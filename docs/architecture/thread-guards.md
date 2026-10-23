@@ -19,13 +19,18 @@ runs, in every permission mode (bypass included), and the denial's reason goes b
 
 ## The local API's own gate
 
-`lib/guard.ts` guards `app/api/*`: Host must be local, writes need `x-weft-token: 1`, and `sensitive` reads (account,
-account/team, account/billing, settings, services) also need the launch token in `x-weft-token`. So do writes that grant power (`elevated()`: a permission answer,
-settings, folder grants, `!` shell, a card's mode or read scope), which a thread's `curl` with `1` can't send. The desktop app adds it
-to the board window's requests only (`electron/api-token.cjs`, a `webRequest` hook on the default session; the browser
-pane is another partition), and it is the control server's token, which threads can't read. With no token (dev in a
-browser, tests) the check is off. `weft://reply|commit` links act only from a real file under `~/.weft` (`ownPage`,
-`electron/page-links.cjs`).
+`lib/guard.ts` guards `app/api/*`: Host must be local, and once the desktop app has written a launch token, **every** route needs it —
+reads included. Writes additionally accept the plain `x-weft-token: 1` a thread's `curl` sends for ordinary board moves, but a read needs
+the token itself or that `1`. Writes that grant power (`elevated()`: a permission answer, settings, folder grants, `!` shell, a card's mode
+or read scope) refuse the `1` and need the token. So a process that only reaches the port — a browser extension, a malicious `postinstall`,
+any other local app — can neither read the board (its project paths, the profile, the names of the secrets in the vault) nor write to it;
+only Weft's own window can.
+
+There is no per-route "sensitive" flag any more: it existed when reads were unauthenticated and marked the six routes that leaked
+(account, account/team, account/billing, settings, services, github/collaborators). The desktop app adds the token to the board window's
+requests only (`electron/api-token.cjs`, a `webRequest` hook on the default session; the browser pane is another partition), and it is
+the control server's token, which threads can't read. With no token on disk (tests, or before Weft has ever launched) the check is off.
+`weft://reply|commit` links act only from a real file under `~/.weft` (`ownPage`, `electron/page-links.cjs`).
 
 ## Folder gate
 

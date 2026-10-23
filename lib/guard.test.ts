@@ -41,6 +41,34 @@ describe("guard", () => {
   });
 });
 
+// A read that names no token used to pass on the Host header alone, so any process that reached the port could
+// read the board: project paths, the profile, and the names of the secrets in the vault. Once the desktop app
+// has launched a token, a read needs it.
+describe("guard reads with the launch token", () => {
+  const read = (headers: Record<string, string>) => guard(req({ host: "localhost:3456", ...headers }), { write: false });
+
+  it("needs the token (or the board's own 1) once the desktop has one", async () => {
+    token.value = "secret-token";
+    const res = read({});
+    expect(res?.status).toBe(403);
+    expect(((await res!.json()) as { error: string }).error).toBe("Missing token");
+    expect(read({ "x-weft-token": "wrong-token!" })?.status).toBe(403);
+    expect(read({ "x-weft-token": "secret-token" })).toBeNull();
+    // The board window sends 1 and Electron swaps it for the launch token, so this is the board's own path.
+    expect(read({ "x-weft-token": "1" })).toBeNull();
+  });
+
+  it("asks nothing where there is no token (a browser, tests)", () => {
+    expect(read({})).toBeNull();
+    expect(read({ "x-weft-token": "1" })).toBeNull();
+  });
+
+  it("still checks the host first", () => {
+    token.value = "secret-token";
+    expect(guard(req({ host: "evil.com" }), { write: false })?.status).toBe(403);
+  });
+});
+
 describe("fail", () => {
   it("wraps an Error message with a 400 by default", async () => {
     const res = fail(new Error("boom"));
@@ -74,28 +102,6 @@ describe("guard writes with the launch token", () => {
 
   it("does not take an arbitrary value where there is no token", () => {
     expect(write({ "x-weft-token": "secret-token" })?.status).toBe(403);
-  });
-});
-
-describe("guard sensitive reads", () => {
-  const read = (headers: Record<string, string>) => guard(req({ host: "localhost:3456", ...headers }), { write: false, sensitive: true });
-
-  it("needs the launch token when the desktop app has one", async () => {
-    token.value = "secret-token";
-    expect(read({})?.status).toBe(403);
-    expect(read({ "x-weft-token": "wrong-token!" })?.status).toBe(403);
-    expect(read({ "x-weft-token": "short" })?.status).toBe(403);
-    expect(((await read({})!.json()) as { error: string }).error).toBe("Missing token");
-    expect(read({ "x-weft-token": "secret-token" })).toBeNull();
-  });
-
-  it("asks nothing where there is no token (a browser, tests)", () => {
-    expect(read({})).toBeNull();
-  });
-
-  it("still checks the host first", () => {
-    token.value = "t";
-    expect(guard(req({ host: "evil.com", "x-weft-token": "t" }), { write: false, sensitive: true })?.status).toBe(403);
   });
 });
 

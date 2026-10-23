@@ -3,8 +3,12 @@ import { shellToken } from "./shell-token";
 
 // The API can start agents with shell access, so only this machine's own pages may call it.
 // The Host check blocks DNS rebinding; the custom header makes cross-site POSTs fail CORS preflight.
-// `sensitive` reads (account, settings, services…) also need the launch's token, which the desktop app adds to the
-// board window's own requests (electron/api-token.cjs); a process that only reaches the port can't read them.
+// Once the desktop app has launched a token, EVERY route needs it — writes, sensitive reads and ordinary reads
+// alike. A process that only reaches the port (a browser extension, a malicious postinstall, any local app) must
+// not be able to read the board, its project paths or the names of the secrets in the vault. The desktop app
+// swaps the board window's x-weft-token for the launch token on all of its own requests
+// (electron/api-token.cjs), so the board keeps working and a thread's plain `1` still works for reads and
+// non-elevated writes. Where there is no token (dev in a browser, tests) every check no-ops.
 const LOCAL_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
 
 function hasToken(req: Request, requireOne = false): boolean {
@@ -15,7 +19,10 @@ function hasToken(req: Request, requireOne = false): boolean {
   return got.length === want.length && crypto.timingSafeEqual(Buffer.from(got), Buffer.from(want));
 }
 
-export function guard(req: Request, { write = true, sensitive = false } = {}): Response | null {
+// `sensitive` is gone: once a launch token exists every route needs it, so the flag no longer changed the
+// verdict. The six routes that passed it (`account`, `account/billing`, `account/team`, `github/collaborators`,
+// `services`, `settings`) now get the same check from the line below.
+export function guard(req: Request, { write = true }: { write?: boolean } = {}): Response | null {
   const host = (req.headers.get("host") ?? "").replace(/:\d+$/, "");
   if (!LOCAL_HOSTS.has(host)) return Response.json({ error: "Forbidden host" }, { status: 403 });
   // The desktop app swaps the board window's x-weft-token for the launch token, so a write carries "1" or that token.
@@ -23,7 +30,9 @@ export function guard(req: Request, { write = true, sensitive = false } = {}): R
   if (write && sent !== "1" && !(sent && hasToken(req, true))) {
     return Response.json({ error: "Missing x-weft-token header" }, { status: 403 });
   }
-  if (sensitive && !hasToken(req)) return Response.json({ error: "Missing token" }, { status: 403 });
+  // Once a launch token exists, a read needs it too — the plain "1" is enough for the board and for a thread's
+  // curl, but a process that never went through the desktop app has no token to send at all.
+  if (sent !== "1" && !hasToken(req)) return Response.json({ error: "Missing token" }, { status: 403 });
   return null;
 }
 

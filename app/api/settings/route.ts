@@ -33,7 +33,7 @@ function readAutomations(value: unknown): Automation[] {
 }
 
 export async function GET(req: Request) {
-  const denied = guard(req, { write: false, sensitive: true });
+  const denied = guard(req, { write: false });
   if (denied) return denied;
   await connection();
   return Response.json(settingsView());

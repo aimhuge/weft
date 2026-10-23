@@ -36,7 +36,7 @@ If you are an agent editing this repo, you are working on me. Read README.md for
   - the 300-line `max-lines` cap and the per-file ratchet in `eslint.config.mjs` are there to force that refactor.
     A file at its cap gets code moved out (Extract Function or Module) and its number lowered; never joined lines,
     dropped blank lines or deleted comments, which only hide the smell
-  - hotspots: components/Board.tsx (~665 lines), electron/main.cjs (~450; its control routes are `electron/pane-routes.cjs`, its splash IPC `electron/startup-ipc.cjs`), electron/vault.cjs (~390), electron/browser-pane.cjs (~345), lib/cloud-sync.ts (~365).
+  - hotspots: components/Board.tsx (~535 lines), electron/main.cjs (~450; its control routes are `electron/pane-routes.cjs`, its splash IPC `electron/startup-ipc.cjs`), electron/vault.cjs (~390), electron/browser-pane.cjs (~345), lib/cloud-sync.ts (~365).
     Everything else is under 300 (2026-10-16): big files became re-exporting fronts (`lib/types.ts` → `lib/types-*.ts`,
     `lib/import.ts` → `lib/import-*.ts`, `lib/secret-guard.ts` → `lib/secret-guard-*.ts`, `lib/client.ts` → `lib/client-*.ts`).
     Pure logic already moved out: `lib/board-view.ts` (columns, project chips, chime/unseen rules, Review's Errors/Restart filter chips drawn by `components/ReviewFilterChips.tsx`) and
@@ -44,11 +44,14 @@ If you are an agent editing this repo, you are working on me. Read README.md for
     `use-toast`, `use-desktop-bridge`, `use-copilot-card`, `use-board-actions`, `use-board-toggles`, `use-board-view`, `use-board-archive`,
     `use-board-card-actions`, plus `lib/board-focus.ts`, `lib/board-helpers.ts`), its live events into `lib/board-live.ts`, the menu/dock/tray
     actions into `lib/board-menu-bridge.ts`, its derived values into `lib/board-derive.ts`, and its JSX into `BoardHeader`, `BoardProjectBar`,
-    `BoardColumns` (each column's extras by id), `BoardBrowserPane`, `OpenCard` (the framed window and the open card's four columns), `BoardToast` and
+    `BoardColumns` (each column's extras by id), `BoardBrowserPane`, `OpenCard` (the framed window and the open card's four columns), `BoardBottom`
+    (footer and terminal drawer), `BoardToast` and
     `components/BoardDialogs.tsx` (the nine dialogs, sheets and overlays the board stacks over its columns, each still loaded through
     `guarded()`; `components/BoardDialogs.test.tsx` says which prop opens which panel and that each close handler fires through).
-    The rail's drawers share one `RailContext` (`components/rail-context.ts`). Next: the footer and terminal into a `BoardFrame`, the palette
-    and shortcut wiring into a hook, and the prop volume (`BoardColumns` takes ~25, `BoardHeader` 11).
+    Shortcuts, the command palette and the menu bridge share one input in `components/use-board-commands.ts`. The rail's drawers share one
+    `RailContext` (`components/rail-context.ts`); `BoardHeader` and `BoardColumns` take grouped props (counts, panes, slots; drag, review, archive).
+    The dialog flags (New thread, Settings, Share board, Help, palette, sign-in, project menu) and what they cover live in `lib/use-board-dialogs.ts`.
+    Next: the open card's state (selection, thread, streaming, rename) into a hook; Board is at complexity 29.
   - My Vitest suite (`pnpm test`, ~3,500 tests) covers every line of `lib/` and `app/api/` (98.6% of branches,
     `pnpm coverage`): a test file beside each module, routes with their libs mocked, the runner's SDK loop
     against a fake `query()` (`lib/runner.harness.ts`, shared by `lib/runner*.test.ts`), and browser code and React hooks under happy-dom +
@@ -291,7 +294,7 @@ If you are an agent editing this repo, you are working on me. Read README.md for
   synced folder, its workspace), makes the card through the same `createCardFromBody` as `POST /api/cards`, starts it and reports back; the card syncs up like any other. `card_id` is set only by the receiver after `createCardFromBody` accepts the request. A `reply` goes to the card through `sendUserMessage`, as if typed on the Mac; an `answer` through `answerPermission` (by `pendingId`), a `stop` through `stop()`.
   `lib/share-types.ts` + `lib/card-share.ts` + `components/ShareCardDialog.tsx` + `components/ShareBoardDialog.tsx` + `components/web-board/WebShareBoard.tsx` over one `components/BoardSharePanel.tsx` (the board's link, `weft.zip/<slug>/board`, and invites: `lib/use-team.ts` on the desktop, `boardShareTeam` in `lib/team-actions.ts` on the web) + `app/s/[id]` + `app/api/s/[id]/*` + `lib/share-*.ts` + `components/share-view/*`: **Share…** on a card gives `weft.zip/s/<id>`,
   its thread and its pane side by side, live (polled), private / public / email / password from `@aimhuge/share`; reads the synced rows (docs/architecture/sharing.md).
-- `app/api/*` + `lib/guard.ts`: localhost-only Host check, writes need `x-weft-token: 1`.
+- `app/api/*` + `lib/guard.ts`: localhost-only Host check; once the desktop app has written a launch token every route needs it, reads included (the board's own `1` passes for a read and a non-elevated write, `elevated()` refuses it), so a process that only reaches the port can neither read the board nor write to it.
 - `lib/restart-guard.ts`: turns away Bash that would kill or restart Weft itself (its server pid, port, `next dev`, the app)
   while other cards' turns run, since a restart cuts them all off; in every thread via `guardedCli()`.
 - `lib/restart-when-idle.ts` + `app/api/restart` + `lib/restart-tool.ts` + `electron/restart-when-idle.cjs` + `components/RestartChip.tsx`: restart when idle

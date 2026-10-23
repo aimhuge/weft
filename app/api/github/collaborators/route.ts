@@ -5,7 +5,7 @@ import { fail, guard } from "@/lib/guard";
 // People to invite to a team: GET ?repos=a/b,c/d is each repo's GitHub collaborators (lib/github-collaborators.ts).
 
 export async function GET(req: Request) {
-  const denied = guard(req, { write: false, sensitive: true });
+  const denied = guard(req, { write: false });
   if (denied) return denied;
   await connection();
   try {

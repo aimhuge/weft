@@ -6,7 +6,7 @@ import { fail, guard } from "@/lib/guard";
 // shows, and the BillingStatus JSON is what the row renders.
 
 export async function GET(req: Request) {
-  const denied = guard(req, { write: false, sensitive: true });
+  const denied = guard(req, { write: false });
   if (denied) return denied;
   try {
     return Response.json(await fetchBillingStatus());

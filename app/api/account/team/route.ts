@@ -10,7 +10,7 @@ import { forwardTeam } from "@/lib/team-remote";
 // x-weft-token header the guard checks for.
 
 export async function GET(req: Request) {
-  const denied = guard(req, { write: false, sensitive: true });
+  const denied = guard(req, { write: false });
   if (denied) return denied;
   await connection();
   try {
