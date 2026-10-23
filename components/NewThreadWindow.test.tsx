@@ -5,7 +5,7 @@ import type { BrowserState } from "@/lib/client";
 import type { Card } from "@/lib/types";
 
 vi.mock("./NewCardDialog", () => ({ default: () => <div>New thread form</div> }));
-vi.mock("./BrowserPane", () => ({ default: () => <div>Browser pane</div> }));
+vi.mock("./BrowserPane", () => ({ default: ({ expanded }: { expanded: boolean }) => <div data-expanded={String(expanded)}>Browser pane</div> }));
 
 import NewThreadWindow from "./NewThreadWindow";
 
@@ -32,6 +32,11 @@ describe("NewThreadWindow", () => {
     render(<NewThreadWindow form={form} browser={{ desktop: true, state, obscured: false, width: 560, onWidth: vi.fn() }} onClose={vi.fn()} />);
     expect(await screen.findByText("New thread form")).toBeTruthy();
     expect(await screen.findByText("Browser pane")).toBeTruthy();
+  });
+
+  it("lets the pane fill the window beside the form instead of keeping the open card's width", async () => {
+    render(<NewThreadWindow form={form} browser={{ desktop: true, state, obscured: false, width: 560, onWidth: vi.fn() }} onClose={vi.fn()} />);
+    expect((await screen.findByText("Browser pane")).getAttribute("data-expanded")).toBe("true");
   });
 
   it("keeps the web New thread dialog free of the native browser pane", async () => {

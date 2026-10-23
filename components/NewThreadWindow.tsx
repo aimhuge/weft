@@ -33,7 +33,7 @@ export default function NewThreadWindow({ form, browser, onClose }: { form: NewT
           desktop
           state={browser.state}
           obscured={browser.obscured}
-          expanded={false}
+          expanded
           width={browser.width}
           onWidth={browser.onWidth}
           onClose={onClose}

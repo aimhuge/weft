@@ -50,7 +50,7 @@ lives in its own component under `components/`.
   card's pane lives in its workspace's `pane` column, `components/OpenCard.tsx`).
 - `components/OpenCard.tsx` — `CardFrame` (the backdrop and the framed window over the board) and
   `OpenCard` (the open card's four-column workspace: thread | editor | pane | show).
-- `components/NewThreadWindow.tsx` — the framed New thread form beside its desktop browser pane.
+- `components/NewThreadWindow.tsx` — the framed New thread form beside its desktop browser pane, which fills the rest of the window (`expanded`) instead of keeping an open card's saved width.
 - `components/BoardBottom.tsx` — the footer (the open or latest card's model, folder and limits) and, below
   it, the terminal drawer.
 - `components/BoardDialogs.tsx` — every dialog, sheet and overlay the board stacks over its columns, each
