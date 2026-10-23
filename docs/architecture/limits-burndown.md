@@ -48,16 +48,51 @@ One plot, two axes:
   the last reading while its window is open, full once it has reset, `"unknown"` before the first
   reading or inside a window that opened unlogged; `null` marks a slot that hasn't happened yet. The
   card's current windows are added at now unless they've already reset or are older than the history.
-- `app/api/limits/route.ts`: `GET /api/limits?backend=claude|puku` returns that CLI's samples.
-- `components/LimitBurndown.tsx`: the 640 px SVG (`CHART_WIDTH`), in a 664 px `Tip` over the strip's
-  `Limit` chips in `components/StatusStrip.tsx`. Colors are the theme's `--ok` and `--danger`.
+- `app/api/limits/route.ts`: `GET /api/limits?backend=claude|puku|codex` returns that CLI's readings,
+  the chart's history; without `?backend`, every CLI's.
+- `lib/plan-limits.ts`: `planLimits(samples)` → each CLI's newest 5-hour and weekly reading;
+  `liveWindow(window, now)` reads a window whose reset has passed as full. `GET /api/limits/plans`
+  serves it and `lib/use-plan-limits.ts` shares one copy across every strip on screen, read again each
+  minute and when the open card gets a new reading (null where the route isn't there, the web board).
+- `components/StatusStrip.tsx`: two parts. The thread's, only for an open card: folder, `[cli · model]`
+  (`stats.runsOn`, the model its session started on, else the last turn's costliest), context, cache,
+  tokens. The plan's: that card's CLI's windows from the plans, or with no card open (the board footer,
+  `lib/board-derive.ts` `footerFor`) every CLI's by name. On the web board the card's own reading stands in.
+- `components/LimitBurndown.tsx`: the 640 px SVG (`CHART_WIDTH`), in a 664 px `Tip` over each plan's
+  `Limit` chips, titled with the CLI's plan. Colors are the theme's `--ok` and `--danger`.
 
 ## Data flow
 
-CLI event or turn end → `updateLimits` → card `stats.fiveHour` / `sevenDay` (latest only) and a sample in
-the log. Background tick → `startLimitPoll` → spare or one-off `usage_EXPERIMENTAL_*` →
-`recordLimits` → a sample. Hover → `GET /api/limits` → `limitsChart()` adds the card's current reading →
-SVG.
+CLI event or turn end → `updateLimits` → a sample in the log under the session's CLI, and card
+`stats.fiveHour` / `sevenDay` while the card is still on that CLI. Background tick → `startLimitPoll` →
+spare or one-off `usage_EXPERIMENTAL_*` → `recordLimits` → a sample. Strip → `GET /api/limits/plans` →
+each CLI's newest windows. Hover → `GET /api/limits?backend=<cli>` → `limitsChart()` adds the plan's
+current reading → SVG.
+
+## Each CLI has its own plan
+
+Claude Code runs on Anthropic's plan, puku-cli on Puku's, Codex on OpenAI's. On 23 Oct the log looked
+like it said otherwise: two "puku" samples at 19:45 matched Claude Code's to the minute (`five_hour
+used=100 resetsAt 21:30`). They were Claude's. A card hit Claude's 5-hour limit, was switched with
+**Run on puku**, and two things carried Claude's numbers over:
+
+- `lib/backend-switch.ts` `switchPatch` kept the card's `stats`, so the puku card showed Claude's
+  `5hr:0% reset 9:30pm` (and a Claude model) until puku finished a turn. On the board 37 puku cards
+  carried Claude's reset times. A switch now keeps only the folder's `branch`, `added` and `removed`.
+- `updateLimits` logged a reading under the card's backend *at the time it landed*, so the Claude
+  session's last reading after the switch went into the log as puku's. It now logs under the session's
+  own CLI (`session.spec.backend`) and leaves the card's stats alone when the card has moved on.
+
+For a while the chart read every CLI's samples as one history on the strength of that misread. It
+reads one CLI's again; a CLI with no readings before the week began gets no lookback, which is correct.
+
+## The footer and the open card
+
+The board footer used to show `latestLimits(cards)`, the stats of whichever card changed last, when no
+card was open: any turn, move or rename elsewhere flipped its model, tokens and limits to that card's
+without saying so. It now shows only each CLI's plan. In an open card, the model chip reads
+`stats.runsOn` (set at session start), not `stats.model`, which is the last turn's costliest model and
+can be a subagent's, or blank after a turn that reported no usage.
 
 ## Notes
 
@@ -66,5 +101,6 @@ SVG.
   stretches) now fills in continuously.
 - Limit hits come from these samples, not from transcripts. `lib/usage.ts` also detects hits from
   transcripts for the Loom's usage chart; the two aren't unified yet.
-- Samples are per CLI (`backend`), matching the strip, which shows the open card's own CLI.
+- The two mis-tagged samples from 23 Oct 19:45 (`"backend":"puku"`, really Claude's) age out of the log
+  after 8 days; until then the footer may list a puku plan built from them.
 

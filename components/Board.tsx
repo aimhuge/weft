@@ -227,7 +227,7 @@ export default function Board() {
 
   // An open card, or the New thread form, fills a framed window with the browser pane beside it.
   const framed = Boolean(selected) || showNew;
-  const footer = footerFor(selected, latest);
+  const footer = footerFor(selected);
   // Each folder has its own shell; with All projects showing, the latest card's folder.
   const folder = workFolder(selected, project, latest);
   const terminalCwd = folder ?? home;

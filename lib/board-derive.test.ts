@@ -15,11 +15,10 @@ describe("filterState", () => {
 });
 
 describe("footerFor", () => {
-  it("shows the open card, else the latest card", () => {
+  it("shows the open card, and no card's numbers when none is open", () => {
     const open = card({ stats: { model: "o" } });
-    expect(footerFor(open, latest)).toEqual({ stats: open.stats, cwd: "/card", backend: "claude" });
-    expect(footerFor(null, latest)).toEqual({ stats: latest, cwd: "/latest", backend: "codex" });
-    expect(footerFor(null, undefined)).toEqual({ stats: undefined, cwd: undefined, backend: undefined });
+    expect(footerFor(open)).toEqual({ stats: open.stats, cwd: "/card", backend: "claude" });
+    expect(footerFor(null)).toEqual({ stats: undefined, cwd: undefined, backend: undefined });
   });
 });
 

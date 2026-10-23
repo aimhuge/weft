@@ -105,7 +105,7 @@ same time; Next.js allows one dev server per project folder.
   finds `claude` and `puku-cli` even when started from Finder.
 - **Puku trial**: a puku thread works with no Puku account. While you're signed in to your Weft account and
   puku-cli has no login of its own, Weft runs it on Weft's own Puku key through a proxy on the deployed Weft, with a
-  daily cap per account (300 requests, 2M tokens); Weft's key never ships in the app. Signed out, the login pop-up
+  daily cap per account (150 requests, 1M tokens); Weft's key never ships in the app. Signed out, the login pop-up
   offers **Sign in to Weft** or Puku's own login. See docs/architecture/puku-trial.md.
 - **Weft Pro**: every workspace has a plan. **Free** keeps the Puku trial's daily cap. **Pro** ($20/month or
   $200/year) replaces it with a 300M Puku token allowance, refreshed every billing period. Every plan includes BlastCP
@@ -496,10 +496,10 @@ resizes from any edge or corner; it stays inside the window and remembers its si
 
 Each project has a changelog Weft keeps: threads record what they ship with `mcp__board__changelog_add`
 instead of editing CHANGELOG.md (which every card used to edit at once), each entry links to the card that
-wrote it, and the card's own commit stamps it with the sha. More → **Changelog of <project>** (or the ⌘K
-palette) lists Unreleased, then each version; **Release** writes the version into the project's CHANGELOG.md
-(`pnpm changelog:release <version>` for Weft's own). Signed in, entries are mirrored to your account
-(docs/architecture/changelog.md).
+wrote it, and the card's own commit stamps it with the sha. Right after that commit Weft writes CHANGELOG.md and
+commits it on its own; when a commit bumps package.json's version, Unreleased becomes that version's section. There's
+no release step to run. More → **Changelog of <project>** (or the ⌘K palette) lists Unreleased, then each version.
+Signed in, entries are mirrored to your account (docs/architecture/changelog.md).
 
 The header shows the code quality ("87% code quality") of the project in view: the open card's
 folder, else the selected project, else your latest card's. It never reaches 100%, because there's always

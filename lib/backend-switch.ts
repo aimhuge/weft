@@ -51,7 +51,10 @@ export async function switchBackend(cardId: string, backend: Backend, { replay =
 
 // What a card changes on its way to another CLI: a fresh session, and the mode, effort and model it can take.
 function switchPatch(card: Card, backend: Backend, model: string | undefined): Partial<Card> {
-  const patch: Partial<Card> = { backend, sessionId: undefined, rateLimitHit: false };
+  // The stats go too, but for the folder's branch and changed lines: the model, context, cache, tokens and
+  // plan limits were the old CLI's session's, and the status strip would show them as the new one's.
+  const { branch, added, removed } = card.stats ?? {};
+  const patch: Partial<Card> = { backend, sessionId: undefined, rateLimitHit: false, stats: { branch, added, removed } };
   if (backend === "puku" && card.permissionMode === "bypassPermissions") patch.permissionMode = "auto";
   const normalized = effortFor(backend, card.effort);
   if (normalized !== card.effort) patch.effort = normalized;

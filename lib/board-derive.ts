@@ -17,12 +17,12 @@ export function filterState(project: string | null, query: string, rail: RailFil
   };
 }
 
-// The footer's stats, folder and CLI: the open card's, else the most recent card's, so the footer has a
-// model and folder to show when no card is open. Account-wide limits live in there too.
-export function footerFor(selected: Card | null, latest: Latest) {
+// The footer's stats, folder and CLI: the open card's. With no card open it shows only every CLI's plan
+// limits (components/StatusStrip.tsx), never another card's numbers passed off as the board's.
+export function footerFor(selected: Card | null) {
   return selected
     ? { stats: selected.stats, cwd: selected.cwd, backend: selected.backend }
-    : { stats: latest, cwd: latest?.cwd, backend: latest?.backend };
+    : { stats: undefined, cwd: undefined, backend: undefined };
 }
 
 // The folder the board is about right now: the open card's, the selected project, else the latest card's.

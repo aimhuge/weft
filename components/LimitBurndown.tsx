@@ -1,15 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { apiFetch } from "@/lib/api-client";
 import { formatReset } from "@/lib/format";
 import { limitsChart, type DaySlot, type LimitSample, type LimitsChart, type Mark, type Slot } from "@/lib/limit-chart";
-import type { Backend, CardStats, LimitWindow } from "@/lib/types";
+import { BACKEND_LABELS, type Backend, type CardStats, type LimitWindow } from "@/lib/types";
 import { useNow } from "@/lib/use-now";
 
 // The plan limits across the week, in the status strip's hover over 5hr / 7d. One plot, two axes: the
 // 5-hour limit left on the left axis as 168 green hour bars, the weekly limit left on the right axis as 7
 // see-through red day bars in front, each topped by its burn-down edge. Red lines where a limit ran out,
-// green lines at the 5-hour resets (light), the next one (strong) and the weekly reset (strongest).
+// green lines at the 5-hour resets (light), the next one (strong) and the weekly reset (strongest). In a
+// week's first days the last days of the week before sit on the left, shaded and dimmed.
 
 export const CHART_WIDTH = 640;
 const H = 196;
@@ -27,7 +29,9 @@ function useSamples(backend: Backend) {
   const [samples, setSamples] = useState<LimitSample[]>([]);
   useEffect(() => {
     let live = true;
-    fetch(`/api/limits?backend=${backend}`)
+    // ?backend: each CLI has its own plan (Claude Code on Anthropic's, puku-cli on Puku's), so the chart
+    // reads only the readings of the CLI whose plan it draws.
+    apiFetch(`/api/limits?backend=${backend}`)
       .then((res) => (res.ok ? res.json() : { samples: [] }))
       .then((body: { samples?: LimitSample[] }) => live && setSamples(body.samples ?? []))
       .catch(() => {});
@@ -60,8 +64,49 @@ function HourBars({ hours, x, y }: Scale & { hours: Slot[] }) {
   });
 }
 
+// Where the 5-hour limit stands right now: the share left of the window open at this moment, drawn as a
+// green level line across the current window with its number on it, so the number in the header ("5-hour
+// 34% left") is a thing you can see in the plot instead of one you have to read off an axis. The line
+// spans the open window (from its reset to the next), so it says "this level, for this stretch of time".
+function NowLevel({ chart, x, y }: Scale & { chart: LimitsChart }) {
+  const level = chart.fiveHourNow;
+  if (level === undefined) return null;
+  const { left, from, to } = level;
+  const x1 = x(from);
+  const x2 = x(to);
+  const yy = y(left);
+  // The label sits above the line when there is room, below it otherwise (a level near the top).
+  const above = yy - PAD.top > 16;
+  return (
+    <g>
+      <line x1={x1} y1={yy} x2={x2} y2={yy} stroke="var(--ok)" strokeWidth={2} opacity={0.95} />
+      <circle cx={x(chart.now)} cy={yy} r={3.5} fill="var(--ok)" stroke="var(--panel)" strokeWidth={1.5} />
+      <text x={x(chart.now)} y={above ? yy - 7 : yy + 13} textAnchor="middle" fontSize={11} fontWeight={700} fill="var(--ok)"
+        stroke="var(--panel)" strokeWidth={3} paintOrder="stroke">{left}%</text>
+    </g>
+  );
+}
+
+// The week before's days, when the chart reaches back into them: a faint shade and a label.
+function LastWeek({ chart, x }: Pick<Scale, "x"> & { chart: LimitsChart }) {
+  if (chart.weekStart <= chart.start) return null;
+  const x1 = x(chart.start);
+  const x2 = x(chart.weekStart);
+  return (
+    <g>
+      <rect x={x1} y={PAD.top} width={x2 - x1} height={BOTTOM - PAD.top} fill="var(--muted)" opacity={0.08} />
+      <text x={(x1 + x2) / 2} y={PAD.top - 5} textAnchor="middle" fontSize={9} fill="var(--faint)">last week</text>
+    </g>
+  );
+}
+
 // A day's weekly bar: see-through red up to its burn-down edge, the edge drawn thick, its end % on top.
+// A day of the week before is drawn at half strength.
 function DayBar({ day, x, y }: Scale & { day: DaySlot }) {
+  return <g opacity={day.past ? 0.5 : 1}><DayFill day={day} x={x} y={y} /></g>;
+}
+
+function DayFill({ day, x, y }: Scale & { day: DaySlot }) {
   const x1 = x(day.from) + 2;
   const x2 = x(day.to) - 2;
   if (day.left === null) return <rect x={x1} y={PAD.top} width={x2 - x1} height={BOTTOM - PAD.top} fill="var(--danger)" opacity={0.04} />;
@@ -96,10 +141,12 @@ function Chart({ chart }: { chart: LimitsChart }) {
         </pattern>
       </defs>
       <Axes y={y} />
+      <LastWeek chart={chart} x={x} />
       <text x={2} y={PAD.top - 5} fontSize={10.5} fontWeight={600} fill="var(--ok)">5-hour</text>
       <text x={CHART_WIDTH - 2} y={PAD.top - 5} textAnchor="end" fontSize={10.5} fontWeight={600} fill="var(--danger)">Weekly</text>
       <HourBars hours={chart.hours} x={x} y={y} />
       {chart.days.map((d) => <DayBar key={d.from} day={d} x={x} y={y} />)}
+      <NowLevel chart={chart} x={x} y={y} />
       {chart.marks.map((m) => (
         <line key={`${m.kind}${m.at}`} x1={x(m.at)} x2={x(m.at)} y1={PAD.top} y2={BOTTOM} stroke={MARK_STYLE[m.kind].stroke}
           strokeWidth={MARK_STYLE[m.kind].width} opacity={MARK_STYLE[m.kind].opacity} />
@@ -136,6 +183,7 @@ function Key({ color, width = 2, height = 10, opacity = 1, label }: { color: str
   );
 }
 
+// One CLI's plan: `stats` holds its latest windows (lib/plan-limits.ts), the history is that CLI's readings.
 export default function LimitBurndown({ backend = "claude", stats }: { backend?: Backend; stats: CardStats }) {
   const samples = useSamples(backend);
   const now = useNow();
@@ -144,6 +192,7 @@ export default function LimitBurndown({ backend = "claude", stats }: { backend?:
   return (
     <div className="flex flex-col gap-1.5 font-sans">
       <div className="flex justify-between gap-3 text-[11.5px]">
+        <span className="text-faint">{`${BACKEND_LABELS[backend]}'s plan`}</span>
         <Summary name="5-hour" window={stats.fiveHour} tone="text-ok" now={now} />
         <Summary name="Weekly" window={stats.sevenDay} tone="text-danger" now={now} />
       </div>

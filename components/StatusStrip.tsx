@@ -3,7 +3,9 @@
 import LimitBurndown from "./LimitBurndown";
 import Tip from "./Tip";
 import { cacheMinutesLeft, folderName, formatReset, formatTokens } from "@/lib/format";
+import { liveWindow, PLAN_ORDER } from "@/lib/plan-limits";
 import { BACKEND_LABELS, type Backend, type CacheState, type CardStats, type LimitWindow } from "@/lib/types";
+import { usePlanLimits } from "@/lib/use-plan-limits";
 import { useNow } from "@/lib/use-now";
 
 // Green while plenty is left, then warn, then danger (same cut-offs as the terminal statusline).
@@ -17,11 +19,21 @@ function modelTone(backend?: Backend) {
   return "text-warn";
 }
 
-function BackendFallback({ backend }: { backend: Backend }) {
-  const name = backend === "puku" ? "puku" : "Codex";
+const CLI_NAMES: Record<Backend, string> = { claude: "claude", puku: "puku", codex: "codex" };
+
+// Which CLI and model the thread runs on: the model its session started with (runsOn), else the one the
+// last turn spent most on. The tip says when those differ (a subagent or side call cost more).
+function ModelChip({ backend = "claude", stats }: { backend?: Backend; stats: CardStats }) {
+  const model = stats.runsOn?.model ?? stats.model;
+  const effort = stats.runsOn?.effort ? `, ${stats.runsOn.effort} effort` : "";
+  const spent = stats.model && stats.runsOn && stats.model !== stats.runsOn.model
+    ? ` The last turn spent most on ${stats.model} (a subagent or side call).`
+    : "";
   return (
-    <Tip text={`Backend: ${BACKEND_LABELS[backend]}`}>
-      <span className={modelTone(backend)}>[{name}]</span>
+    <Tip text={`${BACKEND_LABELS[backend]}${model ? ` on ${model}` : ""}${effort}.${spent}`}>
+      <span className={modelTone(backend)}>
+        [{CLI_NAMES[backend]}{model && ` · ${model.replace(/^claude-/, "")}`}]
+      </span>
     </Tip>
   );
 }
@@ -41,6 +53,51 @@ function Limit({ label, window }: { label: string; window?: LimitWindow }) {
       )}
     </span>
   );
+}
+
+// One CLI's plan: its 5-hour and weekly windows as of now (a passed reset reads full), named when the
+// strip lists more than one plan. The hover is the week's chart.
+function Plan({ backend, reading, named }: { backend: Backend; reading: Pick<CardStats, "fiveHour" | "sevenDay">; named: boolean }) {
+  const now = useNow();
+  const fiveHour = liveWindow(reading.fiveHour, now);
+  const sevenDay = liveWindow(reading.sevenDay, now);
+  if (!fiveHour && !sevenDay) return null;
+  return (
+    <Tip text={<LimitBurndown backend={backend} stats={reading} />} width={664} className="inline-flex gap-x-3">
+      {named && <span className={modelTone(backend)}>{CLI_NAMES[backend]}</span>}
+      <Limit label="5hr" window={fiveHour} />
+      <Limit label="7d" window={sevenDay} />
+    </Tip>
+  );
+}
+
+// The plan limits: the open card's CLI's plan, or every CLI's when no card is open. Each CLI has its own
+// plan, read from the limits log (lib/use-plan-limits.ts); where that isn't there (the web board), the
+// card's own last reading stands in.
+function Plans({ backend, stats }: { backend?: Backend; stats?: CardStats }) {
+  const plans = usePlanLimits(limitKey(stats));
+  const shown: [Backend, Pick<CardStats, "fiveHour" | "sevenDay"> | undefined][] = plans
+    ? backend
+      ? [[backend, plans[backend]]]
+      : PLAN_ORDER.filter((b) => plans[b]).map((b) => [b, plans[b]])
+    : stats
+      ? [[backend ?? "claude", stats]]
+      : [];
+  return shown.map(([b, reading]) =>
+    reading ? (
+      <Plan key={b} backend={b} reading={reading} named={!backend && !stats} />
+    ) : (
+      <Tip key={b} text={`${BACKEND_LABELS[b]} hasn't reported its plan's 5-hour and weekly limits yet.`}>
+        <span className="text-faint">no plan limits yet</span>
+      </Tip>
+    ),
+  );
+}
+
+// A card's new reading reads the plans again, so its strip never lags its own thread.
+function limitKey(stats?: CardStats) {
+  const w = (x?: LimitWindow) => (x ? `${x.used}@${x.resetsAt ?? ""}` : "");
+  return stats ? `${w(stats.fiveHour)}|${w(stats.sevenDay)}` : undefined;
 }
 
 // How long the prompt cache stays warm, or "cold" with what the next message sends again at full price.
@@ -64,23 +121,23 @@ function Cache({ cache }: { cache?: CacheState }) {
   );
 }
 
-// Session numbers for the open thread: model, context left, cache, tokens, plan limits. The folder's
-// uncommitted lines moved to the header (components/PileBadge.tsx).
+// Two parts. The thread's, only when a card is open (stats): folder, CLI and model, context left, cache,
+// tokens. The plan's, always: the 5-hour and weekly limits of that card's CLI, or of every CLI when no card
+// is open. The folder's uncommitted lines moved to the header (components/PileBadge.tsx).
 export default function StatusStrip({
-  stats = {},
+  stats,
   cwd,
   backend,
   className = "",
 }: {
+  // The open card's numbers; leave out when no card is open.
   stats?: CardStats;
   cwd?: string;
-  // Which CLI the thread runs on, so the model label knows whether to say "claude-…" or "puku".
+  // Which CLI the thread runs on (or the New thread dialog will start), whose plan the strip shows.
   backend?: Backend;
   className?: string;
 }) {
-  const left =
-    stats.contextUsed === undefined ? undefined : 100 - stats.contextUsed;
-  const limits = stats.fiveHour || stats.sevenDay;
+  const left = stats?.contextUsed === undefined ? undefined : 100 - stats.contextUsed;
 
   return (
     <div
@@ -88,34 +145,24 @@ export default function StatusStrip({
     >
       <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 whitespace-nowrap">
         {cwd && (
-          <Tip text={stats.branch ? `${cwd} on branch ${stats.branch}` : cwd}>
+          <Tip text={stats?.branch ? `${cwd} on branch ${stats.branch}` : cwd}>
             <span className="text-ok">{folderName(cwd)}</span>
-            {stats.branch && <span className="text-accent"> ({stats.branch})</span>}
+            {stats?.branch && <span className="text-accent"> ({stats.branch})</span>}
           </Tip>
         )}
-        {stats.model && (
-          <Tip text={`Model: ${stats.model}`}>
-            <span className={modelTone(backend)}>[{stats.model.replace(/^claude-/, "")}]</span>
-          </Tip>
-        )}
-        {backend && !stats.model && backend !== "claude" && <BackendFallback backend={backend} />}
-        {left !== undefined && (
+        {stats && <ModelChip backend={backend} stats={stats} />}
+        {stats && left !== undefined && (
           <Tip text={`Context window: ${left}% left (${stats.contextUsed}% filled by the last request). Near zero the thread is compacted or loses detail.`}>
             ctx:<span className={tone(left)}>{left}%</span>
           </Tip>
         )}
-        <Cache cache={stats.cache} />
-        {stats.tokens && (
+        <Cache cache={stats?.cache} />
+        {stats?.tokens && (
           <Tip text={`${stats.tokens.toLocaleString()} input and output tokens used in this thread`}>
             tok:{formatTokens(stats.tokens)}
           </Tip>
         )}
-        {limits && (
-          <Tip text={<LimitBurndown backend={backend} stats={stats} />} width={664} className="inline-flex gap-x-3">
-            <Limit label="5hr" window={stats.fiveHour} />
-            <Limit label="7d" window={stats.sevenDay} />
-          </Tip>
-        )}
+        <Plans backend={backend} stats={stats} />
       </div>
     </div>
   );

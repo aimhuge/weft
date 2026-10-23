@@ -79,6 +79,22 @@ describe("switchBackend", () => {
     expect(after.rateLimitHit).toBe(false);
   });
 
+  it("drops the old CLI's session numbers and keeps the folder's", async () => {
+    const card = addCard({
+      backend: "claude",
+      stats: {
+        model: "claude-opus-5-5", runsOn: { model: "claude-opus-5-5" }, contextUsed: 40, tokens: 9000,
+        cache: { at: 1, ttl: 300, tokens: 9000, hit: 90 }, fiveHour: { used: 100, resetsAt: 5 }, sevenDay: { used: 14 },
+        branch: "main", added: 3, removed: 1,
+      },
+    });
+    await switchBackend(card.id, "puku");
+    expect(store.cards.get(card.id)!.stats).toEqual({ branch: "main", added: 3, removed: 1 });
+    const bare = addCard({ backend: "claude" });
+    await switchBackend(bare.id, "puku");
+    expect(store.cards.get(bare.id)!.stats).toEqual({});
+  });
+
   it("is a no-op when the target is the same as the card's current backend", async () => {
     const card = addCard({ backend: "puku" });
     await switchBackend(card.id, "puku");

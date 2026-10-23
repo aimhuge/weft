@@ -178,23 +178,14 @@ export function summarizeProjects(projects: Project[], cards: Card[], rootOf: (c
   return [...byPath.values()].sort((a, b) => b.lastActivity - a.lastActivity);
 }
 
-// The most recent card's stats, plus the folder and backend the stats came from, so the bottom
-// bar can show "last thread: <folder> [model] 5hr/7d" when no card is open. Limits are
-// account-wide; the rest is the last thread's snapshot.
+// The most recent card's stats, plus the folder and backend the stats came from: the board's working
+// folder when no card is open (lib/board-derive.ts workFolder). Plan limits come from the limits log
+// instead (lib/plan-limits.ts).
 export function latestLimits(cards: Card[]): (CardStats & { cwd: string; backend: Card["backend"] }) | undefined {
   const withStats = cards.filter((c) => c.stats);
   const latest = withStats.sort((a, b) => b.updatedAt - a.updatedAt)[0];
   if (!latest) return undefined;
   return { ...latest.stats, cwd: latest.cwd, backend: latest.backend };
-}
-
-// One CLI's 5-hour and weekly plan limits, from its most recent thread that reported them: what the
-// New thread dialog shows before you start a thread on it. Each CLI has its own plan.
-export function planLimitsFor(cards: Card[], backend: Card["backend"]): CardStats {
-  const latest = cards
-    .filter((c) => c.backend === backend && (c.stats?.fiveHour || c.stats?.sevenDay))
-    .sort((a, b) => b.updatedAt - a.updatedAt)[0];
-  return latest ? { fiveHour: latest.stats?.fiveHour, sevenDay: latest.stats?.sevenDay } : {};
 }
 
 // Whether a thread on the board hit its CLI's plan limit, so the Running and Needs you columns

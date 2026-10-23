@@ -5,7 +5,6 @@ import { isMac } from "@/lib/hotkeys";
 import { type NewCardInput } from "@/lib/client";
 import type { Card, RestartStatus } from "@/lib/types";
 import { busyInFolder } from "@/lib/overlap";
-import { planLimitsFor } from "@/lib/board-view";
 import { startButton } from "@/lib/new-thread";
 import { useEscape } from "@/lib/use-escape";
 import { useHeldModifiers } from "@/lib/use-mod-held";
@@ -137,7 +136,7 @@ export default function NewCardDialog({
         onSubmit={(start) => void submit(start, false)}
       />
       {/* The board's footer sits under this dialog, so its folder and plan limits show here instead. */}
-      <StatusStrip stats={planLimitsFor(cards, dialog.backend)} cwd={dialog.cwd} backend={dialog.backend}
+      <StatusStrip cwd={dialog.cwd} backend={dialog.backend}
         className="shrink-0 border-t border-line px-5 py-1.5" />
     </aside>
   );
