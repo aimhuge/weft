@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DAY, FIVE_HOURS, hitMarks, HOUR, leftAt, limitsChart, QUARTER_HOUR, resetMarks, resetMs, WEEK, weekEnd, type LimitSample } from "./limit-chart";
+import { DAY, FIVE_HOURS, fiveHourNow, hitMarks, HOUR, leftAt, limitsChart, QUARTER_HOUR, resetMarks, resetMs, WEEK, weekEnd, type LimitSample } from "./limit-chart";
 
 // The status strip's limits chart: 672 15-minute slots of the 5-hour limit (4 per hour), 7 day slots
 // of the weekly one with their burn-down edge, hits and reset lines.
@@ -136,9 +136,54 @@ describe("limitsChart", () => {
     expect(older.hours.at(490)?.left).toBe(90);
   });
 
+  it("reaches back 3 days into last week in a new week's first days, when the history has them", () => {
+    const fresh = start + 6 * HOUR;
+    const sevenDay = { used: 2, resetsAt: sec(end) };
+    const rows = [week(start - 2 * DAY, 80, start), five(start - DAY, 40, start - DAY + 2 * HOUR)];
+    const chart = limitsChart(rows, { sevenDay }, fresh);
+    expect([chart.start, chart.weekStart, chart.end]).toEqual([start - 3 * DAY, start, end]);
+    expect(chart.days).toHaveLength(10);
+    expect(chart.hours).toHaveLength(960);
+    expect(chart.days.map((d) => d.past ?? false)).toEqual([true, true, true, false, false, false, false, false, false, false]);
+    expect(chart.days.at(1)?.left).toBe(20);
+    expect(chart.days.at(3)?.left).toBe(98);
+    expect(chart.marks).toContainEqual({ at: start, kind: "week" });
+    expect(chart.marks).toContainEqual({ at: start - DAY + 2 * HOUR, kind: "light" });
+  });
+
+  it("stays on this week later in it, or with no history from before its reset", () => {
+    const sevenDay = { used: 2, resetsAt: sec(end) };
+    const old = [week(start - 2 * DAY, 80, start)];
+    expect(limitsChart(old, { sevenDay }, start + 3 * DAY).start).toBe(start);
+    expect(limitsChart([], { sevenDay }, start + HOUR).start).toBe(start);
+    expect(limitsChart([], { sevenDay }, start + HOUR).days.some((d) => d.past)).toBe(false);
+  });
+
   it("ignores readings after now and spans 7 days ending 5 hours out without a weekly reset", () => {
     const chart = limitsChart([five(T0 + HOUR, 10)], {}, T0);
     expect([chart.start, chart.end]).toEqual([T0 + FIVE_HOURS - WEEK, T0 + FIVE_HOURS]);
     expect(chart.hours.every((h) => h.left === null || h.left === "unknown")).toBe(true);
+  });
+});
+
+describe("fiveHourNow", () => {
+  const reset = T0 + 2 * HOUR;
+  const stats = { fiveHour: { used: 66, resetsAt: sec(reset) } };
+
+  it("reads the share left in the window open now, and the window's span", () => {
+    // The window opened five hours before its reset.
+    expect(fiveHourNow([], stats, T0)).toEqual({ left: 34, from: reset - FIVE_HOURS, to: reset });
+  });
+
+  it("takes the level from the history's last reading when the card has no window", () => {
+    const rows = [five(T0 - HOUR, 90, reset)];
+    expect(fiveHourNow(rows, {}, T0)).toEqual({ left: 10, from: reset - FIVE_HOURS, to: reset });
+  });
+
+  it("is undefined with nothing known about the window", () => {
+    // No reset anywhere.
+    expect(fiveHourNow([], {}, T0)).toBeUndefined();
+    // A reset known, but no reading yet: the level is unknown.
+    expect(fiveHourNow([], { fiveHour: { used: 50 } }, T0)).toBeUndefined();
   });
 });

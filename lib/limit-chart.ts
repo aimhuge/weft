@@ -3,8 +3,8 @@ import type { Backend, CardStats } from "./types";
 // The status strip's limits chart (components/LimitBurndown.tsx), worked out from the limit history
 // (lib/limit-history.ts): the week from one weekly reset to the next as 672 15-minute slots of the
 // 5-hour limit left (4 per hour) and 7 day slots of the weekly limit left, each day with its burn-down
-// edge, plus where either limit was hit and where the 5-hour windows and the week reset. Pure: times
-// in unix ms, shares 0-100.
+// edge, plus where either limit was hit and where the 5-hour windows and the week reset. In a week's
+// first days it reaches back over the last days of the week before. Pure: times in unix ms, shares 0-100.
 
 export type LimitKind = "five_hour" | "seven_day";
 
@@ -22,6 +22,9 @@ export const QUARTER_HOUR = 15 * 60_000;
 export const FIVE_HOURS = 5 * HOUR;
 export const DAY = 24 * HOUR;
 export const WEEK = 7 * DAY;
+// Within this long of a weekly reset, the chart also shows the last LOOKBACK_DAYS of the week before.
+export const NEW_WEEK = 3 * DAY;
+export const LOOKBACK_DAYS = 3;
 
 // A slot's share left: a number, "unknown" (a window was open but nothing was logged, or before the log
 // began), or null (the slot hasn't happened yet).
@@ -36,9 +39,11 @@ export interface Slot {
 // [time, share left].
 export type Point = [number, number];
 
-// A day, with the weekly level at each hour it has seen so far: the top of its bar.
+// A day, with the weekly level at each hour it has seen so far: the top of its bar. past: a day of the
+// week before, shown in a new week's first days.
 export interface DaySlot extends Slot {
   edge: Point[];
+  past?: boolean;
 }
 
 // A vertical line: a 5-hour reset (light), the next one (next), the weekly reset (week), or a hit.
@@ -51,11 +56,16 @@ export interface Mark {
 
 export interface LimitsChart {
   start: number;
+  // The weekly reset this week began at; equal to start unless the chart reaches back into last week.
+  weekStart: number;
   end: number;
   now: number;
   hours: Slot[];
   days: DaySlot[];
   marks: Mark[];
+  // The 5-hour window open at now: the share left in it and when it opened and resets. Undefined when
+  // nothing is known about the window (no reading yet, or its reset has passed).
+  fiveHourNow?: { left: number; from: number; to: number };
 }
 
 // A reset in unix ms, to the minute: the CLI reports one reset a few hundred ms apart from call to call.
@@ -119,14 +129,16 @@ export function hitMarks(rows: LimitSample[]): Mark[] {
 }
 
 // The green lines: every past 5-hour reset the history saw, the next one, every 5 hours after it to the
-// week's end, and the week's end itself. A line within half an hour of one already drawn is dropped.
-export function resetMarks(rows: LimitSample[], next: number | undefined, start: number, end: number, now: number): Mark[] {
+// week's end, and the week's end itself (and its start, when the chart reaches back past it). A line
+// within half an hour of one already drawn is dropped.
+export function resetMarks(rows: LimitSample[], next: number | undefined, start: number, end: number, now: number, weekStart = start): Mark[] {
   const out: Mark[] = [];
   const add = (at: number, kind: MarkKind) => {
     if (at < start || at > end || out.some((m) => Math.abs(m.at - at) < 30 * 60 * 1000)) return;
     out.push({ at, kind });
   };
   add(end, "week");
+  if (weekStart > start) add(weekStart, "week");
   if (next !== undefined && next > now) {
     add(next, "next");
     for (let at = next + FIVE_HOURS; at < end; at += FIVE_HOURS) add(at, "light");
@@ -160,21 +172,46 @@ function withCurrent(rows: LimitSample[], stats: CardStats, now: number): LimitS
   return out;
 }
 
+// The 5-hour window open at now: the share left in it, when it opened (five hours before its reset)
+// and when it resets. The card's own window is the reading when there is one; else the history's last
+// reading, held while its window is open. Undefined when neither is known.
+export function fiveHourNow(rows: LimitSample[], stats: CardStats, now: number): LimitsChart["fiveHourNow"] {
+  const last = rows.findLast((r) => r.kind === "five_hour");
+  const reset = resetMs(stats.fiveHour?.resetsAt) ?? resetMs(last?.resetsAt);
+  if (reset === undefined) return undefined;
+  const card = stats.fiveHour;
+  const fromHistory = leftAt(rows, "five_hour", now);
+  const level = card && resetMs(card.resetsAt) === reset ? Math.max(0, 100 - card.used) : fromHistory;
+  if (level === "unknown") return undefined;
+  // The window it sits in: five hours of usage, ending at its reset.
+  return { left: level, from: reset - FIVE_HOURS, to: reset };
+}
+
 // The whole chart for one CLI's history and its latest windows. Without a known weekly reset, the
-// week is the 7 days ending a 5-hour window from now.
+// week is the 7 days ending a 5-hour window from now. In a week's first NEW_WEEK, with history from
+// before its reset, it starts LOOKBACK_DAYS earlier so the week before's last days stay in view.
 export function limitsChart(samples: LimitSample[], stats: CardStats, now: number): LimitsChart {
   const rows = withCurrent(samples, stats, now);
   const end = weekEnd(rows, stats, now) ?? now + FIVE_HOURS;
-  const start = end - WEEK;
-  const days = slots(rows, "seven_day", start, DAY, 7, now).map((d): DaySlot => ({ ...d, edge: d.left === null ? [] : dayEdge(rows, d, now) }));
+  const weekStart = end - WEEK;
+  const back = now - weekStart < NEW_WEEK && rows.some((s) => s.at < weekStart) ? LOOKBACK_DAYS : 0;
+  const start = weekStart - back * DAY;
+  const span = end - start;
+  const days = slots(rows, "seven_day", start, DAY, span / DAY, now).map((d): DaySlot => ({
+    ...d,
+    edge: d.left === null ? [] : dayEdge(rows, d, now),
+    ...(d.from < weekStart && { past: true }),
+  }));
   const next = resetMs(stats.fiveHour?.resetsAt) ?? resetMs(rows.findLast((s) => s.kind === "five_hour")?.resetsAt);
-  const inWeek = rows.filter((s) => s.at >= start);
+  const shown = rows.filter((s) => s.at >= start);
   return {
     start,
+    weekStart,
     end,
     now,
-    hours: slots(rows, "five_hour", start, QUARTER_HOUR, WEEK / QUARTER_HOUR, now),
+    hours: slots(rows, "five_hour", start, QUARTER_HOUR, span / QUARTER_HOUR, now),
     days,
-    marks: [...resetMarks(inWeek, next, start, end, now), ...hitMarks(inWeek)],
+    marks: [...resetMarks(shown, next, start, end, now, weekStart), ...hitMarks(shown)],
+    fiveHourNow: fiveHourNow(rows, stats, now),
   };
 }
