@@ -199,6 +199,36 @@
   height: auto;
 }
 
+/* The narrated tour (components/home/Tour.tsx), framed like the screenshot above it. */
+.wz-tour {
+  padding-top: 112px;
+}
+
+.wz-tourFrame {
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid rgb(236 229 216 / 0.16);
+  background: #0f131c;
+  box-shadow: 0 40px 100px -40px rgb(0 0 0 / 0.9);
+}
+
+.wz-tourVideo {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1920 / 800;
+}
+
+@media (max-width: 600px) {
+  .wz-tour {
+    padding-top: 72px;
+  }
+
+  .wz-tourFrame {
+    border-radius: 8px;
+  }
+}
+
 /* The five pillars (PILLARS in lib/home.ts): review and copilot wide on top, social, connectors and vault below. */
 .wz-pillars {
   padding-top: 112px;

@@ -7,11 +7,12 @@ import FaqTeaser from "./FaqTeaser";
 import { HomeFooter, HomeNav } from "./HomeChrome";
 import Pillars from "./Pillars";
 import Plans from "./Plans";
+import Tour from "./Tour";
 import "./home.css";
 
 // The weft.zip home page (lib/home.ts has what it says and links to): the name, one
 // sentence, the download, a real screenshot of the board (public/brand/board.png) over the start screen's
-// twin suns, the five pillars, then a short FAQ (the whole one is /faq). A server component with no client JS. Fraunces for display, Instrument Sans for text.
+// twin suns, the narrated tour video, the five pillars, then a short FAQ (the whole one is /faq). A server component with no client JS. Fraunces for display, Instrument Sans for text.
 export default async function Home() {
   const release = await latestRelease();
   const download = downloadLink(release);
@@ -46,6 +47,8 @@ export default async function Home() {
             <Image src={board} alt="The Weft board: Backlog, Running, Needs you, Review and Done, each card a thread" priority sizes="(max-width: 1216px) 100vw, 1104px" />
           </div>
         </div>
+
+        <Tour />
 
         <Pillars />
 

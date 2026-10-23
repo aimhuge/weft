@@ -15,16 +15,18 @@ The home's content is split three ways, and the split is the rule worth keeping:
 - **`components/home/*`** draws it, as server components with no client JS.
 
 ```
-lib/home.ts ──▶ Home.tsx ── HomeNav / hero + board shot / Pillars / Plans / FaqTeaser / HomeFooter
+lib/home.ts ──▶ Home.tsx ── HomeNav / hero + board shot / Tour / Pillars / Plans / FaqTeaser / HomeFooter
                      │            │                    │        │            │
 home-release.ts ─────┘         home.css (prefixed CSS)  PILLARS  catalog     FAQ_HIGHLIGHTS
 ```
 
 ## Key files
 
-- `components/home/Home.tsx`: the page, in order — nav, hero over the twin suns, the board screenshot, `<Pillars />`,
+- `components/home/Home.tsx`: the page, in order — nav, hero over the twin suns, the board screenshot, `<Tour />` (the narrated welcome tour), `<Pillars />`,
   **`<Plans />`**, `<FaqTeaser />`, footer.
 - `components/home/Plans.tsx` + `components/home/Plans.test.tsx`: the pricing section (below).
+- `components/home/Tour.tsx`: `public/brand/weft-tour.mp4` with `preload="none"` and its 3 s title card as the poster
+  (`public/brand/weft-tour-poster.webp`); retake the poster when `pnpm welcome:render` changes the opening.
 - `components/home/Pillars.tsx`, `FaqTeaser.tsx`, `HomeChrome.tsx` (nav and footer), `faq.css`.
 - `components/home/home.css`: the page's whole look. Plain `wz-*` classes, not CSS modules, because
   `next.config.ts` sends every `.css` through Tailwind, which drops module exports.

@@ -124,7 +124,7 @@ On launch and every minute after, Weft picks up your Claude Code sessions (the o
 
 - **First launch gets you to a running thread.** Three screens, for everyone, history or not: **Get ready** plays
   a 30-second loop of a card crossing the board (and getting a key from the 🔐 vault) with your own project names on it (a HyperFrames composition,
-  `public/welcome/loop.html`; the same file renders `public/brand/welcome-loop.mp4` with `pnpm welcome:render`, which also joins `public/welcome/beats.html` (connect your tools, the profile, code quality) into a 78-second `weft-tour.mp4` for weft.zip) and whether Claude Code, puku-cli and Codex are logged in, with **Log in** right there; **Bring in your
+  `public/welcome/loop.html`; the same file renders `public/brand/welcome-loop.mp4` with `pnpm welcome:render`, which also joins `public/welcome/beats.html` (connect your tools, panes, code quality, BlastCP, the profile, open source) into a 96-second `weft-tour.mp4` for weft.zip; a bar under it names the beat on screen and steps **‹ Back** and **Next ›** one beat at a time) and whether Claude Code, puku-cli and Codex are logged in, with **Log in** right there; **Bring in your
   projects** lists the folders with Claude Code sessions (worktree, scratch and temp folders unticked; **Start empty**
   brings in none) with a switch that counts your history on your Wefter Profile; **Start your first thread** picks a
   project and a starter prompt and opens the card as it runs. No cards are added until you answer. A board that already
@@ -788,13 +788,15 @@ deploys, logs, settings, domains and dashboard. More in [docs/architecture/cloud
 ## BlastCP
 
 The BlastCP rocket under 🔐 and ▲ on the left rail shows what each board project has queued on [BlastCP](https://blastcp.com), the
-posting queue. **Connect BlastCP** opens BlastCP in your browser to sign in and approve Weft (OAuth with PKCE); Weft
-keeps the sign-in in your Keychain and threads never see it. **Link…** picks the property a project posts as, from
+posting queue. Signed in to your Weft account, you're connected with no browser: Weft swaps its sign-in for a BlastCP one
+and BlastCP makes you an account the first time (if your email already has one, you confirm it on BlastCP once).
+**Connect with Weft** does it by hand, and **Another BlastCP account** opens BlastCP in your browser to sign in and approve
+Weft (OAuth with PKCE). Either way Weft keeps the sign-in in your Keychain and threads never see it. **Link…** picks the property a project posts as, from
 every workspace you're in, best name match first, or **+ New property** makes one on BlastCP (named after your
 search or the project, in the workspace you pick) and links it. A linked project shows its next scheduled posts with their
 platform and time, a line of drafts, posts to approve and failures, and when the last one went out; clicking any of
-them opens it in the browser pane. BlastCP sign-ins last 30 days, so the drawer warns in the last week and offers
-Reconnect. More in [docs/architecture/blastcp.md](docs/architecture/blastcp.md).
+them opens it in the browser pane. BlastCP sign-ins last 30 days: one made through your Weft account renews itself in its
+last week, and one made in the browser warns and offers Reconnect. More in [docs/architecture/blastcp.md](docs/architecture/blastcp.md).
 
 ## Copilot
 
@@ -926,8 +928,8 @@ The same Next.js app, deployed on Vercel, is Weft's website: with `VERCEL` set a
 Mac the page is at `/home` (`WEFT_HOME=1` shows it at `/` too). Its download button reads the latest release's
 `update.json` from GitHub Releases once an hour and links the dmg; until the first release it points at the repo. The
 shared-link picture is `app/opengraph-image.tsx`. The page is one screen, on purpose: the steel weave emblem and the twin suns scene from
-`electron/assets/` (through `next/image`), one sentence, the download button, and a real screenshot of the board in
-`public/brand/board.png`; retake that one when the board changes a lot (`mcp__board_view__screenshot` with the thread
+`electron/assets/` (through `next/image`), one sentence, the download button, a real screenshot of the board in
+`public/brand/board.png`, and the narrated welcome tour under it (`components/home/Tour.tsx`); retake that one when the board changes a lot (`mcp__board_view__screenshot` with the thread
 panel and drawers closed).
 
 Under the five pillars sits a short FAQ (`components/home/FaqTeaser.tsx`, six questions in `FAQ_HIGHLIGHTS` in
