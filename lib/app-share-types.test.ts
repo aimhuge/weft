@@ -109,24 +109,24 @@ describe("seedAppShareState", () => {
 
   it("returns a private, no-link state for a file: app with no memo", () => {
     const state = seedAppShareState(makeApp({ url: "file:///Users/me/show/page.html" }), false);
-    expect(state).toEqual({ kind: "ok", id: null, url: null, mode: "private", hasPassword: false, shows: "blob", manifest: null, owner: null, slug: null, orgId: null, publicUrl: null, owners: { user: null, orgs: [] } });
+    expect(state).toEqual({ kind: "ok", id: null, url: null, mode: "private", hasPassword: false, shows: "blob", manifest: null, owner: null, slug: null, orgId: null, publicUrl: null, owners: { user: null, orgs: [] }, preview: null, previewing: false });
   });
 
   it("returns a private, no-link state for an https app with no memo", () => {
     const state = seedAppShareState(makeApp({ url: "https://example.com/dash" }), false);
-    expect(state).toEqual({ kind: "ok", id: null, url: null, mode: "private", hasPassword: false, shows: "site", manifest: null, owner: null, slug: null, orgId: null, publicUrl: null, owners: { user: null, orgs: [] } });
+    expect(state).toEqual({ kind: "ok", id: null, url: null, mode: "private", hasPassword: false, shows: "site", manifest: null, owner: null, slug: null, orgId: null, publicUrl: null, owners: { user: null, orgs: [] }, preview: null, previewing: false });
   });
 
   it("hydrates a memo's id and url, keeping its mode and password flag", () => {
     const memo: CardShareMemo = { id: "m1", mode: "email", hasPassword: false };
     const state = seedAppShareState(makeApp({ url: "https://example.com/dash", share: memo }), false);
-    expect(state).toEqual({ kind: "ok", id: "m1", url: "https://weft.zip/a/m1", mode: "email", hasPassword: false, shows: "site", manifest: null, owner: null, slug: null, orgId: null, publicUrl: null, owners: { user: null, orgs: [] } });
+    expect(state).toEqual({ kind: "ok", id: "m1", url: "https://weft.zip/a/m1", mode: "email", hasPassword: false, shows: "site", manifest: null, owner: null, slug: null, orgId: null, publicUrl: null, owners: { user: null, orgs: [] }, preview: null, previewing: false });
   });
 
   it("hydrates a memo with no id (url stays null)", () => {
     const memo: CardShareMemo = { id: null, mode: "password", hasPassword: true };
     const state = seedAppShareState(makeApp({ url: "file:///x.html", share: memo }), false);
-    expect(state).toEqual({ kind: "ok", id: null, url: null, mode: "password", hasPassword: true, shows: "blob", manifest: null, owner: null, slug: null, orgId: null, publicUrl: null, owners: { user: null, orgs: [] } });
+    expect(state).toEqual({ kind: "ok", id: null, url: null, mode: "password", hasPassword: true, shows: "blob", manifest: null, owner: null, slug: null, orgId: null, publicUrl: null, owners: { user: null, orgs: [] }, preview: null, previewing: false });
   });
 });
 

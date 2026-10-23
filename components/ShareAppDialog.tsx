@@ -12,6 +12,7 @@ import { useEscape } from "@/lib/use-escape";
 import { appsApi, reloadApps } from "@/lib/use-mini-apps";
 import { OwnerSlugRow } from "./ShareAppDialogOwnerSlug";
 import { UploadSecretsButton } from "./ShareAppDialogUploadSecrets";
+import { ShareAppPreview } from "./ShareAppPreview";
 import { errorText, NoWorkspace, ShareNote, SignedOut } from "./ShareParts";
 
 // Share… on a mini app (its right-click menu on the rail, its share button in My mini apps, the pane's
@@ -129,6 +130,7 @@ function AppShareBody({
                 ? "The link serves every file in this folder, sandboxed, by path. Opening Share… again sends your latest edits."
                 : "The link frames this site under weft.zip, with an Open link for sites that refuse to be framed."}
           </p>
+          <ShareAppPreview appId={app.id} name={app.name} state={state} setState={setState} />
           <UploadSecretsButton manifest={state.manifest} appId={app.id} />
         </>
       );

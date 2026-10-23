@@ -7,6 +7,7 @@ const { vaultRoutes } = require("./vault-routes.cjs");
 const { envRoutes } = require("./vercel-env.cjs");
 const { restartFor } = require("./restart-when-idle.cjs");
 const { relayKeyFromEnv, sealSecret, sealedToHex } = require("./relay-secret.cjs");
+const { createPageSnapshot, snapshotRoutes } = require("./page-snapshot.cjs");
 
 // The copilot's chips (lib/copilot-sources.ts): a linked service's state per folder, read-only.
 function statusRoute(api) {
@@ -68,6 +69,8 @@ function paneRoutes({ dataDir, app, dialog, shell, window, board, sendMenu, upda
       if (!blastcp) throw new Error("BlastCP isn't set up in this Weft yet. Restart Weft.");
       return blastcp.connectWeft(String(subjectToken ?? ""), { force: force === true });
     },
+    // A mini app's link-preview screenshot (lib/app-preview-capture.ts): the page in a hidden window at 1200×630.
+    ...snapshotRoutes(() => createPageSnapshot({ BrowserWindow: require("electron").BrowserWindow })),
     // mcp__board_view__*: threads see and drive the board itself, secrets redacted (electron/board-view.cjs).
     ...boardViewRoutes(createBoardView({ board })),
   };

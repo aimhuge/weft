@@ -14,6 +14,7 @@ import { resolvePage } from "./blob-paths";
 import { syncOrgId } from "./cloud-sync";
 import { AppShareError } from "./app-share-errors";
 import { listOwners } from "./app-share-owners";
+import { refreshAppPreview } from "./app-preview-capture";
 import { APP_SLUG_RE, type AppOwner, type AppShareState, type AppShareUpdate } from "./app-share-types";
 import { isAppFolderUrl, listAppFolderFiles, reducedManifest, secretHit, type AppManifestUpload, type AppFolderFile } from "./app-folder";
 import { listApps } from "./mini-app-store";
@@ -93,7 +94,7 @@ function readManifest(folder: string): AppManifestUpload {
 
 // The target the share dialog works against: a ready context (the signed-in user, their org, the
 // app, the page) or a blocked reason to surface. Discriminated by `kind` so callers can branch.
-type Target = { kind: "ready" } & Ready | { kind: "blocked"; state: AppShareState };
+export type Target = { kind: "ready" } & Ready | { kind: "blocked"; state: AppShareState };
 
 function check(error: { message: string } | null) {
   if (error) throw new AppShareError(error.message, 500);
@@ -111,7 +112,8 @@ async function signedIn(): Promise<{ client: SupabaseClient; userId: string } | 
   return userId ? { client, userId } : null;
 }
 
-async function target(appId: string): Promise<Target> {
+// Also the preview routes' way in (lib/app-share-preview-actions.ts).
+export async function target(appId: string): Promise<Target> {
   const app = listApps().find((a) => a.id === appId);
   if (!app) throw new AppShareError("No such app.", 404);
   const account = await signedIn();
@@ -141,14 +143,25 @@ export async function getAppShare(appId: string): Promise<AppShareState> {
     row.page === now.page &&
     sameFiles(row.files, now.files) &&
     sameManifest(row.manifest, now.manifest)
-  ) return stateOf(t, row);
+  ) {
+    // The link preview catches up in the background when the page changed since it was made.
+    void refreshAppPreview(t, row, now);
+    return stateOf(t, row);
+  }
   if (row.page !== now.page || !sameFiles(row.files, now.files)) await currentPage(t, true, orgId);
   const writeError = await updateShareRow(t, row.id, {
     name: t.app.name, kind: now.kind, page: now.page, files: now.files, manifest: now.manifest,
     owner: row.owner, slug: row.slug, org_id: orgId,
   });
   if (writeError) throw new AppShareError(writeError.message, 500);
-  return stateOf(t, await readShare(t));
+  return previewed(t, now);
+}
+
+// The row as written, with its link preview started in the background (lib/app-preview-capture.ts).
+async function previewed(t: Ready, now: Parameters<typeof refreshAppPreview>[2]): Promise<AppShareState> {
+  const row = await readShare(t);
+  if (row) void refreshAppPreview(t, row, now);
+  return stateOf(t, row);
 }
 
 function badSlug(value: unknown): string | null {
@@ -178,7 +191,7 @@ export async function setAppShare(appId: string, update: AppShareUpdate): Promis
   const change = buildChange(update, t, now, nextOwner, nextSlug, password);
   const writeError = await writeShareRow(t, existing, change);
   if (writeError) throwAsError(writeError);
-  return stateOf(t, await readShare(t));
+  return previewed(t, now);
 }
 
 // What the row will say about who owns the link and under what address. Carries "user" / "org" with

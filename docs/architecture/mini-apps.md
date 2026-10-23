@@ -94,6 +94,41 @@ password gates post to `app/api/a/[id]/unlock` (`lib/share-unlock.ts`, the same 
 and off-Vercel refusal a card's unlock route uses). `weft.zip/a/<id>` keeps working as a fallback for any
 pre-slug share; the same `SharedApp.tsx` body draws it without an owner.
 
+### Link previews
+
+A public app link unfurls as itself in Slack, X or iMessage, not as Weft's generic card. The row's `preview`
+jsonb (`supabase/migrations/20261023150831_app_share_preview.sql`, at most 4 KB) holds a title, a description,
+a picture and what they were made from (`lib/app-preview.ts`). For each field, the first source that exists wins:
+
+| Field | 1. You | 2. The app | 3. The page | 4. Weft |
+| --- | --- | --- | --- | --- |
+| Title | — | `weft-app.json` `title` | `og:title`, `twitter:title`, `<title>` | the app's name |
+| Description | the Share dialog | `weft-app.json` `description` | `og:description`, `twitter:description`, `description` | one Haiku sentence from the page's text |
+| Picture | — | `weft-app.json` `image` (https, or a path in the folder) | `og:image`, `twitter:image` | the branded card with a capture of the app |
+
+- **Made on the Mac, in the background** (`lib/app-preview-capture.ts`). `getAppShare` and `setAppShare` call
+  `refreshAppPreview` after their row write, and it runs only when the page changed since the last preview
+  (`of`: the page's blob ref, the site's address, or the folder entry's sha). The capture is
+  `POST /page/snapshot` on the control server (`electron/page-snapshot.cjs`): the app in a hidden, sandboxed
+  1200×630 window, on its own in-memory session (none of the pane's sign-ins), no popups or cross-site
+  navigation, muted, one at a time. The PNG is saved to `~/.weft/app-previews/<app id>.png` and uploaded to
+  weft-blobs like any page. No capture is taken when the app or page names its own picture.
+- **Read on weft.zip, for public links only** (`lib/app-share-meta.ts`). The three share routes'
+  `generateMetadata` is `"use cache"` on params alone (it never reads the gate's cookie, so the shell still
+  prerenders; `lib/prerender-check.ts`) and returns the title, description, Open Graph and Twitter tags. A
+  private, email or password link gets the generic "Shared app · Weft" and the root card, so its name, words
+  and screenshot never reach a stranger's chat. Links stay `noindex`; unfurlers ignore it.
+- **The branded card** is `GET /api/a/[id]/og` (`lib/app-card-image.tsx`, Satori): the app's glyph, its
+  name, its description, its owner (`@username` or the workspace's name) and the capture tilted in on the
+  right, on the home page's palette and Fraunces. It serves a folder app's own picture when the preview names
+  one by blob, and 404s for anything but a public link. The metadata adds `?v=` with a hash of the preview,
+  so a new preview is a new address and the route can cache for a day.
+- **The Share dialog** shows the same card (`components/ShareAppPreview.tsx`, drawn locally from this Mac's
+  capture by `lib/app-share-preview-actions.ts` through `app/api/apps/share/preview`): **Refresh preview**
+  makes it again, and the description is editable. Yours is kept over every refresh (`by.description: "you"`),
+  and clearing it hands the description back to the page and Haiku. While the Mac is working, the state says
+  `previewing` and the dialog asks again every 4 s.
+
 Schema: `supabase/migrations/20261018131912_app_shares.sql`, then `20261019095618_app_hosting.sql` and
 `20261019120202_app_share_move_owner.sql`. `cloud_app_shares` is one row per (workspace, sharer, app) and
 now carries `owner`, `slug`, `files`, `manifest`; `kind` adds `'folder'`; one slug is unique per sharer

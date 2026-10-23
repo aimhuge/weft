@@ -74,7 +74,7 @@ If you are an agent editing this repo, you are working on me. Read README.md for
   `electron/pane-error.cjs` shows a failed load's reason, with Try again and Back, instead of Chromium's blank page.
 - `electron/menus.cjs` + `electron/keep-working.cjs`: app menu, menu bar icon, dock; Keep Working (awake with the lid shut, until threads finish).
 - `electron/updater.cjs` (+ `electron/update-window.cjs`, the Software Update window) + `scripts/release-feed.mjs` + `.github/workflows/release.yml`: updates from GitHub Releases (Squirrel.Mac's JSON
-  feed, a download fallback when unsigned) and the tag-triggered signed release; `CHANGELOG.md` holds each version's notes (docs/architecture/updates.md).
+  feed, a download fallback when unsigned) and the tag-triggered signed release; `CHANGELOG.md` holds each version's notes, written by `pnpm changelog:release` (docs/architecture/updates.md).
   `scripts/bundle-toolchain.mjs` stages what the app ships for a fresh Mac (node, npm, pnpm, puku-cli without telemetry, claude, all on
   my own Electron), which `appendToolchain()` in `electron/env.cjs` puts at the end of PATH.
 - `electron/folder-access.cjs` + `lib/folder-access-tool.ts`: `mcp__board__request_folder_access`, called by a thread that got "Operation not permitted" on
@@ -102,6 +102,11 @@ If you are an agent editing this repo, you are working on me. Read README.md for
   server's token is a 0600 file, `~/.weft/shell-token` (`electron/shell-token.cjs`, read by `lib/shell-token.ts`), never an env var.
 - `scripts/check-staged.sh` + `scripts/secret-scan.mjs`: the pre-commit hook; gitleaks, or without it Weft's own key shapes on each added line.
   The Composer flags a pasted or typed key the same way (`components/SecretPaste.tsx`).
+- `lib/changelog.ts` + `lib/changelog-tool.ts` + `lib/changelog-stamp.ts` + `lib/changelog-sync.ts` + `lib/changelog-release.ts` + `lib/changelog-render.ts` + `app/api/changelog` + `components/ChangelogDialog.tsx`:
+  every project's changelog, kept by Weft instead of a CHANGELOG.md every card edits at once. A thread records what it shipped with
+  `mcp__board__changelog_add` (an append-only `~/.weft/changelog.jsonl`, mirrored to Supabase `changelog_entries` while signed in); the entry names its card,
+  the card's own commit stamps its sha (draft → committed, a Bash hook in `guardedCli()` and the commit walk-through), and a release
+  (the dialog's Release, or `pnpm changelog:release`) writes the version into the project's CHANGELOG.md. The dialog opens from the project menu and the palette (docs/architecture/changelog.md).
 - `lib/schedule.ts` + `lib/scheduler.ts` + `components/SendLater.tsx`: "Send later" replies; the server sends them at their
   time, by default the next 5-hour reset.
 - `lib/shell.ts` + `lib/bang.ts` + `app/api/cards/[id]/shell`: `!` in a reply box runs a shell command in the card's folder; its
@@ -271,6 +276,7 @@ If you are an agent editing this repo, you are working on me. Read README.md for
 - `lib/mini-apps.ts` + `lib/mini-app-store.ts` + `app/api/apps` + `lib/use-mini-apps.ts` + `components/AppsRail.tsx` + `components/SaveAppButton.tsx`: mini apps, pages
   saved from the browser pane (its toolbar's grid button) as tiles on the left rail below 🖥 Services (rendered inside `components/LibraryRail.tsx`), in `~/.weft/apps.json`; a tile opens its page in the board's pane. No apps, nothing on the rail (docs/architecture/mini-apps.md).
   `components/LoomApps.tsx` lists them as My mini apps on the Loom's You tab. `lib/app-share.ts` + `lib/app-share-types.ts` + `app/api/apps/share` + `components/ShareAppDialog.tsx` (with `components/ShareParts.tsx`, shared with the card's dialog): Share… on an app, a `weft.zip/a/<id>` link (`cloud_app_shares`) to an uploaded copy of a local page or a framed https site; `lib/app-share-access.ts` + `app/a/[id]` + `app/api/a/[id]/{page,unlock}` serve it behind the card link's gate (`gateVerdict`, `lib/share-unlock.ts`, `lib/share-page-serve.ts`).
+  Link previews: `lib/app-preview.ts` (sources and precedence) + `lib/app-preview-capture.ts` (made on the Mac after each share: meta tags, `weft-app.json`, Haiku, a hidden-window capture from `electron/page-snapshot.cjs`) into `cloud_app_shares.preview`; `lib/app-share-meta.ts` is the share routes' `generateMetadata` (public links only) and `lib/app-card-image.tsx` the branded card at `/api/a/[id]/og`, shown in the Share dialog by `components/ShareAppPreview.tsx`.
   Data apps: `electron/pane-preload.cjs` gives a `file:` page `window.weft`; `electron/app-data.cjs` (+ `electron/app-data-reads.cjs`) answers only a saved app's page in `~/.weft/apps/<slug>/` with a `weft-app.json`, asks Touch ID for the one vault env it names (grants in `~/.weft/app-grants.json`), and runs its named reads in main (Supabase functions, GA4); `lib/app-cloud.ts` persists every app on prod (`cloud_mini_apps`) and restores it on another Mac. 📈 Growth (`~/.weft/apps/growth/`) reads the `growth_*` functions.
 - Browser pane: `components/BrowserPane.tsx` draws the toolbar and the placeholder the native view (`electron/browser-pane.cjs`)
   lies over; `components/ShowRail.tsx` + `lib/show-rail.ts` + `lib/show-events.ts` + `lib/pane-page.ts` (stamps each sent message with the pane's page) are the 72 px show rail right of the page,
@@ -347,7 +353,7 @@ If you are an agent editing this repo, you are working on me. Read README.md for
   - `puku-trial.md` — the puku trial: a puku thread with no Puku login runs through the deployed Weft's proxy on Weft's own key, day-long token, per-account daily cap.
   - `email-forwarding.md` — `weft.zip` mail → Resend → Svix-signed `email.received` → one inbox.
   - `github-issues.md` — a project's open GitHub issues become Backlog cards, one direction, polled every 5 min, instant sync via the deployed relay.
-  - `mini-apps.md` — pages saved from the browser pane as tiles on the left rail below Services: `~/.weft/apps.json`, `/api/apps`, the pane's Save as app button, right-click menu, My mini apps on the profile, and Share… at `weft.zip/a/<id>`.
+  - `mini-apps.md` — pages saved from the browser pane as tiles on the left rail below Services: `~/.weft/apps.json`, `/api/apps`, the pane's Save as app button, right-click menu, My mini apps on the profile, Share… at `weft.zip/a/<id>`, and public links' previews (title, description, branded card).
   - `mini-app-hosting.md` — design, not built: React folder apps bundled by Weft and served from weft.zip with declared reads and cloud secrets ($0), and full Next.js apps on Weft-hosted Workers for apps that need server code.
   - `tags.md` — ★ star and tags (the GitHub-label-style rules, the catalog in `~/.weft/tags.json`, the 🏷 drawer, pills on the card); replaced the library.
   - `dev-servers.md` — Weft-owned dev servers and the rail's 🖥 Services drawer: `mcp__devservers__*`, why not Bash `run_in_background`, how the process tree is split and killed, the task strip's per-task Stop.
@@ -366,6 +372,7 @@ If you are an agent editing this repo, you are working on me. Read README.md for
   - `quality.md` — the header's code quality checklist: coverage, file size, lint, types, guardrails; the refactor scout and the score's last 10 points.
   - `commit-pile.md` — the header's "+N/-N" uncommitted counter and the Review card that walks the pile to a clean commit.
   - `updates.md` — the Squirrel.Mac JSON feed, the download fallback, the tag-triggered signed release, `CHANGELOG.md` notes.
+  - `changelog.md` — every project's changelog in `~/.weft/changelog.jsonl` and `changelog_entries`: the `mcp__board__changelog_*` tools, the commit stamp, the Changelog dialog, releasing into CHANGELOG.md.
   - `keep-working.md` — the menu bar icon's switch to keep the Mac awake with the lid shut so threads keep running in a bag.
   - `analytics.md` — GA4 and PostHog on every weft.zip page, never on a local board: the host and `isDeployed()` gates, `track()`, the event table, `data-track` links.
   - `faq-site.md` — `docs/FAQ.md` as the weft.zip FAQ: the home page's six questions, `/faq` rendering the whole file, how GitHub-shaped paths, image rows and heading ids map onto the site.
@@ -416,7 +423,9 @@ in Electron main, revealed or copied only after the user's Touch ID (docs/archit
 - Run me in dev mode (`pnpm desktop`, or the `~/Applications/Weft.app` launcher, which opens
   Electron on this folder). Run `pnpm dist` only to ship a build to someone else; a local
   packaged `.app` goes stale with every commit.
-- When a feature lands, update README.md and docs/ROADMAP.md in the same change, and add a line under Unreleased in CHANGELOG.md.
+- When a feature lands, update README.md and docs/ROADMAP.md in the same change, and record it with `mcp__board__changelog_add`
+  (`changelog_list` first, to edit your own entry instead of adding a second). Never edit CHANGELOG.md's Unreleased by hand:
+  every card used to, and the whole-file claim made them wait on each other; `pnpm changelog:release <version>` writes it.
 - Run `pnpm lint`, `pnpm typecheck` and `pnpm test` (Vitest; tests sit beside the code as `lib/*.test.ts` and `components/*.test.tsx`, the latter in jsdom with `// @vitest-environment jsdom` and `./test-utils`; API routes in `app/api/routes.test.ts`).
   `pnpm typecheck` and `pnpm lint` take turns across cards (`scripts/one-at-a-time.mjs`, as does the pre-commit hook's tsc);
   `lib/check-guard.ts` refuses `npx tsc` or bare `eslint`. To lint only your own files, `pnpm lint <files>`.

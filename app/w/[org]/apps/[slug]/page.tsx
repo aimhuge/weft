@@ -6,15 +6,21 @@
 // full-window or the fallback (404, sign in, private, the gate form, not set up). The shared
 // body lives in app/u/[username]/apps/[slug]/shared-app-body.tsx; the user app page owns the file
 // because both views are the same flow and the user one is the first one written.
+import type { Metadata } from "next";
 import { Suspense } from "react";
+import { cacheLife } from "next/cache";
+import { appMetadataBySlug } from "@/lib/app-share-meta";
 import { isDeployed } from "@/lib/home";
 import { SharedAppPageBody } from "@/app/u/[username]/apps/[slug]/shared-app-body";
 import { SharedAppSkeleton } from "@/components/web-states/Skeletons";
 
-export const metadata = {
-  title: "Shared app · Weft",
-  robots: { index: false, follow: false },
-};
+// The link preview, as /@<user>/apps/<slug> reads it (lib/app-share-meta.ts).
+export async function generateMetadata({ params }: { params: Promise<{ org: string; slug: string }> }): Promise<Metadata> {
+  "use cache";
+  cacheLife("minutes");
+  const { org, slug } = await params;
+  return appMetadataBySlug({ owner: "org", ownerSlug: org, slug });
+}
 
 function NotDeployed() {
   return (

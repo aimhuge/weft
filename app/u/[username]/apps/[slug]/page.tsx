@@ -10,16 +10,20 @@
 // data, awaited inside it, while the shell prerenders.
 import type { Metadata } from "next";
 import { Suspense } from "react";
+import { cacheLife } from "next/cache";
+import { appMetadataBySlug } from "@/lib/app-share-meta";
 import { isDeployed } from "@/lib/home";
 import { SharedAppPageBody } from "./shared-app-body";
 import { SharedAppSkeleton } from "@/components/web-states/Skeletons";
 
-// Static on purpose, like /a/[id] and /s/[id]: a per-share title would need the params outside
-// the <Suspense>.
-export const metadata: Metadata = {
-  title: "Shared app · Weft",
-  robots: { index: false, follow: false },
-};
+// The link preview (lib/app-share-meta.ts): a public link's title, description and card, else the generic one.
+// "use cache" on params alone, so it reads no cookie and the shell still prerenders (lib/prerender-check.ts).
+export async function generateMetadata({ params }: { params: Promise<{ username: string; slug: string }> }): Promise<Metadata> {
+  "use cache";
+  cacheLife("minutes");
+  const { username, slug } = await params;
+  return appMetadataBySlug({ owner: "user", ownerSlug: username, slug });
+}
 
 function NotDeployed() {
   return (

@@ -51,7 +51,7 @@ describe("AppShareButton", () => {
   });
 
   it("opens the share dialog when clicked and fetches the app's state", async () => {
-    getShare.mockResolvedValueOnce({ kind: "ok", id: "s1", url: "https://weft.zip/a/s1", mode: "public", hasPassword: false, shows: "blob", owner: "user", slug: null, orgId: null, publicUrl: null, owners: { user: { username: "alice" }, orgs: [] }, manifest: null });
+    getShare.mockResolvedValueOnce({ kind: "ok", id: "s1", url: "https://weft.zip/a/s1", mode: "public", hasPassword: false, shows: "blob", owner: "user", slug: null, orgId: null, publicUrl: null, owners: { user: { username: "alice" }, orgs: [] }, manifest: null, preview: null, previewing: false });
     render(<AppShareButton app={APP} />);
     fireEvent.click(screen.getByRole("button", { name: "Share app" }));
     await waitFor(() => expect(getShare).toHaveBeenCalledWith("ap1"));
@@ -60,7 +60,7 @@ describe("AppShareButton", () => {
   });
 
   it("closes the dialog when the dialog's onClose fires", async () => {
-    getShare.mockResolvedValueOnce({ kind: "ok", id: "s1", url: "https://weft.zip/a/s1", mode: "public", hasPassword: false, shows: "blob", owner: "user", slug: null, orgId: null, publicUrl: null, owners: { user: null, orgs: [] }, manifest: null });
+    getShare.mockResolvedValueOnce({ kind: "ok", id: "s1", url: "https://weft.zip/a/s1", mode: "public", hasPassword: false, shows: "blob", owner: "user", slug: null, orgId: null, publicUrl: null, owners: { user: null, orgs: [] }, manifest: null, preview: null, previewing: false });
     render(<AppShareButton app={APP} />);
     fireEvent.click(screen.getByRole("button", { name: "Share app" }));
     await screen.findByRole("dialog");

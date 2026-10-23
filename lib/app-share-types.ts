@@ -6,6 +6,7 @@
 //   viewer (app/a/[id]) and the page itself (app/api/a/[id]/page).
 // Pure, so the dialog and the viewer import it too.
 import { BLOB_REF_PREFIX } from "./cloud-sync-types";
+import type { AppPreview } from "./app-preview";
 import type { MiniApp } from "./mini-apps";
 import type { CardShareMode } from "./share-types";
 import { SITE } from "./site";
@@ -56,6 +57,8 @@ export interface CloudAppShareRow {
   // A folder's files: relative path → sha256 of its blob in weft-blobs/<org_id>/<sha>.
   files: Record<string, string> | null;
   manifest: AppPolicy | null;
+  // The link preview the Mac made (lib/app-preview.ts); read through cleanPreview, never trusted as is.
+  preview?: unknown;
   created_at: string;
   updated_at: string;
 }
@@ -131,6 +134,9 @@ export type AppShareState =
       // The folder app's manifest (lib/app-folder.ts), null for a single-page or site app. The dialog
       // reads it to know when to show "Upload secrets" (author secrets or public names).
       manifest: AppPolicy | null;
+      // The link preview (lib/app-preview.ts), and whether the Mac is making a fresh one right now.
+      preview: AppPreview | null;
+      previewing: boolean;
     };
 
 // PUT /api/apps/share. A password is hashed on the Mac and only its hash goes up; omitted keeps the old one.
@@ -153,14 +159,14 @@ export function seedAppShareState(app: Pick<MiniApp, "url" | "share">, signedOut
   if (!memo) {
     return {
       kind: "ok", id: null, url: null, mode: "private", hasPassword: false, shows,
-      owner: null, slug: null, orgId: null, publicUrl: null, owners: noOwners, manifest: null,
+      owner: null, slug: null, orgId: null, publicUrl: null, owners: noOwners, manifest: null, preview: null, previewing: false,
     };
   }
   return {
     kind: "ok", id: memo.id, url: memo.id ? appShareUrl(memo.id) : null, mode: memo.mode,
     hasPassword: memo.hasPassword, shows,
     owner: memo.owner ?? null, slug: memo.slug ?? null, orgId: memo.orgId ?? null,
-    publicUrl: memo.url ?? null, owners: noOwners, manifest: null,
+    publicUrl: memo.url ?? null, owners: noOwners, manifest: null, preview: null, previewing: false,
   };
 }
 

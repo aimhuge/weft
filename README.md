@@ -52,7 +52,10 @@ same time; Next.js allows one dev server per project folder.
   to open it in the pane; right-click to rename, share, move, copy the address or remove it. Your apps also show as
   **My mini apps** on your wefter profile (the 🔥 chip's You tab), each with a share button. **Share…** gives an app a
   `weft.zip/a/<id>` link with a card's modes (workspace, public, email, password): a local page goes up as a sandboxed
-  copy, refreshed each time you open Share…, and a public https site is framed as is; a localhost app says it can't be reached. The button is lit on a page
+  copy, refreshed each time you open Share…, and a public https site is framed as is; a localhost app says it can't be reached.
+  A public link unfurls as the app itself: its own title and description (from `weft-app.json`, the page's meta tags,
+  or a sentence Weft writes), and a branded card with a screenshot of the app. The Share dialog shows the card, lets you
+  rewrite the description and refresh it. The button is lit on a page
   that's already an app, and clicking it then takes it out. No apps, nothing on the rail.
   A **data app** holds a folder (`~/.weft/apps/<slug>/`: its page and a `weft-app.json` naming the project folder, the
   vault environment it asks for and its reads by name). The page asks for that env (Touch ID), then Weft runs its reads
@@ -201,6 +204,11 @@ The new-thread dialog (⌘N) and every card's reply box use the same editor:
   mark where a limit was hit; green lines mark the 5-hour resets (light), the next one (strong) and the
   weekly reset (strongest). Hours inside a 5-hour window with nothing logged are hatched. Weft asks each
   thread's CLI for its limits after a turn (at most every 5 minutes) and keeps the changes in `~/.weft/limits.jsonl`.
+  Each CLI has its own plan (Claude Code on Anthropic's, puku-cli on Puku's), so the chart draws the open card's CLI's.
+- **Status strip: the thread and the plan.** An open card's strip names its CLI and model (`[puku · opus-4-8]`,
+  the model its session started on), then context, cache and tokens, then that CLI's plan limits. Every card
+  on one CLI shows the same limits, the newest any of them read, and a window whose reset has passed reads
+  full. With no card open, the footer lists each CLI's plan by name and nothing else.
 - **Suggested next message.** After a turn, a Claude thread's reply box shows the CLI's guess at what
   you'll say next as its placeholder (as the Claude CLI does). Tab in the empty box fills it in to edit
   or send; it never sends on its own. It rides the turn's prompt cache, so it costs next to nothing,
@@ -485,6 +493,13 @@ projects and commands too. Opened empty, ⌘K starts with the cards that changed
 latest move first, so Enter opens the one that just finished. Each card row shows its last line of output (or its error)
 under the title and how long ago it changed on the right. New threads default to the selected project. The New thread dialog drags by its header and
 resizes from any edge or corner; it stays inside the window and remembers its size and position.
+
+Each project has a changelog Weft keeps: threads record what they ship with `mcp__board__changelog_add`
+instead of editing CHANGELOG.md (which every card used to edit at once), each entry links to the card that
+wrote it, and the card's own commit stamps it with the sha. More → **Changelog of <project>** (or the ⌘K
+palette) lists Unreleased, then each version; **Release** writes the version into the project's CHANGELOG.md
+(`pnpm changelog:release <version>` for Weft's own). Signed in, entries are mirrored to your account
+(docs/architecture/changelog.md).
 
 The header shows the code quality ("87% code quality") of the project in view: the open card's
 folder, else the selected project, else your latest card's. It never reaches 100%, because there's always

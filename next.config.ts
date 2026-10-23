@@ -15,6 +15,9 @@ const nextConfig: NextConfig = {
     "/faq": ["./docs/FAQ.md"],
     // app/opengraph-image.tsx reads its font and pictures from disk when Vercel renders it on demand.
     "/opengraph-image": ["./public/fonts/fraunces-500.ttf", "./electron/assets/splash-speeder.jpg", "./electron/assets/emblem.png"],
+    // A shared mini app's card (lib/app-card-image.tsx): the same font and emblem.
+    "/api/a/[id]/og": ["./public/fonts/fraunces-500.ttf", "./electron/assets/emblem.png"],
+    "/api/apps/share/preview": ["./public/fonts/fraunces-500.ttf", "./electron/assets/emblem.png"],
     ...(process.env.WEFT_STANDALONE
       ? {
           // The SDK finds its native Claude Code binary with a runtime require.resolve that tracing can't

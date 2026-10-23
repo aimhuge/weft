@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useSyncExternalStore } from "react";
+import type { AppPreview } from "./app-preview";
 import type { AppShareState, AppShareUpdate } from "./app-share-types";
 import { call } from "./client-api";
 import type { MiniApp } from "./mini-apps";
@@ -32,6 +33,10 @@ export const appsApi = {
   // The app's Share dialog: its weft.zip link, or why it can't have one (lib/app-share.ts).
   getShare: (id: string) => call<AppShareState>("GET", `/api/apps/share?id=${encodeURIComponent(id)}`),
   setShare: (id: string, update: AppShareUpdate) => call<AppShareState>("PUT", "/api/apps/share", { id, ...update }),
+  // Its link preview (lib/app-share-preview-actions.ts): the card a chat shows, your description, Refresh preview.
+  previewCard: (id: string) => call<{ image: string | null; preview: AppPreview | null }>("GET", `/api/apps/share/preview?id=${encodeURIComponent(id)}`),
+  describe: (id: string, description: string | null) => call<AppShareState>("PUT", "/api/apps/share/preview", { id, description }),
+  refreshPreview: (id: string) => call<AppShareState>("POST", "/api/apps/share/preview", { id }),
 };
 
 export function reloadApps() {

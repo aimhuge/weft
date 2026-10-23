@@ -36,8 +36,8 @@ const { default: ShareAppDialog } = await import("./ShareAppDialog");
 const BLOB_APP: MiniApp = { id: "ap1", name: "Login page", url: "file:///Users/me/dev/app/index.html", addedAt: 1 };
 const SITE_APP: MiniApp = { id: "ap2", name: "Docs", url: "https://docs.test/handbook", addedAt: 2 };
 
-const PRIVATE: AppShareState = { kind: "ok", id: null, url: null, mode: "private", hasPassword: false, shows: "blob", owner: null, slug: null, orgId: null, publicUrl: null, owners: { user: null, orgs: [] }, manifest: null };
-const SHARED: AppShareState = { kind: "ok", id: "s1", url: "https://weft.zip/a/s1", mode: "email", hasPassword: false, shows: "blob", owner: "user", slug: null, orgId: null, publicUrl: null, owners: { user: { username: "alice" }, orgs: [] }, manifest: null };
+const PRIVATE: AppShareState = { kind: "ok", id: null, url: null, mode: "private", hasPassword: false, shows: "blob", owner: null, slug: null, orgId: null, publicUrl: null, owners: { user: null, orgs: [] }, manifest: null, preview: null, previewing: false };
+const SHARED: AppShareState = { kind: "ok", id: "s1", url: "https://weft.zip/a/s1", mode: "email", hasPassword: false, shows: "blob", owner: "user", slug: null, orgId: null, publicUrl: null, owners: { user: { username: "alice" }, orgs: [] }, manifest: null, preview: null, previewing: false };
 const UNSHAREABLE: AppShareState = { kind: "unshareable", reason: "This app runs on your Mac (localhost:5173), so a weft.zip link can't reach it." };
 
 function setup(app: MiniApp, ...answers: AppShareState[]) {

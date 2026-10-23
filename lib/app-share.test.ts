@@ -3,108 +3,19 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MiniApp } from "./mini-apps";
+import { makeClient, type Db } from "./app-share.test-helpers";
 
 // lib/app-share.ts against a fake account client: every query and write is recorded so the tests can pin what goes up (only a hash, never the password; never an upsert).
-interface Db {
-  user: string | null;
-  org: string | null;
-  configured: boolean;
-  apps: { id: string; name: string; url: string }[];
-  share: { id: string; mode: string; has_password: boolean; name: string; kind: string; page: string; owner: "user" | "org"; slug: string | null; files: Record<string, string> | null; manifest: unknown; org_id: string } | null;
-  error: { message: string } | null;
-  queries: { table: string; filters: Record<string, unknown> }[];
-  writes: { op: "insert" | "update" | "delete"; row: Record<string, unknown>; filters: Record<string, unknown> }[];
-  profile: { username: string } | null;
-  orgs: { id: string; slug: string; name: string }[];
-}
-
 const db = vi.hoisted((): Db => ({
   user: "u1", org: "o1", configured: true,
   apps: [{ id: "a1", name: "My App", url: "https://example.com/page" }],
-  share: null, error: null, queries: [], writes: [],
+  share: null, error: null, queries: [], writes: [], selects: [],
   profile: { username: "alice" }, orgs: [{ id: "o1", slug: "personal", name: "Personal" }],
 }));
 
 const uploaded = vi.hoisted(() => ({ paths: [] as string[] }));
 
-function query(table: string) {
-  // The route hits cloud_app_shares (read/write), profiles, and org_memberships; the latter two
-  // answer from db.profile and db.orgs (mocked Promise.all in app-share-owners.ts).
-  const dataFor = () => {
-    if (table === "cloud_app_shares") return db.share;
-    if (table === "profiles") return db.profile;
-    if (table === "org_memberships") return db.orgs.map((o) => ({ org_id: o.id, orgs: o }));
-    return null;
-  };
-  const filters: Record<string, unknown> = {};
-  const push = () => db.queries.push({ table, filters });
-  const thenable = (done: (r: { data: unknown; error: { message: string } | null }) => unknown) =>
-    Promise.resolve(db.error ? { data: null, error: db.error } : { data: dataFor(), error: null }).then(done);
-  const q = {
-    select: () => { push(); return q; },
-    eq: (col: string, value: unknown) => { filters[col] = value; return q; },
-    maybeSingle: () => {
-      push();
-      return Promise.resolve(db.error ? { data: null, error: db.error } : { data: dataFor(), error: null });
-    },
-    then: thenable,
-    insert: (row: Record<string, unknown>) => write("insert", row, {}),
-    update: (row: Record<string, unknown>) => {
-      const where: Record<string, unknown> = {};
-      const chain = {
-        eq: (col: string, value: unknown) => { where[col] = value; return chain; },
-        then: (done: (r: { error: { message: string } | null }) => unknown) => write("update", row, where).then(done),
-      };
-      return chain;
-    },
-    delete: () => {
-      const where: Record<string, unknown> = {};
-      const chain = {
-        eq: (col: string, value: unknown) => { where[col] = value; return chain; },
-        then: (done: (r: { error: { message: string } | null }) => unknown) => write("delete", {}, where).then(done),
-      };
-      return chain;
-    },
-  };
-  return q;
-}
-
-function write(op: "insert" | "update" | "delete", row: Record<string, unknown>, filters: Record<string, unknown>) {
-  db.writes.push({ op, row, filters });
-  if (db.error) return Promise.resolve({ error: db.error });
-  if (op === "delete") { db.share = null; return Promise.resolve({ error: null }); }
-  db.share = applyRow(row);
-  return Promise.resolve({ error: null });
-}
-
-// The row from a write: the columns from the write, the rest from the previous row. New columns (owner,
-// slug, files, manifest, org_id) only get written when present so a row that doesn't touch them keeps them.
-function applyRow(row: Record<string, unknown>): NonNullable<Db["share"]> {
-  const prior = db.share;
-  const fallback: NonNullable<Db["share"]> = { id: "id", mode: "private", has_password: false, name: "", kind: "site", page: "", owner: "user", slug: null, files: null, manifest: null, org_id: "o1" };
-  const base = prior ?? fallback;
-  return {
-    id: (row.id as string | undefined) ?? base.id,
-    mode: row.mode as string,
-    has_password: "password_hash" in row ? row.password_hash !== null : base.has_password,
-    name: (row.name as string | undefined) ?? base.name,
-    kind: (row.kind as string | undefined) ?? base.kind,
-    page: (row.page as string | undefined) ?? base.page,
-    owner: ((row.owner as string | undefined) ?? base.owner) as "user" | "org",
-    slug: (row.slug === undefined ? base.slug : row.slug) as string | null,
-    files: (row.files === undefined ? base.files : row.files) as Record<string, string> | null,
-    manifest: row.manifest === undefined ? base.manifest : row.manifest,
-    org_id: (row.org_id as string | undefined) ?? base.org_id,
-  };
-}
-
-const client = {
-  auth: { getSession: () => Promise.resolve({ data: { session: db.user ? { user: { id: db.user } } : null } }) },
-  // Typed as the fake's own chain (not Supabase's overloaded from()) so a test can swap in a bespoke
-  // builder that wraps the same query and still satisfies the assignment.
-  from: query as (table: string) => Record<string, unknown>,
-  storage: { from: () => ({ upload: vi.fn((p: string) => { uploaded.paths.push(p); return Promise.resolve({ error: null }); }) }) },
-};
+const client = makeClient(db, uploaded);
 
 vi.mock("./account", () => ({ accountClient: () => { if (!db.configured) throw new Error("no key"); return client; } }));
 vi.mock("./cloud-sync", () => ({ syncOrgId: () => Promise.resolve(db.org) }));
@@ -114,9 +25,16 @@ vi.mock("./blob-store", () => ({
   sha256Of: vi.fn((p: string) => Promise.resolve(p === "/missing/page.html" ? null : "a".repeat(64))),
 }));
 vi.mock("@aimhuge/share/server", () => ({ hashSharePassword: (p: string) => `hash(${p})` }));
+// The preview capture runs in the background and needs the desktop's page snapshot; the Mac-side
+// tests stub it out so nothing reaches Electron, and so the tests can pin what it was asked for.
+vi.mock("./app-preview-capture", () => ({
+  isPreviewing: vi.fn(() => false),
+  refreshAppPreview: vi.fn(async () => {}),
+}));
 
 const { AppShareError, getAppShare, setAppShare } = await import("./app-share");
 const { rememberAppShare } = await import("./mini-app-store");
+const { refreshAppPreview } = await import("./app-preview-capture");
 
 // The default share fixture, so tests that only need to vary one field stay short.
 // Built at runtime so no Stripe-key-shaped literal lands in git (GitHub push protection refuses it).
@@ -132,10 +50,11 @@ beforeEach(() => {
   Object.assign(db, {
     user: "u1", org: "o1", configured: true,
     apps: [{ id: "a1", name: "My App", url: "https://example.com/page" }],
-    share: null, error: null, queries: [], writes: [],
+    share: null, error: null, queries: [], writes: [], selects: [],
     profile: { username: "alice" }, orgs: [{ id: "o1", slug: "personal", name: "Personal" }],
   });
   uploaded.paths.length = 0;
+  vi.mocked(refreshAppPreview).mockClear();
   fs.mkdirSync(homeRoot, { recursive: true });
   sandbox = fs.mkdtempSync(path.join(homeRoot, ".weft-app-share-"));
 });
@@ -170,8 +89,40 @@ describe("getAppShare", () => {
   });
 
   it("reads an unshared app as private with no link, calling the right table and filters", async () => {
-    expect(await getAppShare("a1")).toEqual({ kind: "ok", id: null, url: null, mode: "private", hasPassword: false, shows: "site", manifest: null, ...ORG_OWNER, owner: null });
+    expect(await getAppShare("a1")).toEqual({ kind: "ok", id: null, url: null, mode: "private", hasPassword: false, shows: "site", manifest: null, preview: null, previewing: false, ...ORG_OWNER, owner: null });
     expect(db.queries.find((q) => q.table === "cloud_app_shares" && "app_id" in q.filters)).toEqual({ table: "cloud_app_shares", filters: { created_by: "u1", app_id: "a1" } });
+  });
+
+  it("refreshes the link preview in the background for an unchanged page", async () => {
+    db.share = share({ mode: "public" });
+    await getAppShare("a1");
+    expect(refreshAppPreview).toHaveBeenCalledTimes(1);
+    const [t, row, now] = vi.mocked(refreshAppPreview).mock.calls[0]!;
+    expect(t).toMatchObject({ app: { id: "a1" }, orgId: "o1" });
+    expect(row).toMatchObject({ id: "abcdefghijklmnopqrstuv" });
+    expect(now).toEqual({ kind: "site", page: "https://example.com/page", files: null, manifest: null });
+  });
+
+  it("refreshes the link preview for a page that changed", async () => {
+    db.share = share({ mode: "public", kind: "blob", page: "blob:sha256:" + "0".repeat(64) });
+    const file = path.join(sandbox, "page.html");
+    fs.writeFileSync(file, "<h1>hi</h1>");
+    db.apps = [{ id: "a1", name: "My App", url: `file://${file}` }];
+    await getAppShare("a1");
+    expect(refreshAppPreview).toHaveBeenCalledTimes(1);
+    const [, row, now] = vi.mocked(refreshAppPreview).mock.calls[0]!;
+    expect(row).toMatchObject({ id: "abcdefghijklmnopqrstuv" });
+    expect(now).toEqual({ kind: "blob", page: `blob:sha256:${"a".repeat(64)}`, files: null, manifest: null });
+  });
+
+  it("reads the row's preview column with the rest of the share", async () => {
+    db.share = share({ mode: "public" });
+    await getAppShare("a1");
+    const columns = db.selects.find((s) => s.includes("mode"));
+    expect(columns).toBeDefined();
+    const names = columns!.split(",").map((c) => c.trim());
+    expect(names).toContain("preview");
+    expect(names).toContain("org_id");
   });
 
   it("clears a remembered link whose row is gone, and leaves an unshared app's memo alone", async () => {
@@ -186,7 +137,7 @@ describe("getAppShare", () => {
 
   it("reads a share with its link, and an unknown mode as private", async () => {
     db.share = share({ mode: "password", has_password: true });
-    expect(await getAppShare("a1")).toEqual({ kind: "ok", id: "abcdefghijklmnopqrstuv", url: "https://weft.zip/a/abcdefghijklmnopqrstuv", mode: "password", hasPassword: true, shows: "site", manifest: null, ...ORG_OWNER });
+    expect(await getAppShare("a1")).toEqual({ kind: "ok", id: "abcdefghijklmnopqrstuv", url: "https://weft.zip/a/abcdefghijklmnopqrstuv", mode: "password", hasPassword: true, shows: "site", manifest: null, preview: null, previewing: false, ...ORG_OWNER });
     db.share = share({ mode: "public_edit" });
     expect(await getAppShare("a1")).toMatchObject({ mode: "private" });
   });
@@ -273,8 +224,18 @@ describe("setAppShare", () => {
     expect(row.id).toMatch(/^[A-Za-z0-9_-]{22}$/);
     expect(row).toMatchObject({ org_id: "o1", app_id: "a1", mode: "email", name: "My App", kind: "blob", password_hash: null, owner: "user", slug: null, files: null, manifest: null });
     expect((row.page as string).startsWith("blob:sha256:")).toBe(true);
-    expect(state).toEqual({ kind: "ok", id: row.id, url: `https://weft.zip/a/${row.id as string}`, mode: "email", hasPassword: false, shows: "blob", manifest: null, ...ORG_OWNER });
+    expect(state).toEqual({ kind: "ok", id: row.id, url: `https://weft.zip/a/${row.id as string}`, mode: "email", hasPassword: false, shows: "blob", manifest: null, preview: null, previewing: false, ...ORG_OWNER });
     expect(uploaded.paths).toContain(file);
+  });
+
+  it("refreshes the link preview in the background after a write", async () => {
+    db.share = share();
+    await setAppShare("a1", { mode: "public" });
+    expect(refreshAppPreview).toHaveBeenCalledTimes(1);
+    const [t, row, now] = vi.mocked(refreshAppPreview).mock.calls[0]!;
+    expect(t).toMatchObject({ app: { id: "a1" }, orgId: "o1" });
+    expect(row).toMatchObject({ id: "abcdefghijklmnopqrstuv" });
+    expect(now).toEqual({ kind: "site", page: "https://example.com/page", files: null, manifest: null });
   });
 
   it("updates an existing share in place, keeping its id", async () => {
@@ -331,7 +292,7 @@ describe("setAppShare", () => {
   });
 
   it("turns a unique-slug violation into 'That address is taken.', and rethrows Supabase errors", async () => {
-    const real = query;
+    const real = client.query;
     client.from = (table: string) => {
       const q = real(table);
       const insert = (): Promise<{ error: { message: string } }> => Promise.resolve({ error: { message: 'duplicate key value violates unique constraint "cloud_app_shares_user_slug"' } });

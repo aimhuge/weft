@@ -10,10 +10,12 @@
 import "server-only";
 import type { Metadata } from "next";
 import { Suspense } from "react";
+import { cacheLife } from "next/cache";
 import { connection } from "next/server";
 import { notFound, redirect } from "next/navigation";
 import { ShareGateForm } from "@aimhuge/share/client";
 import { appShareAccess } from "@/lib/app-share-access";
+import { appMetadataById } from "@/lib/app-share-meta";
 import { appFrameSrc, appPublicUrl } from "@/lib/app-share-types";
 import { isDeployed } from "@/lib/home";
 import { SharedApp } from "@/components/share-view/SharedApp";
@@ -22,11 +24,14 @@ import { serviceClient } from "@/lib/web-session";
 import "@/components/home/home.css";
 import { SharedAppSkeleton } from "@/components/web-states/Skeletons";
 
-// Static on purpose, like /s/[id]: a generateMetadata that reads the gate's cookie breaks the prerendered shell.
-export const metadata: Metadata = {
-  title: "Shared app · Weft",
-  robots: { index: false, follow: false },
-};
+// The link preview (lib/app-share-meta.ts), on params alone: reading the gate's cookie here would break the
+// prerendered shell, and a preview never depends on who is looking.
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  "use cache";
+  cacheLife("minutes");
+  const { id } = await params;
+  return appMetadataById(id);
+}
 
 // Look up the row's owner slug: profiles.username for owner "user", orgs.slug for owner "org".
 // null is returned for a missing row, so the redirect falls through to the normal /a/<id> view

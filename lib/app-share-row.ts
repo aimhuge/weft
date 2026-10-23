@@ -11,6 +11,8 @@ import { appShareUrl, type AppOwner, type AppPolicy, type AppShareKind, type App
 import type { AppShareMemo, MiniApp } from "./mini-apps";
 import { rememberAppShare } from "./mini-app-store";
 import type { AppManifestUpload, AppFolderFile } from "./app-folder";
+import { cleanPreview } from "./app-preview";
+import { isPreviewing } from "./app-preview-capture";
 import { isCardShareMode, type CardShareMode } from "./share-types";
 
 export interface AppShareRow {
@@ -27,6 +29,8 @@ export interface AppShareRow {
   // The row's workspace id: the sharer's own for a "user" owner, the picked workspace for "org".
   // Optional so tests can omit it; getAppShare's getAppShare result must always carry it.
   org_id?: string;
+  // The link preview (lib/app-preview.ts), as the Mac last wrote it.
+  preview?: unknown;
 }
 
 // The shape the ready helper returns: the signed-in user, their org, the app, and the page the
@@ -52,7 +56,7 @@ export async function readShare(t: Ready): Promise<AppShareRow | null> {
   const result: { data: AppShareRow | null; error: { message: string } | null } =
     await t.client
       .from("cloud_app_shares")
-      .select("id, mode, has_password, name, kind, page, owner, slug, files, manifest, org_id")
+      .select("id, mode, has_password, name, kind, page, owner, slug, files, manifest, org_id, preview")
       .eq("created_by", t.userId)
       .eq("app_id", t.app.id)
       .maybeSingle<AppShareRow>();
@@ -134,6 +138,8 @@ function buildState(t: Ready, row: AppShareRow | null, owners: Awaited<ReturnTyp
     publicUrl,
     owners,
     manifest: shareManifest(t, row),
+    preview: cleanPreview(row?.preview),
+    previewing: isPreviewing(t.app.id),
   };
 }
 
