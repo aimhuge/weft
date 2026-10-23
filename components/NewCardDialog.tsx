@@ -5,10 +5,12 @@ import { isMac } from "@/lib/hotkeys";
 import { type NewCardInput } from "@/lib/client";
 import type { Card, RestartStatus } from "@/lib/types";
 import { busyInFolder } from "@/lib/overlap";
-import { startButton } from "@/lib/new-thread";
+import { startButton, modelLabel } from "@/lib/new-thread";
+import { gateNote } from "@/lib/limit-reset";
 import { useEscape } from "@/lib/use-escape";
 import { useHeldModifiers } from "@/lib/use-mod-held";
 import { useNewCardDialog } from "@/lib/use-new-card-dialog";
+import { useStartGate } from "@/lib/use-start-gate";
 import { NEW_THREAD } from "@/lib/file-drop";
 import Composer, { type ComposerHandle } from "./Composer";
 import Icon from "./Icon";
@@ -46,6 +48,9 @@ export default function NewCardDialog({
   const startBtn = startButton(useHeldModifiers());
   // Cards get no worktree, so a busy card in this folder would share its working tree.
   const alsoHere = busyInFolder(cards, dialog.cwd);
+  // When this model or CLI is at its limit, the thread can't start now: the Start button names the
+  // reset it waits for, and the card runs then (lib/start-gate.ts).
+  const gate = useStartGate(dialog.backend, dialog.model);
   const composer = useRef<ComposerHandle>(null);
   useEscape(true, onClose);
 
@@ -133,6 +138,8 @@ export default function NewCardDialog({
         started={dialog.started}
         busy={dialog.busy}
         startBtn={startBtn}
+        waitsUntil={gate?.at}
+        waitsFor={gate ? gateNote(gate, modelLabel(dialog.model)) : undefined}
         onSubmit={(start) => void submit(start, false)}
       />
       {/* The board's footer sits under this dialog, so its folder and plan limits show here instead. */}

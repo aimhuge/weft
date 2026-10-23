@@ -46,9 +46,9 @@ describe("remembered / remember", () => {
 });
 
 describe("modelFor", () => {
-  it("is each CLI's default until a listed model is picked", () => {
-    expect(modelFor("claude")).toBe("claude-opus-5-5");
-    expect(modelFor("puku")).toBe("opus-4.8");
+  it("is no model until one is picked — there is no default model", () => {
+    expect(modelFor("claude")).toBe("");
+    expect(modelFor("puku")).toBe("");
     localStorage.setItem("weft.model.claude", "claude-haiku-5-5");
     expect(modelFor("claude")).toBe("claude-haiku-5-5");
   });
@@ -62,7 +62,7 @@ describe("modelFor", () => {
 
   it("ignores a saved model the CLI no longer offers", () => {
     localStorage.setItem("weft.model.puku", "gone-1");
-    expect(modelFor("puku")).toBe("opus-4.8");
+    expect(modelFor("puku")).toBe("");
   });
 });
 
@@ -152,7 +152,8 @@ describe("runningOn", () => {
   });
 
   it("never names a Claude model on a puku card", () => {
-    expect(runningOn({ backend: "puku", model: "claude-fable-5-1" }).model).toBe("opus-4.8");
+    // The gateway would answer it as puku-ai-2.8, so the chip would lie: no model is better.
+    expect(runningOn({ backend: "puku", model: "claude-fable-5-1" }).model).toBeUndefined();
   });
 });
 
@@ -163,9 +164,9 @@ describe("modelOn", () => {
     expect(modelOn("claude", "claude-some-older")).toBe("claude-some-older");
   });
 
-  it("swaps the other CLI's model for this CLI's default", () => {
-    expect(modelOn("puku", "claude-fable-5-1")).toBe("opus-4.8");
-    expect(modelOn("claude", "puku-ai-2.8")).toBe("claude-opus-5-5");
+  it("drops the other CLI's model, so the CLI's own choice stands", () => {
+    expect(modelOn("puku", "claude-fable-5-1")).toBeUndefined();
+    expect(modelOn("claude", "puku-ai-2.8")).toBeUndefined();
   });
 
   it("leaves no model as no model", () => {

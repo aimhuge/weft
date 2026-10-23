@@ -10,9 +10,10 @@ import { isSubagentModel } from "@/lib/subagents";
 import { AUTOMATION_TRIGGERS, MODES, type Automation, type Backend, type PermissionMode } from "@/lib/types";
 
 const BACKENDS: Backend[] = ["claude", "puku", "codex"];
-const DONE_MODEL_IDS = new Set<string>([...MODELS.claude, ...MODELS.puku].map((m) => m.id));
+// Every model any CLI serves. The pickers offer them all — picking a model moves the thread's
+// CLI to the one that serves it — so the API accepts them all too.
+const ALL_MODEL_IDS = new Set<string>([...MODELS.claude, ...MODELS.puku, ...MODELS.codex].map((m) => m.id));
 const DONE_EFFORT_IDS = new Set<string>(EFFORTS.map((e) => e.id));
-const COPILOT_MODEL_IDS = new Set<string>(MODELS.claude.map((m) => m.id));
 
 // The rules as sent, checked; a leading slash on a skill name is dropped.
 function readAutomations(value: unknown): Automation[] {
@@ -40,8 +41,8 @@ export async function GET(req: Request) {
 }
 
 function validateDone(field: "doneModel" | "doneEffort", value: unknown) {
-  const allowed = field === "doneModel" ? DONE_MODEL_IDS : DONE_EFFORT_IDS;
-  const names = field === "doneModel" ? [...DONE_MODEL_IDS] : EFFORTS.map((e) => e.id);
+  const allowed = field === "doneModel" ? ALL_MODEL_IDS : DONE_EFFORT_IDS;
+  const names = field === "doneModel" ? [...ALL_MODEL_IDS] : EFFORTS.map((e) => e.id);
   if (value === undefined) return;
   if (typeof value !== "string" || !allowed.has(value)) {
     throw new Error(`${field} must be one of ${names.join(", ")}, or "" for the card's own.`);
@@ -50,20 +51,20 @@ function validateDone(field: "doneModel" | "doneEffort", value: unknown) {
 
 function validateCopilotModel(value: unknown) {
   if (value === undefined) return;
-  if (typeof value !== "string" || !(value === "" || COPILOT_MODEL_IDS.has(value))) {
-    throw new Error(`copilotModel must be one of ${[...COPILOT_MODEL_IDS].join(", ")}, or "" for the user's last-picked.`);
+  if (typeof value !== "string" || !(value === "" || ALL_MODEL_IDS.has(value))) {
+    throw new Error(`copilotModel must be one of ${[...ALL_MODEL_IDS].join(", ")}, or "" for the user's last-picked.`);
   }
 }
 
 function validateReviewAllModel(value: unknown) {
   if (value === undefined) return;
-  if (typeof value !== "string" || !(value === "" || COPILOT_MODEL_IDS.has(value))) {
-    throw new Error(`reviewAllModel must be one of ${[...COPILOT_MODEL_IDS].join(", ")}, or "" for the default.`);
+  if (typeof value !== "string" || !(value === "" || ALL_MODEL_IDS.has(value))) {
+    throw new Error(`reviewAllModel must be one of ${[...ALL_MODEL_IDS].join(", ")}, or "" for the default.`);
   }
 }
 
 // Any model any installed CLI serves, or "" to disable the banner's rerun.
-const BACKUP_MODEL_IDS = new Set<string>([...MODELS.claude, ...MODELS.puku, ...MODELS.codex].map((m) => m.id));
+const BACKUP_MODEL_IDS = ALL_MODEL_IDS;
 function validateBackupModel(value: unknown) {
   if (value === undefined) return;
   if (typeof value !== "string" || !(value === "" || BACKUP_MODEL_IDS.has(value))) {

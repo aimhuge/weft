@@ -167,6 +167,25 @@ describe("clientLeaks", () => {
     ]);
   });
 
+  // 2026-10-24: a client component imported lib/model-limit.ts, which reads ~/.weft off disk. Turbopack
+  // panicked on node:fs and the board route 500'd with nothing the UI could show.
+  it("reports a client file that reaches a Node built-in", () => {
+    write({
+      "components/Picker.tsx": '"use client";\nimport { limited } from "@/lib/limits";',
+      "lib/limits.ts": 'import fs from "node:fs";\nimport path from "node:path";\nexport const limited = () => fs.readFileSync(path.join("/tmp", "x"), "utf8");',
+    });
+    expect(clientLeaks(root, ["components"])).toEqual([
+      { chain: ["components/Picker.tsx", "lib/limits.ts"], serverOnly: ['imports "node:fs"', 'imports "node:path"'] },
+    ]);
+  });
+
+  it("passes a client file that reaches a Node built-in only as a type", () => {
+    write({
+      "components/Picker.tsx": '"use client";\nimport type { Stats } from "node:fs";',
+    });
+    expect(clientLeaks(root, ["components"])).toEqual([]);
+  });
+
   it("passes server components, type imports, server actions, packages and missing or non-source files", () => {
     write({
       "components/Server.tsx": 'import "@/lib/cached";',

@@ -230,6 +230,10 @@ export interface ReplyBoxState {
   fiveHour?: LimitWindow;
   // The plan's next 5-hour reset, where Send later is offered (undefined where it isn't).
   sendLater?: { planReset?: number };
+  // The reset this thread has to wait for, when the caller knows more than this thread's own
+  // snapshot does: the shared limit stores (lib/limit-reset.ts) also know the model's own cap and
+  // the CLI's weekly window. When it's there, it answers instead of fiveHour + planReset.
+  limitResetAt?: number;
   cutOff: boolean;
   // No prior assistant turn in the current session (model/CLI was just switched, or the card was never started).
   // When true, the reply box defaults to Send fresh (or Send for codex) and Continue is hidden.
@@ -240,7 +244,9 @@ export interface ReplyBoxState {
 }
 
 export function replyBoxMode(s: ReplyBoxState): { view: ReplyModeView; resetAt?: number } {
-  const resetAt = s.sendLater && s.now ? limitResetAt(s.fiveHour, s.sendLater.planReset, s.now) : undefined;
+  const resetAt = s.sendLater && s.now
+    ? s.limitResetAt ?? limitResetAt(s.fiveHour, s.sendLater.planReset, s.now)
+    : undefined;
   const cold = s.cache && !s.live && s.now && s.cache.tokens >= COLD_MIN_TOKENS && cacheMinutesLeft(s.cache, s.now) <= 0 ? s.cache : undefined;
   const view = replyMode({
     live: s.live,

@@ -102,16 +102,24 @@ describe("switchBackend", () => {
     expect(store.updateCalls.length).toBe(0);
   });
 
-  it("swaps a Claude model for puku's default on a switch to puku", async () => {
+  it("drops a Claude model on a switch to puku, so puku's own choice stands", async () => {
     const card = addCard({ backend: "claude", model: "claude-fable-5-1" });
     await switchBackend(card.id, "puku");
-    expect(store.cards.get(card.id)!.model).toBe("opus-4.8");
+    expect(store.cards.get(card.id)!.model).toBeUndefined();
   });
 
   it("takes the picked model with the switch", async () => {
     const card = addCard({ backend: "claude", model: "claude-fable-5-1" });
     await switchBackend(card.id, "puku", { model: "puku-ai-2.7" });
     expect(store.cards.get(card.id)!.model).toBe("puku-ai-2.7");
+  });
+
+  it("a model from another CLI moves the card to the CLI that serves it", async () => {
+    const card = addCard({ backend: "claude", model: "claude-fable-5-1" });
+    await switchBackend(card.id, "puku", { model: "puku-ai-2.8" });
+    const after = store.cards.get(card.id)!;
+    expect(after.backend).toBe("puku");
+    expect(after.model).toBe("puku-ai-2.8");
   });
 
   it("leaves a card with no model on the new CLI's own default", async () => {
@@ -209,14 +217,14 @@ describe("rerunOnModel", () => {
     expect(runner.sendMessage).toHaveBeenCalledWith(card.id, "first prompt", { echo: false });
   });
 
-  it("normalizes a Claude model id on a puku card to puku's default", async () => {
-    // A puku card asking for a Claude id would silently land on a different model than the
-    // picker shows; rerunOnModel routes through modelOn so the user gets what they picked
-    // (or puku's default if the picked model isn't served by puku).
+  it("moves a puku card to the CLI that serves the model it was asked for", async () => {
+    // Every model is offered now, and a model from another CLI moves the card there: one pick,
+    // one thread, and the CLI and the model always agree.
     const card = addCard({ backend: "puku" });
     await rerunOnModel(card.id, "claude-sonnet-5-5");
-    // puku's default: see lib/new-thread.ts DEFAULT_MODEL.
-    expect(store.cards.get(card.id)!.model).toBe("opus-4.8");
+    const after = store.cards.get(card.id)!;
+    expect(after.backend).toBe("claude");
+    expect(after.model).toBe("claude-sonnet-5-5");
   });
 
   it("keeps the same model, still clears error and rateLimitHit, and re-sends", async () => {

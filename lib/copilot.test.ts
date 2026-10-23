@@ -25,6 +25,7 @@ vi.mock("./copilot-suggest", () => suggest);
 vi.mock("./resume", () => ({ resumeInterrupted: vi.fn() }));
 vi.mock("./github-issues", () => ({ startIssueSync: vi.fn() }));
 vi.mock("./github-hooks", () => ({ startHookListener: vi.fn() }));
+vi.mock("./blastcp-auto", () => ({ startBlastcpAuto: vi.fn() }));
 vi.mock("./vercel-hooks", () => ({ startVercelListener: vi.fn() }));
 vi.mock("./webhook-forward", () => ({ startWebhookRelay: vi.fn() }));
 vi.mock("./cloud-sync-start", () => ({ startAccountCloudSync: vi.fn() }));
@@ -69,7 +70,9 @@ beforeEach(() => {
 });
 
 describe("ensureCopilot", () => {
-  it("creates the copilot card in the home folder the first time, with the chosen model", () => {
+  it("creates the copilot card in the home folder the first time, with no model of its own", () => {
+    // There is no default model: with no pick in Settings and nothing remembered, the copilot
+    // starts on whatever its CLI chooses.
     const c = ensureCopilot();
     expect(store.createCard).toHaveBeenCalledWith(
       {
@@ -78,7 +81,7 @@ describe("ensureCopilot", () => {
         cwd: os.homedir(),
         backend: "claude",
         permissionMode: "auto",
-        model: "claude-opus-5-5",
+        model: undefined,
         role: "copilot",
       },
       COPILOT_ID,
@@ -92,6 +95,16 @@ describe("ensureCopilot", () => {
     ensureCopilot();
     expect(store.createCard).toHaveBeenCalledWith(
       expect.objectContaining({ model: "claude-haiku-5-5", role: "copilot" }),
+      COPILOT_ID,
+    );
+  });
+
+  it("moves to the CLI that serves the picked model", async () => {
+    const settings = await import("./settings");
+    vi.mocked(settings.copilotModel).mockReturnValueOnce("puku-ai-2.8");
+    ensureCopilot();
+    expect(store.createCard).toHaveBeenCalledWith(
+      expect.objectContaining({ backend: "puku", model: "puku-ai-2.8" }),
       COPILOT_ID,
     );
   });

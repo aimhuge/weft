@@ -96,7 +96,8 @@ describe("SettingsDialog", () => {
 
     await userEvent.selectOptions(cli, "puku");
     expect(within(pages()).getByLabelText("Unsaved changes")).toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: "Default model" })).toHaveValue("opus-4.8");
+    // There's no default model: a CLI nobody picked a model for has none of its own.
+    expect(screen.getByRole("combobox", { name: "Default model" })).toHaveValue("");
 
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
     expect(api.saveSettings).toHaveBeenCalledWith({ defaultBackend: "puku" });

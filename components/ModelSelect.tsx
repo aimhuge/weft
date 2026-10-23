@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { MODELS } from "@/lib/new-thread";
+import { useLimitedModels } from "@/lib/use-plan-limits";
 import type { Backend } from "@/lib/types";
 
 // One optgroup per CLI a model is offered on. The whole point of grouping here is that
@@ -36,6 +37,8 @@ export default function ModelSelect({
   groups?: { label: string; backends: Backend[] }[];
 }) {
   const list = groups ?? DEFAULT_GROUPS;
+  const limited = useLimitedModels();
+  const atLimit = new Set(limited.map((l) => l.model));
   return (
     <select value={value} aria-label={label} onChange={(e) => onChange(e.target.value)} className={SELECT_CLASS}>
       {leading.map((o) => (
@@ -50,7 +53,7 @@ export default function ModelSelect({
           <optgroup key={g.label} label={g.label}>
             {opts.map((m) => (
               <option key={m.id} value={m.id}>
-                {m.label}
+                {atLimit.has(m.id) ? `${m.label} — at its limit` : m.label}
               </option>
             ))}
           </optgroup>

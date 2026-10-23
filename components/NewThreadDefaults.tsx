@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { lastEffort, modelFor, setLastEffort, setModelFor } from "@/lib/new-thread";
+import { lastEffort, modelFor, NO_MODEL, resolveModel, setLastEffort, setModelFor } from "@/lib/new-thread";
 import type { Backend, Effort } from "@/lib/types";
 import { BackendPicker, EffortPicker, ModelPicker } from "./Pickers";
 
@@ -9,6 +9,9 @@ import { BackendPicker, EffortPicker, ModelPicker } from "./Pickers";
 // waits for Save (it's a server setting the API and copilot use too); the model and effort
 // are the New thread dialog's own remembered picks, so they change right away, and picking
 // something else in that dialog moves them again.
+//
+// Every model any CLI serves is offered here, not just the ones the chosen CLI serves: picking
+// a model moves the CLI to the one that serves it, so the row is one choice, not two.
 export default function NewThreadDefaults({
   backend,
   onBackend,
@@ -37,11 +40,17 @@ export default function NewThreadDefaults({
           value={models[backend]}
           onChange={(next) => {
             setModelFor(backend, next);
-            setModels((m) => ({ ...m, [backend]: next }));
+            // A model from another CLI moves the row's CLI with it, so the two always agree.
+            const resolved = resolveModel(next);
+            if (resolved && resolved.backend !== backend) {
+              onBackend(resolved.backend);
+              setModelFor(resolved.backend, next);
+            }
+            setModels((m) => ({ ...m, [backend]: next, ...(resolved ? { [resolved.backend]: next } : {}) }));
           }}
           label="Default model"
-          // Hide the backends the New thread dialog doesn't offer — keeps the menu tight to what's runnable.
-          groups={[{ label: backend === "codex" ? "Codex" : "Models", backends: [backend] }]}
+          // "" is the CLI's own choice, and it has to be pickable again after a model is set.
+          leading={[{ value: NO_MODEL, label: "Default model" }]}
         />
         <EffortPicker
           value={effort}

@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { PLANS_POLL_MS, resetPlans, usePlanLimits } from "./use-plan-limits";
+import { PLANS_POLL_MS, resetPlans, useLimitedModels, usePlanLimits } from "./use-plan-limits";
 
 const PLANS = { claude: { at: 1, fiveHour: { used: 20 } } };
 
@@ -72,5 +72,24 @@ describe("usePlanLimits", () => {
       vi.advanceTimersByTime(PLANS_POLL_MS * 2);
     });
     expect(fetch).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("useLimitedModels", () => {
+  // The models that hit their own cap (lib/model-limit.ts) come with the plans, so the pickers mark them
+  // without reading the store off disk: a client component can't import lib/model-limit.ts (2026-10-24).
+  it("reads the models that hit their cap from the plans route", async () => {
+    const models = [{ model: "claude-opus-5-5", at: 1, resetsAt: 2 }];
+    vi.stubGlobal("fetch", respond({ plans: PLANS, models }));
+    const { result } = renderHook(() => useLimitedModels());
+    await waitFor(() => expect(result.current).toEqual(models));
+  });
+
+  it("is empty when the route sends none, or refuses", async () => {
+    vi.stubGlobal("fetch", respond({ plans: PLANS }));
+    const { result } = renderHook(() => useLimitedModels());
+    await waitFor(() => expect(result.current).toEqual([]));
+    const refused = renderHook(() => useLimitedModels());
+    await waitFor(() => expect(refused.result.current).toEqual([]));
   });
 });

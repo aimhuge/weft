@@ -8,6 +8,7 @@ import type { Backend } from "@/lib/types";
 import { BACKENDS } from "@/lib/new-thread";
 import { startButton } from "@/lib/new-thread";
 import type { Card } from "@/lib/types";
+import { formatAt } from "@/lib/schedule";
 import { alsoHereLine } from "@/lib/overlap";
 import Icon, { Spinner } from "./Icon";
 
@@ -19,6 +20,9 @@ export function NewCardDialogFooter({
   started,
   busy,
   startBtn,
+  // When this thread can't start yet: the reset it waits for (lib/start-gate.ts).
+  waitsUntil,
+  waitsFor,
   onSubmit,
 }: {
   backend: Backend;
@@ -28,8 +32,13 @@ export function NewCardDialogFooter({
   started: string | null;
   busy: false | "start" | "backlog";
   startBtn: ReturnType<typeof startButton>;
+  // The reset time (unix ms) this thread waits for, and why it waits.
+  waitsUntil?: number;
+  waitsFor?: string;
   onSubmit: (start: boolean) => void;
 }) {
+  // The button names what it does: start now, or start when the window opens.
+  const label = waitsUntil ? `Start at ${formatAt(waitsUntil)}` : startBtn.label;
   return (
     <div className="flex shrink-0 flex-wrap items-center justify-end gap-x-3 gap-y-2 px-5 pb-4 pt-3">
       <div
@@ -53,6 +62,10 @@ export function NewCardDialogFooter({
       <p className="min-w-0 flex-1 basis-24 truncate text-[12px]">
         {error ? (
           <span className="text-danger">{error}</span>
+        ) : waitsUntil ? (
+          <span className="text-warn" title="This thread waits for the window to open, then runs on its own.">
+            {waitsFor ?? "At its limit"} · starts at {formatAt(waitsUntil)}
+          </span>
         ) : alsoHere.length > 0 ? (
           <span
             className="flex min-w-0 items-center gap-1.5 text-warn"
@@ -97,7 +110,7 @@ export function NewCardDialogFooter({
           </>
         ) : (
           <>
-            {startBtn.label}
+            {label}
             <kbd aria-hidden="true" className="font-sans font-normal opacity-60">
               {startBtn.key}
             </kbd>

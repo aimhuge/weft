@@ -1,28 +1,62 @@
 import { endSession, isBusy, sendMessage, setModel } from "./runner";
 import { getCard, getThread, updateCard } from "./store";
 import type { Backend, Card } from "./types";
-import { effortFor, modelOn } from "./new-thread";
+import { backendFor, effortFor, modelLabel, modelOn } from "./new-thread";
+import { fallbackFor, fallbackLine } from "./model-fallback";
 
-// Re-sends the card's last user message on a different model, in a fresh session of the
-// same CLI (lib/runner.ts setModel). Used by the "first message failed" banner: the
-// card's model is what's exhausted, so rerun on the user's configured backup model.
-// The model goes through modelOn: a puku card picking claude-fable-5-1 lands on puku's
-// own default, because that model id would be served by Claude (modelOn normalizes).
+// Moves a card off a model that has hit its limit, onto the user's backup model, and replays the
+// turn that was cut off there. This is what happens by itself when a thread's model runs out
+// (lib/rate-limit.ts records the hit; lib/model-fallback.ts decides where to go): the thread keeps
+// working instead of waiting hours for the window to reset.
+//
+// The backup model may live on another CLI (a Claude card whose Opus is exhausted moves to a Puku
+// model), so the CLI moves with it and the card starts a fresh session there — the old session is
+// on the exhausted model. Returns what happened, so the caller can put it on the card's line.
+//
+// Returns undefined when there's nothing to do: the model is fine, or no backup model is set.
+export async function switchToBackup(cardId: string): Promise<{ from: string; to: string } | undefined> {
+  const card = getCard(cardId);
+  if (!card) return undefined;
+  const fallback = fallbackFor(card.model);
+  if (!fallback?.model || !fallback.from) return undefined;
+  const backend = fallback.backend ?? card.backend;
+  // A card that's mid-turn can't have its session swapped under it; the turn that hit the limit
+  // has already ended by the time we get here, so this is only a guard.
+  if (isBusy(cardId)) return undefined;
+  await endSession(cardId);
+  const patch = switchPatch(card, backend, fallback.model);
+  // The error and the limit flag go: the card is running again, on a model that works.
+  updateCard(cardId, { ...patch, error: undefined, rateLimitHit: false, lastLine: fallbackLine(modelLabel(fallback.from), modelLabel(fallback.model)) });
+  const last = [...getThread(cardId)].reverse().find((item) => item.kind === "user");
+  if (last?.kind === "user") sendMessage(cardId, last.text, { echo: false });
+  return { from: fallback.from, to: fallback.model };
+}
+
+// Re-sends the card's last user message on a different model, in a fresh session. Used by the
+// "first message failed" banner: the card's model is what's exhausted, so rerun on the user's
+// configured backup model.
+// The backup may live on another CLI, so the card moves to the CLI that serves the model: one
+// pick, one thread, and the CLI and the model always agree.
 export async function rerunOnModel(cardId: string, model: string) {
   const card = getCard(cardId);
   if (!card) throw new Error("No such card.");
   if (isBusy(cardId)) throw new Error("Stop the thread before rerunning it.");
   await endSession(cardId);
-  // Normalize the requested model the same way switchBackend does, so a card on puku
-  // asking for a Claude id doesn't quietly pick a different model than the picker shows.
-  const normalized = modelOn(card.backend, model) ?? model;
-  if (normalized !== card.model) {
-    // Different model: clear the session so the new model takes effect on the next send.
-    updateCard(cardId, { model: normalized, sessionId: undefined, error: undefined, rateLimitHit: false });
+  const backend = backendFor(model);
+  if (backend && backend !== card.backend) {
+    // Another CLI's model: the card moves there, in a fresh session on that CLI.
+    updateCard(cardId, { backend, model, sessionId: undefined, error: undefined, rateLimitHit: false });
   } else {
-    // Same model: leave the session id alone (it may already be empty) but still clear
-    // the error and rate-limit flag — that's the point of the rerun.
-    updateCard(cardId, { error: undefined, rateLimitHit: false });
+    // The model's own CLI, or one it doesn't serve: it drops to that CLI's own choice.
+    const normalized = modelOn(card.backend, model);
+    if (normalized !== card.model) {
+      // Different model: clear the session so the new model takes effect on the next send.
+      updateCard(cardId, { model: normalized, sessionId: undefined, error: undefined, rateLimitHit: false });
+    } else {
+      // Same model: leave the session id alone (it may already be empty) but still clear
+      // the error and rate-limit flag — that's the point of the rerun.
+      updateCard(cardId, { error: undefined, rateLimitHit: false });
+    }
   }
   const last = [...getThread(cardId)].reverse().find((item) => item.kind === "user");
   if (last?.kind === "user") sendMessage(cardId, last.text, { echo: false });
@@ -35,14 +69,17 @@ export async function rerunOnModel(cardId: string, model: string) {
 export async function switchBackend(cardId: string, backend: Backend, { replay = false, model }: { replay?: boolean; model?: string } = {}) {
   const card = getCard(cardId);
   if (!card) throw new Error("No such card.");
-  if (card.backend === backend) {
+  // A model from another CLI moves the card to the CLI that serves it: one pick, one thread, and
+  // the CLI and the model always agree. "" is the CLI's own default, which it already is.
+  const target = model ? (backendFor(model) ?? backend) : backend;
+  if (card.backend === target) {
     // Same CLI, another of its models: no new session needed.
-    if (model && model !== card.model) setModel(cardId, model);
+    if (model !== undefined && model !== card.model) setModel(cardId, model);
     return;
   }
   if (isBusy(cardId)) throw new Error("Stop the thread before switching its CLI.");
   await endSession(cardId);
-  updateCard(cardId, switchPatch(card, backend, model));
+  updateCard(cardId, switchPatch(card, target, model));
   if (replay) {
     const last = [...getThread(cardId)].reverse().find((item) => item.kind === "user");
     if (last?.kind === "user") sendMessage(cardId, last.text, { echo: false });

@@ -25,6 +25,23 @@ export function remember(key: string, value: string | null) {
   } catch {}
 }
 
+// The remembered defaults live in localStorage, so a picker that changes one (Settings → Models,
+// or another New thread dialog) has to tell the open dialogs to re-read them — a default you just
+// changed has to take effect now, not the next time a dialog opens.
+const defaultListeners = new Set<() => void>();
+
+export function subscribeDefaults(listener: () => void) {
+  defaultListeners.add(listener);
+  return () => {
+    defaultListeners.delete(listener);
+  };
+}
+
+// Called after a remembered default changes.
+export function defaultsChanged() {
+  for (const listener of defaultListeners) listener();
+}
+
 export const BACKENDS: { id: Backend; label: string }[] = [
   { id: "claude", label: "Claude Code" },
   { id: "puku", label: "puku-cli" },
@@ -56,30 +73,39 @@ export function backendFor(model: string): Backend | undefined {
   return (Object.keys(MODELS) as Backend[]).find((b) => MODELS[b].some((m) => m.id === model));
 }
 
-const DEFAULT_MODEL: Record<Backend, string> = {
-  claude: "claude-opus-5-5",
-  puku: "opus-4.8",
-  codex: CODEX_DEFAULT_MODEL,
-};
+// There is no default model: a model the user didn't pick is the CLI's own choice, and Weft leaves
+// the model off the CLI's command line so the CLI picks. "" is that choice everywhere.
+export const NO_MODEL = "";
 
-// The last model picked for this CLI, or its default.
-export function modelFor(backend: Backend) {
+// The last model picked for this CLI, or "" when the user never picked one (so the CLI's own
+// default runs). The remembered pick is per CLI, so switching the CLI in the New thread dialog
+// lands on the model you last picked for that CLI, or on its own default.
+export function modelFor(backend: Backend): string {
   const saved = remembered(`${LAST_MODEL}.${backend}`);
-  return saved !== null && MODELS[backend].some((m) => m.id === saved)
-    ? saved
-    : DEFAULT_MODEL[backend];
+  return saved !== null && MODELS[backend].some((m) => m.id === saved) ? saved : NO_MODEL;
 }
 
-// The model a card runs on this CLI: its own when the CLI serves it, else the CLI's default. A Claude id
-// on puku isn't refused, the gateway quietly answers it as puku-ai-2.8, so the chip would lie.
+// The model a card runs on this CLI: its own when the CLI serves it, else nothing (the CLI's own
+// default). A Claude id on puku isn't refused — the gateway quietly answers it as puku-ai-2.8, so
+// the chip would lie — so a model the CLI doesn't serve drops to undefined and the CLI decides.
 // undefined stays undefined (the CLI's own default).
 export function modelOn(backend: Backend, model: string | undefined): string | undefined {
   if (!model) return undefined;
-  if (model === CODEX_DEFAULT_MODEL) return backend === "codex" ? undefined : DEFAULT_MODEL[backend];
+  if (model === CODEX_DEFAULT_MODEL) return undefined;
   if (backend === "codex") return undefined;
   const bare = model.replace(/\[[^\]]*\]$/, "");
   const onPuku = MODELS.puku.some((m) => m.id === bare);
-  return (backend === "puku") === onPuku ? model : DEFAULT_MODEL[backend];
+  return (backend === "puku") === onPuku ? model : undefined;
+}
+
+// The CLI that serves a model, and the model as it should be sent to that CLI. Any model from any
+// CLI can be picked anywhere; the CLI moves with the model. Returns undefined for "" (the CLI's
+// own default) and for a model no CLI serves.
+export function resolveModel(model: string): { backend: Backend; model: string } | undefined {
+  if (!model || model === CODEX_DEFAULT_MODEL) return undefined;
+  const backend = backendFor(model);
+  if (!backend) return undefined;
+  return { backend, model };
 }
 
 // "" leaves it to the model's own default. A new thread uses the last card's choice, High at first.
@@ -122,10 +148,12 @@ export function effortFor(backend: Backend, effort: Effort | "" | undefined): Ef
 // Settings → Models sets what the next new thread starts on; the New thread dialog keeps its own last pick the same way.
 export function setModelFor(backend: Backend, model: string) {
   remember(`${LAST_MODEL}.${backend}`, model);
+  defaultsChanged();
 }
 
 export function setLastEffort(effort: Effort | "") {
   remember(LAST_EFFORT, effort);
+  defaultsChanged();
 }
 
 // The last effort picked, High at first. Only the Claude CLI takes one.
@@ -141,6 +169,7 @@ export function rememberPicks(picks: { cwd: string; backend: Backend; model: str
   remember(LAST_BACKEND, picks.backend);
   remember(`${LAST_MODEL}.${picks.backend}`, picks.model);
   remember(LAST_EFFORT, picks.effort);
+  defaultsChanged();
 }
 
 // Why this prompt can't start yet, if it can't.

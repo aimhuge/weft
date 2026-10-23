@@ -1,4 +1,6 @@
 import { backendFor, MODELS } from "./new-thread";
+import { fallbackFor } from "./model-fallback";
+import { subagentModel } from "./settings";
 import type { Backend } from "./types";
 
 // Subagents: when a board thread should hand work to a subagent, and on which model. The user picks in
@@ -17,6 +19,15 @@ const COMMAND: Record<Backend, string> = { claude: "claude", puku: "puku-cli", c
 
 // The CLI that serves a model id, or undefined for "choose", "inherit" and ids neither serves.
 export const subagentBackend = backendFor;
+
+// The model subagents should run on right now: the user's pick, unless that model has hit its
+// limit, in which case the backup model takes over (lib/model-fallback.ts). "choose" and "inherit"
+// pass through — neither names a model that could be exhausted.
+export function subagentModelFor(now = Date.now()): SubagentModel {
+  const picked = subagentModel();
+  if (picked === "choose" || picked === "inherit") return picked;
+  return fallbackFor(picked, now)?.model ?? picked;
+}
 
 export function isSubagentModel(value: unknown): value is SubagentModel {
   return value === "choose" || value === "inherit" || (typeof value === "string" && subagentBackend(value) !== undefined);

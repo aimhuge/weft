@@ -5,26 +5,27 @@ import { describe, expect, it, vi } from "vitest";
 import NewThreadDefaults from "./NewThreadDefaults";
 import "./test-utils";
 
-// localStorage is empty, so modelFor() returns the default for each backend.
+// localStorage is empty, so modelFor() returns "" for each backend: there is no default model,
+// and the CLI picks its own until the user picks one.
 describe("NewThreadDefaults", () => {
-  it("shows the CLI, model and effort pickers with the backend's default model", () => {
+  it("shows the CLI, model and effort pickers with no model of their own", () => {
     render(<NewThreadDefaults backend="claude" onBackend={() => {}} />);
     expect(screen.getByRole("combobox", { name: "Default CLI" })).toHaveValue("claude");
-    expect(screen.getByRole("combobox", { name: "Default model" })).toHaveValue("claude-opus-5-5");
+    expect(screen.getByRole("combobox", { name: "Default model" })).toHaveValue("");
     expect(screen.getByRole("combobox", { name: "Default effort" })).toHaveValue("high");
   });
 
-  it("filters the model menu to the selected backend's group", () => {
+  it("offers every CLI's models, since picking one moves the CLI to it", () => {
     const { rerender } = render(<NewThreadDefaults backend="claude" onBackend={() => {}} />);
-    expect(screen.getByRole("group", { name: "Models" })).toBeInTheDocument();
-    expect(screen.queryByRole("group", { name: "Codex" })).not.toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Claude" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Puku" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Codex" })).toBeInTheDocument();
 
     rerender(<NewThreadDefaults backend="puku" onBackend={() => {}} />);
-    expect(screen.getByRole("combobox", { name: "Default model" })).toHaveValue("opus-4.8");
+    expect(screen.getByRole("combobox", { name: "Default model" })).toHaveValue("");
 
     rerender(<NewThreadDefaults backend="codex" onBackend={() => {}} />);
-    expect(screen.getByRole("combobox", { name: "Default model" })).toHaveValue("codex-default");
-    expect(screen.getByRole("group", { name: "Codex" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Default model" })).toHaveValue("");
   });
 
   it("forwards a new backend pick", async () => {

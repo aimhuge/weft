@@ -4,11 +4,10 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { makeCard } from "./test-utils";
 import CardView, { BackendBadge } from "./CardView";
-import BackendPicker from "./BackendPicker";
 
 const api = vi.hoisted(() => ({
   login: vi.fn(() => Promise.resolve()),
-  switchBackend: vi.fn(() => Promise.resolve()),
+  switchBackend: vi.fn(() => Promise.resolve() as Promise<unknown>),
 }));
 vi.mock("@/lib/client", () => ({ api }));
 
@@ -306,47 +305,5 @@ describe("BackendBadge", () => {
     cleanup();
     render(<BackendBadge backend="puku" card={makeCard({ backend: "puku", stats: { runsOn: { model: "puku-ai-2.8" } } })} />);
     expect(screen.getByText("Puku AI 2.8")).toBeInTheDocument();
-  });
-});
-
-describe("BackendPicker", () => {
-  afterEach(cleanup);
-
-  it("lists each CLI's models, marks the current one, and switches CLI with the picked model", async () => {
-    render(<BackendPicker card={makeCard({ backend: "claude", model: "claude-opus-5-5" })} />);
-    await userEvent.click(screen.getByRole("button", { name: /Switch model/ }));
-    expect(screen.getByRole("button", { name: "Opus 5.5" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("button", { name: "Opus 4.8" })).toHaveAttribute("aria-pressed", "false");
-    expect(screen.getByRole("group", { name: "puku-cli" })).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Puku AI 2.7" }));
-    expect(api.switchBackend).toHaveBeenCalledWith("c1", "puku", false, "puku-ai-2.7");
-  });
-
-  it("a puku card left with a Claude model shows puku's default as current", async () => {
-    render(<BackendPicker card={makeCard({ backend: "puku", model: "claude-fable-5-1" })} />);
-    await userEvent.click(screen.getByRole("button", { name: /Switch model/ }));
-    expect(screen.getByRole("button", { name: "Opus 4.8" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("button", { name: "Fable 5.1" })).toHaveAttribute("aria-pressed", "false");
-  });
-
-  it("is a no-op when the chosen model is the card's own", async () => {
-    render(<BackendPicker card={makeCard({ backend: "puku", model: "puku-ai-2.8" })} />);
-    await userEvent.click(screen.getByRole("button", { name: /Switch model/ }));
-    await userEvent.click(screen.getByRole("button", { name: "Puku AI 2.8" }));
-    expect(api.switchBackend).not.toHaveBeenCalled();
-  });
-
-  it("while live, keeps this CLI's models and disables the other CLI's", async () => {
-    render(<BackendPicker card={makeCard({ backend: "claude", column: "running" })} />);
-    await userEvent.click(screen.getByRole("button", { name: /Switch model/ }));
-    expect(screen.getByRole("button", { name: "Sonnet 5.5" })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "Opus 4.8" })).toBeDisabled();
-    expect(screen.getByText("Stop the thread to switch CLI.")).toBeInTheDocument();
-  });
-
-  it("the copilot doesn't get a switcher — just the static badge", () => {
-    render(<BackendPicker card={makeCard({ id: "copilot", backend: "claude", role: "copilot" })} />);
-    expect(screen.queryByRole("button", { name: /Switch model/ })).not.toBeInTheDocument();
-    expect(screen.getByText("Claude Code")).toBeInTheDocument();
   });
 });

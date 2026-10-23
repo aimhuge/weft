@@ -10,6 +10,7 @@ import { useReplySchedule } from "@/lib/use-reply-schedule";
 import { useReplyContinue } from "@/lib/use-reply-continue";
 import { useReplyQueue } from "@/lib/use-reply-queue";
 import { useNow } from "@/lib/use-now";
+import { useThreadGate } from "@/lib/use-start-gate";
 import { replyBoxMode, type ReplyAction } from "@/lib/reply-mode";
 import type { Backend, CacheState, LimitWindow, ScheduledMessage } from "@/lib/types";
 import Composer, { type ComposerHandle } from "./Composer";
@@ -46,6 +47,8 @@ export default function ReplyBox({
   cutOff = false,
   noPriorContext: noPriorContextProp = false,
   fiveHour,
+  backend,
+  model,
   autoFocus,
   editLast,
   onEditing,
@@ -69,6 +72,10 @@ export default function ReplyBox({
   noPriorContext?: boolean;
   // The plan's 5-hour window on this thread; when it's used up, Enter schedules for its reset.
   fiveHour?: LimitWindow;
+  // The thread's CLI and model, so the reply box can ask the shared limit stores (lib/limit-reset.ts)
+  // about the model's own cap and the CLI's weekly window, not just this thread's snapshot.
+  backend?: Backend;
+  model?: string;
   autoFocus?: boolean;
   editLast?: EditLast;
   onEditing?: (editing: boolean) => void;
@@ -250,6 +257,9 @@ export default function ReplyBox({
   // new session in the same card isn't supported (lib/splice.ts sendFresh refuses codex), so the primary
   // falls back to plain Send with the no-prior-context chip and Continue is hidden.
   const canFresh = Boolean(stale);
+  // The shared limit stores know more than this thread's own snapshot: the model's own cap and the
+  // CLI's weekly window (lib/limit-reset.ts). Where the thread can be scheduled, they answer.
+  const gate = useThreadGate(fiveHour, sendLater?.resets.fiveHour, backend ?? "claude", model);
   const { view, resetAt } = replyBoxMode({
     live,
     question: Boolean(question),
@@ -261,6 +271,7 @@ export default function ReplyBox({
     cache: stale?.cache,
     fiveHour,
     sendLater: sendLater && { planReset: sendLater.resets.fiveHour },
+    limitResetAt: gate?.at,
     cutOff,
     canFresh,
     // No prior assistant context when the card has no live session: a model/CLI was just switched

@@ -7,6 +7,7 @@
 import type { ReactNode } from "react";
 import type { PlanResets } from "@/lib/schedule";
 import { turnCutOff } from "@/lib/reply-mode";
+import { modelOn } from "@/lib/new-thread";
 import { useThreadTransport } from "@/lib/thread-transport";
 import type { Card } from "@/lib/types";
 import CrashGuard from "./CrashGuard";
@@ -87,6 +88,10 @@ export function ThreadReply({ card, show, live, placeholder, question, schedulin
       // this is false there — Continue still works on cold cache with history.
       noPriorContext={!card.sessionId}
       fiveHour={card.stats?.fiveHour}
+      backend={card.backend}
+      // The model the thread runs on: the one it was started with, else the one its session runs on
+      // (lib/new-thread.ts modelOn picks the card's own model only when it fits the CLI).
+      model={modelOn(card.backend, card.model) ?? card.stats?.runsOn?.model}
       editLast={editLast} onEditing={onEditing}
       onSend={onSend} onShell={shell && ((command) => shell(card.id, command))} onStop={() => transport.stop(card.id)} />
   );

@@ -12,6 +12,12 @@ import { resolveSpec } from "./import-check";
 
 const SOURCE = /\.[cm]?[jt]sx?$/;
 const CACHE_NAMES = new Set(["cacheLife", "cacheTag", "unstable_cacheLife", "unstable_cacheTag"]);
+// Node's built-ins, which a browser bundle can't hold. Turbopack panics on them ("the chunking context
+// does not support external modules") and the whole board route 500s with no error the UI can show —
+// on 2026-10-24 components/ModelSelect.tsx imported lib/model-limit.ts, which reads ~/.weft off disk.
+// A client component that needs one of these asks the server for the data instead (as the model
+// pickers now read /api/limits/plans).
+const NODE_BUILTINS = /^(?:node:)?(?:assert|async_hooks|buffer|child_process|cluster|console|constants|crypto|dgram|dns|domain|events|fs|http|http2|https|inspector|module|net|os|path|perf_hooks|process|punycode|querystring|readline|repl|stream|string_decoder|sys|timers|tls|trace_events|tty|url|util|v8|vm|worker_threads|zlib)(?:\/|$)/;
 
 export interface ModuleFacts {
   // The file's own directives ("use client", "use server"), from its prologue.
@@ -56,14 +62,16 @@ function valueSpec(node: ts.Node): string | null {
   return null;
 }
 
-// Why one node keeps its module out of a client bundle: a "use cache" directive, `import "server-only"`, or
-// cacheLife/cacheTag imported for a value.
+// Why one node keeps its module out of a client bundle: a "use cache" directive, `import "server-only"`,
+// cacheLife/cacheTag imported for a value, or a Node built-in.
 function serverOnlyReasons(node: ts.Node): string[] {
   if (ts.isExpressionStatement(node) && ts.isStringLiteral(node.expression) && /^use cache(:|$)/.test(node.expression.text)) {
     return [`has a "${node.expression.text}" directive`];
   }
   const spec = ts.isImportDeclaration(node) ? valueSpec(node) : null;
+  if (spec === null) return [];
   if (spec === "server-only") return ['imports "server-only"'];
+  if (NODE_BUILTINS.test(spec)) return [`imports "${spec}"`];
   if (spec !== "next/cache") return [];
   return valueNames((node as ts.ImportDeclaration).importClause)
     .filter((name) => CACHE_NAMES.has(name))

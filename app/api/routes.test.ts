@@ -47,21 +47,34 @@ vi.mock("@/lib/runner", () => ({
 }));
 
 vi.mock("@/lib/settings", () => ({
+  DEFAULT_THREAD_PROMPT: "You are a card on a board.",
   listProjects: vi.fn(() => []),
   touchProject: vi.fn(),
   removeProject: vi.fn(),
   dismissSession: vi.fn(),
+  dismissedSessions: vi.fn(() => []),
+  threadPrompt: vi.fn(() => "tp"),
   setThreadPrompt: vi.fn(),
+  keepAliveMinutes: vi.fn(() => 5),
   setKeepAliveMinutes: vi.fn(),
-  setDefaultPermissionMode: vi.fn(),
   defaultPermissionMode: vi.fn(() => "auto"),
+  setDefaultPermissionMode: vi.fn(),
+  defaultBackend: vi.fn(() => "claude"),
+  setDefaultBackend: vi.fn(),
+  automations: vi.fn(() => []),
   setAutomations: vi.fn(),
+  pushOnDone: vi.fn(() => true),
   setPushOnDone: vi.fn(),
+  subagentModel: vi.fn(() => "choose"),
   setSubagentModel: vi.fn(),
-  setDoneModel: vi.fn(),
-  setDoneEffort: vi.fn(),
-  setCopilotModel: vi.fn(), setReviewAllModel: vi.fn(),
-  doneModel: vi.fn(() => ""), doneEffort: vi.fn(() => ""), copilotModel: vi.fn(() => ""),
+  doneModel: vi.fn(() => ""), doneEffort: vi.fn(() => ""),
+  setDoneModel: vi.fn(), setDoneEffort: vi.fn(),
+  copilotModel: vi.fn(() => ""), setCopilotModel: vi.fn(),
+  reviewAllModel: vi.fn(() => ""), setReviewAllModel: vi.fn(),
+  backupModel: vi.fn(() => ""), setBackupModel: vi.fn(),
+  issueFolders: vi.fn(() => []), setIssueSync: vi.fn(),
+  allowedFolders: vi.fn(() => []), allowFolder: vi.fn(), unallowFolder: vi.fn(),
+  syncFolders: vi.fn(() => []), setSyncFolder: vi.fn(),
   settingsView: vi.fn(() => ({ threadPrompt: "tp", keepAliveMinutes: 5, automations: [] })),
 }));
 
@@ -753,7 +766,9 @@ describe("/settings", () => {
       { pushOnDone: "no" },
       { subagentModel: "gpt-5" },
       { doneModel: "gpt-5" },
-      { doneEffort: "extreme" }, { copilotModel: "opus-4.8" }, { reviewAllModel: "opus-4.8" },
+      { doneEffort: "extreme" },
+      // A model no CLI serves. Any model a CLI does serve is fine for these rows now.
+      { copilotModel: "not-a-model" }, { reviewAllModel: "not-a-model" },
       { automations: "nope" },
       { automations: [{ on: "sometimes", skill: "x" }] },
       { automations: [{ on: "done", skill: "bad skill!" }] },
@@ -770,6 +785,22 @@ describe("/settings", () => {
     expect(settings.setAutomations).not.toHaveBeenCalled();
     expect(settings.setPushOnDone).not.toHaveBeenCalled();
     expect(settings.setSubagentModel).not.toHaveBeenCalled();
+  });
+
+  it("PATCH takes any model a CLI serves, from any CLI", async () => {
+    for (const body of [
+      { copilotModel: "opus-4.8" },
+      { copilotModel: "puku-ai-2.8" },
+      { reviewAllModel: "claude-opus-5-5" },
+      { reviewAllModel: "puku-ai-2.7" },
+      { subagentModel: "puku-ai-2.8" },
+      { doneModel: "claude-sonnet-5-5" },
+    ]) {
+      expect((await patch(body)).status, JSON.stringify(body)).toBe(200);
+    }
+    expect(settings.setCopilotModel).toHaveBeenCalledWith("puku-ai-2.8");
+    expect(settings.setReviewAllModel).toHaveBeenCalledWith("puku-ai-2.7");
+    expect(settings.setSubagentModel).toHaveBeenCalledWith("puku-ai-2.8");
   });
 });
 

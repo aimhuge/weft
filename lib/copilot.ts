@@ -8,6 +8,7 @@ import { startHookListener } from "./github-hooks";
 import { startVercelListener } from "./vercel-hooks";
 import { startWebhookRelay } from "./webhook-forward";
 import { startAccountCloudSync } from "./cloud-sync-start";
+import { startBlastcpAuto } from "./blastcp-auto";
 import { startLeagueSync } from "./league-sync";
 import { startIssueSync } from "./github-issues";
 import { startPukuTrial } from "./puku-trial";
@@ -16,20 +17,32 @@ import { resumeInterrupted } from "./resume";
 import { startScheduler } from "./scheduler";
 import { chipCardId, startSuggestRefresh } from "./copilot-suggest";
 import type { CopilotPersona } from "./copilot-personas";
-import { modelFor } from "./new-thread";
+import { backendFor, modelFor } from "./new-thread";
+import { fallbackFor } from "./model-fallback";
 import { copilotModel, defaultPermissionMode, listProjects } from "./settings";
 import { clearThread, createCard, getCard, listCards, updateCard } from "./store";
 import { COPILOT_ID } from "./types";
 
 // The model the copilot card should be created with: Settings → Models → Copilot's pick, or the user's
-// last-picked Claude model when that says "default". Set once when the card is first made; the user
+// last-picked model when that says "default". Set once when the card is first made; the user
 // changes the model again by editing the pick and starting a new chat.
+// A model that has hit its limit is replaced by the backup model, so the copilot starts on one
+// that can actually answer.
 function copilotInitialModel() {
   const picked = copilotModel();
-  return picked || modelFor("claude");
+  const wanted = picked || modelFor("claude");
+  return fallbackFor(wanted)?.model ?? (wanted || undefined);
+}
+
+// The CLI the copilot starts on: the one that serves its model. Every model is offered in the
+// picker, so the copilot may run on Claude, Puku or Codex.
+function copilotBackend(model: string | undefined) {
+  return (model && backendFor(model)) || "claude";
 }
 
 export function ensureCopilot() {
+  // The model is worked out once: the pick and the CLI it runs on have to agree.
+  const model = copilotInitialModel();
   return (
     getCard(COPILOT_ID) ??
     createCard(
@@ -37,9 +50,9 @@ export function ensureCopilot() {
         title: "Copilot",
         prompt: "",
         cwd: os.homedir(),
-        backend: "claude",
+        backend: copilotBackend(model),
         permissionMode: defaultPermissionMode(),
-        model: copilotInitialModel(),
+        model,
         role: "copilot",
       },
       COPILOT_ID,
@@ -116,6 +129,8 @@ export function prewarm() {
   startWebhookRelay();
   // Upload the cards and threads of the folders that opted in to your workspace (lib/cloud-sync.ts).
   startAccountCloudSync();
+  // Give a signed-in Weft user a BlastCP account and connect the drawer, no browser (lib/blastcp-auto.ts).
+  startBlastcpAuto();
   // Post your week to your league while you are signed in to Weft (lib/league-sync.ts).
   startLeagueSync();
   // Keep Weft's Puku trial token fresh, and give puku threads waiting on a login the trial when you sign in to Weft.

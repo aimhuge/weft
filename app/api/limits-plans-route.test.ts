@@ -9,20 +9,28 @@ vi.mock("@/lib/limit-history", () => ({
     { at: 2, backend: "puku", kind: "seven_day", used: 9 },
   ]),
 }));
+// The models that hit their own cap come with the plans (lib/model-limit.ts). Mocked so the test reads
+// no real store, and so the shape the client gets (lib/use-plan-limits.ts) is pinned here.
+vi.mock("@/lib/model-limit", () => ({
+  modelLimits: vi.fn(() => []),
+}));
 
 const history = await import("@/lib/limit-history");
+const limits = await import("@/lib/model-limit");
 const route = await import("./limits/plans/route");
 
 const READ = { host: "localhost:3457" };
 
 describe("GET /api/limits/plans", () => {
-  it("returns each CLI's own plan", async () => {
+  it("returns each CLI's own plan, with the models that hit their own cap", async () => {
+    vi.mocked(limits.modelLimits).mockReturnValueOnce([{ model: "claude-opus-5-5", at: 1, resetsAt: 100 }]);
     const res = await route.GET(new Request("http://localhost:3457/api/limits/plans", { headers: READ }));
     expect(await res.json()).toEqual({
       plans: {
         claude: { at: 1, fiveHour: { used: 5, resetsAt: 100 } },
         puku: { at: 2, sevenDay: { used: 9 } },
       },
+      models: [{ model: "claude-opus-5-5", at: 1, resetsAt: 100 }],
     });
   });
 
