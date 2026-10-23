@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, renderHook } from "@testing-library/react";
+import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { RefObject } from "react";
 import type { BrowserState, ShellBridge } from "./client";
@@ -109,5 +109,54 @@ describe("useNewThreadPane", () => {
     unmount();
     await flush();
     expect(browser.setActive).toHaveBeenCalledWith("c1");
+  });
+
+  describe("holds the board pane's visibility through the close", () => {
+    const pane = (showNew: boolean, visible: boolean) => ({ showNew, visible });
+
+    it("returns null while the dialog is open or was never opened", () => {
+      installBridge();
+      const { result, rerender } = renderHook(({ showNew, visible }) => useNewThreadPane(showNew, refOf(null), visible), { initialProps: pane(false, false) });
+      expect(result.current).toBeNull();
+      rerender(pane(true, false));
+      expect(result.current).toBeNull();
+    });
+
+    it("on close returns the prior visibility until the pane's state catches up", async () => {
+      installBridge();
+      mocks.newThreadPage.mockResolvedValue({ url: "file:///new-thread.html" });
+      const { result, rerender } = renderHook(({ showNew, visible }) => useNewThreadPane(showNew, refOf(null), visible), { initialProps: pane(false, false) });
+      rerender(pane(true, false));
+      // The splash opened the pane.
+      rerender(pane(true, true));
+      rerender(pane(false, true));
+      expect(result.current).toBe(false);
+      await flush();
+      // The restore landed: setVisible(false) came back as state.
+      rerender(pane(false, false));
+      expect(result.current).toBeNull();
+    });
+
+    it("lets go once a card is open, whose own pane takes over", async () => {
+      installBridge();
+      mocks.newThreadPage.mockResolvedValue({ url: "file:///new-thread.html" });
+      const ref = refOf(null);
+      const { result, rerender } = renderHook(({ showNew, visible }) => useNewThreadPane(showNew, ref, visible), { initialProps: pane(true, false) });
+      rerender(pane(true, true));
+      ref.current = "c1";
+      rerender(pane(false, true));
+      await act(flush);
+      expect(result.current).toBeNull();
+    });
+
+    it("lets go when the restore fails", async () => {
+      installBridge({ getState: vi.fn().mockRejectedValue(new Error("gone")) });
+      mocks.newThreadPage.mockResolvedValue({ url: "file:///new-thread.html" });
+      const { result, rerender } = renderHook(({ showNew, visible }) => useNewThreadPane(showNew, refOf(null), visible), { initialProps: pane(true, false) });
+      rerender(pane(true, true));
+      rerender(pane(false, true));
+      await act(flush);
+      expect(result.current).toBeNull();
+    });
   });
 });

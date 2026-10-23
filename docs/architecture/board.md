@@ -9,8 +9,8 @@ lives in its own component under `components/`.
 
 - **`components/Board.tsx` is the wiring.** It holds the cards, the projects, the roots, the home folder,
   the filter, the sort, the drag state, the rail's panel and filter, and the browser and terminal state,
-  then hands each layer to its own component. `Board()` is `components/Board.tsx:83`; the file sits at 404
-  counted lines and complexity 26 (`eslint.config.mjs:15` and `eslint.config.mjs:43`).
+  then hands each layer to its own component. `Board()` is `components/Board.tsx:83`; the file is capped
+  at 404 counted lines and complexity 26 (`eslint.config.mjs:15` and `eslint.config.mjs:43`).
 - **Hooks under `lib/` own the logic.** The board's live event stream (`lib/board-live.ts`), the dialog
   flags (`lib/use-board-dialogs.ts`), the open card's state (`lib/use-open-card.ts`), the New thread splash
   page in the pane (`lib/use-new-thread-pane.ts`), the menu/dock/tray actions (`lib/board-menu-bridge.ts`)
@@ -29,6 +29,7 @@ lives in its own component under `components/`.
 ### The board itself
 
 - `components/Board.tsx` — the state and the wiring; the only place that knows how the layers fit together.
+  Its framed New thread branch renders `NewThreadWindow`; an open card gets its pane through `OpenCard`.
 - `components/BoardHeader.tsx` — the top bar (logo, running / needs-you counts, restart chip, header
   badges, the browser / terminal / share / settings / new-thread buttons, the account button). Grouped
   props: `counts`, `panes`, `slots`.
@@ -42,6 +43,7 @@ lives in its own component under `components/`.
   card's pane lives in its workspace's `pane` column, `components/OpenCard.tsx`).
 - `components/OpenCard.tsx` — `CardFrame` (the backdrop and the framed window over the board) and
   `OpenCard` (the open card's four-column workspace: thread | editor | pane | show).
+- `components/NewThreadWindow.tsx` — the framed New thread form beside its desktop browser pane.
 - `components/BoardBottom.tsx` — the footer (the open or latest card's model, folder and limits) and, below
   it, the terminal drawer.
 - `components/BoardDialogs.tsx` — every dialog, sheet and overlay the board stacks over its columns, each
@@ -63,7 +65,8 @@ lives in its own component under `components/`.
 - `lib/use-open-card.ts` — `useOpenCard`: which card is open, its thread and streaming text, the last one
   opened, Rename…, and the unseen moves.
 - `lib/use-new-thread-pane.ts` — `useNewThreadPane`: the New thread splash page in the pane while the
-  dialog is up.
+  dialog is up. It returns the pane's visibility from before the dialog while the restore on close lands, which
+  `BoardBrowserPane` reads (`held`) so the pane doesn't remount open and slide shut.
 - `lib/board-menu-bridge.ts` — `useMenuBridge` and `runMenuAction`: what the app menu, dock, tray and
   global shortcuts ask the board to do.
 

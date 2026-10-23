@@ -31,7 +31,7 @@ export function NewCardDialogFooter({
   onSubmit: (start: boolean) => void;
 }) {
   return (
-    <div className="flex shrink-0 items-center gap-3 px-5 pb-4 pt-3">
+    <div className="flex shrink-0 flex-wrap items-center justify-end gap-x-3 gap-y-2 px-5 pb-4 pt-3">
       <div
         className="flex rounded-md border border-line-strong p-0.5"
         role="group"
@@ -44,13 +44,13 @@ export function NewCardDialogFooter({
             title={b.id === "codex" ? "Requires Codex CLI and login. Weft's browser, board, secrets and webhook tools are unavailable." : undefined}
             onClick={() => onPickBackend(b.id)}
             aria-pressed={backend === b.id}
-            className={`rounded px-2.5 py-1 text-[12px] ${backend === b.id ? "bg-sunken font-medium text-ink" : "text-muted hover:text-ink"}`}
+            className={`whitespace-nowrap rounded px-2.5 py-1 text-[12px] ${backend === b.id ? "bg-sunken font-medium text-ink" : "text-muted hover:text-ink"}`}
           >
             {b.label}
           </button>
         ))}
       </div>
-      <p className="min-w-0 flex-1 truncate text-[12px]">
+      <p className="min-w-0 flex-1 basis-24 truncate text-[12px]">
         {error ? (
           <span className="text-danger">{error}</span>
         ) : alsoHere.length > 0 ? (

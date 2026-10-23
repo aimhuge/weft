@@ -65,7 +65,7 @@ const RestartChip = guarded(() => import("./RestartChip"), { inline: true, what:
 const CardView = guarded(() => import("./CardView"), { what: "card", placeholder: <CardSkeleton /> });
 const SideRail = guarded(() => import("./LibraryRail"), { what: "rail", className: "m-3 w-[220px] self-start" });
 const HeaderBadges = guarded(() => import("./HeaderBadges"), { inline: true, what: "header badges" });
-const NewCardDialog = guarded(() => import("./NewCardDialog"), { what: "New thread dialog", className: "m-3 w-[360px] self-start" });
+const NewThreadWindow = guarded(() => import("./NewThreadWindow"), { what: "New thread window", inline: true });
 // Every dialog, sheet and overlay over the board's columns — Settings, Tags…, Share…, the palette,
 // file drop, the toast — each loading through its own guarded() import (components/BoardDialogs.tsx).
 const BoardDialogs = guarded(() => import("./BoardDialogs"), { what: "dialogs", inline: true });
@@ -130,7 +130,7 @@ export default function Board() {
   const { desktop, mac, browser } = useDesktopBridge(CLOSED_BROWSER, selectedId, cards);
   useStartupCheck(loaded, setToast);
   // The New thread dialog's splash page in the pane (lib/use-new-thread-pane.ts).
-  useNewThreadPane(showNew, selectedRef);
+  const paneHeld = useNewThreadPane(showNew, selectedRef, browser.visible);
 
   // Decode the chime files now, so the first card that moves isn't late to sound.
   useEffect(() => preloadChimes(), []);
@@ -357,6 +357,7 @@ export default function Board() {
           // Only while no card is open (framed), so its X toggles the pane rather than closing a card.
           <BoardBrowserPane
             open={browserOpen}
+            held={paneHeld}
             desktop={desktop}
             state={browser}
             width={browserWidth}
@@ -417,9 +418,7 @@ export default function Board() {
         />
 
         <CardFrame framed={framed} bottom={terminalOpen ? terminalHeight + 16 : undefined} onBackdrop={() => (showNew ? setShowNew(false) : select(null))}>
-          {showNew ? (
-            <NewCardDialog cards={cards} home={home} defaultCwd={newCwd ?? project ?? undefined} recentCwd={[...cards].sort((a, b) => b.updatedAt - a.updatedAt).find((c) => c.cwd !== home)?.cwd} restart={restartView.restart} onClose={() => setShowNew(false)} onCreate={create} />
-          ) : selected && threadProps ? (
+          {showNew ? <NewThreadWindow form={{ cards, home, defaultCwd: newCwd ?? project ?? undefined, recentCwd: [...cards].sort((a, b) => b.updatedAt - a.updatedAt).find((c) => c.cwd !== home)?.cwd, restart: restartView.restart, onCreate: create }} browser={{ desktop, state: browser, obscured: overlay, width: browserWidth, onWidth: setBrowserWidth }} onClose={() => setShowNew(false)} /> : selected && threadProps ? (
             <OpenCard
               card={selected}
               handlers={threadProps}

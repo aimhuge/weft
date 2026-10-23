@@ -13,6 +13,8 @@ const ShowRail = guarded(() => import("./ShowRail"), { what: "show rail", classN
 
 export interface BoardBrowserPaneProps {
   open: boolean;
+  // Its visibility from before the New thread dialog, while that is restored (lib/use-new-thread-pane.ts); wins over open.
+  held?: boolean | null;
   desktop: boolean;
   state: BrowserState;
   width: number;
@@ -23,9 +25,9 @@ export interface BoardBrowserPaneProps {
   items: ThreadItem[];
 }
 
-export default function BoardBrowserPane({ open, desktop, state, width, onWidth, obscured, onClose, items }: BoardBrowserPaneProps) {
+export default function BoardBrowserPane({ open, held, desktop, state, width, onWidth, obscured, onClose, items }: BoardBrowserPaneProps) {
   return (
-    <StandaloneBrowserPane open={open} width={width}>
+    <StandaloneBrowserPane open={held ?? open} width={width}>
       {(sliding) => (
         <BrowserPane
           desktop={desktop}

@@ -10,10 +10,13 @@ lands; a release moves those lines under its version and tags the commit `vX.Y.Z
 
 ### Fixed
 
+- **New thread's Start now stays inside the form, and the pane no longer slides shut after you close it.** The footer wraps beside the browser pane (`components/NewCardDialogFooter.tsx`), and the board's pane holds its prior visibility while the splash restore lands (`lib/use-new-thread-pane.ts`).
 - **Subagents on Opus 4.8 work on puku-cli.** It refuses any subagent model outside `puku-ai-2.7`, `puku-ai-2.8` and `opus`, so Weft now sends `opus` for Opus 4.8; `/weft:done`'s Agent-tool fallback names a model each CLI accepts and treats an all-error Puku batch as a failure (`lib/subagents.ts`, `plugin/skills/done/SKILL.md`).
 
 ### Added
 
+- **Plans on the home page, and a Team tier.** weft.zip now prices itself between the pillars and the FAQ: Free, Pro and Team read straight from the billing catalog, so a price change moves the page (`components/home/Plans.tsx`). **Team** is $9 per seat a month with Pro's allowance, and teams are now a paid capability — a Free workspace is a team of one and can't invite members (`lib/billing/plan-gate.ts`, `lib/team-ops.ts` `runInvite`). The gate fails closed: an unreadable or unpaid subscription reads as Free.
+- **The welcome's Get ready screen plays how Weft works.** A 26-second loop with your own project names on the cards: a prompt starts a card, it asks you a question in Needs you, gets a key from the 🔐 vault after Touch ID without ever seeing it, shows its work in the browser pane, and lands in Done, which commits, refactors and deploys. It's a HyperFrames composition that plays live in the welcome and renders to an MP4 for weft.zip (`public/welcome/loop.html`, `components/WelcomeLoop.tsx`, `pnpm welcome:render`). Reduced motion keeps the still screenshot.
 - **Settings has a Security page.** The default permission mode (from Threads), trusted folders (from General) and sign-in expiry (from Accounts) now sit together (`components/SettingsSecurityPage.tsx`).
 - **The project bar's More menu has a filter.** It has focus when the menu opens, matches the folder name and its `~` path, and Enter picks the top match. It's the same field and rule as the 🔐 and skills filters, now shared (`components/SearchField.tsx`, `lib/text-filter.ts`).
 - **Replay the welcome from your avatar's menu.** It moved out of Settings → General (which keeps Test it and Reset tips) into the avatar menu and the command palette (`components/AccountButton.tsx`).
