@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DAY, FIVE_HOURS, fiveHourNow, hitMarks, HOUR, leftAt, limitsChart, QUARTER_HOUR, resetMarks, resetMs, WEEK, weekEnd, type LimitSample } from "./limit-chart";
+import { DAY, FIVE_HOURS, fiveHourNow, hitMarks, HOUR, leftAt, limitsChart, QUARTER_HOUR, resetMarks, resetMs, shareLeft, WEEK, weekEnd, type LimitSample } from "./limit-chart";
 
 // The status strip's limits chart: 672 15-minute slots of the 5-hour limit (4 per hour), 7 day slots
 // of the weekly one with their burn-down edge, hits and reset lines.
@@ -185,5 +185,22 @@ describe("fiveHourNow", () => {
     expect(fiveHourNow([], {}, T0)).toBeUndefined();
     // A reset known, but no reading yet: the level is unknown.
     expect(fiveHourNow([], { fiveHour: { used: 50 } }, T0)).toBeUndefined();
+  });
+
+  it("is undefined once the window has reset: it is full again, not stale", () => {
+    // The card's window reset a minute ago. The header reads that as 100% left, so the plot must
+    // draw no level rather than the stale 34%.
+    expect(fiveHourNow([], { fiveHour: { used: 66, resetsAt: sec(T0 - 60_000) } }, T0)).toBeUndefined();
+    // The same from the history's last reading.
+    expect(fiveHourNow([five(T0 - HOUR, 66, T0 - 60_000)], {}, T0)).toBeUndefined();
+  });
+});
+
+describe("shareLeft", () => {
+  it("is the share left from the used share, never below zero", () => {
+    expect(shareLeft(0)).toBe(100);
+    expect(shareLeft(66)).toBe(34);
+    expect(shareLeft(100)).toBe(0);
+    expect(shareLeft(120)).toBe(0);
   });
 });

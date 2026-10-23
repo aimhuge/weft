@@ -120,4 +120,25 @@ describe("LimitBurndown", () => {
     // The header says the same thing, so the number is in the plot and in the summary.
     expect(screen.getByText(/34% left/)).toBeTruthy();
   });
+
+  it("draws no level once the window has reset, so the plot never shows a stale number", async () => {
+    const fetchMock = serves([]);
+    vi.stubGlobal("fetch", fetchMock);
+    vi.setSystemTime(NOW);
+
+    // The window reset a minute ago: the header reads it as full, and the plot must agree.
+    const stats: CardStats = {
+      fiveHour: { used: 66, resetsAt: Math.floor((NOW - 60_000) / 1000) },
+      sevenDay: { used: 14, resetsAt: WEEKLY_RESET },
+    };
+    render(<LimitBurndown stats={stats} />);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+
+    const svg = screen.getByRole("img");
+    await waitFor(() => expect(svg.querySelectorAll("text").length).toBeGreaterThan(0));
+    const labels = Array.from(svg.querySelectorAll("text")).map((t) => t.textContent);
+    expect(labels).not.toContain("34%");
+    // The header reads the passed window as full.
+    expect(screen.getAllByText(/100% left/).length).toBeGreaterThan(0);
+  });
 });

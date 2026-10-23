@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api-client";
 import { formatReset } from "@/lib/format";
-import { limitsChart, type DaySlot, type LimitSample, type LimitsChart, type Mark, type Slot } from "@/lib/limit-chart";
+import { limitsChart, shareLeft, type DaySlot, type LimitSample, type LimitsChart, type Mark, type Slot } from "@/lib/limit-chart";
 import { BACKEND_LABELS, type Backend, type CardStats, type LimitWindow } from "@/lib/types";
 import { useNow } from "@/lib/use-now";
 
@@ -72,6 +72,9 @@ function NowLevel({ chart, x, y }: Scale & { chart: LimitsChart }) {
   const level = chart.fiveHourNow;
   if (level === undefined) return null;
   const { left, from, to } = level;
+  // The level is drawn across the window it belongs to; the dot sits on now. A span that doesn't
+  // hold now would put the dot outside the line, so nothing is drawn.
+  if (to < chart.now || from > chart.now) return null;
   const x1 = x(from);
   const x2 = x(to);
   const yy = y(left);
@@ -168,7 +171,7 @@ function Summary({ name, window, tone, now }: { name: string; window?: LimitWind
   const passed = window.resetsAt !== undefined && window.resetsAt * 1000 <= now;
   return (
     <div>
-      <span className={`font-semibold ${tone}`}>{name}</span> {passed ? 100 : Math.max(0, 100 - window.used)}% left
+      <span className={`font-semibold ${tone}`}>{name}</span> {passed ? 100 : shareLeft(window.used)}% left
       {window.resetsAt && <span className="text-muted"> · resets {formatReset(window.resetsAt, now)}</span>}
     </div>
   );

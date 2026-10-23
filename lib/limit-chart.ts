@@ -81,13 +81,18 @@ export function weekEnd(rows: LimitSample[], stats: CardStats, now: number): num
   return end;
 }
 
+// The share left in a window from its used share: 0-100, never below 0.
+export function shareLeft(used: number): number {
+  return Math.max(0, 100 - used);
+}
+
 // The share left at time t: the last reading at or before it, back to full once its window has reset. A
 // 5-hour window that had opened by t (a later reading's reset minus 5 hours) with nothing logged is unknown.
 export function leftAt(rows: LimitSample[], kind: LimitKind, t: number): number | "unknown" {
   const last = rows.findLast((r) => r.kind === kind && r.at <= t);
   if (!last) return "unknown";
   const reset = resetMs(last.resetsAt);
-  if (reset === undefined || reset > t) return Math.max(0, 100 - last.used);
+  if (reset === undefined || reset > t) return shareLeft(last.used);
   const next = rows.find((r) => r.kind === kind && r.at > t && r.resetsAt !== undefined);
   const opened = next && (resetMs(next.resetsAt) ?? 0) - FIVE_HOURS <= t;
   return kind === "five_hour" && opened ? "unknown" : 100;
@@ -173,15 +178,18 @@ function withCurrent(rows: LimitSample[], stats: CardStats, now: number): LimitS
 }
 
 // The 5-hour window open at now: the share left in it, when it opened (five hours before its reset)
-// and when it resets. The card's own window is the reading when there is one; else the history's last
-// reading, held while its window is open. Undefined when neither is known.
+// and when it resets. The card's own window is the reading when it has that same reset; else the
+// history's last reading, held while its window is open. Undefined when neither is known, and when the
+// window's reset has passed (it is full again, and the next reset isn't known yet).
 export function fiveHourNow(rows: LimitSample[], stats: CardStats, now: number): LimitsChart["fiveHourNow"] {
   const last = rows.findLast((r) => r.kind === "five_hour");
   const reset = resetMs(stats.fiveHour?.resetsAt) ?? resetMs(last?.resetsAt);
   if (reset === undefined) return undefined;
+  // A window whose reset has passed is full again: the header reads it as 100% and so must the plot.
+  if (reset <= now) return undefined;
   const card = stats.fiveHour;
   const fromHistory = leftAt(rows, "five_hour", now);
-  const level = card && resetMs(card.resetsAt) === reset ? Math.max(0, 100 - card.used) : fromHistory;
+  const level = card && resetMs(card.resetsAt) === reset ? shareLeft(card.used) : fromHistory;
   if (level === "unknown") return undefined;
   // The window it sits in: five hours of usage, ending at its reset.
   return { left: level, from: reset - FIVE_HOURS, to: reset };

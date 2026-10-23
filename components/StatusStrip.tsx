@@ -3,6 +3,7 @@
 import LimitBurndown from "./LimitBurndown";
 import Tip from "./Tip";
 import { cacheMinutesLeft, folderName, formatReset, formatTokens } from "@/lib/format";
+import { shareLeft } from "@/lib/limit-chart";
 import { liveWindow, PLAN_ORDER } from "@/lib/plan-limits";
 import { BACKEND_LABELS, type Backend, type CacheState, type CardStats, type LimitWindow } from "@/lib/types";
 import { usePlanLimits } from "@/lib/use-plan-limits";
@@ -41,7 +42,7 @@ function ModelChip({ backend = "claude", stats }: { backend?: Backend; stats: Ca
 // One plan window's share left and reset; the hover over both is the burndown chart (LimitBurndown).
 function Limit({ label, window }: { label: string; window?: LimitWindow }) {
   if (!window) return null;
-  const left = Math.max(0, 100 - window.used);
+  const left = shareLeft(window.used);
   return (
     <span>
       {label}:<span className={tone(left)}>{left}%</span>

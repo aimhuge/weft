@@ -12,6 +12,10 @@ One plot, two axes:
 - **Vertical lines:** red where a window ran out (its first reading at 100% used); green at each 5-hour
   reset (light: the past ones the log saw, then every 5 hours after the next one), the next 5-hour reset
   (strong) and the weekly reset (strongest, the right edge). A dotted line marks now.
+- **The level standing right now:** a green line across the 5-hour window open now, at its current share
+  left, with a dot and that number ("34%") on it at now. The header's "5-hour 34% left" is then a
+  thing you can see in the plot, not a number you have to read off the left axis and guess which bar
+  is now.
 
 ## Key files
 
@@ -42,12 +46,18 @@ One plot, two axes:
   shows an "Auto-resumed · 4:12am" chip with a tip that names the CLI. A busy card is skipped;
   the next poll cycle picks it up. The manual "Run on …" still works as an override when the
   user prefers to switch backends first.
-- `lib/limit-chart.ts`: pure chart math, `limitsChart(samples, stats, now)` → `{ start, end, now, hours,
-  days, marks }`. `hours` are 672 15-minute slots of the 5-hour limit (`QUARTER_HOUR`); `days` are 7
-  day slots of the weekly limit with hour-resolution burn-down edges. `leftAt()` is the level at a time:
-  the last reading while its window is open, full once it has reset, `"unknown"` before the first
-  reading or inside a window that opened unlogged; `null` marks a slot that hasn't happened yet. The
-  card's current windows are added at now unless they've already reset or are older than the history.
+- `lib/limit-chart.ts`: pure chart math, `limitsChart(samples, stats, now)` → `{ start, weekStart,
+  end, now, hours, days, marks, fiveHourNow }`. `hours` are 672 15-minute slots of the 5-hour limit
+  (`QUARTER_HOUR`); `days` are 7 day slots of the weekly limit with hour-resolution burn-down edges.
+  `leftAt()` is the level at a time: the last reading while its window is open, full once it has
+  reset, `"unknown"` before the first reading or inside a window that opened unlogged; `null` marks a
+  slot that hasn't happened yet. The card's current windows are added at now unless they've already
+  reset or are older than the history. `fiveHourNow(rows, stats, now)` is the open window's share
+  left and its span (five hours ending at its reset): the card's own reading when it has that same
+  reset, else the history's last reading held while its window is open. `undefined` when neither is
+  known, and `undefined` once the window has reset (it is full again, as the header reads it), so
+  the plot never draws a level the header contradicts. `shareLeft(used)` is the one place a used
+  share becomes a share left.
 - `app/api/limits/route.ts`: `GET /api/limits?backend=claude|puku|codex` returns that CLI's readings,
   the chart's history; without `?backend`, every CLI's.
 - `lib/plan-limits.ts`: `planLimits(samples)` → each CLI's newest 5-hour and weekly reading;
@@ -60,6 +70,7 @@ One plot, two axes:
   `lib/board-derive.ts` `footerFor`) every CLI's by name. On the web board the card's own reading stands in.
 - `components/LimitBurndown.tsx`: the 640 px SVG (`CHART_WIDTH`), in a 664 px `Tip` over each plan's
   `Limit` chips, titled with the CLI's plan. Colors are the theme's `--ok` and `--danger`.
+  `NowLevel` draws the level standing right now: the line, the dot at now and the number on it.
 
 ## Data flow
 
