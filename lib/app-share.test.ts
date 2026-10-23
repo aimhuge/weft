@@ -228,6 +228,22 @@ describe("setAppShare", () => {
     expect(uploaded.paths).toContain(file);
   });
 
+  it("doesn't upload again when only who may open the link changed", async () => {
+    const file = path.join(sandbox, "page.html");
+    fs.writeFileSync(file, "<h1>hi</h1>");
+    db.apps = [{ id: "a1", name: "My App", url: `file://${file}` }];
+    await setAppShare("a1", { mode: "email" });
+    const page = db.writes[0]!.row.page as string;
+    uploaded.paths.length = 0;
+    db.share = share({ kind: "blob", page, org_id: "o1" });
+    await setAppShare("a1", { mode: "public" });
+    expect(uploaded.paths).toEqual([]);
+    // The same bytes under another workspace still go up.
+    db.share = share({ kind: "blob", page, org_id: "o2" });
+    await setAppShare("a1", { mode: "public" });
+    expect(uploaded.paths).toContain(file);
+  });
+
   it("refreshes the link preview in the background after a write", async () => {
     db.share = share();
     await setAppShare("a1", { mode: "public" });

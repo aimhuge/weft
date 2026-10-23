@@ -20,7 +20,7 @@ import { isAppFolderUrl, listAppFolderFiles, reducedManifest, secretHit, type Ap
 import { listApps } from "./mini-app-store";
 import type { MiniApp } from "./mini-apps";
 import { isCardShareMode, newShareId } from "./share-types";
-import { currentPage, readShare, sameFiles, sameManifest, stateOf, type Ready } from "./app-share-row";
+import { currentPage, pageForWrite, readShare, sameFiles, sameManifest, stateOf, type Ready } from "./app-share-row";
 
 export { AppShareError } from "./app-share-errors";
 
@@ -187,7 +187,7 @@ export async function setAppShare(appId: string, update: AppShareUpdate): Promis
   const { nextOwner, nextSlug } = await resolveOwnerAndSlug(update, existing, t);
   rejectFolderSecrets(t);
   const nextOrgId: string = nextOwner === "org" ? (update.orgId ?? t.orgId) : t.orgId;
-  const now = await currentPage(t, true, nextOrgId);
+  const now = await pageForWrite(t, existing, nextOrgId);
   const change = buildChange(update, t, now, nextOwner, nextSlug, password);
   const writeError = await writeShareRow(t, existing, change);
   if (writeError) throwAsError(writeError);

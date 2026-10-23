@@ -59,7 +59,9 @@ Electron shell (electron/*.cjs)
    `startSessionSync()` so existing Claude Code sessions show up as cards.
 3. The board opens an `EventSource("/api/events")`. Every `lib/store.ts` and
    `lib/runner.ts` mutation calls `publish()` on `lib/bus.ts`, which the SSE route
-   forwards.
+   forwards. `useBoardEvents` (`lib/use-events.ts`) shares that one `EventSource` between the board, the open
+   thread and the copilot (ref-counted, closed with the last listener): each stream holds one of Chromium's six
+   connections per host for good, and four of them once starved a dialog's fetch in the renderer.
 3a. A board-side request for the board's own data (a badge's summary, an open card's
    thread page) goes through `apiFetch` (`lib/api-client.ts`), which puts the
    `x-weft-token` header on it — without it `lib/guard.ts` refuses the route with a

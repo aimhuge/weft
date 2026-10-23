@@ -53,7 +53,8 @@ A mini app lives on the Mac, not in cloud sync, so the share row carries its own
   blob store, under the same path rules as cloud sync (`lib/blob-paths.ts`: home only, never the vault or
   a secret). The row's `page` is `blob:sha256:<hex>#hash`. Each time the dialog opens, a changed file is
   uploaded again and the row moved to it, as is a renamed app, so the link shows the page as of the last
-  time you opened Share….
+  time you opened Share…. A save that only changes who may open the link (`pageForWrite` in
+  `lib/app-share-row.ts`) uploads nothing when the row already points at the same bytes under the same workspace.
 - **A folder** (`~/.weft/apps/<slug>/`) is uploaded wholesale by path: every file in the folder becomes one
   blob, the folder's relative paths are the row's `files` map, and `page` is the entry file's path
   (typically `index.html`). `lib/app-folder.ts` walks the folder (realpath'd, no symlinks or `..`), refuses
@@ -107,12 +108,19 @@ a picture and what they were made from (`lib/app-preview.ts`). For each field, t
 | Picture | — | `weft-app.json` `image` (https, or a path in the folder) | `og:image`, `twitter:image` | the branded card with a capture of the app |
 
 - **Made on the Mac, in the background** (`lib/app-preview-capture.ts`). `getAppShare` and `setAppShare` call
-  `refreshAppPreview` after their row write, and it runs only when the page changed since the last preview
-  (`of`: the page's blob ref, the site's address, or the folder entry's sha). The capture is
+  `refreshAppPreview` after their row write, and it runs only when the preview is stale (`isStale`): the page
+  changed since the last preview (`of`: the page's blob ref, the site's address, or the folder entry's sha), the
+  preview is older than `PREVIEW_MAX_AGE_MS` (6 h, so a data app's picture is taken again once its numbers have
+  moved), or it should have a capture and has none (the desktop app was down, the page wouldn't load) and
+  `PREVIEW_RETRY_MS` (30 min) has passed. The capture is
   `POST /page/snapshot` on the control server (`electron/page-snapshot.cjs`): the app in a hidden, sandboxed
   1200×630 window, on its own in-memory session (none of the pane's sign-ins), no popups or cross-site
   navigation, muted, one at a time. The PNG is saved to `~/.weft/app-previews/<app id>.png` and uploaded to
   weft-blobs like any page. No capture is taken when the app or page names its own picture.
+- **Kept current on a timer** (`lib/app-preview-refresh.ts`). With cloud sync running, a timer walks the apps
+  that have a share and refreshes each stale one, one app at a time so the hidden capture window and Haiku
+  never pile up. A refresh of an unchanged page reuses what the last one had: Haiku's sentence stays (it only
+  runs again for a page that changed), and a capture that fails this time keeps the last one.
 - **Read on weft.zip, for public links only** (`lib/app-share-meta.ts`). The three share routes'
   `generateMetadata` is `"use cache"` on params alone (it never reads the gate's cookie, so the shell still
   prerenders; `lib/prerender-check.ts`) and returns the title, description, Open Graph and Twitter tags. A
@@ -127,7 +135,12 @@ a picture and what they were made from (`lib/app-preview.ts`). For each field, t
   capture by `lib/app-share-preview-actions.ts` through `app/api/apps/share/preview`): **Refresh preview**
   makes it again, and the description is editable. Yours is kept over every refresh (`by.description: "you"`),
   and clearing it hands the description back to the page and Haiku. While the Mac is working, the state says
-  `previewing` and the dialog asks again every 4 s.
+  `previewing` and the dialog asks again every 4 s. The drawn card is cached beside the capture
+  (`~/.weft/app-previews/<app id>.card-<hash>.png`, one per app, keyed by what it shows), so opening the dialog
+  again doesn't redraw it.
+- **A save doesn't re-upload the page** (`lib/app-share-row.ts` `pageForWrite`). Changing who may open a link
+  doesn't change the page, so the bytes go up only when the row doesn't already point at them under this
+  workspace: a folder app is one storage round trip per file, and a save used to make them all again.
 
 Schema: `supabase/migrations/20261018131912_app_shares.sql`, then `20261019095618_app_hosting.sql` and
 `20261019120202_app_share_move_owner.sql`. `cloud_app_shares` is one row per (workspace, sharer, app) and

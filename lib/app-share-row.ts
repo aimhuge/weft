@@ -91,6 +91,16 @@ export async function currentPage(
   return { kind: "blob", page: `${BLOB_REF_PREFIX}${sha}${t.page.hash}`, files: null, manifest: null };
 }
 
+// The page a share write will point at. Changing who may open the link doesn't change the page, so the
+// bytes go up only when the row doesn't already point at them under this workspace: a folder app is one
+// storage round trip per file, and a save used to make them all again.
+export async function pageForWrite(t: Ready, existing: AppShareRow | null, orgId: string): ReturnType<typeof currentPage> {
+  const now = await currentPage(t, false, orgId);
+  const there = existing && (existing.org_id ?? t.orgId) === orgId && existing.page === now.page && sameFiles(existing.files, now.files);
+  if (!there) await currentPage(t, true, orgId);
+  return now;
+}
+
 export function sameFiles(a: Record<string, string> | null, b: Record<string, string> | null): boolean {
   if (a === b) return true;
   if (!a || !b) return false;
