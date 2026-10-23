@@ -1,14 +1,16 @@
 #!/usr/bin/env node
 // Renders Weft's two video cuts from the HyperFrames compositions in public/welcome/ (https://hyperframes.heygen.com):
-//   public/brand/welcome-loop.mp4  the welcome's 26 s loop (loop.html): a card from prompt to Done, with the 🔐 vault
-//   public/brand/weft-tour.mp4     weft.zip's ~48 s tour: that loop, then beats.html (connect your tools, Wefter Profile, code quality)
+//   public/brand/welcome-loop.mp4  the welcome's 30 s loop (loop.html): a card from prompt to Done, with the 🔐 vault
+//   public/brand/weft-tour.mp4     weft.zip's 78 s tour: intro.html (Welcome to Weft), that loop, then beats.html
+//                                  (connect your tools, Wefter Profile, code quality, "Now let's get started")
 // Needs ffmpeg (brew install ffmpeg); HyperFrames brings its own Chrome. Each composition is copied to a temp folder as
-// index.html, since `hyperframes render` renders a project folder; ffmpeg's concat demuxer joins the two without
-// re-encoding (both are 1920x800, 30 fps, from the same encoder).
+// index.html, since `hyperframes render` renders a project folder; ffmpeg's concat demuxer joins the three without
+// re-encoding (both are 1920x800, 30 fps, AAC voiceover, from the same encoder). Run `pnpm welcome:narrate` first after
+// changing a caption, so the voice matches.
 //   pnpm welcome:render                      default names (my-app, api, site; @you)
 //   pnpm welcome:render -- --projects=a,b,c  other project names on the loop's cards
 import { spawnSync } from "node:child_process";
-import { copyFileSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -27,8 +29,10 @@ const run = (cmd, args, cwd) => {
 function render(file, out, variables) {
   const dir = mkdtempSync(join(tmpdir(), "weft-welcome-"));
   try {
+    // What the pages load (gsap, live.js, backgrounds, voice tracks), then this page as index.html. The other pages
+    // stay out: HyperFrames treats every root HTML file as an entry point and could play their audio too.
+    for (const name of readdirSync(src)) if (!name.endsWith(".html")) copyFileSync(join(src, name), join(dir, name));
     copyFileSync(join(src, file), join(dir, "index.html"));
-    copyFileSync(join(src, "gsap.min.js"), join(dir, "gsap.min.js"));
     const args = ["-y", HYPERFRAMES, "render", "--quality", "high", "--fps", "30", "-o", out];
     if (variables) args.push("--variables", JSON.stringify(variables));
     run("npx", args, dir);
@@ -42,10 +46,12 @@ const tour = join(brand, "weft-tour.mp4");
 const work = mkdtempSync(join(tmpdir(), "weft-tour-"));
 try {
   render("loop.html", loop, projects ? { projects } : undefined);
+  const intro = join(work, "intro.mp4");
   const beats = join(work, "beats.mp4");
+  render("intro.html", intro);
   render("beats.html", beats);
   const list = join(work, "list.txt");
-  writeFileSync(list, `file '${loop}'\nfile '${beats}'\n`);
+  writeFileSync(list, [intro, loop, beats].map((f) => `file '${f}'`).join("\n") + "\n");
   run("ffmpeg", ["-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", list, "-c", "copy", "-movflags", "+faststart", tour], root);
   console.log(`Rendered ${loop}\nRendered ${tour}`);
 } finally {

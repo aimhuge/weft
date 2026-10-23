@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { api } from "@/lib/client";
 import { openNewThread, selectCard } from "@/lib/onboarding-events";
+import { useStepVoice } from "@/lib/use-welcome-tour";
 import { answerFor, answerWelcome, defaultTicks, loadWelcome, REPLAY_EVENT, TEST_EVENT, type WelcomePreview } from "@/lib/welcome-client";
 import Modal from "./Modal";
 import { FirstThreadStep, STARTERS } from "./WelcomeFirst";
@@ -31,6 +32,8 @@ export default function WelcomeDialog({ onError }: { onError?: (err: unknown) =>
   const ok = useRef<HTMLButtonElement>(null);
   // Screen 1 polls each agent CLI's login while the welcome shows, so a login finished in the browser ticks itself.
   const cliStatus = useCliStatus(preview !== null);
+  // Step 1's tour ends on "Now let's get started"; the next steps say what to do (lib/use-welcome-tour.ts).
+  useStepVoice(preview ? step : "closed");
   // The board hands a new onError on every render; the loading effect shouldn't rerun for that.
   const report = useRef(onError);
   useEffect(() => {

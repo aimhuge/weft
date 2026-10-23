@@ -1,0 +1,68 @@
+<!doctype html>
+<!--
+  The welcome tour's title, a HyperFrames composition (https://hyperframes.heygen.com) before loop.html: "Welcome to
+  Weft", what it is, and the agents it runs on. In the welcome, public/welcome/live.js plays intro → loop → beats → intro;
+  scripts/render-welcome-loop.mjs renders it first in public/brand/weft-tour.mp4. Its voiceover is narration-intro.m4a
+  (scripts/narrate-welcome.mjs). Seekable on purpose: no timers.
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width">
+<title>Welcome to Weft</title>
+<style>
+  html, body { margin: 0; background: #0d0f14; overflow: hidden; }
+  * { box-sizing: border-box; }
+  #root { position: relative; width: 1920px; height: 800px; overflow: hidden; transform-origin: 0 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif; color: #f1f3f8;
+    /* Twin Suns, the scene Weft opens on in dark mode (electron/assets/splash-speeder.jpg), darkened for the title. */
+    background: linear-gradient(rgba(10, 12, 18, 0.55), rgba(10, 12, 18, 0.8)), url(./bg-intro.jpg) center / cover; }
+  .abs { position: absolute; }
+  #logo { left: 860px; top: 50px; width: 200px; height: 200px; }
+  #title { left: 0; top: 260px; width: 1920px; text-align: center; font-size: 132px; font-weight: 700; letter-spacing: -0.03em; }
+  #sub { left: 0; top: 440px; width: 1920px; text-align: center; font-size: 56px; color: #c9cfdf; }
+  #sub b { color: #f0b429; font-weight: 600; }
+  #runs { left: 0; top: 586px; width: 1920px; display: flex; justify-content: center; align-items: center; gap: 22px; font-size: 38px; color: #9aa3b8; }
+  .agent { padding: 12px 28px; border-radius: 18px; background: #1f2433; border: 2px solid #2d3346; color: #f1f3f8; font-weight: 600; }
+  #sound { left: 0; top: 712px; width: 1920px; text-align: center; font-size: 30px; color: #c9cfdf; }
+  #fade { inset: 0; background: #0d0f14; }
+</style>
+</head>
+<body>
+<div id="root" data-composition-id="root" data-width="1920" data-height="800" data-start="0" data-duration="12">
+  <img id="logo" class="abs" src="./icon.png" alt="">
+  <div id="title" class="abs">Welcome to Weft</div>
+  <div id="sub" class="abs">The future of <b>AI engineering</b>.</div>
+  <div id="runs" class="abs">Runs on <span class="agent" id="a1">Claude Code</span><span class="agent" id="a2">Codex</span><span class="agent" id="a3">Puku AI</span><span id="a4">and more</span></div>
+  <div id="sound" class="abs">🔊 Sound on</div>
+  <!-- The voiceover (scripts/narrate-welcome.mjs): the renderer mixes it into the MP4; live, the welcome plays it itself. -->
+  <audio id="voice" src="./narration-intro.m4a" data-start="0" data-duration="12" data-volume="1"></audio>
+  <div id="fade" class="abs"></div>
+</div>
+
+<script src="./gsap.min.js"></script>
+<script src="./live.js"></script>
+<script>
+  (function () {
+    var live = new URLSearchParams(location.search).get("live") === "1";
+    var tl = gsap.timeline({ paused: true });
+    gsap.set("#logo", { opacity: 0, scale: 0.6, transformOrigin: "50% 50%" });
+    gsap.set(["#title", "#sub"], { opacity: 0, y: 24 });
+    gsap.set(["#runs", "#a1", "#a2", "#a3", "#a4"], { opacity: 0 });
+    tl.fromTo("#fade", { opacity: 1 }, { opacity: 0, duration: 0.5 }, 0)
+      .to("#logo", { opacity: 1, scale: 1, duration: 0.6, ease: "back.out(1.8)" }, 0.2)
+      .to("#title", { opacity: 1, y: 0, duration: 0.6, ease: "power2.out" }, 0.4)
+      .to("#sub", { opacity: 1, y: 0, duration: 0.6, ease: "power2.out" }, 2.1)
+      .to("#runs", { opacity: 1, duration: 0.3 }, 5.3)
+      .fromTo("#a1", { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.35 }, 6.3)
+      .fromTo("#a2", { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.35 }, 7.0)
+      .fromTo("#a3", { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.35 }, 8.9)
+      .to("#a4", { opacity: 1, duration: 0.3 }, 8.2)
+      .to("#fade", { opacity: 1, duration: 0.6 }, 11.4);
+    window.__timelines = window.__timelines || {};
+    window.__timelines.root = tl;
+    if (live) window.weftLive(tl, [[0, "intro"]], "loop.html");
+  })();
+</script>
+</body>
+</html>

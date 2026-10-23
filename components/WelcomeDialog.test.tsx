@@ -18,6 +18,8 @@ const client = vi.hoisted(() => ({
   loginStatus: vi.fn(() => Promise.resolve({ status: { claude: { loggedIn: true, email: "a@b.c" }, puku: { loggedIn: false }, codex: { loggedIn: false } }, runs: [] })),
   login: vi.fn(() => Promise.resolve({ login: null })),
   create: vi.fn(() => Promise.resolve({ card: { id: "card-1" } })),
+  // The Get ready hero asks who's signed in, for its profile beat (components/WelcomeLoop.tsx).
+  account: vi.fn(() => Promise.resolve({ configured: false, user: null })),
 }));
 vi.mock("@/lib/client", () => ({ api: client }));
 vi.mock("@/lib/welcome-client", async () => {

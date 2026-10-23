@@ -123,8 +123,8 @@ On launch and every minute after, Weft picks up your Claude Code sessions (the o
 `claude --resume` and the Claude app list) as cards, read-only from `~/.claude/projects`:
 
 - **First launch gets you to a running thread.** Three screens, for everyone, history or not: **Get ready** plays
-  a 26-second loop of a card crossing the board (and getting a key from the 🔐 vault) with your own project names on it (a HyperFrames composition,
-  `public/welcome/loop.html`; the same file renders `public/brand/welcome-loop.mp4` with `pnpm welcome:render`, which also joins `public/welcome/beats.html` (connect your tools, the profile, code quality) into a 48-second `weft-tour.mp4` for weft.zip) and whether Claude Code, puku-cli and Codex are logged in, with **Log in** right there; **Bring in your
+  a 30-second loop of a card crossing the board (and getting a key from the 🔐 vault) with your own project names on it (a HyperFrames composition,
+  `public/welcome/loop.html`; the same file renders `public/brand/welcome-loop.mp4` with `pnpm welcome:render`, which also joins `public/welcome/beats.html` (connect your tools, the profile, code quality) into a 78-second `weft-tour.mp4` for weft.zip) and whether Claude Code, puku-cli and Codex are logged in, with **Log in** right there; **Bring in your
   projects** lists the folders with Claude Code sessions (worktree, scratch and temp folders unticked; **Start empty**
   brings in none) with a switch that counts your history on your Wefter Profile; **Start your first thread** picks a
   project and a starter prompt and opens the card as it runs. No cards are added until you answer. A board that already
