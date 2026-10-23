@@ -10,7 +10,7 @@ import { useStepVoice } from "@/lib/use-welcome-tour";
 import { answerFor, answerWelcome, defaultTicks, loadWelcome, REPLAY_EVENT, TEST_EVENT, type WelcomePreview } from "@/lib/welcome-client";
 import Modal from "./Modal";
 import { FirstThreadStep, STARTERS } from "./WelcomeFirst";
-import { WelcomeFooter, welcomeNote, type WelcomeStep } from "./WelcomeFooter";
+import { WelcomeFooter, WelcomeStepBar, welcomeNote, type WelcomeStep } from "./WelcomeFooter";
 import { CLIS, ReadyStep, readyCli, useCliStatus } from "./WelcomeIntro";
 import { ProjectsStep } from "./WelcomeSteps";
 
@@ -20,7 +20,9 @@ import { ProjectsStep } from "./WelcomeSteps";
 // The answer is saved on leaving screen 2 (or 1 with no history), so the import runs while you write the first prompt;
 // the session sync adds no cards until then. The board explains the rest in place, once, as cards move.
 // Settings → General's "Replay the welcome" shows it again as a preview that saves nothing (Start still starts a
-// thread: you asked for that one); its "Test it" shows the real one, answered for real. It draws over the whole window.
+// thread: you asked for that one); a replay is closeable — Escape, the backdrop or ✕ — while first launch stays put,
+// since the answer only exists once you give it. Its "Test it" shows the real one, answered for real. It draws over
+// the whole window.
 
 export default function WelcomeDialog({ onError }: { onError?: (err: unknown) => void }) {
   const [preview, setPreview] = useState<WelcomePreview | null>(null);
@@ -92,11 +94,12 @@ export default function WelcomeDialog({ onError }: { onError?: (err: unknown) =>
   };
   // Saves the answer (not in a replay) and moves on to the first thread.
   const answer = (fresh: boolean) => {
-    trackOnboarding("onboarding_projects_answered", { brought: fresh ? 0 : folders.length, count_history: countHistory, start_empty: fresh });
+    // A replay answers nothing, so it records no answer — the event would read as a real first launch.
     if (replay) {
       setStep("first");
       return;
     }
+    trackOnboarding("onboarding_projects_answered", { brought: fresh ? 0 : folders.length, count_history: countHistory, start_empty: fresh });
     setBusy(true);
     answerWelcome(answerFor(countHistory, preview.projects, ticked, fresh))
       .then(() => {
@@ -112,7 +115,7 @@ export default function WelcomeDialog({ onError }: { onError?: (err: unknown) =>
   // Start: the thread runs and its card opens; with no folder picked, the New thread dialog takes over with the prompt.
   const start = () => {
     const text = prompt.trim();
-    trackOnboarding("onboarding_first_thread", { backend: cli, used_starter: STARTERS.some((s) => s.text === text) });
+    trackOnboarding("onboarding_first_thread", { backend: cli, used_starter: STARTERS.some((s) => s.text === text), replay });
     if (!cwd) {
       setPreview(null);
       openNewThread({ prompt: text });
@@ -136,6 +139,14 @@ export default function WelcomeDialog({ onError }: { onError?: (err: unknown) =>
       else nextTicks.add(folder);
       return nextTicks;
     });
+  // A replay is a preview you opened, so it dismisses the way any dialog does — Escape, the backdrop, the header's ✕.
+  // First launch doesn't: you came here to answer, and nothing is remembered if you drift off it.
+  const dismiss = () => {
+    trackOnboarding("onboarding_skipped", { step, replay });
+    setPreview(null);
+  };
+  // Nothing to close on first launch, so Modal gets a no-op close and a backdrop that swallows presses.
+  const close = replay ? dismiss : () => {};
   // ↵ is the primary wherever focus is, except on another button (which presses itself) and in the prompt, where ⌘↵ is.
   const onKeyDown = (e: React.KeyboardEvent) => {
     const tag = (e.target as HTMLElement).tagName;
@@ -145,16 +156,9 @@ export default function WelcomeDialog({ onError }: { onError?: (err: unknown) =>
   };
 
   return createPortal(
-    <Modal label="Welcome to Weft" onClose={() => {}} keepOnBackdrop className="w-full max-w-[760px]">
+    <Modal label="Welcome to Weft" onClose={close} keepOnBackdrop={!replay} className="w-full max-w-[760px]">
       <div onKeyDown={onKeyDown} className="flex flex-col">
-        <div className="flex items-center justify-between border-b border-line px-5 py-2.5 text-[12px] text-muted">
-          <span>{replay ? "Replay · saves nothing" : `Step ${steps.indexOf(step) + 1} of ${steps.length}`}</span>
-          <span className="flex gap-1.5" aria-label={`Step ${steps.indexOf(step) + 1} of ${steps.length}`}>
-            {steps.map((s) => (
-              <span key={s} className={`h-1.5 rounded-full transition-all ${step === s ? "w-4 bg-accent" : "w-1.5 bg-line"}`} />
-            ))}
-          </span>
-        </div>
+        <WelcomeStepBar steps={steps} step={step} replay={replay} onDismiss={dismiss} />
         <div className="max-h-[72vh] overflow-auto px-5 py-4">
           {step === "ready" && <ReadyStep status={cliStatus} projects={preview.projects.filter((p) => !p.scratch).map((p) => p.name)} />}
           {step === "projects" && <ProjectsStep projects={preview.projects} ticked={ticked} toggle={toggle} history={{ on: countHistory, set: setCountHistory, preview }} />}
@@ -172,10 +176,7 @@ export default function WelcomeDialog({ onError }: { onError?: (err: unknown) =>
           canStart={!cwd || Boolean(prompt.trim())}
           onNext={next}
           onAnswer={answer}
-          onSkip={() => {
-            trackOnboarding("onboarding_skipped", { step });
-            setPreview(null);
-          }}
+          onSkip={dismiss}
           onStart={start}
         />
       </div>

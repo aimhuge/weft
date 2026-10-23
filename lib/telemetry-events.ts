@@ -10,8 +10,8 @@ export const ONBOARDING_EVENTS = {
   onboarding_cli_login: ["backend"],
   onboarding_step: ["step", "seconds_on_last"],
   onboarding_projects_answered: ["brought", "count_history", "start_empty"],
-  onboarding_first_thread: ["backend", "used_starter"],
-  onboarding_skipped: ["step"],
+  onboarding_first_thread: ["backend", "used_starter", "replay"],
+  onboarding_skipped: ["step", "replay"],
 } as const satisfies Record<string, readonly string[]>;
 
 export type OnboardingEvent = keyof typeof ONBOARDING_EVENTS;

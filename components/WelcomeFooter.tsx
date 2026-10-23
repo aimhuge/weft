@@ -1,9 +1,11 @@
 "use client";
 
 import type { RefObject } from "react";
+import Icon from "./Icon";
 
 // The welcome's footer (components/WelcomeDialog.tsx): a one-line note on the left, the step's buttons on the right,
-// the primary holding the ref ↵ presses.
+// the primary holding the ref ↵ presses. The bar above it says which step is on screen; a replay has no steps to count,
+// so it says what it saves and offers the ✕ any dialog has.
 
 export type WelcomeStep = "ready" | "projects" | "first";
 
@@ -15,6 +17,29 @@ export function welcomeNote(step: WelcomeStep, cliReady: boolean | null, cwd: st
 
 const button = "rounded-md border border-line px-3 py-1.5 text-[12.5px] text-ink hover:bg-sunken disabled:opacity-40";
 const primary = "rounded-md bg-accent px-4 py-1.5 text-[12.5px] font-semibold text-on-accent ring-2 ring-accent/30 disabled:opacity-40";
+
+// The bar above the steps: "Step 2 of 3" with a dot per step, or the replay's "saves nothing" and its ✕. A first launch
+// gets no ✕ — nothing is remembered if you drift off it — but a replay does, since you opened it and can just shut it.
+export function WelcomeStepBar({ steps, step, replay, onDismiss }: { steps: WelcomeStep[]; step: WelcomeStep; replay: boolean; onDismiss: () => void }) {
+  const at = `Step ${steps.indexOf(step) + 1} of ${steps.length}`;
+  return (
+    <div className="flex items-center justify-between border-b border-line px-5 py-2.5 text-[12px] text-muted">
+      <span>{replay ? "Replay · saves nothing" : at}</span>
+      <span className="flex items-center gap-2.5">
+        <span className="flex gap-1.5" aria-label={at}>
+          {steps.map((s) => (
+            <span key={s} className={`h-1.5 rounded-full transition-all ${step === s ? "w-4 bg-accent" : "w-1.5 bg-line"}`} />
+          ))}
+        </span>
+        {replay && (
+          <button type="button" onClick={onDismiss} aria-label="Close" className="rounded-md p-0.5 text-muted hover:bg-sunken hover:text-ink">
+            <Icon name="x" size={14} />
+          </button>
+        )}
+      </span>
+    </div>
+  );
+}
 
 export function WelcomeFooter({
   step,

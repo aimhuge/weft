@@ -3,6 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import "./test-utils";
+import { REPLAY_EVENT } from "@/lib/welcome-client";
 import type { WelcomeProject } from "@/lib/welcome-preview";
 
 // The first-launch welcome (components/WelcomeDialog.tsx): the board's view of /api/welcome, with
@@ -22,6 +23,8 @@ const client = vi.hoisted(() => ({
   account: vi.fn(() => Promise.resolve({ configured: false, user: null })),
 }));
 vi.mock("@/lib/client", () => ({ api: client }));
+const telemetry = vi.hoisted(() => ({ trackOnboarding: vi.fn() }));
+vi.mock("@/lib/telemetry-client", () => ({ trackOnboarding: telemetry.trackOnboarding }));
 vi.mock("@/lib/welcome-client", async () => {
   const actual = await vi.importActual<typeof import("@/lib/welcome-client")>("@/lib/welcome-client");
   return { ...actual, loadWelcome: api.loadWelcome, answerWelcome: api.answerWelcome, changeWelcome: api.changeWelcome };
@@ -59,6 +62,7 @@ function setup() {
   api.changeWelcome.mockReset();
   client.create.mockClear();
   client.login.mockClear();
+  telemetry.trackOnboarding.mockReset();
 }
 
 // Screen 1 is Get ready (the CLIs); Next goes to the projects, or straight to the first thread with no history.
@@ -160,22 +164,84 @@ describe("WelcomeDialog", () => {
 
   it("starts the first thread in the first brought-in project on the ready CLI, then closes", async () => {
     api.loadWelcome.mockResolvedValue({ welcome: null, preview: preview([project("/repo/a")]) });
-    const { container } = render(<WelcomeDialog />);
+    render(<WelcomeDialog />);
     await next();
     await bringIn();
     await userEvent.click(await screen.findByRole("button", { name: /Fix a bug/ }));
     await userEvent.click(screen.getByRole("button", { name: /Start thread/ }));
     expect(client.create).toHaveBeenCalledWith({ prompt: "Find one real bug in this project and fix it.", cwd: "/repo/a", backend: "claude", start: true });
-    await waitFor(() => expect(container.querySelector('[role="dialog"]')).toBeNull());
+    await waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull());
   });
 
   it("Skip on the first thread closes without starting one", async () => {
     api.loadWelcome.mockResolvedValue({ welcome: null, preview: preview([project("/repo/a")]) });
-    const { container } = render(<WelcomeDialog />);
+    render(<WelcomeDialog />);
     await next();
     await bringIn();
     await userEvent.click(await screen.findByRole("button", { name: "Skip" }));
     expect(client.create).not.toHaveBeenCalled();
-    await waitFor(() => expect(container.querySelector('[role="dialog"]')).toBeNull());
+    await waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull());
+  });
+
+  // A replay is a preview you opened, so it dismisses like any dialog; first launch must not, or the answer is lost.
+  // The dialog portals into document.body, so `container` never holds it — these ask the document.
+  const dialogUp = () => Boolean(document.querySelector('[role="dialog"]'));
+  const replayIt = async () => {
+    api.loadWelcome.mockResolvedValue({ welcome: { at: 1, countHistory: true, fresh: false, skip: [] }, preview: preview([project("/repo/a")]) });
+    render(<WelcomeDialog />);
+    await waitFor(() => expect(api.loadWelcome).toHaveBeenCalled());
+    window.dispatchEvent(new Event(REPLAY_EVENT));
+    expect(await screen.findByText("Replay · saves nothing")).toBeInTheDocument();
+    expect(dialogUp()).toBe(true);
+  };
+
+  it("Escape closes a replay without answering", async () => {
+    await replayIt();
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() => expect(dialogUp()).toBe(false));
+    expect(api.answerWelcome).not.toHaveBeenCalled();
+  });
+
+  it("a click outside the replay closes it", async () => {
+    await replayIt();
+    // The panel swallows presses inside itself; the backdrop around it is what closes (components/Modal.tsx).
+    await userEvent.click(screen.getByRole("dialog").parentElement!);
+    await waitFor(() => expect(dialogUp()).toBe(false));
+  });
+
+  it("the replay's ✕ closes it", async () => {
+    await replayIt();
+    await userEvent.click(screen.getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(dialogUp()).toBe(false));
+  });
+
+  it("keeps the first launch open on Escape and a backdrop click", async () => {
+    api.loadWelcome.mockResolvedValue({ welcome: null, preview: preview([project("/repo/a")]) });
+    render(<WelcomeDialog />);
+    expect(await screen.findByText("Welcome to Weft", { selector: "h2" })).toBeInTheDocument();
+    await userEvent.keyboard("{Escape}");
+    await userEvent.click(screen.getByRole("dialog").parentElement!);
+    expect(dialogUp()).toBe(true);
+    expect(screen.queryByRole("button", { name: "Close" })).toBeNull();
+  });
+
+  it("a replay records no answer, and its skip says it was a replay", async () => {
+    await replayIt();
+    // A replay answers nothing, so it must not look like a first launch in the stats.
+    await next();
+    await bringIn();
+    expect(telemetry.trackOnboarding).not.toHaveBeenCalledWith("onboarding_projects_answered", expect.anything());
+    expect(api.answerWelcome).not.toHaveBeenCalled();
+
+    await userEvent.keyboard("{Escape}");
+    expect(telemetry.trackOnboarding).toHaveBeenCalledWith("onboarding_skipped", { step: "first", replay: true });
+  });
+
+  it("a first launch records its answer", async () => {
+    api.loadWelcome.mockResolvedValue({ welcome: null, preview: preview([project("/repo/a")]) });
+    render(<WelcomeDialog />);
+    await next();
+    await bringIn();
+    expect(telemetry.trackOnboarding).toHaveBeenCalledWith("onboarding_projects_answered", { brought: 1, count_history: true, start_empty: false });
   });
 });

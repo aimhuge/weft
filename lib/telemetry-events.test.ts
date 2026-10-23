@@ -22,6 +22,11 @@ describe("cleanProps", () => {
     expect(cleanProps("onboarding_tour_beat", { beat: "blastcp", seconds: 50, jumped: true })).toEqual({ beat: "blastcp", seconds: 50, jumped: true });
   });
 
+  it("keeps whether a skip or a first thread came from a replay", () => {
+    expect(cleanProps("onboarding_skipped", { step: "ready", replay: true })).toEqual({ step: "ready", replay: true });
+    expect(cleanProps("onboarding_first_thread", { backend: "claude", used_starter: true, replay: false })).toEqual({ backend: "claude", used_starter: true, replay: false });
+  });
+
   it("drops objects, NaN and missing props, and cuts long strings", () => {
     expect(cleanProps("onboarding_step", { step: { nested: 1 }, seconds_on_last: Number.NaN })).toEqual({});
     expect(cleanProps("onboarding_step", null)).toEqual({});

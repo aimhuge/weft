@@ -6,6 +6,9 @@ The per-drawer intros ([feature-intros.md](feature-intros.md)) are the same idea
 this tooling: `scripts/narrate-lib.mjs` (Kokoro plus the pad), `lib/welcome-voice.ts` (`VoicePlayer`, and the one
 mute key both read and write) and the live-frame conventions (`?live=1`, the parent `postMessage` handshake).
 
+This is the tour *inside* the welcome. The dialog around it — the steps, the replay, how it closes — is
+[welcome-dialog.md](welcome-dialog.md).
+
 ## Pages (`public/welcome/`)
 
 | Page | Length | What it shows |
