@@ -21,7 +21,7 @@ export const MIN_WIDTH: Record<ColumnId, number> = {
   thread: 320,
   editor: 300,
   pane: 280,
-  show: 56,
+  show: 72,
 };
 
 // Open by default for thread, pane and show; editor closed. Widths picked to feel like the old

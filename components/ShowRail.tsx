@@ -88,7 +88,7 @@ export default function ShowRail({ card, hidden, items, pageUrl }: { card: Card 
     if (m.url && m.url !== pageUrl) reopen(m.url);
   };
   return (
-    <aside aria-label="Show" className="flex w-[72px] shrink-0 flex-col border-l border-line bg-panel max-[979px]:hidden">
+    <aside aria-label="Show" className="flex w-full min-w-0 flex-col border-l border-line bg-panel max-[979px]:hidden">
       <div className="sticky top-0 border-b border-line py-2.5 text-center text-[10px] uppercase tracking-[0.08em] text-muted">Show</div>
       <div
         ref={list}

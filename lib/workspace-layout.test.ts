@@ -206,11 +206,11 @@ describe("fitToWidth", () => {
 
   it("shrinks fixed columns proportionally when the window is narrow", () => {
     // Fixed: thread 440, show 72 = 512. Fill pane min 280. target = 700 - 280 = 420.
-    // 512 > 420, so shrink. Both stay above min (320 / 56).
+    // 512 > 420, so shrink. The show rail is already at its 72 px min, so the thread gives it all.
     const layout = makeLayout({ width: { thread: 440, editor: 480, pane: 600, show: 72 } });
     const next = fitToWidth(layout, 700);
     expect(next.width.thread).toBeLessThan(440);
-    expect(next.width.show).toBeLessThan(72);
+    expect(next.width.show).toBe(MIN_WIDTH.show);
     // Total fixed should now be 420 (700 - 280 pane min).
     expect(next.width.thread + next.width.show).toBeCloseTo(420, 1);
   });
