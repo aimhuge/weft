@@ -4,6 +4,8 @@ import { describe, expect, it, vi } from "vitest";
 // lib/copilot-sources are mocked.
 
 vi.mock("next/server", () => ({ connection: async () => {} }));
+// The guard reads the launch token; none here, so every check no-ops.
+vi.mock("@/lib/shell-token", () => ({ shellToken: () => "" }));
 vi.mock("@/lib/store", () => ({ listCards: vi.fn(() => [{ id: "a" }]) }));
 const result = { chips: [{ text: "Commit Fix login", cardId: "a" }], covers: [] };
 const suggest = vi.hoisted(() => ({ boardSuggestions: vi.fn(), boardContext: vi.fn(() => Promise.resolve("## Vercel deploys\n- weft: READY")) }));

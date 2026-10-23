@@ -25,7 +25,8 @@ beforeAll(() => {
   other = path.join(tmp, "other");
   fs.mkdirSync(repo);
   fs.mkdirSync(other);
-  git("init");
+  // Pin the branch: the test rewrites .git/HEAD to refs/heads/main, and CI's git defaults to master.
+  git("init", "-b", "main");
   fs.writeFileSync(path.join(repo, "tracked.txt"), "tracked in HEAD\n");
   git("add", "tracked.txt");
   git("commit", "-m", "init");

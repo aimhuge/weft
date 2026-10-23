@@ -4,6 +4,8 @@ import { GET } from "./route";
 vi.mock("next/server", () => ({ connection: async () => {} }));
 // lib/show-dir.ts reads DATA_DIR from the store, which these tests mock.
 vi.mock("@/lib/show-dir", () => ({ SHOW_DIR: "/weft/show" }));
+// The guard reads the launch token; none here, so every check no-ops.
+vi.mock("@/lib/shell-token", () => ({ shellToken: () => "" }));
 vi.mock("@/lib/store", () => ({
   listCards: vi.fn(() => [
     { id: "a", title: "Card A", prompt: "Do A", cwd: "/dev/app", column: "backlog", createdAt: 0 },

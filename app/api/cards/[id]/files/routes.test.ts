@@ -28,6 +28,8 @@ const fileAccess = vi.hoisted(() => ({
 
 const db = vi.hoisted(() => ({ cards: new Map<string, Card>(), seq: 0 }));
 
+// The guard reads the launch token; none here, so every check no-ops.
+vi.mock("@/lib/shell-token", () => ({ shellToken: () => "" }));
 vi.mock("@/lib/store", () => ({
   getCard: vi.fn((id: string) => db.cards.get(id)),
 }));

@@ -47,8 +47,10 @@ export function checkMemoryPressure(minFreeMb = MIN_FREE_MB) {
     );
     pressure = { freeMb, swapUsedMb: Math.round(swapUsed / 1e6), totalMb, ok: freeMb >= minFreeMb };
   } catch {
-    // Not macOS, or vm_stat/sysctl unavailable: don't block the suite.
-    pressure = { freeMb: totalMb, swapUsedMb: 0, totalMb, ok: true };
+    // Not macOS (Linux CI), or vm_stat/sysctl unavailable: os.freemem() is the best figure, and the
+    // threshold still applies, so the gate behaves the same on every platform.
+    const freeMb = Math.floor(os.freemem() / 1e6);
+    pressure = { freeMb, swapUsedMb: 0, totalMb, ok: freeMb >= minFreeMb };
   }
   return pressure;
 }
