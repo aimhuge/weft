@@ -121,7 +121,7 @@ describe("cliEnv", () => {
 });
 
 describe("guardedCli", () => {
-  it("starts a thread with the stripped env, the secret guard, the restart guard, the git guard, the check guard, the route import guard, the import guard, the folder gate and symbol claims, for edits and Bash", () => {
+  it("starts a thread with the stripped env, the secret guard, the restart guard, the git guard, the check guard, the route import guard, the import guard, the folder gate, symbol claims for edits and Bash, and the changelog stamp", () => {
     vi.stubEnv("WEFT_SHELL_TOKEN", "secret");
     const opts = guardedCli(() => 0, () => undefined);
     expect(opts.env).not.toHaveProperty("WEFT_SHELL_TOKEN");
@@ -139,6 +139,8 @@ describe("guardedCli", () => {
     expect(pre[5]?.matcher).toBe("Read|Edit|MultiEdit|Write|NotebookEdit|Glob|Grep|LS|Bash"); // the folder gate
     expect(pre[6]?.matcher).toBe("Edit|MultiEdit|Write|NotebookEdit");
     expect(pre[7]?.matcher).toBe("Bash"); // Bash claims
+    expect(pre[8]?.matcher).toBe("Bash"); // the changelog stamp's HEAD before a commit
+    expect(post[3]?.matcher).toBe("Bash"); // and its stamp after
   });
 
   it("counts other cards' turns with the function it's given", async () => {

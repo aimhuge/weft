@@ -34,9 +34,13 @@ tool call.
 
 ## Cutting a release
 
-1. Bump `version` in `package.json`.
-2. In `CHANGELOG.md`, move **Unreleased** under a new `## [X.Y.Z] - date` heading.
-3. Commit, tag `vX.Y.Z`, and push the tag.
+1. Bump `version` in `package.json` and commit it from a Weft thread. Weft commits the release notes right after on its
+   own (docs/architecture/changelog.md): Unreleased in `CHANGELOG.md`, the committed entries plus any lines typed there,
+   becomes `## [X.Y.Z] - date`.
+2. Tag `vX.Y.Z` on that notes commit (HEAD), and push the tag. Tagging in the same Bash line as the bump commit tags the
+   commit before the notes, and the release fails on the missing section.
+
+A bump Weft didn't see (a Codex thread, a commit made outside Weft) gets its section by hand: `pnpm changelog:release X.Y.Z`.
 
 `.github/workflows/release.yml` runs on the tag, on an Apple silicon runner:
 

@@ -22,6 +22,7 @@ const LoginDialog = guarded(() => import("./LoginDialog"), { what: "login dialog
 const FileDrop = guarded(() => import("./FileDrop"), { inline: true, what: "file drop", className: "fixed bottom-6 left-1/2 z-50" });
 const SettingsDialog = guarded(() => import("./SettingsDialog"), { what: "settings", className: "fixed left-4 top-16 z-50" });
 const ShortcutsDialog = guarded(() => import("./ShortcutsDialog"), { what: "shortcuts sheet", className: "fixed left-4 top-16 z-50" });
+const ChangelogDialog = guarded(() => import("./ChangelogDialog"), { what: "changelog", className: "fixed left-4 top-16 z-50" });
 const CommandPalette = guarded(() => import("./CommandPalette"), { what: "command palette", className: "fixed left-4 top-16 z-50" });
 
 // One tag as the dialog's list draws it: the name and how many cards carry it.
@@ -61,6 +62,8 @@ export interface BoardDialogsProps {
   onCloseLogin: () => void;
   // The "Switch all to <CLI>" modal, already built by useSwitchAll.
   switchAllDialog: React.ReactNode;
+  // The delete-card confirmation, already built by useBoardMenus.
+  deleteDialog: React.ReactNode;
   // FileDrop's targets.
   cards: Card[];
   newOpen: boolean;
@@ -93,6 +96,7 @@ export default function BoardDialogs({
   login,
   onCloseLogin,
   switchAllDialog,
+  deleteDialog,
   cards,
   newOpen,
   onDropCard,
@@ -107,6 +111,8 @@ export default function BoardDialogs({
       {tagging && <TagsDialog card={tagging} all={tagOptions} onChange={onTagsChange} onClose={onCloseTags} />}
       {sharing && <ShareCardDialog card={sharing} onClose={onCloseShare} />}
       {sharingBoard && <ShareBoardDialog onClose={onCloseShareBoard} />}
+      {/* Holds its own open flag (lib/changelog-open.ts), so Board passes nothing. */}
+      <ChangelogDialog />
       <ModifierHint />
       {palette && (
         // paletteItems is a thunk because the palette only reads the rows while it's open; Board
@@ -115,6 +121,7 @@ export default function BoardDialogs({
       )}
       {login && <LoginDialog login={login} onClose={onCloseLogin} />}
       {switchAllDialog}
+      {deleteDialog}
 
       <FileDrop cards={cards} newOpen={newOpen} onOpenCard={onDropCard} onOpenNew={onDropNew} />
 

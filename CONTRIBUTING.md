@@ -24,7 +24,8 @@ Weft is [FSL-1.1-ALv2](LICENSE). In short:
 - Use Weft on Weft: open this folder as a project and let a card do the work. It's how most of Weft
   gets built.
 
-Your name goes on the CHANGELOG line for anything you ship.
+Anything you ship gets a changelog entry. In Weft, a thread records it with `mcp__board__changelog_add` and it lands in
+CHANGELOG.md in a commit Weft makes right after yours; without Weft, add the line under **Unreleased** in CHANGELOG.md by hand, with your name.
 
 ## Setup
 

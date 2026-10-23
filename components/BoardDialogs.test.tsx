@@ -45,6 +45,7 @@ function setup(over: Partial<BoardDialogsProps> = {}) {
     login: null,
     onCloseLogin: vi.fn(),
     switchAllDialog: null,
+    deleteDialog: null,
     cards: [card],
     newOpen: false,
     onDropCard: vi.fn(),

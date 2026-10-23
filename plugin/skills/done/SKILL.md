@@ -14,7 +14,9 @@ thread's conversation. Moving a card to Done means "commit, push and deploy this
 the turn: never end it with a question or a menu of options ("Pick one: …"). Decide, do it, report.
 Committed, pushed and deploying (or nothing to deploy) → `column=done`; tests fail, lint errors remain
 in your own code, or the push or deploy check fails → `column=review` with what's left (Weft keeps a
-Review wrap-up on the board instead of archiving it). Show the wrap-up in the browser pane, not as ASCII art.
+Review wrap-up on the board instead of archiving it). `column=needs_you` is never right here: a
+finished wrap-up is archived into Done whatever it asks for, so there is nothing to answer. Show the
+wrap-up in the browser pane, not as ASCII art.
 
 Every `Agent` call names its `model`: `"haiku"` on Claude Code, `"puku-ai-2.8"` on puku-cli (which
 refuses any model outside its pinned `puku-ai-2.7`, `puku-ai-2.8`, `opus`). An agent without one
@@ -107,6 +109,10 @@ The reports are leads, not facts:
 - **Scout.** Drop findings that are wrong or trivial, then run
   `node ${CLAUDE_SKILL_DIR}/scout-save.mjs <dir>/out/findings.json <session files>`. It merges them
   into the report Weft's quality badge reads, where each finding can start a card.
+- **Changelog.** In a Weft thread, a session that shipped something a user would notice needs an
+  entry: `mcp__board__changelog_list`, then `changelog_add` (or `changelog_edit` your own) before the
+  commit, which stamps it with the sha. Never type it under CHANGELOG.md's Unreleased, and leave the file out
+  of your commit: Weft writes and commits it right after yours. Outside Weft (no such tool), add the line under Unreleased as before.
 
 ## Phase 3: SOUL.md (you)
 
@@ -122,7 +128,7 @@ can create one.
 2. `${CLAUDE_SKILL_DIR}/commit.sh "message" file1 file2 ...` with exactly: the session files, the
    docs and lint fixes you verified, `SOUL.md` if it changed. It `git add`s each path and commits
    only those paths, so other sessions' staged work stays out.
-   - **Shared files go whole.** A session file other cards also edited (README.md, CHANGELOG.md,
+   - **Shared files go whole.** A session file other cards also edited (README.md,
      docs/ROADMAP.md, SOUL.md, a shared component) is committed whole, their lines with yours. Their
      lines ship a little early; that's fine, and the pre-commit hook still checks them. Name those
      files in the report. Never leave your own lines behind to dodge theirs.

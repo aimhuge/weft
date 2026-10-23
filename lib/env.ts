@@ -1,5 +1,6 @@
 import type { Options } from "@anthropic-ai/claude-agent-sdk";
 import { bashClaimHooks } from "./bash-claims";
+import { changelogStampHooks } from "./changelog-stamp";
 import { claimHooks } from "./claim-guard";
 import { folderGuardMatcher } from "./folder-guard";
 import { CHECK_GUARD_MATCHER } from "./check-guard";
@@ -60,15 +61,16 @@ export { RESTART_PROMPT } from "./restart-guard";
 // run (otherTurns counts them), the one that won't stash, reset --hard or clean away other cards' uncommitted
 // work, the one that sends tsc and eslint through the pnpm scripts that take turns, the one that refuses
 // an edit making a route file import a module that isn't there yet, the one that reports an edit breaking an import, symbol claims, which ask before an edit to what
-// another busy card is editing (Bash writes too, which also drop claims on files gone clean and tell a failed check whose failures are another card's), and the folder gate, which asks before a tool reaches outside the card's project (cardId names the session's card, once it has one).
+// another busy card is editing (Bash writes too, which also drop claims on files gone clean and tell a failed check whose failures are another card's), the folder gate, which asks before a tool reaches outside the card's project, and the changelog stamp, which marks the card's changelog entries committed when its own commit lands (cardId names the session's card, once it has one).
 export function guardedCli(otherTurns: () => number, cardId: () => string | undefined): Pick<Options, "env" | "hooks"> {
   const claims = claimHooks(cardId);
   const bash = bashClaimHooks(cardId);
+  const stamp = changelogStampHooks(cardId);
   return {
     env: cliEnv(),
     hooks: {
-      PreToolUse: [SECRET_GUARD_MATCHER, restartGuardMatcher(otherTurns), GIT_GUARD_MATCHER, CHECK_GUARD_MATCHER, ROUTE_IMPORT_GUARD_MATCHER, folderGuardMatcher(cardId), claims.pre, bash.pre],
-      PostToolUse: [IMPORT_GUARD_MATCHER, claims.post, bash.post],
+      PreToolUse: [SECRET_GUARD_MATCHER, restartGuardMatcher(otherTurns), GIT_GUARD_MATCHER, CHECK_GUARD_MATCHER, ROUTE_IMPORT_GUARD_MATCHER, folderGuardMatcher(cardId), claims.pre, bash.pre, stamp.pre],
+      PostToolUse: [IMPORT_GUARD_MATCHER, claims.post, bash.post, stamp.post],
       PostToolUseFailure: [bash.post],
     },
   };

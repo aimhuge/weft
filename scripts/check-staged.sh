@@ -25,6 +25,11 @@ else
   echo "pre-commit: scanned for secrets with Weft's key patterns; gitleaks catches more (brew install gitleaks)." >&2
 fi
 
+# Nothing staged that tsc or eslint reads (a docs-only commit, like the CHANGELOG.md one Weft makes after a card's
+# commit, lib/changelog-write.ts): the secret scan was the whole check.
+code="$(git -C "$root" diff --cached --name-only -- '*.ts' '*.tsx' '*.mts' '*.cts' '*.js' '*.jsx' '*.cjs' '*.mjs' '*.json')"
+[ -z "$code" ] && exit 0
+
 git -C "$root" checkout-index --all --prefix="$tmp/"
 ln -s "$root/node_modules" "$tmp/node_modules"
 cd "$tmp" || exit 1

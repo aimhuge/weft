@@ -1,9 +1,11 @@
 import { api } from "@/lib/client";
+import { openChangelog } from "@/lib/changelog-open";
 import { openInPane } from "@/lib/open-in-pane";
 import { activeAt, recentMoves, SORTERS, type ProjectSummary, type SortKey } from "@/lib/board-view";
 import { timeAgo } from "@/lib/format";
 import { SCENES, setTheme, THEMES } from "@/lib/theme";
 import { REPLAY_EVENT } from "@/lib/welcome-client";
+import { replayLastAchievement } from "@/lib/achievement-replay";
 import { COLUMNS, type Card, type Column } from "@/lib/types";
 import type { PaletteItem } from "./CommandPalette";
 import { folderName, SORTS } from "./ProjectBar";
@@ -67,6 +69,13 @@ function importIssuesItem(s: PaletteState, a: PaletteActions): PaletteItem[] {
   return [command("import-issues", `Import GitHub issues into ${name}`, "github", run, undefined, "github issues backlog sync")];
 }
 
+// The open thread's project, or the most recent one: what its threads shipped (components/ChangelogDialog.tsx).
+function changelogItem(s: PaletteState): PaletteItem[] {
+  const folder = s.selected ? s.rootOf(s.selected.cwd) : s.projectSummaries[0]?.path;
+  if (!folder) return [];
+  return [command("changelog", `Changelog of ${folderName(folder)}`, "list", () => openChangelog(folder), undefined, "changelog release notes shipped version")];
+}
+
 // Restart when idle (lib/restart-when-idle.ts), or cancel the one that's waiting.
 function restartItem(s: PaletteState, a: PaletteActions): PaletteItem {
   const fail = (err: unknown) => a.toast?.(err instanceof Error ? err.message : String(err));
@@ -102,7 +111,9 @@ function commandItems(s: PaletteState, a: PaletteActions): PaletteItem[] {
     command("share-board", "Share the board…", "share", a.shareBoard, undefined, "share invite web board weft.zip team link"),
     command("team", "Your team", "globe", openTeamPage, undefined, "team members invite workspace weft.zip"),
     command("replay-welcome", "Replay the welcome", "play", () => window.dispatchEvent(new Event(REPLAY_EVENT)), undefined, "onboarding intro first launch tour"),
+    command("replay-achievement", "Replay last achievement", "sparkles", replayLastAchievement, undefined, "level up badge celebration episode"),
     ...importIssuesItem(s, a),
+    ...changelogItem(s),
     restartItem(s, a),
     ...(doneToArchive.length
       ? [command("archive-done", `Archive all ${doneToArchive.length} in Done`, "archive", () => a.archiveCards(doneToArchive), "shift+e", "clear file")]

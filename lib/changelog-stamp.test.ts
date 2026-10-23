@@ -1,0 +1,97 @@
+import { execFileSync } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+// The changelog's commit stamp (lib/changelog-stamp.ts) against a real temp repo, the store in a temp dir.
+
+const dir = fs.mkdtempSync(path.join(os.tmpdir(), "weft-stamp-"));
+const repo = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "weft-stamp-repo-")));
+const cards: Record<string, { id: string; title?: string; cwd: string }> = { c1: { id: "c1", title: "Card one", cwd: repo } };
+vi.mock("./store", () => ({ DATA_DIR: dir, getCard: (id: string) => cards[id] }));
+
+const { addEntry, changelogFile, readChangelog } = await import("./changelog");
+const { changelogStampHooks, head, stampAfterCommit } = await import("./changelog-stamp");
+
+const git = (...args: string[]) => execFileSync("git", ["-C", repo, ...args], { encoding: "utf8" }).trim();
+git("init", "-q");
+git("config", "user.email", "t@t");
+git("config", "user.name", "t");
+const commit = (name: string) => {
+  fs.writeFileSync(path.join(repo, name), name);
+  git("add", name);
+  git("commit", "-qm", name);
+};
+
+type Hook = (input: Record<string, unknown>, id: string | undefined, opts: unknown) => Promise<Record<string, unknown>>;
+const hooks = (cardId: string | undefined = "c1") => {
+  const h = changelogStampHooks(() => cardId);
+  return { pre: h.pre.hooks[0] as unknown as Hook, post: h.post.hooks[0] as unknown as Hook };
+};
+const bash = (event: string, command: string) => ({ hook_event_name: event, tool_name: "Bash", tool_input: { command }, cwd: repo });
+
+beforeEach(() => fs.rmSync(changelogFile(), { force: true }));
+
+describe("changelog stamp", () => {
+  it("reads HEAD, or null outside a repo or before the first commit", () => {
+    expect(head(os.tmpdir())).toBeNull();
+    commit("a");
+    expect(head(repo)).toBe(git("rev-parse", "HEAD"));
+  });
+
+  it("stamps the card's drafts when its own Bash commit moves HEAD, and tells the thread", async () => {
+    const e = addEntry({ project: repo, kind: "added", text: "x", cardId: "c1" });
+    const { pre, post } = hooks();
+    expect(await pre(bash("PreToolUse", "git commit -m feat"), "t1", {})).toEqual({});
+    commit("b");
+    const sha = git("rev-parse", "HEAD");
+    const out = await post(bash("PostToolUse", "git commit -m feat"), "t1", {});
+    expect(readChangelog().find((x) => x.id === e.id)?.sha).toBe(sha);
+    expect(JSON.stringify(out)).toContain(`"hookEventName":"PostToolUse","additionalContext":"Weft stamped 1 changelog entry of this card with ${sha.slice(0, 7)}`);
+    // Then Weft committed CHANGELOG.md right after the card's commit, and said so.
+    expect(git("log", "-1", "--format=%s")).toBe("docs(changelog): Card one");
+    expect(git("rev-parse", "HEAD~1")).toBe(sha);
+    expect(JSON.stringify(out)).toContain(`Weft committed CHANGELOG.md as ${git("rev-parse", "--short", "HEAD")}.`);
+  });
+
+  it("says entries, plural, and stamps commit.sh runs too", async () => {
+    addEntry({ project: repo, kind: "added", text: "x", cardId: "c1" });
+    addEntry({ project: repo, kind: "fixed", text: "y", cardId: "c1" });
+    const { pre, post } = hooks();
+    await pre(bash("PreToolUse", "bash commit.sh 'msg' a b"), "t2", {});
+    commit("c");
+    const out = await post(bash("PostToolUse", "bash commit.sh 'msg' a b"), "t2", {});
+    expect(JSON.stringify(out)).toContain("2 changelog entries");
+  });
+
+  it("stamps nothing when HEAD didn't move, the call wasn't a commit, it failed, or there are no drafts", async () => {
+    const e = addEntry({ project: repo, kind: "added", text: "x", cardId: "c1" });
+    const { pre, post } = hooks();
+    await pre(bash("PreToolUse", "git commit -m nope"), "t3", {});
+    expect(await post(bash("PostToolUse", "git commit -m nope"), "t3", {})).toEqual({});
+    await pre(bash("PreToolUse", "ls"), "t4", {});
+    commit("d");
+    expect(await post(bash("PostToolUse", "ls"), "t4", {})).toEqual({});
+    await pre(bash("PreToolUse", "git commit -m x"), "t5", {});
+    commit("e");
+    expect(await post(bash("PostToolUseFailure", "git commit -m x"), "t5", {})).toEqual({});
+    expect(readChangelog().find((x) => x.id === e.id)?.sha).toBeUndefined();
+    const other = hooks("c2");
+    expect(await other.pre(bash("PreToolUse", "git commit"), "t6", {})).toEqual({});
+    expect(await other.post(bash("PostToolUse", "git commit"), "t6", {})).toEqual({});
+    expect(await post(bash("PostToolUse", "git commit"), undefined, {})).toEqual({});
+    expect(await pre(bash("PostToolUse", "git commit"), "t7", {})).toEqual({});
+  });
+
+  it("returns 0 when nothing of that card is waiting, and forgets the oldest of too many pending calls", async () => {
+    commit("f");
+    const { pre, post } = hooks();
+    await pre(bash("PreToolUse", "git commit"), "t8", {});
+    commit("g");
+    expect(await post(bash("PostToolUse", "git commit"), "t8", {})).toEqual({});
+    expect(stampAfterCommit(undefined, repo, "abc")).toBe(0);
+    expect(stampAfterCommit("c1", repo, null)).toBe(0);
+    for (let i = 0; i < 105; i++) await pre(bash("PreToolUse", "git commit"), `many-${i}`, {});
+  });
+});

@@ -2,6 +2,8 @@ import { execFile } from "node:child_process";
 import path from "node:path";
 import { promisify } from "node:util";
 import { messagesForMove } from "./automations";
+import { head, stampAfterCommit } from "./changelog-stamp";
+import { writeChangelog } from "./changelog-write";
 import { releaseClaims } from "./claim-guard";
 import { readPile, repoRoot } from "./commit-pile";
 import { archiveWhenIdle, isBusy, queueMessages, sendUserMessage } from "./runner";
@@ -107,6 +109,10 @@ async function attempt(cardId: string, req: CommitRequest, script: string): Prom
   // Those files' changes are in, so no card's claim on them stands (lib/claims.ts).
   releaseClaims(req.paths.map((p) => path.join(root, p)));
   result.hash = (await run("git", ["-C", root, "rev-parse", "--short", "HEAD"])).stdout.trim();
+  // The change's card shipped: its changelog drafts are committed now (lib/changelog-stamp.ts).
+  stampAfterCommit(req.done, root, head(root));
+  // And CHANGELOG.md goes in right after, before the push below (lib/changelog-write.ts).
+  await writeChangelog(root, req.label ?? req.message);
   if (req.push) {
     try {
       await run("git", ["-C", root, "push"], { timeout: 120_000 });

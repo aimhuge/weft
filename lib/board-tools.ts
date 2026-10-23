@@ -6,6 +6,7 @@ import { markSeen } from "./copilot-digest";
 import { setupReport } from "./copilot-setup";
 import { activeProjects } from "./copilot-sources";
 import { resolveFolder } from "./folders";
+import { changelogTools } from "./changelog-tool";
 import { folderAccessTool } from "./folder-access-tool";
 import { restartTool } from "./restart-tool";
 import { cleanTitle, titleFromPrompt } from "./format";
@@ -106,6 +107,8 @@ function listCardsTool() {
 export function weftMcpServer(
   getCardId: () => string | undefined,
   actions: Pick<BoardActions, "start">,
+  // The thread's folder, for its project's changelog before the card is known (a warm spare).
+  getCwd: () => string = () => "",
 ) {
   return createSdkMcpServer({
     name: "board",
@@ -143,6 +146,7 @@ export function weftMcpServer(
       ),
       restartTool(),
       folderAccessTool(),
+      ...changelogTools(getCardId, getCwd),
     ],
   });
 }

@@ -1,4 +1,5 @@
 import { useState, type Dispatch, type SetStateAction } from "react";
+import { useChangelogFolder } from "./changelog-open";
 import type { LoginView } from "./types";
 
 // The board's dialog flags in one place, out of Board.tsx: what it stacks over its columns, and
@@ -14,12 +15,14 @@ export interface DialogFlags {
   login: LoginView | null;
   // The project bar's dropdown, which is a menu rather than a dialog but covers the board the same way.
   menuOpen: boolean;
+  // A project's Changelog dialog (lib/changelog-open.ts), which holds its own open flag.
+  changelog?: boolean;
 }
 
 // Whether a dialog, sign-in or menu is over the board (the native browser pane hides under it), and
 // whether the shortcuts that act on the board still stand down.
 export function dialogLayers(flags: DialogFlags) {
-  const overlay = flags.showSettings || flags.showHelp || flags.showPalette || Boolean(flags.login) || flags.menuOpen;
+  const overlay = flags.showSettings || flags.showHelp || flags.showPalette || Boolean(flags.login) || flags.menuOpen || Boolean(flags.changelog);
   return { overlay, boardKeys: !(flags.showNew || overlay) };
 }
 
@@ -58,7 +61,8 @@ export function useBoardDialogs(): BoardDialogs {
   const [showPalette, setShowPalette] = useState(false);
   const [paletteQuery, setPaletteQuery] = useState("");
   const [login, setLogin] = useState<LoginView | null>(null);
-  const { overlay, boardKeys } = dialogLayers({ showNew, showSettings, showHelp, showPalette, login, menuOpen });
+  const changelog = useChangelogFolder() !== null;
+  const { overlay, boardKeys } = dialogLayers({ showNew, showSettings, showHelp, showPalette, login, menuOpen, changelog });
   return {
     showNew,
     setShowNew,

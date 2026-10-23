@@ -28,6 +28,7 @@ describe("dialogLayers", () => {
     ["showHelp", true],
     ["showPalette", true],
     ["menuOpen", true],
+    ["changelog", true],
   ] as const)("%s alone is an overlay that stands the board's keys down", (flag, on) => {
     expect(dialogLayers({ ...OFF, [flag]: on })).toEqual({ overlay: true, boardKeys: false });
   });
