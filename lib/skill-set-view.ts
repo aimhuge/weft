@@ -1,4 +1,5 @@
 import type { SkillSetRow } from "./types";
+import { matchesQuery } from "./text-filter";
 
 // How the Skills drawer and a card's ✦ menu lay out a skill set (lib/skill-set-actions.ts skillSetView).
 
@@ -16,10 +17,7 @@ const GROUPS: [SkillSetRow["source"], string][] = [
   ["plugin", "Plugins"],
 ];
 
-const matches = (row: SkillSetRow, query: string) => {
-  const q = query.trim().toLowerCase();
-  return !q || row.name.toLowerCase().includes(q) || (row.label ?? "").toLowerCase().includes(q) || row.description.toLowerCase().includes(q);
-};
+const matches = (row: SkillSetRow, query: string) => matchesQuery([row.name, row.label, row.description], query);
 
 // The rows a filter leaves, in the four groups (an empty group is left out).
 export function groupRows(rows: SkillSetRow[], query = ""): SkillGroup[] {

@@ -1,11 +1,12 @@
 // The "More" dropdown menu in the project bar: every project (so the user can pick one outside the
-// recent six), an "Open folder" action, a "Clone from GitHub" form and a "New project" form. The desktop's native folder picker
+// recent six) under a filter box that has focus when the menu opens (Enter picks the top match), an "Open folder" action, a "Clone from GitHub" form and a "New project" form. The desktop's native folder picker
 // bypasses the form; a browser tab falls back to a paste-in path field.
 import { useState } from "react";
 import { api } from "@/lib/client";
-import { folderName, plural, shortPath } from "@/lib/project-bar";
+import { filterProjects, folderName, plural, shortPath } from "@/lib/project-bar";
 import type { ProjectSummary } from "@/lib/board-view";
 import Icon from "./Icon";
+import SearchField from "./SearchField";
 
 const FIELD =
   "w-full min-w-0 rounded-md border border-line-strong bg-canvas px-2.5 py-1.5 text-[12px] text-ink outline-none placeholder:text-faint focus:border-accent";
@@ -39,6 +40,8 @@ export default function ProjectMenu({
   const [parent, setParent] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [query, setQuery] = useState("");
+  const shown = filterProjects(projects, query, home);
 
   function choose(path: string | null) {
     onSelect(path);
@@ -129,11 +132,24 @@ export default function ProjectMenu({
       id={menuId}
       className="absolute left-0 top-full z-40 mt-1.5 flex max-h-[min(540px,calc(100vh-110px))] w-[360px] flex-col rounded-lg border border-line bg-panel shadow-lg"
     >
+      {projects.length > 0 && (
+        <SearchField
+          query={query}
+          onQuery={setQuery}
+          label="Filter projects"
+          autoFocus
+          onEnter={() => shown[0] && choose(shown[0].path)}
+          className="m-1.5 mb-0.5 shrink-0"
+        />
+      )}
       <div className="min-h-0 overflow-y-auto p-1">
         {projects.length === 0 && (
           <p className="px-2.5 py-2 text-[12px] text-muted">No projects yet. Open a folder or create one below.</p>
         )}
-        {projects.map((project) => {
+        {projects.length > 0 && shown.length === 0 && (
+          <p className="px-2.5 py-2 text-[12px] text-muted">No project matches “{query.trim()}”.</p>
+        )}
+        {shown.map((project) => {
           const on = project.path === selected;
           return (
             <button

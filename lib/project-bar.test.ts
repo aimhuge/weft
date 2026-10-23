@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { folderName, plural, shortPath, statusLabel } from "./project-bar";
+import { filterProjects, folderName, plural, shortPath, statusLabel } from "./project-bar";
 import type { ProjectSummary } from "./board-view";
 
 describe("folderName", () => {
@@ -60,5 +60,21 @@ describe("statusLabel", () => {
   it("is empty when nothing is happening", () => {
     const project: ProjectSummary = { path: "/x", lastActivity: 0, cards: 0, running: 0, needsYou: 0 };
     expect(statusLabel(project)).toBe("");
+  });
+});
+
+describe("filterProjects", () => {
+  const at = (path: string): ProjectSummary => ({ path, lastActivity: 0, cards: 0, running: 0, needsYou: 0 });
+  const projects = [at("/Users/me/dev/weft"), at("/Users/me/dev/deckcp"), at("/Users/me"), at("/opt/other")];
+
+  it("matches the folder name and the ~ path, not the home prefix", () => {
+    expect(filterProjects(projects, "deck", "/Users/me").map((p) => p.path)).toEqual(["/Users/me/dev/deckcp"]);
+    expect(filterProjects(projects, "me", "/Users/me").map((p) => p.path)).toEqual(["/Users/me"]);
+    expect(filterProjects(projects, "dev", "/Users/me")).toHaveLength(2);
+    expect(filterProjects(projects, "opt", "/Users/me").map((p) => p.path)).toEqual(["/opt/other"]);
+  });
+
+  it("keeps every project for a blank query", () => {
+    expect(filterProjects(projects, "", "/Users/me")).toBe(projects);
   });
 });

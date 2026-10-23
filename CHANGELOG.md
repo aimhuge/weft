@@ -9,6 +9,8 @@ lands; a release moves those lines under its version and tags the commit `vX.Y.Z
 ## [Unreleased]
 
 ### Added
+
+- **Settings has a Security page.** The default permission mode (from Threads), trusted folders (from General) and sign-in expiry (from Accounts) now sit together (`components/SettingsSecurityPage.tsx`).
 - **The project bar's More menu has a filter.** It has focus when the menu opens, matches the folder name and its `~` path, and Enter picks the top match. It's the same field and rule as the 🔐 and skills filters, now shared (`components/SearchField.tsx`, `lib/text-filter.ts`).
 - **Replay the welcome from your avatar's menu.** It moved out of Settings → General (which keeps Test it and Reset tips) into the avatar menu and the command palette (`components/AccountButton.tsx`).
 - **The 🔐 drawer shows each vault's Vercel project.** A vault whose folder is linked in ▲ gets a line under its name: the project, how many values are still to push, and **Push to Vercel** (one Touch ID) (`components/VaultVercel.tsx`).

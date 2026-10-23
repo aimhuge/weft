@@ -1,6 +1,8 @@
 // Display helpers for the project bar: the folder name and a path shortened with the home dir. Pure,
 // so the bar component and the command palette can share the same rules.
 import type { ProjectSummary } from "./board-view";
+import { folderName } from "./format";
+import { filterByQuery } from "./text-filter";
 
 // "/Users/me/dev/app/" -> "app": the chip's label, ignoring any trailing slashes. Re-exported rather than
 // reimplemented — lib/format.ts's folderName is the one the provider views, services and webhooks already
@@ -25,4 +27,9 @@ export function statusLabel(project: ProjectSummary) {
   if (project.needsYou > 0) parts.push(`${project.needsYou} ${project.needsYou === 1 ? "needs" : "need"} you`);
   if (project.running > 0) parts.push(`${project.running} running`);
   return parts.length ? `, ${parts.join(", ")}` : "";
+}
+
+// The More menu's filter: a project matches on its folder name (home's too, which reads as "~") and its ~-shortened path (lib/text-filter.ts).
+export function filterProjects(projects: ProjectSummary[], query: string, home: string): ProjectSummary[] {
+  return filterByQuery(projects, query, (p) => [folderName(p.path), shortPath(p.path, home)]);
 }
