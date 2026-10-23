@@ -11,8 +11,8 @@ import { WelcomeFooter, welcomeNote, type WelcomeStep } from "./WelcomeFooter";
 import { CLIS, ReadyStep, readyCli, useCliStatus } from "./WelcomeIntro";
 import { ProjectsStep } from "./WelcomeSteps";
 
-// First launch's welcome, for everyone, history or not (lib/welcome.ts). Do, don't tell: screen 1 is what Weft is on a
-// real board, with the agent CLIs and Log in right there; screen 2 the projects to bring in, with the switch that counts
+// First launch's welcome, for everyone, history or not (lib/welcome.ts). Do, don't tell: screen 1 is what Weft is, as a
+// loop of the board at work with your project names, with the agent CLIs and Log in right there; screen 2 the projects to bring in, with the switch that counts
 // your Claude Code history on your Wefter Profile (left out when there's no history); screen 3 starts your first thread.
 // The answer is saved on leaving screen 2 (or 1 with no history), so the import runs while you write the first prompt;
 // the session sync adds no cards until then. The board explains the rest in place, once, as cards move.
@@ -136,7 +136,7 @@ export default function WelcomeDialog({ onError }: { onError?: (err: unknown) =>
 
   const cliReady = cliStatus === null ? null : CLIS.some((c) => cliStatus[c.id]?.loggedIn);
   return createPortal(
-    <Modal label="Welcome to Weft" onClose={() => {}} keepOnBackdrop className="w-full max-w-[620px]">
+    <Modal label="Welcome to Weft" onClose={() => {}} keepOnBackdrop className="w-full max-w-[760px]">
       <div onKeyDown={onKeyDown} className="flex flex-col">
         <div className="flex items-center justify-between border-b border-line px-5 py-2.5 text-[12px] text-muted">
           <span>{replay ? "Replay · saves nothing" : `Step ${steps.indexOf(step) + 1} of ${steps.length}`}</span>
@@ -147,7 +147,7 @@ export default function WelcomeDialog({ onError }: { onError?: (err: unknown) =>
           </span>
         </div>
         <div className="max-h-[72vh] overflow-auto px-5 py-4">
-          {step === "ready" && <ReadyStep status={cliStatus} />}
+          {step === "ready" && <ReadyStep status={cliStatus} projects={preview.projects.filter((p) => !p.scratch).map((p) => p.name)} />}
           {step === "projects" && <ProjectsStep projects={preview.projects} ticked={ticked} toggle={toggle} history={{ on: countHistory, set: setCountHistory, preview }} />}
           {step === "first" && (
             <FirstThreadStep folders={folders} cwd={cwd} setCwd={setCwd} prompt={prompt} setPrompt={setPrompt} cliLabel={CLIS.find((c) => c.id === cli)?.label ?? cli} />

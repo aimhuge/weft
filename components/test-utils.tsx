@@ -8,6 +8,15 @@ import type { Card } from "@/lib/types";
 // Vitest runs without globals, so Testing Library can't register its own cleanup.
 afterEach(cleanup);
 
+// jsdom has no matchMedia, which Electron always has: a stand-in that matches nothing (a test can vi.stubGlobal its own).
+if (typeof window !== "undefined" && typeof window.matchMedia !== "function") {
+  Object.defineProperty(window, "matchMedia", {
+    writable: true,
+    configurable: true,
+    value: (query: string) => ({ matches: false, media: query, addEventListener: () => {}, removeEventListener: () => {} }),
+  });
+}
+
 export function makeCard(over: Partial<Card> = {}): Card {
   return {
     id: "c1",

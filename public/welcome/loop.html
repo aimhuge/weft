@@ -1,0 +1,278 @@
+<!doctype html>
+<!--
+  The welcome's "how Weft works" loop, a HyperFrames composition (https://hyperframes.heygen.com): one card goes from a
+  prompt to Running, asks you a question in Needs you, shows its work in the browser pane in Review, and lands in Done.
+  Two ways to play it:
+  - live, in the welcome's Get ready hero (components/WelcomeIntro.tsx): ?live=1 plays the paused timeline on repeat and
+    scales the 1920x800 stage to the frame; ?p=a,b,c puts your own project names on the cards.
+  - rendered, for weft.zip: `pnpm welcome:render` (scripts/render-welcome-loop.mjs) runs `hyperframes render` on this file;
+    the renderer seeks window.__timelines.root frame by frame, and --variables '{"projects":"a,b,c"}' sets the names.
+  Everything here is seekable on purpose (no tl.call, no timers): the renderer only ever sets the timeline's time.
+-->
+<html data-composition-variables='[{"id":"projects","type":"string","label":"Project names, comma-separated","default":"my-app,api,site"}]'>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width">
+<title>How Weft works</title>
+<style>
+  html, body { margin: 0; background: #0d0f14; overflow: hidden; }
+  * { box-sizing: border-box; }
+  /* Sized to read at the welcome's ~580 px (a 0.3 scale): nothing smaller than 24 px. */
+  #root { position: relative; width: 1920px; height: 800px; overflow: hidden; transform-origin: 0 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif; color: #e8eaf0;
+    background: radial-gradient(1200px 600px at 20% 0%, #1b2030 0%, #0d0f14 70%); }
+  .abs { position: absolute; }
+  /* The board: four columns on the left. */
+  .col { top: 124px; width: 296px; height: 556px; border-radius: 22px; background: #151925; border: 2px solid #232838; }
+  .col h4 { margin: 22px 24px 0; font-size: 32px; font-weight: 600; color: #9aa3b8; display: flex; gap: 12px; align-items: center; }
+  .dot { width: 16px; height: 16px; border-radius: 50%; display: inline-block; }
+  .card { width: 268px; height: 146px; border-radius: 18px; background: #1f2433; border: 2px solid #2d3346; padding: 18px 20px; }
+  .card .t { font-size: 34px; font-weight: 600; line-height: 1.15; color: #f1f3f8; white-space: nowrap; }
+  .card .p { margin-top: 18px; font-size: 26px; color: #8d95aa; display: flex; gap: 12px; align-items: center; white-space: nowrap; }
+  .chip { font-size: 24px; padding: 3px 12px; border-radius: 9px; background: #2a3044; color: #b9c0d4; max-width: 170px; overflow: hidden; text-overflow: ellipsis; }
+  .slot { position: relative; width: 26px; height: 26px; flex: none; }
+  .mark { left: 0; top: -4px; width: 26px; text-align: center; font-size: 26px; line-height: 34px; }
+  .spin { width: 26px; height: 26px; border-radius: 50%; border: 4px solid #3a4258; border-top-color: #7aa7ff; flex: none; }
+  /* The composer at the top. */
+  #composer { left: 30px; top: 20px; width: 1236px; height: 84px; border-radius: 20px; background: #1a1f2c; border: 2px solid #2f3650;
+    display: flex; align-items: center; gap: 18px; padding: 0 22px; font-size: 36px; }
+  #composer .chip { font-size: 28px; max-width: 260px; }
+  #typed { overflow: hidden; white-space: nowrap; width: 0; color: #f1f3f8; }
+  #send { margin-left: auto; font-size: 30px; padding: 8px 22px; border-radius: 12px; background: #4f7cff; color: white; font-weight: 600; }
+  /* The browser pane on the right. */
+  #pane { left: 1290px; top: 20px; width: 610px; height: 660px; border-radius: 22px; background: #f5f6f8; overflow: hidden; border: 2px solid #2d3346; }
+  #pane .bar { height: 60px; background: #e6e8ee; display: flex; align-items: center; gap: 10px; padding: 0 20px; }
+  #pane .bar i { width: 16px; height: 16px; border-radius: 50%; background: #c9cdd6; display: inline-block; }
+  #pane .url { margin-left: 12px; flex: 1; height: 38px; border-radius: 10px; background: white; font-size: 22px; color: #6b7280; display: flex; align-items: center; padding: 0 14px; }
+  .app { left: 0; top: 60px; width: 610px; height: 600px; padding: 44px; }
+  .app h2 { margin: 0; font-size: 56px; }
+  .app .row { margin-top: 34px; height: 30px; border-radius: 8px; }
+  .plan { margin-top: 30px; border: 2px solid #e5e7eb; border-radius: 18px; padding: 22px 26px; font-size: 30px; }
+  .plan small { display: block; margin-top: 6px; font-size: 24px; color: #6b7280; }
+  .pay { left: 44px; top: 330px; width: 522px; height: 76px; border-radius: 16px; font-size: 30px; font-weight: 600;
+    display: flex; align-items: center; justify-content: center; }
+  #paid { left: 44px; top: 426px; width: 522px; height: 70px; border-radius: 16px; background: #dcfce7; color: #166534; font-size: 27px;
+    display: flex; align-items: center; justify-content: center; }
+  .tour { left: 30px; bottom: 30px; width: 546px; border-radius: 18px; background: #10131b; color: #e8eaf0; font-size: 28px; padding: 18px 24px; line-height: 1.3; }
+  /* Needs you: the question under the card. */
+  #ask { left: 344px; top: 352px; width: 288px; border-radius: 18px; background: #262c3e; border: 2px solid #f0b42999; padding: 16px 20px; font-size: 28px; line-height: 1.25; }
+  #ask .opts { margin-top: 14px; display: flex; gap: 12px; }
+  #ask .o { font-size: 26px; padding: 6px 16px; border-radius: 11px; border: 2px solid #3c4560; color: #c9cfdf; }
+  #cursor { left: 1190px; top: 50px; width: 48px; height: 48px; }
+  /* The 🔐 vault: the thread needs a key, Touch ID fills it in, the value stays masked. */
+  #vault { left: 340px; top: 196px; width: 606px; border-radius: 20px; background: #1c2130; border: 2px solid #4f7cff99; padding: 22px 26px;
+    box-shadow: 0 20px 50px #0008; }
+  #vault .h { font-size: 28px; color: #9aa3b8; display: flex; gap: 12px; align-items: center; }
+  #vault .k { margin-top: 18px; display: flex; gap: 18px; align-items: center; font-size: 28px; }
+  #vault code { font-family: ui-monospace, "SF Mono", Menlo, monospace; color: #f1f3f8; }
+  #vault .dots { color: #8d95aa; letter-spacing: 4px; }
+  #vault .pills { position: relative; margin-top: 20px; height: 52px; }
+  #vault .pill { left: 0; top: 0; font-size: 26px; padding: 8px 20px; border-radius: 12px; white-space: nowrap; }
+  /* macOS's Touch ID prompt, the one Electron main shows before a value leaves the vault (drawn after the real one). */
+  #tid { left: 700px; top: 40px; width: 470px; border-radius: 34px; background: #f2f2f4; color: #1d1d1f; padding: 34px 30px 26px;
+    box-shadow: 0 34px 90px #000c, 0 0 0 1px #0003; }
+  #tid .ring { position: relative; width: 112px; height: 112px; margin-left: 10px; }
+  #tid .print { position: absolute; inset: 0; border-radius: 50%; background: #fff; box-shadow: 0 2px 8px #0002, inset 0 0 0 1px #0001; }
+  #tid .print svg { position: absolute; inset: 14px; }
+  #tid .badge { position: absolute; right: -14px; bottom: -10px; width: 58px; height: 58px; }
+  #tid b { display: block; margin: 22px 10px 0; font-size: 27px; }
+  #tid p { margin: 18px 10px 0; font-size: 25px; line-height: 1.32; }
+  #tid .btn { margin-top: 12px; height: 54px; border-radius: 27px; font-size: 25px; display: flex; align-items: center; justify-content: center; }
+  #tid .blue { margin-top: 26px; background: #0a84ff; color: #fff; }
+  #tid .grey { background: #e3e3e6; color: #1d1d1f; }
+  /* The caption under everything. */
+  .cap { left: 30px; top: 704px; width: 1860px; font-size: 52px; font-weight: 600; color: #f1f3f8; letter-spacing: -0.01em; white-space: nowrap; }
+  .cap b { color: #f0b429; font-weight: 600; }
+  #fade { inset: 0; background: #0d0f14; }
+</style>
+</head>
+<body>
+<div id="root" data-composition-id="root" data-width="1920" data-height="800" data-start="0" data-duration="26">
+
+  <div id="composer" class="abs">
+    <span class="chip" id="proj0">my-app</span>
+    <span id="typed">Add Stripe checkout</span>
+    <span id="send">Start</span>
+  </div>
+
+  <div class="abs col" style="left:30px"><h4><span class="dot" style="background:#7aa7ff"></span>Running</h4></div>
+  <div class="abs col" style="left:340px"><h4><span class="dot" style="background:#f0b429"></span>Needs you</h4></div>
+  <div class="abs col" style="left:650px"><h4><span class="dot" style="background:#a78bfa"></span>Review</h4></div>
+  <div class="abs col" style="left:960px"><h4><span class="dot" style="background:#5fd38d"></span>Done</h4></div>
+
+  <!-- Other threads, so the board looks like a working one. -->
+  <div class="abs card" style="left:44px; top:356px"><div class="t">Faster search</div><div class="p"><span class="spin bg1"></span><span class="chip" id="proj1">api</span></div></div>
+  <div class="abs card" style="left:974px; top:356px"><div class="t">Signup email</div><div class="p">✓ pushed <span class="chip" id="proj2">site</span></div></div>
+
+  <!-- The thread this loop follows. -->
+  <div id="hero" class="abs card" style="left:44px; top:196px">
+    <div class="t" style="font-size:29px">Stripe checkout</div>
+    <div class="p"><span class="slot"><span class="spin" id="heroSpin"></span><span class="abs mark" id="heroReview" style="color:#a78bfa">●</span><span class="abs mark" id="heroDone" style="color:#5fd38d">✓</span></span><span class="chip" id="proj0b">my-app</span></div>
+  </div>
+
+  <div id="ask" class="abs">
+    <div>Monthly and yearly plans?</div>
+    <div class="opts"><span class="o" id="yes">Yes</span><span class="o">No</span></div>
+  </div>
+
+  <div id="vault" class="abs">
+    <div class="h">🔐 Vault <span class="chip" id="proj0c">my-app</span></div>
+    <div class="k"><code>STRIPE_SECRET_KEY</code><span class="dots">••••••••••</span></div>
+    <div class="pills"><span class="abs pill" id="touch" style="background:#2a3044; color:#e8eaf0">☝ Touch ID to fill it in</span><span class="abs pill" id="filled" style="background:#173a28; color:#5fd38d">✓ Filled in · the thread never sees it</span></div>
+  </div>
+
+  <div id="tid" class="abs">
+    <div class="ring">
+      <div class="print">
+        <svg id="fp" viewBox="0 0 64 64" fill="none" stroke="url(#fpg)" stroke-width="2.6" stroke-linecap="round">
+          <defs><linearGradient id="fpg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff4fa3"/><stop offset="1" stop-color="#ff2d55"/></linearGradient></defs>
+          <path d="M14 18a24 24 0 0 1 36 0"/><path d="M9 30a24 24 0 0 1 3-8"/><path d="M55 27a24 24 0 0 1 1 9"/>
+          <path d="M14 42c-1-3-2-7-2-10a20 20 0 0 1 40 0c0 3 0 6-1 9"/>
+          <path d="M19 48c-2-5-3-10-3-16a16 16 0 0 1 32 0c0 5 0 9-1 13"/>
+          <path d="M24 53c-2-6-3-13-3-21a11 11 0 0 1 22 0c0 7-1 14-3 20"/>
+          <path d="M29 56c-2-7-3-15-3-24a6 6 0 0 1 12 0c0 8-1 16-3 23"/>
+          <path d="M32 32c0 9-1 17-3 25"/>
+        </svg>
+        <svg id="fpOk" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#34c759"/><path d="M19 33l9 9 17-18" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <svg class="badge" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg"> <defs> <linearGradient id="wi-bg" x1="0" y1="100" x2="0" y2="924" gradientUnits="userSpaceOnUse"> <stop offset="0" stop-color="#28324d"/> <stop offset="1" stop-color="#151a29"/> </linearGradient> <linearGradient id="wi-rim" x1="0" y1="100" x2="0" y2="924" gradientUnits="userSpaceOnUse"> <stop offset="0" stop-color="#fff" stop-opacity="0.16"/> <stop offset="0.45" stop-color="#fff" stop-opacity="0.04"/> <stop offset="1" stop-color="#fff" stop-opacity="0.02"/> </linearGradient> <linearGradient id="wi-warp" x1="0" y1="192" x2="0" y2="832" gradientUnits="userSpaceOnUse"> <stop offset="0" stop-color="#f4eee3"/> <stop offset="1" stop-color="#e3dbcc"/> </linearGradient> <linearGradient id="wi-weft" x1="0" y1="258" x2="0" y2="766" gradientUnits="userSpaceOnUse"> <stop offset="0" stop-color="#6a779b"/> <stop offset="1" stop-color="#5a668a"/> </linearGradient> <linearGradient id="wi-clay" x1="0" y1="462" x2="0" y2="562" gradientUnits="userSpaceOnUse"> <stop offset="0" stop-color="#e3875a"/> <stop offset="1" stop-color="#d06b3e"/> </linearGradient> <filter id="wi-drop" x="40" y="40" width="944" height="964" filterUnits="userSpaceOnUse"> <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#000" flood-opacity="0.32"/> </filter> <mask id="wi-under-clay" maskUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024"> <rect width="1024" height="1024" fill="#fff"/> <rect x="0" y="442" width="1024" height="140" fill="#000"/> </mask> <mask id="wi-under-slate" maskUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024"> <rect width="1024" height="1024" fill="#fff"/> <rect x="0" y="238" width="1024" height="140" fill="#000"/> <rect x="0" y="646" width="1024" height="140" fill="#000"/> </mask> <mask id="wi-under-outer" maskUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024"> <rect width="1024" height="1024" fill="#fff"/> <rect x="238" y="0" width="140" height="1024" fill="#000"/> <rect x="646" y="0" width="140" height="1024" fill="#000"/> </mask> <mask id="wi-under-middle" maskUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024"> <rect width="1024" height="1024" fill="#fff"/> <rect x="442" y="0" width="140" height="1024" fill="#000"/> </mask> </defs> <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#wi-bg)" filter="url(#wi-drop)"/> <rect x="101.5" y="101.5" width="821" height="821" rx="183.5" fill="none" stroke="url(#wi-rim)" stroke-width="3"/> <rect x="258" y="192" width="100" height="640" rx="50" fill="url(#wi-warp)" mask="url(#wi-under-clay)"/> <rect x="462" y="192" width="100" height="640" rx="50" fill="url(#wi-warp)" mask="url(#wi-under-slate)"/> <rect x="666" y="192" width="100" height="640" rx="50" fill="url(#wi-warp)" mask="url(#wi-under-clay)"/> <rect x="192" y="258" width="640" height="100" rx="50" fill="url(#wi-weft)" mask="url(#wi-under-outer)"/> <rect x="192" y="462" width="640" height="100" rx="50" fill="url(#wi-clay)" mask="url(#wi-under-middle)"/> <rect x="192" y="666" width="640" height="100" rx="50" fill="url(#wi-weft)" mask="url(#wi-under-outer)"/> </svg>
+    </div>
+    <b>Weft</b>
+    <p>Weft wants to fill in “STRIPE_SECRET_KEY” from the <span id="proj0d">my-app</span> vault.</p>
+    <p>Touch ID or enter your password to allow this.</p>
+    <div class="btn blue">Use Password…</div>
+    <div class="btn grey">Cancel</div>
+  </div>
+
+  <div id="pane" class="abs">
+    <div class="bar"><i></i><i></i><i></i><span class="url">localhost:3000/pricing</span></div>
+    <div class="abs app" style="background:#ffffff; color:#111827">
+      <h2>Pricing</h2>
+      <div class="plan"><b>Pro</b> · $12 a month<small>Everything, for one builder</small></div>
+    </div>
+    <div class="abs pay" id="payOff" style="background:#e5e7eb; color:#9ca3af">Checkout · no key yet</div>
+    <div class="abs pay" id="payOn" style="background:#635bff; color:#fff">Pay with Stripe</div>
+    <div class="abs" id="paid">✓ Test payment succeeded</div>
+    <div class="abs tour" id="tour"><span style="color:#a78bfa">Review tour</span><br>Run a test payment, check the receipt</div>
+  </div>
+
+  <svg id="cursor" class="abs" viewBox="0 0 24 24"><path d="M3 2l7 19 2.6-7.4L20 11z" fill="#fff" stroke="#111" stroke-width="1.2"/></svg>
+
+  <div class="abs cap" id="c1">You bring the idea. <b>Every card is an AI coding thread.</b></div>
+  <div class="abs cap" id="c2">It builds, and shows its work in the <b>browser pane</b>.</div>
+  <div class="abs cap" id="c3">When it needs a decision, it moves to <b>Needs you</b>.</div>
+  <div class="abs cap" id="c5">Keys live in your <b>🔐 vault</b>. Threads use them, never see them.</div>
+  <div class="abs cap" id="c4">You check it in <b>Review</b>. Done commits, refactors and deploys.</div>
+
+  <div id="fade" class="abs"></div>
+</div>
+
+<script src="./gsap.min.js"></script>
+<script>
+  (function () {
+    var query = new URLSearchParams(location.search);
+    var live = query.get("live") === "1";
+    // Project names: ?p= when live, else the renderer's variables, else the declared default.
+    var vars = (window.__hyperframes && window.__hyperframes.getVariables && window.__hyperframes.getVariables()) || {};
+    var names = (query.get("p") || vars.projects || "my-app,api,site").split(",").map(function (s) { return s.trim(); }).filter(Boolean);
+    while (names.length < 3) names.push(["my-app", "api", "site"][names.length]);
+    var set = function (ids, text) { ids.forEach(function (id) { document.getElementById(id).textContent = text.slice(0, 24); }); };
+    set(["proj0", "proj0b", "proj0c", "proj0d"], names[0]);
+    set(["proj1"], names[1]);
+    set(["proj2"], names[2]);
+
+    var COL = { running: 44, needs: 354, review: 664, done: 974 };
+    var tl = gsap.timeline({ paused: true });
+    var hero = "#hero";
+    // Start state, set outside the timeline so frame 0 shows it (a set at 0 inside a paused timeline doesn't render);
+    // on each repeat the tweens below rewind to these values.
+    gsap.set(hero, { opacity: 0, scale: 0.9 });
+    gsap.set("#ask", { opacity: 0, y: 12 });
+    gsap.set(["#payOn", "#paid", "#tour", "#payOff", "#c2", "#c3", "#c4", "#cursor", "#heroReview", "#heroDone", "#c5", "#filled", "#fpOk"], { opacity: 0 });
+    gsap.set("#tid", { opacity: 0, scale: 0.92 });
+    gsap.set("#vault", { opacity: 0, y: 16 });
+    tl.fromTo("#fade", { opacity: 1 }, { opacity: 0, duration: 0.5 }, 0);
+
+    // 0.4–2.4: the prompt types itself, Start is clicked, the card appears in Running.
+    tl.to("#typed", { width: 400, duration: 1.6, ease: "steps(22)" }, 0.4)
+      .to("#cursor", { opacity: 1, duration: 0.2 }, 1.8)
+      .to("#cursor", { x: -6, y: 4, duration: 0.4 }, 2.0)
+      .to("#send", { scale: 0.92, duration: 0.08, yoyo: true, repeat: 1 }, 2.4)
+      .to(hero, { opacity: 1, scale: 1, duration: 0.4, ease: "back.out(2)" }, 2.6)
+      .to("#typed", { opacity: 0, duration: 0.3 }, 2.7);
+
+    // Spinners turn the whole way through.
+    tl.to(["#heroSpin", ".bg1"], { rotation: 360 * 14, duration: 26, ease: "none" }, 0);
+
+    // 3–6: building; the pane shows the pricing page getting a checkout button that can't pay yet.
+    tl.to("#c1", { opacity: 0, duration: 0.3 }, 3.2)
+      .to("#c2", { opacity: 1, duration: 0.3 }, 3.4)
+      .to("#cursor", { opacity: 0, duration: 0.4 }, 3.0)
+      .fromTo("#payOff", { opacity: 0, scale: 0.8 }, { opacity: 1, scale: 1, duration: 0.5, ease: "back.out(2)" }, 4.4);
+
+    // 6–9.5: a question: the card moves to Needs you, the ask shows, Yes is clicked, back to Running.
+    tl.to("#c2", { opacity: 0, duration: 0.3 }, 6.0)
+      .to("#c3", { opacity: 1, duration: 0.3 }, 6.2)
+      .to(hero, { x: COL.needs - COL.running, duration: 0.6, ease: "power2.inOut" }, 6.0)
+      .to("#ask", { opacity: 1, y: 0, duration: 0.35 }, 6.6)
+      .set("#cursor", { x: -785, y: 400 }, 7.0)
+      .to("#cursor", { opacity: 1, duration: 0.2 }, 7.0)
+      .to("#cursor", { x: -800, y: 420, duration: 0.6 }, 7.2)
+      .to("#yes", { scale: 0.9, duration: 0.08, yoyo: true, repeat: 1 }, 8.0)
+      .to("#ask", { opacity: 0, y: 12, duration: 0.3 }, 8.3)
+      .to("#cursor", { opacity: 0, duration: 0.2 }, 8.3)
+      .to(hero, { x: 0, duration: 0.6, ease: "power2.inOut" }, 8.6);
+
+    // 9.6–15.4: the thread needs a key: the vault asks for Touch ID (macOS's own prompt), fills it in, and the value stays masked.
+    tl.to("#c3", { opacity: 0, duration: 0.3 }, 9.6)
+      .to("#c5", { opacity: 1, duration: 0.3 }, 9.8)
+      .to("#vault", { opacity: 1, y: 0, duration: 0.4 }, 9.8)
+      .set("#cursor", { x: -760, y: 280 }, 10.4)
+      .to("#cursor", { opacity: 1, duration: 0.2 }, 10.4)
+      .to("#cursor", { x: -720, y: 310, duration: 0.6 }, 10.6)
+      .to("#touch", { scale: 0.94, duration: 0.08, yoyo: true, repeat: 1 }, 11.3)
+      .to("#cursor", { opacity: 0, duration: 0.2 }, 11.5)
+      // macOS asks: the finger rests, the print pulses, it turns to a green check, the prompt goes.
+      .to("#tid", { opacity: 1, scale: 1, duration: 0.3, ease: "back.out(1.6)" }, 11.5)
+      .to("#fp", { scale: 1.08, duration: 0.25, yoyo: true, repeat: 3, transformOrigin: "50% 50%" }, 11.9)
+      .to("#fp", { opacity: 0, duration: 0.15 }, 12.9)
+      .to("#fpOk", { opacity: 1, duration: 0.15 }, 12.9)
+      .to("#tid", { opacity: 0, scale: 0.96, duration: 0.25 }, 13.4)
+      .to("#touch", { opacity: 0, duration: 0.2 }, 13.5)
+      .to("#filled", { opacity: 1, duration: 0.25 }, 13.5)
+      .to("#vault", { opacity: 0, y: 16, duration: 0.4 }, 15.0);
+
+    // 16–18: with the key, checkout works: a test payment goes through in the pane, the card moves to Review, the tour opens.
+    tl.to("#payOn", { opacity: 1, duration: 0.3 }, 16)
+      .fromTo("#paid", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.35 }, 16.3)
+      .to("#heroSpin", { opacity: 0, duration: 0.2 }, 16.8)
+      .to("#heroReview", { opacity: 1, duration: 0.2 }, 16.9)
+      .to(hero, { x: COL.review - COL.running, duration: 0.7, ease: "power2.inOut" }, 16.8)
+      .to("#c5", { opacity: 0, duration: 0.3 }, 16.8)
+      .to("#c4", { opacity: 1, duration: 0.3 }, 17)
+      .fromTo("#tour", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.4 }, 17.6);
+
+    // 19.5–21: you move it to Done; it lands on top of the Done column.
+    tl.to(hero, { x: COL.done - COL.running, y: -10, rotation: 2, duration: 0.8, ease: "power2.inOut" }, 19.6)
+      .to(hero, { y: 0, rotation: 0, duration: 0.25 }, 20.4)
+      .to("#tour", { opacity: 0, duration: 0.3 }, 20.4)
+      .to("#heroReview", { opacity: 0, duration: 0.2 }, 20.4)
+      .to("#heroDone", { opacity: 1, duration: 0.2 }, 20.5);
+
+    // 25.2–26: fade out so the loop restarts clean.
+    tl.to("#fade", { opacity: 1, duration: 0.8 }, 25.2);
+
+    window.__timelines = window.__timelines || {};
+    window.__timelines.root = tl;
+
+    if (live) {
+      var root = document.getElementById("root");
+      var fit = function () { root.style.transform = "scale(" + window.innerWidth / 1920 + ")"; };
+      fit();
+      window.addEventListener("resize", fit);
+      tl.repeat(-1).play();
+    }
+  })();
+</script>
+</body>
+</html>

@@ -4,9 +4,10 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/client";
 import type { Backend, CliStatus } from "@/lib/types";
 import { Spinner } from "./Icon";
+import { WelcomeLoop } from "./WelcomeLoop";
 
-// The welcome's first screen (components/WelcomeDialog.tsx draws the frame and the buttons): what Weft is, on a real
-// screenshot of a working board, and whether an agent CLI is ready to run a thread, with Log in right there.
+// The welcome's first screen (components/WelcomeDialog.tsx draws the frame and the buttons): what Weft is, as a live
+// loop of a card crossing the board with your own project names on it (components/WelcomeLoop.tsx), and whether an agent CLI is ready to run a thread, with Log in right there.
 
 export const CLIS: { id: Backend; label: string; note: string }[] = [
   { id: "claude", label: "Claude Code", note: "Anthropic's coding agent" },
@@ -65,8 +66,8 @@ function CliRow({ cli, status, onLogin, starting }: { cli: (typeof CLIS)[number]
   );
 }
 
-// Screen 1: a real board in the hero, then the CLIs. One ready CLI is enough; the rest can wait for Settings → Accounts.
-export function ReadyStep({ status }: { status: CliStatuses | null }) {
+// Screen 1: the board in motion in the hero, then the CLIs. One ready CLI is enough; the rest can wait for Settings → Accounts.
+export function ReadyStep({ status, projects = [] }: { status: CliStatuses | null; projects?: string[] }) {
   const [starting, setStarting] = useState<Backend | null>(null);
   const [error, setError] = useState<string | null>(null);
   const login = (backend: Backend) => {
@@ -80,12 +81,12 @@ export function ReadyStep({ status }: { status: CliStatuses | null }) {
   const ready = CLIS.some((c) => status?.[c.id]?.loggedIn);
   return (
     <div className="flex flex-col gap-3">
-      <div className="relative overflow-hidden rounded-lg border border-line">
-        <img src="/brand/faq/tour-board.jpg" alt="A Weft board with threads in Running, Needs you, Review and Done" className="h-[190px] w-full object-cover object-top" />
-        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/60 to-transparent px-4 pb-3 pt-10">
-          <h2 className="text-[19px] font-semibold text-white">Welcome to Weft</h2>
-          <p className="text-[12.5px] text-white/80">Every card is an AI coding thread. You bring the idea; the threads plan it, build it and show it to you.</p>
-        </div>
+      <div>
+        <h2 className="text-[19px] font-semibold text-ink">Welcome to Weft</h2>
+        <p className="text-[12.5px] text-muted">Every card is an AI coding thread. You bring the idea; the threads plan it, build it and show it to you.</p>
+      </div>
+      <div className="overflow-hidden rounded-lg border border-line">
+        <WelcomeLoop projects={projects} />
       </div>
       <div className="flex flex-col gap-1.5">
         <div className="flex items-baseline justify-between">

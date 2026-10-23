@@ -22,6 +22,7 @@
     "lint": "node scripts/one-at-a-time.mjs lint eslint --max-warnings 0",
     "typecheck": "node scripts/one-at-a-time.mjs typecheck 'next typegen && tsc --noEmit'",
     "test": "node scripts/run-tests.mjs",
+    "welcome:render": "node scripts/render-welcome-loop.mjs",
     "prepare": "git config core.hooksPath .githooks || true",
     "app": "WEFT_DIST=.next-app next build && WEFT_DIST=.next-app WEFT_PROD=1 electron .",
     "dist": "WEFT_DIST=.next-dist WEFT_STANDALONE=1 next build && node scripts/prepare-standalone.mjs .next-dist && node scripts/bundle-toolchain.mjs && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --dir",
