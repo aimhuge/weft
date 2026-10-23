@@ -1,7 +1,7 @@
 {
   "name": "weft",
   "productName": "Weft",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "A board for your AI",
   "author": "Alex Miller <fotoflo@gmail.com>",
   "license": "FSL-1.1-ALv2",
@@ -15,6 +15,7 @@
   "main": "electron/main.cjs",
   "scripts": {
     "dev": "node electron/free-port.cjs 1024 .next && next dev -H 127.0.0.1 -p 1024",
+    "dev:web": "node electron/free-port.cjs 1024 .next && WEFT_WEB=1 next dev -H 127.0.0.1 -p 1024",
     "dev:protocol": "node scripts/dev-protocol.cjs",
     "desktop": "node scripts/dev-protocol.cjs && electron .",
     "build": "next build",
@@ -34,7 +35,8 @@
     "coverage": "node scripts/run-tests.mjs --coverage",
     "postinstall": "chmod +x node_modules/node-pty/prebuilds/darwin-*/spawn-helper 2>/dev/null || true; node scripts/patch-next-hmr.mjs",
     "resend": "node scripts/resend-domain.mjs",
-    "league:test-mail": "jiti scripts/league-mail-test.ts"
+    "league:test-mail": "jiti scripts/league-mail-test.ts",
+    "changelog:release": "jiti scripts/changelog-release.ts"
   },
   "dependencies": {
     "@aimhuge/admin": "github:aimhuge/components#v0.7.0&path:/packages/admin",
