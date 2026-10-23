@@ -1,6 +1,6 @@
 "use client";
 
-import { INTRO_TITLES, introSrc } from "@/lib/feature-intros";
+import { INTRO_TITLES } from "@/lib/feature-intros";
 import type { FeatureIntroState } from "@/lib/use-feature-intro";
 
 // A feature's intro video (lib/feature-intros.ts), at the top of its rail drawer or dialog: a sandboxed iframe that only
@@ -10,7 +10,7 @@ import type { FeatureIntroState } from "@/lib/use-feature-intro";
 const CHIP = "rounded-md bg-black/55 px-1.5 py-0.5 text-[11px] text-white hover:bg-black/75";
 
 export function IntroFrame({ intro, className = "" }: { intro: FeatureIntroState; className?: string }) {
-  const { id, open, ended, run, attach, muted, toggleMuted, play, hide } = intro;
+  const { id, open, ended, run, src, attach, muted, toggleMuted, play, hide } = intro;
   if (!open || !id) return null;
   const title = INTRO_TITLES[id];
   return (
@@ -18,7 +18,7 @@ export function IntroFrame({ intro, className = "" }: { intro: FeatureIntroState
       <iframe
         key={run}
         ref={attach}
-        src={introSrc(id)}
+        src={src}
         title={`What ${title} does`}
         sandbox="allow-scripts"
         tabIndex={-1}

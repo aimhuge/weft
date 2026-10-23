@@ -34,10 +34,11 @@ export const INTRO_TITLES: Record<IntroId, string> = {
 
 export const isIntro = (id: unknown): id is IntroId => INTROS.includes(id as IntroId);
 
-// The page plays itself with ?live=1 (public/intros/player.js); its voiceover is the track beside it, made by
-// `pnpm intros:narrate` (scripts/narrate-intros.mjs) from the page's own #narration lines.
-export const introSrc = (id: IntroId) => `/intros/${id}.html?live=1`;
-export const introVoice = (id: IntroId) => `/intros/${id}.m4a`;
+// The page plays itself with ?live=1 (public/intros/player.js), voice and all: its voiceover is the track beside it,
+// made by `pnpm intros:narrate` (scripts/narrate-intros.mjs) from the page's own #narration lines, and the page plays
+// it so the frames wait for it. ?muted=1 starts it muted; muteMessage flips it after.
+export const introSrc = (id: IntroId, muted = false) => `/intros/${id}.html?live=1${muted ? "&muted=1" : ""}`;
+export const muteMessage = (muted: boolean) => ({ weft: "intro-mute", muted }) as const;
 
 // What the page posts as it plays: "start" when the timeline starts from the top, "done" when it ends.
 export type IntroEvent = "start" | "done";

@@ -14,7 +14,7 @@ sized to read in the rail's 272 px drawer) and played by the shared `player.js`:
 
 | | |
 |---|---|
-| `player.js` | `window.weftIntro` scales the stage to the frame and, with `?live=1`, plays the timeline once from the top. It posts `{ weft: "intro", event: "start" }` when it starts and `{ weft: "intro", event: "done" }` when it ends, and takes `{ weft: "intro-go" }` from the parent to start over. `?t=<seconds>` holds the frame there instead, for checking a scene by eye. |
+| `player.js` | `window.weftIntro` scales the stage to the frame and, with `?live=1`, plays the timeline once from the top **with its own voice** (the `<id>.m4a` beside the page; `?muted=1` starts it muted, `{ weft: "intro-mute", muted }` flips it). The timeline waits for the voice to really play (or fail, or 4 s), and a voice later than that pulls the frames back to where it is. It posts `{ weft: "intro", event: "start" }` when it starts and `{ weft: "intro", event: "done" }` when it ends, and takes `{ weft: "intro-go" }` from the parent to start over. `?t=<seconds>` holds the frame there instead, for checking a scene by eye. |
 | `kit.css` | The shared look: the stage, the caption, the chip row. |
 
 Like the welcome tour's pages, the timelines use no timers and no `tl.call`, so a frame is drawn purely by
@@ -44,15 +44,18 @@ A track is optional: an intro with no `.m4a` plays silently and the 🔊 button 
 - It opens by itself the **first** time that drawer's id comes up, unless you've already seen it or you ask for
   reduced motion (`prefers-reduced-motion: reduce`).
 - It's seen once the page plays to the end (`done`) or you hide it, so hiding counts too.
-- The voice starts when the page posts `start` and stops when you hide it or the drawer closes. It shares the
-  welcome tour's 🔊 setting (`readMuted`/`writeMuted` in `lib/welcome-voice.ts`, the same localStorage key), so
-  muting one mutes the other.
-- Messages count only from the intro's own iframe (`e.source === frame.current?.contentWindow`); another frame on
-  the page can't drive it.
+- The page plays its own voice, and stops it when you hide it or the drawer closes (both unmount the frame). The board
+  used to start it on `start`, but the sandboxed frame animates in its own process while the board's window can be
+  busy for seconds as a drawer opens, so the voice came in that late. The hook shares the welcome tour's 🔊 setting
+  (`readMuted`/`writeMuted` in `lib/welcome-voice.ts`, the same localStorage key), so muting one mutes the other:
+  in the frame's address when it loads (`introSrc(id, muted)`) and as `muteMessage` when you flip it, so a flip
+  doesn't reload the page.
+- Messages count only from the intro's own iframe (`e.source === frame.current?.contentWindow`, and only once it has
+  one); another frame on the page can't drive it.
 - ▶ beside the title plays it again: an open intro is asked to start over, a closed one is loaded fresh (a new
   `run` remounts the iframe). ↻ Replay appears over the frame once it ends.
 
-The hook returns `{ id, open, ended, run, attach, muted, toggleMuted, play, hide }` (typed
+The hook returns `{ id, open, ended, run, src, attach, muted, toggleMuted, play, hide }` (typed
 `FeatureIntroState`); `components/FeatureIntro.tsx` takes that as one `intro` prop and reads
 `INTRO_TITLES[intro.id]` for the title. The iframe's ref is handed over through `attach` rather than returned,
 so no consumer reads a ref while it renders (the `react-hooks/refs` rule refuses that).
@@ -62,7 +65,7 @@ Which ones you've seen live in `localStorage` under `weft-intros-seen` (`INTROS_
 or full is treated as "seen nothing" — the intro just plays again. Settings → General's **Reset tips** clears the
 set too (`resetIntros`, called from `components/HistorySettings.tsx`).
 
-`lib/feature-intros.ts` is pure and untangled from React: the id list, `INTRO_TITLES`, `introSrc`/`introVoice`,
+`lib/feature-intros.ts` is pure and untangled from React: the id list, `INTRO_TITLES`, `introSrc`/`muteMessage`,
 `introEvent` (which reads the `{ weft: "intro", event }` shape off an untrusted `postMessage`), `REPLAY_MESSAGE`
 and the storage helpers.
 

@@ -6,10 +6,10 @@ import {
   INTRO_TITLES,
   introEvent,
   introSrc,
-  introVoice,
   isIntro,
   loadSeenIntros,
   markIntroSeen,
+  muteMessage,
   resetIntros,
 } from "./feature-intros";
 
@@ -51,10 +51,14 @@ describe("the intro list", () => {
   });
 });
 
-describe("introSrc and introVoice", () => {
-  it("plays the page live and pairs the track beside it", () => {
+describe("introSrc and muteMessage", () => {
+  it("plays the page live, its voice muted when you asked", () => {
     expect(introSrc("vault")).toBe("/intros/vault.html?live=1");
-    expect(introVoice("vault")).toBe("/intros/vault.m4a");
+    expect(introSrc("vault", true)).toBe("/intros/vault.html?live=1&muted=1");
+  });
+
+  it("flips the open page's voice in the shape player.js reads", () => {
+    expect(muteMessage(true)).toEqual({ weft: "intro-mute", muted: true });
   });
 });
 
