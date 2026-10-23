@@ -8,6 +8,10 @@ lands; a release moves those lines under its version and tags the commit `vX.Y.Z
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-23
+
+No changes recorded.
+
 ## [0.5.0] - 2026-10-23
 
 ### Added
