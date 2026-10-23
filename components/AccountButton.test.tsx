@@ -92,6 +92,18 @@ describe("AccountButton", () => {
     expect(onOpenSettings).toHaveBeenCalledTimes(1);
   });
 
+  it("replays the welcome from the menu and closes it", async () => {
+    api.account.mockResolvedValue({ configured: true, user: ada });
+    const onReplay = vi.fn();
+    window.addEventListener("weft:welcome-replay", onReplay);
+    setup();
+    await userEvent.click(await screen.findByRole("button", { name: "Signed in as Ada" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "Replay the welcome" }));
+    expect(onReplay).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("menu")).toBeNull();
+    window.removeEventListener("weft:welcome-replay", onReplay);
+  });
+
   it("offers Share the board… when the board passes a handler", async () => {
     api.account.mockResolvedValue({ configured: true, user: ada });
     const onShareBoard = vi.fn();

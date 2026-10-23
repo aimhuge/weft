@@ -127,7 +127,7 @@ On launch and every minute after, Weft picks up your Claude Code sessions (the o
   projects** lists the folders with Claude Code sessions (worktree, scratch and temp folders unticked; **Start empty**
   brings in none) with a switch that counts your history on your Wefter Profile; **Start your first thread** picks a
   project and a starter prompt and opens the card as it runs. No cards are added until you answer. A board that already
-  had cards is left as it was. Settings → General changes either answer later and replays the welcome
+  had cards is left as it was. Settings → General changes either answer later; Replay the welcome is in the avatar menu and the command palette
   (`lib/welcome.ts`, `components/WelcomeDialog.tsx`). After it, an empty board offers New thread and the same starters,
   and the first card to reach Needs you, Review and Done gets a one-time tip under that column (the last opens your
   Wefter Profile); Settings → General → **Reset tips** shows them again (`lib/tips.ts`, `components/OnboardingTips.tsx`).

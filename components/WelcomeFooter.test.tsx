@@ -3,7 +3,7 @@ import { welcomeNote } from "./WelcomeFooter";
 
 describe("welcomeNote", () => {
   it("names where to replay or log in on the first screen", () => {
-    expect(welcomeNote("ready", true, "")).toBe("Replay this any time from Settings → General.");
+    expect(welcomeNote("ready", true, "")).toBe("Replay this any time from your avatar's menu or the command palette.");
     expect(welcomeNote("ready", false, "")).toBe("You can log in later from Settings → Accounts.");
   });
 

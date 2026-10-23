@@ -9,6 +9,8 @@ lands; a release moves those lines under its version and tags the commit `vX.Y.Z
 ## [Unreleased]
 
 ### Added
+- **The project bar's More menu has a filter.** It has focus when the menu opens, matches the folder name and its `~` path, and Enter picks the top match. It's the same field and rule as the 🔐 and skills filters, now shared (`components/SearchField.tsx`, `lib/text-filter.ts`).
+- **Replay the welcome from your avatar's menu.** It moved out of Settings → General (which keeps Test it and Reset tips) into the avatar menu and the command palette (`components/AccountButton.tsx`).
 - **The 🔐 drawer shows each vault's Vercel project.** A vault whose folder is linked in ▲ gets a line under its name: the project, how many values are still to push, and **Push to Vercel** (one Touch ID) (`components/VaultVercel.tsx`).
 - **The ▲ Vercel drawer's 🔐 list has a filter.** Past five variables, a name search and a menu (To push, On Vercel, Vercel only, No value, with counts) narrow the list (`components/VercelEnvRows.tsx`, `lib/vercel-env-filter.ts`).
 - **weft.zip measures the whole site and the download.** GA4 now covers every weft.zip page (the FAQ, profiles, share links and the web board, not just the home), and PostHog runs alongside it. The download button sends `download_clicked` with its version to both, and New thread, replies, new projects and invites send their events through one `track()` (`lib/analytics.ts`, docs/architecture/analytics.md).

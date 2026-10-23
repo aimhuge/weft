@@ -3,6 +3,7 @@ import { openInPane } from "@/lib/open-in-pane";
 import { activeAt, recentMoves, SORTERS, type ProjectSummary, type SortKey } from "@/lib/board-view";
 import { timeAgo } from "@/lib/format";
 import { SCENES, setTheme, THEMES } from "@/lib/theme";
+import { REPLAY_EVENT } from "@/lib/welcome-client";
 import { COLUMNS, type Card, type Column } from "@/lib/types";
 import type { PaletteItem } from "./CommandPalette";
 import { folderName, SORTS } from "./ProjectBar";
@@ -100,6 +101,7 @@ function commandItems(s: PaletteState, a: PaletteActions): PaletteItem[] {
     command("needs-you", "Jump to a card that needs you", "alert", a.jumpToNeedsYou, "a", "waiting"),
     command("share-board", "Share the board…", "share", a.shareBoard, undefined, "share invite web board weft.zip team link"),
     command("team", "Your team", "globe", openTeamPage, undefined, "team members invite workspace weft.zip"),
+    command("replay-welcome", "Replay the welcome", "play", () => window.dispatchEvent(new Event(REPLAY_EVENT)), undefined, "onboarding intro first launch tour"),
     ...importIssuesItem(s, a),
     restartItem(s, a),
     ...(doneToArchive.length

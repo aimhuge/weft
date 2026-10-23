@@ -8,7 +8,7 @@ import type { RefObject } from "react";
 export type WelcomeStep = "ready" | "projects" | "first";
 
 export function welcomeNote(step: WelcomeStep, cliReady: boolean | null, cwd: string): string {
-  if (step === "ready") return cliReady === false ? "You can log in later from Settings → Accounts." : "Replay this any time from Settings → General.";
+  if (step === "ready") return cliReady === false ? "You can log in later from Settings → Accounts." : "Replay this any time from your avatar's menu or the command palette.";
   if (step === "projects") return "Start empty leaves your old sessions off the board. Bring them in later from Settings.";
   return cwd ? "The board explains each column the first time a card reaches it." : "Pick the folder in the next dialog.";
 }
