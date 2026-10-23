@@ -11,6 +11,7 @@ lands; a release moves those lines under its version and tags the commit `vX.Y.Z
 ### Fixed
 
 - **The drawer intros' voice starts with the picture.** The narration came in up to a few seconds late, because the board started it on a message from the intro's frame while it was still busy opening the drawer. Each intro page now plays its own voice and holds its timeline until that voice is really playing; a voice later than 4 s pulls the frames back to it, so its first words are never cut off. The 🔊 setting travels in the frame's address and as a message when you flip it (`public/intros/player.js`, `lib/use-feature-intro.ts`, `lib/feature-intros.ts`, docs/architecture/feature-intros.md).
+- **Share… on a mini app no longer stalls on its spinner.** The board, the open thread and the copilot each opened their own live event stream, and each one kept an HTTP connection open for good. Chromium allows six per host, so with a few slow polls the Share dialog's requests sat queued in the window and never reached the server. Every listener in a window now shares one stream (`lib/use-events.ts`). Changing who may open a link also stopped re-uploading a folder app's unchanged files on every save (`pageForWrite` in `lib/app-share-row.ts`).
 
 ## [0.6.0] - 2026-10-23
 
