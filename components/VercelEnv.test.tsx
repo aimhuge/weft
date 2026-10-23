@@ -62,6 +62,28 @@ describe("VercelEnv", () => {
     expect(screen.queryByText("SUPABASE_SECRET_KEY")).not.toBeInTheDocument();
   });
 
+  it("filters a long list by name and state", async () => {
+    const extra = ["NEXT_PUBLIC_POSTHOG_KEY", "CRON_SECRET"].map((name) => ({ name, environment: "development" as const, inVault: name !== "CRON_SECRET", onVercel: false }));
+    setup({ envStatus: vi.fn(() => Promise.resolve({ ...STATUS, rows: [...STATUS.rows, ...extra] })) });
+    const box = await screen.findByRole("textbox", { name: "Filter variables" });
+    await userEvent.type(box, "posthog");
+    expect(screen.getByText("NEXT_PUBLIC_POSTHOG_KEY")).toBeInTheDocument();
+    expect(screen.queryByText("SUPABASE_SECRET_KEY")).not.toBeInTheDocument();
+    await userEvent.type(box, "{Escape}");
+    expect(box).toHaveValue("");
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Show" }), "noValue");
+    expect(screen.getByText("CRON_SECRET")).toBeInTheDocument();
+    expect(screen.queryByText("GITHUB_CLIENT_ID")).not.toBeInTheDocument();
+    await userEvent.type(box, "zzz");
+    expect(screen.getByText("No variables match")).toBeInTheDocument();
+  });
+
+  it("has no filter on a short list", async () => {
+    setup();
+    await screen.findByText("SUPABASE_SECRET_KEY");
+    expect(screen.queryByRole("textbox", { name: "Filter variables" })).not.toBeInTheDocument();
+  });
+
   it("pushes one and reloads", async () => {
     const { bridge, notify } = setup();
     await userEvent.click(await screen.findByRole("button", { name: "Push" }));

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/client";
+import VercelEnvRows from "./VercelEnvRows";
 import { ENV_SHORT, envLine, pullText, pushAllText, pushText, toPull, toPush, type VercelBridge, type VercelEnvRow, type VercelEnvStatus } from "@/lib/vercel-view";
 
 // A linked project's 🔐 secrets against its Vercel variables (electron/vercel-env.cjs), under its deploy in the ▲
@@ -114,8 +115,22 @@ export default function VercelEnv({ folder, team, bridge, notify }: { folder: st
     <div>
       <EnvHeader rows={env.rows} shown={shown} onToggle={() => setOpen(!shown)} busy={busy} onPushAll={pushAll ? () => void sendAll() : undefined} />
       {shown && (
-        <ul className="mt-1 space-y-0.5">
-          {env.rows.map((r) => (
+        <VercelEnvRows
+          rows={env.rows}
+          footer={
+            pull && isTeam && liveOn !== null && (
+              <li className="flex items-center gap-1.5 pt-0.5">
+                <span className="min-w-0 flex-1 truncate text-faint" title="A Vercel team webhook, relayed by your Weft account, pulls plain variables as they're added">
+                  Live pull from Vercel
+                </span>
+                <button onClick={() => void toggleLive()} disabled={busy === "live"} role="switch" aria-checked={liveOn} className="text-[10px] text-faint hover:text-ink disabled:opacity-40">
+                  {busy === "live" ? "…" : liveOn ? "on" : "off"}
+                </button>
+              </li>
+            )
+          }
+        >
+          {(rows) => rows.map((r) => (
             <li key={`${r.environment}\n${r.name}`} className="flex items-center gap-1.5">
               <span className="min-w-0 flex-1 truncate font-mono text-[10.5px] text-ink" title={r.name}>
                 {r.name}
@@ -124,17 +139,7 @@ export default function VercelEnv({ folder, team, bridge, notify }: { folder: st
               <RowAction row={r} busy={busy === `${r.environment}\n${r.name}` || (r.pullable === true && busy === "pull")} onPush={() => void send(r)} onPull={pull ? () => void bringDown() : undefined} />
             </li>
           ))}
-          {pull && isTeam && liveOn !== null && (
-            <li className="flex items-center gap-1.5 pt-0.5">
-              <span className="min-w-0 flex-1 truncate text-faint" title="A Vercel team webhook, relayed by your Weft account, pulls plain variables as they're added">
-                Live pull from Vercel
-              </span>
-              <button onClick={() => void toggleLive()} disabled={busy === "live"} role="switch" aria-checked={liveOn} className="text-[10px] text-faint hover:text-ink disabled:opacity-40">
-                {busy === "live" ? "…" : liveOn ? "on" : "off"}
-              </button>
-            </li>
-          )}
-        </ul>
+        </VercelEnvRows>
       )}
     </div>
   );

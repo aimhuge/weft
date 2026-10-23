@@ -11,6 +11,7 @@ import type { Editing } from "./VaultParts";
 import { Note } from "./VaultParts";
 import { SecretRow } from "./SecretRow";
 import Icon from "./Icon";
+import VaultVercel from "./VaultVercel";
 
 export function VaultSection({
   vault: v,
@@ -22,6 +23,7 @@ export function VaultSection({
   onImport,
   onAct,
   onMenu,
+  notify,
 }: {
   vault: VaultSummary;
   editing: Editing | null;
@@ -33,6 +35,8 @@ export function VaultSection({
   onImport: () => void;
   onAct: (s: VaultSecret, action: RowAction) => void;
   onMenu: (s: VaultSecret, e: React.MouseEvent) => void;
+  // Toasts from the ▲ line's Push to Vercel.
+  notify: (err: unknown) => void;
 }) {
   const changing = (s: VaultSecret) => editing?.fixed && editing.name === s.name && editing.from === s.environment;
   return (
@@ -52,6 +56,7 @@ export function VaultSection({
           Import…
         </button>
       </div>
+      <VaultVercel folder={v.folder} changed={v.secrets.map((s) => `${secretKey(s)}${s.missing ? "" : s.updatedAt}`).join("\n")} notify={notify} />
       {editing && !editing.fixed && form}
       {v.nudge && (
         <button

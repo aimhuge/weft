@@ -77,6 +77,8 @@ secret get a conflict instead of one silently overwriting the other.
   with the linked project's (on Vercel, vault only, Vercel only, per environment), and every push is its own Touch ID,
   from the drawer or from a thread (`mcp__secrets__push_to_vercel`); the value goes from the vault to Vercel inside main
   (docs/architecture/vercel.md).
+  The 🔐 drawer shows the same link on each vault (`components/VaultVercel.tsx`): the project, how many values are
+  still to push, and **Push to Vercel** (Push all, one Touch ID); nothing for a folder that isn't linked.
 
 ## Where you find it: the left rail
 
