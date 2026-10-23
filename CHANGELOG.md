@@ -8,6 +8,10 @@ lands; a release moves those lines under its version and tags the commit `vX.Y.Z
 
 ## [Unreleased]
 
+### Fixed
+
+- **The drawer intros' voice starts with the picture.** The narration came in up to a few seconds late, because the board started it on a message from the intro's frame while it was still busy opening the drawer. Each intro page now plays its own voice and holds its timeline until that voice is really playing; a voice later than 4 s pulls the frames back to it, so its first words are never cut off. The 🔊 setting travels in the frame's address and as a message when you flip it (`public/intros/player.js`, `lib/use-feature-intro.ts`, `lib/feature-intros.ts`, docs/architecture/feature-intros.md).
+
 ## [0.6.0] - 2026-10-23
 
 No changes recorded.
