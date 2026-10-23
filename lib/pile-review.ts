@@ -1,8 +1,10 @@
 // The review walk-through's first message, from /api/pile (lib/commit-pile.ts): what the header's "+N/-N"
 // counter and the Review column's "Review all" button both start as a card. Rejects when there is nothing
 // uncommitted to walk through.
+import { apiFetch } from "./api-client";
+
 export async function fetchPileReview(cwd: string) {
-  const r = await fetch(`/api/pile?cwd=${encodeURIComponent(cwd)}&prompt=1`);
+  const r = await apiFetch(`/api/pile?cwd=${encodeURIComponent(cwd)}&prompt=1`);
   // A restarting dev server answers with an HTML page; treat that as no prompt rather than a SyntaxError.
   const d = (await r.json().catch(() => ({}))) as { prompt?: string; title?: string; error?: string };
   if (!d.prompt) throw new Error(d.error ?? "Nothing uncommitted to walk through.");

@@ -81,7 +81,7 @@ describe("useToolResult", () => {
     open(ref);
     await waitFor(() => expect(result.current.fetched).toBe("long output"));
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock).toHaveBeenCalledWith("/api/cards/c1/thread/tool/t%2F1");
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/cards/c1/thread/tool/t%2F1");
     expect(result.current).toEqual({ fetched: "long output", loading: false, errored: false });
     // Once it has the result, opening again doesn't fetch again.
     open(ref);

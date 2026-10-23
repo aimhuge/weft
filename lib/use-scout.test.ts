@@ -35,7 +35,7 @@ describe("useScout", () => {
   it("reads the folder's scout, and again on focus", async () => {
     const { result } = renderHook(() => useScout("/p q"));
     await waitFor(() => expect(result.current.scout).toEqual(idle));
-    expect(fetchMock).toHaveBeenCalledWith("/api/scout?cwd=%2Fp%20q");
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/scout?cwd=%2Fp%20q");
     window.dispatchEvent(new Event("focus"));
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });

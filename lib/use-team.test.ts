@@ -66,19 +66,19 @@ describe("useTeam", () => {
     const { result } = renderHook(() => useTeam("acme"));
     expect(result.current.state).toEqual({ kind: "loading" });
     await waitFor(() => expect(result.current.state).toEqual({ kind: "ok", team }));
-    expect(fetchMock).toHaveBeenCalledWith("/api/account/team?org=acme", { method: "GET" });
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/account/team?org=acme");
   });
 
   it("asks with no query when no org was given", async () => {
     const { result } = renderHook(() => useTeam());
     await waitFor(() => expect(result.current.state).toEqual({ kind: "ok", team }));
-    expect(fetchMock).toHaveBeenCalledWith("/api/account/team", { method: "GET" });
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/account/team");
   });
 
   it("URL-encodes the org slug in the query", async () => {
     const { result } = renderHook(() => useTeam("acme co/x"));
     await waitFor(() => expect(result.current.state.kind).toBe("ok"));
-    expect(fetchMock).toHaveBeenCalledWith("/api/account/team?org=acme%20co%2Fx", { method: "GET" });
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/account/team?org=acme%20co%2Fx");
   });
 
   it("reloads when the org changes and shows loading in between", async () => {

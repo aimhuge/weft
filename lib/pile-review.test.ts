@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { fetchPileReview, startPileReview } from "./pile-review";
 
-const reply = (body: unknown) => vi.fn(() => Promise.resolve(new Response(JSON.stringify(body))));
+const reply = (body: unknown) => vi.fn<(url: string, init?: RequestInit) => Promise<Response>>(() => Promise.resolve(new Response(JSON.stringify(body))));
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -10,7 +10,7 @@ describe("fetchPileReview", () => {
     const fetch = reply({ prompt: "Walk me through…", title: "Commit the uncommitted pile in weft" });
     vi.stubGlobal("fetch", fetch);
     await expect(fetchPileReview("/a b")).resolves.toEqual({ prompt: "Walk me through…", title: "Commit the uncommitted pile in weft" });
-    expect(fetch).toHaveBeenCalledWith("/api/pile?cwd=%2Fa%20b&prompt=1");
+    expect(fetch.mock.calls[0]?.[0]).toBe("/api/pile?cwd=%2Fa%20b&prompt=1");
   });
 
   it("falls back to a plain title", async () => {

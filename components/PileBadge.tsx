@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { apiFetch } from "@/lib/api-client";
 import { fetchPileReview } from "@/lib/pile-review";
 import Tip from "./Tip";
 
@@ -47,7 +48,7 @@ export default function PileBadge({
     if (!cwd) return;
     let live = true;
     const load = () => {
-      fetch(`/api/pile?cwd=${encodeURIComponent(cwd)}`)
+      apiFetch(`/api/pile?cwd=${encodeURIComponent(cwd)}`)
         .then((r) => r.json() as Promise<{ pile: PileSummary | null }>)
         .then((d) => {
           if (live) setLoaded({ cwd, pile: d.pile });

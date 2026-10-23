@@ -36,7 +36,10 @@ Electron shell (electron/*.cjs)
 - `lib/settings.ts` — `DEFAULT_THREAD_PROMPT`, `keepAliveMinutes`, project list,
   `dismissedSessions`.
 - `lib/guard.ts` — `Host` must be `127.0.0.1 | localhost | [::1]`; writes also need
-  `x-weft-token: 1`.
+  `x-weft-token: 1`. Once the desktop app has written a launch token, reads need it too.
+- `lib/api-client.ts` — the one place that knows the board's fetch header: `API_TOKEN_HEADER`
+  (`"x-weft-token"`), `API_HEADERS` (`{ "x-weft-token": "1" }`) and `apiFetch(url, init?)`, the
+  `fetch` every board-side request goes through.
 - `lib/bus.ts` — single `EventEmitter` on `globalThis` (survives dev-mode HMR); consumed
   by the SSE route.
 - `lib/types.ts` — `Card`, `ThreadItem`, `Question`, `Backend`, `BoardEvent` union.
@@ -57,6 +60,11 @@ Electron shell (electron/*.cjs)
 3. The board opens an `EventSource("/api/events")`. Every `lib/store.ts` and
    `lib/runner.ts` mutation calls `publish()` on `lib/bus.ts`, which the SSE route
    forwards.
+3a. A board-side request for the board's own data (a badge's summary, an open card's
+   thread page) goes through `apiFetch` (`lib/api-client.ts`), which puts the
+   `x-weft-token` header on it — without it `lib/guard.ts` refuses the route with a
+   403, reads included, and the call site's `.catch()` swallows it into an empty
+   default.
 4. Replying to a card hits `POST /api/cards/[id]/messages`, which calls
    `sendMessage()` in `lib/runner.ts`. `Inbox.push()` wakes the SDK query loop, which
    streams `SDKMessage`s back; `handle()` (`lib/runner-turn.ts`) writes thread items and updates the card.
@@ -84,7 +92,14 @@ Electron shell (electron/*.cjs)
   instantly instead of waiting 12–50s for a cold CLI start.
 - **Guard at the edge.** Every API route begins with `guard(req)`, which checks the `Host`
   header. Writes also need `x-weft-token: 1`; reads (GET routes and the SSE stream) skip that
-  with `guard(req, { write: false })`, since `EventSource` can't set custom headers.
+  with `guard(req, { write: false })`, since `EventSource` can't set custom headers. Once the
+  desktop app has written a launch token, reads need a token too.
+- **One fetch helper.** A client file never calls `fetch` on a local `/api` route directly:
+  it calls `apiFetch` (`lib/api-client.ts`), which adds `x-weft-token: 1` unless the call site
+  set the header itself. A 403 from `lib/guard.ts` must never be swallowed into an empty
+  default — a missing badge and a refused read look the same to the user.
+  `lib/api-token-guard.test.ts` walks the `"use client"` files under `components/`, `lib/` and
+  `app/` and fails on any `/api` fetch that doesn't carry the header.
 - **SDK session marking.** `lib/env.ts` strips `CLAUDECODE` / `CLAUDE_CODE_*` /
   `CLAUDE_AGENT_SDK_*` / `CLAUDE_PID` / `CLAUDE_EFFORT` / `CLAUDE_PREVIEW_*` and sets
   `CLAUDE_CODE_ENTRYPOINT=sdk-ts`, so threads Weft starts don't appear in the Claude

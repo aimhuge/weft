@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { API_HEADERS, apiFetch } from "./api-client";
 import { ACCOUNT_EVENT } from "./auth/hooks";
 import type { NewTeamOp, NewTeamResult, TeamActionResult, TeamClientActions, TeamOp, TeamSnapshot } from "./team-types";
 
@@ -22,7 +23,7 @@ export type TeamHook = {
 };
 
 // The headers the local route needs; x-weft-token is what lib/guard.ts checks on writes.
-const WRITE_HEADERS = { "content-type": "application/json", "x-weft-token": "1" };
+const WRITE_HEADERS = { ...API_HEADERS, "content-type": "application/json" };
 
 // We can't read the status from the typed `api` client (it throws on non-2xx), so the hook asks the
 // server directly and maps the status to a state. The forwarder has already turned a fetch error into
@@ -31,7 +32,7 @@ async function fetchTeam(org: string | undefined): Promise<{ state: Exclude<Team
   const query = org ? `?org=${encodeURIComponent(org)}` : "";
   let res: Response;
   try {
-    res = await fetch(`/api/account/team${query}`, { method: "GET" });
+    res = await apiFetch(`/api/account/team${query}`, { method: "GET" });
   } catch {
     return { state: { kind: "error", message: "Couldn't reach weft.zip." } };
   }

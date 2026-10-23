@@ -1,3 +1,4 @@
+import { apiFetch, API_HEADERS } from "./api-client";
 import type { GithubProfile } from "./github-profile";
 import type { Welcome } from "./welcome";
 import type { WelcomeProfile, WelcomeProject } from "./welcome-preview";
@@ -21,7 +22,7 @@ export interface WelcomeAnswer {
   skip: string[];
 }
 
-const WRITE = { "content-type": "application/json", "x-weft-token": "1" };
+const WRITE = { ...API_HEADERS, "content-type": "application/json" };
 
 async function json<T>(res: Response): Promise<T> {
   const body = (await res.json().catch(() => ({}))) as T & { error?: string };
@@ -29,7 +30,7 @@ async function json<T>(res: Response): Promise<T> {
   return body;
 }
 
-export const loadWelcome = (replay = false) => fetch(`/api/welcome${replay ? "?replay=1" : ""}`).then((r) => json<WelcomeView>(r));
+export const loadWelcome = (replay = false) => apiFetch(`/api/welcome${replay ? "?replay=1" : ""}`).then((r) => json<WelcomeView>(r));
 
 // Settings → General's "Replay the welcome" asks the dialog to show itself again, as a preview.
 export const REPLAY_EVENT = "weft:welcome-replay";

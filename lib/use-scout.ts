@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { apiFetch } from "./api-client";
 import type { ScoutState } from "./scout-view";
 
 // While the scout runs, how often the badge looks for its findings.
@@ -13,7 +14,7 @@ async function scoutOf(res: Promise<Response>) {
   return d.scout ?? null;
 }
 
-const read = (cwd: string) => scoutOf(fetch(`/api/scout?cwd=${encodeURIComponent(cwd)}`));
+const read = (cwd: string) => scoutOf(apiFetch(`/api/scout?cwd=${encodeURIComponent(cwd)}`));
 
 // The refactor scout for a folder (app/api/scout): read on mount and on focus, polled while it runs.
 // rescout() starts a fresh run; started(id) marks a finding as handed to a card.

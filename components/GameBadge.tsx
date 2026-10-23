@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useState, useSyncExternalStore } from "react";
+import { apiFetch } from "@/lib/api-client";
 import { showProgress, subscribeBoardPrefs } from "@/lib/board-prefs";
 import { toAnnounce, type Announced } from "@/lib/game-badges";
 import type { GameState } from "@/lib/game-server";
@@ -43,7 +44,7 @@ export default function GameBadge({
     if (!enabled || open) return;
     let live = true;
     const load = () => {
-      fetch(`/api/game${cwd ? `?cwd=${encodeURIComponent(cwd)}` : ""}`)
+      apiFetch(`/api/game${cwd ? `?cwd=${encodeURIComponent(cwd)}` : ""}`)
         .then((r) => r.json() as Promise<{ game?: GameState }>)
         .then((d) => {
           if (live && d.game) setGame(d.game);

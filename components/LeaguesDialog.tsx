@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { apiFetch } from "@/lib/api-client";
 import { useFeatureIntro } from "@/lib/use-feature-intro";
 import { leagueName, type LeagueView, type TierView } from "@/lib/league";
 import { LeagueHead, LeagueTable, Ladder } from "./LeagueTable";
@@ -48,7 +49,7 @@ export default function LeaguesDialog({ mine, onClose }: { mine: LeagueView | nu
   useEffect(() => {
     if (views[picked]) return;
     let live = true;
-    fetch(`/api/league?tier=${picked}`)
+    apiFetch(`/api/league?tier=${picked}`)
       .then((r) => r.json() as Promise<{ tier?: TierView; error?: string }>)
       .then((d) => live && setViews((v) => ({ ...v, [picked]: d.tier ?? { state: "error", error: d.error ?? "Couldn't read the leagues." } })))
       .catch(() => live && setViews((v) => ({ ...v, [picked]: { state: "error", error: "Couldn't reach Weft's server." } })));

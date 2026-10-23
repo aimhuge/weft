@@ -31,7 +31,7 @@ describe("PileBadge", () => {
   it("shows the folder's uncommitted lines", async () => {
     setup();
     expect(await screen.findByRole("button", { name: "+12/-4" })).toBeTruthy();
-    expect(fetchMock).toHaveBeenCalledWith("/api/pile?cwd=%2Fdev%2Fapp");
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/pile?cwd=%2Fdev%2Fapp");
   });
 
   it("pitches the review on hover, with the count of cards to review", async () => {

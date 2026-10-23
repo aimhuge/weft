@@ -19,6 +19,13 @@ lives in its own component under `components/`.
 - **Components under `components/` own the layers.** `BoardHeader`, `BoardProjectBar`, `BoardColumns`,
   `BoardBrowserPane`, `OpenCard`, `BoardBottom` and `BoardDialogs` each draw one part of the screen and
   take state in through props. They never fetch and never own board-wide state.
+- **The board's own API calls go through one helper.** A badge that needs the server's data
+  (the pile counter, the code-quality score, the streak, the league, the Backlog count) and the
+  open card's thread read all fetch through `apiFetch` (`lib/api-client.ts`), which puts the
+  `x-weft-token` header on the request. `lib/guard.ts` refuses every route — reads included —
+  once the desktop app has written a launch token, and a 403 that a call site swallows into an
+  empty default is a feature that vanishes with no error. `lib/api-token-guard.test.ts` fails the
+  build if a `"use client"` file fetches a local `/api` route without the header.
 - **The board's own keyboard, palette and menu share one input.** `components/use-board-commands.ts`
   takes one `BoardCommandsInput` and feeds the same state and actions to the shortcuts
   (`components/board-shortcuts.ts`), the command palette (`components/board-palette.ts`) and the desktop
@@ -70,6 +77,11 @@ lives in its own component under `components/`.
   `BoardBrowserPane` reads (`held`) so the pane doesn't remount open and slide shut.
 - `lib/board-menu-bridge.ts` — `useMenuBridge` and `runMenuAction`: what the app menu, dock, tray and
   global shortcuts ask the board to do.
+- `lib/api-client.ts` — `apiFetch`, `API_HEADERS` and `API_TOKEN_HEADER`: the one place that knows the
+  board's fetch header, so every board-side request carries `x-weft-token`.
+- `lib/thread-transport.ts` — the desktop's `localTransport`: it reads an open card's thread page from
+  `/api/cards/:id/thread` through `apiFetch`, so a refused read shows as a failure rather than an empty
+  thread.
 
 ### The board's keyboard and palette
 

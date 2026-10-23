@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useState } from "react";
+import { apiFetch } from "@/lib/api-client";
 import type { GameState } from "@/lib/game-server";
 import { openNewThread } from "@/lib/onboarding-events";
 import type { Card } from "@/lib/types";
@@ -18,7 +19,7 @@ export default function OnboardingTips({ cards, loaded, filtering }: { cards: re
   const { tip, empty, dismiss } = useOnboardingTips(cards, loaded, filtering);
   const [game, setGame] = useState<GameState | null>(null);
   const openProfile = () => {
-    fetch("/api/game")
+    apiFetch("/api/game")
       .then((r) => r.json() as Promise<{ game?: GameState }>)
       .then((d) => d.game && setGame(d.game))
       .catch(() => {});

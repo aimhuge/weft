@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { apiFetch } from "@/lib/api-client";
 import type { LeagueView } from "@/lib/league";
 import { LeagueHead, LeagueTable } from "./LeagueTable";
 import LeaguesDialog from "./LeaguesDialog";
@@ -14,7 +15,7 @@ export default function LeagueTab({ weekXp }: { weekXp: number }) {
 
   useEffect(() => {
     let live = true;
-    fetch("/api/league")
+    apiFetch("/api/league")
       .then((r) => r.json() as Promise<{ league?: LeagueView; error?: string }>)
       .then((d) => live && setView(d.league ?? { state: "error", error: d.error ?? "Couldn't read your league." }))
       .catch(() => live && setView({ state: "error", error: "Couldn't reach Weft's server." }));

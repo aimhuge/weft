@@ -2,6 +2,8 @@
 // live reload, the HEAD version for the diff, the folder's file list for ⌘P, and a save that refuses to
 // overwrite a file that changed since it was read.
 
+import { API_HEADERS } from "./api-client";
+
 export interface OpenedFile {
   // Relative to the card's folder.
   path: string;
@@ -32,7 +34,7 @@ export class FileConflictError extends Error {
   }
 }
 
-const HEADERS = { "content-type": "application/json", "x-weft-token": "1" };
+const HEADERS = { ...API_HEADERS, "content-type": "application/json" };
 
 async function call<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, { ...init, headers: HEADERS });

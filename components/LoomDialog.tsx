@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { apiFetch } from "@/lib/api-client";
 import type { GameState } from "@/lib/game-server";
 import { showPage } from "@/lib/board-helpers";
 import { setupPrompt, type CheckDef, type ProjectReport } from "@/lib/project-badges";
@@ -115,7 +116,7 @@ export default function LoomDialog({
 
   useEffect(() => {
     let live = true;
-    fetch(`/api/game?full=1${cwd ? `&cwd=${encodeURIComponent(cwd)}` : ""}`)
+    apiFetch(`/api/game?full=1${cwd ? `&cwd=${encodeURIComponent(cwd)}` : ""}`)
       .then((r) => r.json() as Promise<{ game?: GameState }>)
       .then((d) => {
         if (live && d.game) setGame(d.game);

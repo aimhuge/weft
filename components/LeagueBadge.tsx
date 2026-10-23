@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useState, useSyncExternalStore } from "react";
+import { apiFetch } from "@/lib/api-client";
 import { showProgress, subscribeBoardPrefs } from "@/lib/board-prefs";
 import type { LeagueView } from "@/lib/league";
 import Tip from "./Tip";
@@ -19,7 +20,7 @@ export default function LeagueBadge({ refresh }: { refresh?: unknown }) {
   useEffect(() => {
     if (!enabled || open) return;
     let live = true;
-    fetch("/api/league")
+    apiFetch("/api/league")
       .then((r) => r.json() as Promise<{ league?: LeagueView }>)
       .then((d) => live && d.league && setView(d.league))
       .catch(() => {});

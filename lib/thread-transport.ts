@@ -6,6 +6,7 @@
 // synced rows, Realtime and commands the Mac runs. An action a transport leaves out is one its views don't offer
 // (a "!" command, ↑ edit, folder grants, Wait), the way ToolResultSourceContext swaps where a long tool output comes from.
 import { createContext, useContext } from "react";
+import { apiFetch } from "./api-client";
 import { api } from "./client";
 import { filesApi } from "./client-files";
 import { THREAD_PAGE_SIZE } from "./cloud-sync-types";
@@ -45,7 +46,9 @@ async function localPage(cardId: string, before?: number): Promise<ThreadPage | 
   if (before !== undefined) params.set("before", String(before));
   params.set("limit", String(THREAD_PAGE_SIZE));
   try {
-    const res = await fetch(`/api/cards/${cardId}/thread?${params.toString()}`);
+    // apiFetch carries x-weft-token: without it lib/guard.ts refuses the read with a 403, and this returns
+    // null — an open thread that looks empty rather than one that failed.
+    const res = await apiFetch(`/api/cards/${cardId}/thread?${params.toString()}`);
     // A non-JSON body (a restarting dev server's error page) throws at json(); the caller keeps what it has.
     return res.ok ? ((await res.json()) as ThreadPage) : null;
   } catch {

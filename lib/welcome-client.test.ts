@@ -35,13 +35,13 @@ describe("loadWelcome", () => {
     fetchMock.mockResolvedValueOnce(ok({ welcome: { at: 1, countHistory: true, fresh: false, skip: [] } }));
     const view = await loadWelcome();
     expect(view.welcome).toEqual({ at: 1, countHistory: true, fresh: false, skip: [] });
-    expect(fetchMock).toHaveBeenCalledWith("/api/welcome");
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/welcome");
   });
 
   it("adds ?replay=1 when called with true", async () => {
     fetchMock.mockResolvedValueOnce(ok({ welcome: null, preview: { projects: [], profile: {} as never, github: null } }));
     await loadWelcome(true);
-    expect(fetchMock).toHaveBeenCalledWith("/api/welcome?replay=1");
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/welcome?replay=1");
   });
 
   it("rejects with the server's error message when the request fails", async () => {

@@ -34,12 +34,12 @@ const item = (text: string): ThreadItem => ({ kind: "assistant", text, at: 1 });
 describe("localTransport.loadPage", () => {
   it("reads a page from the card's thread route, newest or before an index", async () => {
     const page: ThreadPage = { items: [item("a")], start: 4, total: 5 };
-    const fetch = vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve(page) }));
+    const fetch = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>(() => Promise.resolve({ ok: true, json: () => Promise.resolve(page) } as Response));
     vi.stubGlobal("fetch", fetch);
     expect(await localTransport.loadPage("c1")).toEqual(page);
-    expect(fetch).toHaveBeenLastCalledWith("/api/cards/c1/thread?limit=50");
+    expect(fetch.mock.calls.at(-1)?.[0]).toBe("/api/cards/c1/thread?limit=50");
     await localTransport.loadPage("c1", 4);
-    expect(fetch).toHaveBeenLastCalledWith("/api/cards/c1/thread?before=4&limit=50");
+    expect(fetch.mock.calls.at(-1)?.[0]).toBe("/api/cards/c1/thread?before=4&limit=50");
   });
 
   it("is null for a refused or unreadable page", async () => {

@@ -83,7 +83,9 @@ describe("useSuperAdminGate", () => {
     const call = fetchMock.mock.calls[0];
     if (!call) throw new Error("fetch was not called");
     const [, init] = call as unknown as [string, RequestInit];
-    expect(init.headers).toMatchObject({ "x-weft-token": "1" });
+    const headers = init.headers;
+    const token = headers instanceof Headers ? headers.get("x-weft-token") : (headers as Record<string, string>)["x-weft-token"];
+    expect(token).toBe("1");
   });
 
   it("removes its weft:account listener on unmount", async () => {

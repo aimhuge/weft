@@ -9,13 +9,14 @@
 //   string    = the result
 //   ""        = the fetch failed
 import { createContext, useContext, useEffect, useState, type RefObject } from "react";
+import { apiFetch } from "./api-client";
 
 // Where a trimmed tool result comes from. The board reads it from its own server; the weft.zip board
 // provides one that reads cloud_tool_outputs through the visitor's session (components/web-board).
 export type ToolResultSource = (cardId: string, toolId: string) => Promise<string>;
 
 const localSource: ToolResultSource = (cardId, toolId) =>
-  fetch(`/api/cards/${cardId}/thread/tool/${encodeURIComponent(toolId)}`)
+  apiFetch(`/api/cards/${cardId}/thread/tool/${encodeURIComponent(toolId)}`)
     .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`${r.status}`))))
     .then((data: { result: string }) => data.result);
 

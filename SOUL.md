@@ -74,7 +74,7 @@ If you are an agent editing this repo, you are working on me. Read README.md for
   `electron/pane-error.cjs` shows a failed load's reason, with Try again and Back, instead of Chromium's blank page.
 - `electron/menus.cjs` + `electron/keep-working.cjs`: app menu, menu bar icon, dock; Keep Working (awake with the lid shut, until threads finish).
 - `electron/updater.cjs` (+ `electron/update-window.cjs`, the Software Update window) + `scripts/release-feed.mjs` + `.github/workflows/release.yml`: updates from GitHub Releases (Squirrel.Mac's JSON
-  feed, a download fallback when unsigned) and the tag-triggered signed release; `CHANGELOG.md` holds each version's notes, written by `pnpm changelog:release` (docs/architecture/updates.md).
+  feed, a download fallback when unsigned) and the tag-triggered signed release; `CHANGELOG.md` holds each version's notes, which Weft commits itself after a version bump (docs/architecture/updates.md).
   `scripts/bundle-toolchain.mjs` stages what the app ships for a fresh Mac (node, npm, pnpm, puku-cli without telemetry, claude, all on
   my own Electron), which `appendToolchain()` in `electron/env.cjs` puts at the end of PATH.
 - `electron/folder-access.cjs` + `lib/folder-access-tool.ts`: `mcp__board__request_folder_access`, called by a thread that got "Operation not permitted" on
@@ -102,11 +102,12 @@ If you are an agent editing this repo, you are working on me. Read README.md for
   server's token is a 0600 file, `~/.weft/shell-token` (`electron/shell-token.cjs`, read by `lib/shell-token.ts`), never an env var.
 - `scripts/check-staged.sh` + `scripts/secret-scan.mjs`: the pre-commit hook; gitleaks, or without it Weft's own key shapes on each added line.
   The Composer flags a pasted or typed key the same way (`components/SecretPaste.tsx`).
-- `lib/changelog.ts` + `lib/changelog-tool.ts` + `lib/changelog-stamp.ts` + `lib/changelog-sync.ts` + `lib/changelog-release.ts` + `lib/changelog-render.ts` + `app/api/changelog` + `components/ChangelogDialog.tsx`:
+- `lib/changelog.ts` + `lib/changelog-tool.ts` + `lib/changelog-stamp.ts` + `lib/changelog-write.ts` + `lib/changelog-sync.ts` + `lib/changelog-render.ts` + `app/api/changelog` + `components/ChangelogDialog.tsx`:
   every project's changelog, kept by Weft instead of a CHANGELOG.md every card edits at once. A thread records what it shipped with
   `mcp__board__changelog_add` (an append-only `~/.weft/changelog.jsonl`, mirrored to Supabase `changelog_entries` while signed in); the entry names its card,
-  the card's own commit stamps its sha (draft → committed, a Bash hook in `guardedCli()` and the commit walk-through), and a release
-  (the dialog's Release, or `pnpm changelog:release`) writes the version into the project's CHANGELOG.md. The dialog opens from the project menu and the palette (docs/architecture/changelog.md).
+  the card's own commit stamps its sha (draft → committed, a Bash hook in `guardedCli()` and the commit walk-through), and right after it
+  Weft writes and commits CHANGELOG.md alone, in the background; a commit that bumps package.json's version gets that version's section.
+  Nobody runs a release step (`pnpm changelog:release`, `lib/changelog-release.ts`, is only for a bump Weft didn't see). The read-only dialog opens from the project menu and the palette (docs/architecture/changelog.md).
 - `lib/schedule.ts` + `lib/scheduler.ts` + `components/SendLater.tsx`: "Send later" replies; the server sends them at their
   time, by default the next 5-hour reset.
 - `lib/shell.ts` + `lib/bang.ts` + `app/api/cards/[id]/shell`: `!` in a reply box runs a shell command in the card's folder; its
@@ -310,6 +311,7 @@ If you are an agent editing this repo, you are working on me. Read README.md for
   `lib/share-types.ts` + `lib/card-share.ts` + `components/ShareCardDialog.tsx` + `components/ShareBoardDialog.tsx` + `components/web-board/WebShareBoard.tsx` over one `components/BoardSharePanel.tsx` (the board's link, `weft.zip/<slug>/board`, and invites: `lib/use-team.ts` on the desktop, `boardShareTeam` in `lib/team-actions.ts` on the web) + `app/s/[id]` + `app/api/s/[id]/*` + `lib/share-*.ts` + `components/share-view/*`: **Share…** on a card gives `weft.zip/s/<id>`,
   its thread and its pane side by side, live (polled), private / public / email / password from `@aimhuge/share`; reads the synced rows (docs/architecture/sharing.md).
 - `app/api/*` + `lib/guard.ts`: localhost-only Host check; once the desktop app has written a launch token every route needs it, reads included (the board's own `1` passes for a read and a non-elevated write, `elevated()` refuses it), so a process that only reaches the port can neither read the board nor write to it.
+  Every board-side fetch goes through `lib/api-client.ts` (`apiFetch`, `API_HEADERS`) so it carries `x-weft-token`: a fetch without it 403s, and the call site's `.catch()` turns that into an empty default — a whole UI feature gone with no error shown (the pile counter, the quality, streak and league chips, an open thread that renders empty). `lib/api-token-guard.test.ts` walks the "use client" files under `components/`, `lib/` and `app/` and fails on an `/api` fetch without the token.
 - `lib/restart-guard.ts`: turns away Bash that would kill or restart Weft itself (its server pid, port, `next dev`, the app)
   while other cards' turns run, since a restart cuts them all off; in every thread via `guardedCli()`.
 - `lib/restart-when-idle.ts` + `app/api/restart` + `lib/restart-tool.ts` + `electron/restart-when-idle.cjs` + `components/RestartChip.tsx`: restart when idle
@@ -425,7 +427,7 @@ in Electron main, revealed or copied only after the user's Touch ID (docs/archit
   packaged `.app` goes stale with every commit.
 - When a feature lands, update README.md and docs/ROADMAP.md in the same change, and record it with `mcp__board__changelog_add`
   (`changelog_list` first, to edit your own entry instead of adding a second). Never edit CHANGELOG.md's Unreleased by hand:
-  every card used to, and the whole-file claim made them wait on each other; `pnpm changelog:release <version>` writes it.
+  every card used to, and the whole-file claim made them wait on each other; Weft writes and commits it after your commit.
 - Run `pnpm lint`, `pnpm typecheck` and `pnpm test` (Vitest; tests sit beside the code as `lib/*.test.ts` and `components/*.test.tsx`, the latter in jsdom with `// @vitest-environment jsdom` and `./test-utils`; API routes in `app/api/routes.test.ts`).
   `pnpm typecheck` and `pnpm lint` take turns across cards (`scripts/one-at-a-time.mjs`, as does the pre-commit hook's tsc);
   `lib/check-guard.ts` refuses `npx tsc` or bare `eslint`. To lint only your own files, `pnpm lint <files>`.

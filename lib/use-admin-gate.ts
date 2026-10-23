@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { apiFetch } from "./api-client";
 
 // Returns true when the signed-in Weft account is on SUPER_ADMIN_EMAILS.
 // Re-evaluates when the account changes (sign in, sign out) via the same
@@ -10,7 +11,7 @@ export function useSuperAdminGate(): boolean {
   useEffect(() => {
     let cancelled = false;
     const load = () =>
-      fetch("/api/admin/gate", { headers: { "x-weft-token": "1" } })
+      apiFetch("/api/admin/gate")
         .then((r) => (r.ok ? r.json() : { admin: false }))
         .then((data: { admin: unknown }) => {
           if (!cancelled) setAdmin(data.admin === true);
