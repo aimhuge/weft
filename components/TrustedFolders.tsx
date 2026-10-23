@@ -4,9 +4,12 @@
 // is lib/folder-guard.ts; "Always" on one of its prompts adds a folder, and this row both shows the list and
 // lets you take one back out. The list arrives in the settings view (allowedFolders), so reading it costs no
 // request; adding and removing each go back through /api/folders.
+//
+// The two handlers live in lib/trusted-folders.ts rather than inline here: with them in the component the
+// function ran past the 60-line ceiling, and they're plain async-to-state transitions with nothing to render.
 
 import { useState } from "react";
-import { api } from "@/lib/client";
+import { addFolder, revokeFolder } from "@/lib/trusted-folders";
 import { folderName } from "@/lib/format";
 import Icon, { Spinner } from "./Icon";
 import { SettingsSectionHeader } from "./SettingsLayout";
@@ -23,30 +26,18 @@ export default function TrustedFolders({ folders }: { folders: string[] }) {
   function revoke(folder: string) {
     setBusy(folder);
     setError("");
-    api
-      .unallowFolder(folder)
+    revokeFolder(folder)
       .then(() => setLeft((f) => f.filter((x) => x !== folder)))
       .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)))
       .finally(() => setBusy(null));
   }
 
-  // Electron's own folder dialog (window.weft.dialog.openFolder, the same one the project and repo pickers
-  // use). Trusted folders are always ones you don't work in, so there's no recent-projects list to offer —
-  // asking the OS for the path is the honest way to get one. The grant still goes through POST /api/folders,
-  // which is the same call the "Always" button makes, so both doors land in one place.
   async function add() {
-    const bridge = window.weft;
-    if (!bridge) {
-      setError("Weft can't pick a folder here. Add it with Always on a thread's folder prompt instead.");
-      return;
-    }
     setAdding(true);
     setError("");
     try {
-      const picked = await bridge.dialog.openFolder();
-      if (!picked) return;
-      await api.allowFolder(picked);
-      setLeft((f) => (f.includes(picked) ? f : [...f, picked]));
+      const picked = await addFolder();
+      if (picked) setLeft((f) => (f.includes(picked) ? f : [...f, picked]));
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
