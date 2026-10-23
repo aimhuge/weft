@@ -793,11 +793,19 @@ publicly. Never your email or workspace.
 
 Every workspace has a plan:
 
-- **Free**: the full app, plus the Puku trial's daily cap (300 requests and 2M tokens a day).
+- **Free**: the full app, plus the Puku trial's daily cap (300 requests and 2M tokens a day). A Free workspace is a
+  team of one: it can't invite members.
 - **Pro**: $20/month or $200/year per workspace (not per seat), replacing the daily cap with 300M Puku tokens per
-  billing period.
+  billing period, and letting you invite people into the workspace.
+- **Team**: $9 per seat a month, on top of everything in Pro, for a shared workspace with roles and invites.
 
 Claude Code and Codex threads always run on your own plans with those providers; Weft doesn't charge for them.
+
+### Can I share a workspace with my team?
+
+Yes, on Pro or Team. Invite people by email, give them an admin or member role, and share the workspace's board from
+any browser. Free is a workspace of one, so an invite from a Free workspace is refused with a note to upgrade.
+Team is priced per seat ($9/seat a month) if you'd rather pay for heads than a flat workspace rate.
 
 ### What is the Puku trial?
 

@@ -14,7 +14,13 @@ import { createInvite, inviteMailer, isPlausibleEmail, normalizeEmail, revokeInv
 import { runRenameTeam } from "./team-create";
 import { runDeleteTeam } from "./team-delete";
 import { listTeamProjects, runLinkProject, runUnlinkProject } from "./team-projects";
+import { workspaceCanHaveMembers } from "./billing/plan-gate";
 import type { TeamActionResult, TeamInvite, TeamMember, TeamOp, TeamOrg, TeamSnapshot, TeamUser } from "./team-types";
+
+// What a Free workspace is told when it tries to bring someone in. One string so the invite op and the team
+// page's upsell can't drift apart. It names Pro, not Team: Pro already carries the seats, so it is the
+// cheaper way to unlock this, and the wording does not tell a Pro subscriber to buy a bigger plan.
+export const TEAM_GATE_MESSAGE = "Teams are part of Pro. Upgrade this workspace to invite members — or to Team, at $9 a seat.";
 
 // A two-line answer: both server actions and the API wrap a result in
 // { ok, message? }. The plain helper keeps the call sites from re-typing
@@ -105,11 +111,15 @@ export async function teamSnapshot(ctx: TeamContext): Promise<TeamSnapshot> {
 
 // ─── invite ──────────────────────────────────────────────────────────────
 
-// Invite by email. If the address already has a profile, add them straight
-// in (no email); otherwise mint a pending invite and email it. The mailer
-// is required for the "no account yet" path; without it the action returns
-// a clear error rather than a silently-dropped invite.
-export async function runInvite(ctx: TeamContext, emailRaw: string, role: TeamContext["role"]): Promise<TeamActionResult> {
+// Everything an invite can be turned away for before it costs anything: the
+// actor's role, the address, the role being assigned, and the self-invite. All
+// synchronous and free, so they run before the plan read and the profile
+// lookup. Returns the normalized email to invite, or the failure to show.
+function checkInvite(
+  ctx: TeamContext,
+  emailRaw: string,
+  role: TeamContext["role"],
+): { email: string } | TeamActionResult {
   if (!roleCan(ctx.role, "members.manage")) return fail("You don't have permission to invite members.");
   if (!isPlausibleEmail(emailRaw)) return fail("Enter a valid email address.");
   const allowed = roleOptions(ctx.role).map((o) => o.role);
@@ -117,6 +127,29 @@ export async function runInvite(ctx: TeamContext, emailRaw: string, role: TeamCo
   const email = normalizeEmail(emailRaw);
   // Self-invite is a no-op; say so instead of pretending.
   if (ctx.user.email && normalizeEmail(ctx.user.email) === email) return fail("That's you.");
+  return { email };
+}
+
+// Tells a { email } (ok) from a TeamActionResult (a failure). "email" is in one
+// and not the other, so the presence of the key is the discriminant.
+function isInviteFailure(r: { email: string } | TeamActionResult): r is TeamActionResult {
+  return !("email" in r);
+}
+
+// Invite by email. If the address already has a profile, add them straight
+// in (no email); otherwise mint a pending invite and email it. The mailer
+// is required for the "no account yet" path; without it the action returns
+// a clear error rather than a silently-dropped invite.
+export async function runInvite(ctx: TeamContext, emailRaw: string, role: TeamContext["role"]): Promise<TeamActionResult> {
+  const checked = checkInvite(ctx, emailRaw, role);
+  if (isInviteFailure(checked)) return checked;
+  const { email } = checked;
+  // Teams are paid: a Free workspace stays a team of one. After the free
+  // checks, and before the profile lookup and the mailer, so a locked
+  // workspace costs nothing and never sends a half-accepted invite. The role
+  // check above still comes first, so a member is told about their role, not
+  // the plan.
+  if (!(await workspaceCanHaveMembers(ctx.service, ctx.org.id))) return fail(TEAM_GATE_MESSAGE);
   // Look up an existing profile by normalized email. The publishable key
   // can't read profiles here (RLS scopes it to the cookie's user), so this
   // goes through the service client.

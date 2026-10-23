@@ -2,8 +2,11 @@
 
 Status: built 2026-10-13; needs the migration applied, Stripe set up and a deploy before it works.
 
-Weft has two plans per workspace: **Free** and **Pro**. Pro is $20 a month or $200 a year (two months free)
-and replaces the Puku trial's daily cap with a 300M Puku token allowance, refreshed every billing period.
+Weft has three plans per workspace: **Free**, **Pro** and **Team**. Pro is $20 a month or $200 a year (two months
+free) and replaces the Puku trial's daily cap with a 300M Puku token allowance, refreshed every billing period.
+Team is $9 per seat a month, carries the same allowance, and is the per-seat shape `@aimhuge/billing`'s DeckCP
+catalog documents. Having people is a paid capability: Free is a team of one, Pro and Team may invite
+(see [teams.md](teams.md)).
 Billing lives on the deployed Weft (weft.zip), on the same Stripe account the other AimHuge apps share,
 with `app: "weft"` and a webhook of its own. The desktop reads the plan, the period and the Puku meter
 through one small endpoint; the manage page and Checkout live on the site.
@@ -20,20 +23,55 @@ so only the service-role client on the deployed Weft can read or write them.
 
 ## The plans
 
-`lib/billing/plans.ts` holds the catalog. It's client-safe — a board-side plan picker can import it without
-pulling in Supabase or Stripe. The token count is the same as `lib/puku-proxy.ts`: input (including cache
-writes) plus output, cache reads don't count.
+`lib/billing/plans.ts` holds the catalog: `PlanId` is `"free" | "pro" | "team"`, and the plans come out in
+`order: ["free", "pro", "team"]` (cheapest first, which is also what makes `catalog.isUpgrade("pro", "team")` true).
+It's client-safe — a board-side plan picker, and the home page's pricing section
+([marketing-site.md](marketing-site.md)), import it without pulling in Supabase or Stripe. The token count is the same
+as `lib/puku-proxy.ts`: input (including cache writes) plus output, cache reads don't count.
 
-| Plan | Price | Puku allowance |
-| --- | --- | --- |
-| Free | $0 | none (Puku trial's daily cap applies) |
-| Pro | $20/month or $200/year (`yearlyMonthsCharged: 10`) | 300,000,000 tokens per period |
+| Plan | Price | Puku allowance | Teams |
+| --- | --- | --- | --- |
+| Free | $0 | none (Puku trial's daily cap applies) | team of one |
+| Pro | $20/month or $200/year (`yearlyMonthsCharged: 10`) | `PRO_PUKU_TOKENS` = 300,000,000 per period | yes |
+| Team | $9/seat/month (`TEAM_SEAT_CENTS = 900`, `perSeat: true`) | `PRO_PUKU_TOKENS` = 300,000,000 per period | yes |
 
-`PRO_PUKU_TOKENS` is a placeholder the user will tune: 300M is a comfortable starting point for a Pro
+Team follows `@aimhuge/billing`'s DeckCP catalog: `perSeat: true` means the Stripe price is a **per-unit** recurring
+price and the seat count rides on the subscription's `quantity`, so a five-seat workspace is 5 × 900 cents.
+`catalog.totalCents("team", "monthly", seats)` does that arithmetic. Pro's own yearly option is unaffected.
+
+## The team gate
+
+Teams are the one thing a plan unlocks rather than meters. `lib/billing/plan-gate.ts` (server-only) is the whole
+rule:
+
+- **`TEAM_PLANS = ["pro", "team"]`** — the list, in one place.
+- **`canHaveMembers(plan)`** — takes a plain string, because the value it gets is whatever is in a `text` column.
+  Free is absent, and an unknown id is false: `TEAM_PLANS.includes(...) && catalog.get(plan).id === plan`, so the
+  catalog's own fallback to `free` is the second half of the refusal.
+- **`workspacePlan(service, orgId)`** — one read of `org_subscriptions` (`plan, status`, `.eq("org_id", orgId)`,
+  `maybeSingle()`), mapped to a `PlanId`.
+- **`workspaceCanHaveMembers(service, orgId)`** — the two together, for the callers that gate on it.
+
+It **fails closed**, and that is the point rather than a hedge: no subscription row, a `plan` that isn't a string, a
+plan id the catalog doesn't know, a `status` that is present and isn't `active` or `trialing`, or a client that
+throws — each answers `"free"`, i.e. no members. `readSubscription` catches, so `workspacePlan` never propagates: a
+Supabase hiccup can neither unlock a paid capability nor 500 an invite form. `past_due` is the intended case — the
+workspace is downgrading, and `meteredStatuses` in `lib/billing/billing.ts` has already stopped it spending Pro
+tokens.
+
+`lib/team-ops.ts` `runInvite` calls it, after the cheap synchronous input checks (`checkInvite`: the actor's role,
+the address, the assignable role, the self-invite) and before the profile lookup or the mailer, so a locked
+workspace costs nothing and never sends a half-accepted invite. The refusal is `TEAM_GATE_MESSAGE` from the same
+file, so the invite op and any upsell note can't drift apart. Role changes, removal and self-leave are **not** gated:
+a workspace is always escapable, and you can always leave.
+
+`PRO_PUKU_TOKENS` is a placeholder the user will tune: 300M is a comfortable starting point for a Pro or Team
 workspace, and changing it later only affects subscribers' next period, not the current one (the
 subscription row freezes `unit_amount_cents` at purchase; the allowance comes from the catalog at read time
 and applies at the start of every new period). `PUKU_METER` (`"puku_tokens"`) is the only meter today, and
-its charges are written to `org_usage_charges` (`refType: "puku_request"`, `createdVia: "system"`).
+its charges are written to `org_usage_charges` (`refType: "puku_request"`, `createdVia: "system"`). Pro and Team
+read the same number, so there is one knob, not two. The home page's pricing section renders it in millions from
+the same constant ([marketing-site.md](marketing-site.md)).
 
 ## Metering in the proxy
 
@@ -139,6 +177,7 @@ with **Push to Vercel** or `mcp__secrets__push_to_vercel`.
 | `STRIPE_WEBHOOK_SECRET` | 🔐 vault → Vercel | The signing secret for the `weft.zip/api/billing/webhook` endpoint, shown once in the Stripe dashboard when the endpoint is created. |
 | `STRIPE_PRICE_PRO_MONTHLY` | Vercel | The `price_…` for the $20/month recurring price (US only for now). |
 | `STRIPE_PRICE_PRO_YEARLY` | Vercel | The `price_…` for the $200/year recurring price. |
+| `STRIPE_PRICE_TEAM_MONTHLY` | Vercel | The `price_…` for the **$9 per seat per month** recurring price. A per-unit price: seats ride on the subscription's `quantity`. Nothing reconciles it against `TEAM_SEAT_CENTS`, so a mismatch is a real bug (the package throws on first use with the whole list of missing variables). |
 | `SUPABASE_SECRET_KEY` | already on Vercel (webhook relay, Puku trial) | Service role; reads and writes the billing tables. |
 | `NEXT_PUBLIC_SITE_URL` | Vercel | `https://weft.zip` by default. Used to build the `manageUrl` on `BillingStatus`. |
 
@@ -149,15 +188,17 @@ with **Push to Vercel** or `mcp__secrets__push_to_vercel`.
    (`20261013155754_teams.sql`).
 2. **Create the Stripe product.** On the shared AimHuge Stripe account, create the product "Weft Pro"
    with two per-unit recurring prices: $20/month (`STRIPE_PRICE_PRO_MONTHLY`) and $200/year
-   (`STRIPE_PRICE_PRO_YEARLY`).
+   (`STRIPE_PRICE_PRO_YEARLY`). Add a "Weft Team" product with one **per-unit** recurring price at $9 per seat per
+   month (`STRIPE_PRICE_TEAM_MONTHLY`) — the seat count is the subscription quantity, so a five-seat workspace is
+   $45 a month, not $9. Create the Stripe prices to match the catalog exactly; nothing in Weft reconciles them.
 3. **Add the webhook endpoint.** `https://weft.zip/api/billing/webhook`, with the 9 events from the
    🪝 stripe blank: `checkout.session.completed`, `customer.subscription.created`,
    `customer.subscription.updated`, `customer.subscription.deleted`, `customer.updated`, `invoice.paid`,
    `invoice.payment_failed`, `payment_method.attached`, `payment_method.detached`. Copy the signing
    secret into the vault as `STRIPE_WEBHOOK_SECRET`.
 4. **Fill the vault blanks and push them.** `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`,
-   `STRIPE_PRICE_PRO_MONTHLY`, `STRIPE_PRICE_PRO_YEARLY`. Push them to Vercel with **Push** in the ▲
-   drawer (Touch ID per push) or `mcp__secrets__push_to_vercel`.
+   `STRIPE_PRICE_PRO_MONTHLY`, `STRIPE_PRICE_PRO_YEARLY`, `STRIPE_PRICE_TEAM_MONTHLY`. Push them to Vercel with
+   **Push** in the ▲ drawer (Touch ID per push) or `mcp__secrets__push_to_vercel`.
 5. **Deploy.** The next deploy activates the billing route. Verify with a test card in the Stripe
    Checkout flow (the standard `4242 4242 4242 4242` test number, Stripe's mock customer and
    subscription should land in the workspace within seconds of `checkout.session.completed`).
@@ -165,6 +206,8 @@ with **Push to Vercel** or `mcp__secrets__push_to_vercel`.
 ## Files
 
 - `lib/billing/plans.ts` + `lib/billing/plans.test.ts` — the catalog (client-safe).
+- `lib/billing/plan-gate.ts` + `lib/billing/plan-gate.test.ts` — `TEAM_PLANS`, `canHaveMembers`, `workspacePlan`,
+  `workspaceCanHaveMembers`: which plans may have members (server-only).
 - `lib/billing/billing.ts` + `lib/billing/billing.test.ts` — `createBilling`, `billingService`, `billingConfigured` (server-only).
 - `lib/billing/org.ts` + `lib/billing/org.test.ts` — `orgForUser` (server-only).
 - `lib/billing/puku-meter.ts` + `lib/billing/puku-meter.test.ts` — the `PlanMeter` the proxy uses (server-only).
@@ -190,6 +233,11 @@ with **Push to Vercel** or `mcp__secrets__push_to_vercel`.
 - Token pricing is a placeholder: `PRO_PUKU_TOKENS = 300_000_000` in `lib/billing/plans.ts`. The user will
   tune it. Stripe doesn't enforce a per-period token count; the catalog does, and a lower number for a
   subscriber only affects their next period.
+- Team is in the catalog and gated on, but the billing page that would sell it (checkout, the plan switch, the seat
+  count on Stripe) is still on the other card. Until `STRIPE_PRICE_TEAM_MONTHLY` exists, a Team subscription can be
+  created by the package and nothing on weft.zip can buy one. Seat changes (add a person, raise the quantity) are
+  the same missing piece: the gate lets members in on Team, but the seat count has to be kept in step with the
+  roster by hand until the billing page does it.
 - Concurrent requests can overdraw by one request. The package accepts this race — the meter writes a row,
   not a counter, and the balance is derived. A burst of N requests at `remaining: 1` can all see the
   one-token allowance and all spend; the next check sees zero. Per-second `CACHE_MS` keeps the window

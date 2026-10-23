@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { PUKU_METER } from "./plans";
+import { PUKU_METER, type PlanId } from "./plans";
 
 // lib/billing/puku-meter.ts: turns a user's plan into a Puku allowance answer, with a 60s per-user cache.
 // billing and orgForUser are mocked so the test is independent of Supabase and Stripe.
@@ -8,7 +8,7 @@ import { PUKU_METER } from "./plans";
 // mocks without a temporal-dead-zone error.
 const { orgForUser, subscription, balance, recordUsage } = vi.hoisted(() => ({
   orgForUser: vi.fn<(svc: unknown, userId: string) => Promise<{ id: string; slug: string; name: string } | null>>(),
-  subscription: vi.fn<(svc: unknown, orgId: string) => Promise<{ plan: "free" | "pro"; status: string }>>(),
+  subscription: vi.fn<(svc: unknown, orgId: string) => Promise<{ plan: PlanId; status: string }>>(),
   balance: vi.fn<(svc: unknown, orgId: string, meter: string) => Promise<{ allowance: number; granted: number; spent: number; remaining: number }>>(),
   recordUsage: vi.fn<(svc: unknown, input: { orgId: string; meter: string; amount: number; refType: string; createdBy: string; createdVia: string }) => Promise<void>>(),
 }));

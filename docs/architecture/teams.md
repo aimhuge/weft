@@ -7,6 +7,22 @@ A Weft account has a **workspace** from its first sign-in (solo is a team of one
 email; an invite link joins whichever account opens it. Billing (`/[orgSlug]/billing`) and the shared vault hang off
 the same workspace id.
 
+Having people is the one thing a plan unlocks, and it is a real gate in code, not a marketing promise:
+
+- **Free** workspaces stay a team of one. `runInvite` (`lib/team-ops.ts`) refuses with `TEAM_GATE_MESSAGE`
+  ("Teams are part of Pro. Upgrade this workspace to invite members — or to Team, at $9 a seat.") after its own
+  cheap input checks and before the profile lookup or the mailer, so a locked workspace never sends a
+  half-accepted invite.
+- **Pro** ($20/workspace) and **Team** ($9/seat) may invite, set roles and manage members. The rule is one list,
+  `TEAM_PLANS` in `lib/billing/plan-gate.ts`, read from `org_subscriptions` — see
+  [billing.md](billing.md#the-team-gate) for the fail-closed behaviour.
+- Removal, self-leave and role changes are **not** gated: a workspace is always escapable, and you can always leave.
+
+An unreadable, missing or non-paying subscription reads as Free rather than letting people in, so a Supabase hiccup
+locks the invite form instead of 500-ing it. One consequence worth knowing: the gate says a workspace *may* have
+members; nothing yet keeps a Team subscription's seat count in step with the roster (no billing page yet), so a Team
+workspace that adds a person is under-charged until that lands.
+
 ## Where it runs
 
 Team management lives on the deployed Weft (weft.zip), not in the desktop app:
@@ -95,7 +111,9 @@ board ── useTeam() ──▶ /api/account/team (local, guarded) ──Bearer
 
 - `app/api/teams` (weft.zip, no localhost guard; the bearer token is the check, `bearerUser` in `lib/web-session.ts`):
   GET a `TeamSnapshot`, POST a `TeamOp`. 401 signed out, 404 not a member, 503 not configured.
-- `lib/team-ops.ts`: one core for that API and the server actions, so both enforce the same rules.
+- `lib/team-ops.ts`: one core for that API and the server actions, so both enforce the same rules. `runInvite`
+  consults the plan gate (`workspaceCanHaveMembers`) and exports `TEAM_GATE_MESSAGE`; `checkInvite` holds the free
+  input checks so the op stays small.
 - `app/api/account/team` + `lib/team-remote.ts`: the desktop's forwarder (`WEFT_TEAMS_URL`, default weft.zip).
 - `lib/use-team.ts`: the board hook; `lib/team-types.ts`: the shapes the board may import. A refresh keeps showing
   the loaded team until the new answer lands (only a workspace switch reads "loading"), so a burst of refreshes

@@ -43,7 +43,7 @@ vi.mock("./team-create", () => createMock);
 const deleteMock = vi.hoisted(() => ({ runDeleteTeam: vi.fn() }));
 vi.mock("./team-delete", () => deleteMock);
 
-import { runInvite, runTeamOp, teamSnapshot } from "./team-ops";
+import { runInvite, runTeamOp, teamSnapshot, TEAM_GATE_MESSAGE } from "./team-ops";
 import { ORG, USER, actorAtLeast, makeService } from "./team-ops.harness";
 
 const CTX = { user: USER, org: ORG, role: "owner" as const, orgs: [ORG], service: {} as never };
@@ -158,33 +158,33 @@ describe("runInvite", () => {
   });
 
   it("adds an existing member immediately", async () => {
-    const svc = makeService({ profiles: [{ id: "u2" }], org_memberships: [{ user_id: "u2" }] });
+    const svc = makeService({ profiles: [{ id: "u2" }], org_memberships: [{ user_id: "u2" }], org_subscriptions: [{ plan: "team", status: "active" }] });
     const ctx = { ...CTX, service: svc.client as never };
     expect(await runInvite(ctx, "x@y.com", "member")).toEqual({ ok: true, message: "Already on the team." });
   });
 
   it("adds an existing profile to the org straight in (no email)", async () => {
-    const svc = makeService({ profiles: [{ id: "u2" }], org_memberships: [] });
+    const svc = makeService({ profiles: [{ id: "u2" }], org_memberships: [], org_subscriptions: [{ plan: "pro", status: "active" }] });
     const ctx = { ...CTX, service: svc.client as never };
     expect(await runInvite(ctx, "x@y.com", "admin")).toEqual({ ok: true, message: "Added x@y.com." });
   });
 
   it("reports an insert error when adding an existing profile fails", async () => {
-    const svc = makeService({ profiles: [{ id: "u2" }], org_memberships: [] }, {}, { org_memberships: { error: { message: "boom" } } });
+    const svc = makeService({ profiles: [{ id: "u2" }], org_memberships: [], org_subscriptions: [{ plan: "pro", status: "active" }] }, {}, { org_memberships: { error: { message: "boom" } } });
     const ctx = { ...CTX, service: svc.client as never };
     expect(await runInvite(ctx, "x@y.com", "admin")).toEqual({ ok: false, message: "Could not add member: boom" });
   });
 
   it("refuses to email when RESEND_API_KEY isn't set", async () => {
     teamsModMock.inviteMailer.mockReturnValue(null);
-    const svc = makeService({ profiles: [] });
+    const svc = makeService({ profiles: [], org_subscriptions: [{ plan: "pro", status: "active" }] });
     const ctx = { ...CTX, service: svc.client as never };
     expect(await runInvite(ctx, "new@example.com", "member")).toEqual({ ok: false, message: "Email isn't set up on this Weft (RESEND_API_KEY)." });
     expect(teamsModMock.createInvite).not.toHaveBeenCalled();
   });
 
   it("creates a new invite and emails it when no profile exists", async () => {
-    const svc = makeService({ profiles: [] });
+    const svc = makeService({ profiles: [], org_subscriptions: [{ plan: "pro", status: "active" }] });
     const ctx = { ...CTX, service: svc.client as never };
     expect(await runInvite(ctx, "new@example.com", "member")).toEqual({ ok: true, message: "Invite sent to new@example.com." });
     expect(teamsModMock.createInvite).toHaveBeenCalledWith(expect.objectContaining({ invitedEmail: "new@example.com", role: "member", appName: "Weft" }));
@@ -192,16 +192,45 @@ describe("runInvite", () => {
 
   it("says 're-sent' when createInvite reports alreadyPending", async () => {
     teamsModMock.createInvite.mockResolvedValue({ invitation: { id: "i1" }, alreadyPending: true });
-    const svc = makeService({ profiles: [] });
+    const svc = makeService({ profiles: [], org_subscriptions: [{ plan: "pro", status: "active" }] });
     const ctx = { ...CTX, service: svc.client as never };
     expect(await runInvite(ctx, "new@example.com", "member")).toEqual({ ok: true, message: "Invite re-sent… (new@example.com)" });
   });
 
   it("reports an error when createInvite throws", async () => {
     teamsModMock.createInvite.mockRejectedValue(new Error("Resend 500"));
-    const svc = makeService({ profiles: [] });
+    const svc = makeService({ profiles: [], org_subscriptions: [{ plan: "pro", status: "active" }] });
     const ctx = { ...CTX, service: svc.client as never };
     expect(await runInvite(ctx, "new@example.com", "member")).toEqual({ ok: false, message: "Could not create invite: Resend 500" });
+  });
+
+  // The plan gate (lib/billing/plan-gate.ts): teams are paid, so a Free workspace is a team of one.
+  it("refuses an invite on a Free workspace, before sending anything", async () => {
+    const svc = makeService({ profiles: [], org_subscriptions: [{ plan: "free", status: "active" }] });
+    const ctx = { ...CTX, service: svc.client as never };
+    expect(await runInvite(ctx, "new@example.com", "member")).toEqual({ ok: false, message: TEAM_GATE_MESSAGE });
+    expect(teamsModMock.createInvite).not.toHaveBeenCalled();
+  });
+
+  it("refuses an invite when the workspace has no subscription row", async () => {
+    const svc = makeService({ profiles: [] });
+    const ctx = { ...CTX, service: svc.client as never };
+    expect(await runInvite(ctx, "new@example.com", "member")).toEqual({ ok: false, message: TEAM_GATE_MESSAGE });
+    expect(teamsModMock.createInvite).not.toHaveBeenCalled();
+  });
+
+  it("refuses an invite on a Team workspace whose payment failed", async () => {
+    const svc = makeService({ profiles: [], org_subscriptions: [{ plan: "team", status: "past_due" }] });
+    const ctx = { ...CTX, service: svc.client as never };
+    expect(await runInvite(ctx, "new@example.com", "member")).toEqual({ ok: false, message: TEAM_GATE_MESSAGE });
+    expect(teamsModMock.createInvite).not.toHaveBeenCalled();
+  });
+
+  it("still says 'permission' first when a member on a Free workspace tries to invite", async () => {
+    // The role check runs before the plan check, so the message names the thing role alone can fix.
+    const svc = makeService({ profiles: [], org_subscriptions: [{ plan: "free", status: "active" }] });
+    const ctx = { ...CTX, role: "member" as const, service: svc.client as never };
+    expect(await runInvite(ctx, "new@example.com", "member")).toEqual({ ok: false, message: "You don't have permission to invite members." });
   });
 });
 
@@ -232,7 +261,7 @@ describe("runTeamOp projects", () => {
 
 describe("runTeamOp", () => {
   it("dispatches by action to the matching runner", async () => {
-    const svc = makeService({ profiles: [] });
+    const svc = makeService({ profiles: [], org_subscriptions: [{ plan: "pro", status: "active" }] });
     const ctx = { ...CTX, service: svc.client as never };
     expect(await runTeamOp(ctx, { org: "acme", action: "invite", email: "a@b.co", role: "member" })).toEqual({ ok: true, message: "Invite sent to a@b.co." });
     const svc2 = makeService({ org_memberships: [{ role: "member" }] }, {}, { org_memberships: { error: null } });

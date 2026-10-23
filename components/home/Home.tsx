@@ -6,6 +6,7 @@ import board from "@/public/brand/board.png";
 import FaqTeaser from "./FaqTeaser";
 import { HomeFooter, HomeNav } from "./HomeChrome";
 import Pillars from "./Pillars";
+import Plans from "./Plans";
 import "./home.css";
 
 // The weft.zip home page (lib/home.ts has what it says and links to): the name, one
@@ -47,6 +48,8 @@ export default async function Home() {
         </div>
 
         <Pillars />
+
+        <Plans />
 
         <FaqTeaser />
 

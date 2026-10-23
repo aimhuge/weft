@@ -21,6 +21,7 @@ import { isDeployed } from "@/lib/home";
 import { requireTeam } from "@/lib/teams";
 import { billing, billingConfigured, billingService } from "@/lib/billing/billing";
 import { catalog, PUKU_METER } from "@/lib/billing/plans";
+import { isPaid } from "@/lib/billing/plan-gate";
 import { cancelForm, manageForm, resumeForm, upgradeForm } from "@/lib/billing-actions";
 import {
   InvoicesSection,
@@ -81,14 +82,14 @@ async function BillingPageBody({ orgSlug, searchParams }: { orgSlug: string; sea
   }
 
   // Sub + plan + balance + invoices in parallel. account() also pulls payment methods and the billing
-  // profile, so it only runs on the Pro path.
+  // profile, so it only runs on a paid plan.
   const sub = await billing.subscription(service, ctx.org.id);
   const plan = catalog.get(sub.plan);
-  const isPro = plan.id === "pro";
+  const isPaidPlan = isPaid(plan.id);
   const hasPukuAllowance = catalog.allowance(plan.id, PUKU_METER) !== null;
   const [puku, account] = await Promise.all([
     hasPukuAllowance ? billing.balance(service, ctx.org.id, PUKU_METER).catch(() => null) : Promise.resolve(null),
-    isPro ? billing.account(service, ctx.org.id).catch(() => null) : Promise.resolve(null),
+    isPaidPlan ? billing.account(service, ctx.org.id).catch(() => null) : Promise.resolve(null),
   ]);
 
   // Pro plan prices. The catalog is the source of truth — never re-price in this file.
@@ -124,14 +125,14 @@ async function BillingPageBody({ orgSlug, searchParams }: { orgSlug: string; sea
       <PlanSection
         plan={plan}
         sub={sub}
-        isPro={isPro}
+        isPaid={isPaidPlan}
         canManage={canManage}
         resumeAction={resumeAction}
       />
 
       <UsageSection puku={puku} />
 
-      {!isPro && configured ? (
+      {!isPaidPlan && configured ? (
         <UpgradeSection
           blurb={catalog.get("pro").blurb}
           monthlyLabel={monthlyLabel}
@@ -143,7 +144,7 @@ async function BillingPageBody({ orgSlug, searchParams }: { orgSlug: string; sea
         />
       ) : null}
 
-      {isPro && configured && canManage ? (
+      {isPaidPlan && configured && canManage ? (
         <ManageSection
           cancelAtPeriodEnd={sub.cancelAtPeriodEnd}
           manageAction={manageAction}
@@ -151,7 +152,7 @@ async function BillingPageBody({ orgSlug, searchParams }: { orgSlug: string; sea
         />
       ) : null}
 
-      {isPro && account ? <InvoicesSection orgSlug={orgSlug} invoices={account.invoices} /> : null}
+      {isPaidPlan && account ? <InvoicesSection orgSlug={orgSlug} invoices={account.invoices} /> : null}
     </div>
   );
 }

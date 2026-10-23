@@ -322,6 +322,127 @@
   }
 }
 
+/* ─── Plans ────────────────────────────────────────────────────────────────────
+   The pricing section between the pillars and the FAQ (components/home/Plans.tsx).
+   Same card language as the pillars, but a three-up grid since there are three plans,
+   and Pro sits a step brighter because it's the one the page is steering at. */
+.wz-plans {
+  padding-top: 112px;
+}
+
+.wz-planGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.wz-plan {
+  display: flex;
+  flex-direction: column;
+  padding: 28px 26px 30px;
+  border-radius: 14px;
+  border: 1px solid rgb(236 229 216 / 0.1);
+  background: linear-gradient(180deg, rgb(236 229 216 / 0.045), rgb(236 229 216 / 0.01));
+}
+
+.wz-planFeatured {
+  border-color: rgb(236 229 216 / 0.28);
+  background: linear-gradient(180deg, rgb(236 229 216 / 0.1), rgb(236 229 216 / 0.02));
+}
+
+.wz-planName {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--clay-2);
+}
+
+.wz-planPrice {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 14px 0 0;
+}
+
+.wz-planAmount {
+  font-family: var(--display);
+  font-weight: 500;
+  font-size: 44px;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  font-variation-settings: "SOFT" 50, "WONK" 1, "opsz" 144;
+}
+
+.wz-planCadence {
+  font-size: 14px;
+  color: var(--thread-3);
+}
+
+.wz-planBlurb {
+  margin: 12px 0 0;
+  font-size: 15.5px;
+  color: var(--thread-2);
+  text-wrap: pretty;
+}
+
+.wz-planFeatures {
+  margin: 18px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 9px;
+  font-size: 14.5px;
+  color: var(--thread-2);
+}
+
+.wz-planFeatures li {
+  position: relative;
+  padding-left: 20px;
+  text-wrap: pretty;
+}
+
+/* A small clay tick instead of a bullet: the one repeated glyph on the page. */
+.wz-planFeatures li::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 8px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--clay-2);
+}
+
+.wz-planNote {
+  margin: 24px 0 0;
+  font-size: 14px;
+  color: var(--thread-3);
+  text-wrap: pretty;
+}
+
+@media (max-width: 960px) {
+  .wz-planGrid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .wz-plan:last-child {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 600px) {
+  .wz-plans {
+    padding-top: 72px;
+  }
+
+  .wz-planGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 600px) {
   .wz-pillars {
     padding-top: 72px;

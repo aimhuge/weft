@@ -50,12 +50,13 @@ export function Notices({
   );
 }
 
-// PlanSection renders the current-plan card. The Pro renewal line and the cancel-at-period-end
-// notice each gate on the same `isPro` / `cancelAtPeriodEnd` flags the page already computed.
+// PlanSection renders the current-plan card. The renewal line and the cancel-at-period-end
+// notice each gate on the same `isPaid` / `cancelAtPeriodEnd` flags the page already computed.
+// `isPaid` is "any plan above Free", so a Team workspace reads as paid too, not as a downgrade.
 export function PlanSection({
   plan,
   sub,
-  isPro,
+  isPaid,
   canManage,
   resumeAction,
 }: {
@@ -66,7 +67,7 @@ export function PlanSection({
     currentPeriodEnd: string;
     cancelAtPeriodEnd: boolean;
   };
-  isPro: boolean;
+  isPaid: boolean;
   canManage: boolean;
   resumeAction: (formData: FormData) => Promise<void>;
 }) {
@@ -78,14 +79,14 @@ export function PlanSection({
           <div className="wz-billingPlanName">{plan.name}</div>
           <div className={`wz-billingPlanStatus wz-billingPlanStatus-${sub.status}`}>{sub.status}</div>
         </div>
-        {isPro ? (
+        {isPaid ? (
           <div className="wz-billingPlanMeta">
             {sub.interval === "yearly" ? "Yearly" : "Monthly"} · renews {new Date(sub.currentPeriodEnd).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}
           </div>
         ) : (
           <div className="wz-billingPlanMeta">Today&apos;s trial: a daily Puku cap on the deployed Weft.</div>
         )}
-        {isPro && sub.cancelAtPeriodEnd ? (
+        {isPaid && sub.cancelAtPeriodEnd ? (
           <div className="wz-billingCancelNotice">
             <span>
               Cancels on {new Date(sub.currentPeriodEnd).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })} — access continues until then.

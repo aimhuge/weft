@@ -127,6 +127,6 @@ export const FAQ_HIGHLIGHTS: FaqHighlight[] = [
   {
     question: "How much does Weft cost?",
     answer:
-      "The app is free. Pro, $20 a month per workspace, raises the Puku allowance; Claude Code and Codex threads always run on your own plans.",
+      "The app is free. Pro, $20 a month per workspace, raises the Puku allowance and lets you share the workspace; Team is $9 per seat a month. Claude Code and Codex threads always run on your own plans.",
   },
 ];
