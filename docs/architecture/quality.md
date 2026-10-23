@@ -35,7 +35,7 @@ that fixes the checklist, weakest area first.
 - `app/api/scout/route.ts`: `GET` returns the cached state; `POST { cwd }` re-scouts,
   `POST { cwd, started }` marks a finding as started.
 - `lib/use-scout.ts`: the badge's scout hook; reads on mount and focus, polls every 20s while a run is going.
-- `components/QualityBadge.tsx`: the badge and its breakdown bubble. `components/ScoutMenu.tsx`: the click menu.
+- `components/QualityBadge.tsx`: the badge and its breakdown bubble. `components/ScoutDialog.tsx`: the click dialog (on the shared `Modal`).
 - `components/Tip.tsx`: the hover bubble. Native `title` tooltips don't show in Electron.
 - `components/Board.tsx`: passes the folder; `improveQuality(cwd, prompt, title)` creates the card.
 

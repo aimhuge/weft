@@ -6,7 +6,7 @@ import { findingPrompt, findingTitle, headroomScore, openFindings, scoreNote, sc
 import { folderName, timeAgo } from "@/lib/format";
 import { useNow } from "@/lib/use-now";
 import { useScout } from "@/lib/use-scout";
-import ScoutMenu from "./ScoutMenu";
+import ScoutDialog from "./ScoutDialog";
 import Tip from "./Tip";
 
 const R = 6;
@@ -88,7 +88,7 @@ function Breakdown({ q, scout }: { q: QualityReport; scout: ScoutState | null })
       <span className="text-muted">
         {q.coverageAt ? `Coverage measured ${timeAgo(q.coverageAt, now)}. ` : ""}
         {scout?.running ? "The scout is reading the code. " : ""}
-        Click to start a card for a finding, or to fix the checklist.
+        Click to see the suggestions and start a card for one.
       </span>
     </span>
   );
@@ -96,7 +96,7 @@ function Breakdown({ q, scout }: { q: QualityReport; scout: ScoutState | null })
 
 // "74% code quality" with a pie, for the project in view (the open card's folder, else the selected
 // project). Never 100: the checklist earns 90 and the refactor scout's open findings (lib/scout-view.ts) the
-// last 10. Hover for how; click for a menu that starts a card per finding, or one that fixes the checklist.
+// last 10. Hover for how; click for a dialog that starts a card per finding, or one that fixes the checklist.
 export default function QualityBadge({
   cwd,
   onImprove,
@@ -138,11 +138,11 @@ export default function QualityBadge({
   const close = () => setMenu(false);
 
   return (
-    <div className="relative">
+    <>
       <Tip text={<Breakdown q={q} scout={scout} />}>
         <button
           onClick={() => setMenu(!menu)}
-          aria-expanded={menu}
+          aria-haspopup="dialog"
           className={`flex items-center gap-1 rounded-md px-1 py-0.5 text-[12px] hover:bg-sunken ${tone(score)}`}
         >
           <Pie pct={score} />
@@ -150,7 +150,8 @@ export default function QualityBadge({
         </button>
       </Tip>
       {menu && (
-        <ScoutMenu
+        <ScoutDialog
+          title={`Code quality · ${folderName(cwd)} · ${String(score)}%`}
           scout={scout}
           checklistDone={busy || q.score >= 100}
           onClose={close}
@@ -167,6 +168,6 @@ export default function QualityBadge({
           onRescout={rescout}
         />
       )}
-    </div>
+    </>
   );
 }
