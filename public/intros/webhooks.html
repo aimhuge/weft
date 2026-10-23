@@ -1,0 +1,146 @@
+<!doctype html>
+<!--
+  The 🪝 Webhooks drawer's intro (components/FeatureIntro.tsx plays it the first time the drawer opens), a HyperFrames
+  composition in the shared look (./kit.css): 0–5.5s the routes providers post to; 5.5–10.5s a thread records one as a
+  blank and 🪝 counts it; 10.5–16.5s a public URL on weft.zip forwards deliveries to localhost; 16.5–21.5s the delivery
+  shows its status. The voice is #narration, read by `pnpm intros:narrate` (scripts/narrate-intros.mjs) into
+  ./webhooks.m4a. Seekable: no timers, no tl.call.
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width">
+<title>Weft: webhooks</title>
+<link rel="stylesheet" href="./kit.css">
+<style>
+  .hook { width: 44px; height: 44px; flex: none; color: #8d95aa; }
+  #r0 { top: 22px; } #r1 { top: 138px; } #r2 { top: 254px; }
+  #code { top: 22px; }
+  #blank { top: 254px; border-color: #f0b42999; }
+  #count { top: 396px; border-color: #f0b42966; }
+  #count .n { color: #f0b429; }
+  #by { left: 26px; top: 400px; width: 688px; }
+  #open { top: 300px; min-height: 88px; }
+  #url { left: 26px; top: 424px; width: 688px; height: 80px; border-radius: 16px; background: #10141f; color: #7aa7ff;
+    font-size: 28px; display: flex; align-items: center; padding: 0 22px; border: 2px solid #232838; }
+  #url b { color: #f0b429; }
+  #flow { left: 26px; top: 300px; width: 688px; }
+  #pills { display: flex; align-items: center; gap: 14px; }
+  #pills .pill { width: 108px; justify-content: center; }
+  #arrow { color: #8d95aa; font-size: 30px; }
+  #local { color: #5fd38d; }
+  #relaybox { left: 26px; top: 400px; width: 688px; height: 96px; border-radius: 16px; background: #1f2433;
+    border: 2px solid #2d3346; display: flex; align-items: center; justify-content: center; gap: 14px; font-size: 30px; }
+  #relaybox .u { color: #8d95aa; }
+  #d0 { top: 22px; } #d1 { top: 138px; }
+  #dl { left: 26px; top: 400px; width: 688px; }
+  #dl .p { color: #5fd38d; }
+</style>
+</head>
+<body>
+<div id="root" data-composition-id="root" data-start="0" data-duration="21.5" data-width="800" data-height="1000">
+  <div class="abs head"><span class="ic">🪝</span>Webhooks</div>
+  <div class="abs panel" id="panel">
+    <div class="abs row" id="r0"><svg class="hook" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v6"/><path d="M6.5 9h11l-2 6h-7z"/><path d="M12 15v4a2 2 0 0 1-2 2H7"/></svg><span class="n">Stripe<small class="mono">/api/stripe/webhook</small></span><span class="end pill off">off</span></div>
+    <div class="abs row" id="r1"><svg class="hook" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v6"/><path d="M6.5 9h11l-2 6h-7z"/><path d="M12 15v4a2 2 0 0 1-2 2H7"/></svg><span class="n">GitHub<small class="mono">/api/webhooks/github</small></span><span class="end pill off">off</span></div>
+    <div class="abs row" id="r2"><svg class="hook" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v6"/><path d="M6.5 9h11l-2 6h-7z"/><path d="M12 15v4a2 2 0 0 1-2 2H7"/></svg><span class="n">Resend<small class="mono">/api/resend/inbound</small></span><span class="end pill off">off</span></div>
+
+    <div class="abs card" id="code"><div class="t">Take payments with Stripe</div><div class="p"><span class="spin"></span>writing the route</div></div>
+
+    <div class="abs row" id="blank"><svg class="hook" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v6"/><path d="M6.5 9h11l-2 6h-7z"/><path d="M12 15v4a2 2 0 0 1-2 2H7"/></svg><span class="n">Clerk<small class="mono">/api/webhooks/clerk</small></span><span class="end swap"><span class="pill warn" id="blankPill">blank</span><span class="pill on" id="regPill">✓ registered</span></span></div>
+    <div class="abs row" id="count" style="min-height:88px"><svg class="hook" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v6"/><path d="M6.5 9h11l-2 6h-7z"/><path d="M12 15v4a2 2 0 0 1-2 2H7"/></svg><span class="n">🪝<small>waiting for you to register it</small></span></div>
+    <div class="abs card" id="by"><div class="t">Take payments with Stripe</div><div class="p"><span class="spin"></span>added a blank: Clerk</div></div>
+
+    <div class="abs row" id="open"><span class="n mono">Clerk · /api/webhooks/clerk</span><span class="end btn" id="get">Get a public URL</span></div>
+    <div class="abs mono" id="url">weft.zip/api/hooks/<b>k7fq2m</b></div>
+    <div class="abs" id="flow"><div id="pills"><span class="pill info" id="prov">Stripe</span><span id="arrow">→</span><span class="pill info" id="relay">weft.zip</span><span id="arrow">→</span><span class="pill info" id="weft">Weft</span><span id="arrow">→</span><span class="pill on" id="local">localhost:3000</span></div></div>
+    <div class="abs" id="relaybox"><span>🪝 relay on</span><span class="u mono">weft.zip</span><span class="u">forwards the delivery</span></div>
+
+    <div class="abs row" id="d0"><span class="n mono">POST /api/webhooks/clerk</span><span class="end swap"><span class="pill info" id="waitPill">on the way</span><span class="pill on" id="okPill">200 · 1s ago</span></span></div>
+    <div class="abs row" id="d1"><span class="n mono">POST /api/webhooks/clerk</span><span class="end pill on" style="width:220px;justify-content:center">200 · just now</span></div>
+    <div class="abs card" id="dl"><div class="t">Take payments with Stripe</div><div class="p">✓ your route answered 200</div></div>
+  </div>
+  <svg class="abs cursor" id="cur" viewBox="0 0 24 24"><path d="M4 2l16 10-7 1.5L9.5 21z" fill="#fff" stroke="#111" stroke-width="1.2"/></svg>
+
+  <div class="abs cap" id="c1">Providers post to the routes your code <b>receives</b>.</div>
+  <div class="abs cap" id="c2">A thread records each one as a <b>blank</b> to register.</div>
+  <div class="abs cap" id="c3">Weft gives it a <b>public URL</b> that reaches localhost.</div>
+  <div class="abs cap" id="c4">Deliveries land on your route, with its <b>status</b>.</div>
+  <div class="abs" id="fade"></div>
+</div>
+
+<script type="application/json" id="narration">
+{ "duration": 21.5, "lines": [
+  [0.3, 5.2, "A webhook is just a route your code receives when a provider posts to it."],
+  [5.6, 10.2, "A thread records each route it writes as a blank, waiting for you to register it."],
+  [10.6, 15.9, "Weft then gives it a public URL that forwards deliveries straight to localhost. No tunnel needed."],
+  [16.4, 21.2, "When one arrives, your route answers, and the delivery shows its status right here."]
+] }
+</script>
+<script src="../welcome/gsap.min.js"></script>
+<script src="./player.js"></script>
+<script>
+  const tl = gsap.timeline({ paused: true });
+  const caps = ["#c1", "#c2", "#c3", "#c4"];
+  const at = [0.2, 5.5, 10.5, 16.5];
+  gsap.set(["#r0", "#r1", "#r2", "#code", "#blank", "#count", "#by", "#open", "#url", "#relaybox", "#d0", "#d1", "#dl", "#cur", ...caps], { opacity: 0 });
+  gsap.set("#pills > *", { opacity: 0 });
+  gsap.set("#regPill", { opacity: 0 });
+  gsap.set("#okPill", { opacity: 0 });
+  gsap.set("#cur", { x: 560, y: 900 });
+
+  tl.to("#fade", { opacity: 0, duration: 0.4 }, 0);
+  caps.forEach((c, i) => {
+    tl.fromTo(c, { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.4 }, at[i]);
+    if (i < caps.length - 1) tl.to(c, { opacity: 0, duration: 0.3 }, at[i + 1] - 0.3);
+  });
+
+  // The three routes a project receives, one by one.
+  ["#r0", "#r1", "#r2"].forEach((r, i) => tl.from(r, { opacity: 0, x: 40, duration: 0.45 }, 0.5 + i * 1.35));
+  tl.to(["#r0", "#r1", "#r2"], { opacity: 0, duration: 0.35 }, 5.5);
+
+  // A thread writes a route and records it as a blank: the blank counts on 🪝.
+  tl.to("#panel", { opacity: 0.3, duration: 0.4 }, 5.7)
+    .to("#code", { opacity: 1, duration: 0.4 }, 5.9)
+    .to("#code", { opacity: 0, duration: 0.3 }, 7.3)
+    .to("#panel", { opacity: 1, duration: 0.3 }, 7.3)
+    .fromTo("#blank", { opacity: 0, x: -40 }, { opacity: 1, x: 0, duration: 0.45 }, 7.6)
+    .fromTo("#count", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.4 }, 8.1)
+    .to("#by", { opacity: 1, duration: 0.4 }, 8.5)
+    .to("#cur", { opacity: 1, duration: 0.2 }, 8.9)
+    .to("#cur", { x: 300, y: 300, duration: 0.8, ease: "power2.inOut" }, 8.9)
+    .to("#cur", { opacity: 0, duration: 0.3 }, 10);
+
+  // Get a public URL: the row opens on the button, the relay URL takes its place.
+  tl.to(["#code", "#blank", "#count"], { opacity: 0, duration: 0.3 }, 10.5)
+    .to("#by", { opacity: 0.25, duration: 0.3 }, 10.5)
+    .to("#open", { opacity: 1, duration: 0.4 }, 10.8)
+    .to("#cur", { opacity: 1, duration: 0.2 }, 11.2)
+    .to("#cur", { x: 560, y: 262, duration: 0.8, ease: "power2.inOut" }, 11.2)
+    .to("#get", { scale: 0.94, duration: 0.1, yoyo: true, repeat: 1 }, 12.1)
+    .to("#get", { opacity: 0, duration: 0.25 }, 12.5)
+    .to("#url", { opacity: 1, duration: 0.4 }, 12.5)
+    .to("#open", { opacity: 0, duration: 0.3 }, 13)
+    .to("#by", { opacity: 1, duration: 0.3 }, 13);
+
+  // The relay hands the delivery on: Stripe → weft.zip → Weft → localhost.
+  tl.to("#url", { opacity: 0, duration: 0.3 }, 13.6)
+    .fromTo(["#prov", "#relay", "#weft", "#local"], { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.35, stagger: 0.45 }, 13.9)
+    .to("#relaybox", { opacity: 1, duration: 0.4 }, 15.4)
+    .to("#flow", { opacity: 0.2, duration: 0.4 }, 15.4);
+
+  // The delivery lands, and the last one shows the status your route answered.
+  tl.to(["#relaybox", "#flow", "#pills > *"], { opacity: 0, duration: 0.3 }, 16.5)
+    .fromTo("#d0", { opacity: 0, x: -40 }, { opacity: 1, x: 0, duration: 0.45 }, 16.9)
+    .to("#waitPill", { opacity: 0, duration: 0.3 }, 17.8)
+    .to("#okPill", { opacity: 1, duration: 0.3 }, 17.8)
+    .fromTo("#d1", { opacity: 0, x: -40 }, { opacity: 1, x: 0, duration: 0.4 }, 18.2)
+    .to("#dl", { opacity: 1, duration: 0.4 }, 18.6)
+    .to("#fade", { opacity: 0, duration: 0.01 }, 21.5);
+
+  window.__timelines = window.__timelines || {};
+  window.__timelines.root = tl;
+  window.weftIntro(tl);
+</script>
+</body>
+</html>

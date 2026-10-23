@@ -49,7 +49,8 @@ lives in its own component under `components/`.
 - `components/BoardDialogs.tsx` — every dialog, sheet and overlay the board stacks over its columns, each
   still loaded through `guarded()`.
 - `components/rail-context.ts` — `RailContext`, the seven props every rail drawer shares; `SideRail`
-  (`components/LibraryRail.tsx`) takes it as one `ctx` prop.
+  (`components/LibraryRail.tsx`) takes it as one `ctx` prop. Every tool drawer also shares the shell's ▶ and the
+  intro video under its title (`useFeatureIntro`, [feature-intros.md](feature-intros.md)).
 - `components/use-board-commands.ts` — the shortcuts, the command palette and the menu bridge sharing one
   input (`BoardCommandsInput`).
 

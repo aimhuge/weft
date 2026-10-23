@@ -3,7 +3,9 @@
 import { timeAgo } from "@/lib/format";
 import { useOverlay } from "@/lib/overlay";
 import { openFindings, type Finding, type ScoutState, type Severity } from "@/lib/scout-view";
+import { useFeatureIntro } from "@/lib/use-feature-intro";
 import { useNow } from "@/lib/use-now";
+import { IntroButton, IntroFrame } from "./FeatureIntro";
 import Modal from "./Modal";
 
 const DOT: Record<Severity, string> = { high: "bg-danger", medium: "bg-warn", low: "bg-muted" };
@@ -30,6 +32,7 @@ export default function ScoutDialog({
 }) {
   const now = useNow();
   useOverlay(true);
+  const intro = useFeatureIntro("quality");
 
   const report = scout?.report ?? null;
   const open = openFindings(report);
@@ -43,8 +46,9 @@ export default function ScoutDialog({
         : "Not scouted yet";
 
   return (
-    <Modal title={title} onClose={onClose} placement="top" className="max-h-[76vh] w-full max-w-[560px] text-[12.5px]">
+    <Modal title={<span className="flex items-center gap-1.5">{title}<IntroButton intro={intro} /></span>} label={title} onClose={onClose} placement="top" className="max-h-[76vh] w-full max-w-[560px] text-[12.5px]">
       <div className="flex min-h-0 flex-1 flex-col p-1.5">
+        <IntroFrame intro={intro} className="mb-1.5" />
         <button className={row} disabled={checklistDone} onClick={onFixChecklist}>
           <span className="flex-1 font-medium text-ink">Fix the checklist, weakest first</span>
         </button>

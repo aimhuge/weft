@@ -1,0 +1,50 @@
+/* The look every feature intro shares (public/intros/*.html): a portrait 800x1000 stage, sized to read in the rail's
+   272 px drawer (a 0.33 scale), so nothing is smaller than 30 px. Dark, like the welcome tour (public/welcome/). */
+html, body { margin: 0; background: #0d0f14; overflow: hidden; }
+* { box-sizing: border-box; }
+#root { position: relative; width: 800px; height: 1000px; overflow: hidden; transform-origin: 0 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif; color: #e8eaf0;
+  background: radial-gradient(circle at 20% 0%, #1c2233, #0d0f14 70%); }
+.abs { position: absolute; }
+
+/* The title at the top: the drawer's icon and name. */
+.head { left: 40px; top: 36px; display: flex; align-items: center; gap: 20px; font-size: 50px; font-weight: 700; }
+.head .ic { width: 84px; height: 84px; border-radius: 22px; background: #1f2433; border: 2px solid #2d3346; display: flex;
+  align-items: center; justify-content: center; font-size: 48px; }
+.head .ic svg { width: 52px; height: 52px; }
+
+/* The stage's main panel and the rows inside it. */
+.panel { left: 30px; top: 160px; width: 740px; height: 620px; border-radius: 28px; background: #151925; border: 2px solid #232838; }
+.row { left: 26px; width: 688px; min-height: 96px; border-radius: 20px; background: #1f2433; border: 2px solid #2d3346; padding: 18px 24px;
+  display: flex; align-items: center; gap: 18px; font-size: 34px; }
+.row .n { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row small { display: block; font-size: 28px; color: #8d95aa; font-weight: 400; }
+.row .end { margin-left: auto; flex: none; }
+.mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+
+/* Little status pills: off (grey), on (green), warn (amber), info (blue). */
+.pill { display: inline-flex; align-items: center; height: 52px; padding: 0 20px; border-radius: 14px; font-size: 30px; white-space: nowrap; }
+.pill.off { background: #2a3044; color: #c9cfdf; }
+.pill.on { background: #173a28; color: #5fd38d; }
+.pill.warn { background: #3a2e10; color: #f0b429; }
+.pill.info { background: #1b2a4d; color: #7aa7ff; }
+/* Two pills stacked in one spot, one fading into the other. */
+.swap { position: relative; width: 220px; height: 52px; }
+.swap .pill { position: absolute; right: 0; top: 0; }
+
+.btn { display: inline-flex; align-items: center; height: 64px; padding: 0 30px; border-radius: 16px; font-size: 32px; font-weight: 600;
+  background: #4f7cff; color: #fff; }
+.spin { width: 34px; height: 34px; border-radius: 50%; border: 5px solid #3a4258; border-top-color: #7aa7ff; flex: none; }
+
+/* A Weft card, as on the board. */
+.card { width: 340px; border-radius: 20px; background: #1f2433; border: 2px solid #2d3346; padding: 18px 22px; }
+.card .t { font-size: 32px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card .p { margin-top: 10px; font-size: 26px; color: #8d95aa; display: flex; gap: 10px; align-items: center; }
+
+/* A pointer that moves to what's clicked. */
+.cursor { width: 46px; height: 46px; z-index: 20; filter: drop-shadow(0 4px 8px #0008); }
+
+/* The caption band at the bottom: one or two lines, the key words in amber. */
+.cap { left: 40px; top: 812px; width: 720px; font-size: 48px; font-weight: 650; line-height: 1.18; color: #f1f3f8; letter-spacing: -0.01em; }
+.cap b { color: #f0b429; font-weight: 650; }
+#fade { inset: 0; background: #0d0f14; z-index: 50; }

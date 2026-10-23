@@ -1,0 +1,238 @@
+<!doctype html>
+<!--
+  The ▲ Vercel drawer's intro (components/FeatureIntro.tsx plays it the first time the drawer opens), a HyperFrames
+  composition in the shared look (./kit.css): 0–5.5s your token, sealed in the Keychain; 5.5–11s Link… picks your
+  project, best fit first; 11–16.5s the latest deploy goes Building → Ready and opens in the pane; 16.5–22.5s Push all
+  sends your vault keys to Vercel env behind Touch ID. The voice is #narration, read by `pnpm intros:narrate`
+  (scripts/narrate-intros.mjs) into ./vercel.m4a. Seekable: no timers, no tl.call.
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width">
+<title>Weft: Vercel</title>
+<link rel="stylesheet" href="./kit.css">
+<style>
+  /* The ▲ mark the rail's button carries, drawn as the triangle glyph but sized to sit in the head chip. */
+  .head .ic { color: #fff; font-size: 40px; line-height: 1; }
+
+  /* Scene 1: the token form the drawer shows before it's signed in (components/TokenForm.tsx). */
+  #tok { left: 26px; top: 30px; width: 688px; height: 250px; border-radius: 22px; background: #1f2433; border: 2px solid #2d3346;
+    padding: 24px 26px; }
+  #tok p { font-size: 30px; line-height: 1.25; color: #c9cfdf; }
+  #tok a { color: #7aa7ff; text-decoration: underline; }
+  #tokfield { margin-top: 18px; height: 74px; border-radius: 14px; background: #10141f; border: 2px solid #3a4258; display: flex;
+    align-items: center; padding: 0 22px; font-size: 28px; color: #8d95aa; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+  #save { left: 26px; top: 452px; }
+  #signed { left: 26px; top: 300px; width: 688px; height: 96px; border-radius: 20px; background: #1f2433; border: 2px solid #2d3346;
+    display: flex; align-items: center; gap: 18px; padding: 0 24px; font-size: 32px; }
+  #signed .mono { font-size: 30px; }
+
+  /* Scene 2: Link… (components/VercelPicker.tsx) over the shared components/DbSelect.tsx. */
+  #pick { left: 26px; top: 30px; width: 688px; height: 470px; border-radius: 22px; background: #1f2433; border: 2px solid #2d3346;
+    padding: 22px 24px; }
+  #pick .ttl { font-size: 30px; font-weight: 600; color: #f1f3f8; }
+  #search { margin-top: 16px; height: 70px; border-radius: 14px; background: #10141f; border: 2px solid #3a4258; display: flex;
+    align-items: center; padding: 0 20px; font-size: 28px; color: #8d95aa; }
+  #new { margin-top: 16px; height: 66px; border-radius: 14px; border: 2px dashed #4a5573; display: flex; align-items: center; gap: 12px;
+    padding: 0 20px; font-size: 29px; color: #7aa7ff; }
+  #p0 { margin-top: 16px; } #p1 { margin-top: 12px; } #p2 { margin-top: 12px; }
+  .proj { border-radius: 14px; background: #151925; border: 2px solid #2d3346; padding: 14px 20px; }
+  #p0 { border-color: #4f7cff88; }
+  .proj .nm { font-size: 30px; font-weight: 600; display: flex; align-items: center; gap: 12px; }
+  .proj .dt { display: block; margin-top: 4px; font-size: 26px; color: #8d95aa; }
+  .fit { background: #1b2a4d; color: #7aa7ff; height: 42px; padding: 0 14px; border-radius: 10px; font-size: 24px; font-weight: 500;
+    display: inline-flex; align-items: center; }
+  #toast2 { left: 26px; top: 520px; width: 688px; height: 90px; border-radius: 18px; background: #173a28; color: #5fd38d;
+    display: flex; align-items: center; padding: 0 24px; font-size: 29px; }
+
+  /* Scene 3: the linked folder's card (components/VercelDrawer.tsx FolderRow + Linked + Deploy). */
+  #card { left: 26px; top: 30px; width: 688px; border-radius: 22px; background: #1f2433; border: 2px solid #2d3346; padding: 22px 24px; }
+  #card .fh { font-size: 31px; font-weight: 600; display: flex; align-items: center; }
+  #card .url { margin-top: 10px; font-size: 27px; color: #7aa7ff; }
+  #dep { margin-top: 16px; height: 78px; border-radius: 14px; background: #151925; border: 2px solid #2d3346; display: flex;
+    align-items: center; gap: 16px; padding: 0 20px; font-size: 28px; }
+  #dep .when { margin-left: auto; color: #8d95aa; }
+  #pane { left: 26px; top: 366px; width: 688px; height: 300px; border-radius: 20px; background: #10141f; border: 2px solid #2d3346;
+    padding: 22px 24px; overflow: hidden; }
+  #pane .bar { height: 34px; border-radius: 10px; background: #1f2433; margin-bottom: 18px; }
+  #pane .hero { font-size: 40px; font-weight: 700; color: #fff; }
+  #pane .sub { margin-top: 10px; font-size: 28px; color: #8d95aa; }
+  #pane .pill { margin-top: 22px; }
+
+  /* Scene 4: the 🔐 env section (components/VercelEnv.tsx) and the Touch ID sheet. */
+  #env { left: 26px; top: 30px; width: 688px; border-radius: 22px; background: #1f2433; border: 2px solid #2d3346; padding: 22px 24px; }
+  #env .fh { font-size: 31px; font-weight: 600; }
+  #envline { margin-top: 14px; display: flex; align-items: center; gap: 14px; font-size: 28px; color: #c9cfdf; }
+  #pushall { height: 62px; border-radius: 14px; border: 2px solid #3a4258; padding: 0 20px; display: inline-flex; align-items: center;
+    font-size: 27px; color: #c9cfdf; margin-left: auto; }
+  #e0 { margin-top: 16px; } #e1 { margin-top: 12px; }
+  .envrow { height: 76px; border-radius: 14px; background: #151925; border: 2px solid #2d3346; display: flex; align-items: center;
+    gap: 16px; padding: 0 20px; font-size: 26px; }
+  .envrow .nm { font-family: ui-monospace, "SF Mono", Menlo, monospace; color: #f1f3f8; white-space: nowrap; overflow: hidden;
+    text-overflow: ellipsis; }
+  .envrow .sc { color: #8d95aa; flex: none; }
+  .envrow .act { margin-left: auto; flex: none; height: 50px; border-radius: 12px; padding: 0 16px; display: inline-flex;
+    align-items: center; font-size: 25px; font-weight: 500; }
+  #push { background: #4f7cff; color: #fff; }
+  #again { background: transparent; color: #8d95aa; border: 1px solid #3a4258; }
+  #touch { left: 70px; top: 230px; width: 660px; border-radius: 28px; background: #f6f7f9; color: #111827; padding: 34px 36px; text-align: center;
+    box-shadow: 0 30px 80px #000a; z-index: 5; }
+  #touch .fp { width: 130px; height: 130px; margin: 0 auto 18px; border-radius: 50%; border: 6px solid #e5484d; display: flex; align-items: center;
+    justify-content: center; font-size: 70px; }
+  #touch .q { font-size: 34px; font-weight: 600; line-height: 1.25; }
+  #touch .q small { display: block; margin-top: 10px; font-size: 28px; color: #6b7280; font-weight: 400; }
+  #envtoast { left: 26px; top: 400px; width: 688px; height: 96px; border-radius: 18px; background: #173a28; color: #5fd38d;
+    display: flex; align-items: center; padding: 0 24px; font-size: 28px; }
+</style>
+</head>
+<body>
+<div id="root" data-composition-id="root" data-start="0" data-duration="22.5" data-width="800" data-height="1000">
+  <div class="abs head"><span class="ic">▲</span>Vercel</div>
+  <div class="abs panel" id="panel">
+
+    <div class="abs" id="tok">
+      <p>A token from <a>vercel.com/account/tokens</a>. Weft keeps it in your Keychain; threads never see it.</p>
+      <div id="tokfield"><span id="typed"></span><span id="dots">••••••••••••••••</span></div>
+    </div>
+    <div class="abs btn" id="save">Save token</div>
+    <div class="abs" id="signed"><span>✓ Signed in as</span><span class="mono" id="who">aimhuge</span></div>
+
+    <div class="abs" id="pick">
+      <div class="ttl">Link weft to…</div>
+      <div id="search">Search projects</div>
+      <div id="new">＋ New project<span style="color:#8d95aa">weft</span></div>
+      <div class="proj" id="p0"><span class="nm">weft<span class="fit">best fit</span></span><span class="dt">Acme · aimhuge/weft</span></div>
+      <div class="proj" id="p1"><span class="nm">weft-docs</span><span class="dt">Acme</span></div>
+      <div class="proj" id="p2"><span class="nm">deck</span><span class="dt">Personal · aimhuge/deck</span></div>
+    </div>
+    <div class="abs" id="toast2">✓ Linked <b style="color:#fff">weft</b> to weft on Vercel</div>
+
+    <div class="abs" id="card">
+      <div class="fh"><span>weft</span><span class="pill off" id="unlink" style="height:46px;font-size:24px">Unlink</span></div>
+      <div class="url mono">weft.vercel.app</div>
+      <div id="dep">
+        <span class="swap" id="depSwap"><span class="pill warn" id="building" style="width:180px;justify-content:center">Building</span><span class="pill on" id="ready" style="width:180px;justify-content:center">✓ Ready</span></span>
+        <span style="color:#c9cfdf">production</span>
+        <span class="when" id="ago">just now</span>
+        <span class="pill info" id="open" style="height:52px">open</span>
+      </div>
+      <div class="url" style="color:#8d95aa;font-size:26px;margin-top:14px">Deploys from aimhuge/weft</div>
+    </div>
+    <div class="abs" id="pane">
+      <div class="bar"></div>
+      <div class="hero">Weft</div>
+      <div class="sub">weft.vercel.app</div>
+      <div class="pill on">✓ Ready · production</div>
+    </div>
+
+    <div class="abs" id="env">
+      <div class="fh">weft</div>
+      <div id="envline"><span>🔐</span><span id="envtext">1 to push · 4 on Vercel</span><span id="pushall">Push all</span></div>
+      <div class="envrow" id="e0"><span class="nm">STRIPE_SECRET_KEY</span><span class="sc">prod</span><span class="act" id="push">Push</span></div>
+      <div class="envrow" id="e1"><span class="nm">DATABASE_URL</span><span class="sc">prod</span><span class="act" id="again">on Vercel · push again</span></div>
+    </div>
+    <div class="abs" id="envtoast">✓ Pushed 5 secrets to weft. Live from the next deploy</div>
+  </div>
+  <div class="abs" id="touch"><div class="fp" id="fp">☝︎</div><div class="q">Push 5 secrets<small>“aimhuge/weft → Vercel project weft”</small></div></div>
+  <svg class="abs cursor" id="cur" viewBox="0 0 24 24"><path d="M4 2l16 10-7 1.5L9.5 21z" fill="#fff" stroke="#111" stroke-width="1.2"/></svg>
+
+  <div class="abs cap" id="c1">Paste your token <b>once</b>. It stays in the Keychain.</div>
+  <div class="abs cap" id="c2">Link a folder to the project that <b>fits</b> it.</div>
+  <div class="abs cap" id="c3">Watch the latest deploy, and <b>open</b> it right here.</div>
+  <div class="abs cap" id="c4">Push your vault <b>keys</b> to Vercel env.</div>
+  <div class="abs" id="fade"></div>
+</div>
+
+<script type="application/json" id="narration">
+{ "duration": 22.5, "lines": [
+  [0.3, 5.1, "Paste a Vercel token once. Weft seals it in your Keychain, where threads never see it."],
+  [5.5, 10.6, "Then link a folder to a project. Weft puts your best fit at the top."],
+  [10.9, 16.2, "Your latest deploy shows right here, from building to ready, and opens in the pane."],
+  [16.5, 22.2, "And push all sends your vault keys to Vercel's environment, behind Touch ID."]
+] }
+</script>
+<script src="../welcome/gsap.min.js"></script>
+<script src="./player.js"></script>
+<script>
+  const tl = gsap.timeline({ paused: true });
+  const caps = ["#c1", "#c2", "#c3", "#c4"];
+  const at = [0.2, 5.5, 10.5, 16.5];
+  gsap.set(["#tok", "#save", "#signed", "#who", "#pick", "#toast2", "#card", "#pane", "#env", "#envtoast", "#touch", "#ready", "#cur", ...caps], { opacity: 0 });
+  gsap.set("#cur", { x: 560, y: 900 });
+  // The token types itself in as dots, so the field never shows a value (TokenForm's password field).
+  gsap.set("#typed", { opacity: 0 });
+  gsap.set("#dots", { opacity: 0 });
+
+  tl.to("#fade", { opacity: 0, duration: 0.4 }, 0);
+  caps.forEach((c, i) => {
+    tl.fromTo(c, { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.4 }, at[i]);
+    if (i < caps.length - 1) tl.to(c, { opacity: 0, duration: 0.3 }, at[i + 1] - 0.3);
+  });
+
+  // Scene 1: the token form, the dots going in, Save token, then "Signed in as".
+  tl.from("#tok", { opacity: 0, y: 24, duration: 0.45 }, 0.4)
+    .to("#dots", { opacity: 1, duration: 0.6 }, 1.4)
+    .fromTo("#save", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.35 }, 2.2)
+    .to("#cur", { opacity: 1, duration: 0.2 }, 2.7)
+    .to("#cur", { x: 300, y: 500, duration: 0.8, ease: "power2.inOut" }, 2.7)
+    .to("#save", { scale: 0.94, duration: 0.1, yoyo: true, repeat: 1 }, 3.5)
+    .to("#cur", { opacity: 0, duration: 0.3 }, 3.9)
+    .to("#tok", { opacity: 0, duration: 0.35 }, 4.6)
+    .to("#save", { opacity: 0, duration: 0.3 }, 4.6)
+    .fromTo("#signed", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.4 }, 4.9)
+    .fromTo("#who", { opacity: 0, x: -14 }, { opacity: 1, x: 0, duration: 0.35 }, 5);
+
+  // Scene 2: Link… opens, your projects slide in, the best fit is picked.
+  tl.to("#signed", { opacity: 0, duration: 0.3 }, 5.6)
+    .from("#pick", { opacity: 0, y: 24, duration: 0.45 }, 5.9)
+    .fromTo("#p0", { opacity: 0, x: -34 }, { opacity: 1, x: 0, duration: 0.4 }, 6.5)
+    .fromTo("#p1", { opacity: 0, x: -34 }, { opacity: 1, x: 0, duration: 0.4 }, 7)
+    .fromTo("#p2", { opacity: 0, x: -34 }, { opacity: 1, x: 0, duration: 0.4 }, 7.5)
+    .to("#cur", { opacity: 1, duration: 0.2 }, 8.1)
+    .to("#cur", { x: 300, y: 400, duration: 0.8, ease: "power2.inOut" }, 8.1)
+    .to("#p0", { scale: 0.98, duration: 0.1, yoyo: true, repeat: 1 }, 8.9)
+    .to("#cur", { opacity: 0, duration: 0.3 }, 9.4)
+    .to(["#pick", "#p1", "#p2"], { opacity: 0, duration: 0.3 }, 9.9)
+    .to("#p0", { opacity: 0, duration: 0.3 }, 9.9)
+    .fromTo("#toast2", { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.4 }, 10);
+
+  // Scene 3: the linked folder's card: the deploy is Building, then Ready, and opens in the pane.
+  tl.to("#toast2", { opacity: 0, duration: 0.3 }, 10.7)
+    .from("#card", { opacity: 0, y: 24, duration: 0.45 }, 10.9)
+    .fromTo("#building", { opacity: 0 }, { opacity: 1, duration: 0.35 }, 11.6)
+    .to("#cur", { opacity: 1, duration: 0.2 }, 12.6)
+    .to("#cur", { x: 640, y: 320, duration: 0.8, ease: "power2.inOut" }, 12.6)
+    .to("#open", { scale: 0.94, duration: 0.1, yoyo: true, repeat: 1 }, 13.4)
+    .to("#cur", { opacity: 0, duration: 0.3 }, 13.9)
+    .to("#building", { opacity: 0, duration: 0.3 }, 14.4)
+    .to("#ready", { opacity: 1, duration: 0.3 }, 14.4)
+    .to("#ago", { textContent: "2s ago", duration: 0.1 }, 14.5)
+    .fromTo("#pane", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.45 }, 14.8)
+    .to("#card", { opacity: 0.3, duration: 0.4 }, 14.8);
+
+  // Scene 4: the 🔐 env section, Touch ID, then Push all's result.
+  tl.to("#pane", { opacity: 0, duration: 0.3 }, 16.7)
+    .to("#card", { opacity: 0, duration: 0.3 }, 16.7)
+    .from("#env", { opacity: 0, y: 24, duration: 0.45 }, 16.9)
+    .fromTo("#e0", { opacity: 0, x: -34 }, { opacity: 1, x: 0, duration: 0.4 }, 17.4)
+    .fromTo("#e1", { opacity: 0, x: -34 }, { opacity: 1, x: 0, duration: 0.4 }, 17.9)
+    .to("#cur", { opacity: 1, duration: 0.2 }, 18.4)
+    .to("#cur", { x: 640, y: 220, duration: 0.8, ease: "power2.inOut" }, 18.4)
+    .to("#pushall", { scale: 0.94, duration: 0.1, yoyo: true, repeat: 1 }, 19.2)
+    .to("#cur", { opacity: 0, duration: 0.3 }, 19.7)
+    .to("#env", { opacity: 0.3, duration: 0.4 }, 20.1)
+    .to("#touch", { opacity: 1, duration: 0.4 }, 20.2)
+    .fromTo("#touch", { scale: 0.92 }, { scale: 1, duration: 0.4 }, 20.2)
+    .to("#fp", { borderColor: "#30a46c", color: "#30a46c", duration: 0.4 }, 21)
+    .to("#touch", { opacity: 0, duration: 0.3 }, 21.4)
+    .to("#env", { opacity: 0, duration: 0.3 }, 21.6)
+    .to("#envtoast", { opacity: 1, duration: 0.35 }, 21.5)
+    .to("#fade", { opacity: 0, duration: 0.01 }, 22.5);
+
+  window.__timelines = window.__timelines || {};
+  window.__timelines.root = tl;
+  window.weftIntro(tl);
+</script>
+</body>
+</html>

@@ -1,0 +1,165 @@
+<!doctype html>
+<!--
+  The Supabase drawer's intro (components/FeatureIntro.tsx plays it the first time the drawer opens), a HyperFrames
+  composition in the shared look (./kit.css): 0–5s paste a token once, sealed in your Keychain; 5–11s link a board
+  folder to a Supabase project; 11–16s the drawer reads the project's state and the migrations it hasn't applied;
+  16–21.5s Migrate starts a card that applies them on your OK, and each migration links to the card that wrote it.
+  The voice is #narration, read by `pnpm intros:narrate` (scripts/narrate-intros.mjs) into ./supabase.m4a. Seekable:
+  no timers, no tl.call.
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width">
+<title>Weft: Supabase</title>
+<link rel="stylesheet" href="./kit.css">
+<style>
+  /* The bolt, the drawer's own icon (components/SupabaseLogo.tsx), sized for a row. */
+  .bolt { width: 40px; height: 42px; flex: none; }
+  /* The token form: the sentence from components/TokenForm.tsx, the field, the button. */
+  #tokLine { left: 26px; top: 150px; width: 688px; font-size: 30px; line-height: 1.35; color: #c9cfdf; }
+  #tokLine a { color: #7aa7ff; text-decoration: underline; }
+  #tokField { left: 26px; top: 400px; width: 688px; height: 86px; border-radius: 16px; background: #1f2433; border: 2px solid #3a4258;
+    color: #e8eaf0; font-size: 32px; display: flex; align-items: center; padding: 0 22px; }
+  #tokField i { font-style: normal; color: #5fd38d; display: inline-block; width: 240px; overflow: hidden; white-space: nowrap; }
+  #save { left: 26px; top: 520px; }
+  #sealed { left: 26px; top: 520px; }
+  /* The linked folder's card (components/FolderRow.tsx + SupabaseLinked.tsx). */
+  #fr { left: 26px; top: 40px; width: 688px; border-radius: 20px; background: #1f2433; border: 2px solid #2d3346; padding: 20px 24px; }
+  #frTop { display: flex; align-items: center; gap: 16px; font-size: 34px; }
+  #frTop .nm { font-weight: 600; white-space: nowrap; }
+  #link { position: absolute; left: 630px; top: 200px; }
+  #frMeta { margin-top: 16px; font-size: 30px; color: #c9cfdf; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #frMeta .org { color: #8d95aa; }
+  #frUrl { margin-top: 10px; font-size: 28px; color: #7aa7ff; white-space: nowrap; }
+  #mig { margin-top: 16px; font-size: 28px; color: #f0b429; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #migNames { text-decoration: underline; text-decoration-style: dotted; }
+  #migrate { height: 56px; font-size: 28px; margin-top: 18px; }
+  /* The card Migrate starts, in the folder's lane. It takes over the row's place in the panel (top 260), so the
+   caption band at 812 stays clear once the OK line makes the card taller. */
+  #mcard { left: 90px; top: 268px; width: 620px; }
+  #okLine { margin-top: 14px; font-size: 26px; color: #5fd38d; white-space: nowrap; }
+</style>
+</head>
+<body>
+<div id="root" data-composition-id="root" data-start="0" data-duration="21.5" data-width="800" data-height="1000">
+  <div class="abs head"><span class="ic"><svg viewBox="0 0 109 113" width="52" height="52" aria-hidden="true"><path d="M63.708 110.284c-2.86 3.601-8.658 1.628-8.727-2.97l-1.007-67.251h45.22c8.19 0 12.758 9.46 7.665 15.874l-43.151 54.347Z" fill="#249361"/><path d="M45.317 2.071c2.86-3.601 8.657-1.628 8.726 2.97l.442 67.251H9.83c-8.19 0-12.759-9.46-7.665-15.875L45.317 2.072Z" fill="#3ECF8E"/></svg></span>Supabase</div>
+
+  <div class="abs panel" id="panel">
+    <!-- Scene 1: the token form, the words components/TokenForm.tsx draws for Supabase. -->
+    <div class="abs" id="tokLine">Link this project to Supabase with a token from
+      <a href="https://supabase.com/dashboard/account/tokens">supabase.com/dashboard/account/tokens</a>.
+      Weft keeps it in your Keychain; threads never see it.</div>
+    <div class="abs" id="tokField"><span class="mono" style="color:#8d95aa">sbp_</span><i id="rest"></i></div>
+    <div class="abs btn" id="save">Save token</div>
+    <div class="abs pill on" id="sealed" style="height:64px;font-size:30px">✓ Sealed in your Keychain</div>
+
+    <!-- Scenes 2–4: the linked folder's row, as SupabaseDrawer draws it for a linked folder. -->
+    <div class="abs" id="fr">
+      <div id="frTop">
+        <svg class="bolt" viewBox="0 0 109 113" aria-hidden="true"><path d="M63.708 110.284c-2.86 3.601-8.658 1.628-8.727-2.97l-1.007-67.251h45.22c8.19 0 12.758 9.46 7.665 15.874l-43.151 54.347Z" fill="#249361"/><path d="M45.317 2.071c2.86-3.601 8.657-1.628 8.726 2.97l.442 67.251H9.83c-8.19 0-12.759-9.46-7.665-15.875L45.317 2.072Z" fill="#3ECF8E"/></svg>
+        <span class="nm">weft</span>
+        <span class="pill on" id="state">Healthy</span>
+      </div>
+      <div id="frMeta"><span class="org">Acme</span> · us-east-1</div>
+      <div id="frUrl" class="mono">abcdefgh.supabase.co</div>
+      <div id="mig">2 of 5 migrations not applied: <span id="migNames">add_profiles, add_orders</span></div>
+      <div class="btn" id="migrate">Migrate</div>
+    </div>
+    <div class="abs" id="link"><span class="btn" id="linkBtn" style="height:56px;font-size:28px">Link…</span></div>
+
+    <!-- Scene 4: the card Migrate starts, and your OK. -->
+    <div class="abs card" id="mcard">
+      <div class="t">Migrate weft's Supabase</div>
+      <div class="p" id="mp"><span class="spin" id="mspin"></span>reviewing 2 migrations</div>
+      <div id="okLine">✓ Applied on your OK, oldest first</div>
+    </div>
+  </div>
+  <svg class="abs cursor" id="cur" viewBox="0 0 24 24"><path d="M4 2l16 10-7 1.5L9.5 21z" fill="#fff" stroke="#111" stroke-width="1.2"/></svg>
+
+  <div class="abs cap" id="c1">Paste a token once. Weft keeps it in your <b>Keychain</b>.</div>
+  <div class="abs cap" id="c2">Link a folder to its <b>Supabase</b> project.</div>
+  <div class="abs cap" id="c3">See its state and what's <b>not applied</b> yet.</div>
+  <div class="abs cap" id="c4"><b>Migrate</b> applies them, after your <b>OK</b>.</div>
+  <div class="abs" id="fade"></div>
+</div>
+
+<script type="application/json" id="narration">
+{ "duration": 21.5, "lines": [
+  [0.3, 5.2, "Paste a Supabase token once. Weft keeps it in your Keychain."],
+  [5.6, 10.9, "Link a board folder to the Supabase project behind it."],
+  [11.3, 16.4, "The drawer shows the project's state and any migrations it hasn't applied yet."],
+  [16.8, 21.3, "Migrate starts a card that applies them, oldest first, on your okay."]
+] }
+</script>
+<script src="../welcome/gsap.min.js"></script>
+<script src="./player.js"></script>
+<script>
+  const tl = gsap.timeline({ paused: true });
+  const caps = ["#c1", "#c2", "#c3", "#c4"];
+  const at = [0.2, 5.5, 11, 16.5];
+  gsap.set(["#tokLine", "#tokField", "#save", "#sealed", "#fr", "#link", "#mcard", "#okLine", "#state", "#frMeta", "#frUrl", "#mig", "#migrate", "#cur", ...caps], { opacity: 0 });
+  gsap.set("#cur", { x: 600, y: 900 });
+
+  tl.to("#fade", { opacity: 0, duration: 0.4 }, 0);
+  caps.forEach((c, i) => {
+    tl.fromTo(c, { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.4 }, at[i]);
+    if (i < caps.length - 1) tl.to(c, { opacity: 0, duration: 0.3 }, at[i + 1] - 0.3);
+  });
+
+  // Scene 1: the token form slides up, the token is typed in, the cursor saves it, and the sealed pill swaps in.
+  tl.from("#tokLine", { opacity: 0, y: 24, duration: 0.45 }, 0.4)
+    .from("#tokField", { opacity: 0, y: 16, duration: 0.4 }, 1.1)
+    .to("#rest", { opacity: 1, duration: 0.3 }, 2)
+    .from("#rest", { width: 0, duration: 0.6, ease: "none" }, 2)
+    .to("#save", { opacity: 1, duration: 0.3 }, 2.9)
+    .to("#cur", { opacity: 1, duration: 0.2 }, 3.1)
+    .to("#cur", { x: 200, y: 680, duration: 0.8, ease: "power2.inOut" }, 3.1)
+    .to("#save", { scale: 0.92, duration: 0.1, yoyo: true, repeat: 1 }, 3.9)
+    .to("#save", { opacity: 0, duration: 0.25 }, 4.4)
+    .to("#sealed", { opacity: 1, duration: 0.3 }, 4.4)
+    .to("#cur", { opacity: 0, duration: 0.3 }, 5.1);
+
+  // Scene 2: the token form clears, the folder row slides in, and Link… links it (the row's border turns green).
+  tl.to(["#tokLine", "#tokField"], { opacity: 0, duration: 0.35 }, 5.6)
+    .to("#fr", { opacity: 1, duration: 0.4 }, 5.9)
+    .from("#fr", { x: -40, duration: 0.5, ease: "power2.out" }, 5.9)
+    .to("#link", { opacity: 1, duration: 0.3 }, 6.9)
+    .to("#cur", { opacity: 1, duration: 0.2 }, 7.1)
+    .to("#cur", { x: 700, y: 400, duration: 0.8, ease: "power2.inOut" }, 7.1)
+    .to("#linkBtn", { scale: 0.92, duration: 0.1, yoyo: true, repeat: 1 }, 7.9)
+    .to("#fr", { borderColor: "#3ECF8E", duration: 0.4 }, 8.4)
+    .to("#link", { opacity: 0, duration: 0.3 }, 8.7)
+    .to("#cur", { opacity: 0, duration: 0.3 }, 8.9);
+
+  // Scene 3: the project answers — its state, its org and region, its URL, then the migrations it hasn't applied.
+  tl.to("#state", { opacity: 1, duration: 0.35 }, 11.3)
+    .from("#state", { scale: 0.8, duration: 0.35 }, 11.3)
+    .to("#frMeta", { opacity: 1, duration: 0.35 }, 11.9)
+    .to("#frUrl", { opacity: 1, duration: 0.35 }, 12.5)
+    .to("#mig", { opacity: 1, duration: 0.4 }, 13.2)
+    .from("#mig", { y: 14, duration: 0.4 }, 13.2);
+
+  // Scene 4: Migrate starts a card; the spinner runs while it reviews, then your OK turns the line green.
+  tl.to("#migrate", { opacity: 1, duration: 0.35 }, 16.5)
+    .to("#cur", { opacity: 1, duration: 0.2 }, 16.7)
+    .to("#cur", { x: 200, y: 640, duration: 0.8, ease: "power2.inOut" }, 16.7)
+    .to("#migrate", { scale: 0.92, duration: 0.1, yoyo: true, repeat: 1 }, 17.5)
+    .to("#migrate", { opacity: 0, duration: 0.25 }, 18)
+    .to("#fr", { opacity: 0, duration: 0.35 }, 18.0)
+    .to("#mcard", { opacity: 1, duration: 0.4 }, 18.3)
+    .from("#mcard", { x: 50, duration: 0.5, ease: "power2.out" }, 18.3)
+    .to("#cur", { opacity: 0, duration: 0.3 }, 18.8)
+    .to("#mspin", { rotation: 360, duration: 0.9, repeat: 2, ease: "none" }, 18.6)
+    .to("#mspin", { opacity: 0, duration: 0.25 }, 21)
+    .to("#mp", { opacity: 0, duration: 0.25 }, 21)
+    .to("#okLine", { opacity: 1, duration: 0.35 }, 21.1)
+    .to("#mig", { opacity: 0.3, duration: 0.4 }, 21.1)
+    .to("#fade", { opacity: 0, duration: 0.01 }, 21.5);
+
+  window.__timelines = window.__timelines || {};
+  window.__timelines.root = tl;
+  window.weftIntro(tl);
+</script>
+</body>
+</html>

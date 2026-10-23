@@ -37,6 +37,8 @@ that fixes the checklist, weakest area first.
 - `lib/use-scout.ts`: the badge's scout hook; reads on mount and focus, polls every 20s while a run is going.
 - `components/QualityBadge.tsx`: the badge and its breakdown bubble. `components/ScoutDialog.tsx`: the click dialog (on the shared `Modal`).
 - `components/Tip.tsx`: the hover bubble. Native `title` tooltips don't show in Electron.
+- `docs/architecture/feature-intros.md`: the dialog's intro video — `useFeatureIntro("quality")` in
+  `ScoutDialog.tsx`, `IntroButton` beside the title and `IntroFrame` under it, playing the first time you open it.
 - `components/Board.tsx`: passes the folder; `improveQuality(cwd, prompt, title)` creates the card.
 
 ## Data flow

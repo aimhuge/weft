@@ -360,6 +360,7 @@ If you are an agent editing this repo, you are working on me. Read README.md for
   - `web-states.md` — weft.zip's loading skeletons, host-aware error page, 404 and the shared pane's load/fail states.
   - `error-boundaries.md` — `CrashGuard.tsx`, `BuildErrorBar.tsx`, the `guarded()` import wrapper, why a build error never reaches a boundary.
   - `welcome-tour.md` — the welcome's narrated 96-second tour: three HyperFrames pages, the live player and beat messages, Kokoro voice and pad, the MP4 render for weft.zip.
+  - `feature-intros.md` — the narrated video each tool drawer, the code quality dialog and the leagues play once: the pages in `public/intros/`, `pnpm intros:narrate`, when `useFeatureIntro` opens one, the seen set in `localStorage` and Reset tips.
   - `gamification.md` — the header's 🔥 chip and "Your loom" dialog: streaks, XP, badges, the builder card, the production-ready tree.
   - `quality.md` — the header's code quality checklist: coverage, file size, lint, types, guardrails; the refactor scout and the score's last 10 points.
   - `commit-pile.md` — the header's "+N/-N" uncommitted counter and the Review card that walks the pile to a clean commit.

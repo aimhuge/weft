@@ -130,6 +130,8 @@ gameState() ── lib/league.ts leagueEntry() ──> { week, xp, shipped, stre
 - **Where it shows.** The header's 🏆 chip (`components/LeagueBadge.tsx`, hidden with the streak by Settings > Show progress)
   reads your league and rank and opens the Leagues dialog: the ladder as six tier buttons, opening on yours, each
   tier's leagues underneath (yours first). The Loom's League tab shows only your league, with an All leagues button.
+  The dialog plays a short intro video the first time you open it (`useFeatureIntro("leagues")`, see
+  [feature-intros.md](feature-intros.md)).
 - **Small leagues.** With few accounts each tier holds one league, so a winner who moves up can find themselves alone; a lone
   builder doesn't move up again until someone joins.
 

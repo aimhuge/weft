@@ -1,7 +1,10 @@
 # The welcome tour
 
-The welcome's first screen (Get ready) plays a narrated 78-second tour of Weft, built from three
+The welcome's first screen (Get ready) plays a narrated 96-second tour of Weft, built from three
 [HyperFrames](https://hyperframes.heygen.com) compositions. The same pages render to MP4s for weft.zip.
+The per-drawer intros ([feature-intros.md](feature-intros.md)) are the same idea at one feature each, and share
+this tooling: `scripts/narrate-lib.mjs` (Kokoro plus the pad), `lib/welcome-voice.ts` (`VoicePlayer`, and the one
+mute key both read and write) and the live-frame conventions (`?live=1`, the parent `postMessage` handshake).
 
 ## Pages (`public/welcome/`)
 
@@ -9,24 +12,32 @@ The welcome's first screen (Get ready) plays a narrated 78-second tour of Weft, 
 |---|---|---|
 | `intro.html` | 12 s | "Welcome to Weft", the future of AI engineering, the agents it runs on (Claude Code, Codex, Puku AI) |
 | `loop.html` | 30 s | One card from prompt to Done: you click the card, its thread works while the pane shows the plan and the app, a question in Needs you, the 🔐 vault's Touch ID prompt, Review, Done |
-| `beats.html` | 36 s | Connect your tools, a pane as a shared live dashboard, the Wefter Profile, code quality and the refactor scout, "Now let's get started" |
+| `beats.html` | 54.5 s | Connect your tools, a pane as a shared live dashboard, code quality and the refactor scout, BlastCP built in (your socials, image, video and voice for a launch post), the Wefter Profile, Weft is open source (make a pull request), "Now let's get started" |
 
 Each page is plain HTML plus a paused GSAP timeline on `window.__timelines.root`; the renderer seeks it frame by
-frame, so nothing uses timers. Backgrounds are Weft's own scenes (`bg-*.jpg`, from `electron/assets`), the icon is
+frame, so nothing uses timers. `beats.html` draws each scene from its start time and lists them in `SCENES`, so the
+order (build → ship → show) lives in one place; keep it in step with `BEATS` in `lib/welcome-loop.ts` and the cues in
+`NARRATION`. Backgrounds are Weft's own scenes (`bg-*.jpg`, from `electron/assets`), the icon is
 `icon.png` (a copy of `public/app-icon.png`), and `gsap.min.js` is vendored.
 
 ## Playing live (`components/WelcomeLoop.tsx`)
 
-- `lib/welcome-loop.ts` builds the first page's address (`?live=1&tour=1&p=<your projects>`), names the beats and
-  maps each page to its voice track (`voiceFor`, `stepVoice`).
-- `public/welcome/live.js` (`window.weftLive`) scales the stage to the frame, posts `{ weft: "welcome", beat }` to the
-  parent as the timeline passes each beat, and hands off intro → loop → beats → intro with `location.replace`.
+- `lib/welcome-loop.ts` builds the first page's address (`?live=1&tour=1&p=<your projects>`), lists the beats in order
+  with their titles and pages (`BEATS`, `BEAT_TITLES`, `pageOf`), and maps each page to its voice track (`voiceFor`,
+  `pageVoice`, `stepVoice`).
+- `public/welcome/live.js` (`window.weftLive`) scales the stage to the frame, posts `{ weft: "welcome", beat, t, jumped }`
+  to the parent as the timeline passes each beat, and hands off intro → loop → beats → intro with `location.replace`.
+  It takes `{ weft: "go", beat, page }` from the parent: a beat on its page is a seek, one on another page loads that
+  page with the beat as its `#hash`, which it seeks to as it starts.
+- `components/WelcomeTourBar.tsx` is the strip under the frame: "3 of 9 · Connect your tools", a segment per beat to jump
+  to, **‹ Back** and **Next ›** a beat at a time (not the whole tour) and the 🔊 mute. A jump comes back with
+  `jumped: true` and the page's time, and the voiceover restarts there (`VoicePlayer.play(src, at)`).
 - `lib/use-welcome-tour.ts` listens (only to its own iframe), starts the page's voiceover through
   `lib/welcome-voice.ts` (`VoicePlayer`: one track at a time), and posts `{ weft: "who", name, avatar }` back so the
   profile beat shows you once you're signed in. During the profile beat a real **Sign in with GitHub** button sits
   over the frame while you're signed out. `useStepVoice` says "Allow Weft to see your projects." and "Now start a new
   thread." as those steps open, unless muted.
-- Narration is on by default; the 🔊 button mutes it, kept in localStorage (`weft-welcome-muted`). Reduced motion
+- Narration is on by default; the bar's 🔊 button mutes it, kept in localStorage (`weft-welcome-muted`). Reduced motion
   shows the still board screenshot instead. The iframe is `sandbox="allow-scripts"` and can't be focused.
 
 ## Voice and music (`scripts/narrate-welcome.mjs`)
@@ -35,6 +46,8 @@ frame, so nothing uses timers. Backgrounds are Weft's own scenes (`bg-*.jpg`, fr
 `~/.cache/weft-kokoro`, outside the repo), places each clip at its cue with ffmpeg, mixes a soft Am-F-C-G pad
 under it (generated from sine waves, about 10 dB under the voice), and writes `narration-<page>.m4a`. It warns when a
 line runs past its beat. Spell tricky words for the voice ("see-ell-eyes" for CLIs) and check with whisper-cli.
+`scripts/narrate-lib.mjs` is the shared half (Kokoro, the pad, `--voice=`), used the same way by
+`pnpm intros:narrate` ([feature-intros.md](feature-intros.md)).
 
 ## Rendering (`scripts/render-welcome-loop.mjs`)
 

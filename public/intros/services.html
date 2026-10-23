@@ -1,0 +1,178 @@
+<!doctype html>
+<!--
+  The 🖥 Services drawer's intro (components/FeatureIntro.tsx plays it the first time the drawer opens), a
+  HyperFrames composition in the shared look (./kit.css): 0–6s the Dev servers section, each project's dev
+  command with Start; 6–12s the cursor starts one, "✓ Started" and "· by <card>"; 12–17s below it the CPU and
+  memory of everything Weft started; 17–22.5s End stops a runaway one. The voice is #narration, read by
+  `pnpm intros:narrate` (scripts/narrate-intros.mjs) into ./services.m4a. Seekable: no timers, no tl.call.
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width">
+<title>Weft: the services drawer</title>
+<link rel="stylesheet" href="./kit.css">
+<style>
+  /* Dev servers rows (components/DevLaunchers.tsx): a dot, the folder, the mono command, Stop/Start. */
+  .lrow { left: 26px; width: 688px; height: 80px; border-radius: 18px; background: #1f2433; border: 2px solid #2d3346;
+    padding: 0 20px; display: flex; align-items: center; gap: 14px; }
+  .lrow .dot { width: 18px; height: 18px; border-radius: 50%; flex: none; background: #4a5163; }
+  .lrow .f { font-size: 31px; font-weight: 600; color: #e8eaf0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .lrow .cmd { font-size: 26px; color: #8d95aa; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; }
+  .btn2 { display: inline-flex; align-items: center; justify-content: center; height: 50px; padding: 0 20px; border-radius: 14px;
+    font-size: 28px; font-weight: 600; background: #2a3044; color: #c9cfdf; flex: none; white-space: nowrap; }
+  .btn2.go { background: #4f7cff; color: #fff; }
+  .ok { display: inline-flex; align-items: center; height: 50px; padding: 0 18px; border-radius: 14px; font-size: 28px;
+    font-weight: 600; background: #173a28; color: #5fd38d; flex: none; white-space: nowrap; }
+
+  /* Weft's own folder lists last, so its row sits below the two working folders. */
+  #l0 { top: 16px; } #l1 { top: 108px; } #l2 { top: 200px; }
+  /* The started row's second line: what happened, when, and by which card. */
+  #deckStatus { left: 62px; top: 96px; width: 660px; font-size: 26px; color: #8d95aa;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #deckStatus b { color: #7aa7ff; font-weight: 600; }
+  #flash { left: 386px; top: 31px; }
+
+  /* The usage summary (components/ServicesSummary.tsx): a CPU bar and a memory bar split by kind. */
+  #sum { left: 26px; top: 292px; width: 688px; height: 150px; border-radius: 20px; background: #151a26;
+    border: 2px solid #232838; padding: 14px 22px; }
+  .bar { display: flex; align-items: center; gap: 14px; height: 36px; }
+  .bar .lbl { width: 112px; font-size: 27px; color: #8d95aa; flex: none; }
+  .bar .track { flex: 1; height: 20px; border-radius: 10px; background: #2a3044; overflow: hidden; display: flex; }
+  .bar .track i { height: 100%; display: block; }
+  .c-cli { background: #4f7cff; } .c-dev { background: #30a46c; } .c-term { background: #f0b429; }
+  #legend { margin-top: 6px; font-size: 25px; color: #c9cfdf; display: flex; gap: 16px; }
+  #legend span { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+  #legend em { width: 15px; height: 15px; border-radius: 50%; display: inline-block; }
+  #busiest { margin-top: 8px; font-size: 25px; color: #8d95aa; display: flex; gap: 8px; }
+  #busiest b { color: #e8eaf0; font-weight: 600; }
+
+  /* The process list below the summary: one row per thread CLI, dev server or terminal. */
+  .srow { left: 26px; width: 688px; height: 70px; border-radius: 16px; background: #1a1f2d; border: 2px solid #262c3c;
+    padding: 0 18px; display: flex; align-items: center; gap: 14px; }
+  .srow .dot { width: 16px; height: 16px; border-radius: 50%; flex: none; }
+  .srow .n { font-size: 29px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; }
+  .srow .m { font-size: 25px; color: #8d95aa; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .srow .num { font-size: 26px; color: #c9cfdf; text-align: right; min-width: 146px; white-space: nowrap; flex: none; }
+  .x { display: inline-flex; align-items: center; justify-content: center; width: 42px; height: 42px; border-radius: 12px;
+    background: #2a3044; color: #e5484d; font-size: 25px; font-weight: 700; flex: none; }
+  #s0 { top: 458px; } #s1 { top: 536px; } #s2 { top: 614px; } #s3 { top: 692px; }
+</style>
+</head>
+<body>
+<div id="root" data-composition-id="root" data-start="0" data-duration="22.5" data-width="800" data-height="1000">
+  <div class="abs head"><span class="ic">🖥</span>Services</div>
+  <div class="abs panel" id="panel">
+    <!-- Dev servers section: each working folder's dev command, Weft's own folder last. -->
+    <div class="abs lrow" id="l0">
+      <span class="dot" id="dot0"></span><span class="f">deckcp</span><span class="cmd mono">pnpm dev</span>
+      <span class="btn2 go" id="start0">Start</span><span class="btn2" id="stop0">Stop</span><span class="btn2" id="res0">Restart</span>
+    </div>
+    <!-- deckcp's status line: when it started and which card started it. -->
+    <div class="abs" id="deckStatus">Started 23:40 · running · by <b>Fix the login page</b></div>
+    <div class="abs ok" id="flash">✓ Started</div>
+    <div class="abs lrow" id="l1"><span class="dot"></span><span class="f">astro-site</span><span class="cmd mono">npm run dev</span><span class="btn2 go">Start</span></div>
+    <div class="abs lrow" id="l2"><span class="dot"></span><span class="f">weft</span><span class="cmd mono">pnpm desktop</span><span class="btn2 go">Start</span></div>
+
+    <!-- Usage summary: CPU and memory bars split by kind, and the busiest service. -->
+    <div class="abs" id="sum">
+      <div class="bar"><span class="lbl">CPU</span><span class="track"><i id="cpuA" class="c-cli"></i><i id="cpuB" class="c-dev"></i><i id="cpuC" class="c-term"></i></span></div>
+      <div class="bar" style="margin-top:4px"><span class="lbl">Memory</span><span class="track"><i id="memA" class="c-cli"></i><i id="memB" class="c-dev"></i><i id="memC" class="c-term"></i></span></div>
+      <div id="legend"><span><em class="c-cli"></em>Threads 1.9 cores</span><span><em class="c-dev"></em>Dev servers 0.6 cores</span><span><em class="c-term"></em>Terminals 0.3 cores</span></div>
+      <div id="busiest">Busiest:<b>Claude Code · Fix the login page</b><span class="mono">120% · 2.1 GB</span></div>
+    </div>
+
+    <!-- Every process Weft spawned: thread CLIs, dev servers, terminals, with CPU and memory.
+         The last row is a test run nobody stopped yet — End stops it. -->
+    <div class="abs srow" id="s0"><span class="dot" style="background:#4f7cff"></span><span class="n">Fix the login page</span><span class="m">Claude Code · 17m</span><span class="num mono">120% · 2.1 GB</span></div>
+    <div class="abs srow" id="s1"><span class="dot" style="background:#30a46c"></span><span class="n">deckcp</span><span class="m">dev server · 12m</span><span class="num mono">48% · 820 MB</span></div>
+    <div class="abs srow" id="s2"><span class="dot" style="background:#f0b429"></span><span class="n">Terminal</span><span class="m">zsh · 4m</span><span class="num mono">0.4% · 12 MB</span></div>
+    <div class="abs srow" id="s3"><span class="dot" style="background:#5c6478"></span><span class="n mono" style="font-weight:400; font-size:27px; color:#c9cfdf">vitest run</span><span class="m">still going · 3m</span><span class="num mono">310% · 1.4 GB</span><span class="x" id="endX">✕</span></div>
+  </div>
+  <svg class="abs cursor" id="cur" viewBox="0 0 24 24"><path d="M4 2l16 10-7 1.5L9.5 21z" fill="#fff" stroke="#111" stroke-width="1.2"/></svg>
+
+  <div class="abs cap" id="c1">Every project's <b>dev server</b>, one tap to start.</div>
+  <div class="abs cap" id="c2">It runs for the <b>card</b> that asked for it.</div>
+  <div class="abs cap" id="c3">Below: <b>everything</b> Weft started, CPU and memory.</div>
+  <div class="abs cap" id="c4">A runaway one? <b>End</b> stops it.</div>
+  <div class="abs" id="fade"></div>
+</div>
+
+<script type="application/json" id="narration">
+{ "duration": 22.5, "lines": [
+  [0.3, 5.6, "Each project's dev server, right here, one tap to start."],
+  [6.0, 11.2, "Once it runs, it belongs to the card that asked for it, and that card can stop it too."],
+  [11.6, 17.0, "Below the servers, every process Weft started — threads, dev servers, terminals — with its share of the CPU and memory."],
+  [17.4, 22.3, "And if one gets away from you, End stops it. Nothing keeps running behind your back."]
+] }
+</script>
+<script src="../welcome/gsap.min.js"></script>
+<script src="./player.js"></script>
+<script>
+  const tl = gsap.timeline({ paused: true });
+  const caps = ["#c1", "#c2", "#c3", "#c4"];
+  const at = [0.2, 6, 11.6, 17.4];
+  // deckcp's Stop/Restart, its status line and the ✓ chip only appear once Start has run it.
+  gsap.set(["#stop0", "#res0", "#deckStatus", "#flash", "#sum", "#s0", "#s1", "#s2", "#s3", "#endX", "#cur", ...caps], { opacity: 0 });
+  gsap.set(["#cpuA", "#cpuB", "#cpuC", "#memA", "#memB", "#memC"], { width: 0 });
+  // Off the buttons, in the caption band.
+  gsap.set("#cur", { x: 640, y: 900 });
+
+  tl.to("#fade", { opacity: 0, duration: 0.4 }, 0);
+
+  // Scene 1 — the Dev servers section: two folders slide in, stopped, each with Start.
+  tl.from("#l2", { opacity: 0, x: 40, duration: 0.4 }, 0.3)
+    .from("#l1", { opacity: 0, x: 40, duration: 0.4 }, 0.55)
+    .from("#l0", { opacity: 0, x: 40, duration: 0.4 }, 0.8)
+    .to("#cur", { opacity: 1, duration: 0.2 }, 1.8)
+    .to("#cur", { x: 556, y: 236, duration: 0.8, ease: "power2.inOut" }, 1.8)
+    .to("#start0", { scale: 0.92, duration: 0.1, yoyo: true, repeat: 1 }, 2.7)
+    .to("#cur", { opacity: 0, duration: 0.3 }, 3.2);
+
+  // The click did it: deckcp turns live, its Start becomes Stop + Restart, ✓ Started flashes,
+  // and the status line names the card that asked for the server.
+  tl.to("#dot0", { background: "#30a46c", duration: 0.3 }, 3.3)
+    .to("#start0", { opacity: 0, duration: 0.25 }, 3.4)
+    .fromTo("#stop0", { x: -60, opacity: 0 }, { x: 0, opacity: 1, duration: 0.35 }, 3.7)
+    .fromTo("#res0", { x: 60, opacity: 0 }, { x: 0, opacity: 1, duration: 0.35 }, 3.8)
+    .to("#deckStatus", { opacity: 1, duration: 0.35 }, 4.0)
+    .fromTo("#flash", { scale: 0.9, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.3 }, 4.3)
+    .to("#flash", { opacity: 0, duration: 0.3 }, 5.6);
+
+  // Captions across the whole piece.
+  caps.forEach((c, i) => {
+    tl.fromTo(c, { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.4 }, at[i]);
+    if (i < caps.length - 1) tl.to(c, { opacity: 0, duration: 0.3 }, at[i + 1] - 0.3);
+  });
+
+  // Scene 3 — below the servers, the summary: bars fill, split by kind, and the busiest is named.
+  tl.to("#sum", { opacity: 1, duration: 0.35 }, 11.6)
+    .to("#cpuA", { width: "16%", duration: 0.6, ease: "power2.out" }, 11.8)
+    .to("#cpuB", { width: "5%", duration: 0.5, ease: "power2.out" }, 12.0)
+    .to("#cpuC", { width: "3%", duration: 0.5, ease: "power2.out" }, 12.2)
+    .to("#memA", { width: "13%", duration: 0.6, ease: "power2.out" }, 12.0)
+    .to("#memB", { width: "5%", duration: 0.5, ease: "power2.out" }, 12.2)
+    .to("#memC", { width: "1%", duration: 0.5, ease: "power2.out" }, 12.4)
+    .from("#busiest", { opacity: 0, duration: 0.35 }, 12.8);
+
+  // The process list: each thing Weft spawned slides in under the summary.
+  tl.from("#s0", { opacity: 0, x: 40, duration: 0.4 }, 13.3)
+    .from("#s1", { opacity: 0, x: 40, duration: 0.4 }, 13.6)
+    .from("#s2", { opacity: 0, x: 40, duration: 0.4 }, 13.9);
+
+  // Scene 4 — a runaway test run, and End stops it.
+  tl.from("#s3", { opacity: 0, x: 40, duration: 0.4 }, 15.7)
+    .to("#cur", { opacity: 1, duration: 0.2 }, 17.6)
+    .to("#cur", { x: 692, y: 892, duration: 0.8, ease: "power2.inOut" }, 17.6)
+    .to("#endX", { scale: 0.88, duration: 0.1, yoyo: true, repeat: 1 }, 18.5)
+    .to("#s3", { opacity: 0.25, duration: 0.4 }, 18.9)
+    .to("#endX", { opacity: 0.25, duration: 0.4 }, 18.9)
+    .to("#cur", { opacity: 0, duration: 0.3 }, 19.5)
+    .to("#fade", { opacity: 0, duration: 0.01 }, 22.5);
+
+  window.__timelines = window.__timelines || {};
+  window.__timelines.root = tl;
+  window.weftIntro(tl);
+</script>
+</body>
+</html>

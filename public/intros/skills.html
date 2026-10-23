@@ -1,0 +1,129 @@
+<!doctype html>
+<!--
+  The ✦ Skills drawer's intro (components/FeatureIntro.tsx plays it the first time the drawer opens), a HyperFrames
+  composition in the shared look (./kit.css): 0–5s one library gathers Weft's, the project's, yours and plugins'
+  skills; 5–10.5s each project keeps its own set, seeded from what its threads ran; 10.5–15.5s a skill none of them
+  ran is switched off; 15.5–21s what was kept out of the thread, and that a hidden skill still runs when you type
+  /name. The voice is #narration, read by `pnpm intros:narrate` (scripts/narrate-intros.mjs) into ./skills.m4a.
+  Seekable: no timers, no tl.call.
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width">
+<title>Weft: skills</title>
+<link rel="stylesheet" href="./kit.css">
+<style>
+  /* The group headings and their rows, laid out like components/SkillSetList.tsx. */
+  .grp { left: 26px; width: 688px; display: flex; justify-content: space-between; align-items: baseline; }
+  .grp b { font-size: 26px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #7d8598; }
+  .grp span { font-size: 26px; color: #7d8598; }
+  .sk { left: 26px; width: 688px; min-height: 78px; padding: 14px 22px; }
+  .sk .nm { font-size: 32px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+  .sk .ds { font-size: 27px; color: #8d95aa; font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+  .sw { margin-left: auto; flex: none; width: 76px; height: 42px; border-radius: 12px; background: #2a3044; border: 2px solid #39415a;
+    display: flex; align-items: center; padding: 4px; }
+  .sw i { width: 30px; height: 30px; border-radius: 8px; background: #c9cfdf; }
+  .sw.on { background: #173a28; border-color: #2a6b4a; justify-content: flex-end; }
+  .sw.on i { background: #5fd38d; }
+  /* The project's headline inside the panel: which folder the set belongs to. */
+  #proj { left: 26px; top: 24px; width: 688px; font-size: 30px; color: #c9cfdf; }
+  #proj b { color: #e8eaf0; font-weight: 650; }
+  /* A Weft card on the board, reading its own project's threads. */
+  #card { left: 56px; top: 130px; width: 600px; }
+  #seed { left: 56px; top: 268px; }
+  #note { left: 26px; top: 372px; width: 688px; font-size: 30px; color: #c9cfdf; }
+  #kept { left: 26px; top: 440px; width: 688px; font-size: 29px; color: #8d95aa; }
+</style>
+</head>
+<body>
+<div id="root" data-composition-id="root" data-start="0" data-duration="21" data-width="800" data-height="1000">
+  <div class="abs head"><span class="ic">✦</span>Skills</div>
+
+  <div class="abs panel" id="lib">
+    <div class="abs grp" id="g0"><b>Weft</b><span>4/4 on</span></div>
+    <div class="abs row sk" id="s0"><span class="n" style="min-width:0"><span class="nm mono">/weft:done</span><span class="ds">wrap a finished card up and move it to Done</span></span><span class="sw on"><i></i></span></div>
+    <div class="abs row sk" id="s1"><span class="n" style="min-width:0"><span class="nm mono">/weft:commit</span><span class="ds">commit the work in careful pieces</span></span><span class="sw on"><i></i></span></div>
+    <div class="abs grp" id="g1" style="top:296px"><b>Yours</b><span>2/4 on</span></div>
+    <div class="abs row sk" id="s2" style="top:340px"><span class="n" style="min-width:0"><span class="nm mono">/tdac</span><span class="ds">yours, in ~/.claude/skills</span></span><span class="sw on"><i></i></span></div>
+    <div class="abs row sk" id="s3" style="top:444px"><span class="n" style="min-width:0"><span class="nm mono">/security-review</span><span class="ds">none of this project's threads ran it</span></span><span class="sw on" id="sw3"><i></i></span></div>
+  </div>
+
+  <div class="abs panel" id="set">
+    <div class="abs" id="proj"><b>Your loom</b> — new threads here get these</div>
+    <div class="abs card" id="card"><div class="t">Add billing to the checkout</div><div class="p"><span class="spin" id="spin"></span><span id="ran">reading this project's threads…</span><span id="ran2" style="opacity:0">the skills its threads ran</span></div></div>
+    <div class="abs" id="seed"><span class="pill info" id="seedIn">weft:done · /tdac · +2 on</span></div>
+    <div class="abs" id="note">5 skills kept out.</div>
+    <div class="abs" id="kept">Hidden skills still run when you type /name.</div>
+  </div>
+
+  <svg class="abs cursor" id="cur" viewBox="0 0 24 24"><path d="M4 2l16 10-7 1.5L9.5 21z" fill="#fff" stroke="#111" stroke-width="1.2"/></svg>
+
+  <div class="abs cap" id="c1">One library: Weft's, the project's, <b>yours</b>, plugins'.</div>
+  <div class="abs cap" id="c2">Each project keeps its own, <b>seeded</b> from what it ran.</div>
+  <div class="abs cap" id="c3">A skill none of them ran <b>goes off</b>.</div>
+  <div class="abs cap" id="c4">Threads stay <b>focused</b>. Type /name and it still runs.</div>
+  <div class="abs" id="fade"></div>
+</div>
+
+<script type="application/json" id="narration">
+{ "duration": 21, "lines": [
+  [0.3, 5.0, "A skill is a packaged set of instructions, like slash weft done, or slash commit."],
+  [5.4, 10.4, "Weft gathers them all into one library, and gives every project a set of its own, seeded from the skills its threads actually ran."],
+  [10.8, 15.4, "A skill none of them ran gets switched off, so the threads here only see what the work needs."],
+  [15.8, 20.7, "Everything else is kept out of the thread, though a hidden skill still runs the moment you type its name."]
+] }
+</script>
+<script src="../welcome/gsap.min.js"></script>
+<script src="./player.js"></script>
+<script>
+  const tl = gsap.timeline({ paused: true });
+  const caps = ["#c1", "#c2", "#c3", "#c4"];
+  const at = [0.2, 5.3, 10.7, 15.7];
+  gsap.set(["#set", "#card", "#seed", "#seedIn", "#note", "#kept", "#cur", ...caps], { opacity: 0 });
+  gsap.set("#cur", { x: 700, y: 880 });
+
+  tl.to("#fade", { opacity: 0, duration: 0.4 }, 0);
+
+  // The library: Weft's two skills and two of yours, in the drawer's four groups, every switch on.
+  tl.from("#g0", { opacity: 0, x: -30, duration: 0.4 }, 0.4);
+  ["#s0", "#s1"].forEach((r, i) => tl.from(r, { opacity: 0, x: 40, duration: 0.45 }, 0.8 + i * 0.4));
+  tl.from("#g1", { opacity: 0, x: -30, duration: 0.4 }, 1.9);
+  ["#s2", "#s3"].forEach((r, i) => tl.from(r, { opacity: 0, x: 40, duration: 0.45 }, 2.3 + i * 0.4));
+  caps.forEach((c, i) => {
+    tl.fromTo(c, { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.4 }, at[i]);
+    if (i < caps.length - 1) tl.to(c, { opacity: 0, duration: 0.3 }, at[i + 1] - 0.3);
+  });
+
+  // Each project keeps its own set: the library gives way to one project's set, seeded in the background
+  // from that folder's threads (lib/skill-usage.ts), so the card's line becomes what those threads ran.
+  tl.to(["#g0", "#g1", "#s0", "#s1", "#s2", "#s3", "#lib"], { opacity: 0, duration: 0.35 }, 5.3)
+    .to("#set", { opacity: 1, duration: 0.35 }, 5.3)
+    .from("#proj", { opacity: 0, y: -14, duration: 0.4 }, 5.6)
+    .fromTo("#card", { opacity: 0, y: 26, scale: 0.97 }, { opacity: 1, y: 0, scale: 1, duration: 0.45 }, 6.1)
+    .to("#seedIn", { opacity: 1, duration: 0.35 }, 6.6)
+    .to("#spin", { rotate: 360, duration: 0.7, repeat: 4, ease: "none" }, 6.6)
+    .to("#spin", { opacity: 0, duration: 0.25 }, 9.5)
+    .to("#ran", { opacity: 0, duration: 0.25 }, 9.5)
+    .to("#ran2", { opacity: 1, duration: 0.3 }, 9.7);
+
+  // A skill none of them ran goes off: the cursor finds its switch and the handle slides back.
+  tl.set("#cur", { x: 700, y: 880 }, 10.7)
+    .to("#cur", { opacity: 1, duration: 0.2 }, 11.2)
+    .to("#cur", { x: 640, y: 470, duration: 0.9, ease: "power2.inOut" }, 11.2)
+    .to("#sw3", { backgroundColor: "#2a3044", borderColor: "#39415a", duration: 0.3 }, 12.2)
+    .to("#sw3 i", { x: -32, duration: 0.35, ease: "power2.out" }, 12.2)
+    .to("#s3", { opacity: 0.45, duration: 0.35 }, 12.2)
+    .to("#cur", { opacity: 0, duration: 0.3 }, 13.1);
+
+  // What the set leaves the thread: the skills it keeps out, and that /name still runs a hidden one.
+  tl.fromTo("#note", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.4 }, 15.9)
+    .fromTo("#kept", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.4 }, 16.6)
+    .to("#fade", { opacity: 0, duration: 0.01 }, 21);
+
+  window.__timelines = window.__timelines || {};
+  window.__timelines.root = tl;
+  window.weftIntro(tl);
+</script>
+</body>
+</html>

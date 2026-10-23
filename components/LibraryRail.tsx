@@ -23,6 +23,8 @@ import { useCloudflare } from "@/lib/use-cloudflare";
 import { cloudflareTitle } from "@/lib/cloudflare-view";
 import { useGithub } from "@/lib/use-github";
 import { githubTitle } from "@/lib/github-view";
+import { useFeatureIntro } from "@/lib/use-feature-intro";
+import { IntroButton, IntroFrame } from "./FeatureIntro";
 import BlastcpDrawer from "./BlastcpDrawer";
 import BlastcpLogo from "./BlastcpLogo";
 import CloudflareDrawer from "./CloudflareDrawer";
@@ -95,6 +97,8 @@ export default function SideRail({
   // The drawer to draw: the open one, or the one sliding back under the board (DRAWER_SLIDE_MS, as in rail-drawer.css).
   const { shown, closing } = useSlideOut(open, DRAWER_SLIDE_MS);
   const drawerWidth = useDrawerWidth();
+  // The open tool drawer's intro video, played the first time it opens (lib/feature-intros.ts).
+  const intro = useFeatureIntro(isTool(shown) && !closing ? shown : null);
   const router = useRouter();
   const isSuperAdmin = useSuperAdminGate();
   const vault = useVault(folders);
@@ -140,6 +144,7 @@ export default function SideRail({
             {icon}
           </span>
           <h2 className="flex-1 text-[13px] font-semibold text-ink">{title}</h2>
+          <IntroButton intro={intro} />
           <button
             onClick={() => pin(!pinned)}
             title={pinned ? "Unpin: Esc slides it back under the board" : "Pin: keep it out, even on Esc"}
@@ -152,6 +157,7 @@ export default function SideRail({
             <Icon name="x" size={13} />
           </button>
         </div>
+        <IntroFrame intro={intro} className="mt-2" />
         {/* A drawer that fails to draw keeps its header (Pin, ✕) and leaves the rail's icons working. */}
         <CrashGuard key={title} what="drawer" name={title} className="m-2">
           {body}

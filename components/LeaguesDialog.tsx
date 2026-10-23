@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useFeatureIntro } from "@/lib/use-feature-intro";
 import { leagueName, type LeagueView, type TierView } from "@/lib/league";
 import { LeagueHead, LeagueTable, Ladder } from "./LeagueTable";
+import { IntroButton, IntroFrame } from "./FeatureIntro";
 import Modal from "./Modal";
 
 // Every league, not just yours: the six tiers as tabs (opens on yours), and under the one picked each of its
@@ -41,6 +43,7 @@ export default function LeaguesDialog({ mine, onClose }: { mine: LeagueView | nu
   const myTier = mine?.state === "ready" ? mine.tier : null;
   const [picked, setPicked] = useState(myTier ?? 0);
   const [views, setViews] = useState<Record<number, TierView>>({});
+  const intro = useFeatureIntro("leagues");
 
   useEffect(() => {
     if (views[picked]) return;
@@ -55,8 +58,17 @@ export default function LeaguesDialog({ mine, onClose }: { mine: LeagueView | nu
   }, [picked, views]);
 
   return (
-    <Modal title={`🏆 Leagues · ${leagueName(picked)}`} onClose={onClose} className="max-h-[86vh] w-full max-w-[760px]">
+    <Modal
+      title={
+        <span className="flex items-center gap-1.5">
+          🏆 Leagues · {leagueName(picked)}
+          <IntroButton intro={intro} />
+        </span>
+      }
+      label="Leagues"
+      onClose={onClose} className="max-h-[86vh] w-full max-w-[760px]">
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
+        <IntroFrame intro={intro} />
         <Ladder tier={myTier} picked={picked} onPick={setPicked} />
         <TierLeagues view={views[picked]} />
       </div>

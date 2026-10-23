@@ -1,0 +1,190 @@
+<!doctype html>
+<!--
+  The 🚀 BlastCP drawer's intro (components/FeatureIntro.tsx plays it the first time the drawer opens), a HyperFrames
+  composition in the shared look (./kit.css): 0–5s connect with your Weft account, sign-in kept in the Keychain;
+  5–11s link a project folder to the property it posts as; 11–15s the property's socials; 15–21s a thread drafts a
+  launch post and schedules it. The voice is #narration, read by `pnpm intros:narrate` (scripts/narrate-intros.mjs)
+  into ./blastcp.m4a. Seekable: no timers, no tl.call.
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width">
+<title>Weft: BlastCP</title>
+<link rel="stylesheet" href="./kit.css">
+<style>
+  /* The drawer's rocket mark (public/brand/blastcp-rocket.png), as components/BlastcpLogo.tsx draws it. */
+  .head .ic img { width: 52px; height: 52px; display: block; }
+
+  #signin { top: 26px; }
+  #accts { top: 200px; }
+  #keys { top: 344px; width: 420px; font-size: 30px; }
+
+  #folder { top: 26px; }
+  #unlinked { top: 214px; width: 688px; }
+  #pick { top: 214px; width: 688px; }
+  #pick .t { font-size: 30px; font-weight: 600; color: #8d95aa; margin-bottom: 14px; }
+  #pick .row { position: relative; left: 0; width: 660px; min-height: 84px; margin-bottom: 12px; }
+  #pick .row .slug { font-size: 28px; color: #8d95aa; }
+  #pick .row .end { font-size: 28px; }
+
+  #socials { top: 20px; left: 26px; width: 688px; height: 300px; border-radius: 20px; background: #1f2433;
+    border: 2px solid #2d3346; padding: 22px 24px; }
+  #socials .lab { font-size: 28px; color: #8d95aa; margin-bottom: 16px; }
+  #socials .grid { display: flex; flex-wrap: wrap; gap: 12px; }
+  #socials .sp { font-size: 28px; height: 50px; padding: 0 18px; border-radius: 12px; background: #2a3044; color: #c9cfdf;
+    display: inline-flex; align-items: center; }
+
+  #queue { top: 344px; }
+  #queue .when { width: 108px; flex: none; font-size: 28px; color: #8d95aa; }
+  #queue .tg { font-size: 26px; height: 44px; padding: 0 14px; border-radius: 10px; background: #2a3044; color: #c9cfdf;
+    display: inline-flex; align-items: center; flex: none; }
+  #draft { top: 470px; }
+  #draft .t { font-size: 30px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #draft .p { margin-top: 12px; font-size: 26px; color: #8d95aa; display: flex; gap: 10px; align-items: center;
+    white-space: nowrap; overflow: hidden; }
+  #sched { top: 596px; }
+  #ok { top: 596px; left: 26px; height: 64px; font-size: 30px; }
+</style>
+</head>
+<body>
+<div id="root" data-composition-id="root" data-start="0" data-duration="21" data-width="800" data-height="1000">
+  <div class="abs head"><span class="ic"><img src="/brand/blastcp-rocket.png" alt=""></span>BlastCP</div>
+  <div class="abs panel" id="panel">
+    <div class="abs row" id="signin">
+      <span class="n mono" style="font-size:32px">you@weft.zip</span>
+      <span class="end swap"><span class="pill off" id="signedOut">Not connected</span><span class="pill on" id="signedIn">✓ Connected</span></span>
+    </div>
+    <div class="abs" id="accts">
+      <div class="abs row" style="position:relative;left:0;width:688px;min-height:88px"><span class="n">Connect with Weft</span><span class="end pill on">✓</span></div>
+      <div class="abs row" style="position:relative;left:0;width:688px;min-height:88px"><span class="n" style="font-size:30px;color:#8d95aa">Another BlastCP account</span></div>
+    </div>
+    <div class="abs pill info" id="keys">🔑 Sign-in kept in your Keychain</div>
+
+    <div class="abs row" id="folder">
+      <span class="n mono">my-app</span>
+      <span class="end swap"><span class="pill off" id="noLink">Not linked</span><span class="pill on" id="linked">🚀 Posts as My App</span></span>
+    </div>
+    <div class="abs row" id="unlinked" style="font-size:30px;color:#8d95aa">Not linked to a BlastCP property</div>
+    <div class="abs" id="pick">
+      <div class="t">Link my-app to…</div>
+      <div class="row"><span class="n">My App</span><span class="slug mono end">my-app</span></div>
+      <div class="row"><span class="n">My App Docs</span><span class="slug mono end">my-app-docs</span></div>
+      <div class="row" style="color:#4f7cff;font-weight:600">+ New property…</div>
+    </div>
+
+    <div class="abs" id="socials">
+      <div class="lab">Connected socials</div>
+      <div class="grid">
+        <span class="sp">in LinkedIn</span>
+        <span class="sp">@ Threads</span>
+        <span class="sp">▶ YouTube</span>
+        <span class="sp">◎ Instagram</span>
+        <span class="sp">✉ Email</span>
+      </div>
+    </div>
+
+    <div class="abs row" id="queue">
+      <span class="when">in 3h</span>
+      <span class="tg">in LinkedIn</span>
+      <span class="n" style="font-size:30px">My App is live</span>
+    </div>
+    <div class="abs card" id="draft" style="width:688px">
+      <div class="t">Draft the My App launch post</div>
+      <div class="p"><span class="spin"></span><span id="draftNote">writing the post, image, video and voice</span></div>
+    </div>
+    <div class="abs btn" id="sched">Schedule it</div>
+    <div class="abs pill on" id="ok" style="height:64px">✓ Scheduled · in 3h</div>
+  </div>
+  <svg class="abs cursor" id="cur" viewBox="0 0 24 24"><path d="M4 2l16 10-7 1.5L9.5 21z" fill="#fff" stroke="#111" stroke-width="1.2"/></svg>
+
+  <div class="abs cap" id="c1">Connect with your <b>Weft account</b>.</div>
+  <div class="abs cap" id="c2">Link a project to the property it <b>posts as</b>.</div>
+  <div class="abs cap" id="c3">All your <b>socials</b>, one queue.</div>
+  <div class="abs cap" id="c4">A thread drafts the launch post and <b>schedules</b> it.</div>
+  <div class="abs" id="fade"></div>
+</div>
+
+<script type="application/json" id="narration">
+{ "duration": 21, "lines": [
+  [0.3, 4.3, "Connect BlastCP with your Weft account."],
+  [4.8, 10.3, "Then link a project folder to the property it posts as."],
+  [10.8, 14.6, "Every social you have connected, in one queue."],
+  [15.1, 20.7, "A thread drafts your launch post, with an image, video and voice, and schedules it."]
+] }
+</script>
+<script src="../welcome/gsap.min.js"></script>
+<script src="./player.js"></script>
+<script>
+  const tl = gsap.timeline({ paused: true });
+  const caps = ["#c1", "#c2", "#c3", "#c4"];
+  const at = [0.2, 5, 11, 15];
+  gsap.set(["#accts", "#keys", "#unlinked", "#pick", "#socials", "#queue", "#draft", "#sched", "#ok",
+    "#signedIn", "#linked", "#cur", ...caps], { opacity: 0 });
+  gsap.set("#cur", { x: 560, y: 900 });
+
+  tl.to("#fade", { opacity: 0, duration: 0.4 }, 0);
+  tl.from("#signin", { opacity: 0, x: 40, duration: 0.45 }, 0.4);
+  tl.from("#folder", { opacity: 0, x: 40, duration: 0.45 }, 0.4);
+  caps.forEach((c, i) => {
+    tl.fromTo(c, { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.4 }, at[i]);
+    if (i < caps.length - 1) tl.to(c, { opacity: 0, duration: 0.3 }, at[i + 1] - 0.3);
+  });
+
+  // Connect with Weft: the two ways in slide in, the cursor presses the first, the pill turns green.
+  tl.to("#accts", { opacity: 1, duration: 0.4 }, 1)
+    .fromTo("#accts", { y: 24 }, { y: 0, duration: 0.4 }, 1)
+    .to("#cur", { opacity: 1, duration: 0.2 }, 1.8)
+    .to("#cur", { x: 600, y: 250, duration: 0.9, ease: "power2.inOut" }, 1.8)
+    .to("#signedOut", { scale: 0.92, duration: 0.1, yoyo: true, repeat: 1 }, 2.9)
+    .to("#signedOut", { opacity: 0, duration: 0.3 }, 3.3)
+    .to("#signedIn", { opacity: 1, duration: 0.3 }, 3.3)
+    .to("#cur", { opacity: 0, duration: 0.3 }, 3.9)
+    .to("#keys", { opacity: 1, duration: 0.4 }, 3.9);
+
+  // Link the folder: the note is replaced by the picker, the cursor takes the best match, the link pill turns green.
+  tl.to(["#accts", "#keys"], { opacity: 0, duration: 0.35 }, 5)
+    .to("#unlinked", { opacity: 1, duration: 0.35 }, 5)
+    .to("#unlinked", { opacity: 0, duration: 0.3 }, 5.9)
+    .to("#pick", { opacity: 1, duration: 0.35 }, 5.9)
+    .to("#cur", { opacity: 1, duration: 0.2 }, 6.4)
+    .to("#cur", { x: 400, y: 320, duration: 0.9, ease: "power2.inOut" }, 6.4)
+    .to("#pick .row:nth-child(2)", { scale: 0.97, duration: 0.1, yoyo: true, repeat: 1 }, 7.5)
+    .to("#pick", { opacity: 0, duration: 0.3 }, 8.1)
+    .to("#noLink", { opacity: 0, duration: 0.3 }, 8.1)
+    .to("#linked", { opacity: 1, duration: 0.3 }, 8.1)
+    .to("#cur", { opacity: 0, duration: 0.3 }, 8.7);
+
+  // The connected socials fan out, one platform at a time.
+  tl.to("#socials", { opacity: 1, duration: 0.4 }, 11)
+    .fromTo("#socials", { y: 24 }, { y: 0, duration: 0.4 }, 11)
+    .fromTo("#socials .sp:nth-child(1)", { opacity: 0, scale: 0.7 }, { opacity: 1, scale: 1, duration: 0.3 }, 11.5)
+    .fromTo("#socials .sp:nth-child(2)", { opacity: 0, scale: 0.7 }, { opacity: 1, scale: 1, duration: 0.3 }, 11.8)
+    .fromTo("#socials .sp:nth-child(3)", { opacity: 0, scale: 0.7 }, { opacity: 1, scale: 1, duration: 0.3 }, 12.1)
+    .fromTo("#socials .sp:nth-child(4)", { opacity: 0, scale: 0.7 }, { opacity: 1, scale: 1, duration: 0.3 }, 12.4)
+    .fromTo("#socials .sp:nth-child(5)", { opacity: 0, scale: 0.7 }, { opacity: 1, scale: 1, duration: 0.3 }, 12.7);
+
+  // A thread drafts the launch post, then schedules it into the queue.
+  tl.to("#socials", { opacity: 0, duration: 0.35 }, 15)
+    .to("#queue", { opacity: 1, duration: 0.35 }, 15)
+    .fromTo("#queue", { x: 40 }, { x: 0, duration: 0.35 }, 15)
+    .to("#draft", { opacity: 1, duration: 0.35 }, 15.2)
+    .fromTo("#draft", { y: 24 }, { y: 0, duration: 0.35 }, 15.2)
+    .to("#draftNote", { opacity: 0, duration: 0.3 }, 17.4)
+    .set("#draftNote", { opacity: 1 }, 17.7)
+    .to("#sched", { opacity: 1, duration: 0.3 }, 18.2)
+    .set("#cur", { x: 300, y: 860 }, 18.2)
+    .to("#cur", { opacity: 1, duration: 0.2 }, 18.4)
+    .to("#cur", { x: 260, y: 700, duration: 0.8, ease: "power2.inOut" }, 18.4)
+    .to("#sched", { scale: 0.94, duration: 0.1, yoyo: true, repeat: 1 }, 19.3)
+    .to("#sched", { opacity: 0, duration: 0.25 }, 19.7)
+    .to("#ok", { opacity: 1, duration: 0.3 }, 19.7)
+    .to("#cur", { opacity: 0, duration: 0.3 }, 20.4)
+    .to("#fade", { opacity: 0, duration: 0.01 }, 21);
+
+  window.__timelines = window.__timelines || {};
+  window.__timelines.root = tl;
+  window.weftIntro(tl);
+</script>
+</body>
+</html>

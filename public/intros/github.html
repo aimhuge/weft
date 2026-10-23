@@ -1,0 +1,158 @@
+<!doctype html>
+<!--
+  The GitHub drawer's intro (components/FeatureIntro.tsx plays it the first time the drawer opens), a HyperFrames
+  composition in the shared look (./kit.css): 0–5s who gh is signed in as; 5–11s a project's repo and the
+  Issues → Backlog cards switch; 11–16.5s its open issues arrive as cards, labels as tags; 16.5–21.5s Instant, by
+  webhook puts a new issue on the board in seconds. The voice is #narration, read by `pnpm intros:narrate`
+  (scripts/narrate-intros.mjs) into ./github.m4a. Seekable: no timers, no tl.call.
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width">
+<title>Weft: GitHub issues on the board</title>
+<link rel="stylesheet" href="./kit.css">
+<style>
+  .gh { width: 40px; height: 40px; flex: none; color: #e8eaf0; }
+  .head .ic svg { width: 60px; height: 60px; }
+  #bar { left: 26px; top: 24px; width: 688px; height: 76px; display: flex; align-items: center; gap: 14px;
+    padding: 0 24px; font-size: 30px; color: #8d95aa; }
+  #bar b { color: #e8eaf0; font-weight: 600; }
+  #bar .gh { width: 30px; height: 30px; }
+  #via { margin-left: auto; font-size: 28px; color: #6f7890; }
+  #login { left: 26px; top: 150px; width: 688px; height: 300px; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 24px; }
+  #login .q { font-size: 34px; font-weight: 600; }
+  #login .q small { display: block; margin-top: 12px; font-size: 28px; color: #8d95aa; font-weight: 400; }
+  #login code { font-size: 30px; background: #0f121c; border: 2px solid #2d3346; border-radius: 12px; padding: 12px 22px; color: #7aa7ff; }
+  #check { height: 58px; font-size: 30px; padding: 0 28px; }
+  #proj { left: 26px; top: 124px; width: 688px; min-height: 128px; flex-direction: column; align-items: stretch;
+    gap: 12px; padding: 20px 24px; }
+  #proj .name { font-size: 32px; font-weight: 600; }
+  #proj .repo { display: flex; align-items: center; gap: 14px; font-size: 30px; color: #e8eaf0; }
+  #proj .repo .gh { width: 28px; height: 28px; }
+  #proj .repo span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #proj .sw { display: flex; align-items: center; gap: 16px; font-size: 30px; color: #e8eaf0; }
+  .tick { width: 34px; height: 34px; border-radius: 9px; border: 3px solid #3a4258; background: #0f121c; flex: none;
+    display: flex; align-items: center; justify-content: center; font-size: 26px; color: #0d0f14; }
+  #proj .now { margin-left: auto; color: #8d95aa; font-size: 28px; }
+  #proj .sw2 { display: flex; align-items: center; gap: 16px; font-size: 28px; color: #8d95aa; }
+  #cards { left: 26px; top: 296px; width: 688px; display: flex; flex-direction: column; gap: 20px; }
+  #cards .card { width: 688px; }
+  #cards .card .t { display: flex; align-items: center; gap: 14px; }
+  #cards .card .t em { font-style: normal; color: #f0b429; font-weight: 600; flex: none; }
+  #cards .card .p span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tag { display: inline-flex; align-items: center; height: 42px; padding: 0 16px; border-radius: 12px;
+    font-size: 26px; font-weight: 600; white-space: nowrap; }
+  #synced { left: 26px; top: 664px; width: 688px; height: 68px; border-radius: 18px; background: #173a28;
+    color: #5fd38d; font-size: 30px; font-weight: 600; display: flex; align-items: center; gap: 14px; padding: 0 24px; }
+  #hook { left: 26px; top: 268px; width: 688px; height: 76px; border-radius: 18px; background: #1b2a4d;
+    border: 2px solid #2d3346; display: flex; align-items: center; gap: 16px; padding: 0 24px; font-size: 30px; color: #7aa7ff; }
+  #newcard { left: 26px; top: 372px; width: 688px; }
+  #notice { left: 26px; top: 500px; width: 688px; font-size: 28px; color: #8d95aa; }
+</style>
+</head>
+<body>
+<div id="root" data-composition-id="root" data-start="0" data-duration="21.5" data-width="800" data-height="1000">
+  <div class="abs head"><span class="ic"><svg viewBox="0 0 16 16" width="60" height="60" fill="#fff" aria-hidden><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" /></svg></span>GitHub</div>
+  <div class="abs panel" id="panel">
+    <div class="abs" id="bar"><svg class="gh" viewBox="0 0 16 16" fill="currentColor" aria-hidden><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" /></svg><span>Signed in · <b>@weaver</b></span><span class="via">via gh</span></div>
+    <div class="abs" id="login"><div class="q">Weft reads GitHub through the CLI<small>Your token stays in gh. Weft never holds one.</small></div><code class="mono">gh auth login --web</code><span class="btn" id="check">Check again</span></div>
+    <div class="abs row" id="proj"><span class="name">weft</span><span class="repo"><svg class="gh" viewBox="0 0 16 16" fill="currentColor" aria-hidden><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" /></svg><span>aimhuge/weft</span></span><span class="sw"><span class="tick" id="tick"></span><span>Issues → Backlog cards</span><span class="now" id="now">every 5 minutes</span></span></div>
+    <div class="abs" id="cards">
+      <div class="abs card" id="c1c"><div class="t">Dark mode flashes white<em>#128</em></div><div class="p"><span class="tag" style="background:#3a2e10;color:#f0b429">bug</span><span>Backlog · from GitHub</span></div></div>
+      <div class="abs card" id="c2c"><div class="t">Export a card as Markdown<em>#131</em></div><div class="p"><span class="tag" style="background:#1b2a4d;color:#7aa7ff">feature</span><span>Backlog · from GitHub</span></div></div>
+      <div class="abs card" id="c3c"><div class="t">Board column drag is sticky<em>#119</em></div><div class="p"><span class="tag" style="background:#3a2e10;color:#f0b429">bug</span><span>Backlog · from GitHub</span></div></div>
+    </div>
+    <div class="abs" id="synced"><svg class="gh" viewBox="0 0 16 16" fill="currentColor" aria-hidden><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" /></svg><span>Synced just now · 3 added</span></div>
+    <div class="abs" id="hook"><span class="tick" id="hookTick" style="border-color:#7aa7ff"><span style="color:#7aa7ff">✓</span></span><span>Instant, by webhook</span></div>
+    <div class="abs card" id="newcard"><div class="t">Crash on a very long card title<em>#142</em></div><div class="p"><span class="tag" style="background:#3a2e10;color:#f0b429">bug</span><span>Backlog · from GitHub</span></div></div>
+    <div class="abs" id="notice">Opened as issue #142 — on the board in seconds.</div>
+  </div>
+  <svg class="abs cursor" id="cur" viewBox="0 0 24 24"><path d="M4 2l16 10-7 1.5L9.5 21z" fill="#fff" stroke="#111" stroke-width="1.2"/></svg>
+
+  <div class="abs cap" id="c1">GitHub, through the <b>gh</b> CLI you signed in.</div>
+  <div class="abs cap" id="c2">Flip a project's switch: its issues become <b>cards</b>.</div>
+  <div class="abs cap" id="c3">Every label lands on the card as a <b>tag</b>.</div>
+  <div class="abs cap" id="c4">Turn on <b>Instant</b> and new issues arrive <b>right away</b>.</div>
+  <div class="abs" id="fade"></div>
+</div>
+
+<script type="application/json" id="narration">
+{ "duration": 21.5, "lines": [
+  [0.3, 4.6, "GitHub, through the gh CLI you already signed in with."],
+  [5.0, 10.6, "Flip a project's switch and its open issues become cards on your backlog."],
+  [11.0, 16.2, "Every label on the issue lands on the card as a tag."],
+  [16.6, 21.3, "Turn on instant updates and a new issue shows up right away."]
+] }
+</script>
+<script src="../welcome/gsap.min.js"></script>
+<script src="./player.js"></script>
+<script>
+  const tl = gsap.timeline({ paused: true });
+  const caps = ["#c1", "#c2", "#c3", "#c4"];
+  const at = [0.2, 5, 11, 16.6];
+  gsap.set(["#bar", "#login", "#check", "#proj", "#c1c", "#c2c", "#c3c", "#synced", "#hook", "#newcard",
+    "#notice", "#cur", ...caps], { opacity: 0 });
+  gsap.set(["#c1c", "#c2c", "#c3c"], { x: -50 });
+  gsap.set("#cur", { x: 610, y: 900 });
+
+  tl.to("#fade", { opacity: 0, duration: 0.4 }, 0);
+  caps.forEach((c, i) => {
+    tl.fromTo(c, { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.4 }, at[i]);
+    if (i < caps.length - 1) tl.to(c, { opacity: 0, duration: 0.3 }, at[i + 1] - 0.3);
+  });
+
+  // Signed in through gh: the drawer's top bar names the account, and the command that gets you there.
+  tl.to("#bar", { opacity: 1, duration: 0.4 }, 0.4)
+    .fromTo("#bar", { y: -14 }, { y: 0, duration: 0.4 }, 0.4)
+    .to("#login", { opacity: 1, duration: 0.4 }, 1.5)
+    .fromTo("#login", { scale: 0.94 }, { scale: 1, duration: 0.4 }, 1.5)
+    .to("#check", { opacity: 1, duration: 0.3 }, 2.4)
+    .to("#cur", { opacity: 1, duration: 0.2 }, 2.6)
+    .to("#cur", { x: 330, y: 470, duration: 0.8, ease: "power2.inOut" }, 2.6)
+    .to("#check", { scale: 0.92, duration: 0.1, yoyo: true, repeat: 1 }, 3.5)
+    .to("#cur", { opacity: 0, duration: 0.3 }, 3.9)
+    .to("#login", { opacity: 0, duration: 0.3 }, 4.3)
+    .to("#check", { opacity: 0, duration: 0.3 }, 4.3);
+
+  // The project's repo and the switch: the cursor presses it and it ticks on.
+  tl.to("#proj", { opacity: 1, duration: 0.4 }, 5.1)
+    .fromTo("#proj", { x: -40 }, { x: 0, duration: 0.45 }, 5.1)
+    .to("#cur", { opacity: 1, duration: 0.2 }, 6.3)
+    .to("#cur", { x: 118, y: 556, duration: 0.85, ease: "power2.inOut" }, 6.3)
+    .to("#tick", { scale: 0.9, duration: 0.1, yoyo: true, repeat: 1 }, 7.3)
+    .to("#tick", { background: "#4f7cff", borderColor: "#4f7cff", duration: 0.3 }, 7.5)
+    .fromTo("#tick", { color: "#0d0f14" }, { color: "#fff", duration: 0.2 }, 7.8)
+    .set("#tick", { textContent: "✓" }, 7.8)
+    .to("#now", { color: "#5fd38d", duration: 0.4 }, 8.0)
+    .to("#cur", { opacity: 0, duration: 0.3 }, 8.7)
+    .to("#proj", { y: -128, duration: 0.5 }, 10.5);
+
+  // The issues arrive as cards, each label a tag; the sync line counts them.
+  tl.to("#c1c", { opacity: 1, x: 0, duration: 0.45 }, 11.1)
+    .to("#c2c", { opacity: 1, x: 0, duration: 0.45 }, 11.55)
+    .to("#c3c", { opacity: 1, x: 0, duration: 0.45 }, 12.0)
+    .to("#synced", { opacity: 1, duration: 0.4 }, 12.7)
+    .fromTo("#synced", { scale: 0.96 }, { scale: 1, duration: 0.4 }, 12.7)
+    .to(["#c1c", "#c2c", "#c3c", "#synced"], { opacity: 0, duration: 0.35 }, 15.9);
+
+  // Instant, by webhook: the tick goes on and a brand-new issue card slides in behind it.
+  tl.to("#proj", { y: 0, duration: 0.5 }, 16.3)
+    .to("#hook", { opacity: 1, duration: 0.35 }, 16.7)
+    .fromTo("#hook", { y: 14 }, { y: 0, duration: 0.35 }, 16.7)
+    .to("#cur", { opacity: 1, duration: 0.2 }, 17.5)
+    .to("#cur", { x: 122, y: 706, duration: 0.8, ease: "power2.inOut" }, 17.5)
+    .to("#hookTick", { scale: 0.9, duration: 0.1, yoyo: true, repeat: 1 }, 18.4)
+    .to("#cur", { opacity: 0, duration: 0.3 }, 19.0)
+    .to("#newcard", { opacity: 1, duration: 0.4 }, 19.2)
+    .fromTo("#newcard", { x: 50, opacity: 0 }, { x: 0, opacity: 1, duration: 0.5 }, 19.2)
+    .to("#notice", { opacity: 1, duration: 0.35 }, 19.9)
+    .to("#fade", { opacity: 0, duration: 0.01 }, 21.5);
+
+  window.__timelines = window.__timelines || {};
+  window.__timelines.root = tl;
+  window.weftIntro(tl);
+</script>
+</body>
+</html>
