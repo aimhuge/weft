@@ -1,6 +1,6 @@
 "use client";
 
-// Settings → General: the folders outside any project that threads may use without asking. The guard itself
+// Settings → Security: the folders outside any project that threads may use without asking. The guard itself
 // is lib/folder-guard.ts; "Always" on one of its prompts adds a folder, and this row both shows the list and
 // lets you take one back out. The list arrives in the settings view (allowedFolders), so reading it costs no
 // request; adding and removing each go back through /api/folders.

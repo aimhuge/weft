@@ -1,6 +1,6 @@
 "use client";
 
-// Settings → Accounts: when each saved credential runs out. The tokens themselves live in the Keychain and
+// Settings → Security: when each saved credential runs out. The tokens themselves live in the Keychain and
 // never cross into the board — only the expiry BlastCP already reports through its status comes over, so this
 // row adds no IPC and asks main for nothing a drawer hasn't already been told.
 //

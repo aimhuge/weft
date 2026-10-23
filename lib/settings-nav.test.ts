@@ -14,7 +14,7 @@ describe("settings nav", () => {
   it("marks the pages with unsaved edits", () => {
     expect(unsavedPages(none).size).toBe(0);
     expect([...unsavedPages({ ...none, backend: true })]).toEqual(["models"]);
-    expect([...unsavedPages({ ...none, mode: true })]).toEqual(["threads"]);
+    expect([...unsavedPages({ ...none, mode: true })]).toEqual(["security"]);
     expect([...unsavedPages({ ...none, keepAlive: true })]).toEqual(["threads"]);
     expect([...unsavedPages({ ...none, prompt: true, rules: true })]).toEqual(["threads", "automations"]);
   });

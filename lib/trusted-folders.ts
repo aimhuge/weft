@@ -1,4 +1,4 @@
-// The two write paths behind Settings → General's trusted-folders row, kept out of the component so it stays
+// The two write paths behind Settings → Security's trusted-folders row, kept out of the component so it stays
 // inside the 60-line ceiling. Both are plain async-to-state transitions with nothing to render, so there was
 // no reason for them to be JSX-adjacent.
 //

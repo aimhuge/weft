@@ -32,7 +32,7 @@ you sign in + approve ─► BlastCP redirects to the loopback with ?code&state
   anything until you approve it.
 - Tokens last **30 days and can't be refreshed** (BlastCP only grants `authorization_code`). The drawer says
   "Sign-in runs out in N days" in the last week and offers **Reconnect**; a refused token shows the Connect form
-  again with BlastCP's reason. Settings → Accounts repeats the same note in its **Sign-in expiry** row
+  again with BlastCP's reason. Settings → Security repeats the same note in its **Sign-in expiry** row
   (`components/TokenExpiry.tsx`), so a lapsing sign-in is found in Settings rather than when a thread trips over it;
   it reuses this drawer's `expiryNote()` and the `expiresAt` main already sends over the bridge, so only the expiry
   crosses from main — the token stays sealed. Vercel, Supabase and Cloudflare tokens don't expire and are listed as

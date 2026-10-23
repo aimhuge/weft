@@ -222,7 +222,7 @@ The new-thread dialog (⌘N) and every card's reply box use the same editor:
 The folder picker lists your recent projects, the git repos in `~/dev` and other usual code folders
 (with their branch), and your GitHub repos from `gh`. Picking a GitHub repo that isn't on this Mac
 clones it into `~/dev`. **New project…** names an empty folder in `~/dev` and starts the thread there. You can also paste a path or browse for a folder. A new thread starts on the CLI, model and effort set in Settings → Models (the dialog remembers your last pick the same way). Cards are titled from the
-prompt's first line (click the title in the open thread to rename it), and new threads start in the default permission mode from Settings (Auto at first: a classifier
+prompt's first line (click the title in the open thread to rename it), and new threads start in the default permission mode from Settings → Security (Auto at first: a classifier
 approves or asks); the menu next to the CLI switch changes that per thread. Effort starts at High and
 then follows whatever the last new thread used. To change it later, even mid-turn,
 use the mode menu in the open thread's header or the card's right-click menu. Sessions picked up from

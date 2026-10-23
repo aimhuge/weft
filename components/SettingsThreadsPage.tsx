@@ -1,13 +1,10 @@
-// The Threads page: the default permission mode, the keep-conversations-open select, and the
-// thread-instructions textarea (with a reset-to-default button).
+// The Threads page: the keep-conversations-open select and the thread-instructions textarea (with a
+// reset-to-default button). The default permission mode lives on Security.
 import { KEEP_ALIVE } from "@/lib/settings-shared";
 import { SELECT_CLASS } from "./ModelSelect";
-import ModePicker from "./ModePicker";
 import { SettingsCard, SettingsSectionHeader } from "./SettingsLayout";
 
 export default function SettingsThreadsPage({
-  mode,
-  setMode,
   keepAlive,
   setKeepAlive,
   prompt,
@@ -16,8 +13,6 @@ export default function SettingsThreadsPage({
   isDefaultPrompt,
   clearSaveError,
 }: {
-  mode: "default" | "acceptEdits" | "auto" | "bypassPermissions";
-  setMode: (next: "default" | "acceptEdits" | "auto" | "bypassPermissions") => void;
   keepAlive: number;
   setKeepAlive: (next: number) => void;
   prompt: string;
@@ -34,19 +29,6 @@ export default function SettingsThreadsPage({
   return (
     <>
       <SettingsCard>
-        <section className="flex items-center justify-between gap-4">
-          <SettingsSectionHeader
-            title="Default permission mode"
-            hint="What a new thread starts in. You can still change it per thread."
-          />
-          <ModePicker
-            value={mode}
-            onChange={(next) => {
-              setMode(next);
-              clearSaveError();
-            }}
-          />
-        </section>
         <section className="flex items-center justify-between gap-4">
           <SettingsSectionHeader
             title="Keep conversations open"

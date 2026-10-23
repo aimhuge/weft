@@ -294,7 +294,7 @@ export function allowFolder(folder: string) {
 }
 
 // Takes a folder back out of the always-allowed list, so threads ask about it again from now on. This is the
-// way back from "Always" on a folder-guard prompt: granting was one-way until Settings → General could show
+// way back from "Always" on a folder-guard prompt: granting was one-way until Settings → Security could show
 // and revoke it, which left a folder trusted once trusted for good. A card that already holds the folder in its
 // read scope keeps it for the turn it's in — a revoke stops new work, it doesn't retract a permission handed out.
 export function unallowFolder(folder: string) {

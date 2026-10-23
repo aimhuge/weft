@@ -169,7 +169,7 @@ export const api = {
   // a /add-dir slash command for the live session so the in-flight turn can keep reading.
   // "Always allow" on an outside-folder prompt: every card may use it (lib/folder-guard.ts).
   allowFolder: (folder: string) => call("POST", "/api/folders", { folder }),
-  // Settings → General's trusted-folders row: take a folder back out, so threads ask about it again.
+  // Settings → Security's trusted-folders row: take a folder back out, so threads ask about it again.
   unallowFolder: (folder: string) => call<{ ok: true }>("DELETE", "/api/folders", { folder }),
   setReadScope: (id: string, path: string) => call<{ card: Card }>("PATCH", `/api/cards/${id}`, { readScope: path }),
   remove: (id: string) => call("DELETE", `/api/cards/${id}`),

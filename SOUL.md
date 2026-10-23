@@ -44,7 +44,8 @@ If you are an agent editing this repo, you are working on me. Read README.md for
     `use-toast`, `use-desktop-bridge`, `use-copilot-card`, `use-board-actions`, `use-board-toggles`, `use-board-view`, `use-board-archive`,
     `use-board-card-actions`, plus `lib/board-focus.ts`, `lib/board-helpers.ts`), its live events into `lib/board-live.ts`, the menu/dock/tray
     actions into `lib/board-menu-bridge.ts`, its derived values into `lib/board-derive.ts`, and its JSX into `BoardHeader`, `BoardProjectBar`,
-    `BoardColumns` (each column's extras by id), `BoardBrowserPane`, `OpenCard` (the framed window and the open card's four columns), `BoardBottom`
+    `BoardColumns` (each column's extras by id), `BoardBrowserPane`, `OpenCard` (the framed window and the open card's four columns),
+    `NewThreadWindow` (the New thread form and desktop browser pane), `BoardBottom`
     (footer and terminal drawer), `BoardToast` and
     `components/BoardDialogs.tsx` (the nine dialogs, sheets and overlays the board stacks over its columns, each still loaded through
     `guarded()`; `components/BoardDialogs.test.tsx` says which prop opens which panel and that each close handler fires through).
@@ -53,7 +54,7 @@ If you are an agent editing this repo, you are working on me. Read README.md for
     The dialog flags (New thread, Settings, Share board, Help, palette, sign-in, project menu) and what they cover live in `lib/use-board-dialogs.ts`.
     The open card's state (selection, thread, streaming text, Rename…, unseen moves) is `lib/use-open-card.ts`, and the New thread
     dialog's splash page in the pane `lib/use-new-thread-pane.ts`. Next: the board's data (cards, home, roots, projects, folder
-    resolution) into a hook, and the framed window's New thread branch into `OpenCard`; Board is at complexity 26.
+    resolution) into a hook; Board is at complexity 26.
   - My Vitest suite (`pnpm test`, ~3,500 tests) covers every line of `lib/` and `app/api/` (98.6% of branches,
     `pnpm coverage`): a test file beside each module, routes with their libs mocked, the runner's SDK loop
     against a fake `query()` (`lib/runner.harness.ts`, shared by `lib/runner*.test.ts`), and browser code and React hooks under happy-dom +
@@ -117,10 +118,10 @@ If you are an agent editing this repo, you are working on me. Read README.md for
   `lib/splice.ts` + `lib/splice-brief.ts` + `lib/splice-diff.ts`: Send fresh, a new CLI session in the same card started from a brief
   (Haiku summary pre-baked on the scheduler's tick, what's open, the diff of the thread's own edits) instead of re-sending a cold history.
 - `components/SettingsDialog.tsx` + `lib/settings-nav.ts`: Settings, full window over a scene, pages down the left (General, Laptop mode, Models,
-  Threads, Automations, Shortcuts, Accounts, Teams, Sync); Laptop mode is `components/LaptopModeCard.tsx` + `LaptopModeRules.tsx` over `electron/keep-working*.cjs`; Models holds every model pick, new threads' through `components/NewThreadDefaults.tsx`;
+  Threads, Security, Automations, Shortcuts, Accounts, Teams, Sync); Laptop mode is `components/LaptopModeCard.tsx` + `LaptopModeRules.tsx` over `electron/keep-working*.cjs`; Models holds every model pick, new threads' through `components/NewThreadDefaults.tsx`;
   the four rows (NewThreadDefaults, SubagentPicker, CopilotPicker, DonePicker) share `components/Pickers.tsx`
   (`BackendPicker`, `ModelPicker`, `EffortPicker`) on top of `components/ModelSelect.tsx` (Claude / Puku / Codex optgroups driven by `MODELS` in `lib/new-thread.ts`; Copilot passes `groups=Claude` to stay Claude-only).
-  General holds `components/TrustedFolders.tsx` (the folders threads may read outside their project, from `SettingsView.allowedFolders`, each revocable through `DELETE /api/folders`); Accounts holds `components/TokenExpiry.tsx` (when each saved sign-in runs out, reusing `expiryNote()`; only BlastCP expires, and only the expiry crosses from main — the tokens stay in the Keychain, and there's no silent auto-refresh).
+  Security (`components/SettingsSecurityPage.tsx`) holds the default permission mode and `components/TrustedFolders.tsx` (the folders threads may read outside their project, from `SettingsView.allowedFolders`, each revocable through `DELETE /api/folders`); Security also holds `components/TokenExpiry.tsx` (when each saved sign-in runs out, reusing `expiryNote()`; only BlastCP expires, and only the expiry crosses from main — the tokens stay in the Keychain, and there's no silent auto-refresh).
 - `components/DbSelect.tsx` + `lib/db-picker.ts` `rankItems`: the one "Link <folder> to…" picker every provider drawer shares
   (▲ Vercel, Supabase, Cloudflare, 🚀 BlastCP — `components/VercelPicker.tsx`, `SupabasePicker.tsx`, `CloudflarePicker.tsx`, `BlastcpPicker.tsx`).
   `DbSelect` draws the search box, the loading/empty notes and the row list; each picker supplies its rows, its own score

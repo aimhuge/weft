@@ -53,7 +53,7 @@ symlinks, a file not created yet by its nearest folder).
 - **After a grant**, a read-only call (Read, Glob, Grep, LS) whose paths are all in granted folders is allowed with no
   prompt at all (`grantedRead`), including the CLI's own working-directory prompt; writes and Bash in a granted folder
   follow the card's permission mode as usual.
-- **Taking it back**: Settings → General's **Trusted folders** row lists `settings.allowedFolders` (it rides along in
+- **Taking it back**: Settings → Security's **Trusted folders** row lists `settings.allowedFolders` (it rides along in
   `SettingsView`), **Add folder** opens the OS dialog (`window.weft.dialog.openFolder`, the one the project and repo
   pickers use) and grants through the same `POST /api/folders` the **Always** button calls, and **Remove** calls
   `DELETE /api/folders` → `unallowFolder`. Until that row existed, "Always" was a one-way door — a folder trusted once

@@ -38,7 +38,7 @@ export interface SettingsView {
   issueFolders: string[];
   syncFolders: string[];
   // Folders outside a project every thread may use without asking (lib/folder-guard.ts), granted with
-  // "Always" on a folder-guard prompt. Settings → General's trusted-folders row shows and revokes these.
+  // "Always" on a folder-guard prompt. Settings → Security's trusted-folders row shows and revokes these.
   allowedFolders: string[];
 }
 

@@ -17,12 +17,13 @@ import SettingsAutomationsPage from "./SettingsAutomationsPage";
 import SettingsGeneralPage from "./SettingsGeneralPage";
 import LaptopModeCard from "./LaptopModeCard";
 import SettingsModelsPage from "./SettingsModelsPage";
+import SettingsSecurityPage from "./SettingsSecurityPage";
 import SettingsShortcutsPage from "./SettingsShortcutsPage";
 import SettingsThreadsPage from "./SettingsThreadsPage";
 import SyncSettings from "./SyncSettings";
 import TeamSettings from "./TeamSettings";
 
-const NEEDS_SETTINGS = new Set<SettingsPage>(["models", "threads", "automations"]);
+const NEEDS_SETTINGS = new Set<SettingsPage>(["models", "threads", "security", "automations"]);
 
 function message(err: unknown) {
   return err instanceof Error ? err.message : String(err);
@@ -100,7 +101,6 @@ export default function SettingsDialog({ onClose }: { onClose: () => void }) {
             setBacklog={setBacklog}
             progress={progress}
             setProgress={setProgress}
-            allowedFolders={s.allowedFolders}
           />
         );
       case "laptop":
@@ -123,14 +123,22 @@ export default function SettingsDialog({ onClose }: { onClose: () => void }) {
         if (!form) return null;
         return (
           <SettingsThreadsPage
-            mode={form.mode}
-            setMode={(next) => updateForm("mode", next)}
             keepAlive={form.keepAlive}
             setKeepAlive={(next) => updateForm("keepAlive", next)}
             prompt={form.prompt}
             setPrompt={(next) => updateForm("prompt", next)}
             defaultThreadPrompt={s.defaultThreadPrompt}
             isDefaultPrompt={dirty?.isDefaultPrompt ?? true}
+            clearSaveError={clearSaveError}
+          />
+        );
+      case "security":
+        if (!form) return null;
+        return (
+          <SettingsSecurityPage
+            mode={form.mode}
+            setMode={(next) => updateForm("mode", next)}
+            allowedFolders={s.allowedFolders}
             clearSaveError={clearSaveError}
           />
         );

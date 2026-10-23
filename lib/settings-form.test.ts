@@ -69,7 +69,7 @@ describe("computeDirty", () => {
 });
 
 describe("settingsDirtyPages", () => {
-  it("returns threads when prompt/keepAlive/mode changed", () => {
+  it("returns threads when prompt/keepAlive changed", () => {
     const form = { ...initialSettingsForm(BASE), keepAlive: 60 };
     const d = computeDirty(form, BASE);
     expect(settingsDirtyPages(d).has("threads")).toBe(true);

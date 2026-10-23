@@ -14,6 +14,8 @@ vi.mock("./AccountSettings", () => ({ default: () => <p>account settings</p> }))
 vi.mock("./CliLogins", () => ({ default: () => <p>cli logins</p> }));
 vi.mock("./SubagentPicker", () => ({ default: () => <p>subagent picker</p> }));
 vi.mock("./DonePicker", () => ({ default: () => <p>done picker</p> }));
+vi.mock("./TrustedFolders", () => ({ default: () => <p>trusted folders</p> }));
+vi.mock("./TokenExpiry", () => ({ default: () => <p>token expiry</p> }));
 vi.mock("./AutomationSettings", () => ({ default: () => <p>automation rules</p> }));
 // LaptopModeCard is a thin wrapper around the keep-working IPC bridge; it has its own focused test
 // (LaptopModeCard.test.tsx). Here it just needs to render on its own page.
@@ -65,7 +67,13 @@ describe("SettingsDialog", () => {
     await go("Accounts");
     expect(screen.getByText("account settings")).toBeInTheDocument();
     expect(screen.getByText("cli logins")).toBeInTheDocument();
+    expect(screen.queryByText("token expiry")).not.toBeInTheDocument();
     expect(screen.queryByText("appearance picker")).not.toBeInTheDocument();
+
+    await go("Security");
+    expect(await screen.findByText("trusted folders")).toBeInTheDocument();
+    expect(screen.getByText("token expiry")).toBeInTheDocument();
+    expect(screen.getByText("Default permission mode")).toBeInTheDocument();
 
     await go("Shortcuts");
     expect(screen.getByRole("heading", { name: "Shortcuts", level: 2 })).toBeInTheDocument();
