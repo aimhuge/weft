@@ -1,5 +1,7 @@
 // lib/app-card-image.tsx: a shared mini app's branded link-preview card. next/og and the font files are stubbed, so the
 // test reads the element tree the card hands to ImageResponse rather than rendering pixels.
+import type { ReactElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
 const seen: { element: unknown; options: unknown } = vi.hoisted(() => ({ element: null, options: null }));
@@ -104,11 +106,32 @@ describe("appCardImage", () => {
     expect(Number(short)).toBeGreaterThan(Number(long));
   });
 
+  const markup = () => renderToStaticMarkup(seen.element as ReactElement);
+
+  it("draws an emoji name's glyph in the tile and the title beside it", async () => {
+    await appCardImage({ name: "📈 Growth", byline: "a" });
+    expect(markup()).toContain("📈");
+    expect(markup()).toContain("Growth");
+  });
+
+  it("draws a plain name's first letter, upper-cased, on a hue of its own", async () => {
+    await appCardImage({ name: "launch checklist", byline: "a" });
+    expect(markup()).toMatch(/>L<\/div>/);
+    expect(markup()).toMatch(/hsl\(\d+ 55% 42%\)/);
+  });
+
+  it("draws the capture as a picture inset in the card", async () => {
+    await appCardImage({ name: "Docs", byline: "Acme", shot: JPEG });
+    expect(markup()).toContain(imageDataUrl(JPEG));
+    expect(markup()).toContain("rotate(-3deg)");
+  });
+
   it("offline, draws a letter instead of the emoji and asks for no twemoji", async () => {
     await appCardImage({ name: "📈 Growth", byline: "a" }, { emoji: false, headers: { "Cache-Control": "x" } });
     const options = seen.options as { headers?: Record<string, string>; emoji?: string };
     expect(options.emoji).toBeUndefined();
     expect(options.headers).toEqual({ "Cache-Control": "x" });
     expect(text()).toContain('"emoji":false');
+    expect(markup()).toMatch(/>G<\/div>/); // the tile shows the title's first letter instead
   });
 });

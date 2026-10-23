@@ -54,7 +54,7 @@ export function cardTitle(input: Pick<AppCardInput, "name" | "title">): string {
 
 function Glyph({ name, emoji, size }: { name: string; emoji: boolean; size: number }) {
   const glyph = appGlyph(name);
-  const text = glyph.emoji && !emoji ? (cardTitle({ name })[0] ?? "?").toUpperCase() : glyph.text;
+  const text = glyph.emoji && !emoji ? cardTitle({ name }).charAt(0).toUpperCase() : glyph.text;
   return (
     <div
       style={{
