@@ -82,6 +82,12 @@ export interface Release {
 // Reads the feed's newest release; null when the feed has none or isn't the shape we write.
 export function parseFeed(feed: unknown): Release | null {
   if (!feed || typeof feed !== "object") return null;
+  // What scripts/release-feed.mjs writes: currentRelease, the dmg as download and the release page at the top
+  // level (releases[] holds Squirrel's updateTo entries, which carry the zip, not the dmg).
+  const { currentRelease, download, page: tagPage } = feed as Record<string, unknown>;
+  if (typeof currentRelease === "string" && typeof download === "string") {
+    return { version: currentRelease, dmg: download, page: typeof tagPage === "string" ? tagPage : download };
+  }
   const releases = (feed as { releases?: unknown }).releases;
   if (!Array.isArray(releases)) return null;
   for (const entry of releases) {
@@ -99,7 +105,7 @@ export function downloadLink(release: Release | null): { label: string; href: st
     return {
       label: `Download Weft ${release.version} for Mac`,
       href: release.dmg,
-      note: "Apple silicon. Signed and notarized; updates itself from GitHub Releases.",
+      note: "Apple silicon. Not notarized yet: on first open, right-click Weft and choose Open. Updates itself from GitHub Releases.",
     };
   }
   return {

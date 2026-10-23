@@ -46,6 +46,13 @@ describe("parseFeed", () => {
     expect(parseFeed({ releases: [{ version: "0.3.0", dmg, page }] })).toEqual({ version: "0.3.0", dmg, page });
   });
 
+  it("reads the feed the release workflow publishes (currentRelease, download, page at the top)", () => {
+    const zip = "https://github.com/aimhuge/weft/releases/download/v0.3.0/Weft-0.3.0-arm64.zip";
+    const feed = { currentRelease: "0.3.0", page, download: dmg, releases: [{ version: "0.3.0", updateTo: { version: "0.3.0", url: zip } }] };
+    expect(parseFeed(feed)).toEqual({ version: "0.3.0", dmg, page });
+    expect(parseFeed({ currentRelease: "0.3.0", download: dmg })).toEqual({ version: "0.3.0", dmg, page: dmg });
+  });
+
   it("falls back to the page when the entry has no dmg", () => {
     expect(parseFeed({ releases: [{ version: "0.3.0", page }] })).toEqual({ version: "0.3.0", dmg: page, page });
   });

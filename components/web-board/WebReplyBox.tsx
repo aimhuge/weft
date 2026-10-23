@@ -7,11 +7,11 @@
 // Continue button sends the word "continue" through the same path; it mirrors the desktop's ▶ button, which
 // the Mac receives and routes like any other reply (lib/resume-actions.ts).
 import { useState } from "react";
-import posthog from "posthog-js";
 import { commandText, type CloudCommandRow } from "@/lib/cloud-commands";
 import type { Card } from "@/lib/types";
 import { replyNote } from "@/lib/web-commands";
 import Icon from "@/components/Icon";
+import { track } from "@/lib/analytics";
 
 export function WebReplyBox({
   card,
@@ -44,9 +44,7 @@ export function WebReplyBox({
     setSending(false);
     setError(failed);
     if (!failed) {
-      if (process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN && process.env.NEXT_PUBLIC_POSTHOG_HOST) {
-        posthog.capture("thread_reply_sent", { reply_type: "message" });
-      }
+      track("thread_reply_sent", { reply_type: "message" });
       setText("");
     }
   };
@@ -58,9 +56,7 @@ export function WebReplyBox({
     const failed = await onSend("continue");
     setSending(false);
     setError(failed);
-    if (!failed && process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN && process.env.NEXT_PUBLIC_POSTHOG_HOST) {
-      posthog.capture("thread_reply_sent", { reply_type: "continue" });
-    }
+    if (!failed) track("thread_reply_sent", { reply_type: "continue" });
   };
   const queued = (card.scheduled ?? []).filter((m) => m.afterTurn);
 

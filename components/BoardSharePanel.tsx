@@ -1,11 +1,11 @@
 "use client";
 
 import { useState, type SubmitEvent } from "react";
-import posthog from "posthog-js";
 import type { TeamClientActions, TeamRole, TeamSnapshot } from "@/lib/team-types";
 import type { TeamHookState } from "@/lib/use-team";
 import { Spinner } from "./Icon";
 import { SHARE_BUTTON, ShareNote } from "./ShareParts";
+import { track } from "@/lib/analytics";
 
 // The body of Share the board, shared by the desktop (components/ShareBoardDialog.tsx, the team through lib/use-team.ts)
 // and the weft.zip board (components/web-board/WebShareBoard.tsx, the team through lib/team-actions.ts): the workspace
@@ -120,9 +120,7 @@ function InviteBox({ role, actions }: { role: TeamRole; actions: TeamClientActio
     setBusy(false);
     setResult(answer);
     if (answer.ok) {
-      if (process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN && process.env.NEXT_PUBLIC_POSTHOG_HOST) {
-        posthog.capture("team_invite_sent", { role });
-      }
+      track("team_invite_sent", { role });
       setEmail("");
     }
   }

@@ -1,7 +1,6 @@
 "use client";
 
 import { useRef } from "react";
-import posthog from "posthog-js";
 import { isMac } from "@/lib/hotkeys";
 import { type NewCardInput } from "@/lib/client";
 import type { Card, RestartStatus } from "@/lib/types";
@@ -19,6 +18,7 @@ import { NewCardDialogFooter } from "./NewCardDialogFooter";
 import { RestartRequested } from "./RestartChip";
 import StatusStrip from "./StatusStrip";
 import { isBacklogKey } from "./submit-keys";
+import { track } from "@/lib/analytics";
 
 export default function NewCardDialog({
   cards = [],
@@ -63,13 +63,11 @@ export default function NewCardDialog({
       onCreate: async (input, options) => {
         if (options) await onCreate(input, options);
         else await onCreate(input);
-        if (input.start && process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN && process.env.NEXT_PUBLIC_POSTHOG_HOST) {
-          posthog.capture("thread_started", {
-            backend: input.backend,
-            model: input.model || "default",
-            effort: input.effort || "default",
-          });
-        }
+        if (input.start) track("thread_started", {
+          backend: input.backend,
+          model: input.model || "default",
+          effort: input.effort || "default",
+        });
       },
       onClose,
     });

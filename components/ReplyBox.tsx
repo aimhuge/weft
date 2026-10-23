@@ -1,7 +1,6 @@
 "use client";
 
 import { useRef, useState, type ReactNode } from "react";
-import posthog from "posthog-js";
 import { bangCommand } from "@/lib/bang";
 import { type PlanResets } from "@/lib/schedule";
 import { replyPlaceholder } from "@/lib/reply-placeholder";
@@ -18,6 +17,7 @@ import QuestionForm, { type QuestionFormHandle, type QuestionProps } from "./Que
 import ReplyBoxActions from "./ReplyBoxActions";
 import { ModeChip, modeBorder } from "./ReplyModeChip";
 import { ReplyQueue } from "./ReplyQueue";
+import { track } from "@/lib/analytics";
 
 // Board threads can take a message to send at a set time; the copilot can't, so it leaves this out.
 // resets are the plan's next 5-hour and weekly resets, the default times on a Claude thread.
@@ -91,9 +91,7 @@ export default function ReplyBox({
   const setErrorWrap = (err: unknown) => setError(err instanceof Error ? err.message : String(err));
   const clearError = () => setError(null);
   const captureReply = () => {
-    if (process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN && process.env.NEXT_PUBLIC_POSTHOG_HOST) {
-      posthog.capture("thread_reply_sent", { reply_type: "message" });
-    }
+    track("thread_reply_sent", { reply_type: "message" });
   };
   const { initial, save: saveDraft, shell, empty } = useReplyDraft(cardId, onShell, clearError);
 

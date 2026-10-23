@@ -1,33 +1,61 @@
 # Analytics
 
-The deployed Weft at weft.zip ships Google Analytics 4 on the marketing home page only. The board
-route, every other route, and every local Weft never call home.
+The deployed Weft at weft.zip sends analytics to two places: Google Analytics 4 and PostHog. A local Weft
+(every Mac runs the same Next app on localhost, in `next dev`) never calls home, even with the PostHog keys
+in its env: a builder's board, prompts and replies stay on their Mac.
 
-## How it's gated
+## The gate
 
-GA is mounted in `components/home/Home.tsx` (the only importer of `components/GoogleAnalytics.tsx`),
-not in `app/layout.tsx`. Two consequences:
+- **Browser:** `lib/analytics-gate.ts` `isLocalHost()` refuses localhost, 127.0.0.1, ::1, `*.localhost` and
+  file: pages (the browser pane's own). `instrumentation-client.ts` calls `startAnalytics()` (`lib/analytics.ts`),
+  which starts nothing on those hosts.
+- **Server:** `lib/analytics-server.ts` `serverPosthogConfig()` needs `isDeployed()` (`VERCEL` or `WEFT_HOME`,
+  `lib/home.ts`) and both keys. `lib/ai-observability.ts` (Haiku and scout `$ai_generation` events) and
+  `instrumentation.ts` (the OTLP log exporter `app/api/account` writes to) both go through it. It lives apart from
+  `lib/analytics-gate.ts` so client code never reaches `lib/home.ts` and the home's `"use cache"` import
+  (`lib/client-graph.test.ts` fails the build if it does).
+- **GA:** `app/layout.tsx` renders `components/GoogleAnalytics.tsx` only when `isDeployed()`.
 
-- The board route never renders `Home` — `app/page.tsx` returns `<Board />` when `isDeployed()` is
-  false (`lib/home.ts`), and on Vercel the snippet is the only client-side script the home adds.
-- `app/home/page.tsx` and `app/page.tsx` both load the home through `loadHome()` (`lib/home.ts`),
-  so a parse error in `Home.tsx` (or in the `GoogleAnalytics` import chain) returns a small
-  fallback page instead of 500-ing the route. See `docs/bug-fixes/011-home-parse-error-took-board-down.md`
-  for why that loader exists; the analytics change inherits the same blast-radius guard.
+## Google Analytics 4
 
-## The snippet
+`components/GoogleAnalytics.tsx` is a server component that emits gtag.js for `G-L9YCWJ4LZ2` on every weft.zip
+page (home, `/faq`, `/@user`, `/s/…`, `/a/…`, the web board). GA4's enhanced measurement sends `page_view` on load and
+on client-side navigations. Named events come in through `window.gtag` from `track()`.
 
-`components/GoogleAnalytics.tsx` is a server component that emits the standard gtag.js loader
-(`https://www.googletagmanager.com/gtag/js?id=…`) plus an inline `gtag('config', …)` call with
-the measurement id `G-L9YCWJ4LZ2`. The id is hardcoded; the loader URL is `encodeURIComponent`-ed
-and the JS literal goes through `JSON.stringify`, so the id can be swapped to any value shaped
-like `G-XXXXXXX` without a code change elsewhere. Rendering server-side puts the script in the
-HTML before paint; gtag fires a single `page_view` on load.
+## PostHog
+
+`posthog-js`, initialised by `startAnalytics()` with `NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN` and `NEXT_PUBLIC_POSTHOG_HOST`
+(both public client values; production on Vercel from the 🔐 vault). Autocapture, pageviews, exceptions and session
+replay follow the project's settings. It's the "Default Project" (56294) the other aimhuge sites share: filter on
+`$host = weft.zip`.
+
+`components/ThemeSync.tsx` identifies a signed-in weft.zip visitor by their Weft account id and resets on sign-out.
+`app/global-error.tsx` sends the root error with `captureException`.
+
+## Events
+
+`track(event, props)` (`lib/analytics.ts`) sends one event to PostHog (if started) and GA (if gtag is on the page)
+under the same name. On a local board both are absent and it does nothing.
+
+| Event | Where | Props |
+|---|---|---|
+| `download_clicked` | home page download button | `version` (`github` before the first release), `href` |
+| `thread_started` | New thread (desktop and web board) | `backend`, `model`, `effort` |
+| `thread_reply_sent` | reply box (desktop and web board) | `reply_type`: `message` or `continue` |
+| `project_created` | New project form | none |
+| `team_invite_sent` | board share panel, team invite form | `role` |
+
+Server components can't take click handlers, so a link opts in with attributes:
+`data-track="download_clicked" data-track-version="0.4.0"`. `startAnalytics()` adds one capturing click
+listener (`trackClick`) that reads them, `data-track-*` becoming camelCased props, plus `href` on links.
+
+The desktop app's own funnel (first launch, first card, first Done) isn't tracked: that needs opt-in telemetry with a
+first-launch notice (docs/ROADMAP.md, Settings and onboarding).
 
 ## Key files
 
-- `components/GoogleAnalytics.tsx` — the snippet, hardcoded `G-L9YCWJ4LZ2`.
-- `components/home/Home.tsx` — renders `<GoogleAnalytics />` as a sibling of the page root.
-- `app/home/page.tsx`, `app/page.tsx` — load `Home` through `loadHome()`; render a dark
-  fallback page when the import fails.
-- `lib/home.ts` — `isDeployed()` (VERCEL or WEFT_HOME) and `loadHome()`.
+- `lib/analytics-gate.ts`: `posthogConfig()`, `isLocalHost()`.
+- `lib/analytics-server.ts`: `serverPosthogConfig()`.
+- `lib/analytics.ts`: `startAnalytics()`, `analyticsOn()`, `track()`, `trackClick()`.
+- `instrumentation-client.ts`, `instrumentation.ts`, `lib/ai-observability.ts`.
+- `components/GoogleAnalytics.tsx`, `app/layout.tsx`, `components/home/Home.tsx` (the download button's `data-track`).

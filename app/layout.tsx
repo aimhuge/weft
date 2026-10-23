@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import BuildErrorBar from "@/components/BuildErrorBar";
+import GoogleAnalytics from "@/components/GoogleAnalytics";
 import ServerErrorBar from "@/components/ServerErrorBar";
 import ThemeSync from "@/components/ThemeSync";
+import { isDeployed } from "@/lib/home";
 import { THEME_SCRIPT } from "@/lib/theme";
 import "./fonts.css";
 import "./globals.css";
@@ -27,6 +29,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="h-full overflow-hidden">
         <ThemeSync />
         {children}
+        {/* GA4 on every weft.zip page (home, FAQ, profiles, shares, the web board); never on a local board. */}
+        {isDeployed() && <GoogleAnalytics />}
         <BuildErrorBar />
         <ServerErrorBar />
       </body>

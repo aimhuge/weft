@@ -1,5 +1,4 @@
 import Image from "next/image";
-import GoogleAnalytics from "@/components/GoogleAnalytics";
 import twinSuns from "@/electron/assets/splash-speeder.jpg";
 import { TAGLINE, downloadLink } from "@/lib/home";
 import { latestRelease } from "@/lib/home-release";
@@ -13,10 +12,10 @@ import "./home.css";
 // sentence, the download, a real screenshot of the board (public/brand/board.png) over the start screen's
 // twin suns, the five pillars, then a short FAQ (the whole one is /faq). A server component with no client JS. Fraunces for display, Instrument Sans for text.
 export default async function Home() {
-  const download = downloadLink(await latestRelease());
+  const release = await latestRelease();
+  const download = downloadLink(release);
   return (
     <>
-      <GoogleAnalytics />
       <div className="wz-root">
         <HomeNav />
 
@@ -32,7 +31,8 @@ export default async function Home() {
               A Mac kanban board where every card is a Claude Code thread. You bring the idea; Weft plans it, builds it and shows it to you.
             </p>
             <div className="wz-ctas wz-rise wz-d2">
-              <a className="wz-btn wz-btnPrimary" href={download.href}>
+              {/* download_clicked in GA and PostHog (lib/analytics.ts trackClick); "github" before the first release. */}
+              <a className="wz-btn wz-btnPrimary" href={download.href} data-track="download_clicked" data-track-version={release?.version ?? "github"}>
                 {download.label}
               </a>
             </div>

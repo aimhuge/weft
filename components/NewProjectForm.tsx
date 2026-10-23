@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import posthog from "posthog-js";
 import { api } from "@/lib/client";
 import Icon, { Spinner } from "./Icon";
+import { track } from "@/lib/analytics";
 
 // The folder picker's "New project…": names an empty folder in ~/dev, creates it and hands back its path.
 
@@ -41,9 +41,7 @@ export default function NewProjectForm({
     setError(null);
     try {
       onCreated((await api.newProject(parent, trimmed)).path);
-      if (process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN && process.env.NEXT_PUBLIC_POSTHOG_HOST) {
-        posthog.capture("project_created");
-      }
+      track("project_created");
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {

@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { PostHog } from "posthog-node";
+import { serverPosthogConfig } from "./analytics-server";
 
 type AiCapture = {
   event: "$ai_generation" | "$ai_span";
@@ -19,24 +20,13 @@ type AiCapture = {
   stream?: boolean;
 };
 
+// The deployed Weft only: Haiku and scout runs on a Mac carry the builder's own prompts and replies, which stay
+// on it (lib/analytics-gate.ts).
 function client() {
-  const projectToken = process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN;
-  const host = process.env.NEXT_PUBLIC_POSTHOG_HOST;
-  for (const variableName of [
-    !projectToken && "NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN",
-    !host && "NEXT_PUBLIC_POSTHOG_HOST",
-  ]) {
-    if (variableName && process.env.NODE_ENV === "development") {
-      console.error(
-        new Error(
-          `${variableName} variable required by PostHog is missing or un-configured, this causes events to be silently missed. This error stops appearing once ${variableName} is configured`,
-        ),
-      );
-    }
-  }
-  if (!projectToken || !host) return;
-  return new PostHog(projectToken, {
-    host,
+  const config = serverPosthogConfig();
+  if (!config) return;
+  return new PostHog(config.token, {
+    host: config.host,
     flushAt: 1,
     flushInterval: 0,
     privacyMode: false,

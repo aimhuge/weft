@@ -1,7 +1,7 @@
-// Google Analytics 4 for the weft.zip home page only. Rendered server-side so the snippet is
-// in the HTML before the page paints; gtag.js sends a single page_view on load and configures
-// the G-... ID. Co-located with the home page (mounted by components/home/Home.tsx), never
-// in app/layout.tsx, so local board sessions never call home.
+// Google Analytics 4 for every weft.zip page. Rendered server-side so the snippet is in the HTML
+// before the page paints; gtag.js sends page_view on load and on client-side navigations (GA4's
+// enhanced measurement), and lib/analytics.ts track() sends named events through window.gtag.
+// app/layout.tsx mounts it only when isDeployed(), so local board sessions never call home.
 const GA_ID = "G-L9YCWJ4LZ2";
 
 const SNIPPET = `

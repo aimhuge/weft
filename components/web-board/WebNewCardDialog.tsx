@@ -5,12 +5,12 @@
 // the board by itself. The desktop's own dialog is a Composer over a local folder picker; a browser tab has
 // neither, so this is a prompt box and two menus on the desktop's Modal and pickers.
 import { useState } from "react";
-import posthog from "posthog-js";
 import type { Effort } from "@/lib/types";
 import { EFFORTS } from "@/lib/new-thread";
 import type { WebTarget } from "@/lib/web-commands";
 import Modal from "../Modal";
 import ModelSelect, { SELECT_CLASS } from "../ModelSelect";
+import { track } from "@/lib/analytics";
 
 export function WebNewCardDialog({
   targets,
@@ -41,12 +41,10 @@ export function WebNewCardDialog({
     setBusy(false);
     if (problem) setError(problem);
     else {
-      if (process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN && process.env.NEXT_PUBLIC_POSTHOG_HOST) {
-        posthog.capture("thread_started", {
-          model: model || "default",
-          effort: effort || "default",
-        });
-      }
+      track("thread_started", {
+        model: model || "default",
+        effort: effort || "default",
+      });
       onClose();
     }
   }

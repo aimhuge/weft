@@ -2,6 +2,7 @@
 
 import { useEffect, useLayoutEffect, useRef } from "react";
 import posthog from "posthog-js";
+import { analyticsOn } from "@/lib/analytics";
 import { DARK_QUERY, applyTheme } from "@/lib/theme";
 
 type AccountIdentity = {
@@ -35,7 +36,8 @@ export default function ThemeSync() {
   }, []);
 
   useEffect(() => {
-    if (!process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN || !process.env.NEXT_PUBLIC_POSTHOG_HOST) return;
+    // Only on weft.zip; a local board never identifies anyone to PostHog (lib/analytics-gate.ts).
+    if (!analyticsOn()) return;
 
     let active = true;
     const synchronizeIdentity = async () => {
