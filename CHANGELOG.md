@@ -8,6 +8,10 @@ lands; a release moves those lines under its version and tags the commit `vX.Y.Z
 
 ## [Unreleased]
 
+### Added
+
+- **Every project has a changelog Weft keeps, so cards stop colliding on CHANGELOG.md.** Threads record what they ship with `mcp__board__changelog_add` (`_list`, `_edit`) into `~/.weft/changelog.jsonl`, mirrored to Supabase `changelog_entries` while you're signed in. Each entry links to the card that wrote it, and the card's own commit stamps it with the sha (draft → committed). Right after that commit Weft rewrites CHANGELOG.md and commits it alone as `docs(changelog): <card>`, keeping lines typed by hand; a commit that bumps package.json's version gets that version's section, so nobody runs a release step (`pnpm changelog:release <version>` stays for a bump Weft didn't see). More → **Changelog of <project>** or ⌘K opens a read-only list, Unreleased then each version. A Markdown-only commit now skips the pre-commit typecheck. (`lib/changelog*.ts`, `components/ChangelogDialog.tsx`, `scripts/check-staged.sh`, docs/architecture/changelog.md)
+
 ### Fixed
 
 - **The drawer intros' voice starts with the picture.** The narration came in up to a few seconds late, because the board started it on a message from the intro's frame while it was still busy opening the drawer. Each intro page now plays its own voice and holds its timeline until that voice is really playing; a voice later than 4 s pulls the frames back to it, so its first words are never cut off. The 🔊 setting travels in the frame's address and as a message when you flip it (`public/intros/player.js`, `lib/use-feature-intro.ts`, `lib/feature-intros.ts`, docs/architecture/feature-intros.md).
