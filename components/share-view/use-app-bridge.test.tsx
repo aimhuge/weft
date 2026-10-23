@@ -135,6 +135,25 @@ describe("useAppBridge", () => {
     expect(postSpy).toHaveBeenCalledWith({ tag: BRIDGE_TAG, id: 1, ok: true, result: { SUPABASE_PUBLISHABLE_KEY: "x" } }, "*");
   });
 
+  it("forwards access to GET /api/a/<id>/access and answers with the result", async () => {
+    const info = { project: "Growth", env: "production", needs: [], missing: [], granted: true };
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(
+      new Response(JSON.stringify(info), { status: 200, headers: { "content-type": "application/json" } }),
+    );
+    const frameRef: { current: HTMLIFrameElement | null } = { current: null };
+    render(<Host shareId="s1" secrets={[]} renderSecretForm={vi.fn()} frameRef={frameRef} />);
+    const fakeFrame = document.createElement("iframe");
+    document.body.appendChild(fakeFrame);
+    frameRef.current = fakeFrame;
+    const postSpy = vi.spyOn(fakeFrame.contentWindow!, "postMessage").mockImplementation(() => {});
+    await act(async () => {
+      postFrom(fakeFrame.contentWindow as unknown as Frame, { tag: BRIDGE_TAG, id: 2, op: "access" }, fakeFrame.contentWindow);
+      await Promise.resolve();
+    });
+    expect(globalThis.fetch).toHaveBeenCalledWith("/api/a/s1/access", { credentials: "same-origin" });
+    expect(postSpy).toHaveBeenCalledWith({ tag: BRIDGE_TAG, id: 2, ok: true, result: info }, "*");
+  });
+
   it("forwards fetch to POST /api/a/<id>/fetch with the AppFetchRequest as JSON", async () => {
     (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(
       new Response(JSON.stringify({ status: 200, ok: true, headers: {}, body: "x", bodyEncoding: "utf8" }), {

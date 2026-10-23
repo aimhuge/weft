@@ -48,13 +48,13 @@ export interface AppSecretsPush {
 export function accessTokenFrom(account: Account): string | null;
 
 // Names the manifest declared that the push will send: every secret that's not from: "viewer",
-// followed by public names, de-duplicated, in declaration order. Viewer secrets and undeclared
+// then the keys its named reads need (deriveNeeds), followed by public names, de-duplicated, in declaration order. Viewer secrets and undeclared
 // names are not pushed.
-export function namesToPush(policy: ParsedPolicy): string[];
+export function namesToPush(policy: ParsedPolicy, reads?: Record<string, unknown>): string[];
 
 // What hosts the manifest's secrets are allowed to talk to, by name. Used in the Touch ID
 // sheet so the user sees where each name will go. Skips from: "viewer" names.
-export function pushTargets(policy: ParsedPolicy): string[];
+export function pushTargets(policy: ParsedPolicy, reads?: Record<string, unknown>): string[];
 
 // Looks up the saved app by id from ~/.weft/apps.json. Returns the app or null when the id
 // isn't there.

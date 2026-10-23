@@ -1,7 +1,8 @@
 // The frame side of the bridge between a hosted mini app and the page around it (lib/app-bridge.ts,
 // docs/architecture/mini-app-hosting.md). The route that serves the app's HTML inserts one inline
 // <script> (this module's output) right after <head>, or at the top if there's no <head>. The script
-// defines window.weft with the four methods a hosted app calls (fetch, read, env, requestSecret),
+// defines window.weft with the methods a hosted app calls (fetch, read, env, requestSecret, and the Mac's
+// access / requestAccess / revoke),
 // each posting a BridgeRequest to window.parent and resolving from a matching BridgeResponse.
 //
 // targetOrigin is the parent's exact origin, not "*": the parent page is on weft.zip (or localhost
@@ -30,7 +31,7 @@ export function bridgeScript(parentOrigin: string, timeoutMs = 30_000): string {
   var TIMEOUT = ${timeoutMs};
   var NOOP = ${noop ? "true" : "false"};
   var rejectAll = function (op) { return function () { return Promise.reject(new Error("bridge disabled: no parent origin")); } };
-  if (NOOP) return { fetch: rejectAll("fetch"), read: rejectAll("read"), env: rejectAll("env"), requestSecret: rejectAll("requestSecret") };
+  if (NOOP) return { fetch: rejectAll("fetch"), read: rejectAll("read"), env: rejectAll("env"), requestSecret: rejectAll("requestSecret"), access: rejectAll("access"), requestAccess: rejectAll("access"), revoke: rejectAll("access") };
   var nextId = 1;
   var pending = {};
   window.addEventListener("message", function (event) {
@@ -74,6 +75,10 @@ export function bridgeScript(parentOrigin: string, timeoutMs = 30_000): string {
     },
     env: function () { return send("env", {}); },
     requestSecret: function (name) { return send("requestSecret", { name: String(name) }); },
+    // The Mac's data-app calls (electron/pane-preload.cjs), so a page written for the Mac runs here too.
+    access: function () { return send("access", {}); },
+    requestAccess: function () { return send("access", {}); },
+    revoke: function () { return send("access", {}); },
   };
 })();`;
 }

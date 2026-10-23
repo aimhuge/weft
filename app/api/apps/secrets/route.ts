@@ -8,6 +8,7 @@ import { connection } from "next/server";
 import { appShareAccess } from "@/lib/app-share-access";
 import { createAppSecretStore } from "@/lib/app-secret-store";
 import { isConfigured as secretsConfigured } from "@/lib/app-secrets";
+import { readNeeds } from "@/lib/app-read-needs";
 import { NO_STORE, reject } from "@/lib/app-share-reply";
 import { serviceClient, bearerUser } from "@/lib/web-session";
 
@@ -15,27 +16,32 @@ const MAX_BODY_BYTES = 4 * 1024 * 1024;
 const SHARE_ID_RE = /^[A-Za-z0-9_-]{8,128}$/;
 const NAME_RE = /^[A-Z][A-Z0-9_]{0,63}$/;
 
-// The names the share's manifest lets an author push: from:"author" or from:undefined secrets, plus the
-// public list. Anything else in the body is silently dropped — the Mac only sends those names, but we
+// The names the share's manifest lets an author push: from:"author" or from:undefined secrets, the keys its
+// named reads need, plus the public list. Anything else in the body is silently dropped — the Mac only sends those names, but we
 // don't trust the wire to never disagree.
 function allowedNames(manifest: unknown): Set<string> {
   const out = new Set<string>();
   if (!manifest || typeof manifest !== "object") return out;
-  const secrets = (manifest as { secrets?: unknown }).secrets;
-  if (secrets && typeof secrets === "object" && !Array.isArray(secrets)) {
-    for (const [name, rule] of Object.entries(secrets as Record<string, unknown>)) {
-      if (!NAME_RE.test(name)) continue;
-      if (!rule || typeof rule !== "object") continue;
-      const r = rule as Record<string, unknown>;
-      if (r.from === "viewer") continue;
-      out.add(name);
-    }
-  }
+  for (const name of authorSecretNames((manifest as { secrets?: unknown }).secrets)) out.add(name);
+  // The keys the manifest's named reads run with on weft.zip (the read route asks for exactly these).
+  for (const name of readNeeds(manifest)) out.add(name);
   const pub = (manifest as { public?: unknown }).public;
   if (Array.isArray(pub)) {
     for (const item of pub) {
       if (typeof item === "string" && NAME_RE.test(item)) out.add(item);
     }
+  }
+  return out;
+}
+
+// The manifest's `secrets` block, minus viewer secrets and names that aren't env-shaped.
+function authorSecretNames(secrets: unknown): string[] {
+  if (!secrets || typeof secrets !== "object" || Array.isArray(secrets)) return [];
+  const out: string[] = [];
+  for (const [name, rule] of Object.entries(secrets as Record<string, unknown>)) {
+    if (!NAME_RE.test(name) || !rule || typeof rule !== "object") continue;
+    if ((rule as Record<string, unknown>).from === "viewer") continue;
+    out.push(name);
   }
   return out;
 }

@@ -33,13 +33,17 @@ export type BridgeRequest =
   // Asks Weft (never the app) to collect this viewer's own value for a `from: "viewer"` secret; resolves to whether it's set.
   | { tag: typeof BRIDGE_TAG; id: number; op: "requestSecret"; name: string }
   // The app's public values (publishable keys) by name.
-  | { tag: typeof BRIDGE_TAG; id: number; op: "env" };
+  | { tag: typeof BRIDGE_TAG; id: number; op: "env" }
+  // What the app's reads run as and whether they can: the Mac's data-app access() shape, so a page written for the
+  // Mac (Growth) gets past its first call on weft.zip. requestAccess() and revoke() send it too: on weft.zip the
+  // author's uploaded values are the grant, and a viewer has nothing to grant or revoke.
+  | { tag: typeof BRIDGE_TAG; id: number; op: "access" };
 
 export type BridgeResponse =
   | { tag: typeof BRIDGE_TAG; id: number; ok: true; result: unknown }
   | { tag: typeof BRIDGE_TAG; id: number; ok: false; error: string };
 
-const OPS = new Set(["fetch", "read", "requestSecret", "env"]);
+const OPS = new Set(["fetch", "read", "requestSecret", "env", "access"]);
 
 // A message from the app's frame, checked before the parent acts on it: the tag, a numeric id, a known op and the
 // fields that op needs. Anything else is ignored, never answered.
@@ -51,6 +55,7 @@ export function parseBridgeRequest(data: unknown): BridgeRequest | null {
   if (m.op === "fetch") return parseFetch(m, id);
   if (m.op === "read") return parseRead(m, id);
   if (m.op === "requestSecret") return parseRequestSecret(m, id);
+  if (m.op === "access") return { tag: BRIDGE_TAG, id, op: "access" };
   return { tag: BRIDGE_TAG, id, op: "env" };
 }
 

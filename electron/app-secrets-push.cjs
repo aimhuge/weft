@@ -11,6 +11,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { APPS_FILE, loadApps } = require("./app-data-frame.cjs");
 const { parsePolicy } = require("./app-fetch-policy.cjs");
+const { deriveNeeds } = require("./app-data-grants.cjs");
 
 // The session JSON the Supabase client stores (lib/account.ts, "weft-auth" key). Returns the
 // access_token; the refresh_token lives next to it but is for the client to use, not main.
@@ -30,8 +31,10 @@ function accessTokenFrom(account) {
 // What hosts the manifest's secrets are allowed to talk to, by name. Used in the Touch ID
 // sheet so the user sees where each name will go. Skips from: "viewer" names (they live in
 // the viewer's own vault, not the app's) so the sheet only names values we're about to push.
-function pushTargets(policy) {
+function pushTargets(policy, reads = {}) {
   const out = [];
+  const needs = deriveNeeds(reads);
+  if (needs.length) out.push(`${needs.join(", ")} → the app's reads`);
   for (const [name, rule] of Object.entries(policy.secrets)) {
     if (rule.from === "viewer") continue;
     const hosts = rule.hosts.map((h) => (h.kind === "wildcard" ? `*.${h.base}` : h.name));
@@ -86,13 +89,17 @@ function readAppManifest(dataDir, app) {
 }
 
 // Returns the names whose values the push will send: the manifest's author secrets
-// (from missing or "author") plus its public names, in the order they appear. Viewer
-// secrets and undeclared names are not pushed.
-function namesToPush(policy) {
+// (from missing or "author"), the keys its named reads run with on weft.zip (deriveNeeds,
+// the same list the Mac's grant sheet shows), then its public names. Viewer secrets and
+// undeclared names are not pushed.
+function namesToPush(policy, reads = {}) {
   const names = [];
   for (const [name, rule] of Object.entries(policy.secrets)) {
     if (rule.from === "viewer") continue;
     names.push(name);
+  }
+  for (const name of deriveNeeds(reads)) {
+    if (!names.includes(name)) names.push(name);
   }
   for (const name of policy.public) {
     if (!names.includes(name)) names.push(name);
@@ -153,7 +160,8 @@ function createAppSecretsPush({ dataDir, vault, account, confirm, fetch: fetchIm
     }
 
     const policy = parsePolicy(manifest);
-    const names = namesToPush(policy);
+    const reads = manifest.reads && typeof manifest.reads === "object" ? manifest.reads : {};
+    const names = namesToPush(policy, reads);
     if (!names.length) return { ok: true, pushed: [], missing: [] };
 
     const { values, missing: missingNames, label } = await vault.valuesFor(folder, names, manifest.env);
@@ -161,7 +169,7 @@ function createAppSecretsPush({ dataDir, vault, account, confirm, fetch: fetchIm
     if (!count) {
       return { ok: true, pushed: [], missing: names, error: `No values yet in ${label} · ${manifest.env}.` };
     }
-    const refused = await confirmPush({ manifest, count, label, targets: pushTargets(policy) });
+    const refused = await confirmPush({ manifest, count, label, targets: pushTargets(policy, reads) });
     if (refused) return refused;
 
     const token = accessTokenFrom(account());

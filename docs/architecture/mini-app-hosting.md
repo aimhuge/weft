@@ -239,8 +239,14 @@ Nothing new: files sit in `weft-blobs` on Supabase and the fetch route runs on V
 
 ### Where data app reads still run
 
-`weft.read(name, args?)` still answers today's data-app reads (Supabase functions, GA4 reports) on the
-Mac only. The weft.zip / API route sides call into the same `electron/app-data-fetch.cjs` and
+`weft.read(name, args?)` answers the data-app reads (Supabase functions, GA4 reports) on the Mac and, for a
+shared app, on weft.zip (`app/api/a/[id]/read`) with the author's keys. Those keys are named by the reads, not by
+a `secrets` block: `lib/app-read-needs.ts` `readNeeds` (the Mac's `deriveNeeds` in `electron/app-data-grants.cjs`)
+gives `SUPABASE_SECRET_KEY` and the GA4 pair, and the Share dialog's Upload secrets button, the push and
+`app/api/apps/secrets` all count them. A page written for the Mac's pane also calls `weft.access()`,
+`requestAccess()` and `revoke()`; on weft.zip they answer from `app/api/a/[id]/access` with the Mac's shape
+(`granted` always true, `missing` = the read keys not uploaded yet). Growth runs unchanged in both places.
+Earlier, reads were Mac only. The weft.zip / API route sides call into the same `electron/app-data-fetch.cjs` and
 `electron/app-data.cjs` flows as the data app did; the `from: "viewer"` and `from: "author"` split for
 secrets is new, the read declaration in `weft-app.json` is the same shape it already was.
 

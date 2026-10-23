@@ -175,6 +175,16 @@ describe("POST /api/apps/secrets", () => {
     expect(setValue).not.toHaveBeenCalledWith("abc123xyz", "OPENAI_KEY", expect.anything(), expect.anything());
   });
 
+  it("accepts the keys the manifest's named reads need, for an app with no secrets block", async () => {
+    const setValue = vi.fn().mockResolvedValue(undefined);
+    createAppSecretStore.mockReturnValue({ setValue });
+    appShareAccess.mockResolvedValue({ kind: "ok", share: { ...SHARE, manifest: { reads: { signups: { supabase: "growth_signups_by_day" } } } } });
+    const { POST } = await import("./route");
+    const res = await POST(post({ shareId: "abc123xyz", values: { SUPABASE_SECRET_KEY: "sb_secret_x", GA4_PROPERTY_ID: "1" } }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ pushed: ["SUPABASE_SECRET_KEY"], dropped: ["GA4_PROPERTY_ID"] });
+  });
+
   it("continues past a single upsert failure so the rest still go up", async () => {
     const setValue = vi.fn().mockImplementation((_id: string, name: string) => {
       if (name === "STRIPE_KEY") throw new Error("cipher failed");

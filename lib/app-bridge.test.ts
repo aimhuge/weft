@@ -41,6 +41,10 @@ describe("parseBridgeRequest", () => {
     expect(parseBridgeRequest({ ...base, op: "env" })).toEqual({ ...base, op: "env" });
   });
 
+  it("accepts access, the Mac's data-app call", () => {
+    expect(parseBridgeRequest({ ...base, op: "access", extra: 1 })).toEqual({ ...base, op: "access" });
+  });
+
   it.each([
     ["null", null],
     ["a string", "hi"],

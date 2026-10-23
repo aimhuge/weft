@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import { readNeeds } from "@/lib/app-read-needs";
 import type { AppPolicy } from "@/lib/app-share-types";
 import { errorText } from "./ShareParts";
 
-// "Upload secrets" appears when the manifest declares author secrets (no `from` or `from: "author"`)
-// or public names. Calling window.weft.appSecrets.push(appId) ships the named vault values to the cloud;
+// "Upload secrets" appears when the manifest declares author secrets (no `from` or `from: "author"`),
+// public names, or named reads (which need the author's keys on weft.zip, lib/app-read-needs.ts). Calling window.weft.appSecrets.push(appId) ships the named vault values to the cloud;
 // Electron's preload wires the IPC, the dialog only handles the answer. A future agent will add the
 // API; this button only renders and calls it when it's there. Split out from ShareAppDialog.tsx so the
 // dialog stays under the 300-line cap (SOUL.md's ratchet).
@@ -45,7 +46,8 @@ function hasUploabableSecrets(manifest: AppPolicy | null): boolean {
   const secretRules = manifest?.secrets ?? {};
   const hasAuthorSecrets = Object.values(secretRules).some((r) => !r.from || r.from === "author");
   const hasPublic = (manifest?.public ?? []).length > 0;
-  return hasAuthorSecrets || hasPublic;
+  // Named reads run on weft.zip with the author's keys too (SUPABASE_SECRET_KEY, the GA4 pair).
+  return hasAuthorSecrets || hasPublic || readNeeds(manifest).length > 0;
 }
 
 function formatPushAnswer(result: PushResult): string {

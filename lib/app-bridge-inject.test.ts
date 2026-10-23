@@ -18,6 +18,10 @@ describe("bridgeScript", () => {
     expect(src).toContain("read");
     expect(src).toContain("env");
     expect(src).toContain("requestSecret");
+    // The Mac's data-app calls, so a page written for the Mac's pane (Growth) runs on weft.zip.
+    expect(src).toContain("access: function");
+    expect(src).toContain("requestAccess: function");
+    expect(src).toContain("revoke: function");
     expect(src).not.toContain('"NOOP", true');
   });
 

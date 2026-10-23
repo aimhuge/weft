@@ -84,6 +84,10 @@ export function useAppBridge(iframeRef: React.RefObject<HTMLIFrameElement | null
           handle(id, callRequestSecret(shareId, name, secrets, renderSecretForm));
           return;
         }
+        case "access": {
+          handle(request.id, callAccess(shareId));
+          return;
+        }
       }
     };
     window.addEventListener("message", onMessage);
@@ -123,6 +127,16 @@ async function callRead(shareId: string, name: string, args?: Record<string, unk
   if (!res.ok) {
     const error = await safeError(res);
     throw new Error(error || `read ${res.status}`);
+  }
+  return res.json();
+}
+
+// GET /api/a/<id>/access: { project, env, needs, missing, granted }, the Mac's data-app access() shape.
+async function callAccess(shareId: string): Promise<unknown> {
+  const res = await fetch(`/api/a/${shareId}/access`, { credentials: "same-origin" });
+  if (!res.ok) {
+    const error = await safeError(res);
+    throw new Error(error || `access ${res.status}`);
   }
   return res.json();
 }
