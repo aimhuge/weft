@@ -65,7 +65,12 @@ is the contract between the parts:
   tag catalog), `WebShareBoard` and the web's dialogs. The board's ★ and 🏷 narrow it with the desktop's own
   `lib/rail-view.ts` (`RailFilter`, `filterCards`, `isFiltering`, `toggleTag`), the same shape the desktop's rail keeps.
   `.wz-desk` (`web-board.css`) gives the
-  subtree the dark desktop tokens and the full window instead of the workspace shell's 880px column. The server renders the
+  subtree the dark desktop tokens and the full window instead of the workspace shell's 252px sidebar column. The
+  shell renders `<div class="wz-app wz-workspace">` — both classes on the *same* element — so the rule that widens
+  the board must be a **compound** selector (`.wz-app.wz-workspace:has(.wz-desk)`); a descendant combinator
+  (`.wz-app .wz-workspace`) asks for a `.wz-workspace` inside a `.wz-app` and never matches, which left the board in
+  the shell's first column with the rest of the width empty. `components/web-board/web-board-layout.test.tsx` pins
+  that shape. The server renders the
   workspace's non-deleted cards (the copilot is left out); `useWebBoard` subscribes to Realtime `postgres_changes` on
   `cloud_cards` and `cloud_thread_items` (filter `org_id=eq.<id>`) and moves, adds and removes cards in place, with a Live dot
   that goes grey when the channel drops. `?card=<id>` opens a card in `WebThreadPanel`, framed over the board like the desktop's open card

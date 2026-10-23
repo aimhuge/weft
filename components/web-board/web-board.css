@@ -47,8 +47,13 @@
   font-size: 14px;
 }
 
-/* The workspace sidebar steps aside on the board (WorkspaceHeader returns null there), so main takes the whole row. */
-.wz-app .wz-workspace:has(.wz-desk) {
+/* The workspace sidebar steps aside on the board (WorkspaceHeader returns null there), so main takes the whole row.
+
+   The two classes sit on the SAME element (app/[orgSlug]/layout.tsx renders class="wz-app wz-workspace"), so this
+   has to be a compound selector — a descendant combinator (.wz-app .wz-workspace) asks for a .wz-workspace inside a
+   .wz-app and never matches, which left the board in the shell's 252px first column with the rest of the width
+   empty. */
+.wz-app.wz-workspace:has(.wz-desk) {
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
 }
