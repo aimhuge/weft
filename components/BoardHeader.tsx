@@ -8,39 +8,27 @@ import Icon from "./Icon";
 
 export interface BoardHeaderProps {
   mac: boolean;
-  running: number;
-  waiting: number;
-  browserOpen: boolean;
-  terminalOpen: boolean;
+  // Unarchived cards in Running and Needs you.
+  counts: { running: number; waiting: number };
   hint: (id: string, fallback: string) => string;
-  onToggleBrowser: () => void;
-  onToggleTerminal: () => void;
+  // The browser and terminal buttons, lit while their panes are open.
+  panes: { browserOpen: boolean; terminalOpen: boolean; onToggleBrowser: () => void; onToggleTerminal: () => void };
   onShareBoard: () => void;
   onOpenSettings: () => void;
   onOpenNew: () => void;
-  // The three load-in-CrashGuard elements; each is a guarded() component from Board.tsx.
-  restartChip: ReactNode;
-  headerBadges: ReactNode;
-  copilotButton: ReactNode;
-  accountButton: ReactNode;
+  // The four load-in-CrashGuard elements; each is a guarded() component from Board.tsx.
+  slots: { restart: ReactNode; badges: ReactNode; copilot: ReactNode; account: ReactNode };
 }
 
 export default function BoardHeader({
   mac,
-  running,
-  waiting,
-  browserOpen,
-  terminalOpen,
+  counts: { running, waiting },
   hint,
-  onToggleBrowser,
-  onToggleTerminal,
+  panes: { browserOpen, terminalOpen, onToggleBrowser, onToggleTerminal },
   onShareBoard,
   onOpenSettings,
   onOpenNew,
-  restartChip,
-  headerBadges,
-  copilotButton,
-  accountButton,
+  slots,
 }: BoardHeaderProps) {
   return (
     <header
@@ -54,10 +42,10 @@ export default function BoardHeader({
         {running} running
         {waiting > 0 && <span className="text-warn"> · {waiting} need{waiting === 1 ? "s" : ""} you</span>}
       </span>
-      {restartChip}
-      {headerBadges}
+      {slots.restart}
+      {slots.badges}
       <div className="flex-1" />
-      {copilotButton}
+      {slots.copilot}
       <button
         onClick={onToggleBrowser}
         title={hint("browser", "Browser")}
@@ -98,7 +86,7 @@ export default function BoardHeader({
       >
         <Icon name="plus" size={15} />
       </button>
-      {accountButton}
+      {slots.account}
     </header>
   );
 }

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { railPinned, setRailPinned, starredCount, toggleTag, type RailFilter, type RailPanel } from "@/lib/rail-view";
-import type { Card } from "@/lib/types";
+import type { RailContext } from "./rail-context";
 import { useSlideOut } from "@/lib/use-slide-out";
 import { useDrawerWidth } from "@/lib/use-drawer-width";
 import { useSuperAdminGate } from "@/lib/use-admin-gate";
@@ -61,29 +61,20 @@ const isTool = (panel: RailPanel | null): panel is Tool => panel !== null && pan
 export default function SideRail({
   open,
   onOpen,
-  project,
-  folders,
-  cards,
+  ctx,
   filter,
   onFilter,
   onStarCard,
   onTagCard,
   catalog,
-  onOpenUrl,
   onClosePane,
   paneUrl,
-  onOpenCard,
-  onStartCard,
-  notify,
 }: {
   // Which drawer is open, if any.
   open: RailPanel | null;
   onOpen: (panel: RailPanel | null) => void;
-  // The board's selected project folder, or null for all of them.
-  project: string | null;
-  // The folders whose vaults 🔐 shows: every project on the board (its filter starts on project).
-  folders: string[];
-  cards: Card[];
+  // The board's project and cards and the actions every drawer shares (components/rail-context.ts).
+  ctx: RailContext;
   // ★ and the tag the board is narrowed to (lib/rail-view.ts filterCards).
   filter: RailFilter;
   onFilter: (filter: RailFilter) => void;
@@ -92,18 +83,12 @@ export default function SideRail({
   onTagCard: (cardId: string, tag: string) => void;
   // Every tag with its colour and count, and the calls that change them (components/use-tag-catalog.ts).
   catalog: TagCatalog;
-  // Shows a page (a deploy) in the board's browser pane.
-  onOpenUrl: (url: string) => void;
   // Hides the standalone browser pane (a second click on the active mini app, components/AppsRail.tsx).
   onClosePane: () => void;
   // The page the board's pane shows, which lights its mini app below Services (components/AppsRail.tsx); unset outside the desktop app.
   paneUrl?: string;
-  // Opens a card's thread (the Supabase drawer's link from a migration to the card that wrote it).
-  onOpenCard: (card: Card) => void;
-  // Starts a card in a folder (a drawer's helper card, like Supabase's Migrate); rejects when that fails.
-  onStartCard: (cwd: string, prompt: string, title: string) => Promise<string | undefined>;
-  notify: (err: unknown) => void;
 }) {
+  const { project, folders, cards, onOpenUrl, onOpenCard, onStartCard, notify } = ctx;
   const [pinned, setPinned] = useState(() => typeof window !== "undefined" && railPinned());
   // A card is being dragged somewhere on the board: ★ and 🏷 light up to show they take drops.
   const [cardDrag, setCardDrag] = useState(false);

@@ -18,7 +18,7 @@ Discoverability is built on the same registry: tooltips, key badges, native righ
 - `components/submit-keys.ts` + `lib/new-thread.ts` + `lib/use-mod-held.ts`: the New thread dialog's start keys. Enter is a new line; ⌘↵ starts the thread and closes the dialog; ⌃↵ (macOS only, since Ctrl is the mod key elsewhere) starts it and keeps the dialog open, emptied, for the next one (`onCreate`'s `{ stay }`: the board doesn't open the new card). `useHeldModifiers()` tells ⌘ from ⌃ while held, and `startButton()` relabels the Start button to match ("Start & close ⌘↵", "Start, keep open ⌃↵"). `submitFor()` decides what Enter does in the raw Markdown box.
 - `components/ModifierHint.tsx`: hold Shift, or ⌘ (Ctrl off macOS) for 0.6s, and a card bottom-left lists the registered shortcuts that use it.
 - `lib/card-menu.ts`: every right-click menu item has a key (`MENU_KEYS`), live only while the menu is open; `electron/main.cjs` sets it as the native item's key equivalent. Items with a board shortcut take the registry's key instead (`components/use-board-menus.ts`), skipping Return, arrows and the other keys the open menu uses itself.
-- `components/Board.tsx`: registers the board shortcuts and mounts the listener once.
+- `components/use-board-commands.ts`: registers the board shortcuts (`components/board-shortcuts.ts`) and mounts the listener once, from the same input as the command palette and the menu bridge (`components/Board.tsx` passes it in).
 - `components/CardView.tsx`: cards carry `data-card-id`, and `Board` marks each column with `data-column`; keyboard navigation moves DOM focus between them.
 
 ## How it works

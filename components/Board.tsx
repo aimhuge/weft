@@ -3,29 +3,26 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { copilotLaneOpen, copilotLanePeek, showBacklog, subscribeBoardPrefs } from "@/lib/board-prefs";
 import { laneStateFromPrefs, type LaneState } from "@/lib/copilot-lane";
-import { api, mergeThread, type BrowserState, type MenuAction } from "@/lib/client";
+import { api, type BrowserState } from "@/lib/client";
 import { worktreeParent } from "@/lib/format";
 import { busyHere } from "@/lib/overlap";
 import { planResets } from "@/lib/schedule";
-import { COLUMNS, type BoardEvent, type Card, type Column, type LoginView, type Project, type ThreadItem } from "@/lib/types";
-import { useShortcutHint, useShortcutListener, useShortcuts } from "@/lib/hotkeys";
-import { playChime, preloadChimes } from "@/lib/chimes";
+import { COLUMNS, type Card, type Column, type Project } from "@/lib/types";
+import { useShortcutHint } from "@/lib/hotkeys";
+import { preloadChimes } from "@/lib/chimes";
 import { useWorkspaceLayout } from "@/lib/use-workspace-layout";
 import { onOpenFile } from "@/lib/open-file";
 import {
-  cardChangeEffects,
   groupByColumn,
-  reviewFilterCounts,
   hitPlanLimit,
   latestLimits,
-  SORTERS,
-  stepThrough,
   summarizeProjects,
-  topMatches,
-  type SortKey,
 } from "@/lib/board-view";
-import { useBoardEvents } from "@/lib/use-events";
-import { useOnboardingEvents } from "@/lib/onboarding-events";
+import { useBoardLive } from "@/lib/board-live";
+import { useBoardDialogs } from "@/lib/use-board-dialogs";
+import { useOpenCard } from "@/lib/use-open-card";
+import { useNewThreadPane } from "@/lib/use-new-thread-pane";
+import { filterState, footerFor, headerCounts, openCardOf, workFolder } from "@/lib/board-derive";
 import { useRestart } from "@/lib/use-restart";
 import { useDesktopBridge } from "@/lib/use-desktop-bridge";
 import { useStartupCheck } from "@/lib/use-startup-check";
@@ -39,31 +36,24 @@ import { useBoardActions } from "@/lib/use-board-actions";
 import { useBoardToggles } from "@/lib/use-board-toggles";
 import { resumeActions } from "@/lib/resume-actions";
 import { useEscape } from "@/lib/use-escape";
-import { announceAccountChange } from "@/lib/use-account";
-import CrashGuard from "./CrashGuard";
 import { guarded } from "./guarded";
-import type { PaletteItem } from "./CommandPalette";
-import { boardPaletteItems, promptItems } from "./board-palette";
-import { boardShortcuts } from "./board-shortcuts";
-import { addSecret } from "@/lib/use-vault";
-import { addWebhookAsk } from "@/lib/use-webhooks";
-import { parseWebhookAsk } from "@/lib/webhooks-view";
-import RailFilterChip from "./RailFilterChip";
-import { filterCards, isFiltering, railPinned, toggleTag, type RailFilter, type RailPanel } from "@/lib/rail-view";
+import { useBoardCommands } from "./use-board-commands";
+import { filterCards, railPinned, toggleTag, type RailFilter, type RailPanel } from "@/lib/rail-view";
 import { TagColors } from "./TagPill";
 import { useTagCatalog } from "./use-tag-catalog";
 import { useBoardMenus } from "./use-board-menus";
 import { useSwitchAll } from "./switch-all-button";
-import ProjectBar, { folderName } from "./ProjectBar";
-import FilterBox from "./FilterBox";
-import { NO_DRAG } from "@/lib/no-drag";
-import { filterHasFocus as filterHasFocusImpl, focusFilter as focusFilterImpl, jumpToNeedsYou as jumpToNeedsYouImpl, moveFocus as moveFocusImpl, openFocused as openFocusedImpl } from "@/lib/board-focus";
-import { announce, showPage, without } from "@/lib/board-helpers";
+import { folderName } from "./ProjectBar";
+import { showPage } from "@/lib/board-helpers";
 import { cardHandlers } from "@/lib/card-handlers";
 import { useThreadHandlers } from "@/lib/thread-handlers";
 import BoardHeader from "./BoardHeader";
-import BoardColumn, { COLUMN_LIMIT, CardSkeleton } from "./BoardColumn";
-import StandaloneBrowserPane from "./StandaloneBrowserPane";
+import { CardSkeleton } from "./BoardColumn";
+import BoardColumns from "./BoardColumns";
+import OpenCard, { CardFrame } from "./OpenCard";
+import BoardBottom from "./BoardBottom";
+import BoardBrowserPane from "./BoardBrowserPane";
+import BoardProjectBar from "./BoardProjectBar";
 
 // Each loads in its own CrashGuard (components/guarded.tsx), so a piece a thread left half-written, even one that
 // fails as its module loads, breaks only its own spot on the board.
@@ -72,26 +62,13 @@ const CopilotButton = guarded(() => import("./CopilotButton"), { inline: true, w
 const CopilotLane = guarded(() => import("./CopilotLane"), { what: "copilot", className: "self-stretch shrink-0" });
 const OnboardingTips = guarded(() => import("./OnboardingTips"), { what: "onboarding tips", inline: true });
 const RestartChip = guarded(() => import("./RestartChip"), { inline: true, what: "restart chip" });
-const BrowserPane = guarded(() => import("./BrowserPane"), { what: "browser pane", className: "m-3 w-[360px] self-start" });
 const CardView = guarded(() => import("./CardView"), { what: "card", placeholder: <CardSkeleton /> });
 const SideRail = guarded(() => import("./LibraryRail"), { what: "rail", className: "m-3 w-[220px] self-start" });
-const PaneCardMarks = guarded(() => import("./PaneCardMarks"), { inline: true, what: "card marks" });
 const HeaderBadges = guarded(() => import("./HeaderBadges"), { inline: true, what: "header badges" });
-const BoardFooter = guarded(() => import("./BoardFooter"), { what: "footer" });
 const NewCardDialog = guarded(() => import("./NewCardDialog"), { what: "New thread dialog", className: "m-3 w-[360px] self-start" });
-const TerminalDrawer = guarded(() => import("./TerminalDrawer"), { what: "terminal", className: "m-3" });
-const ShowRail = guarded(() => import("./ShowRail"), { what: "show rail", className: "w-[72px] shrink-0" });
-const ThreadPanel = guarded(() => import("./ThreadPanel"), { what: "thread", className: "m-3 w-[360px] self-start" });
-// The four-column workspace that holds the thread + editor + pane + show when a card is open.
-const CardWorkspace = guarded(() => import("./CardWorkspace"), { what: "card workspace", className: "flex-1 min-w-0" });
-// The code/markdown editor column, in its own CrashGuard so a broken editor leaves the thread and the pane.
-const EditorColumn = guarded(() => import("./EditorColumn"), { what: "editor column" });
 // Every dialog, sheet and overlay over the board's columns — Settings, Tags…, Share…, the palette,
 // file drop, the toast — each loading through its own guarded() import (components/BoardDialogs.tsx).
 const BoardDialogs = guarded(() => import("./BoardDialogs"), { what: "dialogs", inline: true });
-
-// The browser pane's page beside the New thread dialog (not a card's).
-const NEW_THREAD_PANE = "new-thread";
 
 const CLOSED_BROWSER: BrowserState = {
   visible: false,
@@ -103,32 +80,26 @@ const CLOSED_BROWSER: BrowserState = {
   zoom: 100,
 };
 
-// Cards the filter box lists under itself while typing.
-const FILTER_MATCHES = 5;
-
 export default function Board() {
   const [cards, setCards] = useState<Card[]>([]);
   const [home, setHome] = useState("");
   const [loaded, setLoaded] = useState(false);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  // The card you opened last: still outlined after you close it, so you can find your place on the board.
-  const [lastOpenId, setLastOpenId] = useState<string | null>(null);
   const { toast, setToast, notify } = useToast();
   // Restart when idle (lib/restart-when-idle.ts): the header chip and the palette command.
   const restartView = useRestart();
-  const [thread, setThread] = useState<ThreadItem[]>([]);
-  const [streaming, setStreaming] = useState("");
-  const [showNew, setShowNew] = useState(false);
   // The folder "New Thread in This Folder" asked for; otherwise the dialog picks.
   const [newCwd, setNewCwd] = useState<string | undefined>();
   // The left rail's open drawer (🏷 tags, 🔐 and the tools under it).
   const [libraryOpen, setLibraryOpen] = useState<RailPanel | null>(null);
   // ★ and 🏷 on the rail narrow the board to starred cards, a tag, or both.
   const [railFilter, setRailFilter] = useState<RailFilter>({});
-  // The card opened from Rename…, so its title opens ready to edit.
-  const [renameId, setRenameId] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState<Column | null>(null);
   const [webBrowserOpen, setWebBrowserOpen] = useState(false);
+  // Which card is open, its thread and streaming text, the last one opened, Rename…, unseen moves (lib/use-open-card.ts).
+  const {
+    selectedId, setSelectedId, lastOpenId, thread, setThread, streaming, setStreaming,
+    renameId, setRenameId, unseen, setUnseen, selectedRef, loadThread, select,
+  } = useOpenCard({ setWebBrowserOpen });
   const [browserWidth, setBrowserWidth] = useState(560);
   const [terminalOpen, setTerminalOpen] = useState(false);
   const [terminalHeight, setTerminalHeight] = useState(240);
@@ -138,14 +109,12 @@ export default function Board() {
   // Worktree folder -> its main repo, from the server; the bar shows each worktree's cards under that repo.
   const [roots, setRoots] = useState<Record<string, string>>({});
   const [query, setQuery] = useState("");
-  const [menuOpen, setMenuOpen] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
-  const [sharingBoard, setSharingBoard] = useState(false);
-  const [showHelp, setShowHelp] = useState(false);
-  const [showPalette, setShowPalette] = useState(false);
-  const [paletteQuery, setPaletteQuery] = useState("");
-  const [login, setLogin] = useState<LoginView | null>(null);
+  // New thread, Settings, Share board, Help, the palette, a sign-in and the project menu (lib/use-board-dialogs.ts).
+  const {
+    showNew, setShowNew, setMenuOpen, showSettings, setShowSettings, sharingBoard, setSharingBoard,
+    showHelp, setShowHelp, showPalette, setShowPalette, paletteQuery, setPaletteQuery, login, setLogin, overlay, boardKeys,
+  } = useBoardDialogs();
   // The four-column workspace for an open card: open/close state, widths, and the divider drag.
   // Declared before the shortcuts below read workspace.toggle (lib/workspace-layout.ts has the rest).
   const workspace = useWorkspaceLayout();
@@ -155,33 +124,16 @@ export default function Board() {
   const columns = useRef(new Map<string, Column>());
   // Each card's last known error, to chime when a new one appears.
   const errors = useRef(new Map<string, string | undefined>());
-  const selectedRef = useRef<string | null>(null);
-  // Cards that moved (with a chime) while you weren't looking; highlighted until you open them.
-  const [unseen, setUnseen] = useState<ReadonlySet<string>>(new Set());
   // Folders the server has already resolved into roots.
   const resolvedFolders = useRef(new Set<string>());
   const now = useNow();
   const { desktop, mac, browser } = useDesktopBridge(CLOSED_BROWSER, selectedId, cards);
   useStartupCheck(loaded, setToast);
-  const onMenu = useRef<(action: MenuAction, payload?: string) => void>(() => {});
-
-  useEffect(() => {
-    selectedRef.current = selectedId;
-  }, [selectedId]);
+  // The New thread dialog's splash page in the pane (lib/use-new-thread-pane.ts).
+  useNewThreadPane(showNew, selectedRef);
 
   // Decode the chime files now, so the first card that moves isn't late to sound.
   useEffect(() => preloadChimes(), []);
-
-  // merge keeps live items that arrived during the fetch; without it (after a reconnect, when what's
-  // shown may be stale) the snapshot replaces the thread.
-  const loadThread = useCallback((id: string, { merge = false }: { merge?: boolean } = {}) => {
-    api
-      .thread(id)
-      .then((data) => {
-        if (selectedRef.current === id) setThread((prev) => (merge ? mergeThread(data.items, prev) : data.items));
-      })
-      .catch(() => {});
-  }, []);
 
   const rootOf = useCallback((cwd: string) => roots[cwd] ?? worktreeParent(cwd) ?? cwd, [roots]);
 
@@ -196,31 +148,12 @@ export default function Board() {
       .catch(() => {});
   }, []);
 
-  const select = useCallback(
-    (id: string | null) => {
-      // A card always opens full screen, with its browser beside the thread; closing it hides the browser.
-      if (Boolean(id) !== Boolean(selectedRef.current)) {
-        if (window.weft) window.weft.browser.setVisible(Boolean(id));
-        else setWebBrowserOpen(Boolean(id));
-      }
-      selectedRef.current = id;
-      setSelectedId(id);
-      if (id) setLastOpenId(id);
-      setRenameId(null);
-      if (id) setUnseen((prev) => (prev.has(id) ? without(prev, id) : prev));
-      setThread([]);
-      setStreaming("");
-      if (id) loadThread(id, { merge: true });
-    },
-    [loadThread],
-  );
-
   // Computed early so the hooks below (actions, toggles, archive) can take it as a dep.
   const laneOpen = useSyncExternalStore(subscribeBoardPrefs, copilotLaneOpen, () => false);
   const lanePeek = useSyncExternalStore(subscribeBoardPrefs, copilotLanePeek, () => false);
   const laneState: LaneState = laneStateFromPrefs(laneOpen, lanePeek);
   // The copilot opens in the same window as any card, though it lives apart from `cards`.
-  const selected = cards.find((c) => c.id === selectedId) ?? (copilot?.id === selectedId ? copilot : null);
+  const selected = openCardOf(cards, copilot, selectedId);
   // The most recent card's folder, for places that need a cwd when no card is open.
   const latest = latestLimits(cards);
   const latestCwd = latest?.cwd;
@@ -258,165 +191,15 @@ export default function Board() {
     select,
   });
 
-  // Live updates. The first open (and every reconnect) reloads everything, so nothing is missed.
-  useBoardEvents(
-    (event: BoardEvent) => {
-      switch (event.type) {
-        case "card":
-          // The copilot is a thread too, but it has its own lane and no project.
-          if (event.card.role === "copilot") {
-            updateCopilot(event.card);
-            break;
-          }
-          {
-            const { id, column, error } = event.card;
-            const effects = cardChangeEffects({
-              previous: columns.current.get(id),
-              column,
-              previousError: errors.current.get(id),
-              error,
-              own: ownMoves.current.get(id),
-              now: Date.now(),
-              open: selectedRef.current === id,
-            });
-            columns.current.set(id, column);
-            errors.current.set(id, error);
-            if (effects.moved) {
-              announce(event.card, () => select(id));
-              ownMoves.current.delete(id);
-            }
-            if (effects.chime) playChime(effects.chime);
-            if (effects.markUnseen) setUnseen((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
-            if (effects.errorChime) playChime("error");
-          }
-          resolveFolders([event.card.cwd]);
-          setCards((prev) => {
-            const at = prev.findIndex((c) => c.id === event.card.id);
-            if (at === -1) return [event.card, ...prev];
-            const next = prev.slice();
-            next[at] = event.card;
-            return next;
-          });
-          break;
-        case "card_deleted":
-          setCards((prev) => prev.filter((c) => c.id !== event.id));
-          setUnseen((prev) => (prev.has(event.id) ? without(prev, event.id) : prev));
-          if (selectedRef.current === event.id) setSelectedId(null);
-          break;
-        case "thread":
-          if (event.cardId !== selectedRef.current) break;
-          setThread((prev) => {
-            const next = event.truncate ? prev.slice(0, event.index) : prev.slice();
-            next[event.index] = event.item;
-            return next;
-          });
-          if (event.item.kind === "assistant" || event.item.kind === "result") setStreaming("");
-          break;
-        case "delta":
-          if (event.cardId === selectedRef.current) setStreaming((text) => text + event.text);
-          break;
-        case "account":
-          announceAccountChange();
-          break;
-        case "restart":
-          restartView.apply(event.restart);
-          if (event.restart.error) setToast(event.restart.error);
-          break;
-        case "projects":
-          resolveFolders(event.projects.map((p) => p.path));
-          setProjects(event.projects);
-          break;
-        case "login":
-          setLogin(event.login.state === "cancelled" ? null : event.login);
-          break;
-      }
-    },
-    () => {
-      api
-        .list()
-        .then((data) => {
-          columns.current = new Map(data.cards.map((c) => [c.id, c.column]));
-          errors.current = new Map(data.cards.map((c) => [c.id, c.error]));
-          for (const c of data.cards) resolvedFolders.current.add(c.cwd);
-          setCards(data.cards);
-          setHome(data.home);
-          setRoots(data.roots);
-          setLoaded(true);
-        })
-        .catch(notify);
-      api
-        .settings()
-        .then((settings) => {
-          // The card list resolved the saved projects too.
-          for (const p of settings.projects) resolvedFolders.current.add(p.path);
-          setProjects(settings.projects);
-        })
-        .catch(() => {});
-      loadFromPrefs();
-      loadCopilot();
-      restartView.reload();
-      if (selectedRef.current) loadThread(selectedRef.current);
-    },
-  );
-
-  // While the New thread dialog is up, the browser pane beside it shows the splash. Closing it goes back to
-  // the open card's browser (a card just started is open by then), or the pane as it was.
-  useEffect(() => {
-    const bridge = window.weft;
-    if (!showNew || !bridge) return;
-    const before = bridge.browser.getState();
-    const page = api.newThreadPage();
-    const shown = page.then(({ url }) => bridge.browser.open(url, NEW_THREAD_PANE)).catch(() => {});
-    return () => {
-      void Promise.all([before, shown]).then(([state]) => {
-        bridge.browser.setActive(selectedRef.current);
-        if (!selectedRef.current) bridge.browser.setVisible(state.visible);
-      }).catch(() => {});
-    };
-  }, [showNew]);
-
-  // The menu, dock, tray, and shortcuts reach the board through onMenu, which always sees the latest
-  // state via this ref (the actions live below, defined after this effect).
-  const menuActions = useRef<{ openNew: () => void; openCard: (card: Card) => void; focusFilter: () => void; toggleTerminal: () => void }>({
-    openNew: () => {},
-    openCard: () => {},
-    focusFilter: () => {},
-    toggleTerminal: () => {},
-  });
-  useEffect(() => {
-    onMenu.current = (action, payload) => {
-      switch (action) {
-        case "new-thread":
-          menuActions.current.openNew();
-          break;
-        case "settings":
-          setShowSettings(true);
-          break;
-        case "open-card": {
-          const card = cards.find((c) => c.id === payload);
-          if (card) menuActions.current.openCard(card);
-          else if (payload) select(payload);
-          break;
-        }
-        case "find":
-          menuActions.current.focusFilter();
-          break;
-        case "terminal":
-          menuActions.current.toggleTerminal();
-          break;
-        // A thread added a webhook for you to register: the 🪝 drawer opens on its row.
-        case "add-webhook":
-          addWebhookAsk(setLibraryOpen, parseWebhookAsk(payload));
-          break;
-      }
-    };
+  // Live updates (lib/board-live.ts). The first open (and every reconnect) reloads everything, so nothing is missed.
+  useBoardLive({
+    columns, errors, ownMoves, selectedRef, resolvedFolders,
+    select, setSelectedId, setCards, setUnseen, setThread, setStreaming, setProjects, setLogin, setToast, setHome, setRoots, setLoaded,
+    updateCopilot, loadCopilot, resolveFolders, restart: restartView, loadFromPrefs, loadThread, notify,
   });
 
-  useEffect(() => window.weft?.onMenu((action, payload) => onMenu.current(action, payload)), []);
-
-  const filtering = Boolean(project || query.trim() || isFiltering(railFilter));
-  // Picking another project or changing the filter collapses the columns again.
-  const view = `${project ?? ""}\n${query.trim()}\n${railFilter.starred ? "★" : ""}${railFilter.tag ?? ""}`;
+  // Picking another project or changing the filter collapses the columns again (lib/board-derive.ts).
+  const { filtering, view } = filterState(project, query, railFilter);
   const expandedColumns = expanded.view === view ? expanded.columns : [];
 
   const byColumn = useMemo(
@@ -444,129 +227,26 @@ export default function Board() {
 
   // An open card, or the New thread form, fills a framed window with the browser pane beside it.
   const framed = Boolean(selected) || showNew;
-  // The most recent card's stats (and folder/backend), so the footer has a model/folder to show
-  // when no card is open. Account-wide limits live in here too.
-  const footerStats = selected ? selected.stats : latest;
-  const footerCwd = selected ? selected.cwd : latest?.cwd;
-  const footerBackend = selected ? selected.backend : latest?.backend;
+  const footer = footerFor(selected, latest);
   // Each folder has its own shell; with All projects showing, the latest card's folder.
-  const terminalCwd = selected?.cwd ?? project ?? latest?.cwd ?? home;
+  const folder = workFolder(selected, project, latest);
+  const terminalCwd = folder ?? home;
   const browserOpen = desktop ? browser.visible : webBrowserOpen;
-  // Archived cards are hidden from the board, so the header doesn't count them either.
-  const waiting = cards.filter((c) => c.column === "needs_you" && !c.archived).length;
-  const running = cards.filter((c) => c.column === "running" && !c.archived).length;
+  const counts = headerCounts(cards);
   // "Switch all" only shows once a thread hit its plan limit.
   const limitHit = hitPlanLimit(cards);
 
   // Shortcuts that act on the board stand down while a dialog or the project menu is up.
-  const boardKeys = !(showNew || showSettings || showHelp || showPalette || Boolean(login) || menuOpen);
 
-  function openPalette(initial: string) {
-    setPaletteQuery(initial.trim());
-    setShowPalette(true);
-  }
-
-  // Steps through the project filter: "All projects", then each project in the bar's order.
-  function stepProject(by: number) {
-    chooseProject(stepThrough([null, ...projectSummaries.map((p) => p.path)], project, by));
-  }
-
-  function stepSort() {
-    chooseSort(stepThrough(Object.keys(SORTERS) as SortKey[], sort, 1));
-  }
-
-  // Focus helpers (lib/board-focus.ts) — bound to the board's column / card layout.
-  const filterHasFocus = () => filterHasFocusImpl();
-  const focusFilter = () => focusFilterImpl();
-  const moveFocus = (move: { dx?: number; dy?: number; edge?: "first" | "last" }) =>
-    moveFocusImpl(move, visibleColumns, selectedId, selected?.column ?? null);
-  const jumpToNeedsYou = () => jumpToNeedsYouImpl();
-  const openFocused = (e: KeyboardEvent) => openFocusedImpl(e, cards, openCard);
-
-  // Keep the menu's actions in sync (the effect above runs every render and reads the latest).
-  useEffect(() => {
-    menuActions.current = { openNew, openCard, focusFilter, toggleTerminal };
+  // Shortcuts, the command palette and the app menu (components/use-board-commands.ts).
+  const { openPalette, paletteItems, findPrompts } = useBoardCommands({
+    cards, selected, selectedId, projectSummaries, project, sort, home, columns: visibleColumns, query, boardKeys,
+    dialogs: { showNew, showSettings, showHelp, showPalette, login },
+    doneToArchive, lastArchived, archivedCount, showArchived, rootOf, restart: restartView.restart,
+    openNew: () => openNew(), openCard, select, toggleCopilot, toggleBrowser, toggleTerminal, toggleColumn: workspace.toggle,
+    setShowPalette, setPaletteQuery, setShowHelp, setShowSettings, setSharingBoard, setLibraryOpen, setShowArchived,
+    archiveTarget, archiveCards, unarchive, toggleArchive, chooseSort, chooseProject, move, notify, toast: setToast,
   });
-  useOnboardingEvents(openNew, select);
-
-  // Everything the command palette offers: the board's actions, the projects, and every card.
-  // Computed lazily: only when the palette is open (`showPalette`), so creating a fresh array of
-  // items every render would just churn. Each callback is wrapped so the type analyzer doesn't tag
-  // a useCallback return as a ref passed into boardPaletteItems.
-  function paletteItems(): PaletteItem[] {
-    return showPalette
-      ? boardPaletteItems(
-          { cards, selected, projectSummaries, home, doneToArchive, lastArchived, archivedCount, showArchived, rootOf, restartArmed: !!restartView.restart?.armed },
-          {
-            openNew: () => openNew(),
-            focusFilter: () => focusFilter(),
-            toggleCopilot: () => toggleCopilot(),
-            toggleBrowser: () => toggleBrowser(),
-            toggleTerminal: () => toggleTerminal(),
-            openSettings: () => setShowSettings(true),
-            shareBoard: () => setSharingBoard(true),
-            openHelp: () => setShowHelp(true),
-            addSecret: () => addSecret(setLibraryOpen),
-            jumpToNeedsYou: () => void jumpToNeedsYou(),
-            archiveCards: (l: Card[]) => archiveCards(l),
-            unarchive: (ids: string[]) => unarchive(ids),
-            toggleShowArchived: () => setShowArchived((v) => !v),
-            chooseSort: (s: SortKey) => chooseSort(s),
-            focusReply: () => document.querySelector<HTMLElement>('aside [contenteditable="true"], aside textarea')?.focus(),
-            closeThread: () => select(null),
-            toggleArchive: (c: Card) => toggleArchive(c),
-            stop: (id: string) => void api.stop(id).catch(notify),
-            move: (id: string, column: Column) => move(id, column),
-            chooseProject: (p: string | null) => chooseProject(p),
-            openCard: (c: Card) => openCard(c),
-            toast: setToast,
-          },
-        )
-      : [];
-  }
-
-  // The prompts the user wrote that match a query, as palette items that open their card.
-  async function findPrompts(query: string): Promise<PaletteItem[]> {
-    const { hits } = await api.searchPrompts(query);
-    return promptItems(hits, cards, rootOf, openCard);
-  }
-
-  useShortcuts(
-    boardShortcuts({
-      showNew,
-      showSettings,
-      showHelp,
-      showPalette,
-      login,
-      query,
-      boardKeys,
-      cardOpen: Boolean(selectedId),
-      doneToArchive,
-      lastArchived,
-      setShowPalette,
-      setShowHelp,
-      setShowSettings,
-      setLibraryOpen,
-      openPalette,
-      filterHasFocus,
-      openNew: () => openNew(),
-      focusFilter,
-      toggleCopilot,
-      toggleBrowser,
-      toggleTerminal,
-      toggleColumn: workspace.toggle,
-      moveFocus,
-      openFocused,
-      jumpToNeedsYou,
-      stepProject,
-      stepSort,
-      archiveTarget,
-      toggleArchive,
-      archiveCards,
-      unarchive,
-    }),
-  );
-  useShortcutListener();
   const hint = useShortcutHint();
 
   // Escape closes the newest open layer. The board's own panels sit under any dialog or menu, even one
@@ -625,64 +305,43 @@ export default function Board() {
     <div className="flex h-screen flex-col">
       <BoardHeader
         mac={mac}
-        running={running}
-        waiting={waiting}
-        browserOpen={browserOpen}
-        terminalOpen={terminalOpen}
+        counts={counts}
         hint={hint}
-        onToggleBrowser={toggleBrowser}
-        onToggleTerminal={toggleTerminal}
+        panes={{ browserOpen, terminalOpen, onToggleBrowser: toggleBrowser, onToggleTerminal: toggleTerminal }}
         onShareBoard={() => setSharingBoard(true)}
         onOpenSettings={() => setShowSettings(true)}
         onOpenNew={() => openNew()}
-        restartChip={<RestartChip restart={restartView.restart} notify={notify} />}
-        headerBadges={
-          <HeaderBadges
-            cwd={selected?.cwd ?? project ?? latest?.cwd}
-            cards={cards}
-            start={improveQuality}
-            notify={notify}
-            toast={setToast}
-          />
-        }
-        copilotButton={
-          <CopilotButton open={laneOpen} needsYou={copilotNeedsYou} title={hint("copilot", "Copilot")} onClick={toggleCopilot} />
-        }
-        accountButton={<AccountButton onOpenSettings={() => setShowSettings(true)} onShareBoard={() => setSharingBoard(true)} />}
+        slots={{
+          restart: <RestartChip restart={restartView.restart} notify={notify} />,
+          badges: <HeaderBadges cwd={folder} cards={cards} start={improveQuality} notify={notify} toast={setToast} />,
+          copilot: <CopilotButton open={laneOpen} needsYou={copilotNeedsYou} title={hint("copilot", "Copilot")} onClick={toggleCopilot} />,
+          account: <AccountButton onOpenSettings={() => setShowSettings(true)} onShareBoard={() => setSharingBoard(true)} />,
+        }}
       />
 
-      <CrashGuard what="project bar" className="mx-3 mt-2">
-      <ProjectBar
+      <BoardProjectBar
         projects={projectSummaries}
         total={cards.length}
-        selected={project}
-        onSelect={chooseProject}
-        filter={
-          <>
-          <RailFilterChip filter={railFilter} onClear={setRailFilter} />
-          <FilterBox
-            query={query}
-            onQuery={setQuery}
-            matches={query.trim() ? topMatches(byColumn, FILTER_MATCHES, query) : []}
-            onOpen={openCard}
-            onSearchAll={() => openPalette(query)}
-          />
-          </>
-        }
+        project={project}
+        onProject={chooseProject}
+        railFilter={railFilter}
+        onRailFilter={setRailFilter}
+        query={query}
+        onQuery={setQuery}
+        byColumn={byColumn}
+        onOpenCard={openCard}
+        onSearchAll={openPalette}
         sort={sort}
         onSort={chooseSort}
         home={home}
         onMenuOpenChange={setMenuOpen}
       />
-      </CrashGuard>
 
       <div className="flex min-h-0 flex-1">
         <SideRail
           open={libraryOpen}
           onOpen={setLibraryOpen}
-          project={project}
-          folders={railFolders}
-          cards={cards}
+          ctx={{ project, folders: railFolders, cards, onOpenUrl: showPage, onOpenCard: openCard, onStartCard: improveQuality, notify }}
           filter={railFilter}
           onFilter={setRailFilter}
           onStarCard={(id) => {
@@ -691,97 +350,60 @@ export default function Board() {
           }}
           onTagCard={tagCard}
           catalog={tagCatalog}
-          onOpenUrl={showPage}
           onClosePane={toggleBrowser}
           paneUrl={desktop ? browser.url : undefined}
-          onOpenCard={openCard}
-          onStartCard={improveQuality}
-          notify={notify}
         />
         {!framed && (
-          // The standalone pane sits on the left of the board, between the rail and the columns
-          // (the framed pane lives in the workspace's `pane` column when a card is open).
-          // StandaloneBrowserPane slides the pane in and out instead of popping it.
-          <StandaloneBrowserPane open={browserOpen} width={browserWidth}>
-            {(sliding) => (
-              <BrowserPane
-                desktop={desktop}
-                state={browser}
-                obscured={sliding || showSettings || showPalette || showHelp || Boolean(login) || menuOpen}
-                width={browserWidth}
-                onWidth={setBrowserWidth}
-                onClose={selected ? () => select(null) : toggleBrowser}
-                expanded={false}
-                rail={<ShowRail card={selected} hidden={false} items={thread} pageUrl={browser.url} />}
-              />
-            )}
-          </StandaloneBrowserPane>
+          // Only while no card is open (framed), so its X toggles the pane rather than closing a card.
+          <BoardBrowserPane
+            open={browserOpen}
+            desktop={desktop}
+            state={browser}
+            width={browserWidth}
+            onWidth={setBrowserWidth}
+            obscured={overlay}
+            onClose={toggleBrowser}
+            items={thread}
+          />
         )}
-        <main
-          className="board-sheet flex min-w-0 flex-1 gap-3 overflow-x-auto p-3"
-          onDoubleClick={(e) => {
-            // Empty board space (between or inside columns, not on a card or control) opens New thread.
-            if (!(e.target as HTMLElement).closest("[data-card-id], button, a, input, textarea, [contenteditable]")) openNew();
+        <BoardColumns
+          columns={visibleColumns}
+          byColumn={byColumn}
+          allCards={cards}
+          expanded={expandedColumns}
+          onExpand={(id) => setExpanded({ view, columns: [...expandedColumns, id] })}
+          renderCard={(card) => (
+            <CardView
+              guardName={card.title}
+              card={card}
+              now={now}
+              selected={card.id === selectedId}
+              lastOpen={card.id === lastOpenId}
+              unseen={unseen.has(card.id)}
+              alsoHere={busyHere(cards, card)}
+              {...cardHandlers(card, cardCtx)}
+            />
+          )}
+          loaded={loaded}
+          filtering={filtering}
+          laneState={laneState}
+          drag={{ over: dragOver, onOver: setDragOver, onLeave: (id) => setDragOver((c) => (c === id ? null : c)), onDrop: drop, onReorder: reorder }}
+          onColumnMenu={(id, e) => void onColumnMenu(id, e)}
+          archive={{
+            count: archivedCount,
+            shown: showArchived,
+            onToggleShown: () => setShowArchived((v) => !v),
+            done: doneToArchive,
+            tip: hint("archive-done", `Archive all ${doneToArchive.length}`),
+            cards: archiveCards,
+            restore: unarchive,
           }}
-        >
-          {visibleColumns.map((column) => {
-            const list = byColumn.get(column.id) ?? [];
-            const shown = expandedColumns.includes(column.id) ? list : list.slice(0, COLUMN_LIMIT);
-            const count = list.length;
-            return (
-              <BoardColumn
-                key={column.id}
-                column={column}
-                shown={shown}
-                count={count}
-                loaded={loaded}
-                filtering={filtering}
-                dragOver={dragOver === column.id}
-                laneState={laneState}
-                onShowMore={() => setExpanded({ view, columns: [...expandedColumns, column.id] })}
-                renderCard={(card) => (
-                  <CardView
-                    guardName={card.title}
-                    card={card}
-                    now={now}
-                    selected={card.id === selectedId}
-                    lastOpen={card.id === lastOpenId}
-                    unseen={unseen.has(card.id)}
-                    alsoHere={busyHere(cards, card)}
-                    {...cardHandlers(card, cardCtx)}
-                  />
-                )}
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  setDragOver(column.id);
-                }}
-                onDragLeave={() => setDragOver((c) => (c === column.id ? null : c))}
-                onDrop={(e) => drop(column.id, e)}
-                onReorder={column.id === "backlog" ? (id, target, before) => reorder(id, target, before) : undefined}
-                onColumnContextMenu={(e) => void onColumnMenu(column.id, e)}
-                needsYou={column.id === "needs_you" && count > 0}
-                archivedCount={archivedCount}
-                showArchived={showArchived}
-                onToggleArchived={() => setShowArchived((v) => !v)}
-                toArchive={doneToArchive.length}
-                archiveTip={hint("archive-done", `Archive all ${doneToArchive.length}`)}
-                onArchiveAll={() => archiveCards(doneToArchive)}
-                resumeAll={column.id === "review" ? resumeAll : undefined}
-                onSwitchAll={
-                  limitHit && (column.id === "running" || column.id === "needs_you")
-                    ? () => switchAll(column.id)
-                    : undefined
-                }
-                onReviewAll={column.id === "review" ? reviewAll : undefined}
-                reviewFilter={column.id === "review" ? { on: reviewFilter, counts: reviewFilterCounts(list), toggle: toggleReviewFilter } : undefined}
-                onAddBacklog={() => openNew()}
-                // Backlog's sprints, Save as sprint and Archive all act on the unarchived cards it shows.
-                backlog={column.id === "backlog" ? { cards: list.filter((c) => !c.archived), allCards: cards, onRestore: unarchive, toast: setToast, notify,
-                  onArchiveAll: () => archiveCards(list.filter((c) => !c.archived)) } : undefined}
-              />
-            );
-          })}
-        </main>
+          review={{ resumeAll, onReviewAll: reviewAll, filter: reviewFilter, toggleFilter: toggleReviewFilter }}
+          onSwitchAll={limitHit ? switchAll : undefined}
+          onNew={() => openNew()}
+          toast={setToast}
+          notify={notify}
+        />
         <OnboardingTips cards={cards} loaded={loaded} filtering={filtering} />
         <CopilotLane
           state={laneState}
@@ -794,77 +416,34 @@ export default function Board() {
           toggleTip={hint("copilot", "Copilot")}
         />
 
-        {framed && <div style={NO_DRAG} className="fixed inset-0 z-30 bg-black/40" onClick={() => (showNew ? setShowNew(false) : select(null))} aria-hidden="true" />}
-        <div style={framed ? { ...NO_DRAG, bottom: terminalOpen ? terminalHeight + 16 : undefined } : undefined} className={framed ? "fixed inset-4 z-40 flex overflow-hidden rounded-xl border border-line-strong bg-panel shadow-2xl" : "contents"}>
-        {showNew ? (
-          <NewCardDialog cards={cards} home={home} defaultCwd={newCwd ?? project ?? undefined} recentCwd={[...cards].sort((a, b) => b.updatedAt - a.updatedAt).find((c) => c.cwd !== home)?.cwd} restart={restartView.restart} onClose={() => setShowNew(false)} onCreate={create} />
-        ) : selected && threadProps ? (
-          // The four-column workspace for an open card: thread | editor | pane | show, in order.
-          // The columns remember which are open and how wide each is (lib/use-workspace-layout.ts);
-          // closing the last open column is a no-op so the card always has at least its thread.
-          <CardWorkspace
-            layout={workspace.layout}
-            fill={workspace.fill}
-            dragging={workspace.dragging}
-            setDragging={workspace.setDragging}
-            toggle={workspace.toggle}
-            dragDivider={workspace.dragDivider}
-            fitToContainer={workspace.fitToContainer}
-            columns={{
-              thread: (
-                <ThreadPanel
-                  key={selected.id}
-                  guardName={selected.title}
-                  card={selected}
-                  onStar={() => toggleStar(selected)}
-                  onTags={() => editTags(selected)}
-                  onShare={() => shareCard(selected)}
-                  marksInPane={workspace.layout.open.pane}
-                  resets={planResets(cards)}
-                  items={thread}
-                  streaming={streaming}
-                  {...threadProps}
-                  onArchive={() => toggleArchive(selected)}
-                  // The first-message-error banner's "Pick a backup model" jumps to Settings → Models.
-                  onOpenSettings={() => setShowSettings(true)}
-                  editorOpen={workspace.layout.open.editor}
-                  onEditor={() => workspace.toggle("editor")}
-                  editTitle={renameId === selected.id}
-                  className="flex h-full min-h-0 w-full flex-col bg-panel"
-                />
-              ),
-              editor: (
-                <EditorColumn cardId={selected.id} cwd={selected.cwd} onClose={() => workspace.setOpen("editor", false)} />
-              ),
-              pane: (
-                <BrowserPane
-                  desktop={desktop}
-                  state={browser}
-                  obscured={showSettings || showPalette || showHelp || Boolean(login) || menuOpen || workspace.dragging}
-                  width={browserWidth}
-                  onWidth={setBrowserWidth}
-                  // The pane's X closes the pane column, not the card; the card is closed from
-                  // the thread column's X or the framed window's backdrop / Escape.
-                  onClose={() => workspace.setOpen("pane", false)}
-                  expanded
-                  actions={<PaneCardMarks card={selected} onShare={() => shareCard(selected)} onStar={() => toggleStar(selected)} onArchive={() => toggleArchive(selected)} />}
-                />
-              ),
-              show: <ShowRail card={selected} hidden={false} items={thread} pageUrl={browser.url} />,
-            }}
-          />
-        ) : null}
-
-        </div>
+        <CardFrame framed={framed} bottom={terminalOpen ? terminalHeight + 16 : undefined} onBackdrop={() => (showNew ? setShowNew(false) : select(null))}>
+          {showNew ? (
+            <NewCardDialog cards={cards} home={home} defaultCwd={newCwd ?? project ?? undefined} recentCwd={[...cards].sort((a, b) => b.updatedAt - a.updatedAt).find((c) => c.cwd !== home)?.cwd} restart={restartView.restart} onClose={() => setShowNew(false)} onCreate={create} />
+          ) : selected && threadProps ? (
+            <OpenCard
+              card={selected}
+              handlers={threadProps}
+              items={thread}
+              streaming={streaming}
+              resets={planResets(cards)}
+              editTitle={renameId === selected.id}
+              workspace={workspace}
+              browser={{ desktop, state: browser, width: browserWidth, onWidth: setBrowserWidth, obscured: overlay }}
+              onStar={() => toggleStar(selected)}
+              onTags={() => editTags(selected)}
+              onShare={() => shareCard(selected)}
+              onArchive={() => toggleArchive(selected)}
+              onOpenSettings={() => setShowSettings(true)}
+            />
+          ) : null}
+        </CardFrame>
       </div>
 
-      <BoardFooter stats={footerStats} cwd={footerCwd} backend={footerBackend} onHelp={() => setShowHelp(true)} />
-      {/* After the footer so an open card can stop just above it; z-40 keeps it over the card's backdrop. */}
-      {terminalOpen && (
-        <div style={NO_DRAG} className="relative z-40">
-          <TerminalDrawer key={terminalCwd} cwd={terminalCwd} height={terminalHeight} onHeight={setTerminalHeight} onClose={toggleTerminal} />
-        </div>
-      )}
+      <BoardBottom
+        footer={footer}
+        onHelp={() => setShowHelp(true)}
+        terminal={{ open: terminalOpen, cwd: terminalCwd, height: terminalHeight, onHeight: setTerminalHeight, onClose: toggleTerminal }}
+      />
 
       <BoardDialogs
         settings={showSettings}

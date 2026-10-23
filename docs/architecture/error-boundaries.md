@@ -40,9 +40,11 @@ How it loads:
 
 ## Where it's used
 
-- `Board.tsx`: AccountButton, CopilotButton, HeaderBadges, LibraryRail, CardView, ThreadPanel, BrowserPane,
-  NewCardDialog, TerminalDrawer, BoardFooter, ModifierHint and every dialog (Settings, Shortcuts, Tags, Login,
-  CommandPalette). ProjectBar stays a static import (Board uses its `folderName`) inside a plain CrashGuard.
+- `Board.tsx`: AccountButton, CopilotButton, HeaderBadges, LibraryRail, CardView, NewCardDialog and BoardDialogs
+  (every dialog: Settings, Shortcuts, Tags, Login, CommandPalette, plus ModifierHint). ProjectBar stays a static import
+  (Board uses its `folderName`) inside `BoardProjectBar`'s plain CrashGuard.
+- `OpenCard.tsx`: ThreadPanel, EditorColumn, BrowserPane, ShowRail, CardWorkspace, PaneCardMarks.
+  `BoardBottom.tsx`: BoardFooter, TerminalDrawer. `BoardBrowserPane.tsx`: BrowserPane, ShowRail.
 - `HeaderBadges.tsx`: each badge (quality, pile, backlog, streak), inline.
 - `ThreadPanel.tsx`: ReviewPanel. `ThreadView.tsx`: ReplyBox.
 - Plain CrashGuards: each thread message and tool run and the streaming reply (`ThreadItems.tsx`, inline); the

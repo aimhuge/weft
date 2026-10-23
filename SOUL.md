@@ -36,7 +36,7 @@ If you are an agent editing this repo, you are working on me. Read README.md for
   - the 300-line `max-lines` cap and the per-file ratchet in `eslint.config.mjs` are there to force that refactor.
     A file at its cap gets code moved out (Extract Function or Module) and its number lowered; never joined lines,
     dropped blank lines or deleted comments, which only hide the smell
-  - hotspots: components/Board.tsx (~535 lines), electron/main.cjs (~450; its control routes are `electron/pane-routes.cjs`, its splash IPC `electron/startup-ipc.cjs`), electron/vault.cjs (~390), electron/browser-pane.cjs (~345), lib/cloud-sync.ts (~365).
+  - hotspots: components/Board.tsx (~480 lines), electron/main.cjs (~450; its control routes are `electron/pane-routes.cjs`, its splash IPC `electron/startup-ipc.cjs`), electron/vault.cjs (~390), electron/browser-pane.cjs (~345), lib/cloud-sync.ts (~365).
     Everything else is under 300 (2026-10-16): big files became re-exporting fronts (`lib/types.ts` → `lib/types-*.ts`,
     `lib/import.ts` → `lib/import-*.ts`, `lib/secret-guard.ts` → `lib/secret-guard-*.ts`, `lib/client.ts` → `lib/client-*.ts`).
     Pure logic already moved out: `lib/board-view.ts` (columns, project chips, chime/unseen rules, Review's Errors/Restart filter chips drawn by `components/ReviewFilterChips.tsx`) and
@@ -51,7 +51,9 @@ If you are an agent editing this repo, you are working on me. Read README.md for
     Shortcuts, the command palette and the menu bridge share one input in `components/use-board-commands.ts`. The rail's drawers share one
     `RailContext` (`components/rail-context.ts`); `BoardHeader` and `BoardColumns` take grouped props (counts, panes, slots; drag, review, archive).
     The dialog flags (New thread, Settings, Share board, Help, palette, sign-in, project menu) and what they cover live in `lib/use-board-dialogs.ts`.
-    Next: the open card's state (selection, thread, streaming, rename) into a hook; Board is at complexity 29.
+    The open card's state (selection, thread, streaming text, Rename…, unseen moves) is `lib/use-open-card.ts`, and the New thread
+    dialog's splash page in the pane `lib/use-new-thread-pane.ts`. Next: the board's data (cards, home, roots, projects, folder
+    resolution) into a hook, and the framed window's New thread branch into `OpenCard`; Board is at complexity 26.
   - My Vitest suite (`pnpm test`, ~3,500 tests) covers every line of `lib/` and `app/api/` (98.6% of branches,
     `pnpm coverage`): a test file beside each module, routes with their libs mocked, the runner's SDK loop
     against a fake `query()` (`lib/runner.harness.ts`, shared by `lib/runner*.test.ts`), and browser code and React hooks under happy-dom +
@@ -157,9 +159,10 @@ If you are an agent editing this repo, you are working on me. Read README.md for
   `/` instead of the board when `isDeployed()` (`VERCEL` or `WEFT_HOME`); the home is loaded through `loadHome()` (a cached dynamic
   import in `lib/home.ts`) so a parse error in it can't 500 the board route — the parse-error companion to
   `lib/route-import-guard.ts`; `home.css` is plain prefixed CSS because `next.config.ts` sends every `.css` through the Tailwind loader,
-  which drops CSS-module exports. `GoogleAnalytics` (gated on the home being mounted, so the board route never calls home) and
-  `HomeErrorFallback` (the dark plain page both routes render when `loadHome()` returns an error) are both server components;
-  `docs/architecture/analytics.md` covers GA.
+  which drops CSS-module exports. `HomeErrorFallback` (the dark plain page both routes render when `loadHome()` returns an error) is a server component.
+  Analytics: GA4 (`components/GoogleAnalytics.tsx`, in `app/layout.tsx` when `isDeployed()`) and PostHog (`instrumentation-client.ts`) on every
+  weft.zip page and never on a local board (`lib/analytics-gate.ts` refuses local hosts, `lib/analytics-server.ts` the server off Vercel);
+  `lib/analytics.ts` `track()` sends one event to both, and `data-track` attributes let server components' links opt in (docs/architecture/analytics.md).
 - `lib/file-drop.ts` + `lib/use-file-drop.ts` + `components/FileDrop.tsx`: files dragged from Finder anywhere in the window; a composer takes
   its own drop, a card opens with them in its reply box, an open thread (`data-drop-target`) gets them, empty board opens New thread; files wait
   in the store until the target composer (`dropTarget`) mounts.
@@ -317,6 +320,7 @@ If you are an agent editing this repo, you are working on me. Read README.md for
 - Deeper docs (read the one that matches your task; this is the index, not the docs themselves):
   - `admin.md` — the super-admin gate (`SUPER_ADMIN_EMAILS` on `@aimhuge/teams` via `lib/admin.ts`), the `/admin/users` and `/admin/settings` pages, the rail's 🛡 Admin icon, the data routes in `app/api/admin/*`.
   - `overview.md` — what Weft is end to end: the Electron shell, the Next.js server, cards-as-threads, the loop with the user.
+  - `board.md` — the board screen's structure: `Board.tsx` owns state and wiring, hooks under `lib/` decide, layer components draw; how to add a column extra, shortcut, palette item or dialog flag.
   - `desktop-shell.md` — `electron/` itself: main, preload, tray, dock, `weft://` links, the start screen, the terminal drawer.
   - `threads-and-sessions.md` — the runner: one Agent SDK `query()` per Claude Code/puku thread, the Codex runner, sessions, queues, rewind, warm spares.
   - `thread-guards.md` — what `guardedCli()` strips and hooks: secret/restart/git/check/route-import/claim guards, per-CLI limits.
@@ -353,7 +357,7 @@ If you are an agent editing this repo, you are working on me. Read README.md for
   - `commit-pile.md` — the header's "+N/-N" uncommitted counter and the Review card that walks the pile to a clean commit.
   - `updates.md` — the Squirrel.Mac JSON feed, the download fallback, the tag-triggered signed release, `CHANGELOG.md` notes.
   - `keep-working.md` — the menu bar icon's switch to keep the Mac awake with the lid shut so threads keep running in a bag.
-  - `analytics.md` — GA4 on the home page only; `GoogleAnalytics` is gated on the home being mounted, so the board route never calls home.
+  - `analytics.md` — GA4 and PostHog on every weft.zip page, never on a local board: the host and `isDeployed()` gates, `track()`, the event table, `data-track` links.
   - `faq-site.md` — `docs/FAQ.md` as the weft.zip FAQ: the home page's six questions, `/faq` rendering the whole file, how GitHub-shaped paths, image rows and heading ids map onto the site.
   - `cloud-sync.md` — server-side cards: the outbox, the content-addressed blob store, thread paging, the `cloud_*` tables and their policies.
   - `profiles.md` — public profiles at `weft.zip/@username`: `profiles.username`, the `/@` → `/u/[username]` rewrite, what the page shows and never shows.

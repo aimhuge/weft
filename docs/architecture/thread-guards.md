@@ -79,7 +79,7 @@ into each other. Claims catch that at the moment it happens, instead of a standi
   symbols in one edit (a restructure: each symbol would be noise). Paths are real paths, the way git names them,
   with `#` and `%` escaped (`%23`, `%25`) so a key's first `#` starts the symbol.
 - **Nested claims** (`NEST_LINES = 150` in `lib/symbols.ts`): a top-level symbol over 150 lines would be a whole-file
-  claim in practice (Board() is lines 125–1013 of `components/Board.tsx`), so the walk goes inside it and claims the
+  claim in practice (Board() once ran from line 125 to 1013 of `components/Board.tsx`, before it was split into `lib/` hooks and layer components), so the walk goes inside it and claims the
   statement holding the edit, then again inside that one if it's long too. Function and method bodies split into
   statements, classes into members, a JSX element (a `return (…)`, an arrow's JSX body, `{items.map(…)}`) into its
   children, and a call into its function argument's body (`memo(function …)`, `useEffect(() => …)`, `describe(…)`).

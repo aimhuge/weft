@@ -59,19 +59,21 @@ import type { TagCatalog } from "./use-tag-catalog";
 const baseProps: Parameters<typeof SideRail>[0] = {
   open: null,
   onOpen: vi.fn(),
-  project: null,
-  folders: ["/Users/me/dev/app"],
-  cards: [],
+  ctx: {
+    project: null,
+    folders: ["/Users/me/dev/app"],
+    cards: [],
+    onOpenUrl: vi.fn(),
+    onOpenCard: vi.fn(),
+    onStartCard: vi.fn<() => Promise<string | undefined>>(() => Promise.resolve(undefined)),
+    notify: vi.fn(),
+  },
   filter: {},
   onFilter: vi.fn(),
   onStarCard: vi.fn(),
   onTagCard: vi.fn(),
   catalog: { byName: new Map(), ordered: [] } as unknown as TagCatalog,
-  onOpenUrl: vi.fn(),
   onClosePane: vi.fn(),
-  onOpenCard: vi.fn(),
-  onStartCard: vi.fn<() => Promise<string | undefined>>(() => Promise.resolve(undefined)),
-  notify: vi.fn(),
 };
 
 beforeEach(() => {

@@ -40,9 +40,10 @@ Electron shell (electron/*.cjs)
 - `lib/bus.ts` — single `EventEmitter` on `globalThis` (survives dev-mode HMR); consumed
   by the SSE route.
 - `lib/types.ts` — `Card`, `ThreadItem`, `Question`, `Backend`, `BoardEvent` union.
-- `components/Board.tsx` — the board UI; consumes `useBoardEvents` to stay live, with
-  `CardView`, `ThreadPanel`, `BrowserPane`, `ProjectBar`, `SettingsDialog`, `LoginDialog`,
-  and `ColumnHeader` (Running/Needs you get "Switch all", Review gets "Review all"
+- `components/Board.tsx` — the board UI: it owns the state and wires the layers, while hooks under `lib/`
+  decide (`lib/board-live.ts` stays live off `useBoardEvents`) and components draw (`BoardHeader`,
+  `BoardProjectBar`, `BoardColumns`, `OpenCard`, `BoardBottom`, `BoardDialogs`; docs/architecture/board.md),
+  with `CardView`, `ThreadPanel`, `BrowserPane` and `ColumnHeader` underneath (Running/Needs you get "Switch all", Review gets "Review all"
   — the commit walk-through card — plus "Resume N" for cut-off turns, Done gets archive controls).
 
 ## Data flow
