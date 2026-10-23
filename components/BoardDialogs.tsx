@@ -63,7 +63,7 @@ export interface BoardDialogsProps {
   // The "Switch all to <CLI>" modal, already built by useSwitchAll.
   switchAllDialog: React.ReactNode;
   // The delete-card confirmation, already built by useBoardMenus.
-  deleteDialog: React.ReactNode;
+  deleteDialog?: React.ReactNode;
   // FileDrop's targets.
   cards: Card[];
   newOpen: boolean;
