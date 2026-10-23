@@ -16,8 +16,9 @@ Committed, pushed and deploying (or nothing to deploy) → `column=done`; tests 
 in your own code, or the push or deploy check fails → `column=review` with what's left (Weft keeps a
 Review wrap-up on the board instead of archiving it). Show the wrap-up in the browser pane, not as ASCII art.
 
-Every `Agent` call names its `model` (`"haiku"`): an agent without one inherits the parent's model,
-and a 1M-context parent bills 1M-context credits.
+Every `Agent` call names its `model`: `"haiku"` on Claude Code, `"puku-ai-2.8"` on puku-cli (which
+refuses any model outside its pinned `puku-ai-2.7`, `puku-ai-2.8`, `opus`). An agent without one
+inherits the parent's model, and a 1M-context parent bills 1M-context credits.
 
 **Scripts measure; agents judge.** Anything countable runs in a script in seconds. Spend model turns
 only on what a script can't do: write docs, read failures, decide what's worth refactoring.
@@ -40,8 +41,9 @@ every file you edited, created or wrote. That list is the "session files" below.
 ## Phase 1: One Puku batch (parallel, a few minutes)
 
 Run the agents below on the Puku gateway through the `puku-agent` skill: free, no Anthropic tokens,
-and their file reads stay out of your context. Fall back to the Agent tool (`model: "haiku"`) only
-when `~/.claude/skills/puku-agent` is missing or the batch fails on credentials.
+and their file reads stay out of your context. Fall back to the Agent tool (with the model above) only
+when `~/.claude/skills/puku-agent` is missing or the batch fails on credentials. A failed batch is not
+a no-op: read `summary.json`, and when every task is `error`, say why and fall back.
 
 1. Make this run's scratch folder: `${CLAUDE_SKILL_DIR}/scratch.sh new` prints `<dir>`, a fresh
    `~/.weft/done/run-XXXXXX/` with an empty `out/`. Every file below goes there, never in the project

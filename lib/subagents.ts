@@ -54,6 +54,13 @@ export function subagentPrompt(model: SubagentModel, backend: Backend): string {
   return `${DELEGATE}\n\nSubagents run on ${subagentLabel(model)} (the user's Weft setting), so leave the Agent tool's model input out.`;
 }
 
+// puku-cli refuses a subagent model outside its pinned list ("[pinnedModels] Refusing to persist
+// non-pinned model 'opus-4.8'"), and its list names the Opus tier "opus", not "opus-4.8".
+const PUKU_PINNED = ["puku-ai-2.7", "puku-ai-2.8"];
+export function pukuSubagentModel(model: string): string {
+  return PUKU_PINNED.includes(model) ? model : "opus";
+}
+
 // puku-cli's subagents inherit the thread's model when it's unset, so "inherit" needs nothing there.
 export function subagentEnv(model: SubagentModel, backend: Backend): Record<string, string> {
   if (model === "choose") return {};
@@ -61,5 +68,5 @@ export function subagentEnv(model: SubagentModel, backend: Backend): Record<stri
   if (subagentBackend(model) !== backend) return {};
   return backend === "claude"
     ? { CLAUDE_CODE_SUBAGENT_MODEL: model, CLAUDE_CODE_SUBAGENT_MODEL_FORCE: "1" }
-    : { PUKU_CLI_SUBAGENT_MODEL: model };
+    : { PUKU_CLI_SUBAGENT_MODEL: pukuSubagentModel(model) };
 }

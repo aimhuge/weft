@@ -8,6 +8,10 @@ lands; a release moves those lines under its version and tags the commit `vX.Y.Z
 
 ## [Unreleased]
 
+### Fixed
+
+- **Subagents on Opus 4.8 work on puku-cli.** It refuses any subagent model outside `puku-ai-2.7`, `puku-ai-2.8` and `opus`, so Weft now sends `opus` for Opus 4.8; `/weft:done`'s Agent-tool fallback names a model each CLI accepts and treats an all-error Puku batch as a failure (`lib/subagents.ts`, `plugin/skills/done/SKILL.md`).
+
 ### Added
 
 - **Settings has a Security page.** The default permission mode (from Threads), trusted folders (from General) and sign-in expiry (from Accounts) now sit together (`components/SettingsSecurityPage.tsx`).

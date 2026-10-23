@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isSubagentModel, subagentBackend, subagentEnv, subagentLabel, subagentPrompt } from "./subagents";
+import { isSubagentModel, pukuSubagentModel, subagentBackend, subagentEnv, subagentLabel, subagentPrompt } from "./subagents";
 
 describe("subagents", () => {
   it("knows every model either CLI serves, plus choose and inherit", () => {
@@ -30,6 +30,10 @@ describe("subagents", () => {
     expect(subagentPrompt("claude-sonnet-5-5", "claude")).toContain("Subagents run on Sonnet 5.5 (Claude) (the user's Weft setting), so leave");
     expect(subagentEnv("claude-sonnet-5-5", "claude")).toEqual({ CLAUDE_CODE_SUBAGENT_MODEL: "claude-sonnet-5-5", CLAUDE_CODE_SUBAGENT_MODEL_FORCE: "1" });
     expect(subagentEnv("puku-ai-2.8", "puku")).toEqual({ PUKU_CLI_SUBAGENT_MODEL: "puku-ai-2.8" });
+    expect(subagentEnv("puku-ai-2.7", "puku")).toEqual({ PUKU_CLI_SUBAGENT_MODEL: "puku-ai-2.7" });
+    // puku-cli's pinned list calls it "opus"; "opus-4.8" makes it refuse every subagent.
+    expect(subagentEnv("opus-4.8", "puku")).toEqual({ PUKU_CLI_SUBAGENT_MODEL: "opus" });
+    expect(pukuSubagentModel("haiku")).toBe("opus");
     expect(subagentEnv("inherit", "claude")).toEqual({ CLAUDE_CODE_SUBAGENT_MODEL: "inherit", CLAUDE_CODE_SUBAGENT_MODEL_FORCE: "1" });
     expect(subagentEnv("inherit", "puku")).toEqual({});
     expect(subagentEnv("choose", "claude")).toEqual({});

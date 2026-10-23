@@ -32,6 +32,11 @@ Puku, so a new model added to `MODELS` shows up here without another edit. `suba
 agent definitions, so the pick can't be overridden per call. `PUKU_CLI_SUBAGENT_MODEL` always wins in puku-cli. Both were
 read from the bundled binaries' source, not from docs.
 
+puku-cli also refuses (`[pinnedModels] Refusing to persist non-pinned model`) any `PUKU_CLI_SUBAGENT_MODEL` outside its
+pinned `puku-ai-2.7`, `puku-ai-2.8`, `opus`, so `pukuSubagentModel()` in `lib/subagents.ts` passes the first two through and
+sends `opus` for anything else (`opus-4.8` is the Opus tier). The `/weft:done` skill names `"puku-ai-2.8"` for its Agent-tool
+fallback on puku-cli, `"haiku"` on Claude Code.
+
 ## Models from the other CLI
 
 The Agent tool can only start subagents on the model family its own CLI serves. For the other CLI's models the prompt
