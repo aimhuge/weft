@@ -10,6 +10,7 @@ lands; a release moves those lines under its version and tags the commit `vX.Y.Z
 
 ### Added
 
+- **Weft's plans include BlastCP usage.** weft.zip's pricing lists the BlastCP tier each plan comes with: Free has BlastCP Free (1 brand, 3 channels, 30 posts a month, $0.50 of AI generation once), and Pro and Team have BlastCP Creator (every channel, unlimited posts, $3 a month of AI generation). The tiers come from the catalog (`plan.blastcp` in `lib/billing/plans.ts`). BlastCP doesn't apply them yet.
 - **The limits chart looks back in a new week.** In the first 3 days after a weekly reset, the status strip's 5hr / 7d hover also shows the last 3 days of the week before (shaded, labeled "last week", their weekly bars dimmed), so a fresh reset no longer leaves the chart empty (`lib/limit-chart.ts`, `components/LimitBurndown.tsx`).
 - **weft.zip plays the narrated tour.** Under the board screenshot, "Take the tour, sound on." plays `public/brand/weft-tour.mp4` (the welcome tour `pnpm welcome:render` makes), with its Welcome to Weft title card as the poster (`public/brand/weft-tour-poster.webp`) and nothing loaded until play (`components/home/Tour.tsx`).
 

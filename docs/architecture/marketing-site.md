@@ -48,6 +48,9 @@ catalog**, not typed:
 - `cardFor(id, features, featured)` reads the name and blurb from `catalog.get(id)`.
 - `pukuAllowanceLabel()` renders `PRO_PUKU_TOKENS` in millions ("300M Puku tokens a month"), because
   "300,000,000" is not a number anyone reads.
+- `blastcpLines(plan.blastcp)` turns each plan's BlastCP tier into two bullets ("BlastCP Creator: 1 brand, every channel,
+  unlimited posts", "$3 a month of BlastCP AI generation"). `cardFor` puts them after the plan's own bullets and before a
+  closing "Everything in …" ([billing.md](billing.md#blastcp-usage)).
 
 So a price change in `lib/billing/plans.ts` moves the marketing page with it, and the page cannot drift from what
 the app actually charges. `Plans.test.tsx` (jsdom) asserts exactly that: the card names equal `catalog.order`'s

@@ -53,4 +53,20 @@ describe("Plans", () => {
       expect(list.querySelectorAll("li").length).toBeGreaterThan(0);
     }
   });
+
+  it("lists the BlastCP tier each plan includes, from the catalog", () => {
+    const { container } = render(<Plans />);
+    const lists = Array.from(container.querySelectorAll(".wz-planFeatures")).map((l) =>
+      Array.from(l.querySelectorAll("li")).map((li) => li.textContent),
+    );
+    expect(lists).toHaveLength(3);
+    expect(lists[0]).toContain("BlastCP Free: 1 brand, 3 channels, 30 posts a month");
+    expect(lists[0]).toContain("$0.50 of BlastCP AI generation, once");
+    for (const list of lists.slice(1)) {
+      expect(list).toContain("BlastCP Creator: 1 brand, every channel, unlimited posts");
+      expect(list).toContain("$3 a month of BlastCP AI generation");
+      // The closing "Everything in …" stays last, after the BlastCP lines.
+      expect(list.at(-1)).toMatch(/^Everything in /);
+    }
+  });
 });

@@ -1,4 +1,4 @@
-import { catalog, PRO_PUKU_TOKENS, TEAM_SEAT_CENTS, type PlanId } from "@/lib/billing/plans";
+import { catalog, PRO_PUKU_TOKENS, TEAM_SEAT_CENTS, type BlastcpTier, type PlanId } from "@/lib/billing/plans";
 
 // The pricing section under the pillars (docs/architecture/billing.md). The three plans come from the catalog
 // in lib/billing/plans.ts, so a price change there moves this page too — the numbers below are read, not typed.
@@ -20,6 +20,19 @@ function pukuAllowanceLabel(): string {
   return `${(PRO_PUKU_TOKENS / 1_000_000).toLocaleString("en-US")}M Puku tokens a month`;
 }
 
+// The BlastCP tier a plan includes, as two bullets: what it posts, and its generation credit.
+// "BlastCP Free: 1 brand, 3 channels, 30 posts a month" / "$3 a month of BlastCP AI generation".
+function blastcpLines(tier: BlastcpTier): string[] {
+  const brands = `${tier.brands} brand${tier.brands === 1 ? "" : "s"}`;
+  const channels = tier.channels === null ? "every channel" : `${tier.channels} channels`;
+  const posts = tier.postsPerMonth === null ? "unlimited posts" : `${tier.postsPerMonth} posts a month`;
+  const credit = `$${tier.creditDollars.toFixed(2).replace(/\.00$/, "")}`;
+  const generation = tier.creditResets
+    ? `${credit} a month of BlastCP AI generation`
+    : `${credit} of BlastCP AI generation, once`;
+  return [`${tier.name}: ${brands}, ${channels}, ${posts}`, generation];
+}
+
 // A plan's headline price: "$20", "$9" per seat. Free reads as "Free" rather than "$0".
 function priceFor(id: PlanId): { price: string; cadence: string } {
   const plan = catalog.get(id);
@@ -32,7 +45,10 @@ function priceFor(id: PlanId): { price: string; cadence: string } {
 function cardFor(id: PlanId, features: string[], featured: boolean): PlanCard {
   const plan = catalog.get(id);
   const { price, cadence } = priceFor(id);
-  return { id: plan.id, name: plan.name, blurb: plan.blurb, price, cadence, features, featured };
+  // The BlastCP bullets go after the plan's own, before its closing "Everything in …".
+  const last = features.at(-1)?.startsWith("Everything in") ? features.length - 1 : features.length;
+  const all = [...features.slice(0, last), ...blastcpLines(plan.blastcp), ...features.slice(last)];
+  return { id: plan.id, name: plan.name, blurb: plan.blurb, price, cadence, features: all, featured };
 }
 
 const CARDS: PlanCard[] = [

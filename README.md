@@ -105,8 +105,10 @@ same time; Next.js allows one dev server per project folder.
   daily cap per account (300 requests, 2M tokens); Weft's key never ships in the app. Signed out, the login pop-up
   offers **Sign in to Weft** or Puku's own login. See docs/architecture/puku-trial.md.
 - **Weft Pro**: every workspace has a plan. **Free** keeps the Puku trial's daily cap. **Pro** ($20/month or
-  $200/year) replaces it with a 300M Puku token allowance, refreshed every billing period. Settings → Accounts
-  shows your plan, workspace and the meter; **Manage billing** opens the workspace's billing page on weft.zip
+  $200/year) replaces it with a 300M Puku token allowance, refreshed every billing period. Every plan includes BlastCP
+  usage: Free has BlastCP Free (1 brand, 3 channels, 30 posts a month, $0.50 of AI generation once), and Pro and Team
+  have BlastCP Creator (every channel, unlimited posts, $3 a month of AI generation); BlastCP doesn't apply them yet.
+  Settings → Accounts shows your plan, workspace and the meter; **Manage billing** opens the workspace's billing page on weft.zip
   (Stripe Checkout to upgrade, the Stripe-hosted portal to manage). Billing is per workspace, not per seat;
   owner or admin manages. See docs/architecture/billing.md.
 - **Updates**: the packaged app checks GitHub Releases at launch and every few hours, downloads a new version in the

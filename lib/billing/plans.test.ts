@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { catalog, PUKU_METER, PRO_PUKU_TOKENS, TEAM_SEAT_CENTS } from "./plans";
+import { BLASTCP_CREATOR, BLASTCP_FREE, catalog, PUKU_METER, PRO_PUKU_TOKENS, TEAM_SEAT_CENTS } from "./plans";
 
 // lib/billing/plans.ts: the catalog shape, the meter name and the paid plans' allowances.
 
@@ -74,5 +74,19 @@ describe("PUKU_METER and PRO_PUKU_TOKENS", () => {
   it("puts a positive placeholder on the Pro allowance", () => {
     expect(typeof PRO_PUKU_TOKENS).toBe("number");
     expect(PRO_PUKU_TOKENS).toBeGreaterThan(0);
+  });
+});
+
+describe("blastcp", () => {
+  it("includes BlastCP Free on Free and Creator on Pro and Team", () => {
+    expect(catalog.get("free").blastcp).toBe(BLASTCP_FREE);
+    expect(catalog.get("pro").blastcp).toBe(BLASTCP_CREATOR);
+    // Not BlastCP Pro: that's $29 flat, more than a one-seat Team pays.
+    expect(catalog.get("team").blastcp).toBe(BLASTCP_CREATOR);
+  });
+
+  it("mirrors BlastCP's catalog: Free's credit is spent once, Creator's is monthly and unlimited", () => {
+    expect(BLASTCP_FREE).toMatchObject({ brands: 1, channels: 3, postsPerMonth: 30, creditDollars: 0.5, creditResets: false });
+    expect(BLASTCP_CREATOR).toMatchObject({ brands: 1, channels: null, postsPerMonth: null, creditDollars: 3, creditResets: true });
   });
 });

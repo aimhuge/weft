@@ -29,11 +29,27 @@ It's client-safe — a board-side plan picker, and the home page's pricing secti
 ([marketing-site.md](marketing-site.md)), import it without pulling in Supabase or Stripe. The token count is the same
 as `lib/puku-proxy.ts`: input (including cache writes) plus output, cache reads don't count.
 
-| Plan | Price | Puku allowance | Teams |
-| --- | --- | --- | --- |
-| Free | $0 | none (Puku trial's daily cap applies) | team of one |
-| Pro | $20/month or $200/year (`yearlyMonthsCharged: 10`) | `PRO_PUKU_TOKENS` = 300,000,000 per period | yes |
-| Team | $9/seat/month (`TEAM_SEAT_CENTS = 900`, `perSeat: true`) | `PRO_PUKU_TOKENS` = 300,000,000 per period | yes |
+| Plan | Price | Puku allowance | Teams | BlastCP |
+| --- | --- | --- | --- | --- |
+| Free | $0 | none (Puku trial's daily cap applies) | team of one | `BLASTCP_FREE` |
+| Pro | $20/month or $200/year (`yearlyMonthsCharged: 10`) | `PRO_PUKU_TOKENS` = 300,000,000 per period | yes | `BLASTCP_CREATOR` |
+| Team | $9/seat/month (`TEAM_SEAT_CENTS = 900`, `perSeat: true`) | `PRO_PUKU_TOKENS` = 300,000,000 per period | yes | `BLASTCP_CREATOR` |
+
+### BlastCP usage
+
+Each plan includes a BlastCP tier (`plan.blastcp`, a `BlastcpTier`). The figures copy BlastCP's own catalog
+(aimhuge/blastcp `src/lib/billing/plans.ts`), so a change there needs the same change here:
+
+| | Brands | Channels | Posts / month | AI generation credit |
+| --- | ---: | ---: | ---: | ---: |
+| `BLASTCP_FREE` (Weft Free) | 1 | 3 | 30 | $0.50, once (`creditResets: false`) |
+| `BLASTCP_CREATOR` (Weft Pro, Team) | 1 | every (`null`) | unlimited (`null`) | $3 a month |
+
+Team also gets Creator, not BlastCP Pro: BlastCP Pro is $29 flat, and a one-seat Team only pays $9. BlastCP Pro and Agency
+(more brands and seats) are sold on BlastCP itself, so Weft has no fourth tier for them. **Not built yet: enforcement.**
+Today the bundle is just what the pricing section says. No Weft subscription reaches a BlastCP workspace: BlastCP would
+have to read the Weft plan when an account connects through the token exchange ([blastcp.md](blastcp.md)) and set its own
+`org_subscriptions` row to match.
 
 Team follows `@aimhuge/billing`'s DeckCP catalog: `perSeat: true` means the Stripe price is a **per-unit** recurring
 price and the seat count rides on the subscription's `quantity`, so a five-seat workspace is 5 × 900 cents.
@@ -240,7 +256,7 @@ with **Push to Vercel** or `mcp__secrets__push_to_vercel`.
   roster by hand until the billing page does it.
 - Concurrent requests can overdraw by one request. The package accepts this race — the meter writes a row,
   not a counter, and the balance is derived. A burst of N requests at `remaining: 1` can all see the
-  one-token allowance and all spend; the next check sees zero. Per-second `CACHE_MS` keeps the window
+  one-token allowance and all spend; the next check sees zero. The 15 s `CACHE_MS` keeps the window
   small.
 - The billing page (`/api/billing/webhook`, `app/[orgSlug]/billing/page.tsx`, `lib/billing-actions.ts`)
   is on another card: this doc covers the wiring that's already in `lib/billing/`, the desktop status,

@@ -799,6 +799,10 @@ Every workspace has a plan:
   billing period, and letting you invite people into the workspace.
 - **Team**: $9 per seat a month, on top of everything in Pro, for a shared workspace with roles and invites.
 
+Every plan also comes with BlastCP usage: Free has BlastCP Free (1 brand, 3 channels, 30 posts a month and $0.50 of AI
+generation, once), and Pro and Team have BlastCP Creator (every channel, unlimited posts and $3 a month of AI
+generation). BlastCP doesn't apply those yet — they're what the plan buys, not what it enforces today.
+
 Claude Code and Codex threads always run on your own plans with those providers; Weft doesn't charge for them.
 
 ### Can I share a workspace with my team?

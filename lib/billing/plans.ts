@@ -8,7 +8,42 @@ export type PlanId = "free" | "pro" | "team";
 export interface Plan extends BasePlan<PlanId> {
   // A short marketing line for the plan picker; not used by billing math.
   blurb: string;
+  // The BlastCP tier this plan includes.
+  blastcp: BlastcpTier;
 }
+
+// A BlastCP tier as Weft's pricing sells it. The numbers mirror BlastCP's own catalog (aimhuge/blastcp,
+// src/lib/billing/plans.ts), so keep them in step with it. BlastCP enforces them, not Weft, and nothing
+// links a Weft subscription to a BlastCP workspace yet (docs/architecture/billing.md).
+export interface BlastcpTier {
+  name: string;
+  brands: number;
+  // null is every channel and unlimited posts, as in BlastCP's catalog; not zero.
+  channels: number | null;
+  postsPerMonth: number | null;
+  // Dollars of BlastCP's AI audio, video, image and text generation. Free's is spent once, never refilled.
+  creditDollars: number;
+  creditResets: boolean;
+}
+
+export const BLASTCP_FREE: BlastcpTier = {
+  name: "BlastCP Free",
+  brands: 1,
+  channels: 3,
+  postsPerMonth: 30,
+  creditDollars: 0.5,
+  creditResets: false,
+};
+
+// Pro and Team both carry Creator: BlastCP Pro is $29 flat, more than a one-seat Team's $9.
+export const BLASTCP_CREATOR: BlastcpTier = {
+  name: "BlastCP Creator",
+  brands: 1,
+  channels: null,
+  postsPerMonth: null,
+  creditDollars: 3,
+  creditResets: true,
+};
 
 // The usage ledger's meters. Tokens count input + output, the same way lib/puku-proxy.ts already does it
 // (cache writes are part of input, cache reads don't count).
@@ -25,7 +60,14 @@ export const TEAM_SEAT_CENTS = 900;
 
 export const catalog = defineCatalog<PlanId, Plan>({
   plans: {
-    free: { id: "free", name: "Free", blurb: "The whole app, with today's Puku trial's daily cap.", monthlyUnitAmountCents: 0, perSeat: false },
+    free: {
+      id: "free",
+      name: "Free",
+      blurb: "The whole app, with today's Puku trial's daily cap.",
+      monthlyUnitAmountCents: 0,
+      perSeat: false,
+      blastcp: BLASTCP_FREE,
+    },
     pro: {
       id: "pro",
       name: "Pro",
@@ -33,6 +75,7 @@ export const catalog = defineCatalog<PlanId, Plan>({
       monthlyUnitAmountCents: 2000,
       perSeat: false,
       allowances: { [PUKU_METER]: { amount: PRO_PUKU_TOKENS } },
+      blastcp: BLASTCP_CREATOR,
     },
     team: {
       id: "team",
@@ -41,6 +84,7 @@ export const catalog = defineCatalog<PlanId, Plan>({
       monthlyUnitAmountCents: TEAM_SEAT_CENTS,
       perSeat: true,
       allowances: { [PUKU_METER]: { amount: PRO_PUKU_TOKENS } },
+      blastcp: BLASTCP_CREATOR,
     },
   },
   // Cheapest first: defines what counts as an upgrade and the catalog's display order.
