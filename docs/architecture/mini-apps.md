@@ -78,7 +78,8 @@ and `/<org>/apps/<slug>` to `/w/<org>/apps/[slug]` (handled by `app/w/[org]/apps
 pages wrap a shared body in `<Suspense>` for cacheComponents and import the render logic from
 `app/u/[username]/apps/[slug]/shared-app-body.tsx`. The reserved first-segment set in `lib/app-routes.ts`
 lets the proxy reject matches on top-level folders (`_next`, `api`, `app`, `s`, `w`, `u`, etc.) at the edge
-with no session work.
+with no session work. `SharedApp` (the client viewer) owns the secret form as its own state: a server page can't hand it a function
+prop, which crashed every shared app on 2026-10-23. Loading, failure and 404 states are in [web-states.md](web-states.md).
 
 The body runs the gate (`lib/app-share-access.ts`'s `appShareAccessBySlug`, the same `gateVerdict` as a
 card's link in `lib/share-access.ts`, plus a user-private rule: a user-owned private link is creator-only,

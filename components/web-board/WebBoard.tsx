@@ -97,7 +97,7 @@ export function WebBoard({ orgId, orgSlug, userId, user, orgs, initialCommands, 
 
         {cards.length === 0 ? (
           <p className="m-6 rounded-lg border border-line bg-sunken p-6 text-[13.5px] leading-relaxed text-muted">
-            No synced cards yet. Cards show here once a project&apos;s switch is on in the desktop app&apos;s <strong className="text-ink">Settings → Sync</strong>.
+            No synced cards yet. Cards show here once you turn on Sync for a project in the Weft desktop app (<strong className="text-ink">Settings → Sync</strong>).
           </p>
         ) : (
           <>

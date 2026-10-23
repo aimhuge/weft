@@ -1,11 +1,23 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
+import { WebError } from "@/components/web-states/WebError";
+import { isLocalBoard } from "@/lib/local-board";
 
 // The board itself failed to draw (a card or panel failing is caught closer, by CrashGuard).
 // Usually a thread left Board.tsx or one of its imports half-written; Fast Refresh retries this
 // boundary when the file is fixed, and Reload covers the rest.
-export default function BoardError({ error, retry }: { error: Error & { digest?: string }; retry: () => void }) {
+//
+// The same boundary sits behind every weft.zip page (a profile, a shared card, a workspace), where a
+// visitor has no ~/.weft and no threads: there it draws the web page's own error (WebError).
+export default function RootError(props: { error: Error & { digest?: string }; retry: () => void }) {
+  const onBoard = useSyncExternalStore(noChange, isLocalBoard, () => false);
+  return onBoard ? <BoardError {...props} /> : <WebError {...props} />;
+}
+
+const noChange = () => () => {};
+
+function BoardError({ error, retry }: { error: Error & { digest?: string }; retry: () => void }) {
   const restorePane = usePaneOutOfTheWay();
   return (
     <div role="alert" className="flex h-full items-center justify-center bg-canvas p-6">

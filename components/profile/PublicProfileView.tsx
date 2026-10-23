@@ -45,7 +45,7 @@ export function PublicProfileView({ profile }: { profile: PublicProfile }) {
           </>
         ) : (
           <p className="wz-pfPending">
-            The builder card (level, streak, badges, the cloth) shows up here once @{profile.username} opens Weft on their Mac while signed in.
+            @{profile.username} hasn&apos;t published their builder card yet.
           </p>
         )}
         <AppsSection apps={profile.apps} />

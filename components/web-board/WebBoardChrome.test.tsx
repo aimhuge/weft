@@ -87,7 +87,8 @@ describe("WebBoard desktop chrome", () => {
     const site = [itemRow(0, { kind: "tool", id: "t1", name: "mcp__browser__open_url", summary: "https://example.com/docs", at: 5 } as never, "a")];
     const { unmount } = await board({ openCardId: "a", initialThread: site });
     expect(screen.getByRole("link", { name: /Open ↗/ })).toHaveAttribute("href", "https://example.com/docs");
-    expect(screen.getByLabelText("Page address")).toHaveValue("https://example.com/docs");
+    // The address bar shows the site's host, not the whole URL.
+    expect(screen.getByLabelText("Page address")).toHaveValue("example.com");
     unmount();
     resetHarness();
     const local = [itemRow(0, { kind: "tool", id: "t1", name: "mcp__browser__open_url", summary: "http://localhost:3000/", at: 5 } as never, "a")];

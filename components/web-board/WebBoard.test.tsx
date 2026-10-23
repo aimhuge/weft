@@ -63,10 +63,11 @@ describe("WebBoard", () => {
     expect(document.querySelector("[draggable=true]")).toBeNull();
   });
 
-  it("shows the empty state and points at Settings → Sync when there are no cards", async () => {
+  it("shows the empty state and points at Sync in the desktop app when there are no cards", async () => {
     const { WebBoard } = await loadBoard();
     render(<WebBoard {...props} initialCards={[]} />);
-    expect(screen.getByText(/Settings → Sync/)).toBeInTheDocument();
+    expect(screen.getByText(/turn on Sync for a project in the Weft desktop app/)).toBeInTheDocument();
+    expect(screen.getByText("Settings → Sync")).toBeInTheDocument();
     expect(screen.queryByText("Backlog")).not.toBeInTheDocument();
   });
 

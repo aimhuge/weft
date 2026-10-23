@@ -271,3 +271,121 @@
   background: var(--sunken, rgba(255, 255, 255, 0.06));
   font-size: 14px;
 }
+
+/* PaneFrame (components/share-view/PaneFrame.tsx): the wrapper that takes the iframe's sizing
+   (the same flex:1 / min-* the frame had), so the overlay can sit exactly over the frame area
+   without changing the layout around it. */
+.wz-sharePaneFrameWrap {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+
+.wz-sharePaneOverlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--canvas);
+  padding: 24px;
+}
+
+/* The loading state: grey bars where a page's rows will be, then the note. */
+.wz-sharePaneSkeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  max-width: 420px;
+}
+
+.wz-sharePaneBar {
+  height: 14px;
+  border-radius: 7px;
+  background: linear-gradient(90deg, var(--sunken, rgba(255, 255, 255, 0.06)), var(--line), var(--sunken, rgba(255, 255, 255, 0.06)));
+  background-size: 200% 100%;
+  animation: wz-sharePaneShimmer 1.4s ease-in-out infinite;
+}
+
+.wz-sharePaneBar[data-w="90"] {
+  width: 90%;
+}
+
+.wz-sharePaneBar[data-w="75"] {
+  width: 75%;
+}
+
+.wz-sharePaneBar[data-w="60"] {
+  width: 60%;
+}
+
+.wz-sharePaneBar[data-w="45"] {
+  width: 45%;
+}
+
+@keyframes wz-sharePaneShimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+
+.wz-sharePaneLoadingText {
+  margin-top: 4px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--faint, #6b7280);
+}
+
+/* The failure state (no load in LOAD_TIMEOUT_MS, or the frame errored). */
+.wz-sharePaneFailed {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  text-align: center;
+}
+
+.wz-sharePaneFailedText {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.wz-sharePaneFailedActions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.wz-sharePaneRetry {
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  padding: 4px 12px;
+  font-size: 12px;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+}
+
+.wz-sharePaneRetry:hover {
+  background: var(--sunken, #f3f4f6);
+  color: var(--ink);
+}
+
+.wz-sharePaneOpen {
+  color: var(--muted);
+  font-size: 12px;
+  text-decoration: none;
+}
+
+.wz-sharePaneOpen:hover {
+  color: var(--ink);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wz-sharePaneBar {
+    animation: none;
+  }
+}

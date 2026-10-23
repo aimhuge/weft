@@ -12,6 +12,7 @@ import { isDeployed } from "@/lib/home";
 import { loadPublicProfile } from "@/lib/public-profile";
 import { PublicProfileView } from "@/components/profile/PublicProfileView";
 import "@/components/team/team.css";
+import { ProfileSkeleton } from "@/components/web-states/Skeletons";
 
 // Static on purpose, like /s/[id]'s: a per-profile title would need the params outside the <Suspense>.
 export const metadata: Metadata = { title: "Profile · Weft" };
@@ -39,7 +40,7 @@ async function PageBody({ params }: { params: Promise<{ username: string }> }) {
 export default function Page({ params }: { params: Promise<{ username: string }> }) {
   if (!isDeployed()) return <NotDeployed />;
   return (
-    <Suspense fallback={<p className="wz-boardLoading">Loading the profile…</p>}>
+    <Suspense fallback={<ProfileSkeleton />}>
       <PageBody params={params} />
     </Suspense>
   );

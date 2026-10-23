@@ -52,10 +52,10 @@ export async function SharedAppPageBody({ params, owner }: BodyParams) {
   if (access.kind === "missing") notFound();
   if (access.kind === "login") redirect(`/login?next=${next}`);
   if (access.kind === "unconfigured") {
-    return <ShareNotice title="Sharing isn't set up">This Weft doesn&apos;t have its share key configured. Ask the operator to set SHARE_GATE_SECRET.</ShareNotice>;
+    return <ShareNotice title="Link unavailable">This link can&apos;t be opened right now. Try again in a little while.</ShareNotice>;
   }
   if (access.kind === "denied") {
-    return <ShareNotice title="This app is private">This app is shared with its owner only. Sign in to weft.zip and ask the owner to add you.</ShareNotice>;
+    return <ShareNotice title="This app is private">This app is private. Sign in with an account it&apos;s shared with to open it.</ShareNotice>;
   }
   if (access.kind === "gate") {
     // The share row was loaded inside appShareAccessBySlug to run the gate; the verdict doesn't
@@ -74,10 +74,6 @@ export async function SharedAppPageBody({ params, owner }: BodyParams) {
       site={share.kind === "site"}
       shareId={share.id}
       manifest={share.manifest}
-      renderSecretForm={() => {
-        // The AppSecretForm is built by the secrets route agent; this stub resolves with `set: false`
-        // so a request before the form is wired returns cleanly. Replace once the form exists.
-      }}
     />
   );
 }

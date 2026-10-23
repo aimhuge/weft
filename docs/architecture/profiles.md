@@ -52,7 +52,8 @@ because `private.org_slug_for` skips slugs shorter than 2 characters.
 (`lib/public-profile.ts`). That reads through the service client, since `profiles` has no anon policy, selects only the public
 columns, and returns `null` (so the page 404s) for a handle that can't be a username or isn't taken. A handle like `@Alex` or `%40alex` is lowercased first, so a link
 built from a GitHub login with capitals (the league standings' `username`) still lands. The body is `components/profile/PublicProfileView.tsx`, a server component on
-`team.css`'s tokens plus `components/profile/profile.css`. Off weft.zip (`isDeployed()` false), the page shows a note instead.
+`team.css`'s tokens plus `components/profile/profile.css`. Off weft.zip (`isDeployed()` false), the page shows a note instead. While it loads the page shows `ProfileSkeleton`, and a missing handle
+the site's not-found page ([web-states.md](web-states.md)).
 
 ## Not yet
 

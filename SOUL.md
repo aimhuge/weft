@@ -121,7 +121,7 @@ If you are an agent editing this repo, you are working on me. Read README.md for
   Threads, Security, Automations, Shortcuts, Accounts, Teams, Sync); Laptop mode is `components/LaptopModeCard.tsx` + `LaptopModeRules.tsx` over `electron/keep-working*.cjs`; Models holds every model pick, new threads' through `components/NewThreadDefaults.tsx`;
   the four rows (NewThreadDefaults, SubagentPicker, CopilotPicker, DonePicker) share `components/Pickers.tsx`
   (`BackendPicker`, `ModelPicker`, `EffortPicker`) on top of `components/ModelSelect.tsx` (Claude / Puku / Codex optgroups driven by `MODELS` in `lib/new-thread.ts`; Copilot passes `groups=Claude` to stay Claude-only).
-  Security (`components/SettingsSecurityPage.tsx`) holds the default permission mode and `components/TrustedFolders.tsx` (the folders threads may read outside their project, from `SettingsView.allowedFolders`, each revocable through `DELETE /api/folders`); Security also holds `components/TokenExpiry.tsx` (when each saved sign-in runs out, reusing `expiryNote()`; only BlastCP expires, and only the expiry crosses from main — the tokens stay in the Keychain, and there's no silent auto-refresh).
+  Security (`components/SettingsSecurityPage.tsx`) holds the default permission mode and `components/TrustedFolders.tsx` (the folders threads may read outside their project, from `SettingsView.allowedFolders`, each revocable through `DELETE /api/folders`); Security also holds `components/TokenExpiry.tsx` (when each saved sign-in runs out, reusing `expiryNote()`; only BlastCP expires, and only the expiry crosses from main — the tokens stay in the Keychain; a BlastCP sign-in made through your Weft account renews itself, one made in the browser never re-consents quietly).
 - `components/DbSelect.tsx` + `lib/db-picker.ts` `rankItems`: the one "Link <folder> to…" picker every provider drawer shares
   (▲ Vercel, Supabase, Cloudflare, 🚀 BlastCP — `components/VercelPicker.tsx`, `SupabasePicker.tsx`, `CloudflarePicker.tsx`, `BlastcpPicker.tsx`).
   `DbSelect` draws the search box, the loading/empty notes and the row list; each picker supplies its rows, its own score
@@ -167,6 +167,7 @@ If you are an agent editing this repo, you are working on me. Read README.md for
   Analytics: GA4 (`components/GoogleAnalytics.tsx`, in `app/layout.tsx` when `isDeployed()`) and PostHog (`instrumentation-client.ts`) on every
   weft.zip page and never on a local board (`lib/analytics-gate.ts` refuses local hosts, `lib/analytics-server.ts` the server off Vercel);
   `lib/analytics.ts` `track()` sends one event to both, and `data-track` attributes let server components' links opt in (docs/architecture/analytics.md).
+  The one desktop exception: anonymous onboarding stats (`lib/telemetry.ts` + `lib/telemetry-events.ts` allow-list + `lib/telemetry-send.ts` + `app/api/telemetry` → weft.zip `app/api/telemetry/collect` → PostHog; switch `components/StatsSwitch.tsx`, `~/.weft/telemetry.json`).
 - `lib/file-drop.ts` + `lib/use-file-drop.ts` + `components/FileDrop.tsx`: files dragged from Finder anywhere in the window; a composer takes
   its own drop, a card opens with them in its reply box, an open thread (`data-drop-target`) gets them, empty board opens New thread; files wait
   in the store until the target composer (`dropTarget`) mounts.
@@ -250,6 +251,7 @@ If you are an agent editing this repo, you are working on me. Read README.md for
   folder's wrangler config; docs/architecture/cloudflare.md).
 - `electron/blastcp*.cjs` + `lib/blastcp-view.ts` + `lib/use-blastcp.ts` + `components/BlastcpDrawer.tsx`: the BlastCP drawer (its rocket logo on the rail, `components/BlastcpLogo.tsx`) (OAuth + PKCE
   sign-in sealed in the Keychain, reads through BlastCP's MCP tools, folder → property links in `~/.weft/blastcp-links.json`; docs/architecture/blastcp.md).
+  `lib/blastcp-auto.ts` + `app/api/blastcp` + `electron/blastcp.cjs` `connectWeft`: connecting with your Weft account, the account's access token swapped for a BlastCP sign-in (RFC 8693, `exchangeWeft` in `electron/blastcp-oauth.cjs`) on Weft sign-in, twice a day and from the drawer's Connect with Weft.
 - The board's native right-click menus (lib/card-menu.ts) are built and popped in `electron/main-menu-popup.cjs`:
   one IPC handler, a fresh `Menu` from the items the board sends, the click → resolve wiring behind a `setTimeout`
   (because click fires before the callback on macOS but not on every platform). `Menu` and `BrowserWindow` are
@@ -313,7 +315,7 @@ If you are an agent editing this repo, you are working on me. Read README.md for
 - Components: `Board.tsx`, `ThreadView.tsx`, `ThreadItems.tsx`, `Markdown.tsx`, `ReviewPanel.tsx`;
   every dialog sits in `Modal.tsx` (backdrop, header, close, Escape via `lib/use-escape.ts`);
   each card, panel, dialog body, drawer, header badge and thread message sits in `CrashGuard.tsx` (an error boundary;
-  `inline` draws a one-line chip for small spots), with `app/error.tsx` behind the whole board. Board's panels, dialogs,
+  `inline` draws a one-line chip for small spots), with `app/error.tsx` behind the whole board (on weft.zip it draws the web error page, and `app/not-found.tsx` the 404: `components/web-states/`, which also holds the public pages' loading skeletons). Board's panels, dialogs,
   cards and badges, the reply box and the review panel load through `guarded()` (`components/guarded.tsx`, an `import()`
   inside a CrashGuard), so even a module that throws as it loads (JSX in a constant before its import) breaks only its spot.
   A build error (a file that doesn't parse) fails the route before React runs, so no boundary sees it: `components/BuildErrorBar.tsx`
@@ -355,8 +357,9 @@ If you are an agent editing this repo, you are working on me. Read README.md for
   - `board-view.md` — `mcp__board_view__*`: a thread's eyes and hands on the board window itself, fixed scripts, the token-guarded control server.
   - `keyboard-shortcuts.md` — the shortcut registry, the `?` sheet, tooltips, key badges, the `ModifierHint` component.
   - `themes.md` — System/Light/Dark and a scene (one of Weft's pictures behind the board with its own palette).
+  - `web-states.md` — weft.zip's loading skeletons, host-aware error page, 404 and the shared pane's load/fail states.
   - `error-boundaries.md` — `CrashGuard.tsx`, `BuildErrorBar.tsx`, the `guarded()` import wrapper, why a build error never reaches a boundary.
-  - `welcome-tour.md` — the welcome's narrated 78-second tour: three HyperFrames pages, the live player and beat messages, Kokoro voice and pad, the MP4 render for weft.zip.
+  - `welcome-tour.md` — the welcome's narrated 96-second tour: three HyperFrames pages, the live player and beat messages, Kokoro voice and pad, the MP4 render for weft.zip.
   - `gamification.md` — the header's 🔥 chip and "Your loom" dialog: streaks, XP, badges, the builder card, the production-ready tree.
   - `quality.md` — the header's code quality checklist: coverage, file size, lint, types, guardrails; the refactor scout and the score's last 10 points.
   - `commit-pile.md` — the header's "+N/-N" uncommitted counter and the Review card that walks the pile to a clean commit.

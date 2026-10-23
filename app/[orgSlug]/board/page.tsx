@@ -23,6 +23,7 @@ import { cardThumbRefs } from "@/lib/web-board-thumbs";
 import { webClient } from "@/lib/web-session";
 import { WebBoard } from "@/components/web-board";
 import "@/components/web-board/web-board.css";
+import { BoardSkeleton } from "@/components/web-states/Skeletons";
 
 export const metadata: Metadata = {
   title: "Board",
@@ -127,7 +128,7 @@ async function BoardPageBody({ orgSlug, searchParams }: { orgSlug: string; searc
 }
 
 function BoardPageFallback() {
-  return <p className="wz-boardLoading">Loading the workspace&apos;s cards…</p>;
+  return <BoardSkeleton />;
 }
 
 export default async function Page({ params, searchParams }: { params: Promise<{ orgSlug: string }>; searchParams?: Promise<Query> }) {

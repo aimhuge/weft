@@ -9,7 +9,7 @@ each failure in the smallest spot that owns it, with the error shown and a way t
 | Boundary | Catches | Shows |
 | --- | --- | --- |
 | `app/global-error.tsx` | the root layout | a bare page with Try again and Reload |
-| `app/error.tsx` | `Board.tsx` itself, or a static import of it | "The board failed to draw"; hides the browser pane while it shows (the pane is a native view over the window) and restores it after |
+| `app/error.tsx` | `Board.tsx` itself, or a static import of it | on the desktop, "The board failed to draw"; hides the browser pane while it shows (the pane is a native view over the window) and restores it after. On weft.zip (`lib/local-board.ts`), the web page "This page didn't load" ([web-states.md](web-states.md)) |
 | `guarded()` pieces | a component that throws as it draws **or as its module loads** | the CrashGuard fallback in that piece's spot |
 | `CrashGuard` wrappers | a component that throws as it draws | a box, or with `inline` a one-line chip |
 

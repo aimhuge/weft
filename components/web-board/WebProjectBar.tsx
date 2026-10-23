@@ -64,7 +64,7 @@ export function WebProjectBar({
           );
         })}
       </div>
-      <div className="min-w-2 flex-1" />
+      <div className="min-w-0 flex-1" />
       <input
         type="search"
         value={query}
@@ -77,6 +77,8 @@ export function WebProjectBar({
         value={sort}
         onChange={(e) => onSort(e.target.value as SortKey)}
         aria-label="Sort cards"
+        // Dark, so the dropped-open option list isn't light-on-dark against the board.
+        style={{ colorScheme: "dark" }}
         className="shrink-0 rounded-md border border-line-strong bg-canvas px-2 py-1 text-[12px] text-ink outline-none focus:border-accent"
       >
         {(Object.keys(SORTERS) as SortKey[]).map((id) => (

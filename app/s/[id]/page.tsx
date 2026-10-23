@@ -15,6 +15,7 @@ import { shareAccess } from "@/lib/share-access";
 import { buildShareLive } from "@/lib/share-live";
 import { serviceClient } from "@/lib/web-session";
 import { SharedCard } from "@/components/share-view/SharedCard";
+import { SharedCardSkeleton } from "@/components/web-states/Skeletons";
 
 // Static on purpose: under Cache Components a generateMetadata that reads the gate's cookie raises an error while the
 // shell prerenders, and a card's title in the tab isn't worth it. The page itself is dynamic inside its <Suspense>.
@@ -28,7 +29,7 @@ function NotDeployed() {
     <main className="wz-app">
       <div className="wz-authCard">
         <h1 className="wz-authTitle">Shared thread</h1>
-        <p className="wz-authSub">Shared links live on weft.zip. In the desktop app, the card&apos;s share button is the way in.</p>
+        <p className="wz-authSub">Shared links open on weft.zip.</p>
       </div>
     </main>
   );
@@ -39,7 +40,7 @@ function Denied() {
     <main className="wz-app">
       <div className="wz-authCard">
         <h1 className="wz-authTitle">This thread is private</h1>
-        <p className="wz-authSub">This thread is private to its workspace. Sign in to weft.zip and ask the owner to add you.</p>
+        <p className="wz-authSub">This thread is private to its workspace. Sign in with an account in that workspace to see it.</p>
       </div>
     </main>
   );
@@ -49,8 +50,8 @@ function Unconfigured() {
   return (
     <main className="wz-app">
       <div className="wz-authCard">
-        <h1 className="wz-authTitle">Sharing isn&apos;t set up</h1>
-        <p className="wz-authSub">This Weft doesn&apos;t have its share key configured. Ask the operator to set SHARE_GATE_SECRET.</p>
+        <h1 className="wz-authTitle">Link unavailable</h1>
+        <p className="wz-authSub">This link can&apos;t be opened right now. Try again in a little while.</p>
       </div>
     </main>
   );
@@ -89,7 +90,7 @@ async function PageBody({ params }: { params: Promise<{ id: string }> }) {
 }
 
 function PageFallback() {
-  return <p className="wz-boardLoading">Loading the shared thread…</p>;
+  return <SharedCardSkeleton />;
 }
 
 export default function Page({ params }: { params: Promise<{ id: string }> }) {

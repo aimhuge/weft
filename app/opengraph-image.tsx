@@ -10,23 +10,25 @@ export const alt = `Weft: ${TAGLINE}`;
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
-const ASSETS = path.join(process.cwd(), "electron", "assets");
-
-// Satori needs a TrueType font; use the vendored variable font instead of fetching Google Fonts during builds.
+// Satori needs a static TrueType font: it can't read the variable font's axis names and threw on every render
+// (2026-10-23), so every weft.zip link unfurled with no picture. fraunces-500.ttf is that variable font cut at
+// opsz 144, wght 500 (fonttools varLib.instancer), the cut the home page's headline draws.
 async function displayFont(): Promise<ArrayBuffer> {
-  const bytes = await readFile(path.join(process.cwd(), "public", "fonts", "fraunces-variable.ttf"));
+  const bytes = await readFile(path.join(process.cwd(), "public/fonts/fraunces-500.ttf"));
   return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
 }
 
-async function dataUrl(file: string, type: string): Promise<string> {
-  return `data:${type};base64,${(await readFile(path.join(ASSETS, file))).toString("base64")}`;
+// Literal paths, so file tracing can see them; next.config.ts also lists them for this route. With a
+// variable path the files never reached Vercel's function and every link preview 500'd (2026-10-23).
+async function dataUrl(file: Promise<Buffer>, type: string): Promise<string> {
+  return `data:${type};base64,${(await file).toString("base64")}`;
 }
 
 export default async function Image() {
   const [font, scene, emblem] = await Promise.all([
     displayFont(),
-    dataUrl("splash-speeder.jpg", "image/jpeg"),
-    dataUrl("emblem.png", "image/png"),
+    dataUrl(readFile(path.join(process.cwd(), "electron/assets/splash-speeder.jpg")), "image/jpeg"),
+    dataUrl(readFile(path.join(process.cwd(), "electron/assets/emblem.png")), "image/png"),
   ]);
   return new ImageResponse(
     (

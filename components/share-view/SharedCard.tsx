@@ -18,6 +18,7 @@ import type { ThreadItem } from "@/lib/types";
 import { SHARE_POLL_MS, type ShareCard, type ShareLive, type SharePane } from "@/lib/share-types";
 import { canLoadEarlier, mergeShareLive, newestSeq, oldestSeq } from "@/lib/share-view";
 import { groupThread, ThreadEntries } from "../ThreadItems";
+import { PaneFrame } from "./PaneFrame";
 import "./share-view.css";
 
 // The tool-result source the viewer provides: tool outputs over TOOL_RESULT_INLINE_MAX are
@@ -198,7 +199,7 @@ function SharedPane({ id, pane, thumb, blobUrls }: { id: string; pane: SharePane
         <div className="wz-sharePaneToolbar">
           <span>{pane.label || "Page"}</span>
         </div>
-        <iframe title="Shared page" src={url} sandbox="allow-scripts allow-popups allow-forms" className="wz-sharePaneFrame" />
+        <PaneFrame title="Shared page" src={url} sandbox="allow-scripts allow-popups allow-forms" openHref={url} />
       </>
     );
   }
@@ -212,7 +213,7 @@ function SharedPane({ id, pane, thumb, blobUrls }: { id: string; pane: SharePane
             Open ↗
           </a>
         </div>
-        <iframe title="Shared page" src={pane.url} sandbox="allow-scripts allow-popups allow-forms" className="wz-sharePaneFrame" />
+        <PaneFrame title="Shared page" src={pane.url} sandbox="allow-scripts allow-popups allow-forms" openHref={pane.url} />
       </>
     );
   }

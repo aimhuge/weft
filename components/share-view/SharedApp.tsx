@@ -7,22 +7,18 @@
 // Weft inserts into the app's HTML posts a BridgeRequest to window.parent, the page calls one of
 // Weft's /api/a/<id>/{fetch,read,env} routes (or pops AppSecretForm for requestSecret) and posts
 // a BridgeResponse back. See use-app-bridge.ts and lib/app-bridge-inject.ts.
+//
+// The secret form is this component's own state, never a prop: the page is a server component, and a
+// function can't cross that boundary (passing one crashed every /@<user>/apps/<slug> page on 2026-10-23).
 "use client";
 
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { appGlyph } from "@/lib/mini-apps";
 import type { AppPolicy } from "@/lib/app-share-types";
+import AppSecretForm, { type AppSecretFormProps } from "./AppSecretForm";
+import { PaneFrame } from "./PaneFrame";
 import { useAppBridge, type AppSecretSpec } from "./use-app-bridge";
 import "./share-view.css";
-
-// The portal the secrets route builds. The secrets route is built by another agent; we declare
-// the prop here so this file compiles without a hard import.
-type SecretFormProps = {
-  shareId: string;
-  name: string;
-  hosts: string[];
-  onDone: (set: boolean) => void;
-};
 
 export function SharedApp({
   name,
@@ -30,7 +26,6 @@ export function SharedApp({
   site,
   shareId,
   manifest,
-  renderSecretForm,
 }: {
   name: string;
   src: string;
@@ -41,12 +36,11 @@ export function SharedApp({
   shareId?: string;
   // The folder app's policy, with the secret declarations. Empty for a site or single-page app.
   manifest?: AppPolicy | null;
-  // Render the secret form as a portal. The page passes the real AppSecretForm once it exists;
-  // the legacy viewer omits it (or passes a noop) because requestSecret isn't called there.
-  renderSecretForm?: (input: SecretFormProps) => void;
 }) {
   const glyph = appGlyph(name);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  // The secret the app asked for with weft.requestSecret, while its form is open.
+  const [asking, setAsking] = useState<AppSecretFormProps | null>(null);
   const secrets: AppSecretSpec[] = manifest?.secrets
     ? Object.entries(manifest.secrets).map(([n, rule]) => ({ name: n, hosts: rule.hosts }))
     : [];
@@ -55,7 +49,14 @@ export function SharedApp({
   useAppBridge(iframeRef, {
     shareId: shareId ?? "",
     secrets,
-    renderSecretForm: renderSecretForm ?? noopSecretForm,
+    renderSecretForm: (input) =>
+      setAsking({
+        ...input,
+        onDone: (set) => {
+          setAsking(null);
+          input.onDone(set);
+        },
+      }),
   });
   return (
     <div className="wz-desk" data-theme="dark">
@@ -83,21 +84,16 @@ export function SharedApp({
             Shared from Weft
           </a>
         </header>
-        <iframe
-          ref={iframeRef}
+        <PaneFrame
+          frameRef={iframeRef}
           title={name}
           src={src}
           sandbox="allow-scripts allow-popups allow-forms"
-          className="wz-sharePaneFrame"
+          {...(site ? { openHref: src } : {})}
         />
       </div>
+      {asking && <AppSecretForm {...asking} />}
     </div>
   );
 }
 
-// The hook requires a renderer; the legacy /a/<id> viewer doesn't run a bridge, so the
-// promise never resolves and requestSecret (also unused there) is never called.
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function noopSecretForm(_input: { shareId: string; name: string; hosts: string[]; onDone: (set: boolean) => void }): void {
-  // no-op
-}

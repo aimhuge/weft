@@ -11,10 +11,19 @@ import Icon from "../Icon";
 const NAV = "rounded-md p-1.5 text-muted disabled:opacity-30";
 const SANDBOX = "allow-scripts allow-popups allow-forms";
 
-// What the toolbar's address field reads for each kind of page.
+// What the toolbar's address field reads for each kind of page. A saved page shows its label and a
+// public site its host: the address bar is for a visitor, not a file path.
 function address(pane: SharePane | null): string {
   if (!pane) return "";
-  return pane.kind === "blob" ? `~/.weft/show · ${pane.label}` : pane.url;
+  if (pane.kind === "blob") return pane.label;
+  if (pane.kind === "site") {
+    try {
+      return new URL(pane.url).host || pane.url;
+    } catch {
+      return pane.url;
+    }
+  }
+  return pane.label;
 }
 
 function Snapshot({ src, note }: { src?: string; note: string }) {

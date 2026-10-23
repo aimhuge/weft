@@ -28,8 +28,10 @@ home-release.ts ─────┘         home.css (prefixed CSS)  PILLARS  cat
 - `components/home/Pillars.tsx`, `FaqTeaser.tsx`, `HomeChrome.tsx` (nav and footer), `faq.css`.
 - `components/home/home.css`: the page's whole look. Plain `wz-*` classes, not CSS modules, because
   `next.config.ts` sends every `.css` through Tailwind, which drops module exports.
-- `app/opengraph-image.tsx`: the shared-link card; `public/brand/board.png`: the screenshot in the hero and the
-  OG image.
+- `app/opengraph-image.tsx`: the shared-link card for every weft.zip page (home, profiles, FAQ, shares), drawn by Satori
+  with `public/fonts/fraunces-500.ttf`, a static cut of the variable Fraunces (opsz 144, wght 500, `fonttools varLib.instancer`):
+  Satori throws on the variable font's axis names, which made the route 500 from 2026-10-16 to 10-23. Its three files are listed
+  for tracing in `next.config.ts`, and `app/opengraph-image.test.ts` draws it. `public/brand/board.png`: the screenshot in the hero.
 - `components/HomeErrorFallback.tsx`: the dark plain page both routes render when `loadHome()` fails.
 - `docs/FAQ.md` and the `/faq` route are [faq-site.md](faq-site.md).
 

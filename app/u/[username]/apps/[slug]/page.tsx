@@ -12,6 +12,7 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { isDeployed } from "@/lib/home";
 import { SharedAppPageBody } from "./shared-app-body";
+import { SharedAppSkeleton } from "@/components/web-states/Skeletons";
 
 // Static on purpose, like /a/[id] and /s/[id]: a per-share title would need the params outside
 // the <Suspense>.
@@ -25,7 +26,7 @@ function NotDeployed() {
     <main className="wz-app">
       <div className="wz-authCard">
         <h1 className="wz-authTitle">Shared app</h1>
-        <p className="wz-authSub">Shared apps live on weft.zip. In the desktop app, Share… on the app&apos;s tile is the way in.</p>
+        <p className="wz-authSub">Shared links open on weft.zip.</p>
       </div>
     </main>
   );
@@ -34,7 +35,7 @@ function NotDeployed() {
 export default function Page({ params }: { params: Promise<{ username: string; slug: string }> }) {
   if (!isDeployed()) return <NotDeployed />;
   return (
-    <Suspense fallback={<p className="wz-boardLoading">Loading the shared app…</p>}>
+    <Suspense fallback={<SharedAppSkeleton />}>
       <SharedAppPageBody params={params} owner="user" />
     </Suspense>
   );

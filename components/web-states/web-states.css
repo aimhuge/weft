@@ -1,0 +1,220 @@
+/* weft.zip's loading, error and not-found states (components/web-states/*). The skeletons are drawn in the
+   shape of the page they stand in for, so the swap to the real page doesn't jump: the profile's hero and
+   number tiles, the shared card's thread and pane, a mini app's frame, the web board's columns. The desk
+   ones sit inside .wz-desk[data-theme="dark"] (app/globals.css tokens), the rest inside .wz-app
+   (components/team/team.css). Plain global CSS with a wzs- prefix: next.config.ts routes every .css through
+   the Tailwind loader, which drops module exports. */
+
+/* One shimmering bar. Width and height come from the modifier or an inline style. */
+.wzs-bar {
+  display: block;
+  flex: none;
+  height: 12px;
+  border-radius: 6px;
+  background: linear-gradient(90deg, rgb(236 229 216 / 0.05), rgb(236 229 216 / 0.11), rgb(236 229 216 / 0.05));
+  background-size: 200% 100%;
+  animation: wzs-shimmer 1.4s ease-in-out infinite;
+}
+
+.wzs-bar[data-size="title"] {
+  height: 18px;
+}
+
+.wzs-bar[data-size="big"] {
+  height: 30px;
+  border-radius: 8px;
+}
+
+.wzs-round {
+  border-radius: 50%;
+}
+
+@keyframes wzs-shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+
+/* The words under a skeleton: small, quiet, and only for screen readers and slow loads. */
+.wzs-note {
+  margin: 0;
+  color: var(--thread-3, var(--faint));
+  font-size: 12.5px;
+  opacity: 0;
+  animation: wzs-appear 0.3s ease 1.2s forwards;
+}
+
+@keyframes wzs-appear {
+  to {
+    opacity: 1;
+  }
+}
+
+/* Profile: the hero card, four number tiles and two section blocks, in .wz-profileMain's column. */
+.wzs-profileHero {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 28px 30px;
+  border-radius: 20px;
+  border: 1px solid var(--line-2);
+  background: linear-gradient(180deg, rgb(31 39 66 / 0.6), rgb(23 29 49 / 0.7));
+}
+
+.wzs-stack {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.wzs-tiles {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.wzs-tile,
+.wzs-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px 20px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: rgb(23 29 49 / 0.55);
+}
+
+.wzs-section {
+  margin-top: 20px;
+  min-height: 150px;
+}
+
+@media (max-width: 640px) {
+  .wzs-tiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Shared card and mini app: the thread's message bubbles and the pane's page. */
+.wzs-thread {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 18px;
+  padding: 20px;
+  min-width: 0;
+}
+
+.wzs-bubble {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 82%;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.wzs-bubble[data-who="user"] {
+  align-self: flex-end;
+  width: 46%;
+  background: var(--sunken);
+}
+
+.wzs-page {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+  min-height: 0;
+  padding: 28px;
+  background: var(--canvas);
+}
+
+.wzs-pageBlock {
+  flex: 1;
+  max-height: 260px;
+  border-radius: 12px;
+}
+
+/* The web board: a header row and five columns of cards. */
+.wzs-board {
+  display: flex;
+  flex: 1;
+  gap: 12px;
+  min-height: 0;
+  padding: 14px 16px;
+  overflow: hidden;
+}
+
+.wzs-column {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 170px;
+}
+
+.wzs-card {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.wzs-boardBar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+
+/* A full page that failed or isn't there: the auth card on the brand backdrop. */
+.wzs-full {
+  min-height: 100dvh;
+}
+
+.wzs-full .wz-auth {
+  min-height: 100dvh;
+}
+
+.wzs-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  margin-top: 26px;
+}
+
+.wzs-actions button.wz-btnPrimary {
+  border: 0;
+  cursor: pointer;
+}
+
+.wzs-code {
+  margin: 18px 0 0;
+  color: var(--thread-3);
+  font-family: var(--mono);
+  font-size: 11.5px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wzs-bar {
+    animation: none;
+  }
+
+  .wzs-note {
+    animation: none;
+    opacity: 1;
+  }
+}

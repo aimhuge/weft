@@ -54,7 +54,7 @@ export function WebNewCardDialog({
       <div className="flex flex-col gap-3 p-4">
         {!target ? (
           <p className="text-[13px] leading-relaxed text-muted">
-            No folder to start it in yet. Turn on a project in the desktop app&apos;s <strong className="text-ink">Settings → Sync</strong> and let it sync a card, then it shows up here.
+            No folder to start it in yet. Turn on Sync for a project in the Weft desktop app (<strong className="text-ink">Settings → Sync</strong>) and let it sync a card, then it shows up here.
           </p>
         ) : (
           <>
