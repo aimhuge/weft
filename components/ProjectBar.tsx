@@ -30,6 +30,7 @@ export default function ProjectBar({
   onSort,
   home,
   onMenuOpenChange,
+  variant = "desktop",
 }: {
   projects: ProjectSummary[]; // already sorted, most recent first
   total: number; // total card count, for the "All" chip
@@ -40,6 +41,9 @@ export default function ProjectBar({
   onSort: (sort: SortKey) => void;
   home: string; // user's home dir, for shortening paths (~/dev/x) and default parent for new projects
   onMenuOpenChange?: (open: boolean) => void; // called when the dropdown opens/closes (the board hides a native browser overlay while it's open)
+  // "web" is the same bar on weft.zip, where the project menu can only pick a project (the Mac's
+  // filesystem is out of reach) and the sort's dropdown is styled dark so it isn't light-on-dark.
+  variant?: "desktop" | "web";
 }) {
   const [open, setOpen] = useState(false);
   useEscape(open, () => setOpen(false));
@@ -84,7 +88,7 @@ export default function ProjectBar({
         </button>
 
         {open && (
-          <ProjectMenu projects={projects} selected={selected} onSelect={(p) => { onSelect(p); setOpen(false); }} home={home} menuId={menuId} />
+          <ProjectMenu projects={projects} selected={selected} onSelect={(p) => { onSelect(p); setOpen(false); }} home={home} menuId={menuId} variant={variant} />
         )}
       </div>
 
@@ -97,6 +101,9 @@ export default function ProjectBar({
         onChange={(e) => onSort(e.target.value as SortKey)}
         aria-label="Sort cards"
         title={hint("sort", "Sort cards")}
+        // On weft.zip the page is dark but the browser's dropdown is not, so the opened list would
+        // be light-on-dark. The desktop app is always dark, so it doesn't need the hint.
+        style={variant === "web" ? { colorScheme: "dark" } : undefined}
         className="shrink-0 rounded-md border border-line-strong bg-canvas px-2 py-1 text-[12px] text-ink outline-none focus:border-accent"
       >
         {SORTS.map((s) => (

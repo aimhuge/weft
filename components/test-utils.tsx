@@ -17,6 +17,13 @@ if (typeof window !== "undefined" && typeof window.matchMedia !== "function") {
   });
 }
 
+// jsdom has no scrollIntoView, which the board's shared views call to keep a row in view (the project
+// bar's selected chip, the palette's active row, a thread's turn). Without it they throw and the error
+// boundary swallows the whole panel, so every component test gets a no-op.
+if (typeof Element !== "undefined" && typeof Element.prototype.scrollIntoView !== "function") {
+  Element.prototype.scrollIntoView = () => {};
+}
+
 export function makeCard(over: Partial<Card> = {}): Card {
   return {
     id: "c1",

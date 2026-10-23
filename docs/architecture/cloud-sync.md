@@ -50,17 +50,26 @@ is the contract between the parts:
   `lastError`, `signedOut`, `noWorkspace`. Folders live in settings `syncFolders` (`setSyncFolder`).
 - The web board (`app/[orgSlug]/board/page.tsx`, `components/web-board/*`, pure logic in `lib/web-board.ts`): behind the same
   `requireTeam` gate as Team and Billing, read as the visitor through their cookie session, so RLS decides what they see.
-  It is the desktop board drawn read-only, not a lookalike: the cards are `components/CardView.tsx` with `readOnly` (no drag,
+  It **is** the desktop board drawn read-only, not a lookalike: the cards are `components/CardView.tsx` with `readOnly` (no drag,
   stop, answer, resume, star or archive), the columns and their counts are `ColumnHeader` and `ColumnPlaceholder`, and what a
   column holds comes from the desktop's own `lib/board-view.ts` (`groupByColumn`, `summarizeProjects`, `SORTERS`), so a change
   to the board reaches both, and the columns themselves are the desktop's `BoardColumn` (drag handlers no-ops, Backlog's **Add a
-  thread** opens New thread). The window around them is the desktop's too: `WorkspaceHeader` returns null on `/board`, and
-  `WebBoardHeader` (logo, counts, workspace, Live, New thread on N, `WebAccountMenu` with workspaces, Team, Billing and Sign out)
-  and `WebRail` (★ starred filter, Board, Team, Billing) take its place. `WebProjectBar` is its project chips, filter box and sort; `.wz-desk` (`web-board.css`) gives the
+  thread** opens New thread). The window around them is the desktop's too: `WorkspaceHeader` returns null on `/board`, and the
+  desktop's own chrome takes its place — `components/BoardHeader.tsx` (`variant="web"`: the logo, "N running · M need you", New
+  thread; the browser, terminal and Settings buttons are left out, since those live on the Mac), `components/BoardProjectBar.tsx`
+  (`variant="web"`: the desktop's project chips, filter box and sort, with the Mac-only half of the project menu hidden), the
+  desktop's `BoardColumns`, and the desktop's own rail buttons in `components/RailBoardButtons.tsx` (★ starred filter, 🏷 tags)
+  inside the web's `WebRail` (★, then Board, Team, Billing). The `variant` seam is the whole trick: one implementation, with an
+  explicit switch for what only the Mac can do. What stays the web's own: `WebAccountMenu` (workspaces, Team, Billing, Sign out),
+  `WebLiveDot` (the header's `live` slot — the Realtime channel's state), the read-only tag list in the rail's 🏷 (the Mac owns the
+  tag catalog), `WebShareBoard` and the web's dialogs. The board's ★ and 🏷 narrow it with the desktop's own
+  `lib/rail-view.ts` (`RailFilter`, `filterCards`, `isFiltering`, `toggleTag`), the same shape the desktop's rail keeps.
+  `.wz-desk` (`web-board.css`) gives the
   subtree the dark desktop tokens and the full window instead of the workspace shell's 880px column. The server renders the
   workspace's non-deleted cards (the copilot is left out); `useWebBoard` subscribes to Realtime `postgres_changes` on
   `cloud_cards` and `cloud_thread_items` (filter `org_id=eq.<id>`) and moves, adds and removes cards in place, with a Live dot
-  that goes grey when the channel drops. `?card=<id>` opens a card in `WebThreadPanel`, framed over the board like the desktop's open card (`fixed inset-4`): the
+  that goes grey when the channel drops. `?card=<id>` opens a card in `WebThreadPanel`, framed over the board like the desktop's open card
+  (the desktop's `CardFrame` from `components/OpenCard.tsx`, `fixed inset-4`, a `role="dialog"` named after the card): the
   thread at 44% with the desktop ThreadPanel's header (CLI, folder, session, live, tags, stage and what's left) and, on the right,
   `WebPane`, the browser pane as of the thread's last `open_url` (`paneFor` from `lib/share-types.ts`): a synced page framed
   sandboxed from `app/api/web-board/[orgId]/page/[sha]` (the visitor's cookie client downloads it, so the bucket's member
@@ -70,6 +79,28 @@ is the contract between the parts:
   read from `cloud_tool_outputs` when its row opens, through `ToolResultSourceContext` in `lib/use-tool-result.ts` (the desktop
   fetches the same row from its own server). A signed blob link has no file extension, so `mediaKind` takes it for an image.
   The cards' own controls (drag, star, archive) are absent; the board's writes are **New thread**, and a reply, an answer or Stop in an open card (see Commands).
+
+## The `variant` seam
+
+The desktop's board components are drawn by both hosts. The switch is a `variant?: "desktop" | "web"` prop that
+defaults to `"desktop"`, so the desktop's call sites don't change. It turns off only what genuinely needs the Mac:
+
+- `components/BoardHeader.tsx` — `variant="web"` leaves out the browser pane button, the terminal drawer button and the
+  local Settings button, and the share button becomes the host's own (`slots.share`). The desktop's live dot has no
+  slot to fill, so `slots.live` is optional and the web's `WebLiveDot` fills it.
+- `components/BoardProjectBar.tsx` → `components/ProjectBar.tsx` → `components/ProjectMenu.tsx` — `variant="web"` makes the
+  project menu the picker alone: the Mac-only half (open folder, clone repo, new project, the project's changelog) is left
+  out, since weft.zip can't reach the Mac's filesystem. The sort `<select>` also gets `colorScheme: "dark"`, so the browser's
+  own dropdown isn't light-on-dark.
+- `components/RailBoardButtons.tsx` — the rail's ★ and 🏷 buttons and the `useRailCardDrag` hook, shared by
+  `components/LibraryRail.tsx` and the web's `components/web-board/WebRail.tsx`. Only the buttons are shared: the 🏷 drawer
+  behind them is the host's (the desktop's `TagsDrawer`, the web's read-only list of the synced tags).
+- `components/OpenCard.tsx`'s `CardFrame` — the framed window over the board. It is a `role="dialog"` with `aria-modal`,
+  named by an optional `label` (the card's title on weft.zip; the desktop leaves it to the panel's own heading), and the
+  backdrop carries `data-backdrop`.
+
+Everything else — the header layout, the project chips, the filter box, the sort, the columns, the cards, the framed
+open-card window, the reply box and its modes — is the desktop's code path on both hosts.
 
 ## Commands: starting a card and replying from the web
 

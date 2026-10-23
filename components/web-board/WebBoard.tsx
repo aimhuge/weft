@@ -1,9 +1,10 @@
 "use client";
 
-// The weft.zip board at /[orgSlug]/board, laid out like the desktop window: its header (WebBoardHeader), the project
-// bar, the 38px rail beside the columns (WebRail), the desktop's own BoardColumn and CardView drawn read-only from the
-// opted-in cards the Macs sync (docs/architecture/cloud-sync.md), and a card opening framed with its browser pane
-// (WebThreadPanel), where the thread is the desktop's own ThreadPanel over the cloud transport (useCloudTransport.ts).
+// The weft.zip board at /[orgSlug]/board, drawn as the desktop window: the desktop's own BoardHeader, BoardProjectBar,
+// BoardColumns and CardView, over the opted-in cards the Macs sync (docs/architecture/cloud-sync.md). The thread in an
+// open card is the desktop's own ThreadPanel over the cloud transport (useCloudTransport.ts), so the reply box is the
+// desktop's too — the transport leaves out what only the Mac can do, so those views don't offer it.
+//
 // Server hands it the org id, the initial rows and, with ?card=…, that card's first page of thread; useWebBoard keeps
 // them live over Supabase Realtime.
 import { useEffect, useMemo, useState } from "react";
@@ -17,16 +18,19 @@ import { ToolResultSourceContext } from "@/lib/use-tool-result";
 import { busyHere } from "@/lib/overlap";
 import { COLUMNS, type Column, type ThreadItem } from "@/lib/types";
 import { boardCounts, webCards } from "@/lib/web-board";
+import { filterCards, isFiltering, type RailFilter } from "@/lib/rail-view";
 import { boardCommands, canReply, cardReplies, webTargets } from "@/lib/web-commands";
-import BoardColumn, { COLUMN_LIMIT } from "../BoardColumn";
+import BoardHeader from "../BoardHeader";
+import BoardProjectBar from "../BoardProjectBar";
+import BoardColumns from "../BoardColumns";
 import CardView from "../CardView";
+import { useShortcutHint } from "@/lib/hotkeys";
 import { WebAccountMenu, type WebOrg, type WebUser } from "./WebAccountMenu";
-import { WebBoardHeader } from "./WebBoardHeader";
+import { WebLiveDot } from "./WebLiveDot";
 import { WebShareBoard } from "./WebShareBoard";
 import { useWebBoard } from "./useWebBoard";
 import { WebCommandStrip } from "./WebCommandStrip";
 import { WebNewCardDialog } from "./WebNewCardDialog";
-import { WebProjectBar } from "./WebProjectBar";
 import { WebRail } from "./WebRail";
 import { WebReplyStatus } from "./WebReplyStatus";
 import { CloudBlobContext } from "./useCloudTransport";
@@ -56,25 +60,29 @@ export function WebBoard({ orgId, orgSlug, userId, user, orgs, initialCommands, 
   const [shown, setShown] = useState<ThreadItem[]>(seed);
   const blobs = useMemo(() => ({ ...board.blobs, onShown: setShown }), [board.blobs]);
   const now = useNow();
+  const hint = useShortcutHint();
   const [project, setProject] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SortKey>("newest");
   const [showArchived, setShowArchived] = useState(false);
   const [expanded, setExpanded] = useState<Column[]>([]);
   const [composing, setComposing] = useState(false);
-  const [starredOnly, setStarredOnly] = useState(false);
+  // The rail's ★ and 🏷, the desktop's own filter shape (lib/rail-view.ts).
+  const [railFilter, setRailFilter] = useState<RailFilter>({});
 
   const cards = useMemo(() => webCards(board.cards), [board.cards]);
   const starredCount = cards.filter((c) => c.starred).length;
+  // The board narrowed by ★ and a tag, the desktop's own filter.
+  const visible = useMemo(() => filterCards(cards, railFilter), [cards, railFilter]);
   const byColumn = useMemo(
-    () => groupByColumn(starredOnly ? cards.filter((c) => c.starred) : cards, { project, query, sort, showArchived }, identity),
-    [cards, starredOnly, project, query, sort, showArchived],
+    () => groupByColumn(visible, { project, query, sort, showArchived }, identity),
+    [visible, project, query, sort, showArchived],
   );
   const projects = useMemo(() => summarizeProjects([], cards, identity), [cards]);
   const { running, waiting } = boardCounts(cards);
   const targets = useMemo(() => webTargets(board.cards, userId), [board.cards, userId]);
   const archivedCount = cards.filter((c) => c.archived).length;
-  const filtering = project !== null || query.trim() !== "" || starredOnly;
+  const filtering = project !== null || query.trim() !== "" || isFiltering(railFilter);
 
   const active = board.activeCardId ? board.cards.find((r) => r.card_id === board.activeCardId) : undefined;
   useNewThreadKey(!active && !composing, () => setComposing(true));
@@ -84,15 +92,25 @@ export function WebBoard({ orgId, orgSlug, userId, user, orgs, initialCommands, 
       <ThreadTransportContext.Provider value={board.transport}>
       <CloudBlobContext.Provider value={blobs}>
       <div className="wz-desk" data-theme="dark">
-        <WebBoardHeader
-          workspace={orgs.find((o) => o.id === orgId)?.name || orgSlug}
-          running={running}
-          waiting={waiting}
-          live={board.live}
+        <BoardHeader
+          mac={false}
+          variant="web"
+          counts={{ running, waiting }}
+          hint={hint}
+          panes={{ browserOpen: false, terminalOpen: false, onToggleBrowser: noop, onToggleTerminal: noop }}
+          onShareBoard={noop}
+          onOpenSettings={noop}
           onOpenNew={() => setComposing(true)}
-          share={<WebShareBoard orgSlug={orgSlug} />}
-          account={<WebAccountMenu user={user} orgs={orgs} orgSlug={orgSlug} />}
+          slots={{
+            restart: null,
+            badges: null,
+            copilot: null,
+            account: <WebAccountMenu user={user} orgs={orgs} orgSlug={orgSlug} />,
+            share: <WebShareBoard orgSlug={orgSlug} />,
+            live: <WebLiveDot status={board.live} />,
+          }}
         />
+
         <WebCommandStrip commands={boardCommands(board.commands)} onDrop={(id) => void board.dropCommand(id)} />
 
         {cards.length === 0 ? (
@@ -101,42 +119,64 @@ export function WebBoard({ orgId, orgSlug, userId, user, orgs, initialCommands, 
           </p>
         ) : (
           <>
-            <WebProjectBar projects={projects} total={cards.length} selected={project} onSelect={setProject} query={query} onQuery={setQuery} sort={sort} onSort={setSort} />
+            <BoardProjectBar
+              variant="web"
+              projects={projects}
+              total={cards.length}
+              project={project}
+              onProject={setProject}
+              railFilter={railFilter}
+              onRailFilter={setRailFilter}
+              query={query}
+              onQuery={setQuery}
+              byColumn={byColumn}
+              onOpenCard={(card) => board.openCard(card.id)}
+              onSearchAll={noop}
+              sort={sort}
+              onSort={setSort}
+              home=""
+              onMenuOpenChange={noop}
+            />
             <div className="flex min-h-0 flex-1">
-              <WebRail orgSlug={orgSlug} starred={starredOnly} starredCount={starredCount} onStarred={() => setStarredOnly((v) => !v)} />
-              <main className="flex min-h-0 min-w-0 flex-1 gap-3 overflow-x-auto p-3">
-                {COLUMNS.map((column) => {
-                  const list = byColumn.get(column.id) ?? [];
-                  return (
-                    <BoardColumn
-                      key={column.id}
-                      column={column}
-                      shown={expanded.includes(column.id) ? list : list.slice(0, COLUMN_LIMIT)}
-                      count={list.length}
-                      loaded
-                      filtering={filtering}
-                      dragOver={false}
-                      laneState="hidden"
-                      onShowMore={() => setExpanded((cols) => [...cols, column.id])}
-                      renderCard={(card) => (
-                        <CardView key={card.id} readOnly card={card} now={now} selected={card.id === board.activeCardId} alsoHere={busyHere(cards, card)} onOpen={() => board.openCard(card.id)} />
-                      )}
-                      onDragOver={noop}
-                      onDragLeave={noop}
-                      onDrop={noop}
-                      onColumnContextMenu={noop}
-                      needsYou={column.id === "needs_you" && list.length > 0}
-                      archivedCount={archivedCount}
-                      showArchived={showArchived}
-                      onToggleArchived={() => setShowArchived((v) => !v)}
-                      toArchive={0}
-                      archiveTip=""
-                      onArchiveAll={noop}
-                      onAddBacklog={() => setComposing(true)}
-                    />
-                  );
-                })}
-              </main>
+              <WebRail
+                orgSlug={orgSlug}
+                starred={Boolean(railFilter.starred)}
+                starredCount={starredCount}
+                onStarred={() => setRailFilter((f) => ({ ...f, starred: !f.starred }))}
+                cards={cards}
+                tag={railFilter.tag}
+                // The web's rail clears the tag itself (the tag list says "no tag" by passing undefined),
+                // so the filter is written directly: the desktop's toggleTag only ever sees a real tag.
+                onTag={(next) => setRailFilter((f) => ({ ...f, tag: next }))}
+              />
+              <BoardColumns
+                columns={COLUMNS}
+                byColumn={byColumn}
+                allCards={cards}
+                expanded={expanded}
+                onExpand={(id) => setExpanded((cols) => [...cols, id])}
+                renderCard={(card) => (
+                  <CardView key={card.id} readOnly card={card} now={now} selected={card.id === board.activeCardId} alsoHere={busyHere(cards, card)} onOpen={() => board.openCard(card.id)} />
+                )}
+                loaded
+                filtering={filtering}
+                laneState="hidden"
+                drag={{ over: null, onOver: noop, onLeave: noop, onDrop: noop, onReorder: noop }}
+                onColumnMenu={noop}
+                archive={{
+                  count: archivedCount,
+                  shown: showArchived,
+                  onToggleShown: () => setShowArchived((v) => !v),
+                  done: [],
+                  tip: "",
+                  cards: noop,
+                  restore: noop,
+                }}
+                review={{ onReviewAll: async () => {}, filter: { errors: false, restart: false }, toggleFilter: noop }}
+                onNew={() => setComposing(true)}
+                toast={noop}
+                notify={noop}
+              />
             </div>
           </>
         )}

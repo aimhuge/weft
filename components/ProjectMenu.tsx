@@ -3,6 +3,7 @@
 // bypasses the form; a browser tab falls back to a paste-in path field.
 import { useState } from "react";
 import { api } from "@/lib/client";
+import { openChangelog } from "@/lib/changelog-open";
 import { filterProjects, folderName, plural, shortPath } from "@/lib/project-bar";
 import type { ProjectSummary } from "@/lib/board-view";
 import Icon from "./Icon";
@@ -27,12 +28,17 @@ export default function ProjectMenu({
   onSelect,
   home,
   menuId,
+  variant = "desktop",
 }: {
   projects: ProjectSummary[];
   selected: string | null;
   onSelect: (path: string | null) => void;
   home: string;
   menuId: string;
+  // "desktop" adds the Mac-only actions under the list (open a folder, clone a repo, make a
+  // project, read a changelog). "web" is the picker on its own: weft.zip can't reach the Mac's
+  // filesystem, so the list and its filter are all there is.
+  variant?: "desktop" | "web";
 }) {
   const [form, setForm] = useState<Form>("none");
   const [folder, setFolder] = useState("");
@@ -176,7 +182,13 @@ export default function ProjectMenu({
         })}
       </div>
 
+      {variant === "desktop" && (
       <div className="shrink-0 border-t border-line p-1">
+        {selected && (
+          <button onClick={() => { onSelect(selected); openChangelog(selected); }} className={MENU_ACTION}>
+            <Icon name="list" size={14} className="text-muted" /> Changelog of {folderName(selected)}
+          </button>
+        )}
         <button onClick={openFolder} disabled={busy} className={MENU_ACTION}>
           <Icon name="folder" size={14} className="text-muted" /> Open folder…
         </button>
@@ -264,6 +276,7 @@ export default function ProjectMenu({
 
         {error && <p className="px-2.5 pb-2 pt-1 text-[12px] text-danger">{error}</p>}
       </div>
+      )}
     </div>
   );
 }

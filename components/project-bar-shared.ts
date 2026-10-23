@@ -1,4 +1,4 @@
-// Sort options shared by ProjectBar (desktop) and WebProjectBar (browser): the chip bar uses them in
+// Sort options shared by ProjectBar (desktop and web): the chip bar uses them in
 // its select, and the command palette lists them as actions.
 import type { SortKey } from "@/lib/board-view";
 

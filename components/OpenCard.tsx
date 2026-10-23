@@ -23,12 +23,20 @@ const CardWorkspace = guarded(() => import("./CardWorkspace"), { what: "card wor
 const EditorColumn = guarded(() => import("./EditorColumn"), { what: "editor column" });
 
 // The backdrop and the window: framed while a card or New thread is open, else `contents` so the
-// children (none) take no space. `bottom` stops the window above an open terminal drawer.
-export function CardFrame({ framed, bottom, onBackdrop, children }: { framed: boolean; bottom?: number; onBackdrop: () => void; children: ReactNode }) {
+// children (none) take no space. `bottom` stops the window above an open terminal drawer. The framed
+// window is a dialog — it sits over the board with a backdrop and takes the focus — so it says so.
+// `label` names it (the card's title on weft.zip); the desktop leaves it to the panel's own heading.
+export function CardFrame({ framed, bottom, onBackdrop, label, children }: { framed: boolean; bottom?: number; onBackdrop: () => void; label?: string; children: ReactNode }) {
   return (
     <>
-      {framed && <div style={NO_DRAG} className="fixed inset-0 z-30 bg-black/40" onClick={onBackdrop} aria-hidden="true" />}
-      <div style={framed ? { ...NO_DRAG, bottom } : undefined} className={framed ? "fixed inset-4 z-40 flex overflow-hidden rounded-xl border border-line-strong bg-panel shadow-2xl" : "contents"}>
+      {framed && <div data-backdrop style={NO_DRAG} className="fixed inset-0 z-30 bg-black/40" onClick={onBackdrop} aria-hidden="true" />}
+      <div
+        role={framed ? "dialog" : undefined}
+        aria-modal={framed ? true : undefined}
+        aria-label={framed ? label : undefined}
+        style={framed ? { ...NO_DRAG, bottom } : undefined}
+        className={framed ? "fixed inset-4 z-40 flex overflow-hidden rounded-xl border border-line-strong bg-panel shadow-2xl" : "contents"}
+      >
         {children}
       </div>
     </>

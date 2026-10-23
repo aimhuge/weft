@@ -36,7 +36,8 @@ hue (`tagHue`).
 - `PATCH /api/cards/[id]` with `{tags}` or `{starred}` sets a card's tags or star (client: `api.mark`).
 - `lib/rail-view.ts` (pure): how the rail reads. The ★ and tag filter (`filterCards`, `toggleTag`), tag
   suggestions, colours and the palette, the two pills on a card (`cardTags`), and the pinned preference.
-- `components/LibraryRail.tsx` (`SideRail`): the 38px rail left of the columns. ★ and 🏷 at the top; the 🔐 vault,
+- `components/LibraryRail.tsx` (`SideRail`): the 38px rail left of the columns. ★ and 🏷 at the top (the two
+  board-only buttons live in `components/RailBoardButtons.tsx`, shared with weft.zip's rail); the 🔐 vault,
   ▲ Vercel, Supabase and BlastCP drawers under them, unchanged. While a card is dragged, ★ and 🏷 light up as drop
   targets.
 - `lib/use-drawer-width.ts`: every rail drawer's width. The board sheet's left edge over an open drawer is a handle:

@@ -668,9 +668,12 @@ card you delete stays deleted. It's one direction for now; Weft never edits an i
 Settings → Sync lists your recent projects with a switch each. A project that's on uploads its cards and threads to your
 workspace on Supabase while you're signed in: an outbox sends a batch when a turn ends (never on the way to starting one),
 pictures and pages go up once each by content, and the page shows the last sync, how many items went up, how many wait and the
-last error, with **Sync now**. At `weft.zip/<workspace>/board` the same cards show in the board's own columns and cards (stage,
-tags, model, picture or emoji, what's left), live, in the desktop's own window: its header (New thread on N, your avatar with
-workspaces, Team, Billing and Sign out), the project chips, filter and sort, and the 38px rail (★ starred, Board, Team, Billing).
+last error, with **Sync now**. At `weft.zip/<workspace>/board` the same cards show live, drawn by the desktop's **own
+components** — the same header (New thread on N, your avatar with workspaces, Team, Billing and Sign out), the same project
+chips, filter and sort, the same 38px rail (★ starred, 🏷 tags, Board, Team, Billing), the same columns and cards (stage,
+tags, model, picture or emoji, what's left) and the same open-card window. One implementation, two hosts: a `variant="web"`
+seam hides only what the Mac owns (the browser and terminal panes, the local Settings, the project's filesystem), so a change to
+the desktop board reaches the web board with it.
 A click opens the card framed over the board like on the Mac, its browser pane's page on the right (synced pages sandboxed, a
 localhost page as its last capture) and the thread on the left the way the desktop draws it, oldest first with tool runs folded, Markdown, screenshots and tool outputs loading when you
 open them. **New thread** on the web board starts a card on your Mac: pick one of your synced folders, write the prompt, and the Mac that

@@ -39,16 +39,19 @@ lives in its own component under `components/`.
   Its framed New thread branch renders `NewThreadWindow`; an open card gets its pane through `OpenCard`.
 - `components/BoardHeader.tsx` — the top bar (logo, running / needs-you counts, restart chip, header
   badges, the browser / terminal / share / settings / new-thread buttons, the account button). Grouped
-  props: `counts`, `panes`, `slots`.
+  props: `counts`, `panes`, `slots`. `variant="web"` draws the same bar on weft.zip, leaving out what the
+  Mac owns (the browser / terminal / settings buttons) — see `docs/architecture/cloud-sync.md`.
 - `components/BoardProjectBar.tsx` — the bar under the header: project chips, the rail's ★/tag filter
-  chip, the filter box and the sort menu, in its own `CrashGuard`.
+  chip, the filter box and the sort menu, in its own `CrashGuard`. `variant="web"` is the same bar on
+  weft.zip, where the project menu is the picker alone.
 - `components/BoardColumns.tsx` — the `<main>` sheet and one `components/BoardColumn.tsx` per visible
   column. Each column's extras are wired **by column id** here, so `Board` only passes state in: Backlog
   gets the reorder and the sprints, Review gets Resume all / Review all / the filter chips, Running and
   Needs you get Switch all. Grouped props: `drag`, `archive`, `review`.
 - `components/BoardBrowserPane.tsx` — the standalone browser pane, drawn while no card is open (an open
   card's pane lives in its workspace's `pane` column, `components/OpenCard.tsx`).
-- `components/OpenCard.tsx` — `CardFrame` (the backdrop and the framed window over the board) and
+- `components/OpenCard.tsx` — `CardFrame` (the backdrop and the framed window over the board, a
+  `role="dialog"` named by its optional `label`) and
   `OpenCard` (the open card's four-column workspace: thread | editor | pane | show).
 - `components/NewThreadWindow.tsx` — the framed New thread form beside its desktop browser pane, which fills the rest of the window (`expanded`) instead of keeping an open card's saved width.
 - `components/BoardBottom.tsx` — the footer (the open or latest card's model, folder and limits) and, below

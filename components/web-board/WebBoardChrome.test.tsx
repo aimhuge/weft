@@ -28,11 +28,15 @@ afterEach(() => {
 });
 
 describe("WebBoard desktop chrome", () => {
-  it("draws the desktop header: Weft, the workspace, and no sidebar's worth of nav", async () => {
+  it("draws the desktop header: Weft, the running count, and no Mac-only buttons", async () => {
     await board();
     const banner = within(screen.getByRole("banner"));
     expect(banner.getByText("Weft")).toBeInTheDocument();
-    expect(banner.getByText("Ada's team")).toBeInTheDocument();
+    // The browser and terminal panes and the Mac's Settings live on the Mac, not on this page.
+    expect(banner.queryByRole("button", { name: "Browser" })).toBeNull();
+    expect(banner.queryByRole("button", { name: "Terminal" })).toBeNull();
+    expect(banner.queryByRole("button", { name: "Settings" })).toBeNull();
+    expect(banner.getByRole("button", { name: "New thread" })).toBeInTheDocument();
   });
 
   it("opens the account menu with the workspaces' boards, Team, Billing and Sign out", async () => {
@@ -53,10 +57,10 @@ describe("WebBoard desktop chrome", () => {
     const rail = within(screen.getByRole("navigation", { name: "Rail" }));
     expect(rail.getByRole("link", { name: "Board" })).toHaveAttribute("aria-current", "page");
     expect(rail.getByRole("link", { name: "Team" })).toHaveAttribute("href", "/ada/team");
-    fireEvent.click(rail.getByRole("button", { name: "Starred" }));
+    fireEvent.click(rail.getByRole("button", { name: /Starred cards/ }));
     expect(screen.queryByText("Plain")).toBeNull();
     expect(screen.getByText("Starred one")).toBeInTheDocument();
-    fireEvent.click(rail.getByRole("button", { name: "Starred" }));
+    fireEvent.click(rail.getByRole("button", { name: /Starred cards/ }));
     expect(screen.getByText("Plain")).toBeInTheDocument();
   });
 

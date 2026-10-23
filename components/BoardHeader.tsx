@@ -16,8 +16,14 @@ export interface BoardHeaderProps {
   onShareBoard: () => void;
   onOpenSettings: () => void;
   onOpenNew: () => void;
-  // The four load-in-CrashGuard elements; each is a guarded() component from Board.tsx.
-  slots: { restart: ReactNode; badges: ReactNode; copilot: ReactNode; account: ReactNode };
+  // The load-in-CrashGuard elements; each is a guarded() component from Board.tsx.
+  // `live` is the connection dot: on the desktop the board is local, so it has none; on weft.zip it
+  // says whether the Realtime channel is up.
+  slots: { restart: ReactNode; badges: ReactNode; copilot: ReactNode; account: ReactNode; share?: ReactNode; live?: ReactNode };
+  // Where the header draws. "desktop" is the app window; "web" is the board on weft.zip, where the
+  // browser and terminal panes and the Mac's Settings live on the Mac, not on this page, so those
+  // buttons are left out and the share button becomes the host's own share (components/web-board/).
+  variant?: "desktop" | "web";
 }
 
 export default function BoardHeader({
@@ -29,7 +35,11 @@ export default function BoardHeader({
   onOpenSettings,
   onOpenNew,
   slots,
+  variant = "desktop",
 }: BoardHeaderProps) {
+  // On weft.zip the browser and terminal panes and the Mac's Settings are on the Mac, so the web
+  // header leaves those three out and shares the board with the host's own share control.
+  const web = variant === "web";
   return (
     <header
       className={`flex shrink-0 items-center gap-3 border-b border-line bg-panel ${mac ? "app-drag mac-title-bar pr-4" : "px-4 py-2.5"}`}
@@ -45,39 +55,50 @@ export default function BoardHeader({
       {slots.restart}
       {slots.badges}
       <div className="flex-1" />
+      {slots.live}
       {slots.copilot}
-      <button
-        onClick={onToggleBrowser}
-        title={hint("browser", "Browser")}
-        aria-label="Browser"
-        className={`rounded-md border p-1.5 ${browserOpen ? "border-accent bg-accent-soft text-accent" : "border-line-strong text-ink hover:bg-sunken"}`}
-      >
-        <Icon name="globe" size={15} />
-      </button>
-      <button
-        onClick={onToggleTerminal}
-        title={hint("terminal", "Terminal")}
-        aria-label="Terminal"
-        className={`rounded-md border p-1.5 ${terminalOpen ? "border-accent bg-accent-soft text-accent" : "border-line-strong text-muted hover:bg-sunken hover:text-ink"}`}
-      >
-        <Icon name="terminal" size={15} />
-      </button>
-      <button
-        onClick={onShareBoard}
-        title={hint("share-board", "Share the board")}
-        aria-label="Share the board"
-        className="rounded-md border border-line-strong p-1.5 text-muted hover:bg-sunken hover:text-ink"
-      >
-        <Icon name="share" size={15} />
-      </button>
-      <button
-        onClick={onOpenSettings}
-        title={hint("settings", "Settings")}
-        aria-label="Settings"
-        className="rounded-md border border-line-strong p-1.5 text-muted hover:bg-sunken hover:text-ink"
-      >
-        <Icon name="sliders" size={15} />
-      </button>
+      {!web && (
+        <>
+          <button
+            onClick={onToggleBrowser}
+            title={hint("browser", "Browser")}
+            aria-label="Browser"
+            className={`rounded-md border p-1.5 ${browserOpen ? "border-accent bg-accent-soft text-accent" : "border-line-strong text-ink hover:bg-sunken"}`}
+          >
+            <Icon name="globe" size={15} />
+          </button>
+          <button
+            onClick={onToggleTerminal}
+            title={hint("terminal", "Terminal")}
+            aria-label="Terminal"
+            className={`rounded-md border p-1.5 ${terminalOpen ? "border-accent bg-accent-soft text-accent" : "border-line-strong text-muted hover:bg-sunken hover:text-ink"}`}
+          >
+            <Icon name="terminal" size={15} />
+          </button>
+        </>
+      )}
+      {web ? (
+        slots.share
+      ) : (
+        <button
+          onClick={onShareBoard}
+          title={hint("share-board", "Share the board")}
+          aria-label="Share the board"
+          className="rounded-md border border-line-strong p-1.5 text-muted hover:bg-sunken hover:text-ink"
+        >
+          <Icon name="share" size={15} />
+        </button>
+      )}
+      {!web && (
+        <button
+          onClick={onOpenSettings}
+          title={hint("settings", "Settings")}
+          aria-label="Settings"
+          className="rounded-md border border-line-strong p-1.5 text-muted hover:bg-sunken hover:text-ink"
+        >
+          <Icon name="sliders" size={15} />
+        </button>
+      )}
       <button
         onClick={onOpenNew}
         title={hint("new-thread", "New thread")}

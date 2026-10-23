@@ -1,6 +1,6 @@
 "use client";
 
-// Share on the weft.zip board's header (WebBoardHeader): the same Share the board dialog as the desktop's
+// Share on the weft.zip board's header (the desktop's BoardHeader, variant="web"): the same Share the board dialog as the desktop's
 // (components/BoardSharePanel.tsx), on the visitor's own cookie session. The team loads when the dialog opens, through
 // the boardShareTeam server action, and invites go through the team page's server actions (components/team/web-actions.ts),
 // so an address with a Weft account joins at once and any other gets an invite email to sign up and join.

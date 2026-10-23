@@ -58,7 +58,9 @@ describe("WebBoard", () => {
     const { WebBoard } = await loadBoard();
     render(<WebBoard {...props} initialCards={[cardRow({ card_id: "r", title: "Busy", column: "running" }), cardRow({ card_id: "d", title: "Finished", column: "done" })]} />);
     expect(screen.queryByLabelText("Stop this thread")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText(/star/i)).not.toBeInTheDocument();
+    // The rail's ★ filters the board (the desktop's own button), but a card carries no star of its own.
+    expect(within(screen.getByRole("navigation", { name: "Rail" })).getByRole("button", { name: /Starred cards/ })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Star this card")).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/archive/i)).not.toBeInTheDocument();
     expect(document.querySelector("[draggable=true]")).toBeNull();
   });
@@ -93,8 +95,8 @@ describe("WebBoard", () => {
     fireEvent.click(screen.getByRole("button", { name: /^site/ }));
     expect(screen.queryByText("In app")).not.toBeInTheDocument();
     expect(screen.getByText("In site")).toBeInTheDocument();
-    // Clicking the chosen chip again clears it.
-    fireEvent.click(screen.getByRole("button", { name: /^site/ }));
+    // All brings the other project's card back, as on the desktop.
+    fireEvent.click(screen.getByRole("button", { name: /^All/ }));
     expect(screen.getByText("In app")).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Filter cards"), { target: { value: "footer" } });
     expect(screen.queryByText("In app")).not.toBeInTheDocument();

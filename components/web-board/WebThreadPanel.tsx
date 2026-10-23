@@ -1,13 +1,17 @@
 "use client";
 
-// The open card on weft.zip, framed the way the desktop opens one (Board.tsx: a window inset over the board): the
-// desktop's own ThreadPanel on the left (its header, ThreadView and ReplyBox, fed by the cloud transport the board
-// provides, useCloudTransport.ts) and the card's browser pane on the right (WebPane). What you send goes to the Mac
-// that runs the card as a command; under the reply box, each one still on its way (WebReplyStatus).
+// The open card on weft.zip, framed the way the desktop opens one (components/OpenCard.tsx's CardFrame: a window inset
+// over the board, with a backdrop): the desktop's own ThreadPanel on the left (its header, ThreadView and ReplyBox, fed
+// by the cloud transport the board provides, useCloudTransport.ts) and the card's browser pane on the right (WebPane).
+//
+// The reply box is the desktop's: the transport leaves out what only the Mac can do (a "!" command, ↑ edit, folder
+// grants, Wait), so the box doesn't offer them. What this board sent the card that hasn't reached it yet shows above
+// the box (WebReplyStatus).
 import { useEffect, useMemo, type ReactNode } from "react";
 import { paneFor } from "@/lib/share-types";
 import type { Card, QuestionReply, ThreadItem } from "@/lib/types";
 import ThreadPanel from "../ThreadPanel";
+import { CardFrame } from "../OpenCard";
 import { WebPane } from "./WebPane";
 
 export function WebThreadPanel({
@@ -45,12 +49,20 @@ export function WebThreadPanel({
   }, [onClose]);
 
   return (
-    <>
-      <div data-backdrop className="fixed inset-0 z-30 bg-black/40" onClick={onClose} aria-hidden="true" />
-      <div role="dialog" aria-label={`Thread: ${card.title}`} className="fixed inset-2 z-40 flex overflow-hidden rounded-xl border border-line-strong bg-panel shadow-2xl sm:inset-4">
-        <ThreadPanel key={card.id} card={card} items={seed} streaming="" readOnly={readOnly} footer={footer} onClose={onClose} onSend={onSend} onAnswer={onAnswer} />
-        <WebPane orgId={orgId} pane={pane} thumbUrl={card.thumb && /^https?:/.test(card.thumb) ? card.thumb : undefined} />
-      </div>
-    </>
+    <CardFrame framed onBackdrop={onClose} label={card.title}>
+      <ThreadPanel
+        key={card.id}
+        card={card}
+        items={seed}
+        streaming=""
+        readOnly={readOnly}
+        footer={footer}
+        onClose={onClose}
+        onSend={onSend}
+        onAnswer={onAnswer}
+        className="flex h-full min-h-0 w-full flex-col bg-panel"
+      />
+      <WebPane orgId={orgId} pane={pane} thumbUrl={card.thumb && /^https?:/.test(card.thumb) ? card.thumb : undefined} />
+    </CardFrame>
   );
 }

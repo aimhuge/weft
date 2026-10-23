@@ -299,10 +299,13 @@ If you are an agent editing this repo, you are working on me. Read README.md for
   and long tool outputs to Supabase (`supabase/migrations/20261015155756_card_sync.sql`), images and pages by content hash.
   `lib/thread-page.ts` + `app/api/cards/[id]/thread/**` + `lib/use-tool-result.ts`: threads page from the newest item back and fetch
   a tool output over 2 KB when its row opens (docs/architecture/cloud-sync.md).
-  `app/[orgSlug]/board` + `components/web-board/*` + `lib/web-board.ts`: the weft.zip board is the desktop's own `CardView` (`readOnly`),
-  `BoardColumn`, `ColumnHeader`, `lib/board-view.ts`, and an open card is the desktop's own `ThreadPanel` → `ThreadView` → `ReplyBox` over a different
-  transport (`lib/thread-transport.ts`: `localTransport` for the desktop, `components/web-board/useCloudTransport.ts` + `lib/cloud-thread-page.ts` for Supabase rows,
-  Realtime and commands), not a lookalike; change the desktop card or thread and the web follows. New thread-view code reads the transport, never `fetch`/`api` directly.
+  `app/[orgSlug]/board` + `components/web-board/*` + `lib/web-board.ts`: the weft.zip board is the desktop's own board, not a lookalike —
+  its cards are `CardView` (`readOnly`), its columns are `BoardColumn`/`ColumnHeader`/`BoardColumns`, its chrome is the desktop's `BoardHeader`,
+  `BoardProjectBar`/`ProjectBar`/`ProjectMenu` and the shared rail buttons in `components/RailBoardButtons.tsx`, and an open card is the desktop's own
+  `ThreadPanel` → `ThreadView` → `ReplyBox` over a different transport (`lib/thread-transport.ts`: `localTransport` for the desktop,
+  `components/web-board/useCloudTransport.ts` + `lib/cloud-thread-page.ts` for Supabase rows, Realtime and commands); change the desktop board and the
+  web follows. The seam is a `variant?: "desktop" | "web"` prop that hides only what the Mac owns (the browser and terminal panes, the local
+  Settings, the Mac's filesystem); new thread-view code reads the transport, never `fetch`/`api` directly.
   `lib/cloud-commands.ts` + `lib/cloud-inbox.ts` + `lib/new-card.ts` + `lib/web-commands.ts` + `components/web-board/WebNewCardDialog.tsx` + `components/web-board/WebReplyStatus.tsx`: **New thread**, the open card's reply box, its answers and Stop on the web board
   insert a `cloud_commands` row (`supabase/migrations/20261016065614_card_commands.sql`; a `BEFORE INSERT` trigger
   in `20261018130000_cloud_commands_device_ownership.sql` requires the row's `device_id` to be a device row
