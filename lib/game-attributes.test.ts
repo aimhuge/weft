@@ -20,6 +20,13 @@ describe("attributes", () => {
     expect(list.find((a) => a.id === "craft")?.hint).toBe("0/0 ran /done · review 0 · docs 0 · refactor 0");
   });
 
+  it("counts each created card once toward follow-through", () => {
+    const events = [ev("created", "a"), ev("created", "b"), ev("done", "a"), { ...ev("done", "a"), id: "done-a-again" }, ev("done", "x")];
+    const list = attributes(input({ events }));
+    expect(value(list, "follow")).toBe(50);
+    expect(list.find((a) => a.id === "follow")?.hint).toBe("1 of 2 cards reached Done");
+  });
+
   it("measures follow-through, velocity, range, craft and stamina", () => {
     const events = [
       ev("created", "a"), ev("created", "b"), ev("created", "c"), ev("created", "d"),
@@ -39,6 +46,7 @@ describe("attributes", () => {
     ]);
     const list = attributes(input({ events, days, bestStreak: 30, projectCount: 4, stacks: 5, habits }));
     expect(value(list, "follow")).toBe(75);
+    expect(list.find((a) => a.id === "follow")?.hint).toBe("3 of 4 cards reached Done");
     expect(value(list, "velocity")).toBe(15);
     expect(value(list, "range")).toBe(39);
     // 2 of 3 wrapped and committed (26.7 of 40, 10 of 15), 1 reviewed and 1 refactor by title (past 1 in 5

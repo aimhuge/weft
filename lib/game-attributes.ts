@@ -85,15 +85,17 @@ function craftScore(done: ActivityEvent[], habits: AttributeInput["habits"]) {
 
 export function attributes(input: AttributeInput): Attribute[] {
   const { events, days, today } = input;
-  const created = new Set(events.filter((e) => e.kind === "created").map((e) => e.card)).size;
+  const created = new Set(events.filter((e) => e.kind === "created").map((e) => e.card));
   const done = events.filter((e) => e.kind === "done");
+  // A card reopened and moved to Done again logs a second "done"; count each created card once.
+  const finished = new Set(done.map((e) => e.card).filter((c) => created.has(c))).size;
   const month = lastDays(days, today, 30);
   const activeMonth = month.filter((d) => d.cards + d.turns + d.done > 0).length;
   const shippedMonth = month.reduce((n, d) => n + d.done, 0);
   const perDay = activeMonth ? shippedMonth / activeMonth : 0;
   const { craft, shown } = craftScore(done, input.habits);
   const values: Record<AttributeId, [number, string]> = {
-    follow: [created ? (100 * done.length) / created : 0, `${done.length} of ${created} cards reached Done`],
+    follow: [created.size ? (100 * finished) / created.size : 0, `${finished} of ${created.size} cards reached Done`],
     velocity: [perDay * 10, `${perDay.toFixed(1)} cards shipped per active day this month`],
     range: [input.projectCount * 6 + input.stacks * 3, `${input.projectCount} projects, ${input.stacks} technologies`],
     rigor: [treeShare(input.projects, ["testing"]), "Testing checks passed across your projects"],
