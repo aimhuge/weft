@@ -3,8 +3,9 @@
   The tour's second half, a HyperFrames composition (https://hyperframes.heygen.com) in the same look as loop.html:
   0–7.5s connect your tools (GitHub, Vercel, Supabase, Cloudflare link to the project, then a thread uses them),
   7.5–16.5s the pane (a thread's page as a live dashboard on vault keys and your data, shared as a weft.zip link),
-  16.5–24s the Wefter Profile (streak, XP, badges at weft.zip/@you), 24–31.5s code quality (the score climbing, the
-  refactor scout turning a finding into a card), 31.5–36s "Now let's get started". scripts/render-welcome-loop.mjs renders it after loop.html and joins the
+  16.5–24s code quality (the score climbing, the refactor scout turning a finding into a card), 24–34.5s BlastCP built
+  in (your socials, a launch post with its image, video and voice), 34.5–42s the Wefter Profile (streak, XP, badges at
+  weft.zip/@you), 42–50s Weft is open source (make a pull request), 50–54.5s "Now let's get started". scripts/render-welcome-loop.mjs renders it after loop.html and joins the
   two into public/brand/weft-tour.mp4 for weft.zip; the welcome itself plays only loop.html.
   ?live=1 plays it on repeat for a preview. Seekable on purpose: counters tween textContent with snap, no timers.
 -->
@@ -107,6 +108,46 @@
   .newcard .t { font-size: 34px; font-weight: 600; }
   .newcard .p { margin-top: 14px; font-size: 26px; color: #8d95aa; display: flex; gap: 14px; align-items: center; }
   .spin { width: 26px; height: 26px; border-radius: 50%; border: 4px solid #3a4258; border-top-color: #7aa7ff; }
+  /* Scene K: BlastCP, built in: your socials connect, a launch post gets its image, video and voice, then it's scheduled. */
+  #socials { left: 30px; width: 900px; }
+  .bcp { left: 44px; top: 92px; display: flex; align-items: center; gap: 18px; font-size: 44px; font-weight: 700; }
+  .bcp span { font-size: 24px; font-weight: 500; color: #c9cfdf; border: 2px solid #3a4258; border-radius: 30px; padding: 4px 18px; }
+  .ch { width: 396px; height: 100px; border-radius: 18px; background: #1f2433; border: 2px solid #2d3346; padding: 0 20px;
+    display: flex; align-items: center; gap: 16px; font-size: 30px; font-weight: 600; }
+  .ch i { width: 52px; height: 52px; border-radius: 12px; flex: none; display: flex; align-items: center; justify-content: center;
+    font-style: normal; font-size: 28px; font-weight: 700; color: #fff; }
+  .ch .st { margin-left: auto; position: relative; width: 120px; height: 44px; }
+  .ch .st span { position: absolute; right: 0; top: 0; height: 44px; display: flex; align-items: center; padding: 0 14px; border-radius: 10px; font-size: 22px; white-space: nowrap; }
+  .ch .off { background: #2a3044; color: #c9cfdf; } .ch .on { color: #5fd38d; background: #173a28; }
+  #launch { left: 960px; width: 930px; }
+  .lp { left: 44px; top: 92px; width: 842px; border-radius: 20px; background: #1f2433; border: 2px solid #2d3346; padding: 22px 26px; font-size: 30px; line-height: 1.3; }
+  .gen { top: 236px; width: 268px; height: 200px; border-radius: 18px; overflow: hidden; border: 2px solid #2d3346; background: #1f2433; }
+  .gen .lab { position: absolute; left: 16px; bottom: 12px; font-size: 24px; font-weight: 600; color: #fff; text-shadow: 0 2px 8px #0008; }
+  .gen .busy { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 12px; font-size: 22px; color: #8d95aa; background: #1f2433; }
+  #gImg .art { position: absolute; inset: 0; background: radial-gradient(circle at 30% 30%, #f0b429, transparent 55%), radial-gradient(circle at 75% 70%, #b0305a, transparent 60%), #3b2a6b; }
+  #gVid .art { position: absolute; inset: 0; background: linear-gradient(135deg, #0f3b5f, #4f7cff); display: flex; align-items: center; justify-content: center; }
+  #gVid .art b { width: 0; height: 0; border-left: 46px solid #fff; border-top: 28px solid transparent; border-bottom: 28px solid transparent; margin-left: 10px; }
+  #gVoc .art { position: absolute; inset: 0; background: #173a28; display: flex; align-items: center; justify-content: center; gap: 8px; }
+  #gVoc .art u { width: 10px; border-radius: 5px; background: #5fd38d; }
+  #sched { left: 44px; top: 470px; font-size: 30px; font-weight: 600; padding: 14px 28px; border-radius: 30px; background: #173a28; color: #5fd38d; border: 2px solid #2f6b4a; }
+  /* Scene O: Weft is open source; a pull request from you goes Open → Merged. */
+  #repo { left: 30px; width: 900px; }
+  .repoName { left: 44px; top: 96px; display: flex; align-items: center; gap: 22px; font-size: 46px; font-weight: 700; }
+  .repoName svg { width: 64px; height: 64px; }
+  .repoName .pub { font-size: 24px; font-weight: 500; color: #c9cfdf; border: 2px solid #3a4258; border-radius: 30px; padding: 4px 18px; }
+  .repoUrl { left: 44px; top: 186px; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 30px; color: #8d95aa; }
+  .ask { left: 44px; width: 812px; border-radius: 18px; background: #1f2433; border: 2px solid #2d3346; padding: 22px 26px; font-size: 32px; }
+  .ask small { display: block; margin-top: 6px; font-size: 25px; color: #8d95aa; }
+  #prs { left: 960px; width: 930px; }
+  .pr { left: 44px; top: 96px; width: 842px; border-radius: 20px; background: #1f2433; border: 2px solid #2d3346; padding: 26px 30px; }
+  .pr .t { font-size: 34px; font-weight: 600; }
+  .pr .m { margin-top: 10px; font-size: 26px; color: #8d95aa; }
+  .pr .diff { margin-top: 18px; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 26px; }
+  .pr .diff .add { color: #5fd38d; } .pr .diff .del { color: #f47174; }
+  #prBtn { left: 44px; top: 400px; font-size: 30px; font-weight: 600; padding: 14px 30px; border-radius: 14px; background: #238636; color: #fff; }
+  .prState { left: 44px; top: 400px; font-size: 30px; font-weight: 600; padding: 14px 30px; border-radius: 30px; color: #fff; }
+  #prOpen { background: #238636; } #prMerged { background: #8957e5; }
+  #thanks { left: 44px; top: 500px; font-size: 30px; color: #c9cfdf; }
   /* Scene C: the call to action that hands over to the welcome's next step. */
   #cta { left: 0; top: 270px; width: 1920px; text-align: center; font-size: 120px; font-weight: 700; letter-spacing: -0.03em; }
   #ctaNext { left: 860px; top: 470px; width: 200px; text-align: center; font-size: 40px; font-weight: 600; padding: 14px 0; border-radius: 16px;
@@ -115,7 +156,7 @@
 </style>
 </head>
 <body>
-<div id="root" data-composition-id="root" data-width="1920" data-height="800" data-start="0" data-duration="36">
+<div id="root" data-composition-id="root" data-width="1920" data-height="800" data-start="0" data-duration="54.5">
 
   <div id="sceneT" class="abs" style="inset:0">
     <div id="tools" class="abs panel">
@@ -205,6 +246,48 @@
     <div class="abs cap" style="font-size:46px">Weft <i>also</i> scores your <b>code quality</b>, and Weft's scout keeps your code clean.</div>
   </div>
 
+  <div id="sceneK" class="abs" style="inset:0">
+    <div id="socials" class="abs panel">
+      <div class="label">Built in</div>
+      <div class="abs bcp">🚀 BlastCP<span>your social accounts</span></div>
+      <div class="abs ch" style="left:44px;top:196px"><i style="background:#0a66c2">in</i>LinkedIn<span class="st"><span class="off" id="c1off">Connect</span><span class="on" id="c1on">✓</span></span></div>
+      <div class="abs ch" style="left:460px;top:196px"><i style="background:#111">@</i>Threads<span class="st"><span class="off" id="c2off">Connect</span><span class="on" id="c2on">✓</span></span></div>
+      <div class="abs ch" style="left:44px;top:316px"><i style="background:linear-gradient(135deg,#f58529,#dd2a7b,#8134af)">◎</i>Instagram<span class="st"><span class="off" id="c3off">Connect</span><span class="on" id="c3on">✓</span></span></div>
+      <div class="abs ch" style="left:460px;top:316px"><i style="background:#ff0000">▶</i>YouTube<span class="st"><span class="off" id="c4off">Connect</span><span class="on" id="c4on">✓</span></span></div>
+      <div class="abs ch" style="left:44px;top:436px"><i style="background:#ff6719">S</i>Substack<span class="st"><span class="off" id="c5off">Connect</span><span class="on" id="c5on">✓</span></span></div>
+      <div class="abs ch" style="left:460px;top:436px"><i style="background:#5b6478">✉</i>Email<span class="st"><span class="off" id="c6off">Connect</span><span class="on" id="c6on">✓</span></span></div>
+    </div>
+    <div id="launch" class="abs panel">
+      <div class="label">Your launch post</div>
+      <div class="abs lp" id="lp">Shipped Stripe checkout on <b id="projK">my-app</b> 🎉 Here's how Weft built it in an afternoon…</div>
+      <div class="abs gen" id="gImg" style="left:44px"><div class="art"></div><div class="lab">🖼 Image</div><div class="busy"><span class="spin"></span>Generating</div></div>
+      <div class="abs gen" id="gVid" style="left:331px"><div class="art"><b></b></div><div class="lab">🎬 Video · 0:15</div><div class="busy"><span class="spin"></span>Generating</div></div>
+      <div class="abs gen" id="gVoc" style="left:618px"><div class="art"><u style="height:40px"></u><u style="height:90px"></u><u style="height:60px"></u><u style="height:120px"></u><u style="height:70px"></u><u style="height:100px"></u><u style="height:50px"></u><u style="height:80px"></u></div><div class="lab">🎙 Voice</div><div class="busy"><span class="spin"></span>Generating</div></div>
+      <div class="abs" id="sched">✓ Scheduled · Tue 9:00 · 6 channels</div>
+    </div>
+    <div class="abs cap" style="font-size:46px">Weft comes with <b>BlastCP</b> built in: connect your socials and <b>build in public</b>.</div>
+  </div>
+
+  <div id="sceneO" class="abs" style="inset:0">
+    <div id="repo" class="abs panel">
+      <div class="label">Weft is open source</div>
+      <div class="abs repoName"><svg viewBox="0 0 24 24" fill="none" stroke="#e8eaf0" stroke-width="2" stroke-linecap="round"><circle cx="6" cy="5" r="2.5"/><circle cx="6" cy="19" r="2.5"/><circle cx="18" cy="8" r="2.5"/><path d="M6 7.5v9M18 10.5c0 4-6 3-12 6"/></svg>aimhuge/weft<span class="pub">Public</span></div>
+      <div class="abs repoUrl">github.com/aimhuge/weft</div>
+      <div class="abs ask" id="w1" style="top:270px">🐛 Something broken?<small>Fix it, in Weft, with Weft</small></div>
+      <div class="abs ask" id="w2" style="top:420px">✨ Want a feature?<small>Build it and send it back</small></div>
+    </div>
+    <div id="prs" class="abs panel">
+      <div class="label">Your pull request</div>
+      <div class="abs pr" id="pr"><div class="t">Keep long card titles on two lines</div><div class="m"><span id="prBy">@you</span> wants to merge 1 commit into main</div>
+        <div class="diff"><div class="del">- white-space: nowrap;</div><div class="add">+ -webkit-line-clamp: 2;</div></div></div>
+      <div class="abs" id="prBtn">Create pull request</div>
+      <div class="abs prState" id="prOpen">● Open</div>
+      <div class="abs prState" id="prMerged">✓ Merged</div>
+      <div class="abs" id="thanks">Thank you, Wefter 💛</div>
+    </div>
+    <div class="abs cap" style="font-size:46px">Weft is <b>open source</b>: something broken, or a feature you want? Make a <b>pull request</b>.</div>
+  </div>
+
   <div id="sceneC" class="abs" style="inset:0">
     <div class="abs" id="cta">Now let's get started.</div>
     <div class="abs" id="ctaNext">Next ↵</div>
@@ -212,7 +295,7 @@
 
   <svg id="cursor" class="abs" viewBox="0 0 24 24"><path d="M3 2l7 19 2.6-7.4L20 11z" fill="#fff" stroke="#111" stroke-width="1.2"/></svg>
   <!-- The voiceover (scripts/narrate-welcome.mjs): the renderer mixes it into the MP4; live, the welcome plays it itself. -->
-  <audio id="voice" src="./narration-beats.m4a" data-start="0" data-duration="36" data-volume="1"></audio>
+  <audio id="voice" src="./narration-beats.m4a" data-start="0" data-duration="54.5" data-volume="1"></audio>
   <div id="fade" class="abs"></div>
 </div>
 
@@ -226,6 +309,7 @@
     var user = (query.get("u") || vars.user || "you").replace(/[^\w.-]/g, "").slice(0, 16) || "you";
     document.getElementById("handle").textContent = "@" + user;
     document.getElementById("handle2").textContent = user;
+    document.getElementById("prBy").textContent = "@" + user;
     document.getElementById("handleName").textContent = user === "you" ? "You" : user;
     document.getElementById("initial").textContent = user[0].toUpperCase();
     // Signed in with GitHub in the welcome: components/WelcomeLoop.tsx sends your name and avatar for the profile beat.
@@ -242,86 +326,143 @@
     });
     var project = (query.get("p") || vars.project || "my-app").split(",")[0].slice(0, 24);
     document.getElementById("projT").textContent = project;
+    document.getElementById("projK").textContent = project;
 
     var tl = gsap.timeline({ paused: true });
     gsap.set("#toast", { opacity: 0 });
-    gsap.set(["#sceneP", "#urlShared", "#s1", "#s2", "#shareBtn", "#shared", "#sceneA", "#t1on", "#t2on", "#t3on", "#t4on", "#u1", "#u2", "#u3", "#sceneB", "#sceneC", "#k1", "#k2", "#k3", "#startCard", "#newcard", "#cursor"], { opacity: 0 });
+    gsap.set(["#sceneP", "#urlShared", "#s1", "#s2", "#shareBtn", "#shared", "#sceneA", "#t1on", "#t2on", "#t3on", "#t4on", "#u1", "#u2", "#u3", "#sceneB", "#sceneC", "#k1", "#k2", "#k3", "#startCard", "#newcard", "#sceneK", "#c1on", "#c2on", "#c3on", "#c4on", "#c5on", "#c6on", "#lp", "#gImg", "#gVid", "#gVoc", "#sched", "#sceneO", "#w1", "#w2", "#pr", "#prBtn", "#prOpen", "#prMerged", "#thanks", "#cursor"], { opacity: 0 });
     tl.fromTo("#fade", { opacity: 1 }, { opacity: 0, duration: 0.5 }, 0);
 
-    // 0–7.5: tools connect one by one, then the thread's work shows them in use.
-    var link = function (n, at) {
-      tl.to("#t" + n + "off", { opacity: 0, duration: 0.2 }, at).fromTo("#t" + n + "on", { opacity: 0, scale: 0.85 }, { opacity: 1, scale: 1, duration: 0.3, ease: "back.out(2)" }, at);
-    };
-    link(1, 0.9); link(2, 1.5); link(3, 2.1); link(4, 2.7);
-    tl.fromTo("#u1", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.35 }, 3.5)
-      .fromTo("#u2", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.35 }, 4.3)
-      .fromTo("#u3", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.35 }, 5.1)
-      .to("#sceneT", { opacity: 0, duration: 0.4 }, 7.3)
-      .fromTo("#sceneP", { opacity: 0 }, { opacity: 1, duration: 0.4 }, 7.5);
+    // Each scene draws itself from its start time t, so SCENES below sets the order and the beats in one place.
 
-    // 7.5–16.5: the pane: the dashboard's data connects (GA4 through the vault, Supabase), the numbers and chart fill
-    // in, and Share turns it into a weft.zip link.
+    // Tools connect one by one, then the thread's work shows them in use.
+    function tools(t) {
+      [1, 2, 3, 4].forEach(function (n, i) {
+        var at = t + 0.9 + i * 0.6;
+        tl.to("#t" + n + "off", { opacity: 0, duration: 0.2 }, at).fromTo("#t" + n + "on", { opacity: 0, scale: 0.85 }, { opacity: 1, scale: 1, duration: 0.3, ease: "back.out(2)" }, at);
+      });
+      tl.fromTo("#u1", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.35 }, t + 3.5)
+        .fromTo("#u2", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.35 }, t + 4.3)
+        .fromTo("#u3", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.35 }, t + 5.1);
+    }
+
+    // The pane: the dashboard's data connects (GA4 through the vault, Supabase), the numbers and chart fill in, and
+    // Share turns it into a weft.zip link.
     var count = function (id, to, at) {
       var o = { v: 0 }, el = document.getElementById(id);
       tl.to(o, { v: to, duration: 1.2, ease: "power1.out", onUpdate: function () { el.textContent = Math.round(o.v).toLocaleString("en-US"); } }, at);
     };
-    tl.fromTo("#s1", { opacity: 0, x: 20 }, { opacity: 1, x: 0, duration: 0.35 }, 8.2)
-      .fromTo("#s2", { opacity: 0, x: 20 }, { opacity: 1, x: 0, duration: 0.35 }, 8.8);
-    count("kv", 12480, 9.0); count("ks", 342, 9.2); count("kp", 57, 9.4);
-    tl.to("#line", { attr: { "stroke-dashoffset": 0 }, duration: 1.6, ease: "power1.inOut" }, 9.2)
-      .to("#shareBtn", { opacity: 1, duration: 0.3 }, 11.4)
-      .set("#cursor", { x: 240, y: 160 }, 11.8)
-      .to("#cursor", { opacity: 1, duration: 0.2 }, 11.8)
-      .to("#cursor", { x: 294, y: 178, duration: 0.6 }, 12.0)
-      .to("#shareBtn", { scale: 0.94, duration: 0.08, yoyo: true, repeat: 1 }, 12.7)
-      .to(["#shareBtn", "#cursor"], { opacity: 0, duration: 0.2 }, 12.9)
-      .fromTo("#shared", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.35 }, 13.0)
-      .to("#urlLocal", { opacity: 0, duration: 0.3 }, 13.0)
-      .to("#urlShared", { opacity: 1, duration: 0.3 }, 13.0)
-      .to("#sceneP", { opacity: 0, duration: 0.4 }, 16.3)
-      .fromTo("#sceneA", { opacity: 0 }, { opacity: 1, duration: 0.4 }, 16.5);
+    function pane(t) {
+      tl.fromTo("#s1", { opacity: 0, x: 20 }, { opacity: 1, x: 0, duration: 0.35 }, t + 0.7)
+        .fromTo("#s2", { opacity: 0, x: 20 }, { opacity: 1, x: 0, duration: 0.35 }, t + 1.3);
+      count("kv", 12480, t + 1.5); count("ks", 342, t + 1.7); count("kp", 57, t + 1.9);
+      tl.to("#line", { attr: { "stroke-dashoffset": 0 }, duration: 1.6, ease: "power1.inOut" }, t + 1.7)
+        .to("#shareBtn", { opacity: 1, duration: 0.3 }, t + 3.9)
+        .set("#cursor", { x: 240, y: 160 }, t + 4.3)
+        .to("#cursor", { opacity: 1, duration: 0.2 }, t + 4.3)
+        .to("#cursor", { x: 294, y: 178, duration: 0.6 }, t + 4.5)
+        .to("#shareBtn", { scale: 0.94, duration: 0.08, yoyo: true, repeat: 1 }, t + 5.2)
+        .to(["#shareBtn", "#cursor"], { opacity: 0, duration: 0.2 }, t + 5.4)
+        .fromTo("#shared", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.35 }, t + 5.5)
+        .to("#urlLocal", { opacity: 0, duration: 0.3 }, t + 5.5)
+        .to("#urlShared", { opacity: 1, duration: 0.3 }, t + 5.5);
+    }
 
-    // 16.5–24: the profile fills in: XP climbs, streak and today tick up, the stats and the radar grow, a badge lands.
-    var xp = { v: 20040 }, xpEl = document.getElementById("xp");
-    tl.to(xp, { v: 20468, duration: 1.4, ease: "power1.out", onUpdate: function () { xpEl.textContent = Math.round(xp.v).toLocaleString("en-US"); } }, 17.2)
-      .to("#xpfill", { width: "62%", duration: 1.4, ease: "power1.out" }, 17.2)
-      .to("#streak", { textContent: 37, snap: { textContent: 1 }, duration: 0.3 }, 17.4)
-      .to("#today", { textContent: 681, snap: { textContent: 1 }, duration: 1.2 }, 17.4)
-      .fromTo("#shape", { scale: 0.1, svgOrigin: "310 300" }, { scale: 1, duration: 1.2, ease: "back.out(1.4)" }, 17.6);
-    document.querySelectorAll("#prof .fill").forEach(function (el, i) { tl.to(el, { width: el.dataset.w, duration: 0.6, ease: "power2.out" }, 8.8 + i * 0.2); });
-    tl.to("#badgeN", { textContent: 22, snap: { textContent: 1 }, duration: 0.1 }, 20.6)
-      .fromTo("#toast", { opacity: 0, y: -10 }, { opacity: 1, y: 0, duration: 0.3 }, 20.6)
-      .to("#toast", { opacity: 0, duration: 0.3 }, 23);
+    // Code quality: the score climbs to 91, checks tick, the scout's finding becomes a running card.
+    function quality(t) {
+      tl.to("#score", { textContent: 91, snap: { textContent: 1 }, duration: 1.6, ease: "power1.out" }, t + 0.5)
+        .to("#arc", { attr: { "stroke-dashoffset": 23.8 }, duration: 1.6, ease: "power1.out" }, t + 0.5)
+        .to("#k1", { opacity: 1, duration: 0.3 }, t + 0.8)
+        .to("#k2", { opacity: 1, duration: 0.3 }, t + 1.2)
+        .to("#k3", { opacity: 1, duration: 0.3 }, t + 1.6)
+        .to("#startCard", { opacity: 1, duration: 0.3 }, t + 2.3)
+        .set("#cursor", { x: 294, y: 178 }, t + 2.7)
+        .to("#cursor", { opacity: 1, duration: 0.2 }, t + 2.7)
+        .to("#cursor", { x: -10, y: 110, duration: 0.6 }, t + 2.8)
+        .to("#startCard", { scale: 0.94, duration: 0.08, yoyo: true, repeat: 1 }, t + 3.5)
+        .to("#cursor", { opacity: 0, duration: 0.2 }, t + 3.8)
+        .fromTo("#newcard", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.4, ease: "back.out(1.6)" }, t + 3.7)
+        .to("#spin", { rotation: 360 * 5, duration: 3.8, ease: "none" }, t + 3.7);
+    }
 
-    // 24–31.5: code quality: the score climbs to 91, checks tick, the scout's finding becomes a running card.
-    tl.to("#sceneA", { opacity: 0, duration: 0.4 }, 23.8)
-      .to("#sceneB", { opacity: 1, duration: 0.4 }, 24)
-      .to("#score", { textContent: 91, snap: { textContent: 1 }, duration: 1.6, ease: "power1.out" }, 24.5)
-      .to("#arc", { attr: { "stroke-dashoffset": 23.8 }, duration: 1.6, ease: "power1.out" }, 24.5)
-      .to("#k1", { opacity: 1, duration: 0.3 }, 24.8)
-      .to("#k2", { opacity: 1, duration: 0.3 }, 25.2)
-      .to("#k3", { opacity: 1, duration: 0.3 }, 25.6)
-      .to("#startCard", { opacity: 1, duration: 0.3 }, 26.3)
-      .to("#cursor", { opacity: 1, duration: 0.2 }, 26.7)
-      .to("#cursor", { x: -10, y: 110, duration: 0.6 }, 26.8)
-      .to("#startCard", { scale: 0.94, duration: 0.08, yoyo: true, repeat: 1 }, 27.5)
-      .to("#cursor", { opacity: 0, duration: 0.2 }, 27.8)
-      .fromTo("#newcard", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.4, ease: "back.out(1.6)" }, 27.7)
-      .to("#spin", { rotation: 360 * 5, duration: 3.8, ease: "none" }, 27.7);
+    // BlastCP, built in: your socials connect, the launch post gets its image, video and voice, then it's scheduled.
+    function blastcp(t) {
+      [1, 2, 3, 4, 5, 6].forEach(function (n, i) {
+        var at = t + 0.6 + i * 0.3;
+        tl.to("#c" + n + "off", { opacity: 0, duration: 0.2 }, at).fromTo("#c" + n + "on", { opacity: 0, scale: 0.85 }, { opacity: 1, scale: 1, duration: 0.3, ease: "back.out(2)" }, at);
+      });
+      tl.fromTo("#lp", { opacity: 0, x: 20 }, { opacity: 1, x: 0, duration: 0.35 }, t + 2.5);
+      ["#gImg", "#gVid", "#gVoc"].forEach(function (id, i) {
+        var at = t + 3.1 + i * 0.5;
+        tl.fromTo(id, { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.3 }, at)
+          .to(id + " .spin", { rotation: 720, duration: 1.2, ease: "none" }, at)
+          .to(id + " .busy", { opacity: 0, duration: 0.3 }, at + 1.2);
+      });
+      tl.fromTo("#sched", { opacity: 0, scale: 0.85 }, { opacity: 1, scale: 1, duration: 0.35, ease: "back.out(2)" }, t + 7.9);
+    }
 
-    // 31.5–36: "Now let's get started", with the welcome's Next button under it.
-    tl.to("#sceneB", { opacity: 0, duration: 0.4 }, 31.3)
-      .to("#sceneC", { opacity: 1, duration: 0.4 }, 31.5)
-      .fromTo("#cta", { y: 24 }, { y: 0, duration: 0.6, ease: "power2.out" }, 31.5)
-      .fromTo("#ctaNext", { opacity: 0, scale: 0.8 }, { opacity: 1, scale: 1, duration: 0.4, ease: "back.out(2)" }, 32.6)
-      .to("#ctaNext", { scale: 1.06, duration: 0.4, yoyo: true, repeat: 3 }, 33.2);
+    // The profile fills in: XP climbs, streak and today tick up, the stats and the radar grow, a badge lands.
+    function profile(t) {
+      var xp = { v: 20040 }, xpEl = document.getElementById("xp");
+      tl.to(xp, { v: 20468, duration: 1.4, ease: "power1.out", onUpdate: function () { xpEl.textContent = Math.round(xp.v).toLocaleString("en-US"); } }, t + 0.7)
+        .to("#xpfill", { width: "62%", duration: 1.4, ease: "power1.out" }, t + 0.7)
+        .to("#streak", { textContent: 37, snap: { textContent: 1 }, duration: 0.3 }, t + 0.9)
+        .to("#today", { textContent: 681, snap: { textContent: 1 }, duration: 1.2 }, t + 0.9)
+        .fromTo("#shape", { scale: 0.1, svgOrigin: "310 300" }, { scale: 1, duration: 1.2, ease: "back.out(1.4)" }, t + 1.1);
+      document.querySelectorAll("#prof .fill").forEach(function (el, i) { tl.fromTo(el, { width: 0 }, { width: el.dataset.w, duration: 0.6, ease: "power2.out" }, t + 0.9 + i * 0.2); });
+      tl.to("#badgeN", { textContent: 22, snap: { textContent: 1 }, duration: 0.1 }, t + 4.1)
+        .fromTo("#toast", { opacity: 0, y: -10 }, { opacity: 1, y: 0, duration: 0.3 }, t + 4.1)
+        .to("#toast", { opacity: 0, duration: 0.3 }, t + 6.5);
+    }
 
-    tl.to("#fade", { opacity: 1, duration: 0.6 }, 35.4);
+    // Weft is open source: the repo, why you'd send a change, and your pull request going Open → Merged.
+    function opensource(t) {
+      tl.fromTo("#w1", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.35 }, t + 1.1)
+        .fromTo("#w2", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.35 }, t + 2.1)
+        .fromTo("#pr", { opacity: 0, x: 20 }, { opacity: 1, x: 0, duration: 0.35 }, t + 2.9)
+        .to("#prBtn", { opacity: 1, duration: 0.3 }, t + 3.4)
+        .set("#cursor", { x: -20, y: 0 }, t + 3.6)
+        .to("#cursor", { opacity: 1, duration: 0.2 }, t + 3.6)
+        .to("#cursor", { x: 120, y: 145, duration: 0.6 }, t + 3.7)
+        .to("#prBtn", { scale: 0.94, duration: 0.08, yoyo: true, repeat: 1 }, t + 4.4)
+        .to(["#prBtn", "#cursor"], { opacity: 0, duration: 0.2 }, t + 4.6)
+        .fromTo("#prOpen", { opacity: 0, scale: 0.85 }, { opacity: 1, scale: 1, duration: 0.3, ease: "back.out(2)" }, t + 4.7)
+        .to("#prOpen", { opacity: 0, duration: 0.2 }, t + 5.9)
+        .fromTo("#prMerged", { opacity: 0, scale: 0.85 }, { opacity: 1, scale: 1, duration: 0.3, ease: "back.out(2)" }, t + 5.9)
+        .fromTo("#thanks", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.35 }, t + 6.3);
+    }
+
+    // "Now let's get started", with the welcome's Next button under it.
+    function cta(t) {
+      tl.fromTo("#cta", { y: 24 }, { y: 0, duration: 0.6, ease: "power2.out" }, t)
+        .fromTo("#ctaNext", { opacity: 0, scale: 0.8 }, { opacity: 1, scale: 1, duration: 0.4, ease: "back.out(2)" }, t + 1.1)
+        .to("#ctaNext", { scale: 1.06, duration: 0.4, yoyo: true, repeat: 3 }, t + 1.7);
+    }
+
+    // The order, build → ship → show: each scene's beat (lib/welcome-loop.ts BEATS), element and length in seconds.
+    // The voiceover's cues (scripts/narrate-welcome.mjs) follow these starts.
+    var SCENES = [
+      ["tools", "#sceneT", 7.5, tools],
+      ["pane", "#sceneP", 9, pane],
+      ["quality", "#sceneB", 7.5, quality],
+      ["blastcp", "#sceneK", 10.5, blastcp],
+      ["profile", "#sceneA", 7.5, profile],
+      ["opensource", "#sceneO", 8, opensource],
+      ["cta", "#sceneC", 4.5, cta],
+    ];
+    var at = 0, beats = [];
+    SCENES.forEach(function (scene, i) {
+      if (i > 0) tl.to(SCENES[i - 1][1], { opacity: 0, duration: 0.4 }, at - 0.2).fromTo(scene[1], { opacity: 0 }, { opacity: 1, duration: 0.4 }, at);
+      scene[3](at);
+      beats.push([at, scene[0]]);
+      at += scene[2];
+    });
+    tl.to("#fade", { opacity: 1, duration: 0.6 }, at - 0.6);
 
     window.__timelines = window.__timelines || {};
     window.__timelines.root = tl;
 
-    if (live) window.weftLive(tl, [[0, "tools"], [7.5, "pane"], [16.5, "profile"], [24, "quality"], [31.5, "cta"]], "intro.html");
+    if (live) window.weftLive(tl, beats, "intro.html");
   })();
 </script>
 </body>

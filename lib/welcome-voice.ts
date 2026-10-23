@@ -10,12 +10,14 @@ export class VoicePlayer {
 
   constructor(private readonly make: (src: string) => HTMLAudioElement = (src) => new Audio(src)) {}
 
-  // Stops whatever is playing and starts `src` from the top. A refused play (no autoplay, or no media support at all)
-  // just stays silent.
-  play(src: string) {
+  // Stops whatever is playing and starts `src` at `at` seconds (the top by default; a jump in the tour starts partway,
+  // which a media element takes before it has loaded as its start position). A refused play (no autoplay, or no media
+  // support at all) just stays silent.
+  play(src: string, at = 0) {
     this.stop();
     const audio = this.make(src);
     audio.muted = this.quiet;
+    if (at > 0) audio.currentTime = at;
     this.audio = audio;
     Promise.resolve()
       .then(() => audio.play())

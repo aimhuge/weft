@@ -38,15 +38,18 @@ const NARRATION = {
     ],
   },
   beats: {
-    duration: 36,
+    duration: 54.5,
     lines: [
       [0.5, 7, "Connect your tools to Weft, so your threads can use them."],
       [7.5, 16.3, "Panes aren't just previews. They can use your vault, connect to your data, and be shared, so a live dashboard, mini-app or game is just a few clicks away."],
-      [17, 23.5, "Share your Wefter Profile, and show the world what you ship."],
-      [24.5, 31, "Weft also scores your code quality, and Weft's scout keeps your code clean."],
-      [31.8, 35, "Now let's get started."],
+      [17, 23.5, "Weft also scores your code quality, and Weft's scout keeps your code clean."],
+      [24.3, 34.2, "Weft comes with BlastCP built in, so you can easily connect all your social accounts, make images, video and voice for your posts, and build in public."],
+      [35, 41.5, "Share your Wefter Profile, and show the world what you ship."],
+      [42.3, 49.6, "Weft is open source. If something is broken, or you want to add a feature, please feel free to make a pullrequest."],
+      [50.3, 53.5, "Now let's get started."],
     ],
   },
+
   // The welcome's later steps: one line each, played as the step opens (components/WelcomeDialog.tsx), not looped.
   projects: { lines: [[0, 4, "Allow Weft to see your projects."]] },
   first: { lines: [[0, 4, "Now start a new thread."]] },

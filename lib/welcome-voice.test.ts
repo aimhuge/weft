@@ -35,6 +35,14 @@ describe("VoicePlayer", () => {
     expect(nth(1).play).toHaveBeenCalled();
   });
 
+  it("starts partway through when asked, and from the top otherwise", () => {
+    const { player, nth } = recorder();
+    player.play("/a.m4a", 24.3);
+    expect(nth(0).audio.currentTime).toBe(24.3);
+    player.play("/b.m4a");
+    expect(nth(1).audio.currentTime).toBeUndefined();
+  });
+
   it("keeps a mute across tracks and applies it to the one playing", () => {
     const { player, nth } = recorder();
     player.play("/a.m4a");
