@@ -49,8 +49,28 @@ Server components can't take click handlers, so a link opts in with attributes:
 `data-track="download_clicked" data-track-version="0.4.0"`. `startAnalytics()` adds one capturing click
 listener (`trackClick`) that reads them, `data-track-*` becoming camelCased props, plus `href` on links.
 
-The desktop app's own funnel (first launch, first card, first Done) isn't tracked: that needs opt-in telemetry with a
-first-launch notice (docs/ROADMAP.md, Settings and onboarding).
+## Desktop onboarding stats
+
+The one exception to "a local Weft never calls home": the welcome's steps, as anonymous events (`lib/telemetry.ts`).
+
+- **What:** only the allow-listed events and props in `lib/telemetry-events.ts` (`onboarding_started`,
+  `onboarding_tour_beat` (with `jumped` when the tour bar took you there), `onboarding_tour_nav` (the bar's Back, Next or a
+  jump, with `from` and `to`), `onboarding_narration_muted`, `onboarding_signin_clicked`, `onboarding_cli_login`,
+  `onboarding_step`, `onboarding_projects_answered`, `onboarding_first_thread`, `onboarding_skipped`). Plain values, strings
+  cut to 40 characters; never a prompt, a project name, a path, an email or card content.
+- **Who:** a 32-hex hash of the device ID (`anonymousId()`), so the stats can't be joined to the Mac's synced cards;
+  PostHog gets `$process_person_profile: false` and `source: "desktop"`.
+- **Consent:** on by default, with a switch in Settings → Security
+  (`components/StatsSwitch.tsx`), kept in `~/.weft/telemetry.json`. The switch's PUT is `elevated()`, so only Weft's own
+  window can flip it.
+- **Path:** the board's `trackOnboarding()` (`lib/telemetry-client.ts`) → local `POST /api/telemetry` → the Mac forwards to
+  `https://weft.zip/api/telemetry/collect` (`forwardOnboarding()`, dropped when off or offline, never queued) → the deployed
+  Weft captures it with posthog-node (`captureOnboarding()`, `lib/telemetry-send.ts`). The Mac never holds a PostHog key.
+- **Where they fire:** `lib/use-onboarding-stats.ts` (started, steps), `lib/use-welcome-tour.ts` (beats, mute, the tour bar's moves),
+  `components/WelcomeLoop.tsx` (sign-in), `components/WelcomeIntro.tsx` (CLI log in), `components/WelcomeDialog.tsx`
+  (projects answered, first thread, skip).
+
+The rest of the desktop funnel (first card, first Done) still isn't tracked.
 
 ## Key files
 

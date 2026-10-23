@@ -10,6 +10,7 @@ lands; a release moves those lines under its version and tags the commit `vX.Y.Z
 
 ### Added
 
+- **The limits chart looks back in a new week.** In the first 3 days after a weekly reset, the status strip's 5hr / 7d hover also shows the last 3 days of the week before (shaded, labeled "last week", their weekly bars dimmed), so a fresh reset no longer leaves the chart empty (`lib/limit-chart.ts`, `components/LimitBurndown.tsx`).
 - **weft.zip plays the narrated tour.** Under the board screenshot, "Take the tour, sound on." plays `public/brand/weft-tour.mp4` (the welcome tour `pnpm welcome:render` makes), with its Welcome to Weft title card as the poster (`public/brand/weft-tour-poster.webp`) and nothing loaded until play (`components/home/Tour.tsx`).
 
 ### Fixed

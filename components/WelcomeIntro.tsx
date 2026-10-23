@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/client";
+import { trackOnboarding } from "@/lib/telemetry-client";
 import type { Backend, CliStatus } from "@/lib/types";
 import { Spinner } from "./Icon";
 import { WelcomeLoop } from "./WelcomeLoop";
@@ -71,6 +72,7 @@ export function ReadyStep({ status, projects = [] }: { status: CliStatuses | nul
   const [starting, setStarting] = useState<Backend | null>(null);
   const [error, setError] = useState<string | null>(null);
   const login = (backend: Backend) => {
+    trackOnboarding("onboarding_cli_login", { backend });
     setStarting(backend);
     setError(null);
     api

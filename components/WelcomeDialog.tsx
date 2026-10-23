@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { api } from "@/lib/client";
 import { openNewThread, selectCard } from "@/lib/onboarding-events";
+import { trackOnboarding } from "@/lib/telemetry-client";
+import { useOnboardingStats } from "@/lib/use-onboarding-stats";
 import { useStepVoice } from "@/lib/use-welcome-tour";
 import { answerFor, answerWelcome, defaultTicks, loadWelcome, REPLAY_EVENT, TEST_EVENT, type WelcomePreview } from "@/lib/welcome-client";
 import Modal from "./Modal";
@@ -34,6 +36,9 @@ export default function WelcomeDialog({ onError }: { onError?: (err: unknown) =>
   const cliStatus = useCliStatus(preview !== null);
   // Step 1's tour ends on "Now let's get started"; the next steps say what to do (lib/use-welcome-tour.ts).
   useStepVoice(preview ? step : "closed");
+  // Anonymous setup stats, unless they're switched off in Settings → Security (lib/telemetry.ts).
+  const cliReady = cliStatus === null ? null : CLIS.some((c) => cliStatus[c.id]?.loggedIn);
+  useOnboardingStats({ preview, replay, step, cliReady });
   // The board hands a new onError on every render; the loading effect shouldn't rerun for that.
   const report = useRef(onError);
   useEffect(() => {
@@ -87,6 +92,7 @@ export default function WelcomeDialog({ onError }: { onError?: (err: unknown) =>
   };
   // Saves the answer (not in a replay) and moves on to the first thread.
   const answer = (fresh: boolean) => {
+    trackOnboarding("onboarding_projects_answered", { brought: fresh ? 0 : folders.length, count_history: countHistory, start_empty: fresh });
     if (replay) {
       setStep("first");
       return;
@@ -106,6 +112,7 @@ export default function WelcomeDialog({ onError }: { onError?: (err: unknown) =>
   // Start: the thread runs and its card opens; with no folder picked, the New thread dialog takes over with the prompt.
   const start = () => {
     const text = prompt.trim();
+    trackOnboarding("onboarding_first_thread", { backend: cli, used_starter: STARTERS.some((s) => s.text === text) });
     if (!cwd) {
       setPreview(null);
       openNewThread({ prompt: text });
@@ -137,7 +144,6 @@ export default function WelcomeDialog({ onError }: { onError?: (err: unknown) =>
     ok.current?.click();
   };
 
-  const cliReady = cliStatus === null ? null : CLIS.some((c) => cliStatus[c.id]?.loggedIn);
   return createPortal(
     <Modal label="Welcome to Weft" onClose={() => {}} keepOnBackdrop className="w-full max-w-[760px]">
       <div onKeyDown={onKeyDown} className="flex flex-col">
@@ -166,7 +172,10 @@ export default function WelcomeDialog({ onError }: { onError?: (err: unknown) =>
           canStart={!cwd || Boolean(prompt.trim())}
           onNext={next}
           onAnswer={answer}
-          onSkip={() => setPreview(null)}
+          onSkip={() => {
+            trackOnboarding("onboarding_skipped", { step });
+            setPreview(null);
+          }}
           onStart={start}
         />
       </div>

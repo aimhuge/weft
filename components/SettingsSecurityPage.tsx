@@ -1,7 +1,8 @@
 // The Security page: what threads may do without asking (the default permission mode, the folders outside a
-// project they may use) and how long the saved sign-ins last.
+// project they may use), how long the saved sign-ins last, and the anonymous setup stats switch (lib/telemetry.ts).
 import ModePicker from "./ModePicker";
 import { SettingsCard, SettingsSectionHeader } from "./SettingsLayout";
+import { StatsSwitch } from "./StatsSwitch";
 import TokenExpiry from "./TokenExpiry";
 import TrustedFolders from "./TrustedFolders";
 
@@ -40,6 +41,10 @@ export default function SettingsSecurityPage({
       </SettingsCard>
       <SettingsCard>
         <TokenExpiry />
+      </SettingsCard>
+      <SettingsCard>
+        <SettingsSectionHeader title="Setup stats" hint="Which welcome steps people finish, so the welcome gets better. Nothing from your board." />
+        <StatsSwitch className="mt-2" />
       </SettingsCard>
     </>
   );

@@ -62,7 +62,7 @@ function setup() {
 }
 
 // Screen 1 is Get ready (the CLIs); Next goes to the projects, or straight to the first thread with no history.
-const next = async () => userEvent.click(await screen.findByRole("button", { name: /^Next/ }));
+const next = async () => userEvent.click(await screen.findByRole("button", { name: /^Next ↵/ }));
 const bringIn = async () => userEvent.click(await screen.findByRole("button", { name: /^Bring in/ }));
 
 beforeEach(setup);

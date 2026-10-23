@@ -1,15 +1,19 @@
 // @vitest-environment happy-dom
-import { renderHook } from "@testing-library/react";
+import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useStepVoice } from "./use-welcome-tour";
+import { trackOnboarding } from "./telemetry-client";
+import { useStepVoice, useWelcomeTour } from "./use-welcome-tour";
 import { MUTE_KEY } from "./welcome-loop";
 
 // The welcome's later steps speak as they open (lib/use-welcome-tour.ts), unless the tour was muted.
 // (useWelcomeTour itself is covered through components/WelcomeLoop.test.tsx.)
 
+vi.mock("./telemetry-client", () => ({ trackOnboarding: vi.fn() }));
+
 const played = vi.hoisted(() => [] as string[]);
 
 beforeEach(() => {
+  vi.mocked(trackOnboarding).mockClear();
   played.length = 0;
   localStorage.clear();
   vi.stubGlobal(
@@ -35,5 +39,19 @@ describe("useStepVoice", () => {
     localStorage.setItem(MUTE_KEY, "1");
     renderHook(() => useStepVoice("projects"));
     expect(played).toEqual([]);
+  });
+});
+
+describe("useWelcomeTour's tour bar", () => {
+  it("counts Back, Next and a jump, with where you came from", () => {
+    const { result } = renderHook(() => useWelcomeTour({ current: null }, null));
+    act(() => result.current.go("loop", "next"));
+    act(() => result.current.go("intro", "back"));
+    act(() => result.current.go("cta"));
+    expect(vi.mocked(trackOnboarding).mock.calls).toEqual([
+      ["onboarding_tour_nav", { action: "next", from: "intro", to: "loop" }],
+      ["onboarding_tour_nav", { action: "back", from: "loop", to: "intro" }],
+      ["onboarding_tour_nav", { action: "jump", from: "intro", to: "cta" }],
+    ]);
   });
 });

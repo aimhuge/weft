@@ -22,9 +22,9 @@ function motion(reduce: boolean) {
 }
 
 // A beat message from the tour's page, as its live.js posts it.
-function post(frame: HTMLIFrameElement, beat: string) {
+function post(frame: HTMLIFrameElement, beat: string, extra: { t?: number; jumped?: boolean } = {}) {
   act(() => {
-    window.dispatchEvent(new MessageEvent("message", { data: { weft: "welcome", beat }, source: frame.contentWindow }));
+    window.dispatchEvent(new MessageEvent("message", { data: { weft: "welcome", beat, ...extra }, source: frame.contentWindow }));
   });
 }
 
@@ -95,5 +95,37 @@ describe("WelcomeLoop", () => {
     fireEvent.click(screen.getByRole("button", { name: "Mute narration" }));
     expect(played.at(-1)?.muted).toBe(true);
     expect(screen.getByRole("button", { name: "Turn narration on" })).toBeInTheDocument();
+  });
+
+  it("frames each beat with its title, and Back and Next step one beat at a time", () => {
+    render(<WelcomeLoop projects={[]} />);
+    const frame = screen.getByTitle<HTMLIFrameElement>(/How Weft works/);
+    const sent = vi.spyOn(frame.contentWindow as Window, "postMessage");
+    expect(screen.getByText("Welcome to Weft")).toBeInTheDocument();
+    expect(screen.getByText("1 of 9")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Back a beat" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Next beat" }));
+    expect(sent).toHaveBeenLastCalledWith({ weft: "go", beat: "loop", page: "loop.html" }, "*");
+    // The bar moves at once, so a quick second click steps on before the page has answered.
+    expect(screen.getByText("2 of 9")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Next beat" }));
+    expect(sent).toHaveBeenLastCalledWith({ weft: "go", beat: "tools", page: "beats.html" }, "*");
+
+    post(frame, "tools");
+    expect(screen.getByText("3 of 9")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Back a beat" }));
+    expect(sent).toHaveBeenLastCalledWith({ weft: "go", beat: "loop", page: "loop.html" }, "*");
+    fireEvent.click(screen.getByRole("button", { name: "Your Wefter Profile" }));
+    expect(sent).toHaveBeenLastCalledWith({ weft: "go", beat: "profile", page: "beats.html" }, "*");
+
+    post(frame, "cta");
+    expect(screen.getByRole("button", { name: "Next beat" })).toBeDisabled();
+  });
+
+  it("picks the voiceover up where a jump lands", () => {
+    render(<WelcomeLoop projects={[]} />);
+    const frame = screen.getByTitle<HTMLIFrameElement>(/How Weft works/);
+    post(frame, "blastcp", { t: 24, jumped: true });
+    expect(played.map((a) => [a.src, (a as unknown as { currentTime?: number }).currentTime])).toEqual([["/welcome/narration-beats.m4a", 24]]);
   });
 });
