@@ -60,7 +60,7 @@ export default function EditorColumn({ cardId, cwd, onClose }: { cardId: string;
   }, [file]);
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-panel" data-editor-column data-card-id={cardId}>
+    <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col bg-panel" data-editor-column data-card-id={cardId}>
       <ColumnHeader
         tabs={tabs}
         activePath={activeTab?.path ?? null}
