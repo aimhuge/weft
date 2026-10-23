@@ -126,4 +126,36 @@ async function signIn({ fetch, openExternal, loopback = startLoopback }) {
   }
 }
 
-module.exports = { ORIGIN, SCOPE, authorizeUrl, pkce, signIn, startLoopback };
+// Connecting with your Weft account (docs/architecture/blastcp.md): BlastCP trusts a signed-in Weft session
+// (RFC 8693 token exchange against Weft's published signing keys), so Weft swaps its account's access token for
+// a BlastCP one with no browser, and BlastCP makes the account the first time. Returns
+// { token, expiresAt, clientId, created }; { linkUrl } when that email already has a BlastCP account, which
+// confirms the link once on BlastCP; or null when this BlastCP can't swap (a server from before the grant).
+const WEFT_CLIENT = "weft";
+
+/** @param {{ fetch: Fetch, subjectToken: string }} options */
+async function exchangeWeft({ fetch, subjectToken }) {
+  const res = await fetch(`${ORIGIN}/api/oauth/token`, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "urn:ietf:params:oauth:grant-type:token-exchange",
+      subject_token: subjectToken,
+      subject_token_type: "urn:ietf:params:oauth:token-type:jwt",
+      client_id: WEFT_CLIENT,
+      scope: SCOPE,
+      resource: `${ORIGIN}/api/mcp`,
+    }).toString(),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (res.ok && data.access_token) {
+    const expiresAt = data.expires_in ? Date.now() + Number(data.expires_in) * 1000 : null;
+    return { token: data.access_token, expiresAt, clientId: WEFT_CLIENT, created: data.created === true };
+  }
+  // The drawer opens this link, so only a BlastCP page: anything else would be a phishing hop.
+  if (data.error === "link_required" && typeof data.link_url === "string" && data.link_url.startsWith(`${ORIGIN}/`)) return { linkUrl: data.link_url };
+  if (data.error === "unsupported_grant_type" || data.error === "invalid_client") return null;
+  throw new Error(data.error_description ?? `BlastCP wouldn't take your Weft sign-in (${res.status}).`);
+}
+
+module.exports = { ORIGIN, SCOPE, WEFT_CLIENT, authorizeUrl, exchangeWeft, pkce, signIn, startLoopback };

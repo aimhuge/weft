@@ -66,7 +66,7 @@ const timer = createStartupTimer({
 
 // The secrets vault, set up further down; the pane types its values in for threads (fillSecret).
 // With it, commands and dev servers run with vault values (secret-run.cjs) and the push to Vercel (vercel-env.cjs).
-let vault, secretRun, vercelEnv, vercelApi, supabaseApi;
+let vault, secretRun, vercelEnv, vercelApi, supabaseApi, blastcpApi;
 // Small native warning dialog; shared by pageLinks (walk-through buttons) and accountLink (OAuth callback).
 const warnUser = (message, detail) => dialog.showMessageBox(win, { type: "warning", message, detail });
 const pane = createBrowserPane({
@@ -80,7 +80,7 @@ const pane = createBrowserPane({
   routes: paneRoutes({
     dataDir: dataDir(), app, dialog, shell, sendMenu,
     window: () => win, board: () => appView?.webContents, updater: () => menus.updater,
-    vault: () => vault, vercelEnv: () => vercelEnv, vercelApi: () => vercelApi, supabaseApi: () => supabaseApi,
+    vault: () => vault, vercelEnv: () => vercelEnv, vercelApi: () => vercelApi, supabaseApi: () => supabaseApi, blastcpApi: () => blastcpApi,
   }),
 });
 // A walk-through page's buttons: replies, and commits that run with no turn.
@@ -409,7 +409,7 @@ require("./app-setup.cjs").setupApps({
   getSafeStorage: () => require("electron").safeStorage,
 });
 // And BlastCP: its sign-in is in the Keychain too, and which property a folder posts as is in the data folder.
-require("./blastcp.cjs").setupBlastcp({ ipcMain, dataDir: dataDir(), board: () => appView?.webContents });
+blastcpApi = require("./blastcp.cjs").setupBlastcp({ ipcMain, dataDir: dataDir(), board: () => appView?.webContents });
 // And Cloudflare: its token is in the Keychain and which Worker or Pages project a folder is is in the data folder.
 require("./cloudflare.cjs").setupCloudflare({ ipcMain, dataDir: dataDir(), board: () => appView?.webContents });
 // Keep Working (electron/keep-working.cjs): the board's Settings → General → Laptop mode card; the

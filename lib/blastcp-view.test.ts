@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { blastcpBridge, blastcpTitle, createProperty, newPropertyName, needsRestart, restartWeft, countsLine, expiryNote, platformName, propertyOptions, queueOf, shownFolders, untilText, type BlastcpBridge, type BlastcpFolder, type BlastcpPost, type BlastcpStatus } from "./blastcp-view";
+import { blastcpBridge, blastcpTitle, createProperty, newPropertyName, needsRestart, restartWeft, countsLine, expiryNote, platformName, propertyOptions, queueOf, shownFolders, untilText, weftConnectNote, type BlastcpBridge, type BlastcpFolder, type BlastcpPost, type BlastcpStatus } from "./blastcp-view";
 
 const NOW = Date.UTC(2026, 9, 12, 12);
 const H = 3_600_000;
@@ -163,5 +163,15 @@ describe("shownFolders and blastcpTitle", () => {
     expect(blastcpTitle(status([folder("/a")]), null)).toBe("BlastCP: no property linked yet");
     expect(blastcpTitle(status([folder("/a", { link: link("Weft") }), folder("/b", { link: link("Blog") })]), null)).toBe("BlastCP: Weft, Blog");
     expect(blastcpTitle(status([folder("/a", { link: link("Weft") }), folder("/b", { link: link("Blog") })]), "/b")).toBe("BlastCP: Blog");
+  });
+});
+
+describe("weftConnectNote", () => {
+  it("is null once connected, and says what to do otherwise", () => {
+    expect(weftConnectNote({ state: "connected" })).toBeNull();
+    expect(weftConnectNote({ state: "link", linkUrl: "https://blastcp.com/link/weft" })).toMatch(/already has a BlastCP account/);
+    expect(weftConnectNote({ state: "signed-out" })).toMatch(/Sign in to your Weft account/);
+    expect(weftConnectNote({ state: "off" })).toMatch(/disconnected/);
+    expect(weftConnectNote({ state: "unavailable" })).toMatch(/can't take a Weft sign-in yet/);
   });
 });

@@ -4,11 +4,15 @@
 // a thread's BlastCP connector uses. Links live in Weft's data folder, not the repo. Board window only.
 const fs = require("node:fs");
 const path = require("node:path");
-const { ORIGIN, signIn } = require("./blastcp-oauth.cjs");
+const { ORIGIN, WEFT_CLIENT, exchangeWeft, signIn } = require("./blastcp-oauth.cjs");
 const { readTokenRecord, requireKeychain, writeToken } = require("./provider-token.cjs");
 
 const TOKEN_FILE = "blastcp-token.json";
 const LINKS_FILE = "blastcp-links.json";
+// { off: true } after Disconnect, so connecting with your Weft account doesn't bring it straight back.
+const AUTO_FILE = "blastcp-auto.json";
+// A sign-in Weft made from your Weft account is swapped for a fresh one in its last week.
+const RENEW_MS = 7 * 24 * 60 * 60_000;
 // The newest posts a linked folder lists; the queue and the counts come from these.
 const POSTS = 100;
 
@@ -71,16 +75,33 @@ const propertyUrl = (org, property) => `${ORIGIN}/${encodeURIComponent(org)}/pro
  *   fetch?: import("./blastcp-oauth.cjs").Fetch,
  *   openExternal?: (url: string) => void,
  *   login?: typeof signIn,
+ *   swap?: typeof exchangeWeft,
  * }} options
  */
-function createBlastcp({ dataDir, safeStorage, fetch: fetchImpl = globalThis.fetch, openExternal = () => {}, login = signIn }) {
+function createBlastcp({ dataDir, safeStorage, fetch: fetchImpl = globalThis.fetch, openExternal = () => {}, login = signIn, swap = exchangeWeft }) {
   const tokenFile = path.join(dataDir, TOKEN_FILE);
   const linksFile = path.join(dataDir, LINKS_FILE);
+  const autoFile = path.join(dataDir, AUTO_FILE);
   let rpcId = 0;
+  // BlastCP's page for confirming that your Weft account is your existing BlastCP account, until it's done.
+  /** @type {string | null} */
+  let linkUrl = null;
 
   function saved() {
     const data = readTokenRecord(tokenFile, safeStorage);
-    return data ? { token: data.token, expiresAt: data.expiresAt ?? null } : null;
+    return data ? { token: data.token, expiresAt: data.expiresAt ?? null, viaWeft: data.clientId === WEFT_CLIENT } : null;
+  }
+
+  const autoOff = () => {
+    try {
+      return JSON.parse(fs.readFileSync(autoFile, "utf8")).off === true;
+    } catch {
+      return false;
+    }
+  };
+  function setAutoOff(off) {
+    fs.mkdirSync(dataDir, { recursive: true });
+    fs.writeFileSync(autoFile, JSON.stringify({ off }));
   }
 
   /** @returns {Record<string, { org: string, property: string, name: string }>} */
@@ -157,7 +178,15 @@ function createBlastcp({ dataDir, safeStorage, fetch: fetchImpl = globalThis.fet
           return row;
         }),
       );
-      return { signedIn: Boolean(session), user, expiresAt: session?.expiresAt ?? null, error, folders: rows };
+      return {
+        signedIn: Boolean(session),
+        user,
+        expiresAt: session?.expiresAt ?? null,
+        error,
+        folders: rows,
+        viaWeft: Boolean(session?.viaWeft),
+        linkUrl: session && !error ? null : linkUrl,
+      };
     },
 
     // Runs the browser sign-in and keeps the token. Only one at a time: a second Connect waits on the first.
@@ -177,8 +206,32 @@ function createBlastcp({ dataDir, safeStorage, fetch: fetchImpl = globalThis.fet
       };
     })(),
 
+    // Connects with your Weft account's access token (lib/blastcp-auto.ts sends it: on Weft sign-in, twice a
+    // day, and from the drawer's button, which passes force). A sign-in you made with Connect stays yours; one
+    // made this way is renewed in its last week. After Disconnect only force connects again.
+    async connectWeft(subjectToken, { force = false } = {}) {
+      if (!subjectToken) throw new Error("Sign in to your Weft account first.");
+      if (force) setAutoOff(false);
+      else if (autoOff()) return { state: "off" };
+      const session = fs.existsSync(tokenFile) ? saved() : null;
+      const renew = session?.viaWeft && session.expiresAt !== null && Number(session.expiresAt) - Date.now() < RENEW_MS;
+      if (session && !force && !renew) return { state: "connected" };
+      requireKeychain(safeStorage, "BlastCP sign-in");
+      const got = await swap({ fetch: fetchImpl, subjectToken });
+      if (!got) return { state: "unavailable" };
+      if ("linkUrl" in got) {
+        linkUrl = got.linkUrl;
+        return { state: "link", linkUrl };
+      }
+      const me = await whoami(got.token);
+      writeToken(tokenFile, safeStorage, got.token, { expiresAt: got.expiresAt, clientId: got.clientId });
+      linkUrl = null;
+      return { state: "connected", email: me.email, created: got.created };
+    },
+
     forget() {
       fs.rmSync(tokenFile, { force: true });
+      setAutoOff(true);
       return { signedIn: false };
     },
 
@@ -233,4 +286,4 @@ function setupBlastcp({ ipcMain, dataDir, board }) {
   return blastcp;
 }
 
-module.exports = { setupBlastcp, createBlastcp, registerBlastcp, parseWorkspaces, postOf, BlastcpError, TOKEN_FILE, LINKS_FILE };
+module.exports = { setupBlastcp, createBlastcp, registerBlastcp, parseWorkspaces, postOf, BlastcpError, TOKEN_FILE, LINKS_FILE, AUTO_FILE };

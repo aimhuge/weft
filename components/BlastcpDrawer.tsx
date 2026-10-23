@@ -10,12 +10,14 @@ import {
   queueOf,
   shownFolders,
   untilText,
+  weftConnectNote,
   type BlastcpBridge,
   type BlastcpFolder,
   type BlastcpPost,
   type BlastcpStatus,
   type BlastcpWorkspace,
 } from "@/lib/blastcp-view";
+import { api } from "@/lib/client";
 import { folderName, timeAgo } from "@/lib/format";
 import { useNow } from "@/lib/use-now";
 import { BlastcpConnect, BlastcpRestart, SMALL } from "./BlastcpConnect";
@@ -79,8 +81,27 @@ export default function BlastcpDrawer({
       notify(`Connected to BlastCP as ${email}`);
     });
 
+  // Your Weft account's sign-in swapped for a BlastCP one (lib/blastcp-auto.ts); BlastCP makes the account the first time.
+  const connectWeft = () =>
+    void change(async () => {
+      const result = await api.connectBlastcpWithWeft();
+      setWorkspaces(null);
+      const created = result.state === "connected" && result.created;
+      notify(weftConnectNote(result) ?? (created ? "Made your BlastCP account and connected it" : "Connected to BlastCP with your Weft account"));
+    });
+
   if (!status.signedIn || status.error)
-    return <BlastcpConnect error={status.error} busy={busy} onConnect={connect} onForget={status.signedIn ? () => void change(() => blastcp.forget()) : undefined} />;
+    return (
+      <BlastcpConnect
+        error={status.error}
+        busy={busy}
+        linkUrl={status.linkUrl}
+        onWeft={connectWeft}
+        onConnect={connect}
+        onOpenUrl={onOpenUrl}
+        onForget={status.signedIn ? () => void change(() => blastcp.forget()) : undefined}
+      />
+    );
 
   async function startPicking(folder: string) {
     setPicking(folder);
@@ -98,12 +119,12 @@ export default function BlastcpDrawer({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex items-center gap-1 border-b border-line px-3 py-1.5 text-[11px] text-muted">
-        <span className="min-w-0 flex-1 truncate" title={expiry ?? undefined}>
+        <span className="min-w-0 flex-1 truncate" title={expiry ?? (status.viaWeft ? "Connected with your Weft account; Weft renews it" : undefined)}>
           {status.user?.email}
           {expiry && <span className="text-warn"> · {expiry}</span>}
         </span>
         {expiry && (
-          <button onClick={connect} disabled={busy} className={SMALL}>
+          <button onClick={status.viaWeft ? connectWeft : connect} disabled={busy} className={SMALL}>
             Reconnect
           </button>
         )}

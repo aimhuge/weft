@@ -10,6 +10,7 @@ import type { GithubStatus } from "./github-view";
 import type { MediaKind } from "./media";
 import type { BillingClientView } from "./client-bridge";
 import type { CopilotPersona } from "./copilot-personas";
+import type { WeftConnect } from "./blastcp-view";
 import type {
   AccountProvider,
   AccountView,
@@ -291,6 +292,8 @@ export const api = {
   addHook: (folder: string) => call<{ repo: string }>("POST", "/api/github/hooks", { folder }),
   removeHook: (folder: string) => call<{ ok: true }>("DELETE", "/api/github/hooks", { folder }),
   // Live pull from Vercel: a team webhook relayed by Weft's Supabase pulls new env variables into the vault (lib/vercel-hooks.ts).
+  // The BlastCP drawer's "Connect with your Weft account" (lib/blastcp-auto.ts): main swaps the Weft sign-in for a BlastCP one.
+  connectBlastcpWithWeft: () => call<WeftConnect>("POST", "/api/blastcp"),
   vercelHooks: () => call<{ signedIn: boolean; teams: string[] }>("GET", "/api/vercel/hooks"),
   addVercelHook: (folder: string) => call<{ team: string }>("POST", "/api/vercel/hooks", { folder }),
   removeVercelHook: (folder: string) => call<{ ok: true }>("DELETE", "/api/vercel/hooks", { folder }),

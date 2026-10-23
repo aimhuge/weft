@@ -13,7 +13,7 @@ function statusRoute(api) {
   return ({ folders }) => api()?.status((folders ?? []).map(String)) ?? { folders: [] };
 }
 
-function paneRoutes({ dataDir, app, dialog, shell, window, board, sendMenu, updater, vault, vercelEnv, vercelApi, supabaseApi }) {
+function paneRoutes({ dataDir, app, dialog, shell, window, board, sendMenu, updater, vault, vercelEnv, vercelApi, supabaseApi, blastcpApi = () => null }) {
   return {
     // The Weft account's session, sealed by safeStorage; the server reads it here instead of a plain file.
     ...accountRoutesFor(dataDir),
@@ -61,6 +61,13 @@ function paneRoutes({ dataDir, app, dialog, shell, window, board, sendMenu, upda
     // The latest deploy and the unapplied migrations, per folder.
     "POST /vercel/status": statusRoute(vercelApi),
     "POST /supabase/status": statusRoute(supabaseApi),
+    // Connecting BlastCP with your Weft account (lib/blastcp-auto.ts): the account's access token in, swapped by
+    // main for a BlastCP sign-in it keeps in the Keychain. Only the outcome goes back.
+    "POST /blastcp/connect-weft": ({ subjectToken, force }) => {
+      const blastcp = blastcpApi();
+      if (!blastcp) throw new Error("BlastCP isn't set up in this Weft yet. Restart Weft.");
+      return blastcp.connectWeft(String(subjectToken ?? ""), { force: force === true });
+    },
     // mcp__board_view__*: threads see and drive the board itself, secrets redacted (electron/board-view.cjs).
     ...boardViewRoutes(createBoardView({ board })),
   };

@@ -251,7 +251,7 @@ If you are an agent editing this repo, you are working on me. Read README.md for
   folder's wrangler config; docs/architecture/cloudflare.md).
 - `electron/blastcp*.cjs` + `lib/blastcp-view.ts` + `lib/use-blastcp.ts` + `components/BlastcpDrawer.tsx`: the BlastCP drawer (its rocket logo on the rail, `components/BlastcpLogo.tsx`) (OAuth + PKCE
   sign-in sealed in the Keychain, reads through BlastCP's MCP tools, folder → property links in `~/.weft/blastcp-links.json`; docs/architecture/blastcp.md).
-  `lib/blastcp-auto.ts` + `app/api/blastcp` + `electron/blastcp.cjs` `connectWeft`: connecting with your Weft account, the account's access token swapped for a BlastCP sign-in (RFC 8693, `exchangeWeft` in `electron/blastcp-oauth.cjs`) on Weft sign-in, twice a day and from the drawer's Connect with Weft.
+  `lib/blastcp-auto.ts` + `app/api/blastcp` + `electron/blastcp.cjs` `connectWeft`: connecting with your Weft account, the account's access token swapped for a BlastCP sign-in (RFC 8693, `exchangeWeft` in `electron/blastcp-oauth.cjs`) on Weft sign-in, every 12 h (`CHECK_MS`) and from the drawer's Connect with Weft; the route answers only the outcome, and signing out writes `~/.weft/blastcp-auto.json` `{off:true}` so the timer doesn't reconnect.
 - The board's native right-click menus (lib/card-menu.ts) are built and popped in `electron/main-menu-popup.cjs`:
   one IPC handler, a fresh `Menu` from the items the board sends, the click → resolve wiring behind a `setTimeout`
   (because click fires before the callback on macOS but not on every platform). `Menu` and `BrowserWindow` are

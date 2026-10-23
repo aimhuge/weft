@@ -6,6 +6,9 @@ import type { BlastcpBridge, BlastcpFolder, BlastcpPost, BlastcpStatus } from "@
 import "./test-utils";
 import BlastcpDrawer from "./BlastcpDrawer";
 
+const connectWeft = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/client", () => ({ api: { connectBlastcpWithWeft: connectWeft } }));
+
 const H = 3_600_000;
 const URL_ = "https://blastcp.com/alex/property/weft";
 
@@ -73,10 +76,37 @@ describe("BlastcpDrawer", () => {
   it("connects through the browser when signed out", async () => {
     const { b, notify, reload } = setup({ signedIn: false, user: null, expiresAt: null, error: null, folders: [] });
     expect(screen.queryByText("Forget it")).not.toBeInTheDocument();
-    await userEvent.click(screen.getByText("Connect BlastCP"));
+    await userEvent.click(screen.getByText("Another BlastCP account"));
     expect(b.connect).toHaveBeenCalled();
     await waitFor(() => expect(notify).toHaveBeenCalledWith("Connected to BlastCP as me@x.com"));
     expect(reload).toHaveBeenCalled();
+  });
+
+  it("connects with the Weft account and says when it made the BlastCP account", async () => {
+    connectWeft.mockResolvedValueOnce({ state: "connected", email: "me@x.com", created: true }).mockResolvedValueOnce({ state: "connected" });
+    const { notify, reload } = setup({ signedIn: false, user: null, expiresAt: null, error: null, folders: [] });
+    await userEvent.click(screen.getByText("Connect with Weft"));
+    await waitFor(() => expect(notify).toHaveBeenCalledWith("Made your BlastCP account and connected it"));
+    expect(reload).toHaveBeenCalled();
+    await userEvent.click(screen.getByText("Connect with Weft"));
+    await waitFor(() => expect(notify).toHaveBeenCalledWith("Connected to BlastCP with your Weft account"));
+  });
+
+  it("explains a Weft connect that didn't connect, and opens BlastCP's confirm page", async () => {
+    connectWeft.mockResolvedValueOnce({ state: "signed-out" });
+    const { notify, onOpenUrl } = setup({ signedIn: false, user: null, expiresAt: null, error: null, folders: [], linkUrl: "https://blastcp.com/link/weft?ticket=t" });
+    await userEvent.click(screen.getByText("Connect with Weft"));
+    await waitFor(() => expect(notify).toHaveBeenCalledWith(expect.stringMatching(/Sign in to your Weft account/)));
+    await userEvent.click(screen.getByText("Confirm it's you on BlastCP"));
+    expect(onOpenUrl).toHaveBeenCalledWith("https://blastcp.com/link/weft?ticket=t");
+  });
+
+  it("renews a sign-in Weft made through Weft, not the browser", async () => {
+    connectWeft.mockResolvedValueOnce({ state: "connected" });
+    const { b } = setup(signedIn([], { viaWeft: true, expiresAt: Date.now() + 2 * 24 * H }));
+    await userEvent.click(screen.getByText("Reconnect"));
+    await waitFor(() => expect(connectWeft).toHaveBeenCalled());
+    expect(b.connect).not.toHaveBeenCalled();
   });
 
   it("offers to forget a sign-in BlastCP turned down, and reports a failed connect", async () => {
@@ -84,7 +114,7 @@ describe("BlastcpDrawer", () => {
     b.connect.mockRejectedValueOnce(new Error("You turned BlastCP down in the browser."));
     const { notify } = setup(signedIn([], { error: "BlastCP's sign-in ran out. Connect again." }), { b });
     expect(screen.getByText(/sign-in ran out/)).toBeInTheDocument();
-    await userEvent.click(screen.getByText("Connect BlastCP"));
+    await userEvent.click(screen.getByText("Another BlastCP account"));
     await waitFor(() => expect(notify).toHaveBeenCalledWith(expect.objectContaining({ message: "You turned BlastCP down in the browser." })));
     await userEvent.click(screen.getByText("Forget it"));
     expect(b.forget).toHaveBeenCalled();

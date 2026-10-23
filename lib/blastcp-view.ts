@@ -43,6 +43,36 @@ export interface BlastcpStatus {
   // The saved sign-in didn't work.
   error: string | null;
   folders: BlastcpFolder[];
+  // The sign-in came from your Weft account (lib/blastcp-auto.ts), not a Connect in the browser.
+  viaWeft?: boolean;
+  // Your Weft email already has a BlastCP account: this BlastCP page confirms the link once.
+  linkUrl?: string | null;
+}
+
+// What connecting with your Weft account came to (lib/blastcp-auto.ts, electron/blastcp.cjs connectWeft).
+export type WeftConnect =
+  | { state: "connected"; email?: string; created?: boolean }
+  | { state: "link"; linkUrl: string }
+  // You disconnected BlastCP, so only the drawer's button connects it again.
+  | { state: "off" }
+  // This BlastCP can't swap a Weft sign-in yet, or there's no desktop app to keep the sign-in.
+  | { state: "unavailable" }
+  | { state: "signed-out" };
+
+// The drawer's toast for a Weft connect that didn't end connected, or null when it did.
+export function weftConnectNote(result: WeftConnect): string | null {
+  switch (result.state) {
+    case "connected":
+      return null;
+    case "link":
+      return "Your email already has a BlastCP account. Confirm it on BlastCP, then connect again.";
+    case "signed-out":
+      return "Sign in to your Weft account first (top right), then connect again.";
+    case "off":
+      return "BlastCP is disconnected. Click Connect with your Weft account to turn it back on.";
+    case "unavailable":
+      return "BlastCP can't take a Weft sign-in yet. Use Connect in the browser instead.";
+  }
 }
 
 export interface BlastcpWorkspace {
