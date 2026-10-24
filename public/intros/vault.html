@@ -1,10 +1,10 @@
 <!doctype html>
 <!--
   The 🔐 Secrets drawer's intro (components/FeatureIntro.tsx plays it the first time the drawer opens), a HyperFrames
-  composition in the shared look (./kit.css): 0–5.5s your keys, encrypted on your Mac; 5.5–11s a thread adds a blank you
-  fill in; 11–17s Touch ID lets a thread use a key it never sees; 17–21.5s push to Vercel; 21.5–26.5s the close, the
-  whole drawer quieted under the vault's promise. The voice is #narration, read by `pnpm intros:narrate`
-  (scripts/narrate-intros.mjs) into ./vault.m4a. Seekable: no timers, no tl.call.
+  composition in the shared look (./kit.css): 0–8.6s your keys and passwords, encrypted in your Keychain; 8.8–14.5s your
+  AI asks for a key and Touch ID gives permission; 14.7–17.2s Weft teams share one vault; 17.4–24s the vault syncs to Vercel. The voice is #narration, read by
+  `pnpm intros:narrate` (scripts/narrate-intros.mjs) into ./vault.m4a; the beats sit on its words (./vault.words.json).
+  Seekable: no timers, no tl.call.
 -->
 <html>
 <head>
@@ -14,57 +14,69 @@
 <link rel="stylesheet" href="./kit.css">
 <style>
   .lock { width: 40px; height: 40px; flex: none; color: #8d95aa; }
-  #r0 { top: 26px; } #r1 { top: 140px; } #r2 { top: 254px; } #r3 { top: 368px; }
-  #blank { top: 26px; border-color: #f0b42999; }
-  #by { left: 26px; top: 482px; width: 688px; }
+  #r0 { top: 26px; } #r1 { top: 140px; } #r2 { top: 254px; }
+  /* The names run long (DATABASE_PASSWORD), so they sit a size down to fit whole. */
+  .row .n.mono { font-size: 29px; }
+  .row .end.mono { font-size: 29px; }
+  /* Where the values live: the Mac's Keychain. */
+  #kc { left: 26px; top: 382px; }
+  /* Your AI's card, asking for a key. */
+  #by { left: 26px; top: 470px; width: 688px; }
+  #by .ok { color: #5fd38d; }
   #touch { left: 70px; top: 230px; width: 660px; border-radius: 28px; background: #f6f7f9; color: #111827; padding: 34px 36px; text-align: center;
     box-shadow: 0 30px 80px #000a; z-index: 5; }
   #touch .fp { width: 130px; height: 130px; margin: 0 auto 18px; border-radius: 50%; border: 6px solid #e5484d; display: flex; align-items: center;
     justify-content: center; font-size: 70px; }
   #touch .q { font-size: 34px; font-weight: 600; line-height: 1.25; }
   #touch .q small { display: block; margin-top: 10px; font-size: 28px; color: #6b7280; font-weight: 400; }
-  #field { left: 26px; top: 520px; width: 688px; height: 80px; border-radius: 16px; background: #fff; color: #111827; font-size: 30px;
-    display: flex; align-items: center; padding: 0 22px; }
-  #field i { font-style: normal; color: #4f7cff; font-weight: 600; }
-  #push { left: 26px; top: 500px; }
-  #pushed { left: 26px; top: 500px; }
-  /* The closing beat: the whole panel, quiet, with the vault's promise over it. */
-  #close { left: 40px; top: 800px; width: 720px; font-size: 44px; font-weight: 600; line-height: 1.22; color: #f1f3f8;
-    letter-spacing: -0.01em; z-index: 6; }
-  #close b { color: #f0b429; font-weight: 600; }
+  /* The team's shared vault. */
+  #team { left: 26px; top: 470px; width: 688px; min-height: 110px; border-radius: 20px; background: #1b2a4d; border: 2px solid #35508f;
+    padding: 18px 24px; display: flex; align-items: center; gap: 20px; font-size: 32px; }
+  #team .who { display: flex; }
+  #team .av { width: 60px; height: 60px; border-radius: 50%; border: 4px solid #1b2a4d; margin-left: -16px; display: flex; align-items: center;
+    justify-content: center; font-size: 26px; font-weight: 700; color: #0d0f14; }
+  #team .av:first-child { margin-left: 0; }
+  #team b { font-weight: 650; }
+  #team small { display: block; font-size: 26px; color: #9fb6e8; }
+  /* The vault synced to Vercel's production env. */
+  #sync { left: 26px; top: 470px; width: 688px; min-height: 110px; border-radius: 20px; background: #1f2433; border: 2px solid #2d3346;
+    padding: 18px 24px; display: flex; align-items: center; gap: 20px; font-size: 32px; }
+  #sync .tri { width: 60px; height: 60px; border-radius: 14px; background: #000; color: #fff; display: flex; align-items: center;
+    justify-content: center; font-size: 30px; flex: none; }
+  #sync small { display: block; font-size: 26px; color: #8d95aa; }
+  #sync .end { margin-left: auto; }
+  .shared { opacity: 0; color: #7aa7ff; font-size: 28px; margin-left: 10px; }
 </style>
 </head>
 <body>
-<div id="root" data-composition-id="root" data-start="0" data-duration="26.5" data-width="800" data-height="1000">
+<div id="root" data-composition-id="root" data-start="0" data-duration="24" data-width="1600" data-height="900">
   <div class="abs head"><span class="ic">🔐</span>Secrets</div>
-  <div class="abs panel" id="panel">
-    <div class="abs row" id="r0"><svg class="lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg><span class="n mono">STRIPE_SECRET_KEY</span><span class="end mono" style="color:#8d95aa">••••4f2a</span></div>
-    <div class="abs row" id="r1"><svg class="lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg><span class="n mono">DATABASE_URL</span><span class="end mono" style="color:#8d95aa">••••5432</span></div>
-    <div class="abs row" id="r2"><svg class="lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg><span class="n mono">OPENAI_API_KEY</span><span class="end mono" style="color:#8d95aa">••••9c1e</span></div>
-    <div class="abs row" id="blank"><span class="n mono">RESEND_API_KEY</span><span class="end swap"><span class="pill warn" id="fillBtn">Fill in</span><span class="pill on" id="filled">✓ saved</span></span></div>
-    <div class="abs card" id="by" style="width:688px"><div class="t">Send the welcome email</div><div class="p"><span class="spin"></span>added a blank: RESEND_API_KEY</div></div>
-    <div class="abs" id="field">dashboard.stripe.com&nbsp;·&nbsp;<i>‹STRIPE_SECRET_KEY›</i></div>
-    <div class="abs btn" id="push">▲ Push to Vercel</div>
-    <div class="abs pill on" id="pushed" style="height:64px;font-size:32px">✓ Pushed to production</div>
+  <div class="abs art">
+    <div class="abs panel" id="panel">
+      <div class="abs row" id="r0"><svg class="lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg><span class="n mono">STRIPE_SECRET_KEY</span><span class="shared">👥</span><span class="end mono" style="color:#8d95aa">••••4f2a</span></div>
+      <div class="abs row" id="r1"><svg class="lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg><span class="n mono">OPENAI_API_KEY</span><span class="shared">👥</span><span class="end mono" style="color:#8d95aa">••••9c1e</span></div>
+      <div class="abs row" id="r2"><svg class="lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg><span class="n mono">DATABASE_PASSWORD</span><span class="shared">👥</span><span class="end mono" style="color:#8d95aa">••••••••</span></div>
+      <div class="abs pill on" id="kc" style="height:60px;font-size:30px">🔒 Encrypted in your Mac's Keychain</div>
+      <div class="abs card" id="by"><div class="t">Set up billing</div><div class="p" id="ask"><span class="spin"></span>needs STRIPE_SECRET_KEY</div><div class="p ok" id="got" style="display:none">✓ using STRIPE_SECRET_KEY</div></div>
+      <div class="abs" id="sync"><span class="tri">▲</span><span><b>Vercel</b> · production<small>Synced from your vault</small></span><span class="end swap"><span class="pill info" id="syncing">Syncing…</span><span class="pill on" id="synced">✓ 3 keys</span></span></div>
+      <div class="abs" id="team"><span class="who"><span class="av" style="background:#f0b429">A</span><span class="av" style="background:#5fd38d">M</span><span class="av" style="background:#7aa7ff">J</span></span><span><b>aimhuge</b> team vault<small>Everyone's keys, in one place</small></span></div>
+    </div>
+    <div class="abs" id="touch"><div class="fp" id="fp">☝︎</div><div class="q">Allow your AI to use STRIPE_SECRET_KEY<small>for “Set up billing”</small></div></div>
   </div>
-  <div class="abs" id="touch"><div class="fp" id="fp">☝︎</div><div class="q">Use STRIPE_SECRET_KEY<small>for “Set up billing” on dashboard.stripe.com</small></div></div>
-  <svg class="abs cursor" id="cur" viewBox="0 0 24 24"><path d="M4 2l16 10-7 1.5L9.5 21z" fill="#fff" stroke="#111" stroke-width="1.2"/></svg>
 
-  <div class="abs cap" id="c1">Your keys, <b>encrypted</b> on your Mac.</div>
-  <div class="abs cap" id="c2">A thread needs a key? It adds a <b>blank</b> for you.</div>
-  <div class="abs cap" id="c3">Threads <b>use</b> your keys, but never <b>see</b> them.</div>
-  <div class="abs cap" id="c4">Push them to <b>Vercel</b> in one tap.</div>
-  <div class="abs" id="close">And of course, all your credentials are safely stored in <b>Weft's</b> secrets vault.</div>
+  <div class="abs cap" id="c1">Your keys and passwords, <b>encrypted</b> in your Keychain.</div>
+  <div class="abs cap" id="c2">Your AI asks. <b>Touch ID</b> gives permission.</div>
+  <div class="abs cap" id="c3">With <b>Weft teams</b>, share one vault.</div>
+  <div class="abs cap" id="c4">Your vault, <b>synced</b> to Vercel.</div>
   <div class="abs" id="fade"></div>
 </div>
 
 <script type="application/json" id="narration">
-{ "duration": 26.5, "lines": [
-  [0.3, 5.3, "Your keys live in the vault, encrypted on your Mac."],
-  [5.6, 10.8, "When a thread needs a key, it adds a blank for you to fill in."],
-  [11.2, 16.8, "Threads use your keys with Touch ID, but never see them."],
-  [17.2, 21.3, "And one tap pushes them to Vercel."],
-  [21.8, 26.3, "And of course, all your credentials are safely stored in Weft's secrets vault."]
+{ "duration": 24, "lines": [
+  [0.3, 8.63, "Weft's secure vault stores all your environment variables, like API keys and database passwords, encrypted in your Mac's Keychain."],
+  [8.82, 14.48, "When your AI needs to create or use a key, Touch ID lets you securely give permission."],
+  [14.68, 17.15, "And Weft teams gives you a shared vault."],
+  [17.35, 21.5, "Weft vaults can also be synced to Vercel with our Vercel connector."]
 ] }
 </script>
 <script src="../welcome/gsap.min.js"></script>
@@ -72,55 +84,53 @@
 <script>
   const tl = gsap.timeline({ paused: true });
   const caps = ["#c1", "#c2", "#c3", "#c4"];
-  const at = [0.2, 5.5, 11, 17];
-  gsap.set(["#blank", "#by", "#field", "#push", "#pushed", "#touch", "#filled", "#cur", "#close", ...caps], { opacity: 0 });
-  gsap.set("#cur", { x: 560, y: 900 });
+  const at = [0.2, 8.8, 14.6, 17.3];
+  gsap.set(["#kc", "#by", "#touch", "#team", "#got", "#sync", "#synced", ...caps], { opacity: 0 });
 
   tl.to("#fade", { opacity: 0, duration: 0.4 }, 0);
-  ["#r0", "#r1", "#r2"].forEach((r, i) => tl.from(r, { opacity: 0, x: 40, duration: 0.45 }, 0.4 + i * 0.35));
   caps.forEach((c, i) => {
     tl.fromTo(c, { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.4 }, at[i]);
     if (i < caps.length - 1) tl.to(c, { opacity: 0, duration: 0.3 }, at[i + 1] - 0.3);
   });
 
-  // A thread adds a blank: the rows move down, the blank slides in, the cursor fills it in.
-  tl.to(["#r0", "#r1", "#r2"], { y: 114, duration: 0.5 }, 5.6)
-    .to("#blank", { opacity: 1, duration: 0.4 }, 5.9)
-    .fromTo("#blank", { x: -40 }, { x: 0, duration: 0.4 }, 5.9)
-    .to("#by", { opacity: 1, duration: 0.4 }, 6.3)
-    .to("#cur", { opacity: 1, duration: 0.2 }, 7.4)
-    .to("#cur", { x: 640, y: 210, duration: 0.9, ease: "power2.inOut" }, 7.4)
-    .to("#fillBtn", { scale: 0.92, duration: 0.1, yoyo: true, repeat: 1 }, 8.4)
-    .to("#fillBtn", { opacity: 0, duration: 0.3 }, 8.9)
-    .to("#filled", { opacity: 1, duration: 0.3 }, 8.9)
-    .to("#cur", { opacity: 0, duration: 0.3 }, 9.6);
+  // Your keys and passwords: the rows come in as the voice names them, the password lights up on "passwords",
+  // and the Keychain line lands on "encrypted".
+  ["#r0", "#r1", "#r2"].forEach((r, i) => tl.from(r, { opacity: 0, x: 40, duration: 0.45 }, 0.5 + i * 0.5));
+  tl.to("#r2", { borderColor: "#f0b429", duration: 0.3 }, 5.0)
+    .to("#r2", { borderColor: "#2d3346", duration: 0.5 }, 6.4)
+    .to("#kc", { opacity: 1, duration: 0.4 }, 6.4)
+    .fromTo("#kc", { y: 12 }, { y: 0, duration: 0.4 }, 6.4);
 
-  // Touch ID: the sheet over the panel, the fingerprint turns green, the value goes in as its name only.
-  tl.to("#by", { opacity: 0, duration: 0.3 }, 10.8)
-    .to("#panel", { opacity: 0.35, duration: 0.4 }, 11.1)
-    .to("#touch", { opacity: 1, duration: 0.4 }, 11.2)
-    .fromTo("#touch", { scale: 0.92 }, { scale: 1, duration: 0.4 }, 11.2)
-    .to("#fp", { borderColor: "#30a46c", color: "#30a46c", duration: 0.4 }, 13.2)
-    .to("#touch", { opacity: 0, duration: 0.3 }, 14.2)
-    .to("#panel", { opacity: 1, duration: 0.3 }, 14.2)
-    .to("#field", { opacity: 1, duration: 0.4 }, 14.5)
-    .fromTo("#field i", { opacity: 0 }, { opacity: 1, duration: 0.4 }, 15);
+  // Your AI asks: its card comes in, Touch ID's sheet over the panel, the fingerprint turns green, the card has its key.
+  tl.to("#kc", { opacity: 0, duration: 0.3 }, 8.9)
+    .to("#by", { opacity: 1, duration: 0.4 }, 9.0)
+    .fromTo("#by", { y: 16 }, { y: 0, duration: 0.4 }, 9.0)
+    .to("#panel", { opacity: 0.35, duration: 0.4 }, 10.9)
+    .to("#touch", { opacity: 1, duration: 0.4 }, 10.9)
+    .fromTo("#touch", { scale: 0.92 }, { scale: 1, duration: 0.4 }, 10.9)
+    .to("#fp", { borderColor: "#30a46c", color: "#30a46c", duration: 0.4 }, 12.5)
+    .to("#touch", { opacity: 0, duration: 0.3 }, 13.5)
+    .to("#panel", { opacity: 1, duration: 0.3 }, 13.5)
+    .set("#ask", { display: "none" }, 13.7)
+    .set("#got", { display: "flex" }, 13.7)
+    .to("#got", { opacity: 1, duration: 0.3 }, 13.7);
 
-  // Push to Vercel.
-  tl.to("#field", { opacity: 0, duration: 0.3 }, 16.8)
-    .to("#push", { opacity: 1, duration: 0.3 }, 17.2)
-    .set("#cur", { x: 300, y: 860 }, 17.2)
-    .to("#cur", { opacity: 1, duration: 0.2 }, 17.6)
-    .to("#cur", { x: 240, y: 700, duration: 0.8, ease: "power2.inOut" }, 17.6)
-    .to("#push", { scale: 0.94, duration: 0.1, yoyo: true, repeat: 1 }, 18.5)
-    .to("#push", { opacity: 0, duration: 0.25 }, 18.9)
-    .to("#pushed", { opacity: 1, duration: 0.3 }, 18.9)
-    .to("#cur", { opacity: 0, duration: 0.3 }, 19.6);
+  // Weft teams: the card goes, the team's vault comes in and every key is marked shared.
+  tl.to("#by", { opacity: 0, duration: 0.3 }, 14.4)
+    .to("#team", { opacity: 1, duration: 0.4 }, 14.7)
+    .fromTo("#team", { y: 16 }, { y: 0, duration: 0.4 }, 14.7)
+    .fromTo("#team .av", { scale: 0 }, { scale: 1, duration: 0.3, stagger: 0.15 }, 15.0)
+    .to(".shared", { opacity: 1, duration: 0.3, stagger: 0.2 }, 15.8);
 
-  // The close: everything quiets down and the vault's promise lands over the whole drawer.
-  tl.to("#panel", { filter: "saturate(.5) brightness(.62)", duration: 0.8 }, 21.4)
-    .fromTo("#close", { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.6 }, 21.9)
-    .to("#fade", { opacity: 0, duration: 0.01 }, 26.5);
+  // Synced to Vercel: the team bar makes way for Vercel's production env, which fills from the vault on "Vercel".
+  tl.to("#team", { opacity: 0, duration: 0.3 }, 17.1)
+    .to("#sync", { opacity: 1, duration: 0.4 }, 17.4)
+    .fromTo("#sync", { y: 16 }, { y: 0, duration: 0.4 }, 17.4)
+    .to(["#r0", "#r1", "#r2"], { borderColor: "#4f7cff", duration: 0.25, stagger: 0.25 }, 18.4)
+    .to(["#r0", "#r1", "#r2"], { borderColor: "#2d3346", duration: 0.4 }, 19.6)
+    .to("#syncing", { opacity: 0, duration: 0.3 }, 19.3)
+    .to("#synced", { opacity: 1, duration: 0.3 }, 19.3)
+    .to("#fade", { opacity: 0, duration: 0.01 }, 24);
 
   window.__timelines = window.__timelines || {};
   window.__timelines.root = tl;

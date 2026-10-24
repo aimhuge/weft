@@ -1,0 +1,666 @@
+<!doctype html>
+<!--
+  The ✎ New thread dialog's intro (components/FeatureIntro.tsx plays it the first time the dialog opens), a HyperFrames
+  composition in the shared look (./kit.css). The beats, on the voice's words (./newthread.words.json):
+    0.1s  "start a new thread" — the New thread dialog: header, composer, controls row, footer.
+    4.2s  "control how it runs" — the controls row (folder, Model, Effort, permission mode) lights up, then the AI picker.
+    5.6s  "this video is playing in your browser pane" — zoom out to Weft: board | dialog | browser pane, the pane lit.
+    9.8s  "show you something here" — the pane turns to a reply's page.
+   12.0s  "tell your AI what to build: type it" — the composer, text typing in.
+   15.3s  "paste screenshots" — a screenshot lands inline in the composer.
+   16.7s  "hit the mic" — the mic button lights up.
+   18.5s  "Option apostrophe starts and stops it" — the ⌥ ' key chip presses, the mic goes red, then stops.
+   21.8s  "big idea… talk, and talk, and talk" — the mic records, a waveform runs, a wall of text fills the composer.
+   28.7s  "let your AI sort it out" — the wall of text becomes a tidy plan: headed bullets.
+   32.7s  "give Weft simple instructions" — one short line: "make the header sticky".
+   35.0s  "surprised how well your AI can improvise" — Start, and the card lands in Running, then Done ✓.
+   42.8s  "don't know exactly how… ask your AI" — the composer asks "How should we add billing?".
+   44.1s  "show you a plan in the browser pane" — the pane shows the plan: four steps, the first current.
+   47.3s  "same screen or product area… more than one thread at once" — two cards on checkout, "also busy here".
+   53.7s  "Weft has smart, built-in conflict resolution" — the warning clears on its own.
+   59.3s  "use worktrees" — the second thread takes its own worktree, so the two no longer share.
+   62.0s  "tell your AI to use subagents" — one card fans out into four subagents, running side by side.
+   66.9s  "work through the plan in parallel" — the four tick ✓ in parallel.
+   68.0s  "Now let's get to work. What do you want to build today?" — the empty dialog again, its composer lit.
+  The voice is #narration, read by `pnpm intros:narrate` (scripts/narrate-intros.mjs) into ./newthread.m4a.
+  Seekable: no timers, no tl.call.
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width">
+<title>Weft: new thread</title>
+<link rel="stylesheet" href="./kit.css">
+<style>
+  /* Every scene is drawn in the panel's own coordinates: the panel is 740 wide, 620 tall, at left 30, top 160. */
+  .scene { left: 30px; top: 160px; width: 740px; height: 620px; }
+
+  /* ── The New thread dialog, as Weft's real one ───────────────────────────────── */
+  .dlg { width: 740px; height: 620px; border-radius: 28px; background: #151925; border: 2px solid #232838; overflow: hidden; }
+  .dlghead { left: 0; top: 0; width: 740px; height: 82px; border-bottom: 2px solid #232838; display: flex; align-items: center;
+    padding: 0 26px; font-size: 34px; font-weight: 650; color: #f1f3f8; }
+  .dlghead .x { margin-left: auto; width: 52px; height: 52px; border-radius: 14px; background: #1f2433; border: 2px solid #2d3346;
+    display: flex; align-items: center; justify-content: center; font-size: 30px; color: #8d95aa; }
+  .dlghead .pen { color: #7aa7ff; }
+
+  /* The composer: the big area you write in. */
+  .comp { left: 26px; top: 104px; width: 688px; height: 288px; border-radius: 20px; background: #1f2433; border: 2px solid #2d3346;
+    padding: 22px 24px; font-size: 29px; color: #e8eaf0; }
+  .comp .ph { color: #7d8598; }
+  .comp .line { display: block; line-height: 1.45; }
+  .comp .cursorline { width: 3px; height: 34px; background: #f0b429; display: inline-block; vertical-align: -8px; margin-left: 4px; }
+  .comp .shot { position: absolute; left: 24px; bottom: 24px; width: 196px; height: 128px; border-radius: 14px; background: #101520;
+    border: 2px solid #39415a; overflow: hidden; }
+  .comp .shot .bar { height: 26px; background: #232838; display: flex; align-items: center; gap: 6px; padding: 0 10px; }
+  .comp .shot .dot { width: 8px; height: 8px; border-radius: 50%; background: #4a536e; }
+  .comp .shot .art { position: absolute; left: 0; top: 26px; right: 0; bottom: 0; background:
+    linear-gradient(150deg, #2b3a5c 0%, #1d2740 45%, #3b2a4d 100%); }
+  .comp .shot .art::after { content: ""; position: absolute; left: 22px; top: 22px; width: 92px; height: 12px; border-radius: 6px; background: #7aa7ff88; }
+  .comp .shot .art::before { content: ""; position: absolute; left: 22px; top: 46px; width: 148px; height: 10px; border-radius: 5px; background: #ffffff33; }
+
+  /* The composer's bottom bar: the mic on the right. */
+  .compbar { left: 26px; top: 408px; width: 688px; height: 64px; display: flex; align-items: center; gap: 12px; }
+  .compbar .hint { font-size: 25px; color: #7d8598; }
+  .mic { margin-left: auto; width: 64px; height: 64px; border-radius: 32px; background: #2a3044; border: 2px solid #39415a;
+    display: flex; align-items: center; justify-content: center; flex: none; }
+  .mic svg { width: 28px; height: 28px; color: #c9cfdf; }
+  .mic.rec { background: #e5484d; border-color: #e5484d; }
+  .mic.rec svg { color: #fff; }
+  /* The key chip that starts and stops the mic: ⌥ '. */
+  .keychip { height: 56px; padding: 0 16px; border-radius: 14px; background: #1b2a4d; border: 2px solid #35508f;
+    display: inline-flex; align-items: center; flex: none; font-size: 26px; color: #7aa7ff; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+
+  /* The controls row: folder, Model, Effort, permission mode. */
+  .ctlrow { left: 26px; top: 486px; width: 688px; height: 58px; display: flex; align-items: center; gap: 12px;
+    border-radius: 16px; padding: 0 2px; }
+  .ctl { height: 54px; padding: 0 18px; border-radius: 14px; background: #1f2433; border: 2px solid #2d3346; display: inline-flex;
+    align-items: center; gap: 8px; font-size: 25px; color: #c9cfdf; white-space: nowrap; }
+  .ctl .chev { color: #7d8598; font-size: 20px; margin-left: 2px; }
+  .ctl .folder { color: #8d95aa; }
+
+  /* The footer: the AI picker on the left, the buttons on the right. */
+  .foot { left: 26px; top: 556px; width: 688px; height: 54px; display: flex; align-items: center; gap: 10px; }
+  .aipick { display: inline-flex; align-items: center; height: 52px; padding: 4px; border-radius: 14px; background: #1a1f2c;
+    border: 2px solid #2d3346; flex: none; }
+  .aipick .ai { height: 40px; padding: 0 12px; border-radius: 10px; display: inline-flex; align-items: center; font-size: 23px;
+    color: #8d95aa; white-space: nowrap; }
+  .aipick .ai.on { background: #2a3044; color: #f1f3f8; font-weight: 600; }
+  .foot .spacer { flex: 1; }
+  .fbtn { height: 52px; padding: 0 16px; border-radius: 14px; background: #1f2433; border: 2px solid #39415a; display: inline-flex;
+    align-items: center; font-size: 23px; color: #e8eaf0; white-space: nowrap; flex: none; }
+  .fbtn.go { background: #4f7cff; border-color: #4f7cff; color: #fff; font-weight: 600; }
+  .fbtn .kbd { opacity: 0.7; margin-left: 7px; font-size: 20px; }
+
+  /* ── Scene 2: Weft, zoomed out ──────────────────────────────────────────────── */
+  .win { left: 0; top: 0; width: 740px; height: 620px; border-radius: 26px; background: #101520; border: 2px solid #232838; overflow: hidden; }
+  .winbar { left: 0; top: 0; width: 740px; height: 46px; background: #151925; border-bottom: 2px solid #232838;
+    display: flex; align-items: center; padding: 0 18px; gap: 8px; }
+  .winbar .d { width: 12px; height: 12px; border-radius: 50%; background: #39415a; }
+  .winbar .nm { margin-left: 10px; font-size: 21px; color: #8d95aa; font-weight: 600; }
+  /* The board, on the left: a few columns of small cards. */
+  .board { left: 0; top: 46px; width: 330px; height: 574px; padding: 18px 16px; display: flex; gap: 14px; }
+  .bcol { width: 92px; }
+  .bcol .h { font-size: 19px; color: #7d8598; margin-bottom: 10px; }
+  .bcard { height: 46px; border-radius: 10px; background: #1f2433; border: 2px solid #2d3346; margin-bottom: 10px; padding: 7px 9px; }
+  .bcard .l1 { height: 7px; width: 74%; border-radius: 4px; background: #39415a; }
+  .bcard .l2 { height: 7px; width: 50%; border-radius: 4px; background: #2c3346; margin-top: 7px; }
+  /* The New thread dialog, in the middle. */
+  .mindlg { left: 330px; top: 46px; width: 186px; height: 574px; background: #151925; border-left: 2px solid #232838; padding: 16px 14px; }
+  .mindlg .t { font-size: 20px; font-weight: 650; color: #f1f3f8; }
+  .mindlg .box { margin-top: 14px; height: 120px; border-radius: 12px; background: #1f2433; border: 2px solid #2d3346; padding: 12px; }
+  .mindlg .box .l1 { height: 8px; width: 92%; border-radius: 4px; background: #39415a; }
+  .mindlg .box .l2 { height: 8px; width: 70%; border-radius: 4px; background: #2c3346; margin-top: 10px; }
+  .mindlg .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
+  .mindlg .chips i { height: 22px; padding: 0 9px; border-radius: 7px; background: #2a3044; }
+  /* The browser pane, on the right: lit up. */
+  .pane { left: 516px; top: 46px; width: 224px; height: 574px; background: #121722; border-left: 2px solid #232838; overflow: hidden; }
+  .pane .lit { left: 0; top: 0; width: 224px; height: 574px; border: 3px solid #4f7cff; opacity: 0; border-radius: 6px; }
+  .pane .ph { left: 16px; top: 18px; font-size: 19px; color: #7d8598; }
+  .pane .video { left: 16px; top: 50px; width: 192px; }
+  .pane .play { width: 192px; height: 112px; border-radius: 12px; background: #1f2433; border: 2px solid #39415a;
+    display: flex; align-items: center; justify-content: center; }
+  .pane .play .t { width: 0; height: 0; border-left: 26px solid #f1f3f8; border-top: 16px solid transparent; border-bottom: 16px solid transparent; margin-left: 8px; }
+  .pane .vlabel { margin-top: 12px; font-size: 20px; color: #c9cfdf; }
+  /* The reply's page in the pane: a small plan. */
+  .reply { left: 16px; top: 50px; width: 192px; }
+  .reply .page { border-radius: 12px; background: #f6f7f9; border: 2px solid #39415a; padding: 12px 12px 14px; }
+  .reply .ph2 { height: 9px; width: 60%; border-radius: 5px; background: #c9cfdf; }
+  .reply .pl { margin-top: 10px; }
+  .reply .pl .t1 { height: 8px; width: 84%; border-radius: 4px; background: #98a2b3; }
+  .reply .pl .t2 { height: 8px; width: 60%; border-radius: 4px; background: #cbd2dd; margin-top: 6px; }
+
+  /* The plan page in the pane (scene 6): small enough to sit inside the pane. */
+  .minipage { left: 16px; top: 50px; width: 192px; }
+  .minipage .hd { font-size: 18px; color: #8d95aa; margin-bottom: 10px; }
+  .minipage .st { border-radius: 10px; background: #1f2433; border: 2px solid #2d3346; padding: 9px 10px; margin-bottom: 8px;
+    display: flex; align-items: center; gap: 9px; }
+  .minipage .st .n { width: 26px; height: 26px; border-radius: 8px; background: #2a3044; color: #8d95aa; font-size: 15px;
+    display: flex; align-items: center; justify-content: center; flex: none; }
+  .minipage .st .l { font-size: 16px; color: #c9cfdf; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .minipage .st.cur { border-color: #4f7cff; background: #1b2a4d; }
+  .minipage .st.cur .n { background: #4f7cff; color: #fff; }
+  .minipage .st.cur .l { color: #f1f3f8; font-weight: 600; }
+
+  /* ── Scene 4: the wall of text, and the plan it becomes ────────────────────── */
+  .wave { left: 26px; top: 424px; width: 688px; height: 56px; display: flex; align-items: center; gap: 4px; }
+  .wave i { flex: 1 1 0; border-radius: 3px; background: #e5484d; height: 18px; }
+  .plan { left: 26px; top: 108px; width: 688px; }
+  .plan .pt { font-size: 30px; font-weight: 650; color: #f1f3f8; margin-bottom: 22px; }
+  .plan .step { width: 688px; display: flex; gap: 18px; align-items: flex-start; padding: 16px 0; border-top: 2px solid #232838; }
+  .plan .num { width: 46px; height: 46px; border-radius: 14px; background: #1f2433; border: 2px solid #39415a; flex: none;
+    display: flex; align-items: center; justify-content: center; font-size: 24px; color: #8d95aa; }
+  .plan .step.on .num { background: #1b2a4d; border-color: #35508f; color: #7aa7ff; }
+  .plan .body { min-width: 0; }
+  .plan .hd { display: block; font-size: 29px; font-weight: 600; color: #e8eaf0; }
+  .plan .sub { display: block; font-size: 25px; color: #8d95aa; margin-top: 4px; }
+  .plan .step.on .hd { color: #7aa7ff; }
+
+  /* ── Scene 5: a small idea, started and done ───────────────────────────────── */
+  .mini { left: 26px; top: 108px; width: 688px; }
+  .mini .cardline { width: 688px; border-radius: 20px; background: #1f2433; border: 2px solid #2d3346; padding: 18px 24px;
+    display: flex; align-items: center; gap: 16px; font-size: 29px; }
+  .mini .cardline .t { font-weight: 600; color: #f1f3f8; }
+  .mini .cardline .st { margin-left: auto; flex: none; }
+  /* The board's lane the card moves through: Running, then Done. */
+  .lane { left: 26px; top: 356px; width: 688px; height: 170px; border-radius: 20px; background: #121722; border: 2px solid #232838; }
+  .lane .lh { left: 22px; top: 18px; font-size: 24px; color: #7d8598; }
+  .lane .slot { left: 22px; top: 58px; width: 640px; height: 84px; border-radius: 16px; background: #1f2433; border: 2px solid #2d3346;
+    display: flex; align-items: center; gap: 16px; padding: 0 22px; font-size: 28px; color: #f1f3f8; }
+  .lane .slot .t { font-weight: 600; }
+  .lane .slot .pill { margin-left: auto; flex: none; }
+
+  /* ── Scene 6: asking, and the plan in the pane ─────────────────────────────── */
+  .ask { left: 26px; top: 108px; width: 688px; }
+  .ask .q { display: block; font-size: 33px; color: #e8eaf0; font-weight: 500; }
+  .ask .sub { display: block; margin-top: 12px; font-size: 25px; color: #7d8598; }
+
+  /* ── Scene 7: two threads on one area ──────────────────────────────────────── */
+  .busy { left: 26px; top: 116px; width: 688px; }
+  .busy .area { font-size: 25px; color: #7d8598; margin-bottom: 14px; }
+  .busy .acard { width: 688px; border-radius: 18px; background: #1f2433; border: 2px solid #2d3346; padding: 18px 22px; margin-bottom: 14px;
+    display: flex; align-items: center; gap: 16px; }
+  .busy .acard .t { display: block; font-size: 29px; color: #f1f3f8; font-weight: 600; }
+  .busy .acard .m { display: block; font-size: 24px; color: #8d95aa; margin-top: 4px; }
+  .busy .acard .pill { margin-left: auto; flex: none; }
+  /* The rule, standing on its own between the two cards and the worktree line. */
+  .note { left: 26px; top: 396px; width: 688px; font-size: 27px; color: #7d8598; }
+
+  /* ── Scene 8: subagents, side by side ──────────────────────────────────────── */
+  .fan { left: 26px; top: 116px; width: 688px; }
+  .fan .top { width: 688px; border-radius: 18px; background: #1f2433; border: 2px solid #2d3346; padding: 18px 22px;
+    display: flex; align-items: center; gap: 16px; }
+  .fan .top .t { font-size: 29px; color: #f1f3f8; font-weight: 600; }
+  .fan .top .pill { margin-left: auto; }
+  .fan .subs { margin-top: 16px; border-left: 2px solid #2d3346; padding-left: 18px; }
+  .fan .sub { width: 650px; display: flex; align-items: center; gap: 14px; height: 66px; }
+  .fan .sub .nm { font-size: 26px; color: #c9cfdf; }
+  .fan .sub .meta { margin-left: auto; font-size: 23px; color: #7d8598; }
+  .fan .sub .tick { width: 28px; height: 28px; flex: none; display: flex; align-items: center; justify-content: center;
+    font-size: 27px; color: #5fd38d; }
+  .fan .sub .spin { width: 28px; height: 28px; border-radius: 50%; border: 4px solid #3a4258; border-top-color: #7aa7ff; flex: none; }
+
+  /* The pointer, for the clicks that happen. */
+  .cursor { width: 46px; height: 46px; z-index: 20; filter: drop-shadow(0 4px 8px #0008); }
+</style>
+</head>
+<body>
+<div id="root" data-composition-id="root" data-start="0" data-duration="74" data-width="1600" data-height="900">
+  <div class="abs head"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span>New thread</div>
+
+  <div class="abs art">
+    <!-- Scene 1: the New thread dialog. -->
+    <div class="abs scene" id="s1">
+      <div class="abs dlg">
+        <div class="abs dlghead"><span class="pen">✎</span>&nbsp;New thread<span class="x">✕</span></div>
+        <div class="abs comp" id="s1comp">
+          <span class="ph" id="s1ph">What should this thread do? Paste screenshots or videos right where they belong, or hit the mic and talk.</span>
+        </div>
+        <div class="abs compbar"><span class="hint">⌘↵ starts it</span><span class="mic" id="s1mic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v4"/></svg></span></div>
+        <div class="abs ctlrow" id="s1ctl">
+          <span class="ctl"><span class="folder">📁</span>weft</span>
+          <span class="ctl">Model<span class="chev">⌄</span></span>
+          <span class="ctl">Effort<span class="chev">⌄</span></span>
+          <span class="ctl">Ask me<span class="chev">⌄</span></span>
+        </div>
+        <div class="abs foot">
+          <span class="aipick" id="s1ai">
+            <span class="ai on">Claude Code</span><span class="ai">puku-cli</span><span class="ai">Codex</span>
+          </span>
+          <span class="spacer"></span>
+          <span class="fbtn">Add to backlog</span>
+          <span class="fbtn go">Start<span class="kbd">⌘↵</span></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Scene 2: Weft, zoomed out: board | dialog | browser pane. -->
+    <div class="abs scene" id="s2">
+      <div class="abs win">
+        <div class="abs winbar"><span class="d"></span><span class="d"></span><span class="d"></span><span class="nm">Weft</span></div>
+        <div class="abs board">
+          <div class="bcol"><div class="h">Backlog</div><div class="bcard"><div class="l1"></div><div class="l2"></div></div><div class="bcard"><div class="l1"></div><div class="l2"></div></div></div>
+          <div class="bcol"><div class="h">Running</div><div class="bcard"><div class="l1"></div><div class="l2"></div></div></div>
+          <div class="bcol"><div class="h">Done</div><div class="bcard"><div class="l1"></div><div class="l2"></div></div></div>
+        </div>
+        <div class="abs mindlg">
+          <div class="t">New thread</div>
+          <div class="box"><div class="l1"></div><div class="l2"></div></div>
+          <div class="chips"><i style="width:54px"></i><i style="width:44px"></i><i style="width:38px"></i></div>
+        </div>
+        <div class="abs pane">
+          <div class="abs lit" id="s2lit"></div>
+          <div class="abs ph">Browser pane</div>
+          <div class="abs video" id="s2video">
+            <div class="play"><span class="t"></span></div>
+            <div class="vlabel">this video</div>
+          </div>
+          <div class="abs reply" id="s2reply">
+            <div class="page">
+              <div class="ph2"></div>
+              <div class="pl"><div class="t1"></div><div class="t2"></div></div>
+              <div class="pl"><div class="t1"></div><div class="t2"></div></div>
+              <div class="pl"><div class="t1"></div><div class="t2"></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Scene 3: the composer — type it, paste a screenshot, hit the mic. -->
+    <div class="abs scene" id="s3">
+      <div class="abs dlg">
+        <div class="abs dlghead"><span class="pen">✎</span>&nbsp;New thread<span class="x">✕</span></div>
+        <div class="abs comp" id="s3comp" style="height:250px">
+          <span class="line" id="s3typed"></span><span class="cursorline" id="s3caret"></span>
+          <span class="shot" id="s3shot"><span class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span><span class="art"></span></span>
+        </div>
+        <div class="abs compbar" style="top:370px">
+          <span class="hint" id="s3hint">Paste screenshots right where they belong</span>
+          <span class="keychip" id="s3key">⌥&nbsp;'</span>
+          <span class="mic" id="s3mic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v4"/></svg></span>
+        </div>
+        <div class="abs ctlrow" style="top:448px">
+          <span class="ctl"><span class="folder">📁</span>weft</span>
+          <span class="ctl">Model<span class="chev">⌄</span></span>
+          <span class="ctl">Effort<span class="chev">⌄</span></span>
+          <span class="ctl">Ask me<span class="chev">⌄</span></span>
+        </div>
+        <div class="abs foot" style="top:556px">
+          <span class="aipick"><span class="ai on">Claude Code</span><span class="ai">puku-cli</span><span class="ai">Codex</span></span>
+          <span class="spacer"></span>
+          <span class="fbtn">Add to backlog</span>
+          <span class="fbtn go">Start<span class="kbd">⌘↵</span></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Scene 4: a big idea, talked out. -->
+    <div class="abs scene" id="s4">
+      <div class="abs dlg">
+        <div class="abs dlghead"><span class="pen">✎</span>&nbsp;New thread<span class="x">✕</span></div>
+        <div class="abs comp" id="s4comp" style="height:300px"></div>
+        <div class="abs wave" id="s4wave">
+          <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+        </div>
+        <div class="abs compbar" style="top:496px">
+          <span class="hint" id="s4hint">Recording…</span>
+          <span class="mic rec" id="s4mic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v4"/></svg></span>
+        </div>
+        <div class="abs ctlrow" style="top:562px;height:58px">
+          <span class="ctl"><span class="folder">📁</span>weft</span>
+          <span class="ctl">Model<span class="chev">⌄</span></span>
+          <span class="ctl">Effort<span class="chev">⌄</span></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Scene 4's pay-off: the wall of text becomes a plan. -->
+    <div class="abs scene" id="s4b">
+      <div class="abs dlg">
+        <div class="abs dlghead"><span class="pen">✎</span>&nbsp;New thread<span class="x">✕</span></div>
+        <div class="abs plan" id="s4plan">
+          <div class="pt">Your idea, sorted</div>
+          <div class="step on"><span class="num">1</span><span class="body"><span class="hd">Pricing page</span><span class="sub">Three tiers, side by side</span></span></div>
+          <div class="step"><span class="num">2</span><span class="body"><span class="hd">Monthly or yearly</span><span class="sub">A toggle that re-prices the table</span></span></div>
+          <div class="step"><span class="num">3</span><span class="body"><span class="hd">Free trial CTA</span><span class="sub">One button, above the fold</span></span></div>
+          <div class="step"><span class="num">4</span><span class="body"><span class="hd">FAQ</span><span class="sub">The questions you already asked us</span></span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Scene 5: one short line, started, done. -->
+    <div class="abs scene" id="s5">
+      <div class="abs dlg">
+        <div class="abs dlghead"><span class="pen">✎</span>&nbsp;New thread<span class="x">✕</span></div>
+        <div class="abs comp" id="s5comp" style="height:132px"><span class="line" id="s5typed"></span><span class="cursorline" id="s5caret"></span></div>
+        <div class="abs compbar" style="top:254px">
+          <span class="hint">⌘↵ starts it</span>
+          <span class="mic" id="s5mic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v4"/></svg></span>
+        </div>
+        <!-- The board's Running column: the card lands here, then it turns Done. -->
+        <div class="abs lane" id="s5lane" style="top:356px;height:170px">
+          <div class="abs lh" id="s5lanehead" style="top:18px">Running</div>
+          <div class="abs slot" id="s5slot">
+            <span class="t">make the header sticky</span>
+            <span class="pill info" id="s5running">running</span>
+          </div>
+        </div>
+        <div class="abs foot" style="top:556px">
+          <span class="aipick"><span class="ai on">Claude Code</span><span class="ai">puku-cli</span><span class="ai">Codex</span></span>
+          <span class="spacer"></span>
+          <span class="fbtn">Add to backlog</span>
+          <span class="fbtn go" id="s5start">Start<span class="kbd">⌘↵</span></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Scene 6: asking for a plan. -->
+    <div class="abs scene" id="s6">
+      <div class="abs dlg">
+        <div class="abs dlghead"><span class="pen">✎</span>&nbsp;New thread<span class="x">✕</span></div>
+        <div class="abs comp" id="s6comp" style="height:150px"><span class="line" id="s6typed"></span><span class="cursorline" id="s6caret"></span></div>
+        <div class="abs compbar" style="top:272px">
+          <span class="hint">⌘↵ starts it</span>
+          <span class="mic" id="s6mic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v4"/></svg></span>
+        </div>
+        <div class="abs ask" id="s6ask" style="top:392px">
+          <span class="q">Ask, and it plans it out</span>
+          <span class="sub">Your AI writes the plan, then shows it to you</span>
+        </div>
+        <div class="abs ctlrow" style="top:552px;height:56px">
+          <span class="ctl"><span class="folder">📁</span>weft</span>
+          <span class="ctl">Model<span class="chev">⌄</span></span>
+          <span class="ctl">Effort<span class="chev">⌄</span></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Scene 6's pay-off: the plan, in the browser pane. -->
+    <div class="abs scene" id="s6b">
+      <div class="abs win">
+        <div class="abs winbar"><span class="d"></span><span class="d"></span><span class="d"></span><span class="nm">Weft</span></div>
+        <div class="abs board">
+          <div class="bcol"><div class="h">Backlog</div><div class="bcard"><div class="l1"></div><div class="l2"></div></div></div>
+          <div class="bcol"><div class="h">Running</div><div class="bcard"><div class="l1"></div><div class="l2"></div></div></div>
+          <div class="bcol"><div class="h">Done</div><div class="bcard"><div class="l1"></div><div class="l2"></div></div></div>
+        </div>
+        <div class="abs mindlg">
+          <div class="t">New thread</div>
+          <div class="box"><div class="l1"></div><div class="l2"></div></div>
+          <div class="chips"><i style="width:54px"></i><i style="width:44px"></i><i style="width:38px"></i></div>
+        </div>
+        <div class="abs pane">
+          <div class="abs lit" id="s6lit"></div>
+          <div class="abs ph">Browser pane</div>
+          <div class="abs minipage">
+            <div class="hd">Plan · add billing</div>
+            <div class="st cur"><span class="n">1</span><span class="l">Stripe setup</span></div>
+            <div class="st"><span class="n">2</span><span class="l">Checkout page</span></div>
+            <div class="st"><span class="n">3</span><span class="l">Webhooks</span></div>
+            <div class="st"><span class="n">4</span><span class="l">Billing page</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Scene 7: two threads on the same area. -->
+    <div class="abs scene" id="s7">
+      <div class="abs dlg">
+        <div class="abs dlghead"><span class="pen">✎</span>&nbsp;New thread<span class="x">✕</span></div>
+        <div class="abs busy">
+          <div class="area">Both threads are working on <b style="color:#e8eaf0">checkout / payment</b></div>
+          <div class="acard here" id="s7a">
+            <span><span class="t">Fix the card expiry bug</span><span class="m">checkout / payment</span></span>
+            <span class="pill warn" id="s7warn">also busy here</span>
+          </div>
+          <div class="acard" id="s7b">
+            <span><span class="t">Add a saved card</span><span class="m">checkout / payment</span></span>
+            <span class="pill warn" id="s7pill2">also busy here</span>
+          </div>
+        </div>
+        <div class="abs note" id="s7note">One area, one thread at a time</div>
+        <div class="abs mini" id="s7work" style="top:452px">
+          <div class="cardline"><span class="t">Give it its own worktree</span><span class="st"><span class="pill info" id="s7tree">no conflicts</span></span></div>
+        </div>
+        <div class="abs ctlrow" style="top:552px;height:56px">
+          <span class="ctl"><span class="folder">📁</span>weft</span>
+          <span class="ctl">Model<span class="chev">⌄</span></span>
+          <span class="ctl">Effort<span class="chev">⌄</span></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Scene 8: one card, four subagents, in parallel. -->
+    <div class="abs scene" id="s8">
+      <div class="abs dlg">
+        <div class="abs dlghead"><span class="pen">✎</span>&nbsp;New thread<span class="x">✕</span></div>
+        <div class="abs fan" id="s8fan">
+          <div class="top"><span class="t">Rebuild the checkout</span><span class="pill info" id="s8pill">4 subagents running</span></div>
+          <div class="subs" id="s8subs">
+            <div class="sub"><span class="spin"></span><span class="tick" style="opacity:0">✓</span><span class="nm">Read the checkout code</span><span class="meta" id="s8m0">running</span></div>
+            <div class="sub"><span class="spin"></span><span class="tick" style="opacity:0">✓</span><span class="nm">Move the card fields</span><span class="meta" id="s8m1">running</span></div>
+            <div class="sub"><span class="spin"></span><span class="tick" style="opacity:0">✓</span><span class="nm">Write the tests</span><span class="meta" id="s8m2">running</span></div>
+            <div class="sub"><span class="spin"></span><span class="tick" style="opacity:0">✓</span><span class="nm">Update the docs</span><span class="meta" id="s8m3">running</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <svg class="abs cursor" id="cur" viewBox="0 0 24 24"><path d="M4 2l16 10-7 1.5L9.5 21z" fill="#fff" stroke="#111" stroke-width="1.2"/></svg>
+  </div>
+
+  <div class="abs cap" id="c1">Start a thread, <b>your way</b>.</div>
+  <div class="abs cap" id="c2">Weft <b>shows you</b> its work here.</div>
+  <div class="abs cap" id="c3">Type, paste, or <b>just talk</b>.</div>
+  <div class="abs cap" id="c4">Big idea? <b>Talk it all out.</b></div>
+  <div class="abs cap" id="c5">Small idea? <b>Keep it simple</b>.</div>
+  <div class="abs cap" id="c6">Not sure how? <b>Ask for a plan.</b></div>
+  <div class="abs cap" id="c7">One area, <b>one thread</b>.</div>
+  <div class="abs cap" id="c8">Big task? <b>Fan out.</b></div>
+  <div class="abs cap" id="c9">What will you <b>build today</b>?</div>
+  <div class="abs" id="fade"></div>
+</div>
+
+<script type="application/json" id="narration">
+{ "duration": 74, "lines": [
+  [0.3,5.4,"Weft's new thread screen lets you quickly start a new thread, and control how it runs."],
+  [5.7,11.28,"This video is playing in your browser pane. Most of Weft's replies will show you something here."],
+  [11.98,21.55,"Some tips. First, tell your AI what to build: type it, paste screenshots, or hit the mic and just talk. Option apostrophe starts and stops the mic."],
+  [21.93,30.98,"When you have a big idea, use the mic, and talk, and talk, and talk. Get all your ideas out in one big wall of text, and let your AI sort it out."],
+  [31.68,38.23,"For small ideas, give Weft simple instructions. You'll be surprised how well your AI can improvise."],
+  [38.93,46.65,"Speaking of improvising: when you don't know exactly how to do something, ask your AI. It will show you a plan in the browser pane."],
+  [47.35,60.2,"Try not to work on the same screen or product area in more than one thread at once, so you avoid conflicts. Weft has smart, built-in conflict resolution, but if you know you're going to hit a conflict, use worktrees."],
+  [60.9,67.5,"For bigger tasks, tell your AI to use subagents, so it can fan out and work through the plan in parallel."],
+  [68.2,72.5,"Now let's get to work. What do you want to build today?"]
+] }
+</script>
+<script src="../welcome/gsap.min.js"></script>
+<script src="./player.js"></script>
+<script>
+  const tl = gsap.timeline({ paused: true });
+  const caps = ["#c1", "#c2", "#c3", "#c4", "#c5", "#c6", "#c7", "#c8", "#c9"];
+  // Each caption lands a beat before the words that name it, and goes 0.3s before the next.
+  const at = [0.1, 5.6, 11.9, 21.8, 31.6, 38.8, 47.2, 60.8, 68.0];
+  const scenes = ["#s1", "#s2", "#s3", "#s4", "#s4b", "#s5", "#s6", "#s6b", "#s7", "#s8"];
+
+  gsap.set(scenes, { opacity: 0 });
+  gsap.set(caps, { opacity: 0 });
+  // Everything that arrives later starts out hidden.
+  gsap.set(["#s2lit", "#s2reply", "#s3typed", "#s3caret", "#s3shot", "#s3key", "#s4wave",
+            "#s5typed", "#s5caret", "#s5running", "#s5slot", "#s6typed", "#s6caret", "#s6ask",
+            "#s6lit", "#s7warn", "#s7pill2", "#s7note", "#s7work", "#s7tree", "#s8subs", "#s8pill", "#cur"], { opacity: 0 });
+  gsap.set("#cur", { x: 700, y: 880 });
+
+  tl.to("#fade", { opacity: 0, duration: 0.4 }, 0);
+
+  // One caption per beat, in turn.
+  caps.forEach((c, i) => {
+    tl.fromTo(c, { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.4 }, at[i]);
+    if (i < caps.length - 1) tl.to(c, { opacity: 0, duration: 0.3 }, at[i + 1] - 0.3);
+  });
+
+  // ── Beat 1: the New thread dialog ────────────────────────────────────────────
+  tl.fromTo("#s1", { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.45 }, 0.1)
+    .fromTo("#s1comp", { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.4 }, 0.5)
+    .fromTo("#s1mic", { scale: 0.7 }, { scale: 1, duration: 0.35 }, 1.1);
+  // "control how it runs": the controls row lights up, then the AI picker.
+  tl.to("#s1ctl .ctl", { borderColor: "#4f7cff", color: "#f1f3f8", duration: 0.35, stagger: 0.12 }, 4.2)
+    .to("#s1ai", { borderColor: "#4f7cff", duration: 0.35 }, 4.9)
+    .to("#s1ctl .ctl", { borderColor: "#2d3346", color: "#c9cfdf", duration: 0.4, stagger: 0.06 }, 5.4)
+    .to("#s1ai", { borderColor: "#2d3346", duration: 0.4 }, 5.4);
+
+  // ── Beat 2: Weft, zoomed out — the browser pane is lit ───────────────────────
+  tl.to("#s1", { opacity: 0, duration: 0.35 }, 5.6)
+    .fromTo("#s2", { opacity: 0, scale: 1.08 }, { opacity: 1, scale: 1, duration: 0.5, transformOrigin: "50% 50%" }, 5.6)
+    .to("#s2lit", { opacity: 1, duration: 0.4 }, 6.4)
+    .to("#s2lit", { opacity: 0.55, duration: 0.5 }, 7.2);
+  // "show you something here": the pane turns from this video to a reply's page.
+  tl.to("#s2video", { opacity: 0, duration: 0.35 }, 9.8)
+    .fromTo("#s2reply", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.45 }, 9.9);
+
+  // ── Beat 3: type it, paste a screenshot, hit the mic ─────────────────────────
+  tl.to("#s2", { opacity: 0, duration: 0.35 }, 11.9)
+    .fromTo("#s3", { opacity: 0, scale: 1.05 }, { opacity: 1, scale: 1, duration: 0.45, transformOrigin: "50% 50%" }, 11.9)
+    // "type it": the line appears in the composer.
+    .set("#s3typed", { textContent: "Build a pricing page for the new plan" }, 14.8)
+    .fromTo("#s3typed", { opacity: 0 }, { opacity: 1, duration: 0.5 }, 14.8)
+    .fromTo("#s3caret", { opacity: 0 }, { opacity: 1, duration: 0.3 }, 14.8)
+    // "paste screenshots": a screenshot lands inline.
+    .fromTo("#s3shot", { opacity: 0, y: 22, scale: 0.9 }, { opacity: 1, y: 0, scale: 1, duration: 0.45 }, 15.7)
+    .to("#s3hint", { opacity: 0, duration: 0.3 }, 16.0)
+    // "hit the mic": the mic button takes the eye.
+    .to("#s3mic", { scale: 1.15, duration: 0.25 }, 16.9)
+    .to("#s3mic", { scale: 1, duration: 0.3 }, 17.6);
+  // "Option apostrophe starts and stops it": the key chip presses, the mic goes red, then stops.
+  tl.fromTo("#s3key", { opacity: 0, x: -14 }, { opacity: 1, x: 0, duration: 0.35 }, 18.5)
+    .to("#s3key", { scale: 0.88, duration: 0.12 }, 19.85)
+    .to("#s3key", { scale: 1, duration: 0.2 }, 20.1)
+    .to("#s3mic", { backgroundColor: "#e5484d", borderColor: "#e5484d", duration: 0.25 }, 19.85)
+    .to("#s3mic svg", { color: "#ffffff", duration: 0.25 }, 19.85)
+    .to("#s3key", { scale: 0.88, duration: 0.12 }, 20.65)
+    .to("#s3key", { scale: 1, duration: 0.2 }, 20.9)
+    .to("#s3mic", { backgroundColor: "#2a3044", borderColor: "#39415a", duration: 0.25 }, 20.65)
+    .to("#s3mic svg", { color: "#c9cfdf", duration: 0.25 }, 20.65);
+
+  // ── Beat 4: a big idea, talked out ──────────────────────────────────────────
+  tl.to("#s3", { opacity: 0, duration: 0.35 }, 21.8)
+    .fromTo("#s4", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.45 }, 21.8)
+    .fromTo("#s4mic", { scale: 0.8 }, { scale: 1, duration: 0.3 }, 21.9)
+    .fromTo("#s4wave", { opacity: 0 }, { opacity: 1, duration: 0.3 }, 22.2);
+  // The wall of text, one line at a time, as the voice talks.
+  const wall = [
+    [22.6, "We need a pricing page for the new plan."],
+    [23.4, "Three tiers side by side, and a toggle for monthly or yearly."],
+    [24.2, "Compare them to what the others charge, but don't be too shouty."],
+    [25.1, "Put the free trial button at the top, not buried at the bottom."],
+    [26.0, "And copy the FAQ from the old page, then add a line about refunds."],
+    [26.9, "Make it work on mobile too. That's basically it."]
+  ];
+  wall.forEach((w, i) => {
+    tl.set("#s4comp", { textContent: wall.slice(0, i + 1).map((l) => l[1]).join(" ") }, w[0]);
+  });
+  // The waveform, running while it records: every bar its own height, so it reads as speech.
+  const bars = gsap.utils.toArray("#s4wave i");
+  const profile = [14, 30, 44, 22, 50, 34, 18, 46, 26, 40, 16, 48, 30, 20, 44, 24];
+  bars.forEach((bar, i) => {
+    const peak = profile[i % profile.length];
+    tl.fromTo(bar, { height: 6 }, {
+      height: peak, duration: 0.3, ease: "sine.inOut", yoyo: true, repeat: 17,
+    }, 22.4 + i * 0.055 + (i % 3) * 0.1);
+  });
+  // "let your AI sort it out": the wall of text becomes a plan.
+  tl.to("#s4", { opacity: 0, duration: 0.35 }, 28.7)
+    .fromTo("#s4b", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.45 }, 28.7)
+    .fromTo("#s4plan .step", { opacity: 0, x: -20 }, { opacity: 1, x: 0, duration: 0.35, stagger: 0.22 }, 29.2);
+
+  // ── Beat 5: a small idea, started and done ──────────────────────────────────
+  tl.to("#s4b", { opacity: 0, duration: 0.35 }, 31.6)
+    .fromTo("#s5", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.45 }, 31.6)
+    // "give Weft simple instructions": one short line.
+    .set("#s5typed", { textContent: "make the header sticky" }, 32.7)
+    .fromTo("#s5typed", { opacity: 0 }, { opacity: 1, duration: 0.4 }, 32.7)
+    .fromTo("#s5caret", { opacity: 0 }, { opacity: 1, duration: 0.3 }, 32.7);
+  // The cursor finds Start, and presses it.
+  tl.to("#cur", { opacity: 1, duration: 0.2 }, 34.9)
+    .fromTo("#cur", { x: 700, y: 880 }, { x: 560, y: 786, duration: 0.55, ease: "power2.inOut" }, 34.9)
+    .to("#cur", { scale: 0.85, duration: 0.12 }, 35.5)
+    .to("#cur", { scale: 1, duration: 0.15 }, 35.75)
+    .to("#cur", { opacity: 0, duration: 0.25 }, 36.1);
+  // The thread starts: the card lands on the board, then it's done.
+  tl.fromTo("#s5slot", { opacity: 0, y: -16 }, { opacity: 1, y: 0, duration: 0.4 }, 35.8)
+    .fromTo("#s5running", { opacity: 0, scale: 0.8 }, { opacity: 1, scale: 1, duration: 0.3 }, 35.8)
+    .to("#s5running", { opacity: 0, duration: 0.25 }, 36.9)
+    .set("#s5running", { textContent: "done ✓" }, 36.9)
+    .to("#s5running", { opacity: 1, duration: 0.3 }, 36.9)
+    .to("#s5running", { backgroundColor: "#173a28", color: "#5fd38d", duration: 0.4 }, 36.9)
+    .to("#s5slot", { borderColor: "#2a6b4a", duration: 0.4 }, 36.9)
+    .to("#s5lanehead", { color: "#5fd38d", duration: 0.35 }, 36.9)
+    .set("#s5lanehead", { textContent: "✓  Done" }, 36.9);
+
+  // ── Beat 6: ask your AI, and it shows you a plan ────────────────────────────
+  tl.to("#s5", { opacity: 0, duration: 0.35 }, 38.8)
+    .fromTo("#s6", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.45 }, 38.8)
+    .set("#s6typed", { textContent: "How should we add billing?" }, 42.8)
+    .fromTo("#s6typed", { opacity: 0 }, { opacity: 1, duration: 0.4 }, 42.8)
+    .fromTo("#s6caret", { opacity: 0 }, { opacity: 1, duration: 0.3 }, 42.8)
+    .fromTo("#s6ask", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.4 }, 43.4);
+  // "show you a plan in the browser pane": the pane lights up with the plan.
+  tl.to("#s6", { opacity: 0, duration: 0.35 }, 44.1)
+    .fromTo("#s6b", { opacity: 0, scale: 1.06 }, { opacity: 1, scale: 1, duration: 0.45, transformOrigin: "50% 50%" }, 44.1)
+    .to("#s6lit", { opacity: 1, duration: 0.4 }, 44.4)
+    .fromTo("#s6b .st", { opacity: 0, x: 22 }, { opacity: 1, x: 0, duration: 0.35, stagger: 0.2 }, 44.8);
+
+  // ── Beat 7: one area, one thread ───────────────────────────────────────────
+  tl.to("#s6b", { opacity: 0, duration: 0.35 }, 47.2)
+    .fromTo("#s7", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.45 }, 47.2)
+    .fromTo("#s7a", { opacity: 0, x: -22 }, { opacity: 1, x: 0, duration: 0.4 }, 47.4)
+    .fromTo("#s7b", { opacity: 0, x: -22 }, { opacity: 1, x: 0, duration: 0.4 }, 48.2)
+    .fromTo("#s7note", { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.35 }, 48.4);
+  // "so you avoid conflicts": both cards say the area is busy.
+  tl.to("#s7warn", { opacity: 1, duration: 0.3 }, 50.6)
+    .to("#s7pill2", { opacity: 1, duration: 0.3 }, 51.2)
+    .to("#s7note", { color: "#f0b429", duration: 0.3 }, 51.2);
+  // "smart, built-in conflict resolution": the warning clears on its own.
+  tl.to("#s7warn", { opacity: 0, duration: 0.35 }, 54.4)
+    .to("#s7pill2", { opacity: 0, duration: 0.35 }, 54.4)
+    .to("#s7note", { color: "#7d8598", duration: 0.35 }, 54.4)
+    .to("#s7a", { borderColor: "#2d3346", duration: 0.4 }, 54.4);
+  // "use worktrees": the second thread takes its own worktree, and the warning turns to a plan.
+  tl.fromTo("#s7work", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.4 }, 59.1)
+    .fromTo("#s7tree", { opacity: 0, scale: 0.85 }, { opacity: 1, scale: 1, duration: 0.35 }, 59.3)
+    .to("#s7b", { borderColor: "#7aa7ff", duration: 0.4 }, 59.3)
+    .set("#s7pill2", { textContent: "own worktree" }, 59.3)
+    .to("#s7pill2", { opacity: 1, duration: 0.3 }, 59.3)
+    .to("#s7pill2", { backgroundColor: "#1b2a4d", color: "#7aa7ff", duration: 0.4 }, 59.3);
+
+  // ── Beat 8: fan out ─────────────────────────────────────────────────────────
+  tl.to("#s7", { opacity: 0, duration: 0.35 }, 60.8)
+    .fromTo("#s8", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.45 }, 60.8)
+    .fromTo("#s8pill", { opacity: 0 }, { opacity: 1, duration: 0.3 }, 62.6)
+    .set("#s8pill", { textContent: "4 subagents running" }, 62.6)
+    .fromTo("#s8subs", { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.4 }, 62.9);
+  // They run side by side, then each ticks in turn.
+  tl.to("#s8subs .spin", { rotate: 360, duration: 0.8, repeat: 4, ease: "none" }, 63.0);
+  const done = [64.3, 65.0, 65.7, 66.4];
+  ["#s8m0", "#s8m1", "#s8m2", "#s8m3"].forEach((m, i) => {
+    const row = "#s8subs .sub:nth-child(" + (i + 1) + ")";
+    tl.set(row + " .spin", { display: "none" }, done[i])
+      .fromTo(row + " .tick", { opacity: 0, scale: 0.6 }, { opacity: 1, scale: 1, duration: 0.3 }, done[i])
+      .set(m, { textContent: "done" }, done[i])
+      .to(m, { color: "#5fd38d", duration: 0.3 }, done[i]);
+  });
+  tl.set("#s8pill", { textContent: "✓ 4 subagents done" }, 66.9);
+
+  // ── Beat 9: now let's get to work ─────────────────────────────────────────────
+  // The dialog comes back empty, its composer waiting for "what do you want to build today?".
+  tl.to("#s8", { opacity: 0, duration: 0.35 }, 68.0)
+    .fromTo("#s1", { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.45 }, 68.1)
+    .to("#s1comp", { borderColor: "#4f7cff", duration: 0.5 }, 69.5);
+  tl.to("#fade", { opacity: 0, duration: 0.01 }, 74);
+
+  window.__timelines = window.__timelines || {};
+  window.__timelines.root = tl;
+  window.weftIntro(tl);
+</script>
+</body>
+</html>

@@ -1,10 +1,16 @@
 <!doctype html>
 <!--
   The Code quality dialog's intro (components/FeatureIntro.tsx plays it the first time the badge is clicked), a HyperFrames
-  composition in the shared look (./kit.css): 0–5.5s the header badge scores the project with a pie; 5.5–11s the checklist
-  that earns 90 of the points; 11–16s the refactor scout reads the code for the last 10; 16–21.5s a finding becomes its own
-  small card and the score climbs. The voice is #narration, read by `pnpm intros:narrate` (scripts/narrate-intros.mjs) into
-  ./quality.m4a. Seekable: no timers, no tl.call.
+  composition in the shared look (./kit.css). Beats, on the voice's words (./quality.words.json):
+    0.3s  the header badge comes in and its score counts up to 84;
+    2.1s  the header the badge sits in;
+    3.3s  the score is read from your tests, linting and types — the three bars fill;
+    5.5s  Weft's scout reads your code for refactors — its findings come in;
+    8.5s  you click a finding;
+    10.1s your AI fixes it as its own card — the card starts;
+    11.7s your score keeps climbing — 84 to 88.
+  The voice is #narration, read by `pnpm intros:narrate` (scripts/narrate-intros.mjs) into ./quality.m4a. Seekable:
+  no timers, no tl.call.
 -->
 <html>
 <head>
@@ -18,158 +24,171 @@
   #badge { left: 26px; top: 26px; width: 688px; height: 84px; border-radius: 20px; background: #1f2433; border: 2px solid #2d3346;
     display: flex; align-items: center; gap: 16px; padding: 0 22px; font-size: 34px; color: #f0b429; }
   .lbl { color: #8d95aa; font-size: 30px; }
-  /* Checklist: a label, a bar, a percentage — the row shape from QualityBadge's Row. */
-  .chk { left: 26px; width: 688px; height: 84px; border-radius: 20px; background: #1f2433; border: 2px solid #2d3346;
+  #up { margin-left: auto; flex: none; height: 50px; font-size: 28px; }
+  /* The header the badge sits in, so the score reads as a header chip. */
+  #hdr { left: 26px; top: 124px; width: 688px; height: 46px; display: flex; align-items: center; gap: 18px; font-size: 28px; color: #8d95aa; }
+  #hdr .dot { width: 12px; height: 12px; border-radius: 50%; background: #2d3346; flex: none; }
+  /* Tests, linting and types: the bars the score is read from. */
+  .chk { left: 26px; width: 688px; height: 80px; border-radius: 20px; background: #1f2433; border: 2px solid #2d3346;
     display: flex; align-items: center; gap: 18px; padding: 0 22px; font-size: 32px; }
   .chk .nm { width: 250px; white-space: nowrap; }
   .chk .bar { flex: 1; height: 14px; border-radius: 7px; background: #2a3044; overflow: hidden; }
   .chk .bar i { display: block; height: 100%; width: 0; border-radius: 7px; background: #f0b429; }
   .chk .pc { width: 96px; text-align: right; font-variant-numeric: tabular-nums; }
-  #c0 { top: 26px; } #c1 { top: 126px; } #c2 { top: 226px; } #c3 { top: 326px; } #c4 { top: 426px; }
-  #pts { left: 26px; top: 536px; width: 688px; font-size: 30px; color: #8d95aa; }
-  #band { left: 26px; top: 594px; height: 56px; font-size: 30px; }
-  #finds { left: 26px; top: 668px; width: 688px; font-size: 28px; color: #8d95aa; }
-  /* The dialog: Fix the checklist, weakest first, over the scout's findings. */
-  #fix { left: 26px; top: 24px; width: 688px; height: 80px; border-radius: 18px; background: #232a3d; border: 2px solid #3c4459;
-    padding: 0 24px; display: flex; align-items: center; font-size: 32px; font-weight: 600; }
-  #find { left: 26px; top: 128px; width: 688px; height: 118px; border-radius: 20px; background: #1f2433; border: 2px solid #2d3346;
-    padding: 16px 24px; display: flex; flex-direction: column; gap: 8px; }
-  #find .top { display: flex; align-items: center; gap: 14px; font-size: 32px; font-weight: 600; white-space: nowrap; }
-  #find .dot { width: 16px; height: 16px; border-radius: 50%; background: #f0b429; flex: none; }
-  #find .fixline { font-size: 28px; color: #8d95aa; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  #find .where { font-size: 26px; color: #8d95aa; font-weight: 400; }
-  #status { left: 26px; top: 266px; width: 688px; font-size: 28px; color: #8d95aa; }
-  /* The card a finding starts, over the panel. */
-  #newcard { left: 26px; top: 320px; width: 460px; z-index: 6; box-shadow: 0 30px 80px #000a; }
-  /* The score climbing, in the badge's own colours. */
-  #up { left: 26px; top: 470px; width: 688px; height: 96px; border-radius: 20px; background: #1f2433; border: 2px solid #2d3346;
-    display: flex; align-items: center; gap: 16px; padding: 0 22px; font-size: 34px; color: #f0b429; }
-  #never { left: 26px; top: 586px; width: 688px; font-size: 28px; color: #8d95aa; }
+  #q0 { top: 186px; } #q1 { top: 278px; } #q2 { top: 370px; }
+  #pts { left: 26px; top: 466px; width: 688px; font-size: 29px; color: #8d95aa; }
+  /* The scout: what it found in your code. */
+  #band { left: 26px; top: 186px; height: 56px; font-size: 30px; }
+  #finds { left: 26px; top: 262px; width: 688px; }
+  .fd { left: 0; width: 688px; height: 82px; border-radius: 16px; background: #1f2433; border: 2px solid #2d3346;
+    padding: 0 22px; display: flex; align-items: center; gap: 16px; font-size: 30px; }
+  .fd .dot { width: 16px; height: 16px; border-radius: 50%; background: #f0b429; flex: none; }
+  .fd .n { font-weight: 600; white-space: nowrap; flex: none; }
+  .fd .where { font-size: 24px; color: #8d95aa; font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .fd .end { margin-left: auto; flex: none; color: #8d95aa; }
+  .fd.done { border-color: #2f6a4c; }
+  .fd.done .dot { background: #5fd38d; }
+  .fd.done .n { color: #5fd38d; }
+  #f0 { top: 0; } #f1 { top: 96px; } #f2 { top: 192px; }
+  #status { left: 26px; top: 546px; width: 688px; font-size: 28px; color: #8d95aa; }
+  /* The card the AI starts for the finding you clicked. */
+  #newcard { left: 26px; top: 380px; width: 470px; z-index: 6; box-shadow: 0 30px 80px #000a; }
+  #newcard .t { font-size: 29px; }
 </style>
 </head>
 <body>
-<div id="root" data-composition-id="root" data-start="0" data-duration="21.5" data-width="800" data-height="1000">
+<div id="root" data-composition-id="root" data-start="0" data-duration="16" data-width="1600" data-height="900">
   <div class="abs head">
     <span class="ic">
       <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="#f0b429" stroke-opacity="0.2" stroke-width="4"/></svg>
     </span>Code quality
   </div>
-  <div class="abs panel" id="panel">
-    <!-- The header badge: a pie and the score. -->
-    <div class="abs" id="badge">
-      <svg id="pie" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="none" stroke="#f0b429" stroke-opacity="0.2" stroke-width="4"/>
-        <circle id="arc" cx="8" cy="8" r="6" fill="none" stroke="#f0b429" stroke-width="4" stroke-dasharray="0 37.7" transform="rotate(-90 8 8)"/></svg>
-      <span id="score">74%</span><span class="lbl" id="badgeLbl">code quality</span>
-    </div>
+  <div class="abs art">
+    <div class="abs panel" id="panel">
+      <!-- The header badge: a pie and the score. -->
+      <div class="abs" id="badge">
+        <svg id="pie" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="none" stroke="#f0b429" stroke-opacity="0.2" stroke-width="4"/>
+          <circle id="arc" cx="8" cy="8" r="6" fill="none" stroke="#f0b429" stroke-width="4" stroke-dasharray="0 37.7" transform="rotate(-90 8 8)"/></svg>
+        <span id="score">84%</span><span class="lbl">code quality</span>
+        <span class="pill on" id="up">↑ 4</span>
+      </div>
 
-    <!-- The checklist: the areas Weft measures, each a bar. -->
-    <div class="abs chk" id="c0"><span class="nm">Tests</span><span class="bar"><i data-w="98"></i></span><span class="pc" data-pc="98">98%</span></div>
-    <div class="abs chk" id="c1"><span class="nm">File size</span><span class="bar"><i data-w="88"></i></span><span class="pc" data-pc="88">88%</span></div>
-    <div class="abs chk" id="c2"><span class="nm">Lint</span><span class="bar"><i data-w="74"></i></span><span class="pc" data-pc="74">74%</span></div>
-    <div class="abs chk" id="c3"><span class="nm">Types</span><span class="bar"><i data-w="96"></i></span><span class="pc" data-pc="96">96%</span></div>
-    <div class="abs chk" id="c4"><span class="nm">Guardrails</span><span class="bar"><i data-w="100"></i></span><span class="pc" data-pc="100">100%</span></div>
-    <div class="abs" id="pts">The checklist earns <b style="color:#f0b429">90</b> of the points</div>
-    <div class="abs pill info" id="band">Refactor scout · the last 10</div>
-    <div class="abs" id="finds">Each finding it leaves open costs a few of them</div>
+      <!-- The header it sits in. -->
+      <div class="abs" id="hdr"><span class="dot"></span><span>weft / your-project</span></div>
 
-    <!-- The dialog, on click. -->
-    <div class="abs" id="fix">Fix the checklist, weakest first</div>
-    <div class="abs" id="find">
-      <div class="top"><span class="dot"></span>Long Function<span class="where mono">BoardColumns.tsx:214</span></div>
-      <div class="fixline">Split the column's JSX out, one extra at a time.</div>
-    </div>
-    <div class="abs" id="status">Refactor scout · 3 open · click one to start it as a card</div>
+      <!-- The three things the score is read from. -->
+      <div class="abs chk" id="q0"><span class="nm">Tests</span><span class="bar"><i data-w="98"></i></span><span class="pc" data-pc="98">98%</span></div>
+      <div class="abs chk" id="q1"><span class="nm">Lint</span><span class="bar"><i data-w="86"></i></span><span class="pc" data-pc="86">86%</span></div>
+      <div class="abs chk" id="q2"><span class="nm">Types</span><span class="bar"><i data-w="92"></i></span><span class="pc" data-pc="92">92%</span></div>
+      <div class="abs" id="pts">Read from your tests, linting and types</div>
 
-    <!-- The card it starts, and the score it moves. -->
-    <div class="abs card" id="newcard"><div class="t">Long Function: BoardColumns</div><div class="p">Improve code quality</div></div>
-    <div class="abs" id="up">
-      <svg width="36" height="36" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="#f0b429" stroke-opacity="0.2" stroke-width="4"/></svg>
-      <span id="score2">74%</span><span class="lbl">code quality</span>
+      <!-- The scout's findings. -->
+      <div class="abs pill info" id="band">🔎 Refactor scout</div>
+      <div class="abs" id="finds">
+        <div class="abs fd" id="f0"><span class="dot"></span><span class="n">Long Function</span><span class="where mono">BoardColumns.tsx:214</span><span class="end">▸</span></div>
+        <div class="abs fd" id="f1"><span class="dot"></span><span class="n">Duplicated Code</span><span class="where mono">lib/board-rows.ts:88</span><span class="end">▸</span></div>
+        <div class="abs fd" id="f2"><span class="dot"></span><span class="n">Feature Envy</span><span class="where mono">components/Board.tsx:61</span><span class="end">▸</span></div>
+      </div>
+      <div class="abs" id="status">3 open · click one to start it as a card</div>
+
+      <!-- The card the AI starts for the finding you clicked. -->
+      <div class="abs card" id="newcard"><div class="t">Long Function: BoardColumns</div><div class="p"><span class="spin"></span>Your AI is fixing it</div></div>
     </div>
-    <div class="abs" id="never">There's always another refactor, so it never reads 100.</div>
+    <svg class="abs cursor" id="cur" viewBox="0 0 24 24"><path d="M4 2l16 10-7 1.5L9.5 21z" fill="#fff" stroke="#111" stroke-width="1.2"/></svg>
+
   </div>
-  <svg class="abs cursor" id="cur" viewBox="0 0 24 24"><path d="M4 2l16 10-7 1.5L9.5 21z" fill="#fff" stroke="#111" stroke-width="1.2"/></svg>
 
-  <div class="abs cap" id="cap1">Your header badge <b>scores</b> the project's code.</div>
-  <div class="abs cap" id="cap2">A <b>90-point checklist</b>: tests, file size, lint, types.</div>
-  <div class="abs cap" id="cap3">A <b>scout</b> reads the code for the last 10.</div>
-  <div class="abs cap" id="cap4">Fix a finding and the score <b>climbs</b>.</div>
+  <div class="abs cap" id="cap1">Weft <b>scores</b> your code quality.</div>
+  <div class="abs cap" id="cap2">Right in your <b>header</b>.</div>
+  <div class="abs cap" id="cap3">From your <b>tests</b>, linting and types.</div>
+  <div class="abs cap" id="cap4">Weft's <b>scout</b> finds your refactors.</div>
+  <div class="abs cap" id="cap5">Click one, your AI <b>fixes</b> it as a card.</div>
+  <div class="abs cap" id="cap6">Your score <b>keeps climbing</b>.</div>
   <div class="abs" id="fade"></div>
 </div>
 
 <script type="application/json" id="narration">
-{ "duration": 21.5, "lines": [
-  [0.3, 5.3, "The badge in your header scores the code quality of whatever project you're in."],
-  [5.6, 10.9, "Ninety of those points are a checklist: tests, file size, lint, types and guardrails."],
-  [11.2, 16.0, "A refactor scout reads your code for the last ten, and every finding it leaves open takes some back."],
-  [16.3, 21.3, "Click a finding and it starts as its own small card. Fix it, and the score climbs."]
+{ "duration": 16, "lines": [
+  [0.3, 5.33, "Weft scores your code quality right in your header, from your tests, linting and types."],
+  [5.53, 13.7, "Weft's scout reads your code for refactors, and when you click one, your AI fixes it as its own card, so your score keeps climbing."]
 ] }
 </script>
 <script src="../welcome/gsap.min.js"></script>
 <script src="./player.js"></script>
 <script>
   const tl = gsap.timeline({ paused: true });
-  const caps = ["#cap1", "#cap2", "#cap3", "#cap4"];
-  const at = [0.2, 5.5, 11, 16];
-  const rows = ["#c0", "#c1", "#c2", "#c3", "#c4"];
+  const caps = ["#cap1", "#cap2", "#cap3", "#cap4", "#cap5", "#cap6"];
+  const at = [0.2, 2.1, 3.3, 5.5, 8.6, 11.7];
+  const rows = ["#q0", "#q1", "#q2"];
+  const finds = ["#f0", "#f1", "#f2"];
   const bars = rows.map((r) => r + " .bar i");
   const pcs = rows.map((r) => r + " .pc");
   const widths = rows.map((r) => document.querySelector(r + " .bar i").dataset.w);
   const scores = rows.map((r) => Number(document.querySelector(r + " .pc").dataset.pc));
 
-  gsap.set(["#badge", "#pts", "#band", "#finds", "#fix", "#find", "#status", "#newcard", "#up", "#never", "#cur", ...caps, ...rows], { opacity: 0 });
+  gsap.set(["#badge", "#hdr", "#pts", "#band", "#finds", "#status", "#newcard", "#up", "#cur", ...caps, ...rows, ...finds], { opacity: 0 });
   gsap.set("#cur", { x: 560, y: 900 });
   gsap.set("#arc", { attr: { "stroke-dasharray": "0 37.7" } });
 
   tl.to("#fade", { opacity: 0, duration: 0.4 }, 0);
 
-  // Scene 1 — the badge in the header: the pie fills and the number counts up.
+  // "Weft scores your code quality": the badge comes in, the pie fills, the number counts up to 84.
   tl.fromTo("#badge", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.45 }, 0.3);
-  tl.to("#arc", { attr: { "stroke-dasharray": "27.9 37.7" }, duration: 1.6, ease: "power1.out" }, 0.7);
-  tl.fromTo("#score", { textContent: 0 }, { textContent: 74, duration: 1.6, snap: { textContent: 1 }, ease: "power1.out" }, 0.7);
+  tl.to("#arc", { attr: { "stroke-dasharray": "31.7 37.7" }, duration: 1.4, ease: "power1.out" }, 0.7);
+  tl.fromTo("#score", { textContent: 0 }, { textContent: 84, duration: 1.4, snap: { textContent: 1 }, ease: "power1.out" }, 0.7);
+
+  // "right in your header": the header the badge sits in.
+  tl.fromTo("#hdr", { opacity: 0 }, { opacity: 1, duration: 0.4 }, 2.1);
+
+  // "from your tests, linting and types": the three bars fill, one on each word.
+  tl.fromTo("#q0", { opacity: 0, x: 40 }, { opacity: 1, x: 0, duration: 0.4 }, 3.3);
+  tl.fromTo(bars[0], { width: "0%" }, { width: widths[0] + "%", duration: 0.9, ease: "power2.out" }, 3.3);
+  tl.fromTo(pcs[0], { textContent: 0 }, { textContent: scores[0], duration: 0.9, snap: { textContent: 1 }, ease: "power2.out" }, 3.3);
+  tl.fromTo("#q1", { opacity: 0, x: 40 }, { opacity: 1, x: 0, duration: 0.4 }, 4.2);
+  tl.fromTo(bars[1], { width: "0%" }, { width: widths[1] + "%", duration: 0.9, ease: "power2.out" }, 4.2);
+  tl.fromTo(pcs[1], { textContent: 0 }, { textContent: scores[1], duration: 0.9, snap: { textContent: 1 }, ease: "power2.out" }, 4.2);
+  tl.fromTo("#q2", { opacity: 0, x: 40 }, { opacity: 1, x: 0, duration: 0.4 }, 4.9);
+  tl.fromTo(bars[2], { width: "0%" }, { width: widths[2] + "%", duration: 0.9, ease: "power2.out" }, 4.9);
+  tl.fromTo(pcs[2], { textContent: 0 }, { textContent: scores[2], duration: 0.9, snap: { textContent: 1 }, ease: "power2.out" }, 4.9);
+  tl.fromTo("#pts", { opacity: 0 }, { opacity: 1, duration: 0.4 }, 5.0);
 
   caps.forEach((c, i) => {
     tl.fromTo(c, { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.4 }, at[i]);
     if (i < caps.length - 1) tl.to(c, { opacity: 0, duration: 0.3 }, at[i + 1] - 0.3);
   });
 
-  // Scene 2 — the checklist slides in, bars fill and percentages count, worth 90 of the points.
-  rows.forEach((r, i) => {
-    const t = 5.7 + i * 0.22;
-    tl.fromTo(r, { opacity: 0, x: 40 }, { opacity: 1, x: 0, duration: 0.4 }, t);
-    tl.fromTo(bars[i], { width: "0%" }, { width: widths[i] + "%", duration: 0.9, ease: "power2.out" }, t);
-    tl.fromTo(pcs[i], { textContent: 0 }, { textContent: scores[i], duration: 0.9, snap: { textContent: 1 }, ease: "power2.out" }, t);
-  });
-  tl.fromTo("#pts", { opacity: 0 }, { opacity: 1, duration: 0.4 }, 7.2);
+  // "Weft's scout reads your code for refactors": the checklist clears away, the scout's findings come in.
+  tl.to([...rows, "#pts"], { opacity: 0, duration: 0.35 }, 5.5);
+  tl.fromTo("#band", { opacity: 0, x: -30 }, { opacity: 1, x: 0, duration: 0.4 }, 5.6);
+  tl.fromTo("#finds", { opacity: 0 }, { opacity: 1, duration: 0.4 }, 6.2);
+  finds.forEach((f, i) => tl.fromTo(f, { opacity: 0, x: 30 }, { opacity: 1, x: 0, duration: 0.4 }, 6.5 + i * 0.45));
+  tl.fromTo("#status", { opacity: 0 }, { opacity: 1, duration: 0.4 }, 7.4);
 
-  // Scene 3 — the refactor scout earns the last 10; its open findings cost them, so the badge dips.
-  tl.fromTo("#band", { opacity: 0, x: -30 }, { opacity: 1, x: 0, duration: 0.4 }, 11.3);
-  tl.to("#score", { textContent: 62, duration: 0.9, snap: { textContent: 1 }, ease: "power1.out" }, 11.5);
-  tl.to("#arc", { attr: { "stroke-dasharray": "23.4 37.7" }, duration: 0.9, ease: "power1.out" }, 11.5);
-  tl.fromTo("#finds", { opacity: 0 }, { opacity: 1, duration: 0.4 }, 12.2);
+  // "when you click one": the cursor moves in and clicks the first finding.
+  tl.to("#cur", { opacity: 1, duration: 0.2 }, 8.6);
+  tl.to("#cur", { x: 330, y: 430, duration: 0.8, ease: "power2.inOut" }, 8.6);
+  tl.to("#f0", { scale: 0.97, duration: 0.1, yoyo: true, repeat: 1, transformOrigin: "50% 50%" }, 9.5);
+  tl.to("#cur", { opacity: 0, duration: 0.3 }, 9.7);
 
-  // Scene 4 — click the badge, the dialog opens, one finding starts its own card, the score climbs.
-  tl.to("#cur", { opacity: 1, duration: 0.2 }, 15.9);
-  tl.to("#cur", { x: 560, y: 640, duration: 0.8, ease: "power2.inOut" }, 15.9);
-  tl.to("#badge", { scale: 0.94, duration: 0.1, yoyo: true, repeat: 1 }, 16.3);
-  tl.to("#cur", { opacity: 0, duration: 0.3 }, 16.9);
-  tl.to([...rows, "#pts", "#band", "#finds", "#badge"], { opacity: 0, duration: 0.35 }, 16.7);
-  tl.to("#panel", { opacity: 0.25, duration: 0.4 }, 17.0);
-  tl.fromTo("#fix", { opacity: 0, x: -30 }, { opacity: 1, x: 0, duration: 0.4 }, 17.1);
-  tl.fromTo("#find", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.4 }, 17.6);
-  tl.fromTo("#status", { opacity: 0 }, { opacity: 1, duration: 0.4 }, 18.1);
-  tl.to("#cur", { opacity: 1, duration: 0.2 }, 18.3);
-  tl.to("#cur", { x: 560, y: 560, duration: 0.8, ease: "power2.inOut" }, 18.3);
-  tl.to("#find", { scale: 0.96, duration: 0.1, yoyo: true, repeat: 1 }, 19.0);
-  tl.to("#cur", { opacity: 0, duration: 0.3 }, 19.6);
-  tl.to(["#fix", "#find", "#status"], { opacity: 0, duration: 0.3 }, 19.7);
-  tl.to("#panel", { opacity: 1, duration: 0.3 }, 19.7);
-  tl.fromTo("#newcard", { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.5 }, 19.8);
-  tl.to("#up", { opacity: 1, duration: 0.4 }, 20.0);
-  tl.fromTo("#score2", { textContent: 62 }, { textContent: 67, duration: 1.0, snap: { textContent: 1 }, ease: "power1.out" }, 20.1);
-  tl.fromTo("#never", { opacity: 0 }, { opacity: 1, duration: 0.4 }, 20.6);
+  // "your AI fixes it as its own card": the card starts, with your AI working on it.
+  tl.to(["#f1", "#f2"], { opacity: 0, duration: 0.3 }, 10.0);
+  tl.to("#f0 .where", { opacity: 0, duration: 0.3 }, 10.1);
+  tl.to("#f0", { borderColor: "#2f6a4c", duration: 0.3 }, 10.1);
+  tl.to("#f0 .dot", { backgroundColor: "#5fd38d", duration: 0.3 }, 10.1);
+  tl.to("#f0 .n", { color: "#5fd38d", duration: 0.3 }, 10.1);
+  tl.to("#f0 .end", { innerText: "✓ fixed", color: "#5fd38d", duration: 0.3 }, 10.1);
+  tl.to("#status", { innerText: "2 open · the next one, too", duration: 0.3 }, 10.1);
+  tl.fromTo("#newcard", { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.5 }, 10.2);
 
-  tl.to("#fade", { opacity: 0, duration: 0.01 }, 21.5);
+  // "so your score keeps climbing": the score goes up, 84 to 88, and the two findings left come back.
+  tl.to("#newcard", { opacity: 0, duration: 0.3 }, 11.5);
+  tl.to(["#f1", "#f2"], { opacity: 0.55, duration: 0.3 }, 11.6);
+  tl.fromTo("#score", { textContent: 84 }, { textContent: 88, duration: 1.1, snap: { textContent: 1 }, ease: "power1.out" }, 11.7);
+  tl.to("#arc", { attr: { "stroke-dasharray": "33.2 37.7" }, duration: 1.1, ease: "power1.out" }, 11.7);
+  tl.to("#badge", { borderColor: "#2f6a4c", duration: 0.4 }, 11.8);
+  tl.fromTo("#up", { opacity: 0, y: 8 }, { opacity: 1, y: 0, duration: 0.4 }, 12.7);
+
+  tl.to("#fade", { opacity: 0, duration: 0.01 }, 16);
 
   window.__timelines = window.__timelines || {};
   window.__timelines.root = tl;

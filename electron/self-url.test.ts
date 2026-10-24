@@ -16,6 +16,12 @@ describe("isSelfUrl", () => {
     expect(isSelfUrl("http://localhost:3000/api/tags", own)).toBe(true);
   });
 
+  it("lets a feature intro page through, but nothing else under /intros", () => {
+    expect(isSelfUrl("http://localhost:3000/intros/newthread.html?live=1", own)).toBe(false);
+    expect(isSelfUrl("http://localhost:3000/intros/", own)).toBe(true);
+    expect(isSelfUrl("http://localhost:3000/intros/../board", own)).toBe(true);
+  });
+
   it("never treats file:// pages as Weft, even when Weft itself shows one", () => {
     expect(isSelfUrl("file:///tmp/weft-show/a.html", "file:///Applications/Weft/splash.html")).toBe(false);
     expect(isSelfUrl("file:///tmp/weft-show/a.html", own)).toBe(false);

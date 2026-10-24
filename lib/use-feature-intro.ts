@@ -10,7 +10,7 @@ import { readMuted, writeMuted } from "./welcome-voice";
 // welcome tour's 🔊 setting, in its address when it loads and as a message when you flip it. Messages count only from
 // this intro's own iframe.
 
-const prefersStill = () => {
+export const prefersStill = () => {
   try {
     return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   } catch {

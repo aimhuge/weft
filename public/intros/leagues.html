@@ -1,11 +1,15 @@
 <!doctype html>
 <!--
   The 🏆 Leagues dialog's intro (components/FeatureIntro.tsx plays it the first time the dialog opens), a HyperFrames
-  composition in the shared look (./kit.css): 0–5.5s sign in and you're in a league of ~30 builders, ranked by the XP
-  they earn Monday to Sunday; 5.5–11s shipping a card earns XP and you climb the table; 11–17s at the week's end the
-  top 7 move up a tier and the bottom 5 move down; 17–21.5s only the week's XP, cards shipped, streak, level and
-  badges are shared, never prompts or code. Tiers are the real LEAGUES (lib/game.ts). The voice is #narration,
-  read by `pnpm intros:narrate` (scripts/narrate-intros.mjs) into ./leagues.m4a. Seekable: no timers, no tl.call.
+  composition in the shared look (./kit.css). Beats, on the voice's words (./leagues.words.json):
+    0.3s  Weft's leagues put you with thirty builders each week — the league's head and its table come in;
+    3.4s  ship cards to earn points — a card ships and pays +10 XP;
+    5.4s  and climb the table — your row moves up past one builder, its XP up with it;
+    6.9s  the top seven move up a league, the bottom five move down — the two zones the week ends on;
+    10.6s Weft only shares your profile, never your prompts or code — your public profile on a sheet;
+    14.6s You can also share your mini apps — the app tiles on the profile.
+  The voice is #narration, read by `pnpm intros:narrate` (scripts/narrate-intros.mjs) into ./leagues.m4a. Seekable:
+  no timers, no tl.call.
 -->
 <html>
 <head>
@@ -14,156 +18,217 @@
 <title>Weft: the weekly leagues</title>
 <link rel="stylesheet" href="./kit.css">
 <style>
-  /* The six-tier ladder (lib/game.ts LEAGUES), drawn as the Ladder component does: Cotton to Gold Thread, taller as
-     they go, with the ones above yours locked. */
-  #ladder { left: 26px; top: 30px; display: flex; align-items: flex-end; gap: 12px; }
-  #ladder .t { width: 106px; border-radius: 14px 14px 0 0; border: 2px solid #2d3346; background: #1f2433; display: flex;
-    align-items: flex-end; justify-content: center; padding: 0 0 12px; font-size: 24px; color: #8d95aa;
-    white-space: nowrap; overflow: hidden; }
-  #ladder .t.here { background: #1b2a4d; border-color: #7aa7ff; color: #cfe0ff; font-weight: 600; }
-  #ladder .t.promo { background: #173a28; border-color: #5fd38d; color: #a9f0c6; font-weight: 600; }
-  #ladder .t.locked { border-style: dashed; opacity: 0.55; }
-  #head { left: 26px; top: 250px; font-size: 30px; color: #8d95aa; white-space: nowrap; }
-  #head b { color: #f1f3f8; font-weight: 600; }
-  #head .up { color: #5fd38d; } #head .down { color: #f0857f; }
+  /* The league and its rules for the week, on one line. */
+  #head { left: 26px; top: 28px; width: 688px; height: 52px; display: flex; align-items: center; gap: 14px; font-size: 28px; color: #8d95aa; }
+  #head b { color: #f1f3f8; font-weight: 650; white-space: nowrap; }
+  #head span { white-space: nowrap; }
+  #head .pill { height: 44px; font-size: 23px; padding: 0 13px; white-space: nowrap; }
+  #head .sp { margin-left: auto; }
 
-  /* The league table, as LeagueTable draws it: #, builder with their week under it, badges, then XP. */
-  #tbl { left: 26px; top: 310px; width: 688px; }
-  #th { left: 0; top: 0; width: 688px; height: 46px; border-radius: 12px; background: #191d29; display: flex;
-    align-items: center; padding: 0 22px; font-size: 22px; letter-spacing: 0.06em; color: #8d95aa; }
+  /* The league table: #, builder with their week under it, badges, then XP. */
+  #tbl { left: 26px; top: 92px; width: 688px; }
+  #th { left: 0; top: 0; width: 688px; height: 32px; border-radius: 10px; background: #191d29; display: flex;
+    align-items: center; padding: 0 20px; font-size: 19px; letter-spacing: 0.06em; color: #8d95aa; }
   #th .xp { margin-left: auto; }
-  .lr { left: 0; width: 688px; min-height: 78px; border-radius: 12px; background: #1f2433; border: 2px solid #2d3346;
-    padding: 0 22px; display: flex; align-items: center; gap: 16px; font-size: 30px; }
-  .lr .rk { width: 46px; flex: none; text-align: center; font-weight: 700; color: #c9cfdf; }
-  .lr .av { width: 44px; height: 44px; border-radius: 50%; background: #2a3044; flex: none; }
+  .lr { left: 0; width: 688px; height: 54px; border-radius: 12px; background: #1f2433; border: 2px solid #2d3346;
+    padding: 0 20px; display: flex; align-items: center; gap: 14px; font-size: 26px; }
+  .lr .rk { width: 38px; flex: none; text-align: center; font-weight: 700; color: #c9cfdf; }
+  .lr .av { width: 36px; height: 36px; border-radius: 50%; background: #2a3044; flex: none; }
   .lr .who { flex: 1; min-width: 0; }
   .lr .who .n { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .lr .who small { display: block; font-size: 24px; color: #8d95aa; font-weight: 400; white-space: nowrap;
+  .lr .who small { display: block; font-size: 19px; color: #8d95aa; font-weight: 400; white-space: nowrap;
     overflow: hidden; text-overflow: ellipsis; }
-  .lr .bg { flex: none; font-size: 30px; letter-spacing: 2px; white-space: nowrap; }
-  .lr .xp { width: 108px; flex: none; text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .lr .bg { flex: none; font-size: 22px; letter-spacing: 2px; white-space: nowrap; }
+  .lr .xp { width: 92px; flex: none; text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
   .lr.mine { background: #1b2a4d; border-color: #7aa7ff; }
-  .lr.up .rk { color: #5fd38d; } .lr.down .rk { color: #f0857f; }
-  .lr.up { border-color: #2f6a4c; } .lr.down { border-color: #6a3a3a; }
-  #l0 { top: 54px; } #l1 { top: 140px; } #l2 { top: 226px; } #l3 { top: 312px; }
+  .lr.up { border-color: #2f6a4c; } .lr.up .rk { color: #5fd38d; }
+  .lr.down { border-color: #6a3a3a; } .lr.down .rk { color: #f0857f; }
+  /* The two zones the week ends on: a slim strip laid over the ranks it holds. */
+  #zoneUp { left: 0; top: 36px; width: 688px; height: 36px; border-radius: 10px; background: #14281e;
+    border: 2px solid #2f6a4c; padding: 0 16px; display: flex; align-items: center; gap: 12px; font-size: 22px; color: #a9f0c6; }
+  #zoneUp .tag { margin-left: auto; font-size: 22px; }
+  #zoneDown { left: 0; top: 484px; width: 688px; height: 36px; border-radius: 10px; background: #2a1717;
+    border: 2px solid #6a3a3a; padding: 0 16px; display: flex; align-items: center; gap: 12px; font-size: 22px; color: #f0b7b2; }
+  #zoneDown .tag { margin-left: auto; font-size: 22px; }
+  /* Where the table's rows sit, in the table's own coordinates. */
+  #l0 { top: 76px; } #l1 { top: 134px; } #l2 { top: 192px; } #l3 { top: 250px; } #l4 { top: 308px; }
+  #l5 { top: 366px; } #l6 { top: 424px; }
 
   /* A shipped card and the XP it pays (game.ts XP.done, 10, or 15 on a quality 80+ project). */
-  #ship { left: 26px; top: 500px; }
-  #xpPill { left: 26px; top: 500px; height: 64px; font-size: 32px; }
-  /* The privacy line: what a league shares, and what it never does. */
-  #shares { left: 26px; top: 470px; display: flex; flex-wrap: wrap; gap: 10px; width: 688px; }
-  #shares .pill { height: 50px; font-size: 27px; padding: 0 16px; }
+  #ship { left: 314px; top: 400px; width: 400px; z-index: 6; box-shadow: 0 24px 60px #0009; }
+  #ship .t { font-size: 29px; }
+  #xpPill { left: 314px; top: 530px; height: 58px; font-size: 32px; z-index: 6; }
+
+  /* Your public profile: what Weft shares, and what it never does. */
+  /* A sheet that covers the table, so the profile reads as its own screen. */
+  #sheet { left: 26px; top: 92px; width: 688px; height: 500px; border-radius: 20px; background: #151925;
+    border: 2px solid #232838; }
+  #prof { left: 26px; top: 120px; width: 688px; border-radius: 20px; background: #1f2433; border: 2px solid #2d3346;
+    padding: 20px 24px; display: flex; gap: 18px; align-items: center; }
+  #prof .av { width: 64px; height: 64px; border-radius: 50%; background: #4f7cff; flex: none; }
+  #prof .who { flex: 1; min-width: 0; }
+  #prof .who .n { display: block; font-size: 32px; font-weight: 650; line-height: 1.1; }
+  #prof .who .u { display: block; font-size: 24px; color: #8d95aa; }
+  #stats { left: 26px; top: 232px; width: 688px; display: flex; flex-wrap: wrap; gap: 10px; }
+  #stats .pill { height: 50px; font-size: 25px; padding: 0 16px; gap: 7px; }
+  #stats .pill b { color: #f0b429; font-weight: 700; }
+  #never { left: 26px; top: 356px; width: 688px; font-size: 28px; color: #8d95aa; }
+  #never .pill { height: 52px; font-size: 28px; }
+
+  /* The mini apps you share from your profile. */
+  #apps { left: 26px; top: 424px; width: 688px; height: 148px; }
+  #apps .app { top: 0; width: 220px; height: 148px; border-radius: 18px; background: #1f2433; border: 2px solid #2d3346;
+    padding: 16px 18px; display: flex; flex-direction: column; gap: 6px; }
+  #apps .app:nth-child(1) { left: 0; }
+  #apps .app:nth-child(2) { left: 234px; }
+  #apps .app:nth-child(3) { left: 468px; }
+  #apps .app .ic { font-size: 32px; }
+  #apps .app .t { font-size: 26px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #apps .app .u { font-size: 22px; color: #8d95aa; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 </style>
 </head>
 <body>
-<div id="root" data-composition-id="root" data-start="0" data-duration="21.5" data-width="800" data-height="1000">
+<div id="root" data-composition-id="root" data-start="0" data-duration="19" data-width="1600" data-height="900">
   <div class="abs head"><span class="ic">🏆</span>Leagues</div>
-  <div class="abs panel" id="panel">
-    <div class="abs" id="ladder">
-      <div class="t locked" id="t0" style="height:96px">🔒 Gold</div>
-      <div class="t locked" id="t1" style="height:120px">🔒 Cashmere</div>
-      <div class="t locked" id="t2" style="height:144px">🔒 Silk</div>
-      <div class="t locked" id="t3" style="height:168px">🔒 Wool</div>
-      <div class="t" id="t4" style="height:192px">Linen</div>
-      <div class="t" id="t5" style="height:216px">Cotton</div>
-    </div>
-    <div class="abs" id="head"><b>Linen League</b> · week of Oct 19 · 30 builders · <span class="up">top 7 move up</span> · <span class="down">bottom 5 move down</span></div>
-    <div class="abs" id="tbl">
-      <div class="abs" id="th"><span>BUILDER</span><span class="xp">XP</span></div>
-      <div class="abs lr up" id="l0"><span class="rk">1</span><span class="av"></span><span class="who"><span class="n">Ada R.</span><small>Level 12 · 6 shipped · 🔥 9</small></span><span class="bg">🚀🧪</span><span class="xp">1,840</span></div>
-      <div class="abs lr up" id="l1"><span class="rk">2</span><span class="av"></span><span class="who"><span class="n">Ben K.</span><small>Level 9 · 5 shipped · 🔥 4</small></span><span class="bg">⚙️</span><span class="xp">1,510</span></div>
-      <div class="abs lr mine" id="l2"><span class="rk">8</span><span class="av"></span><span class="who"><span class="n">You</span><small>Level 6 · 3 shipped · 🔥 5</small></span><span class="bg">🎯🔥</span><span class="xp">620</span></div>
-      <div class="abs lr down" id="l3"><span class="rk">29</span><span class="av"></span><span class="who"><span class="n">Cleo P.</span><small>Level 2 · 1 shipped</small></span><span class="bg"></span><span class="xp">90</span></div>
-    </div>
-    <div class="abs card" id="ship"><div class="t">Ship the checkout card</div><div class="p"><span class="spin"></span>card shipped</div></div>
-    <div class="abs swap" id="xpSwap"><span class="pill info" id="xpBefore">+10 XP</span><span class="pill on" id="xpAfter">+10 XP → 720</span></div>
-    <div class="abs" id="shares">
-      <span class="pill on" id="sh1">this week's XP</span>
-      <span class="pill on" id="sh2">cards shipped</span>
-      <span class="pill on" id="sh3">🔥 streak</span>
-      <span class="pill on" id="sh4">level</span>
-      <span class="pill on" id="sh5">badges</span>
-      <span class="pill warn" id="sh6">never prompts or code</span>
-    </div>
-  </div>
-  <svg class="abs cursor" id="cur" viewBox="0 0 24 24"><path d="M4 2l16 10-7 1.5L9.5 21z" fill="#fff" stroke="#111" stroke-width="1.2"/></svg>
+  <div class="abs art">
+    <div class="abs panel" id="panel">
+      <!-- The league and its rules for the week. -->
+      <div class="abs" id="head">
+        <b>Linen League</b>
+        <span>30 builders</span>
+        <span class="pill on sp">▲ top 7 up</span>
+        <span class="pill warn">▼ bottom 5 down</span>
+      </div>
 
-  <div class="abs cap" id="c1">Sign in, and you're in a league of <b>30 builders</b>.</div>
-  <div class="abs cap" id="c2">Ship a card, earn <b>XP</b>, and climb the table.</div>
-  <div class="abs cap" id="c3">Sunday's over: the <b>top 7 rise</b>, the bottom 5 fall.</div>
-  <div class="abs cap" id="c4">Just your week goes up — <b>never</b> prompts or code.</div>
+      <!-- The league table: thirty builders, ranked by the XP they earned this week. -->
+      <div class="abs" id="tbl">
+        <div class="abs" id="th"><span>BUILDER</span><span class="xp">XP THIS WEEK</span></div>
+        <div class="abs lr up" id="l0"><span class="rk">1</span><span class="av"></span><span class="who"><span class="n">Ada R.</span><small>Level 12 · 6 shipped · 🔥 9</small></span><span class="bg">🚀🧪</span><span class="xp">1,840</span></div>
+        <div class="abs lr up" id="l1"><span class="rk">2</span><span class="av"></span><span class="who"><span class="n">Ben K.</span><small>Level 9 · 5 shipped · 🔥 4</small></span><span class="bg">⚙️</span><span class="xp">1,510</span></div>
+        <div class="abs lr" id="l2"><span class="rk">5</span><span class="av"></span><span class="who"><span class="n">Rae S.</span><small>Level 7 · 3 shipped · 🔥 3</small></span><span class="bg">🪡</span><span class="xp">890</span></div>
+        <div class="abs lr mine" id="l3"><span class="rk">8</span><span class="av"></span><span class="who"><span class="n">You</span><small>Level 6 · 3 shipped · 🔥 5</small></span><span class="bg">🎯🔥</span><span class="xp">620</span></div>
+        <div class="abs lr" id="l4"><span class="rk">14</span><span class="av"></span><span class="who"><span class="n">Dara S.</span><small>Level 4 · 2 shipped · 🔥 2</small></span><span class="bg">🧵</span><span class="xp">310</span></div>
+        <div class="abs lr down" id="l5"><span class="rk">27</span><span class="av"></span><span class="who"><span class="n">Fay M.</span><small>Level 2 · 1 shipped</small></span><span class="bg"></span><span class="xp">70</span></div>
+        <div class="abs lr down" id="l6"><span class="rk">30</span><span class="av"></span><span class="who"><span class="n">Cleo P.</span><small>Level 1 · 0 shipped</small></span><span class="bg"></span><span class="xp">20</span></div>
+
+        <!-- The two zones the week ends on. -->
+        <div class="abs" id="zoneUp">▲ Ranks 1–7 move up a league<span class="tag">↑</span></div>
+        <div class="abs" id="zoneDown">▼ Ranks 26–30 move down<span class="tag">↓</span></div>
+      </div>
+
+      <!-- A card shipped, and the points it pays. -->
+      <div class="abs card" id="ship"><div class="t">Ship the checkout card</div><div class="p"><span class="spin"></span>card shipped</div></div>
+      <div class="abs pill info" id="xpPill">+10 XP</div>
+
+      <!-- Your public profile, and what it carries. -->
+      <div class="abs" id="sheet"></div>
+      <div class="abs" id="prof">
+        <span class="av"></span>
+        <span class="who"><span class="n">You</span><span class="u">weft.zip/@you</span></span>
+      </div>
+      <div class="abs" id="stats">
+        <span class="pill on"><b>1,240</b> XP this week</span>
+        <span class="pill on"><b>6</b> cards shipped</span>
+        <span class="pill on"><b>🔥 5</b> streak</span>
+        <span class="pill on">Level <b>8</b></span>
+        <span class="pill on"><b>🚀 🧪 🎯</b> badges</span>
+      </div>
+      <div class="abs" id="never"><span class="pill warn">🔒 never your prompts or code</span></div>
+
+      <!-- The mini apps you share from it. -->
+      <div class="abs" id="apps">
+        <div class="abs app"><span class="ic">📊</span><span class="t">Weekly stats</span><span class="u">weft.zip/a/x7k2</span></div>
+        <div class="abs app"><span class="ic">🧪</span><span class="t">Test runner</span><span class="u">weft.zip/a/m3p9</span></div>
+        <div class="abs app"><span class="ic">🧶</span><span class="t">Cloth clock</span><span class="u">weft.zip/a/r8v1</span></div>
+      </div>
+    </div>
+    <svg class="abs cursor" id="cur" viewBox="0 0 24 24"><path d="M4 2l16 10-7 1.5L9.5 21z" fill="#fff" stroke="#111" stroke-width="1.2"/></svg>
+
+  </div>
+
+  <div class="abs cap" id="c1">Thirty builders, <b>each week</b>.</div>
+  <div class="abs cap" id="c2">Ship a card, earn <b>points</b>.</div>
+  <div class="abs cap" id="c3">You <b>climb</b> the table.</div>
+  <div class="abs cap" id="c4">Top seven <b>move up</b>, bottom five move down.</div>
+  <div class="abs cap" id="c5">Only your <b>profile</b>, never your code.</div>
+  <div class="abs cap" id="c6">You can share your <b>mini apps</b> too.</div>
   <div class="abs" id="fade"></div>
 </div>
 
 <script type="application/json" id="narration">
-{ "duration": 21.5, "lines": [
-  [0.3, 5.3, "Sign in, and you're in a league of about thirty builders."],
-  [5.6, 10.9, "Ship a card, earn experience points, and climb the table."],
-  [11.2, 16.8, "When the week ends, the top seven move up a tier and the bottom five move down."],
-  [17.2, 21.3, "Only your week goes up: your points, cards, streak, level and badges. Never your prompts or code."]
+{ "duration": 19, "lines": [
+  [0.3, 3.27, "Weft's leagues put you with thirty builders each week."],
+  [3.48, 10.4, "Ship cards to earn points and climb the table: the top seven move up a league, and the bottom five move down."],
+  [10.6, 14.35, "Weft only shares your profile, never your prompts or code."],
+  [14.55, 17.2, "You can also share your mini apps."]
 ] }
 </script>
 <script src="../welcome/gsap.min.js"></script>
 <script src="./player.js"></script>
 <script>
   const tl = gsap.timeline({ paused: true });
-  const caps = ["#c1", "#c2", "#c3", "#c4"];
-  const at = [0.2, 5.5, 11, 17];
-  const rows = ["#l0", "#l1", "#l2", "#l3"];
-  gsap.set(["#ladder", "#head", "#tbl", "#ship", "#xpSwap", "#xpAfter", "#shares", "#cur", ...caps], { opacity: 0 });
-  gsap.set(rows, { opacity: 0 });
+  const caps = ["#c1", "#c2", "#c3", "#c4", "#c5", "#c6"];
+  const at = [0.2, 3.4, 5.4, 6.9, 10.6, 14.6];
+  const rows = ["#l0", "#l1", "#l2", "#l3", "#l4", "#l5", "#l6"];
+
+  gsap.set(["#head", "#tbl", "#zoneUp", "#zoneDown", "#ship", "#xpPill", "#sheet", "#prof", "#stats", "#never", "#apps", "#cur", ...caps, ...rows], { opacity: 0 });
+  gsap.set("#apps .app", { opacity: 0, y: 24 });
   gsap.set("#cur", { x: 620, y: 940 });
 
   tl.to("#fade", { opacity: 0, duration: 0.4 }, 0);
 
-  // The ladder rises tier by tier, yours lights up, and the league's head comes in with the rules of the week.
-  tl.fromTo("#ladder", { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.5 }, 0.4)
-    .fromTo("#t4", { scale: 0.85, transformOrigin: "50% 100%" }, { scale: 1, duration: 0.35 }, 1.5)
-    .fromTo("#head", { opacity: 0, x: -30 }, { opacity: 1, x: 0, duration: 0.45 }, 2.6);
+  // "Weft's leagues put you with thirty builders each week": the league's head, then its table.
+  tl.fromTo("#head", { opacity: 0, x: -30 }, { opacity: 1, x: 0, duration: 0.45 }, 0.2);
+  tl.fromTo("#tbl", { opacity: 0 }, { opacity: 1, duration: 0.4 }, 0.8);
+  tl.fromTo("#th", { opacity: 0 }, { opacity: 1, duration: 0.3 }, 0.8);
+  rows.forEach((r, i) => tl.fromTo(r, { opacity: 0, x: 40 }, { opacity: 1, x: 0, duration: 0.4 }, 1.1 + i * 0.2));
+
   caps.forEach((c, i) => {
     tl.fromTo(c, { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.4 }, at[i]);
     if (i < caps.length - 1) tl.to(c, { opacity: 0, duration: 0.3 }, at[i + 1] - 0.3);
   });
 
-  // Ship a card: the spinner finishes, the card joins the board, and its XP swaps your row's score up.
-  tl.to("#head", { opacity: 0.35, duration: 0.3 }, 5.9)
-    .to("#tbl", { opacity: 1, duration: 0.4 }, 5.8)
-    .to("#th", { opacity: 1, duration: 0.3 }, 5.8);
-  ["#l0", "#l1", "#l3"].forEach((r, i) => tl.from(r, { opacity: 0, x: 40, duration: 0.45 }, 6.1 + i * 0.5));
-  tl.from("#l2", { opacity: 0, x: 40, duration: 0.45 }, 6.3)
-    .to("#cur", { opacity: 1, duration: 0.2 }, 8.0)
-    .to("#cur", { x: 470, y: 700, duration: 0.9, ease: "power2.inOut" }, 8.0)
-    .to("#ship", { opacity: 1, duration: 0.4 }, 8.5)
-    .to("#cur", { opacity: 0, duration: 0.3 }, 9.4)
-    .to("#xpSwap", { opacity: 1, duration: 0.3 }, 9.5)
-    .to("#xpAfter", { opacity: 1, duration: 0.3 }, 9.8)
-    .to("#xpBefore", { opacity: 0, duration: 0.3 }, 9.8);
+  // "Ship cards to earn points": a card ships and pays its points.
+  tl.to("#head", { opacity: 0.35, duration: 0.3 }, 3.5);
+  tl.to("#tbl", { opacity: 0.2, duration: 0.35 }, 3.9);
+  tl.to("#cur", { opacity: 1, duration: 0.2 }, 3.7);
+  tl.to("#cur", { x: 470, y: 560, duration: 0.8, ease: "power2.inOut" }, 3.7);
+  tl.fromTo("#ship", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.45 }, 4.2);
+  tl.to("#cur", { opacity: 0, duration: 0.3 }, 4.9);
+  tl.fromTo("#xpPill", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.4 }, 4.7);
 
-  // The week ends: your row crosses the top 7 into the zone that moves up, and Cloe drops toward Cotton.
-  tl.to("#ship", { opacity: 0, duration: 0.3 }, 11.1)
-    .to("#xpSwap", { opacity: 0, duration: 0.3 }, 11.1)
-    .set("#l2 .rk", { innerText: "3" }, 11.6)
-    .fromTo("#l2", { y: 0 }, { y: -114, duration: 0.7, ease: "power2.inOut" }, 11.6)
-    .set("#l2 .xp", { innerText: "1,240" }, 12.4)
-    .to("#l2", { borderColor: "#2f6a4c", duration: 0.3 }, 12.6)
-    .to("#l2 .rk", { color: "#5fd38d", duration: 0.3 }, 12.6)
-    .to("#l3", { y: 100, opacity: 0.5, duration: 0.6 }, 12.9)
-    .to("#l3 .rk", { color: "#f0857f", duration: 0.2 }, 12.6)
-    .to("#t4", { opacity: 0.3, duration: 0.4 }, 13.4)
-    .to("#t3", { backgroundColor: "#173a28", borderColor: "#5fd38d", color: "#a9f0c6", duration: 0.4 }, 13.4)
-    .to("#cur", { opacity: 1, duration: 0.2 }, 13.8)
-    .to("#cur", { x: 150, y: 300, duration: 0.9, ease: "power2.inOut" }, 13.8)
-    .to("#t3", { scale: 1.08, duration: 0.12, yoyo: true, repeat: 1, transformOrigin: "50% 100%" }, 14.9)
-    .to("#cur", { opacity: 0, duration: 0.3 }, 15.6);
+  // "and climb the table": your row moves up past one builder, its XP up with it.
+  tl.to("#ship", { opacity: 0, duration: 0.3 }, 5.3);
+  tl.to("#xpPill", { opacity: 0, duration: 0.3 }, 5.3);
+  tl.to("#tbl", { opacity: 1, duration: 0.35 }, 5.3);
+  // You pass Rae S., who drops a place, and your rank and XP go with you.
+  tl.to("#l2", { y: 58, duration: 0.7, ease: "power2.inOut" }, 5.5);
+  tl.set("#l2 .rk", { innerText: "6" }, 5.5);
+  tl.set("#l3 .rk", { innerText: "4" }, 5.5);
+  tl.fromTo("#l3", { y: 0 }, { y: -58, duration: 0.7, ease: "power2.inOut" }, 5.5);
+  tl.set("#l3 .xp", { innerText: "1,120" }, 5.9);
+  tl.to("#l3", { borderColor: "#2f6a4c", duration: 0.3 }, 6.2);
+  tl.to("#l3 .rk", { color: "#5fd38d", duration: 0.3 }, 6.2);
 
-  // What goes up the wire, and what never does.
-  tl.to("#tbl", { opacity: 0.2, duration: 0.4 }, 17.1)
-    .to("#ladder", { opacity: 0.2, duration: 0.4 }, 17.1)
-    .to("#shares", { opacity: 1, duration: 0.3 }, 17.2);
-  ["#sh1", "#sh2", "#sh3", "#sh4", "#sh5"].forEach((s, i) =>
-    tl.from(s, { opacity: 0, y: 20, duration: 0.35 }, 17.4 + i * 0.28));
-  tl.from("#sh6", { opacity: 0, scale: 0.85, duration: 0.4 }, 19.1)
-    .to("#fade", { opacity: 0, duration: 0.01 }, 21.5);
+  // "the top seven move up a league, and the bottom five move down": the two zones.
+  tl.fromTo("#zoneUp", { opacity: 0, x: -30 }, { opacity: 1, x: 0, duration: 0.4 }, 7.0);
+  tl.fromTo("#zoneDown", { opacity: 0, x: 30 }, { opacity: 1, x: 0, duration: 0.4 }, 8.3);
+  tl.to("#l0", { scale: 1.03, duration: 0.12, yoyo: true, repeat: 1, transformOrigin: "50% 50%" }, 7.6);
+  tl.to("#l6", { scale: 1.03, duration: 0.12, yoyo: true, repeat: 1, transformOrigin: "50% 50%" }, 8.9);
+
+  // "Weft only shares your profile, never your prompts or code": the table steps back, your profile comes in.
+  tl.to(["#tbl", "#zoneUp", "#zoneDown", "#head"], { opacity: 0.1, duration: 0.4 }, 10.6);
+  tl.fromTo("#sheet", { opacity: 0 }, { opacity: 1, duration: 0.4 }, 10.7);
+  tl.fromTo("#prof", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.45 }, 10.8);
+  tl.fromTo("#stats", { opacity: 0 }, { opacity: 1, duration: 0.4 }, 11.6);
+  tl.fromTo("#never", { opacity: 0 }, { opacity: 1, duration: 0.4 }, 12.7);
+
+  // "You can also share your mini apps": the app tiles join the profile.
+  tl.to(["#prof", "#stats", "#never"], { opacity: 0.2, duration: 0.4 }, 14.6);
+  tl.to("#apps", { opacity: 1, duration: 0.4 }, 14.8);
+  tl.to("#apps .app", { opacity: 1, y: 0, duration: 0.4, stagger: 0.18 }, 14.9);
+
+  tl.to("#fade", { opacity: 0, duration: 0.01 }, 19);
 
   window.__timelines = window.__timelines || {};
   window.__timelines.root = tl;

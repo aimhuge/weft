@@ -1,10 +1,16 @@
 <!doctype html>
 <!--
   The ✦ Skills drawer's intro (components/FeatureIntro.tsx plays it the first time the drawer opens), a HyperFrames
-  composition in the shared look (./kit.css): 0–5s one library gathers Weft's, the project's, yours and plugins'
-  skills; 5–10.5s each project keeps its own set, seeded from what its threads ran; 10.5–15.5s a skill none of them
-  ran is switched off; 15.5–21s what was kept out of the thread, and that a hidden skill still runs when you type
-  /name. The voice is #narration, read by `pnpm intros:narrate` (scripts/narrate-intros.mjs) into ./skills.m4a.
+  composition in the shared look (./kit.css). The beats, on the voice's words (./skills.words.json):
+    0.1s  "Skills teach your AI new tricks." — /weft:done running, its four steps waiting.
+    2.4s  "…like Weft's done skill" — the steps tick off: tests ✓, docs ✓, refactor ✓, commit ✓, and the card
+         is wrapped up ("Committed, refactored, deployed and done.").
+    7.0s  "Weft gives each project just the skills it actually uses" — this project's own set: /weft:done and the
+         one skill its threads ran, on; the one no thread ran, off.
+   11.0s  "so your AI stays focused" — that skill's switch slides off, the set keeps it out.
+   13.4s  "any skill still runs the moment you type its name" — the reply box, the hidden skill in the menu
+         already running, its name typed.
+  The voice is #narration, read by `pnpm intros:narrate` (scripts/narrate-intros.mjs) into ./skills.m4a.
   Seekable: no timers, no tl.call.
 -->
 <html>
@@ -14,112 +20,202 @@
 <title>Weft: skills</title>
 <link rel="stylesheet" href="./kit.css">
 <style>
-  /* The group headings and their rows, laid out like components/SkillSetList.tsx. */
+  /* A thread's reply box, with the skill menu open above it. */
+  #reply { left: 26px; top: 430px; width: 688px; height: 96px; border-radius: 20px; background: #1f2433;
+    border: 2px solid #2d3346; padding: 18px 22px; display: flex; align-items: center; gap: 14px; }
+  #reply .caret { width: 3px; height: 38px; background: #f0b429; flex: none; }
+  #typed { font-size: 30px; color: #e8eaf0; font-weight: 500; }
+  #typed .cmd { color: #7aa7ff; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+  #reply .send { margin-left: auto; width: 54px; height: 54px; border-radius: 14px; background: #4f7cff; flex: none;
+    display: flex; align-items: center; justify-content: center; }
+  #reply .send svg { width: 26px; height: 26px; }
+
+  /* The skill menu that opens over the reply box: /weft:done first, then the hidden one. */
+  #menu { left: 26px; top: 190px; width: 688px; border-radius: 20px; background: #232838; border: 2px solid #3a4258;
+    padding: 10px; box-shadow: 0 24px 60px #000a; }
+  #menu .mi { display: flex; align-items: center; gap: 16px; padding: 14px 16px; border-radius: 14px; }
+  #menu .mi .d { font-size: 25px; color: #8d95aa; font-weight: 400; flex: 1; min-width: 0; }
+  #menu .mi .nm { font-size: 28px; font-weight: 600; color: #e8eaf0; flex: none; white-space: nowrap; }
+  #menu .mi .nm .mono { color: #7aa7ff; }
+  #menu .mi.hid { background: #1b2a4d; }
+  #menu .hidpill { flex: none; }
+
+  /* The done skill running: its four steps ticking off one by one. */
+  #run { left: 26px; top: 24px; width: 688px; }
+  #runhead { display: flex; align-items: center; gap: 14px; }
+  #runhead .sk { font-size: 30px; font-weight: 650; color: #e8eaf0; }
+  #runhead .sk .mono { color: #7aa7ff; }
+  #runhead .pill { margin-left: auto; }
+  .step { left: 0; width: 688px; height: 58px; display: flex; align-items: center; gap: 16px; font-size: 29px; color: #c9cfdf; }
+  .step .box { width: 38px; height: 38px; border-radius: 11px; border: 2px solid #39415a; flex: none;
+    display: flex; align-items: center; justify-content: center; font-size: 24px; color: #5fd38d; }
+  .step.done .box { background: #173a28; border-color: #2a6b4a; }
+  .step .nm { font-weight: 500; }
+  .step.done .nm { color: #e8eaf0; }
+  .step .sub { margin-left: auto; font-size: 25px; color: #8d95aa; flex: none; }
+  #st0 { top: 68px; } #st1 { top: 126px; } #st2 { top: 184px; } #st3 { top: 242px; }
+
+  /* The project's own set: the skills its threads actually ran, the rest switched off. */
   .grp { left: 26px; width: 688px; display: flex; justify-content: space-between; align-items: baseline; }
   .grp b { font-size: 26px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #7d8598; }
   .grp span { font-size: 26px; color: #7d8598; }
-  .sk { left: 26px; width: 688px; min-height: 78px; padding: 14px 22px; }
-  .sk .nm { font-size: 32px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
-  .sk .ds { font-size: 27px; color: #8d95aa; font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+  .sk { left: 26px; width: 688px; height: 88px; padding: 14px 22px; }
+  .sk .nm { font-size: 31px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+  .sk .ds { font-size: 26px; color: #8d95aa; font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
   .sw { margin-left: auto; flex: none; width: 76px; height: 42px; border-radius: 12px; background: #2a3044; border: 2px solid #39415a;
     display: flex; align-items: center; padding: 4px; }
   .sw i { width: 30px; height: 30px; border-radius: 8px; background: #c9cfdf; }
   .sw.on { background: #173a28; border-color: #2a6b4a; justify-content: flex-end; }
   .sw.on i { background: #5fd38d; }
-  /* The project's headline inside the panel: which folder the set belongs to. */
-  #proj { left: 26px; top: 24px; width: 688px; font-size: 30px; color: #c9cfdf; }
+
+  /* The set's header: which project, what it seeds from, what it keeps out. */
+  #proj { left: 26px; top: 24px; width: 688px; font-size: 29px; color: #c9cfdf; }
   #proj b { color: #e8eaf0; font-weight: 650; }
-  /* A Weft card on the board, reading its own project's threads. */
-  #card { left: 56px; top: 130px; width: 600px; }
-  #seed { left: 56px; top: 268px; }
-  #note { left: 26px; top: 372px; width: 688px; font-size: 30px; color: #c9cfdf; }
-  #kept { left: 26px; top: 440px; width: 688px; font-size: 29px; color: #8d95aa; }
+  #seednote { left: 26px; top: 470px; width: 688px; font-size: 28px; color: #8d95aa; }
+  #note { left: 26px; top: 546px; width: 688px; font-size: 28px; color: #c9cfdf; }
 </style>
 </head>
 <body>
-<div id="root" data-composition-id="root" data-start="0" data-duration="21" data-width="800" data-height="1000">
+<div id="root" data-composition-id="root" data-start="0" data-duration="19" data-width="1600" data-height="900">
   <div class="abs head"><span class="ic">✦</span>Skills</div>
 
-  <div class="abs panel" id="lib">
-    <div class="abs grp" id="g0"><b>Weft</b><span>4/4 on</span></div>
-    <div class="abs row sk" id="s0"><span class="n" style="min-width:0"><span class="nm mono">/weft:done</span><span class="ds">wrap a finished card up and move it to Done</span></span><span class="sw on"><i></i></span></div>
-    <div class="abs row sk" id="s1"><span class="n" style="min-width:0"><span class="nm mono">/weft:commit</span><span class="ds">commit the work in careful pieces</span></span><span class="sw on"><i></i></span></div>
-    <div class="abs grp" id="g1" style="top:296px"><b>Yours</b><span>2/4 on</span></div>
-    <div class="abs row sk" id="s2" style="top:340px"><span class="n" style="min-width:0"><span class="nm mono">/tdac</span><span class="ds">yours, in ~/.claude/skills</span></span><span class="sw on"><i></i></span></div>
-    <div class="abs row sk" id="s3" style="top:444px"><span class="n" style="min-width:0"><span class="nm mono">/security-review</span><span class="ds">none of this project's threads ran it</span></span><span class="sw on" id="sw3"><i></i></span></div>
+  <div class="abs art">
+    <!-- Scene 1+2: Weft's /weft:done skill running its steps. -->
+    <div class="abs panel" id="panel">
+      <div class="abs" id="run">
+        <div id="runhead"><span class="sk"><span class="mono">/weft:done</span></span><span class="pill info" id="runpill">running</span></div>
+        <div class="step" id="st0"><span class="box"></span><span class="nm">Tests</span><span class="sub" id="sub0">waiting</span></div>
+        <div class="step" id="st1"><span class="box"></span><span class="nm">Docs</span><span class="sub" id="sub1">waiting</span></div>
+        <div class="step" id="st2"><span class="box"></span><span class="nm">Refactor</span><span class="sub" id="sub2">waiting</span></div>
+        <div class="step" id="st3"><span class="box"></span><span class="nm">Commit</span><span class="sub" id="sub3">waiting</span></div>
+      </div>
+      <div class="abs card" id="card" style="left:26px; top:352px; width:688px">
+        <div class="t">Add billing to the checkout</div>
+        <div class="p"><span class="spin" id="spin"></span><span id="ran">wrapping up this card…</span></div>
+      </div>
+      <div class="abs" id="done" style="left:26px; top:490px; width:688px; font-size:29px; color:#5fd38d; font-weight:600">Committed, refactored, deployed and done.</div>
+    </div>
+
+    <!-- Scene 3+4: the project's own set, only the skills its threads ran. -->
+    <div class="abs panel" id="set" style="opacity:0">
+      <div class="abs" id="proj"><b>Your loom</b> — new threads here get these</div>
+      <div class="abs grp" id="g0" style="top:80px"><b>Weft</b><span>1/1 on</span></div>
+      <div class="abs row sk" id="s0" style="top:124px"><span class="n" style="min-width:0"><span class="nm mono">/weft:done</span><span class="ds">wrap up a card: test, document, refactor, commit</span></span><span class="sw on"><i></i></span></div>
+      <div class="abs grp" id="g1" style="top:230px"><b>This project</b><span>1/2 on</span></div>
+      <div class="abs row sk" id="s1" style="top:274px"><span class="n" style="min-width:0"><span class="nm mono">/tdac</span><span class="ds">this project's threads ran it</span></span><span class="sw on"><i></i></span></div>
+      <div class="abs row sk" id="s2" style="top:374px"><span class="n" style="min-width:0"><span class="nm mono">/security-review</span><span class="ds">no thread here ran it</span></span><span class="sw" id="sw2"><i></i></span></div>
+      <div class="abs" id="seednote" style="top:486px">Weft reads this project's threads and keeps the skills they use.</div>
+      <div class="abs" id="note" style="top:572px"><b style="color:#e8eaf0; font-weight:650">1 skill kept out</b> — but it still runs.</div>
+    </div>
+
+    <!-- Scene 5: the reply box, /security-review typed, the hidden skill still runs. -->
+    <div class="abs panel" id="replypanel" style="opacity:0">
+      <div class="abs" id="reply">
+        <span class="caret"></span>
+        <span id="typed"><span class="cmd" id="cmd">/security-review</span><span id="rest"></span></span>
+        <span class="send"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h13M12 5l7 7-7 7"/></svg></span>
+      </div>
+      <div class="abs" id="menu" style="opacity:0">
+        <div class="mi hid"><span class="nm"><span class="mono">/security-review</span></span><span class="d">off here, still runs</span><span class="pill on hidpill" id="ranpill">running</span></div>
+        <div class="mi"><span class="nm"><span class="mono">/weft:done</span></span><span class="d">test, document, refactor, commit</span></div>
+        <div class="mi"><span class="nm"><span class="mono">/tdac</span></span><span class="d">this project's threads ran it</span></div>
+      </div>
+    </div>
+
+    <svg class="abs cursor" id="cur" viewBox="0 0 24 24"><path d="M4 2l16 10-7 1.5L9.5 21z" fill="#fff" stroke="#111" stroke-width="1.2"/></svg>
   </div>
 
-  <div class="abs panel" id="set">
-    <div class="abs" id="proj"><b>Your loom</b> — new threads here get these</div>
-    <div class="abs card" id="card"><div class="t">Add billing to the checkout</div><div class="p"><span class="spin" id="spin"></span><span id="ran">reading this project's threads…</span><span id="ran2" style="opacity:0">the skills its threads ran</span></div></div>
-    <div class="abs" id="seed"><span class="pill info" id="seedIn">weft:done · /tdac · +2 on</span></div>
-    <div class="abs" id="note">5 skills kept out.</div>
-    <div class="abs" id="kept">Hidden skills still run when you type /name.</div>
-  </div>
-
-  <svg class="abs cursor" id="cur" viewBox="0 0 24 24"><path d="M4 2l16 10-7 1.5L9.5 21z" fill="#fff" stroke="#111" stroke-width="1.2"/></svg>
-
-  <div class="abs cap" id="c1">One library: Weft's, the project's, <b>yours</b>, plugins'.</div>
-  <div class="abs cap" id="c2">Each project keeps its own, <b>seeded</b> from what it ran.</div>
-  <div class="abs cap" id="c3">A skill none of them ran <b>goes off</b>.</div>
-  <div class="abs cap" id="c4">Threads stay <b>focused</b>. Type /name and it still runs.</div>
+  <div class="abs cap" id="c1">Skills teach your AI <b>new tricks</b>.</div>
+  <div class="abs cap" id="c2">Its done skill runs <b>tests, docs, refactor, commit</b>.</div>
+  <div class="abs cap" id="c3">Each project gets the skills it <b>uses</b>.</div>
+  <div class="abs cap" id="c4">So your AI stays <b>focused</b>.</div>
+  <div class="abs cap" id="c5">Type its name and it <b>still runs</b>.</div>
   <div class="abs" id="fade"></div>
 </div>
 
 <script type="application/json" id="narration">
-{ "duration": 21, "lines": [
-  [0.3, 5.0, "A skill is a packaged set of instructions, like slash weft done, or slash commit."],
-  [5.4, 10.4, "Weft gathers them all into one library, and gives every project a set of its own, seeded from the skills its threads actually ran."],
-  [10.8, 15.4, "A skill none of them ran gets switched off, so the threads here only see what the work needs."],
-  [15.8, 20.7, "Everything else is kept out of the thread, though a hidden skill still runs the moment you type its name."]
+{ "duration": 19, "lines": [
+  [0.3, 6.97, "Skills teach your AI new tricks, like Weft's done skill, which tests, documents, refactors and commits your work."],
+  [7.17, 16.5, "Weft gives each project just the skills it actually uses, so your AI stays focused, and any skill still runs the moment you type its name."]
 ] }
 </script>
 <script src="../welcome/gsap.min.js"></script>
 <script src="./player.js"></script>
 <script>
   const tl = gsap.timeline({ paused: true });
-  const caps = ["#c1", "#c2", "#c3", "#c4"];
-  const at = [0.2, 5.3, 10.7, 15.7];
-  gsap.set(["#set", "#card", "#seed", "#seedIn", "#note", "#kept", "#cur", ...caps], { opacity: 0 });
+  const caps = ["#c1", "#c2", "#c3", "#c4", "#c5"];
+  const at = [0.1, 2.4, 7.0, 11.0, 13.4];
+  gsap.set(["#card", "#done", "#set", "#replypanel", "#menu", "#ranpill", "#cur", ...caps], { opacity: 0 });
   gsap.set("#cur", { x: 700, y: 880 });
+  gsap.set(".step .box", { opacity: 0 });
+  gsap.set("#st0 .sub, #st1 .sub, #st2 .sub, #st3 .sub", { color: "#8d95aa" });
 
   tl.to("#fade", { opacity: 0, duration: 0.4 }, 0);
 
-  // The library: Weft's two skills and two of yours, in the drawer's four groups, every switch on.
-  tl.from("#g0", { opacity: 0, x: -30, duration: 0.4 }, 0.4);
-  ["#s0", "#s1"].forEach((r, i) => tl.from(r, { opacity: 0, x: 40, duration: 0.45 }, 0.8 + i * 0.4));
-  tl.from("#g1", { opacity: 0, x: -30, duration: 0.4 }, 1.9);
-  ["#s2", "#s3"].forEach((r, i) => tl.from(r, { opacity: 0, x: 40, duration: 0.45 }, 2.3 + i * 0.4));
+  // One caption per beat, in turn.
   caps.forEach((c, i) => {
     tl.fromTo(c, { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.4 }, at[i]);
     if (i < caps.length - 1) tl.to(c, { opacity: 0, duration: 0.3 }, at[i + 1] - 0.3);
   });
 
-  // Each project keeps its own set: the library gives way to one project's set, seeded in the background
-  // from that folder's threads (lib/skill-usage.ts), so the card's line becomes what those threads ran.
-  tl.to(["#g0", "#g1", "#s0", "#s1", "#s2", "#s3", "#lib"], { opacity: 0, duration: 0.35 }, 5.3)
-    .to("#set", { opacity: 1, duration: 0.35 }, 5.3)
-    .from("#proj", { opacity: 0, y: -14, duration: 0.4 }, 5.6)
-    .fromTo("#card", { opacity: 0, y: 26, scale: 0.97 }, { opacity: 1, y: 0, scale: 1, duration: 0.45 }, 6.1)
-    .to("#seedIn", { opacity: 1, duration: 0.35 }, 6.6)
-    .to("#spin", { rotate: 360, duration: 0.7, repeat: 4, ease: "none" }, 6.6)
-    .to("#spin", { opacity: 0, duration: 0.25 }, 9.5)
-    .to("#ran", { opacity: 0, duration: 0.25 }, 9.5)
-    .to("#ran2", { opacity: 1, duration: 0.3 }, 9.7);
+  // Skills teach your AI new tricks: the done skill's card slides in with its four steps, all in by
+  // the time the voice names the skill.
+  tl.fromTo("#run", { opacity: 0, y: -16 }, { opacity: 1, y: 0, duration: 0.4 }, 0.2)
+    .fromTo("#runpill", { opacity: 0 }, { opacity: 1, duration: 0.3 }, 0.4)
+    .fromTo("#card", { opacity: 0, y: 22 }, { opacity: 1, y: 0, duration: 0.45 }, 0.6)
+    .to("#spin", { rotate: 360, duration: 0.7, repeat: 3, ease: "none" }, 0.6);
 
-  // A skill none of them ran goes off: the cursor finds its switch and the handle slides back.
-  tl.set("#cur", { x: 700, y: 880 }, 10.7)
-    .to("#cur", { opacity: 1, duration: 0.2 }, 11.2)
-    .to("#cur", { x: 640, y: 470, duration: 0.9, ease: "power2.inOut" }, 11.2)
-    .to("#sw3", { backgroundColor: "#2a3044", borderColor: "#39415a", duration: 0.3 }, 12.2)
-    .to("#sw3 i", { x: -32, duration: 0.35, ease: "power2.out" }, 12.2)
-    .to("#s3", { opacity: 0.45, duration: 0.35 }, 12.2)
-    .to("#cur", { opacity: 0, duration: 0.3 }, 13.1);
+  // Its steps run in the voice's order: tests, documents, refactors, commits. The four rows are there
+  // from the start; each one's tick and result land as the voice names it.
+  const steps = ["#st0", "#st1", "#st2", "#st3"];
+  const subs = ["#sub0", "#sub1", "#sub2", "#sub3"];
+  const done = ["14 passed", "MAP.md updated", "3 refactors", "a8f3c21"];
+  steps.forEach((s, i) => {
+    tl.fromTo(s, { opacity: 0, x: -24 }, { opacity: 1, x: 0, duration: 0.3 }, 0.3 + i * 0.16)
+      .to(s + " .box", { opacity: 1, duration: 0.25 }, 0.3 + i * 0.16);
+  });
+  // Each step's tick and result land on the words that name it.
+  const on = [3.9, 4.8, 5.6, 6.3];
+  steps.forEach((s, i) => {
+    tl.set(s + " .box", { textContent: "✓" }, on[i])
+      .to(s + " .box", { backgroundColor: "#173a28", borderColor: "#2a6b4a", duration: 0.3 }, on[i])
+      .to(subs[i], { color: "#5fd38d", duration: 0.3 }, on[i])
+      .set(subs[i], { textContent: done[i] }, on[i]);
+  });
 
-  // What the set leaves the thread: the skills it keeps out, and that /name still runs a hidden one.
-  tl.fromTo("#note", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.4 }, 15.9)
-    .fromTo("#kept", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.4 }, 16.6)
-    .to("#fade", { opacity: 0, duration: 0.01 }, 21);
+  // The card is done: the spin stops and the sign-off lands.
+  tl.to("#spin", { opacity: 0, duration: 0.25 }, 6.4)
+    .fromTo("#done", { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.4 }, 6.5);
+
+  // Each project gets the skills it uses: the done panel gives way to this project's set.
+  tl.to("#panel", { opacity: 0, duration: 0.35 }, 7.0)
+    .to("#set", { opacity: 1, duration: 0.35 }, 7.0)
+    .fromTo("#g0", { opacity: 0, x: -26 }, { opacity: 1, x: 0, duration: 0.35 }, 7.3)
+    .fromTo("#s0", { opacity: 0, x: 34 }, { opacity: 1, x: 0, duration: 0.4 }, 7.6)
+    .fromTo("#g1", { opacity: 0, x: -26 }, { opacity: 1, x: 0, duration: 0.35 }, 8.1)
+    .fromTo("#s1", { opacity: 0, x: 34 }, { opacity: 1, x: 0, duration: 0.4 }, 8.4)
+    .fromTo("#seednote", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.4 }, 8.9);
+
+  // So your AI stays focused: the skill no thread ran goes off, and the count follows.
+  tl.to("#sw2", { backgroundColor: "#2a3044", borderColor: "#39415a", duration: 0.3 }, 11.4)
+    .to("#sw2 i", { x: -32, duration: 0.35, ease: "power2.out" }, 11.4)
+    .to("#s2", { opacity: 0.5, duration: 0.35 }, 11.4)
+    .fromTo("#note", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.4 }, 11.6);
+
+  // Any skill still runs when you type its name: the reply box, the skill menu open on the hidden one
+  // (it runs even off), then the cursor finds the box and the name appears as the voice says it.
+  tl.to("#set", { opacity: 0, duration: 0.35 }, 12.6)
+    .to("#replypanel", { opacity: 1, duration: 0.35 }, 12.6)
+    .fromTo("#reply", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.45 }, 12.9)
+    .fromTo("#menu", { opacity: 0, y: -14 }, { opacity: 1, y: 0, duration: 0.35 }, 13.2)
+    .to("#ranpill", { opacity: 1, duration: 0.3 }, 13.7)
+    .to("#cur", { opacity: 1, duration: 0.2 }, 14.6)
+    .fromTo("#cur", { x: 700, y: 880 }, { x: 380, y: 613, duration: 0.5, ease: "power2.inOut" }, 14.6)
+    .fromTo("#cmd", { opacity: 0 }, { opacity: 1, duration: 0.7 }, 15.05)
+    .to("#cur", { opacity: 0, duration: 0.3 }, 15.9)
+    .to("#menu", { opacity: 0, duration: 0.3 }, 16.4)
+    .to("#replypanel", { opacity: 0, duration: 0.3 }, 16.6)
+    .to("#fade", { opacity: 0, duration: 0.01 }, 19);
 
   window.__timelines = window.__timelines || {};
   window.__timelines.root = tl;

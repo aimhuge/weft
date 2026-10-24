@@ -1,10 +1,13 @@
 <!doctype html>
 <!--
   The 🚀 BlastCP drawer's intro (components/FeatureIntro.tsx plays it the first time the drawer opens), a HyperFrames
-  composition in the shared look (./kit.css): 0–5s connect with your Weft account, sign-in kept in the Keychain;
-  5–11s link a project folder to the property it posts as; 11–15s the property's socials; 15–21s a thread drafts a
-  launch post and schedules it. The voice is #narration, read by `pnpm intros:narrate` (scripts/narrate-intros.mjs)
-  into ./blastcp.m4a. Seekable: no timers, no tl.call.
+  composition in the shared look (./kit.css). Beats, on the words that name them:
+  0.1s your AI runs your social media (the post composer opens) · 4.6s it writes the post (the text writes itself into
+  the composer) · 5.7s it makes the image, video and voice (the three media chips) · 7.5s it schedules them (Schedule) ·
+  8.7s to LinkedIn, Instagram, YouTube and more (the platform chips) · 11.3s from one queue (the queue) ·
+  12.5s each project posts as its own brand (my-app → My App).
+  The voice is #narration, read by `pnpm intros:narrate` (scripts/narrate-intros.mjs) into ./blastcp.m4a; the beats
+  sit on its words (./blastcp.words.json). Seekable: no timers, no tl.call.
 -->
 <html>
 <head>
@@ -16,101 +19,121 @@
   /* The drawer's rocket mark (public/brand/blastcp-rocket.png), as components/BlastcpLogo.tsx draws it. */
   .head .ic img { width: 52px; height: 52px; display: block; }
 
-  #signin { top: 26px; }
-  #accts { top: 200px; }
-  #keys { top: 344px; width: 420px; font-size: 30px; }
+  /* The composer: the post the AI is writing, for the project. */
+  #compo { left: 26px; top: 26px; width: 688px; height: 200px; flex-direction: column; align-items: stretch;
+    gap: 8px; padding: 18px 24px; overflow: hidden; }
+  #compo .name { font-size: 32px; font-weight: 600; }
+  #compo .sub { font-size: 27px; color: #8d95aa; }
+  #compo .com { border-radius: 16px; background: #0f121c; border: 2px solid #2d3346; padding: 14px 18px;
+    font-size: 28px; color: #e8eaf0; min-height: 108px; display: flex; align-items: flex-start; gap: 2px; }
+  #compo .com .c { color: #8d95aa; }
+  #compo .caret { width: 3px; height: 32px; background: #f0b429; flex: none; margin-top: 4px; }
+  /* The post, written word by word: each word is a span, revealed in turn. */
+  #post { display: flex; flex-wrap: wrap; gap: 0 8px; }
+  #post span { opacity: 0; }
+  #post span.on { opacity: 1; }
+  #post b { color: #f0b429; font-weight: 650; }
+  /* The post's two lines, so the box holds them whole. */
+  #compo .com { min-height: 108px; align-items: flex-start; }
 
-  #folder { top: 26px; }
-  #unlinked { top: 214px; width: 688px; }
-  #pick { top: 214px; width: 688px; }
-  #pick .t { font-size: 30px; font-weight: 600; color: #8d95aa; margin-bottom: 14px; }
-  #pick .row { position: relative; left: 0; width: 660px; min-height: 84px; margin-bottom: 12px; }
-  #pick .row .slug { font-size: 28px; color: #8d95aa; }
-  #pick .row .end { font-size: 28px; }
+  /* The media it makes: image, video and voice, one chip each. */
+  #media { left: 26px; top: 244px; width: 688px; display: flex; gap: 16px; }
+  .chip { position: relative; left: 0; width: 218px; height: 116px; border-radius: 18px; background: #1f2433;
+    border: 2px solid #2d3346; padding: 12px 16px; display: flex; flex-direction: column; justify-content: center; gap: 6px; }
+  .chip .ic { font-size: 34px; line-height: 1; }
+  .chip .lab { font-size: 27px; color: #e8eaf0; font-weight: 600; }
+  .chip .st { font-size: 24px; color: #8d95aa; display: flex; align-items: center; gap: 10px; position: relative; }
+  .chip .st .spin { width: 26px; height: 26px; border-width: 4px; }
+  /* Two states in one spot: "making…" fades into "ready". */
+  .chip .st .w2 { position: absolute; left: 0; top: 0; color: #5fd38d; opacity: 0; }
+  .chip.done { border-color: #35508f; }
+  .chip.done .st .w1 { opacity: 0; }
+  .chip.done .st .w2 { opacity: 1; }
 
-  #socials { top: 20px; left: 26px; width: 688px; height: 300px; border-radius: 20px; background: #1f2433;
-    border: 2px solid #2d3346; padding: 22px 24px; }
-  #socials .lab { font-size: 28px; color: #8d95aa; margin-bottom: 16px; }
-  #socials .grid { display: flex; flex-wrap: wrap; gap: 12px; }
-  #socials .sp { font-size: 28px; height: 50px; padding: 0 18px; border-radius: 12px; background: #2a3044; color: #c9cfdf;
+  /* The platforms it posts to. */
+  #plats { left: 26px; top: 372px; width: 688px; }
+  #plats .grid { position: relative; left: 0; display: flex; flex-wrap: wrap; gap: 12px; }
+  #plats .sp { font-size: 26px; height: 50px; padding: 0 16px; border-radius: 12px; background: #2a3044; color: #c9cfdf;
     display: inline-flex; align-items: center; }
 
-  #queue { top: 344px; }
-  #queue .when { width: 108px; flex: none; font-size: 28px; color: #8d95aa; }
-  #queue .tg { font-size: 26px; height: 44px; padding: 0 14px; border-radius: 10px; background: #2a3044; color: #c9cfdf;
+  /* The queue: the scheduled posts, one row each. */
+  #queue { left: 26px; top: 440px; width: 688px; display: flex; flex-direction: column; gap: 12px; }
+  #queue .row { position: relative; left: 0; width: 688px; min-height: 80px; }
+  #queue .row .when { width: 128px; flex: none; font-size: 26px; color: #8d95aa; }
+  #queue .row .n { font-size: 28px; }
+  #queue .row .tg { font-size: 23px; height: 40px; padding: 0 13px; border-radius: 10px; background: #2a3044; color: #c9cfdf;
     display: inline-flex; align-items: center; flex: none; }
-  #draft { top: 470px; }
-  #draft .t { font-size: 30px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  #draft .p { margin-top: 12px; font-size: 26px; color: #8d95aa; display: flex; gap: 10px; align-items: center;
-    white-space: nowrap; overflow: hidden; }
-  #sched { top: 596px; }
-  #ok { top: 596px; left: 26px; height: 64px; font-size: 30px; }
+  #queue .row .tg.li { background: #1b2a4d; color: #7aa7ff; }
+  #queue .row .tg.ig { background: #3a2e10; color: #f0b429; }
+  #queue .row .tg.yt { background: #2f1b3a; color: #d29bf0; }
+
+  /* The button that puts the post in the queue. */
+  #sched { left: 26px; top: 440px; }
+
+  /* Each project posts as its own brand: the pairs, one after another. */
+  #brands { left: 26px; top: 155px; width: 688px; display: flex; flex-direction: column; gap: 16px; }
+  .pair { position: relative; left: 0; width: 688px; height: 92px; border-radius: 20px; background: #1f2433;
+    border: 2px solid #2d3346; padding: 0 24px; display: flex; align-items: center; gap: 18px; font-size: 30px; }
+  .pair .proj { color: #e8eaf0; font-weight: 600; }
+  .pair .arrow { color: #6f7890; font-size: 28px; }
+  .pair .brand { margin-left: auto; display: inline-flex; align-items: center; gap: 10px; height: 52px; padding: 0 20px;
+    border-radius: 14px; background: #173a28; color: #5fd38d; font-size: 28px; }
 </style>
 </head>
 <body>
-<div id="root" data-composition-id="root" data-start="0" data-duration="21" data-width="800" data-height="1000">
-  <div class="abs head"><span class="ic"><img src="/brand/blastcp-rocket.png" alt=""></span>BlastCP</div>
-  <div class="abs panel" id="panel">
-    <div class="abs row" id="signin">
-      <span class="n mono" style="font-size:32px">you@weft.zip</span>
-      <span class="end swap"><span class="pill off" id="signedOut">Not connected</span><span class="pill on" id="signedIn">✓ Connected</span></span>
-    </div>
-    <div class="abs" id="accts">
-      <div class="abs row" style="position:relative;left:0;width:688px;min-height:88px"><span class="n">Connect with Weft</span><span class="end pill on">✓</span></div>
-      <div class="abs row" style="position:relative;left:0;width:688px;min-height:88px"><span class="n" style="font-size:30px;color:#8d95aa">Another BlastCP account</span></div>
-    </div>
-    <div class="abs pill info" id="keys">🔑 Sign-in kept in your Keychain</div>
-
-    <div class="abs row" id="folder">
-      <span class="n mono">my-app</span>
-      <span class="end swap"><span class="pill off" id="noLink">Not linked</span><span class="pill on" id="linked">🚀 Posts as My App</span></span>
-    </div>
-    <div class="abs row" id="unlinked" style="font-size:30px;color:#8d95aa">Not linked to a BlastCP property</div>
-    <div class="abs" id="pick">
-      <div class="t">Link my-app to…</div>
-      <div class="row"><span class="n">My App</span><span class="slug mono end">my-app</span></div>
-      <div class="row"><span class="n">My App Docs</span><span class="slug mono end">my-app-docs</span></div>
-      <div class="row" style="color:#4f7cff;font-weight:600">+ New property…</div>
-    </div>
-
-    <div class="abs" id="socials">
-      <div class="lab">Connected socials</div>
-      <div class="grid">
-        <span class="sp">in LinkedIn</span>
-        <span class="sp">@ Threads</span>
-        <span class="sp">▶ YouTube</span>
-        <span class="sp">◎ Instagram</span>
-        <span class="sp">✉ Email</span>
+<div id="root" data-composition-id="root" data-start="0" data-duration="18" data-width="1600" data-height="900">
+  <div class="abs head"><span class="ic"><img src="../brand/blastcp-rocket.png" alt=""></span>BlastCP</div>
+  <div class="abs art">
+    <div class="abs panel" id="panel">
+      <div class="abs row" id="compo">
+        <span class="name">My App</span>
+        <span class="sub">a post for BlastCP</span>
+        <span class="com"><span id="post"></span><span class="caret" id="caret"></span><span class="c" id="ph">Write the post…</span></span>
       </div>
-    </div>
 
-    <div class="abs row" id="queue">
-      <span class="when">in 3h</span>
-      <span class="tg">in LinkedIn</span>
-      <span class="n" style="font-size:30px">My App is live</span>
+      <div class="abs" id="media">
+        <div class="chip" id="mImg"><span class="ic">🖼️</span><span class="lab">Image</span><span class="st"><span class="spin"></span><span class="w1">making…</span><span class="w2">ready</span></span></div>
+        <div class="chip" id="mVid"><span class="ic">🎬</span><span class="lab">Video</span><span class="st"><span class="spin"></span><span class="w1">making…</span><span class="w2">ready</span></span></div>
+        <div class="chip" id="mVoi"><span class="ic">🎙️</span><span class="lab">Voice</span><span class="st"><span class="spin"></span><span class="w1">making…</span><span class="w2">ready</span></span></div>
+      </div>
+
+      <div class="abs" id="plats">
+        <div class="grid">
+          <span class="sp" id="spLi">in LinkedIn</span>
+          <span class="sp" id="spIg">◎ Instagram</span>
+          <span class="sp" id="spYt">▶ YouTube</span>
+          <span class="sp" id="spMore">+ more</span>
+        </div>
+      </div>
+
+      <div class="abs" id="queue">
+        <div class="row" id="q1"><span class="when">in 3h</span><span class="tg li">in LinkedIn</span><span class="n">My App is live</span></div>
+        <div class="row" id="q2"><span class="when">tomorrow</span><span class="tg ig">◎ Instagram</span><span class="n">Behind the build</span></div>
+      </div>
+
+      <div class="abs" id="brands">
+        <div class="pair" id="brand"><span class="proj mono">my-app</span><span class="arrow">posts as</span><span class="brand">🚀 My App</span></div>
+        <div class="pair" id="brand2"><span class="proj mono">my-docs</span><span class="arrow">posts as</span><span class="brand">📘 My Docs</span></div>
+        <div class="pair" id="brand3"><span class="proj mono">my-shop</span><span class="arrow">posts as</span><span class="brand">🛍️ My Shop</span></div>
+      </div>
+
+      <div class="abs btn" id="sched">Schedule</div>
     </div>
-    <div class="abs card" id="draft" style="width:688px">
-      <div class="t">Draft the My App launch post</div>
-      <div class="p"><span class="spin"></span><span id="draftNote">writing the post, image, video and voice</span></div>
-    </div>
-    <div class="abs btn" id="sched">Schedule it</div>
-    <div class="abs pill on" id="ok" style="height:64px">✓ Scheduled · in 3h</div>
+    <svg class="abs cursor" id="cur" viewBox="0 0 24 24"><path d="M4 2l16 10-7 1.5L9.5 21z" fill="#fff" stroke="#111" stroke-width="1.2"/></svg>
+
   </div>
-  <svg class="abs cursor" id="cur" viewBox="0 0 24 24"><path d="M4 2l16 10-7 1.5L9.5 21z" fill="#fff" stroke="#111" stroke-width="1.2"/></svg>
 
-  <div class="abs cap" id="c1">Connect with your <b>Weft account</b>.</div>
-  <div class="abs cap" id="c2">Link a project to the property it <b>posts as</b>.</div>
-  <div class="abs cap" id="c3">All your <b>socials</b>, one queue.</div>
-  <div class="abs cap" id="c4">A thread drafts the launch post and <b>schedules</b> it.</div>
+  <div class="abs cap" id="c1">Your AI <b>runs your social media</b>.</div>
+  <div class="abs cap" id="c2">It <b>writes the post</b>, makes the image, video and voice.</div>
+  <div class="abs cap" id="c3">Then it <b>schedules</b> them, from one queue.</div>
+  <div class="abs cap" id="c4">Each project posts as its own <b>brand</b>.</div>
   <div class="abs" id="fade"></div>
 </div>
 
 <script type="application/json" id="narration">
-{ "duration": 21, "lines": [
-  [0.3, 4.3, "Connect BlastCP with your Weft account."],
-  [4.8, 10.3, "Then link a project folder to the property it posts as."],
-  [10.8, 14.6, "Every social you have connected, in one queue."],
-  [15.1, 20.7, "A thread drafts your launch post, with an image, video and voice, and schedules it."]
+{ "duration": 18, "lines": [
+  [0.3, 12.5, "Weft's BlastCP connector allows your AI to run your social media: write posts, make images, video and voice, and schedule them to LinkedIn, Instagram, YouTube and more from one queue."],
+  [12.7, 15.6, "Each project posts as its own brand."]
 ] }
 </script>
 <script src="../welcome/gsap.min.js"></script>
@@ -118,69 +141,84 @@
 <script>
   const tl = gsap.timeline({ paused: true });
   const caps = ["#c1", "#c2", "#c3", "#c4"];
-  const at = [0.2, 5, 11, 15];
-  gsap.set(["#accts", "#keys", "#unlinked", "#pick", "#socials", "#queue", "#draft", "#sched", "#ok",
-    "#signedIn", "#linked", "#cur", ...caps], { opacity: 0 });
-  gsap.set("#cur", { x: 560, y: 900 });
+  const at = [0.1, 4.6, 7.5, 12.5];
+  gsap.set(["#media", "#plats", "#queue", "#sched", "#caret", "#ph", "#cur", "#brands",
+    "#brand", "#brand2", "#brand3", ...caps], { opacity: 0 });
+  gsap.set("#cur", { x: 40, y: 500 });
 
   tl.to("#fade", { opacity: 0, duration: 0.4 }, 0);
-  tl.from("#signin", { opacity: 0, x: 40, duration: 0.45 }, 0.4);
-  tl.from("#folder", { opacity: 0, x: 40, duration: 0.45 }, 0.4);
   caps.forEach((c, i) => {
     tl.fromTo(c, { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.4 }, at[i]);
     if (i < caps.length - 1) tl.to(c, { opacity: 0, duration: 0.3 }, at[i + 1] - 0.3);
   });
 
-  // Connect with Weft: the two ways in slide in, the cursor presses the first, the pill turns green.
-  tl.to("#accts", { opacity: 1, duration: 0.4 }, 1)
-    .fromTo("#accts", { y: 24 }, { y: 0, duration: 0.4 }, 1)
-    .to("#cur", { opacity: 1, duration: 0.2 }, 1.8)
-    .to("#cur", { x: 600, y: 250, duration: 0.9, ease: "power2.inOut" }, 1.8)
-    .to("#signedOut", { scale: 0.92, duration: 0.1, yoyo: true, repeat: 1 }, 2.9)
-    .to("#signedOut", { opacity: 0, duration: 0.3 }, 3.3)
-    .to("#signedIn", { opacity: 1, duration: 0.3 }, 3.3)
-    .to("#cur", { opacity: 0, duration: 0.3 }, 3.9)
-    .to("#keys", { opacity: 1, duration: 0.4 }, 3.9);
+  // The post, written word by word: the words are spans, and the AI adds them one at a time.
+  const post = document.getElementById("post");
+  const words = ["My", "App", "is", "live", "—", "the", "board", "you", "wanted,", "on", "your", "desk", "now."];
+  const spans = words.map((w) => {
+    const s = document.createElement("span");
+    s.textContent = w;
+    post.appendChild(s);
+    return s;
+  });
 
-  // Link the folder: the note is replaced by the picker, the cursor takes the best match, the link pill turns green.
-  tl.to(["#accts", "#keys"], { opacity: 0, duration: 0.35 }, 5)
-    .to("#unlinked", { opacity: 1, duration: 0.35 }, 5)
-    .to("#unlinked", { opacity: 0, duration: 0.3 }, 5.9)
-    .to("#pick", { opacity: 1, duration: 0.35 }, 5.9)
-    .to("#cur", { opacity: 1, duration: 0.2 }, 6.4)
-    .to("#cur", { x: 400, y: 320, duration: 0.9, ease: "power2.inOut" }, 6.4)
-    .to("#pick .row:nth-child(2)", { scale: 0.97, duration: 0.1, yoyo: true, repeat: 1 }, 7.5)
-    .to("#pick", { opacity: 0, duration: 0.3 }, 8.1)
-    .to("#noLink", { opacity: 0, duration: 0.3 }, 8.1)
-    .to("#linked", { opacity: 1, duration: 0.3 }, 8.1)
-    .to("#cur", { opacity: 0, duration: 0.3 }, 8.7);
+  // Your AI runs your social media: the composer opens on a post it is writing.
+  tl.to("#compo", { opacity: 1, duration: 0.4 }, 0.1)
+    .fromTo("#compo", { y: 20 }, { y: 0, duration: 0.4 }, 0.1)
+    .to("#ph", { opacity: 0, duration: 0.25 }, 3.9)
+    .to("#caret", { opacity: 1, duration: 0.2 }, 3.9);
 
-  // The connected socials fan out, one platform at a time.
-  tl.to("#socials", { opacity: 1, duration: 0.4 }, 11)
-    .fromTo("#socials", { y: 24 }, { y: 0, duration: 0.4 }, 11)
-    .fromTo("#socials .sp:nth-child(1)", { opacity: 0, scale: 0.7 }, { opacity: 1, scale: 1, duration: 0.3 }, 11.5)
-    .fromTo("#socials .sp:nth-child(2)", { opacity: 0, scale: 0.7 }, { opacity: 1, scale: 1, duration: 0.3 }, 11.8)
-    .fromTo("#socials .sp:nth-child(3)", { opacity: 0, scale: 0.7 }, { opacity: 1, scale: 1, duration: 0.3 }, 12.1)
-    .fromTo("#socials .sp:nth-child(4)", { opacity: 0, scale: 0.7 }, { opacity: 1, scale: 1, duration: 0.3 }, 12.4)
-    .fromTo("#socials .sp:nth-child(5)", { opacity: 0, scale: 0.7 }, { opacity: 1, scale: 1, duration: 0.3 }, 12.7);
+  // It writes the post: the words land one after another, from 4.6s to about 5.6s.
+  tl.set("#caret", { opacity: 0 }, 4.6);
+  spans.forEach((s, i) => {
+    tl.to(s, { opacity: 1, duration: 0.12 }, 4.6 + i * 0.08);
+  });
+  tl.to("#caret", { opacity: 1, duration: 0.2 }, 5.7);
 
-  // A thread drafts the launch post, then schedules it into the queue.
-  tl.to("#socials", { opacity: 0, duration: 0.35 }, 15)
-    .to("#queue", { opacity: 1, duration: 0.35 }, 15)
-    .fromTo("#queue", { x: 40 }, { x: 0, duration: 0.35 }, 15)
-    .to("#draft", { opacity: 1, duration: 0.35 }, 15.2)
-    .fromTo("#draft", { y: 24 }, { y: 0, duration: 0.35 }, 15.2)
-    .to("#draftNote", { opacity: 0, duration: 0.3 }, 17.4)
-    .set("#draftNote", { opacity: 1 }, 17.7)
-    .to("#sched", { opacity: 1, duration: 0.3 }, 18.2)
-    .set("#cur", { x: 300, y: 860 }, 18.2)
-    .to("#cur", { opacity: 1, duration: 0.2 }, 18.4)
-    .to("#cur", { x: 260, y: 700, duration: 0.8, ease: "power2.inOut" }, 18.4)
-    .to("#sched", { scale: 0.94, duration: 0.1, yoyo: true, repeat: 1 }, 19.3)
-    .to("#sched", { opacity: 0, duration: 0.25 }, 19.7)
-    .to("#ok", { opacity: 1, duration: 0.3 }, 19.7)
-    .to("#cur", { opacity: 0, duration: 0.3 }, 20.4)
-    .to("#fade", { opacity: 0, duration: 0.01 }, 21);
+  // It makes the image, the video and the voice: each chip spins, then lands.
+  tl.to("#media", { opacity: 1, duration: 0.35 }, 5.7)
+    .to("#mImg", { borderColor: "#35508f", duration: 0.3 }, 6.6)
+    .to("#mImg .w1", { opacity: 0, duration: 0.2 }, 6.6)
+    .to("#mImg .w2", { opacity: 1, duration: 0.2 }, 6.6)
+    .to("#mImg .spin", { opacity: 0, duration: 0.2 }, 6.6)
+    .to("#mVid", { borderColor: "#35508f", duration: 0.3 }, 6.9)
+    .to("#mVid .w1", { opacity: 0, duration: 0.2 }, 6.9)
+    .to("#mVid .w2", { opacity: 1, duration: 0.2 }, 6.9)
+    .to("#mVid .spin", { opacity: 0, duration: 0.2 }, 6.9)
+    .to("#mVoi", { borderColor: "#35508f", duration: 0.3 }, 7.2)
+    .to("#mVoi .w1", { opacity: 0, duration: 0.2 }, 7.2)
+    .to("#mVoi .w2", { opacity: 1, duration: 0.2 }, 7.2)
+    .to("#mVoi .spin", { opacity: 0, duration: 0.2 }, 7.2);
+
+  // It schedules them: the cursor presses Schedule.
+  tl.to("#sched", { opacity: 1, duration: 0.3 }, 7.5)
+    .to("#cur", { opacity: 1, duration: 0.2 }, 7.9)
+    .to("#cur", { x: 96, y: 588, duration: 0.8, ease: "power2.inOut" }, 7.9)
+    .to("#sched", { scale: 0.94, duration: 0.1, yoyo: true, repeat: 1 }, 8.9)
+    .to("#cur", { opacity: 0, duration: 0.3 }, 9.6);
+
+  // To LinkedIn, Instagram, YouTube and more: the platform chips light up, one at a time.
+  tl.to("#plats", { opacity: 1, duration: 0.35 }, 8.7)
+    .fromTo("#plats .grid", { y: 12 }, { y: 0, duration: 0.35 }, 8.7)
+    .to("#spLi", { background: "#1b2a4d", color: "#7aa7ff", duration: 0.25 }, 9.0)
+    .to("#spIg", { background: "#1b2a4d", color: "#7aa7ff", duration: 0.25 }, 9.7)
+    .to("#spYt", { background: "#1b2a4d", color: "#7aa7ff", duration: 0.25 }, 10.4)
+    .to("#spMore", { background: "#1b2a4d", color: "#7aa7ff", duration: 0.25 }, 10.9);
+
+  // From one queue: the scheduled posts, one row each.
+  tl.to("#sched", { opacity: 0, duration: 0.3 }, 11.3)
+    .to("#queue", { opacity: 1, duration: 0.35 }, 11.3)
+    .fromTo("#q1", { x: 40, opacity: 0 }, { x: 0, opacity: 1, duration: 0.4 }, 11.3)
+    .fromTo("#q2", { x: 40, opacity: 0 }, { x: 0, opacity: 1, duration: 0.4 }, 11.7);
+
+  // Each project posts as its own brand: the composer gives way to the project → brand pairs.
+  tl.to("#compo", { opacity: 0, duration: 0.3 }, 12.5)
+    .to(["#media", "#plats", "#queue", "#sched"], { opacity: 0, duration: 0.3 }, 12.5)
+    .to("#brands", { opacity: 1, duration: 0.35 }, 12.7)
+    .fromTo("#brand", { x: -40, opacity: 0 }, { x: 0, opacity: 1, duration: 0.4 }, 12.7)
+    .fromTo("#brand2", { x: -40, opacity: 0 }, { x: 0, opacity: 1, duration: 0.4 }, 13.5)
+    .fromTo("#brand3", { x: -40, opacity: 0 }, { x: 0, opacity: 1, duration: 0.4 }, 14.3)
+    .to("#fade", { opacity: 0, duration: 0.01 }, 18);
 
   window.__timelines = window.__timelines || {};
   window.__timelines.root = tl;

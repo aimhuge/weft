@@ -1,13 +1,13 @@
 <!doctype html>
 <!--
   The orange-cloud drawer's intro (components/FeatureIntro.tsx plays it the first time the drawer opens), a HyperFrames
-  composition in the shared look (./kit.css): 0–5.5s paste a setup token, Weft makes its own narrow one and seals it in
-  the Keychain; 5.5–11.5s Link… lists your Workers and Pages with the best fit first; 11.5–16.5s the linked folder
-  shows the project and its latest deploy; 16.5–21.5s the links to Deploys, Logs and Settings. Every label is the real
-  one (components/CloudflareDrawer.tsx, lib/cloudflare-view.ts). The voice is #narration, read by `pnpm intros:narrate`
-  (scripts/narrate-intros.mjs) into ./cloudflare.m4a. Seekable: no timers, no tl.call.
--->
-<html>
+  composition in the shared look (./kit.css): 0–5.1s your AI works directly with Cloudflare, from the connect form
+  Weft asks for a setup token in; 5.1–7.9s it links a project to its Worker or Pages site, the best fit first; 7.9–8.9s
+  it deploys it; 8.9–10.7s you watch its latest deploy; 10.7–13.1s Weft makes its own narrower key; 13.1–17s Weft
+  keeps that key safely in your Keychain. The voice is #narration, read by `pnpm intros:narrate`
+  (scripts/narrate-intros.mjs) into ./cloudflare.m4a; the beats sit on its words (./cloudflare.words.json). Seekable: no
+  timers, no tl.call.
+--><html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width">
@@ -15,92 +15,139 @@
 <link rel="stylesheet" href="./kit.css">
 <style>
   .cloud { width: 56px; height: 56px; flex: none; }
-  #fold { left: 26px; top: 20px; width: 688px; }
-  #tok { left: 26px; top: 232px; width: 688px; height: 86px; border-radius: 18px; background: #fff; color: #111827;
-    display: flex; align-items: center; padding: 0 24px; font-size: 30px; gap: 14px; }
-  #tok .lbl { color: #6b7280; }
-  #tok i { font-style: normal; color: #111827; letter-spacing: 2px; }
-  #caret { width: 3px; height: 40px; background: #4f7cff; }
-  #ours { left: 26px; top: 350px; width: 688px; min-height: 96px; border-color: #F3802044; }
-  #ours .n { color: #F38020; }
-  #key { left: 26px; top: 470px; }
-  #signout { left: 26px; top: 572px; }
-  #footer { left: 26px; top: 662px; }
-  #pick { left: 26px; top: 180px; width: 688px; border-radius: 22px; background: #151925; border: 2px solid #232838;
-    padding: 20px 22px; z-index: 6; }
-  #pick .h { font-size: 30px; font-weight: 600; color: #e8eaf0; }
-  #search { margin-top: 14px; height: 58px; border-radius: 14px; background: #1f2433; border: 2px solid #2d3346;
+  /* The folder row, as components/FolderRow.tsx draws it: the folder's name, and Connect on the right. */
+  #fold { left: 26px; top: 24px; width: 688px; }
+  /* The connect form, as components/CloudflareDrawer.tsx draws it: two steps, a field, a button. */
+  #form { left: 26px; top: 156px; width: 688px; }
+  .step { display: flex; gap: 16px; font-size: 28px; line-height: 1.35; color: #c9cfdf; }
+  .step b { flex: none; width: 34px; height: 34px; border-radius: 50%; background: #1f2433; border: 2px solid #3a4258;
+    color: #7aa7ff; font-size: 24px; display: flex; align-items: center; justify-content: center; }
+  .step + .step { margin-top: 16px; }
+  #field { margin-top: 20px; height: 76px; border-radius: 16px; background: #1f2433; border: 2px solid #3a4258;
+    color: #8d95aa; font-size: 28px; display: flex; align-items: center; padding: 0 22px; }
+  #connect { margin-top: 20px; }
+  #forget { margin-left: 20px; color: #8d95aa; font-size: 28px; }
+  /* The picker over the drawer (components/CloudflarePicker.tsx): the title, the search, the best fit. */
+  #pick { left: 26px; top: 190px; width: 688px; border-radius: 22px; background: #151925; border: 2px solid #35508f;
+    padding: 22px; z-index: 6; }
+  #pick .h { font-size: 32px; font-weight: 600; color: #e8eaf0; }
+  #search { margin-top: 16px; height: 60px; border-radius: 14px; background: #1f2433; border: 2px solid #2d3346;
     color: #8d95aa; font-size: 28px; display: flex; align-items: center; padding: 0 20px; }
-  #hit { margin-top: 16px; height: 84px; border-radius: 16px; background: #1b2a4d; border: 2px solid #4f7cff;
+  #hit { margin-top: 18px; height: 88px; border-radius: 16px; background: #1b2a4d; border: 2px solid #4f7cff;
     display: flex; align-items: center; gap: 14px; padding: 0 20px; font-size: 30px; }
   #hit .best { margin-left: auto; font-size: 26px; color: #7aa7ff; }
-  #other { margin-top: 12px; height: 66px; border-radius: 14px; background: #1a1f2c; display: flex; align-items: center;
+  #other { margin-top: 12px; height: 68px; border-radius: 14px; background: #1a1f2c; display: flex; align-items: center;
     gap: 14px; padding: 0 20px; font-size: 28px; color: #c9cfdf; }
   #other .rest { color: #8d95aa; font-size: 26px; }
-  #linked { left: 26px; top: 260px; width: 688px; border-radius: 20px; background: #1f2433; border: 2px solid #2d3346;
-    padding: 20px 24px; z-index: 6; }
-  #linked .t { font-size: 32px; font-weight: 600; }
-  #linked .u { margin-top: 8px; font-size: 28px; color: #4f7cff; }
-  #linked .d { margin-top: 12px; display: flex; align-items: center; gap: 12px; font-size: 28px; color: #8d95aa; }
-  #links { margin-top: 16px; display: flex; gap: 20px; font-size: 28px; color: #c9cfdf; }
-  #footer .p { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* The linked project, as components/CloudflareDrawer.tsx draws it: name, kind, address, the deploy, the links. */
+  #linked { left: 26px; top: 156px; width: 688px; }
+  #lTop { display: flex; align-items: center; gap: 14px; font-size: 34px; }
+  #lTop .nm { font-weight: 600; white-space: nowrap; }
+  #lTop .kind { color: #8d95aa; font-size: 28px; }
+  #addr { margin-top: 10px; font-size: 28px; color: #7aa7ff; }
+  /* The deploy row: its state, where it went, how long ago. */
+  #dep { margin-top: 18px; display: flex; align-items: center; gap: 14px; font-size: 28px; color: #8d95aa; }
+  #dep .swap { width: 230px; height: 50px; flex: none; }
+  #dep .open { margin-left: auto; color: #8d95aa; font-size: 26px; }
+  /* The dashboard shortcuts under it. */
+  #links { margin-top: 20px; display: flex; gap: 22px; font-size: 27px; color: #8d95aa; }
+  /* Weft's own key: narrower than yours, and sealed away. It stands below the linked project, not over it. */
+  #ours { left: 26px; top: 424px; width: 688px; min-height: 92px; border-color: #F3802055; }
+  #ours .n { color: #F38020; }
+  #ours .end { font-size: 26px; }
+  #key { left: 26px; top: 534px; }
+  /* The deploy button, as the drawer offers it while a deploy runs. */
+  #dbtn { margin-top: 18px; height: 56px; font-size: 28px; }
 </style>
 </head>
 <body>
-<div id="root" data-composition-id="root" data-start="0" data-duration="21.5" data-width="800" data-height="1000">
+<div id="root" data-composition-id="root" data-start="0" data-duration="17" data-width="1600" data-height="900">
   <div class="abs head"><span class="ic"><svg class="cloud" viewBox="0 0 24 24" aria-hidden="true"><path fill="#F38020" d="M16.509 16.845c.147-.507.09-.971-.156-1.316-.225-.316-.604-.499-1.061-.52l-8.66-.113a.156.156 0 0 1-.133-.071.18.18 0 0 1-.021-.155.24.24 0 0 1 .204-.157l8.736-.112c1.035-.049 2.16-.887 2.553-1.913l.499-1.302a.3.3 0 0 0 .015-.168c-.563-2.546-2.835-4.445-5.55-4.445-2.504 0-4.628 1.617-5.388 3.861a2.56 2.56 0 0 0-1.794-.499 2.56 2.56 0 0 0-2.286 2.286 2.6 2.6 0 0 0 .063.894C1.568 13.171 0 14.775 0 16.752c0 .175.014.352.035.527a.17.17 0 0 0 .169.148h15.981a.21.21 0 0 0 .203-.155z"/><path fill="#FAAE40" d="M19.266 11.282c-.077 0-.161 0-.238.011-.057 0-.106.041-.127.098l-.338 1.174c-.148.507-.092.971.154 1.316.226.317.606.498 1.063.52l1.843.113a.15.15 0 0 1 .133.07.18.18 0 0 1 .021.156.24.24 0 0 1-.204.155l-1.921.112c-1.041.049-2.158.887-2.553 1.914l-.14.359c-.029.071.021.141.098.141h6.598a.17.17 0 0 0 .169-.126c.112-.408.176-.837.176-1.28 0-2.603-2.125-4.727-4.735-4.727"/></svg></span>Cloudflare</div>
 
-  <div class="abs panel" id="panel">
-    <div class="abs row" id="fold"><svg class="cloud" viewBox="0 0 24 24" aria-hidden="true"><path fill="#F38020" d="M16.509 16.845c.147-.507.09-.971-.156-1.316-.225-.316-.604-.499-1.061-.52l-8.66-.113a.156.156 0 0 1-.133-.071.18.18 0 0 1-.021-.155.24.24 0 0 1 .204-.157l8.736-.112c1.035-.049 2.16-.887 2.553-1.913l.499-1.302a.3.3 0 0 0 .015-.168c-.563-2.546-2.835-4.445-5.55-4.445-2.504 0-4.628 1.617-5.388 3.861a2.56 2.56 0 0 0-1.794-.499 2.56 2.56 0 0 0-2.286 2.286 2.6 2.6 0 0 0 .063.894C1.568 13.171 0 14.775 0 16.752c0 .175.014.352.035.527a.17.17 0 0 0 .169.148h15.981a.21.21 0 0 0 .203-.155z"/><path fill="#FAAE40" d="M19.266 11.282c-.077 0-.161 0-.238.011-.057 0-.106.041-.127.098l-.338 1.174c-.148.507-.092.971.154 1.316.226.317.606.498 1.063.52l1.843.113a.15.15 0 0 1 .133.07.18.18 0 0 1 .021.156.24.24 0 0 1-.204.155l-1.921.112c-1.041.049-2.158.887-2.553 1.914l-.14.359c-.029.071.021.141.098.141h6.598a.17.17 0 0 0 .169-.126c.112-.408.176-.837.176-1.28 0-2.603-2.125-4.727-4.735-4.727"/></svg><span class="n">weft</span><span class="end"><span class="pill on" id="connBtn">Connect</span><span class="pill on" id="signed">✓ Signed in</span></span></div>
-    <div class="abs" id="tok"><span class="lbl">Paste the Cloudflare token</span><i id="dots">••••••••••••••••••••</i><span id="caret"></span></div>
-    <div class="abs row" id="ours"><svg class="cloud" viewBox="0 0 24 24" aria-hidden="true"><path fill="#F38020" d="M16.509 16.845c.147-.507.09-.971-.156-1.316-.225-.316-.604-.499-1.061-.52l-8.66-.113a.156.156 0 0 1-.133-.071.18.18 0 0 1-.021-.155.24.24 0 0 1 .204-.157l8.736-.112c1.035-.049 2.16-.887 2.553-1.913l.499-1.302a.3.3 0 0 0 .015-.168c-.563-2.546-2.835-4.445-5.55-4.445-2.504 0-4.628 1.617-5.388 3.861a2.56 2.56 0 0 0-1.794-.499 2.56 2.56 0 0 0-2.286 2.286 2.6 2.6 0 0 0 .063.894C1.568 13.171 0 14.775 0 16.752c0 .175.014.352.035.527a.17.17 0 0 0 .169.148h15.981a.21.21 0 0 0 .203-.155z"/><path fill="#FAAE40" d="M19.266 11.282c-.077 0-.161 0-.238.011-.057 0-.106.041-.127.098l-.338 1.174c-.148.507-.092.971.154 1.316.226.317.606.498 1.063.52l1.843.113a.15.15 0 0 1 .133.07.18.18 0 0 1 .021.156.24.24 0 0 1-.204.155l-1.921.112c-1.041.049-2.158.887-2.553 1.914l-.14.359c-.029.071.021.141.098.141h6.598a.17.17 0 0 0 .169-.126c.112-.408.176-.837.176-1.28 0-2.603-2.125-4.727-4.735-4.727"/></svg><span class="n">Weft's token</span><span class="end mono" style="color:#8d95aa">Workers + Pages only</span></div>
-    <div class="abs pill info" id="key" style="height:60px;font-size:30px">🔑 Sealed in your Keychain</div>
+  <div class="abs art">
+    <div class="abs panel" id="panel">
+      <!-- The folder row, the way the drawer opens on a project with no Cloudflare link yet. -->
+      <div class="abs row" id="fold">
+        <svg class="cloud" viewBox="0 0 24 24" aria-hidden="true"><path fill="#F38020" d="M16.509 16.845c.147-.507.09-.971-.156-1.316-.225-.316-.604-.499-1.061-.52l-8.66-.113a.156.156 0 0 1-.133-.071.18.18 0 0 1-.021-.155.24.24 0 0 1 .204-.157l8.736-.112c1.035-.049 2.16-.887 2.553-1.913l.499-1.302a.3.3 0 0 0 .015-.168c-.563-2.546-2.835-4.445-5.55-4.445-2.504 0-4.628 1.617-5.388 3.861a2.56 2.56 0 0 0-1.794-.499 2.56 2.56 0 0 0-2.286 2.286 2.6 2.6 0 0 0 .063.894C1.568 13.171 0 14.775 0 16.752c0 .175.014.352.035.527a.17.17 0 0 0 .169.148h15.981a.21.21 0 0 0 .203-.155z"/><path fill="#FAAE40" d="M19.266 11.282c-.077 0-.161 0-.238.011-.057 0-.106.041-.127.098l-.338 1.174c-.148.507-.092.971.154 1.316.226.317.606.498 1.063.52l1.843.113a.15.15 0 0 1 .133.07.18.18 0 0 1 .021.156.24.24 0 0 1-.204.155l-1.921.112c-1.041.049-2.158.887-2.553 1.914l-.14.359c-.029.071.021.141.098.141h6.598a.17.17 0 0 0 .169-.126c.112-.408.176-.837.176-1.28 0-2.603-2.125-4.727-4.735-4.727"/></svg>
+        <span class="n">weft</span>
+        <span class="end"><span class="pill on" id="connBtn">Connect</span></span>
+      </div>
+
+      <!-- The connect form: make a setup token, paste it in. Weft swaps it for its own narrower one. -->
+      <div class="abs" id="form">
+        <div class="step" id="s1"><b>1</b><span>Create a setup token with the <span style="color:#7aa7ff">Create additional tokens</span> template.</span></div>
+        <div class="step" id="s2"><b>2</b><span>Paste it here. Weft makes its own token that can only edit Workers and Pages, then deletes the setup token.</span></div>
+        <div id="field">Paste the Cloudflare token</div>
+        <div id="connect"><span class="btn" id="connGo" style="height:58px;font-size:29px">Connect</span><span id="forget">Forget it</span></div>
+      </div>
+
+      <!-- The linked project: its Worker, its address, its deploy. -->
+      <div class="abs" id="linked">
+        <div id="lTop">
+          <svg class="cloud" viewBox="0 0 24 24" aria-hidden="true"><path fill="#F38020" d="M16.509 16.845c.147-.507.09-.971-.156-1.316-.225-.316-.604-.499-1.061-.52l-8.66-.113a.156.156 0 0 1-.133-.071.18.18 0 0 1-.021-.155.24.24 0 0 1 .204-.157l8.736-.112c1.035-.049 2.16-.887 2.553-1.913l.499-1.302a.3.3 0 0 0 .015-.168c-.563-2.546-2.835-4.445-5.55-4.445-2.504 0-4.628 1.617-5.388 3.861a2.56 2.56 0 0 0-1.794-.499 2.56 2.56 0 0 0-2.286 2.286 2.6 2.6 0 0 0 .063.894C1.568 13.171 0 14.775 0 16.752c0 .175.014.352.035.527a.17.17 0 0 0 .169.148h15.981a.21.21 0 0 0 .203-.155z"/><path fill="#FAAE40" d="M19.266 11.282c-.077 0-.161 0-.238.011-.057 0-.106.041-.127.098l-.338 1.174c-.148.507-.092.971.154 1.316.226.317.606.498 1.063.52l1.843.113a.15.15 0 0 1 .133.07.18.18 0 0 1 .021.156.24.24 0 0 1-.204.155l-1.921.112c-1.041.049-2.158.887-2.553 1.914l-.14.359c-.029.071.021.141.098.141h6.598a.17.17 0 0 0 .169-.126c.112-.408.176-.837.176-1.28 0-2.603-2.125-4.727-4.735-4.727"/></svg>
+          <span class="nm">weft-api</span><span class="kind">Worker · aimhuge</span>
+        </div>
+        <div id="addr" class="mono">weft-api.workers.dev</div>
+        <div class="btn" id="dbtn">Deploy</div>
+        <div id="dep">
+          <span class="swap"><span class="pill warn" id="dBusy" style="height:50px;font-size:27px">Deploying…</span><span class="pill on" id="dState" style="height:50px;font-size:27px">Deployed</span></span>
+          <span id="dWhere">via wrangler · just now</span>
+          <span class="open" id="dOpen">open</span>
+        </div>
+        <div id="links"><span>Deploys ↗</span><span>Logs ↗</span><span>Settings ↗</span><span>Dashboard ↗</span></div>
+      </div>
+
+      <!-- Weft's own key: narrower than yours, and sealed away. -->
+      <div class="abs row" id="ours">
+        <svg class="cloud" viewBox="0 0 24 24" aria-hidden="true"><path fill="#F38020" d="M16.509 16.845c.147-.507.09-.971-.156-1.316-.225-.316-.604-.499-1.061-.52l-8.66-.113a.156.156 0 0 1-.133-.071.18.18 0 0 1-.021-.155.24.24 0 0 1 .204-.157l8.736-.112c1.035-.049 2.16-.887 2.553-1.913l.499-1.302a.3.3 0 0 0 .015-.168c-.563-2.546-2.835-4.445-5.55-4.445-2.504 0-4.628 1.617-5.388 3.861a2.56 2.56 0 0 0-1.794-.499 2.56 2.56 0 0 0-2.286 2.286 2.6 2.6 0 0 0 .063.894C1.568 13.171 0 14.775 0 16.752c0 .175.014.352.035.527a.17.17 0 0 0 .169.148h15.981a.21.21 0 0 0 .203-.155z"/><path fill="#FAAE40" d="M19.266 11.282c-.077 0-.161 0-.238.011-.057 0-.106.041-.127.098l-.338 1.174c-.148.507-.092.971.154 1.316.226.317.606.498 1.063.52l1.843.113a.15.15 0 0 1 .133.07.18.18 0 0 1 .021.156.24.24 0 0 1-.204.155l-1.921.112c-1.041.049-2.158.887-2.553 1.914l-.14.359c-.029.071.021.141.098.141h6.598a.17.17 0 0 0 .169-.126c.112-.408.176-.837.176-1.28 0-2.603-2.125-4.727-4.735-4.727"/></svg>
+        <span class="n">Weft's own key</span>
+        <span class="end" style="color:#8d95aa;font-size:26px">Workers + Pages only</span>
+      </div>
+      <div class="abs pill info" id="key" style="height:62px;font-size:30px">🔑 Kept safely in your Keychain</div>
+    </div>
+
+    <!-- The picker sits over the drawer, not inside it, so it stays bright while the drawer dims. -->
+    <div class="abs" id="pick">
+      <div class="h">Link weft to…</div>
+      <div id="search">Search Workers and Pages</div>
+      <div id="hit">
+        <svg class="cloud" viewBox="0 0 24 24" aria-hidden="true"><path fill="#F38020" d="M16.509 16.845c.147-.507.09-.971-.156-1.316-.225-.316-.604-.499-1.061-.52l-8.66-.113a.156.156 0 0 1-.133-.071.18.18 0 0 1-.021-.155.24.24 0 0 1 .204-.157l8.736-.112c1.035-.049 2.16-.887 2.553-1.913l.499-1.302a.3.3 0 0 0 .015-.168c-.563-2.546-2.835-4.445-5.55-4.445-2.504 0-4.628 1.617-5.388 3.861a2.56 2.56 0 0 0-1.794-.499 2.56 2.56 0 0 0-2.286 2.286 2.6 2.6 0 0 0 .063.894C1.568 13.171 0 14.775 0 16.752c0 .175.014.352.035.527a.17.17 0 0 0 .169.148h15.981a.21.21 0 0 0 .203-.155z"/><path fill="#FAAE40" d="M19.266 11.282c-.077 0-.161 0-.238.011-.057 0-.106.041-.127.098l-.338 1.174c-.148.507-.092.971.154 1.316.226.317.606.498 1.063.52l1.843.113a.15.15 0 0 1 .133.07.18.18 0 0 1 .021.156.24.24 0 0 1-.204.155l-1.921.112c-1.041.049-2.158.887-2.553 1.914l-.14.359c-.029.071.021.141.098.141h6.598a.17.17 0 0 0 .169-.126c.112-.408.176-.837.176-1.28 0-2.603-2.125-4.727-4.735-4.727"/></svg>
+        <span>weft-api</span><span class="best">best fit</span>
+      </div>
+      <div id="other"><span>weft-web</span><span class="rest">Pages · aimhuge</span></div>
+    </div>
+
+    <svg class="abs cursor" id="cur" style="left:0;top:0" viewBox="0 0 24 24"><path d="M4 2l16 10-7 1.5L9.5 21z" fill="#fff" stroke="#111" stroke-width="1.2"/></svg>
   </div>
 
-  <div class="abs" id="pick">
-    <div class="h">Link weft to…</div>
-    <div id="search">Search Workers and Pages</div>
-    <div id="hit"><svg class="cloud" viewBox="0 0 24 24" aria-hidden="true"><path fill="#F38020" d="M16.509 16.845c.147-.507.09-.971-.156-1.316-.225-.316-.604-.499-1.061-.52l-8.66-.113a.156.156 0 0 1-.133-.071.18.18 0 0 1-.021-.155.24.24 0 0 1 .204-.157l8.736-.112c1.035-.049 2.16-.887 2.553-1.913l.499-1.302a.3.3 0 0 0 .015-.168c-.563-2.546-2.835-4.445-5.55-4.445-2.504 0-4.628 1.617-5.388 3.861a2.56 2.56 0 0 0-1.794-.499 2.56 2.56 0 0 0-2.286 2.286 2.6 2.6 0 0 0 .063.894C1.568 13.171 0 14.775 0 16.752c0 .175.014.352.035.527a.17.17 0 0 0 .169.148h15.981a.21.21 0 0 0 .203-.155z"/><path fill="#FAAE40" d="M19.266 11.282c-.077 0-.161 0-.238.011-.057 0-.106.041-.127.098l-.338 1.174c-.148.507-.092.971.154 1.316.226.317.606.498 1.063.52l1.843.113a.15.15 0 0 1 .133.07.18.18 0 0 1 .021.156.24.24 0 0 1-.204.155l-1.921.112c-1.041.049-2.158.887-2.553 1.914l-.14.359c-.029.071.021.141.098.141h6.598a.17.17 0 0 0 .169-.126c.112-.408.176-.837.176-1.28 0-2.603-2.125-4.727-4.735-4.727"/></svg><span>weft-api</span><span class="best">best fit</span></div>
-    <div id="other"><span>weft-web</span><span class="rest">Pages · aimhuge</span></div>
-  </div>
-
-  <div class="abs" id="linked">
-    <div class="t">weft-api · Worker</div>
-    <div class="u mono">weft-api.workers.dev</div>
-    <div class="d"><span class="pill on" style="height:48px;font-size:28px">Deployed</span><span>via wrangler · 4 min ago</span></div>
-    <div id="links"><span>Deploys ↗</span><span>Logs ↗</span><span>Settings ↗</span></div>
-  </div>
-
-  <div class="abs card" id="footer" style="width:688px"><div class="t">Signed in to Cloudflare: aimhuge</div><div class="p" id="toast"><span class="pill on" style="height:44px;font-size:26px">✓</span>Setup token deleted, ours sealed</div></div>
-  <div class="abs pill off" id="signout" style="height:52px;font-size:28px">Sign out</div>
-
-  <svg class="abs cursor" id="cur" viewBox="0 0 24 24"><path d="M4 2l16 10-7 1.5L9.5 21z" fill="#fff" stroke="#111" stroke-width="1.2"/></svg>
-
-  <div class="abs cap" id="c1">Paste a setup token. Weft makes a <b>narrower</b> one.</div>
-  <div class="abs cap" id="c2">It <b>seals</b> that token in your Keychain.</div>
-  <div class="abs cap" id="c3">Link a folder to your <b>Worker</b> or Pages.</div>
-  <div class="abs cap" id="c4">The <b>best fit</b> first, from its wrangler config.</div>
-  <div class="abs cap" id="c5">See its address and its <b>latest deploy</b>.</div>
+  <div class="abs cap" id="c1">Your AI works with <b>Cloudflare</b> directly.</div>
+  <div class="abs cap" id="c2">Link a project to its <b>Worker</b>.</div>
+  <div class="abs cap" id="c3">Weft <b>deploys</b> it.</div>
+  <div class="abs cap" id="c4">Watch its <b>latest deploy</b>.</div>
+  <div class="abs cap" id="c5">Weft makes its <b>own key</b>.</div>
+  <div class="abs cap" id="c6">Kept safely in your <b>Keychain</b>.</div>
   <div class="abs" id="fade"></div>
 </div>
 
 <script type="application/json" id="narration">
-{ "duration": 21.5, "lines": [
-  [0.3, 5.3, "Paste a setup token, and Weft makes its own narrower one."],
-  [5.6, 10.6, "It seals that token in your Keychain, then deletes the setup token."],
-  [11.0, 16.0, "Link a folder to one of your Workers or Pages projects."],
-  [16.4, 21.3, "The best fit comes first, and you see the address and the latest deploy."]
+{ "duration": 17, "lines": [
+  [0.3, 10.68, "Weft's Cloudflare connector lets your AI work directly with Cloudflare: link a project to its Worker or Pages site, deploy it, and watch its latest deploy."],
+  [10.88, 15.4, "Weft makes its own narrower key, and keeps it safely in your Keychain."]
 ] }
 </script>
 <script src="../welcome/gsap.min.js"></script>
 <script src="./player.js"></script>
 <script>
   const tl = gsap.timeline({ paused: true });
-  const caps = ["#c1", "#c2", "#c3", "#c4", "#c5"];
-  const at = [0.2, 5.5, 11, 16, 19.4];
-  gsap.set(["#tok", "#dots", "#caret", "#ours", "#key", "#pick", "#linked", "#footer", "#signed", "#cur", ...caps],
-    { opacity: 0 });
-  gsap.set("#cur", { x: 300, y: 900 });
+  const caps = ["#c1", "#c2", "#c3", "#c4", "#c5", "#c6"];
+  // The beats sit on the words that name them: "work directly with Cloudflare" 3.18–4.50, "link a project to its
+  // Worker" 5.32–6.72, "deploy it" 8.12–8.62, "watch its latest deploy" 9.03–10.18, "Weft makes its own narrower
+  // key" 10.88–12.69, "keeps it safely in your Keychain" 13.16–14.65.
+  const at = [0.2, 5.1, 7.9, 8.9, 10.7, 13.1];
+  gsap.set(["#fold", "#connBtn", "#form", "#s1", "#s2", "#field", "#connGo", "#forget",
+    "#pick", "#search", "#hit", "#other", "#linked", "#lTop", "#addr", "#dbtn", "#dep", "#dBusy", "#dState",
+    "#dWhere", "#dOpen", "#links", "#ours", "#key", "#cur", ...caps], { opacity: 0 });
+  gsap.set("#cur", { x: 560, y: 840 });
 
   tl.to("#fade", { opacity: 0, duration: 0.4 }, 0);
 
@@ -109,56 +156,56 @@
     if (i < caps.length - 1) tl.to(c, { opacity: 0, duration: 0.3 }, at[i + 1] - 0.3);
   });
 
-  // The drawer opens: the Connect form on the weft folder, the paste field under it.
-  tl.from("#fold", { opacity: 0, x: 40, duration: 0.45 }, 0.3)
-    .to("#tok", { opacity: 1, duration: 0.4 }, 0.9)
-    .fromTo("#tok", { x: -30 }, { x: 0, duration: 0.4 }, 0.9)
-    .to("#caret", { opacity: 1, duration: 0.15 }, 1.3)
-    .to("#caret", { x: 22, duration: 0.25 }, 1.3)
-    .to("#caret", { x: 44, duration: 0.25 }, 1.55)
-    .to("#caret", { x: 66, duration: 0.25 }, 1.8)
-    .to("#caret", { opacity: 0, duration: 0.15 }, 2.15)
-    .to("#connBtn", { opacity: 1, duration: 0.25 }, 2.5)
-    .to("#cur", { opacity: 1, duration: 0.2 }, 2.5)
-    .set("#cur", { x: 520, y: 900 }, 2.5)
-    .to("#cur", { x: 600, y: 216, duration: 0.9, ease: "power2.inOut" }, 2.5)
-    .to("#connBtn", { scale: 0.92, duration: 0.1, yoyo: true, repeat: 1 }, 3.4);
+  // Your AI works with Cloudflare: the drawer opens on the folder, and the connect form is under it.
+  tl.fromTo("#fold", { opacity: 0, x: 40 }, { opacity: 1, x: 0, duration: 0.45 }, 0.4)
+    .to("#connBtn", { opacity: 1, duration: 0.3 }, 0.9)
+    .fromTo("#form", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.4 }, 1.3)
+    .to("#s1", { opacity: 1, duration: 0.3 }, 1.5)
+    .to("#s2", { opacity: 1, duration: 0.3 }, 2.0)
+    .to("#field", { opacity: 1, duration: 0.3 }, 2.4)
+    .to("#connGo", { opacity: 1, duration: 0.3 }, 2.8)
+    .to("#forget", { opacity: 1, duration: 0.3 }, 2.9);
 
-  // Weft makes its own token, seals it, and says so once the setup token is gone.
-  tl.to("#tok", { opacity: 0.25, duration: 0.35 }, 3.7)
-    .to("#ours", { opacity: 1, duration: 0.35 }, 3.9)
-    .fromTo("#ours", { x: -40 }, { x: 0, duration: 0.4 }, 3.9)
-    .to("#cur", { opacity: 0, duration: 0.3 }, 4.2)
-    .to("#key", { opacity: 1, duration: 0.3 }, 4.6)
-    .fromTo("#key", { y: 14 }, { y: 0, duration: 0.35 }, 4.6)
-    .to("#signout", { opacity: 1, duration: 0.3 }, 5.4)
-    .to("#footer", { opacity: 1, duration: 0.35 }, 8.2)
-    .to("#key", { opacity: 0.5, duration: 0.35 }, 8.2);
+  // Link a project to its Worker: the picker comes over the drawer, the best fit is first, the cursor takes it.
+  tl.to(["#form", "#fold", "#connBtn"], { opacity: 0, duration: 0.3 }, 5.0)
+    .to("#panel", { opacity: 0.3, duration: 0.35 }, 5.05)
+    .to("#pick", { opacity: 1, duration: 0.4 }, 5.1)
+    .fromTo("#pick", { y: -16 }, { y: 0, duration: 0.4 }, 5.1)
+    .to("#search", { opacity: 1, duration: 0.3 }, 5.4)
+    .to("#hit", { opacity: 1, duration: 0.3 }, 5.8)
+    .fromTo("#hit", { x: -24 }, { x: 0, duration: 0.35 }, 5.8)
+    .to("#other", { opacity: 1, duration: 0.3 }, 6.2)
+    .to("#cur", { opacity: 1, duration: 0.2 }, 6.3)
+    .set("#cur", { x: 560, y: 840 }, 6.3)
+    .to("#cur", { x: 162, y: 386, duration: 0.7, ease: "power2.inOut" }, 6.3)
+    .to("#hit", { scale: 0.98, duration: 0.1, yoyo: true, repeat: 1 }, 7.5)
+    .to("#cur", { opacity: 0, duration: 0.3 }, 7.8);
 
-  // Link… : the picker over the drawer, the best fit highlighted.
-  tl.to(["#tok", "#key", "#footer", "#signout", "#ours"], { opacity: 0, duration: 0.3 }, 10.9)
-    .to("#panel", { opacity: 0.3, duration: 0.35 }, 11.0)
-    .to("#pick", { opacity: 1, duration: 0.4 }, 11.1)
-    .fromTo("#pick", { y: -16, scale: 0.96 }, { y: 0, scale: 1, duration: 0.4 }, 11.1)
-    .to("#hit", { opacity: 1, duration: 0.3 }, 12.1)
-    .fromTo("#hit", { x: -24 }, { x: 0, duration: 0.35 }, 12.1)
-    .to("#other", { opacity: 1, duration: 0.3 }, 12.6)
-    .to("#cur", { opacity: 1, duration: 0.2 }, 13.0)
-    .set("#cur", { x: 300, y: 900 }, 13.0)
-    .to("#cur", { x: 330, y: 400, duration: 0.9, ease: "power2.inOut" }, 13.0)
-    .to("#hit", { scale: 0.98, duration: 0.1, yoyo: true, repeat: 1 }, 13.9)
-    .to("#cur", { opacity: 0, duration: 0.3 }, 14.4);
+  // The project is linked: its Worker and its address come in, and Weft deploys it.
+  tl.to("#pick", { opacity: 0, duration: 0.3 }, 7.85)
+    .to("#panel", { opacity: 1, duration: 0.3 }, 7.85)
+    .to("#linked", { opacity: 1, duration: 0.4 }, 7.9)
+    .fromTo("#linked", { y: 18 }, { y: 0, duration: 0.4 }, 7.9)
+    .to("#lTop", { opacity: 1, duration: 0.35 }, 7.95)
+    .to("#addr", { opacity: 1, duration: 0.35 }, 8.25)
+    .to("#dbtn", { opacity: 1, duration: 0.3 }, 8.35);
 
-  // The linked folder: the Worker, its address, its latest deploy, then the dashboard links.
-  tl.to("#pick", { opacity: 0, duration: 0.3 }, 15.9)
-    .to("#panel", { opacity: 1, duration: 0.3 }, 15.9)
-    .to("#ours", { opacity: 1, duration: 0.3 }, 15.9)
-    .fromTo("#ours", { x: -40 }, { x: 0, duration: 0.4 }, 15.9)
-    .to("#linked", { opacity: 1, duration: 0.4 }, 16.6)
-    .fromTo("#linked", { y: 18 }, { y: 0, duration: 0.4 }, 16.6)
-    .to("#links", { opacity: 0, duration: 0.3 }, 18.6)
-    .fromTo("#links", { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.35 }, 18.6)
-    .to("#fade", { opacity: 0, duration: 0.01 }, 21.5);
+  // The deploy runs: the button gives way to the deploy row, which starts as Deploying and turns to Deployed.
+  tl.to("#dbtn", { opacity: 0, duration: 0.25 }, 8.85)
+    .to("#dep", { opacity: 1, duration: 0.35 }, 8.9)
+    .to("#dBusy", { opacity: 1, duration: 0.3 }, 8.95)
+    .to("#dWhere", { opacity: 1, duration: 0.3 }, 9.05)
+    .to("#dOpen", { opacity: 1, duration: 0.3 }, 9.05)
+    .to("#dBusy", { opacity: 0, duration: 0.2 }, 9.5)
+    .to("#dState", { opacity: 1, duration: 0.2 }, 9.72)
+    .to("#links", { opacity: 1, duration: 0.3 }, 9.95);
+
+  // Weft makes its own narrower key, and keeps it safely in your Keychain.
+  tl.to("#linked", { opacity: 0.18, duration: 0.35 }, 10.7)
+    .fromTo("#ours", { opacity: 0, x: -30 }, { opacity: 1, x: 0, duration: 0.4 }, 10.7)
+    .to("#key", { opacity: 1, duration: 0.35 }, 13.1)
+    .fromTo("#key", { y: 14 }, { y: 0, duration: 0.35 }, 13.1)
+    .to("#fade", { opacity: 0, duration: 0.01 }, 17);
 
   window.__timelines = window.__timelines || {};
   window.__timelines.root = tl;

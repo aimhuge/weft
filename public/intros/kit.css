@@ -1,14 +1,18 @@
-/* The look every feature intro shares (public/intros/*.html): a portrait 800x1000 stage, sized to read in the rail's
-   272 px drawer (a 0.33 scale), so nothing is smaller than 30 px. Dark, like the welcome tour (public/welcome/). */
+/* The look every feature intro shares (public/intros/*.html): a 16:9 1600x900 stage. On the left, .art holds the
+   drawer as it's drawn (an 800-wide panel; every coordinate inside it is the art's own); on the right, the drawer's
+   title and the captions, big enough to read when the frame is small. Dark, like the welcome tour (public/welcome/). */
 html, body { margin: 0; background: #0d0f14; overflow: hidden; }
 * { box-sizing: border-box; }
-#root { position: relative; width: 800px; height: 1000px; overflow: hidden; transform-origin: 0 0;
+#root { position: relative; width: 1600px; height: 900px; overflow: hidden; transform-origin: 0 0;
   font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif; color: #e8eaf0;
   background: radial-gradient(circle at 20% 0%, #1c2233, #0d0f14 70%); }
 .abs { position: absolute; }
+/* The drawer's art: the panel and whatever lies over it (sheets, the cursor), in the 800-wide coordinates it was
+   drawn in, lifted so the panel (top 160, 620 tall) sits centred on the 900 px stage. */
+.art { left: 20px; top: -20px; width: 800px; height: 940px; overflow: hidden; }
 
-/* The title at the top: the drawer's icon and name. */
-.head { left: 40px; top: 36px; display: flex; align-items: center; gap: 20px; font-size: 50px; font-weight: 700; }
+/* The right column's title, level with the panel's top: the drawer's icon and name. */
+.head { left: 880px; top: 140px; display: flex; align-items: center; gap: 22px; font-size: 56px; font-weight: 700; }
 .head .ic { width: 84px; height: 84px; border-radius: 22px; background: #1f2433; border: 2px solid #2d3346; display: flex;
   align-items: center; justify-content: center; font-size: 48px; }
 .head .ic svg { width: 52px; height: 52px; }
@@ -44,7 +48,7 @@ html, body { margin: 0; background: #0d0f14; overflow: hidden; }
 /* A pointer that moves to what's clicked. */
 .cursor { width: 46px; height: 46px; z-index: 20; filter: drop-shadow(0 4px 8px #0008); }
 
-/* The caption band at the bottom: one or two lines, the key words in amber. */
-.cap { left: 40px; top: 812px; width: 720px; font-size: 48px; font-weight: 650; line-height: 1.18; color: #f1f3f8; letter-spacing: -0.01em; }
+/* The caption under the title in the right column: one to three lines, the key words in amber. */
+.cap { left: 880px; top: 290px; width: 660px; font-size: 62px; font-weight: 650; line-height: 1.18; color: #f1f3f8; letter-spacing: -0.01em; }
 .cap b { color: #f0b429; font-weight: 650; }
 #fade { inset: 0; background: #0d0f14; z-index: 50; }

@@ -1,6 +1,6 @@
 "use client";
 
-import { INTRO_TITLES } from "@/lib/feature-intros";
+import { INTRO_TITLES, type IntroId } from "@/lib/feature-intros";
 import type { FeatureIntroState } from "@/lib/use-feature-intro";
 
 // A feature's intro video (lib/feature-intros.ts), at the top of its rail drawer or dialog: a sandboxed iframe that only
@@ -22,7 +22,7 @@ export function IntroFrame({ intro, className = "" }: { intro: FeatureIntroState
         title={`What ${title} does`}
         sandbox="allow-scripts"
         tabIndex={-1}
-        className="pointer-events-none block aspect-[4/5] w-full border-0"
+        className="pointer-events-none block aspect-video w-full border-0"
       />
       <div className="absolute right-1.5 top-1.5 flex gap-1">
         <button type="button" onClick={toggleMuted} className={CHIP} aria-label={muted ? "Unmute the voice" : "Mute the voice"}>
@@ -47,12 +47,17 @@ export function IntroFrame({ intro, className = "" }: { intro: FeatureIntroState
 
 export function IntroButton({ intro }: { intro: FeatureIntroState }) {
   if (!intro.id || intro.open) return null;
+  return <PlayIntroButton id={intro.id} onPlay={intro.play} />;
+}
+
+// The ▶ itself, for an intro that plays somewhere else too (lib/pane-intro.ts plays one in the browser pane).
+export function PlayIntroButton({ id, onPlay }: { id: IntroId; onPlay: () => void }) {
   return (
     <button
       type="button"
-      onClick={intro.play}
-      title={`Play the ${INTRO_TITLES[intro.id]} intro`}
-      aria-label={`Play the ${INTRO_TITLES[intro.id]} intro`}
+      onClick={onPlay}
+      title={`Play the ${INTRO_TITLES[id]} intro`}
+      aria-label={`Play the ${INTRO_TITLES[id]} intro`}
       className="rounded px-1 py-0.5 text-[11px] text-muted hover:bg-sunken hover:text-ink"
     >
       ▶

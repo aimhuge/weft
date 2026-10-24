@@ -1,7 +1,7 @@
 // The feature intros: a short narrated video (public/intros/<id>.html, a HyperFrames composition like the welcome
-// tour's) that plays the first time you open each tool drawer on the left rail, the code quality dialog and the
-// leagues. components/FeatureIntro.tsx draws it; lib/use-feature-intro.ts decides when it shows. Which ones you've
-// seen live in localStorage, so each plays once on its own; ▶ beside the title plays it again.
+// tour's) that plays the first time you open each tool drawer on the left rail, the New thread dialog, the code
+// quality dialog and the leagues. components/FeatureIntro.tsx draws it; lib/use-feature-intro.ts decides when it
+// shows. Which ones you've seen live in localStorage, so each plays once on its own; ▶ beside the title plays it again.
 
 export const INTROS = [
   "vault",
@@ -15,6 +15,7 @@ export const INTROS = [
   "services",
   "quality",
   "leagues",
+  "newthread",
 ] as const;
 export type IntroId = (typeof INTROS)[number];
 
@@ -30,6 +31,7 @@ export const INTRO_TITLES: Record<IntroId, string> = {
   services: "Services",
   quality: "Code quality",
   leagues: "Leagues",
+  newthread: "New thread",
 };
 
 export const isIntro = (id: unknown): id is IntroId => INTROS.includes(id as IntroId);

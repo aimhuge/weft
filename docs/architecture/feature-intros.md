@@ -1,7 +1,7 @@
 # Feature intros
 
-Every tool drawer on the left rail, the code quality dialog and the leagues play a short narrated video the
-first time you open them: what the drawer is for and what it can do. Eleven of them, each its own page in
+Every tool drawer on the left rail, the New thread dialog, the code quality dialog and the leagues play a short
+narrated video the first time you open them: what the drawer is for and what it can do. Twelve of them, each its own page in
 `public/intros/`. This is the same HyperFrames idea as the welcome tour (see [welcome-tour.md](welcome-tour.md)),
 scaled down to one feature instead of the whole product.
 
@@ -9,8 +9,11 @@ scaled down to one feature instead of the whole product.
 
 One `<id>.html` per intro, listed in `INTROS` in `lib/feature-intros.ts` — that list is the contract; an id
 without a page plays a blank frame, and a page not in the list is never shown. Each page is plain HTML plus a
-paused GSAP timeline handed to `window.weftIntro(tl)`, drawn with the shared `kit.css` (a portrait 800×1000 stage,
-sized to read in the rail's 272 px drawer) and played by the shared `player.js`:
+paused GSAP timeline handed to `window.weftIntro(tl)`, drawn with the shared `kit.css` (a 16:9 1600×900 stage: the
+drawer's art on the left inside `<div class="abs art">`, in the 800-wide coordinates it was drawn in and clipped there,
+and the `.head` title and `.cap` captions in the right column, in type big enough to read in the rail's 272 px drawer)
+and played by the shared `player.js`. Anything that sits over the panel (a Touch ID sheet, the cursor) goes inside
+`.art`; a page's own closing line goes in the right column like a caption (`#close` in `vault.html`):
 
 | | |
 |---|---|
@@ -54,6 +57,16 @@ A track is optional: an intro with no `.m4a` plays silently and the 🔊 button 
   one); another frame on the page can't drive it.
 - ▶ beside the title plays it again: an open intro is asked to start over, a closed one is loaded fresh (a new
   `run` remounts the iframe). ↻ Replay appears over the frame once it ends.
+
+## New thread plays in the browser pane (`lib/pane-intro.ts`)
+
+The New thread intro is a minute of tips, and one of them is about the browser pane, so on the desktop it plays
+there, beside the dialog, at full size rather than in a frame over the composer. `usePaneIntro("newthread")` opens
+`/intros/newthread.html?live=1` in the board's pane (`openInPane`) the first time the dialog opens, marks it seen
+right away (the pane's page has no parent to post `done` to), and returns the ▶ that opens it again
+(`PlayIntroButton` in `components/FeatureIntro.tsx`). The pane refuses Weft's own server, so
+`electron/self-url.cjs` lets exactly `/intros/<id>.html` through. On the web there is no pane (`hasPane()` is
+false), so the dialog plays it in its own frame like any other intro.
 
 The hook returns `{ id, open, ended, run, src, attach, muted, toggleMuted, play, hide }` (typed
 `FeatureIntroState`); `components/FeatureIntro.tsx` takes that as one `intro` prop and reads

@@ -1,27 +1,14 @@
 // Live playback for the feature intros (public/intros/*.html), HyperFrames compositions like the welcome tour's: each
-// page builds a paused GSAP timeline on window.__timelines.root and calls weftIntro(tl). It scales the 800x1000 stage to
-// the frame's width and, with ?live=1, plays the timeline once with its voiceover. It tells the parent
+// page builds a paused GSAP timeline on window.__timelines.root and calls weftIntro(tl). It scales the 16:9 1600x900
+// stage to the frame and, with ?live=1, plays the timeline once with its voiceover. It tells the parent
 // (components/FeatureIntro.tsx) when it starts and ends ({ weft: "intro", event: "start" | "done" }), so the parent
 // offers Replay at the end; { weft: "intro-go" } from the parent plays it again from the top.
 window.weftIntro = function (tl) {
   var root = document.getElementById("root");
   var query = new URLSearchParams(location.search);
-  // ?ratio=9:16 renders the 800x1000 art on a 1080x1920 stage: the width drives the scale, and the authored
-  // art is shifted down so it sits centred on the taller canvas. Anything else keeps the plain 800x1000 stage.
-  var vertical = query.get("ratio") === "9:16";
-  if (vertical) root.setAttribute("data-ratio", "9x16");
+  // The 1600x900 stage fits the frame whole, letterboxed if the frame isn't 16:9.
   var fit = function () {
-    // Portrait fills the frame width; the 9:16 stage scales to height instead, so the authored 800x1000 art
-    // keeps its proportions (scaling by width at that canvas makes the type overflow its boxes).
-    var scale = vertical
-      ? Math.min(window.innerHeight / 1920, window.innerWidth / 1080)
-      : window.innerWidth / 800;
-    // On the taller canvas the authored art is shifted down half the extra height so it sits centred. In CSS a
-    // transform list applies right to left, so translateY here is scaled by the scale() to its left: dividing
-    // by the scale keeps the on-screen shift at exactly 460px whatever the frame size.
-    root.style.transform = vertical
-      ? "scale(" + scale + ") translateY(" + (460 / scale) + "px)"
-      : "scale(" + scale + ")";
+    root.style.transform = "scale(" + Math.min(window.innerWidth / 1600, window.innerHeight / 900) + ")";
   };
   fit();
   window.addEventListener("resize", fit);

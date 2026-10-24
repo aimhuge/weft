@@ -1,10 +1,12 @@
 <!doctype html>
 <!--
   The ▲ Vercel drawer's intro (components/FeatureIntro.tsx plays it the first time the drawer opens), a HyperFrames
-  composition in the shared look (./kit.css): 0–5.5s your token, sealed in the Keychain; 5.5–11s Link… picks your
-  project, best fit first; 11–16.5s the latest deploy goes Building → Ready and opens in the pane; 16.5–22.5s Push all
-  sends your vault keys to Vercel env behind Touch ID. The voice is #narration, read by `pnpm intros:narrate`
-  (scripts/narrate-intros.mjs) into ./vercel.m4a. Seekable: no timers, no tl.call.
+  composition in the shared look (./kit.css). Beats, on the words that name them:
+  1.9s your AI interact directly with Vercel (your vault on one side, the Vercel project on the other) ·
+  4.9s sync your keys (the keys flow over, each landing in Vercel env with a ✓) · 5.8s deploy to the web (the
+  deploy goes Building → Ready, weft.vercel.app) · 6.95s watch your logs (the log box streams). The voice is
+  #narration, read by `pnpm intros:narrate` (scripts/narrate-intros.mjs) into ./vercel.m4a; the beats sit on its
+  words (./vercel.words.json). Seekable: no timers, no tl.call.
 -->
 <html>
 <head>
@@ -16,140 +18,143 @@
   /* The ▲ mark the rail's button carries, drawn as the triangle glyph but sized to sit in the head chip. */
   .head .ic { color: #fff; font-size: 40px; line-height: 1; }
 
-  /* Scene 1: the token form the drawer shows before it's signed in (components/TokenForm.tsx). */
-  #tok { left: 26px; top: 30px; width: 688px; height: 250px; border-radius: 22px; background: #1f2433; border: 2px solid #2d3346;
-    padding: 24px 26px; }
-  #tok p { font-size: 30px; line-height: 1.25; color: #c9cfdf; }
-  #tok a { color: #7aa7ff; text-decoration: underline; }
-  #tokfield { margin-top: 18px; height: 74px; border-radius: 14px; background: #10141f; border: 2px solid #3a4258; display: flex;
-    align-items: center; padding: 0 22px; font-size: 28px; color: #8d95aa; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
-  #save { left: 26px; top: 452px; }
-  #signed { left: 26px; top: 300px; width: 688px; height: 96px; border-radius: 20px; background: #1f2433; border: 2px solid #2d3346;
-    display: flex; align-items: center; gap: 18px; padding: 0 24px; font-size: 32px; }
-  #signed .mono { font-size: 30px; }
+  /* Scene 1 — your vault on the left, the Vercel project on the right, keys flowing across. */
+  #vault { left: 26px; top: 26px; width: 316px; height: 500px; border-radius: 22px; background: #151925;
+    border: 2px solid #232838; padding: 20px 22px; }
+  #vault .fh { font-size: 27px; font-weight: 600; color: #e8eaf0; display: flex; align-items: center; gap: 10px; }
+  #vault .fh .sc { font-size: 23px; color: #8d95aa; font-weight: 400; }
+  .keyrow { margin-top: 14px; height: 68px; border-radius: 14px; background: #1f2433; border: 2px solid #2d3346;
+    padding: 0 16px; display: flex; align-items: center; gap: 12px; }
+  .keyrow .nm { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 22px; color: #e8eaf0;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .keyrow .ok { margin-left: auto; font-size: 24px; color: #5fd38d; flex: none; }
+  #vaultlock { margin-top: 18px; font-size: 21px; color: #8d95aa; white-space: nowrap; }
 
-  /* Scene 2: Link… (components/VercelPicker.tsx) over the shared components/DbSelect.tsx. */
-  #pick { left: 26px; top: 30px; width: 688px; height: 470px; border-radius: 22px; background: #1f2433; border: 2px solid #2d3346;
-    padding: 22px 24px; }
-  #pick .ttl { font-size: 30px; font-weight: 600; color: #f1f3f8; }
-  #search { margin-top: 16px; height: 70px; border-radius: 14px; background: #10141f; border: 2px solid #3a4258; display: flex;
-    align-items: center; padding: 0 20px; font-size: 28px; color: #8d95aa; }
-  #new { margin-top: 16px; height: 66px; border-radius: 14px; border: 2px dashed #4a5573; display: flex; align-items: center; gap: 12px;
-    padding: 0 20px; font-size: 29px; color: #7aa7ff; }
-  #p0 { margin-top: 16px; } #p1 { margin-top: 12px; } #p2 { margin-top: 12px; }
-  .proj { border-radius: 14px; background: #151925; border: 2px solid #2d3346; padding: 14px 20px; }
-  #p0 { border-color: #4f7cff88; }
-  .proj .nm { font-size: 30px; font-weight: 600; display: flex; align-items: center; gap: 12px; }
-  .proj .dt { display: block; margin-top: 4px; font-size: 26px; color: #8d95aa; }
-  .fit { background: #1b2a4d; color: #7aa7ff; height: 42px; padding: 0 14px; border-radius: 10px; font-size: 24px; font-weight: 500;
-    display: inline-flex; align-items: center; }
-  #toast2 { left: 26px; top: 520px; width: 688px; height: 90px; border-radius: 18px; background: #173a28; color: #5fd38d;
-    display: flex; align-items: center; padding: 0 24px; font-size: 29px; }
+  /* The arrow between the two: the keys travel this way. */
+  #arrow { left: 348px; top: 236px; width: 56px; text-align: center; font-size: 38px; color: #8d95aa; }
 
-  /* Scene 3: the linked folder's card (components/VercelDrawer.tsx FolderRow + Linked + Deploy). */
-  #card { left: 26px; top: 30px; width: 688px; border-radius: 22px; background: #1f2433; border: 2px solid #2d3346; padding: 22px 24px; }
-  #card .fh { font-size: 31px; font-weight: 600; display: flex; align-items: center; }
-  #card .url { margin-top: 10px; font-size: 27px; color: #7aa7ff; }
-  #dep { margin-top: 16px; height: 78px; border-radius: 14px; background: #151925; border: 2px solid #2d3346; display: flex;
-    align-items: center; gap: 16px; padding: 0 20px; font-size: 28px; }
-  #dep .when { margin-left: auto; color: #8d95aa; }
-  #pane { left: 26px; top: 366px; width: 688px; height: 300px; border-radius: 20px; background: #10141f; border: 2px solid #2d3346;
-    padding: 22px 24px; overflow: hidden; }
-  #pane .bar { height: 34px; border-radius: 10px; background: #1f2433; margin-bottom: 18px; }
-  #pane .hero { font-size: 40px; font-weight: 700; color: #fff; }
-  #pane .sub { margin-top: 10px; font-size: 28px; color: #8d95aa; }
-  #pane .pill { margin-top: 22px; }
+  /* The Vercel project the keys land in. */
+  #proj { left: 410px; top: 26px; width: 304px; height: 500px; border-radius: 22px; background: #10141f;
+    border: 2px solid #232838; padding: 20px 22px; }
+  #proj .fh { font-size: 27px; font-weight: 600; color: #e8eaf0; }
+  #proj .env { margin-top: 6px; font-size: 23px; color: #8d95aa; }
+  #envbox { margin-top: 18px; height: 250px; border-radius: 16px; background: #151925; border: 2px solid #2d3346;
+    padding: 16px 16px; }
+  #envbox .t { font-size: 22px; color: #8d95aa; }
+  .envrow { margin-top: 12px; height: 50px; border-radius: 10px; background: #1f2433; padding: 0 12px;
+    display: flex; align-items: center; gap: 10px; }
+  .envrow .nm { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 21px; color: #c9cfdf;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .envrow .ok { margin-left: auto; font-size: 22px; color: #5fd38d; flex: none; }
+  #proj .done { margin-top: 14px; font-size: 23px; color: #5fd38d; }
+  #proj .foot { margin-top: 8px; font-size: 21px; color: #8d95aa; white-space: nowrap; }
 
-  /* Scene 4: the 🔐 env section (components/VercelEnv.tsx) and the Touch ID sheet. */
-  #env { left: 26px; top: 30px; width: 688px; border-radius: 22px; background: #1f2433; border: 2px solid #2d3346; padding: 22px 24px; }
-  #env .fh { font-size: 31px; font-weight: 600; }
-  #envline { margin-top: 14px; display: flex; align-items: center; gap: 14px; font-size: 28px; color: #c9cfdf; }
-  #pushall { height: 62px; border-radius: 14px; border: 2px solid #3a4258; padding: 0 20px; display: inline-flex; align-items: center;
-    font-size: 27px; color: #c9cfdf; margin-left: auto; }
-  #e0 { margin-top: 16px; } #e1 { margin-top: 12px; }
-  .envrow { height: 76px; border-radius: 14px; background: #151925; border: 2px solid #2d3346; display: flex; align-items: center;
-    gap: 16px; padding: 0 20px; font-size: 26px; }
-  .envrow .nm { font-family: ui-monospace, "SF Mono", Menlo, monospace; color: #f1f3f8; white-space: nowrap; overflow: hidden;
-    text-overflow: ellipsis; }
-  .envrow .sc { color: #8d95aa; flex: none; }
-  .envrow .act { margin-left: auto; flex: none; height: 50px; border-radius: 12px; padding: 0 16px; display: inline-flex;
-    align-items: center; font-size: 25px; font-weight: 500; }
-  #push { background: #4f7cff; color: #fff; }
-  #again { background: transparent; color: #8d95aa; border: 1px solid #3a4258; }
-  #touch { left: 70px; top: 230px; width: 660px; border-radius: 28px; background: #f6f7f9; color: #111827; padding: 34px 36px; text-align: center;
-    box-shadow: 0 30px 80px #000a; z-index: 5; }
-  #touch .fp { width: 130px; height: 130px; margin: 0 auto 18px; border-radius: 50%; border: 6px solid #e5484d; display: flex; align-items: center;
-    justify-content: center; font-size: 70px; }
-  #touch .q { font-size: 34px; font-weight: 600; line-height: 1.25; }
-  #touch .q small { display: block; margin-top: 10px; font-size: 28px; color: #6b7280; font-weight: 400; }
-  #envtoast { left: 26px; top: 400px; width: 688px; height: 96px; border-radius: 18px; background: #173a28; color: #5fd38d;
-    display: flex; align-items: center; padding: 0 24px; font-size: 28px; }
+  /* Scene 2 — the latest deploy: Building, then Ready, and the address it is on. */
+  #dep { left: 26px; top: 26px; width: 688px; height: 86px; border-radius: 20px; background: #1f2433;
+    border: 2px solid #2d3346; padding: 0 24px; display: flex; align-items: center; gap: 18px; font-size: 30px; }
+  #dep .swap { width: 190px; height: 52px; }
+  #dep .swap .pill { position: absolute; right: 0; top: 0; width: 190px; justify-content: center; }
+  #dep .prod { color: #c9cfdf; }
+  #dep .when { color: #8d95aa; }
+  #dep .open { margin-left: auto; }
+  /* The site the deploy put up. */
+  #site { left: 26px; top: 132px; width: 688px; height: 420px; border-radius: 20px; background: #10141f;
+    border: 2px solid #232838; padding: 28px 24px; }
+  #site .u { font-size: 32px; color: #7aa7ff; }
+  #site .hero { margin-top: 16px; font-size: 46px; font-weight: 700; color: #fff; }
+  #site .sub { margin-top: 10px; font-size: 27px; color: #8d95aa; }
+  #site .pill { margin-top: 22px; }
+  /* The site's own little cards, so the page in the pane looks like a real page. */
+  #site .tiles { margin-top: 26px; display: flex; gap: 16px; }
+  #site .tile { flex: 1; height: 118px; border-radius: 14px; background: #1f2433; border: 2px solid #2d3346;
+    padding: 18px 18px; font-size: 24px; color: #c9cfdf; }
+  #site .tile b { display: block; font-size: 30px; color: #e8eaf0; font-weight: 600; }
+  #git { left: 26px; top: 570px; width: 688px; font-size: 27px; color: #8d95aa; }
+
+  /* Scene 3 — the logs, streaming in the browser pane. */
+  #logs { left: 26px; top: 26px; width: 688px; height: 520px; border-radius: 20px; background: #10141f;
+    border: 2px solid #232838; padding: 24px 24px; }
+  #logs .bar { height: 40px; border-radius: 10px; background: #1f2433; display: flex; align-items: center;
+    gap: 14px; padding: 0 16px; font-size: 24px; color: #8d95aa; }
+  #logs .bar .u { color: #7aa7ff; }
+  #loglines { margin-top: 26px; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 27px; line-height: 1.9; }
+  #loglines .l { display: flex; gap: 18px; white-space: nowrap; }
+  #loglines .m { color: #8d95aa; }
+  #loglines .c { color: #5fd38d; }
+  #loglines .p { color: #c9cfdf; }
+  #logs .foot { margin-top: 26px; font-size: 25px; color: #8d95aa; }
 </style>
 </head>
 <body>
-<div id="root" data-composition-id="root" data-start="0" data-duration="22.5" data-width="800" data-height="1000">
+<div id="root" data-composition-id="root" data-start="0" data-duration="11" data-width="1600" data-height="900">
   <div class="abs head"><span class="ic">▲</span>Vercel</div>
-  <div class="abs panel" id="panel">
-
-    <div class="abs" id="tok">
-      <p>A token from <a>vercel.com/account/tokens</a>. Weft keeps it in your Keychain; threads never see it.</p>
-      <div id="tokfield"><span id="typed"></span><span id="dots">••••••••••••••••</span></div>
-    </div>
-    <div class="abs btn" id="save">Save token</div>
-    <div class="abs" id="signed"><span>✓ Signed in as</span><span class="mono" id="who">aimhuge</span></div>
-
-    <div class="abs" id="pick">
-      <div class="ttl">Link weft to…</div>
-      <div id="search">Search projects</div>
-      <div id="new">＋ New project<span style="color:#8d95aa">weft</span></div>
-      <div class="proj" id="p0"><span class="nm">weft<span class="fit">best fit</span></span><span class="dt">Acme · aimhuge/weft</span></div>
-      <div class="proj" id="p1"><span class="nm">weft-docs</span><span class="dt">Acme</span></div>
-      <div class="proj" id="p2"><span class="nm">deck</span><span class="dt">Personal · aimhuge/deck</span></div>
-    </div>
-    <div class="abs" id="toast2">✓ Linked <b style="color:#fff">weft</b> to weft on Vercel</div>
-
-    <div class="abs" id="card">
-      <div class="fh"><span>weft</span><span class="pill off" id="unlink" style="height:46px;font-size:24px">Unlink</span></div>
-      <div class="url mono">weft.vercel.app</div>
-      <div id="dep">
-        <span class="swap" id="depSwap"><span class="pill warn" id="building" style="width:180px;justify-content:center">Building</span><span class="pill on" id="ready" style="width:180px;justify-content:center">✓ Ready</span></span>
-        <span style="color:#c9cfdf">production</span>
-        <span class="when" id="ago">just now</span>
-        <span class="pill info" id="open" style="height:52px">open</span>
+  <div class="abs art">
+    <div class="abs panel" id="panel">
+      <!-- Scene 1: your vault, and the Vercel project the keys go to. -->
+      <div class="abs" id="vault">
+        <div class="fh">🔐 Your vault<span class="sc">your keys</span></div>
+        <div class="keyrow" id="k0"><span class="nm">STRIPE_KEY</span><span class="ok" id="k0ok">✓</span></div>
+        <div class="keyrow" id="k1"><span class="nm">DATABASE_URL</span><span class="ok" id="k1ok">✓</span></div>
+        <div class="keyrow" id="k2"><span class="nm">OPENAI_KEY</span><span class="ok" id="k2ok">✓</span></div>
+        <div class="lock" id="vaultlock">🔒 Sealed in your Keychain</div>
       </div>
-      <div class="url" style="color:#8d95aa;font-size:26px;margin-top:14px">Deploys from aimhuge/weft</div>
-    </div>
-    <div class="abs" id="pane">
-      <div class="bar"></div>
-      <div class="hero">Weft</div>
-      <div class="sub">weft.vercel.app</div>
-      <div class="pill on">✓ Ready · production</div>
-    </div>
+      <div class="abs" id="arrow">→</div>
+      <div class="abs" id="proj">
+        <div class="fh">▲ weft</div>
+        <div class="env">Vercel env · production</div>
+        <div id="envbox">
+          <div class="t">Environment variables</div>
+          <div class="envrow" id="e0"><span class="nm">STRIPE_KEY</span><span class="ok" id="e0ok">✓</span></div>
+          <div class="envrow" id="e1"><span class="nm">DATABASE_URL</span><span class="ok" id="e1ok">✓</span></div>
+          <div class="envrow" id="e2"><span class="nm">OPENAI_KEY</span><span class="ok" id="e2ok">✓</span></div>
+        </div>
+        <div class="done" id="projdone">✓ All 3 vault secrets are on Vercel</div>
+        <div class="foot" id="projfoot">Live from the next deploy</div>
+      </div>
 
-    <div class="abs" id="env">
-      <div class="fh">weft</div>
-      <div id="envline"><span>🔐</span><span id="envtext">1 to push · 4 on Vercel</span><span id="pushall">Push all</span></div>
-      <div class="envrow" id="e0"><span class="nm">STRIPE_SECRET_KEY</span><span class="sc">prod</span><span class="act" id="push">Push</span></div>
-      <div class="envrow" id="e1"><span class="nm">DATABASE_URL</span><span class="sc">prod</span><span class="act" id="again">on Vercel · push again</span></div>
+      <!-- Scene 2: the latest deploy, and the site it put up. -->
+      <div class="abs row" id="dep">
+        <span class="swap"><span class="pill warn" id="building" style="width:190px;justify-content:center">Building</span><span class="pill on" id="ready" style="width:190px;justify-content:center">✓ Ready</span></span>
+        <span class="prod">production</span><span class="when" id="ago">just now</span>
+        <span class="pill info open" id="open">open</span>
+      </div>
+      <div class="abs" id="site">
+        <div class="u mono">weft.vercel.app</div>
+        <div class="hero">Weft</div>
+        <div class="sub">Shipped from your card.</div>
+        <div class="pill on">✓ Ready · production</div>
+        <div class="tiles">
+          <div class="tile"><b>128</b>cards</div>
+          <div class="tile"><b>6</b>threads</div>
+          <div class="tile"><b>▲</b>live</div>
+        </div>
+      </div>
+      <div class="abs" id="git">Deploys from aimhuge/weft</div>
+
+      <!-- Scene 3: the logs, streaming. -->
+      <div class="abs" id="logs">
+        <div class="bar"><span>▲ weft</span><span class="u">vercel.com/weft/logs</span></div>
+        <div id="loglines">
+          <div class="l" id="l0"><span class="m">12:04:11</span><span class="p">GET /</span><span class="c">200</span></div>
+          <div class="l" id="l1"><span class="m">12:04:12</span><span class="p">GET /pricing</span><span class="c">200</span></div>
+          <div class="l" id="l2"><span class="m">12:04:15</span><span class="p">POST /api/chat</span><span class="c">200</span></div>
+          <div class="l" id="l3"><span class="m">12:04:19</span><span class="p">GET /docs</span><span class="c">200</span></div>
+        </div>
+        <div class="foot" id="logfoot">Live, as they come in.</div>
+      </div>
     </div>
-    <div class="abs" id="envtoast">✓ Pushed 5 secrets to weft. Live from the next deploy</div>
   </div>
-  <div class="abs" id="touch"><div class="fp" id="fp">☝︎</div><div class="q">Push 5 secrets<small>“aimhuge/weft → Vercel project weft”</small></div></div>
-  <svg class="abs cursor" id="cur" viewBox="0 0 24 24"><path d="M4 2l16 10-7 1.5L9.5 21z" fill="#fff" stroke="#111" stroke-width="1.2"/></svg>
 
-  <div class="abs cap" id="c1">Paste your token <b>once</b>. It stays in the Keychain.</div>
-  <div class="abs cap" id="c2">Link a folder to the project that <b>fits</b> it.</div>
-  <div class="abs cap" id="c3">Watch the latest deploy, and <b>open</b> it right here.</div>
-  <div class="abs cap" id="c4">Push your vault <b>keys</b> to Vercel env.</div>
+  <div class="abs cap" id="c1">Your AI works with <b>Vercel</b> directly.</div>
+  <div class="abs cap" id="c2"><b>Sync your keys</b> to Vercel.</div>
+  <div class="abs cap" id="c3">Deploy to the <b>web</b>.</div>
+  <div class="abs cap" id="c4">Watch your <b>logs</b>.</div>
   <div class="abs" id="fade"></div>
 </div>
 
 <script type="application/json" id="narration">
-{ "duration": 22.5, "lines": [
-  [0.3, 5.1, "Paste a Vercel token once. Weft seals it in your Keychain, where threads never see it."],
-  [5.5, 10.6, "Then link a folder to a project. Weft puts your best fit at the top."],
-  [10.9, 16.2, "Your latest deploy shows right here, from building to ready, and opens in the pane."],
-  [16.5, 22.2, "And push all sends your vault keys to Vercel's environment, behind Touch ID."]
+{ "duration": 11, "lines": [
+  [0.3, 8.7, "Weft's Vercel connector lets your AI interact directly with Vercel: sync your keys, deploy to the web and watch your logs."]
 ] }
 </script>
 <script src="../welcome/gsap.min.js"></script>
@@ -157,12 +162,10 @@
 <script>
   const tl = gsap.timeline({ paused: true });
   const caps = ["#c1", "#c2", "#c3", "#c4"];
-  const at = [0.2, 5.5, 10.5, 16.5];
-  gsap.set(["#tok", "#save", "#signed", "#who", "#pick", "#toast2", "#card", "#pane", "#env", "#envtoast", "#touch", "#ready", "#cur", ...caps], { opacity: 0 });
-  gsap.set("#cur", { x: 560, y: 900 });
-  // The token types itself in as dots, so the field never shows a value (TokenForm's password field).
-  gsap.set("#typed", { opacity: 0 });
-  gsap.set("#dots", { opacity: 0 });
+  const at = [1.9, 4.9, 5.8, 6.95];
+  gsap.set(["#vault", "#k0", "#k1", "#k2", "#k0ok", "#k1ok", "#k2ok", "#arrow", "#proj", "#e0", "#e1",
+    "#e2", "#e0ok", "#e1ok", "#e2ok", "#projdone", "#dep", "#building", "#ready", "#site", "#git", "#logs",
+    "#l0", "#l1", "#l2", "#l3", "#logfoot", ...caps], { opacity: 0 });
 
   tl.to("#fade", { opacity: 0, duration: 0.4 }, 0);
   caps.forEach((c, i) => {
@@ -170,65 +173,51 @@
     if (i < caps.length - 1) tl.to(c, { opacity: 0, duration: 0.3 }, at[i + 1] - 0.3);
   });
 
-  // Scene 1: the token form, the dots going in, Save token, then "Signed in as".
-  tl.from("#tok", { opacity: 0, y: 24, duration: 0.45 }, 0.4)
-    .to("#dots", { opacity: 1, duration: 0.6 }, 1.4)
-    .fromTo("#save", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.35 }, 2.2)
-    .to("#cur", { opacity: 1, duration: 0.2 }, 2.7)
-    .to("#cur", { x: 300, y: 500, duration: 0.8, ease: "power2.inOut" }, 2.7)
-    .to("#save", { scale: 0.94, duration: 0.1, yoyo: true, repeat: 1 }, 3.5)
-    .to("#cur", { opacity: 0, duration: 0.3 }, 3.9)
-    .to("#tok", { opacity: 0, duration: 0.35 }, 4.6)
-    .to("#save", { opacity: 0, duration: 0.3 }, 4.6)
-    .fromTo("#signed", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.4 }, 4.9)
-    .fromTo("#who", { opacity: 0, x: -14 }, { opacity: 1, x: 0, duration: 0.35 }, 5);
+  // Your AI works with Vercel directly: your vault on one side, the Vercel project on the other.
+  tl.to("#vault", { opacity: 1, duration: 0.4 }, 1.9)
+    .fromTo("#vault", { y: 20 }, { y: 0, duration: 0.4 }, 1.9)
+    .to("#k0", { opacity: 1, duration: 0.3 }, 2.5)
+    .to("#k1", { opacity: 1, duration: 0.3 }, 2.7)
+    .to("#k2", { opacity: 1, duration: 0.3 }, 2.9)
+    .to("#arrow", { opacity: 1, duration: 0.3 }, 3.2)
+    .to("#proj", { opacity: 1, duration: 0.4 }, 3.5)
+    .fromTo("#proj", { y: 20 }, { y: 0, duration: 0.4 }, 3.5);
 
-  // Scene 2: Link… opens, your projects slide in, the best fit is picked.
-  tl.to("#signed", { opacity: 0, duration: 0.3 }, 5.6)
-    .from("#pick", { opacity: 0, y: 24, duration: 0.45 }, 5.9)
-    .fromTo("#p0", { opacity: 0, x: -34 }, { opacity: 1, x: 0, duration: 0.4 }, 6.5)
-    .fromTo("#p1", { opacity: 0, x: -34 }, { opacity: 1, x: 0, duration: 0.4 }, 7)
-    .fromTo("#p2", { opacity: 0, x: -34 }, { opacity: 1, x: 0, duration: 0.4 }, 7.5)
-    .to("#cur", { opacity: 1, duration: 0.2 }, 8.1)
-    .to("#cur", { x: 300, y: 400, duration: 0.8, ease: "power2.inOut" }, 8.1)
-    .to("#p0", { scale: 0.98, duration: 0.1, yoyo: true, repeat: 1 }, 8.9)
-    .to("#cur", { opacity: 0, duration: 0.3 }, 9.4)
-    .to(["#pick", "#p1", "#p2"], { opacity: 0, duration: 0.3 }, 9.9)
-    .to("#p0", { opacity: 0, duration: 0.3 }, 9.9)
-    .fromTo("#toast2", { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.4 }, 10);
+  // Sync your keys: each key goes over, and lands in Vercel env with a ✓.
+  tl.to("#e0", { opacity: 1, duration: 0.25 }, 4.9)
+    .to("#proj", { opacity: 0.45, duration: 0.25 }, 4.9)
+    .to("#e0ok", { opacity: 1, duration: 0.2 }, 5.1)
+    .to("#k0ok", { opacity: 1, duration: 0.2 }, 5.15)
+    .to("#e1", { opacity: 1, duration: 0.25 }, 5.2)
+    .to("#e1ok", { opacity: 1, duration: 0.2 }, 5.4)
+    .to("#k1ok", { opacity: 1, duration: 0.2 }, 5.45)
+    .to("#e2", { opacity: 1, duration: 0.25 }, 5.45)
+    .to("#e2ok", { opacity: 1, duration: 0.2 }, 5.6)
+    .to("#k2ok", { opacity: 1, duration: 0.2 }, 5.65)
+    .to("#proj", { opacity: 1, duration: 0.25 }, 5.6)
+    .to("#projdone", { opacity: 1, duration: 0.25 }, 5.65);
 
-  // Scene 3: the linked folder's card: the deploy is Building, then Ready, and opens in the pane.
-  tl.to("#toast2", { opacity: 0, duration: 0.3 }, 10.7)
-    .from("#card", { opacity: 0, y: 24, duration: 0.45 }, 10.9)
-    .fromTo("#building", { opacity: 0 }, { opacity: 1, duration: 0.35 }, 11.6)
-    .to("#cur", { opacity: 1, duration: 0.2 }, 12.6)
-    .to("#cur", { x: 640, y: 320, duration: 0.8, ease: "power2.inOut" }, 12.6)
-    .to("#open", { scale: 0.94, duration: 0.1, yoyo: true, repeat: 1 }, 13.4)
-    .to("#cur", { opacity: 0, duration: 0.3 }, 13.9)
-    .to("#building", { opacity: 0, duration: 0.3 }, 14.4)
-    .to("#ready", { opacity: 1, duration: 0.3 }, 14.4)
-    .to("#ago", { textContent: "2s ago", duration: 0.1 }, 14.5)
-    .fromTo("#pane", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.45 }, 14.8)
-    .to("#card", { opacity: 0.3, duration: 0.4 }, 14.8);
+  // Deploy to the web: the deploy goes Building → Ready, and the site is up.
+  tl.to(["#vault", "#proj", "#arrow"], { opacity: 0, duration: 0.3 }, 5.85)
+    .to("#dep", { opacity: 1, duration: 0.35 }, 5.85)
+    .fromTo("#dep", { y: 18 }, { y: 0, duration: 0.35 }, 5.85)
+    .to("#building", { opacity: 1, duration: 0.3 }, 6.1)
+    .to("#site", { opacity: 1, duration: 0.35 }, 6.2)
+    .to("#building", { opacity: 0, duration: 0.15 }, 6.5)
+    .to("#ready", { opacity: 1, duration: 0.2 }, 6.65)
+    .to("#ago", { textContent: "2s ago", duration: 0.1 }, 6.65)
+    .to("#git", { opacity: 1, duration: 0.3 }, 6.85);
 
-  // Scene 4: the 🔐 env section, Touch ID, then Push all's result.
-  tl.to("#pane", { opacity: 0, duration: 0.3 }, 16.7)
-    .to("#card", { opacity: 0, duration: 0.3 }, 16.7)
-    .from("#env", { opacity: 0, y: 24, duration: 0.45 }, 16.9)
-    .fromTo("#e0", { opacity: 0, x: -34 }, { opacity: 1, x: 0, duration: 0.4 }, 17.4)
-    .fromTo("#e1", { opacity: 0, x: -34 }, { opacity: 1, x: 0, duration: 0.4 }, 17.9)
-    .to("#cur", { opacity: 1, duration: 0.2 }, 18.4)
-    .to("#cur", { x: 640, y: 220, duration: 0.8, ease: "power2.inOut" }, 18.4)
-    .to("#pushall", { scale: 0.94, duration: 0.1, yoyo: true, repeat: 1 }, 19.2)
-    .to("#cur", { opacity: 0, duration: 0.3 }, 19.7)
-    .to("#env", { opacity: 0.3, duration: 0.4 }, 20.1)
-    .to("#touch", { opacity: 1, duration: 0.4 }, 20.2)
-    .fromTo("#touch", { scale: 0.92 }, { scale: 1, duration: 0.4 }, 20.2)
-    .to("#fp", { borderColor: "#30a46c", color: "#30a46c", duration: 0.4 }, 21)
-    .to("#touch", { opacity: 0, duration: 0.3 }, 21.4)
-    .to("#env", { opacity: 0, duration: 0.3 }, 21.6)
-    .to("#envtoast", { opacity: 1, duration: 0.35 }, 21.5)
-    .to("#fade", { opacity: 0, duration: 0.01 }, 22.5);
+  // Watch your logs: the log box streams, a line at a time.
+  tl.to(["#dep", "#site", "#git"], { opacity: 0, duration: 0.3 }, 6.95)
+    .to("#logs", { opacity: 1, duration: 0.35 }, 6.95)
+    .fromTo("#logs", { y: 18 }, { y: 0, duration: 0.35 }, 6.95)
+    .to("#l0", { opacity: 1, duration: 0.3 }, 7.25)
+    .to("#l1", { opacity: 1, duration: 0.3 }, 7.55)
+    .to("#l2", { opacity: 1, duration: 0.3 }, 7.85)
+    .to("#l3", { opacity: 1, duration: 0.3 }, 8.15)
+    .to("#logfoot", { opacity: 1, duration: 0.3 }, 8.5)
+    .to("#fade", { opacity: 0, duration: 0.01 }, 11);
 
   window.__timelines = window.__timelines || {};
   window.__timelines.root = tl;
