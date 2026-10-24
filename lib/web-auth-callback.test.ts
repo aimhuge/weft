@@ -7,9 +7,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 const webClient = vi.fn();
 const webUser = vi.fn();
 const serviceClient = vi.fn();
-const isDeployed = vi.fn();
+const isWebEnabled = vi.fn();
 vi.mock("./web-session", () => ({ webClient, webUser, serviceClient }));
-vi.mock("./home", () => ({ isDeployed }));
+vi.mock("./home", () => ({ isWebEnabled }));
 
 async function load() {
   vi.resetModules();
@@ -74,7 +74,7 @@ function buildService(steps: {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  isDeployed.mockReturnValue(true);
+  isWebEnabled.mockReturnValue(true);
   webClient.mockResolvedValue({});
   webUser.mockResolvedValue(null);
   serviceClient.mockReturnValue(null);
@@ -295,5 +295,117 @@ describe("finishWebSignIn", () => {
     });
     expect(result).toEqual({ kind: "redirect", url: "https://weft.zip/team" });
     expect(consoleSpy).toHaveBeenCalled();
+  });
+
+  it("hands back the GitHub login and token of a fresh session", async () => {
+    const { finishWebSignIn } = await load();
+    const client = buildClient();
+    client.auth.exchangeCodeForSession.mockResolvedValue({
+      error: null,
+      data: {
+        session: {
+          provider_token: "gho_token",
+          user: { id: "u1", user_metadata: { user_name: "jane" } },
+        },
+      },
+    });
+    const result = await finishWebSignIn(client as unknown as SupabaseClient, {
+      request: makeRequest("https://weft.zip/auth/callback?code=ok&next=/team"),
+      code: "ok",
+      providerError: null,
+      next: "/team",
+      defaultNext: "/team",
+    });
+    expect(result).toEqual({
+      kind: "redirect",
+      url: "https://weft.zip/team",
+      github: { userId: "u1", login: "jane", token: "gho_token" },
+    });
+  });
+
+  it("hands back a null token when the session carries none", async () => {
+    const { finishWebSignIn } = await load();
+    const client = buildClient();
+    client.auth.exchangeCodeForSession.mockResolvedValue({
+      error: null,
+      data: { session: { user: { id: "u1", user_metadata: { user_name: "jane" } } } },
+    });
+    const result = await finishWebSignIn(client as unknown as SupabaseClient, {
+      request: makeRequest("https://weft.zip/auth/callback?code=ok&next=/team"),
+      code: "ok",
+      providerError: null,
+      next: "/team",
+      defaultNext: "/team",
+    });
+    expect(result).toEqual({
+      kind: "redirect",
+      url: "https://weft.zip/team",
+      github: { userId: "u1", login: "jane", token: null },
+    });
+  });
+
+  it("leaves the GitHub details out when the session has no user id", async () => {
+    const { finishWebSignIn } = await load();
+    const client = buildClient();
+    client.auth.exchangeCodeForSession.mockResolvedValue({
+      error: null,
+      data: { session: { provider_token: "gho_token", user: { user_metadata: { user_name: "jane" } } } },
+    });
+    const result = await finishWebSignIn(client as unknown as SupabaseClient, {
+      request: makeRequest("https://weft.zip/auth/callback?code=ok&next=/team"),
+      code: "ok",
+      providerError: null,
+      next: "/team",
+      defaultNext: "/team",
+    });
+    expect(result).toEqual({ kind: "redirect", url: "https://weft.zip/team" });
+  });
+
+  it("leaves the GitHub details out when the session has no GitHub login", async () => {
+    const { finishWebSignIn } = await load();
+    const client = buildClient();
+    client.auth.exchangeCodeForSession.mockResolvedValue({
+      error: null,
+      data: { session: { provider_token: "gho_token", user: { id: "u1", user_metadata: {} } } },
+    });
+    const result = await finishWebSignIn(client as unknown as SupabaseClient, {
+      request: makeRequest("https://weft.zip/auth/callback?code=ok&next=/team"),
+      code: "ok",
+      providerError: null,
+      next: "/team",
+      defaultNext: "/team",
+    });
+    expect(result).toEqual({ kind: "redirect", url: "https://weft.zip/team" });
+  });
+
+  it("leaves the GitHub details out when the login isn't a string", async () => {
+    const { finishWebSignIn } = await load();
+    const client = buildClient();
+    client.auth.exchangeCodeForSession.mockResolvedValue({
+      error: null,
+      data: { session: { provider_token: "gho_token", user: { id: "u1", user_metadata: { user_name: 42 } } } },
+    });
+    const result = await finishWebSignIn(client as unknown as SupabaseClient, {
+      request: makeRequest("https://weft.zip/auth/callback?code=ok&next=/team"),
+      code: "ok",
+      providerError: null,
+      next: "/team",
+      defaultNext: "/team",
+    });
+    expect(result).toEqual({ kind: "redirect", url: "https://weft.zip/team" });
+  });
+
+  it("leaves the GitHub details out when the session is empty", async () => {
+    const { finishWebSignIn } = await load();
+    const client = buildClient();
+    client.auth.exchangeCodeForSession.mockResolvedValue({ error: null, data: { session: null } });
+    const result = await finishWebSignIn(client as unknown as SupabaseClient, {
+      request: makeRequest("https://weft.zip/auth/callback?code=ok&next=/team"),
+      code: "ok",
+      providerError: null,
+      next: "/team",
+      defaultNext: "/team",
+    });
+    expect(result).toEqual({ kind: "redirect", url: "https://weft.zip/team" });
   });
 });

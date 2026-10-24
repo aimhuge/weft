@@ -18,7 +18,7 @@ vi.mock("@/lib/account", () => ({
   toAccountUser: () => null,
 }));
 
-vi.mock("@/lib/home", () => ({ isDeployed: () => false }));
+vi.mock("@/lib/home", () => ({ isWebEnabled: () => false }));
 
 async function load() {
   vi.resetModules();

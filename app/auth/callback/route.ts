@@ -9,13 +9,15 @@
 // Only on the deployed site: a 404 in `next dev` keeps the desktop's loopback
 // callback path (lib/auth/server.ts `createAuthCallback`) the only one in
 // the tree.
+import { after } from "next/server";
 import { finishWebSignIn, webAuthFailureUrl, webClient } from "@/lib/web-auth";
-import { isDeployed } from "@/lib/home";
+import { openSourceAfterSignIn } from "@/lib/billing/oss-grant";
+import { isWebEnabled } from "@/lib/home";
 
 const DEFAULT_NEXT = "/team";
 
 export async function GET(request: Request): Promise<Response> {
-  if (!isDeployed()) return new Response("Not Found", { status: 404 });
+  if (!isWebEnabled()) return new Response("Not Found", { status: 404 });
   const url = new URL(request.url);
   const result = await finishWebSignIn(await webClient(), {
     request,
@@ -25,5 +27,8 @@ export async function GET(request: Request): Promise<Response> {
     defaultNext: DEFAULT_NEXT,
   });
   if (result.kind === "error") return Response.redirect(webAuthFailureUrl(url.origin, result.reason), 303);
+  // The Open Source check reads GitHub, so it runs after the redirect rather than holding up sign-in.
+  const github = result.github;
+  if (github) after(() => openSourceAfterSignIn(github));
   return Response.redirect(result.url, 303);
 }

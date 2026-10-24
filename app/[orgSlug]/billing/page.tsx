@@ -15,14 +15,17 @@
 // is belt-and-braces; matching the team page's wrapper keeps the codebase uniform.
 import type { Metadata } from "next";
 import { Suspense } from "react";
+import { headers } from "next/headers";
 import { roleCan, roleLabel } from "@aimhuge/teams";
 import { formatMoney } from "@aimhuge/billing";
-import { isDeployed } from "@/lib/home";
+import { isWebEnabled } from "@/lib/home";
 import { requireTeam } from "@/lib/teams";
 import { billing, billingConfigured, billingService } from "@/lib/billing/billing";
 import { catalog, PUKU_METER } from "@/lib/billing/plans";
-import { isPaid } from "@/lib/billing/plan-gate";
-import { cancelForm, manageForm, resumeForm, upgradeForm } from "@/lib/billing-actions";
+import { grantLapsed, isPaid } from "@/lib/billing/plan-gate";
+import { IP_COUNTRY_HEADER, regionalPick } from "@/lib/billing/regional-pick";
+import { cancelForm, checkOpenSourceForm, manageForm, resumeForm, upgradeForm } from "@/lib/billing-actions";
+import { FreePlansSection, RegionalNote } from "./free-plans";
 import {
   InvoicesSection,
   ManageSection,
@@ -87,10 +90,12 @@ async function BillingPageBody({ orgSlug, searchParams }: { orgSlug: string; sea
   const plan = catalog.get(sub.plan);
   const isPaidPlan = isPaid(plan.id);
   const hasPukuAllowance = catalog.allowance(plan.id, PUKU_METER) !== null;
-  const [puku, account] = await Promise.all([
+  const [puku, account, regional] = await Promise.all([
     hasPukuAllowance ? billing.balance(service, ctx.org.id, PUKU_METER).catch(() => null) : Promise.resolve(null),
     isPaidPlan ? billing.account(service, ctx.org.id).catch(() => null) : Promise.resolve(null),
+    regionalFor(service, ctx.org.id, isPaidPlan),
   ]);
+  const lapsed = grantLapsed(plan.id, sub.trialEnd);
 
   // Pro plan prices. The catalog is the source of truth — never re-price in this file.
   const monthlyCents = catalog.priceCents("pro", "monthly");
@@ -105,6 +110,7 @@ async function BillingPageBody({ orgSlug, searchParams }: { orgSlug: string; sea
   const manageAction = manageForm.bind(null, orgSlug);
   const cancelAction = cancelForm.bind(null, orgSlug);
   const resumeAction = resumeForm.bind(null, orgSlug);
+  const checkOssAction = checkOpenSourceForm.bind(null, orgSlug);
 
   return (
     <div className="wz-billingPage">
@@ -132,6 +138,8 @@ async function BillingPageBody({ orgSlug, searchParams }: { orgSlug: string; sea
 
       <UsageSection puku={puku} />
 
+      <RegionalNote pick={regional} show={configured} />
+
       {!isPaidPlan && configured ? (
         <UpgradeSection
           blurb={catalog.get("pro").blurb}
@@ -144,6 +152,8 @@ async function BillingPageBody({ orgSlug, searchParams }: { orgSlug: string; sea
         />
       ) : null}
 
+      <FreePlansSection plan={plan.id} grantEnds={sub.trialEnd} lapsed={lapsed} canManage={canManage} checkAction={checkOssAction} />
+
       {isPaidPlan && configured && canManage ? (
         <ManageSection
           cancelAtPeriodEnd={sub.cancelAtPeriodEnd}
@@ -155,6 +165,12 @@ async function BillingPageBody({ orgSlug, searchParams }: { orgSlug: string; sea
       {isPaidPlan && account ? <InvoicesSection orgSlug={orgSlug} invoices={account.invoices} /> : null}
     </div>
   );
+}
+
+// The regional price a workspace on Free or a grant would pay for Pro; a paying workspace has no use for it.
+async function regionalFor(service: NonNullable<ReturnType<typeof billingService>>, orgId: string, paid: boolean) {
+  if (paid) return null;
+  return regionalPick(service, orgId, (await headers()).get(IP_COUNTRY_HEADER));
 }
 
 function NotConfiguredPage() {
@@ -187,7 +203,7 @@ export default async function Page({
   searchParams?: Promise<Query>;
 }) {
   const { orgSlug } = await params;
-  if (!isDeployed()) return <NotDeployedCard slug={orgSlug} />;
+  if (!isWebEnabled()) return <NotDeployedCard slug={orgSlug} />;
   return (
     <Suspense fallback={<BillingPageFallback />}>
       <BillingPageBody orgSlug={orgSlug} searchParams={searchParams} />
