@@ -94,6 +94,16 @@ describe("PermissionActions", () => {
     return { onAnswer, onWait };
   }
 
+  it("offers a retry for a call auto mode's classifier blocked, or keeping it denied", async () => {
+    const { onAnswer } = setup({ ...base, why: { category: "classifier", detail: "Looks like a production deploy" } });
+    expect(screen.getAllByRole("button").map((b) => b.textContent)).toEqual(["Allow once and retry", "Keep denied"]);
+    await userEvent.click(screen.getByRole("button", { name: "Allow once and retry" }));
+    expect(onAnswer).toHaveBeenLastCalledWith(true);
+    await userEvent.click(screen.getByRole("button", { name: "Keep denied" }));
+    expect(onAnswer).toHaveBeenLastCalledWith(false);
+    expect(REASONS.classifier.label).toBe("Auto mode blocked");
+  });
+
   it("offers Wait first when another card holds the code", async () => {
     const { onAnswer, onWait } = setup({ ...base, why: { category: "same-code", detail: "d", holder } });
     expect(screen.getAllByRole("button").map((b) => b.textContent)).toEqual(["Await resolution", "Go ahead", "Deny"]);
