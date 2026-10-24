@@ -80,20 +80,23 @@ screenshots the paused timeline once per frame and ffmpeg turns the frames into 
 ```sh
 pnpm intros:render vault 12 portrait --fresh   # the frames
 pnpm intros:encode vault 12 portrait            # the mp4
+pnpm intros:verify                              # every video
 ```
 
 `scripts/render-intros.mjs` captures the frames (1080×1920 in portrait, 12 fps) into `build/intros/frames`, and
 `scripts/encode-intros.sh` muxes the narration in — delayed by the splash, so the voice starts with the story —
-and loudness-normalises it to −16 LUFS. `INTROS_DIR` and `OUT_DIR` move the compositions and the output, so the
-same scripts render on a machine that has the sources synced but not the whole repo.
+and loudness-normalises it to −16 LUFS. `scripts/verify-intros.sh` checks each finished video: the right duration
+(story + splash), an AAC track, the voice starting after the splash, the loudness, and that the poster frame is
+really the poster. `INTROS_DIR` and `OUT_DIR` move the compositions and the output, so the same scripts render on a
+machine that has the sources synced but not the whole repo.
 
 Two things that look like success and are not:
 
 - **A frame that is there but blank.** If the page doesn't load, the capture still writes a file — the background —
   and ffmpeg encodes a reel of nothing with the right length and a silent track. A real frame is over 30 KB and a
   blank one about 10 KB, so the renderer recaptures a frame under 30 KB and the encoder refuses a render that has
-  any. The pages load GSAP from `../welcome/gsap.min.js`, so that file has to be beside the compositions or every
-  frame comes out blank.
+  any. The verifier pulls the poster frame out of the finished video and checks it. The pages load GSAP from
+  `../welcome/gsap.min.js`, so that file has to be beside the compositions or every frame comes out blank.
 - **A frame captured before the kit changed.** The renderer skips frames already on disk, which is what makes it
   resumable — but a frame captured against the old composition is stale, so it compares each frame's timestamp
   against `player.js`'s and recaptures anything older.
