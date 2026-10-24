@@ -32,8 +32,10 @@ export async function POST(req: Request) {
     const loose = body.permissionMode !== undefined && body.permissionMode !== "default" ? elevated(req) : null;
     if (loose) return loose;
     const card = createCardFromBody(body);
-    if (body.start) startCard(card);
-    return Response.json({ card: getCard(card.id) });
+    // A card whose model or CLI is at its limit waits for the window instead of failing its first
+    // turn (lib/start-gate.ts); the answer says when its first message goes out.
+    const start = body.start ? startCard(card) : { started: false };
+    return Response.json({ card: getCard(card.id), start });
   } catch (err) {
     return fail(err);
   }

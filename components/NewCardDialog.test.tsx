@@ -13,6 +13,9 @@ const api = vi.hoisted(() => ({
   warm: vi.fn(() => Promise.resolve()),
 }));
 vi.mock("@/lib/client", () => ({ api }));
+// The gate reads the plan log off the server; the tests say what it answers.
+const gate = vi.hoisted(() => ({ at: undefined as number | undefined }));
+vi.mock("@/lib/use-start-gate", () => ({ useStartGate: () => gate.at ? { at: gate.at, kind: "five_hour", subject: "claude" } : undefined }));
 vi.mock("./Composer", () => import("./composer-mock"));
 // The real picker lists repos from the server and GitHub; this one just shows the folder and offers another.
 vi.mock("./RepoPicker", () => ({
@@ -36,6 +39,7 @@ function setup(props: { cards?: Card[]; defaultCwd?: string; restart?: RestartSt
 beforeEach(() => {
   vi.clearAllMocks();
   localStorage.clear();
+  gate.at = undefined;
 });
 
 describe("NewCardDialog", () => {
@@ -185,6 +189,41 @@ describe("NewCardDialog", () => {
     expect(onClose).toHaveBeenCalledOnce();
     await userEvent.click(screen.getByRole("button", { name: "Close" }));
     expect(onClose).toHaveBeenCalledTimes(2);
+  });
+
+  describe("a model at its limit", () => {
+    // A thread started on a spent model fails on its first turn, so the button waits for the reset
+    // instead (lib/start-gate.ts decides on the server; this names it).
+    const resetAt = Date.now() + 4 * 60 * 60 * 1000;
+    // formatAt() names the time the way the footer does (lib/schedule.ts).
+    const when = new Date(resetAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }).replace(" ", "").toLowerCase();
+
+    it("offers Start at the reset instead of Start now", () => {
+      gate.at = resetAt;
+      setup();
+      expect(screen.getByRole("button", { name: new RegExp(`Start at ${when}`) })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Start now" })).not.toBeInTheDocument();
+    });
+
+    it("says which limit is used up and when the thread starts", () => {
+      gate.at = resetAt;
+      setup();
+      expect(screen.getByText(/5-hour limit used up/)).toBeInTheDocument();
+      expect(screen.getByText(new RegExp(`starts at ${when}`))).toBeInTheDocument();
+    });
+
+    it("still starts the thread when the user asks", async () => {
+      gate.at = resetAt;
+      const { onCreate, box } = setup();
+      await userEvent.type(box, "Add dark mode");
+      await userEvent.click(screen.getByRole("button", { name: new RegExp(`Start at ${when}`) }));
+      expect(onCreate).toHaveBeenCalledWith(expect.objectContaining({ prompt: "Add dark mode", start: true }));
+    });
+
+    it("says Start now when nothing is spent", () => {
+      setup();
+      expect(screen.getByRole("button", { name: "Start now" })).toBeInTheDocument();
+    });
   });
 
   describe("busy-folder hint", () => {

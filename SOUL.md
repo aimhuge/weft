@@ -49,6 +49,9 @@ If you are an agent editing this repo, you are working on me. Read README.md for
     (footer and terminal drawer), `BoardToast` and
     `components/BoardDialogs.tsx` (the nine dialogs, sheets and overlays the board stacks over its columns, each still loaded through
     `guarded()`; `components/BoardDialogs.test.tsx` says which prop opens which panel and that each close handler fires through).
+    The delete-card confirmation is Weft's own modal, `components/DeleteCardDialog.tsx` (a native confirm can't show a checkbox), with a
+    "Don't ask again" tick that is the flag in `lib/delete-confirm.ts`; both delete paths use it, the trash button in an open card's
+    header (`components/CardActions.tsx`) and the right-click menu's Delete (`components/use-board-menus.ts`).
     Shortcuts, the command palette and the menu bridge share one input in `components/use-board-commands.ts`. The rail's drawers share one
     `RailContext` (`components/rail-context.ts`); `BoardHeader` and `BoardColumns` take grouped props (counts, panes, slots; drag, review, archive).
     The dialog flags (New thread, Settings, Share board, Help, palette, sign-in, project menu) and what they cover live in `lib/use-board-dialogs.ts`.
@@ -100,7 +103,8 @@ If you are an agent editing this repo, you are working on me. Read README.md for
   `app/api/mcp/[server]` serves them to `codex exec --config mcp_servers.*`. Puku and Codex don't read `.claude/skills` or Codex `CLAUDE.md`,
   so `lib/skills.ts` `skillIndex`/`skillInvocation` list a folder's skills and expand `/name`, and `lib/puku-context.ts` sends Codex the project's `CLAUDE.md`. `cliEnv()` also drops secret-named and key-shaped variables from your shell's env (`lib/secret-detect.ts`); the control
   server's token is a 0600 file, `~/.weft/shell-token` (`electron/shell-token.cjs`, read by `lib/shell-token.ts`), never an env var.
-- `scripts/check-staged.sh` + `scripts/secret-scan.mjs`: the pre-commit hook; gitleaks, or without it Weft's own key shapes on each added line.
+- `scripts/check-staged.sh` + `scripts/secret-scan.mjs` + `scripts/staged-imports.mjs`: the pre-commit hook; gitleaks, or without it Weft's own key shapes on each added line,
+  then a staged file importing an untracked one (named), then tsc and eslint on a copy of the index (docs/architecture/thread-guards.md). The git guard refuses `--no-verify` and moving `core.hooksPath`.
   The Composer flags a pasted or typed key the same way (`components/SecretPaste.tsx`).
 - `lib/changelog.ts` + `lib/changelog-tool.ts` + `lib/changelog-stamp.ts` + `lib/changelog-write.ts` + `lib/changelog-sync.ts` + `lib/changelog-render.ts` + `app/api/changelog` + `components/ChangelogDialog.tsx`:
   every project's changelog, kept by Weft instead of a CHANGELOG.md every card edits at once. A thread records what it shipped with
@@ -123,10 +127,20 @@ If you are an agent editing this repo, you are working on me. Read README.md for
   chip in the box and on its primary, with the rest in a ▾ menu, a Done button while idle and ■ Stop in its own slot (docs/architecture/composer.md).
   `lib/splice.ts` + `lib/splice-brief.ts` + `lib/splice-diff.ts`: Send fresh, a new CLI session in the same card started from a brief
   (Haiku summary pre-baked on the scheduler's tick, what's open, the diff of the thread's own edits) instead of re-sending a cold history.
+- `lib/limit-reset.ts` + `lib/start-gate.ts` + `lib/use-start-gate.ts`: one answer for "when does this reset?", for every limit a thread
+  can meet — the model's own cap (`~/.weft/model-limits.json`), the CLI's weekly window and its 5-hour window (`~/.weft/limits.jsonl`).
+  Pure and read as data, so the server (`lib/start-gate.ts`) and the browser (`/api/limits/plans`) agree. A new thread on a spent model
+  doesn't get its first turn now: the New thread dialog's button reads "Start at 2:30am" and `startCard` (`lib/new-card.ts`) schedules
+  the prompt for the reset instead of starting a thread that dies in Needs you. The reply box reads the same gate, so a model's own cap
+  reaches it too (docs/architecture/composer.md).
 - `components/SettingsDialog.tsx` + `lib/settings-nav.ts`: Settings, full window over a scene, pages down the left (General, Laptop mode, Models,
   Threads, Security, Automations, Shortcuts, Accounts, Teams, Sync); Laptop mode is `components/LaptopModeCard.tsx` + `LaptopModeRules.tsx` over `electron/keep-working*.cjs`; Models holds every model pick, new threads' through `components/NewThreadDefaults.tsx`;
   the four rows (NewThreadDefaults, SubagentPicker, CopilotPicker, DonePicker) share `components/Pickers.tsx`
-  (`BackendPicker`, `ModelPicker`, `EffortPicker`) on top of `components/ModelSelect.tsx` (Claude / Puku / Codex optgroups driven by `MODELS` in `lib/new-thread.ts`; Copilot passes `groups=Claude` to stay Claude-only).
+  (`BackendPicker`, `ModelPicker`, `EffortPicker`) on top of `components/ModelSelect.tsx` (Claude / Puku / Codex optgroups driven by `MODELS` in `lib/new-thread.ts`).
+  Every model any CLI serves is on offer in every one of them, and there is no default model: `NO_MODEL` ("") is
+  "let the CLI decide" (`lib/new-thread.ts`), picking a model moves the card to the CLI that serves it
+  (`lib/backend-switch.ts`), and a changed default reaches an open New thread dialog at once through
+  `subscribeDefaults` (`lib/new-thread.ts`, `lib/use-new-card-dialog.ts`).
   Security (`components/SettingsSecurityPage.tsx`) holds the default permission mode and `components/TrustedFolders.tsx` (the folders threads may read outside their project, from `SettingsView.allowedFolders`, each revocable through `DELETE /api/folders`); Security also holds `components/TokenExpiry.tsx` (when each saved sign-in runs out, reusing `expiryNote()`; only BlastCP expires, and only the expiry crosses from main — the tokens stay in the Keychain; a BlastCP sign-in made through your Weft account renews itself, one made in the browser never re-consents quietly).
 - `components/DbSelect.tsx` + `lib/db-picker.ts` `rankItems`: the one "Link <folder> to…" picker every provider drawer shares
   (▲ Vercel, Supabase, Cloudflare, 🚀 BlastCP — `components/VercelPicker.tsx`, `SupabasePicker.tsx`, `CloudflarePicker.tsx`, `BlastcpPicker.tsx`).
@@ -142,20 +156,27 @@ If you are an agent editing this repo, you are working on me. Read README.md for
   that failed to read); each supplies its own details as children and Supabase its third "Link CLI…" button. GitHub's drawer keeps
   its own row — it has no Link/Unlink pair and no link object, just a sync switch.
 - `components/BackupModelPicker.tsx` (`backupModel`): Settings → Models → Backup model. The model the first-message-failed banner reruns the card on
-  (when the very first turn came back with an error — a rate limit, mostly). Any model any installed CLI serves, plus an "Off — no backup" leading option
+  (when the very first turn came back with an error — a rate limit, mostly), and the model every thread moves to when the model it was on has hit its limit.
+  Any model any installed CLI serves, plus an "Off — no backup" leading option
   that hides the Rerun button. Behind it `lib/backend-switch.ts` `rerunOnModel` clears the session on a model change and `sendMessage`s the last user
   message with `echo: false`; `app/api/cards/[id]/rerun-model` is the route, the banner (`components/FirstMessageErrorBanner.tsx`) is the only caller.
+- `lib/model-limit.ts` + `lib/model-fallback.ts`: which model hit which limit, and where a thread goes instead. Plan limits are per model
+  (Opus has its own weekly cap, Sonnet another), so `lib/rate-limit.ts` records the hit per model in `~/.weft/model-limits.json` and the pickers mark a
+  used-up model ("— at its limit"). `fallbackFor` moves an exhausted model to the user's backup (across CLIs, if need be), and every thread kind asks it:
+  the New thread dialog (`lib/use-new-card-dialog.ts`), a running thread (`lib/runner-turn.ts`), the copilot (`lib/copilot.ts`), the Review all card
+  (`lib/use-board-actions.ts`) and the `/weft:done` wrap-up (`lib/automations.ts`). With no backup set, Weft never guesses a model the user didn't pick.
 - `lib/subagents.ts` + `components/SubagentPicker.tsx`: when threads delegate to subagents and on which model (Settings → Models → Use for subagents,
-  any Claude or Puku model: forced through `CLAUDE_CODE_SUBAGENT_MODEL` / `PUKU_CLI_SUBAGENT_MODEL` on its own CLI, a headless `-p` run on the other).
+  any model any CLI serves: forced through `CLAUDE_CODE_SUBAGENT_MODEL` / `PUKU_CLI_SUBAGENT_MODEL` on its own CLI, a headless `-p` run on the other).
   `lib/tasks.ts` + `lib/task-ledger.ts` + `lib/tasks-view.ts` + `components/TaskStrip.tsx`: each thread's subagents and background commands from the CLI's
   task events, on `card.tasks` (the strip above the reply box, ⑂N on the card); idle CLIs with live ones stay open, and ones a CLI exit cut off are named to the thread's next message.
-- `lib/automations.ts` `doneOverrides` + `components/DonePicker.tsx`: Settings → Models → Run /weft:done on picks the model (any Claude or
-  Puku model, applied to cards on its own CLI) and effort `/weft:done` uses on a Done move; both model menus are `components/ModelSelect.tsx`; `app/api/cards/[id]` moveCard snapshots the card's own picks into `preDoneModel` /
-  `preDoneEffort` and `lib/runner.ts` `restoreDoneOverride` puts them back after the wrap-up.
-- `components/ReviewAllPicker.tsx`: Settings → Models → Review all picks the Claude model of the Review column's "Review all" card (`reviewAllModel`; `Board.tsx` `reviewAll` reads it at click time).
-- `components/CopilotPicker.tsx`: Settings → Models → Copilot picks the Claude model the copilot thread runs on. The pick is read once when the
-  card is first made (`lib/copilot.ts` `ensureCopilot`), so it takes effect on the next "New chat" in the copilot lane; the default follows the model
-  you last picked for new threads (`lib/new-thread.ts` `modelFor`).
+- `lib/automations.ts` `doneOverrides` + `components/DonePicker.tsx`: Settings → Models → Run /weft:done on picks the model (any model any CLI
+  serves) and effort `/weft:done` uses on a Done move; both model menus are `components/ModelSelect.tsx`; `app/api/cards/[id]` moveCard snapshots the card's own picks into `preDoneModel` /
+  `preDoneEffort` (and `preDoneBackend`, when the backup moved the card to another CLI) and `lib/runner.ts` `restoreDoneOverride` puts them back after the wrap-up.
+- `components/ReviewAllPicker.tsx`: Settings → Models → Review all picks the model of the Review column's "Review all" card (`reviewAllModel`, any model any CLI serves;
+  `Board.tsx` `reviewAll` reads it at click time and the card starts on the CLI that serves it).
+- `components/CopilotPicker.tsx`: Settings → Models → Copilot picks the model the copilot thread runs on (any model any CLI serves). The pick is read once when the
+  card is first made (`lib/copilot.ts` `ensureCopilot`), so it takes effect on the next "New chat" in the copilot lane; with no pick, the copilot runs on
+  whatever its CLI chooses, or the model you last picked for new threads (`lib/new-thread.ts` `modelFor`).
 - `lib/puku-trial.ts` + `lib/puku-trial-token.ts` + `lib/puku-proxy.ts` + `app/api/puku/*`: the Puku trial; a puku thread with no Puku
   login, while you're signed in to Weft, runs through the deployed Weft's proxy on Weft's own key (signed day-long token read by puku's
   `apiKeyHelper` from `~/.weft/puku-trial-token`, per-account daily cap in `puku_trial_usage`; docs/architecture/puku-trial.md).
@@ -331,6 +352,10 @@ If you are an agent editing this repo, you are working on me. Read README.md for
   inside a CrashGuard), so even a module that throws as it loads (JSX in a constant before its import) breaks only its spot.
   A build error (a file that doesn't parse) fails the route before React runs, so no boundary sees it: `components/BuildErrorBar.tsx`
   (`lib/build-error.ts`) hides Next's overlay and leaves the last version that built running.
+  When a thread breaks Weft (stops its server, leaves a file that doesn't build, makes the board reload), `lib/crash-blame.ts`
+  marks its card `broke` (a red ring and a 💥 Broke Weft chip in `components/CardMarks.tsx`, a note with its next message):
+  Electron notes an exit it didn't ask for (`electron/server-exit.cjs`), the board reports the other two (`lib/use-break-report.ts`
+  → `app/api/broke`), and the card whose recent tool call explains it is blamed (docs/architecture/error-boundaries.md).
   A runtime dev-server death (the supervisor's 4-in-2-min crash budget trips while the board is up) gets
   the same treatment: `components/ServerErrorBar.tsx` (`lib/server-status.ts`) offers Restart / Open logs /
   Fix with a thread without tearing down the React tree (`electron/server.cjs` `onNotify` → `electron/server-ipc.cjs`).

@@ -14,6 +14,7 @@ git clone https://github.com/aimhuge/weft.git && cd weft
 pnpm install
 pnpm desktop        # Electron app: board + side browser
 pnpm dev            # board only, in a normal browser at http://127.0.0.1:1024 (no browser pane)
+pnpm dev:web        # the same, plus the weft.zip web routes (/login, /team, /<slug>/board) on :1024
 pnpm test           # unit tests (Vitest), about a second; pnpm lint for ESLint
 ```
 
@@ -22,6 +23,20 @@ GitHub release-feed lookup times out after three seconds and falls back to the r
 
 The first `pnpm desktop` downloads the Electron binary. Don't run `dev` and `desktop` at the
 same time; Next.js allows one dev server per project folder.
+
+### The web board on localhost
+
+The weft.zip routes — `/login`, `/team`, `/<orgSlug>/board`, the share and profile pages — are
+normally deployed-only, so a local server shows "Workspaces live on weft.zip" instead of the real
+page. `WEFT_WEB=1` turns just those routes on locally, leaving the desktop board at `/` and the
+marketing home page alone (analytics stay off, too). Set it in `.env.local`, or use `pnpm dev:web`,
+which sets it for that run:
+
+```bash
+WEFT_WEB=1   # in .env.local, or run pnpm dev:web
+```
+
+`isWebEnabled()` in `lib/home.ts` is the gate; `isDeployed()` still owns the home page and analytics.
 
 ## The desktop app
 
@@ -111,6 +126,10 @@ same time; Next.js allows one dev server per project folder.
   $200/year) replaces it with a 300M Puku token allowance, refreshed every billing period. Every plan includes BlastCP
   usage: Free has BlastCP Free (1 brand, 3 channels, 30 posts a month, $0.50 of AI generation once), and Pro and Team
   have BlastCP Creator (every channel, unlimited posts, $3 a month of AI generation); BlastCP doesn't apply them yet.
+  **Open Source** is free for a year for maintainers of an active, OSI-licensed public repo, checked on GitHub when you
+  sign in to weft.zip (or with **Check my GitHub now** on the billing page): teams and BlastCP Creator on the free tier's
+  Puku cap. **Education** (the GitHub Student Developer Pack) and **Regional pricing** (Pro at $5/month in low-income and
+  $10 in lower-middle-income countries) are built in Weft and wait on the pack partnership and the billing package's price variants.
   Settings → Accounts shows your plan, workspace and the meter; **Manage billing** opens the workspace's billing page on weft.zip
   (Stripe Checkout to upgrade, the Stripe-hosted portal to manage). Billing is per workspace, not per seat;
   owner or admin manages. See docs/architecture/billing.md.
@@ -193,6 +212,11 @@ The new-thread dialog (⌘N) and every card's reply box use the same editor:
   first instead. There's also "In 1 hour", "Tomorrow morning" and any date and time. Scheduled replies sit above the box (click one to
   edit it) and show as a clock on the card. Weft sends them itself, with the thread closed; one that
   came due while Weft was shut goes when it next starts.
+- **A new thread waits for the limit too.** A thread started on a model that has hit its limit used to fail
+  on its first turn and die in Needs you. Weft knows before the turn starts: the New thread dialog's Start
+  button reads **Start at 2:30am** and says which limit is used up, and the card waits for the window before
+  its first message goes out. The same goes for a model's own cap (Opus can run out before the CLI's window
+  does) and for the weekly limit (`lib/limit-reset.ts`, `lib/start-gate.ts`).
 - **Prompt cache in the status strip.** `cache:52m` counts down how long the thread's prompt cache
   stays warm (an hour after each request on a Claude plan). Replies inside that window reread the
   thread from cache at about a tenth of the price. After it, the chip reads `cache:cold 120k`: your
@@ -239,6 +263,24 @@ then follows whatever the last new thread used. To change it later, even mid-tur
 use the mode menu in the open thread's header or the card's right-click menu. Sessions picked up from
 Claude Code keep the mode they last ran in (say `auto`).
 
+**Every model is on offer, and there is no default model.** Wherever Weft asks for a model — the New
+thread dialog, Settings → Models (New threads, Use for subagents, Copilot, Review all, Run /weft:done
+on, Backup model), the thread header's chip — the list is every model any CLI serves, grouped under
+Claude, Puku and Codex. Nothing is locked to one CLI: picking a model moves the card to the CLI that
+serves it, so the choice is one row, not two. The first entry is **Default model**, which means "let
+the CLI decide" — Weft leaves the model off the command line rather than picking one behind your
+back. A changed default takes effect at once: the open New thread dialog follows it, and an idle
+thread picks it up on its next message.
+
+**A model that hits its limit hands over to the backup.** Plan limits are per model (Opus has its own
+weekly cap, Sonnet another), so Weft remembers which model ran out and until when. A model that is
+used up is marked in every picker ("— at its limit"), and every thread on it — a new one, a running
+one, a subagent, the `/weft:done` wrap-up, the Review all card, the copilot — moves to your backup
+model instead of dying in Needs you. The backup may live on another CLI: the card's CLI moves with
+it. With no backup set, Weft never guesses a model you didn't pick, and the card waits in Needs you
+with its error for you to choose. The card's line says what happened: "Opus 5.5 hit its limit — moved
+to Sonnet 5.5".
+
 Pick **Codex** in the New thread dialog to run the OpenAI Codex CLI. Install `codex` on your PATH and sign in with `codex login` first; Weft can open Codex's device login in Terminal from Settings → Accounts. Codex uses its own tools and saved sessions. Weft's browser, board, secrets and webhook MCP tools reach Codex over HTTP, and a folder's `CLAUDE.md` and `.claude/skills` are passed along (Codex reads neither); the per-tool `.env`, git, restart and check guards aren't available to Codex threads. Codex's sandbox mode and reasoning effort are fixed when a session starts.
 
 ## How cards move
@@ -279,7 +321,8 @@ Replying to a card continues the same CLI session, so the agent keeps its contex
 Right-click a card for a native menu where everything is one click: open, rename, start, move to
 Review, Done or Backlog, stop, run `/weft:done`, `/weft:commit` or `/weft:preview`, start, restart or
 stop its dev server, start a new thread in its folder, reveal the folder in Finder, copy the folder path
-or a `claude --resume` command, archive, and delete. Double-click any empty part of the board to open New thread, or right-click a column's empty space for it;
+or a `claude --resume` command, archive, and delete. Deleting asks first, in Weft's own dialog, with a
+"Don't ask again" tick that makes later deletes go straight through. Double-click any empty part of the board to open New thread, or right-click a column's empty space for it;
 in Done, also show or hide archived cards and archive all the Done cards on screen. Every item has a key,
 shown beside it, that picks it while the menu is open: right-click, then `D` for Done, `1` for `/weft:done`,
 `Y` for YOLO. (Desktop app only.)
@@ -330,14 +373,15 @@ keeps their file dumps out of the thread's context. Settings → Models → Use 
 - **Let the model choose** (the default): the thread picks per subagent, Haiku for searches and lookups,
   Sonnet for most coding, Opus for hard reasoning where a mistake is costly.
 - **Same model as the thread**: every subagent runs on the thread's own model.
-- **Any model either CLI serves**, grouped under Claude (Fable 5.1, Opus 5.5, Sonnet 5.5, Haiku 5.5) and
-  Puku (Opus 4.8, Puku AI 2.8, Puku AI 2.7). On a thread whose CLI serves it, the model is forced through
-  that CLI's env (`CLAUDE_CODE_SUBAGENT_MODEL` or `PUKU_CLI_SUBAGENT_MODEL`). On the other CLI's threads,
-  the thread runs that CLI headless as the subagent (`puku-cli -p … --model opus-4.8`, or `claude -p`),
-  read-only unless the task needs edits. That needs the other CLI installed and logged in.
+- **Any model any CLI serves**, grouped under Claude (Fable 5.1, Opus 5.5, Sonnet 5.5, Haiku 5.5), Puku
+  (Opus 4.8, Puku AI 2.8, Puku AI 2.7) and Codex. On a thread whose CLI serves it, the model is forced
+  through that CLI's env (`CLAUDE_CODE_SUBAGENT_MODEL` or `PUKU_CLI_SUBAGENT_MODEL`). On the other CLI's
+  threads, the thread runs that CLI headless as the subagent (`puku-cli -p … --model opus-4.8`, or
+  `claude -p`), read-only unless the task needs edits. That needs the other CLI installed and logged in.
 
 **Backup model** (`Settings → Models → Backup model`) is the model a card reruns its first message on
-when that very first turn came back an error (a rate limit, mostly). The open thread shows a banner
+when that very first turn came back an error (a rate limit, mostly), and the model every thread moves
+to when the model it was on has hit its limit. The open thread shows a banner
 with **Rerun on &lt;backup model&gt;** (or **Pick a backup model** when none is set, which jumps to
 Settings → Models) and **Delete**. "Off — no backup" hides the Rerun button entirely.
 
@@ -550,7 +594,10 @@ answer the thread through `weft://reply` links. It starts a sprint's cards, or a
 
 Beside the code quality badge, **🔥 25 · Lv 15** is your streak and level (Settings → General → Show progress turns it
 off). Hover it for today's numbers; click it for your **Wefter Profile**. A new badge or level pops up over the board
-with a burst of confetti (none with Reduce motion on), and **See your profile** opens your badges:
+with a burst of confetti (none with Reduce motion on), and **See your profile** opens your badges. A level-up opens like
+an episode: your rank's picture (our hovercar, wearing the Weft emblem, from a dusty garage at Thread to a cliff over the
+woven city at Tapestry), "Episode XXIV" and a line of story rising over it. **Replay last achievement**, in the avatar's
+menu and the palette, shows the last one again:
 
 - **XP and levels.** Starting a card earns 2 XP, a turn 1, and taking a card to Done 10, or 15 when its
   project's quality checklist scores 80+. Shipping pays more than starting, and healthy code pays more than
@@ -931,6 +978,10 @@ which imports that edit broke, in any project, and fix them before you see the d
 If one gets through anyway (a stray `}` mid-edit), the board you have keeps running the last version that built: a
 small bar names the broken file in place of the dev server's Build Error overlay, and goes away once the file is fixed
 (`components/BuildErrorBar.tsx`, `lib/build-error.ts`). Reloading the window while the file is broken shows the error page.
+When a thread crashes or refreshes Weft (stops its server, leaves a file that doesn't build, or makes the board reload),
+its card is ringed red with a **💥 Broke Weft** chip saying what it did; × dismisses it, and the thread is told with
+its next message so it doesn't do it again (`lib/crash-blame.ts`). Starting a second Weft dev server in Weft's own
+folder, the usual cause, is refused outright.
 At startup, if the board doesn't load or its renderer crashes, the start screen says why and offers Retry, Logs
 and Quit, rather than waiting on "Starting the board…" or leaving a blank window.
 
