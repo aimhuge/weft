@@ -1,5 +1,6 @@
 // The Security page: what threads may do without asking (the default permission mode, the folders outside a
 // project they may use), how long the saved sign-ins last, and the anonymous setup stats switch (lib/telemetry.ts).
+import DeleteConfirmSwitch from "./DeleteConfirmSwitch";
 import ModePicker from "./ModePicker";
 import { SettingsCard, SettingsSectionHeader } from "./SettingsLayout";
 import { StatsSwitch } from "./StatsSwitch";
@@ -38,6 +39,9 @@ export default function SettingsSecurityPage({
       </SettingsCard>
       <SettingsCard>
         <TrustedFolders folders={allowedFolders} />
+      </SettingsCard>
+      <SettingsCard>
+        <DeleteConfirmSwitch />
       </SettingsCard>
       <SettingsCard>
         <TokenExpiry />

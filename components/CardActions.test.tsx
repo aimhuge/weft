@@ -33,12 +33,14 @@ describe("CardActions", () => {
     const props = renderActions();
     await userEvent.click(screen.getByRole("button", { name: "Archive card" }));
     expect(props.onArchive).toHaveBeenCalledOnce();
-    const confirm = vi.spyOn(window, "confirm").mockReturnValueOnce(false).mockReturnValueOnce(true);
     await userEvent.click(screen.getByRole("button", { name: "Delete card" }));
     expect(props.onDelete).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog", { name: "Delete card" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(props.onDelete).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole("button", { name: "Delete card" }));
+    await userEvent.click(screen.getByRole("button", { name: /^Delete$/ }));
     expect(props.onDelete).toHaveBeenCalledOnce();
-    confirm.mockRestore();
   });
 
   it("can't archive a live card", () => {
@@ -64,9 +66,9 @@ describe("CardActions and the first full turn", () => {
 
   it("offers delete while the first turn runs, and says it stops the turn", async () => {
     const props = renderActions({ card: makeCard({ turns: undefined, sessionId: "s1" }), live: true });
-    const confirm = vi.spyOn(window, "confirm").mockReturnValueOnce(true);
     await userEvent.click(screen.getByRole("button", { name: "Delete card" }));
-    expect(confirm.mock.calls[0]?.[0]).toContain("This stops its turn.");
+    expect(screen.getByText(/This stops its turn\./)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /^Delete$/ }));
     expect(props.onDelete).toHaveBeenCalledOnce();
   });
 

@@ -3,9 +3,12 @@
 // A board card's buttons: its skills and delete in the thread panel's header, and its marks (share, star,
 // archive), which sit in the browser pane's toolbar while the pane is open beside the thread and in the
 // header when it isn't.
+import { useState } from "react";
+import { shouldConfirmDelete } from "@/lib/delete-confirm";
 import { useShortcutHint } from "@/lib/hotkeys";
 import type { Card } from "@/lib/types";
 import CrashGuard from "./CrashGuard";
+import DeleteCardDialog from "./DeleteCardDialog";
 import Icon from "./Icon";
 import SkillMenu from "./SkillMenu";
 import StarButton from "./StarButton";
@@ -58,21 +61,41 @@ export default function CardActions({ onSend, onDelete, marksInPane = false, ...
   marksInPane?: boolean;
 }) {
   const { card, live } = marks;
+  // The card waiting to be deleted: the confirmation dialog is open for it.
+  const [deleting, setDeleting] = useState(false);
+
+  // Deleting asks first, unless the user ticked "Don't ask again" (lib/delete-confirm.ts).
+  const askToDelete = () => {
+    if (!shouldConfirmDelete()) {
+      onDelete();
+      return;
+    }
+    setDeleting(true);
+  };
+
   return (
     <>
       <CrashGuard inline what="skill menu"><SkillMenu cwd={card.cwd} disabled={live} onRun={(skill) => onSend(`/${skill}`)} /></CrashGuard>
       {!marksInPane && <CardMarks {...marks} />}
       {!hasFinishedTurn(card, live) && <button
-        onClick={() => {
-          const stops = live ? " This stops its turn." : "";
-          if (window.confirm(`Delete “${card.title}”?${stops} Its CLI transcript stays on disk.`)) onDelete();
-        }}
+        onClick={askToDelete}
         title="Delete card"
         aria-label="Delete card"
         className="rounded-md p-1.5 text-muted hover:bg-sunken hover:text-danger"
       >
         <Icon name="trash" size={15} />
       </button>}
+      {deleting && (
+        <DeleteCardDialog
+          title={card.title}
+          live={live}
+          onCancel={() => setDeleting(false)}
+          onConfirm={() => {
+            setDeleting(false);
+            onDelete();
+          }}
+        />
+      )}
     </>
   );
 }

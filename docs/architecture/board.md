@@ -58,6 +58,14 @@ lives in its own component under `components/`.
   it, the terminal drawer.
 - `components/BoardDialogs.tsx` — every dialog, sheet and overlay the board stacks over its columns, each
   still loaded through `guarded()`.
+- `components/DeleteCardDialog.tsx` — the delete-card confirmation, Weft's own modal because a native
+  confirm can't show a checkbox. It names the card, says a running turn stops and that the CLI
+  transcript stays on disk, and carries a "Don't ask again" tick. Both delete paths use it: the trash
+  button in an open card's header (`components/CardActions.tsx`) and the right-click menu's Delete
+  (`components/use-board-menus.ts`, whose `deleteDialog` node the board draws). The tick is saved only
+  when the user confirms the delete; cancelling leaves the preference alone. The way back is
+  Settings → Security's **Ask before deleting a card** row (`components/DeleteConfirmSwitch.tsx`),
+  which turns the question back on.
 - `components/rail-context.ts` — `RailContext`, the seven props every rail drawer shares; `SideRail`
   (`components/LibraryRail.tsx`) takes it as one `ctx` prop. Every tool drawer also shares the shell's ▶ and the
   intro video under its title (`useFeatureIntro`, [feature-intros.md](feature-intros.md)).
@@ -80,6 +88,14 @@ lives in its own component under `components/`.
   `BoardBrowserPane` reads (`held`) so the pane doesn't remount open and slide shut.
 - `lib/board-menu-bridge.ts` — `useMenuBridge` and `runMenuAction`: what the app menu, dock, tray and
   global shortcuts ask the board to do.
+- `lib/delete-confirm.ts` — `shouldConfirmDelete` and `rememberDeleteConfirm`: the "don't ask again"
+  flag behind the delete-card dialog, in localStorage under `weft.delete.skipConfirm` like the Switch
+  all dialog's. Both delete paths ask `shouldConfirmDelete()` first: when it is off the card is
+  removed straight away, otherwise the dialog opens.
+- `lib/use-delete-dialog.ts` — `useDeleteDialog` and `removeCard`: the delete confirmation's state
+  (which card is waiting to go, and the dialog node the board draws) and the board's delete itself
+  (it clears the open card if it was the one going, then tells the server). It lives here rather than
+  in the menu hook so `components/Board.tsx` keeps its size ratchet.
 - `lib/api-client.ts` — `apiFetch`, `API_HEADERS` and `API_TOKEN_HEADER`: the one place that knows the
   board's fetch header, so every board-side request carries `x-weft-token`.
 - `lib/thread-transport.ts` — the desktop's `localTransport`: it reads an open card's thread page from
@@ -136,12 +152,19 @@ components/Board.tsx  ── state + actions ──▶  components/BoardHeader.t
 - **Guarded pieces.** Every piece that a thread is likely to edit loads through `guarded()`
   (`components/guarded.tsx`), so a module that throws as it loads breaks only its own spot
   (docs/architecture/error-boundaries.md).
+- **Weft's own modal, not `window.confirm`, when the dialog needs a choice.** A native confirm sheet
+  has only Cancel and OK, so it can't carry a checkbox. The delete-card dialog
+  (`components/DeleteCardDialog.tsx`) and the Switch all dialog
+  (`components/switch-all-button.tsx`) are Weft's own modals for that reason, and each keeps its
+  "Don't ask again" tick in `localStorage`.
 - **Tests.** Each new module has a test beside it: `components/BoardHeader.test.tsx`,
   `components/BoardColumns.test.tsx`, `components/BoardProjectBar.test.tsx`,
   `components/BoardBrowserPane.test.tsx`, `components/BoardBottom.test.tsx`, `components/OpenCard.test.tsx`,
   `components/LibraryRail.test.tsx`, `components/use-board-commands.test.tsx`, `lib/board-derive.test.ts`,
   `lib/board-live.test.ts`, `lib/board-menu-bridge.test.ts`, `lib/use-board-dialogs.test.ts`,
-  `lib/use-open-card.test.ts`, `lib/use-new-thread-pane.test.ts`.
+  `lib/use-open-card.test.ts`, `lib/use-new-thread-pane.test.ts`, `lib/delete-confirm.test.ts`,
+  `components/DeleteCardDialog.test.tsx`, `components/use-board-menus.test.tsx`,
+  `lib/use-delete-dialog.test.ts`.
 
 ## How to add
 
@@ -173,6 +196,21 @@ components/Board.tsx  ── state + actions ──▶  components/BoardHeader.t
 2. If it needs state or an action, add it to `PaletteState` or `PaletteActions` in
    `components/board-palette.ts`, then to the `paletteItems` call in `components/use-board-commands.ts`.
 3. The palette is built only while it is open, so the list stays fresh without churning every render.
+
+### A delete confirmation
+
+1. Draw the modal in `components/DeleteCardDialog.tsx`: it names the card, carries the "Don't ask
+   again" tick, and calls `rememberDeleteConfirm(true)` only when the user confirms with the box
+   ticked. Cancelling leaves the preference alone.
+2. In the path that deletes, call `ask(card)` from `useDeleteDialog` (`lib/use-delete-dialog.ts`): it
+   asks `shouldConfirmDelete()` first (`lib/delete-confirm.ts`), and if the flag is off it deletes
+   straight away; otherwise it opens the dialog and deletes on confirm.
+3. A path that lives in a `.ts` file can't hold JSX: the dialog is built with `createElement`
+   (`BoardDeleteDialog` in `components/DeleteCardDialog.tsx`) and the node is handed to the board to
+   draw (`deleteDialog` in `components/BoardDialogs.tsx`, wired from `components/Board.tsx`).
+4. Test the modal in `components/DeleteCardDialog.test.tsx` and the flag in
+   `lib/delete-confirm.test.ts`; a menu path is driven through the native menu by stubbing
+   `window.weft.popupMenu` (`components/use-board-menus.test.tsx`).
 
 ### A dialog flag
 

@@ -51,7 +51,9 @@ If you are an agent editing this repo, you are working on me. Read README.md for
     `guarded()`; `components/BoardDialogs.test.tsx` says which prop opens which panel and that each close handler fires through).
     The delete-card confirmation is Weft's own modal, `components/DeleteCardDialog.tsx` (a native confirm can't show a checkbox), with a
     "Don't ask again" tick that is the flag in `lib/delete-confirm.ts`; both delete paths use it, the trash button in an open card's
-    header (`components/CardActions.tsx`) and the right-click menu's Delete (`components/use-board-menus.ts`).
+    header (`components/CardActions.tsx`) and the right-click menu's Delete (`components/use-board-menus.ts`). The dialog's state and the
+    board's delete live in `lib/use-delete-dialog.ts`, and Settings → Security's **Ask before deleting a card** row
+    (`components/DeleteConfirmSwitch.tsx`) is the way back from the tick.
     Shortcuts, the command palette and the menu bridge share one input in `components/use-board-commands.ts`. The rail's drawers share one
     `RailContext` (`components/rail-context.ts`); `BoardHeader` and `BoardColumns` take grouped props (counts, panes, slots; drag, review, archive).
     The dialog flags (New thread, Settings, Share board, Help, palette, sign-in, project menu) and what they cover live in `lib/use-board-dialogs.ts`.
@@ -92,6 +94,15 @@ If you are an agent editing this repo, you are working on me. Read README.md for
   with it (`lib/cli-process.ts`), and `lib/cli-reaper.ts` ends the orphans a killed server left behind. The init's model plus the effort (the card's, else `effortLevel` from the CLI's settings, `lib/cli-defaults.ts`)
   land in `stats.runsOn`, which the header's CLI chip shows (`BackendBadge`). `editLastMessage()` is ↑ in the reply box: it rewinds the
   session to before your last message (`lib/edit-last.ts`, `lib/rewind.ts`) and sends the edit.
+- `lib/goose-runner.ts` + `lib/goose-recipe.ts` + `lib/goose-runner-events.ts`: Goose (the Rust CLI agent from Block), our fourth
+  backend and the first whose model you bring yourself — a turn is one `goose run` process (`lib/runner-session.ts` `driveGoose`, no
+  spare to keep warm) reading `--output-format stream-json` on stdout, one JSON object per line, parsed into four kinds (message,
+  notification, error, complete; a notification is told apart by the `progress` key it carries, since Goose's own payload has no tag).
+  Goose's `run` takes one input — `--text`, `--instructions` or `--recipe`, mutually exclusive — so a Weft turn is `--text` plus
+  `--system`, and the recipe is rendered beside it for reproducibility, not run. The provider key never reaches the board: the server
+  asks Electron main for a one-time grant over the control server and `electron/goose-env.cjs` starts Goose with the key in its env
+  (`lib/goose-launch.ts`, `electron/goose-ipc.cjs`, `electron/goose-token.cjs`), so the plaintext path is main's Keychain → the
+  helper's env → Goose's env, and the recipe is a prompt, not a policy (docs/architecture/goose.md).
 - `lib/env.ts` `guardedCli()`: Claude Code and puku-cli's CLI env and Bash guards: `lib/secret-guard.ts` (no .env reads),
   `lib/restart-guard.ts` (no restarting Weft mid-turns), `lib/git-guard.ts` (no `git stash`, `reset --hard`, path
   checkout/restore or `clean -f` in the shared tree), `lib/check-guard.ts` (no `tsc` or `eslint` run directly where the
@@ -381,6 +392,7 @@ If you are an agent editing this repo, you are working on me. Read README.md for
   - `cloudflare.md` — the orange-cloud rail drawer: API token in the Keychain, Worker/Pages links in `~/.weft/cloudflare-links.json`, wrangler `account_id` and deploys.
   - `blastcp.md` — the BlastCP rail drawer: OAuth+PKCE, MCP-tool reads, `~/.weft/blastcp-links.json`.
   - `puku-trial.md` — the puku trial: a puku thread with no Puku login runs through the deployed Weft's proxy on Weft's own key, day-long token, per-account daily cap.
+  - `goose.md` — the Goose backend: one `goose run` process per turn and its `stream-json` events, the provider catalog and the BYO key, the grant that puts the key in Goose's env without it ever reaching the board, and the per-card `GOOSE_PATH_ROOT`.
   - `email-forwarding.md` — `weft.zip` mail → Resend → Svix-signed `email.received` → one inbox.
   - `github-issues.md` — a project's open GitHub issues become Backlog cards, one direction, polled every 5 min, instant sync via the deployed relay.
   - `mini-apps.md` — pages saved from the browser pane as tiles on the left rail below Services: `~/.weft/apps.json`, `/api/apps`, the pane's Save as app button, right-click menu, My mini apps on the profile, Share… at `weft.zip/a/<id>`, and public links' previews (title, description, branded card).

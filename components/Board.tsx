@@ -34,6 +34,7 @@ import { useBoardView } from "@/lib/use-board-view";
 import { useBoardArchive } from "@/lib/use-board-archive";
 import { useBoardActions } from "@/lib/use-board-actions";
 import { useBoardToggles } from "@/lib/use-board-toggles";
+import { removeCard } from "@/lib/use-delete-dialog";
 import { resumeActions } from "@/lib/resume-actions";
 import { useEscape } from "@/lib/use-escape";
 import { guarded } from "./guarded";
@@ -267,7 +268,7 @@ export default function Board() {
     if (!selectedId) return;
     return onOpenFile(selectedId, () => setOpenEditor("editor", true));
   }, [selectedId, setOpenEditor]);
-  const { onCardMenu, onColumnMenu, toggleStar, tagging, editTags, saveTags, closeTags, sharing, closeShare, shareCard } = useBoardMenus({
+  const { onCardMenu, onColumnMenu, toggleStar, tagging, editTags, saveTags, closeTags, sharing, closeShare, shareCard, deleteDialog } = useBoardMenus({
     doneShown: byColumn.get("done") ?? [],
     archivedCount,
     showArchived,
@@ -279,10 +280,7 @@ export default function Board() {
     move,
     toggleArchive,
     archive: archiveCards,
-    remove: (card) => {
-      if (selectedRef.current === card.id) select(null);
-      api.remove(card.id).catch(notify);
-    },
+    remove: (card) => removeCard(card, (c) => selectedRef.current === c.id, select, notify),
     openNew,
     toggleArchived: () => setShowArchived((v) => !v),
     toast: setToast,
@@ -466,6 +464,7 @@ export default function Board() {
         login={login}
         onCloseLogin={() => setLogin(null)}
         switchAllDialog={switchAllDialog}
+        deleteDialog={deleteDialog}
         cards={cards}
         newOpen={showNew}
         onDropCard={openCard}

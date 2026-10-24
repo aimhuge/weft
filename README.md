@@ -1,7 +1,7 @@
 # Weft™
 
 Engineering the future, one thread at a time. Weft is a Trello-style board where each card is an AI CLI
-thread (Claude Code, puku-cli or Codex), with a browser pane on the side that you and the agents can both
+thread (Claude Code, puku-cli, Codex or Goose), with a browser pane on the side that you and the agents can both
 use, and a copilot in its own small window that can see and run the board.
 
 In weaving, the weft is the thread that runs across the loom and binds the separate threads into
@@ -98,7 +98,7 @@ WEFT_WEB=1   # in .env.local, or run pnpm dev:web
   error page instead of a blank white one: the URL, the reason, **Try again**, **Back to the last page**, and an
   automatic reload when a local dev server comes back (`electron/pane-error.cjs`).
 - **Themes**: Settings → General (or ⌘K "Theme: …") picks System, Light or Dark, or a scene: Twin Suns,
-  Canyon, Coast Road, Neon City, Snow Pass, Cockpit or Salt Flats puts that picture behind the board with a palette drawn
+  Canyon, Coast Road, Neon City, Snow Pass, Cockpit, Night Cockpit or Salt Flats puts that picture behind the board with a palette drawn
   from it and clear columns. The first launch opens on Twin Suns, or Salt Flats when the Mac is in light mode
   (`lib/theme.ts`, colors in `app/globals.css`; docs/architecture/themes.md).
 - **Menu bar icon**: shows how many cards need you and lists them; click one to open it.
@@ -266,7 +266,7 @@ Claude Code keep the mode they last ran in (say `auto`).
 **Every model is on offer, and there is no default model.** Wherever Weft asks for a model — the New
 thread dialog, Settings → Models (New threads, Use for subagents, Copilot, Review all, Run /weft:done
 on, Backup model), the thread header's chip — the list is every model any CLI serves, grouped under
-Claude, Puku and Codex. Nothing is locked to one CLI: picking a model moves the card to the CLI that
+Claude, Puku, Codex and Goose. Nothing is locked to one CLI: picking a model moves the card to the CLI that
 serves it, so the choice is one row, not two. The first entry is **Default model**, which means "let
 the CLI decide" — Weft leaves the model off the command line rather than picking one behind your
 back. A changed default takes effect at once: the open New thread dialog follows it, and an idle
@@ -282,6 +282,8 @@ with its error for you to choose. The card's line says what happened: "Opus 5.5 
 to Sonnet 5.5".
 
 Pick **Codex** in the New thread dialog to run the OpenAI Codex CLI. Install `codex` on your PATH and sign in with `codex login` first; Weft can open Codex's device login in Terminal from Settings → Accounts. Codex uses its own tools and saved sessions. Weft's browser, board, secrets and webhook MCP tools reach Codex over HTTP, and a folder's `CLAUDE.md` and `.claude/skills` are passed along (Codex reads neither); the per-tool `.env`, git, restart and check guards aren't available to Codex threads. Codex's sandbox mode and reasoning effort are fixed when a session starts.
+
+Pick **Goose** to run the Goose CLI agent (the Rust one from Block), and bring your own key: Settings → Models → **Bring your own key** takes a provider's API key — OpenRouter, Anthropic, OpenAI, Google, Groq, Mistral, DeepSeek, xAI, Azure, LiteLLM, Perplexity, Cerebras, a local Ollama, or any OpenAI-compatible endpoint — and Weft keeps it in your Keychain. The key never reaches the board and never crosses Weft's control server: the thread's Goose process is started with the key in its env, and that is the only place it exists. The provider and model you pick are what new Goose threads run on; **Goose default** means "let Goose choose", which is also what a card does when you leave the model alone. A Goose thread is a plain CLI process, so like a Codex thread it has no per-tool guards and no session to resume — one fresh `goose run` per turn — and it takes no effort setting. Install `goose` on your PATH first.
 
 ## How cards move
 
@@ -374,7 +376,7 @@ keeps their file dumps out of the thread's context. Settings → Models → Use 
   Sonnet for most coding, Opus for hard reasoning where a mistake is costly.
 - **Same model as the thread**: every subagent runs on the thread's own model.
 - **Any model any CLI serves**, grouped under Claude (Fable 5.1, Opus 5.5, Sonnet 5.5, Haiku 5.5), Puku
-  (Opus 4.8, Puku AI 2.8, Puku AI 2.7) and Codex. On a thread whose CLI serves it, the model is forced
+  (Opus 4.8, Puku AI 2.8, Puku AI 2.7), Codex and Goose. On a thread whose CLI serves it, the model is forced
   through that CLI's env (`CLAUDE_CODE_SUBAGENT_MODEL` or `PUKU_CLI_SUBAGENT_MODEL`). On the other CLI's
   threads, the thread runs that CLI headless as the subagent (`puku-cli -p … --model opus-4.8`, or
   `claude -p`), read-only unless the task needs edits. That needs the other CLI installed and logged in.
@@ -522,8 +524,8 @@ plugin none of them used. Until that scan lands, threads there get everything, a
 that card alone; a dot marks a row that differs from the project. A CLI reads its skills as it starts, so
 a change applies from the next message (an idle CLI closes and resumes with the new set). A hidden skill
 still runs when you type `/name` or an automation runs it; a plugin turned off is gone for that thread.
-Claude Code and puku threads get the set as `skillOverrides` and `enabledPlugins` settings; Codex and
-puku get the skill list Weft writes into their first message, filtered the same way. The copilot keeps
+Claude Code and puku threads get the set as `skillOverrides` and `enabledPlugins` settings; Codex,
+puku and Goose get the skill list Weft writes into their first message, filtered the same way. The copilot keeps
 every skill. Cards on the project's default set still take a warm spare; a card with its own set starts
 its CLI fresh.
 
@@ -934,6 +936,10 @@ Nothing runs on your Mac. `pnpm resend -- create|verify|webhook` sets up the Res
 - `lib/runner.ts` runs each thread with the Claude Agent SDK (`query()` with streaming input, one
   CLI process per thread), streams messages to the board, and routes permission prompts to the card. For puku-cli it points the SDK at the
   `puku-cli` binary (`pathToClaudeCodeExecutable`).
+- `lib/goose-runner.ts` runs a Goose thread instead: one `goose run` process per turn, its `stream-json`
+  output on stdout parsed into the thread's rows, and the provider's key put in the subprocess's env by
+  `electron/goose-env.cjs` from a one-time grant — so the key is in the process and nowhere else
+  (docs/architecture/goose.md).
 - `lib/board-tools.ts` gives the copilot its board tools, and every board thread a small `board`
   server with just `list_cards` and `create_card` (a card made this way records its `parentId`; `list_cards` prints
   one line per open card, newest first, and lists done and archived ones only with `include_done`); `lib/copilot.ts` keeps its thread, which

@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { api } from "@/lib/client";
+import { stopNow } from "@/lib/optimistic-cards";
 import { cardMenu, columnMenu, resumeCommand, withAccelerators, type CardAction, type ColumnAction } from "@/lib/card-menu";
 import { toAccelerator, useShortcutList } from "@/lib/hotkeys";
 import { BACKEND_LABELS, type Backend, type Card, type Column, type DevServerStatus, type PermissionMode } from "@/lib/types";
+import { useDeleteDialog } from "@/lib/use-delete-dialog";
 
 // What the board's right-click menus act through: the same functions its buttons, drag and command palette use.
 export interface BoardMenuDeps {
@@ -35,6 +37,8 @@ export function useBoardMenus(deps: BoardMenuDeps) {
   const [tagging, setTagging] = useState<Card | null>(null);
   // The card whose share link is open (Share…); the board shows components/ShareCardDialog.tsx for it.
   const [sharing, setSharing] = useState<Card | null>(null);
+  // The delete confirmation and the card waiting to be deleted (lib/use-delete-dialog.ts).
+  const deleteDialog = useDeleteDialog(deps.remove);
   const keys = (map: Record<string, string>) =>
     Object.fromEntries(
       Object.entries(map).map(([item, id]) => {
@@ -135,7 +139,7 @@ export function useBoardMenus(deps: BoardMenuDeps) {
         deps.move(card.id, "running");
         return;
       case "stop":
-        await api.stop(card.id);
+        await stopNow(card.id);
         return;
       case "new-here":
         deps.openNew(card.cwd);
@@ -154,7 +158,8 @@ export function useBoardMenus(deps: BoardMenuDeps) {
         deps.toggleArchive(card);
         return;
       case "delete":
-        if (window.confirm(`Delete “${card.title}”? Its CLI transcript stays on disk.`)) deps.remove(card);
+        // Asks first, unless the user ticked "Don't ask again" (lib/use-delete-dialog.ts).
+        deleteDialog.ask(card);
         return;
     }
   }
@@ -183,6 +188,8 @@ export function useBoardMenus(deps: BoardMenuDeps) {
     sharing,
     closeShare: () => setSharing(null),
     shareCard: setSharing,
+    // The delete confirmation, already built: the board draws it over its columns.
+    deleteDialog: deleteDialog.dialog,
   };
 }
 
