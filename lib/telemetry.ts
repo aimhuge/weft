@@ -20,7 +20,7 @@ export const TELEMETRY_FILE = path.join(DATA_DIR, "telemetry.json");
 
 export function telemetryOn(file = TELEMETRY_FILE): boolean {
   try {
-    const saved = JSON.parse(fs.readFileSync(file, "utf8")) as { onboarding?: unknown };
+    const saved = JSON.parse(fs.readFileSync(/*turbopackIgnore: true*/ file, "utf8")) as { onboarding?: unknown };
     return saved.onboarding !== false;
   } catch {
     return true;
@@ -28,6 +28,6 @@ export function telemetryOn(file = TELEMETRY_FILE): boolean {
 }
 
 export function setTelemetryOn(on: boolean, file = TELEMETRY_FILE) {
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, JSON.stringify({ onboarding: on }, null, 2));
+  fs.mkdirSync(/*turbopackIgnore: true*/ path.dirname(file), { recursive: true });
+  fs.writeFileSync(/*turbopackIgnore: true*/ file, JSON.stringify({ onboarding: on }, null, 2));
 }
