@@ -6,13 +6,24 @@
 // Only on the deployed site: the desktop app signs in through the board's
 // AccountButton (lib/account.ts), not this URL. A 404 in `next dev` keeps the
 // route out of the way for the desktop's localhost loopback.
-import { startWebSignIn, webCallbackOrigin, webClient, webSignInErrorUrl } from "@/lib/web-auth";
+import {
+  startWebSignIn,
+  webCallbackOrigin,
+  webCanonicalRedirect,
+  webClient,
+  webSignInErrorUrl,
+} from "@/lib/web-auth";
 import { isWebEnabled } from "@/lib/home";
 
 const DEFAULT_NEXT = "/team";
 
 export async function GET(request: Request): Promise<Response> {
   if (!isWebEnabled()) return new Response("Not Found", { status: 404 });
+  // Move a visitor who reached the dev server on the other loopback name (localhost vs
+  // 127.0.0.1) across to the canonical one first. The PKCE verifier cookie is host-only,
+  // so the host that starts the round trip must be the host that finishes it.
+  const canonical = webCanonicalRedirect(request.url);
+  if (canonical) return Response.redirect(canonical, 303);
   const url = new URL(request.url);
   const provider = url.searchParams.get("provider") ?? "";
   const next = url.searchParams.get("next") ?? DEFAULT_NEXT;

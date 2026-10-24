@@ -10,7 +10,13 @@
 // callback path (lib/auth/server.ts `createAuthCallback`) the only one in
 // the tree.
 import { after } from "next/server";
-import { finishWebSignIn, webAuthFailureUrl, webCallbackOrigin, webClient } from "@/lib/web-auth";
+import {
+  finishWebSignIn,
+  webAuthFailureUrl,
+  webCallbackOrigin,
+  webCanonicalRedirect,
+  webClient,
+} from "@/lib/web-auth";
 import { openSourceAfterSignIn } from "@/lib/billing/oss-grant";
 import { isWebEnabled } from "@/lib/home";
 
@@ -18,18 +24,24 @@ const DEFAULT_NEXT = "/team";
 
 export async function GET(request: Request): Promise<Response> {
   if (!isWebEnabled()) return new Response("Not Found", { status: 404 });
+  // The verifier cookie is host-only, so a callback that arrives on the other loopback
+  // name has nothing to exchange against. Move it to the canonical host, keeping the
+  // one-time code in the query string.
+  const canonical = webCanonicalRedirect(request.url);
+  if (canonical) return Response.redirect(canonical, 303);
   const url = new URL(request.url);
+  // One origin for both the success and the failure redirect, so they cannot disagree.
+  const origin = webCallbackOrigin(url.origin);
   const result = await finishWebSignIn(await webClient(), {
     request,
+    origin,
     code: url.searchParams.get("code"),
     providerError: url.searchParams.get("error"),
     next: url.searchParams.get("next") ?? DEFAULT_NEXT,
     defaultNext: DEFAULT_NEXT,
   });
-  // Same origin the sign-in route pinned, so a bounce back to /login lands on a host
-  // the browser already trusts.
   if (result.kind === "error") {
-    return Response.redirect(webAuthFailureUrl(webCallbackOrigin(url.origin), result.reason), 303);
+    return Response.redirect(webAuthFailureUrl(origin, result.reason), 303);
   }
   // The Open Source check reads GitHub, so it runs after the redirect rather than holding up sign-in.
   const github = result.github;

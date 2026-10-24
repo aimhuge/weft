@@ -146,7 +146,8 @@ service role. The checks are security-definer helpers in `private` (`is_org_memb
 - Apply `20261013155754_teams.sql` (the Supabase drawer's Migrate, or `supabase db push`).
 - Supabase Auth → URL configuration: add `https://weft.zip/auth/callback` to the redirect URLs.
   For a local server (`WEFT_WEB=1`) add `http://127.0.0.1:1024/**` as well — Supabase matches the
-  `redirect_to` against this list, and the local callback is pinned to that origin
-  (`webCallbackOrigin` in `lib/web-auth.ts`), so one wildcard entry covers the whole dev port.
+  `redirect_to` against this list, and the whole local round trip is pinned to that origin
+  (`webLocalOrigin` in `lib/web-auth.ts`; a visitor who arrives as `localhost` is moved to
+  `127.0.0.1` first), so one wildcard entry covers the whole dev port.
 - Vercel env: `SUPABASE_SECRET_KEY` and `RESEND_API_KEY` (both already used by other routes);
   `NEXT_PUBLIC_SITE_URL` is optional (`next.config.ts` defaults it to `https://weft.zip`).

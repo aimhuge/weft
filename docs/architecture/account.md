@@ -106,12 +106,23 @@ one, with two local adjustments:
 1. The visitor opens `http://127.0.0.1:1024/login`. The form is the deployed one: a plain GET
    link to `/auth/sign-in?provider=github&next=…` (`LoginForm`'s `deployed` branch), because the
    session cookie lives on the same origin.
-2. `app/auth/sign-in/route.ts` redirects to Supabase's authorize URL with `redirect_to` pointing
-   at the local callback. `webCallbackOrigin()` (`lib/web-auth.ts`) pins that to
-   `http://127.0.0.1:1024` — the browser may have reached the dev server as `localhost` or
-   `127.0.0.1`, and Supabase matches the `redirect_to` against its allow-list exactly, so one
-   host means one allow-list entry. `WEFT_WEB_ORIGIN` overrides it; a non-local request origin
-   (a preview deployment, a tunnel) is left alone.
+2. **One host for the whole round trip.** The PKCE verifier cookie `@supabase/ssr` writes is
+   host-only — it never sets a `domain` — so the host that starts the round trip must be the host
+   that finishes it. The browser may have reached the dev server as `localhost` or `127.0.0.1`, and
+   Supabase matches the `redirect_to` against its allow-list exactly, so one host also means one
+   allow-list entry. Weft picks `http://127.0.0.1:1024` as the canonical local origin
+   (`webLocalOrigin()` in `lib/web-auth.ts`; `WEFT_WEB_ORIGIN` overrides it, `WEFT_WEB_PORT` moves
+   the port) and the round trip is pinned to it:
+
+   - `webCanonicalRedirect()` moves a visitor who arrived on the other loopback name across
+     **before** the round trip starts — in both `app/auth/sign-in/route.ts` and
+     `app/auth/callback/route.ts`, keeping the query string (and so the one-time `code`).
+   - `webCallbackOrigin()` pins the `redirect_to` and the final redirect to the canonical origin,
+     but only for a loopback request origin. A non-local one (a preview deployment, a tunnel) is
+     left alone, so a deployed visitor is never redirected to a developer's loopback.
+
+   Without the first step a `localhost` visitor's callback would land on `127.0.0.1`, find no
+   verifier, and bounce to `/login?error=link&reason=exchange`.
 3. GitHub → Supabase → `http://127.0.0.1:1024/auth/callback?code=…&next=…`.
    `app/auth/callback/route.ts` exchanges the code, writes the session cookie through
    `webClient()`'s jar (a Route Handler's `cookies()` is writable) and 303s to `next`.
@@ -121,7 +132,10 @@ one, with two local adjustments:
    need the session.
 
 Supabase's Auth URL configuration must list `http://127.0.0.1:1024/**` for the return leg to
-land at all (see `docs/architecture/teams.md`).
+land at all (see `docs/architecture/teams.md`). The routes are covered by
+`app/auth/sign-in/route.test.ts` and `app/auth/callback/route.test.ts`, which drive both handlers
+for a `localhost` and a `127.0.0.1` visitor and assert the `redirect_to`, the callback host and
+the final redirect all agree on one origin.
 
 ## Where it shows
 

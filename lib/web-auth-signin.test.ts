@@ -7,9 +7,14 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 const webClient = vi.fn();
 const webUser = vi.fn();
 const serviceClient = vi.fn();
-const isDeployed = vi.fn();
+const isWebEnabled = vi.fn((env: Record<string, string | undefined> = {}) =>
+  Boolean(env.VERCEL || env.WEFT_HOME || env.WEFT_WEB),
+);
+const isDeployed = vi.fn((env: Record<string, string | undefined> = {}) =>
+  Boolean(env.VERCEL || env.WEFT_HOME),
+);
 vi.mock("./web-session", () => ({ webClient, webUser, serviceClient }));
-vi.mock("./home", () => ({ isDeployed }));
+vi.mock("./home", () => ({ isWebEnabled, isDeployed }));
 
 async function load() {
   vi.resetModules();
@@ -40,7 +45,6 @@ function buildClient(): ClientMock {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  isDeployed.mockReturnValue(true);
   webClient.mockResolvedValue({});
   webUser.mockResolvedValue(null);
   serviceClient.mockReturnValue(null);

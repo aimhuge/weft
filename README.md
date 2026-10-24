@@ -40,11 +40,15 @@ WEFT_WEB=1   # in .env.local, or run pnpm dev:web
 
 Signing in locally with GitHub works too, with one Supabase setting: the project's Auth URL
 configuration needs `http://127.0.0.1:1024/**` in its redirect URLs (Supabase matches the
-`redirect_to` against that list exactly, and the local callback is pinned to that origin). The
+`redirect_to` against that list exactly, and the whole round trip is pinned to that origin). The
 callback then lands on `http://127.0.0.1:1024/auth/callback`, exchanges the code and sets the
-session cookie, so `/team` finds your workspace. The callback is pinned to that one origin
-whatever name the browser used to reach your machine; `WEFT_WEB_ORIGIN` moves it when the dev
-server runs on another port.
+session cookie, so `/team` finds your workspace.
+
+The pinning matters because the PKCE verifier cookie is host-only: the host that starts the round
+trip has to be the host that finishes it. So if you reached the dev server as `localhost`, the
+server moves you to `127.0.0.1` before the round trip starts — one origin, one allow-list entry,
+one cookie. `WEFT_WEB_ORIGIN` moves the canonical origin when the dev server runs on another
+port.
 
 ## The desktop app
 
@@ -816,6 +820,11 @@ four characters showing.
   doesn't need it; 🔐's count goes up, the row shows **Fill in** and the hint under the name, and you
   paste the value when you're ready. Blocked on it now, the thread calls `mcp__secrets__ask_add` and shows
   an input for the key right in the thread: paste the value, click **Add to vault**, and the thread carries on.
+  A key that already has a value stays as it is, and the thread is told so.
+- **Threads store values they made or got themselves.** A signing secret it generated, or new price ids from a
+  Stripe sandbox: `mcp__secrets__set_value` adds the name or fills its blank, and with `replace: true` overwrites
+  the old value. Touch ID asks every time and says which it is ("let a thread overwrite the production value of
+  STRIPE_PRICE_PRO (aimhuge/weft) with a new one").
 - **Threads fill fields for you without seeing the value.** A thread lists the vault's names
   (`mcp__secrets__list`), opens the page in the browser pane and calls `mcp__secrets__fill_field`: Touch ID asks
   "let a thread type GITHUB_CLIENT_SECRET (aimhuge/weft) into supabase.com", then the value goes into the field,

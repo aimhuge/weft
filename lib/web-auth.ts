@@ -5,7 +5,7 @@
 // without a request. (The desktop's file-based PKCE session lives in lib/auth/server.ts
 // and stays untouched; that path can't serve web visitors.)
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { isWebEnabled } from "./home";
+import { isDeployed, isWebEnabled } from "./home";
 import { safeNextPath } from "./auth/next-path";
 import { serviceClient, webClient, webUser, type WebUser } from "./web-session";
 
@@ -23,27 +23,81 @@ export function isWebProvider(value: unknown): value is WebProvider {
 }
 
 /**
+ * The canonical local origin for the web routes, or null when this server is not
+ * running the web board locally.
+ *
+ * The browser may reach the dev server as `localhost` or as `127.0.0.1`, and
+ * Supabase matches the OAuth `redirect_to` against its allow-list exactly, so
+ * two hosts would mean two allow-list entries. Weft picks one: `127.0.0.1`,
+ * the loopback the rest of the codebase already uses (lib/auth/desktop.ts).
+ * `WEFT_WEB_ORIGIN` overrides it when the dev server runs on another port.
+ */
+export function webLocalOrigin(env: WebAuthEnv = process.env): string | null {
+  if (!isWebEnabled(env) || isDeployed(env)) return null;
+  const configured = env.WEFT_WEB_ORIGIN ?? `http://127.0.0.1:${env.WEFT_WEB_PORT ?? "1024"}`;
+  try {
+    return new URL(configured).origin;
+  } catch {
+    // A typo in .env.local must not turn every sign-in into a 500; fall back to
+    // the default and let the request's own origin stand.
+    return new URL(`http://127.0.0.1:${env.WEFT_WEB_PORT ?? "1024"}`).origin;
+  }
+}
+
+/** True for the loopback names a dev server answers on. */
+function isLoopbackHost(hostname: string): boolean {
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]";
+}
+
+/**
  * The origin the OAuth round trip comes back to.
  *
  * On the deployed site that's the request's own origin — weft.zip, one value.
  *
- * Locally (WEFT_WEB=1) the browser may have reached the dev server as either
- * `localhost` or `127.0.0.1`, and Supabase matches the `redirect_to` against its
- * allow-list exactly. Two hosts would need two allow-list entries, so pin a
- * *local* callback to one of them: `127.0.0.1`, the loopback the rest of the
- * codebase already uses (lib/auth/desktop.ts). WEFT_WEB_ORIGIN overrides it
- * when the dev server runs on another port.
+ * Locally it is the canonical loopback origin (see `webLocalOrigin`), *but*
+ * only once the visitor is actually on that host: the PKCE verifier cookie is
+ * host-only (no `domain` is ever set), so the host that starts the round trip
+ * must be the host that finishes it. `webCanonicalRedirect` moves a visitor
+ * that arrived on the other loopback name across before the round trip starts.
  *
  * A non-local request origin is left alone: the deployed site, a preview
  * deployment, or a tunnel must redirect to the host the visitor actually came
  * from, not to the developer's loopback.
  */
 export function webCallbackOrigin(requestOrigin: string, env: WebAuthEnv = process.env): string {
-  if (!env.WEFT_WEB || env.VERCEL || env.WEFT_HOME) return requestOrigin;
-  const host = new URL(requestOrigin).hostname;
-  if (host !== "localhost" && host !== "127.0.0.1" && host !== "[::1]") return requestOrigin;
-  const configured = env.WEFT_WEB_ORIGIN ?? `http://127.0.0.1:${env.WEFT_PORT ?? "1024"}`;
-  return new URL(configured).origin;
+  const local = webLocalOrigin(env);
+  if (!local) return requestOrigin;
+  let hostname: string;
+  try {
+    hostname = new URL(requestOrigin).hostname;
+  } catch {
+    return requestOrigin;
+  }
+  if (!isLoopbackHost(hostname)) return requestOrigin;
+  return local;
+}
+
+/**
+ * The URL a visitor on the wrong loopback name should be sent to before the
+ * OAuth round trip starts, or null when they are already in the right place.
+ *
+ * The sign-in route redirects here first: the verifier cookie is host-only, so
+ * starting on `localhost` and coming back to `127.0.0.1` would find no
+ * verifier and fail the exchange.
+ */
+export function webCanonicalRedirect(requestUrl: string, env: WebAuthEnv = process.env): string | null {
+  const local = webLocalOrigin(env);
+  if (!local) return null;
+  let url: URL;
+  try {
+    url = new URL(requestUrl);
+  } catch {
+    return null;
+  }
+  if (!isLoopbackHost(url.hostname)) return null;
+  if (url.origin === local) return null;
+  const moved = new URL(url.pathname + url.search, local);
+  return moved.toString();
 }
 
 /**
@@ -137,13 +191,19 @@ export async function finishWebSignIn(
     providerError: string | null;
     next: string;
     defaultNext: string;
+    /**
+     * The origin the callback landed on. The route passes the same value it
+     * computed for the redirect, so the cookie we just set and the URL we
+     * redirect to are the same host. Left out, it is derived from the request.
+     */
+    origin?: string;
   },
 ): Promise<WebCallbackResult> {
   const { request, code, providerError, next, defaultNext } = params;
   // The same origin the sign-in route pinned, so the cookie we just set and the URL we
   // redirect to are the same host — a browser that reached us as localhost and a
   // callback that lands on 127.0.0.1 must not split the session across two hosts.
-  const origin = webCallbackOrigin(new URL(request.url).origin);
+  const origin = params.origin ?? webCallbackOrigin(new URL(request.url).origin);
   if (providerError) return { kind: "error", reason: "provider" };
   if (!code) return { kind: "error", reason: "nocode" };
   let github: GithubSignIn | undefined;
@@ -222,9 +282,15 @@ async function bumpProfile(client: SupabaseClient, env: WebAuthEnv = process.env
  */
 export type WebSignOutResult = { kind: "redirect"; url: string };
 
-export async function webSignOut(client: SupabaseClient, params: { request: Request; loginPath: string }): Promise<WebSignOutResult> {
+export async function webSignOut(
+  client: SupabaseClient,
+  params: { request: Request; loginPath: string; origin?: string },
+): Promise<WebSignOutResult> {
   await client.auth.signOut({ scope: "local" });
-  const dest = new URL(params.loginPath, new URL(params.request.url).origin);
+  // Same origin rule as the callback: the sign-out clears the host-only cookies,
+  // so it has to land on the host that holds them.
+  const origin = params.origin ?? webCallbackOrigin(new URL(params.request.url).origin);
+  const dest = new URL(params.loginPath, origin);
   return { kind: "redirect", url: dest.toString() };
 }
 
