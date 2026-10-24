@@ -6,7 +6,7 @@ matching doc below. When a feature lands, add or update its entry here and in it
 
 ## Docs in this folder
 
-- `admin.md` — the super-admin gate (`SUPER_ADMIN_EMAILS` on `@aimhuge/teams` via `lib/admin.ts`), the `/admin/users`, `/admin/billing`, `/admin/coupons` and `/admin/settings` pages, the rail's 🛡 Admin icon, the data routes in `app/api/admin/*`.
+- `admin.md` — the super-admin gate (`SUPER_ADMIN_EMAILS` on `@aimhuge/teams` via `lib/admin.ts`), the `/admin/users`, `/admin/billing`, `/admin/coupons` and `/admin/settings` pages and the admin kit they share (`components/admin/`), the rail's 🛡 Admin icon, the data routes in `app/api/admin/*`.
 - `overview.md` — what Weft is end to end: the Electron shell, the Next.js server, cards-as-threads, the loop with the user.
 - `board.md` — the board screen's structure: `Board.tsx` owns state and wiring, hooks under `lib/` decide, layer components draw; how to add a column extra, shortcut, palette item or dialog flag.
 - `desktop-shell.md` — `electron/` itself: main, preload, tray, dock, `weft://` links, the start screen, the terminal drawer.
@@ -46,7 +46,7 @@ matching doc below. When a feature lands, add or update its entry here and in it
 - `error-boundaries.md` — `CrashGuard.tsx`, `BuildErrorBar.tsx`, the `guarded()` import wrapper, why a build error never reaches a boundary.
 - `welcome-tour.md` — the welcome's narrated 96-second tour: three HyperFrames pages, the live player and beat messages, Kokoro voice and pad, the MP4 render for weft.zip.
 - `welcome-dialog.md` — the welcome dialog itself: first launch vs. the replay preview, the steps and their chrome, and why a replay closes on Escape, the backdrop and ✕ while first launch does not.
-- `feature-intros.md` — the narrated video each tool drawer, the New thread dialog (in the browser pane, `lib/pane-intro.ts`), the code quality dialog and the leagues play once: the pages in `public/intros/`, `pnpm intros:narrate`, when `useFeatureIntro` opens one, the seen set in `localStorage` and Reset tips.
+- `feature-intros.md` — the narrated video each tool drawer, the New thread dialog (in the browser pane, `lib/pane-intro.ts`), the code quality dialog and the leagues play once: the pages in `public/intros/`, `pnpm intros:narrate`, the render (`pnpm intros:render` / `pnpm intros:encode`, `scripts/render-intros.mjs` and `scripts/encode-intros.sh`), when `useFeatureIntro` opens one, the seen set in `localStorage` and Reset tips.
 - `gamification.md` — the header's 🔥 chip and "Your loom" dialog: streaks, XP, badges, the builder card, the production-ready tree.
 - `quality.md` — the header's code quality checklist: coverage, file size, lint, types, guardrails; the refactor scout and the score's last 10 points.
 - `commit-pile.md` — the header's "+N/-N" uncommitted counter and the Review card that walks the pile to a clean commit.
@@ -304,6 +304,8 @@ When a new doc lands in this folder, add it here on the same change.
   account gets one through `supabase/migrations/20261013155754_teams.sql`), on the visitor's own cookie session. Uses `@aimhuge/teams`
   (`vendor/*.tgz`) for its helpers only: its `requireOrg` and actions pass a client into `"use cache"`, which Next 16 refuses, so the
   gate is Weft's own. Never pass the gate's `service` client to a client component (docs/architecture/teams.md, teams-vault.md).
+  Project access: `lib/team-project-access.ts` (who sees each linked project, `org_project_members`) + `components/team/ProjectAccess.tsx`
+  (the **Access** checklist on a project row, for owners and admins).
   The same routes run on a local server with `WEFT_WEB=1`: `proxy.ts` refreshes the cookie session on
   `isWebEnabled()` (not the deployed-only check), and the OAuth round trip is pinned to one canonical
   origin (`http://127.0.0.1:1024`, `webLocalOrigin()` in `lib/web-auth.ts`) — `webCanonicalRedirect()`
@@ -383,6 +385,9 @@ When a new doc lands in this folder, add it here on the same change.
 - `lib/cloud-sync.ts` + `lib/cloud-outbox.ts` + `lib/cloud-sync-start.ts` + `lib/cloud-sync-cards.ts` + `lib/cloud-sync-upload.ts` + `lib/blob-store.ts` + `lib/blob-paths.ts` + `lib/device-id.ts` + `lib/cloud-sync-types.ts`:
   server-side cards, opt-in per folder (settings `syncFolders`): an outbox in `~/.weft/sync-outbox.jsonl` uploads cards, thread items
   and long tool outputs to Supabase (`supabase/migrations/20261015155756_card_sync.sql`), images and pages by content hash.
+  `lib/sync-prompt.ts` + `lib/use-sync-prompt.ts` + `components/SyncPromptDialog.tsx` (mounted in `components/HeaderBadges.tsx`): once the welcome is
+  answered and a thread in the project you're working on has finished a turn, "Turn on Project Sync for <project>?" asks once a launch, with a
+  "Don't show me again" box (localStorage, cleared by Reset tips); `lib/scratch.ts` is the scratch-folder list it shares with `lib/welcome.ts`.
   `lib/thread-page.ts` + `app/api/cards/[id]/thread/**` + `lib/use-tool-result.ts`: threads page from the newest item back and fetch
   a tool output over 2 KB when its row opens (docs/architecture/cloud-sync.md).
   `app/[orgSlug]/board` + `components/web-board/*` + `lib/web-board.ts`: the weft.zip board is the desktop's own board, not a lookalike —
