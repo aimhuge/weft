@@ -4,22 +4,55 @@
 // (components/FeatureIntro.tsx) when it starts and ends ({ weft: "intro", event: "start" | "done" }), so the parent
 // offers Replay at the end; { weft: "intro-go" } from the parent plays it again from the top.
 
-// The splash every intro opens on: the Weft mark over the wordmark, a bar underneath, on the stage's dark ground.
-// It's injected here rather than written into each page, so all eleven intros open the same way.
+// The feature an intro is about, taken from the page's own .head row: the drawer's icon and its name. The splash
+// shows them, so you know which drawer you're about to watch. Returns null if the page has no head row.
+var readFeature = function (root) {
+  var head = root.querySelector(".head");
+  if (!head) return null;
+  var icon = head.querySelector(".ic");
+  // The name is the head's text without the icon's — the icon tile holds a glyph or a drawing, and the glyph
+  // would otherwise be read as part of the name ("🏆 Leagues").
+  var name = head.textContent.replace(/\s+/g, " ").trim();
+  if (icon) name = name.replace(icon.textContent.trim(), "").trim();
+  if (!icon || !name) return null;
+  // The icon tile holds either a drawing (an SVG, or an image) or a glyph as plain text — the drawers that have
+  // no artwork of their own use an emoji. Either way the splash wants the drawing on its own, not the tile.
+  var svg = icon.querySelector("svg");
+  if (svg) return { name: name, icon: svg.outerHTML, glyph: "" };
+  var img = icon.querySelector("img");
+  if (img) return { name: name, icon: "", glyph: "", src: img.getAttribute("src") };
+  var glyph = icon.textContent.trim();
+  return { name: name, icon: "", glyph: glyph };
+};
+
+// The splash every intro opens on: an OG-style poster — the Weft mark big in the middle, the wordmark under it,
+// and the feature's own icon and name on a line below. It's injected here rather than written into each page, so
+// all eleven intros open the same way.
 //
 // It plays on a master timeline with the page's own timeline nested under it, so the story starts after the splash
 // clears instead of running underneath it — and the whole thing stays seekable (?t= holds a frame).
 //
 // Returns { master, lead }: the master is the timeline to play, and lead is how many seconds of splash come first.
 var buildSplash = function (root, tl) {
-  var SPLASH_HOLD = 1.1, SPLASH_FADE = 0.45;
+  var SPLASH_HOLD = 1.5, SPLASH_FADE = 0.5;
   var lead = SPLASH_HOLD + SPLASH_FADE;
+  var feature = readFeature(root);
   var splash = document.createElement("div");
   splash.id = "splash";
   splash.className = "abs";
+  // The feature tile shows whatever the drawer's own icon is: a drawing, an image, or a glyph.
+  var tile = "";
+  if (feature) {
+    var inner = feature.icon ||
+      (feature.src ? '<img src="' + feature.src + '" alt="">' : feature.glyph);
+    tile = '<div class="feat"><span class="ic">' + inner + '</span>' +
+      '<span class="name">' + feature.name + '</span></div>';
+  }
   splash.innerHTML =
+    '<div class="halo"></div>' +
     '<img class="mark" src="../logo.svg" alt="">' +
     '<div class="word">Weft</div>' +
+    tile +
     '<div class="bar"><i></i></div>';
   root.appendChild(splash);
 
@@ -31,10 +64,15 @@ var buildSplash = function (root, tl) {
   tl.paused(false);
   master.fromTo(splash, { opacity: 1 }, { opacity: 1, duration: SPLASH_HOLD }, 0);
   master.to(splash, { opacity: 0, duration: SPLASH_FADE, ease: "power1.inOut" }, SPLASH_HOLD);
-  master.fromTo(splash.querySelector(".mark"), { scale: 0.86, opacity: 0 },
-    { scale: 1, opacity: 1, duration: 0.6, ease: "back.out(1.6)" }, 0);
-  master.fromTo(splash.querySelector(".word"), { opacity: 0, y: 18 },
-    { opacity: 1, y: 0, duration: 0.5 }, 0.15);
+  master.fromTo(splash.querySelector(".mark"), { scale: 0.82, opacity: 0 },
+    { scale: 1, opacity: 1, duration: 0.7, ease: "back.out(1.5)" }, 0);
+  master.fromTo(splash.querySelector(".word"), { opacity: 0, y: 34 },
+    { opacity: 1, y: 0, duration: 0.55 }, 0.18);
+  // The feature's icon and name come in after the wordmark, so the poster reads top to bottom.
+  var feat = splash.querySelector(".feat");
+  if (feat) {
+    master.fromTo(feat, { opacity: 0, y: 26 }, { opacity: 1, y: 0, duration: 0.5 }, 0.42);
+  }
   // The bar crawls across while the splash is up.
   master.fromTo(splash.querySelector(".bar i"), { x: "-100%" },
     { x: "250%", duration: SPLASH_HOLD, ease: "power1.inOut" }, 0.05);

@@ -26,15 +26,22 @@ id="narration">`), so the text and the track change together.
 
 ### The splash
 
-Every intro opens on the same splash: the Weft mark, the wordmark and a bar, for 1.1 s and a 0.45 s fade — 1.55 s
-of lead before the story. `player.js` injects it, so all the pages open alike without each one carrying the markup.
+Every intro opens on a splash poster: the Weft mark big in the middle, the wordmark under it, and the feature's own
+icon and name on a line below, on a radial ground with a halo behind the mark. It is sized like an OG image — a
+620 px mark, a 240 px wordmark and a 146 px feature name in the portrait render, stepping down to 420/168/104 px in
+the landscape one — so it fills the frame rather than floating in it.
 
-It plays on a **master** timeline with the page's own timeline nested under it (`master.add(tl, lead)`), which keeps
-the whole composition seekable for the frame-by-frame render. A nested timeline only advances if it isn't paused
-itself, so `tl.paused(false)` follows the `add`; the master is the only paused thing. `?t=` maps to the story's own
-clock — `?t=0` shows the splash, `?t=2` shows the story two seconds in.
+`player.js` injects it, so all the pages open alike without each one carrying the markup. The feature's name and
+icon are read out of the page's own `.head` row (`readFeature`): a drawer with artwork brings its SVG, one that uses
+a glyph brings its emoji, and the name is the head's text with the glyph taken out of it.
 
-The narration is delayed by the same 1.55 s when the video is encoded, so the voice starts with the picture instead
+It holds for 1.5 s and fades over 0.5 s — 2 s of lead before the story. It plays on a **master** timeline with the
+page's own timeline nested under it (`master.add(tl, lead)`), which keeps the whole composition seekable for the
+frame-by-frame render. A nested timeline only advances if it isn't paused itself, so `tl.paused(false)` follows the
+`add`; the master is the only paused thing. `?t=` maps to the story's own clock — `?t=0` shows the splash, `?t=2`
+shows the story two seconds in.
+
+The narration is delayed by the same 2 s when the video is encoded, so the voice starts with the picture instead
 of underneath the splash.
 
 ### The portrait render
