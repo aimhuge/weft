@@ -56,6 +56,7 @@ function approvalHtml(view, { touchId = false, nonce = "n", home } = {}) {
   const chips = view.names.map((n) => `<span class="chip">${ICONS.key}${escape(n)}</span>`).join("");
   const sample = view.names[0] ? `‹${escape(view.names[0])}›` : "‹NAME›";
   const allow = `${touchId ? ICONS.finger : ""}Allow once`;
+  const hint = touchId ? `<span class="hint" id="hint">${ICONS.finger}Touch ID to allow once</span>` : "";
   return `<!doctype html>
 <html><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${escape(nonce)}'">
@@ -74,7 +75,9 @@ header { display:flex; gap:12px; padding:18px 20px 14px; -webkit-app-region:drag
 h1 { font-size:15px; font-weight:600; letter-spacing:-.01em; }
 .lead { color:var(--muted); margin-top:2px; }
 .lead b { color:var(--ink); font-weight:600; }
-.lead .thread { display:inline-block; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; vertical-align:bottom; }
+.lead .thread { overflow-wrap:anywhere; }
+.hint { display:inline-flex; align-items:center; gap:5px; font-size:12px; color:var(--muted); }
+.hint.waiting { color:var(--accent); font-weight:500; }
 .why p { border-left:3px solid color-mix(in srgb, var(--accent) 55%, transparent); padding:2px 0 2px 10px; -webkit-user-select:text; user-select:text; overflow-wrap:anywhere; }
 .why .label { margin-bottom:4px; }
 main { padding:0 20px 16px; display:grid; gap:12px; }
@@ -112,26 +115,56 @@ ${why}<div class="cmd"><div class="main">${escape(view.command)}</div>${runs}<di
 </main>
 <footer>
 <button class="ghost" data-answer="always" title="Run this exact command with these secrets from now on without asking">Always allow</button>
-<span class="spacer"></span>
+<span class="spacer"></span>${hint}
 <button data-answer="" id="cancel">Cancel</button>
 <button class="primary" data-answer="once">${allow}</button>
 </footer>
 </div>
 <script nonce="${escape(nonce)}">
 window.__answer = new Promise((resolve) => {
-  document.querySelectorAll("button[data-answer]").forEach((b) => b.addEventListener("click", () => resolve(b.dataset.answer || null)));
+  document.querySelectorAll("button[data-answer]").forEach((b) => b.addEventListener("click", () => {
+    const hint = document.getElementById("hint");
+    if (b.dataset.answer && hint) { hint.className = "hint waiting"; hint.lastChild.textContent = "Touch ID to confirm"; }
+    resolve(b.dataset.answer || null);
+  }));
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") resolve(null); });
 });
+window.__touchEnded = () => document.getElementById("hint")?.remove();
 document.getElementById("cancel").focus();
 </script>
 </body></html>`;
 }
 
+// Touch ID is asked the moment the window shows, so a touch on the sensor alone is "Allow once". A click while
+// it's up waits for that same touch (Always allow, or Allow once). Cancelling the macOS prompt leaves the buttons,
+// and a click after that asks Touch ID again. With touch, nothing is allowed without Touch ID passing.
 /**
- * Shows the question over `parent` and resolves "once", "always" or null (Cancel, Escape or closing it).
- * @param {{ BrowserWindow: any, parent?: any, view: Parameters<typeof approvalHtml>[0], touchId?: boolean }} options
+ * @param {Promise<string | null>} answer the page's click, Escape or the window closing (null)
+ * @param {Promise<boolean> | null} touched the Touch ID prompt started with the window, true when it passed
+ * @param {() => Promise<boolean>} [touch] asks Touch ID again
+ * @param {() => void} [onTouchEnded]
+ * @returns {Promise<"once" | "always" | null>}
  */
-async function askInWindow({ BrowserWindow, parent, view, touchId = false }) {
+async function settle(answer, touched, touch = async () => false, onTouchEnded = () => {}) {
+  const pick = (c) => (c === "once" || c === "always" ? c : null);
+  if (!touched) return pick(await answer);
+  const first = await Promise.race([answer.then((c) => ({ clicked: pick(c) })), touched.then((ok) => ({ ok }))]);
+  if ("ok" in first) {
+    if (first.ok) return "once";
+    onTouchEnded();
+    const choice = pick(await answer);
+    return choice && (await touch()) ? choice : null;
+  }
+  if (!first.clicked) return null;
+  return (await touched) ? first.clicked : null;
+}
+
+/**
+ * Shows the question over `parent` and resolves "once", "always" or null (Cancel, Escape, closing it, or Touch ID failing).
+ * `touch` (only where the Mac has Touch ID) starts as the window shows, so a touch alone allows once.
+ * @param {{ BrowserWindow: any, parent?: any, view: Parameters<typeof approvalHtml>[0], touchId?: boolean, touch?: () => Promise<boolean> }} options
+ */
+async function askInWindow({ BrowserWindow, parent, view, touchId = false, touch = undefined }) {
   const nonce = crypto.randomBytes(16).toString("base64");
   const win = new BrowserWindow({
     width: WIDTH,
@@ -162,11 +195,15 @@ async function askInWindow({ BrowserWindow, parent, view, touchId = false }) {
     }
     win.show();
     win.focus();
-    const answer = await Promise.race([win.webContents.executeJavaScript("window.__answer"), closed]);
-    return answer === "once" || answer === "always" ? answer : null;
+    const answer = Promise.race([win.webContents.executeJavaScript("window.__answer"), closed]).catch(() => null);
+    const touched = touch ? touch() : null;
+    const ended = () => {
+      if (!win.isDestroyed()) win.webContents.executeJavaScript("window.__touchEnded()").catch(() => {});
+    };
+    return await settle(answer, touched, touch, ended);
   } finally {
     if (!win.isDestroyed()) win.destroy();
   }
 }
 
-module.exports = { approvalHtml, askInWindow, scriptLines, tilde, escape };
+module.exports = { approvalHtml, askInWindow, settle, scriptLines, tilde, escape };

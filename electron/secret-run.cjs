@@ -169,31 +169,34 @@ function createSecretRun({ vault, ask, rules, spawn, env = process.env, now = Da
 }
 
 // The approval: Weft's own window with the command and names (electron/approval-window.cjs), or macOS's
-// alert if that can't open, then Touch ID where the Mac has it. askWindow is optional in tests.
+// alert if that can't open, then Touch ID where the Mac has it. The window starts Touch ID as it opens, so a
+// touch on the sensor is Allow once with no click; it answers only after Touch ID passed. askWindow is optional in tests.
+/**
+ * @param {{
+ *   dialog: { showMessageBox: (win: unknown, options: { type: string, buttons: string[], defaultId?: number, cancelId?: number, message: string, detail: string }) => Promise<{ response: number }> },
+ *   systemPreferences: { canPromptTouchID?: () => boolean, promptTouchID?: (reason: string) => Promise<void> },
+ *   window: () => unknown,
+ *   askWindow?: (opts: { parent: unknown, view: { command: string, [key: string]: unknown }, touchId: boolean, touch?: () => Promise<boolean> }) => Promise<string | null>
+ * }} options
+ */
 function runApproval({ dialog, systemPreferences, window, askWindow = undefined }) {
   const nativeAsk = async ({ message, detail }) => {
     const { response } = await dialog.showMessageBox(window(), { type: "warning", buttons: ["Cancel", "Allow once", "Always allow"], defaultId: 0, cancelId: 0, message, detail });
     return [null, "once", "always"][response] ?? null;
   };
-  const choose = async (request) => {
-    if (!askWindow || !request.view) return nativeAsk(request);
-    try {
-      return await askWindow({ parent: window(), view: request.view, touchId: Boolean(systemPreferences.canPromptTouchID?.()) });
-    } catch {
-      return nativeAsk(request);
-    }
-  };
   return async (request) => {
-    const choice = await choose(request);
-    if (!choice) return null;
-    if (systemPreferences.canPromptTouchID?.()) {
+    const touchId = Boolean(systemPreferences.canPromptTouchID?.());
+    const touch = () => systemPreferences.promptTouchID(request.reason).then(() => true, () => false);
+    if (askWindow && request.view) {
       try {
-        await systemPreferences.promptTouchID(request.reason);
+        return await askWindow({ parent: window(), view: request.view, touchId, touch: touchId ? touch : undefined });
       } catch {
-        return null;
+        // The window couldn't open: macOS's alert below.
       }
     }
-    return choice;
+    const choice = await nativeAsk(request);
+    if (!choice) return null;
+    return !touchId || (await touch()) ? choice : null;
   };
 }
 

@@ -153,7 +153,11 @@ denied). A file watcher notices hand edits and offers "Import changes", so editi
   the vault holds it the input folds to a ✓. The thread is told to end its turn after the call and wait for that message.
   `lib/runner-turn.ts` marks the tool item with `ask` (`secretAskOf` in `lib/vault-view.ts`), `groupThread` keeps it out
   of the folded tool run, and `ThreadEntries` draws it. `fill_field` and `run` put every missing name in as a blank and
-  point the thread at `ask_add`. `lib/secret-ask.ts` posts `POST /secrets/ask-add`, which only adds the blank. Outside
+  point the thread at `ask_add`. `lib/secret-ask.ts` posts `POST /secrets/ask-add` (`askAdd` in `electron/vault-routes.cjs`), which only adds the blank.
+  A name that already has a value in that environment keeps it (`addBlanks` never clears one, and clearing a value
+  without Touch ID would be a delete): the route answers `{ filled, label }` and the thread hears "NAME already has a
+  value… nothing changed", pointing it at `set_value` with `replace: true` (`filledAskText`) instead of claiming a
+  blank the user can't fill. The input in the thread folds to a ✓ straight away, since the vault holds a value. Outside
   the board window (no vault bridge) the input says to use 🔐 on the rail. No value passes through the thread either way.
 - `mcp__secrets__add_blank(names[], hint?, environment?, project?)` (built): the default for a key a thread needs
   but isn't blocked on. The thread calls this as soon as it knows the name (with a hint for where to get the
@@ -166,13 +170,16 @@ denied). A file watcher notices hand edits and offers "Import changes", so editi
   (`lib/open-in-pane.ts`, falling back to the system browser), where the user is signed in; blanks sort first within each environment, the rail's badge counts
   them, and the plain Add form's button reads **Add blank / Add N blanks** with the same flow. Older shells without
   `addBlank` keep the "type a value" form.
-- `mcp__secrets__set_value(name, value, environment?, project?)` (built): a value the thread generated itself (a
-  32-byte signing secret, a webhook secret it made up) into a name it already put in as a blank. Posts `POST /secrets/set`
-  (`electron/vault-routes.cjs`); its `fillBlank` answers `missing` when the name isn't a blank in
-  that environment ("Call add_blank first") and `filled` when it already has a value, so a thread can't overwrite one the
-  user put in; otherwise it asks Touch ID every time through `vault.confirm` (never the thread unlock cache: it's a write)
-  and stores it through `vault.setValue`, ciphertext in a 0600 file. The answer is `{ ok, label }` and the thread is told "Set NAME in the VAULT vault
-  (env)"; the value is never echoed or logged. It did pass through the thread's context once, as the tool's input, since the
+- `mcp__secrets__set_value(name, value, environment?, replace?, project?)` (built): a value the thread generated or got
+  itself (a 32-byte signing secret, a webhook secret it made up, the price ids it just created in a Stripe sandbox).
+  Posts `POST /secrets/set` (`electron/vault-routes.cjs`); its `fillBlank` adds a name that isn't in that environment
+  (`added`), fills a blank, and answers `filled` for a name that already has a value unless the call passes
+  `replace: true` (only a real `true`), so a thread never overwrites a value by accident. Each asks Touch ID every time
+  through `vault.confirm` (never the thread unlock cache: it's a write), and the prompt says which it is: "let a thread
+  add NAME (owner/repo, env)", "…set NAME (owner/repo, env)" or "…overwrite the production value of NAME (owner/repo)
+  with a new one"; neither value is ever in it. It stores through `vault.setValue`, ciphertext in a 0600 file, touching
+  only that environment. The answer is `{ ok, added? | replaced?, label }` and the thread is told "Added / Set / Replaced
+  the value of NAME … (env)"; the value is never echoed or logged. It did pass through the thread's context once, as the tool's input, since the
   thread made it: keys the user gets from a provider stay blanks for them to fill in.
 - `mcp__secrets__run(command, why, names, environment?, cwd?, timeout_seconds?, project?)` (built): a command with vault
   values in its env, for a thread that never sees them. The motivating case: `DATABASE_URL` is in the vault and a thread
@@ -186,7 +193,10 @@ denied). A file watcher notices hand edits and offers "Import changes", so editi
     with `preX` and `postX`.
   - Electron main (`electron/secret-run.cjs`) gets the values (`vault.valuesFor`, main only, never over IPC) and asks:
     a dialog (`electron/approval-window.cjs`) naming the asking card by its title, the thread's own one-line `why`, the
-    command, the folder, the script and the names (Cancel / Allow once / Always allow), then Touch ID. The title and
+    command, the folder, the script and the names (Cancel / Allow once / Always allow), and Touch ID. The window starts
+    Touch ID as it opens (`settle()` in `approval-window.cjs`), so a touch on the sensor alone is Allow once; a click on
+    Always allow or Allow once waits for that same touch, and a cancelled prompt leaves the buttons, which ask again.
+    Nothing is allowed without Touch ID passing where the Mac has it. The title and
     `why` are only shown, never part of a remembered rule; a dev server's approval names its card too.
     *Always allow* is a rule in the data folder's `vault/run-rules.json` (`electron/run-rules.cjs`), sealed with
     safeStorage so a thread can't write one. It pins the vault, environment, folder, exact command and a hash of the

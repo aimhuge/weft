@@ -181,6 +181,24 @@ describe("helpers", () => {
     expect(await noTouch(req)).toBe("always");
   });
 
+  it("hands Touch ID to the window, so a touch there is the whole approval", async () => {
+    const dialog = { showMessageBox: vi.fn() };
+    const touch = { canPromptTouchID: () => true, promptTouchID: vi.fn(async () => {}) };
+    const askWindow = vi.fn(async ({ touch: t }: { touch?: () => Promise<boolean> }) => ((await t?.()) ? "once" : null));
+    const ask = runApproval({ dialog, systemPreferences: touch, window: () => ({}), askWindow });
+    const req = { message: "m", detail: "d", reason: "r", view: { command: "x" } };
+    expect(await ask(req)).toBe("once");
+    expect(touch.promptTouchID).toHaveBeenCalledTimes(1);
+    touch.promptTouchID.mockRejectedValueOnce(new Error("cancelled"));
+    expect(await ask(req)).toBeNull();
+    const noTouch = runApproval({ dialog, systemPreferences: {}, window: () => ({}), askWindow: vi.fn((o: { touch?: unknown }) => Promise.resolve(o.touch ? "bad" : "always")) });
+    expect(await noTouch(req)).toBe("always");
+    const broken = runApproval({ dialog, systemPreferences: touch, window: () => ({}), askWindow: vi.fn(() => Promise.reject(new Error("no window"))) });
+    dialog.showMessageBox.mockResolvedValueOnce({ response: 1 });
+    expect(await broken(req)).toBe("once");
+    expect(dialog.showMessageBox).toHaveBeenCalledTimes(1);
+  });
+
   it("routes the control server's requests, defaulting to the active card", async () => {
     const r = { run: vi.fn((b: unknown) => Promise.resolve(b)), devGrant: vi.fn((b: unknown) => Promise.resolve(b)), claim: vi.fn((g: string) => ({ env: g })) } as unknown as Runner;
     const routes = secretRunRoutes(() => r, () => "active");
