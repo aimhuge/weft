@@ -76,7 +76,31 @@ from every Claude Code and puku-cli transcript, in Weft or the terminal, so hist
   a plan-limit error (`lib/rate-limit.ts`, the weekly window when the card saw it at 100%).
 - **One hit per window** (`distinctHits`): parallel threads all hit the same window, so hits of one kind within
   the window's length of the first, naming the same reset (or one naming none), count once.
-- **Badges**: ⏳ Hit the ceiling (your 5-hour limit) and 🗓️ Ran the week dry (your weekly limit), dated by the first hit.
+- **Exact resets.** A live hit's event id carries the reset the SDK gave (`limit:<window>:<resetsAt>`; `liveHit` reads it), and
+  `distinctHits` copies it onto the transcript hit of the same window, since the transcript's "resets 2:30am" is rounded.
+- **Burn** (`lib/limit-badges.ts` `burnMs`): how long a window lasted, from when it opened (its reset minus 5 hours or 7 days)
+  to the hit. A transcript reset ("2:30am (Asia/Bangkok)", "Oct 20, 9pm (…)", an epoch) is taken as the first such moment
+  after the hit, in its named zone (`resetTime`). A burn outside one window's length is dropped. `/api/game`'s
+  `limitHits.fastest` holds your fastest of each; the usage chart's legend shows them.
+- **Badges** (the Limits group, `LIMIT_DEFS`): a ladder per window at 1, 2, 5, 10, 20, 50, 100, 250, 500 and 1,000 hits (the first
+  rungs keep the old ids `limit-5h`/`limit-7d`, so nobody's ⏳/🗓️ pops up again); speed (a 5-hour window in under 2h, 1h, 30m,
+  15m; a weekly one in under 3 days, 1 day); 2, 3, 4 five-hour hits in one local day; 3 and 7 days in a row; and both windows
+  within a day.
+
+### Limit records
+
+```
+/api/game limitHits ── lib/limit-board.ts limitEntry ── rpc limit_submit ──> public.limit_records (one row per account)
+/api/league?board=five_hour|seven_day|five_hour_hits|seven_day_hits ── rpc limit_board ──> components/LimitBoardPanel.tsx
+```
+
+- **What goes up.** Your fastest 5-hour and weekly burn with the time each happened, and how many of each window you've
+  run dry. Never prompts, code or project names. Posted on the league's 10-minute timer (`startLeagueSync`) and when a board opens.
+- **The boards** are all time: fastest burn lowest first, hit counts highest first; the top 50 plus your own row, ranked with ties.
+- **Bounds.** `limit_submit` drops a burn under a minute or over its window (or dated in the future) rather than clamping it,
+  so a bad reading can't take first place, and clamps the counts. RLS on, no policies; both RPCs are security definer and act as
+  `auth.uid()` (supabase/migrations/20261024203912_limit_records.sql).
+- **Where it shows.** The 🏆 Leagues dialog's ⏱️ Limit records toggle (`components/LeaguesDialog.tsx`).
 
 ## Projects
 

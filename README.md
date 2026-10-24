@@ -915,6 +915,19 @@ platform and time, a line of drafts, posts to approve and failures, and when the
 them opens it in the browser pane. BlastCP sign-ins last 30 days: one made through your Weft account renews itself in its
 last week, and one made in the browser warns and offers Reconnect. More in [docs/architecture/blastcp.md](docs/architecture/blastcp.md).
 
+## Slack
+
+Slack's four-colour mark on the rail connects the board to a Slack workspace. Weft talks to Slack over Socket Mode, a
+connection from your Mac out to Slack, so nothing needs a public URL. **Create the Weft app** opens Slack with Weft's
+app manifest filled in (or `pnpm slack:manifest <app id>` puts it on an app you already made); install it, then paste
+its bot token (`xoxb-…`) and an app-level token with `connections:write` (`xapp-…`). Both stay in your Keychain. Pick a
+channel and what goes there: **commits** and **pushes** (from every board repo, whoever made them), **Vercel deploys**
+when they finish, and **card status**: when a card lands in Needs you, Review or Done, its own Slack thread gets the
+column, stage, what's left, a preview of its latest reply and a link to the card on weft.zip, where you can reply,
+review or move it (its project needs to sync). In Slack, `/weft fix the login bug` or **@Weft fix the login bug** starts
+a card in the project you picked, and **@Weft** in a card's thread sends that card your next message. More in
+[docs/architecture/slack.md](docs/architecture/slack.md).
+
 ## Copilot
 
 Press ⌘J (or the Copilot button) to open the copilot, an orchestrator thread in its own window.
@@ -957,6 +970,14 @@ the conversation over a picture of the cockpit: you in the driver's seat of the 
 helmet beside you. The board's columns narrow beside it (thumbnails and header extras like Review all drop away in a
 narrow column) so all five stay in view. The top bar's ✨ Copilot button, ⌘J and the command palette open and minimize
 it, and the choice sticks; ⌃⌥Space still opens the separate copilot window, which works with the board hidden.
+
+## Feedback
+
+The little dot at the right end of the board's footer is a line to the people building Weft. Click it and an AI asks
+you what's in your way, then a few short follow-ups: what you were doing, what happened, how often, what you'd want.
+Once it has enough (or you click "That's all"), it writes a short summary for you to check. Send it, and it goes to
+the Weft team's Slack, signed with your Weft account when you're signed in so they can write back. A copy stays in
+`~/.weft/feedback/`.
 
 ## Terminal
 

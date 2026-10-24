@@ -12,6 +12,8 @@ export interface LimitHit {
   at: number;
   kind: LimitKind;
   reset?: string;
+  // When the window resets, in ms, when a live thread was told (lib/runner-turn.ts).
+  resetAt?: number;
 }
 
 // A day's tokens: what went in (fresh input and cache writes, not cache reads) and what came out.
@@ -88,7 +90,9 @@ export function distinctHits(hits: LimitHit[]): LimitHit[] {
   for (const hit of [...hits].sort((a, b) => a.at - b.at)) {
     const same = out.findLast((h) => h.kind === hit.kind);
     const joined = same && hit.at - same.at < WINDOW_MS[hit.kind] && (!same.reset || !hit.reset || same.reset === hit.reset);
-    if (!joined) out.push(hit);
+    if (!joined) out.push({ ...hit });
+    // A live thread's exact reset beats the transcript's rounded one, whichever came first.
+    else if (hit.resetAt !== undefined) same.resetAt ??= hit.resetAt;
   }
   return out;
 }

@@ -1,11 +1,12 @@
 // The achievements: what each one asks for and whether you have it, from the activity log, your
 // records and the projects' production-ready trees. Pure (see lib/game.ts).
 import type { ActivityEvent, Records } from "./game";
-import type { LimitHit, LimitKind } from "./usage";
+import { LIMIT_DEFS } from "./limit-badges";
+import type { LimitHit } from "./usage";
 import { BRANCHES, branchComplete, CHECKS, productionReady, type BranchId, type CheckDef, type ProjectReport } from "./project-badges";
 
-export type BadgeGroup = "Milestones" | "Streaks" | "Habits" | "Code health" | "Production-ready";
-export const BADGE_GROUPS: BadgeGroup[] = ["Milestones", "Streaks", "Habits", "Code health", "Production-ready"];
+export type BadgeGroup = "Milestones" | "Streaks" | "Habits" | "Limits" | "Code health" | "Production-ready";
+export const BADGE_GROUPS: BadgeGroup[] = ["Milestones", "Streaks", "Habits", "Limits", "Code health", "Production-ready"];
 
 export interface Badge {
   id: string;
@@ -75,14 +76,6 @@ function streakBadge(n: number) {
   };
 }
 
-// The first time you ran a plan window dry.
-function limitHit(kind: LimitKind) {
-  return (f: GameFacts): Result => {
-    const hit = f.limitHits?.find((h) => h.kind === kind);
-    return { unlocked: !!hit, at: hit?.at };
-  };
-}
-
 const flag = (test: (f: GameFacts) => boolean) => (f: GameFacts): Result => ({ unlocked: test(f) });
 const anyProject = (test: (p: ProjectReport) => boolean) => flag((f) => f.projects.some(test));
 
@@ -121,8 +114,7 @@ const DEFS: Def[] = [
   def("Habits", "thrifty", "🪙", "Thrifty", "Ship a card for under $0.50", flag((f) => (f.records.cheapest ?? Infinity) < 0.5)),
   def("Habits", "refactor-5", "🧹", "Tidy", "Ship 5 refactor cards", atLeast((f) => f.refactors, 5)),
   def("Habits", "refactor-25", "🧽", "Refactorer", "Ship 25 refactor cards", atLeast((f) => f.refactors, 25)),
-  def("Habits", "limit-5h", "⏳", "Hit the ceiling", "Use up your 5-hour plan limit", limitHit("five_hour")),
-  def("Habits", "limit-7d", "🗓️", "Ran the week dry", "Use up your weekly plan limit", limitHit("seven_day")),
+  ...LIMIT_DEFS.map(({ test, ...d }) => ({ ...d, group: "Limits" as const, test: (f: GameFacts) => test(f.limitHits ?? []) })),
   def("Code health", "tested", "🧪", "Tested", "A project with a coverage report", anyProject((p) => !!p.ok.coverage), { check: "coverage" }),
   def("Code health", "covered-80", "🥈", "Well covered", "80% of lines covered in a project", anyProject((p) => (p.coverage ?? 0) >= 80), { check: "covered80" }),
   def("Code health", "covered-95", "🥇", "Thoroughly covered", "95% of lines covered in a project", anyProject((p) => (p.coverage ?? 0) >= 95), { check: "covered80" }),

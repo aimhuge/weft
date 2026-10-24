@@ -80,6 +80,11 @@ describe("distinctHits", () => {
     expect(list).toEqual([hit(0, "five_hour", "4am"), hit(1, "five_hour", "9am"), hit(6), hit(7, "seven_day"), hit(24 * 8, "seven_day")]);
     expect(WINDOW_MS.seven_day).toBe(168 * HOUR);
   });
+
+  it("keeps a live thread's exact reset on the window it joins", () => {
+    const live = { ...hit(1), resetAt: 99 };
+    expect(distinctHits([hit(0, "five_hour", "4am"), live, { ...hit(2), resetAt: 7 }])).toEqual([{ ...hit(0, "five_hour", "4am"), resetAt: 99 }]);
+  });
 });
 
 describe("usageDays", () => {

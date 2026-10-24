@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { burnLabel } from "@/lib/limit-board";
 import { shortTokens, type UsageDay } from "@/lib/usage";
 
 const W = 600;
@@ -16,7 +17,12 @@ function dayTip(d: UsageDay) {
 // The wefter card's usage chart: a bar of tokens per day (input and cache writes plus output, from every
 // Claude Code and puku-cli transcript) for the last 30 days, with a dot over each day you hit a plan
 // limit, amber for the 5-hour window and red for the weekly one. The hovered day reads out underneath.
-export default function UsageChart({ days, hits }: { days: UsageDay[]; hits: { fiveHour: number; sevenDay: number } }) {
+type Hits = { fiveHour: number; sevenDay: number; fastest?: { fiveHour?: { ms: number }; sevenDay?: { ms: number } } };
+
+// ", fastest 1h 12m" when a burn of that window is known.
+const fastest = (b?: { ms: number }) => (b ? `, fastest ${burnLabel(b.ms)}` : "");
+
+export default function UsageChart({ days, hits }: { days: UsageDay[]; hits: Hits }) {
   const [hover, setHover] = useState<UsageDay | null>(null);
   const peak = Math.max(1, ...days.map((d) => d.input + d.output));
   const slot = W / Math.max(1, days.length);
@@ -31,11 +37,11 @@ export default function UsageChart({ days, hits }: { days: UsageDay[]; hits: { f
         <span className="flex items-center gap-3">
           <span className="flex items-center gap-1">
             <svg width="8" height="8" aria-hidden><circle cx="4" cy="4" r="4" fill="var(--warn)" /></svg>⏳ 5-hour limit hit
-            <span className="tabular-nums">({hits.fiveHour} all time)</span>
+            <span className="tabular-nums">({hits.fiveHour} all time{fastest(hits.fastest?.fiveHour)})</span>
           </span>
           <span className="flex items-center gap-1">
             <svg width="8" height="8" aria-hidden><circle cx="4" cy="4" r="4" fill="var(--danger)" /></svg>🗓️ weekly
-            <span className="tabular-nums">({hits.sevenDay})</span>
+            <span className="tabular-nums">({hits.sevenDay}{fastest(hits.fastest?.sevenDay)})</span>
           </span>
         </span>
       </div>

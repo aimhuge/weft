@@ -132,7 +132,7 @@ describe("gameState", () => {
 
   it("charts the transcripts' tokens and every limit hit, counting a window once", () => {
     log.push(
-      { id: "l1", kind: "limit", at: new Date(2026, 9, 11, 10).getTime(), limit: "five_hour" },
+      { id: `limit:five_hour:${new Date(2026, 9, 11, 11).getTime() / 1000}`, kind: "limit", at: new Date(2026, 9, 11, 10).getTime(), limit: "five_hour" },
       { id: "l2", kind: "limit", at: NOW - 3 * DAY, limit: "seven_day" },
       { id: "l3", kind: "limit", at: NOW },
     );
@@ -140,8 +140,9 @@ describe("gameState", () => {
     expect(game.usage).toHaveLength(30);
     expect(game.usage.at(-1)).toEqual({ day: "2026-10-11", input: 1000, output: 200, fiveHour: 1, sevenDay: 0 });
     expect(game.usage.at(-4)).toMatchObject({ sevenDay: 1 });
-    expect(game.limitHits).toEqual({ fiveHour: 1, sevenDay: 1 });
-    expect(game.badges.filter((b) => b.id.startsWith("limit-")).map((b) => [b.id, b.unlocked])).toEqual([["limit-5h", true], ["limit-7d", true]]);
+    expect(game.limitHits).toEqual({ fiveHour: 1, sevenDay: 1, fastest: { fiveHour: { ms: 3 * 60 * 60 * 1000, at: new Date(2026, 9, 11, 9).getTime() }, sevenDay: undefined } });
+    const unlocked = game.badges.filter((b) => b.group === "Limits" && b.unlocked).map((b) => b.id);
+    expect(unlocked).toEqual(["limit-5h", "limit-7d"]);
   });
 
   it("falls back to the system user name", () => {

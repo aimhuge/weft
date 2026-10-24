@@ -137,4 +137,9 @@ describe("limit badges", () => {
     expect(list.get("limit-7d")).toMatchObject({ unlocked: false, at: undefined });
     expect(byId(badges(facts({ limitHits: [{ at: 7, kind: "seven_day" }] }))).get("limit-7d")).toMatchObject({ unlocked: true, at: 7 });
   });
+
+  it("file under Limits and read no hits as none", () => {
+    const list = byId(badges(facts({ limitHits: undefined })));
+    expect(list.get("limit-5h-2")).toMatchObject({ group: "Limits", unlocked: false, have: 0, need: 2 });
+  });
 });

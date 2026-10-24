@@ -6,11 +6,13 @@ import { useFeatureIntro } from "@/lib/use-feature-intro";
 import { leagueName, type LeagueView, type TierView } from "@/lib/league";
 import { LeagueHead, LeagueTable, Ladder } from "./LeagueTable";
 import { IntroButton, IntroFrame } from "./FeatureIntro";
+import LimitBoardPanel from "./LimitBoardPanel";
 import Modal from "./Modal";
 
 // Every league, not just yours: the six tiers as tabs (opens on yours), and under the one picked each of its
 // leagues this week with who's in it (/api/league?tier=N, lib/league-sync.ts tierView). Opened from the header's
-// 🏆 chip (components/LeagueBadge.tsx) and the profile's League tab.
+// 🏆 chip (components/LeagueBadge.tsx) and the profile's League tab. "Limit records" swaps in the all-time limit
+// leaderboards (components/LimitBoardPanel.tsx).
 
 const SIGN_IN =
   "Sign in to Weft (top bar) to join a league: about 30 builders ranked by the XP they earn Monday to Sunday. The top 7 move up and the bottom 5 move down. Only your week's XP, cards shipped, streak, level and badges are shared, never prompts or code.";
@@ -44,10 +46,11 @@ export default function LeaguesDialog({ mine, onClose }: { mine: LeagueView | nu
   const myTier = mine?.state === "ready" ? mine.tier : null;
   const [picked, setPicked] = useState(myTier ?? 0);
   const [views, setViews] = useState<Record<number, TierView>>({});
+  const [limits, setLimits] = useState(false);
   const intro = useFeatureIntro("leagues");
 
   useEffect(() => {
-    if (views[picked]) return;
+    if (limits || views[picked]) return;
     let live = true;
     apiFetch(`/api/league?tier=${picked}`)
       .then((r) => r.json() as Promise<{ tier?: TierView; error?: string }>)
@@ -56,13 +59,13 @@ export default function LeaguesDialog({ mine, onClose }: { mine: LeagueView | nu
     return () => {
       live = false;
     };
-  }, [picked, views]);
+  }, [picked, views, limits]);
 
   return (
     <Modal
       title={
         <span className="flex items-center gap-1.5">
-          🏆 Leagues · {leagueName(picked)}
+          {limits ? "⏱️ Limit records" : `🏆 Leagues · ${leagueName(picked)}`}
           <IntroButton intro={intro} />
         </span>
       }
@@ -70,8 +73,26 @@ export default function LeaguesDialog({ mine, onClose }: { mine: LeagueView | nu
       onClose={onClose} className="max-h-[86vh] w-full max-w-[760px]">
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
         <IntroFrame intro={intro} />
-        <Ladder tier={myTier} picked={picked} onPick={setPicked} />
-        <TierLeagues view={views[picked]} />
+        <div className="flex gap-1 self-start rounded-md border border-line p-0.5 text-[12px]">
+          {[["🏆 Leagues", false], ["⏱️ Limit records", true]].map(([label, on]) => (
+            <button
+              key={String(on)}
+              onClick={() => setLimits(on as boolean)}
+              aria-pressed={limits === on}
+              className={`rounded px-2.5 py-0.5 ${limits === on ? "bg-accent-soft font-semibold text-accent" : "text-ink hover:bg-sunken"}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        {limits ? (
+          <LimitBoardPanel />
+        ) : (
+          <>
+            <Ladder tier={myTier} picked={picked} onPick={setPicked} />
+            <TierLeagues view={views[picked]} />
+          </>
+        )}
       </div>
     </Modal>
   );

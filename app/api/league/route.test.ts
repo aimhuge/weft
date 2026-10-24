@@ -7,7 +7,10 @@ vi.mock("@/lib/league-sync", () => ({
   tierView: vi.fn(() => Promise.resolve({ state: "signed-out" })),
 }));
 
+vi.mock("@/lib/limit-board-sync", () => ({ limitBoardView: vi.fn(() => Promise.resolve({ state: "signed-out" })) }));
+
 const sync = await import("@/lib/league-sync");
+const limits = await import("@/lib/limit-board-sync");
 const get = (host = "localhost:3457", query = "") => GET(new Request(`http://localhost:3457/api/league${query}`, { headers: { host } }));
 
 beforeEach(() => vi.clearAllMocks());
@@ -29,6 +32,13 @@ describe("GET /api/league", () => {
     expect(sync.tierView).toHaveBeenCalledWith(2);
     expect(sync.leagueView).not.toHaveBeenCalled();
     expect(await res.json()).toEqual({ tier: { state: "signed-out" } });
+  });
+
+  it("returns a limit leaderboard with ?board, refusing an unknown one", async () => {
+    const res = await get(undefined, "?board=five_hour");
+    expect(limits.limitBoardView).toHaveBeenCalledWith("five_hour");
+    expect(await res.json()).toEqual({ board: { state: "signed-out" } });
+    expect((await get(undefined, "?board=nope")).status).toBe(400);
   });
 
   it("is a 500 when reading throws", async () => {

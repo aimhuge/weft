@@ -11,6 +11,7 @@ import {
 } from "./game";
 import { attributes, classFor, stackSkills, type Attribute, type Skill } from "./game-attributes";
 import { badges, coverageClimbed, isRefactor, type Badge } from "./game-badges";
+import { fastestBurn, liveHit } from "./limit-badges";
 import type { GithubProfile } from "./github-profile";
 import { globalSingleton } from "./global-singleton";
 import type { ProjectReport } from "./project-badges";
@@ -48,9 +49,15 @@ export interface GameState {
   leagues: readonly string[];
   // The last 30 days' tokens and limit hits, for the wefter card's chart, and every hit's count.
   usage: UsageDay[];
-  limitHits: { fiveHour: number; sevenDay: number };
+  limitHits: { fiveHour: number; sevenDay: number; fastest?: { fiveHour?: Burn; sevenDay?: Burn } };
   // Your GitHub profile, added by /api/game when gh is signed in.
   github?: GithubProfile | null;
+}
+
+// Your fastest burn of a plan window (lib/limit-badges.ts): how long it lasted and when.
+export interface Burn {
+  ms: number;
+  at: number;
 }
 
 export const REPORT_TTL = 10 * 60 * 1000;
@@ -139,7 +146,7 @@ export function gameState({ cwd, full, now = Date.now() }: { cwd?: string | null
   // So does usage: every transcript's tokens and limit hits, plus the hits Weft's threads logged live.
   void scanUsage(now).catch(() => {});
   const scanned = transcriptUsage();
-  const live = events.flatMap((e): LimitHit[] => (e.kind === "limit" && e.limit ? [{ at: e.at, kind: e.limit }] : []));
+  const live = events.flatMap((e): LimitHit[] => (e.kind === "limit" && e.limit ? [liveHit(e.id, e.at, e.limit)] : []));
   const hits = distinctHits([...scanned.hits, ...live]);
   const inView = cwd ? rootOf(cwd) : null;
   const projects = full
@@ -180,7 +187,11 @@ export function gameState({ cwd, full, now = Date.now() }: { cwd?: string | null
     today: days.get(today) ?? { cards: 0, turns: 0, done: 0, xp: 0 },
     cloth: cloth(days, streak.frozen, today),
     usage: usageDays(scanned.tokens, hits, today),
-    limitHits: { fiveHour: hits.filter((h) => h.kind === "five_hour").length, sevenDay: hits.filter((h) => h.kind === "seven_day").length },
+    limitHits: {
+      fiveHour: hits.filter((h) => h.kind === "five_hour").length,
+      sevenDay: hits.filter((h) => h.kind === "seven_day").length,
+      fastest: { fiveHour: fastestBurn(hits, "five_hour"), sevenDay: fastestBurn(hits, "seven_day") },
+    },
     records: recs,
     attributes: attrs,
     className: classFor(attrs),

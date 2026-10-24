@@ -4,11 +4,13 @@ import type { LeagueEntry } from "./league";
 
 const account = vi.hoisted(() => ({ client: vi.fn() }));
 const profileCardSync = vi.hoisted(() => ({ sync: vi.fn() }));
+const limitSync = vi.hoisted(() => ({ sync: vi.fn(() => Promise.resolve(true)) }));
 vi.mock("./account", () => ({ accountClient: account.client }));
 vi.mock("./game-server", () => ({
   gameState: vi.fn(() => ({ weekXp: 50, weekShipped: 2, streak: { current: 3 }, level: { level: 4 }, badges: [] })),
 }));
 vi.mock("./profile-card-sync", () => ({ syncProfileCard: profileCardSync.sync }));
+vi.mock("./limit-board-sync", () => ({ syncLimits: limitSync.sync, NOT_DEPLOYED: "limits not deployed" }));
 
 const { FIRST_SYNC_MS, leagueView, NOT_DEPLOYED, startLeagueSync, SYNC_MS, syncWeek, tierView } = await import("./league-sync");
 
@@ -188,6 +190,20 @@ describe("startLeagueSync", () => {
     const arg = profileCardSync.sync.mock.calls[0]![0] as { client: () => SupabaseClient | null };
     expect(arg.client()).toBe(client);
     stop();
+  });
+
+  it("posts the limit records in the tick, warning on a failure but not on a missing migration", async () => {
+    vi.useFakeTimers();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    limitSync.sync.mockRejectedValueOnce(new Error("limits not deployed")).mockRejectedValueOnce(new Error("down"));
+    const { client } = fake();
+    const stop = startLeagueSync({ client: () => client, entry: () => ENTRY });
+    await vi.advanceTimersByTimeAsync(FIRST_SYNC_MS);
+    expect(warn).not.toHaveBeenCalledWith("[weft] limit records sync failed:", expect.anything());
+    await vi.advanceTimersByTimeAsync(SYNC_MS - FIRST_SYNC_MS);
+    expect(warn).toHaveBeenCalledWith("[weft] limit records sync failed:", expect.any(Error));
+    stop();
+    warn.mockRestore();
   });
 
   it("catches and warns on a syncProfileCard rejection", async () => {
