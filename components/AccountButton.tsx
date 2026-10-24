@@ -2,10 +2,10 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import { useAccount } from "@/lib/use-account";
+import { useBillingPrefetch } from "@/lib/use-billing-status";
 import { useEscape } from "@/lib/use-escape";
 import { useTeamPrefetch } from "@/lib/use-team";
-import { REPLAY_EVENT } from "@/lib/welcome-client";
-import { openTeamPage } from "./board-palette";
+import AccountMenu from "./AccountMenu";
 import Avatar from "./Avatar";
 import Icon, { Spinner } from "./Icon";
 
@@ -14,8 +14,8 @@ function signedInId(state: ReturnType<typeof useAccount>["state"]): string | und
 }
 
 // The top bar's account control, right of Copilot. Signed out: "Sign in" with GitHub, which finishes in
-// your browser. Signed in: a share icon (Share the board) and your avatar, which opens a tiny menu (Settings, Share the
-// board, Your team, Replay the welcome). Hidden while
+// your browser. Signed in: a share icon (Share the board) and your avatar, which opens a tiny menu
+// (components/AccountMenu.tsx). Hidden while
 // loading, on errors, and in builds without a Supabase key, so it never costs header room for nothing.
 export default function AccountButton({ onOpenSettings, onShareBoard }: { onOpenSettings: () => void; onShareBoard?: () => void }) {
   const { state, busy, waiting, error, signIn } = useAccount();
@@ -24,6 +24,7 @@ export default function AccountButton({ onOpenSettings, onShareBoard }: { onOpen
   const menuId = useId();
   useEscape(menuOpen, () => setMenuOpen(false));
   useTeamPrefetch(signedInId(state));
+  useBillingPrefetch(signedInId(state));
   useEffect(() => {
     if (!menuOpen) return;
     const onDown = (e: MouseEvent) => {
@@ -52,63 +53,7 @@ export default function AccountButton({ onOpenSettings, onShareBoard }: { onOpen
         >
           <Avatar user={user} size={24} />
         </button>
-        {menuOpen && (
-          <div
-            id={menuId}
-            role="menu"
-            className="absolute right-0 top-full z-40 mt-1.5 w-[220px] rounded-lg border border-line bg-panel p-1 shadow-lg"
-          >
-            <button
-              role="menuitem"
-              onClick={() => {
-                setMenuOpen(false);
-                onOpenSettings();
-              }}
-              className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[13px] text-ink hover:bg-sunken"
-            >
-              <Icon name="sliders" size={14} className="text-muted" />
-              Settings…
-            </button>
-            {onShareBoard && (
-              <button
-                role="menuitem"
-                onClick={() => {
-                  setMenuOpen(false);
-                  onShareBoard();
-                }}
-                className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[13px] text-ink hover:bg-sunken"
-              >
-                <Icon name="share" size={14} className="text-muted" />
-                Share the board…
-              </button>
-            )}
-            <button
-              role="menuitem"
-              onClick={() => {
-                setMenuOpen(false);
-                openTeamPage();
-              }}
-              className="flex w-full flex-col items-start gap-0.5 rounded-md px-2.5 py-1.5 text-left hover:bg-sunken"
-            >
-              <span className="flex w-full items-center gap-2 text-[13px] text-ink">
-                <Icon name="globe" size={14} className="text-muted" />
-                Your team
-              </span>
-              <span className="pl-6 text-[11.5px] leading-snug text-muted">Invite teammates on weft.zip</span>
-            </button>
-            <button
-              role="menuitem"
-              onClick={() => {
-                setMenuOpen(false);
-                window.dispatchEvent(new Event(REPLAY_EVENT));
-              }}
-              className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[13px] text-ink hover:bg-sunken"
-            >
-              <Icon name="play" size={14} className="text-muted" />
-              Replay the welcome
-            </button>
-          </div>
-        )}
+        {menuOpen && <AccountMenu id={menuId} onClose={() => setMenuOpen(false)} onOpenSettings={onOpenSettings} onShareBoard={onShareBoard} />}
       </div>
     );
   }
