@@ -88,6 +88,7 @@ export const ThreadMessage = memo(function ThreadMessage({ item, cardId }: { ite
       return (
         <div className="ml-10 rounded-lg bg-accent-soft px-3 py-2">
           <Markdown text={item.text} />
+          {item.midTurn && <p className="mt-1 text-[11px] text-muted">Sent mid-turn · read after the next tool call</p>}
         </div>
       );
     case "assistant":

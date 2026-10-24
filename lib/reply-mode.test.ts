@@ -25,6 +25,13 @@ describe("replyMode", () => {
     expect(view.menu.map((m) => m.action)).toEqual(["sendNow", "later"]);
   });
 
+  it("sends mid-turn where the CLI takes it in after its next tool call, with Queue, Send now and Send later in the menu", () => {
+    const view = at({ live: true, midTurn: true });
+    expect(view).toMatchObject({ mode: "steer", chip: "After the next tool call", tone: "neutral", primary: { action: "steer", label: "Send" } });
+    expect(view.menu.map((m) => m.action)).toEqual(["queue", "sendNow", "later"]);
+    expect(at({ live: true, midTurn: true, canSchedule: false }).menu.map((m) => m.action)).toEqual(["queue", "sendNow"]);
+  });
+
   it("answers a waiting question, even mid-turn", () => {
     expect(at({ question: true, live: true })).toMatchObject({ mode: "answer", tone: "warn", primary: { action: "answer", label: "Answer" }, menu: [] });
   });

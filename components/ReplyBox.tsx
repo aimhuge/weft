@@ -39,6 +39,7 @@ export default function ReplyBox({
   cardId,
   cwd,
   live,
+  midTurn = false,
   placeholder,
   suggestion,
   sendLater,
@@ -60,6 +61,8 @@ export default function ReplyBox({
   cardId: string;
   cwd: string;
   live: boolean;
+  // A live turn here takes a message in after its next tool call, so Enter sends instead of queueing.
+  midTurn?: boolean;
   placeholder: string;
   suggestion?: string;
   sendLater?: SendLater;
@@ -164,23 +167,25 @@ export default function ReplyBox({
     }
   }
 
-  async function submit(now = false) {
+  // Enter on an empty box lets a held queue go; Send now with an empty box sends what's queued instead.
+  function emptyBox(now: boolean) {
+    if (paused && queue.length > 0) queued.resume();
+    else if (now && queue.length > 0) void queued.sendNow();
+    else setError("Write a message first.");
+  }
+
+  // midTurn: Send on a live Claude Code or puku turn, which takes it in after its next tool call (lib/runner-steer.ts).
+  async function submit(now = false, midTurn = false) {
     if (busy) return;
     if (shell && !editing) return runShell();
     const text = readBox();
     if (text === null) return;
     if (editing) return sendEdit(text);
-    if (!text && paused && queue.length > 0) {
-      queued.resume();
-      return;
-    }
-    // Send now with an empty box sends what's queued instead.
-    if (!text && now && queue.length > 0) return queued.sendNow();
     if (!text) {
-      setError("Write a message first.");
+      emptyBox(now);
       return;
     }
-    if (live && !now) {
+    if (live && !now && !midTurn) {
       queued.add(text);
       saveDraft("", true);
       composer.current?.clear();
@@ -189,7 +194,7 @@ export default function ReplyBox({
     setSending(true);
     try {
       // Send now: interrupt the running turn first, then the message goes out as the next one.
-      if (live) await onStop();
+      if (live && now) await onStop();
       await onSend(text);
       captureReply();
       queued.resume();
@@ -203,9 +208,9 @@ export default function ReplyBox({
   }
 
   // Enter or Send: answers a waiting question (a "!" command still runs), else sends.
-  function send(now = false) {
+  function send(now = false, midTurn = false) {
     if (question && form.current && !shell) form.current.enter();
-    else void submit(now);
+    else void submit(now, midTurn);
   }
 
   // Send fresh: the message (what's typed, or `text` from a button) goes to a new session of this card that starts
@@ -262,6 +267,7 @@ export default function ReplyBox({
   const gate = useThreadGate(fiveHour, sendLater?.resets.fiveHour, backend ?? "claude", model);
   const { view, resetAt } = replyBoxMode({
     live,
+    midTurn,
     question: Boolean(question),
     shell,
     editing,
@@ -311,7 +317,7 @@ export default function ReplyBox({
     else if (action === "later") setLaterOpen(true);
     else if (action === "schedule") {
       if (resetAt) void scheduleAt(resetAt);
-    } else send(action === "sendNow");
+    } else send(action === "sendNow", action === "steer");
   }
 
   return (

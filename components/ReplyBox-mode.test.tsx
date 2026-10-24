@@ -88,6 +88,22 @@ describe("5-hour window used up", () => {
   });
 });
 
+describe("mid-turn", () => {
+  it("Enter sends at once on a turn that takes it in, without stopping it; Queue waits for the turn", async () => {
+    const onStop = vi.fn<Props["onStop"]>(() => Promise.resolve());
+    const { onSend, box } = setup({ live: true, midTurn: true, onStop });
+    expect(screen.getByText("After the next tool call")).toBeInTheDocument();
+    await userEvent.type(box, "skip the e2e tests{Enter}");
+    expect(onSend).toHaveBeenCalledWith("skip the e2e tests");
+    expect(onStop).not.toHaveBeenCalled();
+    await waitFor(() => expect(box).toHaveValue(""));
+    await userEvent.type(box, "after");
+    await userEvent.click(screen.getByRole("button", { name: "More ways to send" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: /Queue · after this turn/ }));
+    expect(onSend).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("mode chip", () => {
   it("names the queue while a turn runs, and nothing on a plain reply", () => {
     setup({ live: true });

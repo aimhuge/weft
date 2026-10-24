@@ -5,10 +5,10 @@ import { cacheMinutesLeft, folderName, formatTokens } from "./format";
 import { formatAt } from "./schedule";
 import type { CacheState, Card, LimitWindow } from "./types";
 
-export type ReplyModeName = "reply" | "queue" | "answer" | "shell" | "replace" | "copy";
+export type ReplyModeName = "reply" | "steer" | "queue" | "answer" | "shell" | "replace" | "copy";
 
 // What a click on the primary or a menu item does; ReplyBox maps each to its handler.
-export type ReplyAction = "done" | "send" | "queue" | "sendNow" | "answer" | "run" | "replace" | "continue" | "fresh" | "schedule" | "later";
+export type ReplyAction = "done" | "send" | "steer" | "queue" | "sendNow" | "answer" | "run" | "replace" | "continue" | "fresh" | "schedule" | "later";
 
 export type ReplyTone = "accent" | "neutral" | "shell" | "warn";
 
@@ -34,6 +34,8 @@ export interface ReplyModeView {
 
 export interface ReplyModeInput {
   live: boolean;
+  // A live turn takes a message in after its next tool call (Claude Code and puku; lib/runner-steer.ts).
+  midTurn?: boolean;
   question: boolean;
   shell: boolean;
   editing: boolean;
@@ -185,6 +187,15 @@ export function replyMode(input: ReplyModeInput): ReplyModeView {
   if (input.question) {
     return { mode: "answer", chip: "Answer", tone: "warn", primary: { action: "answer", label: "Answer", tip: "Answer the question (Enter)" }, menu: [] };
   }
+  if (input.live && input.midTurn) {
+    return {
+      mode: "steer",
+      chip: "After the next tool call",
+      tone: "neutral",
+      primary: { action: "steer", label: "Send", tip: "The agent reads it as its next tool call returns, without stopping the turn (Enter)" },
+      menu: [{ action: "queue", label: "Queue · after this turn" }, { action: "sendNow", label: "Send now (stops the turn)" }, ...(input.canSchedule ? [LATER] : [])],
+    };
+  }
   if (input.live) {
     return {
       mode: "queue",
@@ -220,6 +231,7 @@ export function turnCutOff(card: Pick<Card, "error" | "lastLine" | "rateLimitHit
 // limit only where Send later is offered (and once the clock has started, now > 0).
 export interface ReplyBoxState {
   live: boolean;
+  midTurn?: boolean;
   question: boolean;
   shell: boolean;
   editing: boolean;
@@ -250,6 +262,7 @@ export function replyBoxMode(s: ReplyBoxState): { view: ReplyModeView; resetAt?:
   const cold = s.cache && !s.live && s.now && s.cache.tokens >= COLD_MIN_TOKENS && cacheMinutesLeft(s.cache, s.now) <= 0 ? s.cache : undefined;
   const view = replyMode({
     live: s.live,
+    midTurn: s.midTurn,
     question: s.question,
     shell: s.shell,
     editing: s.editing && Boolean(s.editLast),
