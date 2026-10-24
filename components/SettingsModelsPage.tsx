@@ -4,6 +4,7 @@ import type { Backend, Effort } from "@/lib/types";
 import BackupModelPicker from "./BackupModelPicker";
 import CopilotPicker from "./CopilotPicker";
 import DonePicker from "./DonePicker";
+import GooseProviderKey from "./GooseProviderKey";
 import NewThreadDefaults from "./NewThreadDefaults";
 import ReviewAllPicker from "./ReviewAllPicker";
 import { SettingsCard } from "./SettingsLayout";
@@ -15,7 +16,17 @@ export default function SettingsModelsPage({
   setDefaultBackend,
   clearSaveError,
 }: {
-  settings: { subagentModel: string; copilotModel: string; reviewAllModel: string; doneModel: string; doneEffort: Effort | ""; backupModel: string };
+  settings: {
+    subagentModel: string;
+    copilotModel: string;
+    reviewAllModel: string;
+    doneModel: string;
+    doneEffort: Effort | "";
+    backupModel: string;
+    gooseProviderId: string;
+    gooseModelId: string;
+    gooseBaseUrl: string;
+  };
   defaultBackend: Backend;
   setDefaultBackend: (next: Backend) => void;
   clearSaveError: () => void;
@@ -34,6 +45,7 @@ export default function SettingsModelsPage({
       <ReviewAllPicker value={s.reviewAllModel} />
       <DonePicker model={s.doneModel} effort={s.doneEffort} />
       <BackupModelPicker value={s.backupModel} />
+      <GooseProviderKey providerId={s.gooseProviderId} modelId={s.gooseModelId} baseUrl={s.gooseBaseUrl} />
     </SettingsCard>
   );
 }

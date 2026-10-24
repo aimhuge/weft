@@ -4,7 +4,7 @@ import { authStatus, cancelLogin, loginRuns, openLoginInTerminal, sendLoginInput
 import { clearLoginWaiters, retryAfterLogin } from "@/lib/runner";
 import type { Backend, LoginView } from "@/lib/types";
 
-const BACKENDS: Backend[] = ["claude", "puku", "codex"];
+const BACKENDS: Backend[] = ["claude", "puku", "codex", "goose"];
 const ACTIONS = ["start", "input", "cancel", "terminal"] as const;
 type Action = (typeof ACTIONS)[number];
 
@@ -17,8 +17,8 @@ export async function GET(req: Request) {
   const denied = guard(req, { write: false });
   if (denied) return denied;
   await connection();
-  const [claude, puku, codex] = await Promise.all([authStatus("claude"), authStatus("puku"), authStatus("codex")]);
-  return Response.json({ status: { claude, puku, codex }, runs: loginRuns() });
+  const [claude, puku, codex, goose] = await Promise.all([authStatus("claude"), authStatus("puku"), authStatus("codex"), authStatus("goose")]);
+  return Response.json({ status: { claude, puku, codex, goose }, runs: loginRuns() });
 }
 
 export async function POST(req: Request) {
@@ -27,7 +27,7 @@ export async function POST(req: Request) {
   try {
     const body = (await req.json()) as Record<string, unknown>;
     const backend = body.backend as Backend;
-    if (!BACKENDS.includes(backend)) throw new Error("Unknown CLI. Use claude, puku or codex.");
+    if (!BACKENDS.includes(backend)) throw new Error("Unknown CLI. Use claude, puku, codex or goose.");
     const action = body.action as Action;
     if (!ACTIONS.includes(action)) throw new Error("Unknown login action.");
 

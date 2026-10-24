@@ -119,6 +119,13 @@ contextBridge.exposeInMainWorld("weft", {
     link: (folder, kind, accountId, name) => ipcRenderer.invoke("cloudflare:link", folder, kind, accountId, name),
     unlink: (folder) => ipcRenderer.invoke("cloudflare:unlink", folder),
   },
+  // Goose (electron/goose-ipc.cjs): a provider key per provider, sealed in the Keychain. The board sends a key
+  // once and never reads one back — the runner's Goose subprocess gets it in its env (electron/goose-env.cjs).
+  goose: {
+    listProviders: () => ipcRenderer.invoke("goose:list-providers"),
+    setProviderKey: (payload) => ipcRenderer.invoke("goose:set-provider-key", payload),
+    forgetProviderKey: (payload) => ipcRenderer.invoke("goose:forget-provider-key", payload),
+  },
   onMenu: (callback) => listen("menu", callback),
   // The board's first cards are on screen; resolves to this launch's timing (electron/startup-timer.cjs).
   startupReady: () => ipcRenderer.invoke("startup:ready"),
