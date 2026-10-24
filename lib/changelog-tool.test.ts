@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -12,7 +13,9 @@ interface CapturedTool {
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "weft-changelog-tool-"));
 const repo = fs.mkdtempSync(path.join(os.tmpdir(), "weft-changelog-repo-"));
-fs.mkdirSync(path.join(repo, ".git"));
+const git = (...args: string[]) => execFileSync("git", ["-C", repo, ...args], { encoding: "utf8" }).trim();
+git("init", "-q");
+git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "first");
 fs.mkdirSync(path.join(repo, "sub"));
 const cards: Record<string, { id: string; title: string; cwd: string }> = { c1: { id: "c1", title: "Login card", cwd: path.join(repo, "sub") } };
 
@@ -70,6 +73,20 @@ describe("changelog tools", () => {
     expect((await call("changelog_edit", { id, text: "b", kind: "changed" })).text).toBe(`Updated: ${id} | changed | draft | Login card | b`);
     expect((await call("changelog_edit", { id, remove: true })).text).toBe(`Removed ${id}.`);
     expect(await call("changelog_edit", { id, text: "c" })).toEqual({ text: `No changelog entry ${id}.`, isError: true });
+  });
+
+  it("records the entry's files, and re-files or re-stamps it with a commit of its project", async () => {
+    const id = idOf((await call("changelog_add", { kind: "added", text: "a", files: ["./lib/a.ts", "lib/a.ts", " "] })).text);
+    expect((await call("changelog_list", {})).text).toContain(`${id} | added | draft`);
+    const { readChangelog } = await import("./changelog");
+    expect(readChangelog().find((e) => e.id === id)?.files).toEqual(["lib/a.ts"]);
+    expect((await call("changelog_edit", { id, files: ["lib/b.ts"] })).text).toContain("| draft |");
+    expect(readChangelog().find((e) => e.id === id)?.files).toEqual(["lib/b.ts"]);
+    const sha = git("rev-parse", "HEAD");
+    expect((await call("changelog_edit", { id, sha: sha.slice(0, 7) })).text).toBe(`Updated: ${id} | added | committed ${sha.slice(0, 7)} | Login card | a`);
+    expect(readChangelog().find((e) => e.id === id)?.sha).toBe(sha);
+    expect(await call("changelog_edit", { id, sha: "0000000" })).toEqual({ text: `0000000 isn't a commit in ${repo}.`, isError: true });
+    expect(await call("changelog_edit", { id: "nope", sha })).toEqual({ text: "No changelog entry nope.", isError: true });
   });
 
   it("reports a non-Error throw as text", async () => {

@@ -66,6 +66,30 @@ describe("changelog store", () => {
     expect(ec.sha).toBeUndefined();
   });
 
+  it("stamps only the drafts a commit's files carry, and keeps the entry's files", () => {
+    const scoped = add({ files: ["./lib/preview.ts", ""] });
+    const loose = add({ text: "no paths" });
+    expect(readChangelog().find((e) => e.id === scoped.id)?.files).toEqual(["lib/preview.ts"]);
+    expect(loose.files).toBeUndefined();
+    // Another card's commit in the shared tree: only the entry with no files known takes it.
+    expect(stampCard("c1", "/repo", "quota", ["lib/quota.ts"])).toBe(1);
+    expect(readChangelog().find((e) => e.id === scoped.id)?.sha).toBeUndefined();
+    expect(stampCard("c1", "/repo", "own", ["lib/preview.ts"])).toBe(1);
+    expect(readChangelog().find((e) => e.id === scoped.id)?.sha).toBe("own");
+  });
+
+  it("re-stamps and re-files an unreleased entry through an edit", () => {
+    const a = add({ files: ["a.ts"] });
+    stampCard("c1", "/repo", "wrong");
+    const fixed = editEntry(a.id, { sha: "right", files: ["b.ts", "b.ts"] });
+    expect(fixed).toMatchObject({ sha: "right", files: ["b.ts"], text: "A thing" });
+    expect(fixed.committedAt).toBeGreaterThan(0);
+    expect(readChangelog().find((e) => e.id === a.id)).toMatchObject({ sha: "right", files: ["b.ts"], committedAt: fixed.committedAt });
+    // Emptied files: back to reading the text, and the sha stays.
+    expect(editEntry(a.id, { files: [] })).toMatchObject({ sha: "right", files: [] });
+    expect(readChangelog().find((e) => e.id === a.id)?.committedAt).toBe(fixed.committedAt);
+  });
+
   it("releases every unreleased entry of a project, drafts included, and freezes them", () => {
     const a = add();
     stampCard("c1", "/repo", "abc");

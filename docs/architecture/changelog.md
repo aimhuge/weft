@@ -12,8 +12,8 @@ each entry links to the card that wrote it, the card's commit stamps it, and Wef
 
 | event     | what it does                                                                 |
 | --------- | ---------------------------------------------------------------------------- |
-| `add`     | a new entry: project (git root), kind, text, card id and title, time           |
-| `edit`    | rewords or recategorises an unreleased entry                                  |
+| `add`     | a new entry: project (git root), kind, text, card id and title, files, time   |
+| `edit`    | rewords, recategorises, re-files or re-stamps (`sha`) an unreleased entry     |
 | `remove`  | drops an unreleased entry                                                     |
 | `stamp`   | the card's commit landed: entries get the sha (`committedAt`)                 |
 | `release` | a version went out: entries get the version (`releasedAt`)                    |
@@ -29,24 +29,38 @@ is **draft** (no sha), **committed** (sha) or **released** (version) — `status
 so Claude Code, puku-cli and Codex all get them); they skip the permission prompt (`SAFE_BOARD_TOOLS`), since they
 only write the user's own log:
 
-- `mcp__board__changelog_add { kind, text, folder? }` — kind is Keep a Changelog's (added, changed, fixed,
-  removed, security); the calling card's id and title go on the entry.
+- `mcp__board__changelog_add { kind, text, files?, folder? }` — kind is Keep a Changelog's (added, changed, fixed,
+  removed, security); the calling card's id and title go on the entry; `files` (repo-relative) scope its stamp.
 - `mcp__board__changelog_list { all?, folder? }` — `id | kind | status | card | text`, unreleased unless `all`.
-- `mcp__board__changelog_edit { id, text?, kind?, remove? }`.
+- `mcp__board__changelog_edit { id, text?, kind?, files?, sha?, remove? }` — `sha` (full or short, resolved in the
+  entry's project with `git rev-parse`, refused if it isn't a commit there) stamps a draft its commit missed or
+  replaces a stamp that landed on the wrong commit. `editEntry` takes it already resolved; the edit event carries it,
+  and `fold()` sets `sha` and `committedAt` from it: the one way past "a stamp never overwrites".
 
 SOUL.md's convention and `/weft:done`'s Phase 2 tell threads to call these instead of typing under Unreleased.
 
 ## The git stamp
 
-`lib/changelog-stamp.ts`. A Bash PreToolUse/PostToolUse pair in `guardedCli()` (`lib/env.ts`): before a line that
-looks like a commit (`git … commit`, `commit.sh`) it reads HEAD; after it succeeds it reads HEAD again, and if it
-moved, the card's draft entries in that project get the new sha and the thread is told. Comparing HEAD means a
-commit the pre-commit hook refused, or a line that only mentions committing, stamps nothing. The commit
-walk-through's buttons commit without a turn, so `lib/pile-commit.ts` calls `stampAfterCommit` for the change's
-card itself.
+`lib/changelog-stamp.ts` (its git reads in `lib/changelog-git.ts`). A Bash PreToolUse/PostToolUse pair in
+`guardedCli()` (`lib/env.ts`): before a line that looks like a commit (`git … commit`, `commit.sh`) it reads HEAD;
+after it succeeds it reads HEAD again, and if it moved, each commit the call landed (`commitsSince`, oldest first, up
+to 50) stamps the card's drafts it carries, and the thread is told what got stamped with which sha and which drafts
+stayed draft. Comparing HEAD means a commit the pre-commit hook refused, or a line that only mentions committing,
+stamps nothing. The commit walk-through's buttons commit without a turn, so `lib/pile-commit.ts` calls
+`stampAfterCommit` for the change's card itself.
 
-A commit that takes another card's lines ("shared files go whole") stamps only the committing card's entries; the
-other card's stay draft until its own commit.
+**A commit stamps only the entries it carries** (`lib/changelog-files.ts`). Cards share one working tree, so a
+thread's Bash call can land another card's commit: on 2026-10-24 the quota card's `35d9ed2` stamped the preview
+card's entry, whose own commit was `858706e`. So `stampCard(card, project, sha, changed)` takes the commit's paths
+(`commitFiles`: `git diff-tree --root -m -r --name-only`) and stamps a draft only when one of them is among the
+entry's files: the same path, a path inside a folder it names, or one ending with it (a card in a subfolder, a bare
+`CHANGELOG.md`). An entry's files are its `files` field, else the backticked paths in its text (`filesInText`: a
+token with a known code or doc extension, or ending in `/`; not env names, versions, urls or `/routes`). An entry
+with no files known stamps on any commit, as before; so does a call with no `changed` at all.
+
+- A batch commit carrying several cards' work stamps each card's entry only if it touched that entry's files.
+- A draft its commit missed (files named wrong) stays draft; the hook's note names it and says to call
+  `changelog_edit { id, sha }`. A draft never reaches CHANGELOG.md, so that note is the safety net.
 
 ## The Supabase mirror
 
@@ -95,5 +109,6 @@ a bump Weft didn't see: a Codex thread (no per-tool hooks) or a commit made outs
 - weft.zip doesn't show `changelog_entries` anywhere yet (a project's public changelog, a "shipped" feed on the
   profile).
 - A reverted commit doesn't unstamp its entries.
+- The Supabase mirror doesn't carry an entry's `files`.
 - Entries on another Mac aren't pulled down; the mirror is one way.
 - Codex threads don't stamp or write: they get no per-tool hooks.

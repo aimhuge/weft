@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
+import { carries, cleanFiles } from "./changelog-files";
 import { globalSingleton } from "./global-singleton";
 import { DATA_DIR } from "./store";
 
@@ -28,6 +29,8 @@ export interface ChangelogEntry {
   // The card that wrote it; none for an entry imported from a CHANGELOG.md.
   cardId?: string;
   cardTitle?: string;
+  // The files it's about, repo-relative: only a commit that touches one stamps it (lib/changelog-files.ts).
+  files?: string[];
   sha?: string;
   committedAt?: number;
   version?: string;
@@ -38,7 +41,8 @@ export type EntryStatus = "draft" | "committed" | "released";
 
 export type ChangelogEvent =
   | ({ t: "add" } & ChangelogEntry)
-  | { t: "edit"; id: string; at: number; text?: string; kind?: ChangeKind }
+  // `sha` corrects a stamp that landed on the wrong commit; `files` replaces the entry's files.
+  | { t: "edit"; id: string; at: number; text?: string; kind?: ChangeKind; sha?: string; files?: string[] }
   | { t: "remove"; id: string; at: number }
   | { t: "stamp"; ids: string[]; sha: string; at: number }
   | { t: "release"; ids: string[]; version: string; at: number };
@@ -81,6 +85,16 @@ function mark(byId: Map<string, ChangelogEntry>, ids: string[], key: "sha" | "ve
   }
 }
 
+export type EntryPatch = { text?: string; kind?: ChangeKind; sha?: string; files?: string[] };
+
+// The fields an edit sets: each one given, and files even when emptied (back to reading the text).
+const editPatch = (p: EntryPatch): EntryPatch => ({
+  ...(p.text ? { text: p.text } : {}),
+  ...(p.kind ? { kind: p.kind } : {}),
+  ...(p.sha ? { sha: p.sha } : {}),
+  ...(p.files ? { files: p.files } : {}),
+});
+
 function apply(byId: Map<string, ChangelogEntry>, event: ChangelogEvent) {
   switch (event.t) {
     case "add":
@@ -88,7 +102,7 @@ function apply(byId: Map<string, ChangelogEntry>, event: ChangelogEvent) {
       return;
     case "edit": {
       const entry = byId.get(event.id);
-      if (entry) byId.set(event.id, { ...entry, ...(event.text ? { text: event.text } : {}), ...(event.kind ? { kind: event.kind } : {}) });
+      if (entry) byId.set(event.id, { ...entry, ...editPatch(event), ...(event.sha ? { committedAt: event.at } : {}) });
       return;
     }
     case "remove":
@@ -140,6 +154,7 @@ export interface NewEntry {
   text: string;
   cardId?: string;
   cardTitle?: string;
+  files?: string[];
   at?: number;
 }
 
@@ -155,20 +170,23 @@ export function addEntry(input: NewEntry, file = changelogFile()): ChangelogEntr
     at: input.at ?? Date.now(),
     ...(input.cardId ? { cardId: input.cardId } : {}),
     ...(input.cardTitle ? { cardTitle: input.cardTitle } : {}),
+    ...(cleanFiles(input.files).length ? { files: cleanFiles(input.files) } : {}),
   };
   appendEvent({ t: "add", ...entry }, file);
   return entry;
 }
 
-// Rewords or recategorises an entry that hasn't been released; a released one is history.
-export function editEntry(id: string, patch: { text?: string; kind?: ChangeKind }, file = changelogFile()): ChangelogEntry {
+// Rewords, recategorises, re-files or re-stamps an entry that hasn't been released; a released one is history. `sha`
+// must already be a full commit sha (the tool resolves it in the project).
+export function editEntry(id: string, patch: EntryPatch, file = changelogFile()): ChangelogEntry {
   const entry = readChangelog(file).find((e) => e.id === id);
   if (!entry) throw new Error(`No changelog entry ${id}.`);
   if (entry.version) throw new Error(`That entry shipped in ${entry.version}; add a new one instead.`);
   if (patch.kind && !isKind(patch.kind)) throw new Error(`kind must be one of ${KINDS.join(", ")}.`);
-  const text = patch.text?.trim() || undefined;
-  appendEvent({ t: "edit", id, at: Date.now(), ...(text ? { text } : {}), ...(patch.kind ? { kind: patch.kind } : {}) }, file);
-  return { ...entry, ...(text ? { text } : {}), ...(patch.kind ? { kind: patch.kind } : {}) };
+  const at = Date.now();
+  const clean = editPatch({ ...patch, text: patch.text?.trim(), files: patch.files && cleanFiles(patch.files) });
+  appendEvent({ t: "edit", id, at, ...clean }, file);
+  return { ...entry, ...clean, ...(clean.sha ? { committedAt: at } : {}) };
 }
 
 export function removeEntry(id: string, file = changelogFile()) {
@@ -178,10 +196,16 @@ export function removeEntry(id: string, file = changelogFile()) {
   appendEvent({ t: "remove", id, at: Date.now() }, file);
 }
 
-// A card's commit landed in a project: its entries there that had no commit yet get this sha. Returns how many.
-export function stampCard(cardId: string, project: string, sha: string, file = changelogFile()): number {
-  const ids = readChangelog(file)
-    .filter((e) => e.cardId === cardId && e.project === project && !e.sha && !e.version)
+// A card's entries in a project that no commit has stamped yet.
+export const draftsOf = (cardId: string, project: string, file = changelogFile()) =>
+  readChangelog(file).filter((e) => e.cardId === cardId && e.project === project && !e.sha && !e.version);
+
+// A commit landed from a card's thread: its drafts there that the commit carries get this sha. `changed` is the paths the
+// commit touched; a draft with files stamps only when one of them is among those (another card's commit in the shared
+// tree leaves it a draft), one without stamps on any. No `changed` (no git to ask) stamps every draft. Returns how many.
+export function stampCard(cardId: string, project: string, sha: string, changed?: readonly string[], file = changelogFile()): number {
+  const ids = draftsOf(cardId, project, file)
+    .filter((e) => !changed || carries(e, changed))
     .map((e) => e.id);
   if (ids.length) appendEvent({ t: "stamp", ids, sha, at: Date.now() }, file);
   return ids.length;

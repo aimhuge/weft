@@ -8,7 +8,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "weft-stamp-"));
 const repo = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "weft-stamp-repo-")));
-const cards: Record<string, { id: string; title?: string; cwd: string }> = { c1: { id: "c1", title: "Card one", cwd: repo } };
+const cards: Record<string, { id: string; title?: string; cwd: string }> = {
+  c1: { id: "c1", title: "Card one", cwd: repo },
+  c2: { id: "c2", title: "Card two", cwd: repo },
+};
 vi.mock("./store", () => ({ DATA_DIR: dir, getCard: (id: string) => cards[id] }));
 
 const { addEntry, changelogFile, readChangelog } = await import("./changelog");
@@ -19,6 +22,7 @@ git("init", "-q");
 git("config", "user.email", "t@t");
 git("config", "user.name", "t");
 const commit = (name: string) => {
+  fs.mkdirSync(path.dirname(path.join(repo, name)), { recursive: true });
   fs.writeFileSync(path.join(repo, name), name);
   git("add", name);
   git("commit", "-qm", name);
@@ -77,7 +81,7 @@ describe("changelog stamp", () => {
     commit("e");
     expect(await post(bash("PostToolUseFailure", "git commit -m x"), "t5", {})).toEqual({});
     expect(readChangelog().find((x) => x.id === e.id)?.sha).toBeUndefined();
-    const other = hooks("c2");
+    const other = hooks("c3");
     expect(await other.pre(bash("PreToolUse", "git commit"), "t6", {})).toEqual({});
     expect(await other.post(bash("PostToolUse", "git commit"), "t6", {})).toEqual({});
     expect(await post(bash("PostToolUse", "git commit"), undefined, {})).toEqual({});
@@ -93,5 +97,63 @@ describe("changelog stamp", () => {
     expect(stampAfterCommit(undefined, repo, "abc")).toBe(0);
     expect(stampAfterCommit("c1", repo, null)).toBe(0);
     for (let i = 0; i < 105; i++) await pre(bash("PreToolUse", "git commit"), `many-${i}`, {});
+  }, 30_000);
+
+  describe("in a shared tree", () => {
+    const sha = () => git("rev-parse", "HEAD");
+    const shaOf = (id: string) => readChangelog().find((x) => x.id === id)?.sha;
+
+    it("leaves a card's draft alone when another card's commit lands from its thread, and stamps it on its own", async () => {
+      const preview = addEntry({ project: repo, kind: "added", text: "**Preview.** Files: `lib/preview.ts`.", cardId: "c1" });
+      const { pre, post } = hooks();
+      await pre(bash("PreToolUse", "git commit -m quota"), "s1", {});
+      commit("lib/quota.ts");
+      const quota = sha();
+      const out = JSON.stringify(await post(bash("PostToolUse", "git commit -m quota"), "s1", {}));
+      expect(shaOf(preview.id)).toBeUndefined();
+      expect(out).toContain(`1 draft entry of this card stayed draft: the commit touched none of its files (${preview.id})`);
+      expect(out).toContain(`sha ${quota.slice(0, 7)}`);
+      await pre(bash("PreToolUse", "git commit -m preview"), "s2", {});
+      commit("lib/preview.ts");
+      const own = sha();
+      const done = JSON.stringify(await post(bash("PostToolUse", "git commit -m preview"), "s2", {}));
+      expect(shaOf(preview.id)).toBe(own);
+      expect(done).toContain(`Weft stamped 1 changelog entry of this card with ${own.slice(0, 7)}`);
+      expect(done).not.toContain("stayed draft");
+    });
+
+    it("stamps each card's entry in a batch commit only when it touched that entry's files", () => {
+      const a = addEntry({ project: repo, kind: "added", text: "a", files: ["app/a"], cardId: "c1" });
+      const b = addEntry({ project: repo, kind: "fixed", text: "b", files: ["lib/b.ts"], cardId: "c2" });
+      commit("app/a/page.tsx");
+      expect(stampAfterCommit("c1", repo, sha())).toBe(1);
+      expect(stampAfterCommit("c2", repo, sha())).toBe(0);
+      expect(shaOf(a.id)).toBe(sha());
+      expect(shaOf(b.id)).toBeUndefined();
+    });
+
+    it("stamps each entry with the commit that carried it when one call lands several, and says so", async () => {
+      const x = addEntry({ project: repo, kind: "added", text: "x", files: ["x.ts"], cardId: "c1" });
+      const y = addEntry({ project: repo, kind: "added", text: "y", files: ["y.ts", "y2.ts"], cardId: "c1" });
+      const { pre, post } = hooks();
+      await pre(bash("PreToolUse", "git commit -m x && git commit -m y"), "s3", {});
+      commit("x.ts");
+      const first = sha();
+      commit("y.ts");
+      const second = sha();
+      const out = JSON.stringify(await post(bash("PostToolUse", "git commit"), "s3", {}));
+      expect(shaOf(x.id)).toBe(first);
+      expect(shaOf(y.id)).toBe(second);
+      expect(out).toContain(`2 changelog entries of this card with ${first.slice(0, 7)}, ${second.slice(0, 7)}`);
+    });
+
+    it("says entries, plural, of drafts left behind", async () => {
+      addEntry({ project: repo, kind: "added", text: "p", files: ["p.ts"], cardId: "c1" });
+      addEntry({ project: repo, kind: "added", text: "q", files: ["q.ts"], cardId: "c1" });
+      const { pre, post } = hooks();
+      await pre(bash("PreToolUse", "git commit"), "s4", {});
+      commit("other.ts");
+      expect(JSON.stringify(await post(bash("PostToolUse", "git commit"), "s4", {}))).toContain("2 draft entries of this card stayed draft: the commit touched none of their files");
+    });
   });
 });

@@ -134,10 +134,10 @@ When a new doc lands in this folder, add it here on the same change.
 - `scripts/check-staged.sh` + `scripts/secret-scan.mjs` + `scripts/staged-imports.mjs`: the pre-commit hook; gitleaks, or without it Weft's own key shapes on each added line,
   then a staged file importing an untracked one (named), then tsc and eslint on a copy of the index (docs/architecture/thread-guards.md). The git guard refuses `--no-verify` and moving `core.hooksPath`.
   The Composer flags a pasted or typed key the same way (`components/SecretPaste.tsx`).
-- `lib/changelog.ts` + `lib/changelog-tool.ts` + `lib/changelog-stamp.ts` + `lib/changelog-write.ts` + `lib/changelog-sync.ts` + `lib/changelog-render.ts` + `app/api/changelog` + `components/ChangelogDialog.tsx`:
+- `lib/changelog.ts` + `lib/changelog-tool.ts` + `lib/changelog-stamp.ts` + `lib/changelog-files.ts` + `lib/changelog-git.ts` + `lib/changelog-write.ts` + `lib/changelog-sync.ts` + `lib/changelog-render.ts` + `app/api/changelog` + `components/ChangelogDialog.tsx`:
   every project's changelog, kept by Weft instead of a CHANGELOG.md every card edits at once. A thread records what it shipped with
   `mcp__board__changelog_add` (an append-only `~/.weft/changelog.jsonl`, mirrored to Supabase `changelog_entries` while signed in); the entry names its card,
-  the card's own commit stamps its sha (draft → committed, a Bash hook in `guardedCli()` and the commit walk-through), and right after it
+  the card's commit that touches its files stamps its sha (draft → committed, `changelog_edit { sha }` corrects one; a Bash hook in `guardedCli()` and the commit walk-through), and right after it
   Weft writes and commits CHANGELOG.md alone, in the background; a commit that bumps package.json's version gets that version's section.
   Nobody runs a release step (`pnpm changelog:release`, `lib/changelog-release.ts`, is only for a bump Weft didn't see). The read-only dialog opens from the project menu and the palette (docs/architecture/changelog.md).
 - `lib/schedule.ts` + `lib/scheduler.ts` + `components/SendLater.tsx`: "Send later" replies; the server sends them at their
