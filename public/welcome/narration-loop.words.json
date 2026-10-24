@@ -1,5 +1,5 @@
 {
- "duration": 30,
+ "duration": 26.4,
  "lines": [
   [
    0,
@@ -22,13 +22,13 @@
    "When a Weft card needs a decision, it moves to the Needs you column."
   ],
   [
-   17.8,
-   23.4,
+   17.3,
+   20.4,
    "Check Weft's work in the Review column."
   ],
   [
-   23.6,
-   29,
+   20.6,
+   25.6,
    "Moving a card to the Done column commits, refactors and deploys."
   ]
  ],
@@ -235,75 +235,75 @@
   ],
   [
    "Check",
-   17.8
+   17.3
   ],
   [
    "Weft's",
-   18.183
+   17.683
   ],
   [
    "work",
-   18.642
+   18.142
   ],
   [
    "in",
-   18.948
+   18.448
   ],
   [
    "the",
-   19.102
+   18.602
   ],
   [
    "Review",
-   19.331
+   18.831
   ],
   [
    "column.",
-   19.791
+   19.291
   ],
   [
    "Moving",
-   23.6
+   20.6
   ],
   [
    "a",
-   24.076
+   21.076
   ],
   [
    "card",
-   24.155
+   21.155
   ],
   [
    "to",
-   24.473
+   21.473
   ],
   [
    "the",
-   24.631
+   21.631
   ],
   [
    "Done",
-   24.869
+   21.869
   ],
   [
    "column",
-   25.187
+   22.187
   ],
   [
    "commits,",
-   25.663
+   22.663
   ],
   [
    "refactors",
-   26.218
+   23.218
   ],
   [
    "and",
-   26.932
+   23.932
   ],
   [
    "deploys.",
-   27.17
+   24.17
   ]
  ]
 }

@@ -1,6 +1,6 @@
 # The welcome tour
 
-The welcome's first screen (Get ready) plays a narrated 106-second tour of Weft, built from three
+The welcome's first screen (Get ready) plays a narrated 93-second tour of Weft, built from three
 [HyperFrames](https://hyperframes.heygen.com) compositions. The same pages render to MP4s for weft.zip.
 The per-drawer intros ([feature-intros.md](feature-intros.md)) are the same idea at one feature each, and share
 this tooling: `scripts/narrate-lib.mjs` (Kokoro plus the pad), `lib/welcome-voice.ts` (`VoicePlayer`, and the one
@@ -14,8 +14,8 @@ This is the tour *inside* the welcome. The dialog around it — the steps, the r
 | Page | Length | What it shows |
 |---|---|---|
 | `intro.html` | 12 s | "Welcome to Weft", the future of AI engineering, the agents it runs on (Claude Code, Codex, Puku AI) |
-| `loop.html` | 30 s | One card from prompt to Done: you click the card and its thread opens, every card has a pane (the plan, then the app), a question in Needs you, Review, Done |
-| `beats.html` | 64.5 s | Connect your tools, the 🔐 vault (Touch ID fills in a key the thread never sees), a pane as a shared live dashboard, code quality and the refactor scout, BlastCP built in (your socials, image, video and voice for a launch post), the Wefter Profile, Weft is open source (make a pull request), "Now let's get started" |
+| `loop.html` | 26.4 s | One card from prompt to Done: you click the card and its thread opens, every card has a pane (the plan, then the app), a question in Needs you, Review, Done |
+| `beats.html` | 54.5 s | Connect your tools, the 🔐 vault (Touch ID fills in a key the thread never sees), a pane as a shared live dashboard, code quality and the refactor scout, BlastCP built in (your socials, image, video and voice for a launch post), the Wefter Profile, Weft is open source (make a pull request), "Now let's get started" |
 
 Each page is plain HTML plus a paused GSAP timeline on `window.__timelines.root`; the renderer seeks it frame by
 frame, so nothing uses timers. `beats.html` draws each scene from its start time and lists them in `SCENES`, so the
@@ -48,7 +48,7 @@ order (build → ship → show) lives in one place; keep it in step with `BEATS`
 `pnpm welcome:narrate` voices every caption with Kokoro (`kokoro-js`, local, `af_heart` at 1.1×; installed in
 `~/.cache/weft-kokoro`, outside the repo), places each clip at its cue with ffmpeg, mixes a soft Am-F-C-G pad
 under it (generated from sine waves, about 10 dB under the voice), and writes `narration-<page>.m4a`. It warns when a
-line runs past its beat. Spell tricky words for the voice ("see-ell-eyes" for CLIs) and check with whisper-cli.
+line runs past its beat. Spell tricky words for the voice ("see-ell-eyes" for CLIs; "APIs" in capitals, since lowercase "apis" reads "uh-peez") and check the phonemes, not just whisper-cli, which tidies acronyms up: `phonemize()` from the `phonemizer` package in `~/.cache/weft-kokoro`.
 `scripts/narrate-lib.mjs` is the shared half (Kokoro, the pad, `--voice=`), used the same way by
 `pnpm intros:narrate` ([feature-intros.md](feature-intros.md)).
 

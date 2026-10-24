@@ -1,13 +1,13 @@
 <!doctype html>
 <!--
   The tour's second half, a HyperFrames composition (https://hyperframes.heygen.com) in the same look as loop.html:
-  0–7.5s connect your tools (GitHub, Vercel, Supabase, Cloudflare link to the project, then a thread uses them),
-  7.5–15s the 🔐 vault (your keys masked, a thread asks for one, Touch ID fills it in, the thread never sees it),
-  15–26.5s the pane (a thread's page as a live dashboard that reaches your database or APIs with keys from the vault,
+  0–5s connect your tools (GitHub, Vercel, Supabase, Cloudflare link to the project, then a thread uses them),
+  5–10.8s the 🔐 vault (your keys masked, a thread asks for one, Touch ID fills it in, the thread never sees it),
+  10.8–22.7s the pane (a thread's page as a live dashboard that reaches your database or APIs with keys from the vault,
   shared as a weft.zip link),
-  26.5–34s code quality (the score climbing, the refactor scout turning a finding into a card), 34–44.5s BlastCP built
-  in (your socials, a launch post with its image, video and voice), 44.5–52s the Wefter Profile (streak, XP, badges at
-  weft.zip/@you), 52–60s Weft is open source (make a pull request), 60–64.5s "Now let's get started". scripts/render-welcome-loop.mjs renders it after loop.html and joins the
+  22.7–28.3s code quality (the score climbing, the refactor scout turning a finding into a card), 28.3–38.6s BlastCP built
+  in (your socials, a launch post with its image, video and voice), 38.6–43.2s the Wefter Profile (streak, XP, badges at
+  weft.zip/@you), 43.2–51s Weft is open source (make a pull request), 51–54.5s "Now let's get started". scripts/render-welcome-loop.mjs renders it after loop.html and joins the
   two into public/brand/weft-tour.mp4 for weft.zip; the welcome itself plays only loop.html.
   ?live=1 plays it on repeat for a preview. Seekable on purpose: counters tween textContent with snap, no timers.
 -->
@@ -186,7 +186,7 @@
 </style>
 </head>
 <body>
-<div id="root" data-composition-id="root" data-width="1920" data-height="800" data-start="0" data-duration="64.5">
+<div id="root" data-composition-id="root" data-width="1920" data-height="800" data-start="0" data-duration="54.5">
 
   <div id="sceneT" class="abs" style="inset:0">
     <div id="tools" class="abs panel">
@@ -267,7 +267,7 @@
       <div class="abs" id="shareBtn">Share…</div>
       <div class="abs" id="shared">✓ weft.zip/a/growth<small>Anyone with the link · always up to date</small></div>
     </div>
-    <div class="abs cap" style="font-size:40px; white-space:normal; width:1700px; line-height:1.16; top:692px">Panes aren't just previews. They can use keys in your <b>vault</b> to connect to your database or APIs,<br>and be shared, so a <b>secure live dashboard</b>, mini-app or game is just a few clicks away.</div>
+    <div class="abs cap" style="font-size:40px; white-space:normal; width:1700px; line-height:1.16; top:692px">Panes aren't just previews. They can use keys in your <b>vault</b> to connect to your database or APIs,<br>so sharing a <b>secure live dashboard</b>, mini-app or game is just a few clicks away.</div>
   </div>
 
   <div id="sceneA" class="abs" style="inset:0">
@@ -363,7 +363,7 @@
 
   <svg id="cursor" class="abs" viewBox="0 0 24 24"><path d="M3 2l7 19 2.6-7.4L20 11z" fill="#fff" stroke="#111" stroke-width="1.2"/></svg>
   <!-- The voiceover (scripts/narrate-welcome.mjs): the renderer mixes it into the MP4; live, the welcome plays it itself. -->
-  <audio id="voice" src="./narration-beats.m4a" data-start="0" data-duration="64.5" data-volume="1"></audio>
+  <audio id="voice" src="./narration-beats.m4a" data-start="0" data-duration="54.5" data-volume="1"></audio>
   <div id="fade" class="abs"></div>
 </div>
 
@@ -409,12 +409,12 @@
     // Tools connect one by one, then the thread's work shows them in use.
     function tools(t) {
       [1, 2, 3, 4].forEach(function (n, i) {
-        var at = t + 0.9 + i * 0.6;
+        var at = t + 0.6 + i * 0.4;
         tl.to("#t" + n + "off", { opacity: 0, duration: 0.2 }, at).fromTo("#t" + n + "on", { opacity: 0, scale: 0.85 }, { opacity: 1, scale: 1, duration: 0.3, ease: "back.out(2)" }, at);
       });
-      tl.fromTo("#u1", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.35 }, t + 3.5)
-        .fromTo("#u2", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.35 }, t + 4.3)
-        .fromTo("#u3", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.35 }, t + 5.1);
+      tl.fromTo("#u1", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.35 }, t + 2.3)
+        .fromTo("#u2", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.35 }, t + 2.8)
+        .fromTo("#u3", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.35 }, t + 3.3);
     }
 
     // The vault: your keys appear masked, a thread asks for one, macOS's Touch ID prompt allows it, and it is filled in
@@ -498,9 +498,9 @@
         .to("#today", { textContent: 681, snap: { textContent: 1 }, duration: 1.2 }, t + 0.9)
         .fromTo("#shape", { scale: 0.1, svgOrigin: "310 300" }, { scale: 1, duration: 1.2, ease: "back.out(1.4)" }, t + 1.1);
       document.querySelectorAll("#prof .fill").forEach(function (el, i) { tl.fromTo(el, { width: 0 }, { width: el.dataset.w, duration: 0.6, ease: "power2.out" }, t + 0.9 + i * 0.2); });
-      tl.to("#badgeN", { textContent: 22, snap: { textContent: 1 }, duration: 0.1 }, t + 4.1)
-        .fromTo("#toast", { opacity: 0, y: -10 }, { opacity: 1, y: 0, duration: 0.3 }, t + 4.1)
-        .to("#toast", { opacity: 0, duration: 0.3 }, t + 6.5);
+      tl.to("#badgeN", { textContent: 22, snap: { textContent: 1 }, duration: 0.1 }, t + 2.9)
+        .fromTo("#toast", { opacity: 0, y: -10 }, { opacity: 1, y: 0, duration: 0.3 }, t + 2.9)
+        .to("#toast", { opacity: 0, duration: 0.3 }, t + 4.1);
     }
 
     // Weft is open source: the repo, why you'd send a change, and your pull request going Open → Merged.
@@ -524,20 +524,20 @@
     function cta(t) {
       tl.fromTo("#cta", { y: 24 }, { y: 0, duration: 0.6, ease: "power2.out" }, t)
         .fromTo("#ctaNext", { opacity: 0, scale: 0.8 }, { opacity: 1, scale: 1, duration: 0.4, ease: "back.out(2)" }, t + 1.1)
-        .to("#ctaNext", { scale: 1.06, duration: 0.4, yoyo: true, repeat: 3 }, t + 1.7);
+        .to("#ctaNext", { scale: 1.06, duration: 0.4, yoyo: true, repeat: 1 }, t + 1.7);
     }
 
     // The order, build → ship → show: each scene's beat (lib/welcome-loop.ts BEATS), element and length in seconds.
     // The voiceover's cues (scripts/narrate-welcome.mjs) follow these starts.
     var SCENES = [
-      ["tools", "#sceneT", 7.5, tools],
-      ["vault", "#sceneV", 7.5, vault],
-      ["pane", "#sceneP", 11.5, pane],
-      ["quality", "#sceneB", 7.5, quality],
-      ["blastcp", "#sceneK", 10.5, blastcp],
-      ["profile", "#sceneA", 7.5, profile],
-      ["opensource", "#sceneO", 8, opensource],
-      ["cta", "#sceneC", 4.5, cta],
+      ["tools", "#sceneT", 5, tools],
+      ["vault", "#sceneV", 5.8, vault],
+      ["pane", "#sceneP", 11.9, pane],
+      ["quality", "#sceneB", 5.6, quality],
+      ["blastcp", "#sceneK", 10.3, blastcp],
+      ["profile", "#sceneA", 4.6, profile],
+      ["opensource", "#sceneO", 7.8, opensource],
+      ["cta", "#sceneC", 3.5, cta],
     ];
     var at = 0, beats = [];
     SCENES.forEach(function (scene, i) {
