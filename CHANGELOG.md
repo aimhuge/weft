@@ -63,6 +63,7 @@ lands; a release moves those lines under its version and tags the commit `vX.Y.Z
 ### Removed
 
 - **(Superseded) The plan limits were treated as per CLI again, so a puku card never showed Claude's numbers.** That change treated Claude Code and puku-cli as two separate plans: it copied only each CLI's newest reading onto that CLI and drew the chart from each CLI's own history. It rested on two limit-log rows that do not prove a shared plan — and it was wrong: Claude Code and puku-cli read the *same* Anthropic subscription's 5-hour and weekly windows, so the plan limits are one pool per account. The reading belongs to the CLI that made it; the window belongs to the plan. The model that replaced this one is described in the entry "The plan limits are one pool per account" (`lib/plan-pools.ts`, `lib/plan-limits.ts`, `app/api/limits/route.ts`, `components/LimitBurndown.tsx`, `lib/use-start-gate.ts`).
+- **No more coach tips over the board.** The one-time bubbles under the Needs you, Review and Done headers are gone. That includes the last one, which opened your Wefter Profile. An empty board still offers its Start your first thread panel. Reset tips and Replay the welcome now bring back just the drawer intro videos and the ask to sync. The welcome's last screen no longer promises the column tips (`components/EmptyBoardStart.tsx`, `components/Board.tsx`, `lib/welcome-client.ts`, `components/WelcomeFooter.tsx`).
 
 ### Security
 
