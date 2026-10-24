@@ -20,6 +20,10 @@ export interface AppPreview {
   // What the preview was made from (the page's blob, the site's address, the folder entry's sha), so a changed page
   // gets a fresh one.
   of?: string;
+  // When it was made (ms), so a data app's picture is taken again once its numbers have moved (lib/app-preview-capture.ts).
+  at?: number;
+  // When the last capture failed (ms), so a preview that should have a picture tries again sooner (PREVIEW_RETRY_MS).
+  shotFailedAt?: number;
   by?: { title?: PreviewSource; description?: PreviewSource; image?: PreviewSource };
 }
 
@@ -160,6 +164,8 @@ export function mergePreview(input: {
   weft?: { description?: string };
   shot?: string;
   of?: string;
+  at?: number;
+  shotFailedAt?: number;
 }): AppPreview {
   const title = pick([input.app?.title, "app"], [input.page?.title, "page"]);
   const description = pick(
@@ -170,7 +176,16 @@ export function mergePreview(input: {
   );
   const image = pick([input.app?.image, "app"], [input.page?.image, "page"]);
   const by = { title: title.by, description: description.by, image: image.by };
-  return cleanPreview({ title: title.value, description: description.value, image: image.value, shot: input.shot, of: input.of, by }) ?? {};
+  return cleanPreview({
+    title: title.value,
+    description: description.value,
+    image: image.value,
+    shot: input.shot,
+    of: input.of,
+    at: input.at,
+    shotFailedAt: input.shotFailedAt,
+    by,
+  }) ?? {};
 }
 
 function cleanBy(raw: unknown): AppPreview["by"] | undefined {
@@ -184,19 +199,42 @@ function cleanBy(raw: unknown): AppPreview["by"] | undefined {
   return Object.keys(by).length ? by : undefined;
 }
 
+// When the preview was made (ms), as the row may hold it: a whole number of milliseconds, or nothing.
+function cleanAt(raw: unknown): number | undefined {
+  if (typeof raw !== "number" || !Number.isFinite(raw) || raw <= 0) return undefined;
+  return Math.round(raw);
+}
+
+// The two pointers a preview carries: the capture it was made from, as a blob ref, and what it was made from.
+function cleanPointers(raw: Record<string, unknown>): { shot?: string; of?: string } {
+  const pointers: { shot?: string; of?: string } = {};
+  if (typeof raw.shot === "string" && BLOB_REF.test(raw.shot)) pointers.shot = raw.shot;
+  if (typeof raw.of === "string" && raw.of.length <= 2100) pointers.of = raw.of;
+  return pointers;
+}
+
+// When the last capture failed, as the row may hold it: a whole number of milliseconds, or nothing.
+function cleanShotFailedAt(raw: unknown): number | undefined {
+  if (typeof raw !== "number" || !Number.isFinite(raw) || raw <= 0) return undefined;
+  return Math.round(raw);
+}
+
 // A preview read back from the row, as weft.zip and the dialog trust it: plain strings at their caps, only https or
 // blob pictures, a shot only as a blob ref. Anything else is dropped; null when nothing is left.
 export function cleanPreview(raw: unknown): AppPreview | null {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   const r = raw as Record<string, unknown>;
-  const shot = typeof r.shot === "string" && BLOB_REF.test(r.shot) ? r.shot : undefined;
-  const of = typeof r.of === "string" && r.of.length <= 2100 ? r.of : undefined;
+  const { shot, of } = cleanPointers(r);
+  const at = cleanAt(r.at);
+  const shotFailedAt = cleanShotFailedAt(r.shotFailedAt);
   const preview: AppPreview = {
     ...(cleanText(r.title, PREVIEW_TITLE_MAX) ? { title: cleanText(r.title, PREVIEW_TITLE_MAX) } : {}),
     ...(cleanText(r.description, PREVIEW_DESCRIPTION_MAX) ? { description: cleanText(r.description, PREVIEW_DESCRIPTION_MAX) } : {}),
     ...(cleanImage(r.image) ? { image: cleanImage(r.image) } : {}),
     ...(shot ? { shot } : {}),
     ...(of ? { of } : {}),
+    ...(at ? { at } : {}),
+    ...(shotFailedAt ? { shotFailedAt } : {}),
   };
   const by = cleanBy(r.by);
   if (by) preview.by = by;

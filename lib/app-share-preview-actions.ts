@@ -1,6 +1,8 @@
 // The Share dialog's link preview (components/ShareAppPreview.tsx, through app/api/apps/share/preview): the card a
 // chat would show, drawn here from this Mac's capture so it matches weft.zip's /api/a/<id>/og; your own description;
 // and Refresh preview, which makes it again even though the page hasn't changed. lib/app-preview-capture.ts does the work.
+// The drawn card is cached beside the capture, keyed by what it shows, so opening the dialog again doesn't redraw it.
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { appCardImage, imageDataUrl } from "./app-card-image";
@@ -23,6 +25,12 @@ export async function describeApp(appId: string, text: string | null): Promise<A
   const { t, row, now } = await shared(appId);
   await setPreviewDescription(t, row, now, text);
   return getAppShare(appId);
+}
+
+// The background refresh (lib/app-preview-refresh.ts): makes the preview again only when it's stale, and waits for it.
+export async function refreshIfStale(appId: string): Promise<void> {
+  const { t, row, now } = await shared(appId);
+  await refreshAppPreview(t, row, now);
 }
 
 export async function refreshPreview(appId: string): Promise<AppShareState> {
@@ -54,13 +62,33 @@ function folderImage(t: Ready, files: Record<string, string> | null, preview: Ap
   return bytes ? imageDataUrl(bytes) : null;
 }
 
-async function drawCard(input: Parameters<typeof appCardImage>[0]): Promise<string> {
+async function drawCard(input: Parameters<typeof appCardImage>[0]): Promise<ArrayBuffer> {
   try {
-    return imageDataUrl(await (await appCardImage(input)).arrayBuffer());
+    return await (await appCardImage(input)).arrayBuffer();
   } catch {
     // twemoji is fetched; offline, the glyph falls back to a letter.
-    return imageDataUrl(await (await appCardImage(input, { emoji: false })).arrayBuffer());
+    return (await appCardImage(input, { emoji: false })).arrayBuffer();
   }
+}
+
+// The card for these words and this capture, from the cache when it was drawn before; one file per app, replaced.
+export function cardCachePath(appId: string, key: string): string {
+  return shotPath(appId).replace(/\.png$/, `.card-${key}.png`);
+}
+
+async function cachedCard(appId: string, input: Parameters<typeof appCardImage>[0], shotRef: string | undefined): Promise<string> {
+  const key = crypto.createHash("sha256").update(JSON.stringify([{ ...input, shot: undefined }, shotRef ?? null])).digest("hex").slice(0, 16);
+  const file = cardCachePath(appId, key);
+  const hit = readBytes(file);
+  if (hit) return imageDataUrl(hit);
+  const bytes = await drawCard(input);
+  const dir = path.dirname(file);
+  const prefix = path.basename(shotPath(appId)).replace(/\.png$/, ".card-");
+  for (const old of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (old.isFile() && old.name.startsWith(prefix)) fs.rmSync(path.join(dir, old.name), { force: true });
+  }
+  fs.writeFileSync(file, Buffer.from(bytes));
+  return imageDataUrl(bytes);
 }
 
 // What the link unfurls as, for the dialog: the app's or page's own picture, else the branded card.
@@ -72,6 +100,8 @@ export async function previewCard(appId: string): Promise<{ image: string | null
   const own = folderImage(t, now.files, preview);
   if (own) return { image: own, preview };
   const shot = preview.shot ? readBytes(shotPath(appId)) : null;
-  const image = await drawCard({ name: t.app.name, title: preview.title, description: preview.description, byline: await byline(t, row), shot });
+  const input = { name: t.app.name, title: preview.title, description: preview.description, byline: await byline(t, row), shot };
+  fs.mkdirSync(path.dirname(shotPath(appId)), { recursive: true });
+  const image = await cachedCard(appId, input, shot ? preview.shot : undefined);
   return { image, preview };
 }

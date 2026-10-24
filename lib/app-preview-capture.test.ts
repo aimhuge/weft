@@ -10,6 +10,7 @@ import {
   folderFixture as makeFolderFixture,
   folderPage as makeFolderPage,
   LONG_PAGE,
+  previewPage,
   sitePage as makeSitePage,
   stubSite,
 } from "./app-preview-capture.test-helpers";
@@ -61,7 +62,7 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "weft-preview-capture-"));
 process.env.WEFT_DATA = path.join(tmp, "data");
 
 const { DATA_DIR } = await import("./store");
-const { buildPreview, isPreviewing, previewKey, readPageHtml, refreshAppPreview, resolveImage, setPreviewDescription, shotPath } =
+const { buildPreview, isPreviewing, previewKey, readPageHtml, refreshAppPreview, setPreviewDescription, shotPath, PREVIEW_MAX_AGE_MS, PREVIEW_RETRY_MS } =
   await import("./app-preview-capture");
 const { complete } = await import("./haiku");
 const { shell } = await import("./browser-tools");
@@ -87,11 +88,11 @@ afterEach(() => {
 
 describe("previewKey and shotPath", () => {
   it("is the folder entry's sha, the site's address, or the blob ref", () => {
-    expect(previewKey({ kind: "folder", page: "index.html", files: { "index.html": "abc" } })).toBe("abc");
-    expect(previewKey({ kind: "folder", page: "index.html", files: null })).toBe("index.html");
-    expect(previewKey({ kind: "folder", page: "index.html", files: {} })).toBe("index.html");
-    expect(previewKey({ kind: "site", page: "https://example.com/app", files: null })).toBe("https://example.com/app");
-    expect(previewKey({ kind: "blob", page: "blob:sha256:deadbeef", files: null })).toBe("blob:sha256:deadbeef");
+    expect(previewKey(previewPage("folder", "index.html", { "index.html": "abc" }))).toBe("abc");
+    expect(previewKey(previewPage("folder", "index.html"))).toBe("index.html");
+    expect(previewKey(previewPage("folder", "index.html", {}))).toBe("index.html");
+    expect(previewKey(previewPage("site", "https://example.com/app"))).toBe("https://example.com/app");
+    expect(previewKey(previewPage("blob", "blob:sha256:deadbeef"))).toBe("blob:sha256:deadbeef");
   });
 
   it("keeps the capture in a png under the data dir, with the id's odd characters replaced", () => {
@@ -141,37 +142,8 @@ describe("readPageHtml", () => {
   });
 });
 
-describe("resolveImage", () => {
-  const sha = "a".repeat(64);
-
-  it("keeps an absolute https address, and makes a protocol-relative one absolute", () => {
-    expect(resolveImage("https://cdn.example.com/a.png", sitePage(), null)).toBe("https://cdn.example.com/a.png");
-    expect(resolveImage("//cdn.example.com/a.png", sitePage(), null)).toBe("https://cdn.example.com/a.png");
-  });
-
-  it("resolves a site's relative path against the site, and drops one it can't resolve", () => {
-    expect(resolveImage("/a.png", sitePage("https://example.com/dir/app"), null)).toBe("https://example.com/a.png");
-    expect(resolveImage("a.png", sitePage("not a url"), null)).toBeUndefined();
-  });
-
-  it("turns a folder's relative picture into its blob ref", () => {
-    expect(resolveImage("assets/a.png", folderPage("/tmp/app"), { "assets/a.png": sha })).toBe(`blob:sha256:${sha}`);
-    expect(resolveImage("./assets/a.png", folderPage("/tmp/app"), { "assets/a.png": sha })).toBe(`blob:sha256:${sha}`);
-  });
-
-  it("refuses a path that climbs out of the folder, and a name that isn't a picture", () => {
-    expect(resolveImage("../outside.png", folderPage("/tmp/app"), { "../outside.png": sha })).toBeUndefined();
-    expect(resolveImage("notes.txt", folderPage("/tmp/app"), { "notes.txt": sha })).toBeUndefined();
-  });
-
-  it("drops a blob kind's relative name, and nothing at all", () => {
-    expect(resolveImage("a.png", blobPage("/tmp/page.html"), { "a.png": "b" })).toBeUndefined();
-    expect(resolveImage(undefined, sitePage(), null)).toBeUndefined();
-  });
-});
-
 describe("buildPreview", () => {
-  const now = { kind: "site", page: "https://example.com/app", files: null };
+  const now = previewPage("site", "https://example.com/app");
 
   it("takes the page's own description and never asks Haiku", async () => {
     stubSite('<meta property="og:description" content="A page about growth."><p>text</p>');
@@ -247,7 +219,7 @@ describe("buildPreview", () => {
     const folder = folderFixture(JSON.stringify({
       title: "From the app", description: "The app's own words.", image: "https://cdn.example.com/a.png",
     }));
-    const preview = await buildPreview(folderPage(folder), { kind: "folder", page: "index.html", files: null }, "o1", null);
+    const preview = await buildPreview(folderPage(folder), previewPage("folder", "index.html"), "o1", null);
     expect(preview.title).toBe("From the app");
     expect(preview.description).toBe("The app's own words.");
     expect(preview.by?.description).toBe("app");
@@ -256,21 +228,22 @@ describe("buildPreview", () => {
 
   it("keeps going when weft-app.json isn't there, or isn't json", async () => {
     const folder = folderFixture();
-    const none = await buildPreview(folderPage(folder), { kind: "folder", page: "index.html", files: null }, "o1", null);
+    const none = await buildPreview(folderPage(folder), previewPage("folder", "index.html"), "o1", null);
     expect(none.by?.description).toBeUndefined();
 
     fs.writeFileSync(path.join(folder, "weft-app.json"), "{not json");
-    const broken = await buildPreview(folderPage(folder), { kind: "folder", page: "index.html", files: null }, "o1", null);
+    const broken = await buildPreview(folderPage(folder), previewPage("folder", "index.html"), "o1", null);
     expect(broken.by?.description).toBeUndefined();
   });
 });
 
 describe("refreshAppPreview", () => {
-  const now = { kind: "site", page: "https://example.com/app", files: null };
+  const now = previewPage("site", "https://example.com/app");
 
-  it("skips a page that hasn't changed since the last preview", async () => {
+  it("skips a page whose preview is still fresh", async () => {
     const fetchMock = stubSite("<p>text</p>");
-    await refreshAppPreview(sitePage(), { id: "row1", preview: { of: "https://example.com/app" } }, now);
+    const fresh = { of: "https://example.com/app", at: Date.now(), shot: "blob:sha256:old", title: "Old" };
+    await refreshAppPreview(sitePage(), { id: "row1", preview: fresh }, now);
     expect(state.writes).toEqual([]);
     expect(fetchMock).not.toHaveBeenCalled();
   });
@@ -284,6 +257,28 @@ describe("refreshAppPreview", () => {
     state.writes = [];
     await refreshAppPreview(sitePage(), { id: "row1", preview: { of: "https://example.com/app" } }, now, true);
     expect(state.writes).toHaveLength(1);
+  });
+
+  it("makes one again when the preview is older than PREVIEW_MAX_AGE_MS", async () => {
+    stubSite("<p>text</p>");
+    const old = { of: "https://example.com/app", at: Date.now() - PREVIEW_MAX_AGE_MS - 1000, shot: "blob:sha256:old" };
+    await refreshAppPreview(sitePage(), { id: "row1", preview: old }, now);
+    expect(state.writes).toHaveLength(1);
+  });
+
+  it("makes one again sooner when the last capture failed and there's still no picture", async () => {
+    stubSite("<p>text</p>");
+    const noShot = { of: "https://example.com/app", at: Date.now() - PREVIEW_RETRY_MS - 1000 };
+    await refreshAppPreview(sitePage(), { id: "row1", preview: noShot }, now);
+    expect(state.writes).toHaveLength(1);
+  });
+
+  it("leaves a failed preview alone before PREVIEW_RETRY_MS", async () => {
+    const fetchMock = stubSite("<p>text</p>");
+    const noShot = { of: "https://example.com/app", at: Date.now() - PREVIEW_RETRY_MS + 60_000 };
+    await refreshAppPreview(sitePage(), { id: "row1", preview: noShot }, now);
+    expect(state.writes).toEqual([]);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("runs one at a time per app: a second call while the first runs waits", async () => {
@@ -326,7 +321,7 @@ describe("refreshAppPreview", () => {
 });
 
 describe("setPreviewDescription", () => {
-  const now = { kind: "site", page: "https://example.com/app", files: null };
+  const now = previewPage("site", "https://example.com/app");
 
   it("saves what you typed, and says you wrote it", async () => {
     await setPreviewDescription(sitePage(), { id: "row1" }, now, "  My own words.  ");

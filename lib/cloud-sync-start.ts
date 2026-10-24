@@ -1,8 +1,10 @@
 // Server start (lib/copilot.ts prewarm): the outbox on the account's client, with a blob store made the first
-// time a flush needs one, and the inbox that runs cards started on the weft.zip board. Until a folder is in
+// time a flush needs one, the inbox that runs cards started on the weft.zip board, and the timer that keeps shared
+// mini apps' link previews current (lib/app-preview-refresh.ts). Until a folder is in
 // settings `syncFolders` the listener drops every event and the inbox holds nothing open, so this costs nothing
 // on a board that doesn't sync (docs/architecture/cloud-sync.md).
 import { accountClient } from "./account";
+import { startPreviewRefresh } from "./app-preview-refresh";
 import { createBlobStore, type BlobStoreBundle } from "./blob-store";
 import type { BlobStore } from "./cloud-sync-types";
 import { startCloudInbox } from "./cloud-inbox";
@@ -18,7 +20,9 @@ export function startAccountCloudSync(): () => void {
   };
   const stopSync = startCloudSync({ blobs: lazy });
   const stopInbox = startCloudInbox();
+  const stopPreviews = startPreviewRefresh();
   return () => {
+    stopPreviews();
     stopInbox();
     stopSync();
   };

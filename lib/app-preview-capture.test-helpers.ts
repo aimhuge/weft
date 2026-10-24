@@ -7,6 +7,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { vi } from "vitest";
 
+import type { AppShareKind } from "./app-share-types";
+
 // The mocked shell (Electron's control server), Haiku and the blob store, and the row's write.
 export interface CaptureState {
   shell: { png?: unknown } | null;
@@ -81,6 +83,14 @@ export function stubSite(html: string, contentType = "text/html") {
 
 // A page with enough words for Haiku to be asked about it.
 export const LONG_PAGE = "<p>A page with quite a lot of words on it, more than forty characters in all.</p>";
+
+// The page a preview is made from (lib/app-preview-capture.ts's PreviewPage): a site's address, a blob
+// ref, or a folder app's entry and its files.
+export const previewPage = (
+  kind: AppShareKind,
+  page: string,
+  files: Record<string, string> | null = null,
+): { kind: AppShareKind; page: string; files: Record<string, string> | null } => ({ kind, page, files });
 
 // A folder app on disk, with a weft-app.json when one is given.
 export function folderFixture(sandbox: string, manifest?: string) {

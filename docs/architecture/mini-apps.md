@@ -33,6 +33,11 @@ A mini app is a page from the browser pane, saved so it is one click away on the
 
 ## Sharing an app
 
+Views are unlimited and links uncounted on every plan; a plan caps the bytes a workspace's open links serve
+(Free 25 MB, Pro, Open Source and Education 1 GB, Team 5 GB), enforced by a database trigger and shown in
+the Share dialog. Public links' pages are framed at versioned URLs that Vercel's CDN caches, and the
+uncached path is rate-capped for bots: mini-app-hosting.md "Access, plans and limits".
+
 A mini app link lives under its owner: `weft.zip/@<username>/apps/<slug>` (you, the sharer's username) or
 `weft.zip/<org-slug>/apps/<slug>` (a workspace you're a member of). `weft.zip/a/<id>` keeps working for any
 pre-slug link.
@@ -99,7 +104,8 @@ pre-slug share; the same `SharedApp.tsx` body draws it without an owner.
 
 A public app link unfurls as itself in Slack, X or iMessage, not as Weft's generic card. The row's `preview`
 jsonb (`supabase/migrations/20261023150831_app_share_preview.sql`, at most 4 KB) holds a title, a description,
-a picture and what they were made from (`lib/app-preview.ts`). For each field, the first source that exists wins:
+a picture, what they were made from (`of`), when (`at`, ms) and when the last capture failed (`shotFailedAt`, ms)
+(`lib/app-preview.ts`). For each field, the first source that exists wins:
 
 | Field | 1. You | 2. The app | 3. The page | 4. Weft |
 | --- | --- | --- | --- | --- |
@@ -112,15 +118,24 @@ a picture and what they were made from (`lib/app-preview.ts`). For each field, t
   changed since the last preview (`of`: the page's blob ref, the site's address, or the folder entry's sha), the
   preview is older than `PREVIEW_MAX_AGE_MS` (6 h, so a data app's picture is taken again once its numbers have
   moved), or it should have a capture and has none (the desktop app was down, the page wouldn't load) and
-  `PREVIEW_RETRY_MS` (30 min) has passed. The capture is
+  `PREVIEW_RETRY_MS` (30 min) has passed. A capture that failed leaves `shotFailedAt`, so it is retried after
+  `PREVIEW_RETRY_MS` too, even though the last picture is still on the row. A preview with no `at` is stale, and one
+  that has a picture of its own is never retried early. The capture is
   `POST /page/snapshot` on the control server (`electron/page-snapshot.cjs`): the app in a hidden, sandboxed
   1200×630 window, on its own in-memory session (none of the pane's sign-ins), no popups or cross-site
   navigation, muted, one at a time. The PNG is saved to `~/.weft/app-previews/<app id>.png` and uploaded to
-  weft-blobs like any page. No capture is taken when the app or page names its own picture.
-- **Kept current on a timer** (`lib/app-preview-refresh.ts`). With cloud sync running, a timer walks the apps
-  that have a share and refreshes each stale one, one app at a time so the hidden capture window and Haiku
-  never pile up. A refresh of an unchanged page reuses what the last one had: Haiku's sentence stays (it only
-  runs again for a page that changed), and a capture that fails this time keeps the last one.
+  weft-blobs like any page. No capture is taken when the app or page names its own picture. One preview at a
+  time per app: a second call while the first runs is dropped, and the state says `previewing`.
+- **Kept current on a timer** (`lib/app-preview-refresh.ts`). Started and stopped with cloud sync
+  (`lib/cloud-sync-start.ts`), it walks the apps that have a share and refreshes each stale one, one app at a
+  time so the hidden capture window and Haiku never pile up. The first tick is 2 min in (`FIRST_REFRESH_MS`),
+  then every 15 min (`REFRESH_MS`); a tick that lands while the last walk is still running is skipped, and an app
+  that can't refresh (signed out, no longer shared) is skipped for that tick. A tick hashes each shared app's files to
+  know whether the page changed; the sha is cached by path, size and mtime (`lib/app-file-sha.ts`), so a tick that
+  changes nothing reads nothing. A refresh of an unchanged page
+  reuses what the last one had (`fromSamePage`): Haiku's sentence stays (it only runs again for a page that
+  changed), and a capture that fails this time keeps the last one and leaves `shotFailedAt`, so the next tick
+  tries again.
 - **Read on weft.zip, for public links only** (`lib/app-share-meta.ts`). The three share routes'
   `generateMetadata` is `"use cache"` on params alone (it never reads the gate's cookie, so the shell still
   prerenders; `lib/prerender-check.ts`) and returns the title, description, Open Graph and Twitter tags. A
@@ -136,11 +151,12 @@ a picture and what they were made from (`lib/app-preview.ts`). For each field, t
   makes it again, and the description is editable. Yours is kept over every refresh (`by.description: "you"`),
   and clearing it hands the description back to the page and Haiku. While the Mac is working, the state says
   `previewing` and the dialog asks again every 4 s. The drawn card is cached beside the capture
-  (`~/.weft/app-previews/<app id>.card-<hash>.png`, one per app, keyed by what it shows), so opening the dialog
-  again doesn't redraw it.
+  (`~/.weft/app-previews/<app id>.card-<hash>.png`, one per app, the hash taken from what the card shows and
+  the capture's blob ref), so opening the dialog again doesn't redraw it; a new card replaces the old file.
 - **A save doesn't re-upload the page** (`lib/app-share-row.ts` `pageForWrite`). Changing who may open a link
   doesn't change the page, so the bytes go up only when the row doesn't already point at them under this
-  workspace: a folder app is one storage round trip per file, and a save used to make them all again.
+  workspace (the page and its file map, compared with `sameFiles`): a folder app is one storage round trip per
+  file, and a save used to make them all again.
 
 Schema: `supabase/migrations/20261018131912_app_shares.sql`, then `20261019095618_app_hosting.sql` and
 `20261019120202_app_share_move_owner.sql`. `cloud_app_shares` is one row per (workspace, sharer, app) and

@@ -2,7 +2,7 @@
 // disk, and turn the answer into an AppShareState the dialog can render. lib/app-share.ts is the
 // entry point; this file is the row-only toolkit so the entry can stay under the 300-line cap.
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { sha256Of } from "./blob-store";
+import { sha256Cached } from "./app-file-sha";
 import { createBlobStore } from "./blob-store";
 import { BLOB_REF_PREFIX } from "./cloud-sync-types";
 import { AppShareError } from "./app-share-errors";
@@ -79,14 +79,14 @@ export async function currentPage(
     const files: Record<string, string> = {};
     const store = createBlobStore({ client: t.client });
     for (const file of t.page.files) {
-      const sha = await sha256Of(file.absolute);
+      const sha = await sha256Cached(file.absolute);
       if (!sha) throw new AppShareError(`${file.relative} is gone.`, 404);
       if (upload) await store.upload(file.absolute, orgId);
       files[file.relative] = sha;
     }
     return { kind: "folder", page: t.page.entry, files, manifest: t.page.manifest };
   }
-  const sha = await sha256Of(t.page.local);
+  const sha = await sha256Cached(t.page.local);
   if (!sha) throw new AppShareError("This app's page is gone.", 404);
   if (upload) await createBlobStore({ client: t.client }).upload(t.page.local, orgId);
   return { kind: "blob", page: `${BLOB_REF_PREFIX}${sha}${t.page.hash}`, files: null, manifest: null };

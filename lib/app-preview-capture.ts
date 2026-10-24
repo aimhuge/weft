@@ -2,13 +2,17 @@
 // tags, the folder's weft-app.json, a Haiku sentence when neither says what the app is, and a 1200×630 capture from
 // a hidden window in Electron main (electron/page-snapshot.cjs), uploaded as a blob, into cloud_app_shares.preview.
 // In the background: the Share dialog never waits for it, and asks again while isPreviewing() says it's running.
-// A page that hasn't changed since the last preview (`of`) isn't looked at again unless you ask (Refresh preview).
+// It's made again when the page changed since the last one (`of`), when it's older than PREVIEW_MAX_AGE_MS (a data
+// app's numbers move while its page doesn't; lib/app-preview-refresh.ts checks every shared app on a timer), sooner
+// when the last capture failed (PREVIEW_RETRY_MS), and whenever you ask (Refresh preview). Haiku only runs again for
+// a changed page. A failed capture keeps the last picture and leaves `shotFailedAt`, so the retry is never lost.
 import fs from "node:fs";
 import path from "node:path";
 import {
   authorPreview, cleanImage, cleanPreview, descriptionPrompt, mergePreview, MIN_TEXT_FOR_SUMMARY, pageMeta,
   parseDescription, type AppPreview, type PageMeta,
 } from "./app-preview";
+import type { AppShareKind } from "./app-share-types";
 import type { Ready } from "./app-share-row";
 import { shell } from "./browser-tools";
 import { createBlobStore } from "./blob-store";
@@ -23,7 +27,7 @@ export interface PreviewTarget {
   org_id?: string;
 }
 export interface PreviewPage {
-  kind: string;
+  kind: AppShareKind;
   page: string;
   files: Record<string, string> | null;
 }
@@ -32,6 +36,20 @@ const HTML_MAX = 2 * 1024 * 1024;
 const SITE_TIMEOUT_MS = 8000;
 const IMAGE_EXT = /\.(png|jpe?g|webp|gif)$/i;
 const previewing = new Set<string>();
+
+// How long a preview stands before it's made again, and how soon a preview that should have a capture but has none
+// (the desktop app was down, the page wouldn't load) tries again.
+export const PREVIEW_MAX_AGE_MS = 6 * 60 * 60 * 1000;
+export const PREVIEW_RETRY_MS = 30 * 60 * 1000;
+
+// Whether the preview needs making again: a changed page, its age, or a capture that failed (or never came).
+export function isStale(current: AppPreview | null, key: string, now = Date.now()): boolean {
+  if (!current || current.of !== key || !current.at) return true;
+  const age = now - current.at;
+  if (age >= PREVIEW_MAX_AGE_MS) return true;
+  if (current.shotFailedAt && now - current.shotFailedAt >= PREVIEW_RETRY_MS) return true;
+  return !current.shot && !current.image && age >= PREVIEW_RETRY_MS;
+}
 
 export function isPreviewing(appId: string): boolean {
   return previewing.has(appId);
@@ -125,6 +143,16 @@ async function writePreview(t: Ready, rowId: string, preview: AppPreview): Promi
   if (error) throw new Error(error.message);
 }
 
+// What the last preview of this same page already had: Haiku's sentence and the capture. A refresh of an
+// unchanged page reuses them, so Haiku only runs for a page that changed and a failed capture keeps the last one.
+function fromSamePage(current: AppPreview | null, key: string): { description?: string; shot?: string } {
+  if (!current || current.of !== key) return {};
+  const kept: { description?: string; shot?: string } = {};
+  if (current.by?.description === "weft") kept.description = current.description;
+  if (current.shot) kept.shot = current.shot;
+  return kept;
+}
+
 // The preview for what the page is now, from every source; `you` keeps a description typed in the dialog.
 export async function buildPreview(t: Ready, now: PreviewPage, orgId: string, current: AppPreview | null): Promise<AppPreview> {
   const meta = pageMeta(await readPageHtml(t));
@@ -133,16 +161,23 @@ export async function buildPreview(t: Ready, now: PreviewPage, orgId: string, cu
   const app = { ...author, image: resolveImage(author.image, t, now.files) };
   const page = { title: meta.title, description: meta.description, image: resolveImage(meta.image, t, now.files) };
   const needsWords = !you?.description && !app.description && !page.description;
-  const weft = needsWords ? { description: await describe(t.app.name, meta) } : undefined;
-  const shot = app.image || page.image ? undefined : await captureShot(t, orgId);
-  return mergePreview({ you, app, page, weft, shot, of: previewKey(now) });
+  const key = previewKey(now);
+  const last = fromSamePage(current, key);
+  const weft = needsWords ? { description: last.description ?? (await describe(t.app.name, meta)) } : undefined;
+  // A page with its own picture needs no capture; otherwise we take one, and a failed capture keeps the last
+  // picture but leaves a mark, so the next tick tries again (isStale reads shotFailedAt).
+  const hasImage = Boolean(app.image || page.image);
+  const captured = hasImage ? undefined : await captureShot(t, orgId);
+  const shot = hasImage ? undefined : (captured ?? last.shot);
+  const shotFailedAt = hasImage || captured ? undefined : Date.now();
+  return mergePreview({ you, app, page, weft, shot, of: key, at: Date.now(), shotFailedAt });
 }
 
 // Makes the preview when the page changed since the last one (or `force`), once at a time per app. Never throws:
 // a link without a preview still unfurls, as Weft's generic card.
 export async function refreshAppPreview(t: Ready, row: PreviewTarget, now: PreviewPage, force = false): Promise<void> {
   const current = cleanPreview(row.preview);
-  if (previewing.has(t.app.id) || (!force && current?.of === previewKey(now))) return;
+  if (previewing.has(t.app.id) || (!force && !isStale(current, previewKey(now)))) return;
   previewing.add(t.app.id);
   try {
     await writePreview(t, row.id, await buildPreview(t, now, row.org_id ?? t.orgId, current));

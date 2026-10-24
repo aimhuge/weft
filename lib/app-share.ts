@@ -197,7 +197,7 @@ export async function setAppShare(appId: string, update: AppShareUpdate): Promis
   const over = await roomFor(t.client, nextOrgId, existing?.id ?? null, update.mode, t.page);
   if (over) throw new AppShareError(over, 402);
   const now = await pageForWrite(t, existing, nextOrgId);
-  const change = buildChange(update, t, now, nextOwner, nextSlug, password);
+  const change = buildChange({ update, t, now, owner: { nextOwner, nextSlug }, password });
   const writeError = await writeShareRow(t, existing, change);
   if (writeError) throwAsError(writeError, pageBytes(t.page));
   return previewed(t, now);
@@ -239,14 +239,15 @@ function rejectFolderSecrets(t: Ready) {
 // The row we're about to write: the mode, the app's name, what the page is now (kind + page + files
 // + manifest), who owns the link, the slug, and the row's org_id. password_hash is dropped for
 // every mode except "password" (so a password gate never re-opens unseen when the mode changes).
-function buildChange(
-  update: AppShareUpdate,
-  t: Ready,
-  now: { kind: string; page: string; files: Record<string, string> | null; manifest: AppManifestUpload | null },
-  nextOwner: AppOwner,
-  nextSlug: string | null,
-  password: string | undefined,
-): Record<string, unknown> {
+function buildChange(input: {
+  update: AppShareUpdate;
+  t: Ready;
+  now: { kind: string; page: string; files: Record<string, string> | null; manifest: AppManifestUpload | null };
+  owner: { nextOwner: AppOwner; nextSlug: string | null };
+  password: string | undefined;
+}): Record<string, unknown> {
+  const { update, t, now, password } = input;
+  const { nextOwner, nextSlug } = input.owner;
   const change: Record<string, unknown> = {
     mode: update.mode,
     name: t.app.name,

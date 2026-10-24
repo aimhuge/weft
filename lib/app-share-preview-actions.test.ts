@@ -85,7 +85,7 @@ vi.mock("./app-card-image", () => ({
 }));
 
 const { AppShareError } = await import("./app-share");
-const { describeApp, previewCard, refreshPreview } = await import("./app-share-preview-actions");
+const { cardCachePath, describeApp, previewCard, refreshIfStale, refreshPreview } = await import("./app-share-preview-actions");
 const { appCardImage } = await import("./app-card-image");
 const { listOwners } = await import("./app-share-owners");
 const { readShare, currentPage } = await import("./app-share-row");
@@ -97,12 +97,20 @@ function ready(page: unknown): never {
   return { client: {}, orgId: "o1", userId: "u1", app: APP, page } as never;
 }
 
+// The capture and the drawn cards cached beside it (cardCachePath).
+const previewDir = path.join(process.env.WEFT_DATA ?? "/tmp", "app-previews");
+function clearPreviews() {
+  for (const name of fs.existsSync(previewDir) ? fs.readdirSync(previewDir) : []) {
+    if (name.startsWith("app1.")) fs.rmSync(path.join(previewDir, name), { force: true });
+  }
+}
+
 let sandbox: string;
 beforeEach(() => {
   sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "weft-preview-actions-"));
   // The capture of the app lives beside the board's data: a leftover from an earlier case would
   // turn the "no capture" case into one with a capture.
-  fs.rmSync(path.join(process.env.WEFT_DATA ?? "/tmp", "app-previews", "app1.png"), { force: true });
+  clearPreviews();
   state.target = ready({ kind: "site", url: "https://example.com/app" });
   state.row = {
     id: "row1",
@@ -275,6 +283,7 @@ describe("previewCard", () => {
     expect(input.byline).toBe("weft.zip");
 
     vi.mocked(appCardImage).mockClear();
+    clearPreviews();
     state.owners = { user: null, orgs: [] };
     state.row = {
       ...(state.row as Record<string, unknown>),
@@ -284,6 +293,27 @@ describe("previewCard", () => {
     await previewCard("app1");
     input = vi.mocked(appCardImage).mock.calls[0]?.[0] as { byline: string };
     expect(input.byline).toBe("weft.zip");
+  });
+
+  it("draws a card once and serves it from the cache until what it shows changes", async () => {
+    state.row = { ...(state.row as Record<string, unknown>), preview: { title: "Growth", description: "Signups" } };
+    const first = await previewCard("app1");
+    const again = await previewCard("app1");
+    expect(appCardImage).toHaveBeenCalledTimes(1);
+    expect(again.image).toBe(first.image);
+    expect(fs.readdirSync(previewDir).filter((n) => n.startsWith("app1.card-"))).toHaveLength(1);
+
+    state.row = { ...(state.row as Record<string, unknown>), preview: { title: "Growth", description: "Signups and visits" } };
+    await previewCard("app1");
+    expect(appCardImage).toHaveBeenCalledTimes(2);
+    // The old card is replaced, not kept beside the new one.
+    expect(fs.readdirSync(previewDir).filter((n) => n.startsWith("app1.card-"))).toHaveLength(1);
+    expect(cardCachePath("app1", "abc")).toBe(path.join(previewDir, "app1.card-abc.png"));
+  });
+
+  it("refreshes a stale preview and waits for it", async () => {
+    await refreshIfStale("app1");
+    expect(vi.mocked(refreshAppPreview).mock.calls[0]?.[3]).toBeUndefined();
   });
 
   it("falls back to the letter glyph when the emoji can't be fetched", async () => {
