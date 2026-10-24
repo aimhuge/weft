@@ -90,8 +90,10 @@ import { ALL_MODEL_IDS, backendFor } from "@/lib/new-thread";
 const inAnyCli = ALL_MODEL_IDS.has(model);
 ```
 
-The per-card switch route also uses `ALL_MODEL_IDS` instead of constructing its own model list. The
-bulk switch route, settings route, and plan-limits module now use `BACKEND_IDS` as well.
+The per-card switch route no longer constructs its own model list either: it takes the shared `MODELS`
+table and checks the model against the **target CLI's** own list (`MODELS[backend]`), so a switch to
+Goose must name a model Goose serves. The bulk switch route, settings route, and plan-limits module
+now use `BACKEND_IDS` as well.
 
 **Goose's real status command.** `lib/login-status.ts` gained `parseGooseStatus`, which reads the
 output of `goose info --check`. Its **Provider Check:** block has **Provider:**, **Model:**, and
@@ -164,7 +166,7 @@ One shared list of every selectable CLI and model, used by every validator, so a
 - `lib/new-thread.ts` — exports the shared `BACKENDS`, `BACKEND_IDS`, and `ALL_MODEL_IDS`
 - `lib/new-card.ts` — validates the requested backend with `BACKEND_IDS`
 - `app/api/cards/switch-backend/route.ts` — validates the bulk switch backend with `BACKEND_IDS`
-- `app/api/cards/[id]/switch-backend/route.ts` — validates backend with `BACKEND_IDS` and model with `ALL_MODEL_IDS`
+- `app/api/cards/[id]/switch-backend/route.ts` — validates backend with `BACKEND_IDS` and the model against the shared `MODELS` table, restricted to the target CLI's own models
 - `app/api/cards/[id]/rerun-model/route.ts` — validates a rerun model with `ALL_MODEL_IDS`
 - `app/api/settings/route.ts` — validates the default backend and model settings with the shared lists
 - `lib/plan-limits.ts` — uses `BACKEND_IDS` for the plan order
