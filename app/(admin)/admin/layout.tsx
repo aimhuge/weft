@@ -1,4 +1,4 @@
-// Layout for /admin/users and /admin/settings. The body is full-screen
+// Layout for /admin/users, /admin/billing, /admin/coupons and /admin/settings. The body is full-screen
 // (the root layout is overflow-hidden and would clip the table), so we let
 // the admin pages scroll naturally. The page itself calls
 // `requireSuperAdminWeft`, which short-circuits with notFound() for
@@ -18,6 +18,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           ← Board
         </Link>
         <Link href="/admin/users" className="rounded-lg px-2.5 py-1 transition-colors hover:bg-sunken hover:text-ink" title="Weft users (auth.users)">Users</Link>
+        <Link href="/admin/billing" className="rounded-lg px-2.5 py-1 transition-colors hover:bg-sunken hover:text-ink" title="Workspace plans, refunds and resets">Billing</Link>
+        <Link href="/admin/coupons" className="rounded-lg px-2.5 py-1 transition-colors hover:bg-sunken hover:text-ink" title="Coupon codes and referrals">Coupons</Link>
+        <Link href="/admin/billing" className="rounded-lg px-2.5 py-1 transition-colors hover:bg-sunken hover:text-ink" title="Workspace plans, refunds and resets">Billing</Link>
+        <Link href="/admin/coupons" className="rounded-lg px-2.5 py-1 transition-colors hover:bg-sunken hover:text-ink" title="Coupon codes and referrals">Coupons</Link>
         <Link href="/admin/settings" className="rounded-lg px-2.5 py-1 transition-colors hover:bg-sunken hover:text-ink" title="Local install overview">Settings</Link>
         <span className="ml-auto rounded-full border border-line px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-faint">SuperAdmin</span>
       </header>

@@ -204,7 +204,7 @@ export default function SideRail({
               icon="🛡"
               label="Admin"
               open={false}
-              title="Weft admin: Weft users, local install"
+              title="Weft admin: users, billing, coupons, local install"
               onClick={() => {
                 router.push("/admin/users");
               }}

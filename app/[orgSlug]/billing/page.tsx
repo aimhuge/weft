@@ -24,8 +24,12 @@ import { billing, billingConfigured, billingService } from "@/lib/billing/billin
 import { catalog, PUKU_METER } from "@/lib/billing/plans";
 import { grantLapsed, isPaid } from "@/lib/billing/plan-gate";
 import { IP_COUNTRY_HEADER, regionalPick } from "@/lib/billing/regional-pick";
+import { missingStripeEnv } from "@/lib/billing/stripe-env";
 import { cancelForm, checkOpenSourceForm, manageForm, resumeForm, upgradeForm } from "@/lib/billing-actions";
 import { FreePlansSection, RegionalNote } from "./free-plans";
+import { ReferralSection } from "./referral-card";
+import { storedReferralCode } from "@/lib/billing/referrals";
+import { referralCodeForm } from "@/lib/referral-actions";
 import {
   InvoicesSection,
   ManageSection,
@@ -90,10 +94,11 @@ async function BillingPageBody({ orgSlug, searchParams }: { orgSlug: string; sea
   const plan = catalog.get(sub.plan);
   const isPaidPlan = isPaid(plan.id);
   const hasPukuAllowance = catalog.allowance(plan.id, PUKU_METER) !== null;
-  const [puku, account, regional] = await Promise.all([
+  const [puku, account, regional, referralCode] = await Promise.all([
     hasPukuAllowance ? billing.balance(service, ctx.org.id, PUKU_METER).catch(() => null) : Promise.resolve(null),
     isPaidPlan ? billing.account(service, ctx.org.id).catch(() => null) : Promise.resolve(null),
     regionalFor(service, ctx.org.id, isPaidPlan),
+    storedReferralCode(service, ctx.org.id).catch(() => null),
   ]);
   const lapsed = grantLapsed(plan.id, sub.trialEnd);
 
@@ -111,6 +116,7 @@ async function BillingPageBody({ orgSlug, searchParams }: { orgSlug: string; sea
   const cancelAction = cancelForm.bind(null, orgSlug);
   const resumeAction = resumeForm.bind(null, orgSlug);
   const checkOssAction = checkOpenSourceForm.bind(null, orgSlug);
+  const referralAction = referralCodeForm.bind(null, orgSlug);
 
   return (
     <div className="wz-billingPage">
@@ -127,6 +133,8 @@ async function BillingPageBody({ orgSlug, searchParams }: { orgSlug: string; sea
         live={provider.live}
         canManage={canManage}
       />
+
+      <SetupGaps configured={configured} canManage={canManage} />
 
       <PlanSection
         plan={plan}
@@ -154,6 +162,8 @@ async function BillingPageBody({ orgSlug, searchParams }: { orgSlug: string; sea
 
       <FreePlansSection plan={plan.id} grantEnds={sub.trialEnd} lapsed={lapsed} canManage={canManage} checkAction={checkOssAction} />
 
+      <ReferralSection show={configured} code={referralCode} canManage={canManage} action={referralAction} />
+
       {isPaidPlan && configured && canManage ? (
         <ManageSection
           cancelAtPeriodEnd={sub.cancelAtPeriodEnd}
@@ -171,6 +181,20 @@ async function BillingPageBody({ orgSlug, searchParams }: { orgSlug: string; sea
 async function regionalFor(service: NonNullable<ReturnType<typeof billingService>>, orgId: string, paid: boolean) {
   if (paid) return null;
   return regionalPick(service, orgId, (await headers()).get(IP_COUNTRY_HEADER));
+}
+
+// An owner's early warning: Stripe is on, but the provider will refuse every checkout until these are set
+// (lib/billing/stripe-env.ts). Names only, never values, and only to people who could fix it.
+function SetupGaps({ configured, canManage }: { configured: boolean; canManage: boolean }) {
+  const missing = configured && canManage ? missingStripeEnv() : [];
+  if (missing.length === 0) return null;
+  return (
+    <section className="wz-billingSection">
+      <div className="wz-billingNotice" role="alert">
+        Billing isn&apos;t fully set up on this Weft yet: every upgrade will fail until {missing.join(", ")} {missing.length === 1 ? "is" : "are"} set on the deployment.
+      </div>
+    </section>
+  );
 }
 
 function NotConfiguredPage() {

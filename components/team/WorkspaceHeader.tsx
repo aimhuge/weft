@@ -181,7 +181,7 @@ function WeaveMark() {
 export function WorkspaceHeader({ ctx, current }: { ctx: HeaderContext; current?: Section }) {
   const pathname = usePathname();
   const section = current ?? sectionOf(pathname);
-  // The board draws the desktop's own chrome (components/web-board/WebBoardHeader.tsx and WebRail.tsx) instead.
+  // The board draws the desktop's own chrome (components/BoardHeader.tsx and components/web-board/WebRail.tsx) instead.
   if (section === "board") return null;
   return (
     <aside className="wz-workspaceHeader">

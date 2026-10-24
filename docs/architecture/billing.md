@@ -299,6 +299,60 @@ Team**, which start Stripe Checkout.
   page's own return path already had `?checkout=done`, so Stripe came back to `?checkout=done?checkout=done` and the
   page never reconciled. `returnPath` is now the bare `/<slug>/billing`.
 
+## Admin console
+
+Built 2026-10-24. `/admin/billing` (super-admin only, behind `requireSuperAdminWeft`; the routes behind it gate again in
+`lib/billing/admin/route-gate.ts`) is the whole plan lifecycle for one workspace, made because local Weft shares the
+production Supabase: a sandbox checkout from a dev run writes test-mode `cus_`/`sub_` ids, invoices, cards and events onto a
+real workspace, and that customer doesn't exist on the live account.
+
+- **Stripe mode per org** (`lib/billing/admin/stripe-keys.ts`). Stripe ids carry no mode, so the console holds a key per mode
+  (`STRIPE_LIVE_SECRET_KEY`, `STRIPE_TEST_SECRET_KEY`, and `STRIPE_SECRET_KEY` filed by its own prefix) and `detectMode` asks
+  each for the org's customer (or subscription): the key that finds it is its mode. Stripe's wrong-mode error ("a similar
+  object exists in test mode") names a mode even without its key. The panel shows the answer as a badge (live, test, unknown,
+  no Stripe ids), and `orgStripe` (`lib/billing/admin/context.ts`) gives every op the client for that mode, never the
+  deployment's default.
+- **Plan changes** (`lib/billing/admin/subscription-ops.ts`): upgrade, downgrade and switch between Pro and Team or monthly and
+  yearly, and change seats, as one item swap with the proration picked (next invoice, invoice now, none); cancel at period end
+  and resume; **Downgrade to Free now** (cancel in the right mode, optionally crediting unused time to the customer's balance,
+  and the row goes to Free even if Stripe already ended it); **Re-read from Stripe**; comp Free, Open Source or Education
+  (refused while a subscription is live). A mode's price is found by its lookup key `weft_<plan>_<interval>_<cents>`
+  (`scripts/stripe-weft-prices.mjs` names them the same in both modes), and Stripe's answer is mirrored onto the row through
+  `billing.saveSubscription`. A Free workspace is upgraded with **Make checkout link** (`checkout-link.ts`): a Checkout session
+  in the deployment's own mode, reusing the customer only when it lives in that mode, optionally with a promotion code applied.
+- **Refunds** (`refunds.ts`): the customer's charges from Stripe, each refundable in full or for part, only when it is that
+  workspace's customer's, never past what's left, idempotent on a double click.
+- **Reset billing state** (`reset.ts`): optionally cancels the subscription in its own mode, clears
+  `provider_customer_id`/`provider_subscription_id`, puts the row on Free with provider `mock`, and optionally deletes the
+  mirrored Stripe invoices and cards (ticked by default for test-mode ids). The old ids go into the audit row.
+- **People** (`members.ts`): add someone with a Weft account (by profile email) in any role, remove someone (never the last
+  owner); on Team each change re-counts the roster and moves the subscription's quantity to match.
+- **Discounts**: put a promotion code on a live subscription, or take it off.
+
+Every change writes `org_billing_events` kind `admin.<op>` with the actor and a payload (`audit` in `context.ts`).
+`app/api/admin/billing` lists workspaces (`snapshot.ts listOrgs`), `app/api/admin/billing/[orgId]` reads one (`orgDetail`) and
+runs `{ op, ... }` through `lib/billing/admin/dispatch.ts` `ORG_OPS`. The admin pages run on the local Weft (`lib/guard.ts`),
+with the development vault's values.
+
+## Coupons and referrals
+
+Built 2026-10-24. Stripe is the source of truth for both; Checkout already takes codes (`allow_promotion_codes`).
+
+- **Coupons** (`lib/billing/admin/coupons.ts`, `/admin/coupons`): a coupon (percent or amount off; once, some months or forever)
+  and its promotion code (the word typed at Checkout, with optional max uses, expiry and first-purchase-only), both stamped
+  `metadata.app = "weft"` so the shared account's other apps' codes stay out of the list. Per mode, turned on and off, never
+  deleted.
+- **Referrals** (`lib/billing/referrals.ts`, `lib/billing/referral-terms.ts`, `supabase/migrations/20261024165145_referrals.sql`).
+  `REFERRAL_TERMS` (placeholders): the referred workspace gets 20% off its first 3 months, the referrer $20 (one Pro month) on
+  its Stripe balance. A workspace's code (`WEFT-<SLUG>`) is a promotion code on the shared coupon `weft-referral-20off-3mo`
+  (first purchase only), stamped `kind: "referral"` and `referrer_org_id`, made on first ask in the deployment's own mode by
+  **Get our referral code** on the billing page (`app/[orgSlug]/billing/referral-card.tsx`, `lib/referral-actions.ts`) and
+  stored in `referral_codes`. After the package's webhook has answered 2xx, `lib/billing/referral-webhook.ts` re-reads the
+  same delivery, verifies it, and on a completed Weft checkout that used a referral code writes `referrals` (one per referred
+  workspace, unique on the session too, so a retried delivery is a no-op) and pays the reward as a negative customer balance
+  transaction, idempotent on the referral id. A self-referral is `void`; a referrer without a customer in that mode stays
+  `converted`, payable later from `/admin/coupons`, which also voids.
+
 ## Environment
 
 All environment variables live on the deployed Weft (Vercel), held in the 🔐 vault (production) and pushed
@@ -314,6 +368,7 @@ with **Push to Vercel** or `mcp__secrets__push_to_vercel`.
 | `STRIPE_PRICE_PRO_MONTHLY_REGIONAL_LOW`, `STRIPE_PRICE_PRO_MONTHLY_REGIONAL_LOWER_MIDDLE` | 🔐 vault (blanks) → Vercel | The $5 and $10 monthly Pro prices. Optional: unset, Checkout sells the full price. Read only once the package has price variants. |
 | `STRIPE_PRICE_TEAM_MONTHLY` | Vercel | The `price_…` for the **$9 per seat per month** recurring price. A per-unit price: seats ride on the subscription's `quantity`. Nothing reconciles it against `TEAM_SEAT_CENTS`, so a mismatch is a real bug (the package throws on first use with the whole list of missing variables). |
 | `STRIPE_PRICE_TEAM_YEARLY` | 🔐 vault → Vercel | The **$90 per seat per year** price. Checkout never sells it (Team bills monthly), but the package refuses every checkout, Pro included, without a price for each paid plan × interval. Missing it, every upgrade failed with "Something went wrong on our end" (fixed 2026-10-24). |
+| `STRIPE_LIVE_SECRET_KEY`, `STRIPE_TEST_SECRET_KEY` | 🔐 vault (development, blanks) | Optional. The admin console's key per mode, so `/admin/billing` can act on ids in the mode the dev run doesn't sell in. Each key is filed by its prefix. |
 | `SUPABASE_SECRET_KEY` | already on Vercel (webhook relay, Puku trial) | Service role; reads and writes the billing tables. |
 | `NEXT_PUBLIC_SITE_URL` | Vercel | `https://weft.zip` by default. Used to build the `manageUrl` on `BillingStatus`. |
 
@@ -389,6 +444,12 @@ endpoint and hands its signing secret to Vercel over the CLI's stdin, never prin
   company and email as addressee, and the provider's `pdfUrl` / `hostedUrl` as the only ways out (the scan stripe is decoration). The look
   is `components/team/team.css` (`wz-sheet*`, `wz-invoice*`); `@media print` leaves the sheet alone, so the browser's Print is a PDF too.
 - `supabase/migrations/20261014010429_billing.sql` — the package's two SQL files, copied verbatim.
+- `lib/billing/admin/*` (+ tests, `admin.harness.ts`) — the admin console: `stripe-keys.ts` (keys and mode per org), `context.ts`,
+  `subscription-ops.ts`, `checkout-link.ts`, `refunds.ts`, `reset.ts`, `members.ts`, `coupons.ts`, `coupon-ops.ts`, `snapshot.ts`,
+  `dispatch.ts`, `route-gate.ts`. Routes `app/api/admin/billing`, `app/api/admin/billing/[orgId]`, `app/api/admin/coupons`; pages
+  `app/(admin)/admin/billing/*` and `app/(admin)/admin/coupons/*`.
+- `lib/billing/referrals.ts`, `lib/billing/referral-terms.ts`, `lib/billing/referral-webhook.ts`, `lib/referral-actions.ts`,
+  `app/[orgSlug]/billing/referral-card.tsx`, `supabase/migrations/20261024165145_referrals.sql` — referrals.
 
 ## Known gaps
 
@@ -419,7 +480,9 @@ endpoint and hands its signing secret to Vercel over the CLI's stdin, never prin
   created by the package and nothing on weft.zip can buy one. Seat changes (add a person, raise the quantity) are
   the same missing piece: the gate lets members in on Team, but the seat count has to be kept in step with the
   roster by hand until the billing page does it.
-- Concurrent requests can overdraw by one request. The package accepts this race — the meter writes a row,
+- Concurrent requests can overdraw by what they spend together; each is refused up front when the allowance can't
+  cover its own estimate (`reserve` in `lib/puku-proxy-usage.ts`), and every reply is charged however it ends, so a
+  client that hangs up early still pays. The package accepts this race — the meter writes a row,
   not a counter, and the balance is derived. A burst of N requests at `remaining: 1` can all see the
   one-token allowance and all spend; the next check sees zero. The 15 s `CACHE_MS` keeps the window
   small.

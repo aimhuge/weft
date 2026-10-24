@@ -54,6 +54,14 @@ The check happens in three places:
   `requireSuperAdminWeft()`, then fetches `/api/admin/local` over loopback
   with the `x-weft-token` header (the same guard every API route uses).
 
+### Billing and coupons
+
+`/admin/billing` and `/admin/coupons` (the header's **Billing** and **Coupons**) are the billing console: one
+workspace's plan, seats, refunds, people, discounts and reset, each on the Stripe key for the mode its ids live in,
+and the coupon codes and referrals. Their routes (`/api/admin/billing`, `/api/admin/billing/[orgId]`,
+`/api/admin/coupons`) gate again in `lib/billing/admin/route-gate.ts`. See billing.md "Admin console" and
+"Coupons and referrals".
+
 ## Rail
 
 `components/LibraryRail.tsx` adds the 🛡 Admin icon under the others when
