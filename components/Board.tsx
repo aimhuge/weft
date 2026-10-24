@@ -61,7 +61,7 @@ import BoardProjectBar from "./BoardProjectBar";
 const AccountButton = guarded(() => import("./AccountButton"), { inline: true, what: "account button" });
 const CopilotButton = guarded(() => import("./CopilotButton"), { inline: true, what: "copilot button" });
 const CopilotLane = guarded(() => import("./CopilotLane"), { what: "copilot", className: "self-stretch shrink-0" });
-const OnboardingTips = guarded(() => import("./OnboardingTips"), { what: "onboarding tips", inline: true });
+const EmptyBoardStart = guarded(() => import("./EmptyBoardStart"), { what: "start panel", inline: true });
 const RestartChip = guarded(() => import("./RestartChip"), { inline: true, what: "restart chip" });
 const CardView = guarded(() => import("./CardView"), { what: "card", placeholder: <CardSkeleton /> });
 const SideRail = guarded(() => import("./LibraryRail"), { what: "rail", className: "m-3 w-[220px] self-start" });
@@ -402,7 +402,7 @@ export default function Board() {
           toast={setToast}
           notify={notify}
         />
-        <OnboardingTips cards={cards} loaded={loaded} filtering={filtering} />
+        <EmptyBoardStart cards={cards} loaded={loaded} filtering={filtering} />
         <CopilotLane
           state={laneState}
           cards={cards}

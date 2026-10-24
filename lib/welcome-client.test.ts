@@ -62,30 +62,30 @@ describe("loadWelcome", () => {
 describe("replayWelcome", () => {
   function stubBrowser() {
     const store = new Map([
-      ["weft-tips-seen", '["review"]'],
       ["weft-intros-seen", '["secrets"]'],
+      ["weft-sync-prompt-off", "1"],
     ]);
     const storage = { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => store.set(k, v), removeItem: (k: string) => store.delete(k) };
     const win = new EventTarget();
     const events: string[] = [];
-    for (const name of ["weft:tips-changed", REPLAY_EVENT]) win.addEventListener(name, () => events.push(name));
+    for (const name of [REPLAY_EVENT]) win.addEventListener(name, () => events.push(name));
     vi.stubGlobal("localStorage", storage);
     vi.stubGlobal("window", win);
     return { store, events };
   }
 
-  it("resetOnboarding clears the seen tips and intros and tells the board", () => {
+  it("resetOnboarding clears the seen intros and the sync prompt's box", () => {
     const { store, events } = stubBrowser();
     resetOnboarding();
     expect([...store.keys()]).toEqual([]);
-    expect(events).toEqual(["weft:tips-changed"]);
+    expect(events).toEqual([]);
   });
 
   it("replays the dialog and brings back every welcome after it", () => {
     const { store, events } = stubBrowser();
     replayWelcome();
     expect([...store.keys()]).toEqual([]);
-    expect(events).toEqual(["weft:tips-changed", REPLAY_EVENT]);
+    expect(events).toEqual([REPLAY_EVENT]);
   });
 });
 

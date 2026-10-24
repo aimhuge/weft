@@ -1,7 +1,7 @@
 import { apiFetch, API_HEADERS } from "./api-client";
 import { resetIntros } from "./feature-intros";
 import type { GithubProfile } from "./github-profile";
-import { resetTips, TIPS_CHANGED } from "./tips";
+import { resetSyncPrompt } from "./sync-prompt";
 import type { Welcome } from "./welcome";
 import type { WelcomeProfile, WelcomeProject } from "./welcome-preview";
 
@@ -36,11 +36,10 @@ export const loadWelcome = (replay = false) => apiFetch(`/api/welcome${replay ? 
 
 // Settings → General's "Replay the welcome" asks the dialog to show itself again, as a preview.
 export const REPLAY_EVENT = "weft:welcome-replay";
-// Bring back every first-time welcome past the dialog: the board's column tips and each drawer's intro video.
+// Bring back every first-time welcome past the dialog: each drawer's intro video and the ask to sync.
 export function resetOnboarding() {
-  resetTips();
   resetIntros();
-  window.dispatchEvent(new Event(TIPS_CHANGED));
+  resetSyncPrompt();
 }
 
 // Replay the welcome (avatar menu, command palette): the dialog again as a preview, and the welcomes after it too.

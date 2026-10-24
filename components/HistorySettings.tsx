@@ -42,7 +42,7 @@ export default function HistorySettings() {
       <section className="flex items-center justify-between gap-4">
         <div className="flex flex-col gap-0.5">
           <h3 className="text-[13px] font-medium text-ink">The welcome</h3>
-          <p className="text-[12.5px] text-muted">Run the first-launch screens again for real (your agents, your projects and a first thread) and save your answers; to just look, use Replay the welcome in your avatar&rsquo;s menu or the command palette, which also resets the tips. Reset tips brings back the column tips on the board and plays each drawer&rsquo;s intro video again.</p>
+          <p className="text-[12.5px] text-muted">Run the first-launch screens again for real (your agents, your projects and a first thread) and save your answers; to just look, use Replay the welcome in your avatar&rsquo;s menu or the command palette, which also resets the tips. Reset tips plays each drawer&rsquo;s intro video again.</p>
         </div>
         <span className="flex shrink-0 gap-1.5">
           <button type="button" disabled={busy} onClick={() => change({ test: true })} className="rounded-md border border-line px-2.5 py-1 text-[12px] text-ink hover:bg-sunken disabled:opacity-40">

@@ -175,10 +175,9 @@ On launch and every minute after, Weft picks up your Claude Code sessions (the o
   brings in none) with a switch that counts your history on your Wefter Profile; **Start your first thread** picks a
   project and a starter prompt and opens the card as it runs. No cards are added until you answer. A board that already
   had cards is left as it was. Settings → General changes either answer later; Replay the welcome is in the avatar menu and the command palette,
-  and it brings back the column tips and drawer intros too
-  (`lib/welcome.ts`, `components/WelcomeDialog.tsx`). After it, an empty board offers New thread and the same starters,
-  and the first card to reach Needs you, Review and Done gets a one-time tip under that column (the last opens your
-  Wefter Profile); Settings → General → **Reset tips** shows them again (`lib/tips.ts`, `components/OnboardingTips.tsx`).
+  and it brings back the drawer intros too
+  (`lib/welcome.ts`, `components/WelcomeDialog.tsx`). After it, an empty board offers New thread and the same starters
+  (`components/EmptyBoardStart.tsx`).
 
 - A title like "GOING DEEPER - Weft desktop app" becomes the card "Weft desktop app" with stage
   "Going deeper". DONE threads go to Done; other status words, and threads active in the last three
@@ -652,9 +651,13 @@ menu and the palette, shows the last one again:
 - **Tokens and limit hits.** Your last 30 days of tokens as bars, read from every Claude Code and puku-cli
   transcript (in Weft or the terminal, so it has your history from day one), with a dot over each day you
   ran out of your 5-hour (amber) or weekly (red) plan limit. Hover a day for its tokens in and out and its hits.
-  Two badges go with it: ⏳ Hit the ceiling and 🗓️ Ran the week dry.
+  The legend shows your fastest burn of each window (from the window opening to the hit).
+- **Limit badges and the Fastest Burn leaderboard.** A Limits badge family: a ladder for hitting your 5-hour limit
+  1, 2, 5, 10, 20, 50, 100, 250, 500 and 1,000 times, the same for weeklies, speed badges for burning a window fast
+  (⚡ Speedrun is a 5-hour window gone in under 30 minutes), and badges for several hits in a day or days in a row.
+  The 🏆 Leagues dialog's **⏱️ Limit records** shows the all-time boards: fastest 5-hour, fastest week, most of each hit.
 - **The cloth.** Your last 26 weeks as woven stitches, brighter for bigger days, blue where a freeze covered one.
-- **Badges.** 38 of them: milestones, streaks, habits (five cards running at once, night owl, refactorer…),
+- **Badges.** 69 of them: milestones, streaks, habits (five cards running at once, night owl, refactorer…), limits,
   code health (coverage at 80/95/100%, guarded, strict, slim files, clean tree) and the production-ready
   tree. New ones and level-ups arrive as a toast.
 - **Projects.** Each of your busiest repos' production-ready tree: Testing, Security (secrets ignored, secret
@@ -707,6 +710,8 @@ invite link joins whichever account opens it. Billing and the shared 🔐 vault 
 
 You can be in many teams. **Settings → Teams** lists every one with your role in it, the one you're viewing lit;
 click another to manage its projects, members and invites below the list, or **New team** to make one you own.
+Owners and admins choose who sees each project: **Access** on a project's row ticks the members who get it. Owners
+and admins see every project; a member sees only the ones they've been given.
 The pencil beside a team you own renames it; its weft.zip address stays the same. The trash deletes it, once you
 type its name, as long as you're in another team too and it has no paid plan still running.
 
@@ -750,7 +755,9 @@ card you delete stays deleted. It's one direction for now; Weft never edits an i
 
 ### Server-side cards (off by default)
 
-Settings → Sync lists your recent projects with a switch each. A project that's on uploads its cards and threads to your
+Weft asks once, after a thread in your project has finished a turn: "Turn on Project Sync for <project>?" with **Sync**, **Not now**
+and a **Don't show me again** box (it asks again next launch until you sync or tick it; Settings → General → Reset tips brings it back).
+Signed out, its button signs you in with GitHub first. Settings → Sync lists your recent projects with a switch each. A project that's on uploads its cards and threads to your
 workspace on Supabase while you're signed in: an outbox sends a batch when a turn ends (never on the way to starting one),
 pictures and pages go up once each by content, and the page shows the last sync, how many items went up, how many wait and the
 last error, with **Sync now**. At `weft.zip/<workspace>/board` the same cards show live, drawn by the desktop's **own

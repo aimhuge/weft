@@ -2,10 +2,9 @@
 
 import { useEffect, useState } from "react";
 
-// Where an element on the board is, for something drawn fixed over it (a coach tip under a column header, the
-// empty board's start panel). Measured after mount, on resize, scroll and the element's own resizes, and every
-// half second, since a column also moves without resizing (an open card or the side pane closes); state only
-// changes when the rect does. null while nothing matches the selector.
+// Where an element on the board is, for something drawn fixed over it (the empty board's start panel). Measured
+// after mount, on resize, scroll and the element's own resizes, and every half second, since a column also moves
+// without resizing (an open card or the side pane closes); state only changes when the rect does. null while nothing matches the selector.
 export type AnchorRect = { top: number; left: number; width: number; height: number; headerBottom: number };
 
 function measure(selector: string): AnchorRect | null {

@@ -1,15 +1,21 @@
 "use client";
 
 import { openNewThread } from "@/lib/onboarding-events";
+import type { Card } from "@/lib/types";
 import { useAnchorRect } from "@/lib/use-anchor-rect";
 import { STARTERS } from "./WelcomeFirst";
+
+// The board is new, not just filtered empty: loaded, no filter, and no cards but the copilot and archived ones.
+export const isEmptyBoard = (cards: readonly Card[], loaded: boolean, filtering: boolean) =>
+  loaded && !filtering && !cards.some((c) => !c.archived && c.role !== "copilot");
 
 // The empty board's start panel: once the board has loaded with no cards (copilot and archived aside) and no
 // filter, a panel centered over the columns offers New thread and the welcome's four starters. A starter opens
 // New thread with its prompt written in (lib/onboarding-events.ts).
-export default function EmptyBoardStart() {
-  const rect = useAnchorRect(".board-sheet");
-  if (!rect) return null;
+export default function EmptyBoardStart({ cards, loaded, filtering }: { cards: readonly Card[]; loaded: boolean; filtering: boolean }) {
+  const empty = isEmptyBoard(cards, loaded, filtering);
+  const rect = useAnchorRect(empty ? ".board-sheet" : null);
+  if (!empty || !rect) return null;
   return (
     <div
       data-empty-board

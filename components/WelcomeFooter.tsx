@@ -12,7 +12,7 @@ export type WelcomeStep = "ready" | "projects" | "first";
 export function welcomeNote(step: WelcomeStep, cliReady: boolean | null, cwd: string): string {
   if (step === "ready") return cliReady === false ? "You can log in later from Settings → Accounts." : "Replay this any time from your avatar's menu or the command palette.";
   if (step === "projects") return "Start empty leaves your old sessions off the board. Bring them in later from Settings.";
-  return cwd ? "The board explains each column the first time a card reaches it." : "Pick the folder in the next dialog.";
+  return cwd ? "It lands in Running and the browser pane shows its work." : "Pick the folder in the next dialog.";
 }
 
 const button = "rounded-md border border-line px-3 py-1.5 text-[12.5px] text-ink hover:bg-sunken disabled:opacity-40";

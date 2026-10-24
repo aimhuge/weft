@@ -111,13 +111,11 @@ describe("AccountButton", () => {
     api.account.mockResolvedValue({ configured: true, user: ada });
     const onReplay = vi.fn();
     window.addEventListener("weft:welcome-replay", onReplay);
-    localStorage.setItem("weft-tips-seen", '["review"]');
     localStorage.setItem("weft-intros-seen", '["secrets"]');
     setup();
     await userEvent.click(await screen.findByRole("button", { name: "Signed in as Ada" }));
     await userEvent.click(await screen.findByRole("menuitem", { name: "Replay the welcome" }));
     expect(onReplay).toHaveBeenCalledTimes(1);
-    expect(localStorage.getItem("weft-tips-seen")).toBeNull();
     expect(localStorage.getItem("weft-intros-seen")).toBeNull();
     expect(screen.queryByRole("menu")).toBeNull();
     window.removeEventListener("weft:welcome-replay", onReplay);

@@ -11,8 +11,8 @@ describe("welcomeNote", () => {
     expect(welcomeNote("projects", null, "")).toMatch(/^Start empty/);
   });
 
-  it("promises the column tips once a folder is picked on the first thread", () => {
-    expect(welcomeNote("first", true, "/dev/app")).toBe("The board explains each column the first time a card reaches it.");
+  it("says where the first thread lands once a folder is picked", () => {
+    expect(welcomeNote("first", true, "/dev/app")).toBe("It lands in Running and the browser pane shows its work.");
     expect(welcomeNote("first", true, "")).toBe("Pick the folder in the next dialog.");
   });
 });
