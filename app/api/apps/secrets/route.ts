@@ -63,11 +63,12 @@ async function parsePushBody(req: Request): Promise<{ shareId: string; values: R
 }
 
 // One push: takes the parsed body + the allowed names from the manifest and writes each value through the
-// store. Names in the body but not in `allowed` are silently dropped; one failed upsert logs and continues
-// so the names whose ciphertext sealed cleanly still go up.
-async function runPush(store: ReturnType<typeof createAppSecretStore>, shareId: string, values: Record<string, unknown>, allowed: Set<string>): Promise<{ pushed: string[]; dropped: string[] }> {
+// store. Names in the body but not in `allowed` are silently dropped; one failed write logs and continues
+// so the other names still go up, and is listed in `failed` for the route to answer with.
+async function runPush(store: ReturnType<typeof createAppSecretStore>, shareId: string, values: Record<string, unknown>, allowed: Set<string>): Promise<{ pushed: string[]; dropped: string[]; failed: string[] }> {
   const pushed: string[] = [];
   const dropped: string[] = [];
+  const failed: string[] = [];
   for (const [name, value] of Object.entries(values)) {
     if (typeof value !== "string" || !value) continue;
     if (!allowed.has(name)) { dropped.push(name); continue; }
@@ -76,9 +77,10 @@ async function runPush(store: ReturnType<typeof createAppSecretStore>, shareId: 
       pushed.push(name);
     } catch (err) {
       console.error(`apps/secrets: setValue failed for ${name}: ${err instanceof Error ? err.message : String(err)}`);
+      failed.push(name);
     }
   }
-  return { pushed, dropped };
+  return { pushed, dropped, failed };
 }
 
 export async function POST(req: Request): Promise<Response> {
@@ -105,5 +107,7 @@ export async function POST(req: Request): Promise<Response> {
   if (!service) return reject(503, "this server isn't configured to run apps.");
 
   const out = await runPush(createAppSecretStore(service), shareId, values, allowed);
+  // A 200 here reads as "Uploaded …" on the Mac, so a name that didn't store fails the whole answer.
+  if (out.failed.length) return reject(500, `couldn't store ${out.failed.join(", ")}.`);
   return Response.json(out, { headers: NO_STORE });
 }

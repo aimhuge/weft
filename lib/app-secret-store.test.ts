@@ -26,6 +26,27 @@ interface FakeRow {
   ciphertext: string;
 }
 
+// A client for setValue: each update answers the next entry of `updated` (whether it matched a row); the insert
+// answers insertError. Records every call so a test can check the filters and the sealed row.
+function scriptedClient({ updated, updateError, insertError }: { updated: boolean[]; updateError?: { message: string }; insertError?: { code: string; message: string } }) {
+  const calls: { method: string; args: unknown[] }[] = [];
+  let updates = 0;
+  const filter = (): Record<string, unknown> => {
+    const b: Record<string, unknown> = {};
+    for (const m of ["eq", "is"]) b[m] = (...args: unknown[]) => (calls.push({ method: m, args }), b);
+    b.select = () => {
+      const hit = updated[updates++] ?? false;
+      return Promise.resolve({ data: hit ? [{ name: "x" }] : [], error: updateError ?? null });
+    };
+    return b;
+  };
+  const table = {
+    update: (...args: unknown[]) => (calls.push({ method: "update", args }), filter()),
+    insert: (...args: unknown[]) => (calls.push({ method: "insert", args }), Promise.resolve({ error: insertError ?? null })),
+  };
+  return { service: { from: () => table }, calls };
+}
+
 function makeClient(rows: FakeRow[]) {
   const calls: { method: string; args: unknown[] }[] = [];
   const make = (): Record<string, unknown> => {
@@ -166,30 +187,45 @@ describe("app-secret-store", () => {
     expect(await store.getValues("s1", { author: [], viewer: [] }, "user-1")).toEqual({});
   });
 
-  it("setValue seals the value and upserts on the unique index", async () => {
-    const { service, calls } = makeClient([]);
-    const store = createAppSecretStore(service as never);
-    await store.setValue("s1", "STRIPE_KEY", null, "sk_live_y");
-    const upsert = calls.find((c) => c.method === "upsert");
-    expect(upsert).toBeDefined();
-    const row = upsert!.args[0] as { share_id: string; name: string; viewer_id: string | null; ciphertext: string };
-    expect(row.share_id).toBe("s1");
-    expect(row.name).toBe("STRIPE_KEY");
-    expect(row.viewer_id).toBeNull();
+  it("setValue inserts a sealed row when the update finds none", async () => {
+    const { service, calls } = scriptedClient({ updated: [false] });
+    await createAppSecretStore(service as never).setValue("s1", "STRIPE_KEY", null, "sk_live_y");
+    expect(calls.filter((c) => c.method === "update")).toHaveLength(1);
+    expect(calls).toContainEqual({ method: "is", args: ["viewer_id", null] });
+    const row = calls.find((c) => c.method === "insert")!.args[0] as { share_id: string; name: string; viewer_id: string | null; ciphertext: string };
+    expect(row).toMatchObject({ share_id: "s1", name: "STRIPE_KEY", viewer_id: null });
     expect(isConfigured(ENV)).toBe(true);
     expect(open(row.ciphertext, { shareId: "s1", name: "STRIPE_KEY", viewerId: null }, ENV)).toBe("sk_live_y");
-    const opts = upsert!.args[1] as { onConflict: string };
-    expect(opts.onConflict).toBe("share_id,name,viewer_id");
+  });
+
+  it("setValue updates an existing row without inserting", async () => {
+    const { service, calls } = scriptedClient({ updated: [true] });
+    await createAppSecretStore(service as never).setValue("s1", "STRIPE_KEY", null, "sk_new");
+    const set = calls.find((c) => c.method === "update")!.args[0] as { ciphertext: string };
+    expect(open(set.ciphertext, { shareId: "s1", name: "STRIPE_KEY", viewerId: null }, ENV)).toBe("sk_new");
+    expect(calls.some((c) => c.method === "insert")).toBe(false);
   });
 
   it("setValue for a viewer includes their id in the row and the AAD", async () => {
-    const { service, calls } = makeClient([]);
-    const store = createAppSecretStore(service as never);
-    await store.setValue("s1", "OPENAI_KEY", "user-1", "sk-x");
-    const upsert = calls.find((c) => c.method === "upsert");
-    const row = upsert!.args[0] as { viewer_id: string | null; ciphertext: string };
+    const { service, calls } = scriptedClient({ updated: [false] });
+    await createAppSecretStore(service as never).setValue("s1", "OPENAI_KEY", "user-1", "sk-x");
+    expect(calls).toContainEqual({ method: "eq", args: ["viewer_id", "user-1"] });
+    const row = calls.find((c) => c.method === "insert")!.args[0] as { viewer_id: string | null; ciphertext: string };
     expect(row.viewer_id).toBe("user-1");
     expect(open(row.ciphertext, { shareId: "s1", name: "OPENAI_KEY", viewerId: "user-1" }, ENV)).toBe("sk-x");
+  });
+
+  it("setValue updates again when a racing writer inserted first", async () => {
+    const { service, calls } = scriptedClient({ updated: [false, true], insertError: { code: "23505", message: "duplicate key" } });
+    await createAppSecretStore(service as never).setValue("s1", "STRIPE_KEY", null, "v");
+    expect(calls.filter((c) => c.method === "update")).toHaveLength(2);
+  });
+
+  it("setValue throws the update's or the insert's error", async () => {
+    const failedUpdate = scriptedClient({ updated: [false], updateError: { message: "boom" } });
+    await expect(createAppSecretStore(failedUpdate.service as never).setValue("s1", "A", null, "v")).rejects.toThrow("cloud_app_secrets update failed: boom");
+    const failedInsert = scriptedClient({ updated: [false], insertError: { code: "42501", message: "denied" } });
+    await expect(createAppSecretStore(failedInsert.service as never).setValue("s1", "A", null, "v")).rejects.toThrow("cloud_app_secrets insert failed: denied");
   });
 
   it("removeValue uses is(null) for the author and eq for a viewer", async () => {

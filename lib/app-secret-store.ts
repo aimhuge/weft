@@ -83,7 +83,7 @@ function splitNames(
 
 // The store the routes use. Wraps the service client + a `pick` (how to split a name by `from`) so the route's
 // caller never touches Supabase directly. setValue / removeValue / hasValue are single-row operations; they
-// upsert / delete against the unique (share_id, name, coalesce(viewer_id, …)) index.
+// update-or-insert / delete one (share_id, name, viewer_id) row.
 export function createAppSecretStore(service: SupabaseClient): AppSecretStore {
   return {
     async getValues(shareId, names, viewerId) {
@@ -98,13 +98,23 @@ export function createAppSecretStore(service: SupabaseClient): AppSecretStore {
       });
       return openRows(filtered, shareId);
     },
+    // Update the row, else insert it. Not an upsert: the unique key is an expression index on coalesce(viewer_id, …),
+    // which ON CONFLICT (share_id, name, viewer_id) can't infer, so every upsert failed. A second writer racing the
+    // insert hits the unique key (23505); its value then goes in through one more update.
     async setValue(shareId, name, viewerId, value) {
       const ciphertext = seal(value, { shareId, name, viewerId });
-      const row: Record<string, unknown> = { share_id: shareId, name, ciphertext };
+      const update = async () => {
+        let q = service.from("cloud_app_secrets").update({ ciphertext }).eq("share_id", shareId).eq("name", name);
+        q = viewerId === null ? q.is("viewer_id", null) : q.eq("viewer_id", viewerId);
+        const { data, error } = await q.select("name");
+        if (error) throw new Error(`cloud_app_secrets update failed: ${error.message}`);
+        return data.length > 0;
+      };
+      if (await update()) return;
       // null is the column's "no viewer" value; passing it through Supabase JS preserves the NULL insert.
-      row.viewer_id = viewerId;
-      const { error } = await service.from("cloud_app_secrets").upsert(row, { onConflict: "share_id,name,viewer_id" });
-      if (error) throw new Error(`cloud_app_secrets upsert failed: ${error.message}`);
+      const { error } = await service.from("cloud_app_secrets").insert({ share_id: shareId, name, viewer_id: viewerId, ciphertext });
+      if (error?.code === "23505" && (await update())) return;
+      if (error) throw new Error(`cloud_app_secrets insert failed: ${error.message}`);
     },
     async removeValue(shareId, name, viewerId) {
       let q = service.from("cloud_app_secrets").delete().eq("share_id", shareId).eq("name", name);

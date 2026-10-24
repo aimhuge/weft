@@ -168,7 +168,7 @@ describe("POST /api/apps/secrets", () => {
       },
     }));
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ pushed: ["STRIPE_KEY", "PUBLIC_TOKEN"], dropped: ["OPENAI_KEY", "UNDECLARED"] });
+    expect(await res.json()).toEqual({ pushed: ["STRIPE_KEY", "PUBLIC_TOKEN"], dropped: ["OPENAI_KEY", "UNDECLARED"], failed: [] });
     // Each pushed value was sealed as an author secret (viewer_id null).
     expect(setValue).toHaveBeenCalledWith("abc123xyz", "STRIPE_KEY", null, "sk_live_x");
     expect(setValue).toHaveBeenCalledWith("abc123xyz", "PUBLIC_TOKEN", null, "pub_x");
@@ -182,10 +182,10 @@ describe("POST /api/apps/secrets", () => {
     const { POST } = await import("./route");
     const res = await POST(post({ shareId: "abc123xyz", values: { SUPABASE_SECRET_KEY: "sb_secret_x", GA4_PROPERTY_ID: "1" } }));
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ pushed: ["SUPABASE_SECRET_KEY"], dropped: ["GA4_PROPERTY_ID"] });
+    expect(await res.json()).toEqual({ pushed: ["SUPABASE_SECRET_KEY"], dropped: ["GA4_PROPERTY_ID"], failed: [] });
   });
 
-  it("continues past a single upsert failure so the rest still go up", async () => {
+  it("stores the rest past a failed write, then answers 500 naming it", async () => {
     const setValue = vi.fn().mockImplementation((_id: string, name: string) => {
       if (name === "STRIPE_KEY") throw new Error("cipher failed");
       return Promise.resolve();
@@ -196,7 +196,8 @@ describe("POST /api/apps/secrets", () => {
       shareId: "abc123xyz",
       values: { STRIPE_KEY: "sk_x", PUBLIC_TOKEN: "pub_x" },
     }));
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ pushed: ["PUBLIC_TOKEN"], dropped: [] });
+    expect(setValue).toHaveBeenCalledWith("abc123xyz", "PUBLIC_TOKEN", null, "pub_x");
+    expect(res.status).toBe(500);
+    expect(await res.json()).toMatchObject({ error: "couldn't store STRIPE_KEY." });
   });
 });
