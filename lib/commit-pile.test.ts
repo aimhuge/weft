@@ -136,6 +136,9 @@ describe("pilePrompt", () => {
     expect(prompt).toContain('A "Committed" stamp');
     expect(prompt).toContain("skip it for now.");
     expect(prompt).toContain("run `git push` if I asked");
+    expect(prompt).toContain("5. When every change that can go is committed");
+    expect(prompt).toContain("`bash /weft/plugin/skills/done/push.sh`, then `node /weft/plugin/skills/done/deploy.mjs` in the background");
+    expect(prompt).toContain("6. Finish with what is still uncommitted and why.");
   });
 
   it("puts the paths and message on each commit button, and has the page listen for the result", () => {
