@@ -30,6 +30,10 @@ fi
 code="$(git -C "$root" diff --cached --name-only -- '*.ts' '*.tsx' '*.mts' '*.cts' '*.js' '*.jsx' '*.cjs' '*.mjs' '*.json')"
 [ -z "$code" ] && exit 0
 
+# A staged file importing one that's still untracked: named here in a second, before the type-check
+# (scripts/staged-imports.mjs). Twice on 2026-10-24 such a commit reached Vercel as "Module not found".
+node --no-warnings "$root/scripts/staged-imports.mjs" || exit 1
+
 git -C "$root" checkout-index --all --prefix="$tmp/"
 ln -s "$root/node_modules" "$tmp/node_modules"
 cd "$tmp" || exit 1

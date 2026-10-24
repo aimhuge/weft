@@ -1,6 +1,7 @@
 import os from "node:os";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { GIT_GUARD_MATCHER, gitGuard, gitTarget, gitVerdict } from "./git-guard";
+import { GIT_GUARD_MATCHER, gitGuard, gitTarget, gitVerdict, hookTarget } from "./git-guard";
 
 const DIR = "/Users/me/dev/weft";
 const hits = (command: string, cwd = DIR) => gitTarget(command, cwd);
@@ -98,6 +99,24 @@ describe("gitTarget", () => {
     expect(hits("cd /tmp && git -C /Users/me/dev/weft stash")).toBeTruthy();
     expect(hits("git stash", "/tmpfoo")).toBeTruthy();
   });
+
+  it("lets an isolated card discard changes in its own worktree, but never stash or reach another tree", () => {
+    // A real ~/.weft, not the test sandbox's (which is under the temp folder, so already scratch).
+    const saved = process.env.WEFT_DATA;
+    process.env.WEFT_DATA = "/Users/me/.weft";
+    const root = "/Users/me/.weft/worktrees";
+    const mine = path.join(root, "weft-abc123", "card1");
+    const theirs = path.join(root, "weft-abc123", "card2");
+    expect(hits("git reset --hard", mine)).toBeNull();
+    expect(hits("git checkout -- src/a.ts", path.join(mine, "src"))).toBeNull();
+    expect(hits("git clean -fd && git restore .", mine)).toBeNull();
+    expect(hits("git stash", mine)).toBeTruthy();
+    expect(hits(`git -C ${theirs} reset --hard`, mine)).toBeTruthy();
+    expect(hits(`git -C ${DIR} checkout .`, mine)).toBeTruthy();
+    expect(hits(`git -C ${mine} reset --hard`)).toBeTruthy();
+    expect(hits("git reset --hard", root)).toBeTruthy();
+    process.env.WEFT_DATA = saved;
+  });
 });
 
 describe("gitVerdict", () => {
@@ -112,6 +131,30 @@ describe("gitVerdict", () => {
     expect(why).toContain("git show HEAD:path > /tmp/x");
     expect(why).toContain("GIT_INDEX_FILE=/tmp/idx");
     expect(why).toContain("ask the user");
+  });
+});
+
+describe("hookTarget", () => {
+  it("turns away what skips or unhooks the pre-commit hook", () => {
+    expect(hookTarget("git commit --no-verify -m x", DIR)).toContain("--no-verify");
+    expect(hookTarget("git commit -nm x", DIR)).toContain("--no-verify");
+    expect(hookTarget("git config core.hooksPath /Users/me/dev/weft/.git/hooks", DIR)).toContain("core.hooksPath");
+    expect(hookTarget("git config --unset core.hooksPath", DIR)).toContain("unsetting");
+    expect(hookTarget("git -c core.hooksPath=/dev/null commit -m x", DIR)).toContain("skips the pre-commit hook");
+  });
+
+  it("lets reads, the repo's own .githooks, plain commits and scratch repos through", () => {
+    expect(hookTarget("git commit -m 'fix' -- a.ts", DIR)).toBeNull();
+    expect(hookTarget("git commit --amend --no-edit", DIR)).toBeNull();
+    expect(hookTarget("git config core.hooksPath", DIR)).toBeNull();
+    expect(hookTarget("git config --get core.hooksPath", DIR)).toBeNull();
+    expect(hookTarget("git config core.hooksPath .githooks", DIR)).toBeNull();
+    expect(hookTarget("git -C /tmp/x config core.hooksPath .no-hooks", DIR)).toBeNull();
+    expect(hookTarget("git commit -n -m x", os.tmpdir())).toBeNull();
+  });
+
+  it("gives the hook's own reason", () => {
+    expect(gitVerdict("git commit --no-verify -m x", DIR)).toContain("scripts/check-staged.sh");
   });
 });
 
