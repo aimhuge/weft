@@ -13,7 +13,7 @@ const review = { steps: [{ title: "First", look: "a" }, { title: "Second", look:
 const card = makeCard({ id: "c1", review });
 
 function setup() {
-  const onSend = vi.fn(() => Promise.resolve());
+  const onSend = vi.fn<(text: string) => Promise<void>>(() => Promise.resolve());
   const view = render(<ReviewPanel card={card} items={[]} onSend={onSend} />);
   return { onSend, view };
 }
@@ -82,5 +82,55 @@ describe("ReviewPanel dropped files", () => {
   it("takes files dropped on its card, since it stands in for the reply box", () => {
     setup();
     expect(screen.getByRole("textbox", { name: "Message" }).closest("[data-handed-to]")).toHaveAttribute("data-handed-to", "c1");
+  });
+});
+
+// The feedback you write on a step must never become unreachable: stepping on keeps it, and
+// finishing the review sends it.
+describe("ReviewPanel unsent feedback", () => {
+  it("says how many steps still hold feedback you haven't sent", async () => {
+    setup();
+    await userEvent.type(screen.getByRole("textbox", { name: "Message" }), "the login is broken");
+    await userEvent.click(screen.getByRole("button", { name: "Next step" }));
+    expect(screen.getByText(/1 step with unsent feedback/)).toBeTruthy();
+  });
+
+  it("keeps the feedback you wrote when you step away from a step", async () => {
+    setup();
+    const box = screen.getByRole("textbox", { name: "Message" });
+    await userEvent.type(box, "the login is broken");
+    await userEvent.click(screen.getByRole("button", { name: "Next step" }));
+    expect(box).toHaveValue("");
+    await userEvent.click(screen.getByRole("button", { name: "Previous step" }));
+    expect(box).toHaveValue("the login is broken");
+  });
+
+  it("sends the feedback you wrote on a step when you step on", async () => {
+    const { onSend } = setup();
+    await userEvent.type(screen.getByRole("textbox", { name: "Message" }), "the login is broken");
+    await userEvent.click(screen.getByRole("button", { name: "Looks good, next" }));
+    expect(onSend).toHaveBeenCalledWith(expect.stringContaining("the login is broken"));
+  });
+
+  it("sends the feedback you wrote on the last step when you finish", async () => {
+    const { onSend } = setup();
+    const box = screen.getByRole("textbox", { name: "Message" });
+    await userEvent.click(screen.getByRole("button", { name: "Next step" }));
+    await userEvent.type(box, "the logo is wrong");
+    await userEvent.click(screen.getByRole("button", { name: "Done" }));
+    expect(onSend).toHaveBeenCalledWith(expect.stringContaining("the logo is wrong"));
+    expect(onSend).toHaveBeenCalledWith("/weft:done");
+  });
+
+  it("sends the feedback of every step that still holds some, in one message", async () => {
+    const { onSend } = setup();
+    const box = screen.getByRole("textbox", { name: "Message" });
+    await userEvent.type(box, "the login is broken");
+    await userEvent.click(screen.getByRole("button", { name: "Next step" }));
+    await userEvent.type(box, "the logo is wrong");
+    await userEvent.click(screen.getByRole("button", { name: "Done" }));
+    const message = onSend.mock.calls.map((call) => call[0]).find((text) => text.includes("the login is broken"));
+    expect(message).toContain("the login is broken");
+    expect(message).toContain("the logo is wrong");
   });
 });

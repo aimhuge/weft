@@ -2,16 +2,21 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { stepUrl } from "@/lib/review";
-import { moveDraft, readDraft, replyDraftKey, writeDraft } from "@/lib/drafts";
+import { moveDraft, readDraft, replyDraftKey } from "@/lib/drafts";
+import {
+  feedbackKey,
+  flushFeedback,
+  sendStepFeedback,
+  unsentCount,
+  writeFeedback,
+} from "@/lib/review-feedback";
 import { lastLocalUrl } from "@/lib/review-tour";
 import type { ReviewPlan, ThreadItem } from "@/lib/types";
 import Composer, { type ComposerHandle } from "./Composer";
 import Icon from "./Icon";
 import { ReviewPanelDevServer } from "./ReviewPanelDevServer";
+import { ReviewPanelHeader } from "./ReviewPanelHeader";
 import { ReviewPanelLookFor } from "./ReviewPanelLookFor";
-
-// What you were typing as feedback on a step, kept until it's sent.
-const feedbackKey = (cardId: string, step: number) => `weft.review.${cardId}.${step}`;
 
 // The tour a thread left for its Review card: one step at a time, with what to look for, the page
 // opened in the browser pane when it's a web product, and a box to send feedback on that step.
@@ -64,6 +69,15 @@ export function ReviewPanelTour({
 
   const last = index >= steps.length - 1;
 
+  // The steps that still hold feedback you haven't sent. Kept in state so the count follows what you
+  // type, what you send and where you step to: feedback written on a step you step away from must
+  // never become invisible.
+  const [unsent, setUnsent] = useState(() => unsentCount(cardId, steps.map((_, i) => i)));
+
+  function refreshUnsent() {
+    setUnsent(unsentCount(cardId, steps.map((_, i) => i)));
+  }
+
   function go(to: number) {
     const next = Math.max(0, Math.min(steps.length - 1, to));
     setIndex(next);
@@ -79,6 +93,9 @@ export function ReviewPanelTour({
   async function sendFeedback() {
     const box = composer.current;
     if (sending || !step || !box || box.isEmpty()) return;
+    // The box belongs to boxStep, not to index: they are the same step, but the ref is the one that
+    // is always current, and the message and the cleared slot must name the same step.
+    const target = boxStep.current;
     let text: string;
     try {
       text = box.read();
@@ -89,19 +106,34 @@ export function ReviewPanelTour({
     if (!text) return;
     setSending(true);
     try {
-      await onSend(`Review feedback on step ${index + 1} of ${steps.length}, “${step.title}”:\n${text}`);
+      await sendStepFeedback(cardId, target, steps[target]?.title ?? step.title, steps.length, onSend);
       composer.current?.clear();
-      writeDraft(feedbackKey(cardId, boxStep.current), "");
       setEmpty(true);
       setError("");
+      refreshUnsent();
     } finally {
       setSending(false);
     }
   }
 
   // The last step's button wraps the thread up with Weft's done skill, as the Skills menu would.
-  function approve() {
+  async function approve() {
     setApproved((prev) => new Set(prev).add(index));
+    // Feedback you wrote on any step but never sent goes out with the approval: it was written for the
+    // thread to act on, and stepping past a step must not swallow it.
+    const pending = unsent;
+    if (pending > 0) {
+      setSending(true);
+      try {
+        await flushFeedback(cardId, steps, onSend);
+        composer.current?.clear();
+        setEmpty(true);
+        setError("");
+      } finally {
+        setSending(false);
+      }
+      refreshUnsent();
+    }
     if (!last) go(index + 1);
     else void onSend("/weft:done");
   }
@@ -111,16 +143,14 @@ export function ReviewPanelTour({
 
   return (
     <section className="border-t border-line bg-accent-soft/40">
-      <button
-        onClick={() => setCollapsed((c) => !c)}
-        className="flex w-full items-center gap-2 px-4 py-2 text-left text-[12px] font-medium text-ink"
-      >
-        <Icon name={collapsed ? "chevronRight" : "chevronDown"} size={12} />
-        Review
-        <span className="font-normal text-muted">
-          step {Math.min(index + 1, steps.length)} of {steps.length} · {approved.size} approved
-        </span>
-      </button>
+      <ReviewPanelHeader
+        collapsed={collapsed}
+        onToggle={() => setCollapsed((c) => !c)}
+        index={index}
+        total={steps.length}
+        approved={approved.size}
+        unsent={unsent}
+      />
       {!collapsed && (
         <div className="px-4 pb-3">
           <div className="flex items-start gap-2">
@@ -149,9 +179,10 @@ export function ReviewPanelTour({
               placeholder="Anything wrong or missing here? Paste a screenshot to show it. (Enter to send)"
               onSubmit={() => void sendFeedback()}
               onChange={(markdown) => {
-                writeDraft(feedbackKey(cardId, boxStep.current), markdown);
+                writeFeedback(cardId, boxStep.current, markdown);
                 setEmpty(!markdown.trim());
                 setError("");
+                refreshUnsent();
               }}
               sizeClass="min-h-[44px] max-h-[30vh]"
             />
@@ -175,7 +206,7 @@ export function ReviewPanelTour({
             </button>
             <span className="flex-1" />
             <button
-              onClick={approve}
+              onClick={() => void approve()}
               className="rounded-md bg-accent px-3 py-1 text-[12.5px] font-medium text-on-accent hover:opacity-90"
             >
               {last ? "Done" : "Looks good, next"}

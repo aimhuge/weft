@@ -242,7 +242,7 @@ When a new doc lands in this folder, add it here on the same change.
 - `lib/file-drop.ts` + `lib/use-file-drop.ts` + `components/FileDrop.tsx`: files dragged from Finder anywhere in the window; a composer takes
   its own drop, a card opens with them in its reply box, an open thread (`data-drop-target`) gets them, empty board opens New thread; files wait
   in the store until the target composer (`dropTarget`) mounts.
-- `lib/review.ts`: `weft-review` tour blocks. `lib/devserver.ts` + `lib/devserver-list.ts` + `lib/devserver-tools.ts` + `components/ServicesDrawer.tsx`:
+- `lib/review.ts`: `weft-review` tour blocks. `lib/review-feedback.ts` + `components/ReviewPanelTour.tsx` + `components/ReviewPanelHeader.tsx`: the review tour's per-step feedback drafts (`weft.review.<cardId>.<step>` in localStorage), the header's unsent count, and the flush that sends every waiting note with the approval (docs/architecture/threads-and-sessions.md "Review tour"). `lib/devserver.ts` + `lib/devserver-list.ts` + `lib/devserver-tools.ts` + `components/ServicesDrawer.tsx`:
   dev servers Weft runs for threads (`mcp__devservers__*`) and review tours; `lib/task-stop.ts` is the task strip's per-task Stop (docs/architecture/dev-servers.md).
   `lib/services.ts` + `lib/services-snapshot.ts` + `lib/services-kill.ts` + `app/api/services` + `lib/use-services.ts` + `lib/services-view.ts` + `lib/services-prefs.ts` + `components/ServicesDrawer.tsx`:
   the rail's 🖥 Services drawer, every process Weft spawned (one `ps` of the tree under Electron, split by thread CLI, dev server, terminal and other) with CPU, memory, End and a refresh-rate cookie.
@@ -409,7 +409,8 @@ When a new doc lands in this folder, add it here on the same change.
 - `lib/ts-paths.ts`: where `@/` and other tsconfig `paths` aliases point (`aliasBases`), so both import guards resolve `@/x` as `src/x` in DeckCP and `x` in Weft.
 - `lib/import-check.ts` + `lib/dropped-imports.ts`: after each Edit/Write, tells the thread which imports it broke (a build error no boundary catches) or dropped while still in use (an "X is not defined" on draw);
   in every thread via `lib/env.ts` `guardedCli()`, and in other Claude Code sessions via `.claude/settings.json`.
-- Components: `Board.tsx`, `ThreadView.tsx`, `ThreadItems.tsx`, `Markdown.tsx`, `ReviewPanel.tsx`;
+- Components: `Board.tsx`, `ThreadView.tsx`, `ThreadItems.tsx`, `Markdown.tsx`, `ReviewPanel.tsx`
+  (the tour: `ReviewPanelTour.tsx`, its header `ReviewPanelHeader.tsx`, and the card without a tour `ReviewPanelNoTour.tsx`);
   every dialog sits in `Modal.tsx` (backdrop, header, close, Escape via `lib/use-escape.ts`);
   each card, panel, dialog body, drawer, header badge and thread message sits in `CrashGuard.tsx` (an error boundary;
   `inline` draws a one-line chip for small spots), with `app/error.tsx` behind the whole board (on weft.zip it draws the web error page, and `app/not-found.tsx` the 404: `components/web-states/`, which also holds the public pages' loading skeletons). Board's panels, dialogs,
