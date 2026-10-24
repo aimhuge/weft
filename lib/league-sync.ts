@@ -3,6 +3,7 @@ import { gameState } from "./game-server";
 import { globalSingleton } from "./global-singleton";
 import { LEAGUES } from "./game";
 import { leagueEntry, toLeagueView, toTierView, type BrowseRow, type LeagueEntry, type LeagueView, type StandingRow, type TierView } from "./league";
+import { syncChangelog, watchChangelog } from "./changelog-sync";
 import { syncProfileCard } from "./profile-card-sync";
 import { safeClient, signedIn } from "./signed-in-client";
 
@@ -82,7 +83,7 @@ export async function tierView(tier: number, { client = safeClient, entry = ownE
   }
 }
 
-// Once per server (lib/copilot.ts prewarm), and the public builder card rides the same timer. A failed post
+// Once per server (lib/copilot.ts prewarm), and the public builder card and the changelog mirror ride the same timer. A failed post
 // just waits for the next one.
 export function startLeagueSync(deps: LeagueDeps = {}): () => void {
   const state = globalSingleton("__weftLeagueSync", () => ({ timers: [] as ReturnType<typeof setTimeout>[] }));
@@ -92,10 +93,13 @@ export function startLeagueSync(deps: LeagueDeps = {}): () => void {
       if (!(err instanceof Error && err.message === NOT_DEPLOYED)) console.warn("[weft] league sync failed:", err);
     });
     void syncProfileCard({ client: deps.client }).catch((err: unknown) => console.warn("[weft] profile card sync failed:", err));
+    void syncChangelog({ client: deps.client }).catch((err: unknown) => console.warn("[weft] changelog sync failed:", err));
   };
+  const unwatch = watchChangelog({ client: deps.client });
   state.timers.push(setTimeout(tick, FIRST_SYNC_MS), setInterval(tick, SYNC_MS));
   return () => {
     for (const t of state.timers) clearTimeout(t);
     state.timers = [];
+    unwatch();
   };
 }
