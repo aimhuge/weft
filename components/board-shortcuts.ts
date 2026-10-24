@@ -50,7 +50,8 @@ export function boardShortcuts(c: BoardShortcutContext): ShortcutDef[] {
       keys: ["mod+k"],
       description: "Command palette: search cards and run commands",
       group: "General",
-      enabled: !(c.showNew || c.showSettings || c.showHelp || Boolean(c.login)),
+      // Settings stays open underneath: the palette stacks above it (Modal layer "palette").
+      enabled: !(c.showNew || c.showHelp || Boolean(c.login)),
       // From the filter box, the palette picks up what was typed there.
       handler: () => (c.showPalette ? c.setShowPalette(false) : c.openPalette(c.filterHasFocus() ? c.query : "")),
     },

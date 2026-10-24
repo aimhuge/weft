@@ -13,6 +13,12 @@ const PLACEMENT = {
   free: "",
 };
 
+// How high the dialog stacks. "top" clears everything else Weft draws (feature intros at z-[70], the
+// upgrade dialog): Settings and the welcome. "palette" is above them, since ⌘K opens over Settings.
+// "front" is above all of it, for the achievement popup, which can arrive (and start talking) at any
+// moment. Only confetti and tooltips go higher.
+const LAYER = { normal: "z-50", top: "z-[90]", palette: "z-[92]", front: "z-[94]" };
+
 // The chrome every dialog shares: a dimmed backdrop over the whole window, a panel, a header with the
 // title and a close button, and Escape. Escape always closes the newest dialog; so does a click on the
 // backdrop, unless `keepOnBackdrop`. Without a title there's no header, and `label` names the dialog.
@@ -23,6 +29,7 @@ export default function Modal({
   onClose,
   placement = "center",
   keepOnBackdrop = false,
+  layer = "normal",
   className = "",
   style,
   onHeaderPointerDown,
@@ -33,6 +40,7 @@ export default function Modal({
   onClose: () => void;
   placement?: keyof typeof PLACEMENT;
   keepOnBackdrop?: boolean;
+  layer?: keyof typeof LAYER;
   // Width and height for the panel, e.g. "w-full max-w-[560px]".
   className?: string;
   style?: CSSProperties;
@@ -46,7 +54,7 @@ export default function Modal({
   return (
     <div
       style={NO_DRAG}
-      className={`fixed inset-0 z-50 bg-black/40 ${PLACEMENT[placement]}`}
+      className={`fixed inset-0 ${LAYER[layer]} bg-black/40 ${PLACEMENT[placement]}`}
       onMouseDown={keepOnBackdrop ? undefined : onClose}
     >
       <div

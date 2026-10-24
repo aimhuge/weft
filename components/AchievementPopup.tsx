@@ -26,7 +26,7 @@ export default function AchievementPopup({ achievement, onProfile, onClose }: { 
 
   return (
     <>
-      <Modal label={heading} onClose={onClose} className={`w-full overflow-hidden ${lore ? "max-w-[min(760px,92vw)]" : "max-w-[360px]"}`}>
+      <Modal label={heading} onClose={onClose} layer="front" className={`w-full overflow-hidden ${lore ? "max-w-[min(760px,92vw)]" : "max-w-[360px]"}`}>
         {lore && <LevelHero lore={lore} />}
         <div className={`flex flex-col items-center gap-3 px-6 pb-5 text-center ${lore ? "pt-4" : "pt-7"}`}>
           {(fresh.length > 0 || !lore) && <BadgeIcon fresh={fresh} />}

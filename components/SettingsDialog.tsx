@@ -192,6 +192,7 @@ export default function SettingsDialog({ onClose }: { onClose: () => void }) {
     <Modal
       label="Settings"
       onClose={onClose}
+      layer="top"
       className="h-full w-full overflow-hidden"
       style={{ background: `${SCRIM[scene.base]}, url(${sceneUrl(scene.id)}) center 62% / cover no-repeat, var(--canvas)` }}
     >

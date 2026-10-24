@@ -46,5 +46,5 @@ export default function Confetti({ onDone }: { onDone: () => void }) {
     return () => cancelAnimationFrame(frame);
   }, []);
 
-  return <canvas ref={canvas} aria-hidden className="pointer-events-none fixed inset-0 z-[70] h-full w-full" />;
+  return <canvas ref={canvas} aria-hidden className="pointer-events-none fixed inset-0 z-[95] h-full w-full" />;
 }

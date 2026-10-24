@@ -87,7 +87,7 @@ export default function CommandPalette({
   }
 
   return (
-    <Modal label="Command palette" onClose={onClose} placement="top" className="max-h-[min(680px,82vh)] w-full max-w-[840px] overflow-hidden">
+    <Modal label="Command palette" onClose={onClose} layer="palette" placement="top" className="max-h-[min(680px,82vh)] w-full max-w-[840px] overflow-hidden">
         <div className="flex shrink-0 items-center gap-2.5 border-b border-line px-4 py-3.5">
           <Icon name="search" size={19} className="text-muted" />
           <input

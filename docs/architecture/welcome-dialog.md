@@ -8,7 +8,7 @@ whole design of this dialog:
   and saves the welcome (`answerWelcome()`) before it will let you start a thread.
 - **Replay** — the avatar menu's *Replay the welcome* (or the command palette's `replay-welcome`) calls
   `replayWelcome()` in `lib/welcome-client.ts`: it runs `resetOnboarding()` (Settings → General's Reset tips:
-  the column tips and every drawer's intro video come back) and dispatches `REPLAY_EVENT`; the dialog
+  every drawer's intro video and the ask to sync come back) and dispatches `REPLAY_EVENT`; the dialog
   reloads with `loadWelcome(true)` (`?replay=1`) and shows the same screens as a **preview that saves
   nothing**. Only its final **Start thread** still does real work, because you asked for that one.
 
@@ -40,7 +40,7 @@ place, `WelcomeDialog.tsx`:
 ```tsx
 const dismiss = () => { trackOnboarding("onboarding_skipped", { step, replay }); setPreview(null); };
 const close = replay ? dismiss : () => {};
-<Modal label="Welcome to Weft" onClose={close} keepOnBackdrop={!replay} …>
+<Modal label="Welcome to Weft" layer="top" onClose={close} keepOnBackdrop={!replay} …>
 ```
 
 - **On a replay**, `onClose` is the real `dismiss` and `keepOnBackdrop` is off, so the shared

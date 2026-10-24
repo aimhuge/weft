@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useEscape } from "@/lib/use-escape";
 import { filesApi } from "@/lib/client-files";
+import Modal from "./Modal";
 
 // ⌘P: a fuzzy file picker over the card's folder, opened from the editor column. Keyboard-driven:
 // typing filters, ↑/↓ move, Enter opens the highlighted file, Escape closes. The list is kept
@@ -47,7 +47,6 @@ export default function QuickOpen({ cardId, onPick, onClose }: QuickOpenProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const listRef = useRef<HTMLUListElement | null>(null);
 
-  useEscape(true, onClose);
 
   useEffect(() => {
     let cancelled = false;
@@ -96,15 +95,8 @@ export default function QuickOpen({ cardId, onPick, onClose }: QuickOpenProps) {
   }
 
   return (
-    <div
-      role="dialog"
-      aria-label="Open file"
-      className="fixed inset-0 z-50 flex items-start justify-center bg-scrim px-4 pt-[15vh]"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
-      <div className="w-full max-w-[520px] overflow-hidden rounded-lg border border-line bg-panel shadow-xl" onKeyDown={onKey}>
+    <Modal label="Open file" onClose={onClose} placement="top" className="w-full max-w-[520px] overflow-hidden">
+      <div onKeyDown={onKey}>
         <input
           ref={inputRef}
           value={query}
@@ -137,6 +129,6 @@ export default function QuickOpen({ cardId, onPick, onClose }: QuickOpenProps) {
           ))}
         </ul>
       </div>
-    </div>
+    </Modal>
   );
 }

@@ -156,7 +156,7 @@ export default function WelcomeDialog({ onError }: { onError?: (err: unknown) =>
   };
 
   return createPortal(
-    <Modal label="Welcome to Weft" onClose={close} keepOnBackdrop={!replay} className="w-full max-w-[760px]">
+    <Modal label="Welcome to Weft" onClose={close} layer="top" keepOnBackdrop={!replay} className="w-full max-w-[760px]">
       <div onKeyDown={onKeyDown} className="flex flex-col">
         <WelcomeStepBar steps={steps} step={step} replay={replay} onDismiss={dismiss} />
         <div className="max-h-[72vh] overflow-auto px-5 py-4">
