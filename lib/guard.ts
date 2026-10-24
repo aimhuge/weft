@@ -47,5 +47,15 @@ export function elevated(req: Request): Response | null {
 }
 
 export function fail(err: unknown, status = 400) {
-  return Response.json({ error: err instanceof Error ? err.message : String(err) }, { status });
+  return Response.json({ error: errorMessage(err) }, { status });
+}
+
+// Supabase and Stripe errors are often plain objects with a message, not Errors;
+// String() would make those "[object Object]".
+function errorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === "object" && err !== null && typeof (err as { message?: unknown }).message === "string") {
+    return (err as { message: string }).message;
+  }
+  return String(err);
 }

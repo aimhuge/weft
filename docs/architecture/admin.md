@@ -29,11 +29,12 @@ The check happens in three places:
 
 - `app/api/admin/gate/route.ts` — `{ admin: boolean }`. Read-only, no
   service key, no database calls.
-- `app/api/admin/users/route.ts` — paginated `auth.users` joined to
-  `profiles`, sorted by `created_at` / `last_sign_in_at` / `email`, searched
-  with a `ilike` on email (the wildcard is escaped via
-  `@aimhuge/teams`'s `escapeLikeWildcards`). 503 when `SUPABASE_SECRET_KEY`
-  is missing (the desktop case).
+- `app/api/admin/users/route.ts` — every account from GoTrue's admin API
+  (`auth.admin.listUsers`, up to 10 pages of 1000; `auth.users` isn't
+  reachable over PostgREST), joined to `profiles` for name and avatar, then
+  filtered by email-contains, sorted by `created_at` / `last_sign_in_at` /
+  `email` (case-blind, missing values last) and paged in memory. 503 when
+  `SUPABASE_SECRET_KEY` is missing (the desktop case).
 - `app/api/admin/local/route.ts` — local stats from `~/.weft/`: data dir,
   uptime, board / thread / archived counts, activity log size, last
   activity timestamp, page store size, keep-alive minutes. No service key
@@ -41,18 +42,26 @@ The check happens in three places:
 
 ## Pages
 
-- `app/(admin)/admin/layout.tsx` — full-window layout with a top bar
-  (`← Board`, `Users`, `Settings`) so the SuperAdmin can return without the
-  browser back button. The bar's small and dark so it doesn't compete with
-  the page.
-- `app/(admin)/admin/users/page.tsx` — server component, calls
-  `requireSuperAdminWeft()`, hands the session to `UsersClient`.
-- `app/(admin)/admin/users/UsersClient.tsx` — client component, owns the
-  `AdminTablePage` from `@aimhuge/admin` and the fetch loop
-  (`/api/admin/users?skip&take&q&sort`).
+Every page is built from the **admin kit** (`components/admin/`), on the board's own tokens, so admin matches the
+board in light and dark:
+
+- `kit.tsx` — `AdminPage` (title, subtitle, actions), `Section` (a card with a small caps title; `tone="danger"`),
+  `StatGrid` / `Stat`, `Badge` (neutral, accent, ok, warn, danger), `Button` (default, primary, danger; sm, md),
+  `Input`, `Select`, `Field`, `Checkbox`, `Notice`, `Empty`, `KeyValues`.
+- `DataTable.tsx` — `DataTable` (columns as `{ key, header, cell }`; one line for error, loading or empty), `Pager`
+  ("21–40 of 45" with Prev / Next) and `Avatar`.
+
+- `app/(admin)/admin/layout.tsx` — full-window layout with a top bar: `← Board`, 🛡 Admin, the tabs
+  (`AdminNav.tsx`, the current one lit) and the signed-in account on the right. Every page renders through
+  `AdminGate.tsx`: the gate inside the page's own `<Suspense>`. The gate reads the session (`connection()`), and a
+  boundary in the layout doesn't cover a tab-to-tab click (a client navigation only re-renders below the shared
+  layout), so without one per page Next reports a blocking route.
+- `app/(admin)/admin/admin-api.ts` — `adminGet` / `adminPost` (with `x-weft-token`), `money`, `day`.
+- `app/(admin)/admin/users/` — the server page gates; `UsersTable` searches by email, sorts, pages by 20, and shows
+  avatar, name and email, provider, joined and last seen.
 - `app/(admin)/admin/settings/page.tsx` — server component, calls
-  `requireSuperAdminWeft()`, then fetches `/api/admin/local` over loopback
-  with the `x-weft-token` header (the same guard every API route uses).
+  `requireSuperAdminWeft()`, then reads the local overview
+  (`loadAdminLocalOverview`) and shows it as stats.
 
 ### Billing and coupons
 
@@ -72,12 +81,9 @@ take over the whole window and a "← Board" link in the layout returns.
 
 ## Tokens
 
-`app/globals.css` defines `--admin-bg / --admin-surface / --admin-border /
---admin-text / --admin-muted / --admin-accent / --admin-error`, aliased to
-the board's `--canvas / --panel / --line-strong / --ink / --muted /
---accent / --danger` for light and dark themes. The package's
-`AdminTablePage` reads them so a SuperAdmin page in Weft looks like the
-rest of the board rather than the package's default palette.
+`app/globals.css` still defines the `--admin-*` aliases (`--admin-bg`, `--admin-surface` and so on, mapped to
+`--canvas`, `--panel`, ...) for the `@aimhuge/admin` package's components. Weft's own pages no longer use them: the
+kit uses the board's tokens directly.
 
 ## Tests
 
@@ -85,8 +91,11 @@ rest of the board rather than the package's default palette.
   `adminServiceClient`, `adminSessionFrom`. Mocks `next/navigation`'s
   `notFound` to throw `NEXT_NOT_FOUND`, mirrors the package's gate.
 - `app/api/admin-routes.test.ts` — `/api/admin/gate`, `/api/admin/users`
-  (the no-service-key 503, the paginated rows + total, the q-ilter, the
-  auth.users / profiles join), `/api/admin/local` (the overview shape).
+  (the no-service-key 503, rows + total from `listUsers` joined to profiles,
+  search, sort and paging, reading every page, the auth error's message),
+  `/api/admin/local` (the overview shape).
+- `components/admin/kit.test.tsx` — the table's error / loading / empty lines, the pager, the kit's pieces.
+- `app/(admin)/admin/AdminNav.test.tsx` — the current tab is lit.
 - `components/LibraryRail.test.tsx` — admin icon shown only when
   `useSuperAdminGate()` is true; the click navigates to `/admin/users`.
 

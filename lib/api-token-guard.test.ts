@@ -18,7 +18,7 @@ import { sourceFiles } from "./client-graph";
 
 const ROOT = path.resolve(__dirname, "..");
 // Every directory that can hold a client file: components/, lib/ and the routes under app/ (the admin pages are
-// client components too, and app/(admin)/admin/users/UsersClient.tsx fetches /api/admin/users).
+// client components too, and app/(admin)/admin/users/UsersTable.tsx fetches /api/admin/users).
 const CLIENT_DIRS = ["components", "lib", "app"];
 
 // The files that call the board's own routes without the token, and why that's allowed. Each is a route the
@@ -196,7 +196,7 @@ describe("the board's fetches", () => {
   });
 
   it("finds the client files under app/ too, so the admin pages are covered", () => {
-    const admin = path.join(ROOT, "app/(admin)/admin/users/UsersClient.tsx");
+    const admin = path.join(ROOT, "app/(admin)/admin/users/UsersTable.tsx");
     expect(fs.existsSync(admin)).toBe(true);
     expect(unguardedFetches(admin)).toEqual([]);
   });

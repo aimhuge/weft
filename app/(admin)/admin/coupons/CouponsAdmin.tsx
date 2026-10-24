@@ -2,9 +2,12 @@
 
 // The client half of /admin/coupons: one Stripe mode's Weft promotion codes (make one, turn one on or off) and every
 // referral (pay its reward or void it). Referral codes are listed with the rest, marked "referral".
+// Built on the admin kit (components/admin): an admin page, a mode switch, and two data tables.
 
 import { useCallback, useEffect, useState } from "react";
-import { adminGet, adminPost, day, money, ui } from "../billing/admin-api";
+import { DataTable, type Column } from "@/components/admin/DataTable";
+import { AdminPage, Badge, Button, Notice, Section, type Tone } from "@/components/admin/kit";
+import { adminGet, adminPost, day, money } from "../admin-api";
 import CouponForm from "./CouponForm";
 
 interface Coupon {
@@ -46,6 +49,18 @@ function off(c: Coupon): string {
   return `${amount} off, ${span}`;
 }
 
+// A Stripe mode: live is the real one, test the sandbox.
+function modeTone(mode: string): Tone {
+  return mode === "live" ? "ok" : "warn";
+}
+
+// A referral's state: converted is waiting to be paid, rewarded is done, void never happened.
+function statusTone(status: string): Tone {
+  if (status === "converted") return "accent";
+  if (status === "rewarded") return "ok";
+  return "neutral";
+}
+
 export default function CouponsAdmin() {
   const [mode, setMode] = useState<string>("");
   const [view, setView] = useState<View | null>(null);
@@ -73,68 +88,135 @@ export default function CouponsAdmin() {
     }
   };
 
+  const couponColumns: Column<Coupon>[] = [
+    { key: "code", header: "Code", cell: (c) => <span className="font-mono">{c.code}</span>, className: "whitespace-nowrap" },
+    { key: "offer", header: "Offer", cell: (c) => <span className="text-muted">{off(c)}</span>, className: "whitespace-nowrap" },
+    { key: "mode", header: "Mode", cell: () => <Badge tone={modeTone(mode)}>{mode || "—"}</Badge> },
+    { key: "kind", header: "Kind", cell: (c) => <span className="text-muted">{c.kind}</span>, className: "whitespace-nowrap" },
+    {
+      key: "active",
+      header: "Active",
+      cell: (c) => <Badge tone={c.active ? "ok" : "neutral"}>{c.active ? "active" : "off"}</Badge>,
+      className: "whitespace-nowrap",
+    },
+    {
+      key: "uses",
+      header: "Uses",
+      cell: (c) => (
+        <span className="text-muted">
+          {c.timesRedeemed}
+          {c.maxRedemptions ? `/${c.maxRedemptions}` : ""} used
+        </span>
+      ),
+      className: "whitespace-nowrap",
+    },
+    {
+      key: "expiry",
+      header: "Expiry",
+      cell: (c) => <span className="text-muted">{c.expiresAt ? `until ${day(c.expiresAt)}` : "—"}</span>,
+      className: "whitespace-nowrap",
+    },
+    {
+      key: "toggle",
+      header: "",
+      cell: (c) => (
+        <Button
+          size="sm"
+          onClick={() => void run({ op: "set_active", id: c.promotionId, active: !c.active })}
+        >
+          {c.active ? "Turn off" : "Turn on"}
+        </Button>
+      ),
+      className: "whitespace-nowrap",
+    },
+  ];
+
+  const referralColumns: Column<Referral>[] = [
+    {
+      key: "referrer",
+      header: "Referrer",
+      cell: (r) => <span className="font-medium">{r.referrer}</span>,
+      className: "whitespace-nowrap",
+    },
+    {
+      key: "referred",
+      header: "Referred",
+      cell: (r) => <span className="text-muted">{r.referred}</span>,
+      className: "whitespace-nowrap",
+    },
+    { key: "mode", header: "Mode", cell: (r) => <Badge tone={modeTone(r.mode)}>{r.mode}</Badge> },
+    { key: "status", header: "Status", cell: (r) => <Badge tone={statusTone(r.status)}>{r.status}</Badge> },
+    {
+      key: "reward",
+      header: "Reward",
+      cell: (r) => <span className="text-muted">{r.rewardCents ? money(r.rewardCents) : "—"}</span>,
+      className: "whitespace-nowrap",
+    },
+    {
+      key: "date",
+      header: "Date",
+      cell: (r) => <span className="text-muted">{day(r.createdAt)}</span>,
+      className: "whitespace-nowrap",
+    },
+    {
+      key: "actions",
+      header: "",
+      cell: (r) =>
+        r.status === "converted" ? (
+          <div className="flex items-center gap-2">
+            <Button size="sm" onClick={() => void run({ op: "pay_reward", id: r.id })}>
+              Pay
+            </Button>
+            <Button size="sm" variant="danger" onClick={() => void run({ op: "void_referral", id: r.id })}>
+              Void
+            </Button>
+          </div>
+        ) : null,
+      className: "whitespace-nowrap",
+    },
+  ];
+
+  const modeButtons = (view?.keys ?? []).map((k) => (
+    <Button key={k} size="sm" variant={k === mode ? "primary" : "default"} onClick={() => setMode(k)}>
+      {k}
+    </Button>
+  ));
+
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 p-6 text-admin-text">
-      <div className="flex items-baseline gap-3">
-        <h1 className="text-2xl font-semibold tracking-tight">Coupons and referrals</h1>
-        {view?.keys.map((k) => (
-          <button key={k} type="button" className={`${ui.btn} ${k === mode ? "bg-black/5" : ""}`} onClick={() => setMode(k)}>
-            {k}
-          </button>
-        ))}
-      </div>
-      {note && <p className={`text-sm ${note.ok ? "text-green-700" : "text-red-600"}`}>{note.text}</p>}
+    <AdminPage
+      title="Coupons"
+      wide
+      subtitle="Make a Stripe promotion code for a workspace, and pay or void referral rewards."
+      actions={modeButtons}
+    >
+      {note && <Notice tone={note.ok ? "ok" : "danger"}>{note.text}</Notice>}
+
       <CouponForm onCreate={(input) => run({ op: "create", ...input })} />
-      <section className={ui.card}>
-        <h2 className={ui.h}>Codes in {mode || "…"} mode</h2>
-        <table className="w-full text-left text-xs">
-          <tbody>
-            {view?.coupons.map((c) => (
-              <tr key={c.promotionId} className={`border-t border-admin-border ${c.active ? "" : "opacity-50"}`}>
-                <td className="py-1.5 pr-2 font-mono">{c.code}</td>
-                <td className="pr-2">{off(c)}</td>
-                <td className="pr-2 text-admin-muted">{c.kind}</td>
-                <td className="pr-2">{c.timesRedeemed}{c.maxRedemptions ? `/${c.maxRedemptions}` : ""} used</td>
-                <td className="pr-2 text-admin-muted">{c.expiresAt ? `until ${day(c.expiresAt)}` : ""}</td>
-                <td>
-                  <button type="button" className={ui.btn} onClick={() => void run({ op: "set_active", id: c.promotionId, active: !c.active })}>
-                    {c.active ? "Turn off" : "Turn on"}
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
-      <section className={ui.card}>
-        <h2 className={ui.h}>Referrals</h2>
-        {view && (
-          <p className="text-xs text-admin-muted">
-            The referred workspace gets {view.terms.percentOff}% off {view.terms.months} months; the referrer gets {money(view.terms.rewardCents)} on its Stripe balance.
-          </p>
-        )}
-        <table className="w-full text-left text-xs">
-          <tbody>
-            {view?.referrals.map((r) => (
-              <tr key={r.id} className="border-t border-admin-border">
-                <td className="py-1.5 pr-2">{day(r.createdAt)}</td>
-                <td className="pr-2">{r.referrer} → {r.referred}</td>
-                <td className="pr-2 font-mono">{r.code}</td>
-                <td className="pr-2">{r.mode} · {r.status}{r.rewardCents ? ` · ${money(r.rewardCents)}` : ""}</td>
-                <td className={ui.row}>
-                  {r.status === "converted" && (
-                    <>
-                      <button type="button" className={ui.btn} onClick={() => void run({ op: "pay_reward", id: r.id })}>Pay reward</button>
-                      <button type="button" className={ui.btn} onClick={() => void run({ op: "void_referral", id: r.id })}>Void</button>
-                    </>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {view?.referrals.length === 0 && <p className="text-xs text-admin-muted">No referrals yet.</p>}
-      </section>
-    </div>
+
+      <Section title={`Codes in ${mode || "…"} mode`}>
+        <DataTable
+          columns={couponColumns}
+          rows={view?.coupons ?? []}
+          rowKey={(c) => c.promotionId}
+          empty="No codes in this mode yet."
+        />
+      </Section>
+
+      <Section
+        title="Referrals"
+        note={
+          view
+            ? `The referred workspace gets ${view.terms.percentOff}% off ${view.terms.months} months; the referrer gets ${money(view.terms.rewardCents)} on its Stripe balance.`
+            : undefined
+        }
+      >
+        <DataTable
+          columns={referralColumns}
+          rows={view?.referrals ?? []}
+          rowKey={(r) => r.id}
+          empty="No referrals yet."
+        />
+      </Section>
+    </AdminPage>
   );
 }

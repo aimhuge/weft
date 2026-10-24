@@ -4,18 +4,20 @@
 // it, then its invoices and audit log. Every change asks first when it moves money, then reloads the panel.
 
 import { useCallback, useEffect, useState } from "react";
-import { adminGet, adminPost, day, money, ui } from "./admin-api";
+import { DataTable, type Column } from "@/components/admin/DataTable";
+import { Badge, KeyValues, Notice, Section } from "@/components/admin/kit";
+import { adminGet, adminPost, day, money } from "../admin-api";
 import MoneySection from "./MoneySection";
 import type { OrgDetail, RunOp } from "./org-types";
 import PeopleSection from "./PeopleSection";
 import PlanSection from "./PlanSection";
 import ResetSection from "./ResetSection";
 
-const MODE_BADGE: Record<string, string> = {
-  live: "bg-green-500/15 text-green-700",
-  test: "bg-amber-500/20 text-amber-700",
-  unknown: "bg-red-500/15 text-red-700",
-  none: "bg-black/5 text-admin-muted",
+const MODE_TONE: Record<OrgDetail["mode"]["mode"], "ok" | "warn" | "danger" | "neutral"> = {
+  live: "ok",
+  test: "warn",
+  unknown: "danger",
+  none: "neutral",
 };
 
 // The row in one line: plan · status · interval · seats · price · renews or cancels on.
@@ -26,60 +28,81 @@ function summary(row: OrgDetail["row"]): string {
   return [row.plan, row.status, row.billing_interval, seats, money(row.unit_amount_cents), end].join(" · ");
 }
 
-function ids(detail: OrgDetail): string {
-  const row = detail.row;
-  const parts = [row?.provider ?? "mock", row?.provider_customer_id ?? "no customer", row?.provider_subscription_id ?? "no subscription"];
-  if (detail.mode.detail) parts.push(detail.mode.detail);
-  return parts.join(" · ");
-}
-
 function ModeBadge({ mode }: { mode: OrgDetail["mode"] }) {
   return (
-    <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase ${MODE_BADGE[mode.mode] ?? ""}`} title={mode.detail ?? ""}>
+    <Badge tone={MODE_TONE[mode.mode]} title={mode.detail ?? ""}>
       {mode.mode === "none" ? "no Stripe ids" : `${mode.mode} mode`}
       {mode.deleted ? " · deleted" : ""}
-    </span>
+    </Badge>
   );
 }
 
 function Header({ detail }: { detail: OrgDetail }) {
+  const row = detail.row;
   return (
-    <section className={ui.card}>
-      <div className="flex flex-wrap items-baseline gap-3">
-        <h2 className="text-lg font-semibold">{detail.org.name}</h2>
-        <span className="font-mono text-xs text-admin-muted">{detail.org.slug}</span>
-        <ModeBadge mode={detail.mode} />
+    <Section
+      title={detail.org.name}
+      note={summary(detail.row)}
+      actions={<ModeBadge mode={detail.mode} />}
+    >
+      <div className="flex flex-col gap-2">
+        <span className="font-mono text-[12px] text-muted">{detail.org.slug}</span>
+        <KeyValues
+          rows={[
+            ["Provider", row?.provider ?? "mock"],
+            ["Customer", row?.provider_customer_id ?? "no customer"],
+            ["Subscription", row?.provider_subscription_id ?? "no subscription"],
+          ]}
+        />
+        {detail.referral && (
+          <p className="text-[12.5px] text-muted">
+            Referral code <span className="font-mono text-ink">{detail.referral.code}</span>
+          </p>
+        )}
+        {detail.mode.detail && <p className="font-mono text-[11px] text-faint">{detail.mode.detail}</p>}
+        {detail.errors.map((e) => (
+          <Notice key={e} tone="danger">
+            {e}
+          </Notice>
+        ))}
       </div>
-      <p className="text-sm">{summary(detail.row)}</p>
-      <p className="font-mono text-[11px] text-admin-muted">{ids(detail)}</p>
-      {detail.referral && <p className="text-xs">Referral code <span className="font-mono">{detail.referral.code}</span></p>}
-      {detail.errors.map((e) => <p key={e} className="text-xs text-red-600">{e}</p>)}
-    </section>
+    </Section>
   );
 }
 
+const invoiceColumns: Column<OrgDetail["invoices"][number]>[] = [
+  { key: "number", header: "Number", cell: (i) => <span className="font-mono">{i.number}</span> },
+  { key: "status", header: "Status", cell: (i) => i.status },
+  { key: "total", header: "Total", cell: (i) => money(i.total_cents), className: "whitespace-nowrap" },
+  { key: "issued", header: "Issued", cell: (i) => day(i.issued_at), className: "whitespace-nowrap" },
+  { key: "provider", header: "Provider", cell: (i) => <span className="text-muted">{i.provider}</span> },
+];
+
+const eventColumns: Column<OrgDetail["events"][number]>[] = [
+  { key: "date", header: "Date", cell: (e) => day(e.created_at), className: "whitespace-nowrap" },
+  { key: "kind", header: "Kind", cell: (e) => <span className="font-mono">{e.kind}</span> },
+  { key: "actor", header: "Actor", cell: (e) => <span className="text-muted">{e.actor_email ?? "—"}</span> },
+];
+
 function History({ detail }: { detail: OrgDetail }) {
   return (
-    <section className={ui.card}>
-      <h2 className={ui.h}>Invoices</h2>
-      {detail.invoices.length ? (
-        <ul className="text-xs">
-          {detail.invoices.map((i) => (
-            <li key={i.number}>
-              <span className="font-mono">{i.number}</span> · {i.status} · {money(i.total_cents)} · {day(i.issued_at)} · {i.provider}
-            </li>
-          ))}
-        </ul>
-      ) : <p className="text-xs text-admin-muted">None mirrored.</p>}
-      <h2 className={ui.h}>Billing events</h2>
-      <ul className="flex flex-col gap-0.5 text-xs">
-        {detail.events.map((e, n) => (
-          <li key={`${e.created_at}-${n}`} title={JSON.stringify(e.payload)}>
-            <span className="text-admin-muted">{day(e.created_at)}</span> <span className="font-mono">{e.kind}</span> {e.actor_email ?? ""}
-          </li>
-        ))}
-      </ul>
-    </section>
+    <Section title="Invoices">
+      <DataTable
+        columns={invoiceColumns}
+        rows={detail.invoices}
+        rowKey={(i) => i.number}
+        empty="None mirrored."
+      />
+      <div className="flex flex-col gap-2">
+        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-faint">Billing events</h3>
+        <DataTable
+          columns={eventColumns}
+          rows={detail.events}
+          rowKey={(e) => `${e.created_at}-${e.kind}-${e.actor_email ?? ""}`}
+          empty="No billing events yet."
+        />
+      </div>
+    </Section>
   );
 }
 
@@ -113,11 +136,11 @@ export default function OrgPanel({ orgId, onChanged }: { orgId: string; onChange
     }
   };
 
-  if (!detail) return <p className="text-sm text-admin-muted">{note?.text ?? "Loading…"}</p>;
+  if (!detail) return <p className="text-[13px] text-muted">{note?.text ?? "Loading…"}</p>;
   return (
     <div className={`flex flex-col gap-3 ${busy ? "pointer-events-none opacity-60" : ""}`}>
       <Header detail={detail} />
-      {note && <p className={`text-sm ${note.ok ? "text-green-700" : "text-red-600"}`}>{note.text}</p>}
+      {note && <Notice tone={note.ok ? "ok" : "danger"}>{note.text}</Notice>}
       <PlanSection detail={detail} run={run} />
       <MoneySection detail={detail} run={run} />
       <PeopleSection detail={detail} run={run} />

@@ -1,9 +1,11 @@
 "use client";
 
 // The client half of /admin/billing: a searchable workspace list on the left, the chosen workspace's panel on the right.
+// Built on the admin kit (components/admin), so it matches the board's tokens in light and dark.
 
 import { useEffect, useState } from "react";
-import { adminGet, ui } from "./admin-api";
+import { AdminPage, Badge, Empty, Input, Notice } from "@/components/admin/kit";
+import { adminGet } from "../admin-api";
 import OrgPanel from "./OrgPanel";
 
 interface OrgRow {
@@ -20,6 +22,13 @@ interface ListAnswer {
   orgs: OrgRow[];
   keys: string[];
   defaultMode: string | null;
+}
+
+// Free and comped plans read as plain; anything paid gets the accent pill.
+const FREE_PLANS = new Set(["free", "oss", "edu"]);
+
+function planTone(plan: string): "accent" | "neutral" {
+  return FREE_PLANS.has(plan) ? "neutral" : "accent";
 }
 
 export default function BillingAdmin() {
@@ -48,40 +57,39 @@ export default function BillingAdmin() {
     };
   }, [q, tick]);
 
+  const stripeKeys = list?.keys.length ? list.keys.join(" + ") : "none";
+  const subtitle = `Stripe keys: ${stripeKeys}${list?.defaultMode ? ` · this Weft sells in ${list.defaultMode} mode` : ""}`;
+
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 p-6 text-admin-text">
-      <div className="flex items-baseline gap-3">
-        <h1 className="text-2xl font-semibold tracking-tight">Billing</h1>
-        <span className="text-xs text-admin-muted">
-          Stripe keys: {list?.keys.length ? list.keys.join(" + ") : "none"}
-          {list?.defaultMode ? ` · this Weft sells in ${list.defaultMode} mode` : ""}
-        </span>
-      </div>
-      {error && <p className="text-sm text-red-600">{error}</p>}
-      <div className="grid gap-4 md:grid-cols-[260px_1fr]">
-        <div className="flex flex-col gap-2">
-          <input className={ui.input} placeholder="Search workspaces" value={q} onChange={(e) => setQ(e.target.value)} />
-          <ul className="flex flex-col gap-1">
+    <AdminPage title="Billing" wide subtitle={subtitle}>
+      {error && <Notice tone="danger">{error}</Notice>}
+      <div className="grid items-start gap-4 md:grid-cols-[260px_1fr]">
+        <aside className="sticky top-[52px] flex flex-col gap-2 rounded-xl border border-line bg-panel p-3">
+          <Input placeholder="Search workspaces" value={q} onChange={(e) => setQ(e.target.value)} />
+          <ul className="flex max-h-[60vh] flex-col gap-0.5 overflow-y-auto">
             {list?.orgs.map((o) => (
               <li key={o.id}>
                 <button
                   type="button"
                   onClick={() => setPicked(o.id)}
-                  className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-sm hover:bg-black/5 ${picked === o.id ? "bg-black/5" : ""}`}
+                  className={`flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-1.5 text-left text-[13px] transition-colors hover:bg-sunken ${picked === o.id ? "bg-accent-soft text-accent" : ""}`}
                 >
                   <span className="truncate">{o.slug}</span>
-                  <span className="flex items-center gap-1 text-[11px] text-admin-muted">
-                    {o.hasStripeIds && <span title="Has Stripe ids">$</span>}
-                    {o.plan}
-                    {o.seats > 1 ? `×${o.seats}` : ""}
+                  <span className="flex shrink-0 items-center gap-1.5">
+                    {o.hasStripeIds && (
+                      <span title="Has Stripe ids" className="text-[11px] text-muted">
+                        $
+                      </span>
+                    )}
+                    <Badge tone={planTone(o.plan)}>{o.plan}</Badge>
                   </span>
                 </button>
               </li>
             ))}
           </ul>
-        </div>
-        {picked ? <OrgPanel key={picked} orgId={picked} onChanged={() => setTick((t) => t + 1)} /> : <p className="text-sm text-admin-muted">Pick a workspace.</p>}
+        </aside>
+        {picked ? <OrgPanel key={picked} orgId={picked} onChanged={() => setTick((t) => t + 1)} /> : <Empty>Pick a workspace on the left.</Empty>}
       </div>
-    </div>
+    </AdminPage>
   );
 }

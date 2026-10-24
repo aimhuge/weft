@@ -76,6 +76,11 @@ describe("fail", () => {
     expect(await res.json()).toEqual({ error: "boom" });
   });
 
+  it("reads the message off a plain error object (Supabase, Stripe)", async () => {
+    const res = fail({ message: "relation does not exist", code: "42P01" });
+    expect(await res.json()).toEqual({ error: "relation does not exist" });
+  });
+
   it("stringifies other values and honors the status", async () => {
     const res = fail("nope", 500);
     expect(res.status).toBe(500);

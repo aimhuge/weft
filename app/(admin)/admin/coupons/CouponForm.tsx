@@ -2,9 +2,10 @@
 
 // Make a coupon code: a percent or an amount off, for one invoice, some months or forever, with optional limits.
 // lib/billing/admin/coupons.ts readCoupon is the validation; this only gathers the fields.
+// Built on the admin kit (components/admin): a titled section with a responsive grid of labelled fields.
 
 import { useState } from "react";
-import { ui } from "../billing/admin-api";
+import { Button, Checkbox, Field, Input, Section, Select } from "@/components/admin/kit";
 
 export default function CouponForm({ onCreate }: { onCreate: (input: Record<string, unknown>) => Promise<boolean> }) {
   const [code, setCode] = useState("");
@@ -31,30 +32,53 @@ export default function CouponForm({ onCreate }: { onCreate: (input: Record<stri
   };
 
   return (
-    <section className={ui.card}>
-      <h2 className={ui.h}>New code</h2>
-      <div className={ui.row}>
-        <input className={`${ui.input} w-36 font-mono uppercase`} placeholder="LAUNCH20" value={code} onChange={(e) => setCode(e.target.value)} aria-label="Code" />
-        <input className={`${ui.input} w-20`} type="number" min={1} value={value} onChange={(e) => setValue(e.target.value)} aria-label="Amount" />
-        <select className={ui.input} value={kind} onChange={(e) => setKind(e.target.value as "percent" | "amount")} aria-label="Kind">
-          <option value="percent">% off</option>
-          <option value="amount">$ off</option>
-        </select>
-        <select className={ui.input} value={duration} onChange={(e) => setDuration(e.target.value)} aria-label="Duration">
-          <option value="once">once</option>
-          <option value="repeating">for months</option>
-          <option value="forever">forever</option>
-        </select>
-        {duration === "repeating" && <input className={`${ui.input} w-16`} type="number" min={1} value={months} onChange={(e) => setMonths(e.target.value)} aria-label="Months" />}
+    <Section title="New code" note="A percent or an amount off, for one invoice, some months or forever.">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <Field label="Code">
+          <Input
+            className="font-mono uppercase"
+            placeholder="LAUNCH20"
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            aria-label="Code"
+          />
+        </Field>
+        <Field label="Amount">
+          <Input type="number" min={1} value={value} onChange={(e) => setValue(e.target.value)} aria-label="Amount" />
+        </Field>
+        <Field label="Kind">
+          <Select value={kind} onChange={(e) => setKind(e.target.value as "percent" | "amount")} aria-label="Kind">
+            <option value="percent">% off</option>
+            <option value="amount">$ off</option>
+          </Select>
+        </Field>
+        <Field label="Duration">
+          <Select value={duration} onChange={(e) => setDuration(e.target.value)} aria-label="Duration">
+            <option value="once">once</option>
+            <option value="repeating">for months</option>
+            <option value="forever">forever</option>
+          </Select>
+        </Field>
+        {duration === "repeating" && (
+          <Field label="Months">
+            <Input type="number" min={1} value={months} onChange={(e) => setMonths(e.target.value)} aria-label="Months" />
+          </Field>
+        )}
+        <Field label="Max uses">
+          <Input type="number" min={1} placeholder="Max uses" value={max} onChange={(e) => setMax(e.target.value)} aria-label="Max uses" />
+        </Field>
+        <Field label="Expires">
+          <Input type="date" value={expires} onChange={(e) => setExpires(e.target.value)} aria-label="Expires" />
+        </Field>
+        <div className="flex items-end pb-1">
+          <Checkbox label="first purchase only" checked={firstTime} onChange={setFirstTime} />
+        </div>
       </div>
-      <div className={ui.row}>
-        <input className={`${ui.input} w-28`} type="number" min={1} placeholder="Max uses" value={max} onChange={(e) => setMax(e.target.value)} aria-label="Max uses" />
-        <input className={ui.input} type="date" value={expires} onChange={(e) => setExpires(e.target.value)} aria-label="Expires" />
-        <label className="flex items-center gap-1 text-xs">
-          <input type="checkbox" checked={firstTime} onChange={(e) => setFirstTime(e.target.checked)} /> first purchase only
-        </label>
-        <button type="button" className={ui.btn} disabled={!code} onClick={() => void submit()}>Create</button>
+      <div className="flex justify-end">
+        <Button variant="primary" disabled={!code} onClick={() => void submit()}>
+          Create
+        </Button>
       </div>
-    </section>
+    </Section>
   );
 }

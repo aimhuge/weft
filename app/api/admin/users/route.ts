@@ -4,7 +4,7 @@
 // client is what reads across users (RLS on profiles allows only self-read).
 import { adminServiceClient, requireSuperAdminWeft } from "@/lib/admin";
 import { fail, guard } from "@/lib/guard";
-import { escapeLikeWildcards, normalizeEmail } from "@aimhuge/teams";
+import { normalizeEmail } from "@aimhuge/teams";
 
 const PAGE_SIZE = 20;
 const MAX_SKIP = 100 * PAGE_SIZE;
@@ -19,17 +19,20 @@ export interface AdminUserRow {
   lastSignInAt: string | null;
 }
 
-// The auth.users shape as it lands from PostgREST. The fields are nullable
-// because Supabase types them loosely, and `raw_user_meta_data` is
-// `Record<string, unknown>` — three different `user_metadata` shapes over the
-// years, plus service-role JSONB without a fixed schema.
-interface AuthUserRow {
+// A user as GoTrue's admin API returns it (auth.admin.listUsers). auth.users
+// isn't reachable through PostgREST (the auth schema isn't exposed), so the
+// route reads it this way. `user_metadata` has had three shapes over the years.
+interface AuthUser {
   id: string;
-  email: string | null;
-  raw_user_meta_data: Record<string, unknown> | null;
-  created_at: string | null;
-  last_sign_in_at: string | null;
-  app_metadata: { provider?: unknown } | null;
+  email?: string | null;
+  user_metadata?: Record<string, unknown> | null;
+  app_metadata?: { provider?: unknown } | null;
+  created_at?: string | null;
+  last_sign_in_at?: string | null;
+}
+
+interface AuthAdmin {
+  listUsers(params: { page: number; perPage: number }): Promise<{ data: { users: AuthUser[] } | null; error: unknown }>;
 }
 
 interface ProfileRow {
@@ -39,13 +42,18 @@ interface ProfileRow {
 }
 
 // The whitelisted sort columns. Anything else would be an injection surface.
-const SORTABLE: Record<string, string> = {
+const SORTABLE: Record<string, "created_at" | "last_sign_in_at" | "email"> = {
   created_at: "created_at",
   last_sign_in_at: "last_sign_in_at",
   email: "email",
 };
 
-function parseSort(sort: string): { column: string; dir: "asc" | "desc" } {
+// listUsers pages hold up to 1000; ten of them is far past weft.zip's size, and
+// a cap keeps a runaway answer from looping forever.
+const LIST_PAGE = 1000;
+const MAX_LIST_PAGES = 10;
+
+function parseSort(sort: string): { column: "created_at" | "last_sign_in_at" | "email"; dir: "asc" | "desc" } {
   const [field, dirRaw] = sort.split(/\s+/, 2);
   const dir = dirRaw === "asc" ? "asc" : "desc";
   return { column: SORTABLE[field ?? ""] ?? "created_at", dir };
@@ -67,20 +75,20 @@ function pickString(meta: Record<string, unknown>, ...keys: string[]): string | 
 }
 
 function mapUserToRow(
-  u: AuthUserRow,
+  u: AuthUser,
   profiles: Map<string, { name: string | null; avatar_url: string | null }>,
 ): AdminUserRow {
-  const meta = u.raw_user_meta_data ?? {};
+  const meta = u.user_metadata ?? {};
   const profile = profiles.get(u.id);
   const provider = typeof u.app_metadata?.provider === "string" ? u.app_metadata.provider : null;
   return {
     id: u.id,
-    email: u.email,
+    email: u.email ?? null,
     name: profile?.name ?? pickString(meta, "full_name", "name", "user_name"),
     avatarUrl: profile?.avatar_url ?? pickString(meta, "avatar_url", "picture"),
     provider,
-    createdAt: u.created_at,
-    lastSignInAt: u.last_sign_in_at,
+    createdAt: u.created_at ?? null,
+    lastSignInAt: u.last_sign_in_at ?? null,
   };
 }
 
@@ -97,6 +105,32 @@ async function loadProfilesFor(
   const { data: profiles } = await chain.in("id", ids);
   for (const p of profiles ?? []) map.set(p.id, { name: p.name, avatar_url: p.avatar_url });
   return map;
+}
+
+async function listAllUsers(admin: AuthAdmin): Promise<AuthUser[]> {
+  const all: AuthUser[] = [];
+  for (let page = 1; page <= MAX_LIST_PAGES; page++) {
+    const { data, error } = await admin.listUsers({ page, perPage: LIST_PAGE });
+    if (error) throw new Error((error as { message?: string }).message ?? "Couldn't list the users.");
+    const users = data?.users ?? [];
+    all.push(...users);
+    if (users.length < LIST_PAGE) break;
+  }
+  return all;
+}
+
+function compareBy(column: "created_at" | "last_sign_in_at" | "email", dir: "asc" | "desc") {
+  const sign = dir === "asc" ? 1 : -1;
+  // Missing values sort last either way, like Postgres's NULLS LAST on desc.
+  return (a: AuthUser, b: AuthUser) => {
+    // Emails compare case-blind; the ISO timestamps compare as strings.
+    const x = (a[column] ?? "").toLowerCase();
+    const y = (b[column] ?? "").toLowerCase();
+    if (x === y) return 0;
+    if (x === "") return 1;
+    if (y === "") return -1;
+    return x < y ? -sign : sign;
+  };
 }
 
 export async function GET(req: Request) {
@@ -123,29 +157,13 @@ export async function GET(req: Request) {
 
     const emailTerm = q ? normalizeEmail(q) : "";
 
-    // The page. Two more queries than a join would be (a second select for
-    // profiles), but the join on auth.users.id is awkward through PostgREST
-    // (the foreign-key side reads cleanly, the auth.users side doesn't), and
-    // two short round-trips are easier to read than one with a hint comment.
-    let page = service
-      .from("auth.users")
-      .select("id, email, raw_user_meta_data, created_at, last_sign_in_at, app_metadata")
-      .order(sort.column, { ascending: sort.dir === "asc" })
-      .range(skip, skip + take - 1);
-    if (emailTerm) page = page.ilike("email", `%${escapeLikeWildcards(emailTerm)}%`);
-    const { data: users, error: usersErr } = await page;
-    if (usersErr) throw usersErr;
+    const all = await listAllUsers((service as unknown as { auth: { admin: AuthAdmin } }).auth.admin);
+    const matching = emailTerm ? all.filter((u) => normalizeEmail(u.email ?? "").includes(emailTerm)) : all;
+    const pageUsers = [...matching].sort(compareBy(sort.column, sort.dir)).slice(skip, skip + take);
+    const profiles = await loadProfilesFor(service, pageUsers.map((u) => u.id));
+    const rows = pageUsers.map((u) => mapUserToRow(u, profiles));
 
-    const list = (users as AuthUserRow[] | null) ?? [];
-    const profiles = await loadProfilesFor(service, list.map((u) => u.id));
-    const rows = list.map((u) => mapUserToRow(u, profiles));
-
-    let count = service.from("auth.users").select("id", { count: "exact", head: true });
-    if (emailTerm) count = count.ilike("email", `%${escapeLikeWildcards(emailTerm)}%`);
-    const { count: total, error: countErr } = await count;
-    if (countErr) throw countErr;
-
-    return Response.json({ rows, total: total ?? rows.length });
+    return Response.json({ rows, total: matching.length });
   } catch (err) {
     return fail(err);
   }

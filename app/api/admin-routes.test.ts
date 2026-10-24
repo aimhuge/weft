@@ -80,97 +80,83 @@ describe("/api/admin/users", () => {
     expect(data.total).toBe(0);
   });
 
-  it("returns paginated rows + total when the service client is available", async () => {
-    vi.stubEnv("SUPABASE_SECRET_KEY", "sb_secret_x");
-    adminMock.requireSuperAdminWeft.mockResolvedValueOnce({ email: "ada@b.co", user: { id: "u1", email: "ada@b.co", name: "Ada", avatar: null, provider: "github" } });
-
-    // Two query builders: the page + the count. They each chain .order / .range / .ilike.
-    const buildPageChain = (): PageChain & Thenable<{ data: unknown[]; error: null }> => {
-      const chain: PageChain & Thenable<{ data: unknown[]; error: null }> = {
-        order: vi.fn(() => chain),
-        range: vi.fn(() => chain),
-        ilike: vi.fn(() => chain),
-        then: (onFulfilled) => Promise.resolve({ data: FIXTURE_USERS, error: null }).then(onFulfilled),
-      };
-      return chain;
-    };
-    const buildCountChain = (): CountChain & Thenable<{ count: number; error: null }> => {
-      const chain: CountChain & Thenable<{ count: number; error: null }> = {
-        ilike: vi.fn(() => chain),
-        then: (onFulfilled) => Promise.resolve({ count: FIXTURE_USERS.length, error: null }).then(onFulfilled),
-      };
-      return chain;
-    };
-
-    const service = {
-      from(table: string) {
-        if (table === "auth.users") {
-          const sel = vi.fn();
-          // First call: the page. Second call (from `count`): the head:true count.
-          sel.mockReturnValueOnce(buildPageChain());
-          sel.mockReturnValueOnce(buildCountChain());
-          return { select: sel };
-        }
-        if (table === "profiles") {
-          return {
-            select: vi.fn(() => ({
-              in: vi.fn(() => Promise.resolve({ data: FIXTURE_PROFILES, error: null })),
-            })),
-          };
-        }
-        throw new Error(`unexpected table ${table}`);
-      },
-    };
+  it("returns paginated rows + total from the auth admin API, joined to profiles", async () => {
+    adminMock.requireSuperAdminWeft.mockResolvedValueOnce(ADMIN);
+    const { service, listUsers } = serviceWith(FIXTURE_USERS);
     adminMock.adminServiceClient.mockResolvedValueOnce(service);
 
     const res = await get(users, "/api/admin/users?skip=0&take=20&sort=created_at+desc");
     expect(res.status).toBe(200);
+    expect(listUsers).toHaveBeenCalledWith({ page: 1, perPage: 1000 });
     const data = await body(res);
     const rows = data.rows as Array<Record<string, unknown>>;
     expect(data.total).toBe(2);
-    expect(rows).toHaveLength(2);
-    expect(rows[0]).toMatchObject({ id: "u1", email: "ada@b.co", name: "Ada", provider: "github" });
-    // u2 isn't in FIXTURE_PROFILES and its raw_user_meta_data is empty, so the
-    // row's name falls through to null — that's the join behavior we want.
-    expect(rows[1]).toMatchObject({ id: "u2", email: "lin@b.co", name: null, provider: "google" });
+    // Newest first: u2 joined after u1.
+    expect(rows.map((r) => r.id)).toEqual(["u2", "u1"]);
+    expect(rows[1]).toMatchObject({ id: "u1", email: "ada@b.co", name: "Ada", provider: "github" });
+    // u2 has no profile and empty metadata, so its name falls through to null.
+    expect(rows[0]).toMatchObject({ id: "u2", email: "lin@b.co", name: null, provider: "google", lastSignInAt: null });
   });
 
-  it("filters by q (email ilike) when search is set", async () => {
-    vi.stubEnv("SUPABASE_SECRET_KEY", "sb_secret_x");
-    adminMock.requireSuperAdminWeft.mockResolvedValueOnce({ email: "ada@b.co", user: { id: "u1", email: "ada@b.co", name: "Ada", avatar: null, provider: "github" } });
-
-    let iliked = "";
-    const pageChain: PageChain & Thenable<{ data: unknown[]; error: null }> = {
-      order: vi.fn(function (this: unknown) { return this; }),
-      range: vi.fn(function (this: unknown) { return this; }),
-      ilike: vi.fn(function (this: unknown, _col: string, pattern: string) { iliked = pattern; return this; }),
-      then: (onFulfilled) => Promise.resolve({ data: [], error: null }).then(onFulfilled),
-    };
-    const countChain: CountChain & Thenable<{ count: number; error: null }> = {
-      ilike: vi.fn(function (this: unknown, _col: string, pattern: string) { if (!iliked) iliked = pattern; return this; }),
-      then: (onFulfilled) => Promise.resolve({ count: 0, error: null }).then(onFulfilled),
-    };
-    let authCalls = 0;
-    const service = {
-      from(table: string) {
-        if (table === "auth.users") {
-          authCalls += 1;
-          const sel = vi.fn();
-          sel.mockReturnValueOnce(pageChain);
-          sel.mockReturnValueOnce(countChain);
-          return { select: sel };
-        }
-        if (table === "profiles") {
-          return { select: vi.fn(() => ({ in: vi.fn(() => Promise.resolve({ data: [], error: null })) })) };
-        }
-        throw new Error(`unexpected table ${table}`);
-      },
-    };
+  it("names a user from metadata when there's no profile", async () => {
+    adminMock.requireSuperAdminWeft.mockResolvedValueOnce(ADMIN);
+    const { service } = serviceWith([{ id: "u3", email: "kim@b.co", user_metadata: { user_name: "kim" } }], []);
     adminMock.adminServiceClient.mockResolvedValueOnce(service);
+    const rows = (await body(await get(users, "/api/admin/users"))).rows as Array<Record<string, unknown>>;
+    expect(rows[0]).toMatchObject({ name: "kim", provider: null, createdAt: null, avatarUrl: null });
+  });
 
-    await get(users, "/api/admin/users?q=ada");
-    expect(iliked).toBe("%ada%");
-    expect(authCalls).toBe(2);
+  it("filters by q (email contains), sorts and pages the matches", async () => {
+    adminMock.requireSuperAdminWeft.mockResolvedValueOnce(ADMIN);
+    const many = [
+      { id: "a", email: "Zed@acme.co", created_at: "2025-01-01T00:00:00Z" },
+      { id: "b", email: "amy@acme.co", created_at: "2025-02-01T00:00:00Z" },
+      { id: "c", email: "bob@other.co", created_at: "2025-03-01T00:00:00Z" },
+      { id: "d", email: null },
+    ];
+    const { service } = serviceWith(many, []);
+    adminMock.adminServiceClient.mockResolvedValueOnce(service);
+    const data = await body(await get(users, "/api/admin/users?q=ACME&sort=email+asc&skip=1&take=1"));
+    expect(data.total).toBe(2);
+    expect((data.rows as Array<{ id: string }>).map((r) => r.id)).toEqual(["a"]);
+  });
+
+  it("sorts users with no value last", async () => {
+    adminMock.requireSuperAdminWeft.mockResolvedValueOnce(ADMIN);
+    const { service } = serviceWith(
+      [
+        { id: "x", email: "x@b.co", last_sign_in_at: null },
+        { id: "y", email: "y@b.co", last_sign_in_at: "2026-01-01T00:00:00Z" },
+        { id: "z", email: "z@b.co", last_sign_in_at: "2026-01-01T00:00:00Z" },
+      ],
+      [],
+    );
+    adminMock.adminServiceClient.mockResolvedValueOnce(service);
+    const data = await body(await get(users, "/api/admin/users?sort=last_sign_in_at+asc"));
+    expect((data.rows as Array<{ id: string }>).map((r) => r.id)).toEqual(["y", "z", "x"]);
+  });
+
+  it("reads every page of users until a short one", async () => {
+    adminMock.requireSuperAdminWeft.mockResolvedValueOnce(ADMIN);
+    const full = Array.from({ length: 1000 }, (_, i) => ({ id: `p${i}`, email: `p${i}@b.co` }));
+    const listUsers = vi
+      .fn<(p: { page: number; perPage: number }) => Promise<{ data: { users: unknown[] } | null; error: unknown }>>()
+      .mockResolvedValueOnce({ data: { users: full }, error: null })
+      .mockResolvedValueOnce({ data: null, error: null });
+    adminMock.adminServiceClient.mockResolvedValueOnce({ auth: { admin: { listUsers } }, from: profilesFrom([]) });
+    const data = await body(await get(users, "/api/admin/users"));
+    expect(listUsers).toHaveBeenCalledTimes(2);
+    expect(listUsers).toHaveBeenLastCalledWith({ page: 2, perPage: 1000 });
+    expect(data.total).toBe(1000);
+  });
+
+  it("answers the auth API's error message, not [object Object]", async () => {
+    adminMock.requireSuperAdminWeft.mockResolvedValueOnce(ADMIN);
+    const listUsers = vi.fn(() => Promise.resolve({ data: null, error: { message: "User not allowed", status: 403 } }));
+    adminMock.adminServiceClient.mockResolvedValueOnce({ auth: { admin: { listUsers } }, from: profilesFrom([]) });
+    const res = await get(users, "/api/admin/users");
+    expect(res.status).toBe(400);
+    expect((await body(res)).error).toBe("User not allowed");
   });
 
   it("rejects non-localhost hosts", async () => {
@@ -214,11 +200,13 @@ describe("/api/admin/local", () => {
   });
 });
 
+const ADMIN = { email: "ada@b.co", user: { id: "u1", email: "ada@b.co", name: "Ada", avatar: null, provider: "github" } };
+
 const FIXTURE_USERS: AuthUser[] = [
   {
     id: "u1",
     email: "ada@b.co",
-    raw_user_meta_data: { full_name: "Ada", avatar_url: "https://img/ada.png" },
+    user_metadata: { full_name: "Ada", avatar_url: "https://img/ada.png" },
     created_at: "2025-01-01T00:00:00Z",
     last_sign_in_at: "2026-10-01T00:00:00Z",
     app_metadata: { provider: "github" },
@@ -226,7 +214,7 @@ const FIXTURE_USERS: AuthUser[] = [
   {
     id: "u2",
     email: "lin@b.co",
-    raw_user_meta_data: {},
+    user_metadata: {},
     created_at: "2025-06-01T00:00:00Z",
     last_sign_in_at: null,
     app_metadata: { provider: "google" },
@@ -237,13 +225,14 @@ const FIXTURE_PROFILES: ProfileFixture[] = [
   { id: "u1", name: "Ada", avatar_url: "https://img/ada.png" },
 ];
 
+// A user as auth.admin.listUsers returns it.
 interface AuthUser {
   id: string;
-  email: string;
-  raw_user_meta_data: Record<string, unknown>;
-  created_at: string;
-  last_sign_in_at: string | null;
-  app_metadata: { provider?: string };
+  email: string | null;
+  user_metadata?: Record<string, unknown>;
+  created_at?: string;
+  last_sign_in_at?: string | null;
+  app_metadata?: { provider?: string };
 }
 
 interface ProfileFixture {
@@ -252,16 +241,15 @@ interface ProfileFixture {
   avatar_url: string;
 }
 
-interface Thenable<T> {
-  then: <U>(onFulfilled: (value: T) => U) => Promise<U>;
+function profilesFrom(profiles: ProfileFixture[]) {
+  return (table: string) => {
+    if (table !== "profiles") throw new Error(`unexpected table ${table}`);
+    return { select: vi.fn(() => ({ in: vi.fn(() => Promise.resolve({ data: profiles, error: null })) })) };
+  };
 }
 
-interface PageChain {
-  order: ReturnType<typeof vi.fn>;
-  range: ReturnType<typeof vi.fn>;
-  ilike: ReturnType<typeof vi.fn>;
-}
-
-interface CountChain {
-  ilike: ReturnType<typeof vi.fn>;
+// A service client whose auth admin API answers one short page of users.
+function serviceWith(list: AuthUser[], profiles: ProfileFixture[] = FIXTURE_PROFILES) {
+  const listUsers = vi.fn(() => Promise.resolve({ data: { users: list }, error: null }));
+  return { listUsers, service: { auth: { admin: { listUsers } }, from: profilesFrom(profiles) } };
 }
