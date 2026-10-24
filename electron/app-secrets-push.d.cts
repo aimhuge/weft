@@ -64,6 +64,9 @@ export function findApp(dataDir: string, id: string): { id: string; url: string;
 // the folder no longer exists, no longer lives under the apps dir, or has no weft-app.json.
 export function readAppManifest(dataDir: string, app: { url: string }): { manifest: Manifest; folder: string };
 
+// The folder whose vault the push reads: the manifest's `folder`, else the app's own folder.
+export function vaultFolderOf(manifest: { folder?: unknown }, appFolder: string): string;
+
 export function createAppSecretsPush(opts: {
   // Every field except `fetch` is checked at construction with a plain-English error, so a
   // caller can hand in `undefined` and get the guard's message rather than a runtime

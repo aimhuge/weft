@@ -107,6 +107,12 @@ function namesToPush(policy, reads = {}) {
   return names;
 }
 
+// The vault the Mac's reads use: the manifest's `folder` (the project it reads for), else the app folder
+// (readManifest in app-data-frame.cjs). An app under ~/.weft/apps isn't a git repo, so its own vault is empty.
+function vaultFolderOf(manifest, appFolder) {
+  return typeof manifest.folder === "string" && manifest.folder ? manifest.folder : appFolder;
+}
+
 function createAppSecretsPush({ dataDir, vault, account, confirm, fetch: fetchImpl = globalThis.fetch }) {
   if (!dataDir) throw new Error("createAppSecretsPush needs dataDir.");
   if (!vault) throw new Error("createAppSecretsPush needs the vault.");
@@ -164,7 +170,7 @@ function createAppSecretsPush({ dataDir, vault, account, confirm, fetch: fetchIm
     const names = namesToPush(policy, reads);
     if (!names.length) return { ok: true, pushed: [], missing: [] };
 
-    const { values, missing: missingNames, label } = await vault.valuesFor(folder, names, manifest.env);
+    const { values, missing: missingNames, label } = await vault.valuesFor(vaultFolderOf(manifest, folder), names, manifest.env);
     const count = Object.keys(values).length;
     if (!count) {
       return { ok: true, pushed: [], missing: names, error: `No values yet in ${label} · ${manifest.env}.` };
@@ -209,4 +215,5 @@ module.exports = {
   pushTargets,
   findApp,
   readAppManifest,
+  vaultFolderOf,
 };
