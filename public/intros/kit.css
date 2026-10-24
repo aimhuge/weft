@@ -6,6 +6,20 @@ html, body { margin: 0; background: #0d0f14; overflow: hidden; }
 #root { position: relative; width: 1600px; height: 900px; overflow: hidden; transform-origin: 0 0;
   font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif; color: #e8eaf0;
   background: radial-gradient(circle at 20% 0%, #1c2233, #0d0f14 70%); }
+/* Portrait render (?ratio=9:16): the landscape stage is restacked for a tall frame. The drawer art sits at the
+   top and the title + caption column moves below it, so the composition fills a 9:16 frame instead of sitting
+   in a black band. The portrait canvas is 1600 wide and 2844 tall (9:16).
+   The root is taken out of the flow (position: fixed) so its 2844 px can't grow the document and shrink the
+   viewport the stage is scaled against. */
+html.portrait #root { position: fixed; left: 50%; top: 50%; width: 1600px; height: 2844px; transform-origin: 50% 50%; }
+/* The art column, top of the frame: the drawer panel, drawn a touch larger to hold the frame. */
+html.portrait .art { left: 40px; top: 240px; width: 800px; height: 940px; }
+/* The title, under the art. */
+html.portrait .head { left: 60px; top: 1360px; gap: 30px; font-size: 88px; }
+html.portrait .head .ic { width: 132px; height: 132px; border-radius: 34px; font-size: 74px; }
+html.portrait .head .ic svg { width: 78px; height: 78px; }
+/* The caption, under the title. */
+html.portrait .cap { left: 60px; top: 1600px; width: 1480px; font-size: 96px; line-height: 1.14; }
 .abs { position: absolute; }
 /* The drawer's art: the panel and whatever lies over it (sheets, the cursor), in the 800-wide coordinates it was
    drawn in, lifted so the panel (top 160, 620 tall) sits centred on the 900 px stage. */
@@ -52,3 +66,14 @@ html, body { margin: 0; background: #0d0f14; overflow: hidden; }
 .cap { left: 880px; top: 290px; width: 660px; font-size: 62px; font-weight: 650; line-height: 1.18; color: #f1f3f8; letter-spacing: -0.01em; }
 .cap b { color: #f0b429; font-weight: 650; }
 #fade { inset: 0; background: #0d0f14; z-index: 50; }
+
+/* The splash screen every intro opens on: the Weft mark over the wordmark, on the same dark ground as the
+   stage. player.js injects this into each page and fades it out, so every intro opens the same way. */
+#splash { inset: 0; z-index: 60; background: #0d0f14; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 34px; }
+#splash .mark { width: 168px; height: 168px; border-radius: 44px; }
+#splash .word { font-size: 74px; font-weight: 700; letter-spacing: 0.02em; color: #e8eaf0; }
+#splash .bar { width: 260px; height: 6px; border-radius: 3px; background: #232838; overflow: hidden; }
+#splash .bar i { display: block; width: 40%; height: 100%; border-radius: 3px; background: #f0b429; }
+/* In portrait the splash centres on the frame, not the (taller) portrait canvas. */
+html.portrait #splash { position: fixed; inset: 0; }
