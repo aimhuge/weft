@@ -69,11 +69,12 @@ html.portrait .cap { left: 60px; top: 1600px; width: 1480px; font-size: 96px; li
 
 /* The splash screen every intro opens on: the Weft mark over the wordmark, on the same dark ground as the
    stage. player.js injects this into each page and fades it out, so every intro opens the same way. */
-#splash { inset: 0; z-index: 60; background: #0d0f14; display: flex; flex-direction: column;
-  align-items: center; justify-content: center; gap: 34px; }
-#splash .mark { width: 168px; height: 168px; border-radius: 44px; }
-#splash .word { font-size: 74px; font-weight: 700; letter-spacing: 0.02em; color: #e8eaf0; }
-#splash .bar { width: 260px; height: 6px; border-radius: 3px; background: #232838; overflow: hidden; }
+#splash { position: absolute; inset: 0; z-index: 60; background: #0d0f14; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 34px; overflow: hidden; }
+/* flex: none keeps the mark its size — a flex item would otherwise be squashed flat by the column. */
+#splash .mark { width: 168px; height: 168px; flex: none; border-radius: 44px; }
+#splash .word { font-size: 74px; font-weight: 700; letter-spacing: 0.02em; color: #e8eaf0; flex: none; }
+#splash .bar { width: 260px; height: 6px; flex: none; border-radius: 3px; background: #232838; overflow: hidden; }
 #splash .bar i { display: block; width: 40%; height: 100%; border-radius: 3px; background: #f0b429; }
 /* In portrait the splash centres on the frame, not the (taller) portrait canvas. */
 html.portrait #splash { position: fixed; inset: 0; }
