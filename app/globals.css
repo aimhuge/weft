@@ -167,6 +167,24 @@
   --on-accent: #04202b;
 }
 
+:root[data-scene="night-cockpit"] {
+  --scene: url("/api/scenes/night-cockpit");
+  --scene-pos: center 100%;
+  --scrim: linear-gradient(180deg, rgb(4 6 14 / 0.35), rgb(4 6 14 / 0.05) 55%, rgb(4 6 14 / 0.4));
+  --canvas: #0a0d16;
+  --panel: #10141f;
+  --card: #171c29;
+  --sunken: rgb(10 13 24 / 0.4);
+  --line: rgb(196 200 236 / 0.09);
+  --line-strong: rgb(196 200 236 / 0.18);
+  --ink: #eceaf6;
+  --muted: #a2a3bd;
+  --faint: #6c6f8c;
+  --accent: #ab9cff;
+  --accent-soft: rgb(171 156 255 / 0.16);
+  --on-accent: #150f33;
+}
+
 :root[data-scene="salt-flats"] {
   --scene: url("/api/scenes/salt-flats");
   --scrim: linear-gradient(180deg, rgb(255 255 255 / 0.1), rgb(255 250 252 / 0) 55%, rgb(240 244 252 / 0.2));
@@ -473,8 +491,35 @@ button:disabled {
   }
 }
 
+/* A level-up's rank picture drifts in slowly, and its episode and line rise up tilted away, like an opening crawl. */
+.level-hero-art {
+  animation: level-hero-drift 9s ease-out both;
+}
+
+.level-crawl {
+  transform: perspective(320px) rotateX(16deg);
+  transform-origin: 50% 100%;
+  animation: level-crawl-in 1.4s 0.25s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  text-shadow: 0 1px 8px rgb(0 0 0 / 0.8);
+}
+
+@keyframes level-hero-drift {
+  from {
+    transform: scale(1.12);
+  }
+}
+
+@keyframes level-crawl-in {
+  from {
+    transform: perspective(320px) rotateX(16deg) translateY(48px);
+    opacity: 0;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .achievement-pop {
+  .achievement-pop,
+  .level-hero-art,
+  .level-crawl {
     animation: none;
   }
 }

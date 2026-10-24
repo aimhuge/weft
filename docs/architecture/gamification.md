@@ -95,11 +95,21 @@ The chip keeps the badges and level it has announced in `localStorage` (`weft-ga
 load announces nothing, so history doesn't arrive as a burst. After that, `toAnnounce` hands back the badges
 just earned (`fresh`) and the new level (`levelUp`), and `components/AchievementPopup.tsx` opens over the
 board: one badge gets the stage (icon, name, what earned it), several share it as a list (5 shown), a level-up
-names the new level and title. **See your profile** opens the Wefter Profile on Badges (or You for a level-up
+names the new level and title. A level-up opens on its rank's picture (`public/brand/levels/<rank>.webp`: Thread,
+Strand, Yarn, Bolt, Loom, Tapestry), rendered by BlastCP from the splash speeder (`electron/assets/splash-speeder.jpg`)
+and the woven emblem (`electron/assets/emblem.png`) as references, so every car is ours and wears the badge. Over the
+picture rise its "Episode" number in roman numerals and a line of story, tilted like an opening crawl (`lib/level-lore.ts`:
+a few lines per rank, the next one each level, so a rank never repeats until it runs out). The picture drifts and the
+crawl rises in (`.level-hero-art`, `.level-crawl` in `app/globals.css`), and neither moves with Reduce motion on. **See your profile** opens the Wefter Profile on Badges (or You for a level-up
 alone); **Nice!** and Escape close it. Behind it, `components/Confetti.tsx` throws one burst from the two lower
 corners on a click-through canvas, moved by the pure physics in `lib/confetti.ts` (`burst`, `step`: drag,
 gravity, terminal velocity), and draws nothing with Reduce motion on. Settings > Show progress
 (`weft-show-progress` cookie) hides the chip and its popups.
+
+The chip also keeps the last popup it opened (`weft-game-last-achievement`, `lib/achievement-replay.ts`). **Replay last
+achievement**, in the avatar's menu (`components/AccountMenu.tsx`, shown while Show progress is on) and the command
+palette, sends `weft:achievement-replay`, and the chip opens that popup again. Before any popup has opened, it replays
+a level-up to the level you're on.
 
 ## Leagues
 

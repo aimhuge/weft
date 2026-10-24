@@ -256,7 +256,10 @@ When a new doc lands in this folder, add it here on the same change.
   `lib/tips.ts` + `lib/use-onboarding-tips.ts` + `lib/use-anchor-rect.ts` + `components/OnboardingTips.tsx` + `components/CoachTip.tsx` + `components/EmptyBoardStart.tsx`: after the welcome, the empty board's start panel (New thread, the welcome's starters) and one-time coach tips under the Needs you, Review and Done headers, seen set in localStorage `weft-tips-seen`, Reset tips in Settings → General.
 - `lib/activity.ts` + `lib/game*.ts` + `lib/craft.ts` (the skills each Done card's transcript ran, behind Craft) + `lib/project-checks.ts` + `app/api/game`: streaks, XP, badges, the builder card and the
   production-ready tree, from the append-only `~/.weft/activity.jsonl`; `components/GameBadge.tsx` is the header chip and
-  `components/LoomDialog.tsx` its dialog, titled Wefter Profile (docs/architecture/gamification.md). `lib/usage-scan.ts` + `lib/usage.ts` read every Claude Code and puku-cli transcript
+  `components/LoomDialog.tsx` its dialog, titled Wefter Profile (docs/architecture/gamification.md). A level-up's popup
+  (`components/AchievementPopup.tsx`) opens on its rank's picture (`public/brand/levels/<rank>.webp`, BlastCP renders of our
+  hovercar wearing the emblem) with an "Episode" number and a line of story from `lib/level-lore.ts`; **Replay last achievement**
+  (avatar menu, palette) reopens the last popup through `lib/achievement-replay.ts`. `lib/usage-scan.ts` + `lib/usage.ts` read every Claude Code and puku-cli transcript
   incrementally (`~/.weft/usage.json`) into tokens per day and plan-limit hits, which `components/LoomUsage.tsx` charts and the ⏳/🗓️ limit badges read.
 - `lib/commit-pile.ts` + `app/api/pile` + `components/PileBadge.tsx`: the header's "+N/-N" uncommitted counter and the card it
   starts to commit that pile one Review card at a time; its page's Commit buttons are `weft://commit` links

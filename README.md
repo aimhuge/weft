@@ -135,8 +135,10 @@ WEFT_WEB=1   # in .env.local, or run pnpm dev:web
   sign in to weft.zip (or with **Check my GitHub now** on the billing page): teams and BlastCP Creator on the free tier's
   Puku cap. **Education** (the GitHub Student Developer Pack) and **Regional pricing** (Pro at $5/month in low-income and
   $10 in lower-middle-income countries) are built in Weft and wait on the pack partnership and the billing package's price variants.
-  Settings → Accounts shows your plan, workspace and the meter; **Manage billing** opens the workspace's billing page on weft.zip
-  (Stripe Checkout to upgrade, the Stripe-hosted portal to manage). Billing is per workspace, not per seat;
+  Settings → Accounts shows your plan, workspace and the meter. **Upgrade** opens Weft's own pricing dialog (Free, Pro and Team,
+  monthly or yearly) and goes on to Stripe Checkout; it also opens by itself whenever you hit something a plan unlocks, like
+  inviting a teammate on Free, running out of room for shared apps, or the free Puku cap. **Manage billing** opens the
+  workspace's billing page on weft.zip (the Stripe-hosted portal to manage). Billing is per workspace, not per seat;
   owner or admin manages. See docs/architecture/billing.md.
 - **Updates**: the packaged app checks GitHub Releases at launch and every few hours, downloads a new version in the
   background, and the Weft menu offers **Restart to Update**. With threads running it asks: **Restart When Idle**
@@ -204,8 +206,9 @@ The new-thread dialog (⌘N) and every card's reply box use the same editor:
   normal browser tab without whisper it falls back to the browser's speech recognition.
 - **Drafts are kept** per card and for the new-thread dialog until sent, so closing it loses nothing.
 - **One button that says what Enter does.** The reply box is in one mode at a time, named on a chip inside it
-  and on its button: **Send**, **Queue** while a turn runs (the ▾ beside it has **Send now**, which stops the
-  turn first), **Answer** while a question waits, **Run** for a `!` command (green, with the folder named),
+  and on its button: **Send**; while a Claude Code or puku turn runs, **Send** goes in after the agent's next tool
+  call, the way the CLI's own queue does (the ▾ beside it has **Queue · after this turn**, and **Send now**, which
+  stops the turn first); **Queue** while a Codex or Goose turn runs, **Answer** while a question waits, **Run** for a `!` command (green, with the folder named),
   **Replace** after ↑ (amber, with how many file edits stay). ■ Stop keeps its own spot while a turn runs. The
   button also picks the cheaper default: **New card** when the prompt cache has gone cold (a summary, the touched
   files and what you typed start a fresh card; **Send here** is in the ▾), **Send at 10:39pm** when the 5-hour
@@ -263,7 +266,9 @@ The folder picker lists your recent projects, the git repos in `~/dev` and other
 (with their branch), and your GitHub repos from `gh`. Picking a GitHub repo that isn't on this Mac
 clones it into `~/dev`. **New project…** names an empty folder in `~/dev` and starts the thread there. You can also paste a path or browse for a folder. A new thread starts on the CLI, model and effort set in Settings → Models (the dialog remembers your last pick the same way). Cards are titled from the
 prompt's first line (click the title in the open thread to rename it), and new threads start in the default permission mode from Settings → Security (Auto at first: a classifier
-approves or asks); the menu next to the CLI switch changes that per thread. Effort starts at High and
+approves safe calls and blocks risky ones, and a blocked call comes to Needs you with the classifier's reason and
+**Allow once and retry** / **Keep denied**; an MCP server that asks you to confirm something, like the Supabase MCP before
+destructive SQL, comes to Needs you too, with **Accept** / **Decline** and any form it asks for); the menu next to the CLI switch changes that per thread. Effort starts at High and
 then follows whatever the last new thread used. To change it later, even mid-turn,
 use the mode menu in the open thread's header or the card's right-click menu. Sessions picked up from
 Claude Code keep the mode they last ran in (say `auto`).
@@ -668,7 +673,8 @@ Review or Done without you keeps an accent tint and a pulsing dot until you open
 ### Weft account (optional)
 
 **Sign in** in the top bar (right of Copilot) signs you in with GitHub; once you're in it shows your
-avatar, which opens Settings. Settings → Accounts → Weft account also offers Google and an email link, and Sign out. Settings → Accounts also has a **Sign-in expiry** row, so a lapsing sign-in is something you find in Settings rather than when a thread trips over it: BlastCP's 30-day grant is the one that runs out and speaks up in its last week, while Vercel, Supabase and Cloudflare tokens don't expire and say so. Only the expiry crosses from Electron main — tokens stay in the Keychain — and nothing re-consents on your behalf (`components/TokenExpiry.tsx`). The board works the same
+avatar, which opens a small menu headed by your current team, its plan and one button: **Upgrade to Pro** on Free,
+Open Source and Education, **Manage billing** on Pro and Team (`components/AccountPlan.tsx`). Settings → Accounts → Weft account also offers Google and an email link, and Sign out. Settings → Accounts also has a **Sign-in expiry** row, so a lapsing sign-in is something you find in Settings rather than when a thread trips over it: BlastCP's 30-day grant is the one that runs out and speaks up in its last week, while Vercel, Supabase and Cloudflare tokens don't expire and say so. Only the expiry crosses from Electron main — tokens stay in the Keychain — and nothing re-consents on your behalf (`components/TokenExpiry.tsx`). The board works the same
 signed out; the account is for cloud features (page sync, share links) as they land. Sign-in opens
 your default browser and comes back to Weft through a `weft://account-callback` link, so the board
 shows you signed in a moment later. The session is kept in `~/.weft/account.json`, readable only by you
@@ -1000,7 +1006,7 @@ which imports that edit broke, in any project, and fix them before you see the d
 If one gets through anyway (a stray `}` mid-edit), the board you have keeps running the last version that built: a
 small bar names the broken file in place of the dev server's Build Error overlay, and goes away once the file is fixed
 (`components/BuildErrorBar.tsx`, `lib/build-error.ts`). Reloading the window while the file is broken shows the error page.
-When a thread crashes or refreshes Weft (stops its server, leaves a file that doesn't build, or makes the board reload),
+When a thread crashes or restarts Weft (stops its server, or leaves a file that doesn't build),
 its card is ringed red with a **💥 Broke Weft** chip saying what it did; × dismisses it, and the thread is told with
 its next message so it doesn't do it again (`lib/crash-blame.ts`). Starting a second Weft dev server in Weft's own
 folder, the usual cause, is refused outright.

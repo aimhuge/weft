@@ -93,8 +93,29 @@ describe("GameBadge", () => {
     setup();
     const popup = await screen.findByRole("dialog", { name: "Level up!" });
     expect(popup).toHaveTextContent("Level 2 · Thread");
+    expect(popup).toHaveTextContent("Episode II");
+    expect(popup.querySelector("img")?.getAttribute("src")).toBe("/brand/levels/thread.webp");
     await userEvent.click(screen.getByRole("button", { name: "Nice!" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("replays the last popup on the replay event, and the current level before any", async () => {
+    setup();
+    await screen.findByRole("button", { name: /Wefter Profile/ });
+    window.dispatchEvent(new Event("weft:achievement-replay"));
+    expect(await screen.findByRole("dialog", { name: "Level up!" })).toHaveTextContent("Level 2 · Thread");
+    await userEvent.click(screen.getByRole("button", { name: "Nice!" }));
+
+    localStorage.setItem("weft-game-last-achievement", JSON.stringify({ fresh: [game().badges[0]], level: null }));
+    window.dispatchEvent(new Event("weft:achievement-replay"));
+    expect(await screen.findByRole("dialog", { name: "Achievement unlocked!" })).toHaveTextContent("First thread");
+  });
+
+  it("keeps a popup it opens for the replay", async () => {
+    localStorage.setItem("weft-game-announced", JSON.stringify({ badges: ["first-card"], level: 1 }));
+    setup();
+    await screen.findByRole("dialog", { name: "Level up!" });
+    expect(JSON.parse(localStorage.getItem("weft-game-last-achievement") ?? "{}")).toMatchObject({ fresh: [], level: { level: 2 } });
   });
 
   it("hides in quiet mode", async () => {

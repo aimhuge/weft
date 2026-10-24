@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useState, useSyncExternalStore } from "react";
+import { readLastAchievement, REPLAY_ACHIEVEMENT_EVENT, saveLastAchievement } from "@/lib/achievement-replay";
 import { apiFetch } from "@/lib/api-client";
 import { showProgress, subscribeBoardPrefs } from "@/lib/board-prefs";
 import { toAnnounce, type Announced } from "@/lib/game-badges";
@@ -25,7 +26,8 @@ function readAnnounced(): Announced | null {
 
 // "🔥 25 · Lv 15" in the header: your streak and level. Click for your "Wefter Profile" (components/LoomDialog.tsx).
 // `refresh` changes when a turn ends somewhere, so the streak follows your work; new badges and
-// level-ups open a popup with confetti (components/AchievementPopup.tsx). Settings > Show progress turns it off.
+// level-ups open a popup with confetti (components/AchievementPopup.tsx), and the avatar menu's "Replay last
+// achievement" opens the last one again (lib/achievement-replay.ts). Settings > Show progress turns it off.
 export default function GameBadge({
   cwd,
   refresh,
@@ -63,8 +65,18 @@ export default function GameBadge({
     if (!game) return;
     const { next, fresh, levelUp } = toAnnounce(readAnnounced(), game.badges, game.level.level);
     localStorage.setItem(ANNOUNCED, JSON.stringify(next));
-    if (fresh.length || levelUp) setAchievement({ fresh, level: levelUp ? game.level : null }); // eslint-disable-line react-hooks/set-state-in-effect
+    if (!fresh.length && !levelUp) return;
+    const shown = { fresh, level: levelUp ? game.level : null };
+    saveLastAchievement(shown);
+    setAchievement(shown); // eslint-disable-line react-hooks/set-state-in-effect
   }, [game]);
+
+  useEffect(() => {
+    if (!enabled || !game) return;
+    const replay = () => setAchievement(readLastAchievement(game.level));
+    window.addEventListener(REPLAY_ACHIEVEMENT_EVENT, replay);
+    return () => window.removeEventListener(REPLAY_ACHIEVEMENT_EVENT, replay);
+  }, [enabled, game]);
 
   if (!enabled || !game) return null;
   const { streak, level } = game;
