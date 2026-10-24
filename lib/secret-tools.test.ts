@@ -101,6 +101,16 @@ describe("secretsMcpServer", () => {
     expect(sent().body).toEqual({ folder: "/other", name: "K", environment: "production" });
   });
 
+  it("says honestly when an asked-for key already has a value, and how to replace it", async () => {
+    reply({ filled: true, label: "aimhuge/weft" });
+    const r = await run("ask_add", { name: "STRIPE_PRICE_PRO", environment: "production" });
+    expect([r.isError, said(r)]).toEqual([
+      true,
+      "STRIPE_PRICE_PRO already has a value in the aimhuge/weft vault (production), so nothing changed: it isn't a blank and the user has nothing to paste. Carry on with that value. If it should change to one you generated or got yourself, call mcp__secrets__set_value with replace: true; if the user has to supply the new value, ask them to change it in 🔐.",
+    ]);
+    expect(said(r)).not.toContain("is a blank in");
+  });
+
   it("adds blank names to the vault and reports which were already filled", async () => {
     reply({ label: "aimhuge/weft", filled: ["GITHUB_TOKEN"] });
     const r = await run("add_blank", { names: ["GITHUB_TOKEN", "STRIPE_SECRET_KEY"], hint: "Stripe dashboard → Developers → API keys" });
@@ -164,22 +174,37 @@ describe("secretsMcpServer", () => {
       expect(sent().body).toEqual({ folder: "/other", name: "K", value: VALUE, environment: "development" });
     });
 
-    it("refuses a name that isn't a blank yet, a filled one, a no and an error, never echoing the value", async () => {
-      reply({ missing: true, label: "aimhuge/weft" });
-      const missing = await run("set_value", { name: "PUKU_TRIAL_SIGNING_SECRET", value: VALUE });
-      expect([missing.isError, said(missing)]).toEqual([true, "PUKU_TRIAL_SIGNING_SECRET is not in the vault. Call add_blank first."]);
-      // Unlike fill_field, a missing name doesn't open the Add form: the thread adds the blank itself.
+    it("replaces a filled value with replace: true, saying so by name only", async () => {
+      reply({ ok: true, replaced: true, label: "aimhuge/weft" });
+      const r = await run("set_value", { name: "STRIPE_PRICE_PRO", value: VALUE, environment: "production", replace: true });
+      expect(sent().body).toEqual({ folder: "/proj", name: "STRIPE_PRICE_PRO", value: VALUE, environment: "production", replace: true });
+      expect([r.isError, said(r)]).toEqual([false, "Replaced the value of STRIPE_PRICE_PRO in the aimhuge/weft vault (production)."]);
+      clean(r);
+      reply({ denied: true, label: "aimhuge/weft" });
+      expect(said(await run("set_value", { name: "K", value: VALUE, replace: true }))).toBe("The user didn't approve replacing K. Ask before trying again.");
+      // replace: false is the same as leaving it out.
+      fetchMock.mockReset();
+      reply({ ok: true, label: "aimhuge/weft" });
+      await run("set_value", { name: "K", value: VALUE, replace: false });
+      expect(sent().body).not.toHaveProperty("replace");
+    });
+
+    it("adds a new name, refuses a filled one, a no and an error, never echoing the value", async () => {
+      // A name that wasn't there is added, by name only.
+      reply({ ok: true, added: true, label: "aimhuge/weft" });
+      const added = await run("set_value", { name: "PUKU_TRIAL_SIGNING_SECRET", value: VALUE });
+      expect([added.isError, said(added)]).toEqual([false, "Added PUKU_TRIAL_SIGNING_SECRET to the aimhuge/weft vault (development)."]);
       expect(fetchMock).toHaveBeenCalledTimes(1);
       reply({ filled: true, label: "aimhuge/weft" });
       const filled = await run("set_value", { name: "K", value: VALUE });
-      expect([filled.isError, said(filled)]).toEqual([true, "K already has a value in the aimhuge/weft vault (development); set_value only fills blanks. Ask the user to replace it in 🔐 if it should change."]);
+      expect([filled.isError, said(filled)]).toEqual([true, "K already has a value in the aimhuge/weft vault (development); set_value only fills blanks unless you pass replace: true. Call it again with replace: true if the new value should overwrite it; the user approves the overwrite with Touch ID."]);
       reply({ denied: true, label: "aimhuge/weft" });
       const no = await run("set_value", { name: "K", value: VALUE });
       expect([no.isError, said(no)]).toEqual([true, "The user didn't approve setting K. Ask before trying again."]);
       reply({ error: "The secrets vault isn't ready yet." }, false);
       const err = await run("set_value", { name: "K", value: VALUE });
       expect(said(err)).toBe("The secrets vault isn't ready yet.");
-      for (const r of [missing, filled, no, err]) clean(r);
+      for (const r of [added, filled, no, err]) clean(r);
     });
   });
 });

@@ -11,7 +11,7 @@ export const SECRETS_PROMPT = `When a task needs a secret value the user keeps i
 ${ASK_PROMPT}
 ${RUN_PROMPT}
 To put a vault value on the project's linked Vercel project (an env var a deploy needs), call mcp__secrets__push_to_vercel with its name and environment; the user approves with Touch ID and Weft sends it to Vercel itself. Don't use the Vercel dashboard or \`vercel env add\` for a vault value.
-When you generate a secret yourself (a random signing secret, a webhook secret you make up), put its name in with mcp__secrets__add_blank, then call mcp__secrets__set_value with the name and the value right after you generate it: the user approves with Touch ID and Weft stores it; don't write it to a file or repeat it. A key the user gets from a provider stays a blank for them to fill in.`;
+When you generate a secret yourself (a random signing secret, a webhook secret you make up), call mcp__secrets__set_value with the name and the value right after you generate it (it adds the name or fills its blank): the user approves with Touch ID and Weft stores it; don't write it to a file or repeat it. A key the user gets from a provider stays a blank for them to fill in. To change a value that's already there to one you generated or got yourself (new price ids after moving Stripe to a sandbox, say), call mcp__secrets__set_value with replace: true; the user approves the overwrite with Touch ID.`;
 
 const ENVIRONMENTS = ["development", "preview", "production"] as const;
 
@@ -80,21 +80,23 @@ export function secretsMcpServer(cardId: () => string | undefined, folder: () =>
       ),
       tool(
         "set_value",
-        "Store a value you generated (a random signing secret, say) in the 🔐 vault under a name already there as a blank (mcp__secrets__add_blank first). The user approves with Touch ID; the result never repeats the value. For keys the user gets from a provider, leave the blank for them.",
+        "Store a value you generated (a random signing secret, say) in the 🔐 vault: it adds the name, or fills it when it's a blank. With replace: true it overwrites the value a name already has in that environment (one you generated or got yourself, like new price ids); the Touch ID approval says it overwrites. The user approves with Touch ID; the result never repeats the value. For keys the user gets from a provider, leave the blank for them.",
         {
-          name: z.string().describe("The blank's name, e.g. PUKU_TRIAL_SIGNING_SECRET"),
+          name: z.string().describe("The secret's name, e.g. PUKU_TRIAL_SIGNING_SECRET"),
           value: z.string().min(1).describe("The value you generated"),
           environment: z.enum(ENVIRONMENTS).optional().describe("Which environment it's for; defaults to development"),
+          replace: z.boolean().optional().describe("Overwrite the value the name already has in that environment; without it only a blank takes a value"),
           project,
         },
-        ({ name, value, environment, project: p }) =>
+        ({ name, value, environment, replace, project: p }) =>
           attempt(async () => {
             const env = environment ?? "development";
-            const r = await shell("/secrets/set", { folder: p ?? folder(), name, value, environment: env });
+            const r = await shell("/secrets/set", { folder: p ?? folder(), name, value, environment: env, ...(replace ? { replace: true } : {}) });
             const vault = asText(r.label, "this");
-            if (r.denied) return text(`The user didn't approve setting ${name}. Ask before trying again.`, true);
-            if (r.missing) return text(`${name} is not in the vault. Call add_blank first.`, true);
-            if (r.filled) return text(`${name} already has a value in the ${vault} vault (${env}); set_value only fills blanks. Ask the user to replace it in 🔐 if it should change.`, true);
+            if (r.denied) return text(`The user didn't approve ${replace ? "replacing" : "setting"} ${name}. Ask before trying again.`, true);
+            if (r.filled) return text(`${name} already has a value in the ${vault} vault (${env}); set_value only fills blanks unless you pass replace: true. Call it again with replace: true if the new value should overwrite it; the user approves the overwrite with Touch ID.`, true);
+            if (r.replaced) return text(`Replaced the value of ${name} in the ${vault} vault (${env}).`);
+            if (r.added) return text(`Added ${name} to the ${vault} vault (${env}).`);
             return text(`Set ${name} in the ${vault} vault (${env}).`);
           }),
       ),

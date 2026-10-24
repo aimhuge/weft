@@ -7,7 +7,7 @@ import { createVault } from "./vault.cjs";
 import { vaultRoutes as rawRoutes } from "./vault-routes.cjs";
 
 type Route = (body: Record<string, unknown>) => Promise<unknown>;
-const vaultRoutes = (get: () => unknown) => rawRoutes(get) as unknown as { "POST /secrets/add-blank": Route; "POST /secrets/set": Route };
+const vaultRoutes = (get: () => unknown) => rawRoutes(get) as unknown as { "POST /secrets/add-blank": Route; "POST /secrets/set": Route; "POST /secrets/ask-add": Route };
 
 const safeStorage = {
   isEncryptionAvailable: () => true,
@@ -47,11 +47,7 @@ describe("vaultRoutes", () => {
 
   it("fills a thread's blank with a value it generated, into the right environment, after a Touch ID", async () => {
     const { routes, folder, vault, set, prompt, onChange, dataDir } = make();
-    // No vault yet, then a name that isn't there, then a blank in another environment: add_blank comes first.
-    expect(await set({ name: "SIGNING", value: VALUE, environment: "production" })).toEqual({ missing: true, label: "Owner/Repo" });
     await routes["POST /secrets/add-blank"]({ folder, names: ["SIGNING"], environment: "production" });
-    expect(await set({ name: "OTHER", value: VALUE, environment: "production" })).toEqual({ missing: true, label: "Owner/Repo" });
-    expect(await set({ name: "SIGNING", value: VALUE })).toEqual({ missing: true, label: "Owner/Repo" });
     await expect(set({ name: "SIGNING", environment: "production" })).rejects.toThrow(/Give a value for SIGNING/);
     expect(prompt).not.toHaveBeenCalled();
 
@@ -79,6 +75,60 @@ describe("vaultRoutes", () => {
     prompt.mockClear();
     expect(await set({ name: "SIGNING", value: "another", environment: "production" })).toEqual({ filled: true, label: "Owner/Repo" });
     expect(prompt).not.toHaveBeenCalled();
+  });
+
+  it("overwrites a filled value only with replace, after a Touch ID that says it overwrites", async () => {
+    const { folder, vault, set, prompt } = make();
+    await vault.setValue(folder, "PRICE", "production", "price_live");
+    await vault.setValue(folder, "PRICE", "development", "price_dev");
+    prompt.mockClear();
+    // A string "true" isn't replace: only a real true is.
+    expect(await set({ name: "PRICE", value: "price_sandbox", environment: "production", replace: "true" })).toEqual({ filled: true, label: "Owner/Repo" });
+    expect(prompt).not.toHaveBeenCalled();
+
+    prompt.mockResolvedValueOnce(false);
+    expect(await set({ name: "PRICE", value: "price_sandbox", environment: "production", replace: true })).toEqual({ denied: true, label: "Owner/Repo" });
+    expect((await vault.valuesFor(folder, ["PRICE"], "production")).values).toEqual({ PRICE: "price_live" });
+
+    const ok = await set({ name: "PRICE", value: "price_sandbox", environment: "production", replace: true });
+    expect(ok).toEqual({ ok: true, replaced: true, label: "Owner/Repo" });
+    expect(prompt).toHaveBeenLastCalledWith("let a thread overwrite the production value of PRICE (Owner/Repo) with a new one");
+    expect(prompt.mock.calls.flat().join("\n")).not.toMatch(/price_(live|sandbox)/);
+    expect((await vault.valuesFor(folder, ["PRICE"], "production")).values).toEqual({ PRICE: "price_sandbox" });
+    // Only that environment changes.
+    expect((await vault.valuesFor(folder, ["PRICE"], "development")).values).toEqual({ PRICE: "price_dev" });
+    // replace on a blank is a plain set; on a name that isn't there, add_blank still comes first.
+  });
+
+  it("adds a name that isn't in that environment yet, after a Touch ID that says it adds", async () => {
+    const { folder, vault, set, prompt } = make();
+    // No vault at all yet.
+    expect(await set({ name: "NEW", value: VALUE, environment: "production" })).toEqual({ ok: true, added: true, label: "Owner/Repo" });
+    expect(prompt).toHaveBeenLastCalledWith("let a thread add NEW (Owner/Repo, production)");
+    expect((await vault.valuesFor(folder, ["NEW"], "production")).values).toEqual({ NEW: VALUE });
+    // Another environment of the same name is its own add, and replace doesn't change that.
+    expect(await set({ name: "NEW", value: "dev-value", replace: true })).toEqual({ ok: true, added: true, label: "Owner/Repo" });
+    expect((await vault.valuesFor(folder, ["NEW"], "production")).values).toEqual({ NEW: VALUE });
+    prompt.mockResolvedValueOnce(false);
+    expect(await set({ name: "NOPE", value: VALUE })).toEqual({ denied: true, label: "Owner/Repo" });
+    expect(((await vault.names(folder)) as { secrets: { name: string }[] }).secrets.map((s) => s.name)).not.toContain("NOPE");
+    await expect(set({ name: "1BAD", value: VALUE })).rejects.toThrow(/isn't a variable name/);
+  });
+
+  it("puts an asked-for key in as a blank, but says so when it already has a value", async () => {
+    const { routes, folder, vault } = make();
+    const ask = (body: Record<string, unknown>) => routes["POST /secrets/ask-add"]({ folder, ...body });
+    expect(await ask({ name: "NEW" })).toEqual({ added: true });
+    expect((await vault.names(folder)).secrets).toContainEqual({ name: "NEW", environment: "development", missing: true });
+    await vault.setValue(folder, "PRICE", "production", "price_live");
+    expect(await ask({ name: "PRICE", environment: "production" })).toEqual({ filled: true, label: "Owner/Repo" });
+    expect((await vault.valuesFor(folder, ["PRICE"], "production")).values).toEqual({ PRICE: "price_live" });
+    // A value in another environment doesn't count: production has one, development gets the blank.
+    expect(await ask({ name: "PRICE" })).toEqual({ added: true });
+    // No vault, or a failing one, still answers so the thread hears where to add it by hand.
+    expect(await vaultRoutes(() => undefined)["POST /secrets/ask-add"]({ folder, name: "K" })).toEqual({ added: true });
+    const failing = { addBlanks: () => Promise.reject(new Error("locked")) };
+    expect(await vaultRoutes(() => failing)["POST /secrets/ask-add"]({ folder, name: "K" })).toEqual({ added: true });
   });
 
   it("asks Touch ID for each set even while the drawer and a thread's fill are unlocked", async () => {

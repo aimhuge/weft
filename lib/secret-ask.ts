@@ -39,7 +39,7 @@ export function missingText(names: string[], environment: string, vault: string,
 export function askAddTool(folder: () => string) {
   return tool(
     "ask_add",
-    "Ask the user for a key you're blocked on right now: its name goes in the 🔐 vault as a blank and this thread shows an input for it, where the user pastes the value; you never see it. End your turn after calling it; the user tells you once it's in. When you can carry on without the value, use add_blank instead.",
+    "Ask the user for a key you're blocked on right now: its name goes in the 🔐 vault as a blank and this thread shows an input for it, where the user pastes the value; you never see it. End your turn after calling it; the user tells you once it's in. When you can carry on without the value, use add_blank instead. A name that already has a value keeps it (the answer says so); to replace a value you generated or got yourself, use set_value with replace: true.",
     {
       name: NAME.describe("The secret's name, e.g. SUPABASE_SECRET_KEY"),
       environment: z.enum(ENVIRONMENTS).optional().describe("Which environment it's for; defaults to development"),
@@ -47,10 +47,18 @@ export function askAddTool(folder: () => string) {
     },
     ({ name, environment, project }) =>
       attempt(async () => {
-        await shell("/secrets/ask-add", { folder: project ?? folder(), name, environment: environment ?? "development" });
+        const env = environment ?? "development";
+        const r = await shell("/secrets/ask-add", { folder: project ?? folder(), name, environment: env });
+        if (r.filled) return text(filledAskText(name, env, asText(r.label, "this")), true);
         return text(`${name} (${environment ?? "development"}) is a blank in the 🔐 vault, and this thread shows the user an input for it. End your turn now; they'll tell you once it's in.`);
       }),
   );
+}
+
+// What ask_add says for a name that already has a value: nothing changed, so it isn't a blank and the user has
+// nothing to paste. How to change it instead.
+export function filledAskText(name: string, environment: string, vault: string): string {
+  return `${name} already has a value in the ${vault} vault (${environment}), so nothing changed: it isn't a blank and the user has nothing to paste. Carry on with that value. If it should change to one you generated or got yourself, call mcp__secrets__set_value with replace: true; if the user has to supply the new value, ask them to change it in 🔐.`;
 }
 
 /** mcp__secrets__add_blank: names into the vault with no value, nothing opens. folder is the card's project. */
