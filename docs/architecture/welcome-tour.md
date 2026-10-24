@@ -1,6 +1,6 @@
 # The welcome tour
 
-The welcome's first screen (Get ready) plays a narrated 96-second tour of Weft, built from three
+The welcome's first screen (Get ready) plays a narrated 106-second tour of Weft, built from three
 [HyperFrames](https://hyperframes.heygen.com) compositions. The same pages render to MP4s for weft.zip.
 The per-drawer intros ([feature-intros.md](feature-intros.md)) are the same idea at one feature each, and share
 this tooling: `scripts/narrate-lib.mjs` (Kokoro plus the pad), `lib/welcome-voice.ts` (`VoicePlayer`, and the one
@@ -14,8 +14,8 @@ This is the tour *inside* the welcome. The dialog around it — the steps, the r
 | Page | Length | What it shows |
 |---|---|---|
 | `intro.html` | 12 s | "Welcome to Weft", the future of AI engineering, the agents it runs on (Claude Code, Codex, Puku AI) |
-| `loop.html` | 30 s | One card from prompt to Done: you click the card, its thread works while the pane shows the plan and the app, a question in Needs you, the 🔐 vault's Touch ID prompt, Review, Done |
-| `beats.html` | 54.5 s | Connect your tools, a pane as a shared live dashboard, code quality and the refactor scout, BlastCP built in (your socials, image, video and voice for a launch post), the Wefter Profile, Weft is open source (make a pull request), "Now let's get started" |
+| `loop.html` | 30 s | One card from prompt to Done: you click the card and its thread opens, every card has a pane (the plan, then the app), a question in Needs you, Review, Done |
+| `beats.html` | 64.5 s | Connect your tools, the 🔐 vault (Touch ID fills in a key the thread never sees), a pane as a shared live dashboard, code quality and the refactor scout, BlastCP built in (your socials, image, video and voice for a launch post), the Wefter Profile, Weft is open source (make a pull request), "Now let's get started" |
 
 Each page is plain HTML plus a paused GSAP timeline on `window.__timelines.root`; the renderer seeks it frame by
 frame, so nothing uses timers. `beats.html` draws each scene from its start time and lists them in `SCENES`, so the
@@ -32,7 +32,7 @@ order (build → ship → show) lives in one place; keep it in step with `BEATS`
   to the parent as the timeline passes each beat, and hands off intro → loop → beats → intro with `location.replace`.
   It takes `{ weft: "go", beat, page }` from the parent: a beat on its page is a seek, one on another page loads that
   page with the beat as its `#hash`, which it seeks to as it starts.
-- `components/WelcomeTourBar.tsx` is the strip under the frame: "3 of 9 · Connect your tools", a segment per beat to jump
+- `components/WelcomeTourBar.tsx` is the strip under the frame: "3 of 10 · Connect your tools", a segment per beat to jump
   to, **‹ Back** and **Next ›** a beat at a time (not the whole tour) and the 🔊 mute. A jump comes back with
   `jumped: true` and the page's time, and the voiceover restarts there (`VoicePlayer.play(src, at)`).
 - `lib/use-welcome-tour.ts` listens (only to its own iframe), starts the page's voiceover through

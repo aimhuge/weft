@@ -102,17 +102,17 @@ describe("WelcomeLoop", () => {
     const frame = screen.getByTitle<HTMLIFrameElement>(/How Weft works/);
     const sent = vi.spyOn(frame.contentWindow as Window, "postMessage");
     expect(screen.getByText("Welcome to Weft")).toBeInTheDocument();
-    expect(screen.getByText("1 of 9")).toBeInTheDocument();
+    expect(screen.getByText("1 of 10")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Back a beat" })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Next beat" }));
     expect(sent).toHaveBeenLastCalledWith({ weft: "go", beat: "loop", page: "loop.html" }, "*");
     // The bar moves at once, so a quick second click steps on before the page has answered.
-    expect(screen.getByText("2 of 9")).toBeInTheDocument();
+    expect(screen.getByText("2 of 10")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Next beat" }));
     expect(sent).toHaveBeenLastCalledWith({ weft: "go", beat: "tools", page: "beats.html" }, "*");
 
     post(frame, "tools");
-    expect(screen.getByText("3 of 9")).toBeInTheDocument();
+    expect(screen.getByText("3 of 10")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Back a beat" }));
     expect(sent).toHaveBeenLastCalledWith({ weft: "go", beat: "loop", page: "loop.html" }, "*");
     fireEvent.click(screen.getByRole("button", { name: "Your Wefter Profile" }));

@@ -60,27 +60,6 @@
   #ask .opts { margin-top: 14px; display: flex; gap: 12px; }
   #ask .o { font-size: 26px; padding: 6px 16px; border-radius: 11px; border: 2px solid #3c4560; color: #c9cfdf; }
   #cursor { left: 1190px; top: 50px; width: 48px; height: 48px; }
-  /* The 🔐 vault: the thread needs a key, Touch ID fills it in, the value stays masked. */
-  #vault { left: 340px; top: 196px; width: 606px; border-radius: 20px; background: #1c2130; border: 2px solid #4f7cff99; padding: 22px 26px;
-    box-shadow: 0 20px 50px #0008; }
-  #vault .h { font-size: 28px; color: #9aa3b8; display: flex; gap: 12px; align-items: center; }
-  #vault .k { margin-top: 18px; display: flex; gap: 18px; align-items: center; font-size: 28px; }
-  #vault code { font-family: ui-monospace, "SF Mono", Menlo, monospace; color: #f1f3f8; }
-  #vault .dots { color: #8d95aa; letter-spacing: 4px; }
-  #vault .pills { position: relative; margin-top: 20px; height: 52px; }
-  #vault .pill { left: 0; top: 0; font-size: 26px; padding: 8px 20px; border-radius: 12px; white-space: nowrap; }
-  /* macOS's Touch ID prompt, the one Electron main shows before a value leaves the vault (drawn after the real one). */
-  #tid { left: 700px; top: 40px; width: 470px; border-radius: 34px; background: #f2f2f4; color: #1d1d1f; padding: 34px 30px 26px;
-    box-shadow: 0 34px 90px #000c, 0 0 0 1px #0003; }
-  #tid .ring { position: relative; width: 112px; height: 112px; margin-left: 10px; }
-  #tid .print { position: absolute; inset: 0; border-radius: 50%; background: #fff; box-shadow: 0 2px 8px #0002, inset 0 0 0 1px #0001; }
-  #tid .print svg { position: absolute; inset: 14px; }
-  #tid .badge { position: absolute; right: -18px; bottom: -14px; width: 66px; height: 66px; }
-  #tid b { display: block; margin: 22px 10px 0; font-size: 27px; }
-  #tid p { margin: 18px 10px 0; font-size: 25px; line-height: 1.32; }
-  #tid .btn { margin-top: 12px; height: 54px; border-radius: 27px; font-size: 25px; display: flex; align-items: center; justify-content: center; }
-  #tid .blue { margin-top: 26px; background: #0a84ff; color: #fff; }
-  #tid .grey { background: #e3e3e6; color: #1d1d1f; }
   /* The open card: you click the card and its thread opens beside the pane, the way Weft opens one (thread left,
      pane right), working away while the pane shows its plan page. */
   #thread { left: 30px; top: 20px; width: 1236px; height: 660px; border-radius: 22px; background: #f7f7f8; color: #1d1d1f;
@@ -151,35 +130,6 @@
     <div class="opts"><span class="o" id="yes">Yes</span><span class="o">No</span></div>
   </div>
 
-  <div id="vault" class="abs">
-    <div class="h">🔐 Vault <span class="chip" id="proj0c">my-app</span></div>
-    <div class="k"><code>STRIPE_SECRET_KEY</code><span class="dots">••••••••••</span></div>
-    <div class="pills"><span class="abs pill" id="touch" style="background:#2a3044; color:#e8eaf0">☝ Touch ID to fill it in</span><span class="abs pill" id="filled" style="background:#173a28; color:#5fd38d">✓ Filled in · the thread never sees it</span></div>
-  </div>
-
-  <div id="tid" class="abs">
-    <div class="ring">
-      <div class="print">
-        <svg id="fp" viewBox="0 0 64 64" fill="none" stroke="url(#fpg)" stroke-width="2.6" stroke-linecap="round">
-          <defs><linearGradient id="fpg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff4fa3"/><stop offset="1" stop-color="#ff2d55"/></linearGradient></defs>
-          <path d="M14 18a24 24 0 0 1 36 0"/><path d="M9 30a24 24 0 0 1 3-8"/><path d="M55 27a24 24 0 0 1 1 9"/>
-          <path d="M14 42c-1-3-2-7-2-10a20 20 0 0 1 40 0c0 3 0 6-1 9"/>
-          <path d="M19 48c-2-5-3-10-3-16a16 16 0 0 1 32 0c0 5 0 9-1 13"/>
-          <path d="M24 53c-2-6-3-13-3-21a11 11 0 0 1 22 0c0 7-1 14-3 20"/>
-          <path d="M29 56c-2-7-3-15-3-24a6 6 0 0 1 12 0c0 8-1 16-3 23"/>
-          <path d="M32 32c0 9-1 17-3 25"/>
-        </svg>
-        <svg id="fpOk" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#34c759"/><path d="M19 33l9 9 17-18" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      </div>
-      <img class="badge" src="./icon.png" alt="">
-    </div>
-    <b>Weft</b>
-    <p>Weft wants to fill in “STRIPE_SECRET_KEY” from the <span id="proj0d">my-app</span> vault.</p>
-    <p>Touch ID or enter your password to allow this.</p>
-    <div class="btn blue">Use Password…</div>
-    <div class="btn grey">Cancel</div>
-  </div>
-
   <div id="pane" class="abs">
     <div class="bar"><i></i><i></i><i></i><span class="url"><span id="urlApp">localhost:3000/pricing</span><span id="urlPlan">~/.weft/show/stripe-plan.html</span></span></div>
     <div class="abs app" style="background:#ffffff; color:#111827">
@@ -194,7 +144,7 @@
       <div class="st"><span class="bx"><i></i><em id="p1">✓</em></span>Pricing page and plan card</div>
       <div class="st"><span class="bx"><i></i><em id="p2">✓</em></span>Checkout button</div>
       <div class="st"><span class="bx"><i></i><em id="p3">✓</em></span>Dev server running</div>
-      <div class="st"><span class="bx"><i></i><em id="p4">✓</em></span>Stripe key from the vault</div>
+      <div class="st"><span class="bx"><i></i><em id="p4">✓</em></span>Test a payment</div>
     </div>
     <div class="abs tour" id="tour"><span style="color:#a78bfa">Review tour</span><br>Run a test payment, check the receipt</div>
   </div>
@@ -202,9 +152,9 @@
   <svg id="cursor" class="abs" viewBox="0 0 24 24"><path d="M3 2l7 19 2.6-7.4L20 11z" fill="#fff" stroke="#111" stroke-width="1.2"/></svg>
 
   <div class="abs cap" id="c1">You bring the idea. <b>Every card in Weft is an AI coding thread.</b></div>
-  <div class="abs cap" id="c2">Weft shows its work in the <b>browser pane</b>.</div>
+  <div class="abs cap" id="c2">Click a card to open its <b>thread</b>.</div>
+  <div class="abs cap" id="c7" style="white-space:normal; width:1700px; font-size:40px; line-height:1.16; top:692px">Every Weft card has a <b>pane</b>, and it's always showing you something:<br>your app, a plan, a video it made.</div>
   <div class="abs cap" id="c3" style="font-size:46px">When a Weft card needs a decision, it moves to the <b>Needs you</b> column.</div>
-  <div class="abs cap" id="c5">Your keys live in your <b>🔐 vault</b>. Touch ID lets your AI use them.</div>
   <div class="abs cap" id="c4">Check Weft's work in the <b>Review</b> column.</div>
   <div class="abs cap" id="c6">Moving a card to the <b>Done</b> column commits, refactors and deploys.</div>
 
@@ -224,7 +174,7 @@
     var names = (query.get("p") || vars.projects || "my-app,api,site").split(",").map(function (s) { return s.trim(); }).filter(Boolean);
     while (names.length < 3) names.push(["my-app", "api", "site"][names.length]);
     var set = function (ids, text) { ids.forEach(function (id) { document.getElementById(id).textContent = text.slice(0, 24); }); };
-    set(["proj0", "proj0b", "proj0c", "proj0d", "proj0e"], names[0]);
+    set(["proj0", "proj0b", "proj0e"], names[0]);
     set(["proj1"], names[1]);
     set(["proj2"], names[2]);
 
@@ -235,9 +185,7 @@
     // on each repeat the tweens below rewind to these values.
     gsap.set(hero, { opacity: 0, scale: 0.9 });
     gsap.set("#ask", { opacity: 0, y: 12 });
-    gsap.set(["#payOn", "#paid", "#tour", "#payOff", "#c2", "#c3", "#c4", "#cursor", "#heroReview", "#heroDone", "#c5", "#c6", "#filled", "#thread", "#say", "#t1", "#t2", "#t3", "#planpage", "#urlPlan", "#p1", "#p2", "#p3", "#p4", "#fpOk"], { opacity: 0 });
-    gsap.set("#tid", { opacity: 0, scale: 0.92 });
-    gsap.set("#vault", { opacity: 0, y: 16 });
+    gsap.set(["#payOn", "#paid", "#tour", "#payOff", "#c2", "#c3", "#c4", "#cursor", "#heroReview", "#heroDone", "#c6", "#c7", "#thread", "#say", "#t1", "#t2", "#t3", "#planpage", "#urlPlan", "#p1", "#p2", "#p3", "#p4"], { opacity: 0 });
     tl.fromTo("#fade", { opacity: 1 }, { opacity: 0, duration: 0.5 }, 0);
 
     // 0.4–2.4: the prompt types itself, Start is clicked, the card appears in Running.
@@ -251,70 +199,55 @@
     // Spinners turn the whole way through.
     tl.to(["#heroSpin", ".bg1"], { rotation: 360 * 16, duration: 30, ease: "none" }, 0);
 
-    // 2.9–10: you click the card; its thread opens beside the pane and works (read, edit, run), the pane shows its plan
-    // page ticking off, then the pricing page with a checkout button that can't pay yet; the card closes.
+    // 2.9–6: you click the card and its thread opens beside the pane.
     tl.to("#cursor", { x: -1018, y: 215, duration: 0.5, ease: "power2.inOut" }, 2.9)
       .to(hero, { scale: 0.95, duration: 0.08, yoyo: true, repeat: 1 }, 3.45)
       .to("#c1", { opacity: 0, duration: 0.3 }, 3.2)
       .to("#c2", { opacity: 1, duration: 0.3 }, 3.4)
       .fromTo("#thread", { opacity: 0, scale: 0.97 }, { opacity: 1, scale: 1, duration: 0.3 }, 3.6)
       .to("#cursor", { opacity: 0, duration: 0.2 }, 3.6)
-      .to(["#planpage", "#urlPlan"], { opacity: 1, duration: 0.3 }, 3.6)
-      .to("#urlApp", { opacity: 0, duration: 0.2 }, 3.6)
-      .to("#say", { opacity: 1, duration: 0.3 }, 4.0)
-      .to("#t1", { opacity: 1, duration: 0.2 }, 4.8)
-      .to("#p1", { opacity: 1, duration: 0.2 }, 5.0)
-      .to("#t2", { opacity: 1, duration: 0.2 }, 5.8)
-      .to("#p2", { opacity: 1, duration: 0.2 }, 6.0)
-      .to("#t3", { opacity: 1, duration: 0.2 }, 6.8)
-      .to("#p3", { opacity: 1, duration: 0.2 }, 7.0)
-      .to("#workSpin", { rotation: 360 * 7, duration: 6.1, ease: "none" }, 3.6)
-      .to(["#planpage", "#urlPlan"], { opacity: 0, duration: 0.3 }, 7.8)
-      .to("#urlApp", { opacity: 1, duration: 0.3 }, 7.8)
-      .fromTo("#payOff", { opacity: 0, scale: 0.8 }, { opacity: 1, scale: 1, duration: 0.4, ease: "back.out(2)" }, 8.0)
-      .to("#thread", { opacity: 0, duration: 0.3 }, 9.7);
+      .to("#say", { opacity: 1, duration: 0.3 }, 4.2)
+      .to("#workSpin", { rotation: 360 * 9, duration: 8.2, ease: "none" }, 3.6);
 
-    // 6–9.5: a question: the card moves to Needs you, the ask shows, Yes is clicked, back to Running.
-    tl.to("#c2", { opacity: 0, duration: 0.3 }, 10)
-      .to("#c3", { opacity: 1, duration: 0.3 }, 10.2)
-      .to(hero, { x: COL.needs - COL.running, duration: 0.6, ease: "power2.inOut" }, 10)
-      .to("#ask", { opacity: 1, y: 0, duration: 0.35 }, 10.6)
-      .set("#cursor", { x: -785, y: 400 }, 11)
-      .to("#cursor", { opacity: 1, duration: 0.2 }, 11)
-      .to("#cursor", { x: -800, y: 420, duration: 0.6 }, 11.2)
-      .to("#yes", { scale: 0.9, duration: 0.08, yoyo: true, repeat: 1 }, 12)
-      .to("#ask", { opacity: 0, y: 12, duration: 0.3 }, 12.3)
-      .to("#cursor", { opacity: 0, duration: 0.2 }, 12.3)
-      .to(hero, { x: 0, duration: 0.6, ease: "power2.inOut" }, 12.6);
+    // 6–12: the pane: it shows the thread's plan page ticking off (read, edit, run), then the pricing page with a
+    // checkout button that can't pay yet; the card closes.
+    tl.to("#c2", { opacity: 0, duration: 0.3 }, 5.8)
+      .to("#c7", { opacity: 1, duration: 0.3 }, 6)
+      .to(["#planpage", "#urlPlan"], { opacity: 1, duration: 0.3 }, 6)
+      .to("#urlApp", { opacity: 0, duration: 0.2 }, 6)
+      .to("#t1", { opacity: 1, duration: 0.2 }, 6.6)
+      .to("#p1", { opacity: 1, duration: 0.2 }, 6.8)
+      .to("#t2", { opacity: 1, duration: 0.2 }, 7.6)
+      .to("#p2", { opacity: 1, duration: 0.2 }, 7.8)
+      .to("#t3", { opacity: 1, duration: 0.2 }, 8.6)
+      .to("#p3", { opacity: 1, duration: 0.2 }, 8.8)
+      .to(["#planpage", "#urlPlan"], { opacity: 0, duration: 0.3 }, 9.8)
+      .to("#urlApp", { opacity: 1, duration: 0.3 }, 9.8)
+      .fromTo("#payOff", { opacity: 0, scale: 0.8 }, { opacity: 1, scale: 1, duration: 0.4, ease: "back.out(2)" }, 10)
+      .to("#thread", { opacity: 0, duration: 0.3 }, 11.7);
 
-    // 9.6–15.4: the thread needs a key: the vault asks for Touch ID (macOS's own prompt), fills it in, and the value stays masked.
-    tl.to("#c3", { opacity: 0, duration: 0.3 }, 13.6)
-      .to("#c5", { opacity: 1, duration: 0.3 }, 13.8)
-      .to("#vault", { opacity: 1, y: 0, duration: 0.4 }, 13.8)
-      .set("#cursor", { x: -760, y: 280 }, 14.4)
-      .to("#cursor", { opacity: 1, duration: 0.2 }, 14.4)
-      .to("#cursor", { x: -720, y: 310, duration: 0.6 }, 14.6)
-      .to("#touch", { scale: 0.94, duration: 0.08, yoyo: true, repeat: 1 }, 15.3)
-      .to("#cursor", { opacity: 0, duration: 0.2 }, 15.5)
-      // macOS asks: the finger rests, the print pulses, it turns to a green check, the prompt goes.
-      .to("#tid", { opacity: 1, scale: 1, duration: 0.3, ease: "back.out(1.6)" }, 15.5)
-      .to("#fp", { scale: 1.08, duration: 0.25, yoyo: true, repeat: 3, transformOrigin: "50% 50%" }, 15.9)
-      .to("#fp", { opacity: 0, duration: 0.15 }, 16.9)
-      .to("#fpOk", { opacity: 1, duration: 0.15 }, 16.9)
-      .to("#tid", { opacity: 0, scale: 0.96, duration: 0.25 }, 17.4)
-      .to("#touch", { opacity: 0, duration: 0.2 }, 17.5)
-      .to("#filled", { opacity: 1, duration: 0.25 }, 17.5)
-      .to("#vault", { opacity: 0, y: 16, duration: 0.4 }, 19);
+    // 12–16.6: a question: the card moves to Needs you, the ask shows, Yes is clicked, back to Running.
+    tl.to("#c7", { opacity: 0, duration: 0.3 }, 12)
+      .to("#c3", { opacity: 1, duration: 0.3 }, 12.2)
+      .to(hero, { x: COL.needs - COL.running, duration: 0.6, ease: "power2.inOut" }, 12)
+      .to("#ask", { opacity: 1, y: 0, duration: 0.35 }, 12.6)
+      .set("#cursor", { x: -785, y: 400 }, 13.4)
+      .to("#cursor", { opacity: 1, duration: 0.2 }, 13.4)
+      .to("#cursor", { x: -800, y: 420, duration: 0.6 }, 13.6)
+      .to("#yes", { scale: 0.9, duration: 0.08, yoyo: true, repeat: 1 }, 14.4)
+      .to("#ask", { opacity: 0, y: 12, duration: 0.3 }, 14.7)
+      .to("#cursor", { opacity: 0, duration: 0.2 }, 14.7)
+      .to(hero, { x: 0, duration: 0.6, ease: "power2.inOut" }, 15);
 
-    // 16–18: with the key, checkout works: a test payment goes through in the pane, the card moves to Review, the tour opens.
-    tl.to("#payOn", { opacity: 1, duration: 0.3 }, 20)
-      .fromTo("#paid", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.35 }, 20.3)
-      .to("#heroSpin", { opacity: 0, duration: 0.2 }, 20.8)
-      .to("#heroReview", { opacity: 1, duration: 0.2 }, 20.9)
-      .to(hero, { x: COL.review - COL.running, duration: 0.7, ease: "power2.inOut" }, 20.8)
-      .to("#c5", { opacity: 0, duration: 0.3 }, 20.8)
-      .to("#c4", { opacity: 1, duration: 0.3 }, 21)
-      .fromTo("#tour", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.4 }, 21.6);
+    // 17–19: with your answer, checkout works: a test payment goes through in the pane, the card moves to Review, the tour opens.
+    tl.to("#payOn", { opacity: 1, duration: 0.3 }, 17)
+      .fromTo("#paid", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.35 }, 17.3)
+      .to("#heroSpin", { opacity: 0, duration: 0.2 }, 17.8)
+      .to("#heroReview", { opacity: 1, duration: 0.2 }, 17.9)
+      .to(hero, { x: COL.review - COL.running, duration: 0.7, ease: "power2.inOut" }, 17.8)
+      .to("#c3", { opacity: 0, duration: 0.3 }, 17.6)
+      .to("#c4", { opacity: 1, duration: 0.3 }, 17.8)
+      .fromTo("#tour", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.4 }, 18.6);
 
     // 19.5–21: you move it to Done; it lands on top of the Done column.
     tl.to("#c4", { opacity: 0, duration: 0.3 }, 23.4)

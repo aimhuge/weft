@@ -1,0 +1,32 @@
+{
+ "duration": 0,
+ "lines": [
+  [
+   0,
+   4,
+   "Now start a new thread."
+  ]
+ ],
+ "words": [
+  [
+   "Now",
+   0
+  ],
+  [
+   "start",
+   0.308
+  ],
+  [
+   "a",
+   0.822
+  ],
+  [
+   "new",
+   0.925
+  ],
+  [
+   "thread.",
+   1.233
+  ]
+ ]
+}

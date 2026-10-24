@@ -2,10 +2,12 @@
 <!--
   The tour's second half, a HyperFrames composition (https://hyperframes.heygen.com) in the same look as loop.html:
   0–7.5s connect your tools (GitHub, Vercel, Supabase, Cloudflare link to the project, then a thread uses them),
-  7.5–16.5s the pane (a thread's page as a live dashboard on vault keys and your data, shared as a weft.zip link),
-  16.5–24s code quality (the score climbing, the refactor scout turning a finding into a card), 24–34.5s BlastCP built
-  in (your socials, a launch post with its image, video and voice), 34.5–42s the Wefter Profile (streak, XP, badges at
-  weft.zip/@you), 42–50s Weft is open source (make a pull request), 50–54.5s "Now let's get started". scripts/render-welcome-loop.mjs renders it after loop.html and joins the
+  7.5–15s the 🔐 vault (your keys masked, a thread asks for one, Touch ID fills it in, the thread never sees it),
+  15–26.5s the pane (a thread's page as a live dashboard that reaches your database or APIs with keys from the vault,
+  shared as a weft.zip link),
+  26.5–34s code quality (the score climbing, the refactor scout turning a finding into a card), 34–44.5s BlastCP built
+  in (your socials, a launch post with its image, video and voice), 44.5–52s the Wefter Profile (streak, XP, badges at
+  weft.zip/@you), 52–60s Weft is open source (make a pull request), 60–64.5s "Now let's get started". scripts/render-welcome-loop.mjs renders it after loop.html and joins the
   two into public/brand/weft-tour.mp4 for weft.zip; the welcome itself plays only loop.html.
   ?live=1 plays it on repeat for a preview. Seekable on purpose: counters tween textContent with snap, no timers.
 -->
@@ -26,6 +28,14 @@
   .label { font-size: 28px; color: #9aa3b8; }
   .cap { left: 30px; top: 704px; width: 1860px; font-size: 52px; font-weight: 600; color: #f1f3f8; letter-spacing: -0.01em; white-space: nowrap; }
   .cap b { color: #f0b429; font-weight: 600; }
+  /* Word-by-word highlight: the word under the playhead lifts into the amber accent (window.weftCaptions, live.js). */
+  .cap .w { transition: color .12s linear, text-shadow .12s linear, transform .12s ease-out; }
+  .cap .w.lit { color: #ffd166; text-shadow: 0 0 26px rgba(240,180,41,.5); }
+  /* A word already inside a <b> is amber; lit it goes brighter rather than changing colour. */
+  .cap b .w.lit { color: #fff3d0; }
+  /* The closing line is its own big statement, not a caption, but it lights the same way. */
+  #cta .w { transition: color .12s linear, text-shadow .12s linear; }
+  #cta .w.lit { color: #ffd166; text-shadow: 0 0 40px rgba(240,180,41,.5); }
   #fade { inset: 0; background: #0d0f14; }
 
   /* Scene T: connect your tools. */
@@ -148,6 +158,26 @@
   .prState { left: 44px; top: 400px; font-size: 30px; font-weight: 600; padding: 14px 30px; border-radius: 30px; color: #fff; }
   #prOpen { background: #238636; } #prMerged { background: #8957e5; }
   #thanks { left: 44px; top: 500px; font-size: 30px; color: #c9cfdf; }
+  /* The 🔐 vault: your keys sit masked; a thread asks for one, Touch ID fills it in, the value never reaches the thread. */
+  #vlist { left: 30px; width: 900px; }
+  .key { left: 44px; width: 812px; height: 96px; border-radius: 18px; background: #1f2433; border: 2px solid #2d3346; padding: 0 26px;
+    display: flex; align-items: center; gap: 18px; font-size: 28px; }
+  .key code { font-family: ui-monospace, "SF Mono", Menlo, monospace; color: #f1f3f8; }
+  .key .dots { margin-left: auto; color: #8d95aa; letter-spacing: 4px; }
+  #vuse { left: 960px; width: 930px; }
+  #vfill { color: #5fd38d; background: #173a28; border-color: #1f5a3b; }
+  /* macOS's Touch ID prompt, the one Electron main shows before a value leaves the vault (drawn after the real one). */
+  #tid { left: 1300px; top: 70px; width: 470px; border-radius: 34px; background: #f2f2f4; color: #1d1d1f; padding: 34px 30px 26px;
+    box-shadow: 0 34px 90px #000c, 0 0 0 1px #0003; }
+  #tid .ring { position: relative; width: 112px; height: 112px; margin-left: 10px; }
+  #tid .print { position: absolute; inset: 0; border-radius: 50%; background: #fff; box-shadow: 0 2px 8px #0002, inset 0 0 0 1px #0001; }
+  #tid .print svg { position: absolute; inset: 14px; }
+  #tid .badge { position: absolute; right: -18px; bottom: -14px; width: 66px; height: 66px; }
+  #tid b { display: block; margin: 22px 10px 0; font-size: 27px; }
+  #tid p { margin: 18px 10px 0; font-size: 25px; line-height: 1.32; }
+  #tid .btn { margin-top: 12px; height: 54px; border-radius: 27px; font-size: 25px; display: flex; align-items: center; justify-content: center; }
+  #tid .blue { margin-top: 26px; background: #0a84ff; color: #fff; }
+  #tid .grey { background: #e3e3e6; color: #1d1d1f; }
   /* Scene C: the call to action that hands over to the welcome's next step. */
   #cta { left: 0; top: 270px; width: 1920px; text-align: center; font-size: 120px; font-weight: 700; letter-spacing: -0.03em; }
   #ctaNext { left: 860px; top: 470px; width: 200px; text-align: center; font-size: 40px; font-weight: 600; padding: 14px 0; border-radius: 16px;
@@ -156,7 +186,7 @@
 </style>
 </head>
 <body>
-<div id="root" data-composition-id="root" data-width="1920" data-height="800" data-start="0" data-duration="54.5">
+<div id="root" data-composition-id="root" data-width="1920" data-height="800" data-start="0" data-duration="64.5">
 
   <div id="sceneT" class="abs" style="inset:0">
     <div id="tools" class="abs panel">
@@ -183,6 +213,44 @@
     <div class="abs cap">Connect <b>your tools</b> to Weft, so your threads can use them.</div>
   </div>
 
+  <div id="sceneV" class="abs" style="inset:0">
+    <div id="vlist" class="abs panel">
+      <div class="label">🔐 Vault · <span id="projV">my-app</span></div>
+      <div class="abs key" id="v1" style="top:96px">🔒 <code>STRIPE_SECRET_KEY</code><span class="dots">••••••••••</span></div>
+      <div class="abs key" id="v2" style="top:210px">🔒 <code>SUPABASE_SERVICE_KEY</code><span class="dots">••••••••••</span></div>
+      <div class="abs key" id="v3" style="top:324px">🔒 <code>GA4_CREDENTIALS</code><span class="dots">••••••••••</span></div>
+      <div class="abs key" id="v4" style="top:438px">🔒 <code>RESEND_API_KEY</code><span class="dots">••••••••••</span></div>
+    </div>
+    <div id="vuse" class="abs panel">
+      <div class="label">A thread needs a key</div>
+      <div class="abs use" id="vask" style="top:96px">Stripe checkout needs <b>STRIPE_SECRET_KEY</b><small>Weft asks you first, with Touch ID</small></div>
+      <div class="abs use" id="vfill" style="top:260px">✓ Filled in<small>The thread never sees the value</small></div>
+    </div>
+    <div id="tid" class="abs">
+      <div class="ring">
+        <div class="print">
+          <svg id="fp" viewBox="0 0 64 64" fill="none" stroke="url(#fpg)" stroke-width="2.6" stroke-linecap="round">
+            <defs><linearGradient id="fpg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff4fa3"/><stop offset="1" stop-color="#ff2d55"/></linearGradient></defs>
+            <path d="M14 18a24 24 0 0 1 36 0"/><path d="M9 30a24 24 0 0 1 3-8"/><path d="M55 27a24 24 0 0 1 1 9"/>
+            <path d="M14 42c-1-3-2-7-2-10a20 20 0 0 1 40 0c0 3 0 6-1 9"/>
+            <path d="M19 48c-2-5-3-10-3-16a16 16 0 0 1 32 0c0 5 0 9-1 13"/>
+            <path d="M24 53c-2-6-3-13-3-21a11 11 0 0 1 22 0c0 7-1 14-3 20"/>
+            <path d="M29 56c-2-7-3-15-3-24a6 6 0 0 1 12 0c0 8-1 16-3 23"/>
+            <path d="M32 32c0 9-1 17-3 25"/>
+          </svg>
+          <svg id="fpOk" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#34c759"/><path d="M19 33l9 9 17-18" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <img class="badge" src="./icon.png" alt="">
+      </div>
+      <b>Weft</b>
+      <p>Weft wants to fill in “STRIPE_SECRET_KEY” from the <span id="projV2">my-app</span> vault.</p>
+      <p>Touch ID or enter your password to allow this.</p>
+      <div class="btn blue">Use Password…</div>
+      <div class="btn grey">Cancel</div>
+    </div>
+    <div class="abs cap" style="font-size:44px">Your <b>🔐 vault</b> stores your credentials and lets your AI securely use them.</div>
+  </div>
+
   <div id="sceneP" class="abs" style="inset:0">
     <div id="dash" class="abs">
       <div class="bar"><i></i><i></i><i></i><span class="url"><span id="urlLocal">~/.weft/apps/growth/index.html</span><span id="urlShared">weft.zip/a/growth</span></span></div>
@@ -199,7 +267,7 @@
       <div class="abs" id="shareBtn">Share…</div>
       <div class="abs" id="shared">✓ weft.zip/a/growth<small>Anyone with the link · always up to date</small></div>
     </div>
-    <div class="abs cap" style="font-size:46px">Panes aren't just previews: build a live <b>dashboard</b>, mini-app or game, and share it.</div>
+    <div class="abs cap" style="font-size:40px; white-space:normal; width:1700px; line-height:1.16; top:692px">Panes aren't just previews. They can use keys in your <b>vault</b> to connect to your database or APIs,<br>and be shared, so a <b>secure live dashboard</b>, mini-app or game is just a few clicks away.</div>
   </div>
 
   <div id="sceneA" class="abs" style="inset:0">
@@ -295,7 +363,7 @@
 
   <svg id="cursor" class="abs" viewBox="0 0 24 24"><path d="M3 2l7 19 2.6-7.4L20 11z" fill="#fff" stroke="#111" stroke-width="1.2"/></svg>
   <!-- The voiceover (scripts/narrate-welcome.mjs): the renderer mixes it into the MP4; live, the welcome plays it itself. -->
-  <audio id="voice" src="./narration-beats.m4a" data-start="0" data-duration="54.5" data-volume="1"></audio>
+  <audio id="voice" src="./narration-beats.m4a" data-start="0" data-duration="64.5" data-volume="1"></audio>
   <div id="fade" class="abs"></div>
 </div>
 
@@ -327,10 +395,13 @@
     var project = (query.get("p") || vars.project || "my-app").split(",")[0].slice(0, 24);
     document.getElementById("projT").textContent = project;
     document.getElementById("projK").textContent = project;
+    document.getElementById("projV").textContent = project;
+    document.getElementById("projV2").textContent = project;
 
     var tl = gsap.timeline({ paused: true });
     gsap.set("#toast", { opacity: 0 });
-    gsap.set(["#sceneP", "#urlShared", "#s1", "#s2", "#shareBtn", "#shared", "#sceneA", "#t1on", "#t2on", "#t3on", "#t4on", "#u1", "#u2", "#u3", "#sceneB", "#sceneC", "#k1", "#k2", "#k3", "#startCard", "#newcard", "#sceneK", "#c1on", "#c2on", "#c3on", "#c4on", "#c5on", "#c6on", "#lp", "#gImg", "#gVid", "#gVoc", "#sched", "#sceneO", "#w1", "#w2", "#pr", "#prBtn", "#prOpen", "#prMerged", "#thanks", "#cursor"], { opacity: 0 });
+    gsap.set("#tid", { opacity: 0, scale: 0.92 });
+    gsap.set(["#sceneV", "#v1", "#v2", "#v3", "#v4", "#vask", "#vfill", "#fpOk", "#sceneP", "#urlShared", "#s1", "#s2", "#shareBtn", "#shared", "#sceneA", "#t1on", "#t2on", "#t3on", "#t4on", "#u1", "#u2", "#u3", "#sceneB", "#sceneC", "#k1", "#k2", "#k3", "#startCard", "#newcard", "#sceneK", "#c1on", "#c2on", "#c3on", "#c4on", "#c5on", "#c6on", "#lp", "#gImg", "#gVid", "#gVoc", "#sched", "#sceneO", "#w1", "#w2", "#pr", "#prBtn", "#prOpen", "#prMerged", "#thanks", "#cursor"], { opacity: 0 });
     tl.fromTo("#fade", { opacity: 1 }, { opacity: 0, duration: 0.5 }, 0);
 
     // Each scene draws itself from its start time t, so SCENES below sets the order and the beats in one place.
@@ -344,6 +415,23 @@
       tl.fromTo("#u1", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.35 }, t + 3.5)
         .fromTo("#u2", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.35 }, t + 4.3)
         .fromTo("#u3", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.35 }, t + 5.1);
+    }
+
+    // The vault: your keys appear masked, a thread asks for one, macOS's Touch ID prompt allows it, and it is filled in
+    // without the thread ever seeing the value.
+    function vault(t) {
+      ["#v1", "#v2", "#v3", "#v4"].forEach(function (id, i) {
+        tl.fromTo(id, { opacity: 0, x: -16 }, { opacity: 1, x: 0, duration: 0.3 }, t + 0.5 + i * 0.3);
+      });
+      tl.fromTo("#vask", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.35 }, t + 1.9)
+        .to("#v1", { borderColor: "#f0b429", duration: 0.3 }, t + 2.1)
+        .to("#tid", { opacity: 1, scale: 1, duration: 0.3, ease: "back.out(1.6)" }, t + 2.7)
+        .to("#fp", { scale: 1.08, duration: 0.25, yoyo: true, repeat: 3, transformOrigin: "50% 50%" }, t + 3.1)
+        .to("#fp", { opacity: 0, duration: 0.15 }, t + 4.1)
+        .to("#fpOk", { opacity: 1, duration: 0.15 }, t + 4.1)
+        .to("#tid", { opacity: 0, scale: 0.96, duration: 0.25 }, t + 4.6)
+        .to("#v1", { borderColor: "#1f5a3b", duration: 0.3 }, t + 4.8)
+        .fromTo("#vfill", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.35 }, t + 4.8);
     }
 
     // The pane: the dashboard's data connects (GA4 through the vault, Supabase), the numbers and chart fill in, and
@@ -443,7 +531,8 @@
     // The voiceover's cues (scripts/narrate-welcome.mjs) follow these starts.
     var SCENES = [
       ["tools", "#sceneT", 7.5, tools],
-      ["pane", "#sceneP", 9, pane],
+      ["vault", "#sceneV", 7.5, vault],
+      ["pane", "#sceneP", 11.5, pane],
       ["quality", "#sceneB", 7.5, quality],
       ["blastcp", "#sceneK", 10.5, blastcp],
       ["profile", "#sceneA", 7.5, profile],
@@ -453,6 +542,9 @@
     var at = 0, beats = [];
     SCENES.forEach(function (scene, i) {
       if (i > 0) tl.to(SCENES[i - 1][1], { opacity: 0, duration: 0.4 }, at - 0.2).fromTo(scene[1], { opacity: 0 }, { opacity: 1, duration: 0.4 }, at);
+      // Stamp each scene with the time it starts, so the caption inside it can be matched to the line it speaks
+      // (public/welcome/live.js). One source of truth: this list.
+      document.querySelector(scene[1]).setAttribute("data-scene", at);
       scene[3](at);
       beats.push([at, scene[0]]);
       at += scene[2];
@@ -461,6 +553,14 @@
 
     window.__timelines = window.__timelines || {};
     window.__timelines.root = tl;
+
+    // Word-by-word caption highlight (public/welcome/live.js). It reads the lines and their word times out of
+    // narration-beats.words.json, so the copy lives in one place: scripts/narrate-welcome.mjs. The closing
+    // statement is not a caption but lights with its line too, so it is passed as an extra.
+    if (window.weftCaptions) {
+      window.weftCaptions(tl, Array.prototype.slice.call(document.querySelectorAll(".cap")), "beats",
+        [[document.getElementById("cta"), Number(document.querySelector("#sceneC").getAttribute("data-scene"))]]);
+    }
 
     if (live) window.weftLive(tl, beats, "intro.html");
   })();

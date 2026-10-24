@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Renders Weft's two video cuts from the HyperFrames compositions in public/welcome/ (https://hyperframes.heygen.com):
-//   public/brand/welcome-loop.mp4  the welcome's 30 s loop (loop.html): a card from prompt to Done, with the 🔐 vault
-//   public/brand/weft-tour.mp4     weft.zip's 96 s tour: intro.html (Welcome to Weft), that loop, then beats.html
+//   public/brand/welcome-loop.mp4  the welcome's 30 s loop (loop.html): a card from prompt to Done
+//   public/brand/weft-tour.mp4     weft.zip's 106 s tour: intro.html (Welcome to Weft), that loop, then beats.html
 //                                  (connect your tools, Wefter Profile, code quality, "Now let's get started")
 // Needs ffmpeg (brew install ffmpeg); HyperFrames brings its own Chrome. Each composition is copied to a temp folder as
 // index.html, since `hyperframes render` renders a project folder; ffmpeg's concat demuxer joins the three without
