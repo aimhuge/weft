@@ -30,13 +30,13 @@ afterEach(() => {
 
 describe("loadGates", () => {
   it("reads the plans and the spent models", async () => {
-    plans({ plans: { claude: { fiveHour: { used: 100, resetsAt: RESET_AT / 1000 }, at: NOW } } });
+    plans({ plans: { claude: { fiveHour: { used: 100, resetsAt: RESET_AT / 1000 }, reportedAt: NOW } } });
     await loadGates();
     expect(apiFetch).toHaveBeenCalledWith("/api/limits/plans");
   });
 
   it("keeps the numbers it read", async () => {
-    plans({ plans: { claude: { fiveHour: { used: 100, resetsAt: RESET_AT / 1000 }, at: NOW } }, models: [] });
+    plans({ plans: { claude: { fiveHour: { used: 100, resetsAt: RESET_AT / 1000 }, reportedAt: NOW } }, models: [] });
     await loadGates();
     // The cached reading is what useStartGate answers from.
     expect(apiFetch).toHaveBeenCalledTimes(1);
@@ -83,10 +83,27 @@ describe("useStartGate", () => {
   });
 
   it("answers with the CLI's spent window", async () => {
-    plans({ plans: { claude: { fiveHour: { used: 100, resetsAt: RESET_AT / 1000 }, at: NOW } } });
+    plans({ plans: { claude: { fiveHour: { used: 100, resetsAt: RESET_AT / 1000 }, reportedAt: NOW } } });
     await loadGates();
     const { result } = renderHook(() => useStartGate("claude", undefined));
     expect(result.current).toEqual({ at: RESET_AT, kind: "five_hour", subject: "claude" });
+  });
+
+  it("dates the pool's window with the pool's own reading, not the reporting CLI's last report", async () => {
+    // The plan limits are one pool per account: puku's entry carries the number Claude Code read at
+    // 500, while puku itself last reported at 100. The window belongs to the pool, so it is dated
+    // 500 — a sample stamped 100 would claim the value was seen before it was read.
+    plans({
+      plans: {
+        puku: {
+          fiveHour: { used: 100, resetsAt: RESET_AT / 1000, at: NOW + 500 },
+          reportedAt: NOW,
+        },
+      },
+    });
+    await loadGates();
+    const { result } = renderHook(() => useStartGate("puku", undefined));
+    expect(result.current).toEqual({ at: RESET_AT, kind: "five_hour", subject: "puku" });
   });
 
   it("answers with the model's own cap", async () => {
@@ -97,21 +114,21 @@ describe("useStartGate", () => {
   });
 
   it("has no answer when nothing is spent", async () => {
-    plans({ plans: { claude: { fiveHour: { used: 20, resetsAt: RESET_AT / 1000 }, at: NOW } } });
+    plans({ plans: { claude: { fiveHour: { used: 20, resetsAt: RESET_AT / 1000 }, reportedAt: NOW } } });
     await loadGates();
     const { result } = renderHook(() => useStartGate("claude", "opus"));
     expect(result.current).toBeUndefined();
   });
 
   it("answers with the CLI's weekly window", async () => {
-    plans({ plans: { claude: { sevenDay: { used: 100, resetsAt: RESET_AT / 1000 }, at: NOW } } });
+    plans({ plans: { claude: { sevenDay: { used: 100, resetsAt: RESET_AT / 1000 }, reportedAt: NOW } } });
     await loadGates();
     const { result } = renderHook(() => useStartGate("claude", "opus"));
     expect(result.current).toEqual({ at: RESET_AT, kind: "seven_day", subject: "claude" });
   });
 
   it("reads a plan reading with no windows", async () => {
-    plans({ plans: { claude: { at: NOW } } });
+    plans({ plans: { claude: { reportedAt: NOW } } });
     await loadGates();
     const { result } = renderHook(() => useStartGate("claude", "opus"));
     expect(result.current).toBeUndefined();
@@ -125,7 +142,7 @@ describe("useStartGate", () => {
   });
 
   it("reads a window with no reset time", async () => {
-    plans({ plans: { claude: { fiveHour: { used: 100 }, at: NOW } } });
+    plans({ plans: { claude: { fiveHour: { used: 100 }, reportedAt: NOW } } });
     await loadGates();
     const { result } = renderHook(() => useStartGate("claude", "opus"));
     expect(result.current).toBeUndefined();
@@ -153,7 +170,7 @@ describe("useThreadGate", () => {
   });
 
   it("answers with the CLI's weekly window", async () => {
-    plans({ plans: { claude: { sevenDay: { used: 100, resetsAt: RESET_AT / 1000 }, at: NOW } } });
+    plans({ plans: { claude: { sevenDay: { used: 100, resetsAt: RESET_AT / 1000 }, reportedAt: NOW } } });
     await loadGates();
     const { result } = renderHook(() => useThreadGate(undefined, undefined, "claude", "opus"));
     expect(result.current).toEqual({ at: RESET_AT, kind: "seven_day", subject: "claude" });
@@ -167,7 +184,7 @@ describe("useThreadGate", () => {
   });
 
   it("has no answer when nothing is spent", async () => {
-    plans({ plans: { claude: { fiveHour: { used: 20, resetsAt: RESET_AT / 1000 }, at: NOW } } });
+    plans({ plans: { claude: { fiveHour: { used: 20, resetsAt: RESET_AT / 1000 }, reportedAt: NOW } } });
     await loadGates();
     const { result } = renderHook(() => useThreadGate(undefined, undefined, "claude", "opus"));
     expect(result.current).toBeUndefined();

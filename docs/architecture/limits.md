@@ -4,9 +4,16 @@ A thread can meet a limit in three places, and each has its own store:
 
 | Limit | Store | Read by |
 |---|---|---|
-| The model's own cap (Opus runs out before the CLI's window does) | `~/.weft/model-limits.json` | `lib/model-limit.ts` |
-| The CLI's weekly window | `~/.weft/limits.jsonl` | `lib/limit-history.ts` |
-| The CLI's 5-hour window | the same plan log, plus the card's own snapshot `card.stats.fiveHour` | `lib/limit-history.ts`, `lib/store.ts` |
+| The model's own cap (Opus runs out before the plan's window does) | `~/.weft/model-limits.json` | `lib/model-limit.ts` |
+| The account's weekly window | `~/.weft/limits.jsonl` | `lib/limit-history.ts` |
+| The account's 5-hour window | the same plan log, plus the card's own snapshot `card.stats.fiveHour` | `lib/limit-history.ts`, `lib/store.ts` |
+
+**The plan limits are ONE pool per account**, shared by every CLI: Claude Code and puku-cli report
+the same 5-hour and weekly windows, with the same reset times, because they draw from the same plan.
+So the numbers are the account's; a sample's `backend` says which CLI reported it, not whose limit
+it is. The plan the strip *names* is the card's own CLI's, and the model's cap is per model — those
+two are the only per-CLI-ish things left (docs/architecture/limits-burndown.md has the measurement
+and the whole rule).
 
 `lib/limit-reset.ts` reconciles them. It is the one answer to "when does this reset?", and it is
 pure: the stores come in as data, so the server and the browser run the same code and always
@@ -25,7 +32,7 @@ numbers from `/api/limits/plans` and only draws the label ("Start at 2:30am"). A
 be wrong for a minute; the server's answer cannot.
 
 **The tightest limit wins.** The model's own cap comes first (it is the tighter limit, and the one
-the user picked), then the CLI's weekly window (the one that blocks for days), then its 5-hour
+the user picked), then the plan's weekly window (the one that blocks for days), then its 5-hour
 window.
 
 **A limit with no known reset has no answer.** The module returns `undefined` for it, and the
@@ -34,8 +41,9 @@ caller falls back to "wait an hour" rather than pretending to know.
 ## Key files
 
 - `lib/limit-reset.ts` (new) — the pure module.
-  - `planWindow(samples, backend, kind, now)` → the newest reading of one CLI's window; `undefined`
-    once its reset has passed (the window is full again and the next one isn't known yet).
+  - `planWindow(samples, backend, kind, now)` → the pool's newest reading of one window, as that
+    backend's entry carries it; `undefined` once its reset has passed (the window is full again and
+    the next one isn't known yet).
   - `modelResetsAt(model, limits, now)` → when this model's own cap frees up (unix ms).
   - `resetFor(backend, model, samples, limits, now)` → `ResetAnswer | undefined` for a thread that
     would run on that model and CLI: `{ at, kind: "five_hour" | "seven_day" | "model", subject }`.
@@ -60,8 +68,8 @@ caller falls back to "wait an hour" rather than pretending to know.
 - `lib/use-plan-limits.ts` — `useLimitedModels()` (and the `LimitedModel` type) for the model
   pickers; the same route ships the models that have hit their own cap.
 - `app/api/cards/route.ts` — `POST` returns the `start` answer: `{ started, at }`.
-- `app/api/limits/plans/route.ts` — `GET` returns `{ plans, models }`: each CLI's newest window
-  reading and the models at their cap.
+- `app/api/limits/plans/route.ts` — `GET` returns `{ plans, models }`: one entry per CLI that has
+  reported, each carrying the pool's newest window reading, and the models at their cap.
 - `components/NewCardDialog.tsx`, `components/NewCardDialogFooter.tsx` — the button's label and the
   warn-coloured status line.
 - `components/ReplyBox.tsx`, `components/ThreadFooter.tsx` — the thread's own gate.
@@ -102,7 +110,7 @@ The route's answer is the truth the client drew: `{ started, at }`.
 
 ## The reply box's gate
 
-The reply box reads the same gate, so a model's own cap and the CLI's weekly window reach it too
+The reply box reads the same gate, so a model's own cap and the plan's weekly window reach it too
 — it used to know only the 5-hour window.
 
 `components/ReplyBox.tsx` calls `useThreadGate(fiveHour, sendLater?.resets.fiveHour, backend,

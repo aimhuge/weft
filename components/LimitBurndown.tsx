@@ -25,20 +25,32 @@ const MARK_STYLE: Record<Mark["kind"], { stroke: string; width: number; opacity:
   hit: { stroke: "var(--danger)", width: 2.5, opacity: 1 },
 };
 
-function useSamples(backend: Backend) {
+// The whole account's limit history, every CLI's readings together.
+//
+// The plan limits are ONE pool per account: Claude Code and puku-cli report the same 5-hour and weekly
+// windows, with the same reset times, because they draw from the same plan. On this machine puku read
+// five_hour used=100 resetsAt 21:30 at 19:45, and Claude Code read used=99 at 19:43 and used=100 at
+// 19:47 with the same 21:30 reset — one climbing counter, not two.
+//
+// So the chart reads the account's history, not one CLI's slice of it. Filtering by CLI starves a card
+// on the CLI with the fewest samples (puku had 2 of 681 here, all from that day), which leaves the
+// lookback (lib/limit-chart.ts's `rows.some(s => s.at < weekStart)`) permanently false: the chart stays
+// at seven days however fresh the weekly reset.
+//
+// The plan the strip NAMES is still the card's own CLI's, and so are the numbers in the summary
+// (lib/plan-limits.ts) — that is which CLI last reported. The history behind the plot is the account's.
+function useSamples() {
   const [samples, setSamples] = useState<LimitSample[]>([]);
   useEffect(() => {
     let live = true;
-    // ?backend: each CLI has its own plan (Claude Code on Anthropic's, puku-cli on Puku's), so the chart
-    // reads only the readings of the CLI whose plan it draws.
-    apiFetch(`/api/limits?backend=${backend}`)
+    apiFetch("/api/limits")
       .then((res) => (res.ok ? res.json() : { samples: [] }))
       .then((body: { samples?: LimitSample[] }) => live && setSamples(body.samples ?? []))
       .catch(() => {});
     return () => {
       live = false;
     };
-  }, [backend]);
+  }, []);
   return samples;
 }
 
@@ -186,9 +198,10 @@ function Key({ color, width = 2, height = 10, opacity = 1, label }: { color: str
   );
 }
 
-// One CLI's plan: `stats` holds its latest windows (lib/plan-limits.ts), the history is that CLI's readings.
+// The card's own CLI's plan, drawn over the account's history: `stats` holds that CLI's latest windows
+// (lib/plan-limits.ts) and the plot behind them is every reading the account has (see useSamples).
 export default function LimitBurndown({ backend = "claude", stats }: { backend?: Backend; stats: CardStats }) {
-  const samples = useSamples(backend);
+  const samples = useSamples();
   const now = useNow();
   if (!now) return null;
   const chart = limitsChart(samples, stats, now);

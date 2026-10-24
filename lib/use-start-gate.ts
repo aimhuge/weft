@@ -15,8 +15,21 @@ import type { Backend, LimitWindow } from "./types";
 // The numbers come from /api/limits/plans: each CLI's newest window reading and the models that
 // have hit their own cap. The client only needs them to label the button — the server decides.
 
+interface PlanWindowPayload {
+  used: number;
+  resetsAt?: number;
+  // When the pool read this window (unix ms).
+  at?: number;
+}
+
+interface PlanReadingPayload {
+  fiveHour?: PlanWindowPayload;
+  sevenDay?: PlanWindowPayload;
+  reportedAt: number;
+}
+
 interface PlansPayload {
-  plans?: Partial<Record<Backend, { fiveHour?: { used: number; resetsAt?: number }; sevenDay?: { used: number; resetsAt?: number }; at: number }>>;
+  plans?: Partial<Record<Backend, PlanReadingPayload>>;
   models?: { model: string; at: number; resetsAt: number }[];
 }
 
@@ -27,15 +40,19 @@ let timer: ReturnType<typeof setInterval> | undefined;
 export const GATE_POLL_MS = 60_000;
 
 // The plan's own readings, as the flat sample list lib/limit-reset.ts reads.
+//
+// Each sample is stamped with when the POOL read its window, not when this CLI last reported: the
+// number is the pool's, so the time belongs to the pool's reading too. A window without its own
+// time (an older payload) falls back to the CLI's last report, which is when that CLI saw the pool.
 function samplesOf(plans: PlansPayload["plans"]): PlanSample[] {
   const samples: PlanSample[] = [];
-  for (const [backend, reading] of Object.entries(plans ?? {}) as [Backend, NonNullable<PlansPayload["plans"]>[Backend]][]) {
+  for (const [backend, reading] of Object.entries(plans ?? {}) as [Backend, PlanReadingPayload | undefined][]) {
     if (!reading) continue;
     if (reading.fiveHour) {
-      samples.push({ backend, kind: "five_hour", used: reading.fiveHour.used, ...(reading.fiveHour.resetsAt !== undefined && { resetsAt: reading.fiveHour.resetsAt }), at: reading.at });
+      samples.push({ backend, kind: "five_hour", used: reading.fiveHour.used, ...(reading.fiveHour.resetsAt !== undefined && { resetsAt: reading.fiveHour.resetsAt }), at: reading.fiveHour.at ?? reading.reportedAt });
     }
     if (reading.sevenDay) {
-      samples.push({ backend, kind: "seven_day", used: reading.sevenDay.used, ...(reading.sevenDay.resetsAt !== undefined && { resetsAt: reading.sevenDay.resetsAt }), at: reading.at });
+      samples.push({ backend, kind: "seven_day", used: reading.sevenDay.used, ...(reading.sevenDay.resetsAt !== undefined && { resetsAt: reading.sevenDay.resetsAt }), at: reading.sevenDay.at ?? reading.reportedAt });
     }
   }
   return samples;
