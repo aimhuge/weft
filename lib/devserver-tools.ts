@@ -59,11 +59,13 @@ export function devserversMcpServer(cardId: () => string | undefined, cwd: () =>
             if (!id) return text("No card is bound to this thread.", true);
             const existing = findDev(dir, command);
             const targetCard = existing?.cardId ?? id;
-            if (!existing) await startDev(id, command, dir, getCard(id)?.title, url);
-            const up = url ? await waitReachable(url) : false;
-            const status = await devStatus(targetCard, url);
+            const started: { url?: string; port?: number } = (existing ? undefined : await startDev(id, command, dir, getCard(id)?.title, url)) ?? {};
+            const at = started.url ?? url;
+            const up = at ? await waitReachable(at) : false;
+            const status = await devStatus(targetCard, at);
+            const own = started.port ? `\nPort: ${started.port} (this isolated card's own, as PORT; pass --port ${started.port} to tools that ignore PORT)` : "";
             return text(
-              `${existing ? "Reused" : "Started"} ${command} in ${dir}.\nState: ${status.state}${url ? `\nURL: ${url} (${up ? "reachable" : "not reachable yet"})` : ""}\nLog:\n${status.log || "(empty)"}`,
+              `${existing ? "Reused" : "Started"} ${command} in ${dir}.${own}\nState: ${status.state}${at ? `\nURL: ${at} (${up ? "reachable" : "not reachable yet"})` : ""}\nLog:\n${status.log || "(empty)"}`,
             );
           }),
       ),

@@ -7,8 +7,8 @@ import { DEVSERVERS_PROMPT } from "./devserver-tools";
 import { RESTART_PROMPT } from "./env";
 import { REVIEW_PROMPT } from "./review";
 import { SECRETS_PROMPT } from "./secret-tools";
-import { DEFAULT_THREAD_PROMPT, subagentModel, threadPrompt } from "./settings";
-import { CHOOSE, DELEGATE, subagentPrompt } from "./subagents";
+import { DEFAULT_THREAD_PROMPT, threadPrompt } from "./settings";
+import { CHOOSE, DELEGATE, subagentModelFor, subagentPrompt } from "./subagents";
 import { WEBHOOKS_PROMPT } from "./webhook-tools";
 import type { Backend } from "./types";
 
@@ -46,22 +46,27 @@ export function pinnedPromptsHash() {
 }
 
 // The pinned prompts plus the settings the prompt is built from (thread instructions, subagent model).
+// The subagent model is the resolved one, so a model that hits its limit invalidates the cached
+// prompt and the thread's next turn names the backup model instead.
 export function promptsBuild() {
-  return `${PINNED}:${sha(`${threadPrompt()}\n${subagentModel()}`)}`;
+  return `${PINNED}:${sha(`${threadPrompt()}\n${subagentModelFor()}`)}`;
 }
 
-export type PromptSpec = { backend: Backend; copilot?: boolean; persona?: string };
+export type PromptSpec = { backend: Backend; copilot?: boolean; persona?: string; project?: string };
+
+// An isolated card's thread (docs/architecture/worktrees.md): cwd is its own worktree, and Weft lands the branch on Done.
+export const ISOLATED_PROMPT = `This card is isolated: your working directory is a git worktree of its own (under ~/.weft/worktrees), on its own weft/* branch, made from the project's HEAD. Other cards' half-done edits aren't here, and yours aren't in their folder. Work, test, typecheck and run the dev server here, never in the project folder itself. Commit on this branch as you go (by path or git add -A both fine here; reset and restore only touch your own work). Don't push and don't merge (in /weft:done, commit with commit.sh, then skip push.sh and deploy.mjs: pushing would publish your weft/* branch): when the card moves to Done, Weft commits what's left, rebases your branch on the project's branch and fast-forwards the project to it. If that rebase conflicts, Weft tells you which files; resolve them here and the next Done lands it.`;
 
 const built = new Map<string, string>();
 
 // Weft's part of the system prompt. Puku's gateway drops it, so a puku session sends it in its first message (lib/puku-context.ts).
 export function weftSystemPrompt(spec: PromptSpec): string {
-  const key = `${promptsBuild()}|${spec.copilot ? `copilot:${personaOf(spec.persona).id}` : spec.backend}`;
+  const key = `${promptsBuild()}|${spec.copilot ? `copilot:${personaOf(spec.persona).id}` : spec.backend}${spec.project ? "|isolated" : ""}`;
   const cached = built.get(key);
   if (cached !== undefined) return cached;
   const parts = spec.copilot
     ? [WEFT_SOUL_PROMPT, BROWSER_PROMPT, COPILOT_PROMPT, personaOf(spec.persona).prompt].filter(Boolean)
-    : [WEFT_SOUL_PROMPT, BROWSER_PROMPT, SECRETS_PROMPT, WEBHOOKS_PROMPT, DEVSERVERS_PROMPT, decisionsPrompt(spec.backend), RESTART_PROMPT, subagentPrompt(subagentModel(), spec.backend), threadPrompt(), REVIEW_PROMPT];
+    : [WEFT_SOUL_PROMPT, BROWSER_PROMPT, SECRETS_PROMPT, WEBHOOKS_PROMPT, DEVSERVERS_PROMPT, decisionsPrompt(spec.backend), RESTART_PROMPT, subagentPrompt(subagentModelFor(), spec.backend), threadPrompt(), REVIEW_PROMPT, spec.project ? ISOLATED_PROMPT : ""].filter(Boolean);
   // A settings change makes a new key; the old prompts are of no further use.
   if (built.size >= 8) built.clear();
   const text = parts.join("\n\n");

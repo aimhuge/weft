@@ -19,7 +19,11 @@ import {
   remember,
   rememberPicks,
   remembered,
+  resolveModel,
+  setModelFor,
+  subscribeDefaults,
 } from "@/lib/new-thread";
+import { useIsolate } from "./use-isolate";
 
 // The dialog's state and the actions that drive it.
 export interface NewCardDialogLogic {
@@ -42,6 +46,9 @@ export interface NewCardDialogLogic {
   pickMode: (m: PermissionMode) => void;
   chooseFolder: (folder: string) => void;
   promptToStart: (read: () => string, focus: () => void) => string | null;
+  isolated: boolean;
+  toggleIsolated: () => void;
+  promptLength: number;
   submit: (
     start: boolean,
     opts: { stay: boolean; read: () => string; clear: () => void; focus: () => void; onCreate: (input: NewCardInput, opts?: { stay?: boolean }) => Promise<void>; onClose: () => void },
@@ -90,19 +97,49 @@ export function useNewCardDialog(home: string, defaultCwd: string | undefined, r
   const [cwd, setCwd] = useState(() => pickInitialCwd(home, defaultCwd, recentCwd));
   const [backend, setBackend] = useState<Backend>(() => (remembered(LAST_BACKEND) as Backend | null) ?? "claude");
   const pickedBackend = useRef(false);
-  const [model, setModel] = useState(() => modelFor(backend));
-  const [effort, setEffort] = useState<Effort | "">(lastEffort);
+  const [model, setModelState] = useState(() => modelFor(backend));
+  const [effort, setEffortState] = useState<Effort | "">(lastEffort);
   const [permissionMode, setPermissionMode] = useState<PermissionMode>("auto");
   const pickedMode = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<false | "start" | "backlog">(false);
   const [started, setStarted] = useState<string | null>(null);
   const draftTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const { isolated, toggleIsolated, promptLength, notePrompt } = useIsolate(cwd);
 
-  useSettingsDefaults(pickedMode, pickedBackend, setPermissionMode, setBackend, setModel);
+  useSettingsDefaults(pickedMode, pickedBackend, setPermissionMode, setBackend, setModelState);
   useEffect(() => () => clearTimeout(draftTimer.current), []);
 
+  // A default you changed elsewhere (Settings → Models) lands on an open dialog right away: the
+  // model and effort are re-read, and the CLI follows the model when the new model is another
+  // CLI's. A model picked in this dialog is not overwritten — the user's own pick wins.
+  const [pickedModel, setPickedModel] = useState(false);
+  const pickModel = useCallback((m: string) => {
+    setPickedModel(true);
+    setModelState(m);
+    const resolved = resolveModel(m);
+    if (!resolved) return;
+    setModelFor(resolved.backend, resolved.model);
+    setBackend(resolved.backend);
+  }, []);
+
+  const setEffort = useCallback((e: Effort | "") => {
+    setEffortState(e);
+  }, []);
+
+  // The remembered defaults changed somewhere else: re-read them, unless this dialog's own pick
+  // is the newer word on the model.
+  useEffect(() => subscribeDefaults(() => {
+    setEffortState(lastEffort());
+    if (pickedModel) return;
+    const next = modelFor(backend);
+    setModelState(next);
+    const resolved = resolveModel(next);
+    if (resolved && resolved.backend !== backend) setBackend(resolved.backend);
+  }), [backend, pickedModel]);
+
   const saveDraft = useCallback((markdown: string) => {
+    notePrompt(markdown);
     setError(null);
     setStarted(null);
     clearTimeout(draftTimer.current);
@@ -110,12 +147,12 @@ export function useNewCardDialog(home: string, defaultCwd: string | undefined, r
       () => remember(DRAFT, markdown.trim() ? markdown : null),
       300,
     );
-  }, []);
+  }, [notePrompt]);
 
   const pickBackend = useCallback((b: Backend) => {
     pickedBackend.current = true;
     setBackend(b);
-    setModel(modelFor(b));
+    setModelState(modelFor(b));
   }, []);
 
   const pickMode = useCallback((m: PermissionMode) => {
@@ -161,6 +198,7 @@ export function useNewCardDialog(home: string, defaultCwd: string | undefined, r
           permissionMode,
           model,
           effort: effortFor(backend, effort),
+          ...(isolated ? { isolated: true } : {}),
           start,
         };
         if (opts.stay) await opts.onCreate(input, { stay: true });
@@ -181,7 +219,7 @@ export function useNewCardDialog(home: string, defaultCwd: string | undefined, r
         setBusy(false);
       }
     },
-    [busy, cwd, backend, permissionMode, model, effort, promptToStart],
+    [busy, cwd, backend, permissionMode, model, effort, isolated, promptToStart],
   );
 
   return {
@@ -190,7 +228,7 @@ export function useNewCardDialog(home: string, defaultCwd: string | undefined, r
     backend,
     setBackend,
     model,
-    setModel,
+    setModel: pickModel,
     effort,
     setEffort,
     permissionMode,
@@ -204,6 +242,9 @@ export function useNewCardDialog(home: string, defaultCwd: string | undefined, r
     pickMode,
     chooseFolder,
     promptToStart,
+    isolated,
+    toggleIsolated,
+    promptLength,
     submit,
   };
 }

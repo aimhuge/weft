@@ -1,4 +1,5 @@
 import type { Card } from "./types";
+import { workDir } from "./work-dir";
 
 // Busy-folder warnings: Weft gives cards no git worktree of their own (see SOUL.md), so two cards
 // working in one folder share a working tree. These helpers find the other busy cards in a card's
@@ -36,14 +37,15 @@ export function isBusy(card: Card) {
 // warning spots can render alsoHereLine(others) without being handed the card too.
 export type BusyCards = Card[] & { sharedFiles?: string[] };
 
-// The other busy cards working in this folder (pass the card's id to leave it out).
+// The other busy cards working in this folder (pass the card's id to leave it out). An isolated card works in its
+// worktree (lib/work-dir.ts), so it's only "here" for a folder inside that worktree.
 export function busyInFolder(cards: Card[], cwd: string, exceptId?: string) {
-  return cards.filter((c) => c.id !== exceptId && isBusy(c) && sameTree(c.cwd, cwd));
+  return cards.filter((c) => c.id !== exceptId && isBusy(c) && sameTree(workDir(c), cwd));
 }
 
 // The other busy cards in this card's folder, the ones that edited the same files as it first.
 export function busyHere(cards: Card[], card: Card): BusyCards {
-  const others = busyInFolder(cards, card.cwd, card.id);
+  const others = busyInFolder(cards, workDir(card), card.id);
   const overlapping = others.filter((c) => sharedFiles(card, [c]).length > 0);
   if (overlapping.length === 0) return others;
   const ordered: BusyCards = [...overlapping, ...others.filter((c) => !overlapping.includes(c))];

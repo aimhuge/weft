@@ -5,6 +5,7 @@ import path from "node:path";
 import { editedPath } from "./overlap";
 import { allowedFolders } from "./settings";
 import { DATA_DIR, getCard } from "./store";
+import { worktreesRoot } from "./worktrees";
 import type { PromptReason } from "./types";
 
 // The folder gate in every board thread: a thread works in its card's project folder, and the PreToolUse hook
@@ -21,11 +22,13 @@ const SYSTEM = ["/dev", "/usr", "/bin", "/sbin", "/opt", "/etc", "/private/etc",
 export interface Ground {
   home: string;
   free: string[];
+  // Inside a free folder but not free: other isolated cards' worktrees (~/.weft/worktrees), outside your project like any other.
+  fenced?: string[];
 }
 
 const ground = (): Ground => {
   const home = os.homedir();
-  return { home, free: [DATA_DIR, path.join(home, ".claude"), os.tmpdir(), ...SYSTEM] };
+  return { home, free: [DATA_DIR, path.join(home, ".claude"), os.tmpdir(), ...SYSTEM], fenced: [worktreesRoot()] };
 };
 
 const READ_TOOLS = new Set(["Read", "Glob", "Grep", "LS"]);
@@ -102,12 +105,15 @@ const verbOf = (toolName: string) => (READ_TOOLS.has(toolName) ? "read" : toolNa
 
 // The first folder a tool call reaches that's neither the project, one the user granted, nor a system path.
 export function outsideFolder(toolName: string, input: Record<string, unknown>, cwd: string, granted: string[], at: Ground = ground()): Outside | undefined {
-  const roots = [cwd, ...granted, ...at.free].map(realish);
+  const mine = [cwd, ...granted].map(realish);
+  const free = at.free.map(realish);
+  const fenced = (at.fenced ?? []).map(realish);
   // A Bash command's paths only count under the user's own files; /\d+/ in a script isn't a folder.
   const userAreas = [at.home, "/Users", "/Volumes"].map(realish);
   for (const token of pathsOf(toolName, input)) {
     const abs = realish(expand(token, cwd, at.home));
-    if (roots.some((r) => inside(abs, r))) continue;
+    if (mine.some((r) => inside(abs, r))) continue;
+    if (free.some((r) => inside(abs, r)) && !fenced.some((f) => inside(abs, f))) continue;
     if (toolName === "Bash" && !userAreas.some((a) => inside(abs, a))) continue;
     return { directory: grantRoot(abs, at.home), token, verb: verbOf(toolName) };
   }

@@ -8,6 +8,7 @@ import { failureNote } from "./failure-owners";
 import { busyInFolder } from "./overlap";
 import { getCard, listCards, updateCard } from "./store";
 import type { Card } from "./types";
+import { workDir } from "./work-dir";
 
 // Symbol claims for Bash (lib/claims.ts). lib/claim-guard.ts claims what Edit and Write change, but a Bash
 // command writes files too (sed -i, a formatter, codegen, `cat > file`), and nothing claimed those.
@@ -51,7 +52,7 @@ export function bashClaimGuard(cardId: () => string | undefined): HookCallback {
 
 // This card's claim on each file it wrote, skipping the ones another busy card holds.
 export function claimWritten(card: Card, written: string[]) {
-  const held = new Set(busyInFolder(listCards(), card.cwd, card.id).flatMap((c) => (c.claims ?? []).map((k) => splitClaim(k).file)));
+  const held = new Set(busyInFolder(listCards(), workDir(card), card.id).flatMap((c) => (c.claims ?? []).map((k) => splitClaim(k).file)));
   const next = addClaims(card.claims, written.filter((f) => !held.has(f)).map((f) => claimKey(f)));
   if (next) updateCard(card.id, { claims: next });
 }

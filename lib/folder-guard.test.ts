@@ -64,6 +64,20 @@ describe("outsideFolder", () => {
     expect(outsideFolder("Bash", { command: "cat /usr/bin/env /dev/null" }, project, [], at)).toBeUndefined();
   });
 
+  it("fences other cards' worktrees off inside a free folder, but not the card's own", () => {
+    const data = path.join(home, ".weft");
+    const fenced = { ...at, free: [...at.free, data], fenced: [path.join(data, "worktrees")] };
+    const mine = path.join(data, "worktrees", "repo-1", "a");
+    const theirs = path.join(data, "worktrees", "repo-1", "b");
+    fs.mkdirSync(mine, { recursive: true });
+    fs.mkdirSync(theirs, { recursive: true });
+    expect(outsideFolder("Read", { file_path: path.join(data, "pages", "x.html") }, mine, [], fenced)).toBeUndefined();
+    expect(outsideFolder("Edit", { file_path: path.join(mine, "a.ts") }, mine, [], fenced)).toBeUndefined();
+    expect(outsideFolder("Edit", { file_path: path.join(theirs, "a.ts") }, mine, [], fenced)).toMatchObject({ verb: "change" });
+    expect(outsideFolder("Read", { file_path: path.join(theirs, "a.ts") }, mine, [theirs], fenced)).toBeUndefined();
+    expect(outsideFolder("Read", { file_path: path.join(project, "src", "a.ts") }, mine, [], fenced)).toMatchObject({ verb: "read" });
+  });
+
   it("asks about another folder, granting its project root, and words it by tool", () => {
     const out = outsideFolder("Read", { file_path: path.join(home, "Downloads-guard-test", "a.mp3") }, project, [], at);
     expect(out).toMatchObject({ verb: "read", directory: path.join(home, "Downloads-guard-test") });

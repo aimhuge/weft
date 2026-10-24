@@ -15,7 +15,7 @@ export function weftMcpServers(spec: Spec, cardId: () => string | undefined) {
   return {
     browser: browserMcpServer(cardId),
     // Threads only: the copilot runs the board, not a project.
-    ...(spec.copilot ? {} : { secrets: secretsMcpServer(cardId, () => spec.cwd, () => getCard(cardId() ?? "")?.title), webhooks: webhooksMcpServer(() => spec.cwd), devservers: devserversMcpServer(cardId, () => spec.cwd), board_view: boardViewMcpServer() }),
-    board: spec.copilot ? boardMcpServer(hooks.boardActions) : weftMcpServer(cardId, hooks.boardActions),
+    ...(spec.copilot ? {} : { secrets: secretsMcpServer(cardId, () => spec.cwd, () => getCard(cardId() ?? "")?.title), webhooks: webhooksMcpServer(() => spec.project ?? spec.cwd), devservers: devserversMcpServer(cardId, () => spec.cwd), board_view: boardViewMcpServer() }),
+    board: spec.copilot ? boardMcpServer(hooks.boardActions) : weftMcpServer(cardId, hooks.boardActions, () => spec.project ?? spec.cwd),
   };
 }

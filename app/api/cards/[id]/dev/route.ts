@@ -2,6 +2,7 @@ import { connection } from "next/server";
 import { devStatus, reachable, startDev, stopDev } from "@/lib/devserver";
 import { fail, guard } from "@/lib/guard";
 import { getCard } from "@/lib/store";
+import { workDir } from "@/lib/work-dir";
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const denied = guard(req, { write: false });
@@ -27,7 +28,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     if (!plan?.dev) return fail("The review tour has no dev command.");
     if (action === "restart") stopDev(id);
     else if (plan.url && (await reachable(plan.url))) return Response.json({ status: await devStatus(id, plan.url) });
-    await startDev(id, plan.dev, card.cwd, card.title, plan.url);
+    const { url } = await startDev(id, plan.dev, workDir(card), card.title, plan.url);
+    return Response.json({ status: await devStatus(id, url) });
   } else return fail("Unknown action.");
   return Response.json({ status: await devStatus(id, plan?.url) });
 }

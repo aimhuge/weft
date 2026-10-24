@@ -4,6 +4,7 @@ import { splitClaim } from "./claims";
 import { busyInFolder } from "./overlap";
 import { steps } from "./restart-guard";
 import type { Card } from "./types";
+import { workDir } from "./work-dir";
 
 // Cards share one working tree, so a thread's typecheck, tests or lint run over every other busy card's
 // unfinished edits too, and a thread used to spend turns "fixing" breakage that wasn't its own. After a
@@ -54,7 +55,7 @@ export function failurePaths(output: string, cwd: string, root: string): string[
 export function failureNote(command: string, output: string, cwd: string, root: string, card: Card, cards: Card[]): string | undefined {
   if (!FAILED.test(output) || !runsCheck(command, cwd)) return undefined;
   const owner = new Map<string, Card>();
-  for (const other of busyInFolder(cards, card.cwd, card.id)) {
+  for (const other of busyInFolder(cards, workDir(card), card.id)) {
     for (const key of other.claims ?? []) if (!owner.has(splitClaim(key).file)) owner.set(splitClaim(key).file, other);
   }
   if (!owner.size) return undefined;

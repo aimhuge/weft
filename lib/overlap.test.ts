@@ -67,6 +67,15 @@ describe("busyHere", () => {
     expect(busyHere([me], me)).toEqual([]);
   });
 
+  it("puts an isolated card in its worktree, not the shared tree", () => {
+    const wt = { path: "/wt/repo-1/a", branch: "weft/a", base: "x", repo: "/repo" };
+    const me = card({ cwd: "/repo" });
+    const isolated = card({ cwd: "/repo", isolated: true, worktree: wt });
+    expect(busyHere([me, isolated], me)).toEqual([]);
+    expect(busyInFolder([me, isolated], "/wt/repo-1/a/src")).toEqual([isolated]);
+    expect(busyHere([me, isolated], card({ cwd: "/repo", worktree: wt }))).toEqual([isolated]);
+  });
+
   it("checks a folder before any card exists", () => {
     const busy = card({ cwd: "/repo" });
     expect(busyInFolder([busy], "/repo/src")).toEqual([busy]);

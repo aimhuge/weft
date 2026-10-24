@@ -24,6 +24,11 @@ beforeEach(async () => {
 });
 
 describe("weftSystemPrompt", () => {
+  it("an isolated card's thread hears it works in its own worktree; a shared one doesn't", () => {
+    expect(prompts.weftSystemPrompt({ backend: "claude", project: "/repo" })).toContain(prompts.ISOLATED_PROMPT);
+    expect(prompts.weftSystemPrompt({ backend: "claude" })).not.toContain("This card is isolated");
+  });
+
   it("a Claude thread gets every pinned part, in order", () => {
     const text = prompts.weftSystemPrompt({ backend: "claude" });
     const markers = [

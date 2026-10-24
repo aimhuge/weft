@@ -5,6 +5,7 @@ import { findSecret } from "./secret-detect";
 import { bashVerdict } from "./secret-guard";
 import { appendThread, getCard, getThread, replaceThreadItem } from "./store";
 import type { ThreadItem } from "./types";
+import { workDir } from "./work-dir";
 
 // "!" in a thread's reply box: your own shell command, run in the card's folder like Claude Code's bash
 // mode. It shows in the thread as it runs, and what it printed goes to Claude with your next message.
@@ -41,7 +42,8 @@ export function runShell(cardId: string, command: string): number {
   const card = getCard(cardId);
   if (!card) throw new Error("No such card.");
   if (!command) throw new Error("Write a command after the !.");
-  if (!fs.existsSync(card.cwd)) throw new Error(`This thread's folder ${card.cwd} doesn't exist anymore.`);
+  const cwd = workDir(card);
+  if (!fs.existsSync(cwd)) throw new Error(`This thread's folder ${cwd} doesn't exist anymore.`);
   // Its output goes to Claude, so the reads the thread's own Bash can't make (.env, an env dump) stay out too.
   const refused = bashVerdict(command);
   if (refused) throw new Error(`Not run, since its output goes to Claude: ${refused} Use the terminal (⌃\`) for that.`);
@@ -54,7 +56,7 @@ export function runShell(cardId: string, command: string): number {
 
   // Its own process group, so the timeout stops what it started too (a pipeline, a dev server).
   const proc = spawn(process.env.SHELL || "/bin/zsh", ["-c", command], {
-    cwd: card.cwd,
+    cwd,
     env: { ...cliEnv(), TERM: "dumb", NO_COLOR: "1", GIT_PAGER: "cat", PAGER: "cat" },
     stdio: ["ignore", "pipe", "pipe"],
     detached: true,

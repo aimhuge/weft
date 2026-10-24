@@ -23,6 +23,7 @@ import { RestartRequested } from "./RestartChip";
 import StatusStrip from "./StatusStrip";
 import { isBacklogKey } from "./submit-keys";
 import { track } from "@/lib/analytics";
+import { suggestIsolate } from "@/lib/use-isolate";
 
 export default function NewCardDialog({
   cards = [],
@@ -49,7 +50,7 @@ export default function NewCardDialog({
   const dialog = useNewCardDialog(home, defaultCwd, recentCwd);
   // ⌘ or ⌃ held: the Start button names what ⌘↵ or ⌃↵ will do.
   const startBtn = startButton(useHeldModifiers());
-  // Cards get no worktree, so a busy card in this folder would share its working tree.
+  // A busy card in this folder shares its working tree, unless this one is isolated (docs/architecture/worktrees.md).
   const alsoHere = busyInFolder(cards, dialog.cwd);
   // When this model or CLI is at its limit, the thread can't start now: the Start button names the
   // reset it waits for, and the card runs then (lib/start-gate.ts).
@@ -138,13 +139,14 @@ export default function NewCardDialog({
         onPickModel={dialog.setModel}
         onPickEffort={dialog.setEffort}
         onPickMode={dialog.pickMode}
+        isolate={{ on: dialog.isolated, suggest: suggestIsolate(alsoHere.length, dialog.promptLength), onToggle: dialog.toggleIsolated }}
       />
 
       <NewCardDialogFooter
         backend={dialog.backend}
         onPickBackend={dialog.pickBackend}
         error={dialog.error}
-        alsoHere={alsoHere}
+        alsoHere={dialog.isolated ? [] : alsoHere}
         started={dialog.started}
         busy={dialog.busy}
         startBtn={startBtn}
