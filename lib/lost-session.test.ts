@@ -29,6 +29,11 @@ describe("isLostSessionError", () => {
     expect(isLostSessionError("Claude Code returned an error result: No conversation found with session ID: abc")).toBe(true);
     expect(isLostSessionError("Rate limit reached")).toBe(false);
   });
+
+  it("counts puku's refusal of a transcript past its size cap as lost too", () => {
+    const tooLarge = "Failed to resume session: Reconstructed transcript is too large to resume safely (8.8 MiB > 8.0 MiB, 542 messages).";
+    expect(isLostSessionError(`Claude Code returned an error result\n${tooLarge}`)).toBe(true);
+  });
 });
 
 describe("resumeLostSession", () => {

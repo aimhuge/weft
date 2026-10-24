@@ -2,11 +2,12 @@ import { getCard, getThread, updateCard } from "./store";
 
 // A card whose CLI session is gone: the CLI was told to resume a conversation it has no transcript for (deleted,
 // cleaned up by Claude Code, or the card came from another Mac), so it answers "No conversation found with session
-// ID" and every message after fails the same way. Instead the card goes on in a new session started from a brief of
-// its thread, as "Send fresh" does (lib/splice.ts), with your last message sent again.
+// ID" and every message after fails the same way. puku-cli also refuses one whose transcript has outgrown its cap
+// ("Failed to resume session: Reconstructed transcript is too large…", on stderr only). Instead the card goes on in
+// a new session started from a brief of its thread, as "Send fresh" does (lib/splice.ts), with your last message sent again.
 
 export function isLostSessionError(text: string): boolean {
-  return /no conversation found with session id/i.test(text);
+  return /no conversation found with session id|failed to resume session/i.test(text);
 }
 
 // lib/splice.ts imports lib/runner.ts, which imports the session module that calls this, so a direct import would
