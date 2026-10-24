@@ -1,7 +1,7 @@
 import { backendFor, MODELS } from "./new-thread";
 import { fallbackFor } from "./model-fallback";
 import { subagentModel } from "./settings";
-import type { Backend } from "./types";
+import { BACKEND_SHORT, type Backend } from "./types";
 
 // Subagents: when a board thread should hand work to a subagent, and on which model. The user picks in
 // Settings ("Use … for subagents") from every model either CLI serves; "choose" leaves it to the thread,
@@ -15,7 +15,7 @@ import type { Backend } from "./types";
 // "choose", "inherit", or a model id from MODELS (lib/new-thread.ts); isSubagentModel checks one.
 export type SubagentModel = string;
 
-const COMMAND: Record<Backend, string> = { claude: "claude", puku: "puku-cli", codex: "codex" };
+const COMMAND: Record<Backend, string> = { claude: "claude", puku: "puku-cli", codex: "codex", goose: "goose" };
 
 // The CLI that serves a model id, or undefined for "choose", "inherit" and ids neither serves.
 export const subagentBackend = backendFor;
@@ -38,7 +38,7 @@ export function subagentLabel(model: SubagentModel): string {
   if (model === "inherit") return "Same model as the thread";
   const backend = subagentBackend(model);
   const label = backend && MODELS[backend].find((m) => m.id === model)?.label;
-  return label ? `${label} (${backend === "claude" ? "Claude" : backend === "puku" ? "Puku" : "Codex"})` : model;
+  return label ? `${label} (${BACKEND_SHORT[backend]})` : model;
 }
 
 export const DELEGATE = `Use subagents (the Agent tool) more than you'd think: their file reads and long outputs stay out of this thread's context, and several run at once. Delegate when answering means reading across many files (the Explore agent), when the task splits into independent pieces (send them in one message so they run in parallel), for a test, lint or typecheck run where you only need the failures, and for a second-opinion review of a change you made. Do a single known lookup (one file, one grep) yourself. Give each subagent a self-contained prompt that says what to report back, and relay what matters: the user doesn't see its report.`;
@@ -49,15 +49,41 @@ export const CHOOSE = `Pick each subagent's model with the Agent tool's model in
 - opus: hard reasoning where a mistake is costly: architecture, subtle bugs, security review, a plan others will build from.
 When unsure, pick sonnet.`;
 
-// How a thread runs a subagent on the other CLI's model: a headless run whose stdout is the report.
-function crossCli(model: string, backend: Backend): string {
-  const cmd = `${COMMAND[backend]} -p "<self-contained task>" --model ${model} --allowedTools "Read Grep Glob" --permission-mode dontAsk`;
-  return `Subagents run on ${subagentLabel(model)} (the user's Weft setting), which the Agent tool can't reach from this CLI. Run each one with Bash instead:
+// Goose has no Agent tool, so a Goose thread's subagents are headless Goose runs from Bash.
+export const GOOSE_DELEGATE = `Use subagents more than you'd think: their file reads and long outputs stay out of this thread's context, and several run at once. You have no Agent tool, so a subagent is a headless CLI run from Bash (below). Delegate when answering means reading across many files, when the task splits into independent pieces (start them in one message so they run in parallel), for a test, lint or typecheck run where you only need the failures, and for a second-opinion review of a change you made. Do a single known lookup (one file, one grep) yourself. Give each subagent a self-contained prompt that says what to report back, and relay what matters: the user doesn't see its report.`;
+
+// How a thread runs a subagent headless from Bash, on another CLI's model or (for a Goose thread) on Goose
+// itself: a run whose stdout is the report. Each CLI's headless shape is its own: Claude Code and puku-cli
+// take a prompt flag and a model flag, Goose takes `run --text` with the model behind a provider. A Goose
+// run with no model inherits the thread's provider and model from GOOSE_PROVIDER and GOOSE_MODEL
+// (lib/goose-runner.ts gooseEnv). A Goose thread has no Agent tool to fall back on.
+function crossCli(model: string | undefined, backend: Backend, thread: Backend = "claude"): string {
+  const fallback = thread === "goose" ? "do the work yourself" : "use the Agent tool";
+  const reach = thread === "goose" ? "" : ", which the Agent tool can't reach from this CLI";
+  const why = model ? `Subagents run on ${subagentLabel(model)} (the user's Weft setting)${reach}.` : "Subagents run on the same provider and model as this thread.";
+  const tail = `Several Bash calls in one message run in parallel; use run_in_background for long ones. If it fails because ${COMMAND[backend]} isn't installed or logged in, say so and ${fallback}.`;
+  if (backend === "goose") {
+    const cmd = `${COMMAND[backend]} run --text "<self-contained task>"${model ? ` --model ${model}` : ""}`;
+    return `${why} Run each one with Bash:
 ${cmd}
-Its output is the subagent's report. Add Edit and Write to --allowedTools for a subagent that changes files. Several Bash calls in one message run in parallel; use run_in_background for long ones. If it fails because ${COMMAND[backend]} isn't installed or logged in, say so and use the Agent tool.`;
+Its output is the subagent's report. ${tail}`;
+  }
+  const cmd = `${COMMAND[backend]} -p "<self-contained task>" --model ${model} --allowedTools "Read Grep Glob" --permission-mode dontAsk`;
+  return `${why} Run each one with Bash instead:
+${cmd}
+Its output is the subagent's report. Add Edit and Write to --allowedTools for a subagent that changes files. ${tail}`;
+}
+
+// A Goose thread's prompt: the Agent tool's guide doesn't apply, so every choice is a Bash run. A model
+// Goose serves (or none, for "choose" and "inherit") is a `goose run`; another CLI's model is that CLI's.
+function goosePrompt(model: SubagentModel): string {
+  const serves = model === "choose" || model === "inherit" ? undefined : subagentBackend(model);
+  const run = serves && serves !== "goose" ? crossCli(model, serves, "goose") : crossCli(serves ? model : undefined, "goose", "goose");
+  return `${GOOSE_DELEGATE}\n\n${run}`;
 }
 
 export function subagentPrompt(model: SubagentModel, backend: Backend): string {
+  if (backend === "goose") return goosePrompt(model);
   if (model === "choose") return backend === "claude" ? `${DELEGATE}\n\n${CHOOSE}` : DELEGATE;
   if (model === "inherit") return `${DELEGATE}\n\nSubagents run on the same model as this thread (the user's Weft setting), so leave the Agent tool's model input out.`;
   const serves = subagentBackend(model);
@@ -73,11 +99,13 @@ export function pukuSubagentModel(model: string): string {
 }
 
 // puku-cli's subagents inherit the thread's model when it's unset, so "inherit" needs nothing there.
+// Goose has no subagent-model env var at all (it has no Agent tool), so it gets none: naming
+// Claude Code's variable there would set a knob the CLI doesn't read.
 export function subagentEnv(model: SubagentModel, backend: Backend): Record<string, string> {
   if (model === "choose") return {};
   if (model === "inherit") return backend === "claude" ? { CLAUDE_CODE_SUBAGENT_MODEL: "inherit", CLAUDE_CODE_SUBAGENT_MODEL_FORCE: "1" } : {};
   if (subagentBackend(model) !== backend) return {};
-  return backend === "claude"
-    ? { CLAUDE_CODE_SUBAGENT_MODEL: model, CLAUDE_CODE_SUBAGENT_MODEL_FORCE: "1" }
-    : { PUKU_CLI_SUBAGENT_MODEL: pukuSubagentModel(model) };
+  if (backend === "claude") return { CLAUDE_CODE_SUBAGENT_MODEL: model, CLAUDE_CODE_SUBAGENT_MODEL_FORCE: "1" };
+  if (backend === "puku") return { PUKU_CLI_SUBAGENT_MODEL: pukuSubagentModel(model) };
+  return {};
 }

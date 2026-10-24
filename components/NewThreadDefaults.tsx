@@ -23,6 +23,7 @@ export default function NewThreadDefaults({
     claude: modelFor("claude"),
     puku: modelFor("puku"),
     codex: modelFor("codex"),
+    goose: modelFor("goose"),
   }));
   const [effort, setEffort] = useState<Effort | "">(lastEffort);
 

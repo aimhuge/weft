@@ -70,13 +70,18 @@ WEFT_WEB=1   # in .env.local, or run pnpm dev:web
   copy, refreshed each time you open Share…, and a public https site is framed as is; a localhost app says it can't be reached.
   A public link unfurls as the app itself: its own title and description (from `weft-app.json`, the page's meta tags,
   or a sentence Weft writes), and a branded card with a screenshot of the app. The Share dialog shows the card, lets you
-  rewrite the description and refresh it. The button is lit on a page
+  rewrite the description and refresh it. Views are unlimited on every plan: a public link's pages are cached on
+  Vercel's CDN at versioned URLs, and bots meet a per-minute cap. Your plan sets the room your open links share
+  (Free 25 MB, Pro, Open Source and Education 1 GB, Team 5 GB; private links don't count), and the Share dialog shows
+  how much is in use. The button is lit on a page
   that's already an app, and clicking it then takes it out. No apps, nothing on the rail.
   A **data app** holds a folder (`~/.weft/apps/<slug>/`: its page and a `weft-app.json` naming the project folder, the
   vault environment it asks for and its reads by name). The page asks for that env (Touch ID), then Weft runs its reads
   on the Mac with the env's vault values, which never reach the page: Postgres functions through Supabase, and GA4
   reports. 📈 **Growth** is the first one: accounts, signups, active accounts, retention cohorts, activation and page
-  views. Every app is also stored on prod under your account and comes back on any Mac you sign in on
+  views — and what people do *inside* Weft: cards pushed per day, in-app engagement, and a retention table that counts
+  an account as kept only if it pushed a card, moved one or ran a turn that week. Every app is also stored on prod
+  under your account and comes back on any Mac you sign in on
   (docs/architecture/mini-apps.md).
   A **React app** is a folder with an `App.tsx` and no `package.json`: Weft bundles it with its own React into a
   static page on save, and the pane reloads. Shared, a folder app's link lives under its owner,
@@ -148,7 +153,7 @@ On launch and every minute after, Weft picks up your Claude Code sessions (the o
 
 - **First launch gets you to a running thread.** Three screens, for everyone, history or not: **Get ready** plays
   a 30-second loop of a card crossing the board (and getting a key from the 🔐 vault) with your own project names on it (a HyperFrames composition,
-  `public/welcome/loop.html`; the same file renders `public/brand/welcome-loop.mp4` with `pnpm welcome:render`, which also joins `public/welcome/beats.html` (connect your tools, panes, code quality, BlastCP, the profile, open source) into a 96-second `weft-tour.mp4` for weft.zip; a bar under it names the beat on screen and steps **‹ Back** and **Next ›** one beat at a time) and whether Claude Code, puku-cli and Codex are logged in, with **Log in** right there; **Bring in your
+  `public/welcome/loop.html`; the same file renders `public/brand/welcome-loop.mp4` with `pnpm welcome:render`, which also joins `public/welcome/beats.html` (connect your tools, the 🔐 vault, panes, code quality, BlastCP, the profile, open source) into a 106-second `weft-tour.mp4` for weft.zip; a bar under it names the beat on screen and steps **‹ Back** and **Next ›** one beat at a time) and whether Claude Code, puku-cli and Codex are logged in, with **Log in** right there; **Bring in your
   projects** lists the folders with Claude Code sessions (worktree, scratch and temp folders unticked; **Start empty**
   brings in none) with a switch that counts your history on your Wefter Profile; **Start your first thread** picks a
   project and a starter prompt and opens the card as it runs. No cards are added until you answer. A board that already
@@ -283,7 +288,7 @@ to Sonnet 5.5".
 
 Pick **Codex** in the New thread dialog to run the OpenAI Codex CLI. Install `codex` on your PATH and sign in with `codex login` first; Weft can open Codex's device login in Terminal from Settings → Accounts. Codex uses its own tools and saved sessions. Weft's browser, board, secrets and webhook MCP tools reach Codex over HTTP, and a folder's `CLAUDE.md` and `.claude/skills` are passed along (Codex reads neither); the per-tool `.env`, git, restart and check guards aren't available to Codex threads. Codex's sandbox mode and reasoning effort are fixed when a session starts.
 
-Pick **Goose** to run the Goose CLI agent (the Rust one from Block), and bring your own key: Settings → Models → **Bring your own key** takes a provider's API key — OpenRouter, Anthropic, OpenAI, Google, Groq, Mistral, DeepSeek, xAI, Azure, LiteLLM, Perplexity, Cerebras, a local Ollama, or any OpenAI-compatible endpoint — and Weft keeps it in your Keychain. The key never reaches the board and never crosses Weft's control server: the thread's Goose process is started with the key in its env, and that is the only place it exists. The provider and model you pick are what new Goose threads run on; **Goose default** means "let Goose choose", which is also what a card does when you leave the model alone. A Goose thread is a plain CLI process, so like a Codex thread it has no per-tool guards and no session to resume — one fresh `goose run` per turn — and it takes no effort setting. Install `goose` on your PATH first.
+Pick **Goose** to run the Goose CLI agent (the Rust one from Block), and bring your own key: Settings → Models → **Bring your own key** takes a provider's API key — OpenRouter, Anthropic, OpenAI, Google, Groq, Mistral, DeepSeek, xAI, Azure, LiteLLM, Perplexity, Cerebras, a local Ollama, or any OpenAI-compatible endpoint — and Weft keeps it in your Keychain. The key never reaches the board and never crosses Weft's control server: the thread's Goose process is started with the key in its env, and that is the only place it exists. The provider you pick is what new Goose threads run on. A card runs the model you gave it (in the New thread dialog or by switching mid-thread); a card left on **Goose default** runs the model you picked for the provider, and with none, Goose chooses. A provider that needs an endpoint beside its key takes one (Anthropic's host, Azure's resource address, LiteLLM's proxy), and a provider whose model ids aren't known ahead of time lets you type the id. **Puku** is one click: the button beside the Provider picker fills in the Anthropic provider, `https://api-cli.puku.sh` and `puku-ai-2.8`, so all that is left is your Puku key. A Goose thread is a plain CLI process, so like a Codex thread it has no per-tool guards and no session to resume — one fresh `goose run` per turn — and it takes no effort setting. It has no Agent tool either, so its subagents are `goose run --text` calls from Bash on the same provider and model, and its commits are signed `Co-Authored-By: Goose (<model>) on Weft`. Install `goose` on your PATH first.
 
 ## How cards move
 
@@ -333,8 +338,14 @@ Archive from the keyboard: `Shift+A` archives the card you've moved to with `j`/
 open thread, and focus steps to the next card, so `Shift+A` three times clears three cards. `Shift+E`
 archives every Done card on screen, and `Z` (or the toast's Undo) brings back the last archive. The command palette (`Cmd+K`) has all of them too.
 
-Cards get no git worktree of their own, on purpose, so two cards in one folder share a working tree.
-Weft warns you instead: a busy card shows "+1 here" next to its folder when another card is running
+Cards share one working tree by default, so two cards in one folder see each other's edits. When that
+would hurt (a big change, or other cards busy in the folder), switch **Shared** to **Isolated** beside the
+folder in New thread (it reads **Isolate?** with an amber dot when Weft suggests it): the card gets a git
+worktree of its own on a `weft/<title>` branch, taken in milliseconds from a warm pool under `~/.weft/worktrees`
+with `node_modules` already in (an APFS clone), and shows ⑃ on the card. Its CLI, Bash, `!` commands, tests and dev
+server (on a port of its own) all run there. On Done it commits what's left, rebases on the project's branch and
+fast-forwards it, never touching other cards' uncommitted work; a conflict goes back to the thread to resolve
+(docs/architecture/worktrees.md). For shared cards, Weft warns you instead: a busy card shows "+1 here" next to its folder when another card is running
 or waiting in the same folder (or one inside it), and the New thread dialog says "Also running here:
 <title>" beside Start now when the folder you picked already has a busy card. Each card remembers the files its
 thread edited (the last 50, for the card's whole life, since Weft can't cheaply tell what got committed).
@@ -380,6 +391,8 @@ keeps their file dumps out of the thread's context. Settings → Models → Use 
   through that CLI's env (`CLAUDE_CODE_SUBAGENT_MODEL` or `PUKU_CLI_SUBAGENT_MODEL`). On the other CLI's
   threads, the thread runs that CLI headless as the subagent (`puku-cli -p … --model opus-4.8`, or
   `claude -p`), read-only unless the task needs edits. That needs the other CLI installed and logged in.
+  A Goose thread has no Agent tool, so every subagent is a Bash run: `goose run --text …` on the thread's own
+  provider and model (or `--model` for a picked Goose model), or the other CLI's headless line.
 
 **Backup model** (`Settings → Models → Backup model`) is the model a card reruns its first message on
 when that very first turn came back an error (a rate limit, mostly), and the model every thread moves
@@ -940,6 +953,9 @@ Nothing runs on your Mac. `pnpm resend -- create|verify|webhook` sets up the Res
   output on stdout parsed into the thread's rows, and the provider's key put in the subprocess's env by
   `electron/goose-env.cjs` from a one-time grant — so the key is in the process and nowhere else
   (docs/architecture/goose.md).
+- `lib/new-thread.ts` holds the one list of CLIs — `BACKENDS`, `BACKEND_IDS` and `ALL_MODEL_IDS` — and
+  every route that validates a backend checks against it, so the CLI you pick in the New thread dialog is
+  the CLI the card runs on.
 - `lib/board-tools.ts` gives the copilot its board tools, and every board thread a small `board`
   server with just `list_cards` and `create_card` (a card made this way records its `parentId`; `list_cards` prints
   one line per open card, newest first, and lists done and archived ones only with `include_done`); `lib/copilot.ts` keeps its thread, which
@@ -1050,5 +1066,7 @@ Weft™ and the Weft logo aren't covered by the license: a fork you share needs 
   API guard, automations, formatting, settings, store, board tools) and over the API routes, with the
   runner and store mocked, and over the runner's SDK loop with a fake `query()`. UI tests have only started: the card, the reply box and the new-thread dialog (`components/*.test.tsx`, jsdom + Testing Library); the board and thread view have none. CI runs lint, typecheck and tests; a pre-commit hook type-checks what's staged.
 - The packaged app's terminal drawer (`node-pty` now ships in the Electron bundle) hasn't been tried on a fresh Mac yet.
-- No git worktree per card, on purpose: parallel cards in one repo share a working tree. Weft warns
-  when they share a folder, but doesn't yet spot two threads editing the same files.
+- Cards share a working tree unless you make one Isolated (docs/architecture/worktrees.md). An isolated card
+  starts a cold CLI (no warm spare in its worktree yet), and its dev server's own port reaches it as `PORT`, which
+  Vite ignores (pass `--port`). The pool's size is `worktreePool` in `~/.weft/settings.json` (0 to 3, default 1);
+  there's no Settings row for it yet.

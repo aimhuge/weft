@@ -39,6 +39,15 @@ const SEPARATOR: MenuItem = { type: "separator" };
 // Weft's own skills, offered on every card.
 export const MENU_SKILLS = ["weft:done", "weft:commit", "weft:preview"];
 
+// The key for the "Run on <CLI>" item at this position in BACKENDS. The first is plain J and the
+// rest add a modifier, so every CLI gets a key no other item uses. Derived from the position
+// rather than written out, so a CLI added to BACKENDS always gets one.
+const SWITCH_MODIFIERS = ["", "Shift+", "Alt+", "Ctrl+"];
+
+function switchKey(index: number) {
+  return `${SWITCH_MODIFIERS[index] ?? `Ctrl+Shift+`}J`;
+}
+
 // Columns you can move a card to by hand (app/api/cards/[id]/route.ts); Running and Needs you follow the thread.
 const MOVES: { column: Column; label: string }[] = [
   { column: "review", label: "Move to Review" },
@@ -64,9 +73,10 @@ const MENU_KEYS: Record<string, string> = {
   "mode:auto": "U",
   "mode:acceptEdits": "E",
   "mode:default": "M",
-  "switch:claude": "J",
-  "switch:puku": "Shift+J",
-  "switch:codex": "Alt+J",
+  // The "Run on <CLI>" keys, one per CLI the menu offers. Built from the same list the items come
+  // from (BACKENDS), so a CLI added there always gets a key: a hand-written list went stale once
+  // already, and the new item came out with no key at all.
+  ...Object.fromEntries(BACKENDS.map((backend, i) => [`switch:${backend.id}`, switchKey(i)])),
   "new-here": "N",
   reveal: "F",
   "copy-path": "C",

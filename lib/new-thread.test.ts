@@ -5,6 +5,12 @@ import {
   EFFORTS,
   LAST_BACKEND,
   LAST_CWD,
+  CODEX_DEFAULT_MODEL,
+  GOOSE_DEFAULT_MODEL,
+  ALL_MODEL_IDS,
+  BACKENDS,
+  BACKEND_IDS,
+  MODELS,
   effortFor,
   errorText,
   headline,
@@ -171,5 +177,47 @@ describe("modelOn", () => {
 
   it("leaves no model as no model", () => {
     expect(modelOn("puku", undefined)).toBeUndefined();
+  });
+
+  it("drops the 'let the CLI decide' sentinels, so the card pins no model id", () => {
+    // Codex's and Goose's own: a card on the sentinel runs on the CLI's choice, not on a fake id.
+    expect(modelOn("codex", CODEX_DEFAULT_MODEL)).toBeUndefined();
+    expect(modelOn("goose", GOOSE_DEFAULT_MODEL)).toBeUndefined();
+  });
+
+  it("keeps a real Goose model on a Goose card", () => {
+    expect(modelOn("goose", "anthropic/claude-sonnet-4.5")).toBe("anthropic/claude-sonnet-4.5");
+  });
+});
+
+// The shared lists. Every route that takes a backend or a model id checks against these, so a
+// CLI the lists didn't name was dropped on the way in — the card ran on Claude Code while the
+// dialog said Goose. These two tests are the guard: the lists have to cover every CLI.
+describe("BACKEND_IDS", () => {
+  it("names every CLI the picker offers", () => {
+    expect([...BACKEND_IDS].sort()).toEqual(BACKENDS.map((b) => b.id).sort());
+  });
+
+  it("names every CLI the type allows", () => {
+    // A CLI added to the Backend type but not to BACKENDS would be one the dialog can't offer
+    // and no route would accept.
+    const every: string[] = ["claude", "puku", "codex", "goose"];
+    expect([...BACKEND_IDS].sort()).toEqual(every.sort());
+  });
+
+  it("has a model list for every CLI", () => {
+    for (const backend of BACKEND_IDS) expect(MODELS[backend].length).toBeGreaterThan(0);
+  });
+});
+
+describe("ALL_MODEL_IDS", () => {
+  it("holds every model every CLI serves", () => {
+    for (const backend of BACKEND_IDS) {
+      for (const model of MODELS[backend]) expect(ALL_MODEL_IDS.has(model.id)).toBe(true);
+    }
+  });
+
+  it("holds a Goose model, so a Goose card's model is accepted", () => {
+    expect(ALL_MODEL_IDS.has(GOOSE_DEFAULT_MODEL)).toBe(true);
   });
 });

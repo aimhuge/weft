@@ -3,6 +3,7 @@ import path from "node:path";
 import { publish } from "./bus";
 import { DATA_DIR } from "./store";
 import { backendFor, EFFORTS } from "./new-thread";
+import { GOOSE_PROVIDERS } from "./goose-provider";
 import { MODES, type Automation, type Backend, type Effort, type PermissionMode, type Project, type SettingsView } from "./types";
 import { globalSingleton } from "./global-singleton";
 import { isSubagentModel, type SubagentModel } from "./subagents";
@@ -54,6 +55,13 @@ interface Settings {
   // "" means "no backup set": the banner button reads "Pick a backup model" and opens Settings → Models.
   // Any model id one of the installed CLIs serves is allowed; the rerun normalizes through modelOn.
   backupModel?: string;
+  // The Goose provider whose key and env a Goose thread runs on (lib/goose-provider.ts). The key
+  // itself lives in Electron main's Keychain; only the provider's id is a board-side setting.
+  gooseProviderId?: string;
+  // The model id a new Goose thread runs on; "" means the provider's own default.
+  gooseModelId?: string;
+  // The endpoint the providers that need one use (custom, azure, litellm); "" means none.
+  gooseBaseUrl?: string;
   projects: Project[];
   // Claude Code sessions whose cards were deleted, so syncing doesn't bring them back.
   dismissedSessions?: string[];
@@ -63,6 +71,8 @@ interface Settings {
   syncFolders?: string[];
   // Folders outside a card's project that every thread may use without asking (lib/folder-guard.ts), granted with "Always".
   allowedFolders?: string[];
+  // Ready-made worktrees kept per repo for isolated cards (lib/worktree-pool.ts); unset means 1, 0 turns the pool off.
+  worktreePool?: number;
 }
 
 const FILE = path.join(DATA_DIR, "settings.json");
@@ -82,11 +92,15 @@ function settings(): Settings {
       copilotModel: saved.copilotModel,
       reviewAllModel: saved.reviewAllModel,
       backupModel: saved.backupModel,
+      gooseProviderId: saved.gooseProviderId,
+      gooseModelId: saved.gooseModelId,
+      gooseBaseUrl: saved.gooseBaseUrl,
       projects: saved.projects ?? [],
       dismissedSessions: saved.dismissedSessions ?? [],
       issueFolders: saved.issueFolders ?? [],
       syncFolders: saved.syncFolders ?? [],
       allowedFolders: saved.allowedFolders ?? [],
+      worktreePool: saved.worktreePool,
     };
   });
 }
@@ -143,6 +157,15 @@ export function setKeepAliveMinutes(minutes: number) {
   // At most a week; 0 means until the app quits.
   settings().keepAliveMinutes = Math.min(7 * 24 * 60, Math.max(0, Math.round(minutes)));
   save();
+}
+
+// How many ready worktrees the pool keeps per recently isolated repo: 0 to 3, 1 when unset.
+export function worktreePoolSize(): number {
+  return readSetting("worktreePool", (v): v is number => typeof v === "number" && v >= 0 && v <= 3, 1);
+}
+
+export function setWorktreePoolSize(n: number) {
+  writeSetting("worktreePool", Math.min(3, Math.max(0, Math.round(n))), (v) => v === 1);
 }
 
 export function defaultPermissionMode(): PermissionMode {
@@ -221,10 +244,11 @@ export function setDoneEffort(effort: Effort | "") {
   writeSetting("doneEffort", effort, isEmpty);
 }
 
-// The copilot is one long-lived Claude Code thread (lib/copilot.ts), so its model is a Claude id only.
-// "" means "use the user's last-picked Claude model" (lib/new-thread.ts modelFor).
+// The copilot is one long-lived thread (lib/copilot.ts), so its model is any model a CLI serves;
+// picking one moves the copilot's CLI to the one that serves it. "" means "use the user's
+// last-picked model" (lib/new-thread.ts modelFor).
 function isCopilotModel(value: unknown): value is string {
-  return value === "" || (typeof value === "string" && backendFor(value) === "claude");
+  return value === "" || (typeof value === "string" && backendFor(value) !== undefined);
 }
 
 export function copilotModel(): string {
@@ -235,7 +259,7 @@ export function setCopilotModel(model: string) {
   writeSetting("copilotModel", model, isEmpty);
 }
 
-// "Review all" starts a Claude Code card, so its model is a Claude id. "" means the CLI's default.
+// "Review all" starts a card, so its model is any model a CLI serves. "" means the CLI's default.
 export function reviewAllModel(): string {
   return readSetting("reviewAllModel", isCopilotModel, "");
 }
@@ -258,6 +282,53 @@ export function backupModel(): string {
 
 export function setBackupModel(model: string) {
   writeSetting("backupModel", model, isEmpty);
+}
+
+// The Goose provider a Goose thread runs on: the one whose key and env the runner asks Electron
+// main for (lib/goose-launch.ts). The key never comes here — only which provider is active.
+// "" means none picked yet.
+function isGooseProviderId(value: unknown): value is string {
+  return typeof value === "string" && (value === "" || GOOSE_PROVIDERS.some((p) => p.id === value));
+}
+
+export function gooseProviderId(): string {
+  return readSetting("gooseProviderId", isGooseProviderId, "");
+}
+
+// A provider the catalog doesn't know is refused, so the setting can only name a provider the
+// board can actually configure. "" clears it.
+export function setGooseProviderId(id: string) {
+  // The guard narrows `id` to `never` on the failing branch (the check is exhaustive over the
+  // catalog), so the name is read before the check rather than inside the message.
+  const name = id;
+  if (!isGooseProviderId(id)) throw new Error(`Goose doesn't know a provider called "${name}".`);
+  writeSetting("gooseProviderId", id, isEmpty);
+}
+
+// The model a new Goose thread runs on: any id the provider serves, or "" for the provider's
+// own default. The catalog's curated ids are the common ones; a provider that serves anything
+// else takes a typed id, so this is only checked for being text.
+function isGooseModelId(value: unknown): value is string {
+  return typeof value === "string";
+}
+
+// "" is the default (the provider decides), so it's stored as unset.
+export function gooseModelId(): string {
+  return readSetting("gooseModelId", isGooseModelId, "");
+}
+
+export function setGooseModelId(model: string) {
+  writeSetting("gooseModelId", model.trim(), isEmpty);
+}
+
+// The endpoint for the providers that need one (custom, azure, litellm). "" is the default:
+// a provider that doesn't need an endpoint has none, and one that does asks for it.
+export function gooseBaseUrl(): string {
+  return readSetting("gooseBaseUrl", isGooseModelId, "");
+}
+
+export function setGooseBaseUrl(url: string) {
+  writeSetting("gooseBaseUrl", url.trim(), isEmpty);
 }
 
 export function dismissedSessions(): string[] {
@@ -354,6 +425,9 @@ export function settingsView(): SettingsView {
     copilotModel: copilotModel(),
     reviewAllModel: reviewAllModel(),
     backupModel: backupModel(),
+    gooseProviderId: gooseProviderId(),
+    gooseModelId: gooseModelId(),
+    gooseBaseUrl: gooseBaseUrl(),
     projects: listProjects(),
     issueFolders: issueFolders(),
     syncFolders: syncFolders(),

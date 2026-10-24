@@ -38,6 +38,16 @@ describe("defaultEffort", () => {
     expect(defaultEffort("claude")).toBeUndefined();
   });
 
+  // Goose has no effort setting at all. Reading Claude Code's settings.json for a Goose thread
+  // reported Claude's effort level as the Goose thread's — a number for a knob Goose doesn't have.
+  it("has no effort for Goose, and reads no settings file for it", () => {
+    process.env.CLAUDE_CONFIG_DIR = config;
+    fs.writeFileSync(claudeSettings, JSON.stringify({ effortLevel: "xhigh" }));
+    const read = vi.spyOn(fs, "readFileSync");
+    expect(defaultEffort("goose")).toBeUndefined();
+    expect(read).not.toHaveBeenCalled();
+  });
+
   it("falls back to ~/.claude when CLAUDE_CONFIG_DIR isn't set", () => {
     const read = vi.spyOn(fs, "readFileSync").mockReturnValueOnce(JSON.stringify({ effortLevel: "max" }));
     expect(defaultEffort("claude")).toBe("max");

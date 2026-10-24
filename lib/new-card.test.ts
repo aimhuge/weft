@@ -35,6 +35,8 @@ const scheduler = await import("./scheduler");
 const gate = await import("./start-gate");
 const store = await import("./store");
 const { createCardFromBody, startCard } = await import("./new-card");
+// The CLIs the New thread dialog offers. A card must keep whichever one the user picked.
+const { BACKENDS } = await import("./new-thread");
 
 const card = { id: "card-1", prompt: "Add dark mode", backend: "claude", model: "opus" } as never;
 
@@ -78,6 +80,21 @@ describe("createCardFromBody", () => {
   it("keeps a known CLI", () => {
     createCardFromBody({ prompt: "x", backend: "codex" });
     expect(vi.mocked(store.createCard).mock.calls[0]?.[0]).toMatchObject({ backend: "codex" });
+  });
+
+  // A CLI the server didn't know was silently replaced by Claude: the card ran on Claude Code
+  // while the dialog said Goose, with nothing to say so. Every CLI the picker offers has to
+  // survive the trip through the request body.
+  it("keeps every CLI the picker offers", () => {
+    for (const { id: backend } of BACKENDS) {
+      createCardFromBody({ prompt: "x", backend });
+      expect(vi.mocked(store.createCard).mock.calls.at(-1)?.[0]).toMatchObject({ backend });
+    }
+  });
+
+  it("keeps Goose, the fourth CLI", () => {
+    createCardFromBody({ prompt: "x", backend: "goose" });
+    expect(vi.mocked(store.createCard).mock.calls[0]?.[0]).toMatchObject({ backend: "goose" });
   });
 
   it("falls back to the default permission mode for an unknown one", () => {

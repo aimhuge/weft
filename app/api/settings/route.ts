@@ -3,16 +3,19 @@ import { connection } from "next/server";
 import { patternRegex } from "@/lib/automations";
 import { asText } from "@/lib/format";
 import { elevated, fail, guard } from "@/lib/guard";
-import { EFFORTS, MODELS } from "@/lib/new-thread";
-import { setAutomations, setBackupModel, setCopilotModel, setDefaultBackend, setDefaultPermissionMode, setDoneEffort, setDoneModel, setKeepAliveMinutes, setPushOnDone, setReviewAllModel, setSubagentModel, setThreadPrompt, settingsView } from "@/lib/settings";
+import { EFFORTS, ALL_MODEL_IDS, BACKEND_IDS } from "@/lib/new-thread";
+import { GOOSE_PROVIDERS } from "@/lib/goose-provider";
+import { setAutomations, setBackupModel, setCopilotModel, setDefaultBackend, setDefaultPermissionMode, setDoneEffort, setDoneModel, setGooseBaseUrl, setGooseModelId, setGooseProviderId, setKeepAliveMinutes, setPushOnDone, setReviewAllModel, setSubagentModel, setThreadPrompt, settingsView } from "@/lib/settings";
 import { SKILL_NAME } from "@/lib/skills";
 import { isSubagentModel } from "@/lib/subagents";
 import { AUTOMATION_TRIGGERS, MODES, type Automation, type Backend, type PermissionMode } from "@/lib/types";
 
-const BACKENDS: Backend[] = ["claude", "puku", "codex"];
+// Every CLI a setting may name. Shared (lib/new-thread.ts), so a CLI added there is
+// settable here too.
+const BACKENDS: Backend[] = BACKEND_IDS;
 // Every model any CLI serves. The pickers offer them all — picking a model moves the thread's
-// CLI to the one that serves it — so the API accepts them all too.
-const ALL_MODEL_IDS = new Set<string>([...MODELS.claude, ...MODELS.puku, ...MODELS.codex].map((m) => m.id));
+// CLI to the one that serves it — so the API accepts them all too. The set is shared
+// (lib/new-thread.ts), so a CLI's models come with it.
 const DONE_EFFORT_IDS = new Set<string>(EFFORTS.map((e) => e.id));
 
 // The rules as sent, checked; a leading slash on a skill name is dropped.
@@ -72,6 +75,23 @@ function validateBackupModel(value: unknown) {
   }
 }
 
+// The Goose provider a Goose thread runs on: one of the catalog's ids, or "" for none picked.
+const GOOSE_PROVIDER_IDS = new Set<string>(GOOSE_PROVIDERS.map((p) => p.id));
+function validateGooseProviderId(value: unknown) {
+  if (value === undefined) return;
+  if (typeof value !== "string" || !(value === "" || GOOSE_PROVIDER_IDS.has(value))) {
+    throw new Error(`gooseProviderId must be one of ${[...GOOSE_PROVIDER_IDS].join(", ")}, or "" for none.`);
+  }
+}
+
+// The model a new Goose thread runs on and the endpoint the providers that need one use.
+// Both are free text: a provider can serve any model id, and an endpoint is the user's own
+// URL. "" is the default — the provider's own model, no endpoint.
+function validateGooseText(field: "gooseModelId" | "gooseBaseUrl", value: unknown) {
+  if (value === undefined) return;
+  if (typeof value !== "string") throw new Error(`${field} must be text.`);
+}
+
 function validate(body: {
   threadPrompt?: unknown;
   keepAliveMinutes?: unknown;
@@ -85,6 +105,9 @@ function validate(body: {
   copilotModel?: unknown;
   reviewAllModel?: unknown;
   backupModel?: unknown;
+  gooseProviderId?: unknown;
+  gooseModelId?: unknown;
+  gooseBaseUrl?: unknown;
 }): Automation[] | undefined {
   if (body.threadPrompt !== undefined && typeof body.threadPrompt !== "string") {
     throw new Error("threadPrompt must be text.");
@@ -110,6 +133,9 @@ function validate(body: {
   validateCopilotModel(body.copilotModel);
   validateReviewAllModel(body.reviewAllModel);
   validateBackupModel(body.backupModel);
+  validateGooseProviderId(body.gooseProviderId);
+  validateGooseText("gooseModelId", body.gooseModelId);
+  validateGooseText("gooseBaseUrl", body.gooseBaseUrl);
   // Validate automations now so a bad rule 400s before any settings setter runs.
   return body.automations === undefined ? undefined : readAutomations(body.automations);
 }
@@ -126,6 +152,9 @@ function commit(body: {
   copilotModel?: unknown;
   reviewAllModel?: unknown;
   backupModel?: unknown;
+  gooseProviderId?: unknown;
+  gooseModelId?: unknown;
+  gooseBaseUrl?: unknown;
 }, rules: Automation[] | undefined) {
   if (typeof body.threadPrompt === "string") setThreadPrompt(body.threadPrompt);
   if (typeof body.keepAliveMinutes === "number") setKeepAliveMinutes(body.keepAliveMinutes);
@@ -138,6 +167,9 @@ function commit(body: {
   if (typeof body.copilotModel === "string") setCopilotModel(body.copilotModel);
   if (typeof body.reviewAllModel === "string") setReviewAllModel(body.reviewAllModel);
   if (typeof body.backupModel === "string") setBackupModel(body.backupModel);
+  if (typeof body.gooseProviderId === "string") setGooseProviderId(body.gooseProviderId);
+  if (typeof body.gooseModelId === "string") setGooseModelId(body.gooseModelId);
+  if (typeof body.gooseBaseUrl === "string") setGooseBaseUrl(body.gooseBaseUrl);
   if (rules) setAutomations(rules);
 }
 

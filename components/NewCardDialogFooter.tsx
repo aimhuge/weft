@@ -12,6 +12,16 @@ import { formatAt } from "@/lib/schedule";
 import { alsoHereLine } from "@/lib/overlap";
 import Icon, { Spinner } from "./Icon";
 
+// What each CLI needs before a thread on it can run, as the button's tooltip. The two plain
+// CLIs need nothing said; the other two need something installed, or the thread fails on its
+// first turn with a message the user never saw coming.
+const CLI_HINTS: Record<Backend, string | undefined> = {
+  claude: undefined,
+  puku: undefined,
+  codex: "Requires Codex CLI and login. Weft's browser, board, secrets and webhook tools are unavailable.",
+  goose: "Requires the Goose CLI and a provider key (Settings → Models → Bring your own key).",
+};
+
 export function NewCardDialogFooter({
   backend,
   onPickBackend,
@@ -50,7 +60,7 @@ export function NewCardDialogFooter({
           <button
             key={b.id}
             type="button"
-            title={b.id === "codex" ? "Requires Codex CLI and login. Weft's browser, board, secrets and webhook tools are unavailable." : undefined}
+            title={CLI_HINTS[b.id]}
             onClick={() => onPickBackend(b.id)}
             aria-pressed={backend === b.id}
             className={`whitespace-nowrap rounded px-2.5 py-1 text-[12px] ${backend === b.id ? "bg-sunken font-medium text-ink" : "text-muted hover:text-ink"}`}

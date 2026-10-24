@@ -14,13 +14,16 @@ function tone(left: number) {
   return left >= 60 ? "text-ok" : left >= 30 ? "text-warn" : "text-danger";
 }
 
+// Each CLI's own colour, so a card's model reads as the CLI it runs on. Claude has none of
+// its own here and takes the warning tone; puku and the two plain CLIs (Codex, Goose) take
+// the accent.
 function modelTone(backend?: Backend) {
   if (backend === "puku") return "text-puku";
-  if (backend === "codex") return "text-accent";
+  if (backend === "codex" || backend === "goose") return "text-accent";
   return "text-warn";
 }
 
-const CLI_NAMES: Record<Backend, string> = { claude: "claude", puku: "puku", codex: "codex" };
+const CLI_NAMES: Record<Backend, string> = { claude: "claude", puku: "puku", codex: "codex", goose: "goose" };
 
 // Which CLI and model the thread runs on: the model its session started with (runsOn), else the one the
 // last turn spent most on. The tip says when those differ (a subagent or side call cost more).

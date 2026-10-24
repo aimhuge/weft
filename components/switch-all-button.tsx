@@ -91,7 +91,7 @@ export function useSwitchAll({ byColumn, setToast, notify }: { byColumn: Map<Col
     async (column: Column) => {
       const list = byColumn.get(column) ?? [];
       if (!list.length) return;
-      const counts: Record<Backend, number> = { claude: 0, puku: 0, codex: 0 };
+      const counts: Record<Backend, number> = { claude: 0, puku: 0, codex: 0, goose: 0 };
       list.forEach((c) => {
         counts[c.backend]++;
       });

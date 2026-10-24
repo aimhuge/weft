@@ -23,6 +23,9 @@ export interface Card {
   // (app/api/cards/[id] moveCard). Cleared by restoreDoneOverride once that turn ends.
   preDoneModel?: string;
   preDoneEffort?: Effort;
+  // The CLI before a Done move moved the card to the backup model's CLI (an exhausted model
+  // hands the wrap-up to the backup). Cleared by restoreDoneOverride once that turn ends.
+  preDoneBackend?: Backend;
   column: Column;
   // When the card last moved to another column; the command palette opens on the latest moves.
   columnAt?: number;
@@ -73,6 +76,9 @@ export interface Card {
   // Top-level symbols (or whole files) the thread edited and hasn't committed, most recent first, capped:
   // "/abs/Board.tsx#CommandPalette", "/abs/a.css#*" (lib/claims.ts). Dropped at Done, archive and commit.
   claims?: string[];
+  // Weft crashed, failed to build or reloaded right after this thread did something that does that (lib/crash-blame.ts):
+  // the card has a red ring and a "Broke Weft" chip until you dismiss it, and the thread hears why with its next message.
+  broke?: CardBreak;
   // Set on cards picked up from existing Claude Code sessions (see lib/import.ts).
   source?: "claude-code";
   // When the session last changed (its last message), and when its transcript was last read into the thread.
@@ -103,6 +109,10 @@ export interface Card {
   // ("posthog@posthog") turned on or off here only. Read when its CLI starts.
   skillsOn?: string[];
   skillsOff?: string[];
+  // Asked for a git worktree of its own (docs/architecture/worktrees.md), and the one it has once Weft gave it one.
+  // cwd stays the project; code runs in workDir(card) (lib/work-dir.ts).
+  isolated?: boolean;
+  worktree?: CardWorktree;
   // Short labels (lib/tags.ts), the same rules as GitHub labels so they sync with an issue's. Weft's
   // retitle picks them after a turn (tagsBy "auto") until you edit them (tagsBy "user").
   tags?: string[];
@@ -123,6 +133,17 @@ export interface Card {
   updatedAt: number;
 }
 
+// An isolated card's worktree (lib/worktrees.ts): ~/.weft/worktrees/<repo>/<id> on branch weft/<slug>, made from the
+// main tree's HEAD at `base`, landing back on `repo` (the main tree's root). `sub` is the card's folder inside the repo
+// when it isn't the root ("packages/web"), so the thread starts in the same place in its worktree.
+export interface CardWorktree {
+  path: string;
+  branch: string;
+  base: string;
+  repo: string;
+  sub?: string;
+}
+
 export interface CardShareMemo {
   id: string | null;
   mode: CardShareMode;
@@ -137,4 +158,18 @@ export interface CardIssue {
   state: "open" | "closed";
   // The issue's updated_at when Weft last read it, to tell its edits from ours.
   updatedAt: string;
+}
+// What a card did to Weft (Card.broke): the server stopped, a file stopped building, or the board reloaded.
+export interface CardBreak {
+  kind: "server" | "build" | "reload";
+  // When it happened, the latest time when it happened again.
+  at: number;
+  // What the thread did and what it hit: "its `pnpm dev` stopped Weft (whatever listens on port 1024, …)".
+  why: string;
+  // The file it edited, for a build error or reload.
+  file?: string;
+  // How many times, when it did it more than once before you dismissed it.
+  times?: number;
+  // Set once the thread has been told, with its next message.
+  told?: boolean;
 }

@@ -1,7 +1,7 @@
 import { firstMessage } from "./automations";
 import { resolveFolder } from "./folders";
 import { asText, cleanTitle, titleFromPrompt } from "./format";
-import { effortFor } from "./new-thread";
+import { effortFor, BACKEND_IDS } from "./new-thread";
 import { fallbackFor } from "./model-fallback";
 import { sendMessage } from "./runner";
 import { scheduleMessage } from "./scheduler";
@@ -15,7 +15,10 @@ import { MODES, type Backend, type Card, type Effort, type PermissionMode } from
 // Making a card from a request body: POST /api/cards (the New thread dialog) and the cloud inbox (a card
 // started on the weft.zip board, lib/cloud-inbox.ts) both go through here, so a card reads the same either way.
 
-const BACKENDS: Backend[] = ["claude", "puku", "codex"];
+// Every CLI a card may run on. The list is shared (lib/new-thread.ts), so a CLI added there
+// is startable here too — a card that named a CLI this list didn't know started on Claude
+// instead, with nothing to say so.
+const BACKENDS: Backend[] = BACKEND_IDS;
 
 const MODEL_ID = /^[\w.\-\[\]]{1,60}$/;
 
@@ -58,6 +61,8 @@ export function createCardFromBody(body: Record<string, unknown>): Card {
     model: startModel,
     effort,
     ...(tags.length ? { tags, tagsBy: "user" as const } : {}),
+    // Its own worktree, taken from the pool before its first turn (lib/worktree-start.ts).
+    ...(body.isolated === true ? { isolated: true } : {}),
   });
   touchProject(cwd);
   return card;

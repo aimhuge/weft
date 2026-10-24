@@ -15,7 +15,7 @@ const OVERSIZE = {
   "components/Board.tsx": 402,
   "lib/runner.test.ts": 901,
   "app/api/routes.test.ts": 766,
-  "lib/login.test.ts": 576,
+  "lib/login.test.ts": 553,
   "lib/import.test.ts": 568,
   "components/Composer.tsx": 556,
   "lib/board-tools.test.ts": 536,

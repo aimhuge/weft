@@ -32,6 +32,13 @@ export interface SettingsView {
   // The first-message-failed banner reruns the card on this model; "" means the banner
   // shows "Pick a backup model" instead and opens Settings → Models on click.
   backupModel: string;
+  // The Goose provider a Goose thread runs on; "" means none picked yet (lib/goose-provider.ts).
+  // Only the provider's id: the key itself stays in Electron main's Keychain.
+  gooseProviderId: string;
+  // The model id a new Goose thread runs on; "" means the provider's own default.
+  gooseModelId: string;
+  // The endpoint for the providers that need one (custom, azure, litellm); "" means none.
+  gooseBaseUrl: string;
   projects: { path: string; lastUsedAt: number }[];
   // Project folders whose cards sync to the cloud (lib/cloud-sync.ts). Off by default; mirrors the
   // saved settings, the same shape /api/settings sends.

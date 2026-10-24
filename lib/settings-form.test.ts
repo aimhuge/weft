@@ -20,6 +20,9 @@ const BASE: SettingsView = {
   issueFolders: [],
   syncFolders: [],
   allowedFolders: [],
+  gooseProviderId: "",
+  gooseModelId: "",
+  gooseBaseUrl: "",
 };
 
 describe("initialSettingsForm", () => {

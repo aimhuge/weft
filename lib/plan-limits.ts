@@ -1,4 +1,5 @@
 import type { LimitSample } from "./limit-chart";
+import { BACKEND_IDS } from "./new-thread";
 import type { Backend, LimitWindow } from "./types";
 
 // The plan limits as the status strip shows them: the newest 5-hour and weekly reading, from the log
@@ -32,8 +33,9 @@ export interface PlanReading {
 
 export type PlanLimits = Partial<Record<Backend, PlanReading>>;
 
-// The order the strip lists plans in when no card is open.
-export const PLAN_ORDER: Backend[] = ["claude", "puku", "codex"];
+// The order the strip lists plans in when no card is open. Every CLI, so a CLI that reports
+// a plan gets a place in the strip (lib/new-thread.ts's list, so a new CLI comes with it).
+export const PLAN_ORDER: Backend[] = BACKEND_IDS;
 
 // The newest reading of each window of the account's one pool, attributed to the CLI that reported it.
 //

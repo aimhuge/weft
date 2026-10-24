@@ -9,11 +9,17 @@ const EFFORTS: Effort[] = ["low", "medium", "high", "xhigh", "max"];
 function settingsFile(backend: Backend) {
   if (backend === "puku") return PUKU_SETTINGS;
   if (backend === "codex") return path.join(process.env.CODEX_HOME || path.join(os.homedir(), ".codex"), "config.toml");
+  // Goose keeps its own config, and Weft reads none of it for an effort: Goose has no effort
+  // setting (EFFORT_BY_BACKEND.goose is empty). Falling through to Claude Code's settings.json
+  // would report Claude's effort level as the Goose thread's.
+  if (backend === "goose") return "";
   return path.join(process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), ".claude"), "settings.json");
 }
 
 // The effort a CLI runs at when the card picks none: its user settings, if set.
 export function defaultEffort(backend: Backend): Effort | undefined {
+  // A CLI with no effort setting has no default effort.
+  if (backend === "goose") return undefined;
   try {
     if (backend === "codex") {
       const content = fs.readFileSync(settingsFile(backend), "utf8");

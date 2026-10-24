@@ -57,7 +57,13 @@ export function openLoginInTerminal(backend: Backend, onDone?: () => void): Logi
     return snapshot(run);
   }
 
-  const command = backend === "codex" ? `${shellQuote(bin)} login --device-auth` : `${shellQuote(bin)} auth login`;
+  // Each CLI's own login command: Codex has device auth, Goose has an interactive `configure`
+  // wizard, and the rest have `auth login`.
+  const command = backend === "codex"
+    ? `${shellQuote(bin)} login --device-auth`
+    : backend === "goose"
+      ? `${shellQuote(bin)} configure`
+      : `${shellQuote(bin)} auth login`;
   const script = ["tell application \"Terminal\"", `do script ${appleScriptString(command)}`, "activate", "end tell"];
   append(run, `\nOpened Terminal to run: ${command}\n`);
   execFile(

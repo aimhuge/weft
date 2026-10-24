@@ -2,9 +2,12 @@ import { connection } from "next/server";
 import { fail, guard } from "@/lib/guard";
 import { isBusy, switchBackend } from "@/lib/runner";
 import { getCard } from "@/lib/store";
+import { BACKEND_IDS } from "@/lib/new-thread";
 import type { Backend } from "@/lib/types";
 
-const BACKENDS: Backend[] = ["claude", "puku", "codex"];
+// Every CLI a card may be switched to. Shared (lib/new-thread.ts), so a CLI added there can be
+// switched to here too — a switch to a CLI this list didn't know was refused.
+const BACKENDS: Backend[] = BACKEND_IDS;
 
 // Flip every in-flight card in a list to the other backend. Cards that are still running
 // (busy) are returned in `pending` so the column button can confirm with the user before

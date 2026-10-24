@@ -4,17 +4,23 @@ import { folderName, timeAgo } from "@/lib/format";
 import { modelLabel, runningOn } from "@/lib/new-thread";
 import { isBusy } from "@/lib/overlap";
 import { sendsWhen } from "@/lib/schedule";
-import { BACKEND_LABELS, type Card } from "@/lib/types";
+import { BACKEND_LABELS, type Backend, type Card } from "@/lib/types";
 import Icon from "./Icon";
+
+// Each CLI's own colour in the footer: puku has its own, the two plain CLIs (Codex, Goose)
+// take the accent, Claude has none here and takes its own.
+function cliColours(backend: Backend): { tone: string; dot: string } {
+  if (backend === "puku") return { tone: "text-puku", dot: "bg-puku" };
+  if (backend === "codex" || backend === "goose") return { tone: "text-accent", dot: "bg-accent" };
+  return { tone: "text-claude", dot: "bg-claude" };
+}
 
 // The card footer's left side: CLI dot, folder (or "whole board" for the copilot), overlap, age, turns,
 // scheduled sends, open elsewhere, and the card's issue and tags when it has no progress line.
 export default function CardFooterMeta({ card, now, alsoHere, marks }: { card: Card; now: number; alsoHere: Card[]; marks: React.ReactNode }) {
-  const puku = card.backend === "puku";
   const { model, effort } = runningOn(card);
   const cli = BACKEND_LABELS[card.backend];
-  const tone = puku ? "text-puku" : card.backend === "codex" ? "text-accent" : "text-claude";
-  const dot = puku ? "bg-puku" : card.backend === "codex" ? "bg-accent" : "bg-claude";
+  const { tone, dot } = cliColours(card.backend);
   const cliTip = `${cli}${model ? ` on ${model}${effort ? ` · ${effort} effort` : ""}` : ""}${card.source === "claude-code" ? " · picked up from Claude Code" : ""}`;
   return (
     <span className="flex min-w-0 items-center gap-1.5">

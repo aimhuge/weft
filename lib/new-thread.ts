@@ -46,12 +46,24 @@ export const BACKENDS: { id: Backend; label: string }[] = [
   { id: "claude", label: "Claude Code" },
   { id: "puku", label: "puku-cli" },
   { id: "codex", label: "Codex" },
+  { id: "goose", label: "Goose" },
 ];
+
+// Every CLI Weft can start a thread on, as plain ids. The one list of them: a route that
+// validates a backend, or a board tool that names one, checks against this — so a backend
+// added to BACKENDS above works everywhere at once, instead of being quietly dropped
+// (and the card starting on the default CLI) by a list that never heard of it.
+export const BACKEND_IDS: Backend[] = BACKENDS.map((b) => b.id);
 
 // Picker sentinel: Codex's own default model, so the runner omits `--model`.
 export const CODEX_DEFAULT_MODEL = "codex-default";
 
+// Picker sentinel: Goose's provider's own default model. Goose serves many providers, so
+// this is "whatever the configured provider picks" rather than one fixed model.
+export const GOOSE_DEFAULT_MODEL = "goose-default";
+
 // The Puku gateway serves these three and answers any other id as puku-ai-2.8.
+// Goose serves many providers, so its list is a starter set of OpenRouter-style ids.
 export const MODELS: Record<Backend, { id: string; label: string }[]> = {
   claude: [
     { id: "claude-fable-5-1", label: "Fable 5.1" },
@@ -65,13 +77,32 @@ export const MODELS: Record<Backend, { id: string; label: string }[]> = {
     { id: "puku-ai-2.7", label: "Puku AI 2.7" },
   ],
   codex: [{ id: CODEX_DEFAULT_MODEL, label: "Codex default" }],
+  goose: [
+    { id: GOOSE_DEFAULT_MODEL, label: "Goose default" },
+    { id: "anthropic/claude-sonnet-4.5", label: "Claude Sonnet 4.5 (OpenRouter)" },
+    { id: "anthropic/claude-opus-4.1", label: "Claude Opus 4.1 (OpenRouter)" },
+    { id: "openai/gpt-4.1", label: "GPT-4.1 (OpenRouter)" },
+    { id: "google/gemini-2.5-pro", label: "Gemini 2.5 Pro (OpenRouter)" },
+    { id: "qwen/qwen3-coder", label: "Qwen3 Coder (OpenRouter)" },
+  ],
 };
+
+// Every model id any CLI serves. The pickers offer them all — picking a model moves the
+// thread's CLI to the one that serves it — so the routes that accept a model accept them
+// all too. One set, built from MODELS: a CLI added here brings its models with it.
+export const ALL_MODEL_IDS: Set<string> = new Set(
+  (Object.keys(MODELS) as Backend[]).flatMap((b) => MODELS[b].map((m) => m.id)),
+);
 
 // The CLI that serves a model id, or undefined for an id neither serves.
 export function backendFor(model: string): Backend | undefined {
   if (model === CODEX_DEFAULT_MODEL) return undefined;
   return (Object.keys(MODELS) as Backend[]).find((b) => MODELS[b].some((m) => m.id === model));
 }
+
+// The CLI that owns a model id when no list names it: Claude Code, the CLI every id is
+// written for. An older Claude id ("claude-some-older") is still a Claude model.
+const DEFAULT_OWNER: Backend = "claude";
 
 // There is no default model: a model the user didn't pick is the CLI's own choice, and Weft leaves
 // the model off the CLI's command line so the CLI picks. "" is that choice everywhere.
@@ -89,13 +120,17 @@ export function modelFor(backend: Backend): string {
 // default). A Claude id on puku isn't refused — the gateway quietly answers it as puku-ai-2.8, so
 // the chip would lie — so a model the CLI doesn't serve drops to undefined and the CLI decides.
 // undefined stays undefined (the CLI's own default).
+//
+// Every model id belongs to exactly one CLI: the one whose list names it, or Claude Code for
+// an id no list names (an older Claude id is still Claude's). A "[1m]"-style suffix is a cache
+// hint on the same model, so it is stripped before the lookup and kept on the way out.
 export function modelOn(backend: Backend, model: string | undefined): string | undefined {
   if (!model) return undefined;
   if (model === CODEX_DEFAULT_MODEL) return undefined;
-  if (backend === "codex") return undefined;
+  // Goose's own sentinel too: "goose-default" means the provider picks, so the card pins no model id.
+  if (model === GOOSE_DEFAULT_MODEL) return undefined;
   const bare = model.replace(/\[[^\]]*\]$/, "");
-  const onPuku = MODELS.puku.some((m) => m.id === bare);
-  return (backend === "puku") === onPuku ? model : undefined;
+  return (backendFor(bare) ?? DEFAULT_OWNER) === backend ? model : undefined;
 }
 
 // The CLI that serves a model, and the model as it should be sent to that CLI. Any model from any
@@ -120,11 +155,13 @@ export const EFFORTS: { id: Effort | ""; label: string }[] = [
 ];
 
 // What each backend accepts. Puku-cli only takes low/medium/high/max — xhigh crashes it
-// (puku-cli exits 1 with "option '--effort' argument 'xhigh' is invalid").
+// (puku-cli exits 1 with "option '--effort' argument 'xhigh' is invalid"). Goose has no
+// effort flag at all, so it accepts none: effortFor drops every effort for it.
 const EFFORT_BY_BACKEND: Record<Backend, Effort[]> = {
   claude: ["low", "medium", "high", "xhigh", "max"],
   puku: ["low", "medium", "high", "max"],
   codex: ["low", "medium", "high", "xhigh", "max"],
+  goose: [],
 };
 
 // The closest effort a backend accepts. Drops xhigh to high for puku. "" / undefined pass through

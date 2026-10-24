@@ -9,6 +9,7 @@ import type { VercelBridge } from "./vercel-view";
 import type { SupabaseBridge } from "./supabase-view";
 import type { BlastcpBridge } from "./blastcp-view";
 import type { CloudflareBridge } from "./cloudflare-view";
+import type { GooseBridge } from "./goose-provider";
 
 export interface BrowserState {
   visible: boolean;
@@ -116,6 +117,9 @@ export interface ShellBridge {
   blastcp?: BlastcpBridge;
   // Cloudflare in Electron main (lib/cloudflare-view.ts). Missing in older shells.
   cloudflare?: CloudflareBridge;
+  // Goose's provider keys in Electron main (lib/goose-provider.ts). Missing in older shells. The board sends a key
+  // once and never reads one back.
+  goose?: GooseBridge;
   onMenu(callback: (action: MenuAction, payload?: string) => void): () => void;
   // The board's first cards are on screen; resolves to this launch's timing. Missing in older shells.
   startupReady?(): Promise<StartupResult>;

@@ -18,8 +18,10 @@ export const COPILOT_ID = "copilot";
 
 export type Column = (typeof COLUMNS)[number]["id"];
 
-export type Backend = "claude" | "puku" | "codex";
-export const BACKEND_LABELS: Record<Backend, string> = { claude: "Claude Code", puku: "puku-cli", codex: "Codex" };
+export type Backend = "claude" | "puku" | "codex" | "goose";
+export const BACKEND_LABELS: Record<Backend, string> = { claude: "Claude Code", puku: "puku-cli", codex: "Codex", goose: "Goose" };
+// The short name, for a label that sits beside something else ("Sonnet 5.5 (Claude)").
+export const BACKEND_SHORT: Record<Backend, string> = { claude: "Claude", puku: "Puku", codex: "Codex", goose: "Goose" };
 // bypassPermissions is "YOLO": every tool runs without asking.
 export type PermissionMode = "default" | "acceptEdits" | "auto" | "bypassPermissions";
 export const MODES: PermissionMode[] = ["default", "acceptEdits", "auto", "bypassPermissions"];
@@ -239,7 +241,7 @@ export interface PromptReason {
 // Card and CardIssue live in lib/types-card-detail.ts to keep this file under the line limit.
 // Re-exported here so `./types` and direct importers keep working.
 export type { Card } from "./types-card-detail";
-export type { CardIssue } from "./types-card-detail";
+export type { CardBreak, CardIssue, CardWorktree } from "./types-card-detail";
 
 export type BoardEvent =
   | { type: "card"; card: Card }

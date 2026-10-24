@@ -1,6 +1,6 @@
 import { connection } from "next/server";
 import { fail, guard } from "@/lib/guard";
-import { MODELS, backendFor } from "@/lib/new-thread";
+import { ALL_MODEL_IDS, backendFor } from "@/lib/new-thread";
 import { rerunOnModel } from "@/lib/runner";
 import { getCard } from "@/lib/store";
 
@@ -26,7 +26,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     // backendFor returns undefined for codex's default ("codex-default") because MODELS.codex
     // only lists that one model and the picker recognizes it as a token, not as a CLI lookup.
     // Any id in MODELS, regardless of CLI, is a valid backup.
-    const inAnyCli = (["claude", "puku", "codex"] as const).some((b) => MODELS[b].some((m) => m.id === model));
+    const inAnyCli = ALL_MODEL_IDS.has(model);
     if (!backend && !inAnyCli) {
       throw new Error(`${model} isn't a model any installed CLI serves.`);
     }

@@ -11,7 +11,7 @@ import { clean, errMessage, isNotLoggedInError, isRateLimitError, lastUrl, needs
 // CLI's output to the board's login pop-up, and falls back to a Terminal window when the CLI
 // needs a real TTY (the macOS Terminal path lives in ./login-terminal).
 
-const COMMANDS: Record<Backend, string> = { claude: "claude", puku: "puku-cli", codex: "codex" };
+const COMMANDS: Record<Backend, string> = { claude: "claude", puku: "puku-cli", codex: "codex", goose: "goose" };
 const OUTPUT_BYTES = 8 * 1024;
 // Raw output kept for re-cleaning, so escape codes split across chunks still strip cleanly.
 const RAW_BYTES = 32 * 1024;
@@ -230,8 +230,9 @@ export function startLogin(backend: Backend, onDone?: () => void): LoginView {
     return addCallback(existing, onDone);
   }
 
-  // Codex login requires an interactive terminal for browser/device authorization.
-  if (backend === "codex") return openLoginInTerminal(backend, onDone);
+  // Codex login requires an interactive terminal for browser/device authorization, and Goose's
+  // `configure` is an interactive wizard: both need a real TTY, so they go to a Terminal window.
+  if (backend === "codex" || backend === "goose") return openLoginInTerminal(backend, onDone);
 
   const bin = binary(backend);
   const run = newRun(backend, "running", onDone);

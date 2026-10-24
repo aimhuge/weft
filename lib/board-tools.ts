@@ -173,7 +173,7 @@ export function boardMcpServer(actions: BoardActions) {
           prompt: z.string(),
           folder: z.string().describe("Project folder, absolute or ~/..."),
           title: z.string().optional(),
-          cli: z.enum(["claude", "puku", "codex"]).optional(),
+          cli: z.enum(["claude", "puku", "codex", "goose"]).optional(),
           permission_mode: z.enum(["default", "acceptEdits", "auto", "bypassPermissions"]).optional(),
           tags: TAGS,
         },
