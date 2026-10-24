@@ -13,6 +13,7 @@ export const SCENES = [
   { id: "neon-city", label: "Neon City", image: "backdrop-neon-city.jpg", base: "dark" },
   { id: "snow-pass", label: "Snow Pass", image: "backdrop-snow-pass.jpg", base: "dark" },
   { id: "cockpit", label: "Cockpit", image: "backdrop-cockpit.jpg", base: "dark" },
+  { id: "night-cockpit", label: "Night Cockpit", image: "backdrop-night-cockpit.jpg", base: "dark" },
   { id: "salt-flats", label: "Salt Flats", image: "backdrop-salt-flats.jpg", base: "light" },
 ] as const satisfies readonly { id: string; label: string; image: string; base: Base }[];
 

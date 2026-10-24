@@ -10,6 +10,7 @@ const BASES = {
   "neon-city": "dark",
   "snow-pass": "dark",
   cockpit: "dark",
+  "night-cockpit": "dark",
   "salt-flats": "light",
 };
 

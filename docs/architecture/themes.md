@@ -11,6 +11,7 @@ one of Weft's own pictures behind the board, with a palette drawn from it and cl
 | Neon City | `backdrop-neon-city.jpg` | dark |
 | Snow Pass | `backdrop-snow-pass.jpg` | dark |
 | Cockpit | `backdrop-cockpit.jpg` | dark |
+| Night Cockpit | `backdrop-night-cockpit.jpg` | dark |
 | Salt Flats | `backdrop-salt-flats.jpg` | light |
 
 ## Key files
@@ -54,7 +55,9 @@ and sets `nativeTheme.themeSource`.
 Cockpit's picture was rendered with BlastCP (`generate_image`): a FLUX.2 klein 9B spaceship windshield on a starfield with
 the slate dashboard in the bottom fifth, then an edit (GPT Image 2.5 Sunburst, the render and `electron/assets/emblem.png`
 as references) that lights the splash screen's steel weave emblem on the centre console screen. Its palette is the frame's
-slate greys with the console screens' cyan as the accent. A scene picked by position in `SCENES` shifts when one is added:
+slate greys with the console screens' cyan as the accent.
+Night Cockpit is an edit of that picture (GPT Image 2.5 Sunburst, the Cockpit as the only reference): the same frame and console, parked
+on a desert planet on a moonless night under a dense starfield and a spiral galaxy; its accent is the galaxy arms' violet. A scene picked by position in `SCENES` shifts when one is added:
 look scenes up by id (`FIRST_SCENES`, `lib/settings-nav.ts`).
 
 `electron/theme-source.test.ts` fails when `BASES` drifts from `SCENES`; `lib/theme.test.ts` checks each scene has a unique id and a jpg.
