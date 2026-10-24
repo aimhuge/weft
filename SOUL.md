@@ -143,7 +143,7 @@ If you are an agent editing this repo, you are working on me. Read README.md for
   Pure and read as data, so the server (`lib/start-gate.ts`) and the browser (`/api/limits/plans`) agree. A new thread on a spent model
   doesn't get its first turn now: the New thread dialog's button reads "Start at 2:30am" and `startCard` (`lib/new-card.ts`) schedules
   the prompt for the reset instead of starting a thread that dies in Needs you. The reply box reads the same gate, so a model's own cap
-  reaches it too (docs/architecture/composer.md).
+  reaches it too (docs/architecture/limits.md).
 - `components/SettingsDialog.tsx` + `lib/settings-nav.ts`: Settings, full window over a scene, pages down the left (General, Laptop mode, Models,
   Threads, Security, Automations, Shortcuts, Accounts, Teams, Sync); Laptop mode is `components/LaptopModeCard.tsx` + `LaptopModeRules.tsx` over `electron/keep-working*.cjs`; Models holds every model pick, new threads' through `components/NewThreadDefaults.tsx`;
   the four rows (NewThreadDefaults, SubagentPicker, CopilotPicker, DonePicker) share `components/Pickers.tsx`
@@ -378,6 +378,7 @@ If you are an agent editing this repo, you are working on me. Read README.md for
   - `threads-and-sessions.md` — the runner: one Agent SDK `query()` per Claude Code/puku thread, the Codex runner, sessions, queues, rewind, warm spares.
   - `thread-guards.md` — what `guardedCli()` strips and hooks: secret/restart/git/check/route-import/claim guards, per-CLI limits.
   - `composer.md` — the reply box's modes: `lib/reply-mode.ts`'s table of chip, primary and ▾ menu per state, and what's still planned (one dock for every ask, one server-side queue).
+  - `limits.md` — the three limit stores (the model's own cap, the CLI's weekly and 5-hour windows), the pure gate in `lib/limit-reset.ts`, the server-decides rule, and the new-thread path that waits for a spent limit instead of failing.
   - `questions.md` — a thread's AskUserQuestion end to end: the panel above the reply box, keys, previews in the pane, answers and `annotations` back to the CLI.
   - `skills.md` — skill sets: the library (Weft's, project, yours, plugins), a project's default set seeded from usage, a card's own, and how each runner gets it at session start.
   - `subagents.md` — how threads delegate to subagents and how Settings → Models picks their model.
@@ -503,4 +504,7 @@ in Electron main, revealed or copied only after the user's Touch ID (docs/archit
   told whose they are (`lib/failure-owners.ts`). Opt-in worktrees are the planned fix.
 - The copilot learns what finished or needs you only with your next message (`lib/copilot-digest.ts`);
   it never runs a turn on its own.
+- A thread that hits a limit waits for the reset (docs/architecture/limits.md), but only on the desktop: the
+  weft.zip board can't schedule at all (the cloud command kinds are `new_card`, `reply`, `answer` and `stop`,
+  with no `schedule`), and the copilot can't either (`lib/scheduler.ts` refuses it).
 - puku-cli sessions aren't imported; a full puku thread hasn't been verified end to end.

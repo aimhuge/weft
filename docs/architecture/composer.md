@@ -33,10 +33,11 @@ Enter runs the primary, except it won't start a new card from an empty box (that
 
 - **Cut off** is `turnCutOff(card)`: `card.error`, a last line starting "Stopped" (a stop, or the app closing),
   `rateLimitHit` or `interrupted`. ⌘. still sends "continue" whenever the thread is idle.
-- **Limit used up** is `threadReset(card.stats.fiveHour, resets.fiveHour, backend, model, samples, limits, now)`
-  (`lib/limit-reset.ts`): the thread's own last reading of its CLI's window (at 100%, with its own reset when it's
-  still ahead, else the plan's next one), and the shared stores on top — the model's own cap and the CLI's weekly
-  window, which the thread's snapshot can't see. Only where Send later is offered.
+- **Limit used up** is the shared gate: `useThreadGate(card.stats.fiveHour, resets.fiveHour, backend, model)`
+  (`lib/use-start-gate.ts`), which answers with `threadReset(...)` (`lib/limit-reset.ts`): the thread's own last
+  reading of its CLI's window (at 100%, with its own reset when it's still ahead, else the plan's next one), and
+  the shared stores on top — the model's own cap and the CLI's weekly window, which the thread's snapshot can't
+  see. Only where Send later is offered. The gate and the stores are in `docs/architecture/limits.md`.
 - **Cold** is the card's `stats.cache` with no minutes left (`cacheMinutesLeft`) and at least `COLD_MIN_TOKENS` (30k; a short thread re-sends cheaply, so it gets a plain Send), only while idle and only where the
   transport offers `fresh` (the desktop board).
 - **Send fresh** (`lib/splice.ts` `sendFresh`, `POST /api/cards/[id]/fresh`): the card and its thread stay, but its CLI
@@ -66,21 +67,16 @@ that has hit its limit fails on its first turn and dies in Needs you. Weft knows
 New thread dialog asks first — its Start button reads **Start at 2:30am** and the card waits for the window
 (`lib/start-gate.ts` on the server, `lib/use-start-gate.ts` for the label).
 
-`lib/limit-reset.ts` is the one place that answers "when does this reset?", for both paths:
-
-- `resetFor(backend, model, samples, limits, now)` — the model's own cap first (the tighter limit, and the one the
-  user picked), then the CLI's weekly window, then its 5-hour window.
-- `threadReset(window, planReset, ...)` — the same, with the running thread's own snapshot in front: it saw the
-  window fill up in this very conversation, so its reading is the freshest number there is.
-- `startGate(backend, model, now)` — the server's answer, reading the plan log (`~/.weft/limits.jsonl`) and the
-  model store (`~/.weft/model-limits.json`) off disk.
-
-The stores are read as data, so the same pure functions answer on the server and in the browser
-(`/api/limits/plans` ships both). The client only labels the button; the server decides.
+The two paths share one gate, and that gate is `lib/limit-reset.ts`: the model's own cap first (the tighter limit,
+and the one the user picked), then the CLI's weekly window, then its 5-hour window. The stores are read as data,
+so the same pure functions answer on the server and in the browser (`/api/limits/plans` ships both). The client
+only labels the button; the server decides.
 
 A card whose model or CLI is at its limit doesn't get its first turn now: `startCard` (`lib/new-card.ts`) schedules
 the prompt for the reset instead, and the scheduler sends it the moment the window opens. A card that never ran is
 fine to schedule — the runner opens a session for it then (`lib/runner.ts`).
+
+The three stores, the pure-module pattern and the whole gate are in `docs/architecture/limits.md`.
 
 ## Not built yet
 
