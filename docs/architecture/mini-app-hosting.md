@@ -107,6 +107,13 @@ folder lives at `~/.weft/apps/<slug>/` and is walked by `lib/app-folder.ts`, whi
 sources, hidden entries, `weft-app.json` and `node_modules`, and caps the app at 2,000 files, 25 MB per
 file and 50 MB total.
 
+A single-file page anywhere else (an agent's `~/.weft/show/<topic>/index.html`) that links to files beside
+it (`<img src="us.webp">`, a stylesheet, `srcset`, CSS `url()`) is shared as a folder too, of just the page and
+the files it names: `lib/page-assets.ts` scans the HTML for relative references inside the page's folder
+(no `..`, no symlinks out, names the folder route serves, the blob-path rules, the same size caps). A page
+that names none stays a single blob and keeps its `#hash`. Anything else under `/api/a/<id>/` is a plain
+404 (`app/api/a/[id]/[...rest]`), not the HTML not-found page.
+
 Files are served from `app/api/a/[id]/f/[...path]/route.ts`, which is gated by `appShareAccess` and served
 through `lib/share-page-serve.ts` (the same sandboxed page serve as a card's link) with a CSP `sandbox`
 without `allow-same-origin`, so the app runs in an opaque origin and can't read weft.zip's cookies.
@@ -223,6 +230,41 @@ spends. Growth lives at `weft.zip/aimhuge/apps/growth`, open to the AimHuge work
 The fetch route rate-limits per app (`lib/app-fetch-limit.ts`), caps body size and time, and logs each
 call (host, path, status; never the value). Super-admins can switch an app's secrets off.
 
+**Views are unlimited on every plan, and so is the number of links** (decided 2026-10-24). What a plan
+caps is the bytes a workspace's open links serve together: Free 25 MB, Pro, Open Source and Education
+1 GB, Team 5 GB (`APP_SHARE_BYTES` in `lib/billing/plans.ts`). A private link doesn't count, so making one
+private frees its room; a site link stores nothing. The database is the gate:
+`supabase/migrations/20261024124411_app_share_quota.sql` adds `cloud_app_shares.bytes`, and a trigger
+weighs every insert or update from the blobs its `page` and `files` name in `storage.objects` (never a
+size the client sends), reads the workspace's plan the way `workspacePlan` does (`private.org_plan`) and
+raises `app_share_quota: <total> of <cap> bytes on the <plan> plan` past the cap. The Mac
+(`lib/app-share-quota.ts`) asks `app_share_quota(org, except_share)` first, so Share refuses with a 402
+and the dialog's wording before anything uploads, turns the trigger's refusal into the same wording, and
+leaves a link on its last version (with the reason in the dialog) when edits made on open wouldn't fit.
+The Share dialog shows the room in use (`components/ShareAppQuota.tsx`), and the billing page's plan
+cards say each plan's room (`appShareLabel`). A workspace that drops to a smaller plan keeps serving what
+it has; the next write that changes an open link's page, workspace or mode is checked. `lib/app-share-quota.test.ts`
+keeps the SQL's numbers in step with `APP_SHARE_BYTES`.
+
+**Page views are cached, and capped for bots.** The viewer frames a versioned URL
+(`lib/app-share-frame.ts`): `/api/a/<id>/page/<sha>` for a single page, `/api/a/<id>/v/<ver>/<entry>` for a
+folder, where `<ver>` is 32 hex of sha256 over the sorted files map and every sibling resolves under the
+same `/v/<ver>/` by relative URL. `lib/app-share-serve.ts` serves all four page routes (the two versioned
+ones and the old `/page` and `/f/`): it refuses a sha or version the row no longer names, so a cache entry
+can only be what the row named, and for a **public** link on a versioned URL it answers
+`Cache-Control: public, max-age=31536000, immutable` with `Vercel-CDN-Cache-Control: max-age=3600`
+(`APP_CDN_SECONDS`). Vercel's CDN then answers the crowd: one function call and one storage download per
+file per CDN region per hour, however many views. The CDN key is the whole URL with its host, and the only
+per-request part of the body is the bridge's parent origin, which is that host, so a cached page can't
+carry one origin's bridge to another. Private, email and password links, and the unversioned URLs, stay
+`private, max-age=300` and run the gate every time. A link switched from public to private stops being
+linked at once (the viewer page runs the gate) and a saved frame URL stops answering within the hour,
+when the CDN's copy ends; purging by tag from the deployed side would close that window, and is open.
+The uncached path is capped by `lib/app-page-limit.ts`: 1,200 requests a minute per address (hashed with
+`WEFT_MINIAPP_KEY`) and 6,000 per share, in fixed one-minute windows held in memory per server instance,
+not a database row per view (which would cost more than the view), and swept past 20,000 keys. A real
+crowd never meets it: behind the CDN only misses, and private links, reach a function.
+
 Every one of these routes answers through `lib/app-share-reply.ts`: `NO_STORE` (they're never cached),
 `reject(status, error)` for a refusal and `rateLimited(retryAfter)` for a 429 with `Retry-After`. A page
 reads the status out of the body, so the same shape across read, fetch, env, secret and the push route
@@ -235,7 +277,9 @@ Weft doesn't do. When an app needs that, it moves to the Workers shape below; th
 
 ### Cost
 
-Nothing new: files sit in `weft-blobs` on Supabase and the fetch route runs on Vercel, both already paid.
+Nothing new: files sit in `weft-blobs` on Supabase and the fetch route runs on Vercel, both already paid. A
+public link's page views are served by Vercel's CDN (above), so a viral link costs CDN bandwidth, not a
+function call and a storage download per file per view; the plan's byte cap bounds what can be shared.
 
 ### Where data app reads still run
 

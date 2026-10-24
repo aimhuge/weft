@@ -6,6 +6,7 @@
 // (lib/app-folder.ts) the server serves by path. A page only this Mac can reach can't be shared, and the dialog
 // says why.
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { hashSharePassword } from "@aimhuge/share/server";
@@ -18,6 +19,7 @@ import { refreshAppPreview } from "./app-preview-capture";
 import { APP_SLUG_RE, type AppOwner, type AppShareState, type AppShareUpdate } from "./app-share-types";
 import { isAppFolderUrl, listAppFolderFiles, reducedManifest, secretHit, type AppManifestUpload, type AppFolderFile } from "./app-folder";
 import { listApps } from "./mini-app-store";
+import { pageWithAssets } from "./page-assets";
 import type { MiniApp } from "./mini-apps";
 import { isCardShareMode, newShareId } from "./share-types";
 import { currentPage, pageForWrite, readShare, sameFiles, sameManifest, stateOf, type Ready } from "./app-share-row";
@@ -65,7 +67,8 @@ function filePage(url: string, home?: string): AppPage {
     }
   }
   const page = resolvePage(url, home);
-  if (page) return { kind: "blob", ...page };
+  // A page that links to files beside it (<img src="us.webp">) goes up with them, or they'd 404 on weft.zip.
+  if (page) return pageWithAssets(page.local, home ?? os.homedir()) ?? { kind: "blob", ...page };
   return { kind: "none", reason: "This app's file is gone, outside your home folder, or one Weft never uploads (a secret, the vault)." };
 }
 
