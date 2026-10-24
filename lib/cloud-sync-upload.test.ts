@@ -23,23 +23,41 @@ const blobs: BlobStore = {
   rewriteItem: (item) => Promise.resolve(item),
 };
 
-type Upsert = (rows: Record<string, unknown>[]) => { error: { message: string; code?: string } | null };
+type Upsert = (rows: Record<string, unknown>[], body: string) => { error: { message: string; code?: string } | null };
 
-// A Supabase client that records every upsert per table and answers through a script per table.
+// A Supabase client that records every upsert per table and answers through a script per table. Like
+// postgrest-js, the builder sends through its own `fetch` field, so the script sees the body on the wire.
 function fakeClient(script: Partial<Record<string, Upsert>> = {}) {
   const sent: Record<string, Record<string, unknown>[][]> = {};
+  const bodies: Record<string, string[]> = {};
   const client = {
     from: (table: string) => ({
       upsert: (rows: Record<string, unknown>[]) => {
         (sent[table] ??= []).push(rows);
-        return Promise.resolve(script[table]?.(rows) ?? { error: null });
+        const builder = {
+          fetch: (_url: string, init: { body: string }) => Promise.resolve(init.body),
+          then(ok: (v: unknown) => unknown, bad: (e: unknown) => unknown) {
+            return builder
+              .fetch("/rest/v1/" + table, { body: JSON.stringify(rows) })
+              .then((body) => ((bodies[table] ??= []).push(body), script[table]?.(rows, body) ?? { error: null }))
+              .then(ok, bad);
+          },
+        };
+        return builder;
       },
       update: () => ({ eq: () => ({ eq: () => Promise.resolve({ error: null }) }) }),
       delete: () => ({ eq: () => ({ eq: () => ({ gte: () => Promise.resolve({ error: null }) }) }) }),
     }),
   };
-  return { client: client as never, sent };
+  return { client: client as never, sent, bodies };
 }
+
+// Cloudflare's block page, as postgrest-js hands it back: the HTML body in `message`.
+const WAF = {
+  error: {
+    message: '<!DOCTYPE html><html><head><title>Attention Required! | Cloudflare</title></head><body><h1>Sorry, you have been blocked</h1>Cloudflare Ray ID: <strong class="font-semibold">a4f0d5779d1bd32a</strong></body></html>',
+  },
+};
 
 let dir: string;
 
@@ -117,10 +135,40 @@ describe("uploadPending", () => {
       rows.some((r) => (r.item as { text?: string }).text === "poison") ? { error: { message: "unsupported Unicode escape sequence", code: "22P05" } } : { error: null };
     const { client, sent } = fakeClient({ cloud_thread_items: reject });
     const { skipped, shipped, left } = await run(itemEntries("c1", 3), client);
-    expect(skipped).toEqual({ count: 1, message: "unsupported Unicode escape sequence" });
+    expect(skipped).toEqual({ count: 1, message: "unsupported Unicode escape sequence (card c1, item 1)" });
     expect(shipped).toEqual([1, 1]);
     expect(sent.cloud_thread_items).toHaveLength(4);
     expect(left).toEqual([]);
+  });
+
+  it("sends a chunk Cloudflare's WAF blocks again with its strings escaped, so the same rows land", async () => {
+    addCard("c1", [{ text: "ok" }, { text: "<script>alert(1)</script> SELECT * FROM users" }, { text: "fine" }] as Partial<ThreadItem>[]);
+    const { client, sent, bodies } = fakeClient({ cloud_thread_items: (_rows, body) => (body.includes("<script>") ? WAF : { error: null }) });
+    const { skipped, shipped, left } = await run(itemEntries("c1", 3), client);
+    expect(skipped).toBeNull();
+    expect(shipped).toEqual([3]);
+    expect(sent.cloud_thread_items).toHaveLength(2);
+    expect(bodies.cloud_thread_items![1]).not.toMatch(/[<> *]/);
+    expect(JSON.parse(bodies.cloud_thread_items![1]!)).toEqual(JSON.parse(bodies.cloud_thread_items![0]!));
+    expect(left).toEqual([]);
+  });
+
+  it("skips the one item the WAF blocks even escaped, names it readably, and ships the rest", async () => {
+    addCard("c1", [{ text: "ok" }, { text: "poison" }, { text: "fine" }] as Partial<ThreadItem>[]);
+    const { client } = fakeClient({ cloud_thread_items: (_rows, body) => (body.includes("poison") ? WAF : { error: null }) });
+    const { skipped, shipped, left } = await run(itemEntries("c1", 3), client);
+    expect(skipped).toEqual({ count: 1, message: "Cloudflare's firewall blocked an upload to cloud_thread_items (Ray ID a4f0d5779d1bd32a) (card c1, item 1)" });
+    expect(shipped).toEqual([1, 1]);
+    expect(left).toEqual([]);
+  });
+
+  it("sends cards one at a time when the WAF blocks a chunk even escaped, and fails readably on the one it matches", async () => {
+    addCard("c1", [{}]);
+    addCard("c2", [{}]);
+    cards.get("c2")!.title = "poison";
+    const { client, sent } = fakeClient({ cloud_cards: (_rows, body) => (body.includes("poison") ? WAF : { error: null }) });
+    await expect(run([...itemEntries("c1", 1), ...itemEntries("c2", 1)], client)).rejects.toThrow(/^Cloudflare's firewall blocked an upload to cloud_cards \(Ray ID a4f0d5779d1bd32a\)$/);
+    expect(sent.cloud_cards!.map((rows) => rows.map((r) => r.card_id))).toEqual([["c1", "c2"], ["c1", "c2"], ["c1"], ["c2"], ["c2"]]);
   });
 
   it("does not skip rows for an error that isn't about the data, such as row-level security or a dead connection", async () => {

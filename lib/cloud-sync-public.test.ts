@@ -238,7 +238,7 @@ describe("cloudSyncStatus / syncNow / queueFolder", () => {
     mod.syncNow();
     await vi.advanceTimersByTimeAsync(1);
     for (let i = 0; i < 20; i++) await vi.advanceTimersByTimeAsync(0);
-    expect(mod.cloudSyncStatus().lastError).toBe("Skipped 2 items the server refused: unsupported Unicode escape sequence");
+    expect(mod.cloudSyncStatus().lastError).toBe("Skipped 2 items the server refused: unsupported Unicode escape sequence (card a, item 1)");
     expect(mod.cloudSyncStatus().waiting).toBe(0);
     expect(mod.cloudSyncStatus().lastSyncAt).not.toBeNull();
   });

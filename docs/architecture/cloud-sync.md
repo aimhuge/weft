@@ -21,7 +21,12 @@ is the contract between the parts:
   long tool outputs are also redacted on the way out (`lib/cloud-sync-redact.ts`, the share redactor; ids and paths
   kept), since every workspace member can read these rows. If the server still
   refuses a chunk with a data error (Postgres class 22), its rows go one at a time and the refused ones are skipped
-  and named in `lastError` ("Skipped N items the server refused"); a dropped connection or row-level security
+  and named in `lastError` ("Skipped N items the server refused"); Supabase sits behind Cloudflare, whose WAF can answer a
+  request with an HTML "Attention Required" page when a row's text looks like an attack (shell commands, SQL, `<script>`):
+  that stalled the outbox from 2026-10-18 to 10-24. `lib/cloud-sync-send.ts` `upsert()` spots the page, re-sends the
+  request with every string's non-alphanumerics written as `\uXXXX` (the same jsonb in Postgres, so readers change
+  nothing), and a row still blocked is a `WafError`: skipped like a data error, named with its Ray ID, card and item;
+  other HTML errors are named by their title, never dumped; a dropped connection or row-level security
   stays a backoff that keeps everything. A request holds one row per primary key (`lastPerKey`): Codex reuses tool ids like
   `item_1` from turn to turn, and Postgres refuses an upsert that names a row twice. Known gap: `cloud_tool_outputs` is keyed
   by (card, tool id), so two long outputs with one id still overwrite each other remotely; the later wins. Signed out or no workspace: entries wait. An
@@ -126,6 +131,8 @@ The web can't run a thread, so a card made there, or a reply typed there, is a r
   (so one runs once), refuses it unless the folder is in `syncFolders` and `org_id` is the workspace this Mac syncs to, then
   `createCardFromBody` (shared with `POST /api/cards`, `lib/new-card.ts`) and `startCard` run it with the Mac's own default permission mode.
   It reports `done` + `card_id` or `failed` + a short reason; a claimed command is never retried, so a card can't be made twice.
+  The same start also runs the timer that keeps shared mini apps' link previews current (`lib/app-preview-refresh.ts`;
+  mini-apps.md).
 - **Replies** (the desktop's `components/ReplyBox.tsx` over the cloud transport, `useWebBoard.sendReply`, `replyCommand`/`replyBody`): the open card's reply box
   shows only when `owner_user` is you (`canReply`), and sends a `reply` addressed to the card's `owner_device` and `folder`. The Mac
   runs the same checks as for a new card, then refuses a card that isn't on it or isn't in that folder (and the copilot), and calls

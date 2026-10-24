@@ -4,6 +4,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { replaceOutboxHead } from "./cloud-outbox";
 import { cardRows } from "./cloud-sync-cards";
+import { check, isRowError, upsert } from "./cloud-sync-send";
 import { redactCardRow, redactItemRow, redactOutputRow } from "./cloud-sync-redact";
 import { TOOL_RESULT_INLINE_MAX, type BlobStore, type CloudThreadItemRow, type CloudToolOutputRow, type OutboxEntry } from "./cloud-sync-types";
 import { getCard, getThread } from "./store";
@@ -11,6 +12,8 @@ import type { ThreadItem } from "./types";
 
 // Items per request. A first sync of a long-used folder is tens of thousands of entries.
 export const ITEM_CHUNK = 100;
+
+type ItemEntry = Extract<OutboxEntry, { op: "item" }>;
 
 export interface UploadCtx {
   blobs: BlobStore;
@@ -21,27 +24,6 @@ export interface UploadCtx {
 export interface Skipped {
   count: number;
   message: string;
-}
-
-// A Supabase error with its Postgres code, so a refused row can be told from a dropped connection.
-class UploadError extends Error {
-  constructor(
-    message: string,
-    readonly code: string,
-  ) {
-    super(message);
-  }
-}
-
-// Data exceptions (class 22: a NUL in text, a bad Unicode escape, a value out of range) will fail the same
-// way on every retry. Everything else (no network, a 5xx, row-level security) is worth backing off for.
-function isRowError(err: unknown): err is UploadError {
-  return err instanceof UploadError && err.code.startsWith("22");
-}
-
-// Supabase hands errors back as plain objects; throw them as Errors so the backoff's warning can read them.
-function check(result: { error: { message: string; code?: string } | null }) {
-  if (result.error) throw new UploadError(result.error.message, result.error.code ?? "");
 }
 
 // Postgres refuses "\u0000" in text and jsonb and a lone UTF-16 surrogate in either ("unsupported Unicode
@@ -74,7 +56,7 @@ export async function uploadPending(
   onShipped: (items: number) => void,
 ): Promise<Skipped | null> {
   const cards = scrub((await cardRows(ctx.blobs, orgId, pending, ctx.now())).map(redactCardRow));
-  for (let i = 0; i < cards.length; i += ITEM_CHUNK) check(await client.from("cloud_cards").upsert(cards.slice(i, i + ITEM_CHUNK)));
+  for (let i = 0; i < cards.length; i += ITEM_CHUNK) await putCards(client, cards.slice(i, i + ITEM_CHUNK));
   for (const entry of pending) {
     // The row keeps the card json it last uploaded; a card that never synced matches no row.
     if (entry.op === "card_deleted") {
@@ -86,12 +68,23 @@ export async function uploadPending(
     }
   }
   // Cards, deletes and truncates are done: leave only the items in the outbox, so each chunk can drop off its head.
-  const items = pending.filter((e) => e.op === "item");
+  const items = pending.filter((e): e is ItemEntry => e.op === "item");
   replaceOutboxHead(pending.length, items);
   return shipItems(ctx, client, orgId, items, onShipped);
 }
 
-async function shipItems(ctx: UploadCtx, client: SupabaseClient, orgId: string, items: OutboxEntry[], onShipped: (n: number) => void): Promise<Skipped | null> {
+// A chunk of cards. When the WAF still blocks it escaped, each card goes alone so only the one it matches
+// is held back; items need their card's row, so that one card still fails the flush, now with a readable error.
+async function putCards(client: SupabaseClient, rows: object[]) {
+  try {
+    await upsert(client, "cloud_cards", rows);
+  } catch (err) {
+    if (!isRowError(err) || rows.length === 1) throw err;
+    for (const row of rows) await upsert(client, "cloud_cards", [row]);
+  }
+}
+
+async function shipItems(ctx: UploadCtx, client: SupabaseClient, orgId: string, items: ItemEntry[], onShipped: (n: number) => void): Promise<Skipped | null> {
   let count = 0;
   let message = "";
   for (let i = 0; i < items.length; i += ITEM_CHUNK) {
@@ -107,7 +100,7 @@ async function shipItems(ctx: UploadCtx, client: SupabaseClient, orgId: string, 
         } catch (one) {
           if (!isRowError(one)) throw one;
           count++;
-          message = one.message;
+          message = `${one.message} (card ${entry.cardId}, item ${entry.seq})`;
         }
       }
     }
@@ -128,8 +121,8 @@ async function putItems(ctx: UploadCtx, client: SupabaseClient, orgId: string, e
     items.push({ org_id: orgId, card_id: entry.cardId, seq: entry.seq, kind: item.kind, item, at: new Date(live.at).toISOString() });
     if (output) outputs.push({ org_id: orgId, card_id: entry.cardId, ...output });
   }
-  if (outputs.length) check(await client.from("cloud_tool_outputs").upsert(scrub(lastPerKey(outputs, (o) => `${o.card_id}/${o.tool_id}`).map(redactOutputRow))));
-  if (items.length) check(await client.from("cloud_thread_items").upsert(scrub(lastPerKey(items, (i) => `${i.card_id}/${i.seq}`).map(redactItemRow))));
+  if (outputs.length) await upsert(client, "cloud_tool_outputs", scrub(lastPerKey(outputs, (o) => `${o.card_id}/${o.tool_id}`).map(redactOutputRow)));
+  if (items.length) await upsert(client, "cloud_thread_items", scrub(lastPerKey(items, (i) => `${i.card_id}/${i.seq}`).map(redactItemRow)));
   return items.length;
 }
 
