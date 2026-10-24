@@ -1,5 +1,5 @@
 import { COLD_MIN_TOKENS } from "./reply-mode";
-import { endSession, isBusy, sendUserMessage } from "./runner";
+import { endSession, isBusy, sendMessage, sendUserMessage } from "./runner";
 import { open } from "./runner-session";
 import { specFor } from "./runner-state";
 import { briefFor, prebakeBrief } from "./splice-brief";
@@ -10,7 +10,8 @@ import { appendThread, getCard, listCards, updateCard } from "./store";
 // message carries a brief (lib/splice-brief.ts: summary, what's open, the scoped diff) ahead of what you typed.
 // A "spliced" row in the thread marks where the new session begins (docs/architecture/composer.md).
 
-export async function sendFresh(cardId: string, text: string): Promise<void> {
+// `echo: false` re-sends a message the thread already shows (lib/lost-session.ts), without a second user row.
+export async function sendFresh(cardId: string, text: string, { echo = true } = {}): Promise<void> {
   const card = getCard(cardId);
   if (!card) throw new Error("No such card.");
   if (card.backend === "codex") throw new Error("Codex threads resume their own session; send it here instead.");
@@ -24,7 +25,8 @@ export async function sendFresh(cardId: string, text: string): Promise<void> {
   const session = open({ ...specFor({ ...card, sessionId: undefined }), sessionId: undefined }, cardId);
   // puku's own first-message context (lib/puku-context.ts) stays ahead of the brief.
   session.preamble = `${session.preamble ?? ""}${brief}`;
-  sendUserMessage(cardId, text);
+  if (echo) sendUserMessage(cardId, text);
+  else sendMessage(cardId, text, { echo: false });
 }
 
 // How long before a cache lapses its card's brief is written, so "Send fresh" doesn't wait on Haiku.

@@ -18,7 +18,8 @@ twice: on a chip inside the box's frame and on the primary button.
 | reply, empty box, cut-off turn | none | **Continue** | Send later… |
 | reply, cache cold, 30k+ tokens | Cache cold · 184k | **Send fresh** | Send with full history · 184k, Continue here, Send later… |
 | reply, 5h used up | 5-hour limit used up | **Send at 10:39pm** | Send now anyway, Send fresh now (if cold), Send later… |
-| queue | Queue · after this turn | **Queue** | Send now (stops the turn), Send later… |
+| steer (Claude Code, puku) | After the next tool call | **Send** | Queue · after this turn, Send now (stops the turn), Send later… |
+| queue (Codex, Goose) | Queue · after this turn | **Queue** | Send now (stops the turn), Send later… |
 | answer | Answer | **Answer** | none |
 | shell | Shell · *folder* | **Run** (green) | none |
 | replace | Replace last message · N file edits stay · Esc | **Replace** (amber) | none |
@@ -48,6 +49,8 @@ Enter runs the primary, except it won't start a new card from an empty box (that
   ("Fresh session · 83k not re-sent · show the brief"). The scheduler's 15 s tick writes the summary ahead of time for
   idle cards whose cache lapses within 5 minutes (or did in the last 6 hours), so the send doesn't wait on Haiku; the
   diff is always read at send time. A fork (`forkSession`) wouldn't help: it copies the whole history.
+  The same path recovers a card whose CLI session is gone (`lib/lost-session.ts`, threads-and-sessions.md): the last message is
+  re-sent fresh with `echo: false`, so the thread shows no second copy of it.
 - **Keeping it warm**: `cliEnv()` (`lib/env.ts`) sets `CLAUDE_CODE_PROMPT_CACHE_TTL=1h` for every thread, so a break
   under an hour never goes cold.
 

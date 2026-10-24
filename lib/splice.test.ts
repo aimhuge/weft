@@ -10,6 +10,7 @@ const h = vi.hoisted(() => ({
   open: vi.fn(),
   endSession: vi.fn(),
   sendUserMessage: vi.fn(),
+  sendMessage: vi.fn(),
   briefFor: vi.fn(),
   prebakeBrief: vi.fn(),
 }));
@@ -19,7 +20,7 @@ vi.mock("./store", () => ({
   updateCard: (id: string, patch: Partial<Card>) => Object.assign(h.cards.get(id)!, patch),
   appendThread: (_id: string, item: ThreadItem) => h.thread.push(item),
 }));
-vi.mock("./runner", () => ({ endSession: h.endSession, isBusy: (id: string) => h.busy.has(id), sendUserMessage: h.sendUserMessage }));
+vi.mock("./runner", () => ({ endSession: h.endSession, isBusy: (id: string) => h.busy.has(id), sendMessage: h.sendMessage, sendUserMessage: h.sendUserMessage }));
 vi.mock("./runner-session", () => ({ open: h.open }));
 vi.mock("./runner-state", () => ({ specFor: (card: Card) => ({ cwd: card.cwd, sessionId: card.sessionId }) }));
 vi.mock("./splice-brief", () => ({ briefFor: h.briefFor, prebakeBrief: h.prebakeBrief }));
@@ -53,6 +54,13 @@ describe("sendFresh", () => {
     expect(h.open).toHaveBeenCalledWith({ cwd: "/p", sessionId: undefined }, "a");
     expect(h.session.preamble).toBe("PUKU BRIEF ");
     expect(h.sendUserMessage).toHaveBeenCalledWith("a", "commit this");
+  });
+
+  it("re-sends a message the thread already shows without a second user row", async () => {
+    card("a");
+    await sendFresh("a", "again", { echo: false });
+    expect(h.sendMessage).toHaveBeenCalledWith("a", "again", { echo: false });
+    expect(h.sendUserMessage).not.toHaveBeenCalled();
   });
 
   it("leaves the token count out when the card had no cache", async () => {

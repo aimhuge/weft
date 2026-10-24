@@ -149,6 +149,16 @@ A CLI process doesn't outlive the app, so `loadState()` (`lib/store.ts`) moves a
 launch. Cards with no `sessionId`, archived cards and the copilot aren't resumed; a send that throws (folder gone)
 leaves the card in Review with the reason in `error`.
 
+### A session the CLI no longer has
+
+A card names its conversation as soon as the first message goes out (`keepSessionId`, `adoptSpare` in `lib/runner-session.ts`), before
+the CLI has written any of it, so a CLI killed in that gap (a restart, a Stop) leaves a `sessionId` with no transcript. The next
+resume answers `No conversation found with session ID`, as an error result and again as the SDK's exit error, and the error
+result names the same missing id, so the card would fail every message. `lib/lost-session.ts` catches it in `recoverFrom`
+(`lib/runner-turn.ts`) and in `failed` (`lib/runner-session.ts`): the first report, while the card still names the lost id,
+clears `sessionId` and re-sends the last message through `sendFresh` (`lib/splice.ts`, `echo: false`) from a brief, with a
+`spliced` row in the thread; the second finds the id already gone and does nothing.
+
 ### Warm sessions and keep-alive
 
 `scheduleIdle()` (`lib/runner-state.ts`) starts a timer for `keepAliveMinutes()` minutes
@@ -343,8 +353,9 @@ what stops the thread, so it goes first and becomes the Alt+Enter default. Puku 
 ones with no known reset, get "In 1 hour" first; "Tomorrow morning" (9am) and a date-time picker are always there. The copilot
 can't schedule. The card shows the next time as a clock badge in its footer.
 
-A message that reaches a busy thread is held the same way instead of refused ("This thread is
-already running"): `sendUserMessage()` calls `holdForTurn()` (`lib/runner.ts`), which adds it to
+A message that reaches a busy Codex or Goose thread, or a `/command` for any thread, is held the same way
+instead of refused ("This thread is already running"; plain text for Claude Code and puku goes in mid-turn, below):
+`sendUserMessage()` calls `holdForTurn()` (`lib/runner.ts`), which adds it to
 `card.scheduled` with `afterTurn: true` (the page links' Tell me what to change, a failed commit's
 note, the scheduler). `finishResult()` (`lib/runner-turn.ts`) calls `sendHeld()` through `hooks` once
 the turn is over and no queued automations remain, even when the turn ends needing you (the held text
@@ -353,6 +364,30 @@ label it "after this turn" (`sendsWhen()`, `lib/schedule.ts`); it can be taken b
 like a scheduled one. The copilot has no queue, so it still refuses a message mid-turn. A Done move
 from a page's Commit button (`moveToDone()`, `lib/pile-commit.ts`) on a busy card leaves the card
 where it is and queues the Done automations, which run after the turn.
+
+### Mid-turn messages
+
+The Claude Code CLI folds a message you send during a turn into that turn: it waits in the CLI's command queue
+and goes to the model as the next tool call returns, so you can steer a long turn without stopping it. Weft does
+the same for Claude Code and puku threads. `holdForTurn()` hands plain text for a busy session to `steer()`
+(`lib/runner-steer.ts`), which pushes it into the session's live `Inbox` with a uuid of its own (kept in
+`session.steered`) and puts it in the thread at once, marked `midTurn` ("Sent mid-turn · read after the next tool
+call"). It gets no prompt id, so ↑ sends an edit of it as a copy: there's no turn of its own to rewind. The reply
+box's primary while such a turn runs is **Send** with the chip "After the next tool call" (`lib/reply-mode.ts`
+mode `steer`); **Queue · after this turn** and **Send now** are in its ▾.
+
+A turn can end without another tool call to fold the message in after. The CLI then runs it as a turn of its
+own, straight after the result, without Weft sending anything. The result's `user_message_uuids` lists the
+messages a turn took in, so `waitingInCli()` knows which steered ones are still waiting; when any are,
+`handleResult()` (`lib/runner-turn.ts`) settles the turn's cost and stats but keeps the card running and the
+session busy (`goOn()`), and nothing held or queued goes out until that follow-on turn's result. puku's results
+don't list `user_message_uuids`, so its steered messages count as taken in, and a follow-on turn is picked up
+by `handleAssistant()` as its first reply arrives, as a background task's is. `queued_turn_count` on the
+result is no help here: it read 0 with a steered message waiting.
+
+A Stop doesn't drop a steered message the CLI still holds: the interrupt leaves its queue alone, so the message
+runs as the next turn. Codex and Goose run one CLI process per turn, and the copilot has no queue, so they keep
+the hold above.
 
 ### Archiving after Done
 
