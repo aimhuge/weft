@@ -63,20 +63,14 @@ One plot, two axes:
   share becomes a share left. The lookback: `const back = now - weekStart < NEW_WEEK &&
   rows.some((s) => s.at < weekStart) ? LOOKBACK_DAYS : 0` — the chart reaches into the week before
   only when the history it was given actually holds those days.
-- `app/api/limits/route.ts`: `GET /api/limits` returns the account's whole limit history (every
-  CLI's readings) — the only answer it gives. There is no `?backend=` narrowing, on purpose: a caller
-  that narrowed to one CLI would get a history too short to look back with, and the chart would quietly
-  stop reaching into the week before a reset. The one place that wants a single CLI's own readings
-  reads the log itself (`lib/plan-limits.ts`, on the server).
-- `lib/plan-limits.ts`: `planLimits(samples)` → each CLI that has reported an entry, and each entry
-  carries the **pool's** newest 5-hour and weekly reading (see "One pool per account" below);
-  `liveWindow(window, now)` reads a window whose reset has passed as full. Each entry gets its own
-  copy of the pool's window, not the pool's object, so a consumer that changes one CLI's window
-  doesn't change the others'. The entry's `reportedAt` says when that CLI last reported (the strip
-  names the plan by it), and `fiveHourAt` / `sevenDayAt` say when the pool read each window — the
-  number is the pool's, so its time is the pool's too. `GET /api/limits/plans` serves it and
-  `lib/use-plan-limits.ts` shares one copy across every strip on screen, read again each minute and
-  when the open card gets a new reading (null where the route isn't there, the web board).
+- `app/api/limits/route.ts`: `GET /api/limits?backend=claude|puku|codex` returns that CLI's readings, the
+  chart's history; without `?backend`, every CLI's.
+- `lib/plan-limits.ts`: `planLimits(samples)` → each CLI that has reported gets an entry holding that CLI's
+  own newest 5-hour and weekly reading (see "Each CLI has its own plan" below); `liveWindow(window, now)`
+  reads a window whose reset has passed as full. `reportedAt` is when the CLI last reported and
+  `fiveHourAt` / `sevenDayAt` when it read each window. `GET /api/limits/plans` serves it and
+  `lib/use-plan-limits.ts` shares one copy across every strip on screen, read again each minute and when
+  the open card gets a new reading (null where the route isn't there, the web board).
 - `components/StatusStrip.tsx`: two parts. The thread's, only for an open card: folder, `[cli · model]`
   (`stats.runsOn`, the model its session started on, else the last turn's costliest), context, cache,
   tokens. The plan's: that card's CLI's windows from the plans, or with no card open (the board footer,
@@ -84,64 +78,48 @@ One plot, two axes:
 - `components/LimitBurndown.tsx`: the 640 px SVG (`CHART_WIDTH`), in a 664 px `Tip` over each plan's
   `Limit` chips, titled with the CLI's plan. Colors are the theme's `--ok` and `--danger`.
   `NowLevel` draws the level standing right now: the line, the dot at now and the number on it.
-  `useSamples()` reads `/api/limits`: the plot is drawn over the account's whole
-  history, so it can reach back into last week.
+  `useSamples(backend)` reads `/api/limits?backend=<cli>`: the plot is drawn over that CLI's own history,
+  and reaches back into last week only when that CLI has readings from before the week began.
 
 ## Data flow
 
 CLI event or turn end → `updateLimits` → a sample in the log under the session's CLI, and card
 `stats.fiveHour` / `sevenDay` while the card is still on that CLI. Background tick → `startLimitPoll` →
 spare or one-off `usage_EXPERIMENTAL_*` → `recordLimits` → a sample. Strip → `GET /api/limits/plans` →
-the pool's newest windows, one entry per CLI that has reported. Hover → `GET /api/limits` (the
-account's whole history) → `limitsChart()` adds the plan's current reading → SVG.
+each CLI's own newest windows, one entry per CLI that has reported. Hover → `GET /api/limits?backend=<cli>`
+→ `limitsChart()` adds the plan's current reading → SVG.
 
-## One pool per account
+## Each CLI has its own plan
 
-The plan limits are **one pool per account**, shared by every CLI: Claude Code and puku-cli report the
-same 5-hour and weekly windows, with the same reset times, because they draw from the same plan.
-Measured on the author's machine on 2026-10-23: puku read `five_hour used=100 resetsAt 21:30` at
-19:45:15, while Claude Code read `used=99` at 19:43:51 and `used=100` at 19:47:40 against the same
-21:30 reset — one climbing counter, not two. The history log held 684 samples: 682 from Claude Code
-and 2 from puku, both from that one evening.
+Claude Code runs on Anthropic's plan, puku-cli on Puku's, Codex on OpenAI's. Their 5-hour and weekly
+windows are separate, so a CLI's entry holds only what that CLI's sessions read, every card on one CLI
+shows the same numbers, and the chart draws one CLI's history.
 
-Those two puku rows look like a mistake, and the obvious reading — that they are Claude's own
-readings logged under the wrong backend after a CLI switch — is wrong. A mislabeled reading must be
-a duplicate, and the five-hour row is not: `used=100` with `resetsAt=1792765800` appears in **no**
-earlier Claude row. It is exactly the next step in a climbing counter (99 → 100 → 100, the last a
-ceiling), against the identical reset epoch. Both readings are attributed to the session that
-produced them (`lib/runner-turn.ts` uses `session.spec.backend`, `lib/limit-poll.ts` records the
-backend it polled), and puku-cli runs the Anthropic Agent SDK, so it reads the same account's
-windows. The full disproof is in
-`docs/bug-fixes/031-limits-chart-never-reached-back-into-last-week.md`.
+The log once seemed to say otherwise. On 2026-10-23 it held 684 samples, 682 from Claude Code and 2 from
+puku, and the two puku rows matched Claude's counter to the minute: puku `five_hour used=100 resetsAt
+21:30` at 19:45:15, between Claude Code's `used=99` at 19:43:51 and `used=100` at 19:47:40. Two ways to
+read that, and the log cannot tell them apart: they are a Claude session's reading logged under the card's
+new backend after **Run on puku** (`updateLimits` used `getCard(id).backend`, not the session's), or puku
+relayed the same windows. Reading them as proof of one shared plan put Claude's numbers on puku cards, and
+per CLI is right under both readings: if puku reported them they are puku's, and a misattributed one can no
+longer be written. The user's own word is that puku is not on Anthropic's plan.
 
-So the limits are not per CLI, and nothing may read them as if they were:
+What keeps one CLI's numbers out of another's strip:
 
-- **The history behind the chart is the account's.** `components/LimitBurndown.tsx`'s `useSamples()`
-  asks `/api/limits`, which answers with the whole history. Filtering by CLI starves the CLI with the
-  fewest samples (puku had 2 of 684 here, all from that one evening), and the lookback
-  (`rows.some(s => s.at < weekStart)`) is then permanently false: the chart stays at seven days
-  however fresh the weekly reset. The account's history has those days.
-- **The plan the strip NAMES is the card's own CLI's**, and so are the numbers in the summary. The
-  `backend` prop still names it ("Claude Code's plan" / "puku-cli's plan") and still supplies
-  `stats.fiveHour` / `stats.sevenDay`.
-- **`planLimits()` puts the pool's reading on every entry.** Each entry is keyed by the CLI that
-  reported (so the strip can name it), but it carries the pool's newest reading of each window. A
-  card on a CLI that stopped reporting shows the account's real limits instead of a stale snapshot
-  of its own — on the machine above, puku's entry carries `used: 25`, the pool's newest reading,
-  rather than puku's own stale `100` from 19:45.
-- **A pool window is dated by the pool's reading, not by the CLI that carries it.** The entry's
-  `reportedAt` is when that CLI last reported; `fiveHourAt` / `sevenDayAt` are when the pool read
-  each window. `lib/use-start-gate.ts` stamps the sample it builds with the window's own time, so
-  the start gate doesn't claim a value was seen before it was read.
+- **A reading is logged under the session's CLI.** `lib/runner-turn.ts` `updateLimits(id, backend, patch)`
+  takes `session.spec.backend` and leaves the card's stats alone once the card has moved to another CLI.
+- **A CLI switch drops the old session's numbers.** `lib/backend-switch.ts` `switchPatch` keeps only the
+  folder's `branch`, `added` and `removed`; it used to keep everything, and 37 puku cards on the board
+  carried Claude's `5hr:0% reset 9:30pm` and a Claude model.
+- **`planLimits()` never copies an entry onto another.** A CLI that has not reported has no entry, and
+  the strip says "no plan limits yet" for it.
+- **A CLI with a short history gets a short chart.** A puku card's chart reaches back into last week only
+  when puku has readings from before the week began. That is correct, not a bug: there is nothing to look
+  back at.
 
-Two things that look like per-CLI limits but are not: the **model's** own cap is per model
-(`lib/model-limit.ts`, `~/.weft/model-limits.json`), and a card's `stats.fiveHour` / `stats.sevenDay`
-is that card's own last snapshot, which the card keeps until the next reading.
-
-The other way a plan's number leaks across CLIs was the card's stats: `lib/backend-switch.ts`
-`switchPatch` used to keep them, so a puku card showed Claude's `5hr:0% reset 9:30pm` (and a Claude
-model) until puku finished a turn — 37 puku cards on the board carried Claude's reset times. A switch
-now keeps only the folder's `branch`, `added` and `removed`.
+Two other limits are not per CLI: the **model's** own cap is per model (`lib/model-limit.ts`,
+`~/.weft/model-limits.json`), and a card's `stats.fiveHour` / `stats.sevenDay` is that card's last snapshot
+until its next reading. docs/bug-fixes/031-puku-cards-showed-claudes-limits.md has the whole story.
 
 ## The footer and the open card
 
@@ -158,9 +136,6 @@ can be a subagent's, or blank after a turn that reported no usage.
   stretches) now fills in continuously.
 - Limit hits come from these samples, not from transcripts. `lib/usage.ts` also detects hits from
   transcripts for the Loom's usage chart; the two aren't unified yet.
-- The two samples from 23 Oct 19:45 carry `"backend":"puku"`, and they are puku's own readings: a
-  sample's `backend` is the CLI that reported it (`recordLimits(backend, …)` in
-  `lib/limit-history.ts`, called with the session's own backend), so puku's CLI wrote them. They are
-  two readings of the same pool Claude Code was reading, which is the point of the section above.
-  They age out of the log after 8 days; until then they are part of the pool's history like any other
-  reading, and the pool's newest reading is newer than both, so they don't move the numbers.
+- The two samples from 23 Oct 19:45 carry `"backend":"puku"`. Whether puku wrote them or a Claude session's
+  reading was logged under puku after a switch is not known (see "Each CLI has its own plan"); they age out
+  of the log after 8 days, and until then a puku card's strip shows them as puku's newest reading.

@@ -5,9 +5,8 @@ import LimitBurndown from "./LimitBurndown";
 import type { LimitSample } from "@/lib/limit-chart";
 import type { CardStats } from "@/lib/types";
 
-// The chart draws the card's own CLI's plan, but the history behind the plot is the ACCOUNT's: the plan
-// limits are one pool per account, shared by every CLI (see the note in useSamples). With days logged
-// before the week began, it reaches back into them (lib/limit-chart.ts).
+// The chart draws one CLI's plan from that CLI's readings only: Claude Code and puku-cli are on different
+// plans. With days logged before the week began, it reaches back into them (lib/limit-chart.ts).
 
 const DAY = 24 * 60 * 60 * 1000;
 const NOW = new Date("2026-10-23T22:00:00+07:00").getTime();
@@ -23,39 +22,38 @@ function sample(at: number, backend: "claude" | "puku", used: number): LimitSamp
   return { at, backend, kind: "seven_day", used, resetsAt: WEEKLY_RESET };
 }
 
-// A fetch that answers with the given samples.
+// A fetch that answers like /api/limits: the given samples, narrowed to the CLI in ?backend=.
 function serves(samples: LimitSample[]) {
-  return vi.fn<(url: string, init?: RequestInit) => Promise<{ ok: boolean; json: () => Promise<{ samples: LimitSample[] }> }>>(async () => {
+  return vi.fn<(url: string, init?: RequestInit) => Promise<{ ok: boolean; json: () => Promise<{ samples: LimitSample[] }> }>>(async (url) => {
     await Promise.resolve();
+    const backend = new URL(url, "http://localhost").searchParams.get("backend");
     return {
       ok: true,
       json: async () => {
         await Promise.resolve();
-        return { samples };
+        return { samples: backend ? samples.filter((x) => x.backend === backend) : samples };
       },
     };
   });
 }
 
 describe("LimitBurndown", () => {
-  it("reads the account's whole history, and names the card's own CLI's plan", async () => {
+  it("asks for its own CLI's history, Claude Code's by default, and names the plan", async () => {
     const fetchMock = serves([]);
     vi.stubGlobal("fetch", fetchMock);
     vi.setSystemTime(NOW);
     render(<LimitBurndown stats={{ sevenDay: { used: 14, resetsAt: WEEKLY_RESET } }} />);
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    // No ?backend: the plan limits are one pool per account, shared by every CLI, so the chart needs
-    // the whole history to reach back into last week. The plan it NAMES is still the card's own CLI's.
-    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/limits");
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/limits?backend=claude");
     expect(screen.getByText("Claude Code's plan")).toBeTruthy();
     cleanup();
     render(<LimitBurndown backend="puku" stats={{}} />);
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
-    expect(fetchMock.mock.calls[1]?.[0]).toBe("/api/limits");
+    expect(fetchMock.mock.calls[1]?.[0]).toBe("/api/limits?backend=puku");
     expect(screen.getByText("puku-cli's plan")).toBeTruthy();
   });
 
-  it("reaches back into last week when the account's history has those days", async () => {
+  it("reaches back into last week when the CLI's history has those days", async () => {
     // A week of Claude Code readings.
     const history = [
       sample(NOW - 5 * DAY, "claude", 90),
@@ -84,9 +82,10 @@ describe("LimitBurndown", () => {
     expect(days.length).toBe(10);
   });
 
-  it("reaches back into last week for a card on the CLI with the fewest readings", async () => {
-    // The bug this chart had: puku had 2 readings, both from today, so filtering by CLI left no history
-    // before the week began and the lookback could never fire. The account's history has it.
+  it("keeps one CLI's history out of another's chart", async () => {
+    // A week of Claude Code readings and one of puku's own from today. Claude Code's card looks back
+    // into last week; puku's, with nothing logged before the week began, draws a plain week and does not
+    // borrow Claude Code's days.
     const history = [
       sample(NOW - 5 * DAY, "claude", 90),
       sample(NOW - 4 * DAY, "claude", 70),
@@ -95,26 +94,27 @@ describe("LimitBurndown", () => {
       sample(NOW - DAY, "claude", 30),
       sample(NOW - 3 * 60_000, "puku", 14),
     ];
-    const fetchMock = serves(history);
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", serves(history));
     vi.setSystemTime(NOW);
-
     const stats: CardStats = { sevenDay: { used: 14, resetsAt: WEEKLY_RESET } };
-    render(<LimitBurndown backend="puku" stats={stats} />);
-    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const dayLabels = (svg: Element) =>
+      Array.from(svg.querySelectorAll("text"))
+        .map((t) => t.textContent)
+        .filter((l) => l && /^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)$/.test(l));
 
-    const svg = screen.getByRole("img");
-    await waitFor(() => {
-      const labels = Array.from(svg.querySelectorAll("text")).map((t) => t.textContent);
-      expect(labels).toContain("last week");
-    });
-    const days = Array.from(svg.querySelectorAll("text"))
-      .map((t) => t.textContent)
-      .filter((l) => l && /^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)$/.test(l));
-    expect(days.length).toBe(10);
+    render(<LimitBurndown backend="puku" stats={stats} />);
+    const puku = screen.getByRole("img");
+    await waitFor(() => expect(puku.querySelectorAll("text").length).toBeGreaterThan(0));
+    expect(dayLabels(puku).length).toBe(7);
+    cleanup();
+
+    render(<LimitBurndown backend="claude" stats={stats} />);
+    const claude = screen.getByRole("img");
+    await waitFor(() => expect(Array.from(claude.querySelectorAll("text")).map((t) => t.textContent)).toContain("last week"));
+    expect(dayLabels(claude).length).toBe(10);
   });
 
-  it("shows a plain week when the account's history has nothing before the reset", async () => {
+  it("shows a plain week when the CLI's history has nothing before the reset", async () => {
     const history = [sample(NOW - 3 * 60_000, "puku", 14)];
     const fetchMock = serves(history);
     vi.stubGlobal("fetch", fetchMock);

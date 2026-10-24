@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
-// /api/limits/plans: the plan limits for the status strip — each CLI that has reported, carrying the
-// account's newest 5-hour and weekly reading (the plan limits are one pool per account, lib/plan-limits.ts).
+// /api/limits/plans: the plan limits for the status strip — each CLI that has reported, with its
+// own newest 5-hour and weekly reading (each CLI has its own plan, lib/plan-limits.ts).
 
 vi.mock("next/server", () => ({ connection: async () => {} }));
 vi.mock("@/lib/limit-history", () => ({
@@ -23,28 +23,13 @@ const route = await import("./limits/plans/route");
 const READ = { host: "localhost:3457" };
 
 describe("GET /api/limits/plans", () => {
-  it("returns each CLI's entry with the account's one pool's numbers, and the models at their cap", async () => {
+  it("returns each CLI's own entry, and the models at their cap", async () => {
     vi.mocked(limits.modelLimits).mockReturnValueOnce([{ model: "claude-opus-5-5", at: 1, resetsAt: 100 }]);
     const res = await route.GET(new Request("http://localhost:3457/api/limits/plans", { headers: READ }));
     expect(await res.json()).toEqual({
-      // The pool's newest five_hour is claude's (used 5, read at 1) and its newest seven_day is
-      // puku's (used 9, read at 2); both land on both entries, because the account shares one pool.
-      // reportedAt is each CLI's own last report, which is what the strip names the plan by.
       plans: {
-        claude: {
-          reportedAt: 1,
-          fiveHour: { used: 5, resetsAt: 100 },
-          fiveHourAt: 1,
-          sevenDay: { used: 9 },
-          sevenDayAt: 2,
-        },
-        puku: {
-          reportedAt: 2,
-          fiveHour: { used: 5, resetsAt: 100 },
-          fiveHourAt: 1,
-          sevenDay: { used: 9 },
-          sevenDayAt: 2,
-        },
+        claude: { reportedAt: 1, fiveHour: { used: 5, resetsAt: 100 }, fiveHourAt: 1 },
+        puku: { reportedAt: 2, sevenDay: { used: 9 }, sevenDayAt: 2 },
       },
       models: [{ model: "claude-opus-5-5", at: 1, resetsAt: 100 }],
     });

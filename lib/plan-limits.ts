@@ -2,32 +2,25 @@ import type { LimitSample } from "./limit-chart";
 import { BACKEND_IDS } from "./new-thread";
 import type { Backend, LimitWindow } from "./types";
 
-// The plan limits as the status strip shows them: the newest 5-hour and weekly reading, from the log
-// every thread and the background poll write (lib/limit-history.ts).
+// The plan limits as the status strip shows them: each CLI's newest 5-hour and weekly reading, from the
+// log every thread and the background poll write (lib/limit-history.ts).
 //
-// The plan limits are ONE pool per account: Claude Code and puku-cli report the same 5-hour and weekly
-// windows, with the same reset times, because they draw from the same plan. On this machine puku read
-// five_hour used=100 resetsAt 21:30 at 19:45, and Claude Code read used=99 at 19:43 and used=100 at
-// 19:47 against that same 21:30 reset — one climbing counter, not two.
+// Each CLI has its OWN plan: Claude Code on Anthropic's, puku-cli on Puku's, Codex on OpenAI's. So a CLI's
+// entry holds only what that CLI's own sessions read, and every card on one CLI shows the same numbers.
 //
-// So the pool's newest reading is the account's, whichever CLI reported it, and every CLI's entry
-// carries it. A CLI's entry is keyed by that CLI because it is the one that reports: a card on puku
-// shows puku's plan, and the strip names it. But the number in it is the pool's.
+// On 2026-10-23 the log seemed to say otherwise: two "puku" samples at 19:45 matched Claude Code's to the
+// minute (five_hour used=100, resetsAt 21:30). They were Claude's. A card hit Claude's 5-hour limit, was
+// switched with Run on puku, and the reading its Claude session still had coming was logged under the
+// card's new backend (lib/runner-turn.ts updateLimits now takes the session's own). Treating those two
+// lines as proof of one shared pool put Claude's numbers on puku cards (docs/architecture/limits-burndown.md).
 
 export interface PlanReading {
   fiveHour?: LimitWindow;
   sevenDay?: LimitWindow;
-  // When each window's number was read (unix ms), the pool's own reading time.
-  //
-  // The windows are the account's, so their times are the pool's: the moment the reading that
-  // produced them was taken, whichever CLI took it. Without this a consumer can only stamp a
-  // window with a time it was not read at.
+  // When this CLI read each window (unix ms).
   fiveHourAt?: number;
   sevenDayAt?: number;
-  // When this CLI last reported (unix ms).
-  //
-  // Not when the numbers above were read: those are the pool's. This field says which CLI is the
-  // one that reports, so the strip can name the plan.
+  // When this CLI last reported either window (unix ms).
   reportedAt: number;
 }
 
@@ -37,37 +30,20 @@ export type PlanLimits = Partial<Record<Backend, PlanReading>>;
 // a plan gets a place in the strip (lib/new-thread.ts's list, so a new CLI comes with it).
 export const PLAN_ORDER: Backend[] = BACKEND_IDS;
 
-// The newest reading of each window of the account's one pool, attributed to the CLI that reported it.
-//
-// Every CLI that has reported gets an entry, and each carries the pool's newest reading of each window
-// — so a card on a CLI that stopped reporting still shows the account's real limits instead of a stale
-// snapshot of its own. A CLI that has never reported has no entry.
+// Each CLI's newest reading of each window. A CLI that has never reported has no entry.
 export function planLimits(samples: LimitSample[]): PlanLimits {
   const plans: PlanLimits = {};
-  // The pool's newest reading of each window, and when it was read.
-  let fiveHour: { window: LimitWindow; at: number } | undefined;
-  let sevenDay: { window: LimitWindow; at: number } | undefined;
   for (const s of [...samples].sort((a, b) => a.at - b.at)) {
-    const window: LimitWindow = { used: s.used, ...(s.resetsAt !== undefined && { resetsAt: s.resetsAt }) };
-    if (s.kind === "five_hour") fiveHour = { window, at: s.at };
-    else sevenDay = { window, at: s.at };
-    // The CLI that reported gets an entry, so the strip can name it.
     const plan = (plans[s.backend] ??= { reportedAt: s.at });
-    plan.reportedAt = Math.max(plan.reportedAt, s.at);
-  }
-  // Now the pool's newest reading of each window, on every entry: the account shares one pool.
-  //
-  // Each entry gets its own copy of the window, not the pool's: a consumer that changes one CLI's
-  // window (to mark it stale, say) must not quietly change every other CLI's window with it.
-  for (const plan of Object.values(plans)) {
-    if (fiveHour) {
-      plan.fiveHour = { ...fiveHour.window };
-      plan.fiveHourAt = fiveHour.at;
+    const window: LimitWindow = { used: s.used, ...(s.resetsAt !== undefined && { resetsAt: s.resetsAt }) };
+    if (s.kind === "five_hour") {
+      plan.fiveHour = window;
+      plan.fiveHourAt = s.at;
+    } else {
+      plan.sevenDay = window;
+      plan.sevenDayAt = s.at;
     }
-    if (sevenDay) {
-      plan.sevenDay = { ...sevenDay.window };
-      plan.sevenDayAt = sevenDay.at;
-    }
+    plan.reportedAt = s.at;
   }
   return plans;
 }

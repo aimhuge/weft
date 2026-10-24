@@ -60,8 +60,7 @@ function Limit({ label, window }: { label: string; window?: LimitWindow }) {
 }
 
 // One CLI's plan: its 5-hour and weekly windows as of now (a passed reset reads full), named when the
-// strip lists more than one plan. The numbers are the account's one pool (lib/plan-limits.ts); the name
-// is the CLI that reported. The hover is the week's chart.
+// strip lists more than one plan. The hover is the week's chart.
 function Plan({ backend, reading, named }: { backend: Backend; reading: Pick<CardStats, "fiveHour" | "sevenDay">; named: boolean }) {
   const now = useNow();
   const fiveHour = liveWindow(reading.fiveHour, now);
@@ -76,10 +75,9 @@ function Plan({ backend, reading, named }: { backend: Backend; reading: Pick<Car
   );
 }
 
-// The plan limits: the open card's CLI's plan, or every CLI's when no card is open. The plan limits are
-// one pool per account, so every CLI's entry carries the account's newest reading (lib/plan-limits.ts),
-// read from the limits log (lib/use-plan-limits.ts); where that isn't there (the web board), the card's
-// own last reading stands in.
+// The plan limits: the open card's CLI's plan, or every CLI's when no card is open. Each CLI has its own
+// plan, read from the limits log (lib/use-plan-limits.ts); where that isn't there (the web board), the
+// card's own last reading stands in.
 function Plans({ backend, stats }: { backend?: Backend; stats?: CardStats }) {
   const plans = usePlanLimits(limitKey(stats));
   const shown: [Backend, Pick<CardStats, "fiveHour" | "sevenDay"> | undefined][] = plans

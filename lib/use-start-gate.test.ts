@@ -89,21 +89,16 @@ describe("useStartGate", () => {
     expect(result.current).toEqual({ at: RESET_AT, kind: "five_hour", subject: "claude" });
   });
 
-  it("dates the pool's window with the pool's own reading, not the reporting CLI's last report", async () => {
-    // The plan limits are one pool per account: puku's entry carries the number Claude Code read at
-    // 500, while puku itself last reported at 100. The window belongs to the pool, so it is dated
-    // 500 — a sample stamped 100 would claim the value was seen before it was read.
+  it("gates a CLI on its own plan: Claude Code's spent window doesn't hold a puku thread", async () => {
     plans({
       plans: {
-        puku: {
-          fiveHour: { used: 100, resetsAt: RESET_AT / 1000, at: NOW + 500 },
-          reportedAt: NOW,
-        },
+        claude: { fiveHour: { used: 100, resetsAt: RESET_AT / 1000 }, fiveHourAt: NOW, reportedAt: NOW },
+        puku: { fiveHour: { used: 20, resetsAt: RESET_AT / 1000 }, fiveHourAt: NOW, reportedAt: NOW },
       },
     });
     await loadGates();
-    const { result } = renderHook(() => useStartGate("puku", undefined));
-    expect(result.current).toEqual({ at: RESET_AT, kind: "five_hour", subject: "puku" });
+    expect(renderHook(() => useStartGate("claude", undefined)).result.current).toEqual({ at: RESET_AT, kind: "five_hour", subject: "claude" });
+    expect(renderHook(() => useStartGate("puku", undefined)).result.current).toBeUndefined();
   });
 
   it("answers with the model's own cap", async () => {

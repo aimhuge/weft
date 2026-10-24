@@ -163,9 +163,8 @@ When a new doc lands in this folder, add it here on the same change.
   doesn't get its first turn now: the New thread dialog's button reads "Start at 2:30am" and `startCard` (`lib/new-card.ts`) schedules
   the prompt for the reset instead of starting a thread that dies in Needs you. The reply box reads the same gate, so a model's own cap
   reaches it too (docs/architecture/limits.md).
-  The plan limits are ONE pool per account, shared by every CLI (Claude Code and puku-cli report the same windows with the same reset
-  times), so the strip's numbers and the chart's history are the account's; only the plan the strip NAMES is the card's own CLI's
-  (docs/architecture/limits.md, docs/architecture/limits-burndown.md).
+  Each CLI has its own plan (Claude Code on Anthropic's, puku-cli on Puku's), so the strip's numbers and the chart's history
+  are the open card's CLI's own (docs/architecture/limits.md, docs/architecture/limits-burndown.md).
 - `components/SettingsDialog.tsx` + `lib/settings-nav.ts`: Settings, full window over a scene, pages down the left (General, Laptop mode, Models,
   Threads, Security, Automations, Shortcuts, Accounts, Teams, Sync); Laptop mode is `components/LaptopModeCard.tsx` + `LaptopModeRules.tsx` over `electron/keep-working*.cjs`; Models holds every model pick, new threads' through `components/NewThreadDefaults.tsx`;
   the four rows (NewThreadDefaults, SubagentPicker, CopilotPicker, DonePicker) share `components/Pickers.tsx`

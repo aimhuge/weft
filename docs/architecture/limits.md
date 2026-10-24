@@ -8,12 +8,10 @@ A thread can meet a limit in three places, and each has its own store:
 | The account's weekly window | `~/.weft/limits.jsonl` | `lib/limit-history.ts` |
 | The account's 5-hour window | the same plan log, plus the card's own snapshot `card.stats.fiveHour` | `lib/limit-history.ts`, `lib/store.ts` |
 
-**The plan limits are ONE pool per account**, shared by every CLI: Claude Code and puku-cli report
-the same 5-hour and weekly windows, with the same reset times, because they draw from the same plan.
-So the numbers are the account's; a sample's `backend` says which CLI reported it, not whose limit
-it is. The plan the strip *names* is the card's own CLI's, and the model's cap is per model — those
-two are the only per-CLI-ish things left (docs/architecture/limits-burndown.md has the measurement
-and the whole rule).
+**Each CLI has its own plan** (Claude Code on Anthropic's, puku-cli on Puku's, Codex on OpenAI's), so the
+plan limits are read per CLI: a sample's `backend` is the CLI whose session read it, and a thread on one CLI
+is gated by that CLI's windows only. The model's cap is per model (docs/architecture/limits-burndown.md has
+the rule and why it is not one shared pool).
 
 `lib/limit-reset.ts` reconciles them. It is the one answer to "when does this reset?", and it is
 pure: the stores come in as data, so the server and the browser run the same code and always
@@ -41,8 +39,7 @@ caller falls back to "wait an hour" rather than pretending to know.
 ## Key files
 
 - `lib/limit-reset.ts` (new) — the pure module.
-  - `planWindow(samples, backend, kind, now)` → the pool's newest reading of one window, as that
-    backend's entry carries it; `undefined` once its reset has passed (the window is full again and
+  - `planWindow(samples, backend, kind, now)` → that CLI's own newest reading of one window; `undefined` once its reset has passed (the window is full again and
     the next one isn't known yet).
   - `modelResetsAt(model, limits, now)` → when this model's own cap frees up (unix ms).
   - `resetFor(backend, model, samples, limits, now)` → `ResetAnswer | undefined` for a thread that
@@ -69,7 +66,7 @@ caller falls back to "wait an hour" rather than pretending to know.
   pickers; the same route ships the models that have hit their own cap.
 - `app/api/cards/route.ts` — `POST` returns the `start` answer: `{ started, at }`.
 - `app/api/limits/plans/route.ts` — `GET` returns `{ plans, models }`: one entry per CLI that has
-  reported, each carrying the pool's newest window reading, and the models at their cap.
+  reported, with its own newest window readings, and the models at their cap.
 - `components/NewCardDialog.tsx`, `components/NewCardDialogFooter.tsx` — the button's label and the
   warn-coloured status line.
 - `components/ReplyBox.tsx`, `components/ThreadFooter.tsx` — the thread's own gate.
