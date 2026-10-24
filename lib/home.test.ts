@@ -8,6 +8,7 @@ import {
   downloadLink,
   homeMetadata,
   isDeployed,
+  isWebEnabled,
   loadHome,
   parseFeed,
 } from "./home";
@@ -22,6 +23,26 @@ describe("isDeployed", () => {
 
   it("reads process.env by default", () => {
     expect(isDeployed()).toBe(Boolean(process.env.VERCEL || process.env.WEFT_HOME));
+  });
+});
+
+describe("isWebEnabled", () => {
+  it("is true whenever the site is deployed", () => {
+    expect(isWebEnabled({ VERCEL: "1" })).toBe(true);
+    expect(isWebEnabled({ WEFT_HOME: "1" })).toBe(true);
+  });
+
+  it("is true with WEFT_WEB alone, so a local server can serve the web routes", () => {
+    expect(isWebEnabled({ WEFT_WEB: "1" })).toBe(true);
+  });
+
+  it("is false on a plain local server", () => {
+    expect(isWebEnabled({})).toBe(false);
+    expect(isWebEnabled({ WEFT_WEB: "" })).toBe(false);
+  });
+
+  it("reads process.env by default", () => {
+    expect(isWebEnabled()).toBe(Boolean(process.env.VERCEL || process.env.WEFT_HOME || process.env.WEFT_WEB));
   });
 });
 

@@ -59,6 +59,14 @@ export function isDeployed(env: Record<string, string | undefined> = process.env
   return Boolean(env.VERCEL || env.WEFT_HOME);
 }
 
+// The weft.zip routes (the workspace board, /team, /login, the share and app pages) are for the
+// deployed site. Locally they're off, so `next dev` renders the desktop board at / and nothing
+// else. WEFT_WEB=1 turns just those routes on without the home page taking over / — so a local
+// server can serve the web board and the desktop board at the same time (/ and /<slug>/board).
+export function isWebEnabled(env: Record<string, string | undefined> = process.env): boolean {
+  return isDeployed(env) || Boolean(env.WEFT_WEB);
+}
+
 export function homeMetadata(version: string): Metadata {
   const title = `Weft: ${TAGLINE}`;
   return {
