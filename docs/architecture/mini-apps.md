@@ -232,7 +232,8 @@ one vault environment it asks for, and its reads by name:
   `defaults: false`, so it sends only the page's args, while main also sends the manifest's declared defaults.
 - **Reads are functions, reviewed in a migration.** The project's `supabase/migrations/` defines what an app
   may read: `security definer`, `set search_path = ''`, executable by `service_role` only, so the anon and
-  signed-in keys can't call them. Weft's own are `growth_*` (`supabase/migrations/20261018054110_growth_reads.sql`).
+  signed-in keys can't call them. Weft's own are `growth_*` (`supabase/migrations/20261018054110_growth_reads.sql`
+  for the account-level numbers, `20261024041130_growth_in_app_reads.sql` for the in-app ones).
 - **On weft.zip**, a shared data app gets the same `window.weft` from the bridge script
   (`components/share-view/use-app-bridge.ts` answering through `app/api/a/[id]/{fetch,read,env,secret}` — the
   `read` half behind `app/api/a/[id]/read`, the `fetch` half in `app/api/a/[id]/fetch/route.ts`, both with
@@ -248,6 +249,16 @@ one vault environment it asks for, and its reads by name:
 📈 **Growth** is the first one (`~/.weft/apps/growth/`): accounts, signups and active accounts per day, weekly
 retention cohorts and the activation funnel from Weft's own Supabase (production), and page views, top pages and
 sources from GA4 once its two vault names have values.
+
+It also answers the harder question: what people do *inside* Weft, not just that they signed in. The account-level
+retention counts a sign-in as activity, which flatters it — opening the app is not the same as pushing work through
+it — so the app carries a second retention table, **in-app retention**, beside the first: the same weekly signup
+cohorts, but an account counts as retained only if it pushed a card, moved one, or ran a turn that week. Next to it,
+**cards pushed per day** stacks the cards created against the cards moved, and **in-app engagement per day** stacks
+the cards people touched against the cards they started, with the accounts working and the turns they ran in the
+hover. Two more tiles sit at the top: cards pushed in the last 30 days, and the accounts doing real work. All of it
+comes from the synced rows (`cloud_cards`, `cloud_thread_items`), so it undercounts the local-only work the same way
+the earlier reads do — cloud sync is opt-in per folder. Which numbers it counts, and why, is in growth.md.
 
 ## Persisted on prod
 
