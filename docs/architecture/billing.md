@@ -313,12 +313,25 @@ with **Push to Vercel** or `mcp__secrets__push_to_vercel`.
 | `STRIPE_PRICE_PRO_YEARLY` | Vercel | The `price_…` for the $200/year recurring price. |
 | `STRIPE_PRICE_PRO_MONTHLY_REGIONAL_LOW`, `STRIPE_PRICE_PRO_MONTHLY_REGIONAL_LOWER_MIDDLE` | 🔐 vault (blanks) → Vercel | The $5 and $10 monthly Pro prices. Optional: unset, Checkout sells the full price. Read only once the package has price variants. |
 | `STRIPE_PRICE_TEAM_MONTHLY` | Vercel | The `price_…` for the **$9 per seat per month** recurring price. A per-unit price: seats ride on the subscription's `quantity`. Nothing reconciles it against `TEAM_SEAT_CENTS`, so a mismatch is a real bug (the package throws on first use with the whole list of missing variables). |
+| `STRIPE_PRICE_TEAM_YEARLY` | 🔐 vault → Vercel | The **$90 per seat per year** price. Checkout never sells it (Team bills monthly), but the package refuses every checkout, Pro included, without a price for each paid plan × interval. Missing it, every upgrade failed with "Something went wrong on our end" (fixed 2026-10-24). |
 | `SUPABASE_SECRET_KEY` | already on Vercel (webhook relay, Puku trial) | Service role; reads and writes the billing tables. |
 | `NEXT_PUBLIC_SITE_URL` | Vercel | `https://weft.zip` by default. Used to build the `manageUrl` on `BillingStatus`. |
 
+**When one is missing.** The package reads all of these lazily, on the first checkout, and throws a plain `Error`
+naming every missing variable. `lib/billing/stripe-env.ts` names the same list up front, derived from the catalog
+(`catalog.paid` × `BILLING_INTERVALS`), so a gap shows before a customer finds it:
+
+- `describeBillingError` (`lib/billing/checkout.ts`) recognizes that error (`isBillingConfigError`) and tells the customer
+  "Billing isn't fully set up on this Weft yet." instead of "Something went wrong on our end", logging the list as
+  `Billing setup: …` (find it with `vercel logs --environment production --query "Billing setup" --json`).
+- The billing page shows owners and admins a notice naming the missing variables (`missingStripeEnv()`) whenever
+  `BILLING_PROVIDER=stripe` is set; names only, never values.
+- `lib/billing/stripe-env.test.ts` holds `scripts/stripe-weft-prices.mjs`'s `PRICES` to the same list and the catalog's
+  amounts, so a new paid plan or interval fails a test until the script makes its price.
+
 ## Setup steps
 
-**Done 2026-10-24:** the Weft Pro and Weft Team products and their five prices exist on the live account (made by
+**Done 2026-10-24:** the Weft Pro and Weft Team products and their six prices exist on the live account (made by
 `scripts/stripe-weft-prices.mjs`, BlastCP's `app`/`plan`/`interval` metadata and `weft_<plan>_<interval>[_<variant>]_<cents>`
 lookup keys, safe to re-run), and their ids are in the vault and on Vercel production. `scripts/stripe-prices.mjs` lists
 the account's products, prices and webhook endpoints (read-only). `scripts/stripe-weft-webhook.mjs` registers step 3's
@@ -340,7 +353,7 @@ endpoint and hands its signing secret to Vercel over the CLI's stdin, never prin
    `invoice.payment_failed`, `payment_method.attached`, `payment_method.detached`. Copy the signing
    secret into the vault as `STRIPE_WEBHOOK_SECRET`.
 4. **Fill the vault blanks and push them.** `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`,
-   `STRIPE_PRICE_PRO_MONTHLY`, `STRIPE_PRICE_PRO_YEARLY`, `STRIPE_PRICE_TEAM_MONTHLY`. Push them to Vercel with
+   `STRIPE_PRICE_PRO_MONTHLY`, `STRIPE_PRICE_PRO_YEARLY`, `STRIPE_PRICE_TEAM_MONTHLY`, `STRIPE_PRICE_TEAM_YEARLY`. Push them to Vercel with
    **Push** in the ▲ drawer (Touch ID per push) or `mcp__secrets__push_to_vercel`.
 5. **Deploy.** The next deploy activates the billing route. Verify with a test card in the Stripe
    Checkout flow (the standard `4242 4242 4242 4242` test number, Stripe's mock customer and
@@ -350,6 +363,8 @@ endpoint and hands its signing secret to Vercel over the CLI's stdin, never prin
 
 - `lib/billing/plans.ts` + `lib/billing/plans.test.ts` — the catalog (client-safe).
 - `lib/billing/upgrade.ts`, `lib/billing/plan-cards.ts`, `lib/use-upgrade.ts`, `components/UpgradeDialog.tsx` (+ tests) — the upgrade dialog.
+- `lib/billing/stripe-env.ts` + `lib/billing/stripe-env.test.ts` — `requiredStripeEnv`, `missingStripeEnv`, `isBillingConfigError`: the
+  STRIPE_* the provider demands, and the price script held to it.
 - `lib/billing/checkout.ts`, `app/api/billing/checkout/route.ts`, `app/api/account/billing/checkout/route.ts`, `app/checkout/done/page.tsx` (+ tests) — starting Checkout.
 - `lib/billing/plan-gate.ts` + `lib/billing/plan-gate.test.ts` — `TEAM_PLANS`, `GRANT_PLANS`, `grantLapsed`, `canHaveMembers`, `workspacePlan`,
   `workspaceCanHaveMembers`: which plans may have members (server-only).
@@ -379,8 +394,23 @@ endpoint and hands its signing secret to Vercel over the CLI's stdin, never prin
 
 - The mock provider has no hosted checkout page in Weft, so billing needs `BILLING_PROVIDER=stripe` to
   take a real payment. The mock is fine for tests and a local dev run.
-- `checkoutBranding` isn't set yet — Stripe Checkout uses its default. Adding the Weft brand (icon, brand
-  colour) is a one-line `checkout.session.create` parameter once decided.
+- Checkout carries Weft's name, icon (`https://weft.zip/app-icon.png`) and clay button through `checkoutBranding` in
+  `lib/billing/billing.ts`; before that it showed the shared account's dashboard logo (PlainDharma). Receipts, invoice
+  emails, the customer portal and the card statement still carry the account's branding: only Checkout can be branded
+  per app on a shared Stripe account.
+  `scripts/stripe-checkout-preview.mjs` opens an unpaid session with the same branding (through `mcp__secrets__run`), to
+  see a change before deploying it.
+- Testing against the Stripe sandbox from a local Weft: put the sandbox key and the six `STRIPE_PRICE_*` ids
+  (`scripts/stripe-weft-prices.mjs`) in the vault's development values, plus `BILLING_PROVIDER=stripe`,
+  `WEFT_BILLING_URL=http://127.0.0.1:1024` (the desktop's checkout goes to the deployed Weft otherwise, which holds the live
+  key) and `NEXT_PUBLIC_SITE_URL=http://127.0.0.1:1024` (Checkout's return URL; the package defaults to localhost:3000).
+  `stripe listen --forward-to 127.0.0.1:1024/api/billing/webhook` delivers the events, and its `whsec_` must be the vault's
+  `STRIPE_WEBHOOK_SECRET`; `scripts/stripe-listen-secret-check.mjs` says whether it is. `scripts/stripe-replay-local.mjs evt_…`
+  re-sends events that were missed or failed, signed with the vault secret. Local Weft shares the production database, so
+  a sandbox payment writes a real `org_subscriptions` row with sandbox customer and subscription ids.
+- `org_invoices_provider_invoice_idx` and `org_payment_methods_provider_idx` are plain unique indexes, not partial:
+  @aimhuge/billing upserts on those columns and supabase-js's `ON CONFLICT (cols)` can't use a partial index, so
+  `checkout.session.completed` and `invoice.paid` failed (docs/bug-fixes/038-billing-upserts-needed-plain-unique-indexes.md).
 - Token pricing is a placeholder: `PRO_PUKU_TOKENS = 300_000_000` in `lib/billing/plans.ts`. The user will
   tune it. Stripe doesn't enforce a per-period token count; the catalog does, and a lower number for a
   subscriber only affects their next period.
