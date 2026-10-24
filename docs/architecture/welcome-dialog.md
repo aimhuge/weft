@@ -6,8 +6,9 @@ whole design of this dialog:
 
 - **First launch** — `loadWelcome()` returns `welcome: null` plus a `preview`, and the dialog answers
   and saves the welcome (`answerWelcome()`) before it will let you start a thread.
-- **Replay** — Settings → General's *Replay the welcome* (or the command palette's `replay-welcome`,
-  `components/board-palette.ts:104`) dispatches `REPLAY_EVENT` from `lib/welcome-client.ts`; the dialog
+- **Replay** — the avatar menu's *Replay the welcome* (or the command palette's `replay-welcome`) calls
+  `replayWelcome()` in `lib/welcome-client.ts`: it runs `resetOnboarding()` (Settings → General's Reset tips:
+  the column tips and every drawer's intro video come back) and dispatches `REPLAY_EVENT`; the dialog
   reloads with `loadWelcome(true)` (`?replay=1`) and shows the same screens as a **preview that saves
   nothing**. Only its final **Start thread** still does real work, because you asked for that one.
 
