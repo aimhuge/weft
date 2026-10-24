@@ -67,3 +67,29 @@ A file that doesn't parse fails the route before React runs, so no boundary sees
 Build Error overlay (dev mode only, polled once a second), hides it, and `components/BuildErrorBar.tsx` draws a small bar
 instead: the file that broke, **Details** for the message, and **×** to dismiss. A dismissal holds for that error only
 (same file and message); a different build error brings the bar back. Test: `components/BuildErrorBar.test.tsx`.
+
+## Which card broke Weft
+
+Every card runs inside Weft's one Next server, so a thread can take the board down for everyone, and all the user
+sees is Weft restarting. On 2026-10-23 one card's `mcp__devservers__start pnpm dev` restarted it seven times in half
+an hour: Weft's `dev` script frees port 1024 first, which is the board's own server. The card that does it now gets
+marked: a red ring and a **💥 Broke Weft** chip (×N when it does it again) whose hover says what it did, with × to
+dismiss (`PATCH /api/cards/:id { broke: null }`); the thread hears why ahead of its next message, once.
+
+Three things get reported, each with its time:
+
+| Breakage | Who reports it | Evidence that blames a card |
+|---|---|---|
+| The server stopped without Weft asking | `electron/server.cjs` → `electron/server-exit.cjs` writes `~/.weft/server-exit.json`; the next server reads it once in `prewarm()` (`consumeServerExit`) | a Bash or devservers command in the 15 s before it that `restartTarget` (`lib/restart-guard.ts`) says stops Weft |
+| A build error | `BuildErrorBar` → `lib/use-break-report.ts` → `POST /api/broke` with the overlay's file | the latest edit to that file in the last 30 min |
+| A full reload of the board | the same hook, from `performance` (`reload`) and the time the page left (`pagehide`) | a command that stops Weft in the 8 s before it |
+
+`lib/crash-blame.ts` weighs each card's recent thread items (a command that stops Weft beats an edit to the broken
+file; latest of equals), marks `Card.broke`, and folds the board's reload after a server stop into that same incident.
+It never blames an edit for a reload just for being nearby: the first version did, and marked a card for a reload that
+Next's log put on its own `app-bootstrap.js` (every full reload logged on 2026-10-23/24 was that). Next does name the
+module it reloaded for ("Fast Refresh had to perform a full reload when ./x changed" in the server log); matching a
+card's edit against that line is the evidence a Fast Refresh reload still needs, and isn't built. When nothing on the board explains it (you pressed ⌘R, something outside Weft
+sent the SIGTERM), nobody is marked. A command a guard refused can't be blamed. Reloads and build errors are reported in
+dev mode only. Tests: `lib/crash-blame.test.ts`, `lib/use-break-report.test.ts`, `electron/server-exit.test.ts`,
+`app/api/broke-route.test.ts`.

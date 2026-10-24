@@ -2,12 +2,15 @@
 
 import { useState } from "react";
 import { useBuildError } from "@/lib/build-error";
+import { useBreakReport } from "@/lib/use-break-report";
 import Icon from "./Icon";
 
 // Stands in for Next's Build Error overlay (lib/build-error.ts): the board behind it is the last version that
 // compiled and still works, so say which file broke and get out of the way. × hides it until a different error shows.
 export default function BuildErrorBar() {
   const error = useBuildError();
+  // And tell the server, so the card whose edit did it is marked on the board (lib/crash-blame.ts).
+  useBreakReport(error);
   const [open, setOpen] = useState(false);
   const [dismissed, setDismissed] = useState<string | null>(null);
   const key = error && `${error.file}\n${error.message}`;
