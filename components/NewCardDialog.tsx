@@ -8,11 +8,14 @@ import { busyInFolder } from "@/lib/overlap";
 import { startButton, modelLabel } from "@/lib/new-thread";
 import { gateNote } from "@/lib/limit-reset";
 import { useEscape } from "@/lib/use-escape";
+import { useFeatureIntro } from "@/lib/use-feature-intro";
+import { hasPane, usePaneIntro } from "@/lib/pane-intro";
 import { useHeldModifiers } from "@/lib/use-mod-held";
 import { useNewCardDialog } from "@/lib/use-new-card-dialog";
 import { useStartGate } from "@/lib/use-start-gate";
 import { NEW_THREAD } from "@/lib/file-drop";
 import Composer, { type ComposerHandle } from "./Composer";
+import { IntroButton, IntroFrame, PlayIntroButton } from "./FeatureIntro";
 import Icon from "./Icon";
 import { NewCardDialogControls } from "./NewCardDialogControls";
 import { NewCardDialogFooter } from "./NewCardDialogFooter";
@@ -53,6 +56,11 @@ export default function NewCardDialog({
   const gate = useStartGate(dialog.backend, dialog.model);
   const composer = useRef<ComposerHandle>(null);
   useEscape(true, onClose);
+  // Its intro plays the first time the dialog opens (lib/feature-intros.ts), in the browser pane on the desktop
+  // (lib/pane-intro.ts) and in a frame over the composer on the web; ▶ by the title plays it again.
+  const inPane = hasPane();
+  const intro = useFeatureIntro(inPane ? null : "newthread");
+  const playInPane = usePaneIntro(inPane ? "newthread" : null);
 
   // The composer-backed submit: each call site picks its `start` and `stay` shape.
   const composerOps = {
@@ -90,6 +98,7 @@ export default function NewCardDialog({
       <div className="flex shrink-0 items-center justify-between border-b border-line px-5 py-3.5">
         <h2 className="flex min-w-0 items-center gap-2 truncate text-[15px] font-medium text-ink">
           New thread
+          {playInPane ? <PlayIntroButton id="newthread" onPlay={playInPane} /> : <IntroButton intro={intro} />}
           <RestartRequested restart={restart} />
         </h2>
         <button
@@ -101,6 +110,7 @@ export default function NewCardDialog({
         </button>
       </div>
       <div className="flex min-h-0 flex-1 flex-col px-5 pt-3">
+        <IntroFrame intro={intro} className="mb-3" />
         <Composer
           ref={composer}
           variant="dialog"

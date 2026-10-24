@@ -11,6 +11,11 @@ import { pathToFileURL } from "node:url";
 
 const cache = join(homedir(), ".cache", "weft-kokoro");
 
+// Names Kokoro says wrong, respelled for the voice only: the captions and the word timings keep the real word.
+// "Vercel" comes out VER-sul; "Vercelle" phonemizes to vɜːsˈɛl, ver-SELL.
+const SAY = [[/\bVercel\b/g, "Vercelle"]];
+export const spoken = (text) => SAY.reduce((t, [word, said]) => t.replace(word, said), text);
+
 export const voiceArg = () => process.argv.find((a) => a.startsWith("--voice="))?.slice("--voice=".length) ?? "af_heart";
 
 async function loadKokoro() {
@@ -77,7 +82,7 @@ export async function narrate(tracks, outFor, voice = voiceArg()) {
       let free = 0;
       for (const [i, [cue, end, text]] of lines.entries()) {
         const file = join(work, `${name}-${i}.wav`);
-        await (await tts.generate(text, { voice, speed: 1.1 })).save(file);
+        await (await tts.generate(spoken(text), { voice, speed: 1.1 })).save(file);
         const start = Math.max(cue, free);
         const len = seconds(file);
         free = start + len + 0.2;
