@@ -20,7 +20,7 @@ page load of the board, about 8 a second. It happened on some launches and not o
 
 ## Root cause
 
-A race in Next 16.4's Turbopack dev server (`next/dist/server/dev/hot-reloader-turbopack.js`, still in 16.5 canary):
+A race in Next 16.4's Turbopack dev server (`next/dist/server/dev/hot-reloader-turbopack.js`; the race is still present in 16.4.3 and 16.5 canary):
 
 1. The page connects and gets the HMR version `v` (`turbopack-connected`).
 2. It subscribes each chunk with `hmrVersion: v` (`turbopack-subscribe`).
@@ -46,7 +46,8 @@ parsedData.hmrVersion !== undefined && Number(parsedData.hmrVersion) > clientHmr
 ```
 
 If a Next upgrade changes that line, the script warns instead of failing the install. The test "finds the check in the
-installed Next" fails then too, which is the cue to check whether upstream fixed it and delete the patch.
+installed Next" fails then too, which is the cue to check whether upstream fixed it and delete the patch. The 16.4.3
+patch release keeps the line byte-identical, so the patch still applies there and the check is still needed.
 
 ## Why it was hard to find
 
