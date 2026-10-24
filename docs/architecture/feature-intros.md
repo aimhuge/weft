@@ -18,11 +18,32 @@ and played by the shared `player.js`. Anything that sits over the panel (a Touch
 | | |
 |---|---|
 | `player.js` | `window.weftIntro` scales the stage to the frame and, with `?live=1`, plays the timeline once from the top **with its own voice** (the `<id>.m4a` beside the page; `?muted=1` starts it muted, `{ weft: "intro-mute", muted }` flips it). The timeline waits for the voice to really play (or fail, or 4 s), and a voice later than that pulls the frames back to where it is. It posts `{ weft: "intro", event: "start" }` when it starts and `{ weft: "intro", event: "done" }` when it ends, and takes `{ weft: "intro-go" }` from the parent to start over. `?t=<seconds>` holds the frame there instead, for checking a scene by eye. |
-| `kit.css` | The shared look: the stage, the caption, the chip row. |
+| `kit.css` | The shared look: the stage, the caption, the chip row, the splash. |
 
 Like the welcome tour's pages, the timelines use no timers and no `tl.call`, so a frame is drawn purely by
 seeking. Captions live in the page and the voice in its `#narration` block (`<script type="application/json"
 id="narration">`), so the text and the track change together.
+
+### The splash
+
+Every intro opens on the same splash: the Weft mark, the wordmark and a bar, for 1.1 s and a 0.45 s fade — 1.55 s
+of lead before the story. `player.js` injects it, so all the pages open alike without each one carrying the markup.
+
+It plays on a **master** timeline with the page's own timeline nested under it (`master.add(tl, lead)`), which keeps
+the whole composition seekable for the frame-by-frame render. A nested timeline only advances if it isn't paused
+itself, so `tl.paused(false)` follows the `add`; the master is the only paused thing. `?t=` maps to the story's own
+clock — `?t=0` shows the splash, `?t=2` shows the story two seconds in.
+
+The narration is delayed by the same 1.55 s when the video is encoded, so the voice starts with the picture instead
+of underneath the splash.
+
+### The portrait render
+
+`?ratio=9:16` restacks the landscape stage into a tall 1600×2844 canvas (`html.portrait` in `kit.css`): the drawer
+art on top, the title and caption below. `player.js` then scales against 2844 rather than 900, so a vertical video
+fills its frame instead of sitting in a black band. The stage is taken out of the flow (`position: fixed`) in
+portrait, because a 2844 px canvas would otherwise grow the document and shrink the viewport the stage is scaled
+against.
 
 ## Narrating (`pnpm intros:narrate`)
 
