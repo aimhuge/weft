@@ -19,7 +19,8 @@ that counts only real work.
 
 The second set exists because the first set flatters. The original retention counted a **sign-in** as
 activity, so an account that opened Weft once and left counted as retained. Opening the app is not the same as
-pushing work through it, and the gap between the two tables is the interesting number:
+pushing work through it, and the gap between the two tables is the interesting number — an example read off the
+app in October 2026 (the live numbers are the app's, not this doc's):
 
 | Signup week | Sign-in retention | In-app retention |
 | --- | --- | --- |
@@ -34,7 +35,7 @@ pushing work through it, and the gap between the two tables is the interesting n
 | `~/.weft/apps/growth/weft-app.json` | The manifest: the project folder, the vault env, and every read by name |
 | `supabase/migrations/20261018054110_growth_reads.sql` | The account-level reads (`growth_overview`, `growth_signups_by_day`, `growth_active_by_day`, `growth_retention`, `growth_funnel`) |
 | `supabase/migrations/20261024041130_growth_in_app_reads.sql` | The in-app reads (`growth_cards_by_day`, `growth_engagement_by_day`, `growth_engagement_overview`, `growth_retention_in_app`) and the two helpers behind them |
-| `~/.weft/app-grants.json` | The grant: which env, which reads, and the hash that voids it when the manifest changes |
+| `~/.weft/app-grants.json` | The grant: the app's folder and env, the vault names its reads need, and the hash of its manifest that voids it when the manifest changes |
 
 ## The reads
 
@@ -53,14 +54,17 @@ the only key that can, and only Weft's main process holds it.
 
 ### The card helpers
 
-`private.growth_card_days()` flattens `public.cloud_cards.card` — a JSONB blob — into rows:
+`private.growth_card_days()` flattens `public.cloud_cards.card` — a JSONB blob — into one row per card:
+`card_id`, `owner_user`, `created_day`, `moved_day`, `card_column`, `turns`, `added`, `removed`, `folder`.
 
 | Column | From | Note |
 | --- | --- | --- |
+| `card_id`, `owner_user`, `folder` | the `cloud_cards` row | the account the card belongs to |
 | `created_day` | `card->>'createdAt'` | epoch **milliseconds**, converted to a UTC date |
 | `moved_day` | `card->>'columnAt'` | when the card last changed column |
 | `card_column` | `card->>'column'` | `backlog` / `running` / `needs_you` / `review` / `done` |
-| `turns`, `added`, `removed` | `card->>'turns'`, `card->'stats'` | |
+| `turns` | `card->>'turns'` | the turns the card has run |
+| `added`, `removed` | `card->'stats'->>'added'` / `->>'removed'` | lines changed in the card's folder |
 
 `column` is a reserved word in Postgres's OUT-parameter list, so the column is named **`card_column`**. The
 name reads oddly in SQL (`where card_column = 'done'`) and that is the price.
