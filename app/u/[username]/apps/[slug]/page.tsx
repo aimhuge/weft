@@ -12,7 +12,7 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { cacheLife } from "next/cache";
 import { appMetadataBySlug } from "@/lib/app-share-meta";
-import { isDeployed } from "@/lib/home";
+import { isWebEnabled } from "@/lib/home";
 import { SharedAppPageBody } from "./shared-app-body";
 import { SharedAppSkeleton } from "@/components/web-states/Skeletons";
 
@@ -37,7 +37,7 @@ function NotDeployed() {
 }
 
 export default function Page({ params }: { params: Promise<{ username: string; slug: string }> }) {
-  if (!isDeployed()) return <NotDeployed />;
+  if (!isWebEnabled()) return <NotDeployed />;
   return (
     <Suspense fallback={<SharedAppSkeleton />}>
       <SharedAppPageBody params={params} owner="user" />

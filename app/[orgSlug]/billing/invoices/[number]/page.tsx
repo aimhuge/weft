@@ -6,7 +6,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
-import { isDeployed } from "@/lib/home";
+import { isWebEnabled } from "@/lib/home";
 import { requireTeam } from "@/lib/teams";
 import { billing, billingService } from "@/lib/billing/billing";
 import { InvoiceSheet } from "@/components/team/InvoiceSheet";
@@ -74,7 +74,7 @@ async function InvoiceBody({ orgSlug, number }: { orgSlug: string; number: strin
 
 async function InvoiceFor({ params }: { params: Promise<{ orgSlug: string; number: string }> }) {
   const { orgSlug, number } = await params;
-  if (!isDeployed()) return <NotDeployedCard />;
+  if (!isWebEnabled()) return <NotDeployedCard />;
   return <InvoiceBody orgSlug={orgSlug} number={decodeURIComponent(number)} />;
 }
 

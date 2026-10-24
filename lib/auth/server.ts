@@ -4,7 +4,7 @@
 // weft.zip they read the per-visitor cookie session (lib/web-session.ts), so
 // each web visitor is a real account.
 import { accountClient, accountView, finishSignIn, signOut, toAccountUser } from "../account";
-import { isDeployed } from "../home";
+import { isWebEnabled } from "../home";
 import { readWebSessionIdentity } from "../web-auth";
 import { safeNextPath } from "./next-path";
 import { identityFromUser, type SessionIdentity } from "./identity";
@@ -50,7 +50,7 @@ export function createAuthCallback({ defaultNext, loginPath = "/login" }: { defa
 
 /** Read the signed-in identity for the "already signed in" banner on `/login`. */
 export async function readSessionIdentity(): Promise<SessionIdentity | null> {
-  if (isDeployed()) {
+  if (isWebEnabled()) {
     // The deployed site reads the per-visitor cookie session (lib/web-session.ts);
     // accountClient is the desktop's file-based PKCE session and isn't set up for
     // a web visitor.

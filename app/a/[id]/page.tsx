@@ -16,8 +16,9 @@ import { notFound, redirect } from "next/navigation";
 import { ShareGateForm } from "@aimhuge/share/client";
 import { appShareAccess } from "@/lib/app-share-access";
 import { appMetadataById } from "@/lib/app-share-meta";
-import { appFrameSrc, appPublicUrl } from "@/lib/app-share-types";
-import { isDeployed } from "@/lib/home";
+import { versionedFrameSrc } from "@/lib/app-share-frame";
+import { appPublicUrl } from "@/lib/app-share-types";
+import { isWebEnabled } from "@/lib/home";
 import { SharedApp } from "@/components/share-view/SharedApp";
 import { ShareNotice } from "@/components/share-view/ShareNotice";
 import { serviceClient } from "@/lib/web-session";
@@ -73,12 +74,12 @@ async function PageBody({ params }: { params: Promise<{ id: string }> }) {
   }
   // Pre-slug share: render in place. The parent-side bridge is not wired here (only the
   // /@<user>/apps/<slug> and /<org>/apps/<slug> views need it; pre-slug links are the legacy path).
-  return <SharedApp name={share.name} src={appFrameSrc(id, share)} site={share.kind === "site"} />;
+  return <SharedApp name={share.name} src={versionedFrameSrc(id, share)} site={share.kind === "site"} />;
 }
 
 
 export default function Page({ params }: { params: Promise<{ id: string }> }) {
-  if (!isDeployed()) {
+  if (!isWebEnabled()) {
     return <ShareNotice title="Shared app">Shared links open on weft.zip.</ShareNotice>;
   }
   return (

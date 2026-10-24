@@ -13,7 +13,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { isDeployed } from "@/lib/home";
+import { isWebEnabled } from "@/lib/home";
 import { requireTeam } from "@/lib/teams";
 import { isOpenCommand, type CloudCommandRow } from "@/lib/cloud-commands";
 import { BLOB_BUCKET, BLOB_REF_PREFIX, THREAD_PAGE_SIZE, type CloudCardRow, type CloudThreadItemRow } from "@/lib/cloud-sync-types";
@@ -133,7 +133,7 @@ function BoardPageFallback() {
 
 export default async function Page({ params, searchParams }: { params: Promise<{ orgSlug: string }>; searchParams?: Promise<Query> }) {
   const { orgSlug } = await params;
-  if (!isDeployed()) return <NotDeployedCard slug={orgSlug} />;
+  if (!isWebEnabled()) return <NotDeployedCard slug={orgSlug} />;
   return (
     <Suspense fallback={<BoardPageFallback />}>
       <BoardPageBody orgSlug={orgSlug} searchParams={searchParams} />

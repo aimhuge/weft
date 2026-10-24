@@ -10,7 +10,7 @@ import { Suspense } from "react";
 import { connection } from "next/server";
 import { notFound, redirect } from "next/navigation";
 import { ShareGateForm } from "@aimhuge/share/client";
-import { isDeployed } from "@/lib/home";
+import { isWebEnabled } from "@/lib/home";
 import { shareAccess } from "@/lib/share-access";
 import { buildShareLive } from "@/lib/share-live";
 import { serviceClient } from "@/lib/web-session";
@@ -94,7 +94,7 @@ function PageFallback() {
 }
 
 export default function Page({ params }: { params: Promise<{ id: string }> }) {
-  if (!isDeployed()) return <NotDeployed />;
+  if (!isWebEnabled()) return <NotDeployed />;
   return (
     <Suspense fallback={<PageFallback />}>
       <PageBody params={params} />

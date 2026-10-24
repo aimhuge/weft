@@ -26,7 +26,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { WebTeam } from "@/components/team/WebTeam";
-import { isDeployed } from "@/lib/home";
+import { isWebEnabled } from "@/lib/home";
 import { teamSnapshot } from "@/lib/team-ops";
 import { requireTeam } from "@/lib/teams";
 
@@ -67,7 +67,7 @@ function TeamPageFallback() {
 // The route params are request data under cacheComponents, so they're read inside the <Suspense>, not before it.
 async function TeamPageFor({ params }: { params: Promise<{ orgSlug: string }> }) {
   const { orgSlug } = await params;
-  if (!isDeployed()) return <NotDeployedCard slug={orgSlug} />;
+  if (!isWebEnabled()) return <NotDeployedCard slug={orgSlug} />;
   return <TeamPageBody orgSlug={orgSlug} />;
 }
 

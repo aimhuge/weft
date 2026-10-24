@@ -18,7 +18,7 @@
 // app has its own account flow.
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
-import { isDeployed } from "@/lib/home";
+import { isWebEnabled } from "@/lib/home";
 import { currentWorkspaceSlug } from "@/lib/teams";
 import "@/components/team/team.css";
 
@@ -79,7 +79,7 @@ function TeamRedirectFallback() {
 }
 
 export default function Page() {
-  if (!isDeployed()) return <NotDeployedCard />;
+  if (!isWebEnabled()) return <NotDeployedCard />;
   return (
     <Suspense fallback={<TeamRedirectFallback />}>
       <TeamRedirectBody />

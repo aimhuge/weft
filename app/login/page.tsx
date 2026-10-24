@@ -17,7 +17,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { Suspense } from "react";
 import { LoginForm, SignedInPrompt, readSessionIdentity, safeNextPath } from "@/lib/auth";
-import { isDeployed } from "@/lib/home";
+import { isWebEnabled } from "@/lib/home";
 import emblem from "@/electron/assets/emblem.png";
 import speeder from "@/electron/assets/splash-speeder.jpg";
 import cockpit from "@/public/copilots/wingman.jpg";
@@ -93,7 +93,7 @@ function LoginBodyFallback() {
 
 export default function Page({ searchParams }: { searchParams: Promise<{ next?: string }> }) {
   // In plain `next dev` (no Vercel / WEFT_HOME) the page is a no-op marker.
-  if (!isDeployed()) {
+  if (!isWebEnabled()) {
     return (
       <Shell description="In the desktop app, the board&apos;s sign-in button is how you sign in." />
     );

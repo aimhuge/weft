@@ -8,7 +8,7 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { connection } from "next/server";
 import { notFound } from "next/navigation";
-import { isDeployed } from "@/lib/home";
+import { isWebEnabled } from "@/lib/home";
 import { loadPublicProfile } from "@/lib/public-profile";
 import { PublicProfileView } from "@/components/profile/PublicProfileView";
 import "@/components/team/team.css";
@@ -38,7 +38,7 @@ async function PageBody({ params }: { params: Promise<{ username: string }> }) {
 }
 
 export default function Page({ params }: { params: Promise<{ username: string }> }) {
-  if (!isDeployed()) return <NotDeployed />;
+  if (!isWebEnabled()) return <NotDeployed />;
   return (
     <Suspense fallback={<ProfileSkeleton />}>
       <PageBody params={params} />

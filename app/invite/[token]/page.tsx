@@ -24,7 +24,7 @@ import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import Link from "next/link";
 import { lookupInviteByToken } from "@aimhuge/teams";
-import { isDeployed } from "@/lib/home";
+import { isWebEnabled } from "@/lib/home";
 import { serviceClient, webUser } from "@/lib/web-session";
 import { JoinForm } from "@/components/team/JoinForm";
 import { joinWorkspace } from "./actions";
@@ -141,7 +141,7 @@ function InviteFallback() {
 // The route params are request data under cacheComponents, so they're read inside the <Suspense>, not before it.
 async function InviteFor({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
-  if (!isDeployed()) return <NotDeployedCard />;
+  if (!isWebEnabled()) return <NotDeployedCard />;
   return <InviteBody token={token} />;
 }
 
