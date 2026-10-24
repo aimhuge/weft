@@ -109,7 +109,6 @@ export default function Board() {
   const [projects, setProjects] = useState<Project[]>([]);
   // Worktree folder -> its main repo, from the server; the bar shows each worktree's cards under that repo.
   const [roots, setRoots] = useState<Record<string, string>>({});
-  const [query, setQuery] = useState("");
   const [showArchived, setShowArchived] = useState(false);
   // New thread, Settings, Share board, Help, the palette, a sign-in and the project menu (lib/use-board-dialogs.ts).
   const {
@@ -161,8 +160,8 @@ export default function Board() {
 
   // Drag/drop, tag, and the "skip my own move's chime" ref (used by useBoardEvents below).
   const { ownMoves, move, drop, reorder, tagCard } = useBoardCardActions({ cards, setCards, setDragOver, notify });
-  // Project filter and sort, persisted to a cookie.
-  const { project, sort, chooseProject, chooseSort, loadFromPrefs, reviewFilter, toggleReviewFilter } = useBoardView({ select, setWebBrowserOpen });
+  // Project filter and sort, persisted to a cookie; the card filter clears when the project changes.
+  const { project, sort, query, setQuery, chooseProject, chooseSort, loadFromPrefs, reviewFilter, toggleReviewFilter } = useBoardView({ select, setWebBrowserOpen });
   // Archive, unarchive, focus the next card, and the last batch (for Z / Undo).
   const { archiveTarget, archiveCards, toggleArchive, unarchive, lastArchived } = useBoardArchive({
     cards,

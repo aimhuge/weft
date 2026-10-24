@@ -71,6 +71,16 @@ describe("useBoardView", () => {
     expect(select).not.toHaveBeenCalled();
   });
 
+  it("changing project clears the card filter; the same project keeps it", () => {
+    const { result } = makeView();
+    act(() => result.current.chooseProject("/repo"));
+    act(() => result.current.setQuery("login"));
+    act(() => result.current.chooseProject("/repo"));
+    expect(result.current.query).toBe("login");
+    act(() => result.current.chooseProject("/other"));
+    expect(result.current.query).toBe("");
+  });
+
   it("chooseSort updates the sort and writes the cookie", () => {
     const { result } = makeView();
     act(() => result.current.chooseProject("/repo"));
