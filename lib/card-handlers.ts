@@ -1,6 +1,7 @@
 import type React from "react";
 import type { ResumeHow } from "./card-resume";
 import { api } from "./client";
+import { stopNow } from "./optimistic-cards";
 import type { Card } from "./types";
 
 // What the board does when you use a card's own controls, closed over the board's actions so
@@ -21,7 +22,7 @@ export function cardHandlers(card: Card, ctx: CardActionsCtx) {
   return {
     onOpen: () => ctx.openCard(card),
     onAnswer: (allow: boolean) => void api.answer(card.id, allow, undefined, card.pending?.id).catch(ctx.notify),
-    onStop: () => void api.stop(card.id).catch(ctx.notify),
+    onStop: () => void stopNow(card.id).catch(ctx.notify),
     onResume: (how: ResumeHow) => ctx.resume(card.id, how),
     onContextMenu: (e: React.MouseEvent) => void ctx.onCardMenu(card, e),
     onStar: () => ctx.toggleStar(card),

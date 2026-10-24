@@ -1,4 +1,5 @@
 import { api } from "./client";
+import { removeNow } from "./optimistic-cards";
 import type { Card, PermissionMode, QuestionReply } from "./types";
 
 // What the open card's thread does with the server: send, answer, release, delete, rename, mode and the
@@ -33,7 +34,7 @@ export function threadHandlers(card: Card, ctx: ThreadActionsCtx) {
     onRelease: () => void api.release(card.id).catch(ctx.notify),
     onDelete: () => {
       close();
-      api.remove(card.id).catch(ctx.notify);
+      removeNow(card.id).catch(ctx.notify);
     },
     // The thread is always closeable from its own X; the pane column's X closes the pane, not the card.
     onClose: close,

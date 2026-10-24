@@ -2,6 +2,7 @@
 
 import type { Dispatch, SetStateAction } from "react";
 import { api } from "@/lib/client";
+import { stopNow } from "@/lib/optimistic-cards";
 import { useShortcutListener, useShortcuts } from "@/lib/hotkeys";
 import { stepThrough, SORTERS, type ProjectSummary, type SortKey } from "@/lib/board-view";
 import { useMenuBridge } from "@/lib/board-menu-bridge";
@@ -139,7 +140,7 @@ export function useBoardCommands(c: BoardCommandsInput) {
         focusReply: () => document.querySelector<HTMLElement>('aside [contenteditable="true"], aside textarea')?.focus(),
         closeThread: () => c.select(null),
         toggleArchive: c.toggleArchive,
-        stop: (id) => void api.stop(id).catch(c.notify),
+        stop: (id) => void stopNow(id).catch(c.notify),
         move: c.move,
         chooseProject: c.chooseProject,
         openCard,

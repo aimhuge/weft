@@ -388,7 +388,7 @@ Everything else is under 300 (2026-10-16): big files became re-exporting fronts 
 Pure logic already moved out: `lib/board-view.ts` (columns, project chips, chime/unseen rules, Review's Errors/Restart filter chips drawn by `components/ReviewFilterChips.tsx`) and
 `lib/turn.ts` (how a turn's result reads, where its card goes, cost, limits); Board's hooks into `lib/use-*.ts` (`use-now`,
 `use-toast`, `use-desktop-bridge`, `use-copilot-card`, `use-board-actions`, `use-board-toggles`, `use-board-view`, `use-board-archive`,
-`use-board-card-actions`, plus `lib/board-focus.ts`, `lib/board-helpers.ts`), its live events into `lib/board-live.ts`, the menu/dock/tray
+`use-board-card-actions`, plus `lib/board-focus.ts`, `lib/board-helpers.ts`), its live events into `lib/board-live.ts` (Delete and Stop drawn at once by `lib/optimistic-cards.ts`), the menu/dock/tray
 actions into `lib/board-menu-bridge.ts`, its derived values into `lib/board-derive.ts`, and its JSX into `BoardHeader`, `BoardProjectBar`,
 `BoardColumns` (each column's extras by id), `BoardBrowserPane`, `OpenCard` (the framed window and the open card's four columns),
 `NewThreadWindow` (the New thread form and desktop browser pane), `BoardBottom`

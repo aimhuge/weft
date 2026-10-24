@@ -1,9 +1,10 @@
-import type { Dispatch, RefObject, SetStateAction } from "react";
+import { useEffect, useRef, type Dispatch, type RefObject, type SetStateAction } from "react";
 import { api } from "./client";
 import { cardChangeEffects } from "./board-view";
 import { announce, without } from "./board-helpers";
 import { playChime } from "./chimes";
 import { announceAccountChange } from "./use-account";
+import { applyIntents, forget, onOptimistic, overlay, overlayAll } from "./optimistic-cards";
 import { useBoardEvents } from "./use-events";
 import type { BoardEvent, Card, Column, LoginView, Project, RestartStatus, ThreadItem } from "./types";
 
@@ -41,12 +42,15 @@ export interface BoardLive {
 }
 
 // A card changed: chime and highlight it if it moved or newly failed, then put it on the board.
-function onCard(card: Card, live: BoardLive) {
+function onCard(serverCard: Card, live: BoardLive) {
   // The copilot is a thread too, but it has its own lane and no project.
-  if (card.role === "copilot") {
-    live.updateCopilot(card);
+  if (serverCard.role === "copilot") {
+    live.updateCopilot(serverCard);
     return;
   }
+  // A card you just deleted or stopped stays drawn that way until the server catches up (lib/optimistic-cards.ts).
+  const card = overlay(serverCard);
+  if (!card) return;
   const { id, column, error } = card;
   const effects = cardChangeEffects({
     previous: live.columns.current.get(id),
@@ -92,6 +96,7 @@ export function onBoardEvent(event: BoardEvent, live: BoardLive) {
       onCard(event.card, live);
       break;
     case "card_deleted":
+      forget(event.id);
       live.setCards((prev) => prev.filter((c) => c.id !== event.id));
       live.setUnseen((prev) => (prev.has(event.id) ? without(prev, event.id) : prev));
       if (live.selectedRef.current === event.id) live.setSelectedId(null);
@@ -127,7 +132,7 @@ export function reloadBoard(live: BoardLive) {
       live.columns.current = new Map(data.cards.map((c) => [c.id, c.column]));
       live.errors.current = new Map(data.cards.map((c) => [c.id, c.error]));
       for (const c of data.cards) live.resolvedFolders.current.add(c.cwd);
-      live.setCards(data.cards);
+      live.setCards(overlayAll(data.cards));
       live.setHome(data.home);
       live.setRoots(data.roots);
       live.setLoaded(true);
@@ -147,10 +152,23 @@ export function reloadBoard(live: BoardLive) {
   if (live.selectedRef.current) live.loadThread(live.selectedRef.current);
 }
 
-// Board's way in: subscribes to the event stream with the latest state setters each render.
+// Board's way in: subscribes to the event stream with the latest state setters each render, and
+// draws a Delete or Stop the moment it's pressed (or reloads when the server refused one).
 export function useBoardLive(live: BoardLive) {
   useBoardEvents(
     (event) => onBoardEvent(event, live),
     () => reloadBoard(live),
+  );
+  const latest = useRef(live);
+  useEffect(() => {
+    latest.current = live;
+  });
+  useEffect(
+    () =>
+      onOptimistic((update) => {
+        if (update.kind === "reload") reloadBoard(latest.current);
+        else latest.current.setCards(applyIntents);
+      }),
+    [],
   );
 }

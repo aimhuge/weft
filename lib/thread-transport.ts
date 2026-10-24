@@ -8,6 +8,7 @@
 import { createContext, useContext } from "react";
 import { apiFetch } from "./api-client";
 import { api } from "./client";
+import { stopNow } from "./optimistic-cards";
 import { filesApi } from "./client-files";
 import { THREAD_PAGE_SIZE } from "./cloud-sync-types";
 import { applyThreadEvent, type ThreadPage } from "./thread-page";
@@ -69,7 +70,7 @@ export const localTransport: ThreadTransport = {
   loadPage: localPage,
   useLive: useLocalLive,
   useView: same,
-  stop: (cardId) => api.stop(cardId).then(() => {}),
+  stop: (cardId) => stopNow(cardId),
   shell: (cardId, command) => api.shell(cardId, command).then(() => {}),
   editLast: (cardId, text) => api.editLast(cardId, text).then(() => {}),
   fresh: (cardId, message) => api.fresh(cardId, message).then(() => {}),

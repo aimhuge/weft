@@ -2,7 +2,7 @@
 // The first-message-failed banner on the open thread (components/FirstMessageErrorBanner.tsx).
 // Renders only when lib/first-message-failed.ts is true: card has an error, the card is not
 // live, there's exactly one user message, and the assistant produced no useful text. The banner
-// offers Rerun (api.rerunModel) and Delete (api.deleteCard). When no backup is configured the
+// offers Rerun (api.rerunModel) and Delete (api.remove, through lib/optimistic-cards.ts). When no backup is configured the
 // Rerun button opens Settings → Models through the openSettings prop.
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -16,7 +16,7 @@ vi.mock("@/lib/client", () => ({
   api: {
     settings: vi.fn(),
     rerunModel: vi.fn().mockResolvedValue({ card: {} }),
-    deleteCard: vi.fn().mockResolvedValue({ ok: true }),
+    remove: vi.fn().mockResolvedValue({ ok: true }),
   },
 }));
 
@@ -58,7 +58,7 @@ function goodThread(): ThreadItem[] {
 beforeEach(() => {
   vi.mocked(api.settings).mockReset();
   vi.mocked(api.rerunModel).mockReset();
-  vi.mocked(api.deleteCard).mockReset();
+  vi.mocked(api.remove).mockReset().mockResolvedValue({ ok: true });
   vi.mocked(rememberPage).mockReset();
   vi.mocked(api.settings).mockResolvedValue({ backupModel: "claude-sonnet-5-5" } as never);
 });
@@ -131,14 +131,14 @@ describe("FirstMessageErrorBanner", () => {
     expect(api.rerunModel).not.toHaveBeenCalled();
   });
 
-  it("Delete calls api.deleteCard and the parent's onDeleted", async () => {
+  it("Delete calls api.remove and the parent's onDeleted", async () => {
     const card = makeCard({ error: "rate limit" });
     const onDeleted = vi.fn();
     render(<FirstMessageErrorBanner card={card} items={failedThread()} onDeleted={onDeleted} />);
     await screen.findByTestId("first-message-error-banner");
     fireEvent.click(screen.getByRole("button", { name: "Delete this card" }));
     await waitFor(() => {
-      expect(api.deleteCard).toHaveBeenCalledWith("card-1");
+      expect(api.remove).toHaveBeenCalledWith("card-1");
       expect(onDeleted).toHaveBeenCalled();
     });
   });
@@ -149,7 +149,7 @@ describe("FirstMessageErrorBanner", () => {
     await screen.findByTestId("first-message-error-banner");
     fireEvent.click(screen.getByRole("button", { name: "Delete this card" }));
     await waitFor(() => {
-      expect(api.deleteCard).toHaveBeenCalledWith("card-1");
+      expect(api.remove).toHaveBeenCalledWith("card-1");
     });
   });
 

@@ -76,6 +76,14 @@ lives in its own component under `components/`.
 
 - `lib/board-live.ts` — `useBoardLive` and what each server event does to the board's state
   (`onBoardEvent`), plus the full reload on the first connect and every reconnect (`reloadBoard`).
+- `lib/optimistic-cards.ts` — Delete and Stop land on the board before the server answers. Every Delete and
+  Stop button (header trash, right-click menu, card Stop, reply box ■, palette, first-message banner) calls
+  `removeNow` / `stopNow`; each records an intent and tells `useBoardLive` to redraw (`applyIntents`): a
+  deleted card disappears, a stopped one moves to Review with its Stop gone. Server cards (events and
+  reloads) pass through `overlay` / `overlayAll`, so a late update can't undo the intent; an intent ends when
+  the server's card shows the stop done, on `card_deleted`, or on a refusal, which reloads the board. A stop
+  whose card never leaves Running gives up after `STOP_SETTLE_MS` (10 s) and reloads. The copilot lane's Stop
+  and the web board are not covered.
 - `lib/board-derive.ts` — the small values read off the board's state each render: `filterState`,
   `footerFor`, `workFolder`, `openCardOf`, `headerCounts`.
 - `lib/use-board-dialogs.ts` — the dialog flags (`useBoardDialogs`, `DialogFlags`) and what they cover:

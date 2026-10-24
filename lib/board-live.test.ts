@@ -1,3 +1,5 @@
+// @vitest-environment happy-dom
+import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { BoardEvent, Card, ThreadItem } from "./types";
 
@@ -9,8 +11,10 @@ const mocks = vi.hoisted(() => ({
   playChime: vi.fn(),
   announceAccountChange: vi.fn(),
   useBoardEvents: vi.fn(),
+  remove: vi.fn(),
+  stop: vi.fn(),
 }));
-vi.mock("./client", () => ({ api: { list: mocks.list, settings: mocks.settings } }));
+vi.mock("./client", () => ({ api: { list: mocks.list, settings: mocks.settings, remove: mocks.remove, stop: mocks.stop } }));
 vi.mock("./board-view", () => ({ cardChangeEffects: mocks.effects }));
 vi.mock("./board-helpers", async (orig) => ({ ...(await orig<typeof import("./board-helpers")>()), announce: mocks.announce }));
 vi.mock("./chimes", () => ({ playChime: mocks.playChime }));
@@ -18,6 +22,7 @@ vi.mock("./use-account", () => ({ announceAccountChange: mocks.announceAccountCh
 vi.mock("./use-events", () => ({ useBoardEvents: mocks.useBoardEvents }));
 
 import { onBoardEvent, reloadBoard, useBoardLive, type BoardLive } from "./board-live";
+import { removeNow, stopNow } from "./optimistic-cards";
 
 const card = (over: Partial<Card> = {}): Card => ({ id: "a", title: "A", column: "running", cwd: "/r", ...over }) as Card;
 
@@ -203,11 +208,41 @@ describe("useBoardLive", () => {
     mocks.list.mockResolvedValue({ cards: [], home: "", roots: {} });
     mocks.settings.mockResolvedValue({ projects: [] });
     const { l } = live();
-    useBoardLive(l);
+    renderHook(() => useBoardLive(l));
     const [onEvent, onOpen] = mocks.useBoardEvents.mock.calls[0] as [(e: BoardEvent) => void, () => void];
     onEvent({ type: "account" });
     expect(mocks.announceAccountChange).toHaveBeenCalled();
     onOpen();
     expect(l.loadFromPrefs).toHaveBeenCalled();
+  });
+
+  it("draws a delete and a stop at once, and reloads when the server refuses one", async () => {
+    mocks.list.mockResolvedValue({ cards: [card({ id: "a" }), card({ id: "b" })], home: "", roots: {} });
+    mocks.settings.mockResolvedValue({ projects: [] });
+    mocks.remove.mockReturnValue(new Promise(() => {}));
+    mocks.stop.mockRejectedValueOnce(new Error("gone"));
+    const { l, cards } = live();
+    const { unmount } = renderHook(() => useBoardLive(l));
+    act(() => void removeNow("a").catch(() => {}));
+    expect(cards.value.map((c) => c.id)).toEqual(["b"]);
+    // A late update for the deleted card doesn't bring it back.
+    onBoardEvent({ type: "card", card: card({ id: "a", column: "review" }) }, l);
+    expect(cards.value.map((c) => c.id)).toEqual(["b"]);
+    await act(() => stopNow("b").catch(() => {}));
+    expect(mocks.list).toHaveBeenCalled();
+    onBoardEvent({ type: "card_deleted", id: "a" }, l);
+    unmount();
+  });
+});
+
+describe("optimistic stop in the live updates", () => {
+  it("keeps a stopping card out of Running until its turn ends", async () => {
+    mocks.stop.mockResolvedValue({ ok: true });
+    const { l, cards } = live();
+    await stopNow("a");
+    onBoardEvent({ type: "card", card: card({ id: "a", column: "running" }) }, l);
+    expect(cards.value.find((c) => c.id === "a")).toMatchObject({ column: "review", lastLine: "Stopped" });
+    onBoardEvent({ type: "card", card: card({ id: "a", column: "review", lastLine: "Stopped by you" }) }, l);
+    expect(cards.value.find((c) => c.id === "a")?.lastLine).toBe("Stopped by you");
   });
 });
