@@ -29,7 +29,7 @@ export function applyRow(db: Db, row: Record<string, unknown>): NonNullable<Db["
   const base = prior ?? fallback;
   return {
     id: (row.id as string | undefined) ?? base.id,
-    mode: row.mode as string,
+    mode: (row.mode as string | undefined) ?? base.mode,
     has_password: "password_hash" in row ? row.password_hash !== null : base.has_password,
     name: (row.name as string | undefined) ?? base.name,
     kind: (row.kind as string | undefined) ?? base.kind,

@@ -24,6 +24,7 @@ import type { MiniApp } from "./mini-apps";
 import { isCardShareMode, newShareId } from "./share-types";
 import { currentPage, pageForWrite, readShare, sameFiles, sameManifest, stateOf, type Ready } from "./app-share-row";
 import { pageBytes, quotaErrorText, roomFor } from "./app-share-quota";
+import { backfillSlug, defaultAppSlug, isDuplicateSlug, writeWithFreeSlug } from "./app-share-slug";
 
 export { AppShareError } from "./app-share-errors";
 
@@ -132,8 +133,10 @@ export async function target(appId: string): Promise<Target> {
 export async function getAppShare(appId: string): Promise<AppShareState> {
   const t = await target(appId);
   if (t.kind === "blocked") return t.state;
-  const row = await readShare(t);
-  if (!row) return stateOf(t, null);
+  const read = await readShare(t);
+  if (!read) return stateOf(t, null);
+  // A link that went up before every link got an address gets its default one (lib/app-share-slug.ts).
+  const row = await backfillSlug(t, read);
   // Row's workspace: required to upload under and to write back; a row from before org_id existed
   // (or a test fixture that omits it) lands in the sharer's own workspace, like setAppShare's pick.
   const orgId = row.org_id ?? t.orgId;
@@ -178,13 +181,6 @@ function badSlug(value: unknown): string | null {
   return null;
 }
 
-// A unique-index violation comes back as Postgres's "duplicate key value" message; the route
-// surfaces it as a 400 with this friendlier wording.
-function isDuplicateSlug(err: { message: string } | null): boolean {
-  if (!err) return false;
-  return /duplicate key|already exists/i.test(err.message);
-}
-
 export async function setAppShare(appId: string, update: AppShareUpdate): Promise<AppShareState> {
   // Never public_edit: a mini app is the sharer's page, not something a visitor changes.
   if (!isCardShareMode(update.mode)) throw new AppShareError("Unknown share mode.", 400);
@@ -200,8 +196,8 @@ export async function setAppShare(appId: string, update: AppShareUpdate): Promis
   const over = await roomFor(t.client, nextOrgId, existing?.id ?? null, update.mode, t.page);
   if (over) throw new AppShareError(over, 402);
   const now = await pageForWrite(t, existing, nextOrgId);
-  const change = buildChange({ update, t, now, owner: { nextOwner, nextSlug }, password });
-  const writeError = await writeShareRow(t, existing, change);
+  const change = (slug: string | null) => buildChange({ update, t, now, owner: { nextOwner, nextSlug: slug }, password });
+  const writeError = await writeWithSlug(t, existing, nextSlug, change);
   if (writeError) throwAsError(writeError, pageBytes(t.page));
   return previewed(t, now);
 }
@@ -267,6 +263,17 @@ function buildChange(input: {
   if (update.mode !== "password") change.password_hash = null;
   else if (password) change.password_hash = hashSharePassword(password);
   return change;
+}
+
+// A link with no address yet gets its default one, or the next free one after it (lib/app-share-slug.ts).
+function writeWithSlug(
+  t: Ready,
+  existing: Awaited<ReturnType<typeof readShare>>,
+  slug: string | null,
+  change: (slug: string | null) => Record<string, unknown>,
+): Promise<{ message: string } | null> {
+  if (slug !== null) return writeShareRow(t, existing, change(slug));
+  return writeWithFreeSlug(defaultAppSlug(t.app), (next) => writeShareRow(t, existing, change(next)));
 }
 
 async function writeShareRow(

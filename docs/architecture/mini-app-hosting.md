@@ -76,6 +76,12 @@ to the Share dialog instead — shared apps live on weft.zip.
 `appSlugFrom(name)` (from "📈 Growth" to `growth`) and `paneAddress(app, url)` (the pane's address bar shows
 an app's name and link instead of a `file:///Users/...` path).
 
+Every link gets an address, not only one whose slug field was edited (`lib/app-share-slug.ts`): a share with no
+slug writes the app's default (`defaultAppSlug`: its `~/.weft/apps/<slug>/` folder name, else `appSlugFrom(name)`),
+moving on to `<slug>-2` … `<slug>-9` past a taken one and only then going up without a slug. Opening Share… on a
+link from before this (`slug` null) backfills it the same way (`backfillSlug` in `getAppShare`), so Copy link gives
+`weft.zip/@<user>/apps/<slug>` instead of the bare `/a/<id>`.
+
 `MIGRATION 20261019095618_app_hosting.sql`:
 
 - `cloud_app_shares` gains `owner`, `slug`, `files (jsonb path→sha256)`, `manifest (jsonb policy)`; `kind`

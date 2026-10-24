@@ -42,6 +42,8 @@ const STRIPE_LIVE = ["sk", "live", "51Hxabcdefghijklmnopqrstuvwxyz"].join("_");
 const DEFAULT_SHARE: NonNullable<Db["share"]> = { id: "abcdefghijklmnopqrstuv", mode: "private", has_password: false, name: "My App", kind: "site", page: "https://example.com/page", owner: "user", slug: null, files: null, manifest: null, org_id: "o1" };
 const share = (over: Partial<NonNullable<Db["share"]>> = {}): NonNullable<Db["share"]> => ({ ...DEFAULT_SHARE, ...over });
 const ORG_OWNER = { owner: "user", slug: null, orgId: null, publicUrl: null, owners: { user: { username: "alice" }, orgs: [{ id: "o1", slug: "personal", name: "Personal" }] } };
+// A link under its default address: "My App" → weft.zip/@alice/apps/my-app (lib/app-share-slug.ts).
+const MY_APP = { ...ORG_OWNER, slug: "my-app", publicUrl: "https://weft.zip/@alice/apps/my-app" };
 
 // appPage's default home is os.homedir(); a file the share would actually upload has to live there.
 let sandbox: string;
@@ -137,17 +139,17 @@ describe("getAppShare", () => {
 
   it("reads a share with its link, and an unknown mode as private", async () => {
     db.share = share({ mode: "password", has_password: true });
-    expect(await getAppShare("a1")).toEqual({ kind: "ok", id: "abcdefghijklmnopqrstuv", url: "https://weft.zip/a/abcdefghijklmnopqrstuv", mode: "password", hasPassword: true, shows: "site", manifest: null, preview: null, previewing: false, quota: null, ...ORG_OWNER });
+    expect(await getAppShare("a1")).toEqual({ kind: "ok", id: "abcdefghijklmnopqrstuv", url: "https://weft.zip/a/abcdefghijklmnopqrstuv", mode: "password", hasPassword: true, shows: "site", manifest: null, preview: null, previewing: false, quota: null, ...MY_APP });
     db.share = share({ mode: "public_edit" });
     expect(await getAppShare("a1")).toMatchObject({ mode: "private" });
   });
 
   it("updates the row when the app was renamed or its page changed, uploading then", async () => {
-    db.share = share({ mode: "public", name: "Old" });
+    db.share = share({ mode: "public", name: "Old", slug: "my-app" });
     // Renamed only: no upload, name updates.
     await getAppShare("a1");
     expect(db.writes).toHaveLength(1);
-    expect(db.writes[0]).toMatchObject({ op: "update", row: { name: "My App", kind: "site", page: "https://example.com/page", files: null, manifest: null, owner: "user", slug: null }, filters: { id: "abcdefghijklmnopqrstuv" } });
+    expect(db.writes[0]).toMatchObject({ op: "update", row: { name: "My App", kind: "site", page: "https://example.com/page", files: null, manifest: null, owner: "user", slug: "my-app" }, filters: { id: "abcdefghijklmnopqrstuv" } });
     expect(uploaded.paths).toEqual([]);
     // Page changed to a local file: upload + update.
     db.share = share({ mode: "public", kind: "blob", page: "blob:sha256:" + "0".repeat(64) });
@@ -178,7 +180,7 @@ describe("getAppShare", () => {
         const { appPage } = await import("./app-share");
         expect(appPage(app.url).kind).toBe("folder");
         // Stale row: the file's hash differs from what appShare would compute now, so the upload path runs.
-        db.share = share({ mode: "public", kind: "folder", page: "index.html", files: { "index.html": "0".repeat(64) }, slug: null, org_id: "o1" });
+        db.share = share({ mode: "public", kind: "folder", page: "index.html", files: { "index.html": "0".repeat(64) }, slug: "growth", org_id: "o1" });
         const err = await getAppShare("a1").catch((e: unknown) => e);
         expect(err).toBeInstanceOf(AppShareError);
         expect(err).toMatchObject({ status: 400 });
@@ -222,9 +224,9 @@ describe("setAppShare", () => {
     const { op, row } = db.writes[0]!;
     expect(op).toBe("insert");
     expect(row.id).toMatch(/^[A-Za-z0-9_-]{22}$/);
-    expect(row).toMatchObject({ org_id: "o1", app_id: "a1", mode: "email", name: "My App", kind: "blob", password_hash: null, owner: "user", slug: null, files: null, manifest: null });
+    expect(row).toMatchObject({ org_id: "o1", app_id: "a1", mode: "email", name: "My App", kind: "blob", password_hash: null, owner: "user", slug: "my-app", files: null, manifest: null });
     expect((row.page as string).startsWith("blob:sha256:")).toBe(true);
-    expect(state).toEqual({ kind: "ok", id: row.id, url: `https://weft.zip/a/${row.id as string}`, mode: "email", hasPassword: false, shows: "blob", manifest: null, preview: null, previewing: false, quota: null, ...ORG_OWNER });
+    expect(state).toEqual({ kind: "ok", id: row.id, url: `https://weft.zip/a/${row.id as string}`, mode: "email", hasPassword: false, shows: "blob", manifest: null, preview: null, previewing: false, quota: null, ...MY_APP });
     expect(uploaded.paths).toContain(file);
   });
 
@@ -257,7 +259,7 @@ describe("setAppShare", () => {
   it("updates an existing share in place, keeping its id", async () => {
     db.share = share();
     const state = await setAppShare("a1", { mode: "public" });
-    const expected = { op: "update", row: { mode: "public", name: "My App", kind: "site", page: "https://example.com/page", password_hash: null, owner: "user", slug: null, files: null, manifest: null, org_id: "o1" }, filters: { id: "abcdefghijklmnopqrstuv" } };
+    const expected = { op: "update", row: { mode: "public", name: "My App", kind: "site", page: "https://example.com/page", password_hash: null, owner: "user", slug: "my-app", files: null, manifest: null, org_id: "o1" }, filters: { id: "abcdefghijklmnopqrstuv" } };
     expect(db.writes).toEqual([expected]);
     expect(state).toMatchObject({ id: "abcdefghijklmnopqrstuv", mode: "public" });
   });

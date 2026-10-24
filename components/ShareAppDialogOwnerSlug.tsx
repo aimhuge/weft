@@ -1,15 +1,16 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { APP_SLUG_RE, appSlugFrom, type AppOwner, type AppShareState } from "@/lib/app-share-types";
+import { APP_SLUG_RE, type AppOwner, type AppShareState } from "@/lib/app-share-types";
+import { defaultAppSlug } from "@/lib/app-share-slug";
 import type { MiniApp } from "@/lib/mini-apps";
 import { isCardShareMode } from "@/lib/share-types";
 import { appsApi, reloadApps } from "@/lib/use-mini-apps";
 import { errorText } from "./ShareParts";
 
 // One row: "Under [@<user> ▾] / apps / [slug]" — the owner dropdown and the slug field, saved together on
-// blur or Enter. The default slug is the app's folder name when the page sits in ~/.weft/apps/<slug>/,
-// else appSlugFrom(app.name). The server validates with APP_SLUG_RE and turns a unique-index violation
+// blur or Enter. The default slug (lib/app-share-slug.ts defaultAppSlug) is the one the server gives a link
+// that has none yet. The server validates with APP_SLUG_RE and turns a unique-index violation
 // into "That address is taken." (lib/app-share.ts isDuplicateSlug). Split out from ShareAppDialog.tsx
 // so the dialog stays under the 300-line cap (SOUL.md's ratchet).
 export function OwnerSlugRow({
@@ -23,7 +24,7 @@ export function OwnerSlugRow({
   setState: (s: AppShareState) => void;
   setError: (e: string | null) => void;
 }) {
-  const defaultSlug = defaultSlugFor(app);
+  const defaultSlug = defaultAppSlug(app);
   const owners = state.owners;
   const canPickOrg = owners.orgs.length > 0;
   const [draftSlug, setDraftSlug] = useState<string>(state.slug ?? defaultSlug);
@@ -133,14 +134,4 @@ function orgList(orgs: { id: string; slug: string; name: string }[], currentOrgI
   // If the current org isn't in the list (the user left it), show it first so its name is visible.
   if (currentOrgId && !orgs.some((o) => o.id === currentOrgId)) return [{ id: currentOrgId, slug: "unknown", name: "Unknown" }, ...orgs];
   return orgs;
-}
-
-// The folder slug from a file:///path/.weft/apps/<slug>/<entry> URL, or null when it doesn't match.
-function deriveFolderSlug(url: string): string | null {
-  const m = url.match(/^file:\/\/.+?\/\.weft\/apps\/([^/]+)\/[^/?#]+/);
-  return m?.[1] ?? null;
-}
-
-function defaultSlugFor(app: MiniApp): string {
-  return app.url.startsWith("file:") ? deriveFolderSlug(app.url) ?? appSlugFrom(app.name) : appSlugFrom(app.name);
 }
