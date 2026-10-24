@@ -48,6 +48,12 @@ catalog**, not typed:
 - `cardFor(id, features, featured)` reads the name and blurb from `catalog.get(id)`.
 - `pukuAllowanceLabel()` renders `PRO_PUKU_TOKENS` in millions ("300M Puku tokens a month"), because
   "300,000,000" is not a number anyone reads.
+- Free's Puku bullet quotes the free tier cap through `freeTierCapLabel()` ("1M tokens a day", `FREE_TIER`).
+- Under the three cards, `components/home/AccessPlans.tsx` (`#wz-access`, `.wz-access*`) draws a quieter dashed row:
+  Startups, Open source, Education and Regional pricing, two by two, each marked **Coming soon** until weft.zip can
+  grant or sell it. Its numbers come from the catalog too (`STARTUP_TEAM`, `freeTierCapLabel()`, `BLASTCP_CREATOR.name`,
+  `REGIONAL_PRO_CENTS`); drop the Coming soon chip per card as each plan lands
+  ([billing.md](billing.md#startups-open-source-education-and-regional-pricing)).
 - `blastcpLines(plan.blastcp)` turns each plan's BlastCP tier into two bullets ("BlastCP Creator: 1 brand, every channel,
   unlimited posts", "$3 a month of BlastCP AI generation"). `cardFor` puts them after the plan's own bullets and before a
   closing "Everything in …" ([billing.md](billing.md#blastcp-usage)).
