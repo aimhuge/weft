@@ -116,8 +116,15 @@ The reports are leads, not facts:
 
 ## Phase 3: SOUL.md (you)
 
-Only if the project has one, and only when this session changed what it states: the file map, values
-or conventions, hotspot sizes, the "Known gaps" list (refresh its verified date), or test/CI status.
+SOUL.md is loaded into every thread, so keep it small: who the project is, its values, its
+conventions and a short map of the big pieces. Touch it only when this session changed one of
+those.
+
+A feature's details go in the project's detailed map when it has one (Weft's is
+`docs/architecture/MAP.md`; `lib/soul-size.test.ts` caps SOUL.md) and in the feature's own doc, not
+in SOUL.md: which files do what, hotspot sizes, known gaps, test counts. If SOUL.md has grown past
+about 15 KB, move detail out instead of adding more.
+
 First person, the file's terse style, current state only. No `SOUL.md` → say `/weft:setup-done`
 can create one.
 

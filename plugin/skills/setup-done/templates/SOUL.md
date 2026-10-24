@@ -6,7 +6,10 @@
 
 - <Three to five principles that settle design arguments.>
 
-## How it works (file map)
+## Where things live
+
+A short map of the big pieces only; each feature's files, gaps and test notes go in
+`docs/architecture/`.
 
 - `<path>`: <role>
 
@@ -14,3 +17,4 @@
 
 - Run lint and tests before committing (`/done` does this).
 - Update `docs/architecture/` when a feature lands.
+- Keep this file small: it is loaded into every thread, so details go in `docs/architecture/`.

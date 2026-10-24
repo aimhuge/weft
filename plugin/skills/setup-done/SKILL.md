@@ -59,8 +59,9 @@ Create only the missing items. Never touch existing docs.
 - `docs/architecture/`: create `overview.md` from `templates/architecture-overview.md`, filled in
   from the real code (entry points, directory layout, README).
 - `docs/bug-fixes/`: create with `README.md` from `templates/bug-fixes-README.md`.
-- `SOUL.md`: if missing, write a minimal one from `templates/SOUL.md`, with purpose, values and
-  file map filled in from the README and code. Mark guesses with `<confirm>`.
+- `SOUL.md`: if missing, write a minimal one from `templates/SOUL.md`, with purpose, values and a
+  short map of the big pieces filled in from the README and code. Mark guesses with `<confirm>`.
+  It is loaded into every thread, so keep it small: per-file detail goes in `docs/architecture/`.
 - `CLAUDE.md`: if missing, create it from `templates/CLAUDE.md` (just `@SOUL.md`). If it exists
   without the include, show a diff that adds `@SOUL.md` as the first line.
 
