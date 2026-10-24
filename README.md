@@ -151,7 +151,10 @@ port.
   monthly or yearly) and goes on to Stripe Checkout; it also opens by itself whenever you hit something a plan unlocks, like
   inviting a teammate on Free, running out of room for shared apps, or the free Puku cap. **Manage billing** opens the
   workspace's billing page on weft.zip (the Stripe-hosted portal to manage). Billing is per workspace, not per seat;
-  owner or admin manages. See docs/architecture/billing.md.
+  owner or admin manages. The billing page also gives each workspace a referral code: the team you refer gets 20% off
+  three months and you get $20 off your bill. Super-admins run plans from **Admin → Billing** (upgrade, downgrade,
+  switch, seats, refunds in full or part, people, discounts, and a reset for sandbox ids on a real workspace, each in the
+  Stripe mode the workspace's ids live in) and coupon codes from **Admin → Coupons**. See docs/architecture/billing.md.
 - **Updates**: the packaged app checks GitHub Releases at launch and every few hours, downloads a new version in the
   background, and the Weft menu offers **Restart to Update**. With threads running it asks: **Restart When Idle**
   (the default) waits for them to finish, **Restart Now** cuts them off. Weft → Check for Updates… opens the Software Update window (versions, last check, release notes, the next step). What changed is in [CHANGELOG.md](CHANGELOG.md); releasing is in docs/architecture/updates.md.
@@ -334,7 +337,7 @@ whenever cards are waiting in it.
 
 Drag a Backlog card onto another one to set the order: drop on its top half to place the card before it,
 or its bottom half to place it after. Weft saves that order and uses it for the Backlog list, whatever
-sort is selected for the other columns.
+sort is selected for the other columns. Review ignores the sort too: its most recently updated card is always on top.
 In the New thread dialog, **⌘B** adds the thread to the Backlog (the same as **Add to backlog**). Each Backlog card has
 an archive button on hover. The Backlog header has two more: the flag saves the cards it shows as a **sprint** ("Sprint 3 ·
 Oct 18"), and the box archives them all after an "Are you sure?" that can save them as a sprint first. Click the word
@@ -630,7 +633,7 @@ Beside the code quality badge, **🔥 25 · Lv 15** is your streak and level (Se
 off). Hover it for today's numbers; click it for your **Wefter Profile**. A new badge or level pops up over the board
 with a burst of confetti (none with Reduce motion on), and **See your profile** opens your badges. A level-up opens like
 an episode: your rank's picture (our hovercar, wearing the Weft emblem, from a dusty garage at Thread to a cliff over the
-woven city at Tapestry), "Episode XXIV" and a line of story rising over it. **Replay last achievement**, in the avatar's
+woven city at Tapestry), "Episode XXIV" and a line of story rising over it, read aloud by a narrator (🔊 mutes the voice). **Replay last achievement**, in the avatar's
 menu and the palette, shows the last one again:
 
 - **XP and levels.** Starting a card earns 2 XP, a turn 1, and taking a card to Done 10, or 15 when its
@@ -1068,8 +1071,11 @@ Contributions are welcome, and the license is built so they stay open: you keep 
 there's no CLA, and your code becomes Apache-2.0 two years after it ships. Start with
 [CONTRIBUTING.md](CONTRIBUTING.md); security reports go to [SECURITY.md](SECURITY.md).
 Weft is source-available under the [Functional Source License 1.1, ALv2 Future License](LICENSE)
-(FSL-1.1-ALv2). You can fork it, change it, self-host it, use it at work and build client work on it.
-You can't offer it, or something built mainly on it, as a product or service that competes with Weft.
+(FSL-1.1-ALv2), with Weft Additional Terms. You can use Weft at work and build client work with it.
+You can fork and change it for personal use, non-commercial education and research, and to send changes
+back. A modified Weft used in or for a business, or built into a commercial project, needs a commercial
+license. No copy may switch off or get around Weft's plans, limits or payments. You can't offer Weft,
+or something built mainly on it, as a product or service that competes with Weft.
 Each release becomes Apache-2.0 two years after it ships. Versions up to and including v0.3.0 were
 released under Apache-2.0 and stay that way.
 

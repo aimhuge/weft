@@ -1,7 +1,8 @@
 // What a level-up says and shows (components/AchievementPopup.tsx): the rank's picture, rendered by BlastCP in the
 // same retro hovercar world as the scenes and the copilot's cockpit (public/brand/levels/), an "Episode" number
-// in roman numerals, and a line of story. Each rank has a few lines, and each level in it gets the next one, so
-// climbing through a rank never repeats a line until the rank runs out of them.
+// in roman numerals, and a line of story with its voiceover. Each rank has a few lines, and each level in it gets the
+// next one, so climbing through a rank never repeats a line until the rank runs out of them. The voiceovers are Kokoro
+// clips, one per line, made by `pnpm levels:narrate` (scripts/narrate-levels.mjs) from loreLines() below.
 
 export interface Lore {
   // The episode the level is, "Episode XXIV".
@@ -9,6 +10,8 @@ export interface Lore {
   // public/brand/levels/<rank>.webp.
   art: string;
   line: string;
+  // public/brand/levels/voice/<rank>-<n>.m4a, the line read aloud.
+  voice: string;
 }
 
 // The ranks in lib/game.ts (TITLES), lowest first, with the level each starts at.
@@ -126,12 +129,20 @@ function rankFor(level: number, title: string) {
   return RANKS.find((r) => r.title === title) ?? [...RANKS].reverse().find((r) => level >= r.from) ?? FIRST;
 }
 
+const voiceClip = (rank: Rank, index: number) => `${rank.title.toLowerCase()}-${index + 1}`;
+
 export function loreFor(level: number, title: string): Lore {
   const rank = rankFor(level, title);
-  const step = Math.max(0, level - rank.from);
+  const index = Math.max(0, level - rank.from) % rank.lines.length;
   return {
     episode: `Episode ${roman(level)}`,
     art: `/brand/levels/${rank.title.toLowerCase()}.webp`,
-    line: rank.lines[step % rank.lines.length] ?? rank.lines[0],
+    line: rank.lines[index] ?? rank.lines[0],
+    voice: `/brand/levels/voice/${voiceClip(rank, index)}.m4a`,
   };
+}
+
+// Every line with the name of its voiceover clip, for scripts/narrate-levels.mjs.
+export function loreLines(): { clip: string; line: string }[] {
+  return RANKS.flatMap((rank) => rank.lines.map((line, i) => ({ clip: voiceClip(rank, i), line })));
 }

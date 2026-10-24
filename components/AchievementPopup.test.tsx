@@ -1,13 +1,25 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Badge } from "@/lib/game-badges";
 import AchievementPopup from "./AchievementPopup";
 import "./test-utils";
 
 const badge = (id: string, name: string): Badge => ({ id, icon: "🛡️", name, desc: `${name} desc`, group: "Milestones", unlocked: true });
 const level = { level: 24, title: "Loom", floor: 21160, next: 23000 };
+const play = vi.fn(function (this: HTMLMediaElement) {
+  return Promise.resolve();
+});
+const pause = vi.fn();
+
+beforeEach(() => {
+  localStorage.clear();
+  play.mockClear();
+  pause.mockClear();
+  vi.spyOn(HTMLMediaElement.prototype, "play").mockImplementation(play);
+  vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(pause);
+});
 
 function setup(achievement: Parameters<typeof AchievementPopup>[0]["achievement"]) {
   const onProfile = vi.fn();
@@ -56,6 +68,28 @@ describe("AchievementPopup", () => {
     const popup = screen.getByRole("dialog", { name: "Achievement unlocked!" });
     expect(popup.querySelector("img")).not.toBeNull();
     expect(popup).toHaveTextContent("Level 24 · Loom");
+  });
+
+  it("reads the line aloud as a level-up opens, and stops when it closes", () => {
+    const { unmount } = render(<AchievementPopup achievement={{ fresh: [], level }} onProfile={vi.fn()} onClose={vi.fn()} />);
+    return Promise.resolve().then(() => {
+      expect(play).toHaveBeenCalledOnce();
+      expect((play.mock.contexts[0] as HTMLAudioElement).src).toContain("/brand/levels/voice/loom-5.m4a");
+      unmount();
+      expect(pause).toHaveBeenCalled();
+    });
+  });
+
+  it("stays quiet when Weft's voice is muted, and the 🔊 mutes it for next time", async () => {
+    setup({ fresh: [], level });
+    await userEvent.click(screen.getByRole("button", { name: "Mute the voice" }));
+    expect(localStorage.getItem("weft-welcome-muted")).toBe("1");
+    cleanup();
+    play.mockClear();
+    setup({ fresh: [], level });
+    await Promise.resolve();
+    expect(play).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Unmute the voice" })).toBeInTheDocument();
   });
 
   it("opens the profile and closes", async () => {

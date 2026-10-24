@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { levelFor } from "./game";
-import { loreFor, roman } from "./level-lore";
+import { loreFor, loreLines, roman } from "./level-lore";
 
 describe("roman", () => {
   it("writes episode numbers", () => {
@@ -21,6 +21,7 @@ describe("loreFor", () => {
       const { level, title } = levelFor(xp);
       const lore = loreFor(level, title);
       expect(existsSync(join(process.cwd(), "public", lore.art))).toBe(true);
+      expect(existsSync(join(process.cwd(), "public", lore.voice))).toBe(true);
       expect(lore.line.length).toBeGreaterThan(10);
     }
   });
@@ -28,6 +29,13 @@ describe("loreFor", () => {
   it("names the episode and picks the rank's picture", () => {
     expect(loreFor(24, "Loom")).toMatchObject({ episode: "Episode XXIV", art: "/brand/levels/loom.webp" });
     expect(loreFor(1, "Thread").art).toBe("/brand/levels/thread.webp");
+  });
+
+  it("reads each line in the clip loreLines names for it", () => {
+    expect(loreFor(24, "Loom")).toMatchObject({ voice: "/brand/levels/voice/loom-5.m4a" });
+    const clip = loreLines().find((l) => l.line === loreFor(24, "Loom").line)?.clip;
+    expect(clip).toBe("loom-5");
+    expect(new Set(loreLines().map((l) => l.clip)).size).toBe(loreLines().length);
   });
 
   it("walks a rank's lines one level at a time", () => {

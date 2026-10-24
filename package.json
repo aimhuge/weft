@@ -4,7 +4,7 @@
   "version": "0.6.0",
   "description": "A board for your AI",
   "author": "Alex Miller <fotoflo@gmail.com>",
-  "license": "FSL-1.1-ALv2",
+  "license": "SEE LICENSE IN LICENSE",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/aimhuge/weft.git"
@@ -26,6 +26,7 @@
     "welcome:render": "node scripts/render-welcome-loop.mjs",
     "welcome:narrate": "node scripts/narrate-welcome.mjs",
     "intros:narrate": "node scripts/narrate-intros.mjs",
+    "levels:narrate": "node scripts/narrate-levels.mjs",
     "prepare": "git config core.hooksPath .githooks || true",
     "app": "WEFT_DIST=.next-app next build && WEFT_DIST=.next-app WEFT_PROD=1 electron .",
     "dist": "WEFT_DIST=.next-dist WEFT_STANDALONE=1 next build && node scripts/prepare-standalone.mjs .next-dist && node scripts/bundle-toolchain.mjs && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --dir",
@@ -82,6 +83,7 @@
     "remark-gfm": "^4.0.1",
     "server-only": "^0.0.1",
     "sharp": "^0.35.5",
+    "stripe": "22.5.0",
     "zod": "^4.6.5"
   },
   "devDependencies": {

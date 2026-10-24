@@ -497,7 +497,7 @@ button:disabled {
 }
 
 .level-crawl {
-  transform: perspective(320px) rotateX(16deg);
+  transform: perspective(560px) rotateX(18deg);
   transform-origin: 50% 100%;
   animation: level-crawl-in 1.4s 0.25s cubic-bezier(0.2, 0.7, 0.2, 1) both;
   text-shadow: 0 1px 8px rgb(0 0 0 / 0.8);
@@ -511,7 +511,7 @@ button:disabled {
 
 @keyframes level-crawl-in {
   from {
-    transform: perspective(320px) rotateX(16deg) translateY(48px);
+    transform: perspective(560px) rotateX(18deg) translateY(48px);
     opacity: 0;
   }
 }

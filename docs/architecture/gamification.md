@@ -99,7 +99,12 @@ names the new level and title. A level-up opens on its rank's picture (`public/b
 Strand, Yarn, Bolt, Loom, Tapestry), rendered by BlastCP from the splash speeder (`electron/assets/splash-speeder.jpg`)
 and the woven emblem (`electron/assets/emblem.png`) as references, so every car is ours and wears the badge. Over the
 picture rise its "Episode" number in roman numerals and a line of story, tilted like an opening crawl (`lib/level-lore.ts`:
-a few lines per rank, the next one each level, so a rank never repeats until it runs out). The picture drifts and the
+a few lines per rank, the next one each level, so a rank never repeats until it runs out). A level-up's popup is a
+cinema frame (16:9, up to 760 px wide, 60% of the window's height at most); a badge alone keeps the small card. A narrator
+reads the line as it opens: one Kokoro clip per line in `public/brand/levels/voice/<rank>-<n>.m4a` (`Lore.voice`), made
+by `pnpm levels:narrate` (`scripts/narrate-levels.mjs`, voice `bm_george`, from `loreLines()`), so change a line and
+run it again; the test fails on a line with no clip. Its 🔊 is the welcome's and the feature intros' mute
+(`weft-welcome-muted`, `lib/welcome-voice.ts`), so muting Weft's voice anywhere quiets it here too. The picture drifts and the
 crawl rises in (`.level-hero-art`, `.level-crawl` in `app/globals.css`), and neither moves with Reduce motion on. **See your profile** opens the Wefter Profile on Badges (or You for a level-up
 alone); **Nice!** and Escape close it. Behind it, `components/Confetti.tsx` throws one burst from the two lower
 corners on a click-through canvas, moved by the pure physics in `lib/confetti.ts` (`burst`, `step`: drag,
