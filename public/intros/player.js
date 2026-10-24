@@ -3,37 +3,15 @@
 // stage to the frame and, with ?live=1, plays the timeline once with its voiceover. It tells the parent
 // (components/FeatureIntro.tsx) when it starts and ends ({ weft: "intro", event: "start" | "done" }), so the parent
 // offers Replay at the end; { weft: "intro-go" } from the parent plays it again from the top.
-window.weftIntro = function (tl) {
-  var root = document.getElementById("root");
-  var query = new URLSearchParams(location.search);
-  // The 1600x900 stage fits the frame whole, letterboxed if the frame isn't 16:9. With ?ratio=9:16 (the portrait
-  // render) the stage is restacked into a 1600x2844 canvas by the portrait styles in kit.css, and scaled to fill
-  // the tall frame, so the composition fills it instead of sitting in a black band.
-  var portrait = query.get("ratio") === "9:16";
-  if (portrait) document.documentElement.classList.add("portrait");
-  var fit = function () {
-    // The frame is the window, not the document: the portrait stage is 2844 px tall, so the document is far
-    // taller than the window and reading the document's height would scale the stage to nothing.
-    var w = window.innerWidth, h = window.innerHeight;
-    var scale = portrait
-      ? Math.min(w / 1600, h / 2844)
-      : Math.min(w / 1600, h / 900);
-    root.style.transform = portrait
-      ? "translate(-50%, -50%) scale(" + scale + ")"
-      : "scale(" + scale + ")";
-  };
-  fit();
-  window.addEventListener("resize", fit);
-  // The layout settles a beat after the script runs (the portrait stage grows the document), so fit again once
-  // the page has loaded and on the next frame, or the stage is scaled to a viewport that has since changed.
-  window.addEventListener("load", fit);
-  requestAnimationFrame(fit);
 
-  // The splash screen every intro opens on: the Weft mark over the wordmark, a bar underneath, on the stage's
-  // dark ground. It's injected here rather than written into each page, so all eleven intros open the same way.
-  //
-  // It plays on a master timeline with the page's own timeline nested under it, so the story starts after the
-  // splash clears instead of running underneath it — and the whole thing stays seekable (?t= holds a frame).
+// The splash every intro opens on: the Weft mark over the wordmark, a bar underneath, on the stage's dark ground.
+// It's injected here rather than written into each page, so all eleven intros open the same way.
+//
+// It plays on a master timeline with the page's own timeline nested under it, so the story starts after the splash
+// clears instead of running underneath it — and the whole thing stays seekable (?t= holds a frame).
+//
+// Returns { master, lead }: the master is the timeline to play, and lead is how many seconds of splash come first.
+var buildSplash = function (root, tl) {
   var SPLASH_HOLD = 1.1, SPLASH_FADE = 0.45;
   var lead = SPLASH_HOLD + SPLASH_FADE;
   var splash = document.createElement("div");
@@ -62,9 +40,67 @@ window.weftIntro = function (tl) {
     { x: "250%", duration: SPLASH_HOLD, ease: "power1.inOut" }, 0.05);
   // The splash sits above the stage's own #fade, so it hands over cleanly.
   master.set(splash, { display: "none" }, lead + 0.01);
+  return { master: master, lead: lead };
+};
+
+// Start the story once the voice is really playing (or has failed, or 4 s has passed), so the narration and
+// the frames begin together. A voice later than that pulls the frames back to where it is, so its first words
+// are never cut off.
+//
+// The voice's t=0 is the story's t=0, but the story sits behind the splash, so the voice starts `lead` in.
+var startWithVoice = function (play, voice, lead, begin) {
+  if (!voice) return begin();
+  voice.currentTime = 0;
+  // Already playing (a replay mid-way): the seek is enough, and "playing" won't fire again.
+  if (!voice.paused) return begin();
+  var started = false;
+  var go = function () {
+    if (started) return;
+    started = true;
+    clearTimeout(timer);
+    begin();
+  };
+  var timer = setTimeout(go, 4000);
+  voice.addEventListener("playing", function () {
+    // The voice's own time is the story's time; the story sits `lead` in on the master timeline.
+    if (started) play.seek(lead + voice.currentTime);
+    else go();
+  }, { once: true });
+  voice.addEventListener("error", go, { once: true });
+  voice.play().catch(go);
+};
+
+window.weftIntro = function (tl) {
+  var root = document.getElementById("root");
+  var query = new URLSearchParams(location.search);
+  // The 1600x900 stage fits the frame whole, letterboxed if the frame isn't 16:9. With ?ratio=9:16 (the portrait
+  // render) the stage is restacked into a 1600x2844 canvas by the portrait styles in kit.css, and scaled to fill
+  // the tall frame, so the composition fills it instead of sitting in a black band.
+  var portrait = query.get("ratio") === "9:16";
+  if (portrait) document.documentElement.classList.add("portrait");
+  var fit = function () {
+    // The frame is the window, not the document: the portrait stage is 2844 px tall, so the document is far
+    // taller than the window and reading the document's height would scale the stage to nothing.
+    var w = window.innerWidth, h = window.innerHeight;
+    var scale = portrait
+      ? Math.min(w / 1600, h / 2844)
+      : Math.min(w / 1600, h / 900);
+    root.style.transform = portrait
+      ? "translate(-50%, -50%) scale(" + scale + ")"
+      : "scale(" + scale + ")";
+  };
+  fit();
+  window.addEventListener("resize", fit);
+  // The layout settles a beat after the script runs (the portrait stage grows the document), so fit again once
+  // the page has loaded and on the next frame, or the stage is scaled to a viewport that has since changed.
+  window.addEventListener("load", fit);
+  requestAnimationFrame(fit);
+
+  var splash = buildSplash(root, tl);
+  var lead = splash.lead;
   // The page's timeline ends with a no-op that pins its length; the master inherits it, so the master runs
   // for the splash plus the whole story.
-  var play = master;
+  var play = splash.master;
 
   var post = function (event) {
     if (window.parent !== window) window.parent.postMessage({ weft: "intro", event: event }, "*");
@@ -87,25 +123,7 @@ window.weftIntro = function (tl) {
   };
   var start = function () {
     play.seek(0).pause();
-    if (!voice) return begin();
-    voice.currentTime = 0;
-    // Already playing (a replay mid-way): the seek is enough, and "playing" won't fire again.
-    if (!voice.paused) return begin();
-    var started = false;
-    var go = function () {
-      if (started) return;
-      started = true;
-      clearTimeout(timer);
-      begin();
-    };
-    var timer = setTimeout(go, 4000);
-    voice.addEventListener("playing", function () {
-      // The voice's own time is the story's time; the story sits `lead` in on the master timeline.
-      if (started) play.seek(lead + voice.currentTime);
-      else go();
-    }, { once: true });
-    voice.addEventListener("error", go, { once: true });
-    voice.play().catch(go);
+    startWithVoice(play, voice, lead, begin);
   };
   play.eventCallback("onComplete", function () { post("done"); });
   window.addEventListener("message", function (e) {
