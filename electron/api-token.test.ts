@@ -6,6 +6,11 @@ function fakeSession() {
   const calls: { filter: { urls: string[] }; listener: Listener }[] = [];
   return { calls, webRequest: { onBeforeSendHeaders: (filter: { urls: string[] }, listener: Listener) => calls.push({ filter, listener }) } };
 }
+function hook(s: { calls: { filter: { urls: string[] }; listener: Listener }[] }) {
+  const c = s.calls[0];
+  if (!c) throw new Error("no hook attached");
+  return c;
+}
 function send(listener: Listener, method: string): unknown {
   let out: unknown;
   listener({ method, requestHeaders: { accept: "*/*" } }, (r) => (out = r));
@@ -16,17 +21,17 @@ describe("api token", () => {
   it("puts the launch token on every board request to the server", () => {
     const s = fakeSession();
     attachApiToken(s, "http://127.0.0.1:1024/", "secret");
-    expect(s.calls[0].filter.urls).toEqual(["http://127.0.0.1:1024/*"]);
-    expect(send(s.calls[0].listener, "POST")).toEqual({ requestHeaders: { accept: "*/*", "x-weft-token": "secret" } });
+    expect(hook(s).filter.urls).toEqual(["http://127.0.0.1:1024/*"]);
+    expect(send(hook(s).listener, "POST")).toEqual({ requestHeaders: { accept: "*/*", "x-weft-token": "secret" } });
   });
 
   it("gives the pane only the read value, only on attachment GETs", () => {
     const s = fakeSession();
     attachPaneAttachments(s, "http://127.0.0.1:1024");
-    expect(s.calls[0].filter.urls).toEqual(["http://127.0.0.1:1024/api/attachments/*"]);
-    expect(send(s.calls[0].listener, "GET")).toEqual({ requestHeaders: { accept: "*/*", "x-weft-token": "1" } });
-    expect(send(s.calls[0].listener, "HEAD")).toEqual({ requestHeaders: { accept: "*/*", "x-weft-token": "1" } });
-    expect(send(s.calls[0].listener, "POST")).toEqual({});
+    expect(hook(s).filter.urls).toEqual(["http://127.0.0.1:1024/api/attachments/*"]);
+    expect(send(hook(s).listener, "GET")).toEqual({ requestHeaders: { accept: "*/*", "x-weft-token": "1" } });
+    expect(send(hook(s).listener, "HEAD")).toEqual({ requestHeaders: { accept: "*/*", "x-weft-token": "1" } });
+    expect(send(hook(s).listener, "POST")).toEqual({});
   });
 
   it("attaches both once the server is up", () => {
@@ -35,7 +40,7 @@ describe("api token", () => {
     const fromPartition = vi.fn(() => pane);
     attachTokens({ defaultSession: board, fromPartition }, "http://127.0.0.1:1024", "secret");
     expect(fromPartition).toHaveBeenCalledWith("persist:threadboard-browser");
-    expect(board.calls[0].filter.urls).toEqual(["http://127.0.0.1:1024/*"]);
-    expect(pane.calls[0].filter.urls).toEqual(["http://127.0.0.1:1024/api/attachments/*"]);
+    expect(hook(board).filter.urls).toEqual(["http://127.0.0.1:1024/*"]);
+    expect(hook(pane).filter.urls).toEqual(["http://127.0.0.1:1024/api/attachments/*"]);
   });
 });
