@@ -245,7 +245,9 @@ session is never replaced mid-turn.
 `queueMessages(cardId, texts)` (`lib/runner.ts`) runs each text as its own turn, in order. It
 sends the first right away when the card is idle; the `result` handler sends the next once the
 turn ends, unless the turn was stopped or failed (the queue is dropped) or ended in `needs_you`
-(the queue waits for the turn after your reply). A CLI that dies mid-turn drops it too.
+(the queue waits for the turn after your reply). A CLI that dies mid-turn drops it too. A wrap-up
+is the one exception to the `needs_you` hold: a wrap-up is over whether it asks for something or
+not, so the messages queued behind it still go out (see "Archiving after Done").
 
 Board automations use it: `messagesForMove()` (`lib/automations.ts`) returns `/<skill>` messages
 for your own moves to Review or Done, which `PATCH /api/cards/[id]` queues. "A thread starts"
@@ -367,6 +369,25 @@ in the Done header (`components/Board.tsx`). Archived cards don't count toward t
 "need you" and "running" totals or a project chip's dots (`summarizeProjects` in `lib/board-view.ts`),
 so a hidden card never shows a count you can't find.
 
+A wrap-up that ends with `column=needs_you` is still a finished wrap-up: the work is done, so the
+card goes to Done and is archived rather than parked in Needs you waiting for a reply nobody asked
+for. "This turn is a wrap-up" is the turn's own marker: `sendMessage()` in `lib/runner.ts` sets
+`session.wrapUp` when the message that starts the turn is a done command (`/done`, `/weft:done`), so
+`columnAfterTurn()` in `lib/turn.ts` takes it as a fourth argument and reads a `needs_you` status as
+`done` for a wrapping turn. The card never lands in Needs you at the end of a wrap-up:
+`handleResult()` in `lib/runner-turn.ts` stores `done`, and `settleWrapUp()` there no longer holds a
+wrap-up back for a `needs_you` status, so it settles and archives like any other finished wrap-up.
+The automations queued behind it still go out too: `finishResult()` keeps the queue waiting on a
+`needs_you` turn only when that turn was *not* a wrap-up, since a wrap-up is over whether it asks
+for something or not.
+
+The marker is per turn, not per card, and that matters: a Done move landing on a busy card marks
+the *card* as wrapping up (`archiveAfter`, `lib/runner.ts`), but the turn already running is an
+ordinary one, and it still ends where its status line says — a turn that asks for something waits in
+Needs you like any other. A plain turn that ends needing you is unchanged: it waits in Needs you and
+the queue behind it waits for your reply. A wrap-up that ends in `review` still stays on the board,
+unarchived, with what it couldn't do in `remaining`.
+
 ## Permissions and questions
 
 ### Changing a card's mode
@@ -433,7 +454,9 @@ emphasis and in any letter case. The column is normalized to snake_case and must
 `lib/runner-turn.ts` updates the card's stage and remaining from each assistant message as the
 turn progresses, and applies `column` on the `result` message: the status line in the final
 result wins, with the last one seen during the turn as a fallback. A stopped or failed turn
-always lands in `review`. `lastLine` is the first non-empty line of the assistant's text or
+always lands in `review`. A wrap-up is the one exception: a `needs_you` status on a turn that *is* the
+wrap-up reads as `done`, because a finished wrap-up is archived into Done whatever it asks for
+("Archiving after Done"). `lastLine` is the first non-empty line of the assistant's text or
 result summary.
 
 ## Auto-login

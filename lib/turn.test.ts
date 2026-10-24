@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import type { ModelUsage } from "@anthropic-ai/claude-agent-sdk";
 import {
   cacheAfter,
-  columnAfterTurn,
   eventWindow,
   modelStats,
   readQuestions,
@@ -10,7 +9,6 @@ import {
   turnCost,
   usageWindow,
 } from "./turn";
-import type { BoardStatus } from "./status";
 
 // A ModelUsage with only the fields modelStats reads. Cast through unknown so we can omit the rest
 // the SDK type requires, per the task brief.
@@ -185,29 +183,6 @@ describe("readResult", () => {
   it("when not stopped, isError passes through", () => {
     expect(readResult({ subtype: "error_during_execution", isError: true, stopped: false }).isError).toBe(true);
     expect(readResult({ subtype: "success", result: "hi", isError: false, stopped: false }).isError).toBe(false);
-  });
-});
-
-describe("columnAfterTurn", () => {
-  it("returns review when stopped, even if status asks for another column", () => {
-    const status: BoardStatus = { column: "done", stage: "Done" };
-    expect(columnAfterTurn(true, false, status)).toBe("review");
-    expect(columnAfterTurn(true, false, undefined)).toBe("review");
-  });
-
-  it("returns review on error, even if status asks for another column", () => {
-    const status: BoardStatus = { column: "needs_you" };
-    expect(columnAfterTurn(false, true, status)).toBe("review");
-  });
-
-  it("returns the status column when not stopped and not an error", () => {
-    expect(columnAfterTurn(false, false, { column: "done" })).toBe("done");
-    expect(columnAfterTurn(false, false, { column: "needs_you" })).toBe("needs_you");
-    expect(columnAfterTurn(false, false, { column: "review" })).toBe("review");
-  });
-
-  it("returns review when there is no status and nothing else forces it", () => {
-    expect(columnAfterTurn(false, false, undefined)).toBe("review");
   });
 });
 

@@ -83,4 +83,38 @@ describe("wrapping up", () => {
     expect(shownColumn(card("c1"))).toBe("running");
     expect(shownColumn({ ...card("c1"), column: "needs_you", wrappingUp: true })).toBe("needs_you");
   });
+
+  it("a wrap-up that ends needing you is archived in Done, not parked in Needs you", async () => {
+    addCard({ id: "c1" });
+    runner.sendUserMessage("c1", "/done");
+    await flush();
+    lastQuery().emit(success("All done.\nBOARD STATUS: column=needs_you | stage=Cleaning up | remaining=none"));
+    await flush();
+    expect(card("c1")).toMatchObject({ column: "done", archived: true, wrappingUp: false });
+    expect(shownColumn(card("c1"))).toBe("done");
+  });
+
+  it("a wrap-up that ends needing you still runs the automations queued behind it", async () => {
+    addCard({ id: "c1", column: "done" });
+    runner.queueMessages("c1", ["/weft:done", "/after"]);
+    runner.archiveWhenIdle("c1");
+    await flush();
+    lastQuery().emit(success("Done.\nBOARD STATUS: column=needs_you | stage=Cleaning up | remaining=none"));
+    await flush(3);
+    expect(lastQuery().received).toEqual(["/weft:done", "/after"]);
+  });
+
+  it("a Done move on a busy card doesn't make the running turn a wrap-up", async () => {
+    // The card is working; the user moves it to Done, so the card wraps up once the turn is over.
+    // The turn already running is an ordinary one: if it ends needing you, it waits there.
+    addCard({ id: "c1" });
+    runner.sendMessage("c1", "build it");
+    await flush();
+    // What a move to Done does: the Done automations are queued, then the card is marked to file away.
+    runner.queueMessages("c1", ["/weft:done"]);
+    runner.archiveWhenIdle("c1");
+    lastQuery().emit(success("Which one?\nBOARD STATUS: column=needs_you | stage=First shot | remaining=an answer"));
+    await flush(3);
+    expect(card("c1")).toMatchObject({ column: "needs_you", archived: false });
+  });
 });

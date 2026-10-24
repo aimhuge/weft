@@ -2,6 +2,7 @@ import type { ModelUsage, SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import path from "node:path";
 import { recordLimit } from "./activity";
 import { publish } from "./bus";
+import { switchToBackup } from "./backend-switch";
 import { runsOn } from "./cli-defaults";
 import { editPreview } from "./edit-preview";
 import { firstLine, shortToolName, summarizeInput, toolAction } from "./format";
@@ -9,6 +10,7 @@ import { changedLines, gitBranch } from "./git-stats";
 import { showAfterTurn } from "./show";
 import { recordLimits } from "./limit-history";
 import { isNotLoggedInError, isRateLimitError } from "./login";
+import { isLostSessionError, resumeLostSession } from "./lost-session";
 import { editedPath, touchFile } from "./overlap";
 import { hitRateLimit } from "./rate-limit";
 import { extractReview } from "./review";
@@ -22,7 +24,7 @@ import { extractStatus, type BoardStatus } from "./status";
 import { appendThread, getCard, getThread, replaceThreadItem } from "./store";
 import { adoptLocalMedia, liveToolResult, type ToolResult } from "./thread-media";
 import { cacheAfter, columnAfterTurn, eventWindow, modelStats, readResult, turnCost, usageWindow } from "./turn";
-import type { CardStats } from "./types";
+import type { Backend, CardStats } from "./types";
 
 // What a card's CLI sends during a turn, put on the card and its thread: streamed text, replies, tool calls
 // and results, rate limits, and the result that ends the turn (lib/runner-session.ts's drive loop calls handle).
@@ -42,7 +44,7 @@ export function handle(id: string, session: Session, msg: SDKMessage): void | Pr
       break;
 
     case "rate_limit_event":
-      handleRateLimit(id, msg.rate_limit_info);
+      handleRateLimit(id, session.spec.backend, msg.rate_limit_info);
       break;
 
     case "stream_event": {
@@ -72,15 +74,15 @@ export function handle(id: string, session: Session, msg: SDKMessage): void | Pr
   }
 }
 
-function handleRateLimit(id: string, info: Extract<SDKMessage, { type: "rate_limit_event" }>["rate_limit_info"]) {
+function handleRateLimit(id: string, backend: Backend, info: Extract<SDKMessage, { type: "rate_limit_event" }>["rate_limit_info"]) {
   // A refused request is a limit hit, for the limit badges and the wefter card's chart.
   const kind = info.rateLimitType === "five_hour" ? "five_hour" : info.rateLimitType?.startsWith("seven_day") ? "seven_day" : null;
   const card = getCard(id);
   if (info.status === "rejected" && kind && card) recordLimit(kind, Date.now(), card, info.resetsAt);
   const window = eventWindow(info);
   if (!window) return;
-  if (info.rateLimitType === "five_hour") updateLimits(id, { fiveHour: window });
-  else if (info.rateLimitType === "seven_day") updateLimits(id, { sevenDay: window });
+  if (info.rateLimitType === "five_hour") updateLimits(id, backend, { fiveHour: window });
+  else if (info.rateLimitType === "seven_day") updateLimits(id, backend, { sevenDay: window });
 }
 
 // The CLI's guess at your next message, for the reply box's placeholder and Tab.
@@ -206,6 +208,22 @@ function storeToolResults(id: string, results: ToolEntry[]): void | Promise<void
   });
 }
 
+// An error result Weft acts on instead of settling the turn: the resumed session is gone (the card goes on in a
+// fresh one, lib/lost-session.ts), the plan's limit is hit, or the CLI needs a login. Returns whether it did.
+function recoverFrom(id: string, session: Session, summary: string): boolean {
+  if (isLostSessionError(summary) && resumeLostSession(id, session.spec.sessionId)) return true;
+  if (!isNotLoggedInError(summary) && !isRateLimitError(summary)) return false;
+  appendThread(id, { kind: "result", text: summary, isError: true, at: Date.now() });
+  if (isRateLimitError(summary)) {
+    hitRateLimit(id, session.spec.backend, summary);
+    // The model that ran out is now known, so the thread moves to the backup model and picks the
+    // turn up again there (lib/backend-switch.ts switchToBackup). The card goes on running instead
+    // of waiting for the window to reset. Nothing happens when no backup model is set.
+    void switchToBackup(id);
+  } else hooks.needLogin(id, session.spec.backend, summary);
+  return true;
+}
+
 // The turn ended: settle the card (column, cost, stats), then archive it or send what was queued.
 function handleResult(id: string, session: Session, msg: Extract<SDKMessage, { type: "result" }>) {
   const stopped = session.stopping;
@@ -219,20 +237,18 @@ function handleResult(id: string, session: Session, msg: Extract<SDKMessage, { t
   session.busy = false;
   session.stopping = false;
 
-  if (isError && (isNotLoggedInError(summary) || isRateLimitError(summary))) {
-    appendThread(id, { kind: "result", text: summary, isError: true, at: Date.now() });
-    if (isRateLimitError(summary)) hitRateLimit(id, session.spec.backend, summary);
-    else hooks.needLogin(id, session.spec.backend, summary);
-    return;
-  }
+  if (isError && recoverFrom(id, session, summary)) return;
 
   const status = parsed.status ?? session.status;
+  // Whether this turn was the card's wrap-up, not whether the card is wrapping up: a Done move
+  // landing on a busy card marks the card, but the turn already running is an ordinary one.
+  const wrapUp = session.wrapUp === true;
   const cost = turnCost(getCard(id)?.costUsd ?? 0, msg.total_cost_usd, session.costBase);
   session.costBase = cost.base;
   appendThread(id, { kind: "result", text: summary, costUsd: cost.costUsd, isError, at: Date.now() });
   safeUpdate(id, {
     sessionId: msg.session_id,
-    column: columnAfterTurn(stopped, isError, status),
+    column: columnAfterTurn(stopped, isError, status, wrapUp),
     pending: null,
     costUsd: cost.costUsd,
     turns: (getCard(id)?.turns ?? 0) + 1,
@@ -245,21 +261,28 @@ function handleResult(id: string, session: Session, msg: Extract<SDKMessage, { t
   });
   scheduleIdle(session);
   if (!session.spec.copilot) showAfter(id, session, { reply: summary, isError, stopped });
-  finishResult(id, status, stopped, isError);
+  finishResult(id, status, stopped, isError, wrapUp);
 }
 
 // A wrap-up (/done, or a move to Done's automations) that has run its last turn files the card away.
 // A stopped or failed one isn't, nor one that ended in Review (it couldn't commit, push or deploy, and
 // says what's left); a starred card stays on the board too.
+// A wrap-up that ends in Needs you is still a finished wrap-up: the work is done, so the card goes to
+// Done and is archived rather than parked in Needs you waiting for a reply nobody asked for.
 function settleWrapUp(id: string, status: BoardStatus | undefined, failed: boolean) {
-  if (!archiveAfter.has(id) || !(failed || (!queued.has(id) && status?.column !== "needs_you"))) return;
+  if (!archiveAfter.has(id) || !(failed || !queued.has(id))) return;
   archiveAfter.delete(id);
   const unfinished = failed || status?.column === "review";
+  // An isolated card lands its branch first; landing files it away, or hands it back (lib/worktree-done.ts).
+  if (!unfinished && getCard(id)?.worktree) {
+    hooks.land(id);
+    return;
+  }
   safeUpdate(id, unfinished ? { wrappingUp: false } : { column: "done", archived: !getCard(id)?.starred, wrappingUp: false });
 }
 
 // The bookkeeping around archiveAfter and the queued-turn handoff.
-function finishResult(id: string, status: BoardStatus | undefined, stopped: boolean, isError: boolean) {
+function finishResult(id: string, status: BoardStatus | undefined, stopped: boolean, isError: boolean, wrapUp: boolean) {
   const failed = stopped || isError;
   settleWrapUp(id, status, failed);
   // Whether the wrap-up succeeded, failed, or was stopped: the /weft:done turn is over, so the model's
@@ -268,8 +291,10 @@ function finishResult(id: string, status: BoardStatus | undefined, stopped: bool
   restoreDoneOverride(id);
   if (queued.has(id)) {
     if (failed) queued.delete(id);
-    // Once the drive loop has handled this result, so the next turn starts on a settled card.
-    else if (status?.column !== "needs_you") setTimeout(() => hooks.sendQueued(id), 0);
+    // Once the drive loop has handled this result, so the next turn starts on a settled card. A turn
+    // that ends needing you waits for your reply before the next queued message goes out — unless it
+    // was a wrap-up, which is over whether it asks for anything or not.
+    else if (status?.column !== "needs_you" || wrapUp) setTimeout(() => hooks.sendQueued(id), 0);
   }
   // A message that came mid-turn goes whatever the turn's end: it's yours (or a page's on your click).
   // Queued automations go first when they're running on; it then waits for the last of them.
@@ -290,14 +315,16 @@ async function refreshLimits(id: string, session: Session) {
     const usage = await session.query?.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET({ skipBehaviors: true });
     const limits = usage?.rate_limits;
     if (!limits) return;
-    updateLimits(id, { fiveHour: usageWindow(limits.five_hour), sevenDay: usageWindow(limits.seven_day) });
+    updateLimits(id, session.spec.backend, { fiveHour: usageWindow(limits.five_hour), sevenDay: usageWindow(limits.seven_day) });
   } catch {}
 }
 
-// The card's latest windows, and a sample in the history behind the burndown chart (lib/limit-history.ts).
-function updateLimits(id: string, patch: Pick<CardStats, "fiveHour" | "sevenDay">) {
-  updateStats(id, patch);
-  recordLimits(getCard(id)?.backend ?? "claude", patch);
+// A sample in the history behind the strip and its chart (lib/limit-history.ts), under the CLI whose
+// session reported it, and the card's latest windows while the card is still on that CLI: a reading
+// that lands after "Run on …" switched it belongs to the old CLI's plan, not the new one's.
+function updateLimits(id: string, backend: Backend, patch: Pick<CardStats, "fiveHour" | "sevenDay">) {
+  if (getCard(id)?.backend === backend) updateStats(id, patch);
+  recordLimits(backend, patch);
 }
 
 function updateStats(id: string, patch: Partial<CardStats>) {

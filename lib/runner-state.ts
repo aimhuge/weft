@@ -4,7 +4,7 @@ import type { BoardActions } from "./board-tools";
 import type { CliProcess } from "./cli-process";
 import type { CopilotPersona } from "./copilot-personas";
 import type { EditPreview } from "./edit-preview";
-import { allowedFolders, keepAliveMinutes } from "./settings";
+import { allowedFolders, gooseBaseUrl, gooseModelId, gooseProviderId, keepAliveMinutes } from "./settings";
 import type { BoardStatus } from "./status";
 import { getCard, updateCard } from "./store";
 import { hasLiveTasks } from "./task-ledger";
@@ -13,12 +13,13 @@ import { globalSingleton } from "./global-singleton";
 import { effortFor, modelOn } from "./new-thread";
 import { idleToClose, keepAliveFor } from "./puku-idle";
 import { offFor } from "./skill-sets";
+import { workDir } from "./work-dir";
 
 // What every part of the runner shares: a thread's CLI session, the maps that hold them, and the small
 // helpers around them. lib/runner.ts is the front door; lib/runner-session.ts opens and drives sessions,
 // lib/runner-turn.ts handles what the CLI sends, lib/runner-ask.ts the permission requests.
 
-export const CLI_NAMES: Record<Backend, string> = { claude: "Claude Code", puku: "puku-cli", codex: "Codex" };
+export const CLI_NAMES: Record<Backend, string> = { claude: "Claude Code", puku: "puku-cli", codex: "Codex", goose: "Goose" };
 
 export interface Pending {
   id: string;
@@ -67,7 +68,10 @@ export class Inbox implements AsyncIterable<SDKUserMessage> {
 
 // What a CLI process is started with. A spare's spec has no session yet.
 export interface Spec {
+  // Where the CLI runs: the card's folder, or its worktree when it's isolated (lib/work-dir.ts).
   cwd: string;
+  // The card's project folder when cwd is a worktree, for what's kept per project (webhooks, the changelog, new cards).
+  project?: string;
   backend: Backend;
   permissionMode: PermissionMode;
   model?: string;
@@ -85,6 +89,12 @@ export interface Spec {
   copilot: boolean;
   // The copilot's persona, whose prompt joins its system prompt (lib/copilot-personas.ts).
   persona?: CopilotPersona;
+  // The provider a Goose thread runs against (Goose's --provider). Empty means Goose's own choice.
+  provider?: string;
+  // The endpoint a Goose thread runs against, from Settings → Models (gooseBaseUrl). It wins over
+  // the copy Electron main keeps beside the key: the setting is what the user chose, explicitly.
+  // The model the card runs on rides on `model` above: specFor puts the model's id there.
+  gooseBaseUrl?: string;
 }
 
 export interface Session {
@@ -104,6 +114,10 @@ export interface Session {
   status?: BoardStatus;
   // Whether the current turn opened a page in the browser pane (see lib/show.ts).
   openedPane?: boolean;
+  // Whether the current turn is the card's wrap-up (/done, or the automations a move to Done queues).
+  // Per turn, not per card: a card whose Done move landed mid-turn is wrapping up, but the turn
+  // already running is an ordinary one and ends wherever its status line says (lib/turn.ts).
+  wrapUp?: boolean;
   // Counts this session's turns, so a late update page from an earlier turn is dropped.
   turnSeq?: number;
   // Parallel tool calls can ask at once; the card shows the oldest.
@@ -146,6 +160,8 @@ export interface RunnerHooks {
   sendHeld: (cardId: string) => void;
   needLogin: (cardId: string, backend: Backend, message: string) => void;
   boardActions: BoardActions;
+  // Lands an isolated card's branch once its wrap-up ends, then files it away (lib/worktree-done.ts).
+  land: (cardId: string) => void;
 }
 // Every session starts through lib/runner.ts, which sets these as it loads, so none is called before then.
 export const hooks = {} as RunnerHooks;
@@ -187,11 +203,18 @@ function readScopeFor(card: Card): string[] | undefined {
 }
 
 export function specFor(card: Card): Spec {
+  const goose = card.backend === "goose";
+  // The model the user picked for the provider in Settings wins on a Goose card: the provider and its
+  // model are one choice, and a card's own model names a different provider's id (an OpenRouter one).
+  // The card's model still wins when the user picked no model for the provider.
+  const settingsModel = goose ? gooseModelId() : "";
+  const cardModel = modelOn(card.backend, card.model);
   return {
-    cwd: card.cwd,
+    cwd: workDir(card),
+    ...(card.worktree ? { project: card.cwd } : {}),
     backend: card.backend,
     permissionMode: card.permissionMode,
-    model: modelOn(card.backend, card.model),
+    model: (goose && settingsModel) || cardModel || undefined,
     effort: effortFor(card.backend, card.effort),
     sessionId: card.sessionId,
     copilot: card.role === "copilot",
@@ -199,6 +222,10 @@ export function specFor(card: Card): Spec {
     readScope: readScopeFor(card),
     // The copilot runs the board from your home folder; it keeps every skill, as before.
     skillsOff: card.role === "copilot" ? undefined : offFor(card),
+    // A Goose thread runs against the provider the user picked in Settings ("" is Goose's own choice).
+    provider: goose ? gooseProviderId() : undefined,
+    // The endpoint the user picked in Settings, for the providers that need one.
+    gooseBaseUrl: goose ? gooseBaseUrl() : undefined,
   };
 }
 

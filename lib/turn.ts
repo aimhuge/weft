@@ -53,9 +53,18 @@ export function readResult(turn: TurnResult): { summary: string; isError: boolea
 }
 
 // Where the card goes when a turn ends: Review after a stop or an error, else wherever the thread's
-// status line asked for, else Review.
-export function columnAfterTurn(stopped: boolean, isError: boolean, status: BoardStatus | undefined): Column {
-  return stopped || isError ? "review" : (status?.column ?? "review");
+// status line asked for, else Review. A wrap-up (/done, or a move to Done's automations) that ends
+// asking for something is still a finished wrap-up, so it goes to Done and is filed away rather
+// than parked in Needs you waiting for a reply nobody asked for.
+export function columnAfterTurn(
+  stopped: boolean,
+  isError: boolean,
+  status: BoardStatus | undefined,
+  wrappingUp = false,
+): Column {
+  if (stopped || isError) return "review";
+  if (status?.column === "needs_you" && wrappingUp) return "done";
+  return status?.column ?? "review";
 }
 
 // Totals are cumulative within a CLI process. A resumed session usually starts from its saved total;
