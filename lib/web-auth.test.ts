@@ -8,9 +8,9 @@ import type { WebUser } from "./web-session";
 const webClient = vi.fn();
 const webUser = vi.fn();
 const serviceClient = vi.fn();
-const isDeployed = vi.fn();
+const isWebEnabled = vi.fn();
 vi.mock("./web-session", () => ({ webClient, webUser, serviceClient }));
-vi.mock("./home", () => ({ isDeployed }));
+vi.mock("./home", () => ({ isWebEnabled }));
 
 async function load() {
   vi.resetModules();
@@ -19,7 +19,7 @@ async function load() {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  isDeployed.mockReturnValue(true);
+  isWebEnabled.mockReturnValue(true);
   webClient.mockResolvedValue({});
   webUser.mockResolvedValue(null);
   serviceClient.mockReturnValue(null);
@@ -101,7 +101,7 @@ describe("webSignInErrorUrl", () => {
 
 describe("readWebSessionIdentity", () => {
   it("returns null on `next dev` (not deployed)", async () => {
-    isDeployed.mockReturnValue(false);
+    isWebEnabled.mockReturnValue(false);
     const { readWebSessionIdentity } = await load();
     expect(await readWebSessionIdentity({})).toBeNull();
   });

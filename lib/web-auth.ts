@@ -5,7 +5,7 @@
 // without a request. (The desktop's file-based PKCE session lives in lib/auth/server.ts
 // and stays untouched; that path can't serve web visitors.)
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { isDeployed } from "./home";
+import { isWebEnabled } from "./home";
 import { safeNextPath } from "./auth/next-path";
 import { serviceClient, webClient, webUser, type WebUser } from "./web-session";
 
@@ -97,8 +97,12 @@ export function webSignInErrorUrl(origin: string, reason: "provider" | "auth-err
  * /login form can show "the link expired" the same way it does for the
  * desktop's `/api/auth/callback`.
  */
+// Who just signed in with GitHub, for the Open Source check that runs after the redirect (lib/billing/oss-grant.ts).
+// The token is GitHub's, valid for this one request: it's handed on, never stored.
+export type GithubSignIn = { userId: string; login: string; token: string | null };
+
 export type WebCallbackResult =
-  | { kind: "redirect"; url: string }
+  | { kind: "redirect"; url: string; github?: GithubSignIn }
   | { kind: "error"; reason: "provider" | "nocode" | "exchange"; message?: string };
 
 export async function finishWebSignIn(
@@ -115,9 +119,11 @@ export async function finishWebSignIn(
   const origin = new URL(request.url).origin;
   if (providerError) return { kind: "error", reason: "provider" };
   if (!code) return { kind: "error", reason: "nocode" };
+  let github: GithubSignIn | undefined;
   try {
-    const { error } = await client.auth.exchangeCodeForSession(code);
+    const { data, error } = await client.auth.exchangeCodeForSession(code);
     if (error) return { kind: "error", reason: "exchange", message: error.message };
+    github = githubSignIn(data);
   } catch (err) {
     return { kind: "error", reason: "exchange", message: err instanceof Error ? err.message : String(err) };
   }
@@ -131,7 +137,19 @@ export async function finishWebSignIn(
   } catch (err) {
     console.error("[auth/callback] profile bump failed:", err);
   }
-  return { kind: "redirect", url: dest.toString() };
+  return github ? { kind: "redirect", url: dest.toString(), github } : { kind: "redirect", url: dest.toString() };
+}
+
+type ExchangedSession = { provider_token?: string | null; user?: { id?: string; user_metadata?: Record<string, unknown> } } | null;
+
+// The GitHub login and token of a fresh session, or undefined for a session that didn't come from GitHub.
+function githubSignIn(data: { session?: ExchangedSession } | null | undefined): GithubSignIn | undefined {
+  const session = data?.session;
+  const userId = session?.user?.id;
+  if (!session || !userId) return undefined;
+  const login = session.user?.user_metadata?.user_name;
+  if (typeof login !== "string" || !login) return undefined;
+  return { userId, login, token: session.provider_token ?? null };
 }
 
 // Reads the user from the just-exchanged session and bumps last_login_at / login_count
@@ -196,7 +214,7 @@ export async function readWebSessionIdentity(
   client?: SupabaseClient,
   user?: WebUser | null,
 ): Promise<WebSessionIdentity | null> {
-  if (!isDeployed(env)) return null;
+  if (!isWebEnabled(env)) return null;
   const u = user !== undefined ? user : await webUser(client);
   if (!u) return null;
   return { id: u.id, name: u.name, email: u.email, avatar: u.avatar };

@@ -60,7 +60,9 @@ async function run<T>(call: () => Promise<T>): Promise<{ redirectTo: string | nu
   } catch (err) {
     const m = err instanceof Error ? /^NEXT_REDIRECT: (.+)$/.exec(err.message) : null;
     if (!m) throw err;
-    return { redirectTo: m[1] };
+    // The capture group always matches here (the pattern requires a character), but the
+    // index is still `string | undefined` under noUncheckedIndexedAccess.
+    return { redirectTo: m[1] ?? null };
   }
 }
 
