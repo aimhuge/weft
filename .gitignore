@@ -63,3 +63,6 @@ supabase/.temp/
 /plugin/skills/done/tests.md
 /plugin/skills/done/tasks.json
 .env.local
+
+# The intro render's frames and finished videos (scripts/render-intros.mjs, scripts/encode-intros.sh)
+build/

@@ -72,6 +72,32 @@ pnpm intros:narrate -- --voice=am_michael
 A track is optional: an intro with no `.m4a` plays silently and the 🔊 button still shows. A page with no
 `#narration` block is skipped with a warning.
 
+### Rendering (`pnpm intros:render`, `pnpm intros:encode`)
+
+The app plays the live composition in its frame, but a shareable video is a render of it: headless Chrome
+screenshots the paused timeline once per frame and ffmpeg turns the frames into an mp4.
+
+```sh
+pnpm intros:render vault 12 portrait --fresh   # the frames
+pnpm intros:encode vault 12 portrait            # the mp4
+```
+
+`scripts/render-intros.mjs` captures the frames (1080×1920 in portrait, 12 fps) into `build/intros/frames`, and
+`scripts/encode-intros.sh` muxes the narration in — delayed by the splash, so the voice starts with the story —
+and loudness-normalises it to −16 LUFS. `INTROS_DIR` and `OUT_DIR` move the compositions and the output, so the
+same scripts render on a machine that has the sources synced but not the whole repo.
+
+Two things that look like success and are not:
+
+- **A frame that is there but blank.** If the page doesn't load, the capture still writes a file — the background —
+  and ffmpeg encodes a reel of nothing with the right length and a silent track. A real frame is over 30 KB and a
+  blank one about 10 KB, so the renderer recaptures a frame under 30 KB and the encoder refuses a render that has
+  any. The pages load GSAP from `../welcome/gsap.min.js`, so that file has to be beside the compositions or every
+  frame comes out blank.
+- **A frame captured before the kit changed.** The renderer skips frames already on disk, which is what makes it
+  resumable — but a frame captured against the old composition is stale, so it compares each frame's timestamp
+  against `player.js`'s and recaptures anything older.
+
 ## When it shows (`lib/use-feature-intro.ts`)
 
 `useFeatureIntro(id)` takes the drawer (or dialog) that's open, or `null`, and returns the state

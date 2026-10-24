@@ -26,6 +26,8 @@
     "welcome:render": "node scripts/render-welcome-loop.mjs",
     "welcome:narrate": "node scripts/narrate-welcome.mjs",
     "intros:narrate": "node scripts/narrate-intros.mjs",
+    "intros:render": "node scripts/render-intros.mjs",
+    "intros:encode": "scripts/encode-intros.sh",
     "levels:narrate": "node scripts/narrate-levels.mjs",
     "prepare": "git config core.hooksPath .githooks || true",
     "app": "WEFT_DIST=.next-app next build && WEFT_DIST=.next-app WEFT_PROD=1 electron .",
