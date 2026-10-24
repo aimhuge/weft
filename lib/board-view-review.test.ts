@@ -20,6 +20,18 @@ function card(lastLine: string | undefined, over: Partial<Card> = {}): Card {
 const view = (reviewFilter?: { errors: boolean; restart: boolean }) => ({ project: null, query: "", sort: "newest" as const, showArchived: false, reviewFilter });
 const ids = (cards: Card[] | undefined) => (cards ?? []).map((c) => c.lastLine);
 
+describe("the Review column's order", () => {
+  it("puts the most recently updated card on top, whatever the board's sort", () => {
+    const stale = card("stale", { createdAt: 300, updatedAt: 10 });
+    const fresh = card("fresh", { createdAt: 100, updatedAt: 50 });
+    const picked = card("picked", { createdAt: 200, updatedAt: 5, lastActivity: 30 });
+    for (const sort of ["newest", "oldest", "active"] as const) {
+      const groups = groupByColumn([stale, fresh, picked], { ...view(), sort }, (c) => c);
+      expect(ids(groups.get("review"))).toEqual(["fresh", "picked", "stale"]);
+    }
+  });
+});
+
 describe("cardLooksLikeError", () => {
   it("matches a thread error and a build error", () => {
     expect(cardLooksLikeError(card(THREAD_ERROR))).toBe(true);

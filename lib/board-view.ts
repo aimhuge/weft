@@ -125,8 +125,16 @@ export function groupByColumn(cards: Card[], view: BoardView, rootOf: (cwd: stri
     if (column === "review" && !keepReview(card)) continue;
     groups.get(column)?.push(card);
   }
-  for (const [column, list] of groups) list.sort(column === "backlog" ? backlogSorter(view) : SORTERS[view.sort]);
+  for (const [column, list] of groups) list.sort(columnSorter(column, view));
   return groups;
+}
+
+// Backlog keeps the user's dragged order; Review always shows the most recently updated card first, so
+// the turn that just finished is on top whatever the board's sort; the rest follow the chosen sort.
+function columnSorter(column: Column, view: BoardView): (a: Card, b: Card) => number {
+  if (column === "backlog") return backlogSorter(view);
+  if (column === "review") return SORTERS.active;
+  return SORTERS[view.sort];
 }
 
 // Where the board draws a card: a running one that's wrapping up (/done) already sits in Done.
