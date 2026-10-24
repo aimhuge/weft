@@ -1,4 +1,4 @@
-// The signing secret encryption the deployed relay needs (lib/relay-relay.ts, lib/relay-secret.ts). The
+// The signing secret encryption the deployed relay needs (lib/relay-secret.ts, lib/webhook-relay.ts). The
 // plaintext lives in the user's Mac vault only; the local Weft (this process) seals it with the AES-256-GCM
 // key the deployment hands us through WEFT_RELAY_SECRET_KEY, and the deployed relay opens the same way.
 // Same shape, same nonce length, same hex encode as the server-side helpers.

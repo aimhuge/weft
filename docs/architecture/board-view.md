@@ -14,7 +14,7 @@ board window (`appView` in `electron/main.cjs`).
 | Tool | Route | What it does |
 | --- | --- | --- |
 | `screenshot` (`save_to`, `highlight`) | `POST /board-view/screenshot` | `webContents.capturePage()` of the board, optional orange box around a selector |
-| `click` (`selector`) | `POST /board-view/click` | `querySelector(...).click()` |
+| `click` (`selector`) | `POST /board-view/click` | a real, trusted mouse event at the element's middle (times the zoom) |
 | `hover` (`selector`) | `POST /board-view/hover` | a real `mouseMove` input event at the element's middle (times the zoom), so CSS `:hover` and `mouseenter` fire |
 | `type_text` (`selector`, `text`) | `POST /board-view/type` | focuses an input, textarea or contenteditable, selects its contents, `insertText` |
 | `read` (`selector?`) | `POST /board-view/read` | `innerText` of the element, or the whole page, 30,000 characters at most |
@@ -39,11 +39,21 @@ is over. A minimized or hidden window captures empty, which the tool reports as 
     block (`BLANK_SECRETS_CSS`), then remove it.
   - Controls marked `data-secret-action` (the row's reveal 👁 and copy buttons) can't be clicked from here, so a
     thread can't trigger a reveal or put a value on the clipboard (where `pbpaste` could read it). Right-click
-    menus are native and out of reach: `click` only calls `el.click()`.
+    menus are native and out of reach: a click is a mouse event at a point on the page, so it opens a menu
+    rather than choosing one of its items.
   - `type_text` only types into fields, so it can't send Enter or Space to a reveal button.
   - Anything inside `data-human-only` (the permission panel, the reply box while a question waits, the mode picker,
     Settings) can be read and screenshotted but not clicked or typed into: a thread there would approve its own
-    prompts or loosen its own limits (pentest 2026-10-20, P-1).
+    prompts or loosen its own limits (pentest 2026-10-20, P-1). The gate is the marker in the page plus a
+    `data-human-only` hit on the element, and the click itself is a real, trusted mouse event (below), so a
+    handler that gates on `event.isTrusted` can't be fooled either.
+- **A click lands where it was aimed.** The page script returns the element's centre and main sends the mouse event
+  at that point, so the click is trusted (an `Element.click()` from `executeJavaScript` is not, and a handler
+  gating on `event.isTrusted` would let it through). Before sending, the script hit-tests that point with
+  `document.elementFromPoint` and refuses unless the element there is the one selected or one of its descendants —
+  otherwise a tooltip, popover or layered button sitting on top would receive a trusted click the selector never
+  named. The refusal says "Something is on top of <selector> at its centre; ask the user to close it or click it
+  themselves" (`covered()` in `electron/board-view.cjs`).
 
 When you add UI that shows a secret value, mark it `data-secret`; a control that reveals or copies one,
 `data-secret-action`; a control that answers a permission, grants access or changes settings, `data-human-only`.

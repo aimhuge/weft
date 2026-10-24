@@ -315,10 +315,12 @@ When a new doc lands in this folder, add it here on the same change.
   (docs/architecture/secrets.md); decryption only in main, IPC to the board window only, `lib/vault-view.ts` + `lib/use-vault.ts` on the board side.
   A thread that needs a key it doesn't have puts the name in as a blank right away with `mcp__secrets__add_blank` (with a hint for where
   to get the value) — blanks sort first, the rail's badge counts them, every blank row has a visible **Fill in** button, and the user
-  fills them in when they're ready. `mcp__secrets__ask_add` is the urgent path: an input for the key in the thread itself (`components/SecretAskInput.tsx`).
+  fills them in when they're ready. `mcp__secrets__ask_add` is the urgent path: an input for the key in the thread itself (`components/SecretAskInput.tsx`);
+  on a name that already has a value it says so and changes nothing. `mcp__secrets__set_value` stores a value the thread made or got
+  (adds, fills a blank, or with `replace: true` overwrites), Touch ID each time (`electron/vault-routes.cjs`).
 - `lib/webhooks.ts` + `lib/webhook-tools.ts` + `app/api/webhooks` + `lib/use-webhooks.ts` + `lib/webhooks-view.ts` + `components/WebhooksDrawer.tsx`: the 🪝
   webhooks drawer under 🔐 (each project's webhook routes in `~/.weft/webhooks.json`, blanks counted until registered; `mcp__webhooks__*`).
-  `lib/webhook-relay.ts` + `app/api/hooks/[id]` + `lib/webhook-forward.ts`: its public relay URL on the deployed Weft (→ `webhook_deliveries` on
+  `lib/webhook-relay.ts` + `app/api/hooks/[id]/[[...rest]]` + `lib/webhook-forward.ts`: its public relay URL on the deployed Weft (→ `webhook_deliveries` on
   Supabase → Realtime → the local target; the relay only accepts a delivery carrying the provider's signature, checked by
   `lib/webhook-signatures.ts` against the secret sealed into the row by `lib/relay-secret.ts` + `electron/relay-secret.cjs`;
   docs/architecture/webhooks.md).

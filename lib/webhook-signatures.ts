@@ -1,10 +1,12 @@
 // The provider signature registries the webhook relay uses (lib/webhook-relay.ts). Each provider
 // says where its signing secret lives in the request and how to verify it. GitHub and Vercel are
 // already known to the deployed Weft (lib/github-relay.ts, lib/vercel-relay.ts); Stripe, Resend and
-// Svix-shaped providers follow the same HMAC pattern. "generic" is the explicit opt-in: the local
-// Weft declares it, the relay refuses unless WEFT_RELAY_ALLOW_GENERIC is set, and even then it
-// requires the request to carry a header the relay shares with the local Weft at registration time,
-// so a stranger can't ride a "generic" relay.
+// Svix-shaped providers follow the same HMAC pattern.
+//
+// These four are the whole set: a relay names one of them, and a delivery without a known
+// provider's signature is refused (lib/webhook-relay.ts). There is no generic provider and no
+// shared-header opt-out — an allowlist that could be widened by an env var is an allowlist that
+// eventually is.
 //
 // Verifiers run over the raw request bytes (the body the provider signed), use constant-time
 // compares, and ignore the request's body parsing — the same byte-exactness that lets the local

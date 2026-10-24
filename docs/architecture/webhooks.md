@@ -54,9 +54,12 @@ provider ─▶ /api/hooks/<id>[/…] on Vercel ─▶ webhook_deliveries row �
 1. **Create.** `lib/webhook-forward.ts` `createRelay` seals the provider's signing secret and inserts a
    `webhook_relays` row on your account (RLS: yours only) with its id, URL, provider and the sealed secret.
    It keeps the id and URL on the webhook.
-2. **Receive.** `app/api/hooks/[id]/…` on the deployment (no localhost guard: the unguessable id is the address)
-   runs `lib/webhook-relay.ts`: any method, at most 1 MB, headers minus hop-by-hop, Vercel's own and `x-weft-token` (the local API's write header, which a stranger must never supply), the body as
-   base64 so a provider's signature still checks, saved with the Supabase secret key. Rows older than a day go.
+2. **Receive.** `app/api/hooks/[id]/…` on the deployment runs `lib/webhook-relay.ts`: it checks the method, the
+   size, and the provider's signature (below), then saves the request — any method, at most 1 MB, headers minus
+   hop-by-hop, Vercel's own and `x-weft-token` (the local API's write header, which a stranger must never supply),
+   the body as base64 so a provider's signature still checks, saved with the Supabase secret key. Rows older than a
+   day go. The relay id is no longer the address on its own: a delivery also has to carry the signature of the
+   provider the relay names, so a stranger holding the id still gets nothing.
 3. **Forward.** Your Weft listens for its `webhook_deliveries` inserts (Realtime, like the GitHub relay), reads each
    row, sends it to `target` with the same method, headers and body, records the delivery, and deletes the row, so
    payloads don't wait on Weft's Supabase. Deliveries that came while Weft was closed (under a day old) are
