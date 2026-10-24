@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import { SUPABASE_URL } from "@/lib/account";
 import { billingService } from "@/lib/billing/billing";
 import { pukuMeter } from "@/lib/billing/puku-meter";
@@ -31,6 +32,9 @@ async function handler(req: Request, { params }: { params: Promise<{ path: strin
     store: restUsageStore(SUPABASE_URL, supabaseKey),
     dailyRequests: limit("PUKU_TRIAL_DAILY_REQUESTS", DAILY_REQUESTS),
     dailyTokens: limit("PUKU_TRIAL_DAILY_TOKENS", DAILY_TOKENS),
+    // A client that hangs up mid-reply still gets its usage written: after() keeps the function alive for it.
+    background: after,
+    deadlineMs: (maxDuration - 15) * 1000,
     ...(service ? { plan: pukuMeter(service) } : {}),
   };
   try {

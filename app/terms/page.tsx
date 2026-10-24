@@ -1,4 +1,4 @@
-// The Terms of Service for weft.zip, at /terms. The code's license is LICENSE (FSL-1.1-ALv2) and the name's is
+// The Terms of Service for weft.zip, at /terms. The code's license is LICENSE (FSL-1.1-ALv2 with Weft Additional Terms) and the name's is
 // TRADEMARKS.md; these terms cover the services the deployed Weft runs: accounts, workspaces, cloud sync, the web
 // board, the webhook relay, included AI usage and Pro. A server component with no client JS, in the home's palette.
 import type { Metadata } from "next";
@@ -38,7 +38,7 @@ export default function TermsPage() {
         <h2>1. What these terms cover</h2>
         <p>
           The <strong>Weft app</strong> runs on your Mac. Its source code is licensed under{" "}
-          <a href={`${REPO}/blob/main/LICENSE`}>FSL-1.1-ALv2</a>, and that license, not these terms, governs what you
+          <a href={`${REPO}/blob/main/LICENSE`}>FSL-1.1-ALv2 with Weft Additional Terms</a>, and that license, not these terms, governs what you
           can do with the code. You can use the app without an account.
         </p>
         <p>

@@ -453,7 +453,63 @@
   text-wrap: pretty;
 }
 
+/* The access row under the plans (components/home/AccessPlans.tsx): Startups, Open source, Education, Regional pricing,
+   two by two, since four across would squeeze each to ~280px on a 13" screen. Quieter than the plan cards
+   (no gradient, smaller type) since each is a way into Free, Pro or Team, not a plan. */
+.wz-accessGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.wz-access {
+  padding: 20px 22px 22px;
+  border-radius: 14px;
+  border: 1px dashed rgb(236 229 216 / 0.16);
+}
+
+.wz-accessName {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--clay-2);
+}
+
+.wz-accessSoon {
+  padding: 2px 8px;
+  border-radius: 99px;
+  border: 1px solid rgb(236 229 216 / 0.16);
+  font-size: 10.5px;
+  color: var(--thread-3);
+}
+
+.wz-accessHeadline {
+  margin: 10px 0 0;
+  font-family: var(--display);
+  font-weight: 500;
+  font-size: 22px;
+  letter-spacing: -0.02em;
+  font-variation-settings: "SOFT" 50, "WONK" 1, "opsz" 144;
+}
+
+.wz-accessBody {
+  margin: 8px 0 0;
+  font-size: 14.5px;
+  color: var(--thread-2);
+  text-wrap: pretty;
+}
+
 @media (max-width: 960px) {
+  .wz-accessGrid {
+    grid-template-columns: 1fr;
+  }
+
   .wz-planGrid {
     grid-template-columns: 1fr 1fr;
   }

@@ -9,8 +9,8 @@ vi.mock("@/lib/puku-trial-token", () => ({
   accountUserId: vi.fn(() => Promise.resolve("u1")),
 }));
 vi.mock("@/lib/puku-proxy", () => ({
-  DAILY_REQUESTS: 300,
-  DAILY_TOKENS: 2_000_000,
+  DAILY_REQUESTS: 150,
+  DAILY_TOKENS: 1_000_000,
   apiError: (status: number, type: string, message: string) => Response.json({ type: "error", error: { type, message } }, { status }),
   proxy: vi.fn(() => Promise.resolve(new Response("proxied"))),
   restUsageStore: vi.fn(() => ({ add: vi.fn() })),
@@ -86,7 +86,8 @@ describe("/api/puku/v1/[...path]", () => {
     expect(await res.text()).toBe("proxied");
     const [, path, config] = vi.mocked(proxyLib.proxy).mock.calls[0]!;
     expect(path).toBe("messages/count_tokens");
-    expect(config).toMatchObject({ apiKey: "key", secret: "sig", dailyRequests: 300, dailyTokens: 2_000_000 });
+    expect(config).toMatchObject({ apiKey: "key", secret: "sig", dailyRequests: 150, dailyTokens: 1_000_000, deadlineMs: 285_000 });
+    expect(typeof config.background).toBe("function");
     expect(proxyLib.restUsageStore).toHaveBeenCalledWith("https://x.supabase.co", "sb_secret_x");
     // Billing is configured (SUPABASE_SECRET_KEY is set), so the plan meter rides on the config.
     expect(config).toHaveProperty("plan");
@@ -99,11 +100,11 @@ describe("/api/puku/v1/[...path]", () => {
     vi.stubEnv("PUKU_TRIAL_DAILY_REQUESTS", "50");
     vi.stubEnv("PUKU_TRIAL_DAILY_TOKENS", "abc");
     await call(["models"], "GET");
-    expect(vi.mocked(proxyLib.proxy).mock.calls[0]![2]).toMatchObject({ dailyRequests: 50, dailyTokens: 2_000_000 });
+    expect(vi.mocked(proxyLib.proxy).mock.calls[0]![2]).toMatchObject({ dailyRequests: 50, dailyTokens: 1_000_000 });
     vi.stubEnv("PUKU_TRIAL_DAILY_REQUESTS", "-1");
     vi.stubEnv("PUKU_TRIAL_DAILY_TOKENS", "1000");
     await call(["models"], "GET");
-    expect(vi.mocked(proxyLib.proxy).mock.calls[1]![2]).toMatchObject({ dailyRequests: 300, dailyTokens: 1000 });
+    expect(vi.mocked(proxyLib.proxy).mock.calls[1]![2]).toMatchObject({ dailyRequests: 150, dailyTokens: 1000 });
   });
 
   it("is 502 when the proxy throws", async () => {

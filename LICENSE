@@ -1,8 +1,8 @@
-# Functional Source License, Version 1.1, ALv2 Future License
+# Functional Source License, Version 1.1, ALv2 Future License, with Weft Additional Terms
 
 ## Abbreviation
 
-FSL-1.1-ALv2
+FSL-1.1-ALv2 with Weft Additional Terms
 
 ## Notice
 
@@ -83,6 +83,54 @@ EVEN IF WE HAVE BEEN INFORMED OF THEIR POSSIBILITY IN ADVANCE.
 Except for displaying the License Details and identifying us as the origin of
 the Software, you have no right under these Terms and Conditions to use our
 trademarks, trade names, service marks or product names.
+
+### Weft Additional Terms
+
+These Additional Terms are part of these Terms and Conditions. They narrow the
+License Grant and the Permitted Purposes above, and where they conflict with
+anything above, they control.
+
+#### No Circumvention
+
+You may not move, change, disable, remove or circumvent any part of the
+Software that checks, meters, limits or charges for a plan, subscription,
+usage allowance, quota or payment ("Billing Features"), and you may not make,
+use or distribute a copy of the Software, or a Modified Version, that does.
+You may not use the Software, or a Modified Version, to get any product or
+service we offer beyond what your plan with us includes, or without paying
+what that plan costs.
+
+#### Modified Versions Are Non-Commercial
+
+A "Modified Version" is any modification of the Software, any derivative work
+of it, and any work that includes all or a substantial part of it, other than
+the Software as we make it available.
+
+You may use, run and distribute a Modified Version only for a Non-Commercial
+Purpose. A Non-Commercial Purpose is:
+
+1. personal use by an individual, not on behalf of or for the benefit of a
+   business or other organization;
+2. non-commercial education;
+3. non-commercial research; and
+4. making, testing and submitting changes to us for inclusion in the
+   Software.
+
+Any other use of a Modified Version needs a separate commercial license from
+us. That includes using it in or for a business, and building any part of the
+Software into a product, service or project that is sold, licensed or used to
+earn revenue. The Software as we make it available stays licensed for every
+Permitted Purpose above, including your internal use at work.
+
+#### Termination
+
+If you breach these Additional Terms, your license under these Terms and
+Conditions ends right away.
+
+#### Duration
+
+These Additional Terms apply to each version of the Software until the Grant
+of Future License below takes effect for that version.
 
 ## Grant of Future License
 

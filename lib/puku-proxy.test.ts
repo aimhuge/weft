@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { apiError, mergeUsage, meter, overCap, proxy, restUsageStore, today, trialToken, usageIn, type Usage } from "./puku-proxy";
+import { apiError, mergeUsage, overCap, proxy, restUsageStore, today, trialToken, usageIn, type Usage } from "./puku-proxy";
+import { DEFAULT_OUTPUT_TOKENS, MAX_OUTPUT_TOKENS } from "./puku-proxy-usage";
 import { signTrialToken } from "./puku-trial-token";
 import { config, enc, fetchMock, memoryStore, NOW, ok, request, SECRET, sse } from "./puku-proxy.harness";
 
@@ -57,47 +58,6 @@ describe("small helpers", () => {
   });
 });
 
-describe("meter", () => {
-  async function run(chunks: string[], streaming: boolean, done: (u: Usage) => Promise<void>) {
-    const stream = new ReadableStream<Uint8Array>({
-      start(c) {
-        for (const chunk of chunks) c.enqueue(enc.encode(chunk));
-        c.close();
-      },
-    }).pipeThrough(meter(streaming, done));
-    return await new Response(stream).text();
-  }
-
-  it("reads usage from SSE events split across chunk boundaries and passes the bytes through", async () => {
-    const body = sse([
-      { type: "message_start", message: { usage: { input_tokens: 10, cache_creation_input_tokens: 5, cache_read_input_tokens: 100, output_tokens: 1 } } },
-      { type: "message_delta", usage: { output_tokens: 42 } },
-    ]);
-    const done = vi.fn(() => Promise.resolve());
-    const chunks = [body.slice(0, 30), body.slice(30, 95), body.slice(95)];
-    expect(await run(chunks, true, done)).toBe(body);
-    expect(done).toHaveBeenCalledWith({ requests: 0, input_tokens: 15, cache_read_tokens: 100, output_tokens: 42 });
-  });
-
-  it("reads a final data line with no trailing newline", async () => {
-    const done = vi.fn(() => Promise.resolve());
-    await run([`data: ${JSON.stringify({ usage: { output_tokens: 3 } })}`], true, done);
-    expect(done).toHaveBeenCalledWith(expect.objectContaining({ output_tokens: 3 }));
-  });
-
-  it("reads the whole body of a non-streaming reply", async () => {
-    const done = vi.fn(() => Promise.resolve());
-    await run(['{"usage":{"input_tokens":8,', '"output_tokens":2}}'], false, done);
-    expect(done).toHaveBeenCalledWith(expect.objectContaining({ input_tokens: 8, output_tokens: 2 }));
-  });
-
-  it("logs a failure to record instead of breaking the reply", async () => {
-    const err = vi.spyOn(console, "error").mockImplementation(() => {});
-    expect(await run(["ok"], false, () => Promise.reject(new Error("db down")))).toBe("ok");
-    expect(err).toHaveBeenCalledWith("Puku trial: couldn't record usage: db down");
-  });
-});
-
 describe("proxy", () => {
   it("answers only POST and GET", async () => {
     const res = await proxy(await request("messages", { method: "DELETE", body: undefined }), "messages", config());
@@ -120,7 +80,9 @@ describe("proxy", () => {
     const store = memoryStore({ requests: 301 });
     const res = await proxy(await request("messages"), "messages", config({ store }));
     expect(res.status).toBe(429);
-    expect(store.add).toHaveBeenCalledWith("u1", "2026-10-13", { ...ZERO, requests: 1 });
+    // The request and what it could cost go in at once, and the hold comes back with the refusal.
+    expect(store.add).toHaveBeenNthCalledWith(1, "u1", "2026-10-13", { ...ZERO, requests: 1, output_tokens: DEFAULT_OUTPUT_TOKENS });
+    expect(store.add).toHaveBeenNthCalledWith(2, "u1", "2026-10-13", { ...ZERO, output_tokens: -DEFAULT_OUTPUT_TOKENS });
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -151,13 +113,34 @@ describe("proxy", () => {
     expect(((await res.json()) as { error: { message: string } }).error.message).toContain("ECONNRESET");
   });
 
-  it("passes an upstream error through without metering", async () => {
+  it("refuses a request asking for more output than the cap, before counting it", async () => {
+    const store = memoryStore();
+    const res = await proxy(await request("messages", { body: JSON.stringify({ max_tokens: MAX_OUTPUT_TOKENS + 1 }) }), "messages", config({ store }));
+    expect(res.status).toBe(400);
+    expect(store.add).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses counting tokens over the cap with nothing to give back", async () => {
+    const store = memoryStore({ requests: 301 });
+    expect((await proxy(await request("messages/count_tokens"), "messages/count_tokens", config({ store }))).status).toBe(429);
+    expect(store.add).toHaveBeenCalledTimes(1);
+  });
+
+  it("doesn't hold anything for counting tokens", async () => {
+    fetchMock.mockResolvedValue(ok("{}"));
+    const store = memoryStore();
+    await (await proxy(await request("messages/count_tokens"), "messages/count_tokens", config({ store }))).text();
+    expect(store.add).toHaveBeenCalledExactlyOnceWith("u1", "2026-10-13", { ...ZERO, requests: 1 });
+  });
+
+  it("passes an upstream error through and gives the hold back", async () => {
     fetchMock.mockResolvedValue(ok('{"error":"bad"}', { "content-type": "application/json" }, 400));
     const store = memoryStore();
     const res = await proxy(await request("messages"), "messages", config({ store }));
     expect(res.status).toBe(400);
     expect(await res.text()).toBe('{"error":"bad"}');
-    expect(store.add).toHaveBeenCalledTimes(1);
+    expect(store.add).toHaveBeenLastCalledWith("u1", "2026-10-13", { ...ZERO, output_tokens: -DEFAULT_OUTPUT_TOKENS });
   });
 
   it("passes a body-less upstream reply through", async () => {
@@ -166,16 +149,30 @@ describe("proxy", () => {
     expect(res.status).toBe(204);
   });
 
-  it("streams a success back untouched, then records its usage", async () => {
+  it("streams a success back untouched, then trades the hold for its usage", async () => {
     const body = sse([
       { type: "message_start", message: { usage: { input_tokens: 12, cache_read_input_tokens: 3 } } },
       { type: "message_delta", usage: { output_tokens: 20 } },
     ]);
     fetchMock.mockResolvedValue(ok(body, { "content-type": "text/event-stream; charset=utf-8" }));
     const store = memoryStore();
-    const res = await proxy(await request("messages"), "messages", config({ store }));
+    const res = await proxy(await request("messages", { body: '{"max_tokens":100}' }), "messages", config({ store }));
     expect(await res.text()).toBe(body);
-    expect(store.add).toHaveBeenLastCalledWith("u1", "2026-10-13", { requests: 0, input_tokens: 12, cache_read_tokens: 3, output_tokens: 20 });
+    expect(store.add).toHaveBeenNthCalledWith(1, "u1", "2026-10-13", { ...ZERO, requests: 1, input_tokens: 0, output_tokens: 100 });
+    expect(store.add).toHaveBeenLastCalledWith("u1", "2026-10-13", { requests: 0, input_tokens: 12, cache_read_tokens: 3, output_tokens: 20 - 100 });
+  });
+
+  it("charges a client that hangs up before the reply ends", async () => {
+    const events = sse([{ type: "message_start", message: { usage: { input_tokens: 12 } } }, { type: "content_block_delta", delta: { text: "x".repeat(400) } }]);
+    fetchMock.mockResolvedValue(ok(new ReadableStream({ start: (c) => c.enqueue(enc.encode(events)) }), { "content-type": "text/event-stream" }));
+    const store = memoryStore();
+    const tasks: Promise<void>[] = [];
+    const res = await proxy(await request("messages", { body: '{"max_tokens":1000}' }), "messages", config({ store, background: (t) => tasks.push(t) }));
+    const reader = res.body!.getReader();
+    await reader.read();
+    await reader.cancel();
+    await Promise.all(tasks);
+    expect(store.add).toHaveBeenLastCalledWith("u1", "2026-10-13", { requests: 0, input_tokens: 12, cache_read_tokens: 0, output_tokens: 100 - 1000 });
   });
 
   it("meters a non-streaming JSON reply", async () => {
@@ -189,13 +186,13 @@ describe("proxy", () => {
     fetchMock.mockResolvedValue(new Response(enc.encode('{"usage":{"output_tokens":4}}')));
     const store = memoryStore();
     await (await proxy(await request("messages"), "messages", config({ store }))).text();
-    expect(store.add).toHaveBeenLastCalledWith("u1", "2026-10-13", expect.objectContaining({ output_tokens: 4 }));
+    expect(store.add).toHaveBeenLastCalledWith("u1", "2026-10-13", expect.objectContaining({ output_tokens: 4 - DEFAULT_OUTPUT_TOKENS }));
   });
 
   it("doesn't record zero usage", async () => {
     fetchMock.mockResolvedValue(ok("{}"));
     const store = memoryStore();
-    await (await proxy(await request("messages"), "messages", config({ store }))).text();
+    await (await proxy(await request("messages/count_tokens"), "messages/count_tokens", config({ store }))).text();
     expect(store.add).toHaveBeenCalledTimes(1);
   });
 

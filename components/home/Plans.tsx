@@ -1,4 +1,5 @@
-import { catalog, PRO_PUKU_TOKENS, TEAM_SEAT_CENTS, type BlastcpTier, type PlanId } from "@/lib/billing/plans";
+import { catalog, freeTierCapLabel, PRO_PUKU_TOKENS, TEAM_SEAT_CENTS, type BlastcpTier, type PlanId } from "@/lib/billing/plans";
+import AccessPlans from "./AccessPlans";
 
 // The pricing section under the pillars (docs/architecture/billing.md). The three plans come from the catalog
 // in lib/billing/plans.ts, so a price change there moves this page too — the numbers below are read, not typed.
@@ -56,7 +57,7 @@ const CARDS: PlanCard[] = [
     "free",
     [
       "The whole app on your Mac",
-      "Puku threads on today's daily trial",
+      `Puku threads on the free tier: ${freeTierCapLabel()}`,
       "A workspace of one, all to yourself",
     ],
     false,
@@ -106,6 +107,7 @@ export default function Plans() {
           </article>
         ))}
       </div>
+      <AccessPlans />
       <p className="wz-planNote">
         Weft is free to download and open source. Plans are per workspace, charged on weft.zip, and cancel any time.
       </p>

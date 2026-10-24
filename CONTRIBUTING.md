@@ -5,11 +5,14 @@ thread. Read [SOUL.md](SOUL.md) first: it says what Weft values and where things
 
 ## What the license means for you
 
-Weft is [FSL-1.1-ALv2](LICENSE). In short:
+Weft is [FSL-1.1-ALv2 with Weft Additional Terms](LICENSE). In short:
 
 - **Your contribution stays yours.** You keep the copyright; there's no CLA to sign.
-- **You can use Weft for anything but a competing product.** Fork it, run it at work, build on it,
-  do client work with it.
+- **You can use Weft for anything but a competing product.** Run it at work, do client work with it.
+- **A fork is for personal use, learning, research and sending changes back.** Using a modified
+  Weft in or for a business, or building it into a commercial project, needs a commercial license.
+- **Leave the billing alone.** No copy of Weft may switch off or get around its plans, limits or
+  payments.
 - **Your code becomes Apache-2.0 two years after the release it ships in,** like the rest of Weft.
   Nobody can lock it up for good, us included.
 - **The one rule is aimed at big companies, not you:** nobody gets to take Weft and sell it as their
@@ -69,6 +72,6 @@ especially to `lib/`. The runner, store and UI are still untested, so tests ther
 
 Open an issue using the templates. For security problems, see [SECURITY.md](SECURITY.md) instead.
 
-By contributing you agree your work is released under Weft's license, [FSL-1.1-ALv2](LICENSE),
+By contributing you agree your work is released under Weft's license, [FSL-1.1-ALv2 with Weft Additional Terms](LICENSE),
 which turns into Apache-2.0 two years after each release. Sign off your commits (`git commit -s`)
 to say you wrote the change or have the right to submit it ([DCO](https://developercertificate.org/)).

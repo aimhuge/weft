@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import { proxy, type PlanMeter } from "./puku-proxy";
-import { config, fetchMock, memoryStore, ok, request, sse } from "./puku-proxy.harness";
+import { config, enc, fetchMock, memoryStore, ok, request, sse } from "./puku-proxy.harness";
 
 // The Puku trial's "with a plan meter" cases (lib/puku-proxy.ts, lib/puku-proxy.test.ts's parent describe):
 // a Pro workspace's allowance bypasses the daily cap and tokens are billed to the workspace at the end of
@@ -24,7 +24,7 @@ afterEach(() => {
 type MockFn = Mock<(...args: any[]) => any>;
 type Plan = { check: MockFn; record: MockFn };
 
-function approvedPlan(remaining = 1000): Plan {
+function approvedPlan(remaining = 1_000_000): Plan {
   const check = vi.fn<(userId: string) => Promise<{ orgId: string; remaining: number }>>(() => Promise.resolve({ orgId: "org-1", remaining }));
   const record = vi.fn<(orgId: string, userId: string, tokens: number) => Promise<void>>(() => Promise.resolve());
   return { check, record };
@@ -54,6 +54,38 @@ describe("with a plan meter", () => {
     expect(body.error.message).toMatch(/Pro Puku allowance/i);
     expect(store.add).not.toHaveBeenCalled();
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("returns 429 when what's left can't cover what the request could cost", async () => {
+    const store = memoryStore();
+    const { check, record } = approvedPlan(150);
+    const res = await proxy(await request("messages", { body: JSON.stringify({ max_tokens: 200 }) }), "messages", config({ store, plan: { check, record } }));
+    expect(res.status).toBe(429);
+    expect(((await res.json()) as { error: { message: string } }).error.message).toMatch(/doesn't have enough left/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("charges the workspace for a reply the client cut short, and holds nothing in the day's row", async () => {
+    const events = sse([{ type: "message_start", message: { usage: { input_tokens: 30 } } }, { type: "content_block_delta", delta: { text: "x".repeat(80) } }]);
+    fetchMock.mockResolvedValue(ok(new ReadableStream({ start: (c) => c.enqueue(enc.encode(events)) }), { "content-type": "text/event-stream" }));
+    const store = memoryStore();
+    const { check, record } = approvedPlan();
+    const res = await proxy(await request("messages", { body: '{"max_tokens":500}' }), "messages", config({ store, plan: { check, record } }));
+    const reader = res.body!.getReader();
+    await reader.read();
+    await reader.cancel();
+    expect(store.add).toHaveBeenNthCalledWith(1, "u1", "2026-10-13", expect.objectContaining({ requests: 1, input_tokens: 0, output_tokens: 0 }));
+    expect(record).toHaveBeenCalledWith("org-1", "u1", 30 + 20);
+  });
+
+  it("charges a JSON reply cut short at its estimate and its full max_tokens", async () => {
+    fetchMock.mockResolvedValue(ok(new ReadableStream({ start: (c) => c.enqueue(enc.encode('{"content":')) })));
+    const { check, record } = approvedPlan();
+    const res = await proxy(await request("messages", { body: JSON.stringify({ max_tokens: 500, system: "y".repeat(400) }) }), "messages", config({ plan: { check, record } }));
+    const reader = res.body!.getReader();
+    await reader.read();
+    await reader.cancel();
+    expect(record).toHaveBeenCalledWith("org-1", "u1", 100 + 500);
   });
 
   it("keeps the daily cap when the meter says no allowance (Free or unmetered plan)", async () => {
@@ -110,7 +142,7 @@ describe("with a plan meter", () => {
     const body = sse([{ type: "message_start", message: { usage: { input_tokens: 5, output_tokens: 5 } } }]);
     fetchMock.mockResolvedValue(ok(body, { "content-type": "text/event-stream; charset=utf-8" }));
     const store = memoryStore();
-    const check = vi.fn<(userId: string) => Promise<{ orgId: string; remaining: number }>>(() => Promise.resolve({ orgId: "org-1", remaining: 100 }));
+    const check = vi.fn<(userId: string) => Promise<{ orgId: string; remaining: number }>>(() => Promise.resolve({ orgId: "org-1", remaining: 1_000_000 }));
     const record = vi.fn<(orgId: string, userId: string, tokens: number) => Promise<void>>(() => {
       throw new Error("ledger down");
     });

@@ -1,7 +1,7 @@
 # Weft trademarks
 
 Weft™, the Weft logo and weft.zip are trademarks of Alex Miller (AIMHUGE). The code is
-licensed under [FSL-1.1-ALv2](LICENSE); the name and logo are not. The license says so too
+licensed under [FSL-1.1-ALv2 with Weft Additional Terms](LICENSE); the name and logo are not. The license says so too
 (its Trademarks clause), and the Apache-2.0 license each release turns into after two years
 doesn't grant them either (its section 6).
 

@@ -75,9 +75,17 @@ nothing.
   (`authentication_error`), which puku-cli treats as logged out, so the desktop fetches a new token and retries.
 - **Headers:** the hop's headers (`host`, `cookie`, `x-forwarded-*`, `x-vercel-*`, `accept-encoding`, the trial
   token) are dropped on the way in; `content-encoding`, `content-length` and `transfer-encoding` on the way out.
-- **Streaming:** the reply body goes back through a `TransformStream` that passes every byte on unchanged and reads
-  `usage` from the SSE `data:` lines (input and cache counts from `message_start`, output from the last
-  `message_delta`) or from a JSON body; the tokens are recorded when the stream ends.
+- **Streaming:** the reply body goes back through `metered()` (`lib/puku-proxy-usage.ts`), which passes every byte on
+  unchanged and reads `usage` from the SSE `data:` lines (input and cache counts from `message_start`, output from the
+  last `message_delta`) or from a JSON body. It reports **exactly once, however the reply ends**: read to the end, cancelled
+  by the client, aborted with the request (`req.signal`) or broken upstream. The trial token works from any HTTP client, so
+  before 2026-10-24 a script could read up to the last `message_delta`, hang up, and never be charged (the old
+  `TransformStream` only recorded in `flush()`). A reply cut short is charged what it carried: `message_start`'s input (or
+  the reservation's estimate when it never came), and as output the larger of the counted tokens and the streamed text
+  (`delta.text`, `thinking`, `partial_json`) at four characters a token; a JSON reply cut short pays its full `max_tokens`.
+  The route passes `after` as `background`, so the function stays alive to write the charge after a hang-up.
+  A reply still open 15 s before the route's `maxDuration` (`deadlineMs`) is charged as cut short too: a client that
+  reads the text and then sits on the socket would otherwise outlast the function and never let the reply end.
 
 ## Metering and the cap
 
@@ -87,16 +95,25 @@ their own row, nothing else is granted to clients. `puku_trial_add(...)` adds to
 in one statement; execute is granted to `service_role` only. The proxy calls it through PostgREST with
 `SUPABASE_SECRET_KEY` (`restUsageStore`), the same key the webhook relay uses.
 
-Each messages request first adds 1 request; if the totals are then over the cap, the proxy answers **429**
+**Reserve before spending.** `reserve(body)` estimates what a `messages` request could cost before it goes out: its input
+from the text it carries (four characters a token; a base64 image or document is a flat 1,600) and its output at the
+`max_tokens` it asks for (32,000 when it doesn't say). A request asking for more than `MAX_OUTPUT_TOKENS` (128,000) is a
+**400**. On the Free path the request and that estimate go into the day's row in one `puku_trial_add`, so requests sent at
+once can't each see the same room under the cap; when the reply ends, `settle` adds what was spent minus what was held
+(a negative add, so per-day stats stay exact), and an upstream error gives the whole hold back, as does a refusal.
+`count_tokens` holds nothing. A Pro workspace holds nothing in the day's row; it is refused when its allowance can't
+cover the estimate.
+
+Each messages request first adds 1 request (and its hold); if the totals are then over the cap, the proxy answers **429**
 `rate_limit_error`: "You've used today's free Puku trial in Weft. Log in to Puku … to keep going, or try again
 tomorrow." puku-cli shows it, and Weft's rate-limit handling (`lib/rate-limit.ts`) offers the switch to Claude.
 
 | Cap | Default | Env override (Vercel) |
 | --- | --- | --- |
-| Requests per user per day | 300 | `PUKU_TRIAL_DAILY_REQUESTS` |
-| Input + output tokens per user per day (cache reads don't count) | 2,000,000 | `PUKU_TRIAL_DAILY_TOKENS` |
+| Requests per user per day | 150 | `PUKU_TRIAL_DAILY_REQUESTS` |
+| Input + output tokens per user per day (cache reads don't count) | 1,000,000 | `PUKU_TRIAL_DAILY_TOKENS` |
 
-An agent turn makes a request per tool round, so 300 requests is roughly 10 to 30 real turns a day.
+An agent turn makes a request per tool round, so 150 requests is roughly 5 to 15 real turns a day.
 
 ## When the trial can't help
 
@@ -128,5 +145,8 @@ ends every trial token at once; desktops fetch new ones on their next 401.
 - Weft accounts are free (magic link), so one person can open several for more trial. There's no global daily cap
   across all users yet; Puku's own limits on the trial key are the backstop.
 - Vercel limits request bodies to 4.5 MB, so a very long session with many images can outgrow the proxy.
-- A client that aborts mid-stream has its request counted but not its tokens.
+- A Pro workspace's check isn't atomic: requests sent at once can each pass the allowance check and overdraw by what
+  they spend together (billing.md's known gaps). The Free path's hold is atomic.
+- The input estimate is text length, so a request heavy with PDFs (a flat 1,600 tokens each here) can be held for
+  less than it costs; the real usage still settles it.
 - A puku spare started before the token existed runs without the trial until its first failure retries it.

@@ -87,7 +87,7 @@ export const STARTUP_TEAM = {
 // Shared mini apps (docs/architecture/mini-app-hosting.md "Access, plans and limits"): views are unlimited on every
 // plan, and so is the number of links; what a plan caps is the bytes a workspace's open links serve, together. A
 // private link doesn't count, and a site link (an https address) stores nothing. Open Source and Education follow
-// Pro. The database enforces the same numbers (supabase/migrations/20261024070000_app_share_quota.sql
+// Pro. The database enforces the same numbers (supabase/migrations/20261024124411_app_share_quota.sql
 // app_share_byte_limit); lib/app-share-quota.test.ts keeps the two in step.
 const MB = 1024 * 1024;
 export const APP_SHARE_BYTES: Record<PlanId, number> = {

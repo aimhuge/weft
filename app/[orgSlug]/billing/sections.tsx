@@ -4,7 +4,7 @@
 // conditional structure are unchanged from when the page rendered them inline.
 import { formatCompact, formatMoney } from "@aimhuge/billing";
 import { ScanCode } from "@/components/team/ScanCode";
-import { freeTierCapLabel } from "@/lib/billing/plans";
+import { appShareLabel, freeTierCapLabel } from "@/lib/billing/plans";
 
 // Notices renders the stack of small messages above the main sections. Each notice pushes its own
 // conditional down here, so the page doesn't accumulate a long if/then chain just to label Stripe
@@ -61,7 +61,7 @@ export function PlanSection({
   canManage,
   resumeAction,
 }: {
-  plan: { name: string };
+  plan: { id: string; name: string };
   sub: {
     status: string;
     interval: string;
@@ -87,6 +87,7 @@ export function PlanSection({
         ) : (
           <div className="wz-billingPlanMeta">Today&apos;s trial: a daily Puku cap on the deployed Weft.</div>
         )}
+        <div className="wz-billingPlanMeta">{appShareLabel(plan.id)}.</div>
         {isPaid && sub.cancelAtPeriodEnd ? (
           <div className="wz-billingCancelNotice">
             <span>
@@ -159,6 +160,7 @@ export function UpgradeSection({
       <h2 className="wz-billingSectionTitle">Upgrade to Pro</h2>
       <div className="wz-billingProCard">
         <div className="wz-billingProBlurb">{blurb}</div>
+        <div className="wz-billingPlanMeta">{appShareLabel("pro")}.</div>
         <div className="wz-billingProPrice">
           <div className="wz-billingProPriceRow">
             <div className="wz-billingProPriceLabel">Monthly</div>

@@ -337,7 +337,7 @@ New threads start on the CLI, model and effort in Settings → Models, and the d
 | Mode | What it does |
 |------|--------------|
 | YOLO | Runs every tool without asking (Claude Code only) |
-| Auto | A classifier approves safe calls and asks about the rest (the default) |
+| Auto | A classifier approves safe calls and blocks risky ones (the default). A blocked call lands the card in Needs you with the classifier's reason: **Allow once and retry** lets that exact call through once, **Keep denied** leaves it |
 | Accept edits | Edits files freely, asks before commands |
 | Ask me | Asks before each tool |
 
@@ -793,7 +793,7 @@ publicly. Never your email or workspace.
 
 Every workspace has a plan:
 
-- **Free**: the full app, plus the Puku trial's daily cap (300 requests and 2M tokens a day). A Free workspace is a
+- **Free**: the full app, plus the Puku trial's daily cap (150 requests and 1M tokens a day). A Free workspace is a
   team of one: it can't invite members.
 - **Pro**: $20/month or $200/year per workspace (not per seat), replacing the daily cap with 300M Puku tokens per
   billing period, and letting you invite people into the workspace.
@@ -905,9 +905,11 @@ New thread dialog or picking the project a moment earlier starts one in the back
 
 ### Is Weft open source?
 
-Source-available under the [Functional Source License 1.1, ALv2 Future License](../LICENSE). You can fork it, change it,
-self-host it, use it at work and build client work on it. You can't offer it, or something built mainly on it, as a
-competing product or service. Each release becomes Apache-2.0 two years after it ships; versions up to v0.3.0 are
+Source-available under the [Functional Source License 1.1, ALv2 Future License](../LICENSE), with Weft Additional
+Terms. You can use it at work and build client work with it. You can fork and change it for personal use, non-commercial
+education and research, and to send changes back; a modified Weft used in or for a business, or built into a commercial
+project, needs a commercial license. No copy may switch off or get around Weft's plans, limits or payments, and you
+can't offer it, or something built mainly on it, as a competing product or service. Each release becomes Apache-2.0 two years after it ships; versions up to v0.3.0 are
 Apache-2.0 already. The Weft name and logo aren't covered: a fork you share needs its own (see
 [TRADEMARKS.md](../TRADEMARKS.md)).
 

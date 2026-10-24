@@ -2,7 +2,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import "../test-utils";
-import { catalog, TEAM_SEAT_CENTS } from "@/lib/billing/plans";
+import { catalog, freeTierCapLabel, TEAM_SEAT_CENTS } from "@/lib/billing/plans";
 import Plans from "./Plans";
 
 // components/home/Plans.tsx: the home page's pricing section. The point of these tests is that the page
@@ -13,7 +13,8 @@ describe("Plans", () => {
   it("draws all three plans in the catalog, in order", () => {
     const { container } = render(<Plans />);
     const names = Array.from(container.querySelectorAll(".wz-planName")).map((n) => n.textContent);
-    expect(names).toEqual(catalog.order.map((id) => catalog.get(id).name));
+    // Open Source and Education are granted, not sold: they're in the access row under the cards, not cards of their own.
+    expect(names).toEqual(catalog.order.filter((id) => id !== "oss" && id !== "edu").map((id) => catalog.get(id).name));
     expect(names).toEqual(["Free", "Pro", "Team"]);
   });
 
@@ -68,5 +69,17 @@ describe("Plans", () => {
       // The closing "Everything in …" stays last, after the BlastCP lines.
       expect(list.at(-1)).toMatch(/^Everything in /);
     }
+  });
+
+  it("quotes the free tier cap on Free, from the catalog", () => {
+    render(<Plans />);
+    expect(screen.getByText(`Puku threads on the free tier: ${freeTierCapLabel()}`)).toBeTruthy();
+  });
+
+  it("draws the access row under the plans, each marked Coming soon", () => {
+    const { container } = render(<Plans />);
+    const names = Array.from(container.querySelectorAll(".wz-accessName")).map((n) => n.firstChild?.textContent);
+    expect(names).toEqual(["Startups", "Open source", "Education", "Regional pricing"]);
+    expect(container.querySelectorAll(".wz-accessSoon")).toHaveLength(4);
   });
 });
