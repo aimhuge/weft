@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { HookCallback, HookCallbackMatcher } from "@anthropic-ai/claude-agent-sdk";
@@ -150,12 +151,30 @@ function namesPort(args: string[], port: string): boolean {
 
 const RUNNERS = new Set(["npm", "pnpm", "yarn", "bun"]);
 const LAUNCHERS = new Set(["npx", "pnpx", "bunx"]);
+const SCRIPTS = ["dev", "desktop", "start"];
+// What a script runs to start a second Weft: free-port.cjs (frees Weft's port), `next dev` or `electron .`.
+const LAUNCHES = /free-port\.cjs|\bnext dev\b|\belectron \./;
+
+// The package scripts in Weft's folder that start a second Weft, read from its package.json so a new one is caught
+// too: a fixed list missed `pnpm dev:web`, which a card's devservers tool ran and killed the server (2026-10-23).
+export function launcherScripts(dir: string): Set<string> {
+  try {
+    const { scripts = {} } = JSON.parse(fs.readFileSync(path.join(dir, "package.json"), "utf8")) as { scripts?: Record<string, unknown> };
+    return new Set([...SCRIPTS, ...Object.keys(scripts).filter((name) => LAUNCHES.test(String(scripts[name])))]);
+  } catch {
+    return new Set(SCRIPTS);
+  }
+}
 
 // A second Weft started in Weft's folder: its dev script frees Weft's port first, killing the server.
 function startsWeft({ name, args, cwd }: Step, weft: WeftProcess): boolean {
   if (path.resolve(cwd) !== path.resolve(weft.dir)) return false;
   const [sub = "", script = ""] = args;
-  if (RUNNERS.has(name)) return sub === "start" || (sub === "run" && ["dev", "desktop", "start"].includes(script));
+  // pnpm, yarn and bun run a script without `run` (`pnpm dev`); npm only `start` that way.
+  if (RUNNERS.has(name)) {
+    const scripts = launcherScripts(weft.dir);
+    return sub === "start" || (sub === "run" ? scripts.has(script) : name !== "npm" && scripts.has(sub));
+  }
   const tool = LAUNCHERS.has(name) ? path.basename(sub) : name;
   const rest = LAUNCHERS.has(name) ? args.slice(1) : args;
   return (tool === "next" && rest[0] === "dev") || (tool === "electron" && rest.includes("."));

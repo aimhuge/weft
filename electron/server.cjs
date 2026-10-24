@@ -7,6 +7,7 @@ const path = require("node:path");
 
 const { freePort } = require("./free-port.cjs");
 const { readTail, TAIL_BYTES } = require("./server-log.cjs");
+const { noteExit } = require("./server-exit.cjs");
 
 const ROOT = path.join(__dirname, "..");
 const MAX_LOG_BYTES = 5 * 1024 * 1024;
@@ -255,6 +256,8 @@ async function startServer({ preferredPort, env, onStatus, onFatal, onMark, onNo
         `--- server exited (code ${code}, signal ${signal}) pid ${child.pid} after ${(livedMs / 1000).toFixed(1)}s` +
           `${deliberate.has(child.pid) ? " [weft asked: stop/restart]" : " [external SIGTERM]"}\n`,
       );
+      // Something outside Weft stopped it: say when, so the next server can name the card that did (lib/crash-blame.ts).
+      noteExit({ code, signal, asked: stopping || deliberate.has(child.pid) });
       // Ignore a process that was stopped on purpose or already replaced.
       if (stopping || proc !== child) return;
       // A cause we know how to recover from? Handle it and relaunch without counting a crash.
