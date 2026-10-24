@@ -9,7 +9,8 @@ import { connection } from "next/server";
 import { notFound, redirect } from "next/navigation";
 import { ShareGateForm } from "@aimhuge/share/client";
 import { appShareAccessBySlug, loadAppShareBySlug } from "@/lib/app-share-access";
-import { appFrameSrc, type AppOwner } from "@/lib/app-share-types";
+import { versionedFrameSrc } from "@/lib/app-share-frame";
+import type { AppOwner } from "@/lib/app-share-types";
 import { SharedApp } from "@/components/share-view/SharedApp";
 import { ShareNotice } from "@/components/share-view/ShareNotice";
 import { serviceClient } from "@/lib/web-session";
@@ -70,7 +71,7 @@ export async function SharedAppPageBody({ params, owner }: BodyParams) {
   return (
     <SharedApp
       name={share.name}
-      src={appFrameSrc(share.id, share)}
+      src={versionedFrameSrc(share.id, share)}
       site={share.kind === "site"}
       shareId={share.id}
       manifest={share.manifest}

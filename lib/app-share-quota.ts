@@ -1,6 +1,6 @@
 // The Mac's side of the plan gate on shared mini apps (docs/architecture/mini-app-hosting.md "Access, plans and
 // limits"): a workspace's open links may serve up to its plan's bytes (APP_SHARE_BYTES in lib/billing/plans.ts).
-// The database is the gate (supabase/migrations/20261024070000_app_share_quota.sql: a trigger weighs each row from
+// The database is the gate (supabase/migrations/20261024124411_app_share_quota.sql: a trigger weighs each row from
 // its blobs and refuses one over the cap); this reads the same numbers through app_share_quota() so the Share
 // dialog can show the room left, refuses before uploading anything that wouldn't fit, and turns the trigger's
 // refusal into the dialog's wording.

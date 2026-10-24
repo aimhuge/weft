@@ -1,7 +1,7 @@
 // The /@<user>/apps/<slug> and /<org>/apps/<slug> viewer: one shared mini app, its page
-// full-window under a thin header. A page the Mac uploaded is framed from /api/a/<id>/page,
+// full-window under a thin header. A page the Mac uploaded is framed from /api/a/<id>/page/<sha>,
 // sandboxed by the route's CSP; a public site is framed at its address, with Open for the sites
-// that refuse to be framed; a folder's entry is framed from /api/a/<id>/f/<entry>.
+// that refuse to be framed; a folder's entry is framed from /api/a/<id>/v/<ver>/<entry> (lib/app-share-frame.ts).
 //
 // The host page also runs the parent side of the bridge (lib/app-bridge.ts): the inline script
 // Weft inserts into the app's HTML posts a BridgeRequest to window.parent, the page calls one of

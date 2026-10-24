@@ -85,7 +85,7 @@ describe("roomFor", () => {
 
 describe("the database's caps", () => {
   it("match APP_SHARE_BYTES", () => {
-    const sql = fs.readFileSync(path.join(__dirname, "../supabase/migrations/20261024070000_app_share_quota.sql"), "utf8");
+    const sql = fs.readFileSync(path.join(__dirname, "../supabase/migrations/20261024124411_app_share_quota.sql"), "utf8");
     const caps: Record<string, number> = {};
     for (const m of sql.matchAll(/when '(\w+)' then (\d+)::bigint/g)) caps[m[1] as string] = Number(m[2]);
     const fallback = /else (\d+)::bigint/.exec(sql);
