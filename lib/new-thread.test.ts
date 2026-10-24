@@ -175,6 +175,14 @@ describe("modelOn", () => {
     expect(modelOn("claude", "puku-ai-2.8")).toBeUndefined();
   });
 
+  it("keeps any model on a Goose card, whose providers serve their own ids", () => {
+    // A local Ollama model, a private endpoint's id: no list can name them all, and dropping one
+    // would silently run a different model than the card asked for.
+    expect(modelOn("goose", "llama3.2")).toBe("llama3.2");
+    expect(modelOn("goose", "some-private-endpoint/model-v2")).toBe("some-private-endpoint/model-v2");
+    expect(modelOn("goose", "anthropic/claude-sonnet-4.5")).toBe("anthropic/claude-sonnet-4.5");
+  });
+
   it("leaves no model as no model", () => {
     expect(modelOn("puku", undefined)).toBeUndefined();
   });

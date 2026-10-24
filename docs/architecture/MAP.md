@@ -301,7 +301,9 @@ When a new doc lands in this folder, add it here on the same change.
 - `lib/webhooks.ts` + `lib/webhook-tools.ts` + `app/api/webhooks` + `lib/use-webhooks.ts` + `lib/webhooks-view.ts` + `components/WebhooksDrawer.tsx`: the 🪝
   webhooks drawer under 🔐 (each project's webhook routes in `~/.weft/webhooks.json`, blanks counted until registered; `mcp__webhooks__*`).
   `lib/webhook-relay.ts` + `app/api/hooks/[id]` + `lib/webhook-forward.ts`: its public relay URL on the deployed Weft (→ `webhook_deliveries` on
-  Supabase → Realtime → the local target; docs/architecture/webhooks.md).
+  Supabase → Realtime → the local target; the relay only accepts a delivery carrying the provider's signature, checked by
+  `lib/webhook-signatures.ts` against the secret sealed into the row by `lib/relay-secret.ts` + `electron/relay-secret.cjs`;
+  docs/architecture/webhooks.md).
 - `electron/vercel*.cjs` (`vercel-env.cjs`: 🔐 vault → Vercel env push, Touch ID per push, also `mcp__secrets__push_to_vercel`; and `pull()`: plain Vercel vars the vault lacks → vault, by hand or live: `lib/vercel-hooks.ts` + `app/api/vercel/hooks` make the team webhook and listen, `lib/vercel-relay.ts` + `app/api/vercel/webhook` relay it on the deployed Weft → `vercel_events` on Supabase → Realtime) + `lib/vercel-view.ts` + `lib/use-vercel.ts` + `lib/use-linked-status.ts` (the three drawers' cached status hook) + `components/Vercel*.tsx`: the ▲ Vercel drawer (token sealed
   in the Keychain, link or create a project as `.vercel/project.json`, latest deploy; docs/architecture/vercel.md).
 - `electron/supabase.cjs` + `lib/supabase-view.ts` + `lib/use-supabase.ts` + `components/Supabase*.tsx`: the Supabase drawer (its bolt

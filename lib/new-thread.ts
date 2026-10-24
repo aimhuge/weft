@@ -129,6 +129,10 @@ export function modelOn(backend: Backend, model: string | undefined): string | u
   if (model === CODEX_DEFAULT_MODEL) return undefined;
   // Goose's own sentinel too: "goose-default" means the provider picks, so the card pins no model id.
   if (model === GOOSE_DEFAULT_MODEL) return undefined;
+  // A Goose card takes any model id: Goose's providers are gateways that serve their own ids (a local
+  // Ollama model, a private endpoint's), so no list can name them all and dropping one would silently
+  // run a different model than the card asked for.
+  if (backend === "goose") return model;
   const bare = model.replace(/\[[^\]]*\]$/, "");
   return (backendFor(bare) ?? DEFAULT_OWNER) === backend ? model : undefined;
 }

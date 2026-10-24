@@ -49,6 +49,8 @@ export interface NewCardInput {
   effort?: Effort;
   // Tags to start with (lib/tags.ts); they count as yours.
   tags?: string[];
+  // A git worktree of its own (docs/architecture/worktrees.md); left out, the shared folder.
+  isolated?: boolean;
   start: boolean;
 }
 
@@ -146,7 +148,7 @@ export async function call<T>(method: string, url: string, body?: unknown, signa
 
 export const api = {
   list: () => call<{ cards: Card[]; home: string; roots: Record<string, string> }>("GET", "/api/cards"),
-  create: (input: NewCardInput) => call<{ card: Card }>("POST", "/api/cards", input),
+  create: (input: NewCardInput) => call<{ card: Card; start?: { started: boolean; at?: number } }>("POST", "/api/cards", input),
   move: (id: string, column: Column) => call<{ card: Card }>("PATCH", `/api/cards/${id}`, { column }),
   reorder: (id: string, before: string | null) => call<{ card: Card }>("PATCH", `/api/cards/${id}`, { before }),
   rename: (id: string, title: string) => call<{ card: Card }>("PATCH", `/api/cards/${id}`, { title }),
@@ -165,6 +167,9 @@ export const api = {
     call<{ tag: TagInfo }>("PATCH", "/api/tags", { name, ...patch }),
   deleteTag: (name: string) => call<{ ok: true }>("DELETE", "/api/tags", { name }),
   setStarred: (id: string, starred: boolean) => call<{ card: Card }>("PATCH", `/api/cards/${id}`, { starred }),
+  // The card's "Broke Weft" mark (lib/crash-blame.ts): what the board saw break, and × on the chip.
+  reportBreak: (report: { kind: "build" | "reload"; at?: number; file?: string }) => call<{ card: { id: string } | null }>("POST", "/api/broke", report),
+  clearBreak: (id: string) => call<{ card: Card }>("PATCH", `/api/cards/${id}`, { broke: null }),
   setTags: (id: string, tags: string[]) => call<{ card: Card }>("PATCH", `/api/cards/${id}`, { tags }),
   // The user granted read access to a path outside the project. Persists on the card and queues
   // a /add-dir slash command for the live session so the in-flight turn can keep reading.
@@ -246,6 +251,9 @@ export const api = {
     copilotModel?: string;
     reviewAllModel?: string;
     backupModel?: string;
+    gooseProviderId?: string;
+    gooseModelId?: string;
+    gooseBaseUrl?: string;
   }) =>
     call<SettingsView>("PATCH", "/api/settings", patch),
   addProject: (path: string) => call<{ path: string; projects: Project[] }>("POST", "/api/projects", { path }),

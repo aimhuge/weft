@@ -1,0 +1,20 @@
+// Where Goose keeps its own state for a card (docs/architecture/goose.md).
+//
+// Goose's config, data and session rows live under `GOOSE_PATH_ROOT`, and Weft points that at
+// ~/.weft/goose/<card id>, one folder per card, so two cards never share one Goose database.
+// `--no-session` doesn't skip that: Goose still writes a hidden session row.
+//
+// This lives apart from lib/goose-runner.ts because the recipe store (lib/goose-recipe-store.ts) needs
+// the same root and the runner imports that store: keeping the root here keeps the two from forming
+// a circle.
+
+import path from "node:path";
+
+/** The folder a card's Goose state lives in: under Weft's data dir, one per card. */
+export function gooseStateRoot(cardId: string): string {
+  // `||` and not `??`: an empty WEFT_DATA is no data dir, and falling back to the home folder is right.
+  // With `??` an empty one would make the root relative ("goose/<card>"), and Goose's state would land
+  // in whatever folder the server happened to be started in.
+  const root = process.env.WEFT_DATA || path.join(process.env.HOME || "/tmp", ".weft");
+  return path.join(root, "goose", cardId);
+}

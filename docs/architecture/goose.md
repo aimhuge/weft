@@ -23,7 +23,7 @@ or a local Ollama and doesn't want to route it through Anthropic.
 | `lib/goose-progress-paths.ts` | The file paths a progress note mentions |
 | `lib/goose-state.ts` | Where a card's Goose state lives: `~/.weft/goose/<card id>` |
 | `lib/goose-runner.ts` | One Goose process per turn; `gooseEnv()`; the events turned into thread rows |
-| `lib/goose-runner-events.ts` | Parses Goose's `stream-json` output into four kinds of event |
+| `lib/goose-runner-events.ts` | Parses Goose's `stream-json` output into five kinds of event |
 | `lib/goose-launch.ts` | The grant-based key injection: asks main for a one-time grant over the control server |
 | `lib/goose-provider.ts` | The board's copy of the provider catalog; `gooseEnvFor`, `gooseModelFor`, `needsBaseUrl` |
 | `lib/use-goose.ts` | The board-side hook: list providers, save a key, forget one |
@@ -38,7 +38,7 @@ or a local Ollama and doesn't want to route it through Anthropic.
 | `electron/goose-token.cjs` | The keys, one per provider, sealed by `safeStorage` in `~/.weft/goose-tokens.json` |
 | `electron/goose-env.cjs` | The helper that claims a grant and starts Goose with the key in its env |
 | `electron/goose-ipc.cjs` | The board's IPC (list, save, forget) and the control server's two routes (grant, claim) |
-| `lib/login-status.ts` | `parseGooseStatus` reads `goose info --check`; Goose has no `goose auth` |
+| `lib/login-status.ts` | Reads `goose info --check` for Goose's status; Goose has no `goose auth` |
 | `lib/login-terminal.ts` | Runs `goose configure` in a Terminal window and polls the status |
 
 ## The one list of CLIs
@@ -117,8 +117,8 @@ Goose's config and session rows live), so the recipe sits beside them.
 
 The name is `turn.yaml` and it is **one file per card, overwritten each turn**, on purpose: the recipe is what
 the card is running *now*. A stack of them would be a history, and the thing worth keeping is the current one.
-It is also the file the harness optimizer reads back (lib/harness-recipe.ts's `parseRecipe` and
-`harnessFromRecipe` take what `readRecipe()` returns), so the file on disk is always the harness in force.
+It is also the file the harness optimizer reads back (lib/harness-optimizer.ts's `currentHarness` parses it with
+lib/harness-recipe.ts's `parseRecipe`), so the file on disk is always the harness in force.
 
 One detail about the recipe's shape, because Goose rejects the obvious one: it has no `response` block. Goose's
 `validate_recipe.rs` rejects an empty JSON schema and `builder.rs` exits the process on an invalid one, so a
@@ -215,7 +215,9 @@ OpenAI-compatible endpoint is configured.
 
 A provider that needs an endpoint beside its key says so in the catalog, as `extraEnv`: the variable's name with
 `__baseUrl__` standing for the base URL. Anthropic's provider reads its host from `ANTHROPIC_HOST`, so a gateway
-that speaks the Anthropic API is reached by giving a base URL there. The host is the host: Goose appends
+that speaks the Anthropic API is reached by giving a base URL there; Azure and LiteLLM name theirs the same way.
+The custom provider is the exception: its host is always `GOOSE_PROVIDER__HOST`, so it is set directly rather
+than through `extraEnv`. The host is the host: Goose appends
 `v1/messages` itself, so a host with `/v1` on the end would ask for `/v1/v1/messages` and 404.
 
 The model list is a short curated set where the ids are known for certain (OpenRouter's `vendor/model` ids).
@@ -406,7 +408,9 @@ access any process you start there has.
   and it conflicts with it.
 - The provider catalog is a short curated list. A provider Weft doesn't know can't be picked.
 - Weft's own model list for Goose is a starter set of OpenRouter-style ids, so a card on, say, a local Ollama
-  model has to have that id typed into the card's model, not chosen from a menu.
+  model has to have that id typed into the card's model, not chosen from a menu. A Goose card keeps whatever
+  id it is given: its providers are gateways that serve their own ids, so no list can name them all
+  (`modelOn()` in `lib/new-thread.ts`).
 - A Goose card's model is the card's own, as on every other CLI: `lib/runner-state.ts` `specFor` gives it
   priority and the Settings model only fills in a card left on "Goose default".
 - A Goose thread's subagents are headless `goose run --text` calls from Bash, because Goose has no Agent
