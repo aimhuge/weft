@@ -89,7 +89,7 @@ describe("getAppShare", () => {
   });
 
   it("reads an unshared app as private with no link, calling the right table and filters", async () => {
-    expect(await getAppShare("a1")).toEqual({ kind: "ok", id: null, url: null, mode: "private", hasPassword: false, shows: "site", manifest: null, preview: null, previewing: false, ...ORG_OWNER, owner: null });
+    expect(await getAppShare("a1")).toEqual({ kind: "ok", id: null, url: null, mode: "private", hasPassword: false, shows: "site", manifest: null, preview: null, previewing: false, quota: null, ...ORG_OWNER, owner: null });
     expect(db.queries.find((q) => q.table === "cloud_app_shares" && "app_id" in q.filters)).toEqual({ table: "cloud_app_shares", filters: { created_by: "u1", app_id: "a1" } });
   });
 
@@ -137,7 +137,7 @@ describe("getAppShare", () => {
 
   it("reads a share with its link, and an unknown mode as private", async () => {
     db.share = share({ mode: "password", has_password: true });
-    expect(await getAppShare("a1")).toEqual({ kind: "ok", id: "abcdefghijklmnopqrstuv", url: "https://weft.zip/a/abcdefghijklmnopqrstuv", mode: "password", hasPassword: true, shows: "site", manifest: null, preview: null, previewing: false, ...ORG_OWNER });
+    expect(await getAppShare("a1")).toEqual({ kind: "ok", id: "abcdefghijklmnopqrstuv", url: "https://weft.zip/a/abcdefghijklmnopqrstuv", mode: "password", hasPassword: true, shows: "site", manifest: null, preview: null, previewing: false, quota: null, ...ORG_OWNER });
     db.share = share({ mode: "public_edit" });
     expect(await getAppShare("a1")).toMatchObject({ mode: "private" });
   });
@@ -224,7 +224,7 @@ describe("setAppShare", () => {
     expect(row.id).toMatch(/^[A-Za-z0-9_-]{22}$/);
     expect(row).toMatchObject({ org_id: "o1", app_id: "a1", mode: "email", name: "My App", kind: "blob", password_hash: null, owner: "user", slug: null, files: null, manifest: null });
     expect((row.page as string).startsWith("blob:sha256:")).toBe(true);
-    expect(state).toEqual({ kind: "ok", id: row.id, url: `https://weft.zip/a/${row.id as string}`, mode: "email", hasPassword: false, shows: "blob", manifest: null, preview: null, previewing: false, ...ORG_OWNER });
+    expect(state).toEqual({ kind: "ok", id: row.id, url: `https://weft.zip/a/${row.id as string}`, mode: "email", hasPassword: false, shows: "blob", manifest: null, preview: null, previewing: false, quota: null, ...ORG_OWNER });
     expect(uploaded.paths).toContain(file);
   });
 

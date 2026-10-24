@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BLASTCP_CREATOR, BLASTCP_FREE, catalog, FREE_TIER, freeTierCapLabel, PUKU_METER, REGIONAL_PRO_CENTS, PRO_PUKU_TOKENS, STARTUP_TEAM, TEAM_SEAT_CENTS } from "./plans";
+import { APP_SHARE_BYTES, appShareLabel, BLASTCP_CREATOR, BLASTCP_FREE, bytesLabel, catalog, FREE_TIER, freeTierCapLabel, PUKU_METER, REGIONAL_PRO_CENTS, PRO_PUKU_TOKENS, STARTUP_TEAM, TEAM_SEAT_CENTS } from "./plans";
 
 // lib/billing/plans.ts: the catalog shape, the meter name and the paid plans' allowances.
 
@@ -137,5 +137,23 @@ describe("startup team", () => {
   it("is Team free for six months, then half price for six, on up to 10 seats", () => {
     expect(STARTUP_TEAM).toEqual({ freeMonths: 6, halfPriceMonths: 6, maxSeats: 10, maxRaisedUsd: 5_000_000, maxAgeYears: 3 });
     expect(catalog.get("team").perSeat).toBe(true);
+  });
+});
+
+describe("shared mini apps", () => {
+  it("caps open links' bytes, with Open Source and Education on Pro's room", () => {
+    expect(APP_SHARE_BYTES).toEqual({ free: 25 * 1024 ** 2, oss: 1024 ** 3, edu: 1024 ** 3, pro: 1024 ** 3, team: 5 * 1024 ** 3 });
+  });
+
+  it("says bytes the way a plan row does", () => {
+    expect(bytesLabel(25 * 1024 ** 2)).toBe("25 MB");
+    expect(bytesLabel(1.5 * 1024 ** 3)).toBe("1.5 GB");
+    expect(bytesLabel(1500)).toBe("2 KB");
+    expect(bytesLabel(-1)).toBe("0 KB");
+  });
+
+  it("labels a plan's room, an unknown plan as Free's", () => {
+    expect(appShareLabel("pro")).toBe("1 GB of shared mini apps, views unlimited");
+    expect(appShareLabel("gold")).toBe("25 MB of shared mini apps, views unlimited");
   });
 });

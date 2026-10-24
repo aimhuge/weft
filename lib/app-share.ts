@@ -21,6 +21,7 @@ import { listApps } from "./mini-app-store";
 import type { MiniApp } from "./mini-apps";
 import { isCardShareMode, newShareId } from "./share-types";
 import { currentPage, pageForWrite, readShare, sameFiles, sameManifest, stateOf, type Ready } from "./app-share-row";
+import { pageBytes, quotaErrorText, roomFor } from "./app-share-quota";
 
 export { AppShareError } from "./app-share-errors";
 
@@ -148,11 +149,16 @@ export async function getAppShare(appId: string): Promise<AppShareState> {
     void refreshAppPreview(t, row, now);
     return stateOf(t, row);
   }
+  // Edits that would pass the plan's room for shared apps don't go up: the link keeps serving what it had.
+  const over = await roomFor(t.client, orgId, row.id, row.mode, t.page);
+  if (over) return stateOf(t, row, over);
   if (row.page !== now.page || !sameFiles(row.files, now.files)) await currentPage(t, true, orgId);
   const writeError = await updateShareRow(t, row.id, {
     name: t.app.name, kind: now.kind, page: now.page, files: now.files, manifest: now.manifest,
     owner: row.owner, slug: row.slug, org_id: orgId,
   });
+  const refused = writeError && quotaErrorText(writeError.message, pageBytes(t.page));
+  if (refused) return stateOf(t, row, refused);
   if (writeError) throw new AppShareError(writeError.message, 500);
   return previewed(t, now);
 }
@@ -187,10 +193,13 @@ export async function setAppShare(appId: string, update: AppShareUpdate): Promis
   const { nextOwner, nextSlug } = await resolveOwnerAndSlug(update, existing, t);
   rejectFolderSecrets(t);
   const nextOrgId: string = nextOwner === "org" ? (update.orgId ?? t.orgId) : t.orgId;
+  // The plan's room for shared apps, checked before anything uploads (lib/app-share-quota.ts).
+  const over = await roomFor(t.client, nextOrgId, existing?.id ?? null, update.mode, t.page);
+  if (over) throw new AppShareError(over, 402);
   const now = await pageForWrite(t, existing, nextOrgId);
   const change = buildChange(update, t, now, nextOwner, nextSlug, password);
   const writeError = await writeShareRow(t, existing, change);
-  if (writeError) throwAsError(writeError);
+  if (writeError) throwAsError(writeError, pageBytes(t.page));
   return previewed(t, now);
 }
 
@@ -294,8 +303,10 @@ async function deleteShareByAppId(client: SupabaseClient, userId: string, appId:
   return result.error ? { message: result.error.message } : null;
 }
 
-function throwAsError(error: { message: string }) {
+function throwAsError(error: { message: string }, bytes: number) {
   if (isDuplicateSlug(error)) throw new AppShareError("That address is taken.", 400);
+  const over = quotaErrorText(error.message, bytes);
+  if (over) throw new AppShareError(over, 402);
   throw new AppShareError(error.message, 500);
 }
 

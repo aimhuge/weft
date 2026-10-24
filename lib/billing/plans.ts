@@ -84,6 +84,32 @@ export const STARTUP_TEAM = {
   maxAgeYears: 3,
 } as const;
 
+// Shared mini apps (docs/architecture/mini-app-hosting.md "Access, plans and limits"): views are unlimited on every
+// plan, and so is the number of links; what a plan caps is the bytes a workspace's open links serve, together. A
+// private link doesn't count, and a site link (an https address) stores nothing. Open Source and Education follow
+// Pro. The database enforces the same numbers (supabase/migrations/20261024070000_app_share_quota.sql
+// app_share_byte_limit); lib/app-share-quota.test.ts keeps the two in step.
+const MB = 1024 * 1024;
+export const APP_SHARE_BYTES: Record<PlanId, number> = {
+  free: 25 * MB,
+  oss: 1024 * MB,
+  edu: 1024 * MB,
+  pro: 1024 * MB,
+  team: 5 * 1024 * MB,
+};
+
+// "25 MB" / "1 GB": a byte count the way the plan rows and the Share dialog say it.
+export function bytesLabel(bytes: number): string {
+  if (bytes >= 1024 * MB) return `${+(bytes / (1024 * MB)).toFixed(1)} GB`;
+  if (bytes >= MB) return `${+(bytes / MB).toFixed(1)} MB`;
+  return `${Math.max(0, Math.ceil(bytes / 1024))} KB`;
+}
+
+// "1 GB of shared mini apps, views unlimited", for a plan row.
+export function appShareLabel(plan: string): string {
+  return `${bytesLabel(APP_SHARE_BYTES[catalog.get(plan).id])} of shared mini apps, views unlimited`;
+}
+
 // The usage ledger's meters. Tokens count input + output, the same way lib/puku-proxy.ts already does it
 // (cache writes are part of input, cache reads don't count).
 export const PUKU_METER = "puku_tokens";

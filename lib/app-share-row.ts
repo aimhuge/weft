@@ -7,13 +7,14 @@ import { createBlobStore } from "./blob-store";
 import { BLOB_REF_PREFIX } from "./cloud-sync-types";
 import { AppShareError } from "./app-share-errors";
 import { listOwners, publicUrlFor } from "./app-share-owners";
-import { appShareUrl, type AppOwner, type AppPolicy, type AppShareKind, type AppShareState } from "./app-share-types";
+import { appShareUrl, type AppOwner, type AppPolicy, type AppShareKind, type AppShareQuota, type AppShareState } from "./app-share-types";
 import type { AppShareMemo, MiniApp } from "./mini-apps";
 import { rememberAppShare } from "./mini-app-store";
 import type { AppManifestUpload, AppFolderFile } from "./app-folder";
 import { cleanPreview } from "./app-preview";
 import { isPreviewing } from "./app-preview-capture";
 import { isCardShareMode, type CardShareMode } from "./share-types";
+import { readQuota } from "./app-share-quota";
 
 export interface AppShareRow {
   id: string;
@@ -118,23 +119,38 @@ export function sameManifest(a: AppManifestUpload | null, b: AppManifestUpload |
 }
 
 // A row with a mode this build doesn't know reads as private: fail closed. The memo goes on the app in apps.json.
-export async function stateOf(t: Ready, row: AppShareRow | null): Promise<AppShareState> {
-  const owners = await listOwners(t);
-  const state = buildState(t, row, owners);
+// `over` says why the latest edits didn't go up (lib/app-share-quota.ts), for the dialog to show beside the room left.
+export async function stateOf(t: Ready, row: AppShareRow | null, over?: string): Promise<AppShareState> {
+  const [owners, quota] = await Promise.all([listOwners(t), readQuota(t.client, row?.org_id ?? t.orgId)]);
+  const state = { ...buildState(t, row, owners), quota: withOver(quota, over) };
   // The remembered row exists (or did and was just cleared elsewhere); write a fresh memo either way so
   // the next paint reads the latest row.
   if (row || t.app.share?.id) rememberAppShare(t.app.id, memoOf(state));
   return state;
 }
 
-// The state the dialog renders: kind, mode, password, owner, slug, publicUrl. Owners and slug come
-// from the row; the public URL is rebuilt through listOwners + publicUrlFor.
-function buildState(t: Ready, row: AppShareRow | null, owners: Awaited<ReturnType<typeof listOwners>>): Extract<AppShareState, { kind: "ok" }> {
+function withOver(quota: AppShareQuota | null, over: string | undefined): AppShareQuota | null {
+  if (!quota || !over) return quota;
+  return { ...quota, over };
+}
+
+// Who the link belongs to and where it points: the row's owner and slug, the workspace it lives in
+// (only for an "org" owner) and the public URL, rebuilt through listOwners + publicUrlFor.
+function shareOwnerState(
+  t: Ready,
+  row: AppShareRow | null,
+  owners: Awaited<ReturnType<typeof listOwners>>,
+): { owner: AppOwner | null; slug: string | null; orgId: string | null; publicUrl: string | null } {
   const owner: AppOwner | null = row?.owner ?? null;
   const slug = row?.slug ?? null;
   const rowOrgId = row?.org_id ?? t.orgId;
   const orgId = owner === "org" ? rowOrgId : null;
   const publicUrl = owner && slug ? publicUrlFor(owner, slug, owners, rowOrgId) : null;
+  return { owner, slug, orgId, publicUrl };
+}
+
+// The state the dialog renders: kind, mode, password, owner, slug, publicUrl.
+function buildState(t: Ready, row: AppShareRow | null, owners: Awaited<ReturnType<typeof listOwners>>): Extract<AppShareState, { kind: "ok" }> {
   return {
     kind: "ok",
     id: row?.id ?? null,
@@ -142,10 +158,7 @@ function buildState(t: Ready, row: AppShareRow | null, owners: Awaited<ReturnTyp
     mode: rowMode(row),
     hasPassword: Boolean(row?.has_password),
     shows: pageKind(t),
-    owner,
-    slug,
-    orgId,
-    publicUrl,
+    ...shareOwnerState(t, row, owners),
     owners,
     manifest: shareManifest(t, row),
     preview: cleanPreview(row?.preview),

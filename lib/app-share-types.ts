@@ -109,6 +109,16 @@ export interface AppUserOption {
   username: string;
 }
 
+// The room a workspace's shared apps have (lib/app-share-quota.ts): its plan, the bytes its open links serve and
+// the plan's cap. `over` is why the last re-upload of this app didn't go up, when it didn't fit.
+export interface AppShareQuota {
+  plan: string;
+  planName: string;
+  used: number;
+  cap: number;
+  over?: string;
+}
+
 // What GET /api/apps/share answers on the desktop, for the app's Share dialog.
 export type AppShareState =
   | { kind: "signed-out" }
@@ -137,6 +147,8 @@ export type AppShareState =
       // The link preview (lib/app-preview.ts), and whether the Mac is making a fresh one right now.
       preview: AppPreview | null;
       previewing: boolean;
+      // The workspace's room for shared apps, or null when the server couldn't say.
+      quota?: AppShareQuota | null;
     };
 
 // PUT /api/apps/share. A password is hashed on the Mac and only its hash goes up; omitted keeps the old one.
