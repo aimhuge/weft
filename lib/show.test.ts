@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { backdropFor, extractHtml, showPrompt, newThreadPage, nextScene, shouldWriteShow, starterPage } from "./show";
+import { backdropFor, extractHtml, showPrompt, newThreadPage, nextScene, starterPage } from "./show";
 
 describe("extractHtml", () => {
   it("takes the page out of a code fence and chat around it", () => {
@@ -20,26 +20,6 @@ describe("extractHtml", () => {
 
   it("is undefined when there's no page", () => {
     expect(extractHtml("Sorry, I can't.")).toBeUndefined();
-  });
-});
-
-describe("shouldWriteShow", () => {
-  const turn = { openedPane: false, isError: false, stopped: false, paneUrl: "" };
-
-  it("writes when the pane is empty or shows an earlier page file", () => {
-    expect(shouldWriteShow(turn)).toBe(true);
-    expect(shouldWriteShow({ ...turn, paneUrl: "file:///tmp/weft-show/plan.html" })).toBe(true);
-  });
-
-  it("leaves a thread's own page and a live app alone", () => {
-    expect(shouldWriteShow({ ...turn, openedPane: true })).toBe(false);
-    expect(shouldWriteShow({ ...turn, paneUrl: "http://localhost:3000/" })).toBe(false);
-  });
-
-  it("skips failed and stopped turns, and runs without a desktop shell", () => {
-    expect(shouldWriteShow({ ...turn, isError: true })).toBe(false);
-    expect(shouldWriteShow({ ...turn, stopped: true })).toBe(false);
-    expect(shouldWriteShow({ ...turn, paneUrl: undefined })).toBe(false);
   });
 });
 

@@ -39,7 +39,7 @@ export interface QuestionProps {
   onAnswer: (answers: Record<string, string>, annotations: NonNullable<QuestionReply["annotations"]>) => unknown;
   // Declines the question: "Skip" (empty chat) or "Chat about this" with the box's text, which the agent reads instead.
   onDecline?: (chat: string) => unknown;
-  // The parent persists the read scope and queues /add-dir for the live session (lib/read-scope.ts).
+  // The parent persists the read scope, which the live session's folder guard reads (lib/read-scope.ts).
   onReadScope?: (path: string) => void;
 }
 

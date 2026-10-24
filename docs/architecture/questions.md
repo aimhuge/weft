@@ -243,8 +243,8 @@ When `suggestReadScope` returns a directory that one of the questions names
 and that lives outside the card's `cwd`, the form draws a single
 `Read from <token>` button under the options. Clicking it:
 
-- persists the directory on the card through `api.setReadScope` (queued
-  as a `/add-dir` for the live session by `lib/read-scope.ts`)
+- persists the directory on the card through `api.setReadScope`, where the
+  live session's folder guard (`lib/folder-guard.ts`) reads it
 - answers the question itself: the answer for every question is the
   user's picks plus the typed text (if any) plus the line
   `"You can read from <directory> — try again"`, so the agent can retry
@@ -301,8 +301,8 @@ reads them:
   bridge; the form falls back to an inline `<pre>` block under the
   options when the bridge isn't there
 - `readScope` draws the one-click "Read from <path>" grant; the form
-  calls `onReadScope(path)` which `api.setReadScope` persists and
-  queues as a `/add-dir` for the open session
+  calls `onReadScope(path)` which `api.setReadScope` persists on the card,
+  where the open session's folder guard reads it
 
 Neither field is required, and `askUser` swallows a `writeQuestionPreview`
 failure (a read-only disk) so the question still reaches the user

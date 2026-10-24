@@ -32,7 +32,7 @@ export interface ThreadTransport {
   editLast?: (cardId: string, text: string) => Promise<void>;
   // A cold card's next message in a new session of the same card, started from a brief of the thread.
   fresh?: (cardId: string, message: string) => Promise<void>;
-  // An outside-folder prompt's "This card" (and the question form's /add-dir); "always" adds it to every card.
+  // An outside-folder prompt's "This card" (and the question form's "Read from"); "always" adds it to every card.
   grantFolder?: (cardId: string, directory: string, scope: "card" | "always") => Promise<void>;
   waitPermission?: (cardId: string, pendingId: string) => Promise<void>;
   stopTask?: (cardId: string, taskId: string) => Promise<void>;

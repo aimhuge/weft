@@ -37,10 +37,15 @@ export function extractHtml(text: string): string | undefined {
   return end > start ? text.slice(start, end + "</html>".length) : text.slice(start);
 }
 
+// The CLI's own slash commands, answered without the model doing the user's work. A skill (/weft:done) isn't one.
+const CLI_COMMAND = /^\s*\/(add-dir|clear|compact|config|context|cost|doctor|help|mcp|memory|model|permissions|status|usage)(\s|$)/i;
+
 // After a turn: write a page unless the thread already showed one, or the pane shows a live app.
+// A CLI command's one-line answer is nothing to report, and its page would bury the last real one.
 // No pane url means no desktop shell to show it in.
-export function shouldWriteShow(turn: { openedPane: boolean; isError: boolean; stopped: boolean; paneUrl?: string }) {
+export function shouldWriteShow(turn: { ask?: string; openedPane: boolean; isError: boolean; stopped: boolean; paneUrl?: string }) {
   if (turn.openedPane || turn.isError || turn.stopped || turn.paneUrl === undefined) return false;
+  if (CLI_COMMAND.test(turn.ask ?? "")) return false;
   return !/^https?:/i.test(turn.paneUrl);
 }
 
