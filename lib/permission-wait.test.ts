@@ -12,10 +12,10 @@ const settle = vi.fn((cardId: string, _allow: boolean, _a: unknown, pendingId: s
 const safeUpdate = vi.fn();
 
 vi.mock("./store", () => ({ getCard: (id: string) => cards.get(id) }));
-vi.mock("./runner-ask", () => ({ settle, pendingView: (p: Pending) => ({ id: p.id, waiting: p.waiting }) }));
+vi.mock("./runner-pending", () => ({ settle, pendingView: (p: Pending) => ({ id: p.id, waiting: p.waiting }) }));
 vi.mock("./runner-state", () => ({ sessions, safeUpdate }));
 
-const { checkWaits, releasedBecause, waitOverMessage, waitPermission, WAIT_POLL_MS } = await import("./permission-wait");
+const { checkWaits, releasedBecause, startWaiting, waitOverMessage, waitPermission, WAIT_POLL_MS } = await import("./permission-wait");
 
 const holder = { id: "h", title: "Fix login", claim: "/repo/a.ts#one" };
 
@@ -96,5 +96,21 @@ describe("waitPermission", () => {
     session(pending("p1", { why: { category: "mode", detail: "Ask me asks before Edit" } }));
     expect(() => waitPermission("me", "p2")).toThrow("isn't waiting anymore");
     expect(() => waitPermission("me", "p1")).toThrow("Only an edit another card is holding can wait.");
+  });
+});
+
+describe("startWaiting", () => {
+  it("marks the request waiting and moves the card to Running", () => {
+    const p = pending("p1");
+    startWaiting("me", p);
+    expect(p.waiting).toBe(true);
+    expect(safeUpdate).toHaveBeenCalledWith("me", { column: "running", pending: { id: "p1", waiting: true }, lastLine: "Waiting for ‘Fix login’" });
+  });
+
+  it("leaves a request nothing holds alone", () => {
+    const p = pending("p1", { why: { category: "mode", detail: "Ask me asks before Edit" } });
+    startWaiting("me", p);
+    expect(p.waiting).toBeUndefined();
+    expect(safeUpdate).not.toHaveBeenCalled();
   });
 });
