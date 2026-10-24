@@ -10,6 +10,7 @@ import { BillingError } from "@aimhuge/billing";
 import { billing, billingConfigured } from "./billing";
 import { orgForUser } from "./org";
 import { regionalPick } from "./regional-pick";
+import { isBillingConfigError } from "./stripe-env";
 import type { CheckoutAnswer, UpgradeInterval, UpgradePlan } from "./upgrade";
 
 export interface UpgradeContext {
@@ -30,9 +31,16 @@ export interface UpgradeRequest {
 }
 
 // A `BillingError` is safe to show the customer verbatim; anything else is ours and gets logged with its
-// message so a real bug is traceable without the customer seeing a raw Stripe or Postgres string.
+// message so a real bug is traceable without the customer seeing a raw Stripe or Postgres string. A configuration
+// error (a missing STRIPE_* variable, lib/billing/stripe-env.ts) says so, so nobody mistakes it for a passing blip.
+export const BILLING_SETUP_INCOMPLETE = "Billing isn't fully set up on this Weft yet.";
+
 export function describeBillingError(err: unknown): string {
   if (err instanceof BillingError) return err.message;
+  if (isBillingConfigError(err)) {
+    console.error(`Billing setup: ${(err as Error).message}`);
+    return BILLING_SETUP_INCOMPLETE;
+  }
   console.error(`Billing action: ${err instanceof Error ? err.message : "unknown"}`);
   return "Something went wrong on our end. Try again in a moment.";
 }

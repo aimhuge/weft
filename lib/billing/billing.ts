@@ -18,6 +18,9 @@ export const billing = createBilling({
   // Active and trialing are metered. past_due falls back to the free plan's allowance: Stripe's dunning still
   // runs, but the workspace stops spending Pro tokens while a payment is failing.
   meteredStatuses: ["active", "trialing"],
+  // Weft's own name, icon and clay accent on Stripe Checkout, over the shared AimHuge account's dashboard branding
+  // (which shows another company's logo). Receipts, invoice emails and the portal still carry the account's.
+  checkoutBranding: { displayName: "Weft", iconUrl: "https://weft.zip/app-icon.png", buttonColor: "#da7a4c" },
 });
 
 // The service-role Supabase client that every billing table reads and writes through. Weft's RLS locks these

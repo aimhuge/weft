@@ -3,7 +3,7 @@
 // (docs/architecture/billing.md "Environment"). Idempotent: a price whose lookup key already exists is reused, never
 // duplicated. Run it through the vault: mcp__secrets__run("node scripts/stripe-weft-prices.mjs", ["STRIPE_SECRET_KEY"]).
 //
-// The amounts must match the catalog in lib/billing/plans.ts (Pro $20/month or $200/year, Team $9 per seat a month,
+// The amounts must match the catalog in lib/billing/plans.ts (Pro $20/month or $200/year, Team $9 per seat a month or $90 a year,
 // REGIONAL_PRO_CENTS $5 and $10): nothing reconciles them, so change both together.
 
 const key = process.env.STRIPE_SECRET_KEY;
@@ -21,6 +21,9 @@ const PRICES = [
   { env: "STRIPE_PRICE_PRO_MONTHLY", plan: "pro", interval: "month", cents: 2000 },
   { env: "STRIPE_PRICE_PRO_YEARLY", plan: "pro", interval: "year", cents: 20000 },
   { env: "STRIPE_PRICE_TEAM_MONTHLY", plan: "team", interval: "month", cents: 900 },
+  // Checkout only bills Team monthly (lib/billing/checkout.ts), but @aimhuge/billing refuses to start any checkout
+  // without a price for every paid plan × interval, so the catalog's yearly seat ($9 × yearlyMonthsCharged) exists too.
+  { env: "STRIPE_PRICE_TEAM_YEARLY", plan: "team", interval: "year", cents: 9000 },
   { env: "STRIPE_PRICE_PRO_MONTHLY_REGIONAL_LOW", plan: "pro", interval: "month", cents: 500, variant: "regional_low" },
   { env: "STRIPE_PRICE_PRO_MONTHLY_REGIONAL_LOWER_MIDDLE", plan: "pro", interval: "month", cents: 1000, variant: "regional_lower_middle" },
 ];

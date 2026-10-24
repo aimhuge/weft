@@ -38,6 +38,11 @@ describe("billing instance", () => {
     expect(billing.runtime.invoicePrefix).toBe("WFT");
     expect(catalog.get("pro").monthlyUnitAmountCents).toBe(2000);
   });
+
+  it("brands Stripe Checkout as Weft, not the shared account", async () => {
+    const { billing } = await load();
+    expect(billing.runtime.checkoutBranding).toEqual({ displayName: "Weft", iconUrl: "https://weft.zip/app-icon.png", buttonColor: "#da7a4c" });
+  });
 });
 
 describe("billingService", () => {

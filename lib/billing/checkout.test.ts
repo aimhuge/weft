@@ -206,6 +206,14 @@ describe("describeBillingError", () => {
     logged.mockRestore();
   });
 
+  it("names a missing-configuration error as unfinished setup, logging the variables", () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    const err = new Error("BILLING_PROVIDER=stripe but these environment variables are missing: STRIPE_PRICE_TEAM_YEARLY.");
+    expect(describeBillingError(err)).toBe("Billing isn't fully set up on this Weft yet.");
+    expect(logged).toHaveBeenCalledWith(`Billing setup: ${err.message}`);
+    logged.mockRestore();
+  });
+
   it("logs 'unknown' when the throw isn't an Error", () => {
     const logged = vi.spyOn(console, "error").mockImplementation(() => {});
     expect(describeBillingError("nope")).toBe("Something went wrong on our end. Try again in a moment.");
