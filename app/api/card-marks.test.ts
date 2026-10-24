@@ -33,6 +33,14 @@ beforeEach(() => {
 });
 
 describe("PATCH /api/cards/:id marks", () => {
+  it("dismisses the Broke Weft mark with broke: null", async () => {
+    cards.set("c1", { id: "c1", column: "review", broke: { kind: "server", at: 1, why: "w" } });
+    await patch({ starred: true });
+    expect(cards.get("c1")?.broke).toBeDefined();
+    await patch({ broke: null });
+    expect(cards.get("c1")?.broke).toBeUndefined();
+  });
+
   it("stars and unstars", async () => {
     await patch({ starred: true });
     expect(cards.get("c1")?.starred).toBe(true);

@@ -29,6 +29,8 @@ vi.spyOn(process, "on").mockImplementation(((event: string, fn: () => void) => {
 const devSecrets = vi.hoisted(() => vi.fn());
 vi.mock("./secret-run", () => ({ devSecrets }));
 vi.mock("./env", () => ({ cliEnv: () => ({ PATH: "/bin" }) }));
+// Card "iso" is isolated (docs/architecture/worktrees.md); every other id is a shared card.
+vi.mock("./store", () => ({ getCard: (id: string) => (id === "iso" ? { id, worktree: { path: "/w", branch: "weft/x", base: "b", repo: "/r" } } : undefined) }));
 
 const dev = await import("./devserver");
 
@@ -128,6 +130,23 @@ describe("devStatus", () => {
 });
 
 describe("startDev", () => {
+  it("won't start a second Weft in Weft's own folder, whose dev script frees the board's port", async () => {
+    await expect(dev.startDev("a", "pnpm dev", process.cwd())).rejects.toThrow(/would stop Weft itself/);
+    // Any script that frees the port, not just `dev` (2026-10-23: `pnpm dev:web` killed the server).
+    await expect(dev.startDev("a", "pnpm dev:web", process.cwd())).rejects.toThrow(/would stop Weft itself/);
+    expect(spawn).not.toHaveBeenCalled();
+  });
+
+  it("gives an isolated card's server a PORT of its own and moves its url there", async () => {
+    const started = await dev.startDev("iso", "pnpm dev", "/w", "T", "http://localhost:3000");
+    const env = (spawn.mock.calls[0]![2] as { env: Record<string, string> }).env;
+    expect(env.PORT).toBe(String(started.port));
+    expect(started.url).toBe(`http://localhost:${started.port}/`);
+    expect(await dev.startDev("iso", "pnpm dev", "/w")).toMatchObject({ port: started.port, url: started.url });
+    dev.stopDev("iso");
+    expect(await dev.startDev("a", "pnpm dev", "/repo", "T", "http://localhost:3000")).toEqual({ url: "http://localhost:3000", port: undefined });
+  });
+
   it("spawns the command in the card's folder without a shell (L-4 narrowing)", async () => {
     await dev.startDev("a", "npm run dev", "/app");
     // No shell: argv is split and the bin is the first token, not the whole command string.
@@ -268,6 +287,17 @@ describe("on exit", () => {
     vi.resetModules();
     await import("./devserver");
     expect(exitHooks).toHaveLength(1);
+  });
+});
+
+describe("startsWeft", () => {
+  const weft = { pids: [], port: "1024", dir: "/w", names: [], lines: [] };
+  it("names the board's address when it refuses", () => {
+    expect(dev.startsWeft("pnpm dev", "/w", weft)).toContain("http://127.0.0.1:1024");
+    expect(dev.startsWeft("pnpm dev", "/w", { ...weft, port: "" })).not.toContain("http://");
+  });
+  it("lets a project's own dev server start", () => {
+    expect(dev.startsWeft("pnpm dev", "/shop", weft)).toBeNull();
   });
 });
 

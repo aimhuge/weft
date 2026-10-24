@@ -9,6 +9,7 @@ import { startVercelListener } from "./vercel-hooks";
 import { startWebhookRelay } from "./webhook-forward";
 import { startAccountCloudSync } from "./cloud-sync-start";
 import { startBlastcpAuto } from "./blastcp-auto";
+import { consumeServerExit } from "./crash-blame";
 import { startLeagueSync } from "./league-sync";
 import { startIssueSync } from "./github-issues";
 import { startPukuTrial } from "./puku-trial";
@@ -142,6 +143,10 @@ export function prewarm() {
   void import("./app-build-watch")
     .then((m) => m.startAppBuildWatcher())
     .catch((err: unknown) => console.error(`app-build-watch: not started: ${err instanceof Error ? err.message : String(err)}`));
+  // Keep isolated cards' worktree pools fresh (lib/worktree-pool.ts); loaded lazily, so git stays off this import path.
+  void import("./worktree-pool").then((m) => m.startWorktreePool()).catch(() => {});
+  // Name the card whose tool call stopped the last server, before its turn is carried on (lib/crash-blame.ts).
+  consumeServerExit();
   // Carry on the turns the last quit cut off (lib/resume.ts).
   resumeInterrupted();
   ensureCopilot();

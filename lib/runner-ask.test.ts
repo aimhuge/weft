@@ -32,3 +32,28 @@ describe("settle with a deny message", () => {
     sessions.delete("ask-me");
   });
 });
+
+describe("an MCP server's elicitation", () => {
+  const elicitation = { server: "s", message: "m", fields: [{ name: "n", title: "N", required: true, kind: "integer" as const }] };
+
+  it("refuses a form that doesn't fit, leaving the request waiting", async () => {
+    const { answerPermission } = await import("./runner-ask");
+    const resolve = vi.fn();
+    const p = { id: "e1", index: 0, toolName: "mcp__s__elicitation", title: "t", input: { message: "m" }, elicitation, resolve } as Pending;
+    sessions.set("elicit", { pending: [p] } as unknown as Session);
+    expect(() => answerPermission("elicit", true, { n: "x" }, "e1")).toThrow("N needs a whole number.");
+    expect(resolve).not.toHaveBeenCalled();
+    answerPermission("elicit", true, { n: "2" }, "e1");
+    expect(resolve).toHaveBeenCalledWith({ behavior: "allow", updatedInput: { message: "m", answers: { n: "2" } } });
+    sessions.delete("elicit");
+  });
+
+  it("settles an Accept with no form as the bare input", () => {
+    const resolve = vi.fn();
+    const p = { id: "e2", index: 0, toolName: "mcp__s__elicitation", title: "t", input: { message: "m" }, elicitation: { ...elicitation, fields: [] }, resolve } as Pending;
+    sessions.set("elicit", { pending: [p] } as unknown as Session);
+    expect(settle("elicit", true, undefined, "e2")).toBe(true);
+    expect(resolve).toHaveBeenCalledWith({ behavior: "allow", updatedInput: { message: "m" } });
+    sessions.delete("elicit");
+  });
+});

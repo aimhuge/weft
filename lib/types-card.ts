@@ -1,7 +1,7 @@
 // Card, column, project and board-event types used across the app.
 
 import type { Effort, LoginView } from "./types-settings";
-import type { Question, ThreadItem } from "./types-thread";
+import type { PendingElicitation, Question, ThreadItem } from "./types-thread";
 import type { Card } from "./types-card-detail";
 import type { EditPreview } from "./edit-preview";
 
@@ -29,7 +29,7 @@ export const MODES: PermissionMode[] = ["default", "acceptEdits", "auto", "bypas
 // How the pickers (new thread, thread header, card menu) name each mode, loosest first.
 export const MODE_OPTIONS: { id: PermissionMode; label: string; hint: string }[] = [
   { id: "bypassPermissions", label: "YOLO", hint: "Runs every tool without asking" },
-  { id: "auto", label: "Auto", hint: "A classifier approves or asks" },
+  { id: "auto", label: "Auto", hint: "A classifier approves or blocks; Weft asks you about blocks" },
   { id: "acceptEdits", label: "Accept edits", hint: "Edits files freely, asks before commands" },
   { id: "default", label: "Ask me", hint: "Asks before each tool" },
 ];
@@ -226,13 +226,16 @@ export interface PendingPermission {
   why?: PromptReason;
   // The user chose Wait: Weft answers it once the holder lets go of the code.
   waiting?: boolean;
+  // Set when an MCP server asked instead of a tool (lib/elicitation.ts): Accept / Decline and its form.
+  elicitation?: PendingElicitation;
 }
 
 // A permission prompt's reason, as a category chip and a short detail (components/PermissionInput.tsx).
 // same-code / overlap / whole-file: another busy card's claim (lib/claims.ts); mode: the card's permission mode;
-// outside: a folder beyond the card's project (lib/folder-guard.ts).
+// outside: a folder beyond the card's project (lib/folder-guard.ts); classifier: auto mode's classifier denied
+// the call itself, and the prompt offers a one-time retry (lib/classifier-denial.ts).
 export interface PromptReason {
-  category: "same-code" | "overlap" | "whole-file" | "mode" | "outside";
+  category: "same-code" | "overlap" | "whole-file" | "mode" | "outside" | "classifier";
   detail: string;
   // For a clash: the card holding the claim and its claim key, so Wait can watch for its release (lib/permission-wait.ts).
   holder?: { id: string; title: string; claim: string };

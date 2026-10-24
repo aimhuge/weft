@@ -8,6 +8,7 @@ import CardView, { BackendBadge } from "./CardView";
 const api = vi.hoisted(() => ({
   login: vi.fn(() => Promise.resolve()),
   switchBackend: vi.fn(() => Promise.resolve() as Promise<unknown>),
+  clearBreak: vi.fn(() => Promise.resolve()),
 }));
 vi.mock("@/lib/client", () => ({ api }));
 
@@ -22,6 +23,22 @@ function renderCard(over: Parameters<typeof makeCard>[0] = {}, props: Partial<Pa
 beforeEach(() => vi.clearAllMocks());
 
 describe("CardView", () => {
+  it("rings a card that broke Weft red, with a chip that dismisses without opening it", async () => {
+    const { onOpen } = renderCard({ broke: { kind: "server", at: 0, why: "its `pnpm dev` stopped Weft", times: 3 } });
+    const chip = screen.getByText(/Broke Weft ×3/);
+    expect(chip.closest("[data-card-id]")?.className).toContain("border-danger");
+    await userEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    expect(api.clearBreak).toHaveBeenCalledWith(makeCard().id);
+    expect(onOpen).not.toHaveBeenCalled();
+  });
+
+  it("shows the Broke Weft chip read-only on the web board, and keeps selection's ring", () => {
+    renderCard({ broke: { kind: "build", at: 0, why: "w" } }, { readOnly: true, selected: true });
+    expect(screen.getByText("💥 Broke Weft")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Dismiss" })).toBeNull();
+    expect(screen.getByText("💥 Broke Weft").closest("[data-card-id]")?.className).toContain("border-accent");
+  });
+
   it("shows the title, the last line, the folder and the stage", () => {
     renderCard({ lastLine: "Tests pass.", stage: "Polishing", remaining: "commit" });
     expect(screen.getByText("Fix the login page")).toBeInTheDocument();
@@ -110,6 +127,23 @@ describe("CardView", () => {
     renderCard({ column: "needs_you", pending: { ...pending, why } });
     expect(screen.getAllByRole("button").map((b) => b.textContent)).toEqual(expect.arrayContaining(["Await resolution", "Go ahead", "Deny"]));
     expect(screen.queryByRole("button", { name: "Allow" })).not.toBeInTheDocument();
+  });
+
+  it("a card waiting on another card's code stays in Running, with Go ahead now and Deny", async () => {
+    const why = { holder: { id: "c2", title: "Other", claim: "f.ts" } } as never;
+    const { onAnswer } = renderCard({
+      column: "running",
+      lastLine: "Waiting for ‘Other’",
+      pending: { ...pending, why, waiting: true },
+    });
+    expect(screen.getByText("Waiting for ‘Other’…")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Await resolution" })).not.toBeInTheDocument();
+    const go = screen.getByRole("button", { name: "Go ahead now" });
+    await userEvent.click(go);
+    expect(onAnswer).toHaveBeenCalledWith(true);
+    expect(screen.getByRole("button", { name: "Deny" })).toBeInTheDocument();
+    // It reads as held, not as working: the amber border, not a spinner.
+    expect(screen.getByText("Fix the login page").closest("[data-card-id]")).toHaveClass("border-warn/60");
   });
 
   it("Deny answers false", async () => {

@@ -2,7 +2,10 @@ import { spawn, type ChildProcess, type ChildProcessWithoutNullStreams } from "n
 import type { DevServerStatus } from "./types";
 import { cliEnv } from "./env";
 import { globalSingleton } from "./global-singleton";
+import { restartTarget, weftProcess } from "./restart-guard";
 import { devSecrets } from "./secret-run";
+import { getCard } from "./store";
+import { isolatedPort, withPort } from "./worktree-port";
 
 // The dev server a card's review tour points at: started from the card's folder, kept running
 // while the user reviews, and probed so the board can say whether the app really answers.
@@ -60,14 +63,19 @@ export function stopDev(cardId: string) {
 }
 
 // With a vault for the folder, the server gets its development values in its env (lib/secret-run.ts), never
-// this server's or a thread's; the user approves the command the first time.
-export async function startDev(cardId: string, command: string, cwd: string, title?: string, url?: string) {
+// this server's or a thread's; the user approves the command the first time. An isolated card's server gets a port of
+// its own (lib/worktree-port.ts); the url it answers on comes back, moved to that port.
+export async function startDev(cardId: string, command: string, cwd: string, title?: string, givenUrl?: string): Promise<{ url?: string; port?: number }> {
+  const refused = startsWeft(command, cwd);
+  if (refused) throw new Error(refused);
+  const port = await isolatedPort(getCard(cardId), command);
+  const url = withPort(givenUrl, port);
   const existing = runs.get(cardId);
-  if (existing && !existing.exited && existing.command === command) return;
+  if (existing && !existing.exited && existing.command === command) return { url: existing.url ?? url, port };
   const { launch, note } = await devSecrets(cardId, command, cwd, title);
   stopDev(cardId);
   // cliEnv() drops the pane's control-server token, which a dev server has no use for.
-  const env = { ...cliEnv(), ...launch?.env };
+  const env = { ...cliEnv(), ...launch?.env, ...(port ? { PORT: String(port) } : {}) };
   // (A plain start ignores stdin, so its stdin is null; only the secrets launch writes to it.)
   // Without the vault launch, parse the command into argv and spawn without a shell so a
   // launcher the user picked from the project files (lib/dev-commands.ts) never travels through
@@ -93,6 +101,18 @@ export async function startDev(cardId: string, command: string, cwd: string, tit
     run.failed = code !== 0 && code !== null && runs.get(cardId) === run;
   });
   runs.set(cardId, run);
+  return { url, port };
+}
+
+// Why a command can't start here, or null. Weft's own folder is the board itself: its dev script frees the board's
+// port first, so a second one kills the server every card runs on (2026-10-23: one card's `mcp__devservers__start
+// pnpm dev` restarted Weft seven times in half an hour). Bash has lib/restart-guard.ts; every way in here
+// (the devservers tool, a review tour, the Services drawer's Start) comes through startDev.
+export function startsWeft(command: string, cwd: string, weft = weftProcess()): string | null {
+  const target = restartTarget(command, cwd, weft);
+  if (!target) return null;
+  const at = weft.port ? ` at http://127.0.0.1:${weft.port}` : "";
+  return `Won't start \`${command}\` in ${cwd}: it would stop Weft itself (${target}). This folder's dev server is the board you're on${at}, already running; there's nothing to start.`;
 }
 
 // Splits a launcher command into argv and spawns it without a shell. Dev commands Weft detects

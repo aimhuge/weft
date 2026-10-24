@@ -1,6 +1,7 @@
 import path from "node:path";
 import { busyInFolder, TOUCHED_CAP } from "./overlap";
 import type { Card, PromptReason } from "./types";
+import { workDir } from "./work-dir";
 
 // Symbol claims: cards share one working tree (no worktree per card, SOUL.md), so a card claims the
 // symbols its thread edits, `/abs/Board.tsx#CommandPalette` (or inside a long one, `/abs/Board.tsx#Board/useEffect#3`,
@@ -59,7 +60,7 @@ export interface Clash {
 
 // The first other busy card in this card's tree holding a claim that clashes with one of these.
 export function findClash(cards: Card[], card: Card, keys: string[]): Clash | undefined {
-  for (const other of busyInFolder(cards, card.cwd, card.id)) {
+  for (const other of busyInFolder(cards, workDir(card), card.id)) {
     for (const theirs of other.claims ?? []) {
       const mine = keys.find((k) => clashes(k, theirs));
       if (mine) return { card: other, theirs, mine };
@@ -84,7 +85,8 @@ const symbolText = (symbol: string) => symbol.split("/").map((part) => part.repl
 export function clashWhy({ card, theirs, mine }: Clash): PromptReason {
   const t = splitClaim(theirs);
   const m = splitClaim(mine);
-  const state = card.column === "needs_you" ? "waiting on you" : "running";
+  // A holder waiting on its own holder is still holding the code, so it reads as running.
+  const state = card.column === "needs_you" ? "waiting on you" : card.pending?.waiting ? "waiting" : "running";
   const held = t.symbol === WHOLE_FILE ? path.basename(t.file) : symbolText(t.symbol);
   const category = t.symbol === WHOLE_FILE || m.symbol === WHOLE_FILE ? "whole-file" : m.symbol === t.symbol ? "same-code" : "overlap";
   return {

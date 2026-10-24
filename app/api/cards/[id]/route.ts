@@ -1,16 +1,15 @@
 import { firstMessage, messagesForMove, doneOverrides } from "@/lib/automations";
-import { randomUUID } from "node:crypto";
 import { resolveFolder } from "@/lib/folders";
 import { asText, cleanTitle } from "@/lib/format";
 import { elevated, fail, guard } from "@/lib/guard";
 import { withReadScope } from "@/lib/read-scope";
 import { archiveWhenIdle, endSession, isBusy, queueMessages, sendMessage, setPermissionMode } from "@/lib/runner";
-import { addScheduled } from "@/lib/schedule";
 import { dismissSession } from "@/lib/settings";
 import { deleteCard, getCard, reorderCard, updateCard } from "@/lib/store";
 import { rememberTags } from "@/lib/tag-store";
 import { normalizeTags } from "@/lib/tags";
 import { COLUMNS, MODES, type Card, type Column, type PermissionMode } from "@/lib/types";
+import { dropWorktree } from "@/lib/worktree-pool";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -28,8 +27,10 @@ function validatePermissionMode(card: Card, value: unknown) {
 }
 
 // ★ (a starred card is never auto-archived) and tags. Tags you set stay yours: retitle stops picking them (lib/tags.ts).
-function setMarks(id: string, body: { starred?: unknown; tags?: unknown }) {
+// `broke: null` dismisses the card's "Broke Weft" mark (lib/crash-blame.ts).
+function setMarks(id: string, body: { starred?: unknown; tags?: unknown; broke?: unknown }) {
   if (body.starred !== undefined) updateCard(id, { starred: Boolean(body.starred) });
+  if (body.broke === null) updateCard(id, { broke: undefined });
   if (body.tags === undefined) return;
   if (!Array.isArray(body.tags)) throw new Error("Tags must be a list.");
   const tags = normalizeTags(body.tags.map((t) => asText(t)));
@@ -66,14 +67,18 @@ function moveCard(card: Card, column: Column) {
 
 // Snapshots the card's model and effort onto preDoneModel / preDoneEffort, then sets them to the
 // override Settings chose for /weft:done. A no-op when the setting is empty or the card isn't Claude.
+// The CLI moves too when the backup model lives on another one: an exhausted model hands the
+// wrap-up to the backup rather than make it wait for a reset.
 function applyDoneOverride(card: Card) {
   const overrides = doneOverrides(card);
-  if (!overrides.model && !overrides.effort) return;
+  if (!overrides.model && !overrides.effort && !overrides.backend) return;
   updateCard(card.id, {
     preDoneModel: card.model,
     preDoneEffort: card.effort,
+    ...(overrides.backend ? { preDoneBackend: card.backend } : {}),
     ...(overrides.model ? { model: overrides.model } : {}),
     ...(overrides.effort ? { effort: overrides.effort } : {}),
+    ...(overrides.backend ? { backend: overrides.backend, sessionId: undefined } : {}),
   });
 }
 
@@ -96,11 +101,11 @@ export async function PATCH(req: Request, { params }: Ctx) {
       archived?: unknown;
       starred?: unknown;
       tags?: unknown;
+      broke?: null;
       permissionMode?: PermissionMode;
       // The user clicked "Read from <path>" on a question. The directory is added to the card's
-      // read scope (Card.readScope) so the next session starts with it as additionalDirectories.
-      // The live session also gets a /add-dir slash command via the inbox so the in-flight turn
-      // can keep reading.
+      // read scope (Card.readScope) so the live session's folder guard allows it
+      // and the next session starts with it as additionalDirectories.
       readScope?: unknown;
       // The backlog's drop-onto-card gesture: place this card before `before` (a sibling id)
       // in the card's own column, or at the end when null.
@@ -123,20 +128,14 @@ export async function PATCH(req: Request, { params }: Ctx) {
     setMarks(id, body);
 
     // Read-scope grant: the agent's question named a path outside the project, the user picked
-    // "Read from <path>". Persist it (the next session will start with it as additionalDirectories)
-    // and schedule a /add-dir slash command for after the current turn, so the in-flight session
-    // picks it up too.
+    // "Read from <path>". Persist it: the folder guard (lib/folder-guard.ts) reads it live, so the
+    // in-flight turn can use it right away, and the next session starts with it as additionalDirectories.
+    // No /add-dir follow-up: the SDK CLI refuses it ("isn't available in this environment"), and the
+    // empty turn it started let the after-turn update page replace the page the thread had shown.
     if (body.readScope !== undefined) {
       if (typeof body.readScope !== "string" || !body.readScope) throw new Error("readScope must be a non-empty path.");
       if (card.role === "copilot") throw new Error("The copilot doesn't read from project folders.");
-      const next = withReadScope(card.readScope, body.readScope, card.cwd);
-      const update: Partial<Card> = { readScope: next };
-      // The slash command runs as a follow-up turn when the current one ends. The card's UI shows
-      // it in the reply box's queue so the user can pull it back if they change their mind.
-      if (isBusy(id)) {
-        update.scheduled = addScheduled(card.scheduled, { id: randomUUID(), text: `/add-dir ${body.readScope}`, at: Date.now(), afterTurn: true });
-      }
-      updateCard(id, update);
+      updateCard(id, { readScope: withReadScope(card.readScope, body.readScope, card.cwd) });
     }
 
     // Claude and puku can switch modes mid-turn; Codex fixes its sandbox for the saved session.
@@ -180,6 +179,8 @@ export async function DELETE(req: Request, { params }: Ctx) {
     // A picked-up session stays deleted; the sync won't bring it back.
     if (card?.source === "claude-code" && card.sessionId) dismissSession(card.sessionId);
     deleteCard(id);
+    // An isolated card's worktree goes with it; a branch with commits that never landed stays (lib/worktree-pool.ts).
+    if (card?.worktree) void dropWorktree(card.worktree).catch(() => {});
     return Response.json({ ok: true });
   } catch (err) {
     return fail(err);

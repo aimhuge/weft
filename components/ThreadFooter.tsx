@@ -11,6 +11,7 @@ import { modelOn } from "@/lib/new-thread";
 import { useThreadTransport } from "@/lib/thread-transport";
 import type { Card } from "@/lib/types";
 import CrashGuard from "./CrashGuard";
+import ElicitationForm from "./ElicitationForm";
 import { guarded } from "./guarded";
 import Icon from "./Icon";
 import PermissionInput, { PermissionActions } from "./PermissionInput";
@@ -21,8 +22,9 @@ import StatusStrip from "./StatusStrip";
 // leaves the thread readable.
 const ReplyBox = guarded(() => import("./ReplyBox"), { what: "reply box", className: "mx-4 my-2" });
 
-// The request under the thread, with its answers unless the thread is read-only here. answer(allow) marks it answered.
-export function PermissionRequest({ card, readOnly, answered, answer }: { card: Card; readOnly: boolean; answered: boolean; answer: (allow: boolean) => void }) {
+// The request under the thread, with its answers unless the thread is read-only here. answer(allow) marks it answered;
+// an MCP server's form (lib/elicitation.ts) answers with its values too.
+export function PermissionRequest({ card, readOnly, answered, answer }: { card: Card; readOnly: boolean; answered: boolean; answer: (allow: boolean, answers?: Record<string, string>) => void }) {
   const { grantFolder, waitPermission } = useThreadTransport();
   const pending = card.pending;
   if (!pending || pending.questions) return null;
@@ -41,8 +43,12 @@ export function PermissionRequest({ card, readOnly, answered, answer }: { card: 
           <Icon name="lock" size={14} className="mt-0.5 text-warn" />
           <span>{pending.title}</span>
         </div>
-        <PermissionInput input={pending.input} edit={pending.edit} previewUrl={pending.previewUrl} askedBy={card.title} why={pending.why} />
-        {!readOnly && (
+        {pending.elicitation ? (
+          <ElicitationForm elicitation={pending.elicitation} answered={answered} readOnly={readOnly} onAnswer={answer} />
+        ) : (
+          <PermissionInput input={pending.input} edit={pending.edit} previewUrl={pending.previewUrl} askedBy={card.title} why={pending.why} />
+        )}
+        {!readOnly && !pending.elicitation && (
           <PermissionActions
             pending={pending}
             answered={answered}
@@ -79,6 +85,7 @@ export function ThreadReply({ card, show, live, placeholder, question, schedulin
   if (!show) return <div className="shrink-0 border-t border-line px-4 py-1.5">{status}</div>;
   return (
     <ReplyBox key={card.id} question={question} cardId={card.id} cwd={card.cwd} live={live} placeholder={placeholder} suggestion={card.suggestion}
+      midTurn={card.role !== "copilot" && (card.backend === "claude" || card.backend === "puku")}
       sendLater={scheduling && { backend: card.backend, resets: scheduling.resets, scheduled: card.scheduled ?? [] }}
       status={status}
       stale={cache && fresh ? { cache, onFresh: (message) => fresh(card.id, message) } : undefined}

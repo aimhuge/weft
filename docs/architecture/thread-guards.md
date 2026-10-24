@@ -32,6 +32,63 @@ requests only (`electron/api-token.cjs`, a `webRequest` hook on the default sess
 the control server's token, which threads can't read. With no token on disk (tests, or before Weft has ever launched) the check is off.
 `weft://reply|commit` links act only from a real file under `~/.weft` (`ownPage`, `electron/page-links.cjs`).
 
+## Auto mode's classifier denials
+
+In `auto` mode the CLI's classifier decides each call before Weft hears of it. A call it can't decide on comes to
+`canUseTool` as a normal prompt; a call it **denies** never does (the SDK has no option that routes a classifier deny
+to `canUseTool`, checked against `@anthropic-ai/claude-agent-sdk` 0.3.293). Before this, a card whose migration the
+classifier read as a production deploy showed nothing, while the thread told you to "approve it" and every retry was
+declined silently.
+
+What the CLI does send is a `system`/`permission_denied` message (`decision_reason_type: "classifier"`, the classifier's
+`decision_reason`, the `tool_use_id`), and the turn's `result.permission_denials` carries each denied call's input.
+`lib/classifier-denial.ts` uses both:
+
+- `noteDenial` (from `handleSystem` in `lib/runner-turn.ts`) keeps each classifier denial on the session; other deciders
+  (rules, `dontAsk`) and subagents' calls are left alone.
+- When the turn ends (not stopped), `askAboutDenials` turns each distinct call into a `Pending` with
+  `why: { category: "classifier", detail: <reason> }`, so the card goes to Needs you with the ordinary prompt UI; the
+  queued-message handoff waits for it as it does for a Needs you status.
+- `components/PermissionInput.tsx` shows that reason as **Auto mode blocked** with **Allow once and retry** and
+  **Keep denied**. Once the last of them is answered, an allowed call becomes a one-time grant (keyed by tool name plus
+  its input with sorted keys) and Weft sends the thread "retry exactly that call"; with nothing allowed the card goes back
+  to the column the turn ended in.
+- `withRetryGrant` adds a PreToolUse hook that answers `allow` for the granted call, which skips the classifier, and
+  uses the grant up. `canUseTool` checks the grant too, in case the retry asks instead. A deny hook (the secret guard, say)
+  still wins, and a grant the retry turn didn't use is dropped when that turn ends.
+- A reply instead of a click (`sendMessage`) drops the prompts and marks them denied in the thread.
+
+The mode's hint in `MODE_OPTIONS` (`lib/types-card.ts`) says this: "A classifier approves or blocks; Weft asks you about blocks".
+
+## MCP elicitations
+
+An MCP server can stop mid-call and ask the user something (an MCP *elicitation*): the Supabase MCP confirms an
+`execute_sql` or `apply_migration` whose SQL it calls destructive (a `drop trigger`, an `update` with no `where`), and
+other servers ask for a form's values or send you to a URL. The CLI hands each one to the SDK's `Options.onElicitation`;
+with none set, the SDK **declines it automatically**, so before this the card never showed a prompt and the tool came
+back `{"status":"declined"}` in every permission mode (seen 2026-10-24). Permission rules and modes don't touch it:
+it's the server asking, not a tool call.
+
+`queryOptions` in `lib/runner-session.ts` now sets `onElicitation` (`lib/elicitation.ts`):
+
+- A spare with no card yet declines (nobody to ask). Otherwise the request goes through `askUser` as a `Pending` named
+  `mcp__<server>__elicitation`, titled with the server's permission-display `title` or `<server>: <message>`, carrying
+  `elicitation: { server, message, mode?, url?, fields }`. The card goes to Needs you like any prompt, with no edit
+  preview or reason chip.
+- `elicitationFields` reads the `requestedSchema` into fields: text, number, integer, boolean, a choice list (`enum` with
+  `enumNames`, or `oneOf`/`anyOf` of `{ const, title }`) and a multi-select (`type: "array"`), each with its title,
+  description, default and whether it's required. A `url`-mode request has no form, just the link.
+- `components/ElicitationForm.tsx` (inside `PermissionRequest`, `components/ThreadFooter.tsx`) shows the server, its message,
+  the link and the fields, with **Accept** (or **Submit** for a form) and **Decline**. The board card's own row says
+  Accept / Decline for a request with no form; a form is answered from the thread.
+- Answers go through the ordinary permission route as strings (`answers`). `answerPermission` checks them first with
+  `elicitationContent`, which types each one for its field and refuses an empty required field or a value that doesn't
+  fit, so the board gets a 409 and you can answer again. `elicitationResult` turns the settled prompt into the server's
+  answer: `accept` (with the typed `content` when there was a form), `decline` for Decline, and `cancel` when the call
+  was stopped before anyone answered.
+- Codex (`codex exec`, no interactive approvals) and Goose have no channel for a prompt mid-call, so this is Claude Code
+  and puku-cli only.
+
 ## Folder gate
 
 A thread works in its card's project folder. `lib/folder-guard.ts` is a PreToolUse hook (Read, Edit, MultiEdit,
@@ -41,14 +98,15 @@ Bash, from every absolute, `~/`, `$HOME` and `../` token in the command, and onl
 (home, `/Users`, `/Volumes`), a heuristic that can't see a path a script builds. Paths are resolved first (`~`, `..`,
 symlinks, a file not created yet by its nearest folder).
 
-- **Never asked about**: the project, `card.readScope`, `settings.allowedFolders`, Weft's data folder (`~/.weft`),
+- **Never asked about**: the project (an isolated card's worktree, for it), `card.readScope`, `settings.allowedFolders`, Weft's data folder (`~/.weft`, but not `~/.weft/worktrees`: another card's worktree asks like any other folder),
   `~/.claude`, temp dirs, `/dev`, `/tmp` and the system's tool and library paths.
 - **The prompt** reads "Outside the project: read ~/Downloads" with an **Outside project** chip. The folder is the call's
   project root (nearest ancestor with a `.git`, `package.json`…, below home), else the file's folder, never home itself
   (`grantRoot`). `folderAsk` carries the question, reason and folder from the hook to `canUseTool`
   (`lib/runner-session.ts`), whose `askUser` puts the folder on the pending request as `readScope`.
 - **Buttons** (`PermissionActions`): **Allow once**; **This card** (`PATCH /api/cards/:id { readScope }`, the card's
-  `additionalDirectories` from the next session and a `/add-dir` after the current turn); **Always** (`POST /api/folders`
+  `additionalDirectories` from the next session, and the folder guard reads it live for the current one: no `/add-dir`
+  turn, which the SDK CLI refuses); **Always** (`POST /api/folders`
   → `settings.allowedFolders`, which every new session also gets as `additionalDirectories`); Deny.
 - **After a grant**, a read-only call (Read, Glob, Grep, LS) whose paths are all in granted folders is allowed with no
   prompt at all (`grantedRead`), including the CLI's own working-directory prompt; writes and Bash in a granted folder
@@ -105,7 +163,7 @@ into each other. Claims catch that at the moment it happens, instead of a standi
   Above it, **why the prompt came up** (`pending.why`, a `PromptReason`): a category chip and a one-line detail.
   For a claim clash `clashWhy` (`lib/claims.ts`, kept by the PreToolUse hook, read with `claimWhy`) picks **Same code**,
   **Overlapping code** (one symbol inside the other) or **Whole file** (either side claims it), with "‘<card>’
-  (running | waiting on you) has uncommitted edits to <symbol>". Any other prompt is **Permission mode**, "<mode> asks
+  (running | waiting | waiting on you) has uncommitted edits to <symbol>". Any other prompt is **Permission mode**, "<mode> asks
   before <tool>" (`modeWhy` in `lib/runner-ask.ts`, labels from `MODE_OPTIONS`). The explanation every clash shares
   (one working tree, going ahead can undo their uncommitted change) is the chip's tooltip, `REASONS` in the component.
 - **Wait** (`lib/permission-wait.ts`, `PermissionActions` in `components/PermissionInput.tsx`): a clash prompt's
@@ -115,6 +173,14 @@ into each other. Claims catch that at the moment it happens, instead of a standi
   was committed), the held edit is denied with a message telling the thread to re-read the file and redo the edit on top
   of that change: the old_string it planned to replace may be gone, and a Write would clobber it. Go ahead now and Deny
   still answer it while it waits. Waits live in memory; a restart ends the turn and them with it.
+- **Waiting by itself** (`askUser` in `lib/runner-ask.ts`, `startWaiting` in `lib/permission-wait.ts`): a clash prompt
+  doesn't park the card in Needs you at all. The card is already editing code another card holds, so the answer is
+  almost always "wait": the card goes straight to Running with the request marked `waiting`, and the watcher starts
+  with it. The buttons stay where they were — **Go ahead now** and **Deny** in the thread's prompt and on the card —
+  so the wait can still be cut short. Every other prompt (the card's permission mode, an outside folder, a question)
+  still parks in Needs you, because those really need the user; so does a thread whose own
+  `BOARD STATUS: column=needs_you` asks for something. A waiting card reads as held, not as working: a lock instead
+  of a spinner, and Needs you's amber border.
 - **Recording**: the PreToolUse hook keeps what the edit will claim by tool use id, and the PostToolUse hook puts
   it on `card.claims` (most recent first, last 50) once the edit has run, so a denied edit claims nothing.
 - **Dropping**: `updateCard` (`lib/store.ts`) clears a card's claims when it reaches Done or is archived;
@@ -156,6 +222,10 @@ that discards or stashes uncommitted changes takes every card's work, not just i
 - `git restore` unless it's `--staged` (`-S`) alone, without `--worktree` (`-W`)
 - `git clean -f` (but `-n` / `--dry-run`)
 
+An isolated card's own worktree (docs/architecture/worktrees.md) is its own: from inside it, `reset --hard`, path checkouts,
+`restore` and `clean -f` on that worktree are allowed; `stash` stays refused (`refs/stash` is shared by every worktree),
+and so do other trees, the main one included.
+
 It reads git's own options first (`-C dir` moves the folder; `-c`, `--git-dir`, `--work-tree` skip their value), so
 `git -C ~/dev/weft stash` is caught too. A folder under the temp folder (`os.tmpdir()`, `/tmp`, `/private/tmp`) is a
 scratch clone no card owns, and is left alone.
@@ -168,8 +238,35 @@ The refusal says why and points to the safe ways:
 - read a clean copy of a file: `git show HEAD:path > /tmp/x`
 - undo your own change by editing the file back, or ask the user to clean the tree
 
+It also refuses what would let a commit skip the pre-commit hook: `git commit --no-verify` (`-n`), `git config
+core.hooksPath <anything but .githooks>` or `--unset core.hooksPath`, and `git -c core.hooksPath=… <cmd>`. Reading the
+setting is fine. Its refusal names the hook instead of the stash story.
+
 Tests: `lib/git-guard.test.ts` (each refused form, the allowed ones, scratch folders, the hook), `lib/env.test.ts`
 (it's wired into `guardedCli`).
+
+## The pre-commit hook
+
+`.githooks/pre-commit` runs `scripts/check-staged.sh` on what's staged, not the working tree, since other cards'
+unstaged work lives in the same tree. `pnpm install`'s `prepare` script points `core.hooksPath` at `.githooks`. In order:
+
+1. Secrets: gitleaks, or Weft's own key shapes (`scripts/secret-scan.mjs`) on each added line.
+2. A docs-only commit stops here.
+3. Unstaged imports (`scripts/staged-imports.mjs`): every relative or tsconfig-`paths` import in a staged code file has to
+   resolve to a file in the index. One that resolves only to an untracked, not-ignored file on disk fails the commit,
+   naming the file to `git add`. It takes about a second, and doesn't depend on tsc or its cache.
+4. Types: `git checkout-index` into a temp folder, the tree's `tsconfig.tsbuildinfo` copied in for speed, `next typegen`, then
+   `tsc --noEmit` through `scripts/one-at-a-time.mjs`.
+5. Lint: eslint on the staged files.
+
+On 2026-10-24, two commits imported files that were still untracked (5b3b845 → `lib/achievement-replay.ts`, 0d6ed7e →
+`lib/changelog-open.ts`), and Vercel's build failed with "Module not found". Copying the incremental cache was the
+suspect, but a scratch repro showed tsc 6 still reports TS2307 with the copied cache. The real cause: the tree's
+`core.hooksPath` had been set to the absolute `.git/hooks`, which has no `pre-commit`, so the hook never ran. Step 3
+names the missing file even when tsc would bury it, and the git guard keeps threads from unhooking the hook again.
+
+Tests: `scripts/staged-imports.test.ts` (the import scan, alias and extension resolution, and the script against a real
+temp repo).
 
 ## Route import guard
 

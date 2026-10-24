@@ -5,30 +5,36 @@ import { signAsWeft } from "./attribution";
 import { isTrustedTool } from "./board-tools";
 import { runsOn } from "./cli-defaults";
 import { executableFor } from "./cli-path";
+import { onElicitation } from "./elicitation";
 import { spawnCli, withStderr } from "./cli-process";
+import { takeGrant, withRetryGrant } from "./classifier-denial";
 import { claimQuestion, claimSymbols, claimWhy } from "./claim-guard";
 import { folderAsk, grantedRead } from "./folder-guard";
 import { guardedCli } from "./env";
 import { isNotLoggedInError, isRateLimitError } from "./login";
+import { isLostSessionError, resumeLostSession } from "./lost-session";
 import { hitRateLimit } from "./rate-limit";
-import { askUser, settle } from "./runner-ask";
+import { askUser } from "./runner-ask";
+import { settle } from "./runner-pending";
 import { close, hooks, Inbox, queued, safeUpdate, scheduleIdle, sessions, spares, specFor, type Session, type Spec } from "./runner-state";
 import { TURN_CODE, handle } from "./runner-turn";
-import { defaultPermissionMode, subagentModel } from "./settings";
+import { defaultPermissionMode } from "./settings";
 import { pukuContext } from "./puku-context";
 import { trialOptions } from "./puku-trial";
 import { PLUGIN_DIR } from "./skills";
 import { ensureSeeded, offFor, sameOff, withSkillSettings } from "./skill-sets";
 import { switchSpare } from "./spare-switch";
 import { backendEnv, refillsSpare } from "./puku-idle";
-import { subagentEnv, subagentPrompt } from "./subagents";
+import { subagentEnv, subagentModelFor, subagentPrompt, type SubagentModel } from "./subagents";
 import { weftMcpServers } from "./weft-mcp";
 import { promptsBuild, weftSystemPrompt } from "./weft-prompts";
 import { CODEX_CODE, driveCodex } from "./codex-runner";
+import { GOOSE_RUNNER_CODE, driveGoose } from "./goose-runner";
 import { getCard, updateCard } from "./store";
 import { loseTasks } from "./task-ledger";
 import * as turnRules from "./turn";
 import type { Backend, Card } from "./types";
+import { awaitingWorktree, workDir } from "./work-dir";
 
 // A thread's CLI process: started (or a spare taken over), driven through the Agent SDK until it ends,
 // and replaced when the code it runs is out of date.
@@ -41,7 +47,7 @@ const MAX_SPARES = 3;
 // the code (not random) because each API route can load its own copy of these modules. The pure turn
 // rules in turn.ts count too: a session started before they changed would still run the old ones.
 const BUILD = createHash("sha1")
-  .update([drive, driveCodex, queryOptions, threadEnv, weftMcpServers, weftSystemPrompt, subagentPrompt, ...CODEX_CODE, ...TURN_CODE, askUser, settle, ...Object.values(turnRules)].map(String).join("\n"))
+  .update([drive, driveCodex, driveGoose, queryOptions, threadEnv, weftMcpServers, weftSystemPrompt, subagentPrompt, ...CODEX_CODE, ...GOOSE_RUNNER_CODE, ...TURN_CODE, askUser, settle, onElicitation, ...Object.values(turnRules)].map(String).join("\n"))
   .digest("hex");
 
 // The code fingerprint plus what a CLI only reads when it starts: the content of Weft's pinned prompts
@@ -100,7 +106,7 @@ export function warmUp(cardId: string) {
   if (!card || currentSession(cardId)) return;
   // Picked-up sessions only start a CLI when you send something, so Weft never holds a session
   // the Claude app might reopen.
-  if (card.source === "claude-code" || !fs.existsSync(card.cwd)) return;
+  if (card.source === "claude-code" || awaitingWorktree(card) || !fs.existsSync(workDir(card))) return;
   try {
     open(specFor(card), cardId);
   } catch {}
@@ -108,7 +114,8 @@ export function warmUp(cardId: string) {
 
 // Keeps a spare CLI open in a project folder for the next new card there.
 export function ensureSpare(cwd: string, backend: Backend = "claude") {
-  if (backend === "codex") return;
+  // Codex and Goose start a fresh process for every turn, so there is no spare process to keep warm.
+  if (backend === "codex" || backend === "goose") return;
   const key = spareKey(backend, cwd);
   const existing = spares.get(key);
   if (existing && !isStale(existing)) return;
@@ -137,7 +144,8 @@ export function ensureSpare(cwd: string, backend: Backend = "claude") {
 }
 
 export function adoptSpare(card: Card): Session | undefined {
-  if (card.sessionId || card.role === "copilot") return undefined;
+  // A spare runs in the project folder, so an isolated card (whose CLI runs in its worktree) starts its own.
+  if (card.sessionId || card.role === "copilot" || card.isolated) return undefined;
   const key = spareKey(card.backend, card.cwd);
   const spare = spares.get(key);
   if (!spare || spare.abort.signal.aborted || spare.ended) return undefined;
@@ -161,7 +169,9 @@ export function adoptSpare(card: Card): Session | undefined {
 }
 
 // The copilot runs the board, not code, so subagent settings are for threads only.
-function threadEnv(spec: Spec, env: Options["env"], subagents: ReturnType<typeof subagentModel>) {
+// The subagent model is read fresh for every turn, so a change in Settings takes effect on the
+// thread's next message instead of when its session happens to start (lib/subagents.ts subagentModelFor).
+function threadEnv(spec: Spec, env: Options["env"], subagents: SubagentModel) {
   return spec.copilot ? env : { ...env, ...subagentEnv(subagents, spec.backend) };
 }
 
@@ -170,7 +180,7 @@ function queryOptions(session: Session, executable: string | undefined): Options
   const { spec } = session;
   const cardId = () => session.cardId ?? undefined;
   const guarded = guardedCli(() => [...sessions.values()].filter((s) => s.busy && s !== session).length, cardId);
-  const subagents = subagentModel();
+  const subagents = subagentModelFor();
   // A puku thread with no Puku login of its own runs on Weft's Puku trial while you're signed in to Weft.
   const trial = spec.backend === "puku" ? trialOptions() : null;
   const logStderr = (data: string) => console.error(`[thread ${(session.cardId ?? "spare").slice(0, 8)}] ${data.trimEnd()}`);
@@ -184,7 +194,7 @@ function queryOptions(session: Session, executable: string | undefined): Options
     sessionId: spec.sessionId ? undefined : session.sessionId,
     forkSession: spec.sessionId ? spec.forkSession : undefined,
     resumeSessionAt: spec.sessionId ? spec.resumeAt : undefined,
-    ...guarded,
+    ...withRetryGrant(guarded, session),
     env: { ...threadEnv(spec, guarded.env, subagents), ...backendEnv(spec.backend), ...trial?.env },
     settings: withSkillSettings(trial?.settings, spec.skillsOff),
     abortController: session.abort,
@@ -211,6 +221,8 @@ function queryOptions(session: Session, executable: string | undefined): Options
         return Promise.resolve({ behavior: "allow", updatedInput: input });
       }
       if (!session.cardId) return Promise.resolve({ behavior: "deny", message: "No card is attached yet." });
+      // A call auto mode blocked that you allowed once (lib/classifier-denial.ts), in case the retry asks instead.
+      if (takeGrant(session, toolName, input)) return Promise.resolve({ behavior: "allow", updatedInput: input });
       // A folder the user granted (lib/folder-guard.ts) is read without the CLI's own working-directory prompt.
       if (grantedRead(toolName, input, session.spec.cwd, session.cardId)) return Promise.resolve({ behavior: "allow", updatedInput: input });
       // A folder outside the project (lib/folder-guard.ts) or a symbol-claim clash (lib/claim-guard.ts) asks in its own words.
@@ -221,6 +233,9 @@ function queryOptions(session: Session, executable: string | undefined): Options
         folder: folder?.folder,
       });
     },
+    // An MCP server asking you something (the Supabase MCP confirming destructive SQL) becomes a prompt on the
+    // card instead of the SDK's silent decline (lib/elicitation.ts).
+    onElicitation: onElicitation(session, askUser),
     // Its own spawn, so ending the session ends puku-cli's `Puku` child too (lib/cli-process.ts).
     spawnClaudeCodeProcess: (opts) => (session.process = spawnCli(opts, logStderr)),
   };
@@ -233,6 +248,11 @@ async function drive(session: Session, executable: string | undefined) {
     if (session.spec.backend === "codex") {
       if (!executable) throw new Error("Codex CLI isn't on this app's PATH.");
       await driveCodex(session, executable);
+      return;
+    }
+    if (session.spec.backend === "goose") {
+      if (!executable) throw new Error("goose isn't on this app's PATH.");
+      await driveGoose(session, executable);
       return;
     }
     session.query = query({ prompt: session.inbox, options: queryOptions(session, executable) });
@@ -261,6 +281,7 @@ function failed(session: Session, err: unknown) {
   const cardId = session.cardId;
   if (!cardId || session.abort.signal.aborted) return;
   const message = withStderr(err instanceof Error ? err.message : String(err), session.process?.stderrTail());
+  if (isLostSessionError(message) && resumeLostSession(cardId, session.spec.sessionId)) return;
   if (isRateLimitError(message)) hitRateLimit(cardId, session.spec.backend, message);
   else if (isNotLoggedInError(message)) hooks.needLogin(cardId, session.spec.backend, message);
   else safeUpdate(cardId, { error: message });

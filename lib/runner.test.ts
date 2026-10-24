@@ -96,7 +96,8 @@ describe("sendMessage", () => {
       promptSuggestions: true,
       allowDangerouslySkipPermissions: true,
       pathToClaudeCodeExecutable: undefined,
-      env: { PATH: "/usr/bin" }, hooks: { PreToolUse: [] },
+      // The guards are mocked away; what is left is the retry grant for calls auto mode blocked (lib/classifier-denial.ts).
+      env: { PATH: "/usr/bin" }, hooks: { PreToolUse: [{ hooks: [expect.any(Function)] }] },
     });
     expect((q.options.systemPrompt as { append: string }).append).toMatch(/mcp__secrets__fill_field[\s\S]*THREAD PROMPT/);
     expect(Object.keys(q.options.mcpServers as object)).toEqual(["browser", "secrets", "webhooks", "devservers", "board_view", "board"]);

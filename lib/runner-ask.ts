@@ -4,87 +4,18 @@ import { describeBoardTool } from "./board-tools";
 import { editPreview } from "./edit-preview";
 import { shortToolName, summarizeInput } from "./format";
 import { isPlanTool, writePlanPreview } from "./plan-preview";
+import { startWaiting, watchHolds } from "./permission-wait";
 import { writeQuestionPreview } from "./question-preview";
 import { suggestReadScope } from "./read-scope";
 import { safeUpdate, sessions, type Pending, type Session } from "./runner-state";
-import { appendThread, replaceThreadItem } from "./store";
+import { pendingView } from "./runner-pending";
+import { appendThread } from "./store";
 import { readQuestions } from "./turn";
-import { MODE_OPTIONS, type PermissionMode, type PromptReason, type QuestionReply } from "./types";
+import { MODE_OPTIONS, type PendingElicitation, type PermissionMode, type PromptReason } from "./types";
 
 // A thread's permission requests and questions: asked on the card, answered from the board.
-
-// pendingId ties the answer to the request the user saw; without it, the oldest one is answered.
-// reply carries a question's notes, or the message that declines it to talk it over instead.
-export function answerPermission(
-  cardId: string,
-  allow: boolean,
-  answers?: Record<string, string>,
-  pendingId?: string,
-  reply?: QuestionReply,
-) {
-  const queue = sessions.get(cardId)?.pending ?? [];
-  const target = pendingId ? queue.find((p) => p.id === pendingId) : queue[0];
-  if (!target) throw new Error(pendingId ? "That request isn't waiting anymore." : "Nothing is waiting for an answer.");
-  if (target.questions && allow && !answers) throw new Error("This thread asked a question, so it needs answers.");
-  settle(cardId, allow, answers, target.id, reply);
-}
-
-// denyMessage: what a denial tells the thread instead of "The user denied this" (a Wait that ended, lib/permission-wait.ts).
-export function settle(
-  cardId: string,
-  allow: boolean,
-  answers?: Record<string, string>,
-  pendingId?: string,
-  reply?: QuestionReply,
-  denyMessage?: string,
-) {
-  const session = sessions.get(cardId);
-  if (!session) return false;
-  const at = pendingId ? session.pending.findIndex((p) => p.id === pendingId) : 0;
-  const p = at >= 0 ? session.pending[at] : undefined;
-  if (!p) return false;
-  session.pending.splice(at, 1);
-  replaceThreadItem(cardId, p.index, {
-    kind: "permission",
-    id: p.id,
-    toolName: p.toolName,
-    title: p.title,
-    decision: allow ? "allow" : "deny",
-    answer: answers ? Object.values(answers).join("; ") : undefined,
-    at: Date.now(),
-  });
-  const next = session.pending[0];
-  safeUpdate(cardId, {
-    column: next ? "needs_you" : "running",
-    pending: next ? pendingView(next) : null,
-    lastLine: next ? next.title : answers ? `Answered: ${Object.values(answers).join("; ")}` : `${allow ? "Allowed" : "Denied"}: ${p.title}`,
-  });
-  p.resolve(denyMessage && !allow ? { behavior: "deny", message: denyMessage } : permissionResult(p, allow, answers, reply));
-  return true;
-}
-
-// What the CLI gets back: the input (with the answers and any notes, for a question), or a denial, which
-// for a question carries what the user wrote instead of answering.
-function permissionResult(p: Pending, allow: boolean, answers?: Record<string, string>, reply?: QuestionReply): PermissionResult {
-  if (p.questions) {
-    if (allow && answers) {
-      const annotations = reply?.annotations && Object.keys(reply.annotations).length ? { annotations: reply.annotations } : {};
-      return { behavior: "allow", updatedInput: { ...p.input, answers, ...annotations } };
-    }
-    const chat = reply?.chat?.trim();
-    return {
-      behavior: "deny",
-      message: chat
-        ? `The user didn't pick an answer and wants to talk it over instead. They wrote: ${chat}`
-        : "The user skipped the question.",
-    };
-  }
-  return allow ? { behavior: "allow", updatedInput: p.input } : { behavior: "deny", message: "The user denied this in Weft." };
-}
-
-export function pendingView(p: Pending) {
-  return { id: p.id, toolName: p.toolName, title: p.title, input: p.input, questions: p.questions, readScope: p.readScope, previewUrl: p.previewUrl, edit: p.edit, why: p.why, waiting: p.waiting };
-}
+// Answering a request lives in lib/runner-pending.ts, which lib/permission-wait.ts shares.
+export { answerPermission, settle } from "./runner-pending";
 
 export function askUser(
   cardId: string,
@@ -95,7 +26,8 @@ export function askUser(
   title?: string,
   // From the claim guard: the symbols the edit touches, for its preview, and why it asked.
   // From the folder guard: the folder outside the project the call reaches, for the buttons that grant it.
-  claim: { symbols?: string[]; why?: PromptReason; folder?: { directory: string; token: string } } = {},
+  // From an MCP server (lib/elicitation.ts): what it asks, which the card shows as its form instead of the input.
+  claim: { symbols?: string[]; why?: PromptReason; folder?: { directory: string; token: string }; elicitation?: PendingElicitation } = {},
 ): Promise<PermissionResult> {
   return new Promise((resolve) => {
     const questions = toolName === "AskUserQuestion" ? readQuestions(input) : undefined;
@@ -112,12 +44,24 @@ export function askUser(
       : plan
         ? writePlanPreview(cardId, toolName, input)
         : undefined;
-    const edit = questions || plan ? undefined : editPreview(toolName, input, session.spec.cwd, claim.symbols);
-    const why = questions || plan ? undefined : (claim.why ?? modeWhy(session.spec.permissionMode, toolName));
-    const p: Pending = { id, index, toolName, title: label, input, questions, readScope, previewUrl, edit, why, resolve };
+    const { elicitation } = claim;
+    // A question, a plan or an MCP server's form is no change to preview, and its own reason for asking.
+    const ownForm = Boolean(questions || plan || elicitation);
+    const edit = ownForm ? undefined : editPreview(toolName, input, session.spec.cwd, claim.symbols);
+    const why = ownForm ? undefined : (claim.why ?? modeWhy(session.spec.permissionMode, toolName));
+    const p: Pending = { id, index, toolName, title: label, input, questions, readScope, previewUrl, edit, why, elicitation, resolve };
     session.pending.push(p);
     if (session.pending.length === 1) {
-      safeUpdate(cardId, { column: "needs_you", pending: pendingView(p), lastLine: label });
+      // A symbol clash (lib/claims.ts) waits by itself: the holder is editing the same code, so the
+      // card goes to Running and waits instead of parking in Needs you for an answer that is almost
+      // always "wait". Go ahead and Deny stay on the card and in the thread. Every other prompt — the
+      // card's permission mode, an outside folder, a question — still needs the user, so it parks.
+      if (why?.holder) {
+        startWaiting(cardId, p);
+        watchHolds();
+      } else {
+        safeUpdate(cardId, { column: "needs_you", pending: pendingView(p), lastLine: label });
+      }
     }
     signal.addEventListener(
       "abort",

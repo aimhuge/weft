@@ -18,6 +18,9 @@ CLI closes (a Weft restart), and sits in the thread's task strip as "1 task runn
   (`| & ; < > \` $ ( ) { } \`) is refused outright with a clear error, so a launcher from
   `lib/dev-commands.ts` can never travel through a shell. The vault launch path already takes a
   structured `{ bin, args }` from `secret-run`, so this only applies to user-supplied commands.
+  `startDev` refuses a command that would start a second Weft in Weft's own folder (`startsWeft`, from
+  `lib/restart-guard.ts` `restartTarget`): its `dev` script frees port 1024 first, killing the board every card runs
+  on. That covers the devservers tool, review tours and the Services drawer's Start.
 - `lib/devserver-tools.ts`: `mcp__devservers__start` (command, url, cwd inside the project; reuses a live run with
   the same folder and command so two cards don't fight over a port; waits up to 60s for the url), `status`
   (the whole list) and `stop`. `DEVSERVERS_PROMPT` in every thread's system prompt (`lib/weft-prompts.ts`) and

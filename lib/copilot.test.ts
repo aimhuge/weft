@@ -23,6 +23,7 @@ vi.mock("./scheduler", () => ({ startScheduler: vi.fn() }));
 const suggest = vi.hoisted(() => ({ startSuggestRefresh: vi.fn(), chipCardId: vi.fn<(text: string) => string | undefined>() }));
 vi.mock("./copilot-suggest", () => suggest);
 vi.mock("./resume", () => ({ resumeInterrupted: vi.fn() }));
+vi.mock("./crash-blame", () => ({ consumeServerExit: vi.fn() }));
 vi.mock("./github-issues", () => ({ startIssueSync: vi.fn() }));
 vi.mock("./github-hooks", () => ({ startHookListener: vi.fn() }));
 vi.mock("./blastcp-auto", () => ({ startBlastcpAuto: vi.fn() }));
@@ -50,6 +51,7 @@ const { startSessionSync } = await import("./import");
 const { startSearchIndex } = await import("./search");
 const { startScheduler } = await import("./scheduler");
 const { resumeInterrupted } = await import("./resume");
+const { consumeServerExit } = await import("./crash-blame");
 const { startIssueSync } = await import("./github-issues");
 const { lastSeen } = await import("./copilot-digest");
 const { ensureCopilot, sendToCopilot, resetCopilot, setCopilotPersona, prewarm } = await import("./copilot");
@@ -202,7 +204,7 @@ describe("prewarm", () => {
   it("starts session sync, search, the scheduler, resumes and the copilot's CLI, once per server", () => {
     prewarm();
     prewarm();
-    for (const fn of [startSessionSync, startSearchIndex, startScheduler, resumeInterrupted, startIssueSync]) expect(fn).toHaveBeenCalledOnce();
+    for (const fn of [startSessionSync, startSearchIndex, startScheduler, consumeServerExit, resumeInterrupted, startIssueSync]) expect(fn).toHaveBeenCalledOnce();
     expect(db.cards.get(COPILOT_ID)?.role).toBe("copilot");
     expect(runner.warmUp).toHaveBeenCalledExactlyOnceWith(COPILOT_ID);
     // The Puku trial's sign-in callback retries puku threads waiting on a login.

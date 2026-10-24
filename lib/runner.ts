@@ -7,8 +7,9 @@ import { isOpenElsewhere } from "./import";
 import { holdForRestart } from "./restart-when-idle";
 import { sessionRewindPoint } from "./rewind";
 import { addScheduled } from "./schedule";
-import { answerPermission, settle } from "./runner-ask";
+import { answerPermission, settle } from "./runner-pending";
 import { needLogin } from "./runner-login";
+import { canSteer, steer } from "./runner-steer";
 import { adoptSpare, currentSession, open } from "./runner-session";
 import { withShellContext } from "./shell";
 import { switchSpare } from "./spare-switch";
@@ -18,15 +19,21 @@ import { findDescendantGroups, signalGroups } from "./process-tree";
 import { skillInvocation } from "./skills";
 import { appendThread, foldThread, getCard, getThread, updateCard } from "./store";
 import { takeTaskNote } from "./task-ledger";
+import { takeBreakNote } from "./crash-blame";
+import { dropDenialPrompts } from "./classifier-denial";
 import type { Card, PermissionMode } from "./types";
+import { awaitingWorktree, workDir } from "./work-dir";
+import { isolate } from "./worktree-start";
+import { landCard } from "./worktree-done";
 
 // One Agent SDK query() per thread: what the board and the API call to send, stop, queue and answer.
 // The parts behind it: lib/runner-state.ts (sessions and the shared maps), lib/runner-session.ts (starting
 // and driving a CLI, spares), lib/runner-turn.ts (what the CLI sends during a turn), lib/runner-ask.ts
-// (permission requests), lib/runner-login.ts (auth wall).
+// (permission requests), lib/runner-pending.ts (answering one), lib/permission-wait.ts (holding one
+// until another card lets go of the code), lib/runner-login.ts (auth wall).
 export { switchBackend } from "./backend-switch";
 export { rerunOnModel } from "./backend-switch";
-export { answerPermission } from "./runner-ask";
+export { answerPermission } from "./runner-pending";
 export { waitPermission } from "./permission-wait";
 export { ensureSpare, warmUp } from "./runner-session";
 export { isBusy } from "./runner-state";
@@ -52,18 +59,34 @@ export function setPermissionMode(cardId: string, mode: PermissionMode) {
 
 // Saves a card's model and applies it to its open CLI, so a warm thread keeps its session (BackendPicker).
 // switchSpare also signs its commits as the new model.
+// The stats' runsOn follows the model, so the header's chip and the status strip name the model the
+// thread is on now, not the one it was on when it last reported.
 export function setModel(cardId: string, model: string) {
-  updateCard(cardId, { model });
+  const card = getCard(cardId);
+  const effort = card?.effort;
+  const stats = card?.stats;
+  updateCard(cardId, {
+    model,
+    ...(stats ? { stats: { ...stats, runsOn: { model, effort } } } : {}),
+  });
   const session = sessions.get(cardId);
   if (session) switchSpare(session.query, session.spec, { permissionMode: session.spec.permissionMode, model });
+}
+
+// A message that can't go yet waits: for a restart the running turns hold up (it goes after it), or for an
+// isolated card's worktree (lib/worktree-start.ts), which it then goes out in.
+function holdSend(card: Card, text: string, { echo, cli }: { echo: boolean; cli: string }) {
+  if (holdForRestart(card.id, text, { echo })) return true;
+  if (!awaitingWorktree(card)) return false;
+  void isolate(card.id, () => sendMessage(card.id, text, { echo, cli }));
+  return true;
 }
 
 // `cli` is what the CLI gets when it differs from what the thread shows (the copilot's board digest).
 export function sendMessage(cardId: string, text: string, { echo = true, cli = text } = {}) {
   const card = getCard(cardId);
   if (!card) throw new Error("No such card.");
-  // A restart is waiting for the running turns to end, so this one waits on the card until after it.
-  if (holdForRestart(cardId, text, { echo })) return;
+  if (holdSend(card, text, { echo, cli })) return;
   const session = sessionFor(card);
   // Claude threads tag the prompt so ↑ can rewind its turn later (lib/edit-last.ts).
   const promptId = card.backend === "claude" && !session.spec.copilot ? randomUUID() : undefined;
@@ -74,6 +97,7 @@ export function sendMessage(cardId: string, text: string, { echo = true, cli = t
   const fresh = { error: undefined, suggestion: undefined, pending: null, interrupted: undefined, resumes: undefined };
   updateCard(cardId, { column: "running", archived: false, wrappingUp: archiveAfter.has(cardId), ...fresh, lastLine: "Thinking…" });
   clearTimeout(session.idle);
+  dropDenialPrompts(cardId, session);
   session.busy = true;
   session.status = undefined;
   session.openedPane = false;
@@ -83,8 +107,9 @@ export function sendMessage(cardId: string, text: string, { echo = true, cli = t
   session.turnSeq = (session.turnSeq ?? 0) + 1;
   // puku doesn't run .claude/skills as slash commands, so a /skill message goes as the skill's instructions.
   const forCli = card.backend === "puku" ? skillInvocation(cli, card.cwd, { weft: false }) : cli;
-  // Ahead of it, a note about subagents its CLI lost since the last message (lib/tasks.ts taskNote).
-  session.inbox.push(`${session.preamble ?? ""}${takeTaskNote(cardId)}${forCli}`, promptId);
+  // Ahead of it, a note about subagents its CLI lost since the last message (lib/tasks.ts taskNote), and about the time
+  // it broke Weft (lib/crash-blame.ts).
+  session.inbox.push(`${session.preamble ?? ""}${takeTaskNote(cardId)}${takeBreakNote(cardId)}${forCli}`, promptId);
   keepSessionId(cardId, session);
   session.preamble = undefined;
   if (!session.spec.copilot) showStarter(cardId, card.title, text).catch(() => {});
@@ -101,7 +126,8 @@ function sessionFor(card: Card) {
   const session = currentSession(card.id);
   if (session?.busy) throw new Error("This thread is already running.");
   if (session) return session;
-  if (!fs.existsSync(card.cwd)) throw new Error(`This thread's folder ${card.cwd} doesn't exist anymore.`);
+  if (awaitingWorktree(card)) throw new Error("This card's worktree isn't ready yet; it starts as soon as it is.");
+  if (!fs.existsSync(workDir(card))) throw new Error(`This thread's folder ${workDir(card)} doesn't exist anymore.`);
   if (activeElsewhere(card)) {
     // Two apps writing one session would split the conversation, so continue it as a copy.
     const copy = open({ ...specFor(card), forkSession: true }, card.id);
@@ -130,10 +156,16 @@ export function sendUserMessage(cardId: string, text: string, { cli = text } = {
   queueMessages(cardId, skills.map((skill) => `/${skill}`));
 }
 
-// A message for a thread that's mid-turn waits on the card as "after this turn" (the reply box's queue
-// shows it, and you can pull it back) instead of being turned away. The copilot has no such queue.
+// A message for a thread that's mid-turn goes into a Claude Code or puku CLI at once, which takes it in after
+// its next tool call (lib/runner-steer.ts). A /command, or one for Codex or Goose, waits on the card as "after
+// this turn" (the reply box's queue shows it, and you can pull it back) instead. The copilot has no such queue.
 function holdForTurn(card: Card, text: string) {
   if (!isBusy(card.id) || card.role === "copilot") return false;
+  const session = sessions.get(card.id);
+  if (!text.startsWith("/") && canSteer(session)) {
+    steer(card.id, session, text, withShellContext(card.id, text));
+    return true;
+  }
   updateCard(card.id, { scheduled: addScheduled(card.scheduled, { id: randomUUID(), text, at: Date.now(), afterTurn: true }) });
   return true;
 }
@@ -197,6 +229,11 @@ export function queueMessages(cardId: string, texts: string[]) {
 // unarchived, and a starred card stays on the board (★: worth keeping).
 export function archiveWhenIdle(cardId: string) {
   if (queued.has(cardId) || isBusy(cardId)) archiveAfter.add(cardId);
+  // With no wrap-up turn to wait for, an isolated card lands its branch now (lib/worktree-done.ts).
+  if (!archiveAfter.has(cardId) && getCard(cardId)?.worktree) {
+    hooks.land(cardId);
+    return;
+  }
   updateCard(cardId, archiveAfter.has(cardId) ? { wrappingUp: true } : { archived: !getCard(cardId)?.starred });
 }
 
@@ -207,13 +244,22 @@ export function archiveWhenIdle(cardId: string) {
 export function restoreDoneOverride(cardId: string) {
   const card = getCard(cardId);
   if (!card) return;
-  if (card.preDoneModel === undefined && card.preDoneEffort === undefined) return;
-  const patch: { preDoneModel: undefined; preDoneEffort: undefined; model?: string; effort?: typeof card.effort } = {
+  if (card.preDoneModel === undefined && card.preDoneEffort === undefined && card.preDoneBackend === undefined) return;
+  const patch: {
+    preDoneModel: undefined;
+    preDoneEffort: undefined;
+    preDoneBackend: undefined;
+    model?: string;
+    effort?: typeof card.effort;
+    backend?: typeof card.backend;
+  } = {
     preDoneModel: undefined,
     preDoneEffort: undefined,
+    preDoneBackend: undefined,
   };
   if (card.preDoneModel !== undefined) patch.model = card.preDoneModel;
   if (card.preDoneEffort !== undefined) patch.effort = card.preDoneEffort;
+  if (card.preDoneBackend !== undefined) patch.backend = card.preDoneBackend;
   updateCard(cardId, patch);
 }
 
@@ -282,6 +328,7 @@ export async function retry(cardId: string) {
 hooks.sendQueued = sendQueued;
 hooks.sendHeld = sendHeld;
 hooks.needLogin = needLogin;
+hooks.land = (id) => void landCard(id, (cardId, text) => sendMessage(cardId, text));
 hooks.boardActions = {
   start: (cardId: string, text: string) => sendMessage(cardId, text),
   stop,

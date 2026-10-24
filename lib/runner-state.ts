@@ -1,6 +1,7 @@
 import type { PermissionResult, Query, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import { messageContent } from "./attachments";
 import type { BoardActions } from "./board-tools";
+import type { ClassifierDenial } from "./classifier-denial";
 import type { CliProcess } from "./cli-process";
 import type { CopilotPersona } from "./copilot-personas";
 import type { EditPreview } from "./edit-preview";
@@ -8,7 +9,7 @@ import { allowedFolders, gooseBaseUrl, gooseModelId, gooseProviderId, keepAliveM
 import type { BoardStatus } from "./status";
 import { getCard, updateCard } from "./store";
 import { hasLiveTasks } from "./task-ledger";
-import type { Backend, CacheState, Card, Effort, PermissionMode, PromptReason, Question } from "./types";
+import type { Backend, CacheState, Card, Effort, PendingElicitation, PermissionMode, PromptReason, Question } from "./types";
 import { globalSingleton } from "./global-singleton";
 import { effortFor, modelOn } from "./new-thread";
 import { idleToClose, keepAliveFor } from "./puku-idle";
@@ -33,6 +34,7 @@ export interface Pending {
   edit?: EditPreview;
   why?: PromptReason;
   waiting?: boolean;
+  elicitation?: PendingElicitation;
   resolve: (result: PermissionResult) => void;
 }
 
@@ -122,7 +124,12 @@ export interface Session {
   turnSeq?: number;
   // Parallel tool calls can ask at once; the card shows the oldest.
   pending: Pending[];
+  // Auto mode's classifier denials this turn, asked about when it ends, and the calls you then allowed once (lib/classifier-denial.ts).
+  denials?: ClassifierDenial[];
+  retryGrants?: string[];
   toolIndex: Map<string, number>;
+  // Ids of the messages sent mid-turn that the CLI hasn't taken in yet (lib/runner-steer.ts).
+  steered?: Set<string>;
   // Ids of this CLI's tasks that ran in the background, whose end gets a row in the thread (lib/runner-tasks.ts).
   backgrounded?: Set<string>;
   idle?: ReturnType<typeof setTimeout>;

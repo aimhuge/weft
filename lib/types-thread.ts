@@ -19,10 +19,33 @@ export interface QuestionReply {
   chat?: string;
 }
 
+// One field of an MCP server's elicitation form (lib/elicitation.ts elicitationFields). Its answer travels as a
+// string: "true"/"false" for a boolean, a JSON array of values for a multi-select.
+export interface ElicitField {
+  name: string;
+  title: string;
+  description?: string;
+  required: boolean;
+  kind: "string" | "number" | "integer" | "boolean" | "enum" | "multi";
+  options?: { value: string; label: string }[];
+  default?: string;
+}
+
+// An MCP server asking the user to confirm or fill something in mid-call (components/ElicitationForm.tsx):
+// its message, a form when it sent a schema, or a URL to open (mode "url").
+export interface PendingElicitation {
+  server: string;
+  message: string;
+  mode?: "url";
+  url?: string;
+  fields: ElicitField[];
+}
+
 export type ThreadItem =
   // id is the uuid Weft sent the prompt to the CLI with, so ↑ can rewind its turn (lib/edit-last.ts).
   // page is what the card's browser pane showed as it was sent (lib/pane-page.ts), for the show rail.
-  | { kind: "user"; text: string; at: number; id?: string; page?: string }
+  // midTurn: sent while a turn ran, so the CLI took it in after its next tool call (lib/runner-steer.ts).
+  | { kind: "user"; text: string; at: number; id?: string; page?: string; midTurn?: true }
   | { kind: "assistant"; text: string; at: number }
   | {
       kind: "tool";
