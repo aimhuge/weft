@@ -55,6 +55,33 @@ describe("useBoardCardActions", () => {
     expect(notify).toHaveBeenCalledWith(new Error("down"));
   });
 
+  it("move puts the card in its new column before the server answers", () => {
+    apiMove.mockReturnValueOnce(new Promise(() => {}));
+    const { result, setCards } = makeActions([card({ id: "c1", column: "review" }), card({ id: "c2", column: "review" })]);
+    act(() => result.current.move("c1", "done"));
+    const next = setCards.mock.calls[0]![0]([card({ id: "c1", column: "review" }), card({ id: "c2", column: "review" })]);
+    expect(next.map((c) => c.column)).toEqual(["done", "review"]);
+  });
+
+  it("move puts the card back when the server refuses, unless it moved again since", async () => {
+    apiMove.mockRejectedValueOnce(new Error("Stop the thread before moving it."));
+    const { result, setCards, notify } = makeActions([card({ id: "c1", column: "review" })]);
+    act(() => result.current.move("c1", "done"));
+    await Promise.resolve();
+    expect(notify).toHaveBeenCalled();
+    const undo = setCards.mock.calls[1]![0];
+    expect(undo([card({ id: "c1", column: "done" })])[0]!.column).toBe("review");
+    expect(undo([card({ id: "c1", column: "backlog" })])[0]!.column).toBe("backlog");
+  });
+
+  it("move to the card's own column or an unknown card changes nothing locally", () => {
+    const { result, setCards } = makeActions([card({ id: "c1", column: "review" })]);
+    act(() => result.current.move("c1", "review"));
+    act(() => result.current.move("nope", "done"));
+    expect(setCards).not.toHaveBeenCalled();
+    expect(apiMove).toHaveBeenCalledTimes(2);
+  });
+
   it("drop moves the dragged card when its column changed", () => {
     const preventDefault = vi.fn();
     const { result, setDragOver } = makeActions([card({ id: "c1", column: "running" })]);

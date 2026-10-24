@@ -23,13 +23,22 @@ export function useBoardCardActions({ cards, setCards, setDragOver, notify }: Bo
   // Moves you made, by card: where to and when, so the next event for that card skips its chime.
   const ownMoves = useRef(new Map<string, { column: Column; at: number }>());
 
-  // Moves a card for you, remembering it so the move doesn't chime.
+  // Moves a card for you, remembering it so the move doesn't chime. The card lands in its new
+  // column right away; if the server refuses (a busy thread, Running from anywhere but Backlog),
+  // it goes back where it was, unless something else has moved it since.
   const move = useCallback(
     (id: string, column: Column) => {
       ownMoves.current.set(id, { column, at: Date.now() });
-      api.move(id, column).catch(notify);
+      const from = cards.find((c) => c.id === id)?.column;
+      const setColumn = (to: Column, unless?: Column) =>
+        setCards((cur) => cur.map((c) => (c.id === id && (!unless || c.column === unless) ? { ...c, column: to } : c)));
+      if (from && from !== column) setColumn(column);
+      api.move(id, column).catch((err: unknown) => {
+        if (from && from !== column) setColumn(from, column);
+        notify(err);
+      });
     },
-    [notify],
+    [cards, setCards, notify],
   );
 
   // A card dropped on a column moves there if it's not already; clears the drag highlight.
