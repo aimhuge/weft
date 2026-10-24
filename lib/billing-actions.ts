@@ -6,11 +6,14 @@
 // useActionState's contract: a tuple of (state, formAction) where the action returns the new state.
 
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { roleCan, type OrgRole } from "@aimhuge/teams";
 import { BillingError, type BillingInterval } from "@aimhuge/billing";
 import { requireTeam } from "./teams";
 import { billing, billingConfigured } from "./billing/billing";
+import { checkOpenSourceFor } from "./billing/oss-grant";
+import { IP_COUNTRY_HEADER, regionalPick } from "./billing/regional-pick";
 
 // The action result type. Successes either redirect (the action throws a redirect sentinel that
 // Next handles) or return an `ok` status; failures carry a single `error` string the form can
@@ -53,14 +56,19 @@ export async function upgradeToPro(slug: string, interval: BillingInterval): Pro
   if (!canManageBilling(ctx.role)) return fail("Ask an owner to change the plan.");
   if (!billingConfigured()) return fail("Billing isn't set up on this Weft yet.");
   const provider = billing.provider();
+  // Regional prices are monthly only. `priceVariant` picks the Stripe price; a billing package without variant
+  // support ignores it and sells the full price (docs/architecture/billing.md).
+  const regional = interval === "monthly" ? await regionalPick(ctx.service, ctx.org.id, (await headers()).get(IP_COUNTRY_HEADER)) : null;
   let result: Awaited<ReturnType<typeof provider.startCheckout>>;
   try {
-    result = await provider.startCheckout(billingContext(ctx), {
+    const input: Parameters<typeof provider.startCheckout>[1] & { priceVariant?: string } = {
       plan: "pro",
       interval,
       seats: 1,
       returnPath: `/${slug}/billing?checkout=done`,
-    });
+      ...(regional && { priceVariant: regional.variant }),
+    };
+    result = await provider.startCheckout(billingContext(ctx), input);
   } catch (err) {
     return fail(describe(err));
   }
@@ -117,6 +125,25 @@ export async function resumePro(slug: string): Promise<BillingActionResult> {
   return ok("Cancellation undone.");
 }
 
+// Check the signed-in user's GitHub for an open-source repo and grant the workspace Open Source when it qualifies.
+// Owner or admin only, like any plan change. GitHub is read without a token here, so it counts against Vercel's IP limit.
+export async function checkOpenSourceNow(slug: string): Promise<BillingActionResult> {
+  const ctx = await requireTeam(slug, `/${slug}/billing`);
+  if (!canManageBilling(ctx.role)) return fail("Ask an owner to check open source.");
+  let check: Awaited<ReturnType<typeof checkOpenSourceFor>>;
+  try {
+    check = await checkOpenSourceFor(ctx.service, ctx.user.id);
+  } catch (err) {
+    return fail(describe(err));
+  }
+  revalidatePath(`/${slug}/billing`);
+  if (check.kind === "granted" && check.outcome.granted) return ok(`Open Source granted for ${check.repo}.`);
+  if (check.kind === "skipped" && check.reason === "paid") return fail("This workspace pays for Pro or Team, which already includes everything.");
+  if (check.kind === "skipped" && check.reason === "not-due") return ok("Your Open Source grant is current.");
+  if (check.kind === "skipped" && check.reason === "no-login") return fail("Sign in with GitHub to check.");
+  return fail("No active, OSI-licensed public repo you maintain clears the bar yet.");
+}
+
 // The page's <form action> wants an action that returns nothing, so these run one of the actions above and carry a
 // refusal back to the page as ?error=… (a success has already redirected or revalidated).
 async function orBack(slug: string, result: Promise<BillingActionResult>): Promise<void> {
@@ -138,4 +165,8 @@ export async function cancelForm(slug: string): Promise<void> {
 
 export async function resumeForm(slug: string): Promise<void> {
   await orBack(slug, resumePro(slug));
+}
+
+export async function checkOpenSourceForm(slug: string): Promise<void> {
+  await orBack(slug, checkOpenSourceNow(slug));
 }

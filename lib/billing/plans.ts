@@ -1,9 +1,9 @@
-// Weft's plan catalog (docs/architecture/billing.md): the Free and Pro plans and their per-meter allowances.
+// Weft's plan catalog (docs/architecture/billing.md): Free, Open Source, Education, Pro and Team, and their per-meter allowances.
 // Client-safe: a board-side plan picker can import the catalog and the prices without pulling in Supabase or Stripe.
 
 import { defineCatalog, type BasePlan } from "@aimhuge/billing";
 
-export type PlanId = "free" | "pro" | "team";
+export type PlanId = "free" | "oss" | "edu" | "pro" | "team";
 
 export interface Plan extends BasePlan<PlanId> {
   // A short marketing line for the plan picker; not used by billing math.
@@ -35,7 +35,7 @@ export const BLASTCP_FREE: BlastcpTier = {
   creditResets: false,
 };
 
-// Pro and Team both carry Creator: BlastCP Pro is $29 flat, more than a one-seat Team's $9.
+// Open Source, Education, Pro and Team carry Creator: BlastCP Pro is $29 flat, more than a one-seat Team's $9.
 export const BLASTCP_CREATOR: BlastcpTier = {
   name: "BlastCP Creator",
   brands: 1,
@@ -44,6 +44,45 @@ export const BLASTCP_CREATOR: BlastcpTier = {
   creditDollars: 3,
   creditResets: true,
 };
+
+// The free tier: the plans with no Puku allowance of their own, which run on the Puku trial's daily cap
+// (lib/puku-proxy.ts): Free, Open Source and Education. A free plan never gets more Puku than this cap
+// (docs/architecture/billing.md). PUKU_TRIAL_DAILY_REQUESTS / PUKU_TRIAL_DAILY_TOKENS on the deployment override it.
+export interface FreeTier {
+  name: string;
+  plans: readonly PlanId[];
+  dailyRequests: number;
+  // Input + output tokens per user per day; cache reads don't count.
+  dailyTokens: number;
+}
+
+export const FREE_TIER: FreeTier = {
+  name: "Free tier",
+  plans: ["free", "oss", "edu"],
+  dailyRequests: 150,
+  dailyTokens: 1_000_000,
+};
+
+// "1M tokens a day", for the plan rows and pricing that quote the cap.
+export function freeTierCapLabel(tier: FreeTier = FREE_TIER) {
+  const m = tier.dailyTokens / 1_000_000;
+  return m >= 1 ? `${m}M tokens a day` : `${tier.dailyTokens / 1000}K tokens a day`;
+}
+
+// Regional Pro (docs/architecture/billing.md): still plan "pro" with Pro's allowance, at a lower monthly price in
+// World Bank low-income and lower-middle-income countries (lib/billing/regional.ts picks which).
+export const REGIONAL_PRO_CENTS = { low: 500, lowerMiddle: 1000 } as const;
+
+// Startups (docs/architecture/billing.md): still plan "team" at TEAM_SEAT_CENTS, taken to $0 for freeMonths and
+// then half price for halfPriceMonths by Stripe subscription-schedule phases, on up to maxSeats seats, for companies
+// under maxRaisedUsd raised and under maxAgeYears old.
+export const STARTUP_TEAM = {
+  freeMonths: 6,
+  halfPriceMonths: 6,
+  maxSeats: 10,
+  maxRaisedUsd: 5_000_000,
+  maxAgeYears: 3,
+} as const;
 
 // The usage ledger's meters. Tokens count input + output, the same way lib/puku-proxy.ts already does it
 // (cache writes are part of input, cache reads don't count).
@@ -63,10 +102,26 @@ export const catalog = defineCatalog<PlanId, Plan>({
     free: {
       id: "free",
       name: "Free",
-      blurb: "The whole app, with today's Puku trial's daily cap.",
+      blurb: "The whole app, on the free tier's daily Puku cap.",
       monthlyUnitAmountCents: 0,
       perSeat: false,
       blastcp: BLASTCP_FREE,
+    },
+    oss: {
+      id: "oss",
+      name: "Open Source",
+      blurb: "Free for maintainers of an active open-source project: teams and BlastCP Creator on the free tier.",
+      monthlyUnitAmountCents: 0,
+      perSeat: false,
+      blastcp: BLASTCP_CREATOR,
+    },
+    edu: {
+      id: "edu",
+      name: "Education",
+      blurb: "Free for students and teachers through the GitHub Student Developer Pack, a class workspace included.",
+      monthlyUnitAmountCents: 0,
+      perSeat: false,
+      blastcp: BLASTCP_CREATOR,
     },
     pro: {
       id: "pro",
@@ -87,8 +142,9 @@ export const catalog = defineCatalog<PlanId, Plan>({
       blastcp: BLASTCP_CREATOR,
     },
   },
-  // Cheapest first: defines what counts as an upgrade and the catalog's display order.
-  order: ["free", "pro", "team"],
+  // Cheapest first: defines what counts as an upgrade and the catalog's display order. Open Source and Education
+  // cost nothing, so they sit with Free; neither has a Puku allowance (FREE_TIER above).
+  order: ["free", "oss", "edu", "pro", "team"],
   free: "free",
   // "Two months free" on a yearly Pro term.
   yearlyMonthsCharged: 10,

@@ -65,6 +65,14 @@ describe("runDeleteTeam", () => {
     }
   });
 
+  it("goes ahead on a granted $0 plan, which bills nothing", async () => {
+    for (const plan of ["oss", "edu"]) {
+      const t = ctx({ sub: { plan, status: "active", cancel_at_period_end: false } });
+      expect((await runDeleteTeam(t.c, "Acme")).ok).toBe(true);
+      expect(t.del).toHaveBeenCalled();
+    }
+  });
+
   it("reports a delete error", async () => {
     expect(await runDeleteTeam(ctx({ error: "fk" }).c, "Acme")).toEqual({ ok: false, message: "Could not delete the team: fk" });
   });

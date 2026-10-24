@@ -44,16 +44,38 @@ const navMock = vi.hoisted(() => ({
 const cacheMock = vi.hoisted(() => ({
   revalidatePath: vi.fn(),
 }));
+const headersMock = vi.hoisted(() => ({
+  headers: vi.fn(),
+}));
+const regionalMock = vi.hoisted(() => ({
+  regionalPick: vi.fn(),
+}));
 
 vi.mock("@aimhuge/teams", () => teamsMock);
-vi.mock("@aimhuge/billing", () => ({ BillingError: class BillingError extends Error {} }));
+// The real package's `defineCatalog` builds the plan catalog lib/billing/plans.ts reads, so the mock keeps it.
+vi.mock("@aimhuge/billing", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@aimhuge/billing")>();
+  return { ...actual, BillingError: class BillingError extends Error {} };
+});
 vi.mock("./teams", () => teamsModMock);
 vi.mock("./billing/billing", () => ({ billing: billingMock, billingConfigured: billingMock.billingConfigured }));
 vi.mock("next/navigation", () => navMock);
 vi.mock("next/cache", () => cacheMock);
+vi.mock("next/headers", () => headersMock);
+vi.mock("./billing/regional-pick", () => ({ IP_COUNTRY_HEADER: "x-vercel-ip-country", ...regionalMock }));
+vi.mock("./billing/oss-grant", () => ({ checkOpenSourceFor: vi.fn() }));
 
 import { BillingError } from "@aimhuge/billing";
-import { cancelForm, cancelPro, manageBilling, manageForm, resumeForm, resumePro, upgradeForm, upgradeToPro } from "./billing-actions";
+import {
+  cancelForm,
+  cancelPro,
+  manageBilling,
+  manageForm,
+  resumeForm,
+  resumePro,
+  upgradeForm,
+  upgradeToPro,
+} from "./billing-actions";
 
 const USER = { id: "u1", email: "jane@example.com", name: "Jane", avatar: null };
 const ORG = { id: "o1", slug: "acme", name: "Acme" };
@@ -65,6 +87,9 @@ beforeEach(() => {
   teamsMock.roleCan.mockImplementation((role: string, perm: string) => role !== "member" && perm === "workspace.manage");
   billingMock.billingConfigured.mockReturnValue(true);
   cacheMock.revalidatePath.mockReturnValue(undefined);
+  // No IP country by default: the regional pick finds nothing and Checkout sells the full price.
+  headersMock.headers.mockResolvedValue({ get: () => null });
+  regionalMock.regionalPick.mockResolvedValue(null);
 });
 
 // Captures a thrown redirect without letting it bubble. Returns the URL the action tried to redirect to,
@@ -131,6 +156,14 @@ describe("upgradeToPro", () => {
     const { result } = await run(() => upgradeToPro("acme", "monthly"));
     expect(result).toEqual({ ok: false, error: "Something went wrong on our end. Try again in a moment." });
     expect(err).toHaveBeenCalledWith("Billing action: Stripe 500");
+  });
+
+  it("logs 'unknown' when the throw isn't an Error", async () => {
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    billingMock.providerHandle.startCheckout.mockRejectedValueOnce("nope");
+    const { result } = await run(() => upgradeToPro("acme", "monthly"));
+    expect(result).toEqual({ ok: false, error: "Something went wrong on our end. Try again in a moment." });
+    expect(err).toHaveBeenCalledWith("Billing action: unknown");
   });
 });
 
@@ -232,7 +265,6 @@ describe("resumePro", () => {
   });
 });
 
-// The page's <form action>s: void wrappers that send a refusal back to the page as ?error=….
 describe("form wrappers", () => {
   it("upgradeForm sends a refusal back to the page as ?error=", async () => {
     teamsModMock.requireTeam.mockResolvedValue({ ...CTX, role: "member" });

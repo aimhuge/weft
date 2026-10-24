@@ -1,7 +1,8 @@
 import "server-only";
 
 // "Does this workspace's plan let it have people?" (docs/architecture/teams.md, billing.md). Teams are a paid
-// capability: a Free workspace stays a team of one, and inviting or adding a member needs Pro or Team.
+// capability: a Free workspace stays a team of one, and inviting or adding a member needs Pro, Team, or one of the
+// granted $0 plans (Open Source, Education).
 //
 // The check lives here rather than in lib/team-ops.ts so the rule ("which plans may have members") is one
 // list, testable without a Supabase client, and shared by anything else that asks — the team page's upsell
@@ -11,8 +12,25 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { catalog, type PlanId } from "./plans";
 
-// The plans whose workspaces may invite and manage members. Free is deliberately absent.
-export const TEAM_PLANS: readonly PlanId[] = ["pro", "team"];
+// The plans whose workspaces may invite and manage members. Free is deliberately absent; Open Source and
+// Education are granted, not bought, and include teams (a teacher's class is a workspace).
+export const TEAM_PLANS: readonly PlanId[] = ["oss", "edu", "pro", "team"];
+
+// The $0 plans Weft grants for a year instead of selling (lib/billing/grants.ts), rather than a Stripe subscription.
+export const GRANT_PLANS: readonly PlanId[] = ["oss", "edu"];
+
+export function isGrantPlan(plan: string | null | undefined): plan is "oss" | "edu" {
+  return !!plan && GRANT_PLANS.includes(plan as PlanId);
+}
+
+// A granted plan whose year is over, or whose end we can't read, has lapsed: it reads as Free until a re-check
+// renews it. Any other plan never lapses here; Stripe ends those. The grant's end is the row's trial_end, not its
+// period end: @aimhuge/billing rolls a $0 row's period forward on every read, so that one never runs out.
+export function grantLapsed(plan: string | null | undefined, grantEnd: unknown, now: Date = new Date()): boolean {
+  if (!isGrantPlan(plan)) return false;
+  const end = typeof grantEnd === "string" ? Date.parse(grantEnd) : NaN;
+  return !(end > now.getTime());
+}
 
 // Whether a workspace is on a paid plan at all — anything above Free. The billing page's "is this paid?"
 // question: a paying workspace shows Manage billing and Invoices whether it's Pro or Team, so this must not be
@@ -39,16 +57,19 @@ export async function workspacePlan(service: SupabaseClient, orgId: string): Pro
   if (!row || typeof row.plan !== "string") return "free";
   const status = typeof row.status === "string" ? row.status : "";
   if (status && status !== "active" && status !== "trialing") return "free";
+  if (grantLapsed(row.plan, row.trial_end)) return "free";
   return catalog.get(row.plan).id;
 }
 
 // The one subscription read, as a row or null. Split out so workspacePlan has a single place that can fail:
 // a missing client, a client that throws on from(), or a rejected query all land on "no row".
-async function readSubscription(service: SupabaseClient, orgId: string): Promise<{ plan?: unknown; status?: unknown } | null> {
+type SubscriptionRead = { plan?: unknown; status?: unknown; trial_end?: unknown };
+
+async function readSubscription(service: SupabaseClient, orgId: string): Promise<SubscriptionRead | null> {
   try {
     const { data } = await service
       .from("org_subscriptions")
-      .select("plan, status")
+      .select("plan, status, trial_end")
       .eq("org_id", orgId)
       .maybeSingle();
     return data ?? null;

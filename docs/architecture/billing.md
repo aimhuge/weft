@@ -23,8 +23,9 @@ so only the service-role client on the deployed Weft can read or write them.
 
 ## The plans
 
-`lib/billing/plans.ts` holds the catalog: `PlanId` is `"free" | "pro" | "team"`, and the plans come out in
-`order: ["free", "pro", "team"]` (cheapest first, which is also what makes `catalog.isUpgrade("pro", "team")` true).
+`lib/billing/plans.ts` holds the catalog: `PlanId` is `"free" | "oss" | "edu" | "pro" | "team"`, and the plans come out in
+`order: ["free", "oss", "edu", "pro", "team"]` (cheapest first, which is also what makes `catalog.isUpgrade("pro", "team")` true;
+`catalog.paid` is still `["pro", "team"]`, so Stripe needs no price for the two $0 plans).
 It's client-safe — a board-side plan picker, and the home page's pricing section
 ([marketing-site.md](marketing-site.md)), import it without pulling in Supabase or Stripe. The token count is the same
 as `lib/puku-proxy.ts`: input (including cache writes) plus output, cache reads don't count.
@@ -32,6 +33,8 @@ as `lib/puku-proxy.ts`: input (including cache writes) plus output, cache reads 
 | Plan | Price | Puku allowance | Teams | BlastCP |
 | --- | --- | --- | --- | --- |
 | Free | $0 | none (Puku trial's daily cap applies) | team of one | `BLASTCP_FREE` |
+| Open Source (`oss`) | $0, granted for 12 months | none (the free tier's cap) | yes | `BLASTCP_CREATOR` |
+| Education (`edu`) | $0, granted for 12 months | none (the free tier's cap) | yes (a teacher's class) | `BLASTCP_CREATOR` |
 | Pro | $20/month or $200/year (`yearlyMonthsCharged: 10`) | `PRO_PUKU_TOKENS` = 300,000,000 per period | yes | `BLASTCP_CREATOR` |
 | Team | $9/seat/month (`TEAM_SEAT_CENTS = 900`, `perSeat: true`) | `PRO_PUKU_TOKENS` = 300,000,000 per period | yes | `BLASTCP_CREATOR` |
 
@@ -54,6 +57,72 @@ have to read the Weft plan when an account connects through the token exchange (
 Team follows `@aimhuge/billing`'s DeckCP catalog: `perSeat: true` means the Stripe price is a **per-unit** recurring
 price and the seat count rides on the subscription's `quantity`, so a five-seat workspace is 5 × 900 cents.
 `catalog.totalCents("team", "monthly", seats)` does that arithmetic. Pro's own yearly option is unaffected.
+
+## The free tier
+
+`FREE_TIER` in `lib/billing/plans.ts` groups the plans with no Puku allowance of their own: they run on the Puku
+trial's daily cap, **150 requests and 1M tokens per user per day** (cut from 300 and 2M on 2026-10-23).
+`lib/puku-proxy.ts` `DAILY_REQUESTS` / `DAILY_TOKENS` read it, `freeTierCapLabel()` writes the "1M tokens a day"
+that the Settings plan row and the billing page quote, and `PUKU_TRIAL_DAILY_*` on Vercel still override it
+([puku-trial.md](puku-trial.md)). Its plans are `free`, `oss` and `edu`: a free plan never gets more tokens than this cap.
+
+## Startups, Open Source, Education and regional pricing
+
+Decided 2026-10-23 (Startups 2026-10-24):
+
+| | Price | Puku | Teams | BlastCP | Who, and how we check |
+| --- | --- | --- | --- | --- | --- |
+| **Startups** (`team`) | $0 for 6 months, then half of `TEAM_SEAT_CENTS` for 6, then full | Pro's 300M per seat | yes, up to 10 seats | Creator | Companies under $5M raised and under 3 years old: an application (company site, founding date, amount raised), or straight through a partner accelerator's perks page. Once per company. **Not built.** |
+| **Open Source** (`oss`) | $0 | free tier cap | yes | Creator | Maintainers of an active, non-fork public repo with an OSI licence, read from GitHub at sign-in (sign-in is GitHub-only). Re-checked every 12 months. **Built.** |
+| **Education** (`edu`) | $0 | free tier cap | yes (teachers' classes) | Creator | Students and teachers in the GitHub Student Developer Pack (Weft applies as a pack partner; GitHub does the verifying). Yearly. **Plan and grant built; the redemption waits on the pack's offer format.** |
+| **Regional pricing** ("LDN" internally) | $5/mo low income, $10/mo lower-middle income | Pro's 300M | yes | Creator | World Bank income groups, not the UN LDC list (Bangladesh, Laos and Nepal are scheduled to leave it in November 2026). Country from IP and billing address; the card's issuing country doesn't have to match. **Built in Weft; selling it needs `@aimhuge/billing` price variants (below).** |
+
+**Startups** (`STARTUP_TEAM` in `lib/billing/plans.ts`, not built) is plan `team` at its full seat price, never a $0 plan
+of its own, so the meter, the gate and the member count work unchanged. The discount is two Stripe subscription-schedule
+phases on the Team subscription (100% off for `freeMonths`, 50% off for `halfPriceMonths`), and seats past `maxSeats`
+bill at full price from day one. Unlike the grants below it asks for a card at Checkout, so a startup that stays rolls
+straight into paying Team with nothing to redeem. Needs: the application form and its review on `/admin`, a
+partner-accelerator code path, and `@aimhuge/billing` support for schedule phases (or a Stripe coupon pair) in
+`startCheckout`. The weft.zip pricing section shows it as Coming soon until then.
+
+**Grants** (`lib/billing/grants.ts`). `oss` and `edu` are `GRANT_PLANS` in `lib/billing/plan-gate.ts`, also in `TEAM_PLANS`.
+`grantPlan(service, orgId, plan)` writes the workspace's subscription row through `billing.saveSubscription` (no Stripe customer,
+`unitAmountCents: 0`, `interval: "yearly"`) and refuses a workspace that pays for Pro or Team. The grant's end is the row's
+**`trial_end`**, not its period end: `@aimhuge/billing` rolls any $0 row's period forward on every read (`rollsOnRead`), so
+`current_period_end` never runs out. `grantLapsed(plan, trialEnd)` reads a grant past its end (or with none) as Free, which
+`workspacePlan` applies, so a lapsed workspace can't invite. `renewDue` is true inside the grant's last 30 days (`RENEW_WITHIN_DAYS`).
+
+**Open Source check** (`lib/billing/oss.ts`, `lib/billing/oss-grant.ts`). `openSourceRepo(login, { token })` lists the
+user's public repos (with their GitHub token: `/user/repos` with owner, collaborator and org-member repos; without:
+`/users/<login>/repos`), keeps the ones they maintain (owner, or admin/maintain/push), and asks each for `OSS_BAR`:
+public, not a fork, not archived, a licence in `OSI_LICENCES` (GitHub's `spdx_id`), pushed within 90 days, and **25 stars
+or 20 commits in those 90 days** (picked 2026-10-24) (commit counts are one request each, at most five repos). `checkOpenSource` skips a paying
+workspace and a grant with more than a month left, else grants `oss` on a hit. It runs:
+
+- at sign-in: `finishWebSignIn` (`lib/web-auth.ts`) returns `github: { userId, login, token }` from the exchanged session
+  (`user_metadata.user_name`, `provider_token`), and `app/auth/callback/route.ts` runs `openSourceAfterSignIn` in `after()`,
+  so GitHub's latency never holds up the redirect. The token is used for that request only, never stored. Every failure is
+  logged and swallowed: the grant just waits for the next sign-in.
+- from the billing page: **Check my GitHub now** (`checkOpenSourceNow` in `lib/billing-actions.ts`, owner or admin), which
+  reads the login from `auth.admin.getUserById` and calls GitHub without a token (60 requests an hour per IP).
+
+**Education** has the plan, the gate and `grantPlan(…, "edu")`, but no redemption yet: GitHub gives a pack partner its offer
+format (a link with a code, or a coupon list) once the application is accepted, and the redeem route follows that.
+The application is the user's step (`~/.weft/show/oss-edu-regional/setup.html`).
+
+**Regional pricing** (`lib/billing/regional.ts`, `lib/billing/regional-pick.ts`). `LOW_INCOME` and `LOWER_MIDDLE_INCOME` are
+the World Bank's FY2026 groups from `api.worldbank.org/v2/country` (refresh every July). `regionalPick(service, orgId, ip)`
+takes the cheapest tier the IP country (`x-vercel-ip-country`) or the workspace's billing-profile country qualifies for, and
+gives the Stripe price variant (`regional_low`, `regional_lower_middle`) and its cents (`REGIONAL_PRO_CENTS`). The billing
+page shows the price (`RegionalNote` in `app/[orgSlug]/billing/free-plans.tsx`), and `upgradeToPro` passes
+`priceVariant` to `startCheckout` on a monthly upgrade (regional prices are monthly only). It is still plan `pro`, so the meter
+and the gate don't change. A VPN gets anyone the price: lost revenue, not lost money, as long as $5 covers a Pro user's tokens.
+
+**Not sold yet: the package.** `@aimhuge/billing` v0.5.0's Stripe provider has one price per plan and interval: it ignores
+`priceVariant`, so Checkout sells the full $20, and its webhook maps an unknown price id to no plan. Selling regional Pro needs
+the package to read optional `STRIPE_PRICE_<PLAN>_<INTERVAL>_<VARIANT>` prices, use them in `priceIdFor(config, plan,
+interval, variant)`, and map them back to their plan in `planForPriceId`; then bump Weft's dependency. Until then the
+pricing section marks Regional pricing as coming soon.
 
 ## The team gate
 
@@ -193,6 +262,7 @@ with **Push to Vercel** or `mcp__secrets__push_to_vercel`.
 | `STRIPE_WEBHOOK_SECRET` | 🔐 vault → Vercel | The signing secret for the `weft.zip/api/billing/webhook` endpoint, shown once in the Stripe dashboard when the endpoint is created. |
 | `STRIPE_PRICE_PRO_MONTHLY` | Vercel | The `price_…` for the $20/month recurring price (US only for now). |
 | `STRIPE_PRICE_PRO_YEARLY` | Vercel | The `price_…` for the $200/year recurring price. |
+| `STRIPE_PRICE_PRO_MONTHLY_REGIONAL_LOW`, `STRIPE_PRICE_PRO_MONTHLY_REGIONAL_LOWER_MIDDLE` | 🔐 vault (blanks) → Vercel | The $5 and $10 monthly Pro prices. Optional: unset, Checkout sells the full price. Read only once the package has price variants. |
 | `STRIPE_PRICE_TEAM_MONTHLY` | Vercel | The `price_…` for the **$9 per seat per month** recurring price. A per-unit price: seats ride on the subscription's `quantity`. Nothing reconciles it against `TEAM_SEAT_CENTS`, so a mismatch is a real bug (the package throws on first use with the whole list of missing variables). |
 | `SUPABASE_SECRET_KEY` | already on Vercel (webhook relay, Puku trial) | Service role; reads and writes the billing tables. |
 | `NEXT_PUBLIC_SITE_URL` | Vercel | `https://weft.zip` by default. Used to build the `manageUrl` on `BillingStatus`. |
@@ -222,8 +292,13 @@ with **Push to Vercel** or `mcp__secrets__push_to_vercel`.
 ## Files
 
 - `lib/billing/plans.ts` + `lib/billing/plans.test.ts` — the catalog (client-safe).
-- `lib/billing/plan-gate.ts` + `lib/billing/plan-gate.test.ts` — `TEAM_PLANS`, `canHaveMembers`, `workspacePlan`,
+- `lib/billing/plan-gate.ts` + `lib/billing/plan-gate.test.ts` — `TEAM_PLANS`, `GRANT_PLANS`, `grantLapsed`, `canHaveMembers`, `workspacePlan`,
   `workspaceCanHaveMembers`: which plans may have members (server-only).
+- `lib/billing/grants.ts` — `grantPlan`, `grantEnd`, `renewDue`: the 12-month Open Source and Education grants (server-only).
+- `lib/billing/oss.ts` — `OSS_BAR`, `OSI_LICENCES`, `openSourceRepo`: the GitHub read. `lib/billing/oss-grant.ts` — `checkOpenSource`,
+  `checkOpenSourceFor`, `openSourceAfterSignIn` (server-only).
+- `lib/billing/regional.ts` — the World Bank groups, `regionalTier`; `lib/billing/regional-pick.ts` — `regionalPick` (server-only).
+- `app/[orgSlug]/billing/free-plans.tsx` — the billing page's regional note and Open source and education card.
 - `lib/billing/billing.ts` + `lib/billing/billing.test.ts` — `createBilling`, `billingService`, `billingConfigured` (server-only).
 - `lib/billing/org.ts` + `lib/billing/org.test.ts` — `orgForUser` (server-only).
 - `lib/billing/puku-meter.ts` + `lib/billing/puku-meter.test.ts` — the `PlanMeter` the proxy uses (server-only).

@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { BLASTCP_CREATOR, BLASTCP_FREE, catalog, PUKU_METER, PRO_PUKU_TOKENS, TEAM_SEAT_CENTS } from "./plans";
+import { BLASTCP_CREATOR, BLASTCP_FREE, catalog, FREE_TIER, freeTierCapLabel, PUKU_METER, REGIONAL_PRO_CENTS, PRO_PUKU_TOKENS, STARTUP_TEAM, TEAM_SEAT_CENTS } from "./plans";
 
 // lib/billing/plans.ts: the catalog shape, the meter name and the paid plans' allowances.
 
 describe("catalog", () => {
-  it("orders free, then pro, then team, and pays 10 months for a yearly term", () => {
-    expect(catalog.order).toEqual(["free", "pro", "team"]);
+  it("orders the $0 plans, then pro, then team, and pays 10 months for a yearly term", () => {
+    expect(catalog.order).toEqual(["free", "oss", "edu", "pro", "team"]);
+    expect(catalog.paid).toEqual(["pro", "team"]);
     expect(catalog.free).toBe("free");
     expect(catalog.yearlyMonthsCharged).toBe(10);
   });
@@ -85,8 +86,56 @@ describe("blastcp", () => {
     expect(catalog.get("team").blastcp).toBe(BLASTCP_CREATOR);
   });
 
+  it("includes Creator on Open Source and Education too", () => {
+    expect(catalog.get("oss").blastcp).toBe(BLASTCP_CREATOR);
+    expect(catalog.get("edu").blastcp).toBe(BLASTCP_CREATOR);
+  });
+
   it("mirrors BlastCP's catalog: Free's credit is spent once, Creator's is monthly and unlimited", () => {
     expect(BLASTCP_FREE).toMatchObject({ brands: 1, channels: 3, postsPerMonth: 30, creditDollars: 0.5, creditResets: false });
     expect(BLASTCP_CREATOR).toMatchObject({ brands: 1, channels: null, postsPerMonth: null, creditDollars: 3, creditResets: true });
+  });
+});
+
+describe("open source and education", () => {
+  it("are $0 plans with no Puku allowance, so they stay on the free tier's cap", () => {
+    for (const id of ["oss", "edu"] as const) {
+      expect(catalog.get(id).id).toBe(id);
+      expect(catalog.priceCents(id, "monthly")).toBe(0);
+      expect(catalog.allowance(id, PUKU_METER)).toBeNull();
+    }
+    expect(catalog.get("oss").name).toBe("Open Source");
+    expect(catalog.get("edu").name).toBe("Education");
+  });
+
+  it("calls a move from either to Pro an upgrade", () => {
+    expect(catalog.isUpgrade("oss", "pro")).toBe(true);
+    expect(catalog.isUpgrade("edu", "pro")).toBe(true);
+  });
+});
+
+describe("free tier", () => {
+  it("caps Free at 150 requests and 1M tokens a day, with no allowance of its own", () => {
+    expect(FREE_TIER).toMatchObject({ name: "Free tier", plans: ["free", "oss", "edu"], dailyRequests: 150, dailyTokens: 1_000_000 });
+    for (const id of FREE_TIER.plans) expect(catalog.get(id).allowances).toBeUndefined();
+  });
+
+  it("labels the cap in millions, or thousands under a million", () => {
+    expect(freeTierCapLabel()).toBe("1M tokens a day");
+    expect(freeTierCapLabel({ ...FREE_TIER, dailyTokens: 500_000 })).toBe("500K tokens a day");
+  });
+});
+
+describe("regional pro", () => {
+  it("prices Pro at $5 in low-income and $10 in lower-middle-income countries, under Pro", () => {
+    expect(REGIONAL_PRO_CENTS).toEqual({ low: 500, lowerMiddle: 1000 });
+    expect(REGIONAL_PRO_CENTS.lowerMiddle).toBeLessThan(catalog.priceCents("pro", "monthly"));
+  });
+});
+
+describe("startup team", () => {
+  it("is Team free for six months, then half price for six, on up to 10 seats", () => {
+    expect(STARTUP_TEAM).toEqual({ freeMonths: 6, halfPriceMonths: 6, maxSeats: 10, maxRaisedUsd: 5_000_000, maxAgeYears: 3 });
+    expect(catalog.get("team").perSeat).toBe(true);
   });
 });

@@ -4,6 +4,7 @@
 // conditional structure are unchanged from when the page rendered them inline.
 import { formatCompact, formatMoney } from "@aimhuge/billing";
 import { ScanCode } from "@/components/team/ScanCode";
+import { freeTierCapLabel } from "@/lib/billing/plans";
 
 // Notices renders the stack of small messages above the main sections. Each notice pushes its own
 // conditional down here, so the page doesn't accumulate a long if/then chain just to label Stripe
@@ -127,7 +128,7 @@ export function UsageSection({
         </div>
       ) : (
         <div className="wz-billingUsage wz-billingUsageMuted">
-          Puku trial: 2M tokens a day on Weft&apos;s key. Upgrade to Pro for a monthly allowance.
+          Puku trial: {freeTierCapLabel()} on Weft&apos;s key. Upgrade to Pro for a monthly allowance.
         </div>
       )}
     </section>

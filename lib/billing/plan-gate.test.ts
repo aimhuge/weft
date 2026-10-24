@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { canHaveMembers, isPaid, workspaceCanHaveMembers, workspacePlan, TEAM_PLANS } from "./plan-gate";
+import { canHaveMembers, grantLapsed, isGrantPlan, isPaid, workspaceCanHaveMembers, workspacePlan, GRANT_PLANS, TEAM_PLANS } from "./plan-gate";
 
 // lib/billing/plan-gate.ts: which plans may have people, and what a workspace's plan is. The Supabase client is
 // a hand-rolled chain stub — only .from().select().eq().maybeSingle() is used, so a fake covers it without a database.
 
 // One .maybeSingle() answer for the org_subscriptions read.
-function serviceReturning(row: { plan?: unknown; status?: unknown } | null): never {
+function serviceReturning(row: { plan?: unknown; status?: unknown; trial_end?: unknown } | null): never {
   const chain = {
     select: () => chain,
     eq: () => chain,
@@ -15,8 +15,10 @@ function serviceReturning(row: { plan?: unknown; status?: unknown } | null): nev
 }
 
 describe("canHaveMembers", () => {
-  it("lets Pro and Team workspaces have members, and not Free", () => {
-    expect(TEAM_PLANS).toEqual(["pro", "team"]);
+  it("lets Open Source, Education, Pro and Team workspaces have members, and not Free", () => {
+    expect(TEAM_PLANS).toEqual(["oss", "edu", "pro", "team"]);
+    expect(canHaveMembers("oss")).toBe(true);
+    expect(canHaveMembers("edu")).toBe(true);
     expect(canHaveMembers("pro")).toBe(true);
     expect(canHaveMembers("team")).toBe(true);
     expect(canHaveMembers("free")).toBe(false);
@@ -78,7 +80,43 @@ describe("workspacePlan", () => {
   });
 });
 
+describe("granted plans", () => {
+  const now = new Date("2026-10-23T00:00:00Z");
+
+  it("are Open Source and Education", () => {
+    expect(GRANT_PLANS).toEqual(["oss", "edu"]);
+    expect(isGrantPlan("oss")).toBe(true);
+    expect(isGrantPlan("pro")).toBe(false);
+    expect(isGrantPlan(null)).toBe(false);
+  });
+
+  it("lapse once their period end has passed, or when it can't be read", () => {
+    expect(grantLapsed("oss", "2027-10-23T00:00:00Z", now)).toBe(false);
+    expect(grantLapsed("edu", "2026-10-22T00:00:00Z", now)).toBe(true);
+    expect(grantLapsed("oss", null, now)).toBe(true);
+    expect(grantLapsed("oss", "not a date", now)).toBe(true);
+  });
+
+  it("never lapse a plan Weft doesn't grant", () => {
+    expect(grantLapsed("pro", "2020-01-01T00:00:00Z", now)).toBe(false);
+    expect(grantLapsed(undefined, null)).toBe(false);
+  });
+
+  it("read as free in the gate once lapsed", async () => {
+    const live = serviceReturning({ plan: "oss", status: "active", trial_end: "2999-01-01T00:00:00Z" });
+    await expect(workspacePlan(live, "org-1")).resolves.toBe("oss");
+    const lapsed = serviceReturning({ plan: "edu", status: "active", trial_end: "2000-01-01T00:00:00Z" });
+    await expect(workspacePlan(lapsed, "org-1")).resolves.toBe("free");
+    await expect(workspaceCanHaveMembers(lapsed, "org-1")).resolves.toBe(false);
+  });
+});
+
 describe("isPaid", () => {
+  it("counts the granted $0 plans as not paid", () => {
+    expect(isPaid("oss")).toBe(false);
+    expect(isPaid("edu")).toBe(false);
+  });
+
   it("counts Pro and Team as paid and Free as not", () => {
     expect(isPaid("pro")).toBe(true);
     expect(isPaid("team")).toBe(true);

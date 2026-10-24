@@ -5,12 +5,13 @@
 import "server-only";
 import type { TeamActionResult } from "./team-types";
 import type { TeamContext } from "./teams";
+import { isPaid } from "./billing/plan-gate";
 
 type Subscription = { plan: string; status: string; cancel_at_period_end: boolean };
 
-// A plan that still bills: not free, not canceled, not already set to end with its period.
+// A plan that still bills: a paid one (not Free or a granted $0 plan), not canceled, not already set to end with its period.
 function stillBilling(sub: Subscription | null): sub is Subscription {
-  return !!sub && sub.plan !== "free" && sub.status !== "canceled" && !sub.cancel_at_period_end;
+  return !!sub && isPaid(sub.plan) && sub.status !== "canceled" && !sub.cancel_at_period_end;
 }
 
 export async function runDeleteTeam(ctx: TeamContext, confirm: string): Promise<TeamActionResult> {
