@@ -5,8 +5,9 @@ import LimitBurndown from "./LimitBurndown";
 import type { LimitSample } from "@/lib/limit-chart";
 import type { CardStats } from "@/lib/types";
 
-// The chart draws one CLI's plan from that CLI's readings only: Claude Code and puku-cli are on different
-// plans. With days logged before the week began, it reaches back into them (lib/limit-chart.ts).
+// The chart draws the account's plan from the account's readings: the plan limits are ONE pool per
+// account (lib/plan-pools.ts), so a card on puku-cli draws the same history as one on Claude Code. With
+// days logged before the week began, it reaches back into them (lib/limit-chart.ts).
 
 const DAY = 24 * 60 * 60 * 1000;
 const NOW = new Date("2026-10-23T22:00:00+07:00").getTime();
@@ -22,34 +23,33 @@ function sample(at: number, backend: "claude" | "puku", used: number): LimitSamp
   return { at, backend, kind: "seven_day", used, resetsAt: WEEKLY_RESET };
 }
 
-// A fetch that answers like /api/limits: the given samples, narrowed to the CLI in ?backend=.
+// A fetch that answers like /api/limits: the given samples.
 function serves(samples: LimitSample[]) {
-  return vi.fn<(url: string, init?: RequestInit) => Promise<{ ok: boolean; json: () => Promise<{ samples: LimitSample[] }> }>>(async (url) => {
+  return vi.fn<(url: string, init?: RequestInit) => Promise<{ ok: boolean; json: () => Promise<{ samples: LimitSample[] }> }>>(async () => {
     await Promise.resolve();
-    const backend = new URL(url, "http://localhost").searchParams.get("backend");
     return {
       ok: true,
       json: async () => {
         await Promise.resolve();
-        return { samples: backend ? samples.filter((x) => x.backend === backend) : samples };
+        return { samples };
       },
     };
   });
 }
 
 describe("LimitBurndown", () => {
-  it("asks for its own CLI's history, Claude Code's by default, and names the plan", async () => {
+  it("asks for the account's history and names the plan", async () => {
     const fetchMock = serves([]);
     vi.stubGlobal("fetch", fetchMock);
     vi.setSystemTime(NOW);
     render(<LimitBurndown stats={{ sevenDay: { used: 14, resetsAt: WEEKLY_RESET } }} />);
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/limits?backend=claude");
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/limits");
     expect(screen.getByText("Claude Code's plan")).toBeTruthy();
     cleanup();
     render(<LimitBurndown backend="puku" stats={{}} />);
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
-    expect(fetchMock.mock.calls[1]?.[0]).toBe("/api/limits?backend=puku");
+    expect(fetchMock.mock.calls[1]?.[0]).toBe("/api/limits");
     expect(screen.getByText("puku-cli's plan")).toBeTruthy();
   });
 
@@ -82,10 +82,10 @@ describe("LimitBurndown", () => {
     expect(days.length).toBe(10);
   });
 
-  it("keeps one CLI's history out of another's chart", async () => {
-    // A week of Claude Code readings and one of puku's own from today. Claude Code's card looks back
-    // into last week; puku's, with nothing logged before the week began, draws a plain week and does not
-    // borrow Claude Code's days.
+  it("reaches back into last week for a card on the CLI with the fewest readings", async () => {
+    // A week of Claude Code readings and one of puku's own from today. The plan limits are one pool per
+    // account, so puku's card draws the account's history and reaches back like Claude Code's — that was
+    // the bug: asking for one CLI's own readings left a puku card with two rows and nothing to look at.
     const history = [
       sample(NOW - 5 * DAY, "claude", 90),
       sample(NOW - 4 * DAY, "claude", 70),
@@ -104,8 +104,8 @@ describe("LimitBurndown", () => {
 
     render(<LimitBurndown backend="puku" stats={stats} />);
     const puku = screen.getByRole("img");
-    await waitFor(() => expect(puku.querySelectorAll("text").length).toBeGreaterThan(0));
-    expect(dayLabels(puku).length).toBe(7);
+    await waitFor(() => expect(Array.from(puku.querySelectorAll("text")).map((t) => t.textContent)).toContain("last week"));
+    expect(dayLabels(puku).length).toBe(10);
     cleanup();
 
     render(<LimitBurndown backend="claude" stats={stats} />);

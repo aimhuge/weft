@@ -1,13 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
 
-// /api/limits: the plan-limit history from lib/limit-history, for the burndown chart. Each CLI has its
-// own plan, so the chart asks for one CLI's readings with ?backend; without it, every CLI's.
+// /api/limits: the plan-limit history from lib/limit-history, for the burndown chart. The plan limits
+// are one pool per account (lib/plan-pools.ts), so ?backend asks for the PLAN's readings: asking for
+// claude and asking for puku give the same rows. Without it, every plan's.
 
 vi.mock("next/server", () => ({ connection: async () => {} }));
 vi.mock("@/lib/limit-history", () => ({
   readSamples: vi.fn(() => [
     { at: 1, backend: "claude", kind: "five_hour", used: 5 },
     { at: 2, backend: "puku", kind: "five_hour", used: 9 },
+    { at: 3, backend: "codex", kind: "five_hour", used: 3 },
   ]),
 }));
 
@@ -17,9 +19,27 @@ const route = await import("./limits/route");
 const READ = { host: "localhost:3457" };
 
 describe("GET /api/limits", () => {
-  it("returns every CLI's samples when no backend is asked for", async () => {
+  it("returns every plan's samples when no backend is asked for", async () => {
     const all = await route.GET(new Request("http://localhost:3457/api/limits", { headers: READ }));
     expect(await all.json()).toEqual({
+      samples: [
+        { at: 1, backend: "claude", kind: "five_hour", used: 5 },
+        { at: 2, backend: "puku", kind: "five_hour", used: 9 },
+        { at: 3, backend: "codex", kind: "five_hour", used: 3 },
+      ],
+    });
+  });
+
+  it("answers with the plan's readings, whichever CLI on it is asked for", async () => {
+    const claude = await route.GET(new Request("http://localhost:3457/api/limits?backend=claude", { headers: READ }));
+    expect(await claude.json()).toEqual({
+      samples: [
+        { at: 1, backend: "claude", kind: "five_hour", used: 5 },
+        { at: 2, backend: "puku", kind: "five_hour", used: 9 },
+      ],
+    });
+    const puku = await route.GET(new Request("http://localhost:3457/api/limits?backend=puku", { headers: READ }));
+    expect(await puku.json()).toEqual({
       samples: [
         { at: 1, backend: "claude", kind: "five_hour", used: 5 },
         { at: 2, backend: "puku", kind: "five_hour", used: 9 },
@@ -27,11 +47,9 @@ describe("GET /api/limits", () => {
     });
   });
 
-  it("returns one CLI's own readings when asked", async () => {
-    const claude = await route.GET(new Request("http://localhost:3457/api/limits?backend=claude", { headers: READ }));
-    expect(await claude.json()).toEqual({ samples: [{ at: 1, backend: "claude", kind: "five_hour", used: 5 }] });
-    const puku = await route.GET(new Request("http://localhost:3457/api/limits?backend=puku", { headers: READ }));
-    expect(await puku.json()).toEqual({ samples: [{ at: 2, backend: "puku", kind: "five_hour", used: 9 }] });
+  it("keeps another plan's readings out of it", async () => {
+    const codex = await route.GET(new Request("http://localhost:3457/api/limits?backend=codex", { headers: READ }));
+    expect(await codex.json()).toEqual({ samples: [{ at: 3, backend: "codex", kind: "five_hour", used: 3 }] });
   });
 
   it("refuses other hosts and reports errors", async () => {

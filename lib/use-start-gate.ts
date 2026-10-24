@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { apiFetch } from "./api-client";
 import { resetFor, threadReset, type PlanSample, type ResetAnswer } from "./limit-reset";
+import { poolKey } from "./plan-pools";
 import type { Backend, LimitWindow } from "./types";
 
 // When a new thread on this model and CLI can start, if it can't start now.
@@ -37,17 +38,25 @@ export const GATE_POLL_MS = 60_000;
 
 // The plan's own readings, as the flat sample list lib/limit-reset.ts reads.
 //
-// Each sample is stamped with when that CLI read the window; a payload without it falls back to the
-// CLI's last report.
-function samplesOf(plans: PlansPayload["plans"]): PlanSample[] {
+// The payload carries the ACCOUNT's windows on every CLI of that plan (lib/plan-limits.ts), so the
+// same window arrives once per CLI. One sample per POOL per window is what the plan log holds, so
+// that is what comes out: a sample per pool per window would be read as several readings of one
+// counter, and the newest of them would win over the one the server saw.
+export function samplesOf(plans: PlansPayload["plans"]): PlanSample[] {
   const samples: PlanSample[] = [];
+  const seen = new Set<string>();
   for (const [backend, reading] of Object.entries(plans ?? {}) as [Backend, PlanReadingPayload | undefined][]) {
     if (!reading) continue;
-    if (reading.fiveHour) {
-      samples.push({ backend, kind: "five_hour", used: reading.fiveHour.used, ...(reading.fiveHour.resetsAt !== undefined && { resetsAt: reading.fiveHour.resetsAt }), at: reading.fiveHourAt ?? reading.reportedAt });
-    }
-    if (reading.sevenDay) {
-      samples.push({ backend, kind: "seven_day", used: reading.sevenDay.used, ...(reading.sevenDay.resetsAt !== undefined && { resetsAt: reading.sevenDay.resetsAt }), at: reading.sevenDayAt ?? reading.reportedAt });
+    const pool = poolKey(backend);
+    for (const [kind, window, at] of [
+      ["five_hour", reading.fiveHour, reading.fiveHourAt ?? reading.reportedAt],
+      ["seven_day", reading.sevenDay, reading.sevenDayAt ?? reading.reportedAt],
+    ] as const) {
+      if (!window) continue;
+      const key = `${pool}:${kind}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      samples.push({ backend, kind, used: window.used, ...(window.resetsAt !== undefined && { resetsAt: window.resetsAt }), at });
     }
   }
   return samples;

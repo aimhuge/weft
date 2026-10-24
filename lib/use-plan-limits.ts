@@ -4,13 +4,14 @@ import { useEffect, useSyncExternalStore } from "react";
 import { apiFetch } from "./api-client";
 import type { PlanLimits } from "./plan-limits";
 
-// Each CLI's plan limits for the status strip (lib/plan-limits.ts), from /api/limits/plans. One copy for
+// The plan limits for the status strip (lib/plan-limits.ts), from /api/limits/plans: each CLI that has
+// reported, carrying the PLAN's windows. One copy for
 // every strip on screen, read again each minute and whenever a strip's refresh key changes (a card's
 // new reading). null until it loads, and where the route isn't there (the web board): the strip then
 // falls back on the card's own reading.
 //
 // The route also sends the models that have hit their own cap (lib/model-limit.ts): the limits are per
-// model as well as per CLI, so a model can be spent while its CLI's 5-hour window still has room. The
+// model as well as per plan, so a model can be spent while the plan's 5-hour window still has room. The
 // model pickers mark those models (components/ModelSelect.tsx). They read them from here rather than
 // importing lib/model-limit.ts, which reads the store off disk and so can't run in the browser.
 

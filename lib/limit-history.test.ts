@@ -33,13 +33,14 @@ describe("recordLimits", () => {
     recordLimits("puku", { fiveHour: { used: 12, resetsAt: 600 } }, 4000);
     recordLimits("puku", { fiveHour: { used: 12, resetsAt: 600.4 } }, 4500);
     recordLimits("puku", { fiveHour: { used: 12, resetsAt: 599.7 } }, 4600);
+    // puku reads the same counter as Claude Code (lib/plan-pools.ts), so its reading of 12 is the
+    // counter Claude Code already reported: no new row. Only a change in the window is a sample.
     expect(lines()).toEqual([
       { at: 1000, backend: "claude", kind: "five_hour", used: 10, resetsAt: 600 },
       { at: 1000, backend: "claude", kind: "seven_day", used: 3 },
       { at: 3000, backend: "claude", kind: "five_hour", used: 12, resetsAt: 600 },
-      { at: 4000, backend: "puku", kind: "five_hour", used: 12, resetsAt: 600 },
     ]);
-    expect(readSamples(5000).map((s) => s.at)).toEqual([1000, 1000, 3000, 4000]);
+    expect(readSamples(5000).map((s) => s.at)).toEqual([1000, 1000, 3000]);
   });
 
   it("picks up where the file left off after a restart", async () => {
@@ -86,7 +87,9 @@ describe("setOnLimitReset", () => {
     expect(seen).toEqual([50]);
   });
 
-  it("fires per backend: puku reset doesn't re-fire claude's hook", async () => {
+  it("fires per plan: one pool, one reset, whichever CLI reported it", async () => {
+    // The plan limits are one pool per account (lib/plan-pools.ts), so Claude Code and puku-cli read
+    // one counter: the reset is the account's, and it fires once — not once per CLI.
     const { recordLimits, setOnLimitReset } = await load();
     const seen: string[] = [];
     setOnLimitReset((s) => seen.push(s.backend));
@@ -94,7 +97,18 @@ describe("setOnLimitReset", () => {
     recordLimits("puku", { fiveHour: { used: 100, resetsAt: 600 } }, 1500);
     recordLimits("puku", { fiveHour: { used: 40, resetsAt: 700 } }, 2000);
     recordLimits("claude", { fiveHour: { used: 30, resetsAt: 700 } }, 2500);
-    expect(seen).toEqual(["puku", "claude"]);
+    expect(seen).toEqual(["puku"]);
+  });
+
+  it("fires once per plan: another plan's reset is its own", async () => {
+    const { recordLimits, setOnLimitReset } = await load();
+    const seen: string[] = [];
+    setOnLimitReset((s) => seen.push(s.backend));
+    recordLimits("claude", { fiveHour: { used: 100, resetsAt: 600 } }, 1000);
+    recordLimits("codex", { fiveHour: { used: 100, resetsAt: 600 } }, 1500);
+    recordLimits("codex", { fiveHour: { used: 40, resetsAt: 700 } }, 2000);
+    recordLimits("claude", { fiveHour: { used: 30, resetsAt: 700 } }, 2500);
+    expect(seen).toEqual(["codex", "claude"]);
   });
 
   it("fires for the weekly window too", async () => {

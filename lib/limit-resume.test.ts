@@ -91,16 +91,30 @@ describe("resumeParkedCards", () => {
     });
   });
 
-  it("does not touch cards on a different backend", () => {
+  it("resumes a card parked on the pool's limit, whichever CLI on the pool reported the reset", () => {
+    // One account, one counter (lib/plan-pools.ts): a puku card parked on the account's spent window
+    // is waiting for the same reset a Claude Code card is, so it resumes with it.
     const claude = addCard();
     const puku = addCard({ id: "p1", backend: "puku" });
     seedThread(claude.id, [{ kind: "user", text: "ask", at: 1 }]);
     seedThread(puku.id, [{ kind: "user", text: "ask", at: 1 }]);
     const resumed = resumeParkedCards("claude", "five_hour", 5000);
+    expect(resumed).toBe(2);
+    expect(sent.map((s) => s.id).sort()).toEqual([claude.id, puku.id].sort());
+    expect(store.cards.get(puku.id)?.rateLimitHit).toBe(false);
+    expect(store.cards.get(puku.id)?.autoResumedAt).toBe(5000);
+  });
+
+  it("does not touch cards on another plan", () => {
+    const claude = addCard();
+    const codex = addCard({ id: "c1", backend: "codex" });
+    seedThread(claude.id, [{ kind: "user", text: "ask", at: 1 }]);
+    seedThread(codex.id, [{ kind: "user", text: "ask", at: 1 }]);
+    const resumed = resumeParkedCards("claude", "five_hour", 5000);
     expect(resumed).toBe(1);
     expect(sent.map((s) => s.id)).toEqual([claude.id]);
-    expect(store.cards.get(puku.id)?.rateLimitHit).toBe(true);
-    expect(store.cards.get(puku.id)?.autoResumedAt).toBeUndefined();
+    expect(store.cards.get(codex.id)?.rateLimitHit).toBe(true);
+    expect(store.cards.get(codex.id)?.autoResumedAt).toBeUndefined();
   });
 
   it("skips archived cards and leaves them flagged", () => {
@@ -156,10 +170,10 @@ describe("resumeParkedCards", () => {
     expect(store.cards.get(card.id)?.lastLine).toBe("Auto-resumed after weekly reset");
   });
 
-  it("resumes multiple parked cards on the same backend in one call", () => {
+  it("resumes multiple parked cards on the pool in one call", () => {
     const a = addCard();
     const b = addCard({ id: "b" });
-    const c = addCard({ id: "c", backend: "puku" });
+    const c = addCard({ id: "c", backend: "codex" });
     seedThread(a.id, [{ kind: "user", text: "a", at: 1 }]);
     seedThread(b.id, [{ kind: "user", text: "b", at: 1 }]);
     seedThread(c.id, [{ kind: "user", text: "c", at: 1 }]);

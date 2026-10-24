@@ -24,12 +24,26 @@ describe("planWindow", () => {
     expect(planWindow([], "claude", "five_hour", NOW)).toBeUndefined();
   });
 
-  it("ignores samples for other backends and kinds", () => {
+  it("ignores samples for other plans and kinds", () => {
     const samples = [
-      sample({ backend: "puku" }),
+      sample({ backend: "codex" }),
       sample({ kind: "seven_day" }),
     ];
     expect(planWindow(samples, "claude", "five_hour", NOW)).toBeUndefined();
+  });
+
+  it("answers with the pool's window, whichever CLI on it reported", () => {
+    // The plan limits are one pool per account (lib/plan-pools.ts): Claude Code and puku-cli read the
+    // same windows, so a puku reading is the answer for a Claude thread, and the other way round.
+    const samples = [sample({ backend: "puku", used: 90, at: NOW - 5_000 })];
+    expect(planWindow(samples, "claude", "five_hour", NOW)).toEqual({ used: 90 });
+    expect(planWindow(samples, "puku", "five_hour", NOW)).toEqual({ used: 90 });
+  });
+
+  it("keeps another plan's window out of it", () => {
+    const samples = [sample({ backend: "codex", used: 90 })];
+    expect(planWindow(samples, "claude", "five_hour", NOW)).toBeUndefined();
+    expect(planWindow(samples, "puku", "five_hour", NOW)).toBeUndefined();
   });
 
   it("returns the newest sample for that backend and kind", () => {
@@ -138,6 +152,22 @@ describe("resetFor", () => {
   it("does not count a spent window whose reset time is unknown", () => {
     const samples = [sample({ used: 100 })];
     expect(resetFor("claude", undefined, samples, [], NOW)).toBeUndefined();
+  });
+
+  it("gates a CLI on the pool's spent window, whichever CLI reported it", () => {
+    // One account, one window: a puku thread waits for the window Claude Code spent.
+    const samples = [sample({ backend: "claude", used: 100, resetsAt: RESET_AT / 1000 })];
+    expect(resetFor("puku", undefined, samples, [], NOW)).toEqual({
+      at: RESET_AT,
+      kind: "five_hour",
+      subject: "puku",
+    });
+  });
+
+  it("doesn't gate a CLI on another plan's spent window", () => {
+    const samples = [sample({ backend: "codex", used: 100, resetsAt: RESET_AT / 1000 })];
+    expect(resetFor("claude", undefined, samples, [], NOW)).toBeUndefined();
+    expect(resetFor("puku", undefined, samples, [], NOW)).toBeUndefined();
   });
 });
 

@@ -245,7 +245,8 @@ The new-thread dialog (⌘N) and every card's reply box use the same editor:
   mark where a limit was hit; green lines mark the 5-hour resets (light), the next one (strong) and the
   weekly reset (strongest). Hours inside a 5-hour window with nothing logged are hatched. Weft asks each
   thread's CLI for its limits after a turn (at most every 5 minutes) and keeps the changes in `~/.weft/limits.jsonl`.
-  Each CLI has its own plan (Claude Code on Anthropic's, puku-cli on Puku's), so the chart draws the open card's CLI's.
+  The plan limits are one pool per account (Claude Code and puku-cli both read the same Anthropic
+  subscription's windows), so the chart draws the account's whole history whichever CLI the card runs on.
 - **Status strip: the thread and the plan.** An open card's strip names its CLI and model (`[puku · opus-4-8]`,
   the model its session started on), then context, cache and tokens, then that CLI's plan limits. Every card
   on one CLI shows the same limits, the newest any of them read, and a window whose reset has passed reads

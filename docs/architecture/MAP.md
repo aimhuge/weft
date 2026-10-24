@@ -60,8 +60,8 @@ matching doc below. When a feature lands, add or update its entry here and in it
 - `profiles.md` — public profiles at `weft.zip/@username`: `profiles.username`, the `/@` → `/u/[username]` rewrite, what the page shows and never shows.
 - `sharing.md` — a card's share link on weft.zip: thread + pane, live; the `@aimhuge/share` modes and gate, `cloud_shares`, the sandboxed pane, redaction.
 - `copilot-suggestions.md` — the copilot's empty-chat chips: what Haiku reads, the one run per board labeled by project, the client filter, setup gaps and `setup_status`.
-- `limits.md` — the three limits a thread can meet (the model's own cap, the CLI's weekly and 5-hour windows), their stores and the start gate.
-- `limits-burndown.md` — the status strip's `5hr` / `7d` hover chart: a week of 15-minute bars for the 5-hour limit left against the weekly one.
+- `limits.md` — the three limits a thread can meet (the model's own cap, the account's weekly and 5-hour windows), their stores and the start gate.
+- `limits-burndown.md` — the status strip's `5hr` / `7d` hover chart: a week of 15-minute bars for the 5-hour limit left against the weekly one, and why the plan limits are one pool per account.
 - `worktrees.md` — isolated cards, the opt-in git worktree per card: its CLI, Bash, dev server and commits live there, and Done lands its branch back.
 - `copilot-personas.md` — the copilot's personas (Wingman, Founder, Captain): the prompt each adds, the lane header picker, why a switch starts a new chat.
 
@@ -163,8 +163,10 @@ When a new doc lands in this folder, add it here on the same change.
   doesn't get its first turn now: the New thread dialog's button reads "Start at 2:30am" and `startCard` (`lib/new-card.ts`) schedules
   the prompt for the reset instead of starting a thread that dies in Needs you. The reply box reads the same gate, so a model's own cap
   reaches it too (docs/architecture/limits.md).
-  Each CLI has its own plan (Claude Code on Anthropic's, puku-cli on Puku's), so the strip's numbers and the chart's history
-  are the open card's CLI's own (docs/architecture/limits.md, docs/architecture/limits-burndown.md).
+  The plan limits are **one pool per account** — Claude Code and puku-cli read the same Anthropic
+  subscription's windows, so the strip's numbers and the chart's history are the account's, whichever CLI
+  the open card runs on. `lib/plan-pools.ts` is where that mapping lives (docs/architecture/limits.md,
+  docs/architecture/limits-burndown.md).
 - `components/SettingsDialog.tsx` + `lib/settings-nav.ts`: Settings, full window over a scene, pages down the left (General, Laptop mode, Models,
   Threads, Security, Automations, Shortcuts, Accounts, Teams, Sync); Laptop mode is `components/LaptopModeCard.tsx` + `LaptopModeRules.tsx` over `electron/keep-working*.cjs`; Models holds every model pick, new threads' through `components/NewThreadDefaults.tsx`;
   the four rows (NewThreadDefaults, SubagentPicker, CopilotPicker, DonePicker) share `components/Pickers.tsx`

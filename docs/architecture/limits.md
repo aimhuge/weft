@@ -8,10 +8,11 @@ A thread can meet a limit in three places, and each has its own store:
 | The account's weekly window | `~/.weft/limits.jsonl` | `lib/limit-history.ts` |
 | The account's 5-hour window | the same plan log, plus the card's own snapshot `card.stats.fiveHour` | `lib/limit-history.ts`, `lib/store.ts` |
 
-**Each CLI has its own plan** (Claude Code on Anthropic's, puku-cli on Puku's, Codex on OpenAI's), so the
-plan limits are read per CLI: a sample's `backend` is the CLI whose session read it, and a thread on one CLI
-is gated by that CLI's windows only. The model's cap is per model (docs/architecture/limits-burndown.md has
-the rule and why it is not one shared pool).
+**The plan limits are one pool per account** (Claude Code and puku-cli read the same Anthropic
+subscription's windows; Codex is on OpenAI's), so the plan limits are read per **plan**: a sample's
+`backend` is the CLI whose session read it, but the window it carries is the account's, and a thread on
+one CLI of that account is gated by the account's windows. The model's cap is per model
+(docs/architecture/limits-burndown.md has the rule and the proof that the counter is Anthropic's).
 
 `lib/limit-reset.ts` reconciles them. It is the one answer to "when does this reset?", and it is
 pure: the stores come in as data, so the server and the browser run the same code and always
@@ -29,6 +30,12 @@ reads the stores off disk and is the answer that matters. `lib/use-start-gate.ts
 numbers from `/api/limits/plans` and only draws the label ("Start at 2:30am"). A stale label can
 be wrong for a minute; the server's answer cannot.
 
+**Both readers see one window per plan.** The server reads the raw log, where a plan has one reading
+per window. The client reads the `/api/limits/plans` payload, where the account's window arrives on
+*every* CLI of the plan, so `samplesOf()` reduces it to one sample per pool per window before
+`planWindow()` sees it. Read as two readings of one counter, the newer of the pair would win over the
+one the server saw — and the two would disagree about when the window opens.
+
 **The tightest limit wins.** The model's own cap comes first (it is the tighter limit, and the one
 the user picked), then the plan's weekly window (the one that blocks for days), then its 5-hour
 window.
@@ -39,8 +46,9 @@ caller falls back to "wait an hour" rather than pretending to know.
 ## Key files
 
 - `lib/limit-reset.ts` (new) — the pure module.
-  - `planWindow(samples, backend, kind, now)` → that CLI's own newest reading of one window; `undefined` once its reset has passed (the window is full again and
-    the next one isn't known yet).
+  - `planWindow(samples, backend, kind, now)` → the newest reading of one window by ANY CLI on that
+    plan (`lib/plan-pools.ts`), since the window is the account's; `undefined` once its reset has
+    passed (the window is full again and the next one isn't known yet).
   - `modelResetsAt(model, limits, now)` → when this model's own cap frees up (unix ms).
   - `resetFor(backend, model, samples, limits, now)` → `ResetAnswer | undefined` for a thread that
     would run on that model and CLI: `{ at, kind: "five_hour" | "seven_day" | "model", subject }`.
@@ -66,7 +74,8 @@ caller falls back to "wait an hour" rather than pretending to know.
   pickers; the same route ships the models that have hit their own cap.
 - `app/api/cards/route.ts` — `POST` returns the `start` answer: `{ started, at }`.
 - `app/api/limits/plans/route.ts` — `GET` returns `{ plans, models }`: one entry per CLI that has
-  reported, with its own newest window readings, and the models at their cap.
+  reported, carrying the PLAN's newest window readings, and the models at their cap.
+- `lib/plan-pools.ts` — which CLIs read one plan's counter: `poolOf()`, `samePool()`, `poolKey()`.
 - `components/NewCardDialog.tsx`, `components/NewCardDialogFooter.tsx` — the button's label and the
   warn-coloured status line.
 - `components/ReplyBox.tsx`, `components/ThreadFooter.tsx` — the thread's own gate.

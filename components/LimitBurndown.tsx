@@ -25,21 +25,22 @@ const MARK_STYLE: Record<Mark["kind"], { stroke: string; width: number; opacity:
   hit: { stroke: "var(--danger)", width: 2.5, opacity: 1 },
 };
 
-// One CLI's limit history: each CLI has its own plan (Claude Code on Anthropic's, puku-cli on Puku's), so
-// the plot reads only the readings of the CLI whose plan it draws. A CLI with no readings from before the
-// week began gets no lookback (lib/limit-chart.ts), which is correct: there is nothing to look back at.
-function useSamples(backend: Backend) {
+// The account's limit history: the plan limits are ONE pool per account (lib/plan-pools.ts), so the plot
+// reads every reading of the plan the card's CLI is on. Asking for one CLI's own readings would starve
+// the lookback (lib/limit-chart.ts): a card on the CLI with the fewest readings had nothing to look back
+// at, and the weekly lookback could never fire.
+function useSamples() {
   const [samples, setSamples] = useState<LimitSample[]>([]);
   useEffect(() => {
     let live = true;
-    apiFetch(`/api/limits?backend=${backend}`)
+    apiFetch("/api/limits")
       .then((res) => (res.ok ? res.json() : { samples: [] }))
       .then((body: { samples?: LimitSample[] }) => live && setSamples(body.samples ?? []))
       .catch(() => {});
     return () => {
       live = false;
     };
-  }, [backend]);
+  }, []);
   return samples;
 }
 
@@ -187,12 +188,12 @@ function Key({ color, width = 2, height = 10, opacity = 1, label }: { color: str
   );
 }
 
-// One CLI's plan: `stats` holds its latest windows (lib/plan-limits.ts), the history is that CLI's readings.
+// A plan: `stats` holds its latest windows (lib/plan-limits.ts), the history is the account's.
 export default function LimitBurndown({ backend = "claude", stats }: { backend?: Backend; stats: CardStats }) {
-  const samples = useSamples(backend);
+  const samples = useSamples();
   const now = useNow();
   if (!now) return null;
-  const chart = limitsChart(samples, stats, now);
+  const chart = limitsChart(samples, stats, now, backend);
   return (
     <div className="flex flex-col gap-1.5 font-sans">
       <div className="flex justify-between gap-3 text-[11.5px]">

@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const apiFetch = vi.hoisted(() => vi.fn());
 vi.mock("./api-client", () => ({ apiFetch }));
 
-const { GATE_POLL_MS, loadGates, resetGates, useStartGate, useThreadGate } = await import("./use-start-gate");
+const { GATE_POLL_MS, loadGates, resetGates, samplesOf, useStartGate, useThreadGate } = await import("./use-start-gate");
 
 const NOW = Date.now();
 const RESET_AT = NOW + 4 * 60 * 60 * 1000;
@@ -89,16 +89,60 @@ describe("useStartGate", () => {
     expect(result.current).toEqual({ at: RESET_AT, kind: "five_hour", subject: "claude" });
   });
 
-  it("gates a CLI on its own plan: Claude Code's spent window doesn't hold a puku thread", async () => {
+  it("gates both CLIs on the pool's spent window", async () => {
+    // One account, one counter (lib/plan-pools.ts): the payload carries the ACCOUNT's window on both
+    // CLIs, and a spent window holds a puku thread exactly as it holds a Claude Code one.
     plans({
       plans: {
         claude: { fiveHour: { used: 100, resetsAt: RESET_AT / 1000 }, fiveHourAt: NOW, reportedAt: NOW },
-        puku: { fiveHour: { used: 20, resetsAt: RESET_AT / 1000 }, fiveHourAt: NOW, reportedAt: NOW },
+        puku: { fiveHour: { used: 100, resetsAt: RESET_AT / 1000 }, fiveHourAt: NOW, reportedAt: NOW },
       },
     });
     await loadGates();
     expect(renderHook(() => useStartGate("claude", undefined)).result.current).toEqual({ at: RESET_AT, kind: "five_hour", subject: "claude" });
-    expect(renderHook(() => useStartGate("puku", undefined)).result.current).toBeUndefined();
+    expect(renderHook(() => useStartGate("puku", undefined)).result.current).toEqual({ at: RESET_AT, kind: "five_hour", subject: "puku" });
+  });
+
+  it("doesn't gate a CLI on another plan's spent window", async () => {
+    // A Codex thread is on OpenAI's plan: Anthropic's spent window says nothing about it.
+    plans({
+      plans: {
+        claude: { fiveHour: { used: 100, resetsAt: RESET_AT / 1000 }, fiveHourAt: NOW, reportedAt: NOW },
+        codex: { reportedAt: NOW },
+      },
+    });
+    await loadGates();
+    expect(renderHook(() => useStartGate("codex", undefined)).result.current).toBeUndefined();
+  });
+
+  it("dates the window with the pool's read time, not the reporting CLI's", async () => {
+    // The pool's window was read at 10:00; puku reported at 11:00. The window belongs to the pool, so
+    // the sample that answers the gate is the pool's reading — puku's own last report cannot make a
+    // window look newer (or older) than it is.
+    const POOL_READ = NOW - 60 * 60 * 1000;
+    plans({
+      plans: {
+        claude: { fiveHour: { used: 100, resetsAt: RESET_AT / 1000 }, fiveHourAt: POOL_READ, reportedAt: POOL_READ },
+        puku: { fiveHour: { used: 100, resetsAt: RESET_AT / 1000 }, fiveHourAt: POOL_READ, reportedAt: NOW },
+      },
+    });
+    await loadGates();
+    expect(renderHook(() => useStartGate("puku", undefined)).result.current).toEqual({ at: RESET_AT, kind: "five_hour", subject: "puku" });
+  });
+
+  it("reads one window per pool, not one per CLI", () => {
+    // The payload carries the account's window on every CLI of the plan. Read as two readings of one
+    // counter, the newer of the two would win — and the older copy could hold a stale number. One
+    // sample per pool is what the plan log holds, so that is what the gate reads.
+    const samples = samplesOf({
+      claude: { fiveHour: { used: 100, resetsAt: RESET_AT / 1000 }, fiveHourAt: NOW, reportedAt: NOW },
+      puku: { fiveHour: { used: 100, resetsAt: RESET_AT / 1000 }, fiveHourAt: NOW, reportedAt: NOW },
+      codex: { sevenDay: { used: 40, resetsAt: RESET_AT / 1000 }, sevenDayAt: NOW, reportedAt: NOW },
+    });
+    expect(samples).toEqual([
+      { backend: "claude", kind: "five_hour", used: 100, resetsAt: RESET_AT / 1000, at: NOW },
+      { backend: "codex", kind: "seven_day", used: 40, resetsAt: RESET_AT / 1000, at: NOW },
+    ]);
   });
 
   it("answers with the model's own cap", async () => {

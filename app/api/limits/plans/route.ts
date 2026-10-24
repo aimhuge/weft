@@ -4,11 +4,12 @@ import { readSamples } from "@/lib/limit-history";
 import { modelLimits } from "@/lib/model-limit";
 import { planLimits } from "@/lib/plan-limits";
 
-// Each CLI's newest 5-hour and weekly reading, for the status strip (lib/plan-limits.ts). Every CLI has
-// its own plan, so the strip shows the open card's CLI's plan, or every CLI's when no card is open.
+// The plan limits, for the status strip (lib/plan-limits.ts): each CLI that has reported, carrying the
+// PLAN's newest 5-hour and weekly reading. The plan limits are one pool per account (lib/plan-pools.ts),
+// so the strip shows the open card's CLI's plan, or every CLI's when no card is open.
 //
 // The models that have hit their own cap come with it (lib/model-limit.ts): the limits are per model as
-// well as per CLI, so a model can be spent while the CLI's 5-hour window still has room. The New thread
+// well as per plan, so a model can be spent while the plan's 5-hour window still has room. The New thread
 // dialog reads both to know whether a thread can start now (lib/limit-reset.ts).
 export async function GET(req: Request) {
   const denied = guard(req, { write: false });

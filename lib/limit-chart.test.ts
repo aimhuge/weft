@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DAY, FIVE_HOURS, fiveHourNow, hitMarks, HOUR, leftAt, limitsChart, QUARTER_HOUR, resetMarks, resetMs, shareLeft, WEEK, weekEnd, type LimitSample } from "./limit-chart";
+import { DAY, FIVE_HOURS, fiveHourNow, hitMarks, HOUR, leftAt, limitsChart, QUARTER_HOUR, resetMarks, resetMs, shareLeft, WEEK, weekEnd, withCurrent, type LimitSample } from "./limit-chart";
 
 // The status strip's limits chart: 672 15-minute slots of the 5-hour limit (4 per hour), 7 day slots
 // of the weekly one with their burn-down edge, hits and reset lines.
@@ -78,6 +78,22 @@ describe("resetMarks", () => {
     ]);
     expect(resetMarks([], T0 - HOUR, T0 - WEEK, T0 + HOUR, T0)).toEqual([{ at: T0 + HOUR, kind: "week" }]);
     expect(resetMarks([], undefined, T0 - WEEK, T0 + 2 * HOUR, T0)).toEqual([{ at: T0 + 2 * HOUR, kind: "week" }]);
+  });
+});
+
+describe("withCurrent", () => {
+  const now = T0 + HOUR;
+
+  it("stamps the card's own reading with the card's CLI, not with a hardcoded claude", () => {
+    // A puku card's reading used to fall back to "claude" when the history had no reading of that
+    // kind yet: the same mislabeling docs/bug-fixes/031-puku-cards-showed-claudes-limits.md is about.
+    const rows = withCurrent([], { fiveHour: { used: 40, resetsAt: sec(T0 + 3 * HOUR) } }, now, "puku");
+    expect(rows).toEqual([{ at: now, backend: "puku", kind: "five_hour", used: 40, resetsAt: sec(T0 + 3 * HOUR) }]);
+  });
+
+  it("adds no reading when the history already says the same", () => {
+    const rows = [five(now - HOUR, 40, T0 + 3 * HOUR)];
+    expect(withCurrent(rows, { fiveHour: { used: 40, resetsAt: sec(T0 + 3 * HOUR) } }, now, "puku")).toEqual(rows);
   });
 });
 

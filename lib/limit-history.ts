@@ -3,11 +3,17 @@ import path from "node:path";
 import { globalSingleton } from "./global-singleton";
 import { DATA_DIR } from "./store";
 import { resetMs, type LimitKind, type LimitSample } from "./limit-chart";
+import { poolKey } from "./plan-pools";
 import type { Backend, CardStats } from "./types";
 
 // The plan limits over time, for the status strip's burndown chart (components/LimitBurndown.tsx): a
 // card only keeps the latest 5-hour and weekly window, so each change is also appended to
-// ~/.weft/limits.jsonl, one sample per line, per CLI. A week and a day of it is kept.
+// ~/.weft/limits.jsonl, one sample per line, naming the CLI that reported it. A week and a day of it
+// is kept.
+//
+// A sample names the CLI that REPORTED a reading; the window it carries is the plan's (lib/plan-pools.ts).
+// So what Weft remembers between two samples is per PLAN: one account's counter, read by whichever CLI
+// last reported it. Keying that memory per CLI would log the same window twice and see one reset twice.
 
 export const LIMITS_FILE = path.join(DATA_DIR, "limits.jsonl");
 export const KEEP_MS = 8 * 24 * 60 * 60 * 1000;
@@ -34,7 +40,9 @@ export function setOnLimitReset(handler: (sample: LimitSample) => void): ((sampl
   return prev;
 }
 
-const key = (backend: Backend, kind: LimitKind) => `${backend}:${kind}`;
+// What Weft remembers between two samples, per PLAN and window: the plan's counter is one, so the
+// memory of it is one, whichever CLI reported it.
+const key = (backend: Backend, kind: LimitKind) => `${poolKey(backend)}:${kind}`;
 
 function parse(line: string): LimitSample | null {
   try {
@@ -78,9 +86,9 @@ export function changedSamples(backend: Backend, patch: Partial<CardStats>, last
   return out;
 }
 
-// Logs what a thread just learned about its CLI's limits (lib/runner-turn.ts). Never throws: the chart
+// Logs what a thread just learned about its plan's limits (lib/runner-turn.ts). Never throws: the chart
 // is a nicety, the turn isn't. When a window's used share drops from >=100 to <100 between two
-// samples, fires the onReset hook (lib/limit-resume.ts) so parked cards on that backend get replayed.
+// samples, fires the onReset hook (lib/limit-resume.ts) so parked cards on that plan get replayed.
 export function recordLimits(backend: Backend, patch: Partial<CardStats>, now = Date.now()) {
   const l = log();
   if (!l.last.size) for (const s of readSamples(now)) l.last.set(key(s.backend, s.kind), s);

@@ -166,13 +166,17 @@ function addsReading(w: CardStats["fiveHour"], last: LimitSample | undefined, no
 }
 
 // The card's current windows as readings at now, when they add anything to the history.
-function withCurrent(rows: LimitSample[], stats: CardStats, now: number): LimitSample[] {
+//
+// The reading is the card's own, so it carries the card's CLI's name. It used to fall back to "claude"
+// when the history had no reading of that kind yet, which put a puku card's reading under Claude's
+// name — the very mislabeling docs/bug-fixes/031-puku-cards-showed-claudes-limits.md is about.
+export function withCurrent(rows: LimitSample[], stats: CardStats, now: number, backend: Backend): LimitSample[] {
   const out = rows.filter((s) => s.at <= now).sort((a, b) => a.at - b.at);
   const windows: [LimitKind, CardStats["fiveHour"]][] = [["five_hour", stats.fiveHour], ["seven_day", stats.sevenDay]];
   for (const [kind, w] of windows) {
     const last = out.findLast((s) => s.kind === kind);
     if (!addsReading(w, last, now)) continue;
-    out.push({ at: now, backend: last?.backend ?? "claude", kind, used: w.used, ...(w.resetsAt !== undefined && { resetsAt: w.resetsAt }) });
+    out.push({ at: now, backend, kind, used: w.used, ...(w.resetsAt !== undefined && { resetsAt: w.resetsAt }) });
   }
   return out;
 }
@@ -195,11 +199,14 @@ export function fiveHourNow(rows: LimitSample[], stats: CardStats, now: number):
   return { left: level, from: reset - FIVE_HOURS, to: reset };
 }
 
-// The whole chart for one CLI's history and its latest windows. Without a known weekly reset, the
-// week is the 7 days ending a 5-hour window from now. In a week's first NEW_WEEK, with history from
+// The whole chart for the account's history and a card's latest windows. Without a known weekly reset,
+// the week is the 7 days ending a 5-hour window from now. In a week's first NEW_WEEK, with history from
 // before its reset, it starts LOOKBACK_DAYS earlier so the week before's last days stay in view.
-export function limitsChart(samples: LimitSample[], stats: CardStats, now: number): LimitsChart {
-  const rows = withCurrent(samples, stats, now);
+//
+// The history is the plan's whole history (lib/plan-pools.ts): the windows are one account's, so the
+// chart draws them all, and the card's CLI only names the plan.
+export function limitsChart(samples: LimitSample[], stats: CardStats, now: number, backend: Backend = "claude"): LimitsChart {
+  const rows = withCurrent(samples, stats, now, backend);
   const end = weekEnd(rows, stats, now) ?? now + FIVE_HOURS;
   const weekStart = end - WEEK;
   const back = now - weekStart < NEW_WEEK && rows.some((s) => s.at < weekStart) ? LOOKBACK_DAYS : 0;

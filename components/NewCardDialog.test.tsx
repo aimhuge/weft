@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { NewCardInput } from "@/lib/client";
 import type { Card, RestartStatus } from "@/lib/types";
 import { isMac } from "@/lib/hotkeys";
+import { formatAt } from "@/lib/schedule";
 import { makeCard } from "./test-utils";
 import NewCardDialog from "./NewCardDialog";
 
@@ -195,8 +196,10 @@ describe("NewCardDialog", () => {
     // A thread started on a spent model fails on its first turn, so the button waits for the reset
     // instead (lib/start-gate.ts decides on the server; this names it).
     const resetAt = Date.now() + 4 * 60 * 60 * 1000;
-    // formatAt() names the time the way the footer does (lib/schedule.ts).
-    const when = new Date(resetAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }).replace(" ", "").toLowerCase();
+    // formatAt() names the time the way the footer does (lib/schedule.ts) — and it prefixes the
+    // weekday when the reset is not today, so the label moves with the clock. Build the same string
+    // here instead of hand-rolling the time: four hours from now is often tomorrow.
+    const when = formatAt(resetAt);
 
     it("offers Start at the reset instead of Start now", () => {
       gate.at = resetAt;

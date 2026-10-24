@@ -1,3 +1,4 @@
+import { samePool } from "./plan-pools";
 import type { Backend, LimitWindow } from "./types";
 
 // When a limit frees up. One answer for every place that has to decide "can this run now, or should it
@@ -6,12 +7,13 @@ import type { Backend, LimitWindow } from "./types";
 //
 // The reset time lives in three stores, and they answer different questions:
 //
-//   - the plan log (lib/limit-history.ts → ~/.weft/limits.jsonl): per CLI. "Claude Code's 5-hour window
-//     is at 100%, and it resets at 2:30am." A new thread on Claude needs this: the limit is the CLI's,
-//     not the model's.
-//   - the card's own reading (card.stats.fiveHour): one card's last snapshot of its CLI's window.
+//   - the plan log (lib/limit-history.ts → ~/.weft/limits.jsonl): per reading, per plan. "The 5-hour
+//     window is at 100%, and it resets at 2:30am." A new thread needs this: the limit is the PLAN's,
+//     not the model's. The log says which CLI reported a reading; the window is the plan's, so any CLI
+//     on that plan answers for it (lib/plan-pools.ts).
+//   - the card's own reading (card.stats.fiveHour): one card's last snapshot of its window.
 //   - the per-model store (lib/model-limit.ts → ~/.weft/model-limits.json): per model. "Opus ran out on
-//     its own weekly cap, until 2:30am." A model can be spent while the CLI's 5-hour window has room,
+//     its own weekly cap, until 2:30am." A model can be spent while the plan's 5-hour window has room,
 //     so this one comes first when the model is known.
 //
 // A limit that has no reset time (a weekly cap whose end Weft never learned) has no answer here: the
@@ -46,7 +48,11 @@ export interface ModelLimitView {
 }
 
 // The plan's own window for a CLI, as the newest reading of it: the window as it stands now, and when it
-// resets. The limit log is per backend:kind, so this is the newest sample of that pair.
+// resets.
+//
+// The window is the PLAN's, so any CLI on that plan reports it: Claude Code and puku-cli read one
+// account's windows (lib/plan-pools.ts). That is what keeps the server's answer (the raw log, here) and
+// the client's (the /api/limits/plans payload, lib/plan-limits.ts) in agreement about one account.
 export function planWindow(
   samples: PlanSample[],
   backend: Backend,
@@ -55,7 +61,7 @@ export function planWindow(
 ): LimitWindow | undefined {
   let best: { used: number; resetsAt?: number; at: number } | undefined;
   for (const s of samples) {
-    if (s.backend !== backend || s.kind !== kind) continue;
+    if (!samePool(s.backend, backend) || s.kind !== kind) continue;
     if (!best || s.at >= best.at) {
       best = { used: s.used, ...(s.resetsAt !== undefined && { resetsAt: s.resetsAt }), at: s.at };
     }
