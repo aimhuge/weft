@@ -1,6 +1,7 @@
 // Refreshes the weft.zip visitor's Supabase session cookie before the team pages render (lib/web-session.ts):
 // Server Components can read cookies but not write them, so an expired access token is swapped here. Only on the
-// deployed Weft; the desktop board's routes never match, and a local Weft passes straight through.
+// deployed Weft, or on a local server with WEFT_WEB=1; the desktop board's routes never match, and a local Weft
+// without WEFT_WEB passes straight through.
 //
 // Also rewrites the public app links /@<username>/apps/<slug> and /<org>/apps/<slug> to the
 // route folders that serve them (/u/.../apps/... and /w/.../apps/...; lib/app-routes.ts). The gate
@@ -11,10 +12,15 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { appLinkTarget } from "@/lib/app-routes";
+import { isWebEnabled } from "@/lib/home";
 import { SUPABASE_KEY, SUPABASE_URL } from "@/lib/supabase-project";
 
 export async function proxy(request: NextRequest) {
-  if (!(process.env.VERCEL || process.env.WEFT_HOME) || !SUPABASE_KEY) return NextResponse.next();
+  // isWebEnabled(), not isDeployed(): WEFT_WEB=1 turns the weft.zip routes on for a local
+  // server too, and those routes read the cookie session. Gating the refresh on the
+  // deployed-only check would let a local visitor's expired access token bounce them
+  // back to "signed out" on the very pages that need the session.
+  if (!isWebEnabled() || !SUPABASE_KEY) return NextResponse.next();
   // The app-link rewrite is the only path that needs a session refresh. If the request isn't an
   // app link, return at once with no Supabase work.
   const target = appLinkTarget(request.nextUrl.pathname);

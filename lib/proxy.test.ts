@@ -46,6 +46,12 @@ function makeRequest(url: string, init: ConstructorParameters<typeof NextRequest
 
 describe("proxy (not deployed)", () => {
   it("passes straight through when neither VERCEL nor WEFT_HOME is set", async () => {
+    // WEFT_WEB is stubbed empty on purpose: a developer's .env.local may set it (the web
+    // routes on a local server), and then the proxy does refresh — this case is the plain
+    // desktop one, where the web routes are off.
+    vi.stubEnv("VERCEL", "");
+    vi.stubEnv("WEFT_HOME", "");
+    vi.stubEnv("WEFT_WEB", "");
     const { proxy, config } = await load();
     const res = await proxy(makeRequest("https://weft.zip/team"));
     expect(res.status).toBe(200);
@@ -106,6 +112,31 @@ describe("proxy (deployed)", () => {
     const res = await proxy(makeRequest("https://weft.zip/login"));
     expect(res.status).toBe(200);
     expect(createServerClient).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("proxy (local web)", () => {
+  it("refreshes the session when WEFT_WEB=1, even off Vercel", async () => {
+    // WEFT_WEB=1 turns the weft.zip routes on for a local server. The visitor's cookie
+    // session has to be refreshed there too, or an expired access token bounces them
+    // back to "signed out" on the very pages that need the session.
+    vi.stubEnv("VERCEL", "");
+    vi.stubEnv("WEFT_HOME", "");
+    vi.stubEnv("WEFT_WEB", "1");
+    const { proxy } = await load();
+    const res = await proxy(makeRequest("http://127.0.0.1:1024/team"));
+    expect(res.status).toBe(200);
+    expect(createServerClient).toHaveBeenCalledTimes(1);
+  });
+
+  it("still passes straight through without WEFT_WEB", async () => {
+    vi.stubEnv("VERCEL", "");
+    vi.stubEnv("WEFT_HOME", "");
+    vi.stubEnv("WEFT_WEB", "");
+    const { proxy } = await load();
+    const res = await proxy(makeRequest("http://127.0.0.1:1024/team"));
+    expect(res.status).toBe(200);
+    expect(createServerClient).not.toHaveBeenCalled();
   });
 });
 

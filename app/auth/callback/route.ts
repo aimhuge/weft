@@ -10,7 +10,7 @@
 // callback path (lib/auth/server.ts `createAuthCallback`) the only one in
 // the tree.
 import { after } from "next/server";
-import { finishWebSignIn, webAuthFailureUrl, webClient } from "@/lib/web-auth";
+import { finishWebSignIn, webAuthFailureUrl, webCallbackOrigin, webClient } from "@/lib/web-auth";
 import { openSourceAfterSignIn } from "@/lib/billing/oss-grant";
 import { isWebEnabled } from "@/lib/home";
 
@@ -26,7 +26,11 @@ export async function GET(request: Request): Promise<Response> {
     next: url.searchParams.get("next") ?? DEFAULT_NEXT,
     defaultNext: DEFAULT_NEXT,
   });
-  if (result.kind === "error") return Response.redirect(webAuthFailureUrl(url.origin, result.reason), 303);
+  // Same origin the sign-in route pinned, so a bounce back to /login lands on a host
+  // the browser already trusts.
+  if (result.kind === "error") {
+    return Response.redirect(webAuthFailureUrl(webCallbackOrigin(url.origin), result.reason), 303);
+  }
   // The Open Source check reads GitHub, so it runs after the redirect rather than holding up sign-in.
   const github = result.github;
   if (github) after(() => openSourceAfterSignIn(github));

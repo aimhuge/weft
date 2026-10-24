@@ -65,6 +65,47 @@ describe("webCallbackUrl", () => {
   });
 });
 
+describe("webCallbackOrigin", () => {
+  it("leaves the request's own origin alone on the deployed site", async () => {
+    const { webCallbackOrigin } = await load();
+    expect(webCallbackOrigin("https://weft.zip", {})).toBe("https://weft.zip");
+    // WEFT_HOME is a deployed signal too: the home page serves the site locally.
+    expect(webCallbackOrigin("https://weft.zip", { WEFT_HOME: "1" })).toBe("https://weft.zip");
+    expect(webCallbackOrigin("https://weft.zip", { VERCEL: "1" })).toBe("https://weft.zip");
+  });
+
+  it("pins the local callback to 127.0.0.1 so the allow-list needs one entry", async () => {
+    const { webCallbackOrigin } = await load();
+    expect(webCallbackOrigin("http://localhost:1024", { WEFT_WEB: "1" })).toBe("http://127.0.0.1:1024");
+    expect(webCallbackOrigin("http://127.0.0.1:1024", { WEFT_WEB: "1" })).toBe("http://127.0.0.1:1024");
+  });
+
+  it("leaves a non-local request origin alone", async () => {
+    // A preview deployment or a tunnel must redirect to the host the visitor came
+    // from, not to the developer's loopback.
+    const { webCallbackOrigin } = await load();
+    expect(webCallbackOrigin("https://weft.zip", { WEFT_WEB: "1" })).toBe("https://weft.zip");
+    expect(webCallbackOrigin("https://weft-git-abc.vercel.app", { WEFT_WEB: "1" })).toBe(
+      "https://weft-git-abc.vercel.app",
+    );
+  });
+
+  it("takes the port from WEFT_PORT and the whole origin from WEFT_WEB_ORIGIN", async () => {
+    const { webCallbackOrigin } = await load();
+    expect(webCallbackOrigin("http://localhost:3000", { WEFT_WEB: "1", WEFT_PORT: "3000" })).toBe(
+      "http://127.0.0.1:3000",
+    );
+    expect(webCallbackOrigin("http://localhost:1024", { WEFT_WEB: "1", WEFT_WEB_ORIGIN: "http://127.0.0.1:9999" })).toBe(
+      "http://127.0.0.1:9999",
+    );
+  });
+
+  it("is a no-op without WEFT_WEB", async () => {
+    const { webCallbackOrigin } = await load();
+    expect(webCallbackOrigin("http://localhost:1024", {})).toBe("http://localhost:1024");
+  });
+});
+
 describe("webAuthFailureUrl", () => {
   it("builds the /login?error=link&reason=… URL", async () => {
     const { webAuthFailureUrl } = await load();

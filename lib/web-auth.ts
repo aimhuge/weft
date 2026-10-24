@@ -23,6 +23,30 @@ export function isWebProvider(value: unknown): value is WebProvider {
 }
 
 /**
+ * The origin the OAuth round trip comes back to.
+ *
+ * On the deployed site that's the request's own origin — weft.zip, one value.
+ *
+ * Locally (WEFT_WEB=1) the browser may have reached the dev server as either
+ * `localhost` or `127.0.0.1`, and Supabase matches the `redirect_to` against its
+ * allow-list exactly. Two hosts would need two allow-list entries, so pin a
+ * *local* callback to one of them: `127.0.0.1`, the loopback the rest of the
+ * codebase already uses (lib/auth/desktop.ts). WEFT_WEB_ORIGIN overrides it
+ * when the dev server runs on another port.
+ *
+ * A non-local request origin is left alone: the deployed site, a preview
+ * deployment, or a tunnel must redirect to the host the visitor actually came
+ * from, not to the developer's loopback.
+ */
+export function webCallbackOrigin(requestOrigin: string, env: WebAuthEnv = process.env): string {
+  if (!env.WEFT_WEB || env.VERCEL || env.WEFT_HOME) return requestOrigin;
+  const host = new URL(requestOrigin).hostname;
+  if (host !== "localhost" && host !== "127.0.0.1" && host !== "[::1]") return requestOrigin;
+  const configured = env.WEFT_WEB_ORIGIN ?? `http://127.0.0.1:${env.WEFT_PORT ?? "1024"}`;
+  return new URL(configured).origin;
+}
+
+/**
  * Build the URL the OAuth provider should bounce back to. The route
  * hands this to `signInWithOAuth({ redirectTo })` so Supabase knows where
  * to send the browser. The `next` is sanitized (only same-origin paths) and
@@ -116,7 +140,10 @@ export async function finishWebSignIn(
   },
 ): Promise<WebCallbackResult> {
   const { request, code, providerError, next, defaultNext } = params;
-  const origin = new URL(request.url).origin;
+  // The same origin the sign-in route pinned, so the cookie we just set and the URL we
+  // redirect to are the same host — a browser that reached us as localhost and a
+  // callback that lands on 127.0.0.1 must not split the session across two hosts.
+  const origin = webCallbackOrigin(new URL(request.url).origin);
   if (providerError) return { kind: "error", reason: "provider" };
   if (!code) return { kind: "error", reason: "nocode" };
   let github: GithubSignIn | undefined;

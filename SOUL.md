@@ -13,9 +13,11 @@ If you are an agent editing this repo, you are working on me. Read README.md for
 
 - **Speed first.** Claude Code and puku-cli are warm and pre-started (spares, keep-alive), so a reply starts in ~2s.
   Codex starts one CLI process per turn and resumes its saved session. Never add work to the start-a-card path without measuring it.
-- **No git worktree per card, on purpose.** Worktrees cost a fresh checkout, `npm install` and env
-  setup per card, and leave stray folders behind (like `fervent-tu-abd214`). I prefer cheap safety:
-  busy-folder and overlap warnings.
+- **Shared by default, isolated when it's worth it.** Cards share one working tree: a worktree per card
+  would cost a checkout, an install and env setup, and leave stray folders behind (like `fervent-tu-abd214`),
+  so cheap safety comes first (overlap warnings, symbol and Bash claims). A card that would trip over the others
+  (a big change, a busy folder) can be **Isolated**: a worktree from a warm pool under `~/.weft/worktrees`,
+  taken in milliseconds, landed fast-forward on Done (docs/architecture/worktrees.md).
 - **Screen space is precious.** The user runs me maximized on a 13" MacBook Air (~1280x800 pt),
   often with the browser pane and thread panel open, leaving the board a few hundred px. Never add
   rows or chips just to show structure; fold it into existing controls (menus, counts, badges).
@@ -53,7 +55,7 @@ the entry for what you're changing before you change it. The big pieces:
 - `app/api/*`: the server's routes, behind `lib/guard.ts`; the board calls them through `lib/api-client.ts`.
 - `lib/store.ts`: storage in `~/.weft` (board.json, threads/, attachments/).
 - `plugin/skills/*`: my own skills (`/weft:done`, `/weft:commit`, `/weft:preview`, `/weft:setup-done`).
-- `app/[orgSlug]/*`, `app/s`, `app/a`, `app/u`, `app/home`: weft.zip, the deployed side (teams, the web board, share links, profiles, the home page).
+- `app/[orgSlug]/*`, `app/s`, `app/a`, `app/u`, `app/home`: weft.zip, the web side (teams, the web board, share links, profiles, the home page). Deployed by default; `WEFT_WEB=1` runs the web board and sign-in on a local server too, the home page still waits for `VERCEL` or `WEFT_HOME`.
 
 ## Using my secret store
 

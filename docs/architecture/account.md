@@ -97,6 +97,32 @@ loopback HTTP origin for plain `next dev` (no Electron, no `weft://` handler at 
 6. `/login` re-renders with `SignedInPrompt` if the cookie is now valid, or with the form and a
    one-line error under the title if the callback bounced.
 
+### On a local web server (`WEFT_WEB=1`)
+
+`WEFT_WEB=1` turns the weft.zip routes on for `next dev` without the home page taking over `/`
+(see `isWebEnabled()` in `lib/home.ts`). The sign-in round trip is the same shape as the deployed
+one, with two local adjustments:
+
+1. The visitor opens `http://127.0.0.1:1024/login`. The form is the deployed one: a plain GET
+   link to `/auth/sign-in?provider=github&next=…` (`LoginForm`'s `deployed` branch), because the
+   session cookie lives on the same origin.
+2. `app/auth/sign-in/route.ts` redirects to Supabase's authorize URL with `redirect_to` pointing
+   at the local callback. `webCallbackOrigin()` (`lib/web-auth.ts`) pins that to
+   `http://127.0.0.1:1024` — the browser may have reached the dev server as `localhost` or
+   `127.0.0.1`, and Supabase matches the `redirect_to` against its allow-list exactly, so one
+   host means one allow-list entry. `WEFT_WEB_ORIGIN` overrides it; a non-local request origin
+   (a preview deployment, a tunnel) is left alone.
+3. GitHub → Supabase → `http://127.0.0.1:1024/auth/callback?code=…&next=…`.
+   `app/auth/callback/route.ts` exchanges the code, writes the session cookie through
+   `webClient()`'s jar (a Route Handler's `cookies()` is writable) and 303s to `next`.
+4. `proxy.ts` refreshes the visitor's cookie session before the team pages render. It gates on
+   `isWebEnabled()`, not the deployed-only check: with the web routes on locally, an expired
+   access token would otherwise bounce the visitor back to "signed out" on the very pages that
+   need the session.
+
+Supabase's Auth URL configuration must list `http://127.0.0.1:1024/**` for the return leg to
+land at all (see `docs/architecture/teams.md`).
+
 ## Where it shows
 
 - `lib/auth/hooks.ts:useAuth()` is the one hook behind both views: it loads `GET /api/account`, polls every 2s for up
