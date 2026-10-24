@@ -157,31 +157,81 @@ describe("webCallbackOrigin", () => {
 describe("webCanonicalRedirect", () => {
   it("is null on the deployed site", async () => {
     const { webCanonicalRedirect } = await load();
-    expect(webCanonicalRedirect("https://weft.zip/auth/sign-in?provider=github", {})).toBeNull();
+    expect(
+      webCanonicalRedirect("https://weft.zip", "https://weft.zip/auth/sign-in?provider=github", {}),
+    ).toBeNull();
   });
 
   it("moves a localhost visitor to the canonical origin, keeping the query", async () => {
     // The PKCE verifier cookie is host-only, so the host that starts the round trip
     // must be the host that finishes it.
     const { webCanonicalRedirect } = await load();
-    expect(webCanonicalRedirect("http://localhost:1024/auth/sign-in?provider=github&next=%2Fteam", { WEFT_WEB: "1" })).toBe(
-      "http://127.0.0.1:1024/auth/sign-in?provider=github&next=%2Fteam",
-    );
+    expect(
+      webCanonicalRedirect(
+        "http://localhost:1024",
+        "http://localhost:1024/auth/sign-in?provider=github&next=%2Fteam",
+        { WEFT_WEB: "1" },
+      ),
+    ).toBe("http://127.0.0.1:1024/auth/sign-in?provider=github&next=%2Fteam");
   });
 
   it("is null when the visitor is already on the canonical origin", async () => {
     const { webCanonicalRedirect } = await load();
-    expect(webCanonicalRedirect("http://127.0.0.1:1024/auth/sign-in?provider=github", { WEFT_WEB: "1" })).toBeNull();
+    expect(
+      webCanonicalRedirect(
+        "http://127.0.0.1:1024",
+        "http://127.0.0.1:1024/auth/sign-in?provider=github",
+        { WEFT_WEB: "1" },
+      ),
+    ).toBeNull();
   });
 
   it("leaves a non-loopback origin alone", async () => {
     const { webCanonicalRedirect } = await load();
-    expect(webCanonicalRedirect("https://weft.zip/auth/sign-in", { WEFT_WEB: "1" })).toBeNull();
+    expect(
+      webCanonicalRedirect("https://weft.zip", "https://weft.zip/auth/sign-in", { WEFT_WEB: "1" }),
+    ).toBeNull();
   });
 
-  it("is null for an unparseable URL", async () => {
+  it("is null for an unparseable origin or URL", async () => {
     const { webCanonicalRedirect } = await load();
-    expect(webCanonicalRedirect("not a url", { WEFT_WEB: "1" })).toBeNull();
+    expect(webCanonicalRedirect("not a url", "http://localhost:1024/auth/sign-in", { WEFT_WEB: "1" })).toBeNull();
+    expect(webCanonicalRedirect("http://localhost:1024", "not a url", { WEFT_WEB: "1" })).toBeNull();
+  });
+});
+
+describe("webRequestOrigin", () => {
+  it("uses the Host header, not the URL's host", async () => {
+    // `next dev` normalizes request.url to localhost, but the cookies are keyed on
+    // the Host header the browser sent — that is the host the round trip must use.
+    const { webRequestOrigin } = await load();
+    const request = new Request("http://localhost:1024/auth/sign-in", {
+      headers: { host: "127.0.0.1:1024" },
+    });
+    expect(webRequestOrigin(request)).toBe("http://127.0.0.1:1024");
+  });
+
+  it("keeps the request's own scheme", async () => {
+    const { webRequestOrigin } = await load();
+    const request = new Request("https://weft.zip/auth/sign-in", {
+      headers: { host: "weft.zip" },
+    });
+    expect(webRequestOrigin(request)).toBe("https://weft.zip");
+  });
+
+  it("falls back to the URL's origin without a Host header", async () => {
+    const { webRequestOrigin } = await load();
+    expect(webRequestOrigin(new Request("http://localhost:1024/auth/sign-in"))).toBe(
+      "http://localhost:1024",
+    );
+  });
+
+  it("falls back to the URL's origin for a malformed Host header", async () => {
+    const { webRequestOrigin } = await load();
+    const request = new Request("http://localhost:1024/auth/sign-in", {
+      headers: { host: "not a host" },
+    });
+    expect(webRequestOrigin(request)).toBe("http://localhost:1024");
   });
 });
 

@@ -50,6 +50,34 @@ function isLoopbackHost(hostname: string): boolean {
 }
 
 /**
+ * The origin the browser actually asked for, taken from the `Host` header.
+ *
+ * `request.url` is not the same thing: `next dev` normalizes it to the server's
+ * own hostname (`localhost`), so a visitor who typed `127.0.0.1:1024` still sees
+ * `http://localhost:1024` in the URL. The cookies are the authority here — the
+ * cookie jar is keyed on the `Host` header the browser sent (that is how
+ * `cookies()` in `next/headers` reads them), so the host that must appear in
+ * `redirect_to` and in the final redirect is the `Host` header's host, not the
+ * URL's.
+ *
+ * Falls back to the URL's own origin when there is no usable `Host` header.
+ */
+export function webRequestOrigin(request: Request): string {
+  const host = request.headers.get("host");
+  if (host) {
+    try {
+      // A Host header is `host[:port]`, never a scheme; the scheme is the
+      // request's own (http locally, https on the deployed site).
+      const scheme = new URL(request.url).protocol;
+      return new URL(`${scheme}//${host}`).origin;
+    } catch {
+      // A malformed Host header is not worth a 500; fall through to the URL.
+    }
+  }
+  return new URL(request.url).origin;
+}
+
+/**
  * The origin the OAuth round trip comes back to.
  *
  * On the deployed site that's the request's own origin — weft.zip, one value.
@@ -84,19 +112,35 @@ export function webCallbackOrigin(requestOrigin: string, env: WebAuthEnv = proce
  * The sign-in route redirects here first: the verifier cookie is host-only, so
  * starting on `localhost` and coming back to `127.0.0.1` would find no
  * verifier and fail the exchange.
+ *
+ * `requestOrigin` is the host the browser used (see `webRequestOrigin`); the
+ * path and query come from `requestUrl`, so the one-time `code` survives the hop.
  */
-export function webCanonicalRedirect(requestUrl: string, env: WebAuthEnv = process.env): string | null {
+export function webCanonicalRedirect(
+  requestOrigin: string,
+  requestUrl: string,
+  env: WebAuthEnv = process.env,
+): string | null {
   const local = webLocalOrigin(env);
   if (!local) return null;
-  let url: URL;
+  let hostname: string;
+  let path: string;
+  let search: string;
   try {
-    url = new URL(requestUrl);
+    hostname = new URL(requestOrigin).hostname;
   } catch {
     return null;
   }
-  if (!isLoopbackHost(url.hostname)) return null;
-  if (url.origin === local) return null;
-  const moved = new URL(url.pathname + url.search, local);
+  try {
+    const url = new URL(requestUrl);
+    path = url.pathname;
+    search = url.search;
+  } catch {
+    return null;
+  }
+  if (!isLoopbackHost(hostname)) return null;
+  if (requestOrigin === local) return null;
+  const moved = new URL(path + search, local);
   return moved.toString();
 }
 
@@ -203,7 +247,7 @@ export async function finishWebSignIn(
   // The same origin the sign-in route pinned, so the cookie we just set and the URL we
   // redirect to are the same host — a browser that reached us as localhost and a
   // callback that lands on 127.0.0.1 must not split the session across two hosts.
-  const origin = params.origin ?? webCallbackOrigin(new URL(request.url).origin);
+  const origin = params.origin ?? webCallbackOrigin(webRequestOrigin(request));
   if (providerError) return { kind: "error", reason: "provider" };
   if (!code) return { kind: "error", reason: "nocode" };
   let github: GithubSignIn | undefined;
@@ -289,7 +333,7 @@ export async function webSignOut(
   await client.auth.signOut({ scope: "local" });
   // Same origin rule as the callback: the sign-out clears the host-only cookies,
   // so it has to land on the host that holds them.
-  const origin = params.origin ?? webCallbackOrigin(new URL(params.request.url).origin);
+  const origin = params.origin ?? webCallbackOrigin(webRequestOrigin(params.request));
   const dest = new URL(params.loginPath, origin);
   return { kind: "redirect", url: dest.toString() };
 }

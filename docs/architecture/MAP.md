@@ -305,7 +305,9 @@ When a new doc lands in this folder, add it here on the same change.
   origin (`http://127.0.0.1:1024`, `webLocalOrigin()` in `lib/web-auth.ts`) — `webCanonicalRedirect()`
   moves a visitor on the other loopback name across before the round trip starts, because the PKCE
   verifier cookie is host-only, and `webCallbackOrigin()` pins the `redirect_to` and the final
-  redirect to that origin, which Supabase's allow-list must list.
+  redirect to that origin, which Supabase's allow-list must list. The host is read from the request's
+  `Host` header (`webRequestOrigin()`), not from `request.url`: `next dev` normalizes the URL to
+  `localhost`, and reading it there sends the canonical move in a circle.
 - `lib/profile-card.ts` + `lib/profile-card-sync.ts` + `lib/signed-in-client.ts` + `lib/public-profile.ts` + `components/profile/*` + `supabase/migrations/20261018135430_profile_cards.sql`: the public Wefter Profile at `weft.zip/@username` (`app/u/[username]`):
   the signed-in Mac posts the Loom's You and Badges tabs as one snapshot (`profileCard()`, every 10 min on the league timer and on opening the dialog, never projects or folders) into `profile_cards` through
   `profile_card_submit`; `loadPublicProfile` re-validates it with `parseProfileCard`, adds league rank and public mini apps, and the page is server components with plain SVG charts and no JS (docs/architecture/profiles.md).

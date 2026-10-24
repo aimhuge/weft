@@ -123,6 +123,17 @@ one, with two local adjustments:
 
    Without the first step a `localhost` visitor's callback would land on `127.0.0.1`, find no
    verifier, and bounce to `/login?error=link&reason=exchange`.
+
+   **The host comes from the `Host` header, not from `request.url`.** `next dev` normalizes
+   `request.url` to the server's own hostname (`localhost`) whatever the browser asked for, so a
+   `127.0.0.1` visitor's request still reports `http://localhost:1024`. The cookies are keyed on
+   the `Host` header the browser sent — that is how `cookies()` in `next/headers` reads them — so
+   `webRequestOrigin()` in `lib/web-auth.ts` builds the origin from `request.headers.get("host")`
+   and falls back to the URL's own origin when there is no usable header. Reading the URL instead
+   makes every visitor look like a `localhost` one, and the canonical move then goes in a circle:
+   the visitor is sent to the canonical origin, arrives there, is seen as `localhost` again, and
+   is sent again. The route tests cover exactly that shape — a request whose URL host is
+   `localhost` while its `Host` header is `127.0.0.1:1024`.
 3. GitHub → Supabase → `http://127.0.0.1:1024/auth/callback?code=…&next=…`.
    `app/auth/callback/route.ts` exchanges the code, writes the session cookie through
    `webClient()`'s jar (a Route Handler's `cookies()` is writable) and 303s to `next`.

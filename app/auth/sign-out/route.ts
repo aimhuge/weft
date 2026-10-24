@@ -6,13 +6,14 @@
 //
 // Only on the deployed site: a 404 in `next dev` keeps the desktop's
 // /api/account/signout (lib/account.ts `signOut`) the only one in the tree.
-import { webCallbackOrigin, webClient, webSignOut } from "@/lib/web-auth";
+import { webCallbackOrigin, webClient, webRequestOrigin, webSignOut } from "@/lib/web-auth";
 import { isWebEnabled } from "@/lib/home";
 
 export async function POST(request: Request): Promise<Response> {
   if (!isWebEnabled()) return new Response("Not Found", { status: 404 });
   // Sign-out clears the host-only cookies, so it lands on the host that holds them.
-  const origin = webCallbackOrigin(new URL(request.url).origin);
+  // The Host header is that host; `request.url`'s host is normalized to localhost.
+  const origin = webCallbackOrigin(webRequestOrigin(request));
   const result = await webSignOut(await webClient(), { request, loginPath: "/login", origin });
   return Response.redirect(result.url, 303);
 }

@@ -37,6 +37,16 @@ function makeRequest(url: string) {
   return new Request(url, { method: "GET" });
 }
 
+/**
+ * A request the way `next dev` actually delivers one: `request.url` carries the
+ * server's own hostname (`localhost`) whatever the browser asked for, and the
+ * real host only survives in the `Host` header — which is the host the PKCE
+ * verifier cookie is written for.
+ */
+function makeDevRequest(url: string, host: string) {
+  return new Request(url, { method: "GET", headers: { host } });
+}
+
 type OAuthOptions = { provider: string; options: { redirectTo: string; skipBrowserRedirect: boolean } };
 type ClientMock = {
   auth: {
@@ -210,6 +220,44 @@ describe("/auth/callback", () => {
     const { GET } = await load();
     await GET(makeRequest("http://127.0.0.1:1024/auth/callback?code=ok"));
     expect(openSourceAfterSignIn).toHaveBeenCalledWith({ userId: "u1", login: "ada", token: "gho_x" });
+  });
+});
+
+describe("/auth/callback on a dev server (request.url normalized to localhost)", () => {
+  it("does not redirect a callback on the canonical origin to itself", async () => {
+    // The live bug: `next dev` reports request.url as `http://localhost:1024`, so
+    // the route thought every callback was on the wrong loopback name and moved
+    // it to the canonical origin — which was itself, forever.
+    const client = buildClient();
+    mockSession(client);
+    webClient.mockResolvedValue(client);
+    const { GET } = await load();
+    const res = await GET(makeDevRequest("http://localhost:1024/auth/callback?code=ok", "127.0.0.1:1024"));
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toBe("http://127.0.0.1:1024/team");
+    expect(client.auth.exchangeCodeForSession).toHaveBeenCalledWith("ok");
+  });
+
+  it("moves a localhost callback across, keeping the one-time code", async () => {
+    const client = buildClient();
+    mockSession(client);
+    webClient.mockResolvedValue(client);
+    const { GET } = await load();
+    const res = await GET(
+      makeDevRequest("http://localhost:1024/auth/callback?code=ok&next=%2Fapp", "localhost:1024"),
+    );
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toBe("http://127.0.0.1:1024/auth/callback?code=ok&next=%2Fapp");
+    expect(client.auth.exchangeCodeForSession).not.toHaveBeenCalled();
+  });
+
+  it("lands the visitor on the Host header's host", async () => {
+    const client = buildClient();
+    mockSession(client);
+    webClient.mockResolvedValue(client);
+    const { GET } = await load();
+    const res = await GET(makeDevRequest("http://localhost:1024/auth/callback?code=ok&next=%2Fapp", "127.0.0.1:1024"));
+    expect(res.headers.get("location")).toBe("http://127.0.0.1:1024/app");
   });
 });
 

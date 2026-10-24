@@ -33,6 +33,16 @@ function makeRequest(url: string) {
   return new Request(url, { method: "GET" });
 }
 
+/**
+ * A request the way `next dev` actually delivers one: `request.url` carries the
+ * server's own hostname (`localhost`) whatever the browser asked for, and the
+ * real host only survives in the `Host` header. The cookies are keyed on that
+ * header, so it — not the URL — is what the round trip has to agree on.
+ */
+function makeDevRequest(url: string, host: string) {
+  return new Request(url, { method: "GET", headers: { host } });
+}
+
 type OAuthOptions = { provider: string; options: { redirectTo: string; skipBrowserRedirect: boolean } };
 type ClientMock = {
   auth: { signInWithOAuth: ReturnType<typeof vi.fn> };
@@ -175,6 +185,50 @@ describe("/auth/sign-in", () => {
     webClient.mockResolvedValue(client);
     const { GET } = await load();
     await GET(makeRequest("http://127.0.0.1:1024/auth/sign-in?provider=github&next=" + encodeURIComponent("//evil.com/x")));
+    expect(redirectTo(client)).toBe("http://127.0.0.1:1024/auth/callback?next=%2Fteam");
+  });
+});
+
+describe("/auth/sign-in on a dev server (request.url normalized to localhost)", () => {
+  it("does not redirect a visitor on the canonical origin to itself", async () => {
+    // The live bug: `next dev` reports request.url as `http://localhost:1024`,
+    // so the route thought every visitor was on the wrong loopback name and
+    // redirected them to the canonical origin — which was themselves, forever.
+    const client = buildClient();
+    mockProviderUrl(client);
+    webClient.mockResolvedValue(client);
+    const { GET } = await load();
+    const res = await GET(
+      makeDevRequest("http://localhost:1024/auth/sign-in?provider=github", "127.0.0.1:1024"),
+    );
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toBe("https://github.com/login/oauth/authorize?state=x");
+    expect(redirectTo(client)).toBe("http://127.0.0.1:1024/auth/callback?next=%2Fteam");
+  });
+
+  it("moves a localhost visitor across, using the Host header to decide", async () => {
+    const client = buildClient();
+    mockProviderUrl(client);
+    webClient.mockResolvedValue(client);
+    const { GET } = await load();
+    const res = await GET(
+      makeDevRequest("http://localhost:1024/auth/sign-in?provider=github&next=%2Fapp", "localhost:1024"),
+    );
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toBe(
+      "http://127.0.0.1:1024/auth/sign-in?provider=github&next=%2Fapp",
+    );
+    expect(client.auth.signInWithOAuth).not.toHaveBeenCalled();
+  });
+
+  it("hands Supabase the Host header's host, not request.url's", async () => {
+    // The verifier cookie is written for the host the browser is on, so the
+    // callback has to come back to that same host.
+    const client = buildClient();
+    mockProviderUrl(client);
+    webClient.mockResolvedValue(client);
+    const { GET } = await load();
+    await GET(makeDevRequest("http://localhost:1024/auth/sign-in?provider=github", "127.0.0.1:1024"));
     expect(redirectTo(client)).toBe("http://127.0.0.1:1024/auth/callback?next=%2Fteam");
   });
 });
