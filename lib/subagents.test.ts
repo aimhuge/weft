@@ -47,4 +47,58 @@ describe("subagents", () => {
     expect(subagentEnv("opus-4.8", "claude")).toEqual({});
     expect(subagentEnv("claude-haiku-5-5", "puku")).toEqual({});
   });
+
+  // Goose is the fourth CLI, and it takes none of Claude Code's and puku-cli's shapes: no
+  // Agent tool, so no subagent-model env var, and its own `run --text` command line.
+  it("labels a Goose model with Goose, not Codex", () => {
+    expect(subagentLabel("anthropic/claude-sonnet-4.5")).toBe("Claude Sonnet 4.5 (OpenRouter) (Goose)");
+  });
+
+  it("sets no subagent env for Goose", () => {
+    expect(subagentEnv("anthropic/claude-sonnet-4.5", "goose")).toEqual({});
+    expect(subagentEnv("inherit", "goose")).toEqual({});
+    expect(subagentEnv("choose", "goose")).toEqual({});
+  });
+
+  it("runs a Goose model headless with Goose's own command line", () => {
+    const onClaude = subagentPrompt("anthropic/claude-sonnet-4.5", "claude");
+    expect(onClaude).toContain('goose run --text "<self-contained task>" --model anthropic/claude-sonnet-4.5');
+    // Not Claude Code's flags: Goose takes none of them.
+    expect(onClaude).not.toContain("--allowedTools");
+    expect(onClaude).not.toContain("--permission-mode");
+  });
+});
+
+// A Goose thread has no Agent tool, so its prompt must never send it there: every subagent is a Bash run,
+// a bare `goose run` for "choose" and "inherit" (it inherits GOOSE_PROVIDER and GOOSE_MODEL), `--model` for
+// a picked Goose model, and the other CLI's own line for another CLI's model.
+describe("subagentPrompt for a Goose thread", () => {
+  it("runs choose and inherit as a bare goose run on the thread's own provider and model", () => {
+    for (const model of ["choose", "inherit"]) {
+      const text = subagentPrompt(model, "goose");
+      expect(text).toContain("You have no Agent tool");
+      expect(text).toContain('goose run --text "<self-contained task>"\n');
+      expect(text).toContain("same provider and model as this thread");
+      expect(text).not.toContain("Agent tool's model input");
+      expect(text).not.toContain("Explore agent");
+    }
+  });
+
+  it("pins a picked Goose model with --model", () => {
+    const text = subagentPrompt("openai/gpt-4.1", "goose");
+    expect(text).toContain('goose run --text "<self-contained task>" --model openai/gpt-4.1');
+    expect(text).not.toContain("which the Agent tool can't reach");
+  });
+
+  it("runs another CLI's model with that CLI's line, falling back to doing the work itself", () => {
+    const text = subagentPrompt("claude-opus-5-5", "goose");
+    expect(text).toContain('claude -p "<self-contained task>" --model claude-opus-5-5');
+    expect(text).toContain("say so and do the work yourself");
+    expect(text).not.toContain("use the Agent tool");
+  });
+
+  it("leaves the other CLIs' prompts on the Agent tool", () => {
+    expect(subagentPrompt("anthropic/claude-sonnet-4.5", "claude")).toContain("say so and use the Agent tool");
+    expect(subagentPrompt("choose", "claude")).not.toContain("You have no Agent tool");
+  });
 });

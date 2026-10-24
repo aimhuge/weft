@@ -26,3 +26,24 @@ export function signAsWeft(
   if (spec.backend !== "claude" || spec.copilot) return;
   void q?.applyFlagSettings({ attribution: attribution(model) }).catch(() => {});
 }
+
+// A Goose thread's lines. Goose has no attribution setting, so they go in its system text instead
+// (lib/goose-recipe.ts gooseSystemText). The model is whatever the provider serves, often not Claude's,
+// so the trailer names Goose and the model id as given, at Weft's own address rather than Anthropic's.
+export function gooseAttribution(model: string | undefined): { commit: string; pr: string } {
+  return {
+    commit: `Co-Authored-By: Goose${model ? ` (${model})` : ""} on Weft <noreply@weft.zip>`,
+    pr: "🤖 Generated with [Goose](https://github.com/aaif-goose/goose) on Weft",
+  };
+}
+
+// The instruction a Goose thread gets, worded like the attribution reminder Claude Code gives its own threads.
+export function gooseAttributionPrompt(model: string | undefined): string {
+  const { commit, pr } = gooseAttribution(model);
+  return `# Attribution
+For git commits and pull requests you create (including in /weft:done and /weft:commit):
+- End git commit messages with:
+${commit}
+- End pull request descriptions with:
+${pr}`;
+}

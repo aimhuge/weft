@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { attribution, modelName, signAsWeft } from "./attribution";
+import { attribution, gooseAttribution, gooseAttributionPrompt, modelName, signAsWeft } from "./attribution";
 
 describe("modelName", () => {
   it("names a Claude model from its id", () => {
@@ -42,5 +42,20 @@ describe("signAsWeft", () => {
     signAsWeft({ applyFlagSettings: () => Promise.reject(new Error("gone")) }, { backend: "claude" }, undefined);
     signAsWeft(undefined, { backend: "claude" }, undefined);
     await Promise.resolve();
+  });
+});
+
+// Goose has no attribution setting, so its lines go in its system text; they name Goose and the model it ran.
+describe("gooseAttribution", () => {
+  it("signs commits as Goose on Weft, with the model when there is one", () => {
+    expect(gooseAttribution("openai/gpt-4.1").commit).toBe("Co-Authored-By: Goose (openai/gpt-4.1) on Weft <noreply@weft.zip>");
+    expect(gooseAttribution(undefined).commit).toBe("Co-Authored-By: Goose on Weft <noreply@weft.zip>");
+    expect(gooseAttribution(undefined).pr).toBe("🤖 Generated with [Goose](https://github.com/aaif-goose/goose) on Weft");
+  });
+
+  it("words the instruction with both lines", () => {
+    const text = gooseAttributionPrompt("puku-ai-2.8");
+    expect(text).toContain("End git commit messages with:\nCo-Authored-By: Goose (puku-ai-2.8) on Weft <noreply@weft.zip>");
+    expect(text).toContain("End pull request descriptions with:\n🤖 Generated with [Goose]");
   });
 });

@@ -11,6 +11,7 @@ process.env.WEFT_DATA = dir;
 afterAll(() => fs.rmSync(dir, { recursive: true, force: true }));
 
 import { specFor } from "./runner-state";
+import { setGooseModelId } from "./settings";
 import { setProjectOff } from "./skill-sets";
 
 // A card's spec is what the SDK's `query()` runs with: cwd, model, mode, read scope. The copilot
@@ -112,5 +113,33 @@ describe("specFor", () => {
     // A card with nothing in the project's or its own off-list gets an empty one.
     const bare: Card = { ...thread, id: "b", skillsOff: undefined };
     expect(specFor(bare).skillsOff).toEqual(["project-skill"]);
+  });
+});
+
+// A Goose card runs the model it was given (the New thread dialog, a mid-thread switch), as a Claude Code or
+// puku-cli card does; the model picked in Settings → Models → Bring your own key only fills in "Goose default".
+describe("specFor on a Goose card", () => {
+  const goose: Card = { id: "g1", title: "T", prompt: "", cwd: "/", backend: "goose", permissionMode: "default", column: "backlog", createdAt: 0, updatedAt: 0 };
+  afterAll(() => setGooseModelId(""));
+
+  it("runs the card's own model over the one picked in Settings", () => {
+    setGooseModelId("puku-ai-2.8");
+    expect(specFor({ ...goose, model: "openai/gpt-4.1" }).model).toBe("openai/gpt-4.1");
+  });
+
+  it("falls back to the Settings model when the card is on Goose default", () => {
+    setGooseModelId("puku-ai-2.8");
+    expect(specFor({ ...goose, model: "goose-default" }).model).toBe("puku-ai-2.8");
+    expect(specFor(goose).model).toBe("puku-ai-2.8");
+  });
+
+  it("leaves the model to Goose with neither", () => {
+    setGooseModelId("");
+    expect(specFor({ ...goose, model: "goose-default" }).model).toBeUndefined();
+  });
+
+  it("never gives a Claude Code card the Goose Settings model", () => {
+    setGooseModelId("puku-ai-2.8");
+    expect(specFor({ ...goose, backend: "claude" }).model).toBeUndefined();
   });
 });
