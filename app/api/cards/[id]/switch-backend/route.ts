@@ -2,7 +2,7 @@ import { connection } from "next/server";
 import { fail, guard } from "@/lib/guard";
 import { switchBackend } from "@/lib/runner";
 import { getCard } from "@/lib/store";
-import { BACKEND_IDS, MODELS } from "@/lib/new-thread";
+import { BACKEND_IDS, MODELS, NO_MODEL } from "@/lib/new-thread";
 import type { Backend } from "@/lib/types";
 
 // Every CLI a card may be switched to. Shared (lib/new-thread.ts), so a CLI added there can be
@@ -28,7 +28,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       throw new Error(`backend must be one of ${BACKENDS.join(", ")}.`);
     }
     const model = body.model;
-    if (model !== undefined && (typeof model !== "string" || !MODELS[backend as Backend].some((m) => m.id === model))) {
+    // "" is the no-model choice: "let the CLI decide", which is what the Default model row picks.
+    // Any other model has to be one this CLI serves — the picker sends a model's own CLI with it,
+    // so a model from another CLI is a mismatch worth refusing.
+    if (model !== undefined && (typeof model !== "string" || (model !== NO_MODEL && !MODELS[backend as Backend].some((m) => m.id === model)))) {
       throw new Error(`${typeof model === "string" ? model : "That"} isn't a ${backend} model.`);
     }
     await switchBackend(id, backend as Backend, { replay: body.replay === true, model });

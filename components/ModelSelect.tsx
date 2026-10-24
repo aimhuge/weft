@@ -8,12 +8,13 @@ import type { Backend } from "@/lib/types";
 // One optgroup per CLI a model is offered on. The whole point of grouping here is that
 // Claude and Puku share some model names today and Codex will tomorrow — and a model
 // added to MODELS shows up in the right group without anyone touching this file.
-// A picker that only wants some groups (the Copilot picker: Claude-only) passes a `groups`
-// override; the default is the full list.
+// Every picker offers the whole list: no row is narrowed to one CLI, and picking a model
+// moves that row's CLI to the one serving it.
 const DEFAULT_GROUPS: { label: string; backends: Backend[] }[] = [
   { label: "Claude", backends: ["claude"] },
   { label: "Puku", backends: ["puku"] },
   { label: "Codex", backends: ["codex"] },
+  { label: "Goose", backends: ["goose"] },
 ];
 
 export const SELECT_CLASS =

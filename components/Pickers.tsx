@@ -40,21 +40,24 @@ export function BackendPicker({
 }
 
 // The model menu: optional leading options (e.g. "Card's own model") then a Claude / Puku /
-// Codex group. Pass `groups` to restrict (the Copilot picker is Claude-only).
+// Codex group. Every model any CLI serves is offered — a row's choice isn't limited to one
+// CLI, and picking a model moves that row's CLI to the one serving it. `groups` is still
+// accepted so a caller can pass it; it no longer narrows the list.
 export function ModelPicker({
   value,
   onChange,
   label,
   leading = [],
-  groups,
 }: {
   value: string;
   onChange: (next: string) => void;
   label: string;
   leading?: PickerOption[];
+  // Accepted and ignored: every picker offers every model now, so narrowing a row to one CLI
+  // is no longer something a caller can ask for.
   groups?: { label: string; backends: Backend[] }[];
 }) {
-  return <ModelSelect value={value} label={label} leading={leading} onChange={onChange} groups={groups} />;
+  return <ModelSelect value={value} label={label} leading={leading} onChange={onChange} />;
 }
 
 // The effort menu. `leading` defaults to "Card's own effort" for the /weft:done row and to

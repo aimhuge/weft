@@ -214,6 +214,14 @@ describe("POST /api/cards/:id/switch-backend", () => {
     expect(((await res.json()) as { error: string }).error).toMatch(/isn't a puku model/);
   });
 
+  it("takes the no-model choice (the Default model row) as a blank model", async () => {
+    // "" is "let the CLI decide" — not a model id, so it isn't refused.
+    const card = addCard({ backend: "claude" });
+    const res = await post(card.id, { backend: "claude", model: "" });
+    expect(res.status).toBe(200);
+    expect(runner.switchBackend).toHaveBeenLastCalledWith(card.id, "claude", { replay: false, model: "" });
+  });
+
   it("404s an unknown card; 400s a bad backend or bad JSON", async () => {
     addCard();
     expect((await post("ghost", { backend: "puku" })).status).toBe(404);

@@ -15,11 +15,12 @@ describe("ModelPicker", () => {
     expect(screen.getByRole("option", { name: "Codex default" })).toBeInTheDocument();
   });
 
-  it("respects a groups override (Copilot = Claude only)", () => {
-    render(<ModelPicker value="claude-opus-5-5" onChange={() => {}} label="Model" groups={[{ label: "Claude", backends: ["claude"] }]} />);
-    expect(screen.getByRole("group", { name: "Claude" })).toBeInTheDocument();
-    expect(screen.queryByRole("group", { name: "Puku" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("group", { name: "Codex" })).not.toBeInTheDocument();
+  it("offers every model of every CLI — no per-row lock", () => {
+    render(<ModelPicker value="claude-opus-5-5" onChange={() => {}} label="Model" />);
+    // A Puku and a Codex model are both there: picking one moves that row's CLI to the one
+    // that serves it, so no row is limited to one CLI.
+    expect(screen.getByRole("option", { name: "Puku AI 2.8" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Opus 4.8" })).toBeInTheDocument();
   });
 
   it("forwards the picked value", async () => {

@@ -13,13 +13,14 @@ beforeEach(() => {
 });
 
 describe("ReviewAllPicker", () => {
-  it("shows only Claude models and saves a new pick right away", async () => {
+  it("offers every model and saves a new pick right away", async () => {
     render(<ReviewAllPicker value="claude-opus-5-5" />);
     const select = screen.getByRole("combobox", { name: "Model for Review all" });
     expect(select).toHaveValue("claude-opus-5-5");
+    // Every CLI's models are here: picking one moves the card to the CLI that serves it.
     expect(screen.getByRole("group", { name: "Claude" })).toBeInTheDocument();
-    expect(screen.queryByRole("group", { name: "Puku" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("group", { name: "Codex" })).not.toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Puku" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Codex" })).toBeInTheDocument();
     await userEvent.selectOptions(select, "claude-sonnet-5-5");
     expect(api.saveSettings).toHaveBeenCalledWith({ reviewAllModel: "claude-sonnet-5-5" });
   });

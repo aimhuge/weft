@@ -5,10 +5,8 @@ import { api } from "@/lib/client";
 import { ModelPicker } from "./Pickers";
 
 const LEADING = [{ value: "", label: "Default model (last picked)" }];
-// Copilot is locked to Claude Code, so the picker shows only Claude models.
-const COPILOT_GROUPS = [{ label: "Claude", backends: ["claude" as const] }];
 
-// Settings' "Copilot" row: which Claude model the copilot thread starts on when the card is
+// Settings' "Copilot" row: which model the copilot thread starts on when the card is
 // first made (lib/copilot.ts). The card is one long-lived record (id: "copilot", role: "copilot"),
 // so changing the pick here takes effect on the next "New chat" — the current conversation
 // keeps running on the model it already chose.
@@ -32,7 +30,7 @@ export default function CopilotPicker({ value }: { value: string }) {
         <h3 className="text-[13px] font-medium text-ink">Copilot</h3>
         <p className="text-[12.5px] text-muted">
           {error ??
-            "The model the copilot thread runs on. Copilot is locked to Claude Code, so only Claude models appear here. The default follows the model you last picked for new threads."}
+            "The model the copilot thread runs on. Every model is offered here; picking one moves the copilot to the CLI that serves it. The default follows the model you last picked for new threads."}
         </p>
       </div>
       <ModelPicker
@@ -40,7 +38,6 @@ export default function CopilotPicker({ value }: { value: string }) {
         onChange={pick}
         label="Model for the copilot"
         leading={LEADING}
-        groups={COPILOT_GROUPS}
       />
     </section>
   );

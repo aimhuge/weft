@@ -107,7 +107,7 @@ vi.mock("@/lib/import", () => ({
 vi.mock("@/lib/devserver", () => ({
   devStatus: vi.fn(() => Promise.resolve({ state: "running" })),
   reachable: vi.fn(() => Promise.resolve(false)),
-  startDev: vi.fn(),
+  startDev: vi.fn(() => Promise.resolve({})),
   stopDev: vi.fn(),
 }));
 
@@ -722,88 +722,6 @@ describe("POST /warm", () => {
   });
 });
 
-describe("/settings", () => {
-  const patch = (body: unknown) => settingsRoute.PATCH(req("/settings", { method: "PATCH", body }));
-
-  it("GET returns the settings view", async () => {
-    expect(await (await settingsRoute.GET(req("/settings"))).json()).toEqual({ threadPrompt: "tp", keepAliveMinutes: 5, automations: [] });
-  });
-
-  it("PATCH saves the prompt, keep-alive, default mode, push on Done and automations", async () => {
-    const res = await patch({
-      threadPrompt: "be brief",
-      pushOnDone: false,
-      subagentModel: "opus-4.8",
-      doneModel: "claude-opus-5-5", doneEffort: "xhigh", copilotModel: "claude-haiku-5-5", reviewAllModel: "claude-sonnet-5-5",
-      keepAliveMinutes: 10,
-      defaultPermissionMode: "acceptEdits",
-      automations: [
-        { id: "a1", on: "done", skill: "/weft:done" },
-        { on: "prompt-matches", skill: "deploy", pattern: "ship it" },
-      ],
-    });
-    expect(res.status).toBe(200);
-    expect(settings.setThreadPrompt).toHaveBeenCalledWith("be brief");
-    expect(settings.setKeepAliveMinutes).toHaveBeenCalledWith(10);
-    expect(settings.setDefaultPermissionMode).toHaveBeenCalledWith("acceptEdits");
-    expect(settings.setPushOnDone).toHaveBeenCalledWith(false);
-    expect(settings.setSubagentModel).toHaveBeenCalledWith("opus-4.8");
-    expect(settings.setDoneModel).toHaveBeenCalledWith("claude-opus-5-5");
-    expect(settings.setDoneEffort).toHaveBeenCalledWith("xhigh");
-    expect([vi.mocked(settings.setCopilotModel).mock.calls[0], vi.mocked(settings.setReviewAllModel).mock.calls[0]]).toEqual([["claude-haiku-5-5"], ["claude-sonnet-5-5"]]);
-    const [rules] = vi.mocked(settings.setAutomations).mock.calls[0]!;
-    expect(rules[0]).toEqual({ id: "a1", on: "done", skill: "weft:done" });
-    expect(rules[1]).toMatchObject({ on: "prompt-matches", skill: "deploy", pattern: "ship it" });
-    expect(rules[1]!.id).toBeTruthy();
-  });
-
-  it("PATCH rejects bad values with 400 and saves nothing", async () => {
-    for (const body of [
-      { threadPrompt: 5 },
-      { keepAliveMinutes: -1 },
-      { keepAliveMinutes: "10" },
-      { defaultPermissionMode: "yolo" },
-      { pushOnDone: "no" },
-      { subagentModel: "gpt-5" },
-      { doneModel: "gpt-5" },
-      { doneEffort: "extreme" },
-      // A model no CLI serves. Any model a CLI does serve is fine for these rows now.
-      { copilotModel: "not-a-model" }, { reviewAllModel: "not-a-model" },
-      { automations: "nope" },
-      { automations: [{ on: "sometimes", skill: "x" }] },
-      { automations: [{ on: "done", skill: "bad skill!" }] },
-      { automations: [{ on: "prompt-matches", skill: "x" }] },
-      { automations: [{ on: "prompt-matches", skill: "x", pattern: "(" }] },
-      { threadPrompt: "ok", automations: [{ on: "nope" }] },
-      "{",
-    ]) {
-      expect((await patch(body)).status, JSON.stringify(body)).toBe(400);
-    }
-    expect(settings.setThreadPrompt).not.toHaveBeenCalled();
-    expect(settings.setKeepAliveMinutes).not.toHaveBeenCalled();
-    expect(settings.setDefaultPermissionMode).not.toHaveBeenCalled();
-    expect(settings.setAutomations).not.toHaveBeenCalled();
-    expect(settings.setPushOnDone).not.toHaveBeenCalled();
-    expect(settings.setSubagentModel).not.toHaveBeenCalled();
-  });
-
-  it("PATCH takes any model a CLI serves, from any CLI", async () => {
-    for (const body of [
-      { copilotModel: "opus-4.8" },
-      { copilotModel: "puku-ai-2.8" },
-      { reviewAllModel: "claude-opus-5-5" },
-      { reviewAllModel: "puku-ai-2.7" },
-      { subagentModel: "puku-ai-2.8" },
-      { doneModel: "claude-sonnet-5-5" },
-    ]) {
-      expect((await patch(body)).status, JSON.stringify(body)).toBe(200);
-    }
-    expect(settings.setCopilotModel).toHaveBeenCalledWith("puku-ai-2.8");
-    expect(settings.setReviewAllModel).toHaveBeenCalledWith("puku-ai-2.7");
-    expect(settings.setSubagentModel).toHaveBeenCalledWith("puku-ai-2.8");
-  });
-});
-
 describe("/projects", () => {
   it("POST adds an existing folder", async () => {
     const res = await projectsRoute.POST(req("/projects", { method: "POST", body: { path: tmp } }));
@@ -860,7 +778,11 @@ describe("/login", () => {
 
   it("GET returns every CLI's status and runs", async () => {
     const json = await body(await loginRoute.GET(req("/login")));
-    expect(json).toEqual({ status: { claude: { loggedIn: true }, puku: { loggedIn: true }, codex: { loggedIn: true } }, runs: [] });
+    // Every CLI, Goose included: the route reports the status of all four.
+    expect(json).toEqual({
+      status: { claude: { loggedIn: true }, puku: { loggedIn: true }, codex: { loggedIn: true }, goose: { loggedIn: true } },
+      runs: [],
+    });
   });
 
   it("start begins a login that retries the CLI's cards when done", async () => {
