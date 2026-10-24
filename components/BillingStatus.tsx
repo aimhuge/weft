@@ -2,7 +2,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { formatCompact, type MeterBalance } from "@aimhuge/billing";
+import { freeTierCapLabel } from "@/lib/billing/plans";
 import { api, type BillingClientView, type BillingStatusView } from "@/lib/client";
+import { planCta } from "@/lib/use-billing-status";
+import { openUpgrade } from "@/lib/use-upgrade";
 import CrashGuard from "./CrashGuard";
 import { Spinner } from "./Icon";
 
@@ -65,8 +68,11 @@ export default function BillingStatus() {
 
   const s: BillingStatusView = status;
 
+  const cta = planCta(s.plan.id);
+  // Upgrade opens the in-app pricing dialog; Manage billing opens the workspace's billing page on weft.zip.
   function openManage() {
-    if (window.weft) window.weft.openExternal(s.manageUrl);
+    if (cta.upgrade) openUpgrade("plan");
+    else if (window.weft) window.weft.openExternal(s.manageUrl);
   }
 
   return (
@@ -79,7 +85,7 @@ export default function BillingStatus() {
         {s.puku ? (
           <PukuBar puku={s.puku} />
         ) : (
-          <span className="text-[12px] text-muted">Puku trial: 2M tokens a day</span>
+          <span className="text-[12px] text-muted">Puku trial: {freeTierCapLabel()}</span>
         )}
         {s.cancelAtPeriodEnd && s.periodEnd && (
           <span className="text-[12px] text-warn">Cancels on {formatReset(s.periodEnd)}</span>
@@ -88,7 +94,8 @@ export default function BillingStatus() {
           onClick={openManage}
           className="flex shrink-0 items-center gap-1.5 rounded-md border border-line-strong px-2.5 py-1 text-[12.5px] text-ink hover:bg-sunken"
         >
-          {s.plan.id === "pro" ? "Manage billing" : "Upgrade to Pro"} ↗
+          {cta.label}
+          {!cta.upgrade && " ↗"}
         </button>
       </span>
     </CrashGuard>

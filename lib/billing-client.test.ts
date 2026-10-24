@@ -107,3 +107,70 @@ describe("fetchBillingStatus", () => {
     expect(result).toEqual({ error: "Couldn't reach Weft's billing: offline" });
   });
 });
+
+describe("startCheckout", () => {
+  it("asks the user to sign in when SUPABASE_KEY isn't set", async () => {
+    keys.supabase = "";
+    const { startCheckout } = await load();
+    expect(await startCheckout("pro", "monthly")).toEqual({ ok: false, error: "Sign in to your Weft account first." });
+    expect(getSession).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+    keys.supabase = "anon";
+  });
+
+  it("asks the user to sign in when no session is loaded", async () => {
+    signedIn(null);
+    const { startCheckout } = await load();
+    expect(await startCheckout("pro", "monthly")).toEqual({ ok: false, error: "Sign in to your Weft account first." });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("posts the plan and interval with the access token", async () => {
+    signedIn();
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ ok: true, url: "https://stripe.test/c/cs_x" }), { status: 200, headers: { "content-type": "application/json" } }));
+    const { startCheckout } = await load();
+    const result = await startCheckout("team", "yearly");
+    expect(result).toEqual({ ok: true, url: "https://stripe.test/c/cs_x" });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0]! as [string, RequestInit];
+    expect(url).toBe("https://weft-topaz.vercel.app/api/billing/checkout");
+    expect(init.method).toBe("POST");
+    expect(init.headers).toEqual({ authorization: "Bearer acc-tok", "content-type": "application/json" });
+    expect(init.body).toBe(JSON.stringify({ plan: "team", interval: "yearly" }));
+  });
+
+  it("passes an applied change through", async () => {
+    signedIn();
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ ok: true, applied: true }), { status: 200, headers: { "content-type": "application/json" } }));
+    const { startCheckout } = await load();
+    expect(await startCheckout("pro", "monthly")).toEqual({ ok: true, applied: true });
+  });
+
+  it("passes the server's error message through", async () => {
+    signedIn();
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ ok: false, error: "Ask an owner to change the plan." }), { status: 400, headers: { "content-type": "application/json" } }));
+    const { startCheckout } = await load();
+    expect(await startCheckout("pro", "monthly")).toEqual({ ok: false, error: "Ask an owner to change the plan." });
+  });
+
+  it("returns a network error message when fetch throws", async () => {
+    signedIn();
+    fetchMock.mockRejectedValueOnce(new Error("offline"));
+    const { startCheckout } = await load();
+    expect(await startCheckout("pro", "monthly")).toEqual({ ok: false, error: "Couldn't reach Weft's billing: offline" });
+  });
+
+  it("says this Weft can't take payments yet on a 404 with no JSON", async () => {
+    signedIn();
+    fetchMock.mockResolvedValueOnce(new Response("not json", { status: 404 }));
+    const { startCheckout } = await load();
+    expect(await startCheckout("pro", "monthly")).toEqual({ ok: false, error: "weft.zip can't take payments from this Weft yet." });
+  });
+
+  it("falls back to a status-code message on any other reply with no JSON", async () => {
+    signedIn();
+    fetchMock.mockResolvedValueOnce(new Response("not json", { status: 502 }));
+    const { startCheckout } = await load();
+    expect(await startCheckout("pro", "monthly")).toEqual({ ok: false, error: "Weft's billing answered 502." });
+  });
+});

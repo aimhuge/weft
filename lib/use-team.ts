@@ -1,5 +1,6 @@
 "use client";
 
+import { upgradeOnGate } from "./use-upgrade";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { API_HEADERS, apiFetch } from "./api-client";
 import { ACCOUNT_EVENT } from "./auth/hooks";
@@ -181,7 +182,8 @@ export function useTeam(org?: string): TeamHook {
   };
 
   const actions: TeamClientActions = {
-    invite: (email, role) => onTeam((org) => ({ org, action: "invite", email, role })),
+    // A paywall's refusal (an invite on Free) also opens the upgrade dialog.
+    invite: (email, role) => onTeam((org) => ({ org, action: "invite", email, role })).then(upgradeOnGate),
     changeRole: (userId, role) => onTeam((org) => ({ org, action: "role", userId, role })),
     remove: (userId) => onTeam((org) => ({ org, action: "remove", userId })),
     revoke: (inviteId) => onTeam((org) => ({ org, action: "revoke", inviteId })),

@@ -208,21 +208,21 @@ describe("runInvite", () => {
   it("refuses an invite on a Free workspace, before sending anything", async () => {
     const svc = makeService({ profiles: [], org_subscriptions: [{ plan: "free", status: "active" }] });
     const ctx = { ...CTX, service: svc.client as never };
-    expect(await runInvite(ctx, "new@example.com", "member")).toEqual({ ok: false, message: TEAM_GATE_MESSAGE });
+    expect(await runInvite(ctx, "new@example.com", "member")).toEqual({ ok: false, message: TEAM_GATE_MESSAGE, upgrade: "teams" });
     expect(teamsModMock.createInvite).not.toHaveBeenCalled();
   });
 
   it("refuses an invite when the workspace has no subscription row", async () => {
     const svc = makeService({ profiles: [] });
     const ctx = { ...CTX, service: svc.client as never };
-    expect(await runInvite(ctx, "new@example.com", "member")).toEqual({ ok: false, message: TEAM_GATE_MESSAGE });
+    expect(await runInvite(ctx, "new@example.com", "member")).toEqual({ ok: false, message: TEAM_GATE_MESSAGE, upgrade: "teams" });
     expect(teamsModMock.createInvite).not.toHaveBeenCalled();
   });
 
   it("refuses an invite on a Team workspace whose payment failed", async () => {
     const svc = makeService({ profiles: [], org_subscriptions: [{ plan: "team", status: "past_due" }] });
     const ctx = { ...CTX, service: svc.client as never };
-    expect(await runInvite(ctx, "new@example.com", "member")).toEqual({ ok: false, message: TEAM_GATE_MESSAGE });
+    expect(await runInvite(ctx, "new@example.com", "member")).toEqual({ ok: false, message: TEAM_GATE_MESSAGE, upgrade: "teams" });
     expect(teamsModMock.createInvite).not.toHaveBeenCalled();
   });
 

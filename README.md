@@ -38,6 +38,12 @@ WEFT_WEB=1   # in .env.local, or run pnpm dev:web
 
 `isWebEnabled()` in `lib/home.ts` is the gate; `isDeployed()` still owns the home page and analytics.
 
+Signing in locally with GitHub works too, with one Supabase setting: the project's Auth URL
+configuration needs `http://127.0.0.1:1024/**` in its redirect URLs (Supabase matches the
+`redirect_to` against that list exactly, and the local callback is pinned to that origin). The
+callback then lands on `http://127.0.0.1:1024/auth/callback`, exchanges the code and sets the
+session cookie, so `/team` finds your workspace.
+
 ## The desktop app
 
 - **Closing the window keeps Weft running**, with your threads' CLIs open, so conversations stay

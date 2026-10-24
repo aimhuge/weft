@@ -10,6 +10,7 @@
 // a server component, so this file is marked "use client" and rendered
 // inside the WebTeam client wrapper (app/[orgSlug]/team/page.tsx).
 
+import { upgradeOnGate } from "@/lib/use-upgrade";
 import type { NewTeamResult, TeamActionResult, TeamClientActions, TeamRole } from "@/lib/team-types";
 import {
   addProject as serverAddProject,
@@ -32,7 +33,8 @@ export function webTeamActions(orgSlug: string): TeamClientActions {
       // The server action in lib/team-actions.ts accepts the plain args
       // (agent S1 is moving it from FormData to these). The result is
       // already { ok, message? }.
-      return serverInviteMember(orgSlug, email, role);
+      // A paywall's refusal (an invite on Free) also opens the upgrade dialog.
+      return serverInviteMember(orgSlug, email, role).then(upgradeOnGate);
     },
     async changeRole(userId: string, role: TeamRole): Promise<TeamActionResult> {
       return serverChangeMemberRole(orgSlug, userId, role);

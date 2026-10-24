@@ -15,9 +15,11 @@
 // /login and /team pages do. The team pages don't have a desktop equivalent;
 // the board's account flow is the way in.
 import { Suspense } from "react";
-import { isDeployed } from "@/lib/home";
+import { isWebEnabled } from "@/lib/home";
 import { requireTeam, type TeamContext } from "@/lib/teams";
 import { WorkspaceHeader } from "@/components/team/WorkspaceHeader";
+import UpgradeDialog from "@/components/UpgradeDialog";
+import { upgradeCheckout } from "@/lib/billing-actions";
 import "@/components/team/team.css";
 
 function NotDeployedCard({ slug }: { slug: string }) {
@@ -40,6 +42,8 @@ async function WorkspaceShellBody({ orgSlug, children }: { orgSlug: string; chil
     <div className="wz-app wz-workspace">
       <WorkspaceHeader ctx={{ user: ctx.user, org: ctx.org, role: ctx.role, orgs: ctx.orgs }} />
       <main className="wz-workspaceMain">{children}</main>
+      {/* The upgrade dialog a paywall here opens (an invite on Free), checking out through this workspace's action. */}
+      <UpgradeDialog checkout={upgradeCheckout.bind(null, orgSlug)} />
     </div>
   );
 }
@@ -68,7 +72,7 @@ function WorkspaceShellFallback() {
 // The route params are request data under cacheComponents, so they're read inside the <Suspense>, not before it.
 async function WorkspaceShell({ params, children }: { params: Promise<{ orgSlug: string }>; children: React.ReactNode }) {
   const { orgSlug } = await params;
-  if (!isDeployed()) return <NotDeployedCard slug={orgSlug} />;
+  if (!isWebEnabled()) return <NotDeployedCard slug={orgSlug} />;
   return <WorkspaceShellBody orgSlug={orgSlug}>{children}</WorkspaceShellBody>;
 }
 

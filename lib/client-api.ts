@@ -9,6 +9,7 @@ import type { CardShareState, CardShareUpdate } from "./share-types";
 import type { GithubStatus } from "./github-view";
 import type { MediaKind } from "./media";
 import type { BillingClientView } from "./client-bridge";
+import type { CheckoutAnswer, UpgradeInterval, UpgradePlan } from "./billing/upgrade";
 import type { CopilotPersona } from "./copilot-personas";
 import type { WeftConnect } from "./blastcp-view";
 import type {
@@ -171,8 +172,8 @@ export const api = {
   reportBreak: (report: { kind: "build" | "reload"; at?: number; file?: string }) => call<{ card: { id: string } | null }>("POST", "/api/broke", report),
   clearBreak: (id: string) => call<{ card: Card }>("PATCH", `/api/cards/${id}`, { broke: null }),
   setTags: (id: string, tags: string[]) => call<{ card: Card }>("PATCH", `/api/cards/${id}`, { tags }),
-  // The user granted read access to a path outside the project. Persists on the card and queues
-  // a /add-dir slash command for the live session so the in-flight turn can keep reading.
+  // The user granted read access to a path outside the project. Persists on the card, where the live
+  // session's folder guard reads it, so the in-flight turn can keep reading.
   // "Always allow" on an outside-folder prompt: every card may use it (lib/folder-guard.ts).
   allowFolder: (folder: string) => call("POST", "/api/folders", { folder }),
   // Settings → Security's trusted-folders row: take a folder back out, so threads ask about it again.
@@ -291,6 +292,9 @@ export const api = {
   signOut: () => call<{ ok: true }>("POST", "/api/account", { action: "signout" }),
   // The signed-in user's billing status (lib/billing-client.ts); null when signed out, { error } on a failure.
   billingStatus: () => call<BillingClientView>("GET", "/api/account/billing"),
+  // A Stripe Checkout for the workspace (the upgrade dialog): its url goes to the system browser.
+  billingCheckout: (plan: UpgradePlan, interval: UpgradeInterval) =>
+    call<CheckoutAnswer>("POST", "/api/account/billing/checkout", { plan, interval }),
   cloneRepo: (fullName: string) => call<{ path: string; projects: Project[] }>("POST", "/api/repos/clone", { fullName }),
   // A folder's open GitHub issues as Backlog cards, now and every 5 minutes after (lib/github-issues.ts).
   importIssues: (folder: string) =>

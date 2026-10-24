@@ -1,6 +1,7 @@
 import { accountClient, SUPABASE_KEY } from "./account";
 import { TRIAL_URL } from "./puku-trial";
 import type { BillingStatus } from "./billing/status";
+import type { CheckoutAnswer, UpgradeInterval, UpgradePlan } from "./billing/upgrade";
 
 // The desktop's bridge to the deployed Weft's billing endpoint (docs/architecture/billing.md). We don't host
 // billing here — the deployed Weft does, and the page lives at /<orgSlug>/billing. This client only fetches
@@ -32,4 +33,28 @@ export async function fetchBillingStatus(): Promise<BillingClientResult> {
     return { error: typeof body.error === "string" ? body.error : `Weft's billing answered ${res.status}.` };
   }
   return body as BillingStatus;
+}
+
+// Starts a Stripe Checkout for the signed-in user's workspace on the deployed Weft's /api/billing/checkout (the upgrade
+// dialog, components/UpgradeDialog.tsx). The answer's url is the Checkout page the board opens in the system browser.
+export async function startCheckout(plan: UpgradePlan, interval: UpgradeInterval): Promise<CheckoutAnswer> {
+  if (!SUPABASE_KEY) return { ok: false, error: "Sign in to your Weft account first." };
+  const { data } = await accountClient().auth.getSession();
+  const token = data.session?.access_token;
+  if (!token) return { ok: false, error: "Sign in to your Weft account first." };
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}/api/billing/checkout`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify({ plan, interval }),
+    });
+  } catch (err) {
+    return { ok: false, error: `Couldn't reach Weft's billing: ${(err as Error).message}` };
+  }
+  const body = (await res.json().catch(() => ({}))) as Partial<CheckoutAnswer> & { error?: unknown };
+  if (body.ok === true) return body as CheckoutAnswer;
+  if (typeof body.error === "string") return { ok: false, error: body.error };
+  // A deployment that predates the route answers 404 with no JSON.
+  return { ok: false, error: res.status === 404 ? "weft.zip can't take payments from this Weft yet." : `Weft's billing answered ${res.status}.` };
 }

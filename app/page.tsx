@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Board from "@/components/Board";
+import UpgradeDialog from "@/components/UpgradeDialog";
 import HomeErrorFallback from "@/components/HomeErrorFallback";
 import { homeMetadata, isDeployed, loadHome } from "@/lib/home";
 
@@ -20,5 +21,11 @@ export default async function Page() {
     // the real error. Render a small marker so the page is still a page.
     return <HomeErrorFallback message={result.error.message} file={result.error.file} />;
   }
-  return <Board />;
+  // The upgrade dialog sits beside the board so any paywall in it (an invite, a share, the Puku cap) can open it.
+  return (
+    <>
+      <Board />
+      <UpgradeDialog />
+    </>
+  );
 }

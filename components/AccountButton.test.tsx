@@ -1,8 +1,11 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
+import { act, render, renderHook, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { BillingClientView } from "@/lib/client";
 import type { AccountView } from "@/lib/types";
+import { resetBillingStatus } from "@/lib/use-billing-status";
+import { closeUpgrade, useUpgradeReason } from "@/lib/use-upgrade";
 import "./test-utils";
 import AccountButton from "./AccountButton";
 
@@ -11,6 +14,7 @@ const api = vi.hoisted(() => ({
   signIn: vi.fn(() => Promise.resolve({ url: "https://github.com/login/oauth" })),
   magicLink: vi.fn(),
   signOut: vi.fn(),
+  billingStatus: vi.fn<() => Promise<BillingClientView>>(() => Promise.resolve(null)),
 }));
 vi.mock("@/lib/client", () => ({ api }));
 
@@ -19,6 +23,16 @@ vi.mock("@/lib/use-team", () => ({ useTeamPrefetch }));
 
 const openExternal = vi.fn();
 const browserOpen = vi.fn(() => Promise.resolve());
+const billing = {
+  org: { slug: "acme", name: "Acme Labs" },
+  plan: { id: "pro" as const, name: "Pro" },
+  status: "active",
+  interval: "monthly" as const,
+  periodEnd: null,
+  cancelAtPeriodEnd: false,
+  puku: null,
+  manageUrl: "https://weft.zip/acme/billing",
+};
 const ada = { id: "u1", email: "ada@b.co", name: "Ada", avatar: "https://img/ada.png", provider: "github" };
 
 function setup() {
@@ -29,6 +43,7 @@ function setup() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  resetBillingStatus();
   // The pane path and the system-browser path both stub the shell bridge; specific tests
   // overwrite `window.weft` to exercise each branch.
   window.weft = { openExternal, browser: { open: browserOpen } } as unknown as typeof window.weft;
@@ -104,6 +119,24 @@ describe("AccountButton", () => {
     window.removeEventListener("weft:welcome-replay", onReplay);
   });
 
+  it("replays the last achievement from the menu, and hides it in quiet mode", async () => {
+    api.account.mockResolvedValue({ configured: true, user: ada });
+    const onReplay = vi.fn();
+    window.addEventListener("weft:achievement-replay", onReplay);
+    const view = render(<AccountButton onOpenSettings={vi.fn()} />);
+    await userEvent.click(await screen.findByRole("button", { name: "Signed in as Ada" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "Replay last achievement" }));
+    expect(onReplay).toHaveBeenCalledTimes(1);
+    window.removeEventListener("weft:achievement-replay", onReplay);
+    view.unmount();
+
+    document.cookie = "weft-show-progress=0; path=/";
+    render(<AccountButton onOpenSettings={vi.fn()} />);
+    await userEvent.click(await screen.findByRole("button", { name: "Signed in as Ada" }));
+    expect(screen.queryByRole("menuitem", { name: "Replay last achievement" })).toBeNull();
+    document.cookie = "weft-show-progress=; path=/; max-age=0";
+  });
+
   it("offers Share the board… when the board passes a handler", async () => {
     api.account.mockResolvedValue({ configured: true, user: ada });
     const onShareBoard = vi.fn();
@@ -168,6 +201,49 @@ describe("AccountButton", () => {
     expect(screen.getByRole("menu")).toBeInTheDocument();
     await userEvent.click(document.body);
     expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  it("heads the menu with your team, its plan and Upgrade to Pro, which opens the upgrade dialog", async () => {
+    api.account.mockResolvedValue({ configured: true, user: ada });
+    api.billingStatus.mockResolvedValue({ ...billing, plan: { id: "free", name: "Free" } });
+    setup();
+    await vi.waitFor(() => expect(api.billingStatus).toHaveBeenCalled());
+    await userEvent.click(await screen.findByRole("button", { name: "Signed in as Ada" }));
+    expect(screen.getByRole("menu")).toHaveTextContent("Acme LabsFreeYour current team");
+    await userEvent.click(screen.getByRole("menuitem", { name: /Upgrade to Pro/ }));
+    expect(openExternal).not.toHaveBeenCalled();
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(renderHook(() => useUpgradeReason()).result.current).toBe("plan");
+    act(() => closeUpgrade());
+  });
+
+  it("offers Manage billing on Pro, says when it cancels, and opens a tab outside the desktop", async () => {
+    api.account.mockResolvedValue({ configured: true, user: ada });
+    api.billingStatus.mockResolvedValue({ ...billing, cancelAtPeriodEnd: true, periodEnd: "2026-11-20T12:00:00Z" });
+    delete (window as unknown as { weft?: unknown }).weft;
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    setup();
+    await userEvent.click(await screen.findByRole("button", { name: "Signed in as Ada" }));
+    expect(await screen.findByText(/Cancels on/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("menuitem", { name: /Manage billing/ }));
+    expect(open).toHaveBeenCalledWith("https://weft.zip/acme/billing", "_blank", "noopener");
+    open.mockRestore();
+  });
+
+  it("shows a quiet line while the plan loads, and no header when it can't be read", async () => {
+    api.account.mockResolvedValue({ configured: true, user: ada });
+    api.billingStatus.mockReturnValue(new Promise(() => {}));
+    const view = setup();
+    await userEvent.click(await screen.findByRole("button", { name: "Signed in as Ada" }));
+    expect(screen.getByRole("menu")).toHaveTextContent("Checking your plan");
+    view.unmount();
+
+    resetBillingStatus();
+    api.billingStatus.mockRejectedValue(new Error("offline"));
+    setup();
+    await userEvent.click(await screen.findByRole("button", { name: "Signed in as Ada" }));
+    await vi.waitFor(() => expect(screen.getByRole("menu")).not.toHaveTextContent("Checking your plan"));
+    expect(screen.queryByRole("menuitem", { name: /Upgrade|Manage billing/ })).toBeNull();
   });
 
   it("falls back to your email, then an initial", async () => {

@@ -9,11 +9,13 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { roleCan, type OrgRole } from "@aimhuge/teams";
-import { BillingError, type BillingInterval } from "@aimhuge/billing";
+import type { BillingInterval } from "@aimhuge/billing";
 import { requireTeam } from "./teams";
-import { billing, billingConfigured } from "./billing/billing";
+import { billing } from "./billing/billing";
+import { describeBillingError as describe, startUpgrade } from "./billing/checkout";
 import { checkOpenSourceFor } from "./billing/oss-grant";
-import { IP_COUNTRY_HEADER, regionalPick } from "./billing/regional-pick";
+import { IP_COUNTRY_HEADER } from "./billing/regional-pick";
+import type { CheckoutAnswer, UpgradeInterval, UpgradePlan } from "./billing/upgrade";
 
 // The action result type. Successes either redirect (the action throws a redirect sentinel that
 // Next handles) or return an `ok` status; failures carry a single `error` string the form can
@@ -25,14 +27,6 @@ function ok(message: string): BillingActionResult {
 }
 function fail(error: string): BillingActionResult {
   return { ok: false, error };
-}
-
-// A `BillingError` is safe to show the customer verbatim; anything else is ours and gets logged with its
-// message so a real bug is traceable without the customer seeing a raw Stripe or Postgres string.
-function describe(err: unknown): string {
-  if (err instanceof BillingError) return err.message;
-  console.error(`Billing action: ${err instanceof Error ? err.message : "unknown"}`);
-  return "Something went wrong on our end. Try again in a moment.";
 }
 
 // Whether the caller can change the workspace's plan. Owners and admins only — members can see billing
@@ -47,36 +41,28 @@ function billingContext(ctx: Awaited<ReturnType<typeof requireTeam>>) {
   return { service: ctx.service, orgId: ctx.org.id, orgSlug: ctx.org.slug, actorEmail: ctx.user.email };
 }
 
-// Start a Stripe Checkout for the Pro plan. Members get a clear refusal; a Weft without a Stripe key
-// (BILLING_PROVIDER !== "stripe" or no STRIPE_SECRET_KEY) is told billing isn't set up yet. The provider
-// returns either a hosted-checkout URL to redirect to, or an inline-applied result (a downgrade needs no
-// new authorization, so it just applies — we won't see that path on a Free→Pro move, but we handle it).
+// Start a Stripe Checkout for the Pro plan from the billing page's buttons. Members get a clear refusal; a Weft
+// without a Stripe key is told billing isn't set up yet. lib/billing/checkout.ts does the work; this sends the
+// browser on to Checkout, or re-renders the page when the change applied inline (a downgrade needs no new card).
 export async function upgradeToPro(slug: string, interval: BillingInterval): Promise<BillingActionResult> {
-  const ctx = await requireTeam(slug, `/${slug}/billing`);
-  if (!canManageBilling(ctx.role)) return fail("Ask an owner to change the plan.");
-  if (!billingConfigured()) return fail("Billing isn't set up on this Weft yet.");
-  const provider = billing.provider();
-  // Regional prices are monthly only. `priceVariant` picks the Stripe price; a billing package without variant
-  // support ignores it and sells the full price (docs/architecture/billing.md).
-  const regional = interval === "monthly" ? await regionalPick(ctx.service, ctx.org.id, (await headers()).get(IP_COUNTRY_HEADER)) : null;
-  let result: Awaited<ReturnType<typeof provider.startCheckout>>;
-  try {
-    const input: Parameters<typeof provider.startCheckout>[1] & { priceVariant?: string } = {
-      plan: "pro",
-      interval,
-      seats: 1,
-      returnPath: `/${slug}/billing?checkout=done`,
-      ...(regional && { priceVariant: regional.variant }),
-    };
-    result = await provider.startCheckout(billingContext(ctx), input);
-  } catch (err) {
-    return fail(describe(err));
-  }
-  // Outside the try: redirect() throws Next's redirect signal, which a catch would turn into an error.
-  if (result.kind === "redirect") redirect(result.url);
-  // Inline-applied: a downgrade or a same-plan change. Nothing to send them to; the page re-renders.
-  revalidatePath(`/${slug}/billing`);
+  const answer = await upgradeCheckout(slug, "pro", interval);
+  if (!answer.ok) return fail(answer.error);
+  // redirect() throws Next's redirect signal, so it stays out of any try.
+  if ("url" in answer) redirect(answer.url);
   return ok("Plan updated.");
+}
+
+// The upgrade dialog's checkout on weft.zip (components/UpgradeDialog.tsx): the same start as the billing page's
+// buttons, for Pro or Team, answering with the Checkout URL for the dialog to open instead of redirecting.
+export async function upgradeCheckout(slug: string, plan: UpgradePlan, interval: UpgradeInterval): Promise<CheckoutAnswer> {
+  const ctx = await requireTeam(slug, `/${slug}/billing`);
+  // No ?checkout=done here: the Stripe provider adds it (and the session id) to the success URL itself.
+  const answer = await startUpgrade(
+    { service: ctx.service, orgId: ctx.org.id, orgSlug: ctx.org.slug, actorEmail: ctx.user.email, role: ctx.role },
+    { plan, interval, ipCountry: (await headers()).get(IP_COUNTRY_HEADER), returnPath: `/${slug}/billing` },
+  );
+  if (answer.ok && !("url" in answer)) revalidatePath(`/${slug}/billing`);
+  return answer;
 }
 
 // Open the workspace's customer portal. Owner or admin only. When the provider has no portal (the mock),

@@ -2,6 +2,8 @@
 // forwarder (app/api/account/team) and the board (lib/use-team.ts, components/TeamSettings.tsx). Plain types only:
 // the board imports this file, so nothing here may pull in server code or @aimhuge/teams.
 
+import type { UpgradeReason } from "./billing/upgrade";
+
 export type TeamRole = "owner" | "admin" | "member";
 
 // `role` is the viewer's role in that workspace; the switcher shows it beside each name.
@@ -60,7 +62,8 @@ export type NewTeamResult = TeamActionResult & { slug?: string };
 // The longest team name, for a new team and a rename alike.
 export const TEAM_NAME_MAX = 60;
 
-export type TeamActionResult = { ok: boolean; message?: string };
+// `upgrade` is set when a paywall refused the action: the client opens the upgrade dialog for that reason.
+export type TeamActionResult = { ok: boolean; message?: string; upgrade?: UpgradeReason };
 
 // What the team components call. On weft.zip these are server actions (components/team/web-actions.ts); in the
 // desktop's Settings they post through the board's forwarder (lib/use-team.ts).

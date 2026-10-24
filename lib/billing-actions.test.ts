@@ -131,7 +131,7 @@ describe("upgradeToPro", () => {
     expect(result).toBeNull();
     expect(billingMock.providerHandle.startCheckout).toHaveBeenCalledWith(
       { service: { svc: true }, orgId: ORG.id, orgSlug: ORG.slug, actorEmail: USER.email },
-      { plan: "pro", interval: "yearly", seats: 1, returnPath: "/acme/billing?checkout=done" },
+      { plan: "pro", interval: "yearly", seats: 1, returnPath: "/acme/billing" },
     );
   });
 

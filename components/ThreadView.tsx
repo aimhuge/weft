@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { isLive } from "@/lib/format";
+import { isPukuCapError } from "@/lib/billing/upgrade";
+import { openUpgrade } from "@/lib/use-upgrade";
 import { onScrollToTurn, pulse, reportTopTurn, topmostTurn, turnRow, PULSE_MS } from "@/lib/show-events";
 import type { PlanResets } from "@/lib/schedule";
 import { THREAD_PAGE_SIZE } from "@/lib/cloud-sync-types";
@@ -34,7 +36,7 @@ function questionFor(card: Card, onAnswer: (allow: boolean, answers?: Record<str
     onAnswer: (answers: Record<string, string>, annotations: NonNullable<QuestionReply["annotations"]>) =>
       onAnswer(true, answers, Object.keys(annotations).length ? { annotations } : undefined),
     onDecline: (chat: string) => onAnswer(false, undefined, chat.trim() ? { chat } : undefined),
-    // Persist the read scope and queue the /add-dir slash command; the form answers the question itself.
+    // Persist the read scope (the folder guard reads it live); the form answers the question itself.
     onReadScope: grantFolder && ((path: string) => void grantFolder(card.id, path, "card").catch(() => {})),
   };
 }
@@ -190,10 +192,10 @@ export default function ThreadView({
     }
   }
 
-  function answer(allow: boolean) {
+  function answer(allow: boolean, answers?: Record<string, string>) {
     if (!card.pending || answered) return;
     setAnsweredId(card.pending.id);
-    void Promise.resolve(onAnswer(allow)).catch(() => setAnsweredId(null));
+    void Promise.resolve(onAnswer(allow, answers)).catch(() => setAnsweredId(null));
   }
 
   async function send(text: string) {
@@ -235,7 +237,15 @@ export default function ThreadView({
           </div>
         )}
         {card.error && !live && !firstMessageFailed(card, page.items) && (
-          <div className="rounded-md bg-danger-soft px-3 py-2 font-mono text-[12px] text-danger">{card.error}</div>
+          <div className="rounded-md bg-danger-soft px-3 py-2 font-mono text-[12px] text-danger">
+            {card.error}
+            {/* The free Puku cap is a paywall: Pro lifts it. */}
+            {isPukuCapError(card.error) && (
+              <button type="button" onClick={() => openUpgrade("puku-cap")} className="ml-2 font-sans font-medium underline hover:opacity-80">
+                Upgrade to Pro
+              </button>
+            )}
+          </div>
         )}
         <FirstMessageErrorBanner
           card={card}

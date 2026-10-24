@@ -30,13 +30,13 @@ It's client-safe — a board-side plan picker, and the home page's pricing secti
 ([marketing-site.md](marketing-site.md)), import it without pulling in Supabase or Stripe. The token count is the same
 as `lib/puku-proxy.ts`: input (including cache writes) plus output, cache reads don't count.
 
-| Plan | Price | Puku allowance | Teams | BlastCP |
-| --- | --- | --- | --- | --- |
-| Free | $0 | none (Puku trial's daily cap applies) | team of one | `BLASTCP_FREE` |
-| Open Source (`oss`) | $0, granted for 12 months | none (the free tier's cap) | yes | `BLASTCP_CREATOR` |
-| Education (`edu`) | $0, granted for 12 months | none (the free tier's cap) | yes (a teacher's class) | `BLASTCP_CREATOR` |
-| Pro | $20/month or $200/year (`yearlyMonthsCharged: 10`) | `PRO_PUKU_TOKENS` = 300,000,000 per period | yes | `BLASTCP_CREATOR` |
-| Team | $9/seat/month (`TEAM_SEAT_CENTS = 900`, `perSeat: true`) | `PRO_PUKU_TOKENS` = 300,000,000 per period | yes | `BLASTCP_CREATOR` |
+| Plan | Price | Puku allowance | Teams | BlastCP | Shared mini apps |
+| --- | --- | --- | --- | --- | --- |
+| Free | $0 | none (Puku trial's daily cap applies) | team of one | `BLASTCP_FREE` | 25 MB |
+| Open Source (`oss`) | $0, granted for 12 months | none (the free tier's cap) | yes | `BLASTCP_CREATOR` | 1 GB |
+| Education (`edu`) | $0, granted for 12 months | none (the free tier's cap) | yes (a teacher's class) | `BLASTCP_CREATOR` | 1 GB |
+| Pro | $20/month or $200/year (`yearlyMonthsCharged: 10`) | `PRO_PUKU_TOKENS` = 300,000,000 per period | yes | `BLASTCP_CREATOR` | 1 GB |
+| Team | $9/seat/month (`TEAM_SEAT_CENTS = 900`, `perSeat: true`) | `PRO_PUKU_TOKENS` = 300,000,000 per period | yes | `BLASTCP_CREATOR` | 5 GB |
 
 ### BlastCP usage
 
@@ -57,6 +57,14 @@ have to read the Weft plan when an account connects through the token exchange (
 Team follows `@aimhuge/billing`'s DeckCP catalog: `perSeat: true` means the Stripe price is a **per-unit** recurring
 price and the seat count rides on the subscription's `quantity`, so a five-seat workspace is 5 × 900 cents.
 `catalog.totalCents("team", "monthly", seats)` does that arithmetic. Pro's own yearly option is unaffected.
+
+### Shared mini apps
+
+`APP_SHARE_BYTES` caps the bytes a workspace's open mini app links serve together; views and the number of
+links are unlimited on every plan, and a private link doesn't count. Open Source and Education get Pro's
+room. The same numbers live in `private.app_share_byte_limit` (supabase/migrations/20261024124411_app_share_quota.sql),
+whose trigger is the gate; `appShareLabel(plan)` is the line the billing page's plan cards show
+(mini-app-hosting.md "Access, plans and limits").
 
 ## The free tier
 
@@ -236,6 +244,11 @@ at end of stream.
   Puku-usage bar (spent of `allowance + granted`, resets on the period end) and a **Manage billing** /
   **Upgrade to Pro** button that opens the deployed Weft's page in the system browser. Refetches on window
   focus, so coming back from Checkout updates it.
+- **`lib/use-billing-status.ts`** + **`components/AccountPlan.tsx`**: the avatar menu's header (`components/AccountMenu.tsx`):
+  your current workspace's name, its plan as a chip, and one button, **Upgrade to Pro** (accent) on Free, Open Source
+  and Education, **Manage billing** on Pro and Team, both opening `manageUrl` (system browser in the desktop, a new tab
+  on the web). The hook keeps one answer for the board, loaded when you sign in (`useBillingPrefetch` in
+  `AccountButton`) so the menu opens with it, and again on window focus. Hidden when signed out or unreadable.
 - **`/api/billing/webhook`** (planned, the same thread as the billing page): Stripe's POST target on
   `https://weft.zip/api/billing/webhook`. Mounts the 9 events listed below, verifies the signature with
   `STRIPE_WEBHOOK_SECRET`, records the event in `billing_webhook_events` (PK on the Stripe event id, so a
@@ -249,6 +262,42 @@ at end of stream.
 
 The mock provider that ships in `@aimhuge/billing` is the default and lets every test run without Stripe,
 but the mock has no hosted checkout page in Weft — for real customers you need `BILLING_PROVIDER=stripe`.
+
+## The upgrade dialog
+
+Built 2026-10-24. Every paywall opens the same in-app pricing dialog (`components/UpgradeDialog.tsx`): Free, Pro and
+Team side by side, priced off the catalog (`lib/billing/plan-cards.ts`), a Monthly/Yearly switch (Pro's $200/year with
+its saving; Team is monthly per seat either way), the plan you're on marked Current, and **Upgrade to Pro** / **Upgrade to
+Team**, which start Stripe Checkout.
+
+- **One per window.** `lib/use-upgrade.ts` holds which reason is open; `openUpgrade(reason)` opens it from anywhere.
+  It's mounted beside the board in `app/page.tsx` (desktop) and in the workspace shell `app/[orgSlug]/layout.tsx`
+  (weft.zip), in its own stacking layer so it opens above Share… or Settings, and it steps the browser pane aside.
+- **Reasons** (`lib/billing/upgrade.ts`, client-safe, `UPGRADE_COPY` is the headline per reason):
+  - `teams`: `runInvite`'s gate refusal now carries `upgrade: "teams"` (`TeamActionResult.upgrade`). The two
+    team-action factories pass every invite through `upgradeOnGate`: `lib/use-team.ts` on the desktop and
+    `components/team/web-actions.ts` on weft.zip. That covers every invite box: Settings → Teams, the board's Share
+    panel and People on your projects. A deployed weft.zip that predates the field is recognised by
+    `TEAM_GATE_MESSAGE`, now in this file.
+  - `share-room`: **See plans** in the Share dialog's over-the-cap line (`components/ShareAppQuota.tsx`), on any plan
+    below Team.
+  - `puku-cap`: **Upgrade to Pro** beside a card's error when it is the proxy's free-cap refusal (`isPukuCapError`, `components/ThreadView.tsx`).
+  - `plan`: the avatar menu's **Upgrade to Pro** (`components/AccountPlan.tsx`) and Settings → Accounts' plan row
+    (`components/BillingStatus.tsx`, which now also says Manage billing on Team).
+- **Checkout** is one function, `startUpgrade` in `lib/billing/checkout.ts`: owner or admin only, Pro with its regional
+  price variant on monthly, Team billed monthly on the workspace's current member count. Three ways in:
+  - the billing page's buttons (`upgradeToPro` in `lib/billing-actions.ts`);
+  - the dialog on weft.zip (`upgradeCheckout(slug, plan, interval)`, a server action bound in the layout), which goes to
+    Checkout in the same tab and comes back to `/<slug>/billing`;
+  - the dialog on the desktop: `api.billingCheckout` → `/api/account/billing/checkout` (localhost, guarded) →
+    `lib/billing-client.ts` `startCheckout` → weft.zip's `/api/billing/checkout` (Weft access token, like
+    `/api/billing/status`; `upgradeContextFor` reads the workspace, role and email with the service client). Checkout
+    opens in the system browser and comes back to `/checkout/done` (`app/checkout/done/page.tsx`: no sign-in needed,
+    says upgraded or canceled, links `weft://board`). Meanwhile the dialog waits, re-reading the plan on focus and every
+    4 s, and thanks you once the webhook has made it Pro or Team.
+- **Fixed on the way:** the Stripe provider adds `?checkout=done&session_id=…` to `returnPath` itself, and the billing
+  page's own return path already had `?checkout=done`, so Stripe came back to `?checkout=done?checkout=done` and the
+  page never reconciled. `returnPath` is now the bare `/<slug>/billing`.
 
 ## Environment
 
@@ -268,6 +317,14 @@ with **Push to Vercel** or `mcp__secrets__push_to_vercel`.
 | `NEXT_PUBLIC_SITE_URL` | Vercel | `https://weft.zip` by default. Used to build the `manageUrl` on `BillingStatus`. |
 
 ## Setup steps
+
+**Done 2026-10-24:** the Weft Pro and Weft Team products and their five prices exist on the live account (made by
+`scripts/stripe-weft-prices.mjs`, BlastCP's `app`/`plan`/`interval` metadata and `weft_<plan>_<interval>[_<variant>]_<cents>`
+lookup keys, safe to re-run), and their ids are in the vault and on Vercel production. `scripts/stripe-prices.mjs` lists
+the account's products, prices and webhook endpoints (read-only). `scripts/stripe-weft-webhook.mjs` registers step 3's
+endpoint and hands its signing secret to Vercel over the CLI's stdin, never printing it. All three run through
+`mcp__secrets__run` with `STRIPE_SECRET_KEY`. Both the development and production keys are **live**, so development's
+`BILLING_PROVIDER` stays unset (the mock) and a local run can't charge a card.
 
 1. **Apply the migration.** The Supabase drawer's **Migrate** (or `supabase db push`) for
    `supabase/migrations/20261014010429_billing.sql`, after the teams migration
@@ -292,6 +349,8 @@ with **Push to Vercel** or `mcp__secrets__push_to_vercel`.
 ## Files
 
 - `lib/billing/plans.ts` + `lib/billing/plans.test.ts` — the catalog (client-safe).
+- `lib/billing/upgrade.ts`, `lib/billing/plan-cards.ts`, `lib/use-upgrade.ts`, `components/UpgradeDialog.tsx` (+ tests) — the upgrade dialog.
+- `lib/billing/checkout.ts`, `app/api/billing/checkout/route.ts`, `app/api/account/billing/checkout/route.ts`, `app/checkout/done/page.tsx` (+ tests) — starting Checkout.
 - `lib/billing/plan-gate.ts` + `lib/billing/plan-gate.test.ts` — `TEAM_PLANS`, `GRANT_PLANS`, `grantLapsed`, `canHaveMembers`, `workspacePlan`,
   `workspaceCanHaveMembers`: which plans may have members (server-only).
 - `lib/billing/grants.ts` — `grantPlan`, `grantEnd`, `renewDue`: the 12-month Open Source and Education grants (server-only).
@@ -307,6 +366,7 @@ with **Push to Vercel** or `mcp__secrets__push_to_vercel`.
 - `app/api/billing/status/route.ts` + `app/api/billing/status/route.test.ts` — the deployed Weft's endpoint.
 - `app/api/account/billing/route.ts` + `app/api/account/billing/route.test.ts` — the board's localhost-only proxy.
 - `components/BillingStatus.tsx` + `components/BillingStatus.test.tsx` — Settings → Accounts → Weft account plan row.
+- `lib/use-billing-status.ts` (+ test) + `components/AccountPlan.tsx` — the avatar menu's team, plan and upgrade header (tested in `components/AccountButton.test.tsx`).
 - `app/[orgSlug]/billing/sections.tsx` — the Billing page's pieces; its invoices are tickets (`InvoiceTicket`) that link to the sheet.
 - `app/[orgSlug]/billing/invoices/[number]/page.tsx` + `components/team/InvoiceSheet.tsx` (+ test) + `components/team/ScanCode.tsx` — one invoice
   as a full page: read through `billing.invoice(service, orgId, number)` (org-scoped, so another workspace's number is a 404) and drawn

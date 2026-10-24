@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, renderHook, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { BillingClientView } from "@/lib/client";
+import { closeUpgrade, useUpgradeReason } from "@/lib/use-upgrade";
 import "./test-utils";
 import BillingStatus from "./BillingStatus";
 
@@ -59,7 +60,7 @@ describe("BillingStatus", () => {
     expect(openExternal).toHaveBeenCalledWith("https://weft.zip/ada/billing");
   });
 
-  it("shows the Free trial hint and the Upgrade to Pro button", async () => {
+  it("shows the Free trial hint and an Upgrade to Pro button that opens the upgrade dialog", async () => {
     api.billingStatus.mockResolvedValue({
       ...PRO,
       plan: { id: "free", name: "Free" },
@@ -69,8 +70,17 @@ describe("BillingStatus", () => {
     expect(
       await screen.findByText((_, el) => el?.textContent === "Plan: Free · Ada"),
     ).toBeInTheDocument();
-    expect(screen.getByText("Puku trial: 2M tokens a day")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Upgrade to Pro/ })).toBeInTheDocument();
+    expect(screen.getByText("Puku trial: 1M tokens a day")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Upgrade to Pro/ }));
+    expect(openExternal).not.toHaveBeenCalled();
+    expect(renderHook(() => useUpgradeReason()).result.current).toBe("plan");
+    act(() => closeUpgrade());
+  });
+
+  it("offers Manage billing on Team, not an upgrade", async () => {
+    api.billingStatus.mockResolvedValue({ ...PRO, plan: { id: "team", name: "Team" } });
+    setup();
+    expect(await screen.findByRole("button", { name: /Manage billing/ })).toBeInTheDocument();
   });
 
   it("shows a cancel notice on Pro when cancelAtPeriodEnd is set", async () => {

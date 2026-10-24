@@ -15,12 +15,11 @@ import { runRenameTeam } from "./team-create";
 import { runDeleteTeam } from "./team-delete";
 import { listTeamProjects, runLinkProject, runUnlinkProject } from "./team-projects";
 import { workspaceCanHaveMembers } from "./billing/plan-gate";
+import { TEAM_GATE_MESSAGE } from "./billing/upgrade";
 import type { TeamActionResult, TeamInvite, TeamMember, TeamOp, TeamOrg, TeamSnapshot, TeamUser } from "./team-types";
 
-// What a Free workspace is told when it tries to bring someone in. One string so the invite op and the team
-// page's upsell can't drift apart. It names Pro, not Team: Pro already carries the seats, so it is the
-// cheaper way to unlock this, and the wording does not tell a Pro subscriber to buy a bigger plan.
-export const TEAM_GATE_MESSAGE = "Teams are part of Pro. Upgrade this workspace to invite members — or to Team, at $9 a seat.";
+// What a Free workspace is told when it tries to bring someone in, kept beside the upgrade dialog it opens.
+export { TEAM_GATE_MESSAGE };
 
 // A two-line answer: both server actions and the API wrap a result in
 // { ok, message? }. The plain helper keeps the call sites from re-typing
@@ -149,7 +148,8 @@ export async function runInvite(ctx: TeamContext, emailRaw: string, role: TeamCo
   // workspace costs nothing and never sends a half-accepted invite. The role
   // check above still comes first, so a member is told about their role, not
   // the plan.
-  if (!(await workspaceCanHaveMembers(ctx.service, ctx.org.id))) return fail(TEAM_GATE_MESSAGE);
+  // `upgrade` tells the board and the team page to open the upgrade dialog (lib/billing/upgrade.ts).
+  if (!(await workspaceCanHaveMembers(ctx.service, ctx.org.id))) return { ok: false, message: TEAM_GATE_MESSAGE, upgrade: "teams" };
   // Look up an existing profile by normalized email. The publishable key
   // can't read profiles here (RLS scopes it to the cookie's user), so this
   // goes through the service client.

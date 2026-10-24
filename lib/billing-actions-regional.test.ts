@@ -80,7 +80,7 @@ describe("upgradeToPro regional price", () => {
         plan: "pro",
         interval: "monthly",
         seats: 1,
-        returnPath: "/acme/billing?checkout=done",
+        returnPath: "/acme/billing",
         priceVariant: "pro_monthly_low",
       },
     );
@@ -94,7 +94,7 @@ describe("upgradeToPro regional price", () => {
     expect(regionalMock.regionalPick).toHaveBeenCalledWith({ svc: true }, ORG.id, "US");
     expect(billingMock.providerHandle.startCheckout).toHaveBeenCalledWith(
       { service: { svc: true }, orgId: ORG.id, orgSlug: ORG.slug, actorEmail: USER.email },
-      { plan: "pro", interval: "monthly", seats: 1, returnPath: "/acme/billing?checkout=done" },
+      { plan: "pro", interval: "monthly", seats: 1, returnPath: "/acme/billing" },
     );
   });
 
@@ -104,7 +104,7 @@ describe("upgradeToPro regional price", () => {
     expect(regionalMock.regionalPick).not.toHaveBeenCalled();
     expect(billingMock.providerHandle.startCheckout).toHaveBeenCalledWith(
       { service: { svc: true }, orgId: ORG.id, orgSlug: ORG.slug, actorEmail: USER.email },
-      { plan: "pro", interval: "yearly", seats: 1, returnPath: "/acme/billing?checkout=done" },
+      { plan: "pro", interval: "yearly", seats: 1, returnPath: "/acme/billing" },
     );
   });
 });
