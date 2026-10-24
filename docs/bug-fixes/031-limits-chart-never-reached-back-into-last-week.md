@@ -46,6 +46,56 @@ The same wrong assumption sat in `lib/plan-limits.ts`: `planLimits()` kept each 
 reading of each window, so a card on a CLI that stopped reporting showed that CLI's stale snapshot
 instead of the account's real limits.
 
+### The counter-hypothesis, and why the log refutes it
+
+The two puku rows look, at a glance, like a mistake: a puku reading that matches Claude Code's to
+the minute. The obvious reading is that they are Claude's own readings logged under the wrong
+backend — that a card hit Claude's 5-hour limit, was switched to puku, and the reading its Claude
+session still had coming was written under the card's new backend. That reading is testable, and the
+log rules it out three ways.
+
+**A mislabeled reading must be a duplicate, and it is not.** For each puku row, look for an *earlier*
+Claude row with the same value *and* the same reset epoch:
+
+| puku reading | used | reset | an earlier Claude row with the same value AND reset? |
+| --- | --- | --- | --- |
+| 19:45:15 five_hour | 100 | 1792765800 | **no** — no earlier Claude row has `used=100` with this reset |
+| 19:45:15 seven_day | 14 | 1793332800 | yes, at 19:38:34 — the same value the counter had 7 minutes earlier |
+
+The five-hour row carries a value Claude had never read. A re-reported reading cannot do that: it
+must carry a value already in the log. And the weekly row's "match" is the opposite of a duplicate —
+it matches the value the counter had *seven minutes earlier*, which is what a shared counter looks
+like, not a copied line.
+
+**The value fits the counter's trajectory.** The five-hour counter, minutes either side:
+
+```
+  19:41:20  claude  used= 97  resetsAt=1792765800
+  19:42:25  claude  used= 98  resetsAt=1792765800
+  19:43:51  claude  used= 99  resetsAt=1792765800
+  19:45:15  puku    used=100  resetsAt=1792765800   <-- the next step, same reset epoch
+  19:47:40  claude  used=100  resetsAt=1792765800
+```
+
+One counter, climbing. The puku reading is exactly the next step after Claude's 99, against the
+*identical* reset epoch — not a near-miss, the same integer. Two separate plans could not produce
+this: a puku plan would carry its own reset epoch, and a duplicate would repeat a value already in
+the log. Claude's own 19:47:40 reading is also 100 — the counter had reached its ceiling — which is
+exactly what made this look like a repeat.
+
+**The mechanism makes it inevitable.** Both readings are attributed to the session that produced them:
+`lib/runner-turn.ts` calls `updateLimits(id, session.spec.backend, …)` and `lib/limit-poll.ts`
+calls `recordLimits(backend, …)` for the backend it polled. So a puku row means a puku session
+reported it. puku-cli runs the Anthropic Agent SDK, so `usage_EXPERIMENTAL_*` returns the account's
+real windows — the same account Claude Code draws from. Two readers, one counter.
+
+**What the counter-hypothesis does get right.** A card that *switches* CLI can carry the old CLI's
+stale stats onto the new one, and that is a real defect worth its own fix: clear a card's stats when
+it switches, and record each reading under the CLI that sent it. But that is a bug about *stale
+state on a card*, not a fact about the shape of the plan — and it does not make the two counters
+separate.
+
+
 ## Fix
 
 **The history behind the chart is the account's.** `useSamples()` no longer takes a `backend` and no

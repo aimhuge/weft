@@ -104,6 +104,16 @@ Measured on the author's machine on 2026-10-23: puku read `five_hour used=100 re
 21:30 reset — one climbing counter, not two. The history log held 684 samples: 682 from Claude Code
 and 2 from puku, both from that one evening.
 
+Those two puku rows look like a mistake, and the obvious reading — that they are Claude's own
+readings logged under the wrong backend after a CLI switch — is wrong. A mislabeled reading must be
+a duplicate, and the five-hour row is not: `used=100` with `resetsAt=1792765800` appears in **no**
+earlier Claude row. It is exactly the next step in a climbing counter (99 → 100 → 100, the last a
+ceiling), against the identical reset epoch. Both readings are attributed to the session that
+produced them (`lib/runner-turn.ts` uses `session.spec.backend`, `lib/limit-poll.ts` records the
+backend it polled), and puku-cli runs the Anthropic Agent SDK, so it reads the same account's
+windows. The full disproof is in
+`docs/bug-fixes/031-limits-chart-never-reached-back-into-last-week.md`.
+
 So the limits are not per CLI, and nothing may read them as if they were:
 
 - **The history behind the chart is the account's.** `components/LimitBurndown.tsx`'s `useSamples()`
