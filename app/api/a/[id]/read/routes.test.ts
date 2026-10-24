@@ -50,7 +50,7 @@ const SHARE = {
     supabaseUrl: "https://abc.supabase.co",
     reads: {
       // The manifest's args values are the defaults — their JS type is what the page must send back.
-      growth_overview: { supabase: { fn: "growth_overview", args: { days: 7 } } },
+      growth_overview: { supabase: "growth_overview", args: { days: 7 } },
       site_visits: { ga4: { dimensions: ["date"], metrics: [{ name: "sessions" }] } },
     },
   },
@@ -194,7 +194,7 @@ describe("POST /api/a/[id]/read", () => {
 
     const { POST } = await import("./route");
     for (const bad of ["https://attacker.example", "http://abc.supabase.co", "https://abc.supabase.co.evil.example", "https://localhost:54321"]) {
-      appShareAccess.mockResolvedValue({ kind: "ok", share: { ...SHARE, manifest: { supabaseUrl: bad, reads: { growth_overview: { supabase: { fn: "growth_overview", args: { days: "number" } } } } } } });
+      appShareAccess.mockResolvedValue({ kind: "ok", share: { ...SHARE, manifest: { supabaseUrl: bad, reads: { growth_overview: { supabase: "growth_overview", args: { days: 7 } } } } } });
       fetchMock.mockClear();
       const res = await POST(post({ name: "growth_overview", args: { days: 7 } }), ctx("s1"));
       expect(res.status).toBe(400);
@@ -205,7 +205,7 @@ describe("POST /api/a/[id]/read", () => {
     }
   });
 
-  it("drops a missing arg instead of forwarding it", async () => {
+  it("sends the manifest's arg when the page leaves it out", async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response("[]", { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
     createAppSecretStore.mockReturnValue({ getValues: vi.fn().mockResolvedValue({ SUPABASE_SECRET_KEY: "sb_secret_x" }) });
@@ -214,7 +214,7 @@ describe("POST /api/a/[id]/read", () => {
     const res = await POST(post({ name: "growth_overview", args: {} }), ctx("s1"));
     expect(res.status).toBe(200);
     const [called] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(called).not.toContain("days=");
+    expect(called).toContain("days=7");
   });
 
   it("rejects an arg with the wrong type with 400", async () => {

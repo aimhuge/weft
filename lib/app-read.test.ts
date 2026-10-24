@@ -1,11 +1,11 @@
 // lib/app-read.ts: the hosted side of a mini app's reads. The reads themselves are electron/app-read-core.cjs
 // (tested in electron/app-data-reads.test.ts); here, the status each refusal kind answers with and the
-// hosted defaults (the page's args only, the global fetch).
+// hosted defaults (the global fetch, one GA4 token cache).
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { readStatus, runHostedRead } from "./app-read";
 
 const MANIFEST = { supabaseUrl: "https://abc.supabase.co" };
-const ENTRY = { supabase: { fn: "growth_overview", args: { days: 7 } } };
+const ENTRY = { supabase: "growth_overview", args: { days: 7 } };
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -28,11 +28,18 @@ describe("readStatus", () => {
 });
 
 describe("runHostedRead", () => {
-  it("sends only the page's args, not the manifest's defaults", async () => {
+  it("calls the function weft-app.json names, with the manifest's args as defaults", async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response("[]", { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
     await expect(runHostedRead(ENTRY, MANIFEST, {}, { SUPABASE_SECRET_KEY: "k" })).resolves.toEqual([]);
-    expect(String(fetchMock.mock.calls[0]?.[0])).not.toContain("days=");
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe("https://abc.supabase.co/rest/v1/rpc/growth_overview?days=7");
+  });
+
+  it("lets the page override a declared arg", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response("[]", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    await runHostedRead(ENTRY, MANIFEST, { days: 30 }, { SUPABASE_SECRET_KEY: "k" });
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain("days=30");
   });
 
   it("puts the refusal's status on the error it throws", async () => {

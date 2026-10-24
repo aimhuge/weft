@@ -107,9 +107,8 @@ function plainObject(v) {
 
 // The manifest's args are the defaults; the page may override only keys the manifest declared, with the same
 // primitive type. A page that changes a type is refused before any network call; an undeclared key is dropped.
-// defaults: false sends only what the page passed, which is how the hosted route has always behaved (its
-// test "drops a missing arg instead of forwarding it"); docs/architecture/mini-apps.md promises defaults,
-// so the two disagree on purpose until someone decides which is right.
+// defaults: false sends only what the page passed. Both the Mac and the hosted route send defaults, as
+// docs/architecture/mini-apps.md promises.
 function cleanArgs(declaredArgs, pageArgs, { defaults = true } = {}) {
   const cleaned = {};
   const declared = plainObject(declaredArgs);

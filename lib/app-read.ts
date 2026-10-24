@@ -7,8 +7,11 @@ import type { ReadError, ReadFetch } from "../electron/app-read-core.cjs";
 
 type Core = typeof import("../electron/app-read-core.cjs");
 
+// A manifest read, as weft-app.json writes it and electron/app-data.cjs reads it: the function's name in
+// `supabase`, its default args beside it in `args`.
 export interface ReadEntry {
-  supabase?: { fn: string; args?: unknown };
+  supabase?: string;
+  args?: unknown;
   ga4?: unknown;
 }
 
@@ -46,8 +49,8 @@ async function loadCore(): Promise<Core> {
 
 const serverFetch: ReadFetch = (url, init) => fetch(url, init);
 
-// Runs a manifest entry's read with the author's secret values. The Supabase read sends only the args the
-// page passed (defaults: false), which is how the hosted read has always behaved; see cleanArgs in the core.
+// Runs a manifest entry's read with the author's secret values. The Supabase read sends the manifest's args as
+// defaults, with the page's overriding them, the same as the Mac (cleanArgs in the core).
 // A refusal leaves with its HTTP status on .status, which the route's pipeline (lib/app-route-pipeline.ts
 // errStatus) answers with.
 export async function runHostedRead(entry: ReadEntry, manifest: unknown, args: Record<string, unknown> | undefined, values: Record<string, string>): Promise<unknown> {
@@ -64,12 +67,11 @@ function runRead({ runSupabase, runGa4 }: Core, entry: ReadEntry, manifest: unkn
   if (entry.supabase) {
     return runSupabase({
       supabaseUrl: (manifest as { supabaseUrl?: string }).supabaseUrl ?? "",
-      fn: entry.supabase.fn,
-      declaredArgs: entry.supabase.args,
+      fn: entry.supabase,
+      declaredArgs: entry.args,
       pageArgs: args,
       values,
       fetch: serverFetch,
-      defaults: false,
     });
   }
   return runGa4({ body: entry.ga4, values, fetch: serverFetch, tokens: gaTokens });
