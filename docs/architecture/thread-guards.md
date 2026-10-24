@@ -29,7 +29,8 @@ only Weft's own window can.
 There is no per-route "sensitive" flag any more: it existed when reads were unauthenticated and marked the six routes that leaked
 (account, account/team, account/billing, settings, services, github/collaborators). The desktop app adds the token to the board window's
 requests only (`electron/api-token.cjs`, a `webRequest` hook on the default session; the browser pane is another partition), and it is
-the control server's token, which threads can't read. With no token on disk (tests, or before Weft has ever launched) the check is off.
+the control server's token, which threads can't read. The one thing the pane gets is the plain read value `1` on GET/HEAD of
+`/api/attachments/*` (`attachPaneAttachments`), so a page a thread opens can show a card's pictures: an `<img>` can't send a header. With no token on disk (tests, or before Weft has ever launched) the check is off.
 `weft://reply|commit` links act only from a real file under `~/.weft` (`ownPage`, `electron/page-links.cjs`).
 
 ## Auto mode's classifier denials

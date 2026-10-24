@@ -23,6 +23,9 @@ function stepZoom(percent, dir) {
   return [...ZOOM_STEPS].reverse().find((z) => z < percent - 0.5) ?? ZOOM_STEPS[0];
 }
 
+// Its own session, apart from the board window's, so pages never carry the launch token (electron/api-token.cjs).
+const PANE_PARTITION = "persist:threadboard-browser";
+
 function createBrowserPane({ getWindow, getAppView, token, onContents, pages, onLink, secrets, secretRun = () => undefined, routes: moreRoutes = {} }) {
   // One page per card (keyed by card id), so each review keeps its own browser; "board" is the
   // one shown with no card open. Only the active one is on screen.
@@ -85,7 +88,7 @@ function createBrowserPane({ getWindow, getAppView, token, onContents, pages, on
     const existing = views.get(key);
     if (existing) return existing;
     const view = new WebContentsView({
-      webPreferences: { partition: "persist:threadboard-browser", sandbox: true, contextIsolation: true, preload: path.join(__dirname, "pane-preload.cjs") },
+      webPreferences: { partition: PANE_PARTITION, sandbox: true, contextIsolation: true, preload: path.join(__dirname, "pane-preload.cjs") },
     });
     view.setBackgroundColor("#ffffff");
     getWindow().contentView.addChildView(view);
@@ -379,4 +382,4 @@ function createBrowserPane({ getWindow, getAppView, token, onContents, pages, on
   };
 }
 
-module.exports = { createBrowserPane };
+module.exports = { createBrowserPane, PANE_PARTITION };
