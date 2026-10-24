@@ -25,8 +25,10 @@
 @keyframes rail-drawer-in {
   from { width: var(--rail-drawer-w, 272px); }
 }
+/* By its margin rather than a transform: a transform would make the body the containing block for anything fixed
+   inside it, and the feature intro's modal (components/FeatureIntro.tsx) is fixed to the window as the drawer opens. */
 @keyframes rail-drawer-body-out {
-  from { transform: translateX(-24px); opacity: 0.4; }
+  from { margin-left: -24px; opacity: 0.4; }
 }
 [data-rail]:has(> [data-drawer]) + .board-sheet {
   position: relative;

@@ -3,7 +3,8 @@ import { act, render, renderHook } from "@testing-library/react";
 import { createElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { IntroFrame } from "@/components/FeatureIntro";
-import { INTROS_KEY, markIntroSeen, muteMessage, REPLAY_MESSAGE } from "./feature-intros";
+import { INTROS_KEY, markIntroSeen, muteMessage, REPLAY_MESSAGE, TOGGLE_MESSAGE } from "./feature-intros";
+import { useIntroModal } from "./intro-modal";
 import { useFeatureIntro } from "./use-feature-intro";
 
 // A message from the intro's own iframe, as public/intros/player.js posts it.
@@ -130,5 +131,65 @@ describe("useFeatureIntro", () => {
 
   it("has no page to load for no drawer", () => {
     expect(renderHook(() => useFeatureIntro(null)).result.current.src).toBe("");
+  });
+
+  it("opens big, and shrinks into its drawer with the same frame, so it plays on", () => {
+    const { result } = renderHook(() => useFeatureIntro("vault"));
+    expect(result.current.expanded).toBe(true);
+    const { container, rerender } = render(createElement(IntroFrame, { intro: result.current }));
+    const frame = container.querySelector("iframe");
+    expect(container.querySelector("[role=dialog]")).not.toBeNull();
+
+    act(() => result.current.setExpanded(false));
+    rerender(createElement(IntroFrame, { intro: result.current }));
+    expect(container.querySelector("[role=dialog]")).toBeNull();
+    expect(container.querySelector("iframe")).toBe(frame);
+
+    act(() => result.current.setExpanded(true));
+    expect(result.current.expanded).toBe(true);
+  });
+
+  it("shrinks on Esc and on the backdrop, and its ✕ shrinks rather than hides", () => {
+    const { result } = renderHook(() => useFeatureIntro("vault"));
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    });
+    expect(result.current).toMatchObject({ open: true, expanded: false });
+
+    act(() => result.current.setExpanded(true));
+    const { container } = render(createElement(IntroFrame, { intro: result.current }));
+    act(() => (container.querySelector("[aria-hidden].fixed") as HTMLElement).click());
+    expect(result.current.expanded).toBe(false);
+
+    act(() => result.current.setExpanded(true));
+    const big = render(createElement(IntroFrame, { intro: result.current }));
+    act(() => (big.container.querySelector("[aria-label='Shrink it back']") as HTMLElement).click());
+    expect(result.current).toMatchObject({ open: true, expanded: false });
+  });
+
+  it("hides the browser pane while it plays big", () => {
+    const { result } = renderHook(() => ({ intro: useFeatureIntro("vault"), modal: useIntroModal() }));
+    expect(result.current.modal).toBe(true);
+    act(() => result.current.intro.setExpanded(false));
+    expect(result.current.modal).toBe(false);
+  });
+
+  it("asks the page to pause or play on when you click the video, and shows ▶ while paused", () => {
+    const { result } = renderHook(() => useFeatureIntro("vault"));
+    const { container, rerender } = render(createElement(IntroFrame, { intro: result.current }));
+    const post = vi.fn();
+    const page = { postMessage: post };
+    Object.defineProperty(container.querySelector("iframe")!, "contentWindow", { value: page });
+
+    act(() => (container.querySelector("[aria-label='Pause the intro']") as HTMLElement).click());
+    expect(post).toHaveBeenCalledWith(TOGGLE_MESSAGE, "*");
+
+    act(() => fromFrame(page, { weft: "intro", event: "pause" }));
+    expect(result.current.paused).toBe(true);
+    rerender(createElement(IntroFrame, { intro: result.current }));
+    expect(container.querySelector("[aria-label='Play the intro']")!.textContent).toContain("▶");
+
+    act(() => fromFrame(page, { weft: "intro", event: "play" }));
+    expect(result.current.paused).toBe(false);
   });
 });

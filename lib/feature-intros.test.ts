@@ -66,6 +66,8 @@ describe("introEvent", () => {
   it("reads the page's own start and done", () => {
     expect(introEvent({ weft: "intro", event: "start" })).toBe("start");
     expect(introEvent({ weft: "intro", event: "done" })).toBe("done");
+    expect(introEvent({ weft: "intro", event: "pause" })).toBe("pause");
+    expect(introEvent({ weft: "intro", event: "play" })).toBe("play");
   });
 
   it("ignores anything that isn't one of ours", () => {

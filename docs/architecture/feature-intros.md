@@ -17,7 +17,7 @@ and played by the shared `player.js`. Anything that sits over the panel (a Touch
 
 | | |
 |---|---|
-| `player.js` | `window.weftIntro` scales the stage to the frame and, with `?live=1`, plays the timeline once from the top **with its own voice** (the `<id>.m4a` beside the page; `?muted=1` starts it muted, `{ weft: "intro-mute", muted }` flips it). The timeline waits for the voice to really play (or fail, or 4 s), and a voice later than that pulls the frames back to where it is. It posts `{ weft: "intro", event: "start" }` when it starts and `{ weft: "intro", event: "done" }` when it ends, and takes `{ weft: "intro-go" }` from the parent to start over. `?t=<seconds>` holds the frame there instead, for checking a scene by eye. |
+| `player.js` | `window.weftIntro` scales the stage to the frame and, with `?live=1`, plays the timeline once from the top **with its own voice** (the `<id>.m4a` beside the page; `?muted=1` starts it muted, `{ weft: "intro-mute", muted }` flips it). The timeline waits for the voice to really play (or fail, or 4 s), and a voice later than that pulls the frames back to where it is. It posts `{ weft: "intro", event }` as `start` when it starts, `pause` and `play` when it stops and plays on, and `done` when it ends. It takes `{ weft: "intro-go" }` from the parent to start over and `{ weft: "intro-toggle" }` (a click on the video) to pause the frames and the voice together or play both on; a toggle on a finished video starts it over. `?t=<seconds>` holds the frame there instead, for checking a scene by eye. |
 | `kit.css` | The shared look: the stage, the caption, the chip row, the splash. |
 
 Like the welcome tour's pages, the timelines use no timers and no `tl.call`, so a frame is drawn purely by
@@ -117,7 +117,9 @@ Two things that look like success and are not:
   doesn't reload the page.
 - Messages count only from the intro's own iframe (`e.source === frame.current?.contentWindow`, and only once it has
   one); another frame on the page can't drive it.
-- ▶ beside the title plays it again: an open intro is asked to start over, a closed one is loaded fresh (a new
+- It plays **big first**: a modal three quarters of the window (`min(75vw, 75vh × 16/9)` wide, 16:9) over a dimmed backdrop. ✕, Esc or the backdrop shrink it back into its drawer or dialog, where it **plays on** at the full width of that space; ⤢ there blows it up again, and ✕ there hides it. It is one iframe in one box whose styles switch between `fixed` and in-flow (`expanded`, `setExpanded`), so it is never moved in the DOM and never reloads. That only works because nothing above it makes a containing block for `fixed`: the rail drawer slides its body in by `margin-left`, not a transform (`components/rail-drawer.css`), and `Modal` uses none. Esc goes through `useEscape` (`lib/use-escape.ts`), so it shrinks the intro before the drawer or dialog under it reads it. While it is big, `lib/intro-modal.ts` tells `lib/use-board-dialogs.ts` an overlay is up, so the native browser pane hides under it.
+- A click anywhere on the video pauses it (▶ shows over it) and plays it on (`togglePlaying` → `TOGGLE_MESSAGE`); the page answers `pause`/`play`, which is what `paused` follows.
+- ▶ beside the title plays it again, big: an open intro is asked to start over, a closed one is loaded fresh (a new
   `run` remounts the iframe). ↻ Replay appears over the frame once it ends.
 
 ## New thread plays in the browser pane (`lib/pane-intro.ts`)
@@ -130,7 +132,7 @@ right away (the pane's page has no parent to post `done` to), and returns the �
 `electron/self-url.cjs` lets exactly `/intros/<id>.html` through. On the web there is no pane (`hasPane()` is
 false), so the dialog plays it in its own frame like any other intro.
 
-The hook returns `{ id, open, ended, run, src, attach, muted, toggleMuted, play, hide }` (typed
+The hook returns `{ id, open, ended, paused, expanded, run, src, attach, muted, toggleMuted, play, togglePlaying, setExpanded, hide }` (typed
 `FeatureIntroState`); `components/FeatureIntro.tsx` takes that as one `intro` prop and reads
 `INTRO_TITLES[intro.id]` for the title. The iframe's ref is handed over through `attach` rather than returned,
 so no consumer reads a ref while it renders (the `react-hooks/refs` rule refuses that).
@@ -150,7 +152,7 @@ The rail draws it for whichever tool drawer is open (`components/LibraryRail.tsx
 `isTool(shown) && !closing ? shown : null`, so a drawer sliding shut doesn't hold it open, with `IntroButton` in the
 drawer shell's title row and `IntroFrame` under it), the leagues in `components/LeaguesDialog.tsx` and the code
 quality dialog in `components/ScoutDialog.tsx`. Each of those two passes a fixed id (`"leagues"`, `"quality"`) and
-renders `IntroButton` (▶, beside the title) and `IntroFrame` (the frame with 🔊 and ✕ over its corner). The iframe
+renders `IntroButton` (▶, beside the title) and `IntroFrame` (the modal or the docked frame, with ⤢, 🔊 and ✕ over its corner). The iframe
 is `sandbox="allow-scripts"` and can't be focused, like the welcome tour's.
 
 To add one: add the id to `INTROS` and `INTRO_TITLES`, write `public/intros/<id>.html` in the shape of the

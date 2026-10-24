@@ -11,6 +11,7 @@ export const INTROS = [
   "cloudflare",
   "blastcp",
   "github",
+  "slack",
   "skills",
   "services",
   "quality",
@@ -27,6 +28,7 @@ export const INTRO_TITLES: Record<IntroId, string> = {
   cloudflare: "Cloudflare",
   blastcp: "BlastCP",
   github: "GitHub",
+  slack: "Slack",
   skills: "Skills",
   services: "Services",
   quality: "Code quality",
@@ -42,15 +44,19 @@ export const isIntro = (id: unknown): id is IntroId => INTROS.includes(id as Int
 export const introSrc = (id: IntroId, muted = false) => `/intros/${id}.html?live=1${muted ? "&muted=1" : ""}`;
 export const muteMessage = (muted: boolean) => ({ weft: "intro-mute", muted }) as const;
 
-// What the page posts as it plays: "start" when the timeline starts from the top, "done" when it ends.
-export type IntroEvent = "start" | "done";
+// What the page posts as it plays: "start" when the timeline starts from the top, "pause" and "play" when a click
+// stops it and plays it on, "done" when it ends.
+const INTRO_EVENTS = ["start", "pause", "play", "done"] as const;
+export type IntroEvent = (typeof INTRO_EVENTS)[number];
 export function introEvent(data: unknown): IntroEvent | null {
   if (typeof data !== "object" || data === null) return null;
   const { weft, event } = data as { weft?: unknown; event?: unknown };
-  return weft === "intro" && (event === "start" || event === "done") ? event : null;
+  return weft === "intro" && INTRO_EVENTS.includes(event as IntroEvent) ? (event as IntroEvent) : null;
 }
 // The message that plays the page again from the top.
 export const REPLAY_MESSAGE = { weft: "intro-go" } as const;
+// The message a click on the video sends: pause it, or play it on (or again from the top, once it has ended).
+export const TOGGLE_MESSAGE = { weft: "intro-toggle" } as const;
 
 export const INTROS_KEY = "weft-intros-seen";
 

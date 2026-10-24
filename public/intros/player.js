@@ -1,8 +1,9 @@
 // Live playback for the feature intros (public/intros/*.html), HyperFrames compositions like the welcome tour's: each
 // page builds a paused GSAP timeline on window.__timelines.root and calls weftIntro(tl). It scales the 16:9 1600x900
 // stage to the frame and, with ?live=1, plays the timeline once with its voiceover. It tells the parent
-// (components/FeatureIntro.tsx) when it starts and ends ({ weft: "intro", event: "start" | "done" }), so the parent
-// offers Replay at the end; { weft: "intro-go" } from the parent plays it again from the top.
+// (components/FeatureIntro.tsx) when it starts, pauses, plays on and ends ({ weft: "intro", event: "start" | "pause" |
+// "play" | "done" }), so the parent offers Replay at the end; { weft: "intro-go" } from the parent plays it again from
+// the top, and { weft: "intro-toggle" } (a click on the video) pauses it or plays it on.
 
 // What each feature is for, in one line, on its splash poster. The poster is about the feature, so it says what
 // the feature does rather than what Weft is. The id is the page's file name (public/intros/<id>.html).
@@ -190,9 +191,26 @@ window.weftIntro = function (tl) {
     startWithVoice(play, voice, lead, begin);
   };
   play.eventCallback("onComplete", function () { post("done"); });
+  // A click on the video pauses it and plays it on: the frames and the voice stop together, and the voice picks up
+  // again only if it was playing when it stopped. A click on a finished video plays it again from the top.
+  var voiceWasPlaying = false;
+  var toggle = function () {
+    if (play.progress() === 1) return start();
+    if (play.paused()) {
+      play.resume();
+      if (voice && voiceWasPlaying) voice.play().catch(function () {});
+      post("play");
+    } else {
+      play.pause();
+      voiceWasPlaying = !!voice && !voice.paused && !voice.ended;
+      if (voice) voice.pause();
+      post("pause");
+    }
+  };
   window.addEventListener("message", function (e) {
     if (e.source !== window.parent || !e.data) return;
     if (e.data.weft === "intro-go") start();
+    if (e.data.weft === "intro-toggle") toggle();
     if (e.data.weft === "intro-mute" && voice) voice.muted = !!e.data.muted;
   });
   // ?t=12 holds the frame at 12 s, for checking a scene by eye. The time is the story's own: the splash adds
