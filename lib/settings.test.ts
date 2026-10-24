@@ -129,35 +129,75 @@ describe("settings", () => {
     expect(s.doneEffort()).toBe("");
   });
 
-  it("the copilot model defaults to empty and only accepts Claude ids", async () => {
+  it("the copilot model defaults to empty and takes any model a CLI serves", async () => {
     let s = await load();
     expect(s.copilotModel()).toBe("");
     expect(s.settingsView().copilotModel).toBe("");
     s.setCopilotModel("claude-haiku-5-5");
     s = await load();
     expect(s.copilotModel()).toBe("claude-haiku-5-5");
+    s.setCopilotModel("puku-ai-2.8");
+    s = await load();
+    expect(s.copilotModel()).toBe("puku-ai-2.8");
     s.setCopilotModel("");
     const saved = JSON.parse(fs.readFileSync(path.join(dir, "settings.json"), "utf8")) as Record<string, unknown>;
     expect("copilotModel" in saved).toBe(false);
   });
 
-  it("a non-Claude saved copilot model reads as empty", async () => {
-    fs.writeFileSync(path.join(dir, "settings.json"), JSON.stringify({ copilotModel: "opus-4.8" }));
+  it("a saved copilot model no CLI serves reads as empty", async () => {
+    fs.writeFileSync(path.join(dir, "settings.json"), JSON.stringify({ copilotModel: "gone-1" }));
     expect((await load()).copilotModel()).toBe("");
   });
 
-  it("the Review all model defaults to empty, only accepts Claude ids, and clears on empty", async () => {
+  it("the Review all model defaults to empty, takes any model, and clears on empty", async () => {
     let s = await load();
     expect(s.reviewAllModel()).toBe("");
     expect(s.settingsView().reviewAllModel).toBe("");
     s.setReviewAllModel("claude-sonnet-5-5");
     s = await load();
     expect(s.reviewAllModel()).toBe("claude-sonnet-5-5");
+    s.setReviewAllModel("puku-ai-2.8");
+    s = await load();
+    expect(s.reviewAllModel()).toBe("puku-ai-2.8");
     s.setReviewAllModel("");
     const saved = JSON.parse(fs.readFileSync(path.join(dir, "settings.json"), "utf8")) as Record<string, unknown>;
     expect("reviewAllModel" in saved).toBe(false);
-    fs.writeFileSync(path.join(dir, "settings.json"), JSON.stringify({ reviewAllModel: "opus-4.8" }));
+    fs.writeFileSync(path.join(dir, "settings.json"), JSON.stringify({ reviewAllModel: "gone-1" }));
     expect((await load()).reviewAllModel()).toBe("");
+  });
+
+  it("the Goose provider defaults to none, takes a provider from the catalog, and refuses one it doesn't know", async () => {
+    let s = await load();
+    expect(s.gooseProviderId()).toBe("");
+    expect(s.settingsView().gooseProviderId).toBe("");
+    s.setGooseProviderId("openrouter");
+    s = await load();
+    expect(s.gooseProviderId()).toBe("openrouter");
+    expect(s.settingsView().gooseProviderId).toBe("openrouter");
+    expect(() => s.setGooseProviderId("nope")).toThrow(/doesn't know a provider called "nope"/);
+  });
+
+  it("an unknown saved Goose provider reads as none", async () => {
+    fs.writeFileSync(path.join(dir, "settings.json"), JSON.stringify({ gooseProviderId: "gone" }));
+    expect((await load()).gooseProviderId()).toBe("");
+  });
+
+  it("the Goose model and endpoint default to empty, and are stored as unset", async () => {
+    let s = await load();
+    expect(s.gooseModelId()).toBe("");
+    expect(s.gooseBaseUrl()).toBe("");
+    expect(s.settingsView().gooseModelId).toBe("");
+    expect(s.settingsView().gooseBaseUrl).toBe("");
+    s.setGooseModelId("anthropic/claude-sonnet-4.5");
+    s.setGooseBaseUrl("https://api.example.com/v1");
+    s = await load();
+    expect(s.gooseModelId()).toBe("anthropic/claude-sonnet-4.5");
+    expect(s.gooseBaseUrl()).toBe("https://api.example.com/v1");
+    s.setGooseModelId("");
+    s.setGooseBaseUrl("");
+    const saved = JSON.parse(fs.readFileSync(path.join(dir, "settings.json"), "utf8")) as Record<string, unknown>;
+    expect("gooseModelId" in saved).toBe(false);
+    expect("gooseBaseUrl" in saved).toBe(false);
   });
 
   it("an empty automations list is kept, not replaced by the defaults", async () => {

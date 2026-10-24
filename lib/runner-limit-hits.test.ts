@@ -52,3 +52,26 @@ it("logs a refused request as a hit of its window, with its reset; allowed ones 
   await flush();
   expect(logged.map(([kind, , card, resetsAt]) => [kind, (card as Card).id, resetsAt])).toEqual([["five_hour", "c1", 300], ["seven_day", "c1", 900]]);
 });
+
+it("a reading that lands after the card switched CLI is logged under the CLI that sent it, and stays off the card", async () => {
+  const recorded = vi.fn();
+  vi.doMock("./limit-history", () => ({ recordLimits: recorded, setOnLimitReset: vi.fn() }));
+  vi.resetModules();
+  runner = await import("./runner");
+  addCard({ id: "c1" });
+  runner.sendMessage("c1", "hello");
+  await flush();
+  const q = nth(h.queries, -1, "query");
+  const limit = (info: Record<string, unknown>) => ({ type: "rate_limit_event", rate_limit_info: info });
+  q.emit(limit({ status: "allowed", rateLimitType: "five_hour", utilization: 0.4, resetsAt: 300 }));
+  await flush();
+  expect(recorded).toHaveBeenLastCalledWith("claude", { fiveHour: { used: 40, resetsAt: 300 } });
+  expect(h.cards.get("c1")?.stats?.fiveHour).toEqual({ used: 40, resetsAt: 300 });
+  // "Run on puku" flipped the card while the Claude session still had a reading on its way.
+  h.cards.set("c1", { ...h.cards.get("c1")!, backend: "puku" });
+  q.emit(limit({ status: "rejected", rateLimitType: "five_hour", utilization: 1, resetsAt: 300 }));
+  await flush();
+  expect(recorded).toHaveBeenLastCalledWith("claude", { fiveHour: { used: 100, resetsAt: 300 } });
+  expect(h.cards.get("c1")?.stats?.fiveHour).toEqual({ used: 40, resetsAt: 300 });
+  vi.doUnmock("./limit-history");
+});

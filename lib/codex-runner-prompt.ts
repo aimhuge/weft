@@ -3,9 +3,9 @@
 
 import { permissionArgs } from "./codex-permissions";
 import { codexProjectInstructions } from "./puku-context";
-import { subagentPrompt } from "./subagents";
+import { subagentModelFor, subagentPrompt } from "./subagents";
 import { CODEX_DEFAULT_MODEL } from "./new-thread";
-import { subagentModel, threadPrompt } from "./settings";
+import { threadPrompt } from "./settings";
 import { skillIndex, skillInvocation } from "./skills";
 import { getCard } from "./store";
 import type { Session } from "./runner-state";
@@ -16,7 +16,7 @@ function skillPrompt(text: string, cwd: string) {
 }
 
 export function promptFor(session: Session, text: string) {
-  const weftInstructions = `You are a Codex CLI thread managed by Weft. Work in the card's project folder using Codex's native tools. Weft's tools (browser, board, secrets, webhooks, board_view) are MCP servers: call them as mcp__browser__open_url and so on. Never read .env files, credential stores or environment dumps. Never restart or kill Weft. Codex's sandbox enforces this card's permission mode.\n\n${subagentPrompt(subagentModel(), "codex")}\n\n${threadPrompt()}`;
+  const weftInstructions = `You are a Codex CLI thread managed by Weft. Work in the card's project folder using Codex's native tools. Weft's tools (browser, board, secrets, webhooks, board_view) are MCP servers: call them as mcp__browser__open_url and so on. Never read .env files, credential stores or environment dumps. Never restart or kill Weft. Codex's sandbox enforces this card's permission mode.\n\n${subagentPrompt(subagentModelFor(), "codex")}\n\n${threadPrompt()}`;
   // Codex reads AGENTS.md on its own but not CLAUDE.md; a resumed session already has it in its history.
   const resumed = Boolean(session.sessionId ?? session.spec.sessionId);
   const claudeMd = resumed ? "" : codexProjectInstructions(session.spec.cwd);

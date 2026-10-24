@@ -8,6 +8,7 @@ import { api, type NewCardInput } from "./client";
 import { startPileReview } from "./pile-review";
 import { lastFolder } from "./board-helpers";
 import { onOpenCardRequest } from "./open-card";
+import { backendFor } from "./new-thread";
 import type { Card } from "./types";
 
 export interface BoardActions {
@@ -72,7 +73,9 @@ export function useBoardActions({
 
   const improveQuality = useCallback(
     async (cwd: string, prompt: string, title: string, model?: string): Promise<string | undefined> => {
-      const { card } = await api.create({ title, prompt, cwd, backend: "claude", model, start: true });
+      // The model picks the CLI: every model is offered, and the card runs on the one that serves it.
+      const backend = (model && backendFor(model)) || "claude";
+      const { card } = await api.create({ title, prompt, cwd, backend, model, start: true });
       return card.id;
     },
     [],
