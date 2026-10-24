@@ -4,6 +4,33 @@
 // (components/FeatureIntro.tsx) when it starts and ends ({ weft: "intro", event: "start" | "done" }), so the parent
 // offers Replay at the end; { weft: "intro-go" } from the parent plays it again from the top.
 
+// What each feature is for, in one line, on its splash poster. The poster is about the feature, so it says what
+// the feature does rather than what Weft is. The id is the page's file name (public/intros/<id>.html).
+var FEATURE_TAGS = {
+  vault: "Your keys, encrypted in your Keychain",
+  webhooks: "Your services, talking to Weft",
+  vercel: "Deploy, and watch the logs",
+  supabase: "Migrations, auth, functions, health",
+  cloudflare: "Your Worker, deployed and watched",
+  blastcp: "Your social media, on one queue",
+  github: "Your issues, as cards on the board",
+  skills: "New tricks for your AI to learn",
+  services: "Your dev servers, and what they cost",
+  quality: "A score, and the refactors behind it",
+  leagues: "Thirty builders, one table"
+};
+
+// A better mark for the two features whose own icon doesn't carry at poster size: Vercel's is a plain triangle,
+// and the code quality ring is drawn at a fifth of its opacity so it vanishes on the poster's ground. These are
+// the poster's own marks; the drawer's icon is unchanged.
+var FEATURE_MARKS = {
+  vercel: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#fff" ' +
+    'd="M12 3.5 22 20H2L12 3.5Z"/></svg>',
+  quality: '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">' +
+    '<circle cx="12" cy="12" r="9" stroke="#f0b429" stroke-opacity="0.25" stroke-width="3"/>' +
+    '<path d="M12 3a9 9 0 0 1 9 9" stroke="#f0b429" stroke-width="3" stroke-linecap="round"/></svg>'
+};
+
 // The feature an intro is about, taken from the page's own .head row: the drawer's icon and its name. The splash
 // shows them, so you know which drawer you're about to watch. Returns null if the page has no head row.
 var readFeature = function (root) {
@@ -25,9 +52,9 @@ var readFeature = function (root) {
   return { name: name, icon: "", glyph: glyph };
 };
 
-// The splash every intro opens on: an OG-style poster — the Weft mark big in the middle, the wordmark under it,
-// and the feature's own icon and name on a line below. It's injected here rather than written into each page, so
-// all eleven intros open the same way.
+// The splash every intro opens on: an OG-style poster about the feature — its own icon big in the middle, its
+// name under it, and a line saying what it's for. It's injected here rather than written into each page, so all
+// eleven intros open the same way without each one carrying the markup.
 //
 // It plays on a master timeline with the page's own timeline nested under it, so the story starts after the splash
 // clears instead of running underneath it — and the whole thing stays seekable (?t= holds a frame).
@@ -37,22 +64,23 @@ var buildSplash = function (root, tl) {
   var SPLASH_HOLD = 1.5, SPLASH_FADE = 0.5;
   var lead = SPLASH_HOLD + SPLASH_FADE;
   var feature = readFeature(root);
+  // The id is the page's file name, which is what the taglines are keyed by.
+  var id = (location.pathname.split("/").pop() || "").replace(/\.html$/, "");
   var splash = document.createElement("div");
   splash.id = "splash";
   splash.className = "abs";
-  // The feature tile shows whatever the drawer's own icon is: a drawing, an image, or a glyph.
-  var tile = "";
-  if (feature) {
-    var inner = feature.icon ||
+  // The mark shows whatever the drawer's own icon is: a drawing, an image, or a glyph — unless the poster has a
+  // better mark of its own for that feature.
+  var mark = FEATURE_MARKS[id] || "";
+  if (!mark && feature) {
+    mark = feature.icon ||
       (feature.src ? '<img src="' + feature.src + '" alt="">' : feature.glyph);
-    tile = '<div class="feat"><span class="ic">' + inner + '</span>' +
-      '<span class="name">' + feature.name + '</span></div>';
   }
   splash.innerHTML =
     '<div class="halo"></div>' +
-    '<img class="mark" src="../logo.svg" alt="">' +
-    '<div class="word">Weft</div>' +
-    tile +
+    '<div class="mark">' + mark + '</div>' +
+    '<div class="name">' + (feature ? feature.name : "") + '</div>' +
+    '<div class="tag">' + (FEATURE_TAGS[id] || "") + '</div>' +
     '<div class="bar"><i></i></div>';
   root.appendChild(splash);
 
@@ -66,13 +94,11 @@ var buildSplash = function (root, tl) {
   master.to(splash, { opacity: 0, duration: SPLASH_FADE, ease: "power1.inOut" }, SPLASH_HOLD);
   master.fromTo(splash.querySelector(".mark"), { scale: 0.82, opacity: 0 },
     { scale: 1, opacity: 1, duration: 0.7, ease: "back.out(1.5)" }, 0);
-  master.fromTo(splash.querySelector(".word"), { opacity: 0, y: 34 },
+  // The name comes in under the icon, then the line about what the feature does.
+  master.fromTo(splash.querySelector(".name"), { opacity: 0, y: 34 },
     { opacity: 1, y: 0, duration: 0.55 }, 0.18);
-  // The feature's icon and name come in after the wordmark, so the poster reads top to bottom.
-  var feat = splash.querySelector(".feat");
-  if (feat) {
-    master.fromTo(feat, { opacity: 0, y: 26 }, { opacity: 1, y: 0, duration: 0.5 }, 0.42);
-  }
+  master.fromTo(splash.querySelector(".tag"), { opacity: 0, y: 24 },
+    { opacity: 1, y: 0, duration: 0.5 }, 0.42);
   // The bar crawls across while the splash is up.
   master.fromTo(splash.querySelector(".bar i"), { x: "-100%" },
     { x: "250%", duration: SPLASH_HOLD, ease: "power1.inOut" }, 0.05);

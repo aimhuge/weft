@@ -26,14 +26,19 @@ id="narration">`), so the text and the track change together.
 
 ### The splash
 
-Every intro opens on a splash poster: the Weft mark big in the middle, the wordmark under it, and the feature's own
-icon and name on a line below, on a radial ground with a halo behind the mark. It is sized like an OG image — a
-620 px mark, a 240 px wordmark and a 146 px feature name in the portrait render, stepping down to 420/168/104 px in
-the landscape one — so it fills the frame rather than floating in it.
+Every intro opens on a splash poster **about the feature, not about Weft**: the feature's own icon big in the
+middle, its name under it, and a line saying what it's for, on a radial ground with a halo behind the icon. It is
+sized like an OG image — a 640 px mark, a 176 px name and a 78 px line in the portrait render, stepping down to
+420/138/60 px in the landscape one — so it fills the frame rather than floating in it.
 
 `player.js` injects it, so all the pages open alike without each one carrying the markup. The feature's name and
 icon are read out of the page's own `.head` row (`readFeature`): a drawer with artwork brings its SVG, one that uses
-a glyph brings its emoji, and the name is the head's text with the glyph taken out of it.
+a glyph brings its emoji, and the name is the head's text with the glyph taken out of it. Two features get a mark
+of the poster's own (`FEATURE_MARKS`): Vercel's own icon is a plain triangle and the code quality ring is drawn at
+a fifth of its opacity, so both vanish at poster size — the drawer is unchanged.
+
+The one line under the name is `FEATURE_TAGS` in `player.js`, keyed by the page's file name: what the feature does,
+not what Weft is.
 
 It holds for 1.5 s and fades over 0.5 s — 2 s of lead before the story. It plays on a **master** timeline with the
 page's own timeline nested under it (`master.add(tl, lead)`), which keeps the whole composition seekable for the
