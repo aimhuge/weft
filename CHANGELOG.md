@@ -8,6 +8,10 @@ lands; a release moves those lines under its version and tags the commit `vX.Y.Z
 
 ## [Unreleased]
 
+### Fixed
+
+- **A project whose folder has a space in its name (like Google Drive's `~/My Drive/app`) no longer asks about every command.** The folder gate split each Bash path at the first space, so `cd "/Users/you/My Drive/app"` read as `~/My`, which is outside the project, and nearly every command got an "Outside the project" prompt. A quoted path now runs to its closing quote and `\ ` escapes a space, so the gate sees the real folder. A sibling folder still gets asked about. (`lib/folder-guard.ts`, docs/architecture/thread-guards.md)
+
 ## [0.6.1] - 2026-10-25
 
 ### Added
