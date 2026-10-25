@@ -23,6 +23,7 @@ const FileDrop = guarded(() => import("./FileDrop"), { inline: true, what: "file
 const SettingsDialog = guarded(() => import("./SettingsDialog"), { what: "settings", className: "fixed left-4 top-16 z-50" });
 const ShortcutsDialog = guarded(() => import("./ShortcutsDialog"), { what: "shortcuts sheet", className: "fixed left-4 top-16 z-50" });
 const ChangelogDialog = guarded(() => import("./ChangelogDialog"), { what: "changelog", className: "fixed left-4 top-16 z-50" });
+const IntakeDialog = guarded(() => import("./IntakeDialog"), { what: "intake screen", className: "fixed left-4 top-16 z-50" });
 const CommandPalette = guarded(() => import("./CommandPalette"), { what: "command palette", className: "fixed left-4 top-16 z-50" });
 
 // One tag as the dialog's list draws it: the name and how many cards carry it.
@@ -113,6 +114,8 @@ export default function BoardDialogs({
       {sharingBoard && <ShareBoardDialog onClose={onCloseShareBoard} />}
       {/* Holds its own open flag (lib/changelog-open.ts), so Board passes nothing. */}
       <ChangelogDialog />
+      {/* Opened by a project's intake (lib/intake-open.ts), with its own open flag too. */}
+      <IntakeDialog />
       <ModifierHint />
       {palette && (
         // paletteItems is a thunk because the palette only reads the rows while it's open; Board

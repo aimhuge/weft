@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from "react";
 import { api } from "./client";
+import { openIntake } from "./intake-open";
 import { readViewPrefs, writeViewPrefs } from "./view-prefs";
 import { NO_REVIEW_FILTER, type ReviewFilter, type ReviewFilterKey, type SortKey } from "./board-view";
 
@@ -13,6 +14,18 @@ import { NO_REVIEW_FILTER, type ReviewFilter, type ReviewFilterKey, type SortKey
 export interface BoardViewDeps {
   select: (id: string | null) => void;
   setWebBrowserOpen: (open: boolean) => void;
+}
+
+// A project opened: take in its .env files, the keys its code reads and its webhook routes (lib/project-intake.ts),
+// in the background, and show what it took in (components/IntakeDialog.tsx). The server runs it once per folder until
+// HEAD or an .env file changes, so the screen comes up the first time and after a change, never on every pick.
+function takeIn(folder: string) {
+  api
+    .intake(folder)
+    .then((r) => {
+      if (r.text) openIntake(folder, r);
+    })
+    .catch(() => {}); // best-effort: the 🔐 nudge and Import still work by hand
 }
 
 export function useBoardView({ select, setWebBrowserOpen }: BoardViewDeps) {
@@ -29,6 +42,7 @@ export function useBoardView({ select, setWebBrowserOpen }: BoardViewDeps) {
   const loadFromPrefs = useCallback(() => {
     const prefs = readViewPrefs();
     if (prefs.project !== undefined) setProject(prefs.project);
+    if (prefs.project) takeIn(prefs.project);
     const next = prefs.sort;
     if (next && VALID_SORTS.has(next)) setSort(next);
   }, []);
@@ -46,6 +60,7 @@ export function useBoardView({ select, setWebBrowserOpen }: BoardViewDeps) {
       writeViewPrefs({ project: path, sort });
       // Have a CLI ready in that folder for the next new thread.
       if (path) api.warm({ cwd: path }).catch(() => {}); // best-effort prefetch
+      if (path) takeIn(path);
     },
     [project, sort, select, setWebBrowserOpen],
   );

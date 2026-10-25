@@ -1,5 +1,6 @@
 import { useState, type Dispatch, type SetStateAction } from "react";
 import { useChangelogFolder } from "./changelog-open";
+import { useOpenIntake } from "./intake-open";
 import { useIntroModal } from "./intro-modal";
 import type { LoginView } from "./types";
 
@@ -20,12 +21,14 @@ export interface DialogFlags {
   changelog?: boolean;
   // A feature intro playing big in its modal (lib/intro-modal.ts).
   intro?: boolean;
+  // The project intake's screen (lib/intake-open.ts).
+  intake?: boolean;
 }
 
 // Whether a dialog, sign-in or menu is over the board (the native browser pane hides under it), and
 // whether the shortcuts that act on the board still stand down.
 export function dialogLayers(flags: DialogFlags) {
-  const overlay = flags.showSettings || flags.showHelp || flags.showPalette || Boolean(flags.login) || flags.menuOpen || Boolean(flags.changelog) || Boolean(flags.intro);
+  const overlay = flags.showSettings || flags.showHelp || flags.showPalette || Boolean(flags.login) || flags.menuOpen || Boolean(flags.changelog) || Boolean(flags.intro) || Boolean(flags.intake);
   return { overlay, boardKeys: !(flags.showNew || overlay) };
 }
 
@@ -66,7 +69,8 @@ export function useBoardDialogs(): BoardDialogs {
   const [login, setLogin] = useState<LoginView | null>(null);
   const changelog = useChangelogFolder() !== null;
   const intro = useIntroModal();
-  const { overlay, boardKeys } = dialogLayers({ showNew, showSettings, showHelp, showPalette, login, menuOpen, changelog, intro });
+  const intake = useOpenIntake() !== null;
+  const { overlay, boardKeys } = dialogLayers({ showNew, showSettings, showHelp, showPalette, login, menuOpen, changelog, intro, intake });
   return {
     showNew,
     setShowNew,

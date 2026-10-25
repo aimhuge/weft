@@ -121,6 +121,29 @@ Most projects already have their secrets in `.env.local`, so that's how a vault 
 - **Committed file?** If git tracks the `.env` file (`git ls-files`), warn loudly: those values are in
   history, so rotate them at the provider instead of just importing.
 
+### Project intake: taken in when a project opens
+
+Picking a project on the board (or the saved one coming back on reconnect) runs an intake in the background,
+off the start-a-card path (`lib/use-board-view.ts` → `POST /api/projects/intake` → `lib/project-intake.ts`). It
+runs once per folder until HEAD or a root `.env*` file's mtime changes, and remembers in `~/.weft/intake.json`
+what it offered, so a secret or blank you remove never comes back.
+
+- **`.env*` in with no click** (`electron/vault-intake.cjs`, `POST /secrets/intake` on the control server): the
+  import preview's ticked rows whose status is **new**. A value that differs from the vault's stays the nudge, `.env`
+  defaults stay unticked, and a file git tracks is never imported: the toast says to rotate its keys instead.
+- **The names the code reads** (`lib/intake-scan.ts` `envReads`: Node's and Vite's env objects, Python's
+  `os.environ` and `os.getenv`, Deno's `env.get`) and the names `.env.example` lists become blanks, at most 25.
+  A name counts when it's key-shaped (`KEY`, `SECRET`, `TOKEN`, `DATABASE_URL`…), or a known provider's and
+  URL- or id-shaped. Platform names (`NODE_ENV`, `VERCEL_URL`, `GITHUB_SHA`) and names the code sets itself are
+  left out. Each blank gets a hint with the provider's page (`lib/provider-hints.ts`) and the file that reads it.
+- **Webhook routes** become 🪝 blanks (docs/architecture/webhooks.md#found-by-the-intake).
+- **The intake screen** (`components/IntakeDialog.tsx`, opened through `lib/intake-open.ts`) lists what happened by
+  name, never a value: what moved and from which file, each blank with its provider link, each webhook's route, and any
+  committed file to rotate. **Open 🔐** and **Open 🪝** go to the drawers (the board's commands hook registers the
+  opener, so Board passes nothing). **Set it up in a thread** starts a card in the project with the list as its prompt
+  (`lib/intake-view.ts`) and opens it. It only comes up when the intake took something in, and a hint's link closes it
+  first, since the native pane hides under any dialog.
+
 ### After import: the file stays, managed by Weft
 
 `next dev`, Prisma, the Supabase CLI and scripts you run yourself all read `.env.local` directly;

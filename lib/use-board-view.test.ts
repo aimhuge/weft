@@ -3,7 +3,11 @@ import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const apiWarm = vi.fn<(args: { cwd: string }) => Promise<unknown>>();
-vi.mock("./client", () => ({ api: { warm: (args: { cwd: string }) => apiWarm(args) } }));
+const apiIntake = vi.fn<(folder: string) => Promise<{ text: string | null }>>();
+vi.mock("./client", () => ({ api: { warm: (args: { cwd: string }) => apiWarm(args), intake: (folder: string) => apiIntake(folder) } }));
+
+const openIntake = vi.fn<(folder: string, result: unknown) => void>();
+vi.mock("./intake-open", () => ({ openIntake: (folder: string, result: unknown) => openIntake(folder, result) }));
 
 const readPrefs = vi.fn<() => { project?: string | null; sort?: string }>();
 const writePrefs = vi.fn<(prefs: { project: string | null; sort: string }) => void>();
@@ -14,9 +18,12 @@ const { useBoardView } = await import("./use-board-view");
 beforeEach(() => {
   apiWarm.mockReset();
   apiWarm.mockResolvedValue(undefined);
+  apiIntake.mockReset();
+  apiIntake.mockResolvedValue({ text: null });
   readPrefs.mockReset();
   readPrefs.mockReturnValue({});
   writePrefs.mockReset();
+  openIntake.mockReset();
 });
 
 afterEach(cleanup);
@@ -27,6 +34,51 @@ function makeView() {
   const { result } = renderHook(() => useBoardView({ select, setWebBrowserOpen }));
   return { result, select, setWebBrowserOpen };
 }
+
+describe("project intake", () => {
+  it("takes a chosen project in and shows what it took in", async () => {
+    const taken = { text: "Moved 2 secrets from .env.local into 🔐." };
+    apiIntake.mockResolvedValue(taken);
+    const { result } = makeView();
+    await act(() => {
+      result.current.chooseProject("/repo");
+      return Promise.resolve();
+    });
+    expect(apiIntake).toHaveBeenCalledWith("/repo");
+    expect(openIntake).toHaveBeenCalledWith("/repo", taken);
+  });
+
+  it("stays quiet when nothing was taken in, or the call fails", async () => {
+    const { result } = makeView();
+    await act(() => {
+      result.current.chooseProject("/repo");
+      return Promise.resolve();
+    });
+    apiIntake.mockRejectedValue(new Error("offline"));
+    await act(() => {
+      result.current.chooseProject("/other");
+      return Promise.resolve();
+    });
+    expect(openIntake).not.toHaveBeenCalled();
+  });
+
+  it("takes in the saved project on (re)connect, and none without one", async () => {
+    readPrefs.mockReturnValue({ project: "/saved" });
+    const { result } = makeView();
+    await act(() => {
+      result.current.loadFromPrefs();
+      return Promise.resolve();
+    });
+    expect(apiIntake).toHaveBeenCalledWith("/saved");
+    readPrefs.mockReturnValue({ project: null });
+    apiIntake.mockClear();
+    await act(() => {
+      result.current.loadFromPrefs();
+      return Promise.resolve();
+    });
+    expect(apiIntake).not.toHaveBeenCalled();
+  });
+});
 
 describe("useBoardView", () => {
   it("starts with no project and the newest sort", () => {

@@ -1,6 +1,8 @@
 // The control server's vault routes for threads that write (docs/architecture/secrets.md): blank names in
 // (mcp__secrets__add_blank, mcp__secrets__ask_add) and a value the thread generated or got itself
-// (mcp__secrets__set_value). Names and what happened come back, never a value.
+// (mcp__secrets__set_value), and the project intake (electron/vault-intake.cjs). Names and what happened come back,
+// never a value.
+const { intakeVault, cleanBlanks } = require("./vault-intake.cjs");
 
 // Stores one value a thread made or got itself (a signing secret, new Stripe price ids): adds a name that isn't
 // there, fills a blank, and overwrites a value only with replace (set_value's replace: true), so a thread can't
@@ -46,6 +48,9 @@ function vaultRoutes(getVault) {
       fillBlank(vault(), String(folder), String(name), env(environment), String(value ?? ""), replace === true),
     // The ask's input shows in the thread itself (components/SecretAskInput.tsx).
     "POST /secrets/ask-add": ({ folder, name, environment }) => askAdd(getVault(), String(folder), String(name), env(environment)),
+    // A project opened on the board (lib/project-intake.ts): untracked .env values in, the code's names as blanks.
+    "POST /secrets/intake": ({ folder, blanks, skip }) =>
+      intakeVault(vault(), String(folder), { blanks: cleanBlanks(blanks), skip: Array.isArray(skip) ? skip.map(String) : [] }),
   };
 }
 

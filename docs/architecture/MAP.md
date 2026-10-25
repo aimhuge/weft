@@ -32,6 +32,7 @@ matching doc below. When a feature lands, add or update its entry here and in it
 - `goose.md` — the Goose backend: one `goose run` process per turn and its `stream-json` events, the provider catalog and the BYO key, the grant that puts the key in Goose's env without it ever reaching the board, and the per-card `GOOSE_PATH_ROOT`.
 - `email-forwarding.md` — `weft.zip` mail → Resend → Svix-signed `email.received` → one inbox.
 - `github-issues.md` — a project's open GitHub issues become Backlog cards, one direction, polled every 5 min, instant sync via the deployed relay.
+- `project-seed.md` — a new project's starter Backlog: up to 6 parked cards (agent docs, Supabase migrations, your issues, failing checks, a TODO cluster), once per project, Re-seed from the project menu; the shared project-open hook.
 - `mini-apps.md` — pages saved from the browser pane as tiles on the left rail below Services: `~/.weft/apps.json`, `/api/apps`, the pane's Save as app button, right-click menu, My mini apps on the profile, Share… at `weft.zip/a/<id>`, and public links' previews (title, description, branded card).
 - `mini-app-hosting.md` — design, not built: React folder apps bundled by Weft and served from weft.zip with declared reads and cloud secrets ($0), and full Next.js apps on Weft-hosted Workers for apps that need server code.
 - `growth.md` — 📈 Growth, Weft's own data app: which numbers it counts and why. The account-level reads (`supabase/migrations/20261018054110_growth_reads.sql`) and the in-app ones (`20261024041130_growth_in_app_reads.sql`: cards pushed per day, in-app engagement per day, and a retention table that counts an account as retained only if it pushed a card, moved one or ran a turn that week, rather than merely signed in).
@@ -269,7 +270,9 @@ When a new doc lands in this folder, add it here on the same change.
   hovercar wearing the emblem) with an "Episode" number and a line of story from `lib/level-lore.ts`, read aloud from `public/brand/levels/voice/` (`scripts/narrate-levels.mjs`); **Replay last achievement**
   (avatar menu, palette) reopens the last popup through `lib/achievement-replay.ts`. `lib/usage-scan.ts` + `lib/usage.ts` read every Claude Code and puku-cli transcript
   incrementally (`~/.weft/usage.json`) into tokens per day and plan-limit hits, which `components/LoomUsage.tsx` charts and the Limits badges read
-  (`lib/limit-badges.ts`: 5-hour and weekly ladders to 1,000, burn-speed, same-day and in-a-row badges). `lib/limit-board.ts` +
+  (`lib/limit-badges.ts`: 5-hour and weekly ladders to 1,000, burn-speed, same-day and in-a-row badges). The newer families are one pure module
+  each on `lib/badge-kit.ts`, gathered by `lib/extra-badges.ts` (time, spend, craft, more, league, explorer badges); `lib/explore.ts` logs a feature's
+  first use and `lib/badge-facts.ts` reads league weeks, referrals and team size from the `badge_facts()` RPC. `lib/limit-board.ts` +
   `lib/limit-board-sync.ts` post your fastest burns and hit counts to `limit_records` for the Leagues dialog's ⏱️ Limit records boards
   (`components/LimitBoardPanel.tsx`, `/api/league?board=`).
 - `lib/commit-pile.ts` + `app/api/pile` + `components/PileBadge.tsx`: the header's "+N/-N" uncommitted counter and the card it
@@ -287,6 +290,9 @@ When a new doc lands in this folder, add it here on the same change.
   `components/TagsDialog.tsx` + `components/CardMarks.tsx` + `components/StarButton.tsx`: ★ star (never auto-archived; the rail's ★ filters
   the board) and tags (GitHub label rules, catalog in `~/.weft/tags.json`, the 🏷 drawer, pills on the card's stage line); they replaced the
   library (docs/architecture/tags.md).
+- `lib/project-open.ts` (the project-open hook `touchProject` fires for a folder new to the list) + `lib/project-seed.ts` + `lib/project-seed-find.ts` +
+  `lib/project-seed-run.ts` + `app/api/projects/seed`: a new project's starter Backlog, up to 6 parked cards once per project (`~/.weft/project-seeds.json`),
+  Re-seed Backlog in `components/ProjectMenu.tsx`, and the copilot's `SEED_SOURCE` chips (docs/architecture/project-seed.md).
 - `lib/github-issues.ts` + `app/api/github/issues`: a project's open GitHub issues become Backlog cards through the `gh` CLI, labels as tags,
   one direction; opt-in folders in settings `issueFolders`, polled from `prewarm()` every 5 min (docs/architecture/github-issues.md).
   `lib/github-status.ts` + `app/api/github` + `lib/github-view.ts` + `lib/use-github.ts` + `components/GithubDrawer.tsx`: the rail's GitHub drawer
@@ -330,13 +336,19 @@ When a new doc lands in this folder, add it here on the same change.
   fills them in when they're ready. `mcp__secrets__ask_add` is the urgent path: an input for the key in the thread itself (`components/SecretAskInput.tsx`);
   on a name that already has a value it says so and changes nothing. `mcp__secrets__set_value` stores a value the thread made or got
   (adds, fills a blank, or with `replace: true` overwrites), Touch ID each time (`electron/vault-routes.cjs`).
+- `lib/project-intake.ts` + `lib/intake-scan.ts` + `lib/provider-hints.ts` + `app/api/projects/intake` + `electron/vault-intake.cjs`: the project
+  intake. Opening a project on the board (`lib/use-board-view.ts`) moves its untracked `.env*` files' new values into 🔐 with no click (never a
+  tracked file's, never over a vault value) and turns the keys its code reads, its `.env.example` names and its webhook routes into 🔐 and 🪝
+  blanks with provider links. It runs in the background, once per folder until HEAD or an `.env` changes, and `~/.weft/intake.json` remembers
+  what it offered (docs/architecture/secrets.md#project-intake). `components/IntakeDialog.tsx` + `lib/intake-open.ts` + `lib/intake-view.ts`: the
+  screen that lists what it took in, with Open 🔐 / 🪝 and "Set it up in a thread" (a card whose prompt is the list).
 - `lib/webhooks.ts` + `lib/webhook-tools.ts` + `app/api/webhooks` + `lib/use-webhooks.ts` + `lib/webhooks-view.ts` + `components/WebhooksDrawer.tsx`: the 🪝
   webhooks drawer under 🔐 (each project's webhook routes in `~/.weft/webhooks.json`, blanks counted until registered; `mcp__webhooks__*`).
   `lib/webhook-relay.ts` + `app/api/hooks/[id]/[[...rest]]` + `lib/webhook-forward.ts`: its public relay URL on the deployed Weft (→ `webhook_deliveries` on
   Supabase → Realtime → the local target; the relay only accepts a delivery carrying the provider's signature, checked by
   `lib/webhook-signatures.ts` against the secret sealed into the row by `lib/relay-secret.ts` + `electron/relay-secret.cjs`;
   docs/architecture/webhooks.md).
-- `electron/vercel*.cjs` (`vercel-env.cjs`: 🔐 vault → Vercel env push, Touch ID per push, also `mcp__secrets__push_to_vercel`; and `pull()`: plain Vercel vars the vault lacks → vault, by hand or live: `lib/vercel-hooks.ts` + `app/api/vercel/hooks` make the team webhook and listen, `lib/vercel-relay.ts` + `app/api/vercel/webhook` relay it on the deployed Weft → `vercel_events` on Supabase → Realtime) + `lib/vercel-view.ts` + `lib/use-vercel.ts` + `lib/use-linked-status.ts` (the three drawers' cached status hook) + `components/Vercel*.tsx`: the ▲ Vercel drawer (token sealed
+- `electron/vercel*.cjs` (`vercel-env.cjs`: 🔐 vault → Vercel env push, and the vault ⇄ Vercel drift from `vercel-env-cache.cjs` with `lib/vercel-drift*.ts`, `lib/use-vercel-drift.ts` and `components/VercelDriftActions.tsx`; Touch ID per push, also `mcp__secrets__push_to_vercel`; and `pull()`: plain Vercel vars the vault lacks → vault, by hand or live: `lib/vercel-hooks.ts` + `app/api/vercel/hooks` make the team webhook and listen, `lib/vercel-relay.ts` + `app/api/vercel/webhook` relay it on the deployed Weft → `vercel_events` on Supabase → Realtime) + `lib/vercel-view.ts` + `lib/use-vercel.ts` + `lib/use-linked-status.ts` (the three drawers' cached status hook) + `components/Vercel*.tsx`: the ▲ Vercel drawer (token sealed
   in the Keychain, link or create a project as `.vercel/project.json`, latest deploy; docs/architecture/vercel.md).
 - `electron/supabase.cjs` + `lib/supabase-view.ts` + `lib/use-supabase.ts` + `components/Supabase*.tsx`: the Supabase drawer (its bolt
   on the rail; token sealed in the Keychain, link a project as `supabase/.temp/project-ref`, state, unapplied migrations matched by version then name;
@@ -414,7 +426,7 @@ When a new doc lands in this folder, add it here on the same change.
   `lib/share-types.ts` + `lib/card-share.ts` + `components/ShareCardDialog.tsx` + `components/ShareBoardDialog.tsx` + `components/web-board/WebShareBoard.tsx` over one `components/BoardSharePanel.tsx` (the board's link, `weft.zip/<slug>/board`, and invites: `lib/use-team.ts` on the desktop, `boardShareTeam` in `lib/team-actions.ts` on the web) + `app/s/[id]` + `app/api/s/[id]/*` + `lib/share-*.ts` + `components/share-view/*`: **Share…** on a card gives `weft.zip/s/<id>`,
   its thread and its pane side by side, live (polled), private / public / email / password from `@aimhuge/share`; reads the synced rows (docs/architecture/sharing.md).
 - `app/api/*` + `lib/guard.ts`: localhost-only Host check; once the desktop app has written a launch token every route needs it, reads included (the board's own `1` passes for a read and a non-elevated write, `elevated()` refuses it), so a process that only reaches the port can neither read the board nor write to it.
-  Every board-side fetch goes through `lib/api-client.ts` (`apiFetch`, `API_HEADERS`) so it carries `x-weft-token`: a fetch without it 403s, and the call site's `.catch()` turns that into an empty default — a whole UI feature gone with no error shown (the pile counter, the quality, streak and league chips, an open thread that renders empty). `lib/api-token-guard.test.ts` walks the "use client" files under `components/`, `lib/` and `app/` and fails on an `/api` fetch without the token.
+  Every board-side fetch goes through `lib/api-client.ts` (`apiFetch`, `API_HEADERS`) so it carries `x-weft-token`: a fetch without it 403s, and the call site's `.catch()` turns that into an empty default — a whole UI feature gone with no error shown (the pile counter, the quality, streak and league chips, an open thread that renders empty). Electron main's own reads (dock badge and tray, Keep Working, the updater's running count, a `weft://new` link's folder) skip the window's token swap, so they send `READ_HEADERS` from `electron/server-read.cjs`. `lib/api-token-guard.test.ts` walks the "use client" files under `components/`, `lib/` and `app/` and fails on an `/api` fetch without the token.
 - `lib/restart-guard.ts`: turns away Bash that would kill or restart Weft itself (its server pid, port, `next dev`, the app)
   while other cards' turns run, since a restart cuts them all off; in every thread via `guardedCli()`.
 - `lib/restart-when-idle.ts` + `app/api/restart` + `lib/restart-tool.ts` + `electron/restart-when-idle.cjs` + `components/RestartChip.tsx`: restart when idle
@@ -424,7 +436,7 @@ When a new doc lands in this folder, add it here on the same change.
 - `lib/import-check.ts` + `lib/dropped-imports.ts`: after each Edit/Write, tells the thread which imports it broke (a build error no boundary catches) or dropped while still in use (an "X is not defined" on draw);
   in every thread via `lib/env.ts` `guardedCli()`, and in other Claude Code sessions via `.claude/settings.json`.
 - Components: `Board.tsx`, `ThreadView.tsx`, `ThreadItems.tsx`, `Markdown.tsx`, `ReviewPanel.tsx`
-  (the tour: `ReviewPanelTour.tsx`, its header `ReviewPanelHeader.tsx`, and the card without a tour `ReviewPanelNoTour.tsx`);
+  (the tour: `ReviewPanelTour.tsx`, its header `ReviewPanelHeader.tsx`, its button row `ReviewPanelTourNav.tsx`, and the card without a tour `ReviewPanelNoTour.tsx`);
   every dialog sits in `Modal.tsx` (backdrop, header, close, Escape via `lib/use-escape.ts`; its `layer` prop sets the stack: `normal` z-50, `top` z-90 for Settings and the welcome, `palette` z-92 for ⌘K, which also opens over Settings, `front` z-94 for the achievement popup, which can arrive at any moment; confetti z-95 and tooltips z-100 sit above all; `QuickOpen` ⌘P is a `Modal` too);
   each card, panel, dialog body, drawer, header badge and thread message sits in `CrashGuard.tsx` (an error boundary;
   `inline` draws a one-line chip for small spots), with `app/error.tsx` behind the whole board (on weft.zip it draws the web error page, and `app/not-found.tsx` the 404: `components/web-states/`, which also holds the public pages' loading skeletons). Board's panels, dialogs,
@@ -448,7 +460,7 @@ Everything else is under 300 (2026-10-16): big files became re-exporting fronts 
 Pure logic already moved out: `lib/board-view.ts` (columns and their order: Backlog by drag, Review by last update, the rest by the sort menu; project chips, chime/unseen rules, Review's Errors/Restart filter chips drawn by `components/ReviewFilterChips.tsx`) and
 `lib/turn.ts` (how a turn's result reads, where its card goes, cost, limits); Board's hooks into `lib/use-*.ts` (`use-now`,
 `use-toast`, `use-desktop-bridge`, `use-copilot-card`, `use-board-actions`, `use-board-toggles`, `use-board-view`, `use-board-archive`,
-`use-board-card-actions`, plus `lib/board-focus.ts`, `lib/board-helpers.ts`), its live events into `lib/board-live.ts` (Delete and Stop drawn at once by `lib/optimistic-cards.ts`), the menu/dock/tray
+`use-board-card-actions`, plus `lib/board-focus.ts`, `lib/board-helpers.ts`), its live events into `lib/board-live.ts` (Delete and Stop drawn at once by `lib/optimistic-cards.ts`; a failed card list is tried again on `LIST_RETRY_MS` until it lands, so the columns never sit on placeholders), the menu/dock/tray
 actions into `lib/board-menu-bridge.ts`, its derived values into `lib/board-derive.ts`, and its JSX into `BoardHeader`, `BoardProjectBar`,
 `BoardColumns` (each column's extras by id), `BoardBrowserPane`, `OpenCard` (the framed window and the open card's four columns),
 `NewThreadWindow` (the New thread form and desktop browser pane), `BoardBottom`

@@ -3,6 +3,7 @@
 
 import type { TagInfo, TagRow } from "./tags";
 import type { Webhook, WebhookInput, WebhookPatch } from "./webhooks";
+import type { IntakeResult } from "./project-intake";
 import type { SubagentModel } from "./subagents";
 import type { CloudSyncStatus } from "./cloud-sync-view";
 import type { CardShareState, CardShareUpdate } from "./share-types";
@@ -260,12 +261,16 @@ export const api = {
   addProject: (path: string) => call<{ path: string; projects: Project[] }>("POST", "/api/projects", { path }),
   newProject: (parent: string, name: string) =>
     call<{ path: string; projects: Project[] }>("POST", "/api/projects/new", { parent, name }),
+  // The project menu's Re-seed Backlog (lib/project-seed-run.ts): parks starter cards again, says how many.
+  seedProject: (path: string) => call<{ added: number }>("POST", "/api/projects/seed", { path }),
   removeProject: (path: string) => call<{ projects: Project[] }>("DELETE", "/api/projects", { path }),
   loginStatus: () => call<{ status: Record<Backend, CliStatus>; runs: LoginView[] }>("GET", "/api/login"),
   login: (backend: Backend, action: "start" | "input" | "cancel" | "terminal", text?: string, signal?: AbortSignal) =>
     call<{ login: LoginView | null }>("POST", "/api/login", { backend, action, text }, signal),
   // Starts a CLI ahead of time: a card's own, or a spare in a project folder.
   warm: (body: { cardId?: string; cwd?: string; backend?: Backend }) => call<{ ok: true }>("POST", "/api/warm", body),
+  // A project opened: its .env files, code's keys and webhook routes into 🔐 and 🪝 (lib/project-intake.ts).
+  intake: (folder: string) => call<IntakeResult & { text: string | null }>("POST", "/api/projects/intake", { folder }),
   // The splash page the browser pane shows beside the New thread dialog.
   newThreadPage: () => call<{ url: string }>("POST", "/api/new-thread-page", {}),
   // Prompts the user wrote, in cards on the board. Matched words in each snippet sit between \u0001 and \u0002.

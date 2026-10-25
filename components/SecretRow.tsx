@@ -117,7 +117,8 @@ function WrapName({ name }: { name: string }) {
 }
 
 // A blank's hint in full, wrapped and never cut off; its links open in the browser pane, where you're signed in.
-function HintText({ hint }: { hint: string }) {
+// onOpen runs first, for a dialog that has to close so the pane shows (components/IntakeDialog.tsx).
+export function HintText({ hint, onOpen }: { hint: string; onOpen?: () => void }) {
   return (
     <p className="mt-0.5 break-words text-[10.5px] leading-snug text-faint">
       {hintParts(hint).map((p, i) =>
@@ -128,6 +129,7 @@ function HintText({ hint }: { hint: string }) {
             title={`Open ${p.url} in the browser pane`}
             onClick={(e) => {
               e.preventDefault();
+              onOpen?.();
               openInPane(p.url);
             }}
             className="break-all text-accent underline decoration-accent/40 underline-offset-2 hover:decoration-accent"

@@ -6,6 +6,7 @@ import { stopNow } from "@/lib/optimistic-cards";
 import { useShortcutListener, useShortcuts } from "@/lib/hotkeys";
 import { stepThrough, SORTERS, type ProjectSummary, type SortKey } from "@/lib/board-view";
 import { useMenuBridge } from "@/lib/board-menu-bridge";
+import { useIntakeActions } from "@/lib/intake-open";
 import { useOnboardingEvents } from "@/lib/onboarding-events";
 import { addSecret } from "@/lib/use-vault";
 import { filterHasFocus, focusFilter, jumpToNeedsYou, moveFocus, openFocused } from "@/lib/board-focus";
@@ -81,6 +82,7 @@ export function useBoardCommands(c: BoardCommandsInput) {
 
   useMenuBridge({ cards, openNew: c.openNew, openCard, select: c.select, openSettings: () => c.setShowSettings(true), focusFilter, toggleTerminal: c.toggleTerminal, openDrawer: c.setLibraryOpen });
   useOnboardingEvents(c.openNew, c.select);
+  useIntakeActions(c.setLibraryOpen, c.select);
 
   useShortcuts(
     boardShortcuts({

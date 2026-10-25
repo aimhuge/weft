@@ -657,9 +657,12 @@ menu and the palette, shows the last one again:
   (⚡ Speedrun is a 5-hour window gone in under 30 minutes), and badges for several hits in a day or days in a row.
   The 🏆 Leagues dialog's **⏱️ Limit records** shows the all-time boards: fastest 5-hour, fastest week, most of each hit.
 - **The cloth.** Your last 26 weeks as woven stitches, brighter for bigger days, blue where a freeze covered one.
-- **Badges.** 69 of them: milestones, streaks, habits (five cards running at once, night owl, refactorer…), limits,
-  code health (coverage at 80/95/100%, guarded, strict, slim files, clean tree) and the production-ready
-  tree. New ones and level-ups arrive as a toast.
+- **Badges.** 143 of them in 17 families: milestones (to 2,500 shipped and 100,000 turns), streaks (to 1,000 days),
+  speed (🏭 Assembly line: 10 ships in an hour), the calendar (🥧 Pi day, 🍂 Four seasons), habits, parallel (🐙 Octopus),
+  tokens and spend (💰 Billionaire, 🐋 Whale), limits, craft (/done, code reviews, docs), the board, projects, leagues
+  (🥇 Week winner, 🔄 Comeback), social (referrals, a team of 5), the Weft explorer family (first use of the vault, the
+  webhook relay, a dev server, a pane screenshot, sharing, your profile, every feature intro), secret ones that show
+  as ❓ until you earn them, code health and the production-ready tree. New ones and level-ups arrive as a toast.
 - **Projects.** Each of your busiest repos' production-ready tree: Testing, Security (secrets ignored, secret
   scanning, Dependabot, security headers, SECURITY.md), Observability (analytics, error tracking, tracing,
   structured logs, a health route), Docs and Delivery. Every check Weft finds missing has **Set it up**,
@@ -737,6 +740,15 @@ match issue labels one to one.
 The old library's recipes, to-dos and notes became starred cards tagged `recipe`, `to-do` or `note`; their files in
 `~/.weft/library` and the recipe skills in `~/.claude/skills` are still there. More in
 [docs/architecture/tags.md](docs/architecture/tags.md).
+
+### A starter Backlog for a new project
+
+The first time a project lands on the board, Weft parks up to 6 cards in its Backlog from what it can already see:
+**Set up for agents** when there's no CLAUDE.md or AGENTS.md, migrations the linked Supabase project hasn't applied,
+up to 3 open GitHub issues assigned to you or labeled bug, the 2 most important failing production-ready checks, and the
+file with the most TODOs. Nothing starts on its own, and nothing already on the board is added twice. **Re-seed Backlog**
+in the project menu runs it again; the copilot's chips offer the same finds. More in
+[docs/architecture/project-seed.md](docs/architecture/project-seed.md).
 
 ### GitHub issues
 
@@ -817,6 +829,11 @@ four characters showing.
   thread, and previews each name as new, same, differs or missing before anything is written. `.env` is offered
   unticked, `.env.example` brings names only (shown as missing until filled), `NEXT_PUBLIC_*` gets a public tag,
   short-lived `vercel env pull` values are skipped, and a file git tracks gets a warning to rotate its values.
+- **Opening a project takes it in.** Pick a project on the board and Weft moves the new values in its untracked
+  `.env` files into 🔐 with no click (never over a value the vault holds, never from a file git tracks: those get
+  "rotate" instead). The keys its code reads, the names `.env.example` lists and the webhook routes it serves come
+  in as 🔐 and 🪝 blanks with a link to each provider's page. A screen lists what moved and what's left, by name, with
+  **Set it up in a thread** to start a card that walks you through the blanks and webhooks. Anything you remove stays removed.
 - A dot on 🔐 means `.env.local` has values the vault doesn't hold yet; its count is names still missing a value.
 - **Weft can write `.env.local` for you.** Tick "Then let Weft write .env.local from the vault" in the import preview:
   the file gets a `# Managed by Weft` header, stays gitignored and readable only by you, and follows every change to
@@ -871,7 +888,9 @@ behind a single Touch ID, and a thread can do the same with
 `mcp__secrets__push_to_vercel`, so a key never goes through the dashboard or a thread. The other way, **pull** brings
 a plain Vercel variable the vault has no value for into it (sensitive ones can't be read back), and **Live pull from
 Vercel** does it the moment one is added, through a team webhook relayed by the deployed Weft (Pro or Enterprise teams,
-signed in to Weft). More in
+signed in to Weft). When the two drift apart, Weft notices on its own as a project opens: 🔐 and ▲ on the rail light
+up, the drawers say "4 on Vercel not in vault: pull? · 2 missing on preview: push?" with **Pull** and **Push N** beside
+it, and the copilot lists it under what isn't set up yet. More in
 [docs/architecture/vercel.md](docs/architecture/vercel.md).
 
 ## Supabase
@@ -921,11 +940,11 @@ Slack's four-colour mark on the rail connects the board to a Slack workspace. We
 connection from your Mac out to Slack, so nothing needs a public URL. **Create the Weft app** opens Slack with Weft's
 app manifest filled in (or `pnpm slack:manifest <app id>` puts it on an app you already made); install it, then paste
 its bot token (`xoxb-…`) and an app-level token with `connections:write` (`xapp-…`). Both stay in your Keychain. Pick a
-channel and what goes there: **commits** and **pushes** (from every board repo, whoever made them), **Vercel deploys**
+default channel and what goes there, and map any project to a channel of its own: **commits** and **pushes** (from every board repo, whoever made them), **Vercel deploys**
 when they finish, and **card status**: when a card lands in Needs you, Review or Done, its own Slack thread gets the
 column, stage, what's left, a preview of its latest reply and a link to the card on weft.zip, where you can reply,
 review or move it (its project needs to sync). In Slack, `/weft fix the login bug` or **@Weft fix the login bug** starts
-a card in the project you picked, and **@Weft** in a card's thread sends that card your next message. More in
+a card in that channel's project (or your default one), and **@Weft** in a card's thread sends that card your next message. More in
 [docs/architecture/slack.md](docs/architecture/slack.md).
 
 ## Copilot

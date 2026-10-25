@@ -45,6 +45,17 @@ webhook declares `svix` explicitly. `providerFor` resolves it; a webhook with ne
 `WEBHOOKS_PROMPT` tells threads to record each webhook as soon as they know its route, use `relay` rather than a
 tunnel, register it themselves when they can and `ask_add` only when blocked.
 
+## Found by the intake
+
+When a project opens, the project intake (docs/architecture/secrets.md#project-intake) also reads its route files
+(`lib/intake-scan.ts` `findHook`): an App Router `route.ts` or a `pages/api` file, never one with a `[param]`. A route is
+a webhook when its code checks a provider's signature (Stripe's `constructEvent` or `stripe-signature`, GitHub's
+`x-hub-signature`, Vercel's `x-vercel-signature`, svix for Resend and Clerk), or when its path has a `webhook`
+segment beside a real one. Weft's own `/api/webhooks` registry doesn't count. The blank gets the provider,
+the signing secret's name when the file reads one, the event types it switches on (`case "checkout.session.completed"`),
+and where to register it. It's skipped when the folder already has a webhook by that name or route, or an earlier
+intake offered it, so a registered webhook is never overwritten.
+
 ## The relay
 
 ```
