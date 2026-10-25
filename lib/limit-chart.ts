@@ -199,12 +199,12 @@ export function fiveHourNow(rows: LimitSample[], stats: CardStats, now: number):
   return { left: level, from: reset - FIVE_HOURS, to: reset };
 }
 
-// The whole chart for the account's history and a card's latest windows. Without a known weekly reset,
+// The whole chart for the CLI's own history and a card's latest windows. Without a known weekly reset,
 // the week is the 7 days ending a 5-hour window from now. In a week's first NEW_WEEK, with history from
 // before its reset, it starts LOOKBACK_DAYS earlier so the week before's last days stay in view.
 //
-// The history is the plan's whole history (lib/plan-pools.ts): the windows are one account's, so the
-// chart draws them all, and the card's CLI only names the plan.
+// The history is the plan's own (lib/plan-pools.ts): each CLI has its own plan, so the chart draws that
+// CLI's readings and no other plan's.
 export function limitsChart(samples: LimitSample[], stats: CardStats, now: number, backend: Backend = "claude"): LimitsChart {
   const rows = withCurrent(samples, stats, now, backend);
   const end = weekEnd(rows, stats, now) ?? now + FIVE_HOURS;

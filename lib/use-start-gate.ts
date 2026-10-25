@@ -38,10 +38,10 @@ export const GATE_POLL_MS = 60_000;
 
 // The plan's own readings, as the flat sample list lib/limit-reset.ts reads.
 //
-// The payload carries the ACCOUNT's windows on every CLI of that plan (lib/plan-limits.ts), so the
-// same window arrives once per CLI. One sample per POOL per window is what the plan log holds, so
-// that is what comes out: a sample per pool per window would be read as several readings of one
-// counter, and the newest of them would win over the one the server saw.
+// The payload carries each CLI's own windows (lib/plan-limits.ts), and each CLI has its own plan
+// (lib/plan-pools.ts), so one sample per CLI per window is what the plan log holds — and that is what
+// comes out. A sample per CLI would be read as several readings of one counter, and the newest of them
+// would win over the one the server saw.
 export function samplesOf(plans: PlansPayload["plans"]): PlanSample[] {
   const samples: PlanSample[] = [];
   const seen = new Set<string>();

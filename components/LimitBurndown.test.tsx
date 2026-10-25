@@ -5,9 +5,9 @@ import LimitBurndown from "./LimitBurndown";
 import type { LimitSample } from "@/lib/limit-chart";
 import type { CardStats } from "@/lib/types";
 
-// The chart draws the account's plan from the account's readings: the plan limits are ONE pool per
-// account (lib/plan-pools.ts), so a card on puku-cli draws the same history as one on Claude Code. With
-// days logged before the week began, it reaches back into them (lib/limit-chart.ts).
+// The chart draws the CLI's own plan from that CLI's readings: each CLI has its own plan
+// (lib/plan-pools.ts), so a card on puku-cli asks for Puku's history and never draws Claude Code's.
+// With days logged before the week began, it reaches back into them (lib/limit-chart.ts).
 
 const DAY = 24 * 60 * 60 * 1000;
 const NOW = new Date("2026-10-23T22:00:00+07:00").getTime();
@@ -38,18 +38,18 @@ function serves(samples: LimitSample[]) {
 }
 
 describe("LimitBurndown", () => {
-  it("asks for the account's history and names the plan", async () => {
+  it("asks for the CLI's own history and names the plan", async () => {
     const fetchMock = serves([]);
     vi.stubGlobal("fetch", fetchMock);
     vi.setSystemTime(NOW);
     render(<LimitBurndown stats={{ sevenDay: { used: 14, resetsAt: WEEKLY_RESET } }} />);
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/limits");
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/limits?backend=claude");
     expect(screen.getByText("Claude Code's plan")).toBeTruthy();
     cleanup();
     render(<LimitBurndown backend="puku" stats={{}} />);
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
-    expect(fetchMock.mock.calls[1]?.[0]).toBe("/api/limits");
+    expect(fetchMock.mock.calls[1]?.[0]).toBe("/api/limits?backend=puku");
     expect(screen.getByText("puku-cli's plan")).toBeTruthy();
   });
 
@@ -82,16 +82,20 @@ describe("LimitBurndown", () => {
     expect(days.length).toBe(10);
   });
 
-  it("reaches back into last week for a card on the CLI with the fewest readings", async () => {
-    // A week of Claude Code readings and one of puku's own from today. The plan limits are one pool per
-    // account, so puku's card draws the account's history and reaches back like Claude Code's — that was
-    // the bug: asking for one CLI's own readings left a puku card with two rows and nothing to look at.
+  it("reaches back into last week for a card on the CLI with a week of its own readings", async () => {
+    // A week of Claude Code readings and a week of puku's own. Each CLI has its own plan, so puku's
+    // card draws puku's week and reaches back like Claude Code's — each from its own history.
     const history = [
       sample(NOW - 5 * DAY, "claude", 90),
       sample(NOW - 4 * DAY, "claude", 70),
       sample(NOW - 3 * DAY, "claude", 55),
       sample(NOW - 2 * DAY, "claude", 40),
       sample(NOW - DAY, "claude", 30),
+      sample(NOW - 5 * DAY, "puku", 80),
+      sample(NOW - 4 * DAY, "puku", 60),
+      sample(NOW - 3 * DAY, "puku", 45),
+      sample(NOW - 2 * DAY, "puku", 30),
+      sample(NOW - DAY, "puku", 20),
       sample(NOW - 3 * 60_000, "puku", 14),
     ];
     vi.stubGlobal("fetch", serves(history));

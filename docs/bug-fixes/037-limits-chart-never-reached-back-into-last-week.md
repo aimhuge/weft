@@ -8,9 +8,6 @@ Hovering the status strip's `5hr` / `7d` opened the burndown chart. On a Claude 
 of history and reached back into the days before the weekly reset when the account had them. On a **puku**
 card it drew a flat seven days with nothing in it, and never reached back.
 
-The two cards sit on the same account and read the same counters, so the puku card's chart was the same
-chart with the history taken away.
-
 ## Root cause
 
 `components/LimitBurndown.tsx` asked for the **CLI's** readings:
@@ -33,60 +30,79 @@ const back = now - weekStart < NEW_WEEK && rows.some((s) => s.at < weekStart) ? 
 The chart reaches back only when the history it was given actually holds those days. It was never given
 them.
 
-## Fix
+## The wrong fix (reverted)
 
-The plan limits are **one pool per account** (`lib/plan-pools.ts`): Claude Code and puku-cli read the
-same Anthropic subscription's windows, so the history belongs to the account and the CLI only names the
-plan. The proof — the SDK's `rate_limits` come from the claude.ai usage endpoint and are null for
-API-key sessions, and the log's own puku rows carry Claude Code's reset epoch to the second — is in
-docs/architecture/limits-burndown.md.
-
-So the chart asks for the account's history, and the route answers with the plan's:
+The first fix here put Claude Code and puku-cli into **one pool per account** (`lib/plan-pools.ts`), on the
+premise that both read the same Anthropic subscription's windows, and made the chart ask for the
+account's history rather than the CLI's:
 
 ```ts
-// after — app/api/limits/route.ts
-const backend = new URL(req.url).searchParams.get("backend") as Backend | null;
+// the one-pool fix — app/api/limits/route.ts
 const samples = readSamples();
 return Response.json({ samples: backend ? samples.filter((s) => samePool(s.backend, backend)) : samples });
 ```
 
 ```ts
-// after — components/LimitBurndown.tsx
+// the one-pool fix — components/LimitBurndown.tsx
 apiFetch("/api/limits")
 ```
 
-`?backend=claude` and `?backend=puku` now answer with the same rows — the account's — and
-`?backend=codex` with Codex's own.
+That premise was wrong: puku-cli bills through Puku's gateway (`lib/puku-proxy.ts` points at
+`https://api-cli.puku.sh`) and has its own allowance, and the SDK's `rate_limits` come from the claude.ai
+usage endpoint (`sdk.d.ts:4293`) — a gateway session has no plan window to report at all. Pooling the two
+CLIs therefore did not share one history; it made a puku thread inherit Claude's spent 5-hour window, and
+the New thread dialog blocked it with "Start at 2:30am" while changing the model changed nothing. See
+docs/bug-fixes/041-a-puku-thread-was-held-behind-claudes-limit.md.
 
-Three more bugs the per-CLI model was hiding went with it:
+The chart now asks for the **CLI's own** history, which is the same request as before, and each CLI's plan
+carries its own history.
 
-- **The server and the client disagreed about the gate.** The server (`lib/start-gate.ts`) read the raw
-  log and `lib/limit-reset.ts` `planWindow()` filtered by the CLI, while the browser read
-  `/api/limits/plans`. The dialog could say "Start at 2:30am" and the server start the card anyway.
-  `planWindow()` is pool-aware now, and `lib/use-start-gate.ts` `samplesOf()` reduces the payload's
-  duplicate per-CLI copies to one sample per pool per window, so both sides read the same thing.
-- **A parked card on the wrong CLI never resumed.** `lib/limit-resume.ts` filtered
-  `c.backend === backend`, so a puku card parked on the account's spent window waited for a Claude Code
-  reset to resume it. The filter is `samePool()` now.
-- **The log remembered the counter twice.** `lib/limit-history.ts` keyed its last-seen map by
-  `` `${backend}:${kind}` ``, so puku's reading of the same counter looked like a change against puku's
-  own stale value, and a pool reset seen on Claude Code did not fire for puku. The key is the pool's.
+## The fix
 
-**Key rule:** the window belongs to the plan, the reading to the CLI. History, the last-seen map and the
-resume filter are all keyed by the plan; the log still says which CLI reported.
+Each CLI has its own plan (`lib/plan-pools.ts` — `GROUPS` is empty), so the history belongs to the CLI
+that read it, and the chart asks for it:
+
+```ts
+// after — components/LimitBurndown.tsx
+apiFetch(`/api/limits?backend=${backend}`)
+```
+
+```ts
+// after — app/api/limits/route.ts
+const backend = new URL(req.url).searchParams.get("backend") as Backend | null;
+const samples = readSamples();
+return Response.json({ samples: backend ? samples.filter((s) => s.backend === backend) : samples });
+```
+
+`?backend=claude` answers with Claude Code's rows, `?backend=puku` with puku's own, `?backend=codex` with
+Codex's. A CLI that has few readings has a thin chart — which is the truth about that plan, not a bug in
+the chart.
+
+Two bugs the per-CLI model was hiding went with it:
+
+- **A parked card on the wrong CLI never resumed.** `lib/limit-resume.ts` filtered by pool, so a puku card
+  parked on the account's spent window waited for a Claude Code reset to resume it. The filter is the
+  CLI's own backend now, so Claude's reset does not release a card parked on Puku's allowance.
+- **The log remembered the counter twice.** `lib/limit-history.ts` keyed its last-seen map by the pool, so
+  puku's reading of the same counter looked like a change against puku's own stale value. The key is the
+  CLI's own plan, so a puku reading is a sample of its own and not a repeat of Claude's.
+
+**Key rule:** a window belongs to the plan, and each CLI has its own plan. History, the last-seen map and
+the resume filter are all keyed by the CLI's own plan; the log still says which CLI reported.
 
 ## Files
 
-- `lib/plan-pools.ts` (new) — `poolOf()`, `samePool()`, `poolKey()`: the mapping, in one place
-- `lib/plan-pools.test.ts` (new)
-- `lib/plan-limits.ts` — `planLimits()` computes the pool's newest window and copies it onto each
-  entry of that pool, each as its own copy
-- `lib/limit-reset.ts` — `planWindow()` is pool-aware, so the server and the browser agree
-- `lib/limit-history.ts` — the last-seen map is keyed by the pool
-- `lib/limit-resume.ts` — the resume filter is `samePool()`
-- `app/api/limits/route.ts` — `?backend=` means the plan's readings; no param means all of them
-- `components/LimitBurndown.tsx` — the chart fetches the account's history
+- `lib/plan-pools.ts` — `poolOf()`, `samePool()`, `poolKey()`: the mapping, in one place. `GROUPS` is
+  empty, so each CLI is its own pool
+- `lib/plan-pools.test.ts`
+- `lib/plan-limits.ts` — `planLimits()` gives each CLI the newest window of its own plan
+- `lib/limit-reset.ts` — `planWindow()` answers with the CLI's own window
+- `lib/limit-history.ts` — the last-seen map is keyed by the CLI's own plan
+- `lib/limit-resume.ts` — the resume filter is the CLI's own backend
+- `app/api/limits/route.ts` — `?backend=` means that CLI's readings; no param means all of them
+- `components/LimitBurndown.tsx` — the chart fetches the CLI's own history
 - `lib/limit-chart.ts` — `withCurrent()` stamps the card's own CLI, not a hardcoded "claude"
-- `lib/use-start-gate.ts` — `samplesOf()` reads one window per pool
+- `lib/use-start-gate.ts` — `samplesOf()` reads one window per CLI
 - `docs/architecture/limits-burndown.md`, `docs/architecture/limits.md`, `docs/architecture/MAP.md`,
-  `README.md`, `docs/ROADMAP.md`, `docs/bug-fixes/031-puku-cards-showed-claudes-limits.md`
+  `README.md`, `docs/ROADMAP.md`, `docs/bug-fixes/031-puku-cards-showed-claudes-limits.md`,
+  `docs/bug-fixes/041-a-puku-thread-was-held-behind-claudes-limit.md`

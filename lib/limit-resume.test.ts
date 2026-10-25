@@ -91,18 +91,18 @@ describe("resumeParkedCards", () => {
     });
   });
 
-  it("resumes a card parked on the pool's limit, whichever CLI on the pool reported the reset", () => {
-    // One account, one counter (lib/plan-pools.ts): a puku card parked on the account's spent window
-    // is waiting for the same reset a Claude Code card is, so it resumes with it.
+  it("leaves a card parked on another CLI's plan alone", () => {
+    // Each CLI has its own plan (lib/plan-pools.ts): a puku card is waiting on Puku's allowance, not
+    // on Claude Code's 5-hour window, so Claude's reset does not release it.
     const claude = addCard();
     const puku = addCard({ id: "p1", backend: "puku" });
     seedThread(claude.id, [{ kind: "user", text: "ask", at: 1 }]);
     seedThread(puku.id, [{ kind: "user", text: "ask", at: 1 }]);
     const resumed = resumeParkedCards("claude", "five_hour", 5000);
-    expect(resumed).toBe(2);
-    expect(sent.map((s) => s.id).sort()).toEqual([claude.id, puku.id].sort());
-    expect(store.cards.get(puku.id)?.rateLimitHit).toBe(false);
-    expect(store.cards.get(puku.id)?.autoResumedAt).toBe(5000);
+    expect(resumed).toBe(1);
+    expect(sent.map((s) => s.id)).toEqual([claude.id]);
+    expect(store.cards.get(puku.id)?.rateLimitHit).toBe(true);
+    expect(store.cards.get(puku.id)?.autoResumedAt).toBeUndefined();
   });
 
   it("does not touch cards on another plan", () => {

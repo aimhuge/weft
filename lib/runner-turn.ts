@@ -10,6 +10,8 @@ import { askAboutDenials, noteDenial } from "./classifier-denial";
 import { changedLines, gitBranch } from "./git-stats";
 import { showAfterTurn } from "./show";
 import { recordLimits } from "./limit-history";
+import { modelCapFor, planWindowOf, recordModelCaps } from "./limit-kind";
+import { recordModelLimit } from "./model-limit";
 import { isNotLoggedInError, isRateLimitError } from "./login";
 import { isLostSessionError, resumeLostSession } from "./lost-session";
 import { editedPath, touchFile } from "./overlap";
@@ -83,10 +85,20 @@ function handleSystem(id: string, session: Session, msg: Extract<SDKMessage, { t
 }
 
 function handleRateLimit(id: string, backend: Backend, info: Extract<SDKMessage, { type: "rate_limit_event" }>["rate_limit_info"]) {
-  // A refused request is a limit hit, for the limit badges and the wefter card's chart.
-  const kind = info.rateLimitType === "five_hour" ? "five_hour" : info.rateLimitType?.startsWith("seven_day") ? "seven_day" : null;
   const card = getCard(id);
-  if (info.status === "rejected" && kind && card) recordLimit(kind, Date.now(), card, info.resetsAt);
+  const at = Date.now();
+  // A per-model cap ("seven_day_opus") is that MODEL's own limit, not the plan's: it belongs in
+  // the per-model store (lib/model-limit.ts), so it gates that model alone. Filed as a plan
+  // window instead, it would gate every model on the pool and picking another model would not
+  // help (lib/limit-kind.ts).
+  const capped = modelCapFor(card?.model, info.rateLimitType);
+  if (info.status === "rejected" && capped) {
+    recordModelLimit(capped, at, info.resetsAt ? info.resetsAt * 1000 : undefined);
+    return;
+  }
+  // A refused request is a limit hit, for the limit badges and the wefter card's chart.
+  const kind = planWindowOf(info.rateLimitType);
+  if (info.status === "rejected" && kind && card) recordLimit(kind, at, card, info.resetsAt);
   const window = eventWindow(info);
   if (!window) return;
   if (info.rateLimitType === "five_hour") updateLimits(id, backend, { fiveHour: window });
@@ -342,12 +354,19 @@ function showAfter(id: string, session: Session, turn: { reply: string; isError:
 }
 
 // The plan's 5-hour and weekly usage, asked of the CLI so it shows before any rate-limit event.
+//
+// The per-model weekly caps come with it (the SDK's seven_day_opus, seven_day_sonnet and
+// model_scoped rows). Those are the MODEL's own limits, not the plan's, so they go to the
+// per-model store (lib/model-limit.ts) — where they gate that model alone — and not to the plan
+// window, which would gate every model on the account and leave the user with no way out but
+// waiting for the reset (lib/limit-kind.ts).
 async function refreshLimits(id: string, session: Session) {
   try {
     const usage = await session.query?.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET({ skipBehaviors: true });
     const limits = usage?.rate_limits;
     if (!limits) return;
     updateLimits(id, session.spec.backend, { fiveHour: usageWindow(limits.five_hour), sevenDay: usageWindow(limits.seven_day) });
+    recordModelCaps(getCard(id)?.model, limits);
   } catch {}
 }
 

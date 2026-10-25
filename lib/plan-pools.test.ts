@@ -1,25 +1,24 @@
 import { describe, expect, it } from "vitest";
 import { poolKey, poolOf, samePool } from "./plan-pools";
 
-describe("poolOf", () => {
-  it("puts Claude Code and puku-cli in one pool: they read one account's windows", () => {
-    expect(poolOf("claude")).toEqual(["claude", "puku"]);
-    expect(poolOf("puku")).toEqual(["claude", "puku"]);
-  });
+// Each CLI has its own plan. Claude Code runs on Anthropic's subscription and reads the claude.ai
+// account's 5-hour and weekly windows; puku-cli bills through Puku's gateway and has no Anthropic
+// plan limit; Codex runs OpenAI's. So no two CLIs share a counter.
 
-  it("gives every other CLI its own pool", () => {
+describe("poolOf", () => {
+  it("gives every CLI its own pool", () => {
+    expect(poolOf("claude")).toEqual(["claude"]);
+    expect(poolOf("puku")).toEqual(["puku"]);
     expect(poolOf("codex")).toEqual(["codex"]);
     expect(poolOf("goose")).toEqual(["goose"]);
   });
 });
 
 describe("samePool", () => {
-  it("is true for two CLIs on the same plan", () => {
-    expect(samePool("claude", "puku")).toBe(true);
-    expect(samePool("puku", "claude")).toBe(true);
-  });
-
-  it("is false for CLIs on different plans", () => {
+  it("is false for two different CLIs, whatever they are", () => {
+    // Claude Code's spent 5-hour window says nothing about a puku thread: puku is on Puku's plan.
+    expect(samePool("claude", "puku")).toBe(false);
+    expect(samePool("puku", "claude")).toBe(false);
     expect(samePool("claude", "codex")).toBe(false);
     expect(samePool("claude", "goose")).toBe(false);
     expect(samePool("codex", "goose")).toBe(false);
@@ -27,13 +26,14 @@ describe("samePool", () => {
 
   it("is true for a CLI with itself", () => {
     expect(samePool("codex", "codex")).toBe(true);
+    expect(samePool("puku", "puku")).toBe(true);
   });
 });
 
 describe("poolKey", () => {
-  it("names a pool by one of its CLIs, so the plan has one key", () => {
+  it("names a pool by its own CLI, so the plan has one key", () => {
     expect(poolKey("claude")).toBe("claude");
-    expect(poolKey("puku")).toBe("claude");
+    expect(poolKey("puku")).toBe("puku");
     expect(poolKey("codex")).toBe("codex");
     expect(poolKey("goose")).toBe("goose");
   });

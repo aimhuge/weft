@@ -6,11 +6,11 @@ import type { Backend } from "@/lib/types";
 
 // The plan-limit history behind the status strip's burndown chart (lib/limit-history.ts).
 //
-// ?backend=claude|puku|codex gives the PLAN's readings: Claude Code and puku-cli read one account's
-// windows (lib/plan-pools.ts), so asking for either gives the same rows. Without it, every plan's.
+// ?backend=claude|puku|codex gives that CLI's OWN readings: each CLI has its own plan
+// (lib/plan-pools.ts), so asking for puku gives Puku's rows and never Claude's. Without it, every CLI's.
 //
-// The chart asks without a backend and draws the account's whole history, so it can reach back across a
-// weekly reset: a CLI with a short history of its own had nothing to look back at.
+// The chart asks for the CLI it is drawing, so the plot is that plan's own history and can reach back
+// across a weekly reset.
 export async function GET(req: Request) {
   const denied = guard(req, { write: false });
   if (denied) return denied;

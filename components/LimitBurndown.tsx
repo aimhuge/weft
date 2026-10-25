@@ -25,22 +25,21 @@ const MARK_STYLE: Record<Mark["kind"], { stroke: string; width: number; opacity:
   hit: { stroke: "var(--danger)", width: 2.5, opacity: 1 },
 };
 
-// The account's limit history: the plan limits are ONE pool per account (lib/plan-pools.ts), so the plot
-// reads every reading of the plan the card's CLI is on. Asking for one CLI's own readings would starve
-// the lookback (lib/limit-chart.ts): a card on the CLI with the fewest readings had nothing to look back
-// at, and the weekly lookback could never fire.
-function useSamples() {
+// The CLI's own limit history. Each CLI has its own plan (lib/plan-pools.ts): Claude Code reads
+// Anthropic's account windows, puku-cli reads Puku's, so the plot asks for the CLI's own readings and
+// another CLI's history never lands in it.
+function useSamples(backend: Backend) {
   const [samples, setSamples] = useState<LimitSample[]>([]);
   useEffect(() => {
     let live = true;
-    apiFetch("/api/limits")
+    apiFetch(`/api/limits?backend=${backend}`)
       .then((res) => (res.ok ? res.json() : { samples: [] }))
       .then((body: { samples?: LimitSample[] }) => live && setSamples(body.samples ?? []))
       .catch(() => {});
     return () => {
       live = false;
     };
-  }, []);
+  }, [backend]);
   return samples;
 }
 
@@ -188,9 +187,9 @@ function Key({ color, width = 2, height = 10, opacity = 1, label }: { color: str
   );
 }
 
-// A plan: `stats` holds its latest windows (lib/plan-limits.ts), the history is the account's.
+// A plan: `stats` holds its latest windows (lib/plan-limits.ts), the history is the CLI's own.
 export default function LimitBurndown({ backend = "claude", stats }: { backend?: Backend; stats: CardStats }) {
-  const samples = useSamples();
+  const samples = useSamples(backend);
   const now = useNow();
   if (!now) return null;
   const chart = limitsChart(samples, stats, now, backend);

@@ -9,8 +9,8 @@ import type { Backend, LimitWindow } from "./types";
 //
 //   - the plan log (lib/limit-history.ts → ~/.weft/limits.jsonl): per reading, per plan. "The 5-hour
 //     window is at 100%, and it resets at 2:30am." A new thread needs this: the limit is the PLAN's,
-//     not the model's. The log says which CLI reported a reading; the window is the plan's, so any CLI
-//     on that plan answers for it (lib/plan-pools.ts).
+//     not the model's. The log says which CLI reported a reading, and each CLI has its own plan
+//     (lib/plan-pools.ts), so a reading answers only for the CLI that made it.
 //   - the card's own reading (card.stats.fiveHour): one card's last snapshot of its window.
 //   - the per-model store (lib/model-limit.ts → ~/.weft/model-limits.json): per model. "Opus ran out on
 //     its own weekly cap, until 2:30am." A model can be spent while the plan's 5-hour window has room,
@@ -50,9 +50,11 @@ export interface ModelLimitView {
 // The plan's own window for a CLI, as the newest reading of it: the window as it stands now, and when it
 // resets.
 //
-// The window is the PLAN's, so any CLI on that plan reports it: Claude Code and puku-cli read one
-// account's windows (lib/plan-pools.ts). That is what keeps the server's answer (the raw log, here) and
-// the client's (the /api/limits/plans payload, lib/plan-limits.ts) in agreement about one account.
+// The window is the PLAN's, and each CLI has its own plan (lib/plan-pools.ts): Claude Code reads
+// Anthropic's account windows, puku-cli reads Puku's. So a CLI's window is its own — another CLI's
+// spent window says nothing about this thread, which is what lets a puku thread start while Claude is
+// out of room. That is what keeps the server's answer (the raw log, here) and the client's (the
+// /api/limits/plans payload, lib/plan-limits.ts) in agreement.
 export function planWindow(
   samples: PlanSample[],
   backend: Backend,

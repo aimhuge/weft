@@ -32,12 +32,12 @@ describe("planWindow", () => {
     expect(planWindow(samples, "claude", "five_hour", NOW)).toBeUndefined();
   });
 
-  it("answers with the pool's window, whichever CLI on it reported", () => {
-    // The plan limits are one pool per account (lib/plan-pools.ts): Claude Code and puku-cli read the
-    // same windows, so a puku reading is the answer for a Claude thread, and the other way round.
+  it("answers with the CLI's own window, and only that one", () => {
+    // Each CLI has its own plan (lib/plan-pools.ts): Claude Code runs on Anthropic's subscription and
+    // puku-cli bills through Puku's gateway, so a puku reading says nothing about a Claude thread.
     const samples = [sample({ backend: "puku", used: 90, at: NOW - 5_000 })];
-    expect(planWindow(samples, "claude", "five_hour", NOW)).toEqual({ used: 90 });
     expect(planWindow(samples, "puku", "five_hour", NOW)).toEqual({ used: 90 });
+    expect(planWindow(samples, "claude", "five_hour", NOW)).toBeUndefined();
   });
 
   it("keeps another plan's window out of it", () => {
@@ -154,13 +154,16 @@ describe("resetFor", () => {
     expect(resetFor("claude", undefined, samples, [], NOW)).toBeUndefined();
   });
 
-  it("gates a CLI on the pool's spent window, whichever CLI reported it", () => {
-    // One account, one window: a puku thread waits for the window Claude Code spent.
+  it("doesn't gate a CLI on another plan's spent window", () => {
+    // The case from the bug: Claude Code's 5-hour window was spent, and a puku thread — on Puku's own
+    // plan, with no Anthropic limit at all — was held behind it with "Start at 2:30am". Changing the
+    // model changed nothing, because the limit was never the model's.
     const samples = [sample({ backend: "claude", used: 100, resetsAt: RESET_AT / 1000 })];
-    expect(resetFor("puku", undefined, samples, [], NOW)).toEqual({
+    expect(resetFor("puku", undefined, samples, [], NOW)).toBeUndefined();
+    expect(resetFor("claude", undefined, samples, [], NOW)).toEqual({
       at: RESET_AT,
       kind: "five_hour",
-      subject: "puku",
+      subject: "claude",
     });
   });
 
@@ -168,6 +171,40 @@ describe("resetFor", () => {
     const samples = [sample({ backend: "codex", used: 100, resetsAt: RESET_AT / 1000 })];
     expect(resetFor("claude", undefined, samples, [], NOW)).toBeUndefined();
     expect(resetFor("puku", undefined, samples, [], NOW)).toBeUndefined();
+  });
+
+  it("unblocks when the model changes and the new model has no cap of its own", () => {
+    // The case from the bug: Opus ran out on its own weekly cap, the user picks Sonnet, and the
+    // dialog still said "at its limit" — because the cap was filed as a plan window, which gates
+    // every model on the account.
+    //
+    // A per-model cap is recorded in the model store and never in the plan log (lib/limit-kind.ts),
+    // so the plan windows here are the plan's own: the 5-hour one, which every model shares. With
+    // that one spent, no model can start — which is right, and is why the fix is at the recording
+    // site rather than here.
+    const samples = [sample({ kind: "five_hour", used: 100, resetsAt: RESET_AT / 1000 })];
+    expect(resetFor("claude", "opus", samples, [modelLimit()], NOW)).toEqual({
+      at: RESET_AT,
+      kind: "model",
+      subject: "opus",
+    });
+    expect(resetFor("claude", "sonnet", samples, [modelLimit()], NOW)).toEqual({
+      at: RESET_AT,
+      kind: "five_hour",
+      subject: "claude",
+    });
+  });
+
+  it("unblocks a different model when only the old model's cap was spent", () => {
+    // The case that matters: Opus hit its own weekly cap and the user picks Sonnet. Nothing else
+    // is spent, so Sonnet starts now. Before the fix the cap was filed as a plan window and
+    // Sonnet was held for the reset too.
+    expect(resetFor("claude", "opus", [], [modelLimit()], NOW)).toEqual({
+      at: RESET_AT,
+      kind: "model",
+      subject: "opus",
+    });
+    expect(resetFor("claude", "sonnet", [], [modelLimit()], NOW)).toBeUndefined();
   });
 });
 

@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
-// /api/limits: the plan-limit history from lib/limit-history, for the burndown chart. The plan limits
-// are one pool per account (lib/plan-pools.ts), so ?backend asks for the PLAN's readings: asking for
-// claude and asking for puku give the same rows. Without it, every plan's.
+// /api/limits: the plan-limit history from lib/limit-history, for the burndown chart. Each CLI has its
+// own plan (lib/plan-pools.ts), so ?backend asks for that CLI's OWN readings: asking for claude gives
+// Claude Code's rows and asking for puku gives Puku's. Without it, every plan's.
 
 vi.mock("next/server", () => ({ connection: async () => {} }));
 vi.mock("@/lib/limit-history", () => ({
@@ -30,20 +30,14 @@ describe("GET /api/limits", () => {
     });
   });
 
-  it("answers with the plan's readings, whichever CLI on it is asked for", async () => {
+  it("answers with the CLI's own readings", async () => {
     const claude = await route.GET(new Request("http://localhost:3457/api/limits?backend=claude", { headers: READ }));
     expect(await claude.json()).toEqual({
-      samples: [
-        { at: 1, backend: "claude", kind: "five_hour", used: 5 },
-        { at: 2, backend: "puku", kind: "five_hour", used: 9 },
-      ],
+      samples: [{ at: 1, backend: "claude", kind: "five_hour", used: 5 }],
     });
     const puku = await route.GET(new Request("http://localhost:3457/api/limits?backend=puku", { headers: READ }));
     expect(await puku.json()).toEqual({
-      samples: [
-        { at: 1, backend: "claude", kind: "five_hour", used: 5 },
-        { at: 2, backend: "puku", kind: "five_hour", used: 9 },
-      ],
+      samples: [{ at: 2, backend: "puku", kind: "five_hour", used: 9 }],
     });
   });
 

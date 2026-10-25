@@ -10,9 +10,9 @@ import type { LimitKind } from "./limit-chart";
 // way lib/backend-switch.ts does for a rateLimitHit card. The chip on the card and
 // lastLine explain what happened. lib/limit-poll.ts wires the handler on startup.
 //
-// The window is the plan's, so every CLI on it is parked by the same reset: a puku card waiting on the
-// account's 5-hour window resumes when the account's window resets, whoever reported the reading
-// (lib/plan-pools.ts).
+// The window is the plan's, and each CLI has its own plan (lib/plan-pools.ts): a card parked on Claude
+// Code's 5-hour window resumes when Claude's window resets, and a puku card waiting on Puku's allowance
+// is untouched by it.
 
 // Human-friendly window name for the card's lastLine.
 const KIND_LABEL: Record<LimitKind, string> = { five_hour: "5-hour", seven_day: "weekly" };

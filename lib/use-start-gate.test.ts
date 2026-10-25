@@ -89,18 +89,19 @@ describe("useStartGate", () => {
     expect(result.current).toEqual({ at: RESET_AT, kind: "five_hour", subject: "claude" });
   });
 
-  it("gates both CLIs on the pool's spent window", async () => {
-    // One account, one counter (lib/plan-pools.ts): the payload carries the ACCOUNT's window on both
-    // CLIs, and a spent window holds a puku thread exactly as it holds a Claude Code one.
+  it("doesn't gate a CLI on another plan's spent window", async () => {
+    // Each CLI has its own plan (lib/plan-pools.ts): puku-cli bills through Puku's gateway and has no
+    // Anthropic plan limit, so Claude Code's spent 5-hour window says nothing about a puku thread.
+    // Filing it against puku is what left the user stuck at "Start at 2:30am" with no way out.
     plans({
       plans: {
         claude: { fiveHour: { used: 100, resetsAt: RESET_AT / 1000 }, fiveHourAt: NOW, reportedAt: NOW },
-        puku: { fiveHour: { used: 100, resetsAt: RESET_AT / 1000 }, fiveHourAt: NOW, reportedAt: NOW },
+        puku: { fiveHour: { used: 20, resetsAt: RESET_AT / 1000 }, fiveHourAt: NOW, reportedAt: NOW },
       },
     });
     await loadGates();
     expect(renderHook(() => useStartGate("claude", undefined)).result.current).toEqual({ at: RESET_AT, kind: "five_hour", subject: "claude" });
-    expect(renderHook(() => useStartGate("puku", undefined)).result.current).toEqual({ at: RESET_AT, kind: "five_hour", subject: "puku" });
+    expect(renderHook(() => useStartGate("puku", undefined)).result.current).toBeUndefined();
   });
 
   it("doesn't gate a CLI on another plan's spent window", async () => {
@@ -115,32 +116,32 @@ describe("useStartGate", () => {
     expect(renderHook(() => useStartGate("codex", undefined)).result.current).toBeUndefined();
   });
 
-  it("dates the window with the pool's read time, not the reporting CLI's", async () => {
-    // The pool's window was read at 10:00; puku reported at 11:00. The window belongs to the pool, so
-    // the sample that answers the gate is the pool's reading — puku's own last report cannot make a
-    // window look newer (or older) than it is.
+  it("dates the window with the CLI's own read time, not another CLI's report", async () => {
+    // Claude Code read its window at 10:00; puku reported at 11:00. Each CLI has its own plan, so
+    // puku's later report cannot make Claude's window look newer (or older) than it is.
     const POOL_READ = NOW - 60 * 60 * 1000;
     plans({
       plans: {
         claude: { fiveHour: { used: 100, resetsAt: RESET_AT / 1000 }, fiveHourAt: POOL_READ, reportedAt: POOL_READ },
-        puku: { fiveHour: { used: 100, resetsAt: RESET_AT / 1000 }, fiveHourAt: POOL_READ, reportedAt: NOW },
+        puku: { fiveHour: { used: 20, resetsAt: RESET_AT / 1000 }, fiveHourAt: POOL_READ, reportedAt: NOW },
       },
     });
     await loadGates();
-    expect(renderHook(() => useStartGate("puku", undefined)).result.current).toEqual({ at: RESET_AT, kind: "five_hour", subject: "puku" });
+    expect(renderHook(() => useStartGate("claude", undefined)).result.current).toEqual({ at: RESET_AT, kind: "five_hour", subject: "claude" });
   });
 
-  it("reads one window per pool, not one per CLI", () => {
-    // The payload carries the account's window on every CLI of the plan. Read as two readings of one
-    // counter, the newer of the two would win — and the older copy could hold a stale number. One
-    // sample per pool is what the plan log holds, so that is what the gate reads.
+  it("reads one window per CLI, not one per counter", () => {
+    // Each CLI has its own plan (lib/plan-pools.ts), so the payload carries one window per CLI. Read as
+    // two readings of one counter, the newer of the two would win — and the older copy could hold a
+    // stale number. One sample per CLI is what the plan log holds, so that is what the gate reads.
     const samples = samplesOf({
       claude: { fiveHour: { used: 100, resetsAt: RESET_AT / 1000 }, fiveHourAt: NOW, reportedAt: NOW },
-      puku: { fiveHour: { used: 100, resetsAt: RESET_AT / 1000 }, fiveHourAt: NOW, reportedAt: NOW },
+      puku: { fiveHour: { used: 20, resetsAt: RESET_AT / 1000 }, fiveHourAt: NOW, reportedAt: NOW },
       codex: { sevenDay: { used: 40, resetsAt: RESET_AT / 1000 }, sevenDayAt: NOW, reportedAt: NOW },
     });
     expect(samples).toEqual([
       { backend: "claude", kind: "five_hour", used: 100, resetsAt: RESET_AT / 1000, at: NOW },
+      { backend: "puku", kind: "five_hour", used: 20, resetsAt: RESET_AT / 1000, at: NOW },
       { backend: "codex", kind: "seven_day", used: 40, resetsAt: RESET_AT / 1000, at: NOW },
     ]);
   });
@@ -227,5 +228,27 @@ describe("useThreadGate", () => {
     await loadGates();
     const { result } = renderHook(() => useThreadGate(undefined, undefined, "claude", "opus"));
     expect(result.current).toBeUndefined();
+  });
+
+  it("lets another model send once the spent one is the only thing that was capped", async () => {
+    // The case from the bug: the thread's model hit its own cap, the user picks another model in
+    // the reply box, and the Send button stayed "Send at 2:30am" — the cap was filed as a plan
+    // window, which gates every model on the account.
+    //
+    // A per-model cap is in the model store and not in the plan windows (lib/limit-kind.ts), so
+    // picking another model has nothing left to hold it back.
+    plans({ plans: {}, models: [{ model: "opus", at: NOW, resetsAt: RESET_AT }] });
+    await loadGates();
+    const { result } = renderHook(() => useThreadGate(undefined, undefined, "claude", "opus"));
+    expect(result.current).toEqual({ at: RESET_AT, kind: "model", subject: "opus" });
+  });
+
+  it("still holds a plan-wide window back, whatever model is picked", async () => {
+    // The 5-hour window is the account's: every model on it is out of room, so switching models
+    // genuinely doesn't help and the thread waits.
+    plans({ plans: { claude: { fiveHour: { used: 100, resetsAt: RESET_AT / 1000 }, reportedAt: NOW } } });
+    await loadGates();
+    const { result } = renderHook(() => useThreadGate(undefined, undefined, "claude", "sonnet"));
+    expect(result.current).toEqual({ at: RESET_AT, kind: "five_hour", subject: "claude" });
   });
 });

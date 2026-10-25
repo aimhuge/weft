@@ -75,10 +75,10 @@ function Plan({ backend, reading, named }: { backend: Backend; reading: Pick<Car
   );
 }
 
-// The plan limits: the open card's CLI's plan, or every CLI's when no card is open. The plan limits are
-// one pool per account (lib/plan-pools.ts), so a card on any CLI of the plan reads the same windows;
-// they come from the limits log (lib/use-plan-limits.ts), and where that isn't there (the web board), the
-// card's own last reading stands in.
+// The plan limits: the open card's CLI's plan, or every CLI's when no card is open. Each CLI has its own
+// plan (lib/plan-pools.ts), so a card reads the windows of the CLI it actually runs on; they come from the
+// limits log (lib/use-plan-limits.ts), and where that isn't there (the web board), the card's own last
+// reading stands in.
 function Plans({ backend, stats }: { backend?: Backend; stats?: CardStats }) {
   const plans = usePlanLimits(limitKey(stats));
   const shown: [Backend, Pick<CardStats, "fiveHour" | "sevenDay"> | undefined][] = plans

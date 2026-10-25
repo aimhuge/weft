@@ -40,8 +40,8 @@ export function setOnLimitReset(handler: (sample: LimitSample) => void): ((sampl
   return prev;
 }
 
-// What Weft remembers between two samples, per PLAN and window: the plan's counter is one, so the
-// memory of it is one, whichever CLI reported it.
+// What Weft remembers between two samples, per PLAN and window. Each CLI has its own plan
+// (lib/plan-pools.ts), so the memory of a counter is the CLI's own.
 const key = (backend: Backend, kind: LimitKind) => `${poolKey(backend)}:${kind}`;
 
 function parse(line: string): LimitSample | null {

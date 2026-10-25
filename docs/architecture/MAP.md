@@ -6,7 +6,7 @@ matching doc below. When a feature lands, add or update its entry here and in it
 
 ## Docs in this folder
 
-- `admin.md` — the super-admin gate (`SUPER_ADMIN_EMAILS` or a `super_admins` row, via `lib/admin.ts`), the `/admin/users`, `/admin/billing`, `/admin/coupons` and `/admin/settings` pages and the admin kit they share (`components/admin/`), the rail's 🛡 Admin icon, the data routes in `app/api/admin/*`.
+- `admin.md` — the super-admin gate (`SUPER_ADMIN_EMAILS` or a `super_admins` row, via `lib/admin.ts`), the `/admin/users` (real Last seen from `user_active_days`, a per-account activity drawer), `/admin/billing`, `/admin/coupons` and `/admin/settings` pages and the admin kit they share (`components/admin/`), the rail's 🛡 Admin icon, the data routes in `app/api/admin/*`.
 - `overview.md` — what Weft is end to end: the Electron shell, the Next.js server, cards-as-threads, the loop with the user.
 - `board.md` — the board screen's structure: `Board.tsx` owns state and wiring, hooks under `lib/` decide, layer components draw; how to add a column extra, shortcut, palette item or dialog flag.
 - `desktop-shell.md` — `electron/` itself: main, preload, tray, dock, `weft://` links, the start screen, the terminal drawer.
@@ -27,6 +27,7 @@ matching doc below. When a feature lands, add or update its entry here and in it
 - `supabase.md` — the Supabase rail drawer: token in the Keychain, `supabase/.temp/project-ref`, state, unapplied migrations, the Migrate card.
 - `cloudflare.md` — the orange-cloud rail drawer: API token in the Keychain, Worker/Pages links in `~/.weft/cloudflare-links.json`, wrangler `account_id` and deploys.
 - `blastcp.md` — the BlastCP rail drawer: OAuth+PKCE, MCP-tool reads, `~/.weft/blastcp-links.json`.
+- `connectors.md` — Settings → Connectors: CLIs your threads use for your own accounts; gog (Google Workspace) shipped in the toolchain, its OAuth client and browser sign-in.
 - `slack.md` — the Slack rail drawer: bot + app tokens in the Keychain, Socket Mode in main, commits/pushes (reflog), deploys and card status to a channel, `/weft` and @Weft start cards, weft.zip card links.
 - `puku-trial.md` — the puku trial: a puku thread with no Puku login runs through the deployed Weft's proxy on Weft's own key, day-long token, per-account daily cap.
 - `goose.md` — the Goose backend: one `goose run` process per turn and its `stream-json` events, the provider catalog and the BYO key, the grant that puts the key in Goose's env without it ever reaching the board, and the per-card `GOOSE_PATH_ROOT`.
@@ -48,7 +49,7 @@ matching doc below. When a feature lands, add or update its entry here and in it
 - `error-boundaries.md` — `CrashGuard.tsx`, `BuildErrorBar.tsx`, the `guarded()` import wrapper, why a build error never reaches a boundary.
 - `welcome-tour.md` — the welcome's narrated 96-second tour: three HyperFrames pages, the live player and beat messages, Kokoro voice and pad, the MP4 render for weft.zip.
 - `welcome-dialog.md` — the welcome dialog itself: first launch vs. the replay preview, the steps and their chrome, and why a replay closes on Escape, the backdrop and ✕ while first launch does not.
-- `feedback.md` — the feedback dot in the footer's corner: Haiku's interview (`lib/feedback.ts`, `lib/use-feedback.ts`, `app/api/feedback`), the summary-only wrap-up, the copy in `~/.weft/feedback`, and weft.zip's collector (`lib/feedback-send.ts`, `app/api/feedback/collect`) that stores it in `public.feedback` and posts it to the team's Slack webhook.
+- `feedback.md` — the feedback dot in the footer's corner: Haiku's interview (`lib/feedback.ts`, `lib/use-feedback.ts`, `app/api/feedback`), the summary-only wrap-up, the copy in `~/.weft/feedback`, and weft.zip's collector (`lib/feedback-send.ts`, `app/api/feedback/collect`) that stores it in `public.feedback` and posts it to the team's Slack webhook. The dot names itself on hover ("Feedback"); the collector needs both halves up (the table applied and the webhook on Vercel) or a summary reaches weft.zip and no channel.
 - `feature-intros.md` — the narrated video each tool drawer, the New thread dialog (in the browser pane, `lib/pane-intro.ts`), the code quality dialog and the leagues play once: the pages in `public/intros/`, the splash poster every one opens on (the feature's own icon, its name and one line about what it does), `pnpm intros:narrate`, the render (`pnpm intros:render` / `pnpm intros:encode` / `pnpm intros:verify`, `scripts/render-intros.mjs`, `scripts/encode-intros.sh` and `scripts/verify-intros.sh`) and the blank-frame trap that makes a broken render look finished, when `useFeatureIntro` opens one (big, in a ¾-window modal that shrinks into the drawer and plays on; a click pauses it, and so does a dialog or achievement opening over it, `lib/intro-cover.ts`), the seen set in `localStorage` and Reset tips.
 - `gamification.md` — the header's 🔥 chip and "Your loom" dialog: streaks, XP, badges, the builder card, the production-ready tree.
 - `quality.md` — the header's code quality checklist: coverage, file size, lint, types, guardrails; the refactor scout and the score's last 10 points.
@@ -63,8 +64,8 @@ matching doc below. When a feature lands, add or update its entry here and in it
 - `profiles.md` — public profiles at `weft.zip/@username`: `profiles.username`, the `/@` → `/u/[username]` rewrite, what the page shows and never shows.
 - `sharing.md` — a card's share link on weft.zip: thread + pane, live; the `@aimhuge/share` modes and gate, `cloud_shares`, the sandboxed pane, redaction.
 - `copilot-suggestions.md` — the copilot's empty-chat chips: what Haiku reads, the one run per board labeled by project, the client filter, setup gaps and `setup_status`.
-- `limits.md` — the three limits a thread can meet (the model's own cap, the account's weekly and 5-hour windows), their stores and the start gate.
-- `limits-burndown.md` — the status strip's `5hr` / `7d` hover chart: a week of 15-minute bars for the 5-hour limit left against the weekly one, and why the plan limits are one pool per account.
+- `limits.md` — the three limits a thread can meet (the model's own cap, the CLI's weekly and 5-hour windows), their stores and the start gate.
+- `limits-burndown.md` — the status strip's `5hr` / `7d` hover chart: a week of 15-minute bars for the 5-hour limit left against the weekly one, and why each CLI has its own plan.
 - `worktrees.md` — isolated cards, the opt-in git worktree per card: its CLI, Bash, dev server and commits live there, and Done lands its branch back.
 - `copilot-personas.md` — the copilot's personas (Wingman, Founder, Captain): the prompt each adds, the lane header picker, why a switch starts a new chat.
 
@@ -83,7 +84,7 @@ When a new doc lands in this folder, add it here on the same change.
 - `electron/updater.cjs` (+ `electron/update-window.cjs`, the Software Update window) + `scripts/release-feed.mjs` + `.github/workflows/release.yml`: updates from GitHub Releases (Squirrel.Mac's JSON
   feed, a download fallback when unsigned, a quiet install once nothing runs and nobody's at the Mac) and the tag-triggered signed release; `CHANGELOG.md` holds each version's notes, which Weft commits itself after a version bump (docs/architecture/updates.md).
   `scripts/bundle-toolchain.mjs` stages what the app ships for a fresh Mac (node, npm, pnpm, puku-cli without telemetry, claude, all on
-  my own Electron), which `appendToolchain()` in `electron/env.cjs` puts at the end of PATH.
+  my own Electron, plus gog, the checksum-pinned Google Workspace CLI), which `appendToolchain()` in `electron/env.cjs` puts at the end of PATH.
 - `electron/folder-access.cjs` + `lib/folder-access-tool.ts`: `mcp__board__request_folder_access`, called by a thread that got "Operation not permitted" on
   Downloads, Documents or Desktop (never on launch): lists the folder so macOS shows its allow prompt, else a dialog with an Open Settings button.
 - `lib/worktrees.ts` + `lib/worktree-pool.ts` + `lib/worktree-deps.ts` + `lib/worktree-start.ts` + `lib/worktree-land.ts` + `lib/worktree-done.ts` + `lib/worktree-port.ts` + `lib/work-dir.ts` + `lib/use-isolate.ts` + `components/IsolateToggle.tsx` + `app/api/worktrees`:
@@ -129,7 +130,7 @@ When a new doc lands in this folder, add it here on the same change.
   checkout/restore or `clean -f` in the shared tree), `lib/check-guard.ts` (no `tsc` or `eslint` run directly where the
   project's `pnpm typecheck`/`pnpm lint` take turns through `scripts/one-at-a-time.mjs`; plain Claude Code sessions get it from `.claude/settings.json`), `lib/route-import-guard.ts` (refuses an edit that makes `app/**/page.tsx`,
   a layout, a `route.ts` or middleware import a module that isn't there yet, or export a segment config cacheComponents refuses; `lib/prerender-check.ts`), `lib/claim-guard.ts` (symbol claims: asks before an edit to a top-level
-  symbol another busy card is editing, with **Wait** until it lets go, `lib/permission-wait.ts`; `lib/claims.ts`, parsed by `lib/symbols.ts`; the prompt's readable diff and reason chip are `lib/edit-preview.ts` + `components/PermissionInput.tsx`), and for Bash `lib/bash-claims.ts` (asks before a line that writes a claimed file, claims what Bash wrote, drops claims on files `git status` sees clean, tells a failed check which failures are another card's: `lib/bash-writes.ts`, `lib/dirty-files.ts`, `lib/failure-owners.ts`) (docs/architecture/thread-guards.md).
+  symbol another busy card is editing, with **Wait** until it lets go, `lib/permission-wait.ts`, or **Me first** / the holder's **You first** to put the held card ahead, `lib/precedence.ts` + `lib/yields.ts` + `lib/waits-on.ts` + `components/YouFirst.tsx`, with both cards' faces on the prompt, `components/CardFace.tsx`; `lib/claims.ts`, parsed by `lib/symbols.ts`; the prompt's readable diff and reason chip are `lib/edit-preview.ts` + `components/PermissionInput.tsx`), and for Bash `lib/bash-claims.ts` (asks before a line that writes a claimed file, claims what Bash wrote while no other card's Bash ran (`lib/bash-writers.ts`; else the writer is unknown and nobody claims it), drops claims on files `git status` sees clean, tells a failed check which failures are another card's: `lib/bash-writes.ts`, `lib/dirty-files.ts`, `lib/failure-owners.ts`) (docs/architecture/thread-guards.md).
   Codex gets the filtered `cliEnv()` but not these per-tool hooks; `lib/codex-runner.ts` asks it not to read `.env` files. It does get
   Weft's MCP tools, over HTTP: `lib/weft-mcp.ts` builds the servers every CLI gets, `lib/mcp-bridge.ts` opens a per-turn token and
   `app/api/mcp/[server]` serves them to `codex exec --config mcp_servers.*`. Puku and Codex don't read `.claude/skills` or Codex `CLAUDE.md`,
@@ -146,6 +147,10 @@ When a new doc lands in this folder, add it here on the same change.
   Nobody runs a release step (`pnpm changelog:release`, `lib/changelog-release.ts`, is only for a bump Weft didn't see). The read-only dialog opens from the project menu and the palette (docs/architecture/changelog.md).
 - `lib/schedule.ts` + `lib/scheduler.ts` + `components/SendLater.tsx`: "Send later" replies; the server sends them at their
   time, by default the next 5-hour reset.
+- `lib/cron-schedule.ts` + `lib/crons.ts` + `lib/cron-run.ts` (+ `lib/cron-store.ts`, `lib/cron-tools.ts`, `lib/cron-form.ts`, `lib/cron-stacks.ts`,
+  `components/CronButton.tsx`, `CronsDrawer.tsx`, `CronStack.tsx`): crons, a thread run again on a schedule, each run a new
+  card forked from the source (`Card.forkOf` → `forkSession` in `specFor`) or fresh; the rail's ⏰ drawer and the stacked runs
+  (docs/architecture/crons.md).
 - `lib/thread-slots.ts` (+ `maxThreads()` in `lib/settings.ts`, `holdSend` in `lib/runner.ts`, `freeSlots` from the turn end and `lib/scheduler.ts`):
   the cap on threads running at once; docs/architecture/threads-and-sessions.md#cap-on-running-threads.
 - `lib/shell.ts` + `lib/bang.ts` + `app/api/cards/[id]/shell`: `!` in a reply box runs a shell command in the card's folder; its
@@ -163,15 +168,19 @@ When a new doc lands in this folder, add it here on the same change.
   `lib/splice.ts` + `lib/splice-brief.ts` + `lib/splice-diff.ts`: Send fresh, a new CLI session in the same card started from a brief
   (Haiku summary pre-baked on the scheduler's tick, what's open, the diff of the thread's own edits) instead of re-sending a cold history.
 - `lib/limit-reset.ts` + `lib/start-gate.ts` + `lib/use-start-gate.ts`: one answer for "when does this reset?", for every limit a thread
-  can meet — the model's own cap (`~/.weft/model-limits.json`), the account's weekly window and its 5-hour window (`~/.weft/limits.jsonl`).
+  can meet — the model's own cap (`~/.weft/model-limits.json`), the CLI's weekly window and its 5-hour window (`~/.weft/limits.jsonl`).
   Pure and read as data, so the server (`lib/start-gate.ts`) and the browser (`/api/limits/plans`) agree. A new thread on a spent model
   doesn't get its first turn now: the New thread dialog's button reads "Start at 2:30am" and `startCard` (`lib/new-card.ts`) schedules
   the prompt for the reset instead of starting a thread that dies in Needs you. The reply box reads the same gate, so a model's own cap
   reaches it too (docs/architecture/limits.md).
-  The plan limits are **one pool per account** — Claude Code and puku-cli read the same Anthropic
-  subscription's windows, so the strip's numbers and the chart's history are the account's, whichever CLI
-  the open card runs on. `lib/plan-pools.ts` is where that mapping lives (docs/architecture/limits.md,
-  docs/architecture/limits-burndown.md).
+  The plan limits are **per CLI** — each CLI has its own plan (Claude Code on Anthropic's subscription and reads the claude.ai account's
+  windows, puku-cli on Puku's and has no Anthropic plan limit), so the strip's numbers and the chart's history are the open card's CLI's
+  own, and a puku thread is never gated by Claude Code's spent window. `lib/plan-pools.ts` is where that mapping lives
+  (docs/architecture/limits.md, docs/architecture/limits-burndown.md).
+  `lib/limit-kind.ts` sorts a hit into the plan's window or one model's own cap: the SDK names which
+  (`five_hour`/`seven_day` are the plan's, `seven_day_opus`/`seven_day_sonnet` are a model's), and a per-model
+  cap is kept out of the plan log so it gates that model alone — filed as a plan window it gated every model on
+  the plan, and picking another model in the composer changed nothing.
 - `components/SettingsDialog.tsx` + `lib/settings-nav.ts`: Settings, full window over a scene, pages down the left (General, Laptop mode, Models,
   Threads, Security, Automations, Shortcuts, Accounts, Teams, Sync); Laptop mode is `components/LaptopModeCard.tsx` + `LaptopModeRules.tsx` over `electron/keep-working*.cjs`; Models holds every model pick, new threads' through `components/NewThreadDefaults.tsx`;
   the four rows (NewThreadDefaults, SubagentPicker, CopilotPicker, DonePicker) share `components/Pickers.tsx`
@@ -259,11 +268,15 @@ When a new doc lands in this folder, add it here on the same change.
   `lib/skill-library.ts` + `lib/skill-usage.ts` + `lib/skill-sets.ts` + `lib/skill-set-actions.ts` + `app/api/skills/set` + `components/SkillsDrawer.tsx` + `components/SkillsChip.tsx`:
   skill sets, a thread gets only its project's skills (an off-list per folder seeded from what its transcripts ran, plus the card's own
   changes), as Claude Code `skillOverrides`/`enabledPlugins` settings when its CLI starts and a filtered skill index for puku and Codex (docs/architecture/skills.md).
+  `lib/skill-registry.ts` + `lib/skill-cache.ts` + `lib/skill-install.ts` + `lib/skill-scan*.ts` + `lib/skill-license.ts` + `lib/skill-review*.ts` +
+  `app/api/skills/{search,remote,review,scan}` + `components/SkillSearchResults.tsx` + `components/SkillScanPill.tsx`: a ✦ filter also searches skills.sh;
+  a hit is kept by hash in `~/.weft/skill-registry`, scanned statically (code, prompt injection, telemetry, license) and by a Sonnet review shown in the
+  pane, then installed into `~/.claude/skills`; your own skills get the same scan and a ⚠ (docs/architecture/skills.md#the-skill-scan).
 - `lib/quality.ts` + `lib/quality-view.ts` + `app/api/quality`: the header's code quality checklist (coverage via `lib/coverage.ts`,
   file size, lint, types, guardrails); `lib/scout.ts` + `lib/scout-view.ts` + `app/api/scout`: the refactor scout, a cached
   read-only Sonnet run whose findings take the score's last 10 points so it never hits 100. `components/QualityBadge.tsx`
   draws it, `components/ScoutDialog.tsx` (a `Modal`) starts a card per finding; its hover bubble is `components/Tip.tsx` (native titles don't show in Electron).
-- `lib/welcome.ts` + `lib/welcome-preview.ts` + `lib/welcome-client.ts` + `app/api/welcome` + `components/WelcomeDialog.tsx` + `components/WelcomeIntro.tsx` (Get ready: `components/WelcomeLoop.tsx`, a live HyperFrames loop of the board with your project names from `public/welcome/loop.html` + `lib/welcome-loop.ts`, rendered to `public/brand/welcome-loop.mp4` by `pnpm welcome:render`, which joins `public/welcome/beats.html` (tools, the 🔐 vault, panes, quality, profile) after it into `weft-tour.mp4` for weft.zip; the welcome plays `intro.html` (Welcome to Weft) → loop → beats (ending on Weft's keyboard shortcuts: double-click or ⌘N, Esc, ⌘K, ?), handed off by `public/welcome/live.js`, which posts the beat on screen so WelcomeLoop puts Sign in with GitHub over the profile beat and starts each page's voiceover (`lib/use-welcome-tour.ts`, `lib/welcome-voice.ts`; tracks from Kokoro via `pnpm welcome:narrate`, `scripts/narrate-welcome.mjs`), and each CLI's login, with puku-cli's Try free for the Puku trial when no agent is logged in: `lib/welcome-trial.ts`) + `components/WelcomeAccount.tsx` (signed out, the required GitHub sign-in between Get ready and the projects) + `components/WelcomeSteps.tsx` (the projects, with the history switch) + `components/WelcomeFirst.tsx` (the first thread, starters, a real open-card screenshot) + `components/WelcomeFooter.tsx` (the footer's buttons and the step bar above them, with the replay's ✕) + `lib/onboarding-events.ts` (window events that open New thread with a prompt or open a card) + `components/HistorySettings.tsx`: first launch's welcome, for everyone, history or not, ending on a running thread; the session sync (`lib/import-sync.ts`) adds no cards until it's answered, a board with cards is adopted silently, and `countsAt` keeps opted-out history off the game. Settings → General changes it; the avatar's menu and the command palette replay it, and a replay closes on Escape, the backdrop or ✕ while first launch does not (docs/architecture/welcome-dialog.md).
+- `lib/welcome.ts` + `lib/welcome-preview.ts` + `lib/welcome-client.ts` + `app/api/welcome` + `components/WelcomeDialog.tsx` + `components/WelcomeIntro.tsx` (Get ready: `components/WelcomeLoop.tsx`, a live HyperFrames loop of the board with your project names from `public/welcome/loop.html` + `lib/welcome-loop.ts`, rendered to `public/brand/welcome-loop.mp4` by `pnpm welcome:render`, which joins `public/welcome/beats.html` (tools, the 🔐 vault, panes, quality, profile; cut before its shortcuts) and `public/welcome/outro.html` (download Weft) after it into `weft-tour.mp4` for weft.zip's homepage; the welcome plays `intro.html` (Welcome to Weft) → loop → beats (ending on Weft's keyboard shortcuts: double-click or ⌘N, Esc, ⌘K, ?), handed off by `public/welcome/live.js`, which posts the beat on screen so WelcomeLoop puts Sign in with GitHub over the profile beat and starts each page's voiceover (`lib/use-welcome-tour.ts`, `lib/welcome-voice.ts`; tracks from Kokoro via `pnpm welcome:narrate`, `scripts/narrate-welcome.mjs`), and each CLI's login, with puku-cli's Try free for the Puku trial when no agent is logged in: `lib/welcome-trial.ts`) + `components/WelcomeAccount.tsx` (signed out, the required GitHub sign-in between Get ready and the projects) + `components/WelcomeSteps.tsx` (the projects, with the history switch) + `components/WelcomeFirst.tsx` (the first thread, starters, a real open-card screenshot) + `components/WelcomeFooter.tsx` (the footer's buttons and the step bar above them, with the replay's ✕) + `lib/onboarding-events.ts` (window events that open New thread with a prompt or open a card) + `components/HistorySettings.tsx`: first launch's welcome, for everyone, history or not, ending on a running thread; the session sync (`lib/import-sync.ts`) adds no cards until it's answered, a board with cards is adopted silently, and `countsAt` keeps opted-out history off the game. Settings → General changes it; the avatar's menu and the command palette replay it, and a replay closes on Escape, the backdrop or ✕ while first launch does not (docs/architecture/welcome-dialog.md).
   `lib/use-anchor-rect.ts` + `components/EmptyBoardStart.tsx`: after the welcome, the empty board's start panel (New thread, the welcome's starters) once the board has loaded with no cards and no filter.
 - `public/intros/<id>.html` + `public/intros/player.js` + `public/intros/kit.css` + `public/intros/splash-timing.js` + `lib/feature-intros.ts` + `lib/use-feature-intro.ts` +
   `components/FeatureIntro.tsx`: the short narrated video each tool drawer, the New thread dialog, the code quality dialog and the
@@ -350,6 +363,14 @@ When a new doc lands in this folder, add it here on the same change.
   fills them in when they're ready. `mcp__secrets__ask_add` is the urgent path: an input for the key in the thread itself (`components/SecretAskInput.tsx`);
   on a name that already has a value it says so and changes nothing. `mcp__secrets__set_value` stores a value the thread made or got
   (adds, fills a blank, or with `replace: true` overwrites), Touch ID each time (`electron/vault-routes.cjs`).
+  `electron/vault-ipc.cjs` is the board window's IPC, `electron/vault-unlock.cjs` the Touch ID unlock timer.
+- `electron/keychain-audit.cjs` + `lib/keychain-audit-sync.ts` + `components/KeychainAccess.tsx`: the Keychain audit log
+  (docs/architecture/secrets.md#audit-log). Every `safeStorage` open or seal (`keychainFor(what)`) and every vault value use is a line,
+  kept in the `keychain_events` table, not on the Mac: `~/.weft/vault/audit.jsonl` is only the outbox (numbered, deleted once uploaded,
+  every 5 s while signed in). Settings → Security → Keychain access reads it back with whose it was (`lib/keychain-audit-record.ts`,
+  `app/api/account/keychain-events`, `lib/keychain-audit-view.ts`, `lib/use-keychain-access.ts`).
+- `electron/vault-grants.cjs`: thread grants (docs/architecture/secrets.md#thread-grants). One Touch ID lets a card fill, run and
+  start its dev server with one vault's secrets for an hour; from the card menu or `mcp__secrets__request_access`.
 - `lib/project-intake.ts` + `lib/intake-scan.ts` + `lib/provider-hints.ts` + `app/api/projects/intake` + `electron/vault-intake.cjs`: the project
   intake. Opening a project on the board (`lib/use-board-view.ts`) moves its untracked `.env*` files' new values into 🔐 with no click (never a
   tracked file's, never over a vault value) and turns the keys its code reads, its `.env.example` names and its webhook routes into 🔐 and 🪝

@@ -26,10 +26,9 @@ One plot, two axes:
   `kind` `five_hour` | `seven_day`, `used` 0-100, `resetsAt` unix seconds rounded to the minute) to
   `~/.weft/limits.jsonl` when a window's share or reset changes for that **plan**. The CLI reports one
   reset a few hundred ms apart from call to call, so resets are compared to the minute. What Weft
-  remembers between two samples is keyed by the POOL (`lib/plan-pools.ts` `poolKey()`), not by the CLI:
-  the counter is one, so the memory of it is one, and a puku reading that repeats Claude Code's current
-  value is not a new sample. `readSamples()` returns the last 8 days oldest first, skips bad lines, and
-  drops older lines from the file once per process. Never throws.
+  remembers between two samples is keyed by the plan (`lib/plan-pools.ts` `poolKey()`), and each CLI has
+  its own plan, so the memory of a counter is the CLI's own. `readSamples()` returns the last 8 days
+  oldest first, skips bad lines, and drops older lines from the file once per process. Never throws.
 - `lib/limit-poll.ts`: `startLimitPoll()` runs in the background every `LIMITS_POLL_MS` = 15 minutes. It
   reuses a warm spare (or opens a one-off session the first time) for the user's default CLI in their
   most-recent project folder, asks it for its 5-hour and weekly usage, and pipes the result through
@@ -44,9 +43,9 @@ One plot, two axes:
 - `lib/limit-history.ts` `setOnLimitReset(handler)` and the `used >= 100 → used < 100` check inside
   `recordLimits` notify one subscriber when a window just reset. `lib/limit-resume.ts`
   `resumeParkedCards(backend, kind, now)` is the subscriber, installed by `lib/limit-poll.ts` on
-  first import: for every non-archived, `needs_you`, `rateLimitHit` card **on that plan** (the
-  filter is `samePool()`, so a puku card parked on the account's spent window resumes with a
-  Claude Code one), it
+  first import: for every non-archived, `needs_you`, `rateLimitHit` card **on that CLI's plan** (the
+  filter is `samePool()`, and each CLI is its own pool, so a puku card parked on Puku's allowance is
+  untouched by Claude Code's reset), it
   clears the rate-limit flag, stamps `autoResumedAt`, sets
   `lastLine = "Auto-resumed after 5-hour reset"` (or `weekly`), and replays the last user message
   the same way `lib/backend-switch.ts` does for a `rateLimitHit` card. The card's `CardMarks`
@@ -70,16 +69,16 @@ One plot, two axes:
   rows.some((s) => s.at < weekStart) ? LOOKBACK_DAYS : 0` — the chart reaches into the week before
   only when the history it was given actually holds those days.
 - `app/api/limits/route.ts`: `GET /api/limits` returns every reading, the chart's history; with
-  `?backend=claude|puku|codex` it returns that **plan's** readings — the same rows for Claude Code and
-  for puku-cli, and only Codex's own for Codex.
-- `lib/plan-pools.ts`: the mapping, in one place. `GROUPS` is `[["claude", "puku"], ["codex"], ["goose"]]`;
-  `poolOf(backend)` is the pool's CLIs, `samePool(a, b)` whether two CLIs read one counter, and
-  `poolKey(backend)` the pool's name as a key. Everything that has to know "whose counter is this?"
-  asks here, so the answer is never written down twice.
-- `lib/plan-limits.ts`: `planLimits(samples)` → each CLI that has reported gets an entry holding the
-  POOL's newest 5-hour and weekly reading (see "One plan per account" below); `liveWindow(window, now)`
-  reads a window whose reset has passed as full. `reportedAt` is when that CLI last reported and
-  `fiveHourAt` / `sevenDayAt` when the POOL read each window. Each entry gets its own copy of the
+  `?backend=claude|puku|codex` it returns that CLI's OWN readings — Claude Code's rows for `claude`,
+  Puku's for `puku`.
+- `lib/plan-pools.ts`: the mapping, in one place. `GROUPS` is empty — each CLI has its own plan, so
+  each is its own pool; `poolOf(backend)` is the pool's CLIs, `samePool(a, b)` whether two CLIs read one
+  counter, and `poolKey(backend)` the pool's name as a key. Everything that has to know "whose counter is
+  this?" asks here, so the answer is never written down twice.
+- `lib/plan-limits.ts`: `planLimits(samples)` → each CLI that has reported gets an entry holding ITS
+  OWN newest 5-hour and weekly reading (see "Each CLI has its own plan" below); `liveWindow(window,
+  now)` reads a window whose reset has passed as full. `reportedAt` is when that CLI last reported and
+  `fiveHourAt` / `sevenDayAt` when that CLI read each window. Each entry gets its own copy of the
   window, so a consumer that changes one CLI's window does not change every other CLI's with it.
   `GET /api/limits/plans` serves it and
   `lib/use-plan-limits.ts` shares one copy across every strip on screen, read again each minute and when
@@ -91,106 +90,76 @@ One plot, two axes:
 - `components/LimitBurndown.tsx`: the 640 px SVG (`CHART_WIDTH`), in a 664 px `Tip` over each plan's
   `Limit` chips, titled with the CLI's plan. Colors are the theme's `--ok` and `--danger`.
   `NowLevel` draws the level standing right now: the line, the dot at now and the number on it.
-  `useSamples()` reads `/api/limits` with no query: the plot is drawn over the ACCOUNT's history, so it
-  reaches back into last week whenever the account has readings from before the week began — on a puku
-  card as much as on a Claude Code one. The `backend` prop still names the plan in the title and still
-  supplies the card's own `stats`.
+  `useSamples(backend)` reads `/api/limits?backend=<cli>`: the plot is drawn over that CLI's own
+  history, so it reaches back into last week whenever that plan has readings from before the week began.
+  The `backend` prop names the plan in the title and supplies the card's own `stats`.
 
 ## Data flow
 
 CLI event or turn end → `updateLimits` → a sample in the log under the session's CLI, and card
 `stats.fiveHour` / `sevenDay` while the card is still on that CLI. Background tick → `startLimitPoll` →
 spare or one-off `usage_EXPERIMENTAL_*` → `recordLimits` → a sample, if the plan's window changed.
-Strip → `GET /api/limits/plans` → one entry per CLI that has reported, each carrying the PLAN's
-newest windows. Hover → `GET /api/limits` → the account's whole history → `limitsChart()` adds the
-card's own reading → SVG.
+Strip → `GET /api/limits/plans` → one entry per CLI that has reported, each carrying that CLI's own
+newest windows. Hover → `GET /api/limits?backend=<cli>` → that CLI's whole history → `limitsChart()`
+adds the card's own reading → SVG.
 
-## One plan per account, one reading per CLI
+## Each CLI has its own plan
 
-The plan limits are **one pool per account**. Claude Code and puku-cli read the same Anthropic plan's
-5-hour and weekly windows, so a card's numbers are the account's numbers whichever CLI it runs on, and
-the chart is drawn over the account's whole history. Codex is on OpenAI's plan and has its own.
+**Each CLI reads its own counter.** Claude Code runs on Anthropic's subscription and reads the
+claude.ai account's 5-hour and weekly windows. puku-cli bills through Puku's gateway and has no
+Anthropic plan limit. Codex is on OpenAI's plan. So the windows a reading carries answer for the CLI
+that read them and no other: a puku thread is not gated by Claude Code's spent 5-hour window, and
+Codex's window never touches either.
 
-A CLI's *reading* is still recorded under the CLI that made it — the log says who reported a number, not
-whose account the number came from. Those are different things, and conflating them is what made a puku
-card look like it was showing Claude's limits.
+A CLI's *reading* is recorded under the CLI that made it — the log says who reported a number, and
+now that is also whose plan the number is about.
 
-### How the counter reaches puku
+### Why the pool was wrong, and how it was undone
 
-The billing and the counter are two different things, and puku changes only the first. Puku bills through
-Puku's gateway; the 5-hour and weekly windows are Anthropic's account windows, and a puku session reads
-the same account's windows that Claude Code does. The chain, link by link:
+Commit `bcabb72` ("the plan limits are one pool per account") read Claude Code and puku-cli as two
+fronts onto one Anthropic counter, on the strength of two `limits.jsonl` rows tagged
+`"backend":"puku"` at 2026-10-23 19:45. Those rows were not puku's own report of Puku's plan. A card
+switched with **Run on puku** kept its Claude stats, and `lib/runner-turn.ts` `updateLimits` logged a
+late Claude reading under the card's *new* backend — so a Claude reading became a "puku" row. That is
+bug 031, and it is fixed: `lib/backend-switch.ts` `switchPatch` drops the old session's numbers, and
+readings are logged under `session.spec.backend`.
 
-- **Both CLIs run the Anthropic Agent SDK.** `lib/runner-session.ts` `queryOptions()` builds the SDK's
-  `Options` for every backend, and `lib/runner-turn.ts` and `lib/limit-poll.ts` both read it through
-  `session.query?.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET(...)`.
-- **The SDK's `rate_limits` are Anthropic's subscription windows.** `sdk.d.ts:4293` documents them as
-  *"Plan rate-limit utilization windows from the claude.ai usage endpoint"*, and `sdk.d.ts:4286` gives the
-  account's `subscription_type` ('pro' | 'max' | 'team' | 'enterprise'). The SDK reads claude.ai's usage
-  endpoint, so the number is the Anthropic account's, whoever made the call.
-- **Puku's gateway speaks Anthropic's `/v1/messages`.** `lib/puku-proxy.ts:10` points at
-  `https://api-cli.puku.sh`, and a request without a key answers Anthropic's own error shape
-  (`{"error":{"type":"authentication_error","code":"missing_token"}}`), not a Puku-specific one.
-- **The headers come back untouched.** `lib/puku-proxy.ts:202-203` copies every upstream response header
-  except the ones `DROP_RESPONSE` (`lib/puku-proxy.ts:58`) names —
-  `/^(content-encoding|content-length|transfer-encoding|connection)$/i` — so Anthropic's
-  `anthropic-ratelimit-*` reach the SDK, and the SDK turns them into `rate_limits`.
-- **A puku thread on Weft's trial goes through that proxy.** `lib/puku-trial.ts` `trialOptions()` sets
-  `PUKU_AI_BASE_URL` to Weft's deployed `/api/puku`, which is `lib/puku-proxy.ts` and relays the headers.
+The revert's own chain of reasoning — that the SDK's `rate_limits` come from the claude.ai usage
+endpoint, and so must be Anthropic's account's wherever they are read — is the premise that does not
+hold. `sdk.d.ts:4286` is explicit that `rate_limits` is null for API-key, Bedrock and Vertex
+sessions: the SDK reports **plan** windows, and a session on a gateway with its own billing has its
+own plan. `SDKRateLimitInfo` is documented as *"Rate limit information for claude.ai subscription
+users"* (`sdk.d.ts:5674`), and `rateLimitType` can only be `five_hour`, `seven_day`,
+`seven_day_opus`, `seven_day_sonnet`, `seven_day_overage_included` or `overage` (`sdk.d.ts:5680`) —
+there is no reading for a gateway's own allowance, so there is nothing for a puku session to report
+except Puku's 429 (`lib/puku-proxy.ts`), which carries no window at all.
 
-So there is no second counter to read: a puku session's reading *is* the Anthropic account's window, which
-is why a puku card can show the account's 5-hour burn and a puku chart can reach back into the week
-before. The user's own word — that puku is not on Anthropic's plan — is true of the billing and not of
-the counter.
+The consequence of the wrong pool was the bug a user hit on 2026-10-26: Claude Code's 5-hour window
+reached 100%, and a puku thread — on a plan with room — was held behind it with "Start at 2:30am".
+Changing the model changed nothing, because the limit was never the model's.
 
-One link is not provable from this repo: a puku thread signed in to Puku with its own key talks to
-`api-cli.puku.sh` directly, and whether *Puku's* gateway relays Anthropic's rate-limit headers the way
-Weft's own proxy does cannot be read from here. The log settles that case, not the mechanism: the two
-puku rows on 23 Oct carry the same reset epoch as Claude's, to the second, and the next value in a
-climbing sequence — a second counter would carry its own epoch.
+The per-CLI reading was already shipped once (`f338d62`, "each CLI's plan limits are its own again")
+and reverted three hours later by `bcabb72`. `lib/plan-pools.ts` now holds the per-CLI mapping, with
+`GROUPS` empty: every CLI is its own pool.
 
-### What the log said, and what it decided
-
-The log once seemed to say otherwise. On 2026-10-23 it held 684 samples, 682 from Claude Code and 2 from
-puku, and the puku rows matched Claude's counter to the minute: puku `five_hour used=100 resetsAt
-21:30` at 19:45:15, between Claude Code's `used=99` at 19:43:51 and `used=100` at 19:47:40. Two ways to
-read that — a Claude session's reading logged under the card's new backend after **Run on puku**, or puku
-relayed the same windows — and the log alone cannot tell them apart. It can, once the mechanism is in
-sight, and the mechanism is above. The two rows are puku's own report:
-
-- **The five-hour row is not a duplicate.** Under the mislabel reading it would have to be a re-report of
-  a value already in the log. No earlier Claude row carries `used=100` with reset `1792765800`.
-- **It is the next step in one climbing sequence.** The counter ran 93, 92, 94, 95, 96, 97, 98, 99 across
-  19:38–19:43, all with reset `1792765800`, and the puku row is 100 with that same epoch — the same
-  integer, not a near miss. Two independent plans would not share a reset epoch to the second.
-- **The readings are logged under the CLI that made them.** `lib/runner-turn.ts:344` uses
-  `session.spec.backend` and `lib/limit-poll.ts:110` records the backend that was polled, so a puku row
-  means a puku session reported it. The misattribution that could have produced it — logging a Claude
-  reading under the card's *current* backend — was the bug fixed in `lib/backend-switch.ts`
-  `switchPatch`, and a puku card's stats are dropped on a switch now.
-
-The log's own count has moved on since (765 rows, 763 from Claude Code and 2 from puku) but the two
-puku rows are the same two, and they age out eight days after they were written.
-
-What keeps one PLAN's numbers out of another's strip:
+What keeps one CLI's numbers out of another's strip:
 
 - **A reading is logged under the session's CLI.** `lib/runner-turn.ts` `updateLimits(id, backend, patch)`
   takes `session.spec.backend` and leaves the card's stats alone once the card has moved to another CLI.
 - **A CLI switch drops the old session's numbers.** `lib/backend-switch.ts` `switchPatch` keeps only the
   folder's `branch`, `added` and `removed`; it used to keep everything, and 37 puku cards on the board
   carried Claude's `5hr:0% reset 9:30pm` and a Claude model.
-- **The pools are named in one place.** `lib/plan-pools.ts` `GROUPS` is the whole mapping —
-  `["claude", "puku"]`, `["codex"]`, `["goose"]` — so a CLI in no group is its own pool and a CLI added
+- **The pools are named in one place.** `lib/plan-pools.ts` `GROUPS` is the whole mapping — empty, so
+  every CLI is its own pool — and a CLI added
   later reads its own numbers until someone says otherwise. `poolOf()` / `samePool()` / `poolKey()` are
   the only way anything asks.
 - **A CLI that has not reported has no entry.** The strip says "no plan limits yet" for it, even though
   its pool's other CLI has reported: the entry says who reported, and the windows it carries are the
   pool's. `planLimits()` copies the pool's newest window onto every entry of that pool, each as its own
   copy, so a consumer that changes one CLI's window does not change every other CLI's with it.
-- **The chart draws the pool's whole history.** `GET /api/limits` answers with every reading, and
-  `?backend=` answers with the PLAN's readings — the same rows for Claude Code and for puku-cli. A puku
-  card's chart reaches back into last week whenever the account has readings from before the week began,
-  which is the whole point: it used to ask for puku's own rows and find two of them.
+- **The chart draws the CLI's own history.** `GET /api/limits` answers with every reading, and
+  `?backend=` answers with that CLI's own readings. A puku card's chart reaches back into last week
+  whenever Puku's own history has readings from before the week began.
 
 Two other limits are not per CLI: the **model's** own cap is per model (`lib/model-limit.ts`,
 `~/.weft/model-limits.json`), and a card's `stats.fiveHour` / `stats.sevenDay` is that card's last snapshot
@@ -211,6 +180,7 @@ can be a subagent's, or blank after a turn that reported no usage.
   stretches) now fills in continuously.
 - Limit hits come from these samples, not from transcripts. `lib/usage.ts` also detects hits from
   transcripts for the Loom's usage chart; the two aren't unified yet.
-- The two samples from 23 Oct 19:45 carry `"backend":"puku"`. They are puku's own report of the
-  Anthropic account's window (see "What the log said, and what it decided"); they age out of the log after
-  8 days, and until then they are the account's newest reading of that window, whichever CLI reported it.
+- The two samples from 23 Oct 19:45 carry `"backend":"puku"`. They were a Claude reading logged under a
+  card's new backend after **Run on puku** (bug 031), not puku's own report of Puku's plan; they age out
+  of the log after 8 days, and until then they sit in puku's own history as a reading that was never
+  puku's.

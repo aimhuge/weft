@@ -156,6 +156,8 @@ port.
   three months and you get $20 off your bill. Super-admins run plans from **Admin → Billing** (upgrade, downgrade,
   switch, seats, refunds in full or part, people, discounts, and a reset for sandbox ids on a real workspace, each in the
   Stripe mode the workspace's ids live in) and coupon codes from **Admin → Coupons**. See docs/architecture/billing.md.
+  **Admin → Users** shows when each account last really used Weft (token refreshes, not just sign-ins), and a row
+  opens its activity: a 12-week calendar, cards per day, streaks. See docs/architecture/admin.md.
 - **Updates**: the packaged app checks GitHub Releases at launch and every few hours, downloads a new version in the
   background, and a notification (click it for the Software Update window, or **Restart Now**) and the Weft menu offer
   **Restart to Update**. With threads running it asks: **Restart When Idle** (the default) waits for them to finish,
@@ -173,7 +175,7 @@ On launch and every minute after, Weft picks up your Claude Code sessions (the o
 
 - **First launch gets you to a running thread.** Three screens, for everyone, history or not: **Get ready** plays
   a 30-second loop of a card crossing the board (and getting a key from the 🔐 vault) with your own project names on it (a HyperFrames composition,
-  `public/welcome/loop.html`; the same file renders `public/brand/welcome-loop.mp4` with `pnpm welcome:render`, which also joins `public/welcome/beats.html` (connect your tools, the 🔐 vault, panes, code quality, BlastCP, the profile, open source) into a 93-second `weft-tour.mp4` for weft.zip; a bar under it names the beat on screen and steps **‹ Back** and **Next ›** one beat at a time) and whether Claude Code, puku-cli and Codex are logged in, with **Log in** right there; signed out, **Sign in to Weft** comes next, and you sign in with GitHub to go on; **Bring in your
+  `public/welcome/loop.html`; the same file renders `public/brand/welcome-loop.mp4` with `pnpm welcome:render`, which also joins `public/welcome/beats.html` (connect your tools, the 🔐 vault, panes, code quality, BlastCP, the profile, open source) and `outro.html` (download Weft, in place of the keyboard shortcuts) into a ~102-second `weft-tour.mp4` for weft.zip's homepage; a bar under it names the beat on screen and steps **‹ Back** and **Next ›** one beat at a time) and whether Claude Code, puku-cli and Codex are logged in, with **Log in** right there; signed out, **Sign in to Weft** comes next, and you sign in with GitHub to go on; **Bring in your
   projects** lists the folders with Claude Code sessions (worktree, scratch and temp folders unticked; **Start empty**
   brings in none) with a switch that counts your history on your Wefter Profile; **Start your first thread** picks a
   project and a starter prompt and opens the card as it runs. No cards are added until you answer. A board that already
@@ -231,6 +233,13 @@ The new-thread dialog (⌘N) and every card's reply box use the same editor:
   button also picks the cheaper default: **New card** when the prompt cache has gone cold (a summary, the touched
   files and what you typed start a fresh card; **Send here** is in the ▾), **Send at 10:39pm** when the 5-hour
   limit is used up, and **Continue** in an empty box only after a turn stopped short (`lib/reply-mode.ts`).
+- **Crons.** ⏰ in a thread's header, or on one of your messages ("Repeat from here"), runs the thread again on a
+  schedule: hourly, daily, weekdays, weekly, monthly or any cron, from a day you pick on a mini calendar, until an end
+  date if you like. Each run is a new card, forked from that point (its context, folder, model and page) or a fresh
+  thread with the prompt only, so the original thread is never touched. Runs wear a violet ticket stub and fold into a
+  stack under their thread; ⏰ Crons on the left rail lists every cron with its next run, its last runs and Run now.
+  Threads and the copilot can make them too (`create_cron`), and ⏰ in the New thread window puts a new prompt on a
+  cron (docs/architecture/crons.md).
 - **Send later.** In the send button's ▾ menu (Alt+Enter), it holds a reply until a time you pick. On a Claude
   thread the first choice is a minute after the 5-hour limit resets (the time in the bottom bar), so
   a message written when you hit the limit goes out as the new window opens. When the weekly limit
@@ -254,8 +263,8 @@ The new-thread dialog (⌘N) and every card's reply box use the same editor:
   mark where a limit was hit; green lines mark the 5-hour resets (light), the next one (strong) and the
   weekly reset (strongest). Hours inside a 5-hour window with nothing logged are hatched. Weft asks each
   thread's CLI for its limits after a turn (at most every 5 minutes) and keeps the changes in `~/.weft/limits.jsonl`.
-  The plan limits are one pool per account (Claude Code and puku-cli both read the same Anthropic
-  subscription's windows), so the chart draws the account's whole history whichever CLI the card runs on.
+  The plan limits are per CLI — each CLI has its own plan (Claude Code on Anthropic's, puku-cli on
+  Puku's) — so the chart draws that CLI's own history.
 - **Status strip: the thread and the plan.** An open card's strip names its CLI and model (`[puku · opus-4-8]`,
   the model its session started on), then context, cache and tokens, then that CLI's plan limits. Every card
   on one CLI shows the same limits, the newest any of them read, and a window whose reset has passed reads
@@ -386,6 +395,10 @@ claims drop when it reaches Done or is archived, and a file's as soon as `git st
 walk-through, or a thread's own `git commit`). Bash counts too: a line that writes a claimed file (`sed -i`, `> file`,
 `prettier --write`) asks the same way, and whatever a Bash call wrote becomes the card's claim. When a typecheck, test
 or lint run fails, the thread is told which failures sit in files another card is mid-edit on, so it leaves them alone.
+When one card matters more right now, press **Me first** on its prompt: its edit goes ahead with the whole file, and
+the card holding the code is told mid-turn to leave that file to it until it commits or finishes (its own edits there
+wait). The holder's thread shows **You first** for each card waiting on it, to do the same from that side, and the
+prompt shows both cards' faces (thumbnail or emoji), so who is in whose way reads at a glance.
 
 A thread works in its card's project folder. When a file tool or a Bash command reaches anywhere else (say `~/Downloads`), Weft asks first, whether or not macOS would have refused it: **Allow once**, **This card** or **Always**, with an **Outside project** chip saying which folder. **Always** used to be a one-way door — nothing listed those folders and nothing took one back. Settings → General now has a **Trusted folders** row: **Add folder** opens the OS folder dialog, **Remove** takes one back out, and a thread already holding the folder keeps it only until that turn ends (`lib/folder-guard.ts`, `components/TrustedFolders.tsx`).
 
@@ -470,6 +483,9 @@ board starts them before you need them:
 - On launch, the copilot's CLI starts, plus a spare CLI in your most recent project.
 - Picking a project, opening the new-thread dialog, or opening a card starts a CLI for it in the
   background. A new card takes over the spare in its folder (up to three spares are kept).
+- At most six threads run a turn at once (Settings → Threads → Threads running at once, 2 to 12 or no limit). Past the cap a
+  thread's message waits on its card, shown as "when a slot frees" in its reply queue, and goes out, oldest first, as a
+  running turn ends. A thread waiting on your answer doesn't count, and the copilot isn't a card.
 - puku-cli is held tighter, since each one is a whole Node process: 2 idle puku CLIs at most, closed after
   10 idle minutes, and one puku spare, started only when the new-thread dialog has puku picked.
 
@@ -565,6 +581,19 @@ Claude Code and puku threads get the set as `skillOverrides` and `enabledPlugins
 puku and Goose get the skill list Weft writes into their first message, filtered the same way. The copilot keeps
 every skill. Cards on the project's default set still take a warm spare; a card with its own set starts
 its CLI fresh.
+
+### Finding and checking skills
+
+Type in either ✦ list's filter and Weft also searches [skills.sh](https://skills.sh), below your own
+matches. Open a hit and Weft downloads it, keeps that exact copy, and scans every file, SKILL.md
+included: malicious code (scripts piped into a shell, reverse shells, credential reads), prompt
+injection (instructions to ignore you or hide things, invisible characters), telemetry (analytics
+SDKs, webhook endpoints, every host a script calls) and its license. **AI review** has Sonnet read the
+skill against those findings and opens a page in the pane: what the skill really does, which findings
+are real, which are false alarms, and what the rules missed. **Install** writes the copy that was
+scanned into `~/.claude/skills`; a dangerous one asks first. A review is kept with its copy, so a skill
+is reviewed once per version, and the drawer still shows it when skills.sh is down. The skills you
+already have get the same scan: a ⚠ beside one opens its review.
 
 ## Projects, filter, and sort
 
@@ -846,6 +875,15 @@ four characters showing.
 - Revealing or copying a value asks for Touch ID (or a confirmation on a Mac without it). One Touch ID covers a few
   minutes of use, the drawer hides values again after 3 idle minutes, and a copied value leaves the clipboard
   after a minute.
+- **Every Keychain access is logged.** Each time Weft opens something it keeps in the Keychain (the vault key, a
+  provider's token, your sign-in), and each time a secret is revealed, copied, typed into a page, run with, pushed or
+  written, by you, a thread or Weft, there's a line: who (whose thread it was), which names, where, and whether it was
+  allowed. Names only, never values. The log is kept in your Weft account, not on your Mac, where it could be edited:
+  each line uploads within seconds and is then deleted from the Mac, the database stamps when it arrived, and lines
+  are numbered, so a line held back or removed before upload shows. See it in Settings → Security → **Keychain access**.
+- **Give a thread standing access.** Right-click a card → **Give 🔐 Vault Access for 1 Hour**, or let the thread ask
+  (`mcp__secrets__request_access`): one Touch ID and its fills, commands and dev server stop asking for an hour. It
+  still never sees a value, and writes still ask. Revoke it from the same menu or from Settings → Security.
 - **Threads save a key they need as a blank right away.** When a key isn't in the vault yet, the thread
   calls `mcp__secrets__add_blank` (with a hint for where to get the value) and keeps going with what
   doesn't need it; 🔐's count goes up, the row shows **Fill in** and the hint under the name, and you
@@ -937,6 +975,14 @@ search or the project, in the workspace you pick) and links it. A linked project
 platform and time, a line of drafts, posts to approve and failures, and when the last one went out; clicking any of
 them opens it in the browser pane. BlastCP sign-ins last 30 days: one made through your Weft account renews itself in its
 last week, and one made in the browser warns and offers Reconnect. More in [docs/architecture/blastcp.md](docs/architecture/blastcp.md).
+
+## Connectors
+
+Settings → **Connectors** lets your threads work in your own accounts. The first one is **Google Workspace**,
+through [gog](https://github.com/steipete/gogcli), which Weft.app ships: Gmail, Calendar, Drive, Docs, Sheets,
+Contacts and Tasks from any thread's Bash. Choose a Google Cloud OAuth client JSON (Desktop app) once, then **Sign in
+with Google** for each account; tick **Read-only** to keep threads from changing anything. Threads ask before
+they send mail, change events or share files. More in [docs/architecture/connectors.md](docs/architecture/connectors.md).
 
 ## Slack
 
