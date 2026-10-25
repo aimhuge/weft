@@ -114,6 +114,9 @@ port.
 - **Failed loads say why**: a page that won't load in the browser pane (say a card's dev server stopped) shows Weft's
   error page instead of a blank white one: the URL, the reason, **Try again**, **Back to the last page**, and an
   automatic reload when a local dev server comes back (`electron/pane-error.cjs`).
+- **Touch ID for new sites**: when a thread asks the pane to open a site you haven't opened in that card's pane, Weft
+  asks you with Touch ID ("open www.google.com in a card's browser pane") instead of refusing; a yes lets that card
+  use the site from then on (`electron/pane-origins.cjs`).
 - **Themes**: Settings → General (or ⌘K "Theme: …") picks System, Light or Dark, or a scene: Twin Suns,
   Canyon, Coast Road, Neon City, Snow Pass, Cockpit, Night Cockpit or Salt Flats puts that picture behind the board with a palette drawn
   from it and clear columns. The first launch opens on Twin Suns, or Salt Flats when the Mac is in light mode

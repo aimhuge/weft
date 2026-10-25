@@ -1,7 +1,7 @@
 // The side browser pane: a native view laid over the board where the board's placeholder sits.
 // The board drives it over IPC; agents drive it through a token-protected control server on
 // 127.0.0.1 (see lib/browser-tools.ts).
-const { WebContentsView } = require("electron");
+const { WebContentsView, dialog, systemPreferences } = require("electron");
 const fs = require("node:fs");
 const http = require("node:http");
 const path = require("node:path");
@@ -11,7 +11,8 @@ const { secretRunRoutes } = require("./secret-run.cjs");
 const { click, typeText } = require("./pane-actions.cjs");
 const { controlHandler } = require("./control-server.cjs");
 const { failedUrl, watchLoadFailures } = require("./pane-error.cjs");
-const { canThreadOpen, rememberBoardOrigin } = require("./pane-origins.cjs");
+const { authorizeThreadOpen, originOf, rememberBoardOrigin } = require("./pane-origins.cjs");
+const { touchIdPrompt } = require("./touch-id.cjs");
 const { appsDir, attachWebContentsView, createAppReload } = require("./app-reload.cjs");
 
 // Chrome's zoom steps, as percentages; Zoom In/Out walk them.
@@ -26,7 +27,7 @@ function stepZoom(percent, dir) {
 // Its own session, apart from the board window's, so pages never carry the launch token (electron/api-token.cjs).
 const PANE_PARTITION = "persist:threadboard-browser";
 
-function createBrowserPane({ getWindow, getAppView, token, onContents, pages, onLink, secrets, secretRun = () => undefined, routes: moreRoutes = {} }) {
+function createBrowserPane({ getWindow, getAppView, token, onContents, pages, onLink, secrets, secretRun = () => undefined, routes: moreRoutes = {}, askUser }) {
   // One page per card (keyed by card id), so each review keeps its own browser; "board" is the
   // one shown with no card open. Only the active one is on screen.
   const BOARD = "board";
@@ -35,8 +36,10 @@ function createBrowserPane({ getWindow, getAppView, token, onContents, pages, on
   // (electron/main.cjs). A thread's control-server POST /browser/open can only navigate within
   // an origin already in the set (L-5 fix: a compromised renderer can't pivot the pane to a
   // brand new host). Same-origin nav inside a loaded page is always allowed — the set only
-  // covers cross-host opens.
+  // covers cross-host opens. A host outside the set asks the user with Touch ID first (pane-origins.cjs).
   const authorizedOrigins = new Map();
+  const pendingOrigins = new Map();
+  const ask = askUser ?? touchIdPrompt({ systemPreferences, dialog, window: getWindow });
   let active = BOARD;
   let visible = false;
   let bounds = { x: 0, y: 0, width: 0, height: 0 };
@@ -240,8 +243,9 @@ function createBrowserPane({ getWindow, getAppView, token, onContents, pages, on
     // Weft inside its own pane is a confusing hall of mirrors; a card working on Weft should run its own dev server on another port.
     if (isSelf(url)) throw new Error(`${url} is Weft itself; open the card's own dev server instead`);
     const prior = views.get(targetKey)?.webContents.getURL();
-    if (!opts.fromBoard && !canThreadOpen(authorizedOrigins, targetKey, origin, prior ? originOf(prior) : null)) {
-      throw new Error(`The browser pane can't open a new host from a thread. Open ${origin} in the pane first.`);
+    const priorOrigin = prior ? originOf(prior) : null;
+    if (!opts.fromBoard && !(await authorizeThreadOpen({ authorized: authorizedOrigins, pending: pendingOrigins, targetKey, origin, priorOrigin, ask }))) {
+      throw new Error(`You didn't allow this thread to open ${origin} in the browser pane. Ask the user to open it there, or to approve it next time.`);
     }
     if (activate) active = targetKey;
     if (opts.fromBoard) rememberBoardOrigin(authorizedOrigins, targetKey, origin);
@@ -262,17 +266,6 @@ function createBrowserPane({ getWindow, getAppView, token, onContents, pages, on
       if (boardFocused && !v.webContents.isDestroyed() && v.webContents.isFocused()) boardContents()?.focus();
     }
     return { url: v.webContents.getURL(), title: v.webContents.getTitle() };
-  }
-
-  // The origin (scheme + host + port) of a URL. file: and about: URLs have no origin; we return the
-  // string "null" so the caller can treat them uniformly (the URL spec's "null origin" serialises
-  // to the literal string "null" in WebKit too — same-host same-scheme check just works).
-  function originOf(url) {
-    try {
-      return new URL(url).origin;
-    } catch {
-      return null;
-    }
   }
 
   function requirePage(key = active) {

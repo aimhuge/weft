@@ -133,10 +133,13 @@ export function resetTimeOf(text: string, at = Date.now()): number | undefined {
   const minute = Number(named[2] ?? 0);
   if (Number.isNaN(hour) || hour > 24) return undefined;
   // The time of day in the zone the CLI named, as the milliseconds since the epoch.
-  const ms = zonedTime(twelveHour(hour, named[3]), minute, named[4]);
+  const zone = named[4];
+  const ms = zonedTime(twelveHour(hour, named[3]), minute, zone, at);
   if (ms === undefined) return undefined;
-  // A reset in the past means the message named the next one: roll it forward a day.
-  return ms > at ? ms : ms + 24 * 60 * 60 * 1000;
+  // A reset in the past means the message named the next one: roll it forward a day. The day is
+  // re-derived in the zone rather than added as 24 hours, so a zone that shifts its offset across
+  // the boundary (a DST change) still lands on the same clock time tomorrow.
+  return ms > at ? ms : (zonedTime(twelveHour(hour, named[3]), minute, zone, at + 24 * 60 * 60 * 1000) ?? ms + 24 * 60 * 60 * 1000);
 }
 
 // The hour as a 24-hour one: "10:40pm" is 22, "12:30am" is 0.
@@ -147,23 +150,52 @@ function twelveHour(hour: number, meridiem: string | undefined): number {
   return hour;
 }
 
-// The time of day (hour:minute) in a named IANA zone, as unix ms. Undefined when the zone is
-// unknown. Uses Intl, which knows the zone's offset on that date.
-function zonedTime(hour: number, minute: number, zone: string | undefined): number | undefined {
-  const now = new Date();
-  // The offset of the zone at a moment near the target: guess the UTC time first, then correct.
-  const guess = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), hour, minute);
-  for (const probe of [guess, guess - 12 * 3600_000, guess + 12 * 3600_000]) {
-    const offset = zoneOffset(probe, zone);
-    if (offset === undefined) continue;
-    const local = new Date(probe + offset);
-    // The offset was measured at a different instant than the target; step and retry.
-    const corrected = Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate(), hour, minute) - offset;
-    const check = zoneOffset(corrected, zone);
-    if (check === undefined) continue;
-    if (check === offset) return corrected;
+// The time of day (hour:minute) on the calendar day that `at` falls on in a named IANA zone, as
+// unix ms. Undefined when the zone is unknown. Uses Intl, which knows the zone's offset on that
+// date.
+//
+// The calendar day is read IN THE ZONE, not from the UTC date: at 19:21 UTC on the 25th it is
+// already the 26th in Bangkok (UTC+7), and a target built on the UTC date would name yesterday.
+function zonedTime(hour: number, minute: number, zone: string | undefined, at: number): number | undefined {
+  // The zone's own calendar day for `at`: year, month and day as the zone reads them.
+  const day = zoneDate(at, zone);
+  if (!day) return undefined;
+  // The target as a wall-clock time in the zone, held as UTC-shaped parts. The instant it names
+  // is that reading minus the zone's offset at that moment; the offset depends on the instant, so
+  // it is found by iterating until it stops moving (two rounds is enough for every real zone).
+  let parts = { year: day.year, month: day.month, day: day.day };
+  let instant = Date.UTC(parts.year, parts.month, parts.day, hour, minute);
+  for (let round = 0; round < 4; round++) {
+    const offset = zoneOffset(instant, zone);
+    if (offset === undefined) return undefined;
+    const next = Date.UTC(parts.year, parts.month, parts.day, hour, minute) - offset;
+    // Read the wall clock back in the zone: if the offset we used was the wrong one, the reading
+    // lands on another day, and that day is the one the target really belongs to.
+    const read = zoneDate(next, zone);
+    if (!read) return undefined;
+    const moved = read.year !== parts.year || read.month !== parts.month || read.day !== parts.day;
+    parts = read;
+    instant = next;
+    if (!moved) return instant;
   }
-  return undefined;
+  return instant;
+}
+
+// The calendar day an instant falls on in a zone: { year, month, day }, month 0-based. Undefined
+// when the zone is unknown.
+function zoneDate(at: number, zone: string | undefined): { year: number; month: number; day: number } | undefined {
+  try {
+    const formatter = new Intl.DateTimeFormat("en-US", {
+      ...(zone ? { timeZone: zone } : {}),
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    });
+    const parts = Object.fromEntries(formatter.formatToParts(new Date(at)).map((p) => [p.type, p.value]));
+    return { year: Number(parts.year), month: Number(parts.month) - 1, day: Number(parts.day) };
+  } catch {
+    return undefined;
+  }
 }
 
 // A zone's offset from UTC in ms at an instant, or undefined when the zone is unknown.

@@ -78,7 +78,8 @@ When a new doc lands in this folder, add it here on the same change.
   `electron/startup-timer.cjs` times every launch into `~/.weft/startup.jsonl` (`node electron/startup-timer.cjs` lists them).
 - `electron/browser-pane.cjs`: native browser pane, one page per card; token-guarded control
   server on 127.0.0.1 for agents, IPC for the board (`electron/preload.cjs`); `electron/pane-pages.cjs`
-  saves each card's page to `~/.weft/pages/` so it comes back after a restart.
+  saves each card's page to `~/.weft/pages/` so it comes back after a restart. `electron/pane-origins.cjs` is the
+  per-card allowlist of hosts a thread may open; a host outside it asks the user with Touch ID (`authorizeThreadOpen`).
   `electron/pane-error.cjs` shows a failed load's reason, with Try again and Back, instead of Chromium's blank page.
 - `electron/menus.cjs` + `electron/keep-working.cjs`: app menu, menu bar icon, dock; Keep Working (awake with the lid shut, until threads finish).
 - `electron/updater.cjs` (+ `electron/update-window.cjs`, the Software Update window) + `scripts/release-feed.mjs` + `.github/workflows/release.yml`: updates from GitHub Releases (Squirrel.Mac's JSON

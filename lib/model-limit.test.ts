@@ -100,6 +100,26 @@ describe("model limits", () => {
 });
 
 describe("resetTimeOf", () => {
+  // A fixed "now": 2026-10-25T19:30:00Z, which is 02:30 the next day in Bangkok (UTC+7) and
+  // 15:30 the same day in New York (UTC-4 in October). Fixed, so the expectations below pin the
+  // arithmetic instead of the wall clock.
+  const AT = Date.UTC(2026, 9, 25, 19, 30);
+  // Just after that, so a reset at 2:30am in Bangkok is still ahead rather than exactly now.
+  const AT_EARLY = Date.UTC(2026, 9, 25, 19, 0);
+  // What a zone reads an instant as, as "Oct 26, 02:30" and the like.
+  const inZone = (ms: number, zone: string) =>
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: zone,
+      hour12: false,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    })
+      .format(new Date(ms))
+      .replace(",", "");
+
   it("reads the epoch form after a pipe", async () => {
     const m = await load();
     expect(m.resetTimeOf("You've hit your limit |1792268400")).toBe(1792268400 * 1000);
@@ -107,27 +127,53 @@ describe("resetTimeOf", () => {
 
   it("reads the local time with a named zone", async () => {
     const m = await load();
-    const at = Date.now();
-    const reset = m.resetTimeOf("You've hit your session limit · resets 2:30am (Asia/Bangkok)", at);
+    const reset = m.resetTimeOf("You've hit your session limit · resets 2:30am (Asia/Bangkok)", AT_EARLY);
     expect(reset).toBeDefined();
-    // The named zone is honoured: 2:30am in Bangkok is 19:30 UTC the day before.
-    expect(new Date(reset!).toISOString()).toContain("19:30:00");
+    // The named zone is honoured, and it is the zone's own day: 2:30am in Bangkok on the 26th.
+    expect(inZone(reset!, "Asia/Bangkok")).toBe("10/26/2026 02:30");
+  });
+
+  it("rolls a reset that is exactly now forward a day", async () => {
+    const m = await load();
+    // 19:30 UTC is exactly 2:30am in Bangkok, so that reset has arrived: it names the next one.
+    const reset = m.resetTimeOf("resets 2:30am (Asia/Bangkok)", AT);
+    expect(inZone(reset!, "Asia/Bangkok")).toBe("10/27/2026 02:30");
   });
 
   it("reads a 12-hour time without minutes", async () => {
     const m = await load();
-    const at = Date.now();
-    const reset = m.resetTimeOf("resets 10pm (Asia/Bangkok)", at);
+    const reset = m.resetTimeOf("resets 10pm (Asia/Bangkok)", AT);
     expect(reset).toBeDefined();
+    // 10pm in Bangkok is 15:00 UTC, and it is still today in Bangkok (the 26th).
     expect(new Date(reset!).getUTCHours()).toBe(15);
+    expect(inZone(reset!, "Asia/Bangkok")).toBe("10/26/2026 22:00");
   });
 
   it("rolls a reset in the past forward a day", async () => {
     const m = await load();
-    const at = Date.now();
-    const reset = m.resetTimeOf("resets 1:00am (Asia/Bangkok)", at);
+    // 1:00am Bangkok is 18:00 UTC on the 25th, before `at` — so it names the next one.
+    const reset = m.resetTimeOf("resets 1:00am (Asia/Bangkok)", AT);
     expect(reset).toBeDefined();
-    expect(reset!).toBeGreaterThan(at);
+    expect(reset!).toBeGreaterThan(AT);
+    expect(inZone(reset!, "Asia/Bangkok")).toBe("10/27/2026 01:00");
+  });
+
+  it("reads the day in the zone, not the day in UTC", async () => {
+    const m = await load();
+    // 19:30 UTC is already the 26th in Bangkok. A reset named for 3pm belongs to the 26th there,
+    // not the 25th.
+    const reset = m.resetTimeOf("resets 3pm (Asia/Bangkok)", AT);
+    expect(inZone(reset!, "Asia/Bangkok")).toBe("10/26/2026 15:00");
+  });
+
+  it("reads a zone west of UTC on its own day", async () => {
+    const m = await load();
+    // 15:30 in New York is still the 25th, so 10pm there is the 25th.
+    const reset = m.resetTimeOf("resets 10pm (America/New_York)", AT);
+    expect(inZone(reset!, "America/New_York")).toBe("10/25/2026 22:00");
+    // And 1am there has passed, so it rolls to the 26th.
+    const past = m.resetTimeOf("resets 1am (America/New_York)", AT);
+    expect(inZone(past!, "America/New_York")).toBe("10/26/2026 01:00");
   });
 
   it("returns undefined when no reset is named", async () => {

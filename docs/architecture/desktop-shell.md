@@ -56,7 +56,8 @@ lives in `electron/server.cjs`.
   answers the board window's `webContents` — `e.sender === appView?.webContents`
   — so a compromised renderer can't navigate the pane to an arbitrary URL
   (L-5); per-card origin allowlists in `electron/pane-origins.cjs` further
-  constrain where a thread can navigate), `browser:active`, `browser:prune`, `browser:state`, `browser:visible`,
+  constrain where a thread can navigate: a host outside the card's list asks the user with Touch ID through
+  `electron/touch-id.cjs`, and a yes adds it to the list), `browser:active`, `browser:prune`, `browser:state`, `browser:visible`,
   `browser:bounds`, `browser:back/forward/reload`, `copilot:toggle`,
   `dialog:openFolder`, `shell:openExternal` (http/https only), `shell:reveal` (opens an existing
   absolute folder in Finder), `menu:popup` (shows a native context menu from the items the board
