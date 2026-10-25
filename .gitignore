@@ -66,3 +66,7 @@ supabase/.temp/
 
 # The intro render's frames and finished videos (scripts/render-intros.mjs, scripts/encode-intros.sh)
 build/
+
+# puku-cli subagents' settings and worktrees, and pages threads write into the project by mistake
+.puku-cli/
+.weft/show/
