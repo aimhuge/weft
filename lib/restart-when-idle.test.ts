@@ -84,8 +84,7 @@ describe("armRestart", () => {
     expect(restartArmed()).toBe(true);
   });
 
-  it("doesn't take a gap between two queued turns for idle", async () => {
-    card("a");
+  it("doesn't take a gap between two queued turns for idle", async () => {    card("a");
     armRestart();
     // The turn ends, and its queued follow-up starts a tick later.
     busy.add("a");
@@ -135,6 +134,37 @@ describe("armRestart", () => {
     cardEvent("a");
     cardEvent("a");
     expect(events.length).toBe(count);
+  });
+
+  it("remembers the card that asked, so the board can mark it", () => {
+    card("asker", { title: "The card that asked" });
+    expect(armRestart("relaunch", "asker").requestedBy).toEqual({ id: "asker", title: "The card that asked" });
+    expect(restartStatus().requestedBy).toEqual({ id: "asker", title: "The card that asked" });
+    // It rides the board event stream, so the board marks the card without asking.
+    expect(lastRestart()?.requestedBy).toEqual({ id: "asker", title: "The card that asked" });
+  });
+
+  it("has no asking card when the restart came from the menu or the palette", () => {
+    expect(armRestart().requestedBy).toBeUndefined();
+    expect(restartStatus().requestedBy).toBeUndefined();
+  });
+
+  it("marks the newest asker when a second card asks while armed", () => {
+    card("first", { title: "First" });
+    card("second", { title: "Second" });
+    armRestart("relaunch", "first");
+    expect(armRestart("relaunch", "second").requestedBy).toEqual({ id: "second", title: "Second" });
+  });
+
+  it("forgets the asking card once the restart is cancelled", () => {
+    card("asker", { title: "The card that asked" });
+    armRestart("relaunch", "asker");
+    expect(cancelRestart().requestedBy).toBeUndefined();
+    expect(restartStatus().requestedBy).toBeUndefined();
+  });
+
+  it("calls a card with no title a thread, and keeps the id", () => {
+    expect(armRestart("relaunch", "gone").requestedBy).toEqual({ id: "gone", title: "A thread" });
   });
 
   it("ignores events other than card changes", async () => {

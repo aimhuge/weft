@@ -42,6 +42,14 @@ export interface Card {
   promptSkills?: string[];
   // The card whose thread started this one, via the board tools.
   parentId?: string;
+  // A cron's run (lib/crons.ts): the cron, its run number, and the card whose stack it folds into on the board
+  // (the source thread, or the cron's first run when it has none).
+  cronId?: string;
+  cronRun?: number;
+  cronOf?: string;
+  // Start as a copy of another thread's session, resumed at this entry (a cron's fork run). Read only until the
+  // card's own first turn gives it a sessionId (lib/runner-state.ts specFor).
+  forkOf?: { sessionId: string; at?: string };
   sessionId?: string;
   lastLine?: string;
   costUsd?: number;
@@ -76,6 +84,9 @@ export interface Card {
   // Top-level symbols (or whole files) the thread edited and hasn't committed, most recent first, capped:
   // "/abs/Board.tsx#CommandPalette", "/abs/a.css#*" (lib/claims.ts). Dropped at Done, archive and commit.
   claims?: string[];
+  // Files this card leaves to another card for now: the user put that card first ("Me first", lib/precedence.ts).
+  // While it holds a claim on the file, its edits there don't ask this card, and this card's edits there wait on it.
+  yields?: { to: string; file: string }[];
   // Weft crashed, failed to build or reloaded right after this thread did something that does that (lib/crash-blame.ts):
   // the card has a red ring and a "Broke Weft" chip until you dismiss it, and the thread hears why with its next message.
   broke?: CardBreak;

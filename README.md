@@ -109,6 +109,11 @@ port.
   screen as you sent it. Click any mini and the chat scrolls to that turn while the pane goes back to the page it showed
   then; scroll the chat and the turn at its top lights up and the pane follows to its page, back to the newest at the
   end of the chat. Hidden in windows under 980 px (docs/architecture/show-rail.md).
+- **Agents drive the pane like a real browser**: a thread takes a `snapshot` of the page (its elements, each with a
+  ref), then clicks, hovers, types, presses keys, picks options and scrolls by ref, with real trusted input. A short
+  orange ripple shows where each click lands. It can `wait_for` something to appear, check a phone or tablet layout
+  with `set_viewport`, and read the page's `console_logs` and `network_errors` when something breaks, all in the pane
+  you're watching, where you're logged in (docs/architecture/agent-browser.md).
 - **Browser pane zoom**: the % button in the pane's toolbar zooms the page (Chrome's steps, plus
   50–200% presets); ⌘+ / ⌘− / ⌘0 and ⌘+scroll work on the page too, and a trackpad pinch magnifies.
 - **Failed loads say why**: a page that won't load in the browser pane (say a card's dev server stopped) shows Weft's
@@ -121,6 +126,9 @@ port.
   Canyon, Coast Road, Neon City, Snow Pass, Cockpit, Night Cockpit or Salt Flats puts that picture behind the board with a palette drawn
   from it and clear columns. The first launch opens on Twin Suns, or Salt Flats when the Mac is in light mode
   (`lib/theme.ts`, colors in `app/globals.css`; docs/architecture/themes.md).
+  **Your own** describes a theme in words ("a rainy Tokyo alley at night, neon pink"): a card paints the picture and
+  draws a palette from it into `~/.weft/themes/<id>/`, and the tile shows up and is picked the moment it lands
+  (`lib/custom-themes.ts`, `app/api/themes`).
 - **Menu bar icon**: shows how many cards need you and lists them; click one to open it.
 - **Keep Working** (menu bar icon, and its own **Laptop mode** page in Settings): your Mac stays awake with the lid shut, so threads keep running in a bag.
   Choose **Until threads finish** (sleep comes back once no card has been running for two minutes, 8 hours at most) or 1, 2, 3 or 8 hours,
@@ -413,7 +421,9 @@ many turns it would cut off, and the thread asks you instead. Its own project's 
 When Weft does need a restart, **Restart when idle** waits for it: Weft → Restart When Idle, the command palette, or a
 thread calling `mcp__board__restart_weft_when_idle` (you approve it). From then on nothing new starts. A message you
 send waits on its card, marked "after restart" above the reply box, and goes out once Weft is back. The header shows
-**⟳ Restart after N** (hover it for the threads it's waiting on, click it to cancel and send what waited). When the
+**⟳ Restart after N** (hover it for the threads it's waiting on, click it to cancel and send what waited). A card that
+asked for the restart is marked on the board too: a red edge and a **⟳ Restart asked** chip, so you can see which
+thread is waiting on it. When the
 last running turn and any queued follow-up have ended, Weft relaunches, or installs the update if the updater armed it
 (`lib/restart-when-idle.ts`, `electron/restart-when-idle.cjs`).
 
@@ -588,7 +598,10 @@ its CLI fresh.
 ### Finding and checking skills
 
 Type in either ✦ list's filter and Weft also searches [skills.sh](https://skills.sh), below your own
-matches. Open a hit and Weft downloads it, keeps that exact copy, and scans every file, SKILL.md
+matches. Click a hit's name and it opens in a new thread: the skill's skills.sh page in the pane, Weft's
+scan and AI review, a short summary, and a question whether to install it; say yes and that thread
+installs it. The ▾ beside a hit shows the same scan right in the list. Either way Weft downloads the
+skill, keeps that exact copy, and scans every file, SKILL.md
 included: malicious code (scripts piped into a shell, reverse shells, credential reads), prompt
 injection (instructions to ignore you or hide things, invisible characters), telemetry (analytics
 SDKs, webhook endpoints, every host a script calls) and its license. **AI review** has Sonnet read the

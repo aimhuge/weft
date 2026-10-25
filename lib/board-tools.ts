@@ -7,6 +7,8 @@ import { setupReport } from "./copilot-setup";
 import { activeProjects } from "./copilot-sources";
 import { resolveFolder } from "./folders";
 import { changelogTools } from "./changelog-tool";
+import { cronTools } from "./cron-tools";
+import { skillTools } from "./skill-tools";
 import { folderAccessTool } from "./folder-access-tool";
 import { restartTool } from "./restart-tool";
 import { cleanTitle, titleFromPrompt } from "./format";
@@ -144,9 +146,11 @@ export function weftMcpServer(
             return `Created and started ${card.id}: ${card.title}`;
           }),
       ),
-      restartTool(),
+      restartTool(getCardId),
       folderAccessTool(),
       ...changelogTools(getCardId, getCwd),
+      ...cronTools(getCardId),
+      ...skillTools(getCwd),
     ],
   });
 }
@@ -255,6 +259,8 @@ export function boardMcpServer(actions: BoardActions) {
             return `${allow ? "Allowed" : "Denied"} on “${card.title}”.`;
           }),
       ),
+      // The copilot has no thread to fork: its crons are fresh ones in a folder, or forks of a card it names.
+      ...cronTools(() => undefined),
     ],
   });
 }

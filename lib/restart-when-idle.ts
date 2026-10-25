@@ -39,6 +39,8 @@ interface Drain {
   last?: string;
   // The server generation that armed this drain; a mismatch means it survived that generation's death.
   generation?: string;
+  // The card whose thread asked for the restart, so the board can mark it (lib/restart-tool.ts).
+  requestedBy?: { id: string; title: string };
 }
 
 const state = globalSingleton("__weftRestart", () => ({ drain: undefined as Drain | undefined }));
@@ -67,18 +69,24 @@ function waiting(): RestartStatus["waiting"] {
 
 export function restartStatus(): RestartStatus {
   const drain = state.drain;
-  return drain ? { armed: true, then: drain.then, waiting: waiting() } : { armed: false, waiting: waiting() };
+  return drain
+    ? { armed: true, then: drain.then, waiting: waiting(), ...(drain.requestedBy && { requestedBy: drain.requestedBy }) }
+    : { armed: false, waiting: waiting() };
 }
 
 // Arms the restart, or turns an armed relaunch into an update. With nothing running it restarts after SETTLE_MS.
-export function armRestart(then: RestartThen = "relaunch"): RestartStatus {
+// `cardId` is the card whose thread asked for it, when one did (lib/restart-tool.ts): the board marks that card, so
+// you can see which one is waiting on a restart. A restart asked for from the menu or the palette has no card.
+export function armRestart(then: RestartThen = "relaunch", cardId?: string): RestartStatus {
   if (!process.env.WEFT_SHELL_URL) throw new Error("Restarting Weft needs the desktop app.");
   console.warn(`[weft] restart-when-idle armed (${then}), generation ${GENERATION}`);
   let drain = state.drain;
   if (drain) {
     if (then === "update") drain.then = "update";
+    // A second card asking while the drain is armed: the newest asker is the one to mark.
+    if (cardId) drain.requestedBy = askingCard(cardId);
   } else {
-    const armed = { then, generation: GENERATION } as Drain;
+    const armed = { then, generation: GENERATION, ...(cardId && { requestedBy: askingCard(cardId) }) } as Drain;
     armed.stop = subscribe((event) => {
       if (event.type === "card") check(armed);
     });
@@ -86,6 +94,11 @@ export function armRestart(then: RestartThen = "relaunch"): RestartStatus {
   }
   check(drain);
   return restartStatus();
+}
+
+// The card a restart was asked for, with the title it has now: the board shows it on the card.
+function askingCard(cardId: string): { id: string; title: string } {
+  return { id: cardId, title: getCard(cardId)?.title ?? "A thread" };
 }
 
 function disarm(error?: string): RestartStatus {

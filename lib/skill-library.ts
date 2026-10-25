@@ -41,21 +41,25 @@ function pluginDescription(installPath: string): string {
   return description.length > 240 ? `${description.slice(0, 239)}…` : description;
 }
 
-// The plugins in ~/.claude/plugins/installed_plugins.json that your settings haven't turned off.
-// An id is "name@marketplace", the key `enabledPlugins` takes.
-export function installedPlugins(): PluginInfo[] {
+// The plugins in ~/.claude/plugins/installed_plugins.json that your settings haven't turned off, with the
+// folder each is installed in. An id is "name@marketplace", the key `enabledPlugins` takes.
+export function pluginInstalls(): { id: string; installPath: string }[] {
   const installed = readJson(path.join(configDir(), "plugins", "installed_plugins.json"));
   const settings = readJson(path.join(configDir(), "settings.json"));
   const enabled = isObject(settings) && isObject(settings.enabledPlugins) ? settings.enabledPlugins : {};
   const plugins = isObject(installed) && isObject(installed.plugins) ? installed.plugins : {};
-  const out: PluginInfo[] = [];
-  for (const [id, installs] of Object.entries(plugins)) {
-    if (enabled[id] === false) continue;
-    const install: unknown = Array.isArray(installs) ? installs[0] : undefined;
-    const installPath = isObject(install) && typeof install.installPath === "string" ? install.installPath : "";
-    out.push({ id, name: id.replace(/@.*/, ""), skills: installPath ? skillCount(installPath) : 0, description: installPath ? pluginDescription(installPath) : "" });
-  }
-  return out.sort((a, b) => a.name.localeCompare(b.name));
+  return Object.entries(plugins)
+    .filter(([id]) => enabled[id] !== false)
+    .map(([id, installs]) => {
+      const install: unknown = Array.isArray(installs) ? installs[0] : undefined;
+      return { id, installPath: isObject(install) && typeof install.installPath === "string" ? install.installPath : "" };
+    });
+}
+
+export function installedPlugins(): PluginInfo[] {
+  return pluginInstalls()
+    .map(({ id, installPath }) => ({ id, name: id.replace(/@.*/, ""), skills: installPath ? skillCount(installPath) : 0, description: installPath ? pluginDescription(installPath) : "" }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export function skillLibrary(cwd?: string): SkillLibrary {

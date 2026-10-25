@@ -13,6 +13,8 @@ import type { BillingClientView } from "./client-bridge";
 import type { CheckoutAnswer, UpgradeInterval, UpgradePlan } from "./billing/upgrade";
 import type { CopilotPersona } from "./copilot-personas";
 import type { WeftConnect } from "./blastcp-view";
+import type { GogStatus } from "./gog-view";
+import type { CustomTheme } from "./custom-theme";
 import type {
   AccountProvider,
   AccountView,
@@ -195,6 +197,7 @@ export const api = {
     call("POST", `/api/cards/${id}/permission`, { allow, answers, pendingId, ...reply }),
   // Wait on a symbol-claim prompt: Weft answers it once the card holding that code lets go.
   waitPermission: (id: string, pendingId: string) => call("POST", `/api/cards/${id}/permission`, { wait: true, pendingId }),
+  putFirst: (id: string, pendingId: string) => call("POST", `/api/cards/${id}/permission`, { first: true, pendingId }),
   stop: (id: string) => call("POST", `/api/cards/${id}/stop`),
   // The task strip's Stop: ends one subagent or background command (lib/task-stop.ts).
   stopTask: (id: string, taskId: string) => call<{ ok: true }>("POST", `/api/cards/${id}/tasks/${encodeURIComponent(taskId)}/stop`),
@@ -240,9 +243,13 @@ export const api = {
   restartWhenIdle: () => call<RestartStatus>("POST", "/api/restart", {}),
   cancelRestart: () => call<RestartStatus>("DELETE", "/api/restart"),
   settings: () => call<SettingsView>("GET", "/api/settings"),
+  // Themes you prompted up (lib/custom-themes.ts), and starting the thread that paints a new one.
+  themes: () => call<{ themes: CustomTheme[] }>("GET", "/api/themes"),
+  createTheme: (prompt: string) => call<{ id: string; card: Card }>("POST", "/api/themes", { prompt }),
   saveSettings: (patch: {
     threadPrompt?: string;
     keepAliveMinutes?: number;
+    maxThreads?: number;
     defaultPermissionMode?: PermissionMode;
     defaultBackend?: Backend;
     automations?: Automation[];
@@ -267,6 +274,10 @@ export const api = {
   loginStatus: () => call<{ status: Record<Backend, CliStatus>; runs: LoginView[] }>("GET", "/api/login"),
   login: (backend: Backend, action: "start" | "input" | "cancel" | "terminal", text?: string, signal?: AbortSignal) =>
     call<{ login: LoginView | null }>("POST", "/api/login", { backend, action, text }, signal),
+  // Settings → Connectors → Google Workspace (lib/gog.ts).
+  gogStatus: () => call<GogStatus>("GET", "/api/connectors/gog"),
+  gog: (body: { action: "credentials"; json: string } | { action: "add"; email: string; readonly?: boolean } | { action: "cancel" } | { action: "remove"; email: string; client?: string }) =>
+    call<GogStatus>("POST", "/api/connectors/gog", body),
   // Starts a CLI ahead of time: a card's own, or a spare in a project folder.
   warm: (body: { cardId?: string; cwd?: string; backend?: Backend }) => call<{ ok: true }>("POST", "/api/warm", body),
   // A project opened: its .env files, code's keys and webhook routes into 🔐 and 🪝 (lib/project-intake.ts).

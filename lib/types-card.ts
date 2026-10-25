@@ -96,6 +96,10 @@ export interface ScheduledMessage {
   afterRestart?: boolean;
   // Sent while the thread was mid-turn (a page's link, a failed commit's note): it goes out as that turn ends.
   afterTurn?: boolean;
+  // Held because the cap on running threads was reached (lib/thread-slots.ts): it goes out when a slot frees, oldest first.
+  forSlot?: boolean;
+  // A re-run of the last message (a retry or a limit resume): it is already in the thread, so it goes out without an echo.
+  quiet?: boolean;
 }
 
 // A thread's tour of what it built, for the user to step through in Review (see lib/review.ts).
@@ -238,7 +242,8 @@ export interface PromptReason {
   category: "same-code" | "overlap" | "whole-file" | "mode" | "outside" | "classifier";
   detail: string;
   // For a clash: the card holding the claim and its claim key, so Wait can watch for its release (lib/permission-wait.ts).
-  holder?: { id: string; title: string; claim: string };
+  // Its emoji and thumbnail show beside the prompt; first: the user put it first, so this card yields (lib/precedence.ts).
+  holder?: { id: string; title: string; claim: string; emoji?: string; thumb?: string; first?: true };
 }
 
 // Card and CardIssue live in lib/types-card-detail.ts to keep this file under the line limit.
@@ -259,6 +264,8 @@ export type BoardEvent =
   | { type: "projects"; projects: Project[] }
   // You signed in or out of your Weft account (lib/account.ts).
   | { type: "account" }
+  // A cron was made, changed, run or deleted (lib/cron-store.ts): the rail's Crons drawer reloads.
+  | { type: "crons" }
   // A restart was armed, cancelled, or the turns it waits on changed (lib/restart-when-idle.ts).
   | { type: "restart"; restart: RestartStatus };
 
@@ -269,6 +276,9 @@ export interface RestartStatus {
   then?: "relaunch" | "update";
   // The turns it waits on: running now, or with queued messages still to run.
   waiting: { id: string; title: string }[];
+  // The card that asked for the restart, when a thread did (lib/restart-tool.ts). The board marks that card, so
+  // you can see which one is waiting on a restart. A restart asked for from the menu or the palette has no card.
+  requestedBy?: { id: string; title: string };
   // Why the restart didn't happen, when it couldn't (it's disarmed then).
   error?: string;
 }

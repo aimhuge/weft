@@ -9,7 +9,7 @@ interface CapturedTool {
 }
 
 const captures: CapturedTool[] = [];
-const armRestart = vi.hoisted(() => vi.fn<() => { armed: boolean; waiting: { id: string; title: string }[] }>());
+const armRestart = vi.hoisted(() => vi.fn<(then?: string, cardId?: string) => { armed: boolean; waiting: { id: string; title: string }[] }>());
 
 vi.mock("@anthropic-ai/claude-agent-sdk", () => ({
   createSdkMcpServer: (options: { tools?: CapturedTool[] }) => {
@@ -64,6 +64,26 @@ describe("restart_weft_when_idle", () => {
   it("is registered on every board thread's server", () => {
     weftMcpServer(() => "parent-1", { start: vi.fn() });
     expect(captures.map((x) => x.name)).toContain("restart_weft_when_idle");
+  });
+
+  it("names the card that asked, so the board can mark it", async () => {
+    armRestart.mockReturnValue({ armed: true, waiting: waiting(1) });
+    await (restartTool(() => "card-7") as unknown as CapturedTool).handler({});
+    expect(armRestart).toHaveBeenCalledWith("relaunch", "card-7");
+  });
+
+  it("asks with no card when the thread has none yet (a warm spare)", async () => {
+    armRestart.mockReturnValue({ armed: true, waiting: waiting(1) });
+    await (restartTool(() => undefined) as unknown as CapturedTool).handler({});
+    expect(armRestart).toHaveBeenCalledWith("relaunch", undefined);
+  });
+
+  it("passes the server's card id through, so the card that asked is the one marked", async () => {
+    armRestart.mockReturnValue({ armed: true, waiting: waiting(1) });
+    weftMcpServer(() => "card-9", { start: vi.fn() });
+    const tool = captures.find((x) => x.name === "restart_weft_when_idle");
+    await tool!.handler({});
+    expect(armRestart).toHaveBeenCalledWith("relaunch", "card-9");
   });
 
   it("needs the user's OK: not a safe board tool, and described without a card", () => {

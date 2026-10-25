@@ -84,6 +84,13 @@ lives in its own component under `components/`.
   the server's card shows the stop done, on `card_deleted`, or on a refusal, which reloads the board. A stop
   whose card never leaves Running gives up after `STOP_SETTLE_MS` (10 s) and reloads. The copilot lane's Stop
   and the web board are not covered.
+  A permission prompt's answers are intents too: Allow and Deny (`answerNow`, from the card row and a thread's
+  plain Allow/Deny), Me first and You first (`firstNow`) and Wait (`waitNow`, through `localTransport`) draw
+  the card as the runner will leave it (prompt gone and Running, or waiting on the holder) until the server's
+  card shows another request or none. A question or form with answers still waits, so a refused form stays filled.
+  Card fields go through `patchNow`: star, tags (Tags… and a drop on the 🏷 drawer), archive and unarchive
+  (with Undo), rename, permission mode and dismissing the broke chip draw at once; a patch ends when the server's
+  card has every field (false, missing and [] read alike), after `STOP_SETTLE_MS`, or on a refusal (reload).
 - `lib/board-derive.ts` — the small values read off the board's state each render: `filterState`,
   `footerFor`, `workFolder`, `openCardOf`, `headerCounts`.
 - `lib/use-board-dialogs.ts` — the dialog flags (`useBoardDialogs`, `DialogFlags`) and what they cover:
@@ -149,6 +156,12 @@ components/Board.tsx  ── state + actions ──▶  components/BoardHeader.t
 - **One owner per piece of state.** The board's flags live in `lib/use-board-dialogs.ts`, the open card's in
   `lib/use-open-card.ts`, the live stream's effects in `lib/board-live.ts`. A component draws; a hook
   decides; `Board.tsx` wires.
+- **A card's own signal, on the card.** A state that belongs to one card is drawn by that card, not by the
+  board: a cron run's violet stub (`components/CronMark.tsx`), a card that broke Weft's red ring
+  (`lib/crash-blame.ts`), a card that asked Weft to restart (`components/RestartMark.tsx`). Each mark is a
+  component with a `cardClass(card)` helper and its own CSS file, so the board passes the state down and the
+  card draws itself. The colour is that feature's alone: a feature picks one (violet for crons, red for a
+  restart) and keeps it, so two signals never read as one.
 - **Grouped props.** A layer with many props takes them grouped by what they are: `BoardHeader` gets
   `counts`, `panes` and `slots`; `BoardColumns` gets `drag`, `archive` and `review`; `BoardBottom` gets
   `terminal`; `OpenCard` gets `browser`. New props belong in the group they belong to, not as a tenth

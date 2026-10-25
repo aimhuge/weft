@@ -8,3 +8,4 @@ export * from "./types-card";
 export * from "./types-thread";
 export * from "./types-settings";
 export * from "./types-services";
+export * from "./types-skills";

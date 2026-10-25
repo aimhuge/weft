@@ -44,7 +44,7 @@ matching doc below. When a feature lands, add or update its entry here and in it
 - `show-rail.md` — the browser pane's 72 px rail of one mini per turn and per page, its dots, fallbacks and browser history, and the two events that sync it with the chat.
 - `board-view.md` — `mcp__board_view__*`: a thread's eyes and hands on the board window itself, fixed scripts, the token-guarded control server.
 - `keyboard-shortcuts.md` — the shortcut registry, the `?` sheet, tooltips, key badges, the `ModifierHint` component.
-- `themes.md` — System/Light/Dark and a scene (one of Weft's pictures behind the board with its own palette).
+- `themes.md` — System/Light/Dark, a scene (one of Weft's pictures behind the board with its own palette), or a theme you prompted up.
 - `web-states.md` — weft.zip's loading skeletons, host-aware error page, 404 and the shared pane's load/fail states.
 - `error-boundaries.md` — `CrashGuard.tsx`, `BuildErrorBar.tsx`, the `guarded()` import wrapper, why a build error never reaches a boundary.
 - `welcome-tour.md` — the welcome's narrated 96-second tour: three HyperFrames pages, the live player and beat messages, Kokoro voice and pad, the MP4 render for weft.zip.
@@ -81,6 +81,9 @@ When a new doc lands in this folder, add it here on the same change.
   saves each card's page to `~/.weft/pages/` so it comes back after a restart. `electron/pane-origins.cjs` is the
   per-card allowlist of hosts a thread may open; a host outside it asks the user with Touch ID (`authorizeThreadOpen`).
   `electron/pane-error.cjs` shows a failed load's reason, with Try again and Back, instead of Chromium's blank page.
+  `electron/pane-cdp.cjs` is each page's one CDP session (console and failed-request buffers); `electron/pane-input.cjs`
+  drives the page through it (trusted click, keys, type, select, scroll, wait, viewport, snapshot routes) with
+  `electron/pane-ax.cjs` (the accessibility outline and its refs) and `electron/pane-keys.cjs` (docs/architecture/agent-browser.md).
 - `electron/menus.cjs` + `electron/keep-working.cjs`: app menu, menu bar icon, dock; Keep Working (awake with the lid shut, until threads finish).
 - `electron/updater.cjs` (+ `electron/update-window.cjs`, the Software Update window) + `scripts/release-feed.mjs` + `.github/workflows/release.yml`: updates from GitHub Releases (Squirrel.Mac's JSON
   feed, a download fallback when unsigned, a quiet install once nothing runs and nobody's at the Mac) and the tag-triggered signed release; `CHANGELOG.md` holds each version's notes, which Weft commits itself after a version bump (docs/architecture/updates.md).
@@ -273,6 +276,8 @@ When a new doc lands in this folder, add it here on the same change.
   `app/api/skills/{search,remote,review,scan}` + `components/SkillSearchResults.tsx` + `components/SkillScanPill.tsx`: a ✦ filter also searches skills.sh;
   a hit is kept by hash in `~/.weft/skill-registry`, scanned statically (code, prompt injection, telemetry, license) and by a Sonnet review shown in the
   pane, then installed into `~/.claude/skills`; your own skills get the same scan and a ⚠ (docs/architecture/skills.md#the-skill-scan).
+  `lib/skill-thread.ts` + `lib/skill-tools.ts`: a hit's name opens a thread on it that shows its skills.sh page, scans and reviews it with
+  `mcp__board__skill_preview`/`skill_review`, and installs it on your yes with `mcp__board__skill_install`.
 - `lib/quality.ts` + `lib/quality-view.ts` + `app/api/quality`: the header's code quality checklist (coverage via `lib/coverage.ts`,
   file size, lint, types, guardrails); `lib/scout.ts` + `lib/scout-view.ts` + `app/api/scout`: the refactor scout, a cached
   read-only Sonnet run whose findings take the score's last 10 points so it never hits 100. `components/QualityBadge.tsx`
@@ -413,7 +418,9 @@ When a new doc lands in this folder, add it here on the same change.
   founder-skill, Captain after gstack), picked from its name in the lane header; `card.persona` → `Spec.persona` → its prompt after
   `COPILOT_PROMPT`, and a switch starts a new chat (docs/architecture/copilot-personas.md).
 - `lib/workspace-layout.ts` + `components/CardWorkspace.tsx` + `components/EditorColumn.tsx` + `lib/file-access.ts` + `app/api/cards/[id]/files` + `lib/open-file.ts`: the open card's four columns and the editor column (CodeMirror, TipTap markdown, Changes vs. HEAD); any file path in the thread opens it (docs/architecture/editor.md).
-- `lib/browser-tools.ts`: `mcp__browser__*` tools every thread gets.
+- `lib/browser-tools.ts`: `mcp__browser__*` tools every thread gets; `lib/browser-act-tools.ts` the ones that act on the page
+  (snapshot with refs, click, hover, type_text, press_key, select_option, scroll, wait_for, set_viewport, console_logs,
+  network_errors; docs/architecture/agent-browser.md); `lib/browser-shell.ts` the control-server call every Weft tool uses.
 - `lib/mini-apps.ts` + `lib/mini-app-store.ts` + `app/api/apps` + `lib/use-mini-apps.ts` + `components/AppsRail.tsx` + `components/SaveAppButton.tsx`: mini apps, pages
   saved from the browser pane (its toolbar's grid button) as tiles on the left rail below 🖥 Services (rendered inside `components/LibraryRail.tsx`), in `~/.weft/apps.json`; a tile opens its page in the board's pane. No apps, nothing on the rail (docs/architecture/mini-apps.md).
   `components/LoomApps.tsx` lists them as My mini apps on the Loom's You tab. `lib/app-share.ts` + `lib/app-share-types.ts` + `app/api/apps/share` + `components/ShareAppDialog.tsx` (with `components/ShareParts.tsx`, shared with the card's dialog): Share… on an app, a `weft.zip/a/<id>` link (`cloud_app_shares`) to an uploaded copy of a local page (with the files it links to beside it, `lib/page-assets.ts`) or a framed https site; `lib/app-share-access.ts` + `app/a/[id]` + `app/api/a/[id]/{page,unlock}` serve it behind the card link's gate (`gateVerdict`, `lib/share-unlock.ts`, `lib/share-page-serve.ts`). `lib/app-share-frame.ts` (versioned frame URLs) + `lib/app-share-serve.ts` (the page, `page/[sha]`, `f/` and `v/[ver]/` routes: CDN headers for public links, version checks) + `lib/app-page-limit.ts` (per-address and per-share cap) keep views unlimited and cheap; `lib/app-share-quota.ts` + `components/ShareAppQuota.tsx` + `supabase/migrations/20261024124411_app_share_quota.sql` gate a workspace's open links' bytes by plan (`APP_SHARE_BYTES` in `lib/billing/plans.ts`; docs/architecture/mini-app-hosting.md).
@@ -438,6 +445,8 @@ When a new doc lands in this folder, add it here on the same change.
   a **Claude Code** card with no error (docs/architecture/goose.md#the-one-list-of-clis).
 - `lib/theme.ts` + `app/api/scenes` + `components/AppearancePicker.tsx` + `electron/theme-source.cjs`: System, Light, Dark or a scene
   (one of Weft's pictures behind the board with its own palette, in `app/globals.css`; docs/architecture/themes.md).
+- `lib/custom-theme.ts` + `lib/custom-themes.ts` + `app/api/themes` + `lib/use-custom-themes.ts` + `components/ThemeDescriber.tsx`:
+  themes you prompted up, painted by a card into `~/.weft/themes/<id>/` and applied from a second cookie (docs/architecture/themes.md#prompted-themes).
 - `lib/store.ts`: storage in `~/.weft` (board.json, threads/, attachments/). `lib/attachments.ts` saves every PNG, JPEG and GIF as WebP (uploads, tool screenshots, pane thumbnails; transcript reads add one beside the original); `scripts/webp-backfill.mjs` converts the old ones (docs/architecture/threads-and-sessions.md).
 - `lib/cloud-sync.ts` + `lib/cloud-outbox.ts` + `lib/cloud-sync-start.ts` + `lib/cloud-sync-cards.ts` + `lib/cloud-sync-upload.ts` + `lib/blob-store.ts` + `lib/blob-paths.ts` + `lib/device-id.ts` + `lib/cloud-sync-types.ts`:
   server-side cards, opt-in per folder (settings `syncFolders`): an outbox in `~/.weft/sync-outbox.jsonl` uploads cards, thread items
@@ -465,9 +474,10 @@ When a new doc lands in this folder, add it here on the same change.
   Every board-side fetch goes through `lib/api-client.ts` (`apiFetch`, `API_HEADERS`) so it carries `x-weft-token`: a fetch without it 403s, and the call site's `.catch()` turns that into an empty default — a whole UI feature gone with no error shown (the pile counter, the quality, streak and league chips, an open thread that renders empty). Electron main's own reads (dock badge and tray, Keep Working, the updater's running count, a `weft://new` link's folder) skip the window's token swap, so they send `READ_HEADERS` from `electron/server-read.cjs`. `lib/api-token-guard.test.ts` walks the "use client" files under `components/`, `lib/` and `app/` and fails on an `/api` fetch without the token.
 - `lib/restart-guard.ts`: turns away Bash that would kill or restart Weft itself (its server pid, port, `next dev`, the app)
   while other cards' turns run, since a restart cuts them all off; in every thread via `guardedCli()`.
-- `lib/restart-when-idle.ts` + `app/api/restart` + `lib/restart-tool.ts` + `electron/restart-when-idle.cjs` + `components/RestartChip.tsx`: restart when idle
+- `lib/restart-when-idle.ts` + `app/api/restart` + `lib/restart-tool.ts` + `electron/restart-when-idle.cjs` + `components/RestartChip.tsx` + `components/RestartMark.tsx`: restart when idle
   (Weft menu, palette, updater, `mcp__board__restart_weft_when_idle`): `sendMessage` holds new turns as "after restart" scheduled
   messages, and once no turn runs or is queued the server calls the control server's `POST /app/restart` (relaunch or install the update).
+  A card that asked for the restart is recorded in the drain (`RestartStatus.requestedBy`) and marked on the board: a red edge and a ⟳ chip, so the thread waiting on a restart is spotted in any column.
 - `lib/ts-paths.ts`: where `@/` and other tsconfig `paths` aliases point (`aliasBases`), so both import guards resolve `@/x` as `src/x` in DeckCP and `x` in Weft.
 - `lib/import-check.ts` + `lib/dropped-imports.ts`: after each Edit/Write, tells the thread which imports it broke (a build error no boundary catches) or dropped while still in use (an "X is not defined" on draw);
   in every thread via `lib/env.ts` `guardedCli()`, and in other Claude Code sessions via `.claude/settings.json`.
@@ -496,7 +506,7 @@ Everything else is under 300 (2026-10-16): big files became re-exporting fronts 
 Pure logic already moved out: `lib/board-view.ts` (columns and their order: Backlog by drag, Review by last update, the rest by the sort menu; project chips, chime/unseen rules, Review's Errors/Restart filter chips drawn by `components/ReviewFilterChips.tsx`) and
 `lib/turn.ts` (how a turn's result reads, where its card goes, cost, limits); Board's hooks into `lib/use-*.ts` (`use-now`,
 `use-toast`, `use-desktop-bridge`, `use-copilot-card`, `use-board-actions`, `use-board-toggles`, `use-board-view`, `use-board-archive`,
-`use-board-card-actions`, plus `lib/board-focus.ts`, `lib/board-helpers.ts`), its live events into `lib/board-live.ts` (Delete and Stop drawn at once by `lib/optimistic-cards.ts`; a failed card list is tried again on `LIST_RETRY_MS` until it lands, so the columns never sit on placeholders), the menu/dock/tray
+`use-board-card-actions`, plus `lib/board-focus.ts`, `lib/board-helpers.ts`), its live events into `lib/board-live.ts` (Delete, Stop, prompt answers (Allow, Deny, Wait, Me first) and card fields (star, tags, archive, rename, mode) drawn at once by `lib/optimistic-cards.ts`; a failed card list is tried again on `LIST_RETRY_MS` until it lands, so the columns never sit on placeholders), the menu/dock/tray
 actions into `lib/board-menu-bridge.ts`, its derived values into `lib/board-derive.ts`, and its JSX into `BoardHeader`, `BoardProjectBar`,
 `BoardColumns` (each column's extras by id), `BoardBrowserPane`, `OpenCard` (the framed window and the open card's four columns),
 `NewThreadWindow` (the New thread form and desktop browser pane), `BoardBottom`

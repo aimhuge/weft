@@ -81,6 +81,11 @@ export function listSkills(cwd?: string): SkillInfo[] {
   return foundSkills(cwd).map(({ name, description, source }) => ({ name, description, source }));
 }
 
+// Each skill's folder, for the scan (lib/skill-scan-library.ts).
+export function skillDirs(cwd?: string): { name: string; dir: string }[] {
+  return foundSkills(cwd).map(({ name, file }) => ({ name, dir: path.dirname(file) }));
+}
+
 // Puku and Codex don't look in .claude/skills (puku reads .puku-cli/skills, Codex .agents/skills), and Codex
 // has no plugin for Weft's own either. `weft` says whether to list those: puku loads them as a plugin. `off` is the
 // card's skill set's off-list (lib/skill-sets.ts); a /name for one of those still runs, through skillInvocation.
