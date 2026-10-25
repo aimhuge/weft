@@ -47,6 +47,26 @@ The install route is the better one, and Weft runs it: `/api/slack/oauth/install
 URL is a credential — it belongs in the database or the 🔐 vault (`SLACK_FEEDBACK_WEBHOOK_URL`, production), and
 nowhere else. A URL that reaches a chat reaches a transcript for good.
 
+### Token rotation and PKCE
+
+Two switches live in the developer console, not in the manifest, and both are one-way.
+
+**Token rotation** (`settings.token_rotation_enabled`) makes Slack issue a token that expires in 12 hours and a
+refresh token that redeems it. Turning it on in the console makes the manifest's `false` **invalid**: Slack answers a
+manifest that disables it with `cannot_disable_once_enabled`, so `apps.manifest.validate` fails and the sync never
+lands — and the error reads like a schema problem rather than "you enabled a one-way switch". The manifest therefore
+carries `true`, and a test pins it.
+
+**PKCE** (`oauth_config.pkce_enabled`) is a different lever: it protects the *exchange* rather than the token, and the
+`oauth.v2.access` call sends a `code_verifier` instead of `client_secret`. That would remove the app's Client Secret
+from the install path entirely — the one thing a person currently has to copy by hand — at the cost of Weft holding a
+verifier between the authorize redirect and the callback. Slack accepts PKCE with an HTTPS redirect and with bot
+scopes; only a *desktop* redirect (a custom URI scheme) cannot ask for bot scopes.
+
+Open question: whether `incoming_webhook` still comes back in the `oauth.v2.access` answer once token rotation is
+on. Slack's rotation docs list the rotating tokens and say nothing about it, and only a real grant shows the answer's
+shape. If rotation strips it, the console's copy-paste is the only route to the URL.
+
 ## Who holds what
 
 ```
