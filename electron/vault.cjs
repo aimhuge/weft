@@ -1,7 +1,6 @@
 // The secrets vault's side of Electron main (docs/architecture/secrets.md): which vault a project folder
 // opens, the .env import with its preview, the rail's nudge, and Touch ID before a value is revealed or
 // copied. It answers the board window only; pane pages are agent-driven and can be any site.
-const { execFile } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
 const { findEnvFiles, envFileKind, isVercelPull, parseEnv, shortLived } = require("./dotenv.cjs");
@@ -9,6 +8,7 @@ const { loadDeviceKey } = require("./device-key.cjs");
 const { createVaultStore, tailOf } = require("./vault-store.cjs");
 const { MANAGED_FILE, createEnvWatcher, ignoreLocalEnv, isManaged, planWrite, readOrNull, renderEnv, writeFileAtomic } = require("./env-writeback.cjs");
 const { touchIdPrompt } = require("./touch-id.cjs");
+const { git, parseRemote, vaultIdFor } = require("./vault-id.cjs");
 
 // How long one Touch ID keeps reveal and copy open, counted from the last use.
 const UNLOCK_MS = 3 * 60_000;
@@ -18,27 +18,6 @@ const CLIPBOARD_MS = 60_000;
 const NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 // Files whose values the rail nudges you to import.
 const NUDGE_FILES = new Set([".env.local", ".env.development.local"]);
-
-function git(folder, args) {
-  return new Promise((resolve) => {
-    execFile("git", ["-C", folder, ...args], { timeout: 5000 }, (err, stdout) => resolve(err ? null : String(stdout)));
-  });
-}
-
-// A remote URL as a vault id: GitHub repos as github:owner/name, so a teammate's clone finds the same vault.
-function parseRemote(url) {
-  const m = /^(?:[a-z+]+:\/\/)?(?:[^@/]+@)?([^/:]+)[:/](.+?)(?:\.git)?\/?$/i.exec(url.trim());
-  if (!m) return null;
-  const [, host, repo] = m;
-  const label = repo.replace(/^\/+/, "");
-  return { id: host.toLowerCase() === "github.com" ? `github:${label.toLowerCase()}` : `${host.toLowerCase()}:${label}`, label };
-}
-
-/** @returns {Promise<{ id: string, label: string }>} */
-async function vaultIdFor(folder, run = git) {
-  const remote = await run(folder, ["remote", "get-url", "origin"]);
-  return (remote && parseRemote(remote)) || { id: `folder:${path.resolve(folder)}`, label: path.basename(folder) };
-}
 
 // Keeps reveal and copy open for a while after one Touch ID. Without Touch ID (a Mac without it, or the
 // lid shut on an external keyboard) prompt falls back to a confirmation dialog.
@@ -331,6 +310,9 @@ function createVault({ dataDir, safeStorage, sodium, prompt, clipboard, run = gi
 
     // A Touch ID with no unlock cache, for a write a thread asks for (electron/vault-routes.cjs).
     confirm: (reason) => prompt(reason),
+
+    // Tells the board a folder's vault changed, for a write that doesn't itself (the intake's import).
+    notify: (folder) => onChange(folder),
 
     // Values for a command main runs (electron/secret-run.cjs), never sent over IPC. names null means every
     // name with a value in that environment, for a dev server. The caller asks the user first.
