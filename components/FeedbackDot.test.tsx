@@ -9,6 +9,8 @@ import FeedbackDot from "./FeedbackDot";
 const fetchMock = vi.fn<typeof fetch>();
 const reply = (body: unknown) => Promise.resolve(new Response(JSON.stringify(body), { status: 200 }));
 const summary = { title: "Cards vanish after a restart", body: "- The user loses cards" };
+// The two long walks type and click a lot; on a busy Mac they outrun vitest's 5 s default.
+const LONG = 20_000;
 
 beforeEach(() => {
   fetchMock.mockReset();
@@ -17,7 +19,7 @@ beforeEach(() => {
 
 describe("FeedbackDot", () => {
   it("opens the interview from the dot and closes on ✕, Escape and an outside click", async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     render(<><FeedbackDot /><p>outside</p></>);
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Feedback" }));
@@ -33,14 +35,14 @@ describe("FeedbackDot", () => {
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     await user.click(screen.getByText("outside"));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-  });
+  }, LONG);
 
   it("interviews, wraps up, sends, and starts over", async () => {
     fetchMock
       .mockReturnValueOnce(reply({ reply: "How often does it happen?", summary: null }))
       .mockReturnValueOnce(reply({ reply: "Thanks! Here's what I'll send.", summary }))
       .mockReturnValueOnce(reply({ sent: true }));
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     render(<FeedbackDot />);
     await user.click(screen.getByRole("button", { name: "Feedback" }));
     expect(screen.queryByText(/write the summary/)).not.toBeInTheDocument();
@@ -55,11 +57,11 @@ describe("FeedbackDot", () => {
     expect(await screen.findByText(/Sent to the Weft team/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "New feedback" }));
     expect(screen.queryByText(summary.title)).not.toBeInTheDocument();
-  });
+  }, LONG);
 
   it("keeps Shift+Enter as a new line, skips an empty answer, and says when the send didn't reach weft.zip", async () => {
     fetchMock.mockReturnValueOnce(reply({ reply: "Got it.", summary })).mockReturnValueOnce(reply({ sent: false }));
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     render(<FeedbackDot />);
     await user.click(screen.getByRole("button", { name: "Feedback" }));
     const box = screen.getByPlaceholderText("Type your answer…");
@@ -76,7 +78,7 @@ describe("FeedbackDot", () => {
   it("shows Thinking… while Haiku answers and the error when it fails", async () => {
     let finish: (r: Response) => void = () => {};
     fetchMock.mockReturnValueOnce(new Promise<Response>((r) => (finish = r)));
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     render(<FeedbackDot />);
     await user.click(screen.getByRole("button", { name: "Feedback" }));
     await user.type(screen.getByPlaceholderText("Type your answer…"), "hi{Enter}");
