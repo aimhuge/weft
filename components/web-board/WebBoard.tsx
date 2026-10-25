@@ -14,6 +14,7 @@ import type { CloudCardRow, CloudThreadItemRow } from "@/lib/cloud-sync-types";
 import { pageFromRows } from "@/lib/cloud-thread-page";
 import { ThreadTransportContext } from "@/lib/thread-transport";
 import { useNow } from "@/lib/use-now";
+import { useViewMode } from "@/lib/use-view-mode";
 import { ToolResultSourceContext } from "@/lib/use-tool-result";
 import { busyHere } from "@/lib/overlap";
 import { COLUMNS, type Column, type ThreadItem } from "@/lib/types";
@@ -22,7 +23,8 @@ import { filterCards, isFiltering, type RailFilter } from "@/lib/rail-view";
 import { boardCommands, canReply, cardReplies, webTargets } from "@/lib/web-commands";
 import BoardHeader from "../BoardHeader";
 import BoardProjectBar from "../BoardProjectBar";
-import BoardColumns from "../BoardColumns";
+import BoardSurface from "../BoardSurface";
+import CardRow from "../CardRow";
 import CardView from "../CardView";
 import { useShortcutHint } from "@/lib/hotkeys";
 import { WebAccountMenu, type WebOrg, type WebUser } from "./WebAccountMenu";
@@ -69,6 +71,8 @@ export function WebBoard({ orgId, orgSlug, userId, user, orgs, initialCommands, 
   const [composing, setComposing] = useState(false);
   // The rail's ★ and 🏷, the desktop's own filter shape (lib/rail-view.ts).
   const [railFilter, setRailFilter] = useState<RailFilter>({});
+  // The board's layout: cards in columns or in one list (lib/use-view-mode.ts).
+  const { mode: viewMode, choose: chooseView } = useViewMode();
 
   const cards = useMemo(() => webCards(board.cards), [board.cards]);
   const starredCount = cards.filter((c) => c.starred).length;
@@ -134,6 +138,8 @@ export function WebBoard({ orgId, orgSlug, userId, user, orgs, initialCommands, 
               onSearchAll={noop}
               sort={sort}
               onSort={setSort}
+              view={viewMode}
+              onView={chooseView}
               home=""
               onMenuOpenChange={noop}
             />
@@ -149,7 +155,8 @@ export function WebBoard({ orgId, orgSlug, userId, user, orgs, initialCommands, 
                 // so the filter is written directly: the desktop's toggleTag only ever sees a real tag.
                 onTag={(next) => setRailFilter((f) => ({ ...f, tag: next }))}
               />
-              <BoardColumns
+              <BoardSurface
+                mode={viewMode}
                 columns={COLUMNS}
                 byColumn={byColumn}
                 allCards={cards}
@@ -158,10 +165,13 @@ export function WebBoard({ orgId, orgSlug, userId, user, orgs, initialCommands, 
                 renderCard={(card) => (
                   <CardView key={card.id} readOnly card={card} now={now} selected={card.id === board.activeCardId} alsoHere={busyHere(cards, card)} onOpen={() => board.openCard(card.id)} />
                 )}
+                renderRow={(card, column) => (
+                  <CardRow key={card.id} card={card} column={column} now={now} selected={card.id === board.activeCardId} alsoHere={busyHere(cards, card)} onOpen={() => board.openCard(card.id)} />
+                )}
                 loaded
                 filtering={filtering}
                 laneState="hidden"
-                drag={{ over: null, onOver: noop, onLeave: noop, onDrop: noop, onReorder: noop }}
+                drag={{ over: null, setOver: noop, onDrop: noop, onReorder: noop }}
                 onColumnMenu={noop}
                 archive={{
                   count: archivedCount,

@@ -63,6 +63,11 @@ port.
 - **Full screen threads**: clicking a card opens its thread and its browser together in one large
   overlay over the board; Esc (or clicking outside) closes it, and so does sending `/done`. A card
   running `/done` sits in Done while it works and is archived when it finishes.
+- **List view**: the board as a sheet. The toggle in the project bar swaps the columns for a table —
+  title, status, stage, tags, folder, age — one line per card, with the header stuck to the top and the
+  columns lined up down the sheet. The status reads *Needs you* for a card waiting on you. A narrow
+  board drops the roomiest columns instead of squeezing them, so the title is always readable
+  (docs/architecture/board.md).
 - **Board view for threads**: a thread can screenshot, click, hover, type into and read Weft's own board window
   (`mcp__board_view__*`), so a thread changing a drawer or dialog tests it in the real app instead of asking you to click
   through. Revealed secrets read as ‹secret› and are blanked in its screenshots (docs/architecture/board-view.md).

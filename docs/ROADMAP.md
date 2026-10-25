@@ -19,6 +19,7 @@ Tags: `Now` is being built this session; `P1` is next and high value; `P2` is cl
 ## Board and organization
 
 - `Now` **Projects bar** — a bar above the columns listing the project folders in use, to filter the board to one or more projects and sort cards by activity or age.
+- `Done` **List view** — the board as a sheet: a toggle in the project bar swaps the columns for a table with a header row and one line per card — title, status, stage, tags, folder, age — grouped by column, the header stuck to the top and the columns lined up down the sheet (`components/BoardList.tsx`, `components/CardRow.tsx`, `components/list-grid.css`). The choice is a preference (`lib/board-prefs.ts`), so it is remembered. A narrow board drops the roomiest columns through container queries rather than squeezing the title away.
 - `Done` **Recently changed in ⌘K** — the palette opens on the cards that moved column in the last day, latest move first: five, then a **Show N more** row that lists up to 30 in place (`recentMoves` in `lib/board-view.ts`, stamped as `columnAt` by `lib/store.ts`; the fold in `paletteResults`, `lib/palette.ts`).
 - `Done` **Bigger ⌘K with the last output** — the palette is 840px wide with larger type; each card row shows its last line of output (or error) and how long ago it changed (`preview` and `when` on `PaletteItem`, filled in `components/board-palette.ts`).
 - `Now` **Filter quick-open** — the filter box shows its `/` key, lists the top matching cards as you type (Enter opens one) and hands the text to the ⌘K palette.

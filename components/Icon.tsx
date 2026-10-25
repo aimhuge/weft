@@ -79,6 +79,7 @@ const PATHS = {
   code: <path d="m16 18 6-6-6-6M8 6l-6 6 6 6" />,
   heading: <path d="M6 12h12M6 20V4M18 20V4" />,
   list: <path d="M3 12h.01M3 18h.01M3 6h.01M8 12h13M8 18h13M8 6h13" />,
+  columns: <path d="M4 4h4v16H4zM10 4h4v16h-4zM16 4h4v16h-4z" />,
   listOrdered: <path d="M10 12h11M10 18h11M10 6h11M4 10h2M4 6h1v4M6 18H4c0-1 2-2 2-3s-1-1.5-2-1" />,
   quote: <path d="M17 6H3M21 12H8M21 18H8M3 12v6" />,
   codeBlock: (

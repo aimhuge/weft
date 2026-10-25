@@ -1,0 +1,83 @@
+/* The list view's grid: the columns of the sheet, and the widths they hold. The header row and the
+   card rows share this template, so a column's header always sits over its cells.
+
+   It lives in CSS rather than a Tailwind arbitrary value because the tracks need minmax(), and
+   Tailwind drops an arbitrary value that holds a comma. The shares are fractions, so the sheet
+   always fits the board it is drawn in — no column is squeezed to nothing and none pushes the
+   sheet into a sideways scroll. The title takes the largest share, since it is the column that
+   has to be read.
+
+   The breakpoints below are container queries, not media queries: the board's width follows the
+   rail and the thread panel, not the window, so the sheet has to answer to its own size. */
+/* The list's own container, so the sheet answers to the width it is drawn at — the board's width
+   follows the rail and the thread panel, not the window. Only the list view sets this; the board's
+   column view shares .board-sheet and is left alone. */
+.list-sheet {
+  container-type: inline-size;
+  container-name: board-sheet;
+}
+
+.list-grid {
+  display: grid;
+  grid-template-columns:
+    minmax(0, 2.4fr)
+    minmax(0, 0.9fr)
+    minmax(0, 1.2fr)
+    minmax(0, 1.4fr)
+    minmax(0, 0.9fr)
+    52px
+    60px;
+  align-items: center;
+  column-gap: 0.75rem;
+}
+
+/* Every cell — the header's and the row's — truncates rather than spilling into the next column,
+   so a long name or a narrow board never lets two columns run into each other. */
+.list-grid > * {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The actions keep their buttons whole; they are the smallest cells and never need a title. */
+.list-grid > *:last-child {
+  overflow: visible;
+  text-overflow: clip;
+}
+
+/* A narrow board drops the roomiest columns instead of squeezing them all: the tags and the
+   folder go first, then the age. What is left — the title, the status and the stage — is what
+   you read while scanning. The header cells go with them, so a column's name always sits over
+   its cells. */
+@container board-sheet (max-width: 820px) {
+  .list-grid > :nth-child(4),
+  .list-grid > :nth-child(5) {
+    display: none;
+  }
+  .list-grid {
+    grid-template-columns:
+      minmax(0, 2.6fr)
+      minmax(0, 1fr)
+      minmax(0, 1.2fr)
+      52px
+      60px;
+  }
+}
+
+@container board-sheet (max-width: 560px) {
+  .list-grid > :nth-child(6) {
+    display: none;
+  }
+  .list-grid {
+    grid-template-columns:
+      minmax(0, 2.8fr)
+      minmax(0, 1fr)
+      minmax(0, 1.2fr)
+      60px;
+  }
+  /* The stage's dots would eat the cell the stage's name needs, so the name wins here. */
+  .list-stage-dots {
+    display: none;
+  }
+}

@@ -5,6 +5,7 @@
 // draws the same bar (variant="web"), where the project menu can only pick a project.
 import type { Card, Column } from "@/lib/types";
 import { topMatches, type ProjectSummary, type SortKey } from "@/lib/board-view";
+import type { ViewMode } from "@/lib/board-prefs";
 import type { RailFilter } from "@/lib/rail-view";
 import CrashGuard from "./CrashGuard";
 import ProjectBar from "./ProjectBar";
@@ -30,6 +31,9 @@ export interface BoardProjectBarProps {
   onSearchAll: (query: string) => void;
   sort: SortKey;
   onSort: (sort: SortKey) => void;
+  // The board's layout: cards in columns or in one list.
+  view: ViewMode;
+  onView: (view: ViewMode) => void;
   home: string;
   onMenuOpenChange: (open: boolean) => void;
   // "web" is the same bar on weft.zip, where the project menu can only pick a project.
@@ -58,6 +62,8 @@ export default function BoardProjectBar(p: BoardProjectBarProps) {
         }
         sort={p.sort}
         onSort={p.onSort}
+        view={p.view}
+        onView={p.onView}
         home={p.home}
         onMenuOpenChange={p.onMenuOpenChange}
         variant={p.variant}

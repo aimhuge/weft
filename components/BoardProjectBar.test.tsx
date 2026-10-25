@@ -43,6 +43,8 @@ function setup(over: Partial<BoardProjectBarProps> = {}) {
     onSearchAll: vi.fn(),
     sort: "recent" as BoardProjectBarProps["sort"],
     onSort: vi.fn(),
+    view: "board",
+    onView: vi.fn(),
     home: "/h",
     onMenuOpenChange: vi.fn(),
     ...over,
@@ -57,6 +59,11 @@ describe("BoardProjectBar", () => {
     const bar = seen.get("bar")!;
     expect(bar).toMatchObject({ total: 3, selected: "/p", onSelect: p.onProject, sort: "recent", onSort: p.onSort, home: "/h", onMenuOpenChange: p.onMenuOpenChange });
     expect(seen.get("chip")).toMatchObject({ filter: p.railFilter, onClear: p.onRailFilter });
+  });
+
+  it("hands ProjectBar the board's layout and a way to change it", () => {
+    const p = setup({ view: "list" });
+    expect(seen.get("bar")).toMatchObject({ view: "list", onView: p.onView });
   });
 
   it("lists no matches for a blank query", () => {

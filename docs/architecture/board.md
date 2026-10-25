@@ -48,6 +48,18 @@ lives in its own component under `components/`.
   column. Each column's extras are wired **by column id** here, so `Board` only passes state in: Backlog
   gets the reorder and the sprints, Review gets Resume all / Review all / the filter chips, Running and
   Needs you get Switch all. Grouped props: `drag`, `archive`, `review`.
+- `components/BoardList.tsx` — the list view: the same cards as a sheet, a table with a header row and a
+  line each, grouped by column. It draws the groups and the header and hands every row to `Board`, so it
+  holds no card details of its own.
+- `components/CardRow.tsx` — one line of the list: the title, the status, the stage, the tags, the folder
+  and the age, each in its own cell. The status reads *Needs you* for a card waiting on you, and the
+  folder carries a `+N` when other cards share its working tree.
+- `components/list-grid.css` — the sheet's columns. The template lives in CSS because it needs
+  `minmax()`, and Tailwind drops an arbitrary value holding a comma. The tracks are fractional, so the
+  sheet always fits the board it is drawn in; a narrow board drops the tags and the folder, then the age,
+  through **container queries** (the board's width follows the rail and the thread panel, not the window).
+- `components/ViewToggle.tsx` — the board / list toggle in the project bar. The choice is a preference
+  (`lib/board-prefs.ts`), read through `lib/use-view-mode.ts`.
 - `components/BoardBrowserPane.tsx` — the standalone browser pane, drawn while no card is open (an open
   card's pane lives in its workspace's `pane` column, `components/OpenCard.tsx`).
 - `components/OpenCard.tsx` — `CardFrame` (the backdrop and the framed window over the board, a

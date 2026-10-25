@@ -164,6 +164,41 @@ export function topMatches(groups: Map<Column, Card[]>, limit: number, query = "
   return enriched.toSorted((a, b) => SORTERS.active(a.card, b.card)).slice(0, limit);
 }
 
+// One row of the list view: a card and the column it sits in, so the row can label itself.
+export interface ListRow {
+  card: Card;
+  column: Column;
+}
+
+// One group of the list view: a column's cards, under the column's name.
+export interface ListGroup {
+  column: Column;
+  label: string;
+  cards: Card[];
+}
+
+// The list view's rows: every card the board shows, in column order (Backlog, Running, Needs you,
+// Review, Done) and each column's own sort within it, so the list reads like the board does. Cards
+// from a column the board hides (Backlog, when it's off) still show here: the list is the whole board.
+export function listRows(groups: Map<Column, Card[]>): ListRow[] {
+  const rows: ListRow[] = [];
+  for (const column of COLUMNS) {
+    for (const card of groups.get(column.id) ?? []) rows.push({ card, column: column.id });
+  }
+  return rows;
+}
+
+// The list view's groups: one per column that has cards, in the same column order as listRows. The
+// list draws a heading for each, so a row never has to name its own column.
+export function listGroups(groups: Map<Column, Card[]>): ListGroup[] {
+  const out: ListGroup[] = [];
+  for (const column of COLUMNS) {
+    const cards = groups.get(column.id) ?? [];
+    if (cards.length) out.push({ column: column.id, label: column.label, cards });
+  }
+  return out;
+}
+
 // Recent projects: saved ones plus every folder a card runs in, most recently active first. Worktrees
 // count toward their main repo and never get a chip of their own.
 export function summarizeProjects(projects: Project[], cards: Card[], rootOf: (cwd: string) => string) {

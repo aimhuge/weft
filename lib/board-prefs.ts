@@ -27,6 +27,21 @@ export function setShowProgress(on: boolean) {
   window.dispatchEvent(new Event(EVENT));
 }
 
+// How the board lays its cards out: as columns (the default) or as one list of every card.
+export type ViewMode = "board" | "list";
+
+const VIEW_COOKIE = "weft-view-mode";
+
+export function viewMode(): ViewMode {
+  if (typeof document === "undefined") return "board";
+  return new RegExp(`(?:^|; )${VIEW_COOKIE}=list`).test(document.cookie) ? "list" : "board";
+}
+
+export function setViewMode(mode: ViewMode) {
+  document.cookie = `${VIEW_COOKIE}=${mode}; path=/; max-age=${10 * 365 * 24 * 60 * 60}; SameSite=Lax`;
+  window.dispatchEvent(new Event(EVENT));
+}
+
 const LANE_COOKIE = "weft-copilot-lane";
 const PEEK_COOKIE = "weft-copilot-peek";
 

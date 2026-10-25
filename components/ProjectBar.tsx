@@ -5,10 +5,12 @@ import { keyLabel, useShortcutHint, useShortcutList } from "@/lib/hotkeys";
 import { useEscape } from "@/lib/use-escape";
 import { useMenuOpen } from "@/lib/use-menu-open";
 import type { ProjectSummary, SortKey } from "@/lib/board-view";
+import type { ViewMode } from "@/lib/board-prefs";
 import { SORTS } from "./project-bar-shared";
 import Icon from "./Icon";
 import ProjectChips from "./ProjectChips";
 import ProjectMenu from "./ProjectMenu";
+import ViewToggle from "./ViewToggle";
 
 export type { ProjectSummary, SortKey };
 export { folderName, shortPath } from "@/lib/project-bar";
@@ -28,6 +30,8 @@ export default function ProjectBar({
   filter,
   sort,
   onSort,
+  view,
+  onView,
   home,
   onMenuOpenChange,
   variant = "desktop",
@@ -39,6 +43,9 @@ export default function ProjectBar({
   filter: ReactNode; // the filter box, drawn before the sort menu
   sort: SortKey;
   onSort: (sort: SortKey) => void;
+  // The board's layout: cards in columns or in one list.
+  view: ViewMode;
+  onView: (view: ViewMode) => void;
   home: string; // user's home dir, for shortening paths (~/dev/x) and default parent for new projects
   onMenuOpenChange?: (open: boolean) => void; // called when the dropdown opens/closes (the board hides a native browser overlay while it's open)
   // "web" is the same bar on weft.zip, where the project menu can only pick a project (the Mac's
@@ -95,6 +102,8 @@ export default function ProjectBar({
       <div className="min-w-2 flex-1" />
 
       {filter}
+
+      <ViewToggle mode={view} onChange={onView} />
 
       <select
         value={sort}

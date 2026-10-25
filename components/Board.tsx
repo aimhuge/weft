@@ -5,8 +5,6 @@ import { copilotLaneOpen, copilotLanePeek, showBacklog, subscribeBoardPrefs } fr
 import { laneStateFromPrefs, type LaneState } from "@/lib/copilot-lane";
 import { api, type BrowserState } from "@/lib/client";
 import { worktreeParent } from "@/lib/format";
-import { busyHere } from "@/lib/overlap";
-import { planResets } from "@/lib/schedule";
 import { COLUMNS, type Card, type Column, type Project } from "@/lib/types";
 import { useShortcutHint } from "@/lib/hotkeys";
 import { preloadChimes } from "@/lib/chimes";
@@ -31,6 +29,7 @@ import { useToast } from "@/lib/use-toast";
 import { useCopilotCard } from "@/lib/use-copilot-card";
 import { useBoardCardActions } from "@/lib/use-board-card-actions";
 import { useBoardView } from "@/lib/use-board-view";
+import { useViewMode } from "@/lib/use-view-mode";
 import { useBoardArchive } from "@/lib/use-board-archive";
 import { useBoardActions } from "@/lib/use-board-actions";
 import { useBoardToggles } from "@/lib/use-board-toggles";
@@ -46,12 +45,13 @@ import { useBoardMenus } from "./use-board-menus";
 import { useSwitchAll } from "./switch-all-button";
 import { folderName } from "./ProjectBar";
 import { showPage } from "@/lib/board-helpers";
-import { cardHandlers } from "@/lib/card-handlers";
 import { useThreadHandlers } from "@/lib/thread-handlers";
+import { useBoardCards } from "@/lib/use-board-cards";
 import BoardHeader from "./BoardHeader";
 import { CardSkeleton } from "./BoardColumn";
-import BoardColumns from "./BoardColumns";
-import OpenCard, { CardFrame } from "./OpenCard";
+import BoardSurface from "./BoardSurface";
+import BoardOverlays from "./BoardOverlays";
+import BoardRail from "./BoardRail";
 import BoardBottom from "./BoardBottom";
 import BoardBrowserPane from "./BoardBrowserPane";
 import BoardProjectBar from "./BoardProjectBar";
@@ -64,12 +64,7 @@ const CopilotLane = guarded(() => import("./CopilotLane"), { what: "copilot", cl
 const EmptyBoardStart = guarded(() => import("./EmptyBoardStart"), { what: "start panel", inline: true });
 const RestartChip = guarded(() => import("./RestartChip"), { inline: true, what: "restart chip" });
 const CardView = guarded(() => import("./CardView"), { what: "card", placeholder: <CardSkeleton /> });
-const SideRail = guarded(() => import("./LibraryRail"), { what: "rail", className: "m-3 w-[220px] self-start" });
 const HeaderBadges = guarded(() => import("./HeaderBadges"), { inline: true, what: "header badges" });
-const NewThreadWindow = guarded(() => import("./NewThreadWindow"), { what: "New thread window", inline: true });
-// Every dialog, sheet and overlay over the board's columns — Settings, Tags…, Share…, the palette,
-// file drop, the toast — each loading through its own guarded() import (components/BoardDialogs.tsx).
-const BoardDialogs = guarded(() => import("./BoardDialogs"), { what: "dialogs", inline: true });
 
 const CLOSED_BROWSER: BrowserState = {
   visible: false,
@@ -162,6 +157,8 @@ export default function Board() {
   const { ownMoves, move, drop, reorder, tagCard } = useBoardCardActions({ cards, setCards, setDragOver, notify });
   // Project filter and sort, persisted to a cookie; the card filter clears when the project changes.
   const { project, sort, query, setQuery, chooseProject, chooseSort, loadFromPrefs, reviewFilter, toggleReviewFilter } = useBoardView({ select, setWebBrowserOpen });
+  // The board's layout: cards in columns or in one list (lib/use-view-mode.ts).
+  const { mode: viewMode, choose: chooseView } = useViewMode();
   // Archive, unarchive, focus the next card, and the last batch (for Z / Undo).
   const { archiveTarget, archiveCards, toggleArchive, unarchive, lastArchived } = useBoardArchive({
     cards,
@@ -287,6 +284,17 @@ export default function Board() {
   });
   const onTag = (tag: string) => setRailFilter((f) => toggleTag(f, tag));
   const cardCtx = { openCard, resume, onCardMenu, toggleStar, toggleArchive, onTag, notify };
+  // How the board draws a card, as a card and as a row of the list view (lib/use-board-cards.ts).
+  const { renderCard, renderRow } = useBoardCards({
+    cards,
+    now,
+    selectedId,
+    lastOpenId,
+    unseen,
+    restartRequestedBy: restartView.restart?.requestedBy?.id ?? null,
+    ctx: cardCtx,
+    CardView,
+  });
   const threadProps = useThreadHandlers(selected, { select, notify });
 
   // "Switch all to <other CLI>" on the Running and Needs you columns. Idle cards flip right
@@ -330,21 +338,20 @@ export default function Board() {
         onSearchAll={openPalette}
         sort={sort}
         onSort={chooseSort}
+        view={viewMode}
+        onView={chooseView}
         home={home}
         onMenuOpenChange={setMenuOpen}
       />
 
       <div className="flex min-h-0 flex-1">
-        <SideRail
+        <BoardRail
           open={libraryOpen}
           onOpen={setLibraryOpen}
           ctx={{ project, folders: railFolders, cards, onOpenUrl: showPage, onOpenCard: openCard, onStartCard: improveQuality, notify }}
           filter={railFilter}
           onFilter={setRailFilter}
-          onStarCard={(id) => {
-            const card = cards.find((c) => c.id === id);
-            if (card && !card.starred) toggleStar(card);
-          }}
+          onStarCard={toggleStar}
           onTagCard={tagCard}
           catalog={tagCatalog}
           onClosePane={toggleBrowser}
@@ -364,28 +371,19 @@ export default function Board() {
             items={thread}
           />
         )}
-        <BoardColumns
+        <BoardSurface
+          mode={viewMode}
           columns={visibleColumns}
           byColumn={byColumn}
           allCards={cards}
           expanded={expandedColumns}
           onExpand={(id) => setExpanded({ view, columns: [...expandedColumns, id] })}
-          renderCard={(card) => (
-            <CardView
-              guardName={card.title}
-              card={card}
-              now={now}
-              selected={card.id === selectedId}
-              lastOpen={card.id === lastOpenId}
-              unseen={unseen.has(card.id)}
-              alsoHere={busyHere(cards, card)}
-              {...cardHandlers(card, cardCtx)}
-            />
-          )}
+          renderCard={renderCard}
+          renderRow={renderRow}
           loaded={loaded}
           filtering={filtering}
           laneState={laneState}
-          drag={{ over: dragOver, onOver: setDragOver, onLeave: (id) => setDragOver((c) => (c === id ? null : c)), onDrop: drop, onReorder: reorder }}
+          drag={{ over: dragOver, setOver: setDragOver, onDrop: drop, onReorder: reorder }}
           onColumnMenu={(id, e) => void onColumnMenu(id, e)}
           archive={{
             count: archivedCount,
@@ -413,26 +411,6 @@ export default function Board() {
           onOpen={() => setCopilotState("open")}
           toggleTip={hint("copilot", "Copilot")}
         />
-
-        <CardFrame framed={framed} bottom={terminalOpen ? terminalHeight + 16 : undefined} onBackdrop={() => (showNew ? setShowNew(false) : select(null))}>
-          {showNew ? <NewThreadWindow form={{ cards, home, defaultCwd: newCwd ?? project ?? undefined, recentCwd: [...cards].sort((a, b) => b.updatedAt - a.updatedAt).find((c) => c.cwd !== home)?.cwd, restart: restartView.restart, onCreate: create }} browser={{ desktop, state: browser, obscured: overlay, width: browserWidth, onWidth: setBrowserWidth }} onClose={() => setShowNew(false)} /> : selected && threadProps ? (
-            <OpenCard
-              card={selected}
-              handlers={threadProps}
-              items={thread}
-              streaming={streaming}
-              resets={planResets(cards)}
-              editTitle={renameId === selected.id}
-              workspace={workspace}
-              browser={{ desktop, state: browser, width: browserWidth, onWidth: setBrowserWidth, obscured: overlay }}
-              onStar={() => toggleStar(selected)}
-              onTags={() => editTags(selected)}
-              onShare={() => shareCard(selected)}
-              onArchive={() => toggleArchive(selected)}
-              onOpenSettings={() => setShowSettings(true)}
-            />
-          ) : null}
-        </CardFrame>
       </div>
 
       <BoardBottom
@@ -441,35 +419,31 @@ export default function Board() {
         terminal={{ open: terminalOpen, cwd: terminalCwd, height: terminalHeight, onHeight: setTerminalHeight, onClose: toggleTerminal }}
       />
 
-      <BoardDialogs
-        settings={showSettings}
-        onCloseSettings={() => setShowSettings(false)}
-        help={showHelp}
-        onCloseHelp={() => setShowHelp(false)}
-        tagging={tagging}
-        tagOptions={tagCatalog.tags.map((t) => ({ tag: t.name, count: t.count }))}
-        onTagsChange={saveTags}
-        onCloseTags={closeTags}
-        sharing={sharing}
-        onCloseShare={closeShare}
-        sharingBoard={sharingBoard}
-        onCloseShareBoard={() => setSharingBoard(false)}
-        palette={showPalette}
-        paletteQuery={paletteQuery}
-        paletteItems={paletteItems}
-        findPrompts={findPrompts}
-        paletteProject={project ? { path: project, name: folderName(project) } : null}
-        onClosePalette={() => setShowPalette(false)}
-        login={login}
-        onCloseLogin={() => setLogin(null)}
-        switchAllDialog={switchAllDialog}
-        deleteDialog={deleteDialog}
-        cards={cards}
-        newOpen={showNew}
-        onDropCard={openCard}
-        onDropNew={() => openNew()}
-        toast={toast}
-        onDismissToast={() => setToast(null)}
+      <BoardOverlays
+        frame={{
+          showNew, selected, cards, home, newCwd, project, restart: restartView.restart, onCreate: create,
+          onCloseNew: () => setShowNew(false), items: thread, handlers: threadProps, streaming, renameId,
+          workspace, desktop, browser, obscured: overlay, browserWidth, onBrowserWidth: setBrowserWidth,
+          onStar: () => selected && toggleStar(selected), onTags: () => selected && editTags(selected),
+          onShare: () => selected && shareCard(selected),
+          onArchive: () => selected && toggleArchive(selected), onOpenSettings: () => setShowSettings(true),
+          bottom: terminalOpen ? terminalHeight + 16 : undefined,
+          onBackdrop: () => (showNew ? setShowNew(false) : select(null)),
+        }}
+        dialogs={{
+          settings: showSettings, onCloseSettings: () => setShowSettings(false),
+          help: showHelp, onCloseHelp: () => setShowHelp(false),
+          tagging, tagOptions: tagCatalog.tags.map((t) => ({ tag: t.name, count: t.count })),
+          onTagsChange: saveTags, onCloseTags: closeTags,
+          sharing, onCloseShare: closeShare,
+          sharingBoard, onCloseShareBoard: () => setSharingBoard(false),
+          palette: showPalette, paletteQuery, paletteItems, findPrompts,
+          paletteProject: project ? { path: project, name: folderName(project) } : null,
+          onClosePalette: () => setShowPalette(false),
+          login, onCloseLogin: () => setLogin(null),
+          switchAllDialog, deleteDialog, newOpen: showNew, onDropCard: openCard, onDropNew: () => openNew(),
+          toast, onDismissToast: () => setToast(null),
+        }}
       />
     </div>
     </TagColors.Provider>
