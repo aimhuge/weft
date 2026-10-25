@@ -10,10 +10,12 @@
 // The client hook lives in `lib/use-admin-gate.ts`. Keep it separate so this
 // module's Node-only account dependencies cannot enter the browser bundle.
 //
-// The allowlist is `SUPER_ADMIN_EMAILS` (comma-separated), read by
-// `@aimhuge/teams` once at module load. We don't keep a second copy here.
-import { requireSuperAdmin as adminRequireSuperAdmin, isAdminCaller } from "@aimhuge/admin";
+// Two ways in: the `SUPER_ADMIN_EMAILS` env (comma-separated, read by `@aimhuge/teams` once at module
+// load; the bootstrap) or a row in `public.super_admins` for the signed-in account (add one in the database,
+// no redeploy). We don't keep a second copy of the env list here.
+import { isAdminCaller } from "@aimhuge/admin";
 import type { SuperAdminSession } from "@aimhuge/admin/client";
+import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { accountClient, accountView, toAccountUser } from "@/lib/account";
 import type { AccountUser } from "@/lib/types";
@@ -25,32 +27,38 @@ export interface AdminCaller {
   user: AccountUser;
 }
 
-// Server gate. Throws notFound() when the caller isn't on SUPER_ADMIN_EMAILS.
+// True when the account's own row is in `super_admins` (RLS lets a signed-in user read only that row).
+// Any failure (no network, table missing, signed out) reads as "not a super admin".
+async function inSuperAdminTable(user: AccountUser): Promise<boolean> {
+  try {
+    const { data } = await accountClient().from("super_admins").select("user_id").eq("user_id", user.id).maybeSingle();
+    return data !== null;
+  } catch {
+    return false;
+  }
+}
+
+async function isSuperAdminUser(user: AccountUser | null): Promise<boolean> {
+  if (!user?.email) return false;
+  return isAdminCaller({ email: user.email }) || (await inSuperAdminTable(user));
+}
+
+// Server gate. Throws notFound() when the caller isn't a super admin (env allowlist or `super_admins` row).
 // Use from a server component or API route that wants admin-only behaviour.
 export async function requireSuperAdminWeft(): Promise<AdminCaller> {
   // The gate reads the signed-in session, which is per-request: without this
   // Next tries to prerender the admin pages and trips on the session's Date.now().
   await connection();
-  const view = await accountView();
-  const user = view.user;
-  // The early branch handles the unsigned case without a non-null assertion.
-  if (!user?.email) {
-    adminRequireSuperAdmin({ email: null });
-  }
-  // requireSuperAdmin short-circuits with notFound() if the email isn't on
-  // the allowlist, so the code below only runs for a signed-in super-admin.
-  const email = adminRequireSuperAdmin({ email: user?.email ?? null });
-  // The cast keeps the return shape narrow; the previous branch already
-  // proved the account is signed in.
-  return { email, user: user as AccountUser };
+  const { user } = await accountView();
+  if (!user?.email || !(await isSuperAdminUser(user))) notFound();
+  return { email: user.email, user };
 }
 
 // Non-throwing variant for layouts that want to render differently, not block.
 export async function isAdminWeft(): Promise<boolean> {
   await connection();
-  const view = await accountView();
-  if (!view.user?.email) return false;
-  return isAdminCaller({ email: view.user.email });
+  const { user } = await accountView();
+  return isSuperAdminUser(user);
 }
 
 // Server-side: returns a service-role Supabase client for the admin Users

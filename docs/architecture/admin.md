@@ -8,11 +8,21 @@ gates.
 
 ## Gate
 
-`SUPER_ADMIN_EMAILS` is a comma-separated env on the deployed Weft, read by
-`@aimhuge/teams`'s `isSuperAdmin`. The admin gate (`lib/admin.ts`) wraps
-`@aimhuge/admin`'s `requireSuperAdmin` and returns the Weft account for the
-page to show in the banner. Non-admins see a 404, not a 403 — a 403 would
-confirm the route's existence, a 404 is silent.
+A signed-in Weft account is a super admin when either holds:
+
+- its email is on `SUPER_ADMIN_EMAILS`, a comma-separated env on the deployed
+  Weft read by `@aimhuge/teams`'s `isSuperAdmin` (the bootstrap), or
+- its `auth.users` id has a row in `public.super_admins`
+  (`supabase/migrations/20261025171511_super_admins.sql`: `user_id`, `email`,
+  `created_at`). RLS lets a signed-in user read only their own row, with no
+  write policies, so the gate asks through the account's own client and nobody
+  can add themselves. To add one, insert a row with the service role or in the
+  Supabase dashboard; no redeploy.
+
+The admin gate (`lib/admin.ts`) checks the env first, then the table (any
+lookup error reads as "no"), and returns the Weft account for the page to show
+in the banner. Non-admins see a 404, not a 403 — a 403 would confirm the
+route's existence, a 404 is silent.
 
 The check happens in three places:
 
