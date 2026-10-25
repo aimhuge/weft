@@ -133,4 +133,34 @@ describe("ReviewPanel unsent feedback", () => {
     expect(message).toContain("the login is broken");
     expect(message).toContain("the logo is wrong");
   });
+
+  it("sends feedback written on an earlier step from a step whose box is empty", async () => {
+    const { onSend } = setup();
+    await userEvent.type(screen.getByRole("textbox", { name: "Message" }), "the login is broken");
+    await userEvent.click(screen.getByRole("button", { name: "Next step" }));
+    const send = screen.getByRole("button", { name: "Send feedback" });
+    expect(send).toBeEnabled();
+    await userEvent.click(send);
+    expect(onSend).toHaveBeenCalledWith(expect.stringContaining("step 1 of 2, “First”:\nthe login is broken"));
+    expect(screen.queryByText(/unsent feedback/)).toBeNull();
+    expect(send).toBeDisabled();
+  });
+
+  it("keeps the feedback and says why when sending it fails", async () => {
+    const onSend = vi.fn<(text: string) => Promise<void>>(() => Promise.reject(new Error("offline")));
+    render(<ReviewPanel card={card} items={[]} onSend={onSend} />);
+    await userEvent.type(screen.getByRole("textbox", { name: "Message" }), "the login is broken{Enter}");
+    expect(await screen.findByText("offline")).toBeTruthy();
+    expect(localStorage.getItem("weft.review.c1.0")).toBe("the login is broken");
+    expect(screen.getByRole("button", { name: "Send feedback" })).toBeEnabled();
+  });
+
+  it("stays on the step when its feedback fails to go out with the approval", async () => {
+    const onSend = vi.fn<(text: string) => Promise<void>>(() => Promise.reject(new Error("offline")));
+    render(<ReviewPanel card={card} items={[]} onSend={onSend} />);
+    await userEvent.type(screen.getByRole("textbox", { name: "Message" }), "the login is broken");
+    await userEvent.click(screen.getByRole("button", { name: "Looks good, next" }));
+    expect(await screen.findByText("offline")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: /First/ })).toBeTruthy();
+  });
 });
