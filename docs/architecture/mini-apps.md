@@ -228,8 +228,8 @@ one vault environment it asks for, and its reads by name:
   `app-fetch-run.cjs`. A refusal throws an Error tagged `err.kind` (`bad-request`, `manifest`, `missing`,
   `bad-args`, `upstream`, `too-large`, `timeout`, `network`; an upstream answer adds `err.status`): main hands
   the kind to the page, and `lib/app-read.ts` `readStatus` maps it to the route's HTTP status (400, 413, 504,
-  502, or the upstream's own). The one place the two still differ is on purpose and named: the hosted read passes
-  `defaults: false`, so it sends only the page's args, while main also sends the manifest's declared defaults.
+  502, or the upstream's own). Hosted and local send the same thing: the manifest's declared args as defaults, with
+  the page's overriding them. A hosted manifest's `supabase` is the function's name as a string, `args` beside it.
 - **Reads are functions, reviewed in a migration.** The project's `supabase/migrations/` defines what an app
   may read: `security definer`, `set search_path = ''`, executable by `service_role` only, so the anon and
   signed-in keys can't call them. Weft's own are `growth_*` (`supabase/migrations/20261018054110_growth_reads.sql`
