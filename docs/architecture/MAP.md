@@ -292,7 +292,7 @@ When a new doc lands in this folder, add it here on the same change.
   library (docs/architecture/tags.md).
 - `lib/project-open.ts` (the project-open hook `touchProject` fires for a folder new to the list) + `lib/project-seed.ts` + `lib/project-seed-find.ts` +
   `lib/project-seed-run.ts` + `app/api/projects/seed`: a new project's starter Backlog, up to 6 parked cards once per project (`~/.weft/project-seeds.json`),
-  Re-seed Backlog in `components/ProjectMenu.tsx`, and the copilot's `SEED_SOURCE` chips (docs/architecture/project-seed.md).
+  Re-seed Backlog (`components/ReseedButton.tsx` in `components/ProjectMenu.tsx`), and the copilot's `SEED_SOURCE` chips (docs/architecture/project-seed.md).
 - `lib/github-issues.ts` + `app/api/github/issues`: a project's open GitHub issues become Backlog cards through the `gh` CLI, labels as tags,
   one direction; opt-in folders in settings `issueFolders`, polled from `prewarm()` every 5 min (docs/architecture/github-issues.md).
   `lib/github-status.ts` + `app/api/github` + `lib/github-view.ts` + `lib/use-github.ts` + `components/GithubDrawer.tsx`: the rail's GitHub drawer

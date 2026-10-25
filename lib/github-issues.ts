@@ -190,7 +190,8 @@ function cardPatch(card: Card & { issue: CardIssue }, meta: CardIssue, issue: Gh
   return patch;
 }
 
-function apply(folder: string, repo: string, issues: GhIssue[]): SyncCounts {
+// Makes or updates the cards for these issues (also how lib/project-seed-run.ts parks a few on a new project).
+export function applyIssues(folder: string, repo: string, issues: GhIssue[]): SyncCounts {
   const counts: SyncCounts = { added: 0, updated: 0, archived: 0 };
   const key = repo.toLowerCase();
   const byNumber = new Map<number, Card & { issue: CardIssue }>();
@@ -231,7 +232,7 @@ async function runSync(folder: string): Promise<SyncCounts> {
   try {
     if (!fs.existsSync(folder)) throw new Error(`${folder} isn't there anymore.`);
     repo = await repoOf(folder);
-    const counts = apply(folder, repo, await fetchIssues(repo, folder));
+    const counts = applyIssues(folder, repo, await fetchIssues(repo, folder));
     g.status.set(folder, { at: Date.now(), repo, counts });
     return counts;
   } catch (err) {

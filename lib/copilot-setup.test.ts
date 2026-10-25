@@ -22,6 +22,7 @@ vi.mock("node:child_process", () => ({ execFile: h.execFile }));
 vi.mock("./store", () => ({ get DATA_DIR() { return h.dir; } }));
 vi.mock("./account", () => ({ accountView: h.accountView }));
 vi.mock("./browser-tools", () => ({ shell: h.shell }));
+vi.mock("./project-seed-run", () => ({ seedChipLines: vi.fn(async (p: readonly string[]) => p.map((x) => `- ${x}: starter`)) }));
 vi.mock("./copilot-sources", async (orig) => ({ ...(await orig<typeof import("./copilot-sources")>()), statusOf: h.statusOf }));
 
 const signedOut = { configured: true, user: null };
@@ -137,6 +138,20 @@ describe("vercel", () => {
   });
 });
 
+describe("vercel drift", () => {
+  it("lists a drifted project's names from main's cache", async () => {
+    const rows = [{ name: "KEY", environment: "preview", inVault: false, onVercel: true, pullable: true }];
+    h.shell.mockImplementation((route: string) => Promise.resolve(route === "/vercel/env-drift" ? [{ folder: "/dev/web", label: "o/web", project: "web", rows }] : {}));
+    const g = gaps(await (await loadSetup()).setupGaps(["/dev/web"])).find((x) => x.what.startsWith("vault ⇄ Vercel"));
+    expect(g).toMatchObject({ project: "web", what: "vault ⇄ Vercel env sync (1 Vercel env vars not in the 🔐 vault (KEY))" });
+    expect(h.shell).toHaveBeenCalledWith("/vercel/env-drift", { folders: ["/dev/web"] });
+  });
+  it("is left out when main can't answer", async () => {
+    h.shell.mockRejectedValue(new Error("no pane"));
+    expect(gaps(await (await loadSetup()).setupGaps(["/dev/web"])).find((x) => x.what.startsWith("vault ⇄ Vercel"))).toBeUndefined();
+  });
+});
+
 describe("supabase", () => {
   it("token gap when signed out and web project uses supabase-js", async () => {
     const r = webProject({ "@supabase/supabase-js": "2.0.0" });
@@ -241,6 +256,12 @@ describe("gapLine, setup, SETUP_SOURCE", () => {
   it("setup returns [] when nothing to do", async () => {
     expect(await (await loadSetup()).setup([], [])).toEqual([]);
   });
+  it("SEED_SOURCE offers the starter cards as chip lines", async () => {
+    const { SEED_SOURCE } = await loadSetup();
+    expect(SEED_SOURCE.title).toBe("Starter work Weft found");
+    expect(await SEED_SOURCE.source(["/r"], [])).toEqual(["- /r: starter"]);
+  });
+
   it("SETUP_SOURCE shape", async () => {
     const { SETUP_SOURCE, setup } = await loadSetup();
     expect(SETUP_SOURCE.title).toBe("Not set up yet");

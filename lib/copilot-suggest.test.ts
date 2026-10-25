@@ -5,7 +5,7 @@ import type { Card } from "./types";
 
 const sources = vi.hoisted(() => ({ gatherSections: vi.fn(() => Promise.resolve([] as { title: string; lines: string[] }[])), SOURCES: [{ title: "S" }], activeProjects: vi.fn(() => ["/x/weft", "/x/groove"]), safeRoot: (cwd: string) => cwd }));
 vi.mock("./copilot-sources", () => sources);
-vi.mock("./copilot-setup", () => ({ SETUP_SOURCE: { title: "Not set up yet" } }));
+vi.mock("./copilot-setup", () => ({ SETUP_SOURCE: { title: "Not set up yet" }, SEED_SOURCE: { title: "Starter work Weft found" } }));
 vi.mock("./store", () => ({ listCards: vi.fn(() => []) }));
 
 const NOW = Date.UTC(2026, 9, 16, 14, 54);
@@ -176,7 +176,7 @@ describe("boardContext and chipCardId", () => {
     sources.gatherSections.mockResolvedValueOnce([{ title: "Not set up yet", lines: ["- weft: analytics not set up"] }]);
     const text = await boardContext([card({})]);
     expect(text).toContain("## Not set up yet\n- weft: analytics not set up");
-    expect(sources.gatherSections).toHaveBeenLastCalledWith([card({})], [{ title: "S" }, { title: "Not set up yet" }]);
+    expect(sources.gatherSections).toHaveBeenLastCalledWith([card({})], [{ title: "S" }, { title: "Not set up yet" }, { title: "Starter work Weft found" }]);
     expect(await boardContext([card({})], { gather: () => Promise.resolve([]), now: () => NOW })).toMatch(/^Now: Friday/);
   });
 

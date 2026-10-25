@@ -12,6 +12,9 @@ import { startBlastcpAuto } from "./blastcp-auto";
 import { consumeServerExit } from "./crash-blame";
 import { startLeagueSync } from "./league-sync";
 import { startIssueSync } from "./github-issues";
+import { startProjectSeed } from "./project-seed-run";
+import { startVercelDrift } from "./vercel-drift-open";
+import { startSlack } from "./slack";
 import { startPukuTrial } from "./puku-trial";
 import { endSession, ensureSpare, retryPukuWithTrial, sendUserMessage, warmUp } from "./runner";
 import { resumeInterrupted } from "./resume";
@@ -122,6 +125,10 @@ export function prewarm() {
   startScheduler();
   // Sync the GitHub issues of the folders that opted in, every 5 minutes (lib/github-issues.ts).
   startIssueSync();
+  // Park a few starter cards in a project's Backlog the first time it lands on the board (lib/project-seed-run.ts).
+  startProjectSeed();
+  // Line a newly opened project's 🔐 vault up against its Vercel env, in the background (lib/vercel-drift-open.ts).
+  startVercelDrift();
   // Hear webhook-relayed issue events within seconds, while you're signed in to Weft (lib/github-hooks.ts).
   startHookListener();
   // Pull new Vercel env variables into the 🔐 vault as their webhook events arrive (lib/vercel-hooks.ts).
@@ -138,6 +145,8 @@ export function prewarm() {
   startPukuTrial(() => void retryPukuWithTrial());
   // Keep the copilot's board-made chips fresh as cards move (lib/copilot-suggest.ts).
   startSuggestRefresh();
+  // Post commits, pushes, deploys and card status to the Slack drawer's channel (lib/slack.ts).
+  startSlack();
   // Build every app folder on save (lib/app-build-watch.ts). Loaded lazily and never awaited: esbuild must stay off every
   // route's import path, and a watcher that fails to start logs a line instead of taking the server down.
   void import("./app-build-watch")

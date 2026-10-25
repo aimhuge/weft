@@ -1,6 +1,6 @@
 import { subscribe } from "./bus";
 import { cardLines, clock, overlaps, recentDone, spend } from "./copilot-context";
-import { SETUP_SOURCE } from "./copilot-setup";
+import { SEED_SOURCE, SETUP_SOURCE } from "./copilot-setup";
 import { basename } from "node:path";
 import { activeProjects, gatherSections, safeRoot, SOURCES, type Section } from "./copilot-sources";
 import { STARTERS } from "./copilot-starters";
@@ -125,8 +125,8 @@ function parseChip(raw: unknown, { ids, cardProject, projects }: Known): Chip | 
 
 type Deps = { ask?: (prompt: string) => Promise<string>; gather?: (cards: readonly Card[]) => Promise<Section[]>; now?: () => number };
 
-// Every source, the setup checks included.
-const gatherAll = (cards: readonly Card[]) => gatherSections(cards, [...SOURCES, SETUP_SOURCE]);
+// Every source, the setup checks and starter cards included.
+const gatherAll = (cards: readonly Card[]) => gatherSections(cards, [...SOURCES, SETUP_SOURCE, SEED_SOURCE]);
 
 // Exactly what Haiku would read for this board now (GET /api/copilot/suggestions?context=1).
 export async function boardContext(cards: readonly Card[], deps: Deps = {}): Promise<string> {

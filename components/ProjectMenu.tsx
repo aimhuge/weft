@@ -7,6 +7,7 @@ import { openChangelog } from "@/lib/changelog-open";
 import { filterProjects, folderName, plural, shortPath } from "@/lib/project-bar";
 import type { ProjectSummary } from "@/lib/board-view";
 import Icon from "./Icon";
+import ReseedButton from "./ReseedButton";
 import SearchField from "./SearchField";
 
 const FIELD =
@@ -189,6 +190,7 @@ export default function ProjectMenu({
             <Icon name="list" size={14} className="text-muted" /> Changelog of {folderName(selected)}
           </button>
         )}
+        {selected && <ReseedButton path={selected} className={MENU_ACTION} />}
         <button onClick={openFolder} disabled={busy} className={MENU_ACTION}>
           <Icon name="folder" size={14} className="text-muted" /> Open folder…
         </button>

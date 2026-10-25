@@ -6,6 +6,7 @@ import { backendFor, EFFORTS } from "./new-thread";
 import { GOOSE_PROVIDERS } from "./goose-provider";
 import { MODES, type Automation, type Backend, type Effort, type PermissionMode, type Project, type SettingsView } from "./types";
 import { globalSingleton } from "./global-singleton";
+import { projectOpened } from "./project-open";
 import { isSubagentModel, type SubagentModel } from "./subagents";
 
 // Appended to every board thread's system prompt (not the copilot's). The user can edit it in
@@ -395,12 +396,15 @@ export function listProjects(): Project[] {
 // Marks a project folder as just used, adding it to the recent list if it's new.
 export function touchProject(folder: string) {
   const s = settings();
+  const fresh = !s.projects.some((p) => p.path === folder);
   s.projects = [{ path: folder, lastUsedAt: Date.now() }, ...s.projects.filter((p) => p.path !== folder)].slice(
     0,
     MAX_PROJECTS,
   );
   save();
   publish({ type: "projects", projects: listProjects() });
+  // A folder new to the list: whatever looks at a project once it lands (lib/project-open.ts), on a later tick.
+  if (fresh) projectOpened(folder);
 }
 
 export function removeProject(folder: string) {

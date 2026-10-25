@@ -2,12 +2,16 @@ import { execFile } from "node:child_process";
 import fs from "node:fs";
 import { basename, join } from "node:path";
 import { accountView } from "./account";
+import { seedChipLines } from "./project-seed-run";
 import { analyticsTools, dependencies, GTAG_ONLY, statusOf, within, type Source } from "./copilot-sources";
+import { shell } from "./browser-tools";
 import { DATA_DIR } from "./store";
+import { driftGaps, type VercelDrift } from "./vercel-drift";
 
 // What isn't set up yet, per project: the Weft account, the GitHub CLI's sign-in, Vercel, Supabase, Cloudflare and analytics.
 // The copilot's chips offer one "link it" chip from these (lib/copilot-suggest.ts), and its setup_status tool reads them to
 // walk you through onboarding (lib/board-tools.ts). Each check says only what is missing, why it helps, and where to link it.
+// A linked project whose 🔐 vault and Vercel env have drifted apart is one too (lib/vercel-drift.ts, names only).
 
 export type Gap = { project?: string; what: string; why: string; where: string };
 
@@ -26,11 +30,15 @@ type Ctx = { vercel: Status | null; supabase: Status | null; cloudflareLinks: Re
 
 // The gaps across these projects, account-wide ones first. A service that can't be asked is left out, not reported missing.
 export async function setupGaps(projects: readonly string[], deps = { ghSignedIn, accountView }): Promise<Gap[]> {
-  const [account, gh, vercel, supabase] = await Promise.all([
+  const [account, gh, vercel, supabase, drifts] = await Promise.all([
     deps.accountView().catch(() => null),
     deps.ghSignedIn(),
     (statusOf("/vercel/status", projects) as Promise<Status>).catch(() => null),
     (statusOf("/supabase/status", projects) as Promise<Status>).catch(() => null),
+    // Main's cached lists only: never waits on Vercel (electron/vercel-env-cache.cjs).
+    Promise.resolve()
+      .then(() => shell("/vercel/env-drift", { folders: projects }) as Promise<unknown> as Promise<VercelDrift[] | null>)
+      .catch(() => null),
   ]);
   const gaps: Gap[] = [];
   if (account?.configured && !account.user)
@@ -40,6 +48,7 @@ export async function setupGaps(projects: readonly string[], deps = { ghSignedIn
     gaps.push({ what: "Vercel token", why: "deploy status, env pushes from the vault", where: "the ▲ Vercel drawer on the left rail" });
   const ctx: Ctx = { vercel, supabase, cloudflareLinks: readCloudflareLinks(), cloudflareToken: fs.existsSync(join(DATA_DIR, "cloudflare-token.json")) };
   for (const root of projects) gaps.push(...projectGaps(root, ctx));
+  for (const { folder, ...g } of driftGaps(Array.isArray(drifts) ? drifts : [])) gaps.push({ project: basename(folder), ...g });
   return gaps;
 }
 
@@ -97,6 +106,9 @@ export const gapLine = (g: Gap) => `- ${g.project ? `${g.project}: ` : ""}${g.wh
 export const setup: Source = async (projects) => (await setupGaps(projects)).map(gapLine);
 
 export const SETUP_SOURCE = { title: "Not set up yet", source: setup, ms: 6_000 };
+
+// The starter cards a project's Backlog would get now (lib/project-seed-run.ts), for chips that offer them.
+export const SEED_SOURCE = { title: "Starter work Weft found", source: ((projects) => seedChipLines(projects)) as Source, ms: 6_000 };
 
 // The copilot's setup_status tool: every gap, or that everything Weft can link is linked.
 export async function setupReport(projects: readonly string[]): Promise<string> {
