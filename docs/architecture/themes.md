@@ -62,8 +62,38 @@ look scenes up by id (`FIRST_SCENES`, `lib/settings-nav.ts`).
 
 `electron/theme-source.test.ts` fails when `BASES` drifts from `SCENES`; `lib/theme.test.ts` checks each scene has a unique id and a jpg.
 
+## Prompted themes
+
+Settings → Appearance ends with a **Your own** tile: describe a theme in words and a thread makes it.
+
+```
+"rainy Tokyo alley, neon pink" ─► POST /api/themes ─► startThemeCard(): mkdir ~/.weft/themes/<id>, start a card
+                                                        (cwd ~/.weft/themes, tag "theme", brief = themeCardPrompt)
+card ─► picture.(jpg|png|webp|svg) + theme.json ─► GET /api/themes lists it ─► picker polls every 4s, picks it on arrival
+```
+
+- `lib/custom-theme.ts` (pure, shared): `THEME_VARS` (the twelve palette variables a scene sets), `parseCustomTheme()` keeps
+  only safe values (`safeCss`: colors and gradients, no `url(`, nothing that ends a declaration) and needs canvas, ink and
+  accent; `themeProperties()` turns a theme into CSS custom properties, `--scene` pointing at its picture route or `none`.
+- `lib/custom-themes.ts` (server): reads `~/.weft/themes/*/theme.json`, newest first, skipping folders still being painted;
+  `startThemeCard()` names the folder from the first words (`themeIdFrom`) and starts the card. The brief asks for an image
+  tool's render when the thread has one, a hand-drawn SVG otherwise, and a contrast check (ink on card 7:1, muted 4.5:1).
+- `app/api/themes/[id]/picture`: only a `THEME_ID` folder and a `PICTURES` file name resolve; an SVG goes out with a
+  `default-src 'none'` CSP so a thread-drawn file can't run script; `no-cache`, since a thread may repaint it.
+- Applying: the theme cookie holds `custom-<id>`; a second cookie, `weft-custom-theme`, holds its id, base and properties
+  (`encodeThemeCookie`), so `THEME_SCRIPT` paints it before React without asking the server. The properties go on
+  `<html style>` (beating both palettes) with `data-scene="custom"`, so `:root[data-scene] body` lays the picture and the
+  columns go clear like any scene. A `custom-` value whose cookie is missing or stale follows the system.
+- `lib/use-custom-themes.ts` loads the list when Appearance opens, polls while a theme is painting, and rewrites the
+  active theme's cookie so a repaint shows up. `electron/theme-source.cjs` `followThemeChoice()` watches both cookies and
+  sets `nativeTheme` from the custom theme's base.
+
 ## Patterns
 
 - Colors come only from CSS variables, so a scene needs no component changes; any new surface should use `--panel`,
   `--card` or `--sunken`, never a hard-coded color.
 - The picture is a CSS background on `body`, behind everything; columns are clear over it (no `backdrop-filter`).
+- Settings paints its own copy of the picture (`components/SettingsDialog.tsx`): `useSettingsBackdrop()` in
+  `lib/use-scene.ts` returns the scrim plus the scene's `/api/scenes/<id>` picture, or, when `data-scene="custom"`,
+  `var(--scene) var(--scene-pos)` from the properties `applyTheme` set on `<html>`. A MutationObserver on `data-scene`,
+  `data-theme` and `style` keeps it current while Appearance is open, so a custom theme never falls back to Twin Suns.
