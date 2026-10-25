@@ -94,11 +94,12 @@ describe("promptFolder", () => {
     expect(promptFolder("/Users/me/app", [card({})])).toBe("/Users/me/app");
     expect(promptFolder("/Users/me/app", [card({ column: "running" })])).toBeNull();
     expect(promptFolder("/Users/me/app", [card({ column: "backlog" })])).toBeNull();
+    expect(promptFolder("/Users/me/app", [card({ column: "needs_you" })])).toBeNull();
     expect(promptFolder("/Users/me/other", [card({})])).toBeNull();
   });
 
   it("with no project picked, takes the folder of the card that moved last", () => {
-    const cards = [card({ id: "a", cwd: "/Users/me/old", updatedAt: 1 }), card({ id: "b", cwd: "/Users/me/new", updatedAt: 5, column: "done" }), card({ id: "c", cwd: "/Users/me/mid", updatedAt: 3, column: "needs_you" })];
+    const cards = [card({ id: "a", cwd: "/Users/me/old", updatedAt: 1 }), card({ id: "b", cwd: "/Users/me/new", updatedAt: 5, column: "done" }), card({ id: "c", cwd: "/Users/me/mid", updatedAt: 3, column: "review" })];
     expect(promptFolder(null, cards)).toBe("/Users/me/new");
     expect(promptFolder(undefined, [])).toBeNull();
   });
@@ -114,7 +115,7 @@ describe("promptFolder", () => {
 
 describe("finishedCount", () => {
   it("counts threads that have finished a turn", () => {
-    expect(finishedCount([card({}), card({ column: "running" }), card({ column: "backlog" }), card({ column: "done" })])).toBe(2);
+    expect(finishedCount([card({}), card({ column: "running" }), card({ column: "backlog" }), card({ column: "needs_you" }), card({ column: "done" })])).toBe(2);
   });
 });
 

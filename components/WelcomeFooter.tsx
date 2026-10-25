@@ -7,10 +7,19 @@ import Icon from "./Icon";
 // the primary holding the ref ↵ presses. The bar above it says which step is on screen; a replay has no steps to count,
 // so it says what it saves and offers the ✕ any dialog has.
 
-export type WelcomeStep = "ready" | "projects" | "first";
+export type WelcomeStep = "ready" | "account" | "projects" | "first";
+
+// The steps in order: sign-in only when it's needed (components/WelcomeAccount.tsx), the projects only with history.
+export const welcomeSteps = (signIn: boolean, history: boolean): WelcomeStep[] => [
+  "ready",
+  ...(signIn ? (["account"] as const) : []),
+  ...(history ? (["projects"] as const) : []),
+  "first",
+];
 
 export function welcomeNote(step: WelcomeStep, cliReady: boolean | null, cwd: string): string {
   if (step === "ready") return cliReady === false ? "You can log in later from Settings → Accounts." : "Replay this any time from your avatar's menu or the command palette.";
+  if (step === "account") return "Sign in opens GitHub in your browser, then brings you back here.";
   if (step === "projects") return "Start empty leaves your old sessions off the board. Bring them in later from Settings.";
   return cwd ? "It lands in Running and the browser pane shows its work." : "Pick the folder in the next dialog.";
 }
@@ -49,6 +58,7 @@ export function WelcomeFooter({
   bringing,
   cwd,
   canStart,
+  canNext = true,
   onNext,
   onAnswer,
   onSkip,
@@ -62,6 +72,8 @@ export function WelcomeFooter({
   bringing: number;
   cwd: string;
   canStart: boolean;
+  // The sign-in screen's Next waits for you to be signed in.
+  canNext?: boolean;
   onNext: () => void;
   onAnswer: (fresh: boolean) => void;
   onSkip: () => void;
@@ -71,8 +83,8 @@ export function WelcomeFooter({
     <div className="flex items-center gap-3 border-t border-line px-5 py-3">
       <span className="flex-1 text-[11.5px] text-muted">{note}</span>
       <span className="flex shrink-0 gap-2">
-        {step === "ready" && (
-          <button type="button" ref={okRef} className={primary} disabled={busy} onClick={onNext}>
+        {(step === "ready" || step === "account") && (
+          <button type="button" ref={okRef} className={primary} disabled={busy || !canNext} onClick={onNext}>
             Next ↵
           </button>
         )}

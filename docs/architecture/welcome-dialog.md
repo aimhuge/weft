@@ -20,10 +20,17 @@ keeps `lib/welcome.ts` + `lib/welcome-preview.ts` + `lib/welcome-client.ts` + `a
 
 ## Steps and the chrome
 
-`step` is one of `WelcomeStep` (`"ready" | "projects" | "first"`, exported from
-`components/WelcomeFooter.tsx`). The list of steps is derived, not stored: with history it's
+`step` is one of `WelcomeStep` (`"ready" | "account" | "projects" | "first"`, exported from
+`components/WelcomeFooter.tsx`). The list of steps is derived, not stored (`welcomeSteps()`): with history it's
 `["ready", "projects", "first"]`, with none it's `["ready", "first"]` (the projects screen is left out,
-since there's nothing to import). `WelcomeStepBar` draws the bar above the body — "Step N of M" with a
+since there's nothing to import), and signed out it gets `"account"` after `"ready"`.
+
+**Sign-in (`components/WelcomeAccount.tsx`).** After Get ready's video and before the projects, a signed-out
+Wefter signs in to Weft with GitHub: **Next** stays disabled until the account reads signed in (the `weft:account`
+event fires when the browser round trip lands). `useAccountStep()` decides: the step is there only when the account
+is loaded, sign-in is set up on this Weft (`configured`) and you're signed out. An account that's still loading or
+can't be read leaves it out, so a broken account route never traps a first launch. Once shown, it stays in the list,
+so the step bar doesn't renumber the moment you sign in. Signing in during the tour's profile beat skips it. `WelcomeStepBar` draws the bar above the body — "Step N of M" with a
 dot per step, or, **on a replay**, the text "Replay · saves nothing" and a ✕. That component lives in
 `WelcomeFooter.tsx` next to the footer it sits against; both were split out of `WelcomeDialog.tsx` to
 keep that file under the eslint complexity cap (15).

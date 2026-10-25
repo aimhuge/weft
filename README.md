@@ -135,7 +135,8 @@ port.
   from Alfred, Raycast, or Shortcuts. (Registered by the packaged app.)
 - The window remembers its size and position, and the app reads your login shell's PATH, so it
   finds `claude` and `puku-cli` even when started from Finder.
-- **Puku trial**: a puku thread works with no Puku account. While you're signed in to your Weft account and
+- **Puku trial**: a puku thread works with no Puku account. With no agent logged in, the welcome's puku-cli row offers
+  **Try free** (sign in with GitHub) before your first prompt, and the first thread runs on the trial. While you're signed in to your Weft account and
   puku-cli has no login of its own, Weft runs it on Weft's own Puku key through a proxy on the deployed Weft, with a
   daily cap per account (150 requests, 1M tokens); Weft's key never ships in the app. Signed out, the login pop-up
   offers **Sign in to Weft** or Puku's own login. See docs/architecture/puku-trial.md.
@@ -172,7 +173,7 @@ On launch and every minute after, Weft picks up your Claude Code sessions (the o
 
 - **First launch gets you to a running thread.** Three screens, for everyone, history or not: **Get ready** plays
   a 30-second loop of a card crossing the board (and getting a key from the 🔐 vault) with your own project names on it (a HyperFrames composition,
-  `public/welcome/loop.html`; the same file renders `public/brand/welcome-loop.mp4` with `pnpm welcome:render`, which also joins `public/welcome/beats.html` (connect your tools, the 🔐 vault, panes, code quality, BlastCP, the profile, open source) into a 93-second `weft-tour.mp4` for weft.zip; a bar under it names the beat on screen and steps **‹ Back** and **Next ›** one beat at a time) and whether Claude Code, puku-cli and Codex are logged in, with **Log in** right there; **Bring in your
+  `public/welcome/loop.html`; the same file renders `public/brand/welcome-loop.mp4` with `pnpm welcome:render`, which also joins `public/welcome/beats.html` (connect your tools, the 🔐 vault, panes, code quality, BlastCP, the profile, open source) into a 93-second `weft-tour.mp4` for weft.zip; a bar under it names the beat on screen and steps **‹ Back** and **Next ›** one beat at a time) and whether Claude Code, puku-cli and Codex are logged in, with **Log in** right there; signed out, **Sign in to Weft** comes next, and you sign in with GitHub to go on; **Bring in your
   projects** lists the folders with Claude Code sessions (worktree, scratch and temp folders unticked; **Start empty**
   brings in none) with a switch that counts your history on your Wefter Profile; **Start your first thread** picks a
   project and a starter prompt and opens the card as it runs. No cards are added until you answer. A board that already
@@ -282,11 +283,11 @@ The new-thread dialog (⌘N) and every card's reply box use the same editor:
 
 The folder picker lists your recent projects, the git repos in `~/dev` and other usual code folders
 (with their branch), and your GitHub repos from `gh`. Picking a GitHub repo that isn't on this Mac
-clones it into `~/dev`. **New project…** names an empty folder in `~/dev` and starts the thread there. You can also paste a path or browse for a folder. A new thread starts on the CLI, model and effort set in Settings → Models (the dialog remembers your last pick the same way). Cards are titled from the
+clones it into `~/dev`. **New project…** names an empty folder in `~/dev` and starts the thread there. You can also paste a path or browse for a folder. A new thread starts on the CLI, model and effort set in Settings → Models (the dialog remembers your last pick the same way). The dialog's one model menu is also its CLI picker, the same menu as Settings → Models: each CLI is a heading with its own default first, picking a model moves the thread to the CLI that serves it, and Goose lists only the models a saved provider key serves. Cards are titled from the
 prompt's first line (click the title in the open thread to rename it), and new threads start in the default permission mode from Settings → Security (Auto at first: a classifier
 approves safe calls and blocks risky ones, and a blocked call comes to Needs you with the classifier's reason and
 **Allow once and retry** / **Keep denied**; an MCP server that asks you to confirm something, like the Supabase MCP before
-destructive SQL, comes to Needs you too, with **Accept** / **Decline** and any form it asks for); the menu next to the CLI switch changes that per thread. Effort starts at High and
+destructive SQL, comes to Needs you too, with **Accept** / **Decline** and any form it asks for); the mode menu beside the model and effort menus changes that per thread, and says under each mode what it does. Effort starts at High and
 then follows whatever the last new thread used. To change it later, even mid-turn,
 use the mode menu in the open thread's header or the card's right-click menu. Sessions picked up from
 Claude Code keep the mode they last ran in (say `auto`).
@@ -769,9 +770,10 @@ card you delete stays deleted. It's one direction for now; Weft never edits an i
 
 ### Server-side cards (off by default)
 
-Weft asks once, after a thread in your project has finished a turn: "Turn on Project Sync for <project>?" with **Sync**, **Not now**
+Weft asks once, after a thread in your project has reached Review: "Turn on Project Sync for <project>?" with **Sync**, **Not now**
 and a **Don't show me again** box (it asks again next launch until you sync or tick it; Settings → General → Reset tips brings it back).
-Signed out, its button signs you in with GitHub first. Settings → Sync lists your recent projects with a switch each. A project that's on uploads its cards and threads to your
+Signed out, it is Weft's one sign-in ask instead: "Sign in to Weft?" with what an account gets you (Project Sync, share links,
+leagues, the Puku trial) and **Sign in with GitHub**; once you're in, it offers to sync the project. Settings → Sync lists your recent projects with a switch each. A project that's on uploads its cards and threads to your
 workspace on Supabase while you're signed in: an outbox sends a batch when a turn ends (never on the way to starting one),
 pictures and pages go up once each by content, and the page shows the last sync, how many items went up, how many wait and the
 last error, with **Sync now**. At `weft.zip/<workspace>/board` the same cards show live, drawn by the desktop's **own

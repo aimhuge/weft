@@ -98,11 +98,20 @@ describe("SyncPromptDialog", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  it("signed out, the button signs you in", async () => {
+  it("signed out, it asks you to sign in, says what you get, and the button signs you in", async () => {
     account.state = { kind: "ready", view: { user: null } };
     setup();
     await userEvent.click(await screen.findByRole("button", { name: "Sign in with GitHub" }));
     expect(account.signIn).toHaveBeenCalledWith("github");
+    expect(screen.getByText("Sign in to Weft?")).toBeInTheDocument();
+    for (const perk of ["Project Sync", "Share links", "Leagues", "Puku trial"]) expect(screen.getByText(perk)).toBeInTheDocument();
+    expect(screen.queryByText(/uploaded unencrypted/)).toBeNull();
+  });
+
+  it("doesn't ask while the only thread waits on a question", async () => {
+    setup([makeCard({ cwd: APP, column: "needs_you" })]);
+    await waitFor(() => expect(welcome.loadWelcome).not.toHaveBeenCalled());
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 
   it("with no workspace, the button opens the web board", async () => {

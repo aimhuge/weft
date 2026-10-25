@@ -2,7 +2,7 @@ import { looksScratch } from "./scratch";
 import { COPILOT_ID, type Card } from "./types";
 
 // The "Turn on Project Sync?" dialog (components/SyncPromptDialog.tsx): once the welcome is answered and a thread in
-// the project you're working in has finished a turn, Weft asks once per launch whether to sync that project to
+// the project you're working in has reached Review, Weft asks once per launch whether to sync that project to
 // weft.zip (lib/cloud-sync.ts), until you sync it or tick "Don't show me again". That box lives in localStorage
 // for good, until Settings → General → Reset tips (lib/welcome-client.ts resetOnboarding).
 
@@ -43,8 +43,9 @@ export function resetSyncPrompt(storage: PromptStorage | null = defaultStorage()
   }
 }
 
-// A thread that has finished a turn: it ran, and now waits on you, for review or is done.
-const finished = (card: Card) => card.column !== "running" && card.column !== "backlog";
+// A thread that has shown what it does: it reached Review or Done. Needs you is a question mid-task, not a payoff,
+// and signed out this dialog is Weft's one sign-in ask (components/SyncPromptDialog.tsx), so it waits for the payoff.
+const finished = (card: Card) => card.column === "review" || card.column === "done";
 export const finishedCount = (cards: Card[]) => cards.filter(finished).length;
 
 // The project you're working on: the one the board is narrowed to, else the folder of the card that moved last.

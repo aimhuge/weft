@@ -15,12 +15,16 @@ const api = vi.hoisted(() => ({
   answerWelcome: vi.fn(() => Promise.resolve({ welcome: { at: 0, countHistory: true, fresh: false, skip: [] } })),
   changeWelcome: vi.fn(),
 }));
+// Claude Code logged in, the others not: the usual first launch.
+const CLAUDE_READY = { status: { claude: { loggedIn: true, email: "a@b.c" }, puku: { loggedIn: false }, codex: { loggedIn: false } }, runs: [] };
 const client = vi.hoisted(() => ({
-  loginStatus: vi.fn(() => Promise.resolve({ status: { claude: { loggedIn: true, email: "a@b.c" }, puku: { loggedIn: false }, codex: { loggedIn: false } }, runs: [] })),
+  loginStatus: vi.fn(),
   login: vi.fn(() => Promise.resolve({ login: null })),
   create: vi.fn(() => Promise.resolve({ card: { id: "card-1" } })),
   // The Get ready hero asks who's signed in, for its profile beat (components/WelcomeLoop.tsx).
-  account: vi.fn(() => Promise.resolve({ configured: false, user: null })),
+  account: vi.fn(() => Promise.resolve<{ configured: boolean; user: { id: string; email: string } | null }>({ configured: false, user: null })),
+  // puku-cli's Try free signs in to Weft (lib/auth/hooks.ts).
+  signIn: vi.fn(() => Promise.resolve({ url: "https://github.com/login/oauth" })),
 }));
 vi.mock("@/lib/client", () => ({ api: client }));
 const telemetry = vi.hoisted(() => ({ trackOnboarding: vi.fn() }));
@@ -62,6 +66,9 @@ function setup() {
   api.changeWelcome.mockReset();
   client.create.mockClear();
   client.login.mockClear();
+  client.loginStatus.mockReset().mockResolvedValue(CLAUDE_READY);
+  client.account.mockReset().mockResolvedValue({ configured: false, user: null });
+  client.signIn.mockClear();
   telemetry.trackOnboarding.mockReset();
 }
 
@@ -160,6 +167,60 @@ describe("WelcomeDialog", () => {
     checkbox.focus();
     await userEvent.keyboard("{Enter}");
     expect(api.answerWelcome).toHaveBeenCalled();
+  });
+
+  it("with no agent logged in and signed out, puku-cli's row offers the free trial behind a GitHub sign-in", async () => {
+    client.loginStatus.mockResolvedValue({ status: { claude: { loggedIn: false }, puku: { loggedIn: false }, codex: { loggedIn: false } }, runs: [] });
+    api.loadWelcome.mockResolvedValue({ welcome: null, preview: preview([project("/repo/a")]) });
+    render(<WelcomeDialog />);
+    await userEvent.click(await screen.findByRole("button", { name: /Try free/ }));
+    expect(screen.getByText(/try it free with your Weft account/)).toBeInTheDocument();
+    expect(screen.getByText("Log in to one, or try Puku free")).toBeInTheDocument();
+    expect(client.signIn).toHaveBeenCalledWith("github", expect.anything());
+    expect(telemetry.trackOnboarding).toHaveBeenCalledWith("onboarding_cli_login", { backend: "puku" });
+  });
+
+  it("signed in with no agent logged in, the first thread runs on puku-cli's trial", async () => {
+    client.loginStatus.mockResolvedValue({ status: { claude: { loggedIn: false }, puku: { loggedIn: false }, codex: { loggedIn: false } }, runs: [] });
+    client.account.mockResolvedValue({ configured: true, user: { id: "u1", email: "me@x.y" } });
+    api.loadWelcome.mockResolvedValue({ welcome: null, preview: preview([project("/repo/a")]) });
+    render(<WelcomeDialog />);
+    expect(await screen.findByText("Ready · free trial on your Weft account")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Try free/ })).toBeNull();
+    await next();
+    await bringIn();
+    await userEvent.click(await screen.findByRole("button", { name: /Start thread/ }));
+    expect(client.create).toHaveBeenCalledWith(expect.objectContaining({ backend: "puku" }));
+  });
+
+  it("signed out, you sign in with GitHub after the video and before the projects", async () => {
+    client.account.mockResolvedValue({ configured: true, user: null });
+    api.loadWelcome.mockResolvedValue({ welcome: null, preview: preview([project("/repo/a")]) });
+    render(<WelcomeDialog />);
+    await next();
+    expect(await screen.findByRole("heading", { name: "Sign in to Weft" })).toBeInTheDocument();
+    expect(screen.getByText("Step 2 of 4")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Next ↵/ })).toBeDisabled();
+    await userEvent.click(screen.getByRole("button", { name: "Sign in with GitHub" }));
+    expect(client.signIn).toHaveBeenCalledWith("github", expect.anything());
+
+    client.account.mockResolvedValue({ configured: true, user: { id: "u1", email: "me@x.y" } });
+    window.dispatchEvent(new Event("weft:account"));
+    expect(await screen.findByText("me@x.y")).toBeInTheDocument();
+    expect(screen.getByText("Step 2 of 4")).toBeInTheDocument();
+    await next();
+    expect(await screen.findByRole("button", { name: /^Bring in/ })).toBeInTheDocument();
+    expect(screen.getByText("Step 3 of 4")).toBeInTheDocument();
+  });
+
+  it("already signed in, or with sign-in not set up, there is no sign-in screen", async () => {
+    client.account.mockResolvedValue({ configured: true, user: { id: "u1", email: "me@x.y" } });
+    api.loadWelcome.mockResolvedValue({ welcome: null, preview: preview([project("/repo/a")]) });
+    render(<WelcomeDialog />);
+    await screen.findByText("Step 1 of 3");
+    await next();
+    expect(await screen.findByRole("button", { name: /^Bring in/ })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Sign in to Weft" })).toBeNull();
   });
 
   it("starts the first thread in the first brought-in project on the ready CLI, then closes", async () => {
