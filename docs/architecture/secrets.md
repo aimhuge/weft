@@ -300,8 +300,8 @@ that opens the file itself (`~/.weft/shell-token` included). This is a strong de
   grant per device (the vault key sealed to it), and entries with ciphertext, nonce and key version. A name from
   `.env.example` is an entry without ciphertext ("missing"). `list` returns names and 4-character tails only.
 - `electron/dotenv.cjs`: the parser and the file rules (which file feeds which environment, names-only
-  templates, Vercel pulls). `electron/vault.cjs`: the vault id from `git remote` (`github:owner/name`, or
-  `folder:<path>`), the overview with the nudge, the import preview, `importPicks` (which reads the files again
+  templates, Vercel pulls). `electron/vault-id.cjs`: the vault id from `git remote` (`github:owner/name`, or
+  `folder:<path>`; `parseRemote`, `vaultIdFor`). `electron/vault.cjs`: the overview with the nudge, the import preview, `importPicks` (which reads the files again
   in main, so values never pass through the board), `setValue` (a typed secret; checks the name) and `copyTo`
   (vault to vault, in main), reveal and copy behind `createUnlock` (Touch ID, open for 3
   minutes from the last use), and `registerVault`, whose IPC handlers refuse any sender but the board's
