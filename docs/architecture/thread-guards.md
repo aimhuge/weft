@@ -95,7 +95,8 @@ it's the server asking, not a tool call.
 A thread works in its card's project folder. `lib/folder-guard.ts` is a PreToolUse hook (Read, Edit, MultiEdit,
 Write, NotebookEdit, Glob, Grep, LS, Bash) that answers "ask" when a call reaches anywhere else, whether or not macOS
 would refuse it, so Weft, not the OS, decides. The paths come from the tool's file or folder argument (`pathsOf`); for
-Bash, from every absolute, `~/`, `$HOME` and `../` token in the command, and only those under the user's own files
+Bash, from every absolute, `~/`, `$HOME` and `../` token in the command (a quoted token runs to its closing quote and
+`\ ` escapes a space, so a project in `~/My Drive` isn't read as `~/My`), and only those under the user's own files
 (home, `/Users`, `/Volumes`), a heuristic that can't see a path a script builds. Paths are resolved first (`~`, `..`,
 symlinks, a file not created yet by its nearest folder).
 

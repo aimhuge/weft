@@ -50,9 +50,33 @@ describe("pathsOf", () => {
 
   it("finds absolute, home and parent paths in a Bash command, not URLs or sed expressions", () => {
     expect(pathsOf("Bash", { command: "ls ~/Downloads && cat /Users/me/x.txt > /dev/null" })).toEqual(["~/Downloads", "/Users/me/x.txt", "/dev/null"]);
-    expect(pathsOf("Bash", { command: 'cp "$HOME/a b" ../x; ls ~' })).toEqual(["$HOME/a", "../x", "~"]);
+    expect(pathsOf("Bash", { command: 'cp "$HOME/a b" ../x; ls ~' })).toEqual(["$HOME/a b", "../x", "~"]);
     expect(pathsOf("Bash", { command: "curl https://example.com/a/b | sed 's/a/b/'" })).toEqual([]);
     expect(pathsOf("Bash", {})).toEqual([]);
+  });
+
+  it("keeps the spaces in a quoted or backslash-escaped Bash path", () => {
+    expect(pathsOf("Bash", { command: 'cd "/Users/p/My Drive/app" && cat x' })).toEqual(["/Users/p/My Drive/app"]);
+    expect(pathsOf("Bash", { command: "ls '~/My Drive/a b'" })).toEqual(["~/My Drive/a b"]);
+    expect(pathsOf("Bash", { command: String.raw`ls ~/My\ Drive/app /tmp` })).toEqual(["~/My Drive/app", "/tmp"]);
+    expect(pathsOf("Bash", { command: 'echo "/a" "/b c"' })).toEqual(["/a", "/b c"]);
+  });
+});
+
+describe("a project folder with a space in its name", () => {
+  // Google Drive projects live in ~/My Drive: every command cd'd there used to ask about ~/My.
+  const drive = path.join(home, "My Drive", "app");
+  fs.mkdirSync(drive, { recursive: true });
+  fs.mkdirSync(path.join(home, "My Drive", "other-app"));
+
+  it("lets a quoted or escaped cd into the project through", () => {
+    expect(outsideFolder("Bash", { command: `cd "${drive}" && cat package.json` }, drive, [], at)).toBeUndefined();
+    expect(outsideFolder("Bash", { command: `cd '${drive}/lib'` }, drive, [], at)).toBeUndefined();
+    expect(outsideFolder("Bash", { command: `ls ${drive.replace(/ /g, "\\ ")}` }, drive, [], at)).toBeUndefined();
+  });
+
+  it("still asks about a sibling folder", () => {
+    expect(outsideFolder("Bash", { command: `cd "${drive}" && cd ../other-app` }, drive, [], at)).toMatchObject({ verb: "use", directory: path.join(home, "My Drive", "other-app") });
   });
 });
 

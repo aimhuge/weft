@@ -33,7 +33,17 @@ const ground = (): Ground => {
 
 const READ_TOOLS = new Set(["Read", "Glob", "Grep", "LS"]);
 const GATED = "Read|Edit|MultiEdit|Write|NotebookEdit|Glob|Grep|LS|Bash";
-const BASH_PATH = /(?:^|[\s"'=(<>|;&])((?:~|\$HOME|\$\{HOME\})(?:\/[^\s"'`;|&<>()]*)?|\.{1,2}\/[^\s"'`;|&<>()]*|\/[^\s"'`;|&<>()]+)/g;
+// A path in a Bash command. Quoted, it runs to its closing quote, spaces and all ("/Users/me/My Drive/app": a
+// project in Google Drive used to read as /Users/me/My, outside, so every command asked); bare, it ends at a
+// space, quote or operator, and a backslash escapes one (~/My\ Drive).
+const HEAD = String.raw`(?:~|\$HOME|\$\{HOME\})(?=\/|$)|\.{1,2}\/|\/`;
+const BARE = String.raw`(?:\\.|[^\s"'\`;|&<>()\\])`;
+const BASH_PATH = new RegExp(
+  String.raw`(?:^|[\s=(<>|;&])"((?:${HEAD})[^"]*)"|(?:^|[\s=(<>|;&])'((?:${HEAD})[^']*)'|(?:^|[\s"'=(<>|;&])((?:~|\$HOME|\$\{HOME\})(?:\/${BARE}*)?|\.{1,2}\/${BARE}*|\/${BARE}+)`,
+  "g",
+);
+const bashPaths = (command: string) =>
+  [...command.matchAll(BASH_PATH)].map((m) => m[1] ?? m[2] ?? (m[3] as string).replace(/\\(.)/g, "$1"));
 const MARKERS = [".git", "package.json", "pyproject.toml", "Cargo.toml", "go.mod", "pom.xml", "build.gradle"];
 
 // The real path of a path that may not exist yet: its nearest existing ancestor, resolved, plus the rest.
@@ -67,7 +77,7 @@ export const tilde = (p: string, home = os.homedir()) => (inside(p, home) ? path
 // the command (a heuristic: a path a script builds at run time isn't visible).
 export function pathsOf(toolName: string, input: Record<string, unknown>): string[] {
   const str = (v: unknown) => (typeof v === "string" && v ? v : undefined);
-  if (toolName === "Bash") return [...(str(input.command) ?? "").matchAll(BASH_PATH)].map((m) => m[1] as string);
+  if (toolName === "Bash") return bashPaths(str(input.command) ?? "");
   if (toolName === "Glob") {
     const pattern = str(input.pattern);
     const fixed = pattern && /^[/~]/.test(pattern) ? path.dirname((pattern.split(/[*?[{]/)[0] ?? "") + "x") : undefined;
