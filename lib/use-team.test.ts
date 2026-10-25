@@ -212,10 +212,12 @@ describe("useTeam", () => {
       );
       await act(() => result.current.actions.addProject("aimhuge/weft"));
       await act(() => result.current.actions.removeProject("aimhuge/weft"));
+      await act(() => result.current.actions.setProjectAccess("aimhuge/weft", "u2", true));
       const bodies = fetchMock.mock.calls.filter(([, i]) => i?.method === "POST").map(([, i]) => i?.body);
       expect(bodies).toEqual([
         JSON.stringify({ org: "acme", action: "link-project", repo: "aimhuge/weft" }),
         JSON.stringify({ org: "acme", action: "unlink-project", repo: "aimhuge/weft" }),
+        JSON.stringify({ org: "acme", action: "project-access", repo: "aimhuge/weft", userId: "u2", grant: true }),
       ]);
     });
 

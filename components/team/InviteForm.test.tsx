@@ -22,6 +22,7 @@ function makeActions(): TeamClientActions & {
     revoke: vi.fn<(inviteId: string) => Promise<TeamActionResult>>().mockResolvedValue({ ok: true }),
     addProject: vi.fn<(repo: string) => Promise<TeamActionResult>>().mockResolvedValue({ ok: true }),
     removeProject: vi.fn<(repo: string) => Promise<TeamActionResult>>().mockResolvedValue({ ok: true }),
+    setProjectAccess: vi.fn<(repo: string, userId: string, grant: boolean) => Promise<TeamActionResult>>().mockResolvedValue({ ok: true }),
     createTeam: vi.fn<(name: string) => Promise<TeamActionResult & { slug?: string }>>().mockResolvedValue({ ok: true }),
     renameTeam: vi.fn().mockResolvedValue({ ok: true }),
     deleteTeam: vi.fn().mockResolvedValue({ ok: true }),

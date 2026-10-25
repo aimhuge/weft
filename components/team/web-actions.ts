@@ -22,6 +22,7 @@ import {
   renameTeam as serverRenameTeam,
   deleteTeam as serverDeleteTeam,
   revokeInvite as serverRevokeInvite,
+  setProjectAccess as serverSetProjectAccess,
 } from "@/lib/team-actions";
 
 // Build a TeamClientActions for an org on weft.zip. Each function closes
@@ -50,6 +51,9 @@ export function webTeamActions(orgSlug: string): TeamClientActions {
     },
     async removeProject(repo: string): Promise<TeamActionResult> {
       return serverRemoveProject(orgSlug, repo);
+    },
+    async setProjectAccess(repo: string, userId: string, grant: boolean): Promise<TeamActionResult> {
+      return serverSetProjectAccess(orgSlug, repo, userId, grant);
     },
     // The result's slug is the new workspace; the caller navigates to /<slug>/team.
     async createTeam(name: string): Promise<NewTeamResult> {

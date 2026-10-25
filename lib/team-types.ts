@@ -9,8 +9,10 @@ export type TeamRole = "owner" | "admin" | "member";
 // `role` is the viewer's role in that workspace; the switcher shows it beside each name.
 export type TeamOrg = { id: string; slug: string; name: string; role?: TeamRole };
 
-// A GitHub repo ("owner/name") linked to a workspace: a team has many projects.
-export type TeamProject = { repo: string; addedAt: string; addedBy: string | null };
+// A GitHub repo ("owner/name") linked to a workspace: a team has many projects. `access` is the members (user ids)
+// granted it; owners and admins always see every project. Filled only for those who manage the team, and a member's
+// snapshot lists only the projects they were granted (lib/team-project-access.ts).
+export type TeamProject = { repo: string; addedAt: string; addedBy: string | null; access: string[] };
 
 export type TeamUser = { id: string; email: string | null; name: string | null; avatar: string | null };
 
@@ -49,6 +51,8 @@ export type TeamOp =
   | { org: string; action: "revoke"; inviteId: string }
   | { org: string; action: "link-project"; repo: string }
   | { org: string; action: "unlink-project"; repo: string }
+  // Owners and admins only; `grant` false takes the access away.
+  | { org: string; action: "project-access"; repo: string; userId: string; grant: boolean }
   // Owners only; the slug stays, so links and synced boards keep working.
   | { org: string; action: "rename"; name: string }
   // Owners only, and only while they're in another team too; `confirm` is the team's name, typed.
@@ -74,6 +78,7 @@ export type TeamClientActions = {
   revoke: (inviteId: string) => Promise<TeamActionResult>;
   addProject: (repo: string) => Promise<TeamActionResult>;
   removeProject: (repo: string) => Promise<TeamActionResult>;
+  setProjectAccess: (repo: string, userId: string, grant: boolean) => Promise<TeamActionResult>;
   createTeam: (name: string) => Promise<NewTeamResult>;
   // By slug, not the loaded team: Settings → Teams renames any team you own from its list.
   renameTeam: (slug: string, name: string) => Promise<TeamActionResult>;

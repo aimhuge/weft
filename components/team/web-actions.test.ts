@@ -8,6 +8,7 @@ const actions = vi.hoisted(() => ({
   removeMember: vi.fn().mockResolvedValue({ ok: true, message: "remove" }),
   removeProject: vi.fn().mockResolvedValue({ ok: true, message: "rmproj" }),
   revokeInvite: vi.fn().mockResolvedValue({ ok: true, message: "revoke" }),
+  setProjectAccess: vi.fn().mockResolvedValue({ ok: true, message: "access" }),
   renameTeam: vi.fn().mockResolvedValue({ ok: true, message: "renamed" }),
   deleteTeam: vi.fn().mockResolvedValue({ ok: true, message: "deleted" }),
 }));
@@ -24,6 +25,8 @@ describe("webTeamActions", () => {
     await a.revoke("i1");
     await a.addProject("a/b");
     await a.removeProject("a/b");
+    await a.setProjectAccess("a/b", "u2", true);
+    expect(actions.setProjectAccess).toHaveBeenCalledWith("acme", "a/b", "u2", true);
     expect(actions.inviteMember).toHaveBeenCalledWith("acme", "x@y.com", "member");
     expect(actions.changeMemberRole).toHaveBeenCalledWith("acme", "u1", "admin");
     expect(actions.removeMember).toHaveBeenCalledWith("acme", "u1");

@@ -8,7 +8,7 @@ import { Projects } from "./Projects";
 
 vi.mock("./ProjectPeople", () => ({ ProjectPeople: () => <div>people</div> }));
 
-const projects = [{ repo: "aimhuge/weft", addedAt: "2026-10-01T00:00:00.000Z", addedBy: null }];
+const projects = [{ repo: "aimhuge/weft", addedAt: "2026-10-01T00:00:00.000Z", addedBy: null, access: [] }];
 
 function actions(over: Partial<TeamClientActions> = {}): TeamClientActions {
   return {
@@ -82,6 +82,11 @@ describe("Projects", () => {
     expect(screen.getByRole("link", { name: "aimhuge/weft" })).toBeInTheDocument();
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
     expect(screen.queryByText("people")).not.toBeInTheDocument();
+  });
+
+  it("tells a member with no granted projects so", () => {
+    view(actions(), { canManage: false, projects: [] });
+    expect(screen.getByText("No projects shared with you yet.")).toBeInTheDocument();
   });
 
   it("empty list for managers invites an add, and has no people suggestions", () => {

@@ -1,6 +1,6 @@
 // A team's projects: the GitHub repos ("owner/name") linked to a workspace (public.org_projects). Split out of
 // lib/team-ops.ts, which dispatches link-project / unlink-project here. Owners and admins link and unlink;
-// everyone in the team sees the list.
+// who else sees each project is lib/team-project-access.ts.
 import "server-only";
 import { roleCan } from "@aimhuge/teams";
 import type { TeamContext } from "./teams";
@@ -9,7 +9,7 @@ import { REPO_PATTERN, type TeamActionResult, type TeamProject } from "./team-ty
 type ProjectRow = { repo: string; created_at: string; added_by: string | null };
 
 // The workspace's projects, sorted by repo.
-export async function listTeamProjects(ctx: TeamContext): Promise<TeamProject[]> {
+export async function listTeamProjects(ctx: TeamContext): Promise<Omit<TeamProject, "access">[]> {
   const { data } = await ctx.service
     .from("org_projects")
     .select("repo, created_at, added_by")

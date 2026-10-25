@@ -139,7 +139,27 @@ service role. The checks are security-definer helpers in `private` (`is_org_memb
 |---|---|
 | owner | everything, including other owners and the workspace itself |
 | admin | invite, remove and re-role members and admins; manage billing |
-| member | see the roster; leave |
+| member | see the roster and the projects they're granted; leave |
+
+## Project access
+
+A workspace's projects (`org_projects`, linked GitHub repos) aren't all for everyone. Owners and admins see every
+project and decide who else does; a member sees only the projects granted to them
+(`supabase/migrations/20261024190747_org_project_members.sql`, `org_project_members`: org, repo, user).
+
+- `lib/team-project-access.ts`: `listVisibleProjects` is the snapshot's project list: every project with its
+  `access` (granted user ids) for those who manage, and only the granted ones (with an empty `access`, so a member
+  doesn't learn who else is on them) for a member. `runSetProjectAccess` is the `project-access` op
+  (`{ repo, userId, grant }`), `members.manage` only. A grant needs a linked project and a plain member (owners and
+  admins have everything already); both directions are idempotent.
+- A grant goes with its project (unlink) and its membership (remove or leave): both foreign keys cascade. Promoting a
+  member to admin keeps their rows, harmlessly; demoting them back restores what they had.
+- The migration backfilled every member onto every project linked before it, so nobody lost sight of one. A project
+  linked after it starts with no members; the admin who links it sees it regardless.
+- `components/team/ProjectAccess.tsx`: **Access · 2 of 3** on each project row (managers only, and only when the team
+  has plain members) opens a checklist of the members; a tick shows at once and goes back with the reason if refused.
+- What a grant gates today is the team page's project list. Synced cards (`cloud_cards`) and the shared vault aren't
+  scoped by project yet; when they are, they should read `org_project_members` the same way.
 
 ## Setup on the deployment
 

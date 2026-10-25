@@ -100,6 +100,14 @@ export async function removeProject(orgSlug: string, repo: string): Promise<Team
   return result;
 }
 
+// A server action's arguments are whatever the client sent: only a real `true` grants.
+export async function setProjectAccess(orgSlug: string, repo: string, userId: string, grant: unknown): Promise<TeamActionResult> {
+  const ctx = await gate(orgSlug);
+  const result = await runTeamOp(ctx, { org: orgSlug, action: "project-access", repo: asString(repo), userId: asString(userId), grant: grant === true });
+  if (result.ok) revalidatePath(`/${orgSlug}/team`);
+  return result;
+}
+
 // The name shows in the workspace's whole shell (sidebar, switcher), so every page under it is revalidated.
 export async function renameTeam(orgSlug: string, name: string): Promise<TeamActionResult> {
   const ctx = await gate(orgSlug);

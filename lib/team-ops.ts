@@ -13,7 +13,8 @@ import type { TeamContext } from "./teams";
 import { createInvite, inviteMailer, isPlausibleEmail, normalizeEmail, revokeInvite as revokeInviteRow, roleOptions } from "./teams";
 import { runRenameTeam } from "./team-create";
 import { runDeleteTeam } from "./team-delete";
-import { listTeamProjects, runLinkProject, runUnlinkProject } from "./team-projects";
+import { runLinkProject, runUnlinkProject } from "./team-projects";
+import { listVisibleProjects, runSetProjectAccess } from "./team-project-access";
 import { workspaceCanHaveMembers } from "./billing/plan-gate";
 import { TEAM_GATE_MESSAGE } from "./billing/upgrade";
 import type { TeamActionResult, TeamInvite, TeamMember, TeamOp, TeamOrg, TeamSnapshot, TeamUser } from "./team-types";
@@ -89,7 +90,7 @@ export async function teamSnapshot(ctx: TeamContext): Promise<TeamSnapshot> {
   const [members, pending, projects] = await Promise.all([
     listOrgMembers(ctx.service, ctx.org.id),
     core.canManage ? listPendingInvites(ctx.service, ctx.org.id) : Promise.resolve([]),
-    listTeamProjects(ctx),
+    listVisibleProjects(ctx),
   ]);
   const memberRows: TeamMember[] = members.map((m) => ({
     userId: m.user_id,
@@ -312,6 +313,8 @@ export async function runTeamOp(ctx: TeamContext, op: TeamOp): Promise<TeamActio
       return runLinkProject(ctx, op.repo);
     case "unlink-project":
       return runUnlinkProject(ctx, op.repo);
+    case "project-access":
+      return runSetProjectAccess(ctx, op.repo, op.userId, op.grant);
     case "rename":
       return runRenameTeam(ctx, op.name);
     case "delete":

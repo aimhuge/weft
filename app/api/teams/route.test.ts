@@ -191,6 +191,13 @@ describe("POST /api/teams project and create ops", () => {
     }
   });
 
+  it("runs project-access, and 400s when grant isn't a boolean", async () => {
+    const op = { org: "acme", action: "project-access", repo: "a/b", userId: "u2", grant: false };
+    expect((await route.POST(req({ method: "POST", body: op }))).status).toBe(200);
+    expect(runTeamOp).toHaveBeenLastCalledWith(CTX, op);
+    expect((await route.POST(req({ method: "POST", body: { ...op, grant: "yes" } }))).status).toBe(400);
+  });
+
   it("runs rename against the body's org, and 400s without a name", async () => {
     const op = { org: "acme", action: "rename", name: "Acme Labs" };
     expect((await route.POST(req({ method: "POST", body: op }))).status).toBe(200);

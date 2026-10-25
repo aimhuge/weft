@@ -33,11 +33,13 @@ vi.mock("@aimhuge/teams", () => teamsMock);
 vi.mock("./teams", () => teamsModMock);
 
 const projectsMock = vi.hoisted(() => ({
-  listTeamProjects: vi.fn(),
+  listVisibleProjects: vi.fn(),
   runLinkProject: vi.fn(),
   runUnlinkProject: vi.fn(),
+  runSetProjectAccess: vi.fn(),
 }));
 vi.mock("./team-projects", () => projectsMock);
+vi.mock("./team-project-access", () => projectsMock);
 const createMock = vi.hoisted(() => ({ runRenameTeam: vi.fn() }));
 vi.mock("./team-create", () => createMock);
 const deleteMock = vi.hoisted(() => ({ runDeleteTeam: vi.fn() }));
@@ -62,7 +64,7 @@ beforeEach(() => {
   teamsMock.assignableRoles.mockImplementation((r: string) => (r === "owner" ? ["owner", "admin", "member"] : r === "admin" ? ["admin", "member"] : []));
   teamsMock.listOrgMembers.mockResolvedValue([]);
   teamsMock.listPendingInvites.mockResolvedValue([]);
-  projectsMock.listTeamProjects.mockResolvedValue([]);
+  projectsMock.listVisibleProjects.mockResolvedValue([]);
   teamsModMock.createInvite.mockResolvedValue({ invitation: { id: "i1" }, alreadyPending: false });
 });
 
@@ -86,8 +88,8 @@ describe("teamSnapshot", () => {
 
   it("carries the viewer's role on each org and the team's projects", async () => {
     const other = { id: "o2", slug: "beta", name: "Beta" };
-    const project = { repo: "acme/site", addedAt: "t", addedBy: null };
-    projectsMock.listTeamProjects.mockResolvedValue([project]);
+    const project = { repo: "acme/site", addedAt: "t", addedBy: null, access: [] };
+    projectsMock.listVisibleProjects.mockResolvedValue([project]);
     const ctx = { ...CTX, orgs: [ORG, other], orgRoles: { o1: "owner" as const, o2: "member" as const }, service: {} as never };
     const snap = await teamSnapshot(ctx);
     expect(snap.orgs).toEqual([{ ...ORG, role: "owner" }, { ...other, role: "member" }]);
@@ -244,6 +246,15 @@ describe("runTeamOp projects", () => {
     expect(projectsMock.runLinkProject).toHaveBeenCalledWith(CTX, "a/b");
     expect(await runTeamOp(CTX, { org: "acme", action: "unlink-project", repo: "a/b" })).toEqual({ ok: true, message: "x" });
     expect(projectsMock.runUnlinkProject).toHaveBeenCalledWith(CTX, "a/b");
+  });
+
+  it("dispatches project-access", async () => {
+    projectsMock.runSetProjectAccess.mockResolvedValue({ ok: true, message: "Granted access to a/b." });
+    expect(await runTeamOp(CTX, { org: "acme", action: "project-access", repo: "a/b", userId: "u2", grant: true })).toEqual({
+      ok: true,
+      message: "Granted access to a/b.",
+    });
+    expect(projectsMock.runSetProjectAccess).toHaveBeenCalledWith(CTX, "a/b", "u2", true);
   });
 
   it("dispatches rename", async () => {

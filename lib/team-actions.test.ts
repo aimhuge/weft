@@ -28,7 +28,7 @@ vi.mock("./web-session", () => sessionMock);
 vi.mock("./team-ops", () => teamOpsMock);
 vi.mock("next/cache", () => cacheMock);
 
-import { addProject, boardShareTeam, changeMemberRole, createTeam, removeProject, inviteMember, removeMember, renameTeam, revokeInvite, deleteTeam } from "./team-actions";
+import { addProject, boardShareTeam, changeMemberRole, createTeam, removeProject, inviteMember, removeMember, renameTeam, revokeInvite, deleteTeam, setProjectAccess } from "./team-actions";
 import { ORG, USER } from "./team-actions.harness";
 
 const CTX = { user: USER, org: ORG, role: "owner" as const, orgs: [ORG], service: {} as never };
@@ -163,6 +163,21 @@ describe("addProject / removeProject", () => {
   it("skips revalidation when a link fails", async () => {
     teamOpsMock.runTeamOp.mockResolvedValueOnce({ ok: false });
     await addProject("acme", "a/b");
+    expect(cacheMock.revalidatePath).not.toHaveBeenCalled();
+  });
+});
+
+describe("setProjectAccess", () => {
+  it("runs project-access through the gate and revalidates on success", async () => {
+    await setProjectAccess("acme", " a/b ", " u2 ", true);
+    expect(teamOpsMock.runTeamOp).toHaveBeenCalledWith(CTX, { org: "acme", action: "project-access", repo: "a/b", userId: "u2", grant: true });
+    expect(cacheMock.revalidatePath).toHaveBeenCalledWith("/acme/team");
+  });
+
+  it("reads anything but true as a revoke, and skips revalidation on failure", async () => {
+    teamOpsMock.runTeamOp.mockResolvedValueOnce({ ok: false, message: "no" });
+    expect(await setProjectAccess("acme", "a/b", "u2", "yes")).toEqual({ ok: false, message: "no" });
+    expect(teamOpsMock.runTeamOp).toHaveBeenCalledWith(CTX, { org: "acme", action: "project-access", repo: "a/b", userId: "u2", grant: false });
     expect(cacheMock.revalidatePath).not.toHaveBeenCalled();
   });
 });

@@ -1,11 +1,12 @@
 "use client";
 
 // A team's projects (GitHub repos, "owner/name") in Settings → Team: the linked list with Remove for those who
-// manage the team, and "Add project" (a pick from the board's repos not yet linked, or a typed owner/name).
-// Members see the list only. The actions come in as a prop like the rest of components/team.
+// manage the team, "Access" to pick which members see each one (./ProjectAccess), and "Add project" (a pick from
+// the board's repos not yet linked, or a typed owner/name). Members see only the projects they were granted. The actions come in as a prop like the rest of components/team.
 import { useState, useTransition, type SubmitEvent } from "react";
-import { REPO_PATTERN, type RoleOption, type TeamClientActions, type TeamProject } from "@/lib/team-types";
+import { REPO_PATTERN, type RoleOption, type TeamClientActions, type TeamMember, type TeamProject } from "@/lib/team-types";
 import { unlinkedRepos } from "@/lib/team-view";
+import { ProjectAccess } from "./ProjectAccess";
 import { ProjectPeople } from "./ProjectPeople";
 
 const FIELD = "rounded-md border border-line-strong bg-canvas px-2 py-1 text-[12.5px] text-ink outline-none focus:border-accent";
@@ -76,7 +77,9 @@ function AddProject({ linked, boardRepos, actions }: { linked: string[]; boardRe
   );
 }
 
-function ProjectRow({ project, canManage, actions }: { project: TeamProject; canManage: boolean; actions: TeamClientActions }) {
+type RowProps = { project: TeamProject; canManage: boolean; actions: TeamClientActions; members: TeamMember[] };
+
+function ProjectRow({ project, canManage, actions, members }: RowProps) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -90,15 +93,16 @@ function ProjectRow({ project, canManage, actions }: { project: TeamProject; can
 
   return (
     <li className="flex flex-col gap-1 py-1.5">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
         <a
           href={`https://github.com/${project.repo}`}
           target="_blank"
           rel="noreferrer"
-          className="min-w-0 truncate text-[13px] text-ink hover:underline"
+          className="min-w-0 flex-1 truncate text-[13px] text-ink hover:underline"
         >
           {project.repo}
         </a>
+        {canManage ? <ProjectAccess project={project} members={members} actions={actions} /> : null}
         {canManage ? (
           <button type="button" onClick={remove} disabled={pending} className={BUTTON}>
             {pending ? "Removing…" : "Remove"}
@@ -128,18 +132,18 @@ export function Projects({
   actions: TeamClientActions;
   boardRepos: string[];
   roleOptions: RoleOption[];
-  members: { email: string | null }[];
+  members: TeamMember[];
   pending: { email: string }[];
 }) {
   const repos = projects.map((p) => p.repo);
   return (
     <>
       {projects.length === 0 ? (
-        <p className="text-[12.5px] text-muted">No projects yet.{canManage ? " Add a GitHub repo below." : ""}</p>
+        <p className="text-[12.5px] text-muted">{canManage ? "No projects yet. Add a GitHub repo below." : "No projects shared with you yet."}</p>
       ) : (
         <ul className="divide-y divide-line">
           {projects.map((p) => (
-            <ProjectRow key={p.repo} project={p} canManage={canManage} actions={actions} />
+            <ProjectRow key={p.repo} project={p} canManage={canManage} actions={actions} members={members} />
           ))}
         </ul>
       )}

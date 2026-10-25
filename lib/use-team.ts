@@ -189,6 +189,7 @@ export function useTeam(org?: string): TeamHook {
     revoke: (inviteId) => onTeam((org) => ({ org, action: "revoke", inviteId })),
     addProject: (repo) => onTeam((org) => ({ org, action: "link-project", repo })),
     removeProject: (repo) => onTeam((org) => ({ org, action: "unlink-project", repo })),
+    setProjectAccess: (repo, userId, grant) => onTeam((org) => ({ org, action: "project-access", repo, userId, grant })),
     // A new, renamed or deleted workspace changes every cached snapshot's `orgs` list, so forget them all before the refresh.
     createTeam: (name) => postOp({ action: "create", name }).then(refreshAll),
     renameTeam: (slug, name) => postOp({ org: slug, action: "rename", name }).then(refreshAll),

@@ -64,6 +64,7 @@ const TeamOpSchema = z.discriminatedUnion("action", [
   z.object({ org: text, action: z.literal("revoke"), inviteId: text }),
   z.object({ org: text, action: z.literal("link-project"), repo: text }),
   z.object({ org: text, action: z.literal("unlink-project"), repo: text }),
+  z.object({ org: text, action: z.literal("project-access"), repo: text, userId: text, grant: z.boolean() }),
   z.object({ org: text, action: z.literal("rename"), name: text }),
   z.object({ org: text, action: z.literal("delete"), confirm: text }),
   z.object({ action: z.literal("create"), name: text }),

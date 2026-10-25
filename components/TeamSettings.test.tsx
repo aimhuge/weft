@@ -30,7 +30,7 @@ const team: TeamSnapshot = {
   pending: [
     { id: "i1", email: "linus@b.co", role: "member", createdAt: "2026-10-05T00:00:00.000Z", expiresAt: "2026-10-19T00:00:00.000Z" },
   ],
-  projects: [{ repo: "aimhuge/weft", addedAt: "2026-10-01T00:00:00.000Z", addedBy: "u1" }],
+  projects: [{ repo: "aimhuge/weft", addedAt: "2026-10-01T00:00:00.000Z", addedBy: "u1", access: [] }],
   roleOptions: [
     { role: "owner", label: "Owner", description: "Full control." },
     { role: "admin", label: "Admin", description: "Manage the workspace." },
@@ -47,6 +47,7 @@ function actions(): TeamClientActions {
     revoke: vi.fn().mockResolvedValue({ ok: true, message: "ok" }),
     addProject: vi.fn().mockResolvedValue({ ok: true, message: "ok" }),
     removeProject: vi.fn().mockResolvedValue({ ok: true, message: "ok" }),
+    setProjectAccess: vi.fn().mockResolvedValue({ ok: true, message: "ok" }),
     createTeam: vi.fn().mockResolvedValue({ ok: true, message: "ok" }),
     renameTeam: vi.fn().mockResolvedValue({ ok: true }),
     deleteTeam: vi.fn().mockResolvedValue({ ok: true }),
