@@ -68,10 +68,20 @@ To prove both halves at once, POST a summary to `https://weft.zip/api/feedback/c
 
 ### Turning the feature on
 
-Slack has no Web API method for incoming webhooks: no create, no list, no delete. The feature is turned on either by
-the app's manifest (`features.incoming_webhooks`, which `lib/slack-manifest.json` now declares) or by hand in the
-developer console, and either way it needs an app configuration token (`xoxe-`, 12 hours) for `apps.manifest.update`.
-The webhook's URL is shown once, at creation, so it goes straight into the 🔐 vault.
+Slack has no Web API method for incoming webhooks: no create, no list, no delete. Two different routes reach it,
+and they answer different halves of the question.
+
+**The manifest turns the feature on.** `features.incoming_webhooks` in `lib/slack-manifest.json` takes
+`{ incoming_webhooks_enabled: true }` — *not* `{ name: "Feedback" }`, which looks right and is not the shape Slack
+reads, so the feature stays off with nothing to say why. Applying the manifest needs an app configuration token
+(`xoxe-`, 12 hours) for `apps.manifest.update`; `pnpm slack:manifest A0CBFBZMTV5` does it (docs/architecture/slack.md).
+The manifest's answer is only `ok`, `app_id` and `permissions_updated`: no webhook, no URL.
+
+**The OAuth answer carries the URL.** A *user* grant of the `incoming-webhook` scope returns `incoming_webhook.url`
+in its OAuth response, and that URL is a real, listable webhook — not the once-only console one. So the manifest
+asks for `oauth_config.scopes.user: ["incoming-webhook"]`, and an install that grants it hands back the address
+programmatically. That is the only route that can put the URL in the vault without a human reading it off a page;
+the console's URL is shown once and has to be copied by hand.
 
 An incoming webhook is a channel-bound posting URL, not a way to reach any channel: the one Weft creates is bound to
 the feedback channel, and `SLACK_FEEDBACK_WEBHOOK_URL` is that URL, not a channel id.
@@ -79,5 +89,5 @@ the feedback channel, and `SLACK_FEEDBACK_WEBHOOK_URL` is that URL, not a channe
 ## Storage
 
 - The Mac: `~/.weft/feedback/*.json`, one file per summary sent, with its transcript.
-- weft.zip: the `public.feedback` table (`supabase/migrations/20261025033000_feedback.sql`). Read it in the
+- weft.zip: the `public.feedback` table (`supabase/migrations/20261025181607_feedback.sql`). Read it in the
   Supabase dashboard.
