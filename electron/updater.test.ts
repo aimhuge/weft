@@ -1,38 +1,6 @@
-import { EventEmitter } from "node:events";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { compareVersions, createUpdater, FIRST_CHECK_MS, menuItem, newerRelease } from "./updater.cjs";
-
-function feed(version: string, notes = "### Added\n- things") {
-  return {
-    currentRelease: version,
-    releases: [{ version, updateTo: { version, notes, url: `https://example.test/Weft-${version}-arm64.zip` } }],
-    page: `https://example.test/releases/tag/v${version}`,
-  };
-}
-
-// Squirrel stand-in: records the feed it was given and lets a test fire its events.
-function fakeSquirrel() {
-  const emitter = new EventEmitter() as EventEmitter & Record<string, ReturnType<typeof vi.fn>>;
-  emitter.setFeedURL = vi.fn();
-  emitter.checkForUpdates = vi.fn();
-  emitter.quitAndInstall = vi.fn();
-  return emitter;
-}
-
-function make(over: Record<string, unknown> = {}) {
-  const squirrel = fakeSquirrel();
-  const calls = { tell: vi.fn(), notify: vi.fn(), openExternal: vi.fn(), onBeforeInstall: vi.fn(), onChange: vi.fn() };
-  const updater = createUpdater({
-    currentVersion: "0.3.0",
-    packaged: true,
-    autoUpdater: squirrel,
-    fetchJson: () => Promise.resolve(feed("0.4.0")),
-    log: { ...console, warn: () => {} },
-    ...calls,
-    ...over,
-  });
-  return { updater, squirrel, ...calls };
-}
+import { compareVersions, FIRST_CHECK_MS, menuItem, newerRelease } from "./updater.cjs";
+import { fakeSquirrel, feed, make } from "./updater.fixtures";
 
 afterEach(() => vi.useRealTimers());
 
@@ -102,7 +70,7 @@ describe("createUpdater", () => {
     expect(updater.state()).toMatchObject({ phase: "downloading", version: "0.4.0" });
     squirrel.emit("update-downloaded");
     expect(updater.state()).toMatchObject({ phase: "ready", version: "0.4.0" });
-    expect(notify).toHaveBeenCalledWith("Weft 0.4.0 is ready", expect.any(String));
+    expect(notify.mock.calls[0]?.slice(0, 2)).toEqual(["Weft 0.4.0 is ready", expect.any(String)]);
     expect(updater.menuItem().label).toBe("Restart to Update to 0.4.0");
   });
 

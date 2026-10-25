@@ -80,6 +80,12 @@ because the private key lives only in this Mac's keychain. It notarizes when the
 The certificate belongs to the Apple Developer team that publishes Weft; Gatekeeper shows its name. Weft publishes
 from Alex Miller's individual membership, not Flexbike Inc's.
 
+## Downloads
+
+weft.zip's download button and `weft.zip/download` (`app/download/route.ts`, a 302 to the newest dmg; the link to
+share) both read the release feed through `latestRelease()` in `lib/home-release.ts`, cached for hours, so a new release
+reaches the site without a deploy.
+
 ## How an installed Weft updates (`electron/updater.cjs`)
 
 - A packaged Weft fetches `https://github.com/aimhuge/weft/releases/latest/download/update.json` 30s after launch and
@@ -92,6 +98,11 @@ from Alex Miller's individual membership, not Flexbike Inc's.
   installs on the next quit. With threads running, restarting asks first: **Restart When Idle** (the default) arms the
   server's drain (`lib/restart-when-idle.ts`) with `then: "update"`, and once the last turn ends the server calls the
   control server's `POST /app/restart`, which runs `updater.installNow()`; **Restart Now** installs at once.
+- Left alone, a ready update installs itself: every minute (`QUIET_CHECK_MS`) `installWhenQuiet()` restarts into it
+  when the Mac has had no keyboard or mouse input for 10 minutes (`AWAY_SECONDS`, Electron's
+  `powerMonitor.getSystemIdleTime()`) and the board reports exactly 0 running threads. A count the server couldn't give
+  (an error, a 403) counts as busy, so it never cuts a turn off. The ready notification's click opens the Software
+  Update window; its **Restart Now** button goes through the same `install()` as the menu, asking when threads run.
 - Squirrel only installs into a signed app. An unsigned build (or any Squirrel error) falls back to **Download Weft
   X…**, which opens the release page.
 - The Weft menu always has the item, and in the app it opens the **Software Update** window (`electron/update-window.cjs`,

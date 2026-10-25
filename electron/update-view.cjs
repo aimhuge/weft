@@ -25,7 +25,7 @@ function headline(state, currentVersion, packaged) {
     case "downloading":
       return { tone: "busy", title: `Downloading Weft ${v}…`, detail: "It downloads in the background. You can close this window." };
     case "ready":
-      return { tone: "new", title: `Weft ${v} is ready`, detail: "Restart to finish. If threads are running, Weft asks whether to wait for them first." };
+      return { tone: "new", title: `Weft ${v} is ready`, detail: "Weft restarts into it on its own once no threads are running and you've been away for 10 minutes. Or restart now: with threads running, Weft asks whether to wait for them." };
     case "available":
       return {
         tone: "new",

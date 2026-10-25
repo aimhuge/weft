@@ -81,7 +81,7 @@ When a new doc lands in this folder, add it here on the same change.
   `electron/pane-error.cjs` shows a failed load's reason, with Try again and Back, instead of Chromium's blank page.
 - `electron/menus.cjs` + `electron/keep-working.cjs`: app menu, menu bar icon, dock; Keep Working (awake with the lid shut, until threads finish).
 - `electron/updater.cjs` (+ `electron/update-window.cjs`, the Software Update window) + `scripts/release-feed.mjs` + `.github/workflows/release.yml`: updates from GitHub Releases (Squirrel.Mac's JSON
-  feed, a download fallback when unsigned) and the tag-triggered signed release; `CHANGELOG.md` holds each version's notes, which Weft commits itself after a version bump (docs/architecture/updates.md).
+  feed, a download fallback when unsigned, a quiet install once nothing runs and nobody's at the Mac) and the tag-triggered signed release; `CHANGELOG.md` holds each version's notes, which Weft commits itself after a version bump (docs/architecture/updates.md).
   `scripts/bundle-toolchain.mjs` stages what the app ships for a fresh Mac (node, npm, pnpm, puku-cli without telemetry, claude, all on
   my own Electron), which `appendToolchain()` in `electron/env.cjs` puts at the end of PATH.
 - `electron/folder-access.cjs` + `lib/folder-access-tool.ts`: `mcp__board__request_folder_access`, called by a thread that got "Operation not permitted" on

@@ -4,13 +4,16 @@
 // own updater (Squirrel.Mac, Electron's built-in autoUpdater) reads. A signed build hands the feed to
 // Squirrel, which downloads the zip in the background; the app menu then offers "Restart to Update", and
 // the update also lands on the next quit. An unsigned build, or any Squirrel failure, falls back to
-// "Download Weft X…", which opens the release page. No restart happens without a click, and the click asks
-// first when threads are running. Dev mode never checks on its own (`npm run desktop` updates with git pull).
+// "Download Weft X…", which opens the release page. A ready update installs on its own only when nobody would
+// notice: no thread running and nobody at the Mac for AWAY_SECONDS. A click asks first when threads are running.
+// Dev mode never checks on its own (`npm run desktop` updates with git pull).
 const FEED = process.env.WEFT_UPDATE_FEED || "https://github.com/aimhuge/weft/releases/latest/download/update.json";
 const RELEASES = "https://github.com/aimhuge/weft/releases";
 const CHECK_EVERY_MS = 4 * 60 * 60 * 1000;
 const FIRST_CHECK_MS = 30_000; // after launch, out of the board's way
 const BUSY = new Set(["checking", "downloading", "ready"]); // phases a new check would only disturb
+const AWAY_SECONDS = 10 * 60; // no keyboard or mouse for this long, and a ready update installs itself
+const QUIET_CHECK_MS = 60_000;
 
 // -1, 0 or 1 for semver-ish "1.2.3" strings; a prerelease ("1.2.3-beta.1") sorts before its release.
 function compareVersions(a, b) {
@@ -77,6 +80,8 @@ function createUpdater({
   openExternal = () => {},
   onBeforeInstall = () => {},
   onChange = () => {},
+  // Seconds since the last keyboard or mouse input on this Mac (Electron's powerMonitor).
+  idleSeconds = () => 0,
   // The Software Update window (update-window.cjs): when given, the menu item opens it instead of acting.
   openWindow = null,
   feed = FEED,
@@ -85,6 +90,7 @@ function createUpdater({
   let state = { phase: "idle" };
   let timer = null;
   let squirrelReady = false;
+  let quietTimer = null;
 
   function set(next) {
     state = next;
@@ -107,7 +113,9 @@ function createUpdater({
       squirrelReady = true;
       autoUpdater.on("update-downloaded", () => {
         set({ ...state, phase: "ready" });
-        notify(`Weft ${state.version} is ready`, "Restart Weft to update, or it updates the next time you quit.");
+        const body = "Weft restarts into it once no threads are running and you've stepped away. Or restart now.";
+        notify(`Weft ${state.version} is ready`, body, { install: () => install(), open: openWindow });
+        watchForQuiet();
       });
       autoUpdater.on("error", (err) => {
         if (state.phase === "downloading") fallBack(state, err);
@@ -164,6 +172,19 @@ function createUpdater({
     return installNow();
   }
 
+  // Once an update is ready, installs it the first time nothing runs and nobody's at the Mac: a restart no one sees.
+  function watchForQuiet() {
+    if (quietTimer) return;
+    quietTimer = setInterval(() => installWhenQuiet().catch(() => {}), QUIET_CHECK_MS);
+  }
+
+  async function installWhenQuiet() {
+    if (state.phase !== "ready" || idleSeconds() < AWAY_SECONDS) return false;
+    const running = await countRunning().catch(() => null);
+    if (running !== 0) return false; // a count the server couldn't give is busy, never idle
+    return installNow();
+  }
+
   // Restarts into the downloaded update without asking: the server's restart when idle calls this once nothing runs.
   function installNow() {
     if (state.phase !== "ready") return false;
@@ -186,13 +207,16 @@ function createUpdater({
 
   function stop() {
     clearTimeout(timer);
+    clearInterval(quietTimer);
     timer = null;
+    quietTimer = null;
   }
 
   return {
     check,
     install,
     installNow,
+    installWhenQuiet,
     download,
     start,
     stop,
@@ -214,7 +238,8 @@ function createUpdater({
 // The updater with Electron's own pieces: Squirrel, dialogs, a notification, and the board's running count.
 function createAppUpdater({ getServer, onChange, openWindow }) {
   const { armRestart } = require("./restart-when-idle.cjs");
-  const { BaseWindow, Notification, app, autoUpdater, dialog, shell } = require("electron");
+  const { BaseWindow, Notification, app, autoUpdater, dialog, powerMonitor, shell } = require("electron");
+  let shown = null; // the last notification, held so its click handlers outlive garbage collection
   return createUpdater({
     currentVersion: app.getVersion(),
     packaged: app.isPackaged,
@@ -235,7 +260,14 @@ function createAppUpdater({ getServer, onChange, openWindow }) {
       if (error) dialog.showMessageBox({ type: "warning", message: "Couldn't wait for the threads to finish", detail: error });
     },
     tell: (message, detail) => dialog.showMessageBox({ type: "info", message, detail }),
-    notify: (title, body) => Notification.isSupported() && new Notification({ title, body }).show(),
+    notify: (title, body, on = {}) => {
+      if (!Notification.isSupported()) return;
+      shown = new Notification({ title, body, actions: on.install ? [{ type: "button", text: "Restart Now" }] : [] });
+      if (on.open) shown.on("click", on.open);
+      if (on.install) shown.on("action", on.install);
+      shown.show();
+    },
+    idleSeconds: () => powerMonitor.getSystemIdleTime(),
     openExternal: (url) => shell.openExternal(url),
     // quitAndInstall closes every window first, and the board's close handler only hides it; destroying skips that.
     onBeforeInstall: () => BaseWindow.getAllWindows().forEach((w) => w.destroy()),
@@ -244,4 +276,6 @@ function createAppUpdater({ getServer, onChange, openWindow }) {
   });
 }
 
-module.exports = { createAppUpdater, createUpdater, compareVersions, newerRelease, menuItem, FEED, CHECK_EVERY_MS, FIRST_CHECK_MS };
+module.exports = {
+  createAppUpdater, createUpdater, compareVersions, newerRelease, menuItem, FEED, CHECK_EVERY_MS, FIRST_CHECK_MS, AWAY_SECONDS, QUIET_CHECK_MS,
+};

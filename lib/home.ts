@@ -113,7 +113,7 @@ export function downloadLink(release: Release | null): { label: string; href: st
     return {
       label: `Download Weft ${release.version} for Mac`,
       href: release.dmg,
-      note: "Apple silicon. Not notarized yet: on first open, right-click Weft and choose Open. Updates itself from GitHub Releases.",
+      note: "Apple silicon. Signed and notarized by Apple, and it updates itself.",
     };
   }
   return {
