@@ -21,6 +21,7 @@ const navMock = vi.hoisted(() => ({ notFound: vi.fn() }));
 vi.mock("@aimhuge/admin", () => adminPkg);
 vi.mock("./account", () => accountMock);
 vi.mock("next/navigation", () => navMock);
+vi.mock("next/server", () => ({ connection: async () => {} }));
 
 const admin = await import("./admin");
 

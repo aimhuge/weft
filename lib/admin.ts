@@ -14,6 +14,7 @@
 // `@aimhuge/teams` once at module load. We don't keep a second copy here.
 import { requireSuperAdmin as adminRequireSuperAdmin, isAdminCaller } from "@aimhuge/admin";
 import type { SuperAdminSession } from "@aimhuge/admin/client";
+import { connection } from "next/server";
 import { accountClient, accountView, toAccountUser } from "@/lib/account";
 import type { AccountUser } from "@/lib/types";
 
@@ -27,6 +28,9 @@ export interface AdminCaller {
 // Server gate. Throws notFound() when the caller isn't on SUPER_ADMIN_EMAILS.
 // Use from a server component or API route that wants admin-only behaviour.
 export async function requireSuperAdminWeft(): Promise<AdminCaller> {
+  // The gate reads the signed-in session, which is per-request: without this
+  // Next tries to prerender the admin pages and trips on the session's Date.now().
+  await connection();
   const view = await accountView();
   const user = view.user;
   // The early branch handles the unsigned case without a non-null assertion.
@@ -43,6 +47,7 @@ export async function requireSuperAdminWeft(): Promise<AdminCaller> {
 
 // Non-throwing variant for layouts that want to render differently, not block.
 export async function isAdminWeft(): Promise<boolean> {
+  await connection();
   const view = await accountView();
   if (!view.user?.email) return false;
   return isAdminCaller({ email: view.user.email });
