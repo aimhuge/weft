@@ -23,7 +23,7 @@ type Manifest = {
     bot_user?: { display_name: string; always_online?: boolean };
     slash_commands?: { command: string; description: string; usage_hint?: string; should_escape?: boolean }[];
   };
-  oauth_config: { scopes: { bot?: string[]; user?: string[] }; redirect_urls?: string[] };
+  oauth_config: { scopes: { bot?: string[]; user?: string[] }; redirect_urls?: string[]; pkce_enabled?: boolean };
   settings: {
     event_subscriptions?: { bot_events?: string[] };
     interactivity?: { is_enabled?: boolean };
@@ -75,6 +75,13 @@ describe("the Slack manifest", () => {
     // Without a redirect URL, Slack has nowhere to send the install code, so the answer that carries
     // incoming_webhook.url never arrives.
     expect(m.oauth_config.redirect_urls).toContain("https://weft.zip/api/slack/oauth/callback");
+  });
+
+  it("keeps token rotation on, because Slack refuses to turn it off again", () => {
+    // Token rotation was enabled on the app in the console. Slack's answer to a manifest that disables it
+    // is `cannot_disable_once_enabled` — so a manifest saying `false` fails validation outright, and the
+    // sync never lands. The setting is one-way: this must stay `true` from here on.
+    expect(m.settings.token_rotation_enabled).toBe(true);
   });
 
   it("names the app and its bot, the way the drawer shows them", () => {
