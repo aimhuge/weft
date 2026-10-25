@@ -70,6 +70,22 @@ function redactOnePass(text: string): string {
   return out;
 }
 
+// An inlined file in a page: `data:image/webp;base64,…`. Its payload is random-looking by nature, so the opaque-token
+// pass would chop a pasted-in photo into `‹hidden: an opaque value›` pieces and the image wouldn't render.
+const DATA_URI = /data:[\w.+-]+\/[\w.+-]+(?:;[\w.+-]+=[^;,\s"')]+)*;base64,[A-Za-z0-9+/=]+/gi;
+
+// redactText for a shared page or folder file: the text around each base64 data URI is redacted, the payloads pass
+// through whole.
+export function redactPageText(text: string): string {
+  let out = "";
+  let cursor = 0;
+  for (const match of text.matchAll(DATA_URI)) {
+    out += redactText(text.slice(cursor, match.index)) + match[0];
+    cursor = match.index + match[0].length;
+  }
+  return out + redactText(text.slice(cursor));
+}
+
 // Walk a ThreadItem and replace every string value with its redacted form. A tool item whose
 // `result` is over TOOL_RESULT_INLINE_MAX is dropped entirely: the share viewer has no route to
 // fetch it (an attacker could probe paths), and the redactor's defence against an uncut item is to

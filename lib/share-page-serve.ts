@@ -5,7 +5,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { NO_STORE } from "./app-share-reply";
 import { isTextType, pageContentType } from "./share-page";
-import { redactText } from "./share-redact";
+import { redactPageText } from "./share-redact";
 
 export const SHA_RE = /^[0-9a-f]{64}$/;
 
@@ -56,7 +56,7 @@ export function folderFileType(extension: string): string {
 // Strip the redaction-friendly extension. Sandboxed HTML and other text files still get the
 // secret-shaped redaction the page route uses; binary bytes pass through untouched.
 function applyTextRedaction(type: string, bytes: ArrayBuffer): string | ArrayBuffer {
-  return isTextType(type) ? redactText(new TextDecoder().decode(bytes)) : bytes;
+  return isTextType(type) ? redactPageText(new TextDecoder().decode(bytes)) : bytes;
 }
 
 async function downloadBlob(service: SupabaseClient, orgId: string, sha: string): Promise<{ data: Blob; declared: string } | null> {

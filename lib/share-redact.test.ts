@@ -4,7 +4,7 @@
 // both fire.
 import { describe, expect, it } from "vitest";
 import { TOOL_RESULT_INLINE_MAX } from "./cloud-sync-types";
-import { REDACTED, redactItem, redactItems, redactText } from "./share-redact";
+import { REDACTED, redactItem, redactItems, redactPageText, redactText } from "./share-redact";
 import type { ThreadItem } from "./types";
 
 // Built at run time so no key-shaped literal sits in the file for the pre-commit secret scan.
@@ -78,6 +78,29 @@ describe("redactText", () => {
   it("leaves a UUID alone (whitelisted)", () => {
     const uuid = "550e8400-e29b-41d4-a716-446655440000";
     expect(redactText(`id ${uuid} end`)).toBe(`id ${uuid} end`);
+  });
+});
+
+describe("redactPageText", () => {
+  // Random bytes as base64: the shape of an inlined photo, which the opaque-token pass would chop up.
+  const payload = Buffer.from(Array.from({ length: 600 }, (_, i) => (i * 97 + 13) % 256)).toString("base64");
+
+  it("leaves a base64 data URI's payload whole", () => {
+    const html = `<img src="data:image/webp;base64,${payload}" alt="us"><div style="background:url(data:image/png;base64,${payload})"></div>`;
+    expect(redactText(html)).toContain("‹hidden: an opaque value›");
+    expect(redactPageText(html)).toBe(html);
+  });
+
+  it("still masks keys around a data URI", () => {
+    const html = `<p>${STRIPE_KEY}</p><img src="data:image/webp;base64,${payload}"><p>${GITHUB_TOKEN}</p>`;
+    const out = redactPageText(html);
+    expect(out).not.toContain(STRIPE_KEY);
+    expect(out).not.toContain(GITHUB_TOKEN);
+    expect(out).toContain(`data:image/webp;base64,${payload}`);
+  });
+
+  it("redacts a page with no data URI the way redactText does", () => {
+    expect(redactPageText(`key ${STRIPE_KEY}`)).toBe(redactText(`key ${STRIPE_KEY}`));
   });
 });
 

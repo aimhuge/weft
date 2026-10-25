@@ -78,6 +78,9 @@ merge by seq, so one that changed in place is replaced. `?before=<seq>` pages ba
   (`lib/share-redact-entropy.ts`) flags any 40+ char run whose Shannon entropy is above 4.7 bits/char
   and isn't a known safe shape (UUID, hex hash, ULID, Snowflake) — a custom in-house API key, a
   freshly minted one-off, an internal SaaS token — and replaces it with `‹hidden: an opaque value›`.
+  A shared page or folder file goes through `redactPageText` instead (`lib/share-page-serve.ts`): the same passes,
+  except a `data:…;base64,` payload is left whole, since an inlined image is high-entropy by nature and used to be
+  chopped into markers that wouldn't render.
 - Long tool outputs: an output over 2 KB is cut from the item by cloud sync anyway, and the viewer's tool-result
   source answers "Long output isn't shared." instead of fetching it from `cloud_tool_outputs`.
 - The password hash: `authenticated` can't select `cloud_shares.password_hash` (column grants); clients read
