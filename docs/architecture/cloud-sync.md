@@ -53,6 +53,14 @@ is the contract between the parts:
   and, when on, `queueFolder()` queues its existing cards and items; `POST { sync: true }` flushes now). The status
   (`cloudSyncStatus()`, type in `lib/cloud-sync-view.ts`) is `waiting` (outbox lines), `lastSyncAt`, `uploaded` since start,
   `lastError`, `signedOut`, `noWorkspace`. Folders live in settings `syncFolders` (`setSyncFolder`).
+- The sync prompt (`components/SyncPromptDialog.tsx`, mounted beside the welcome in `components/HeaderBadges.tsx`; rules in
+  `lib/sync-prompt.ts`, state in `lib/use-sync-prompt.ts`): "Turn on Project Sync for <project>?" for the project you're working on — the
+  one the board is narrowed to, else the folder of the card that moved last, never the copilot, an archived card or a scratch folder
+  (`lib/scratch.ts`). It waits for the welcome's answer and for one of that project's threads to finish a turn (so first launch asks
+  after your first thread, not over it), skips a project already in `syncFolders`, and asks at most once a launch (a module flag).
+  **Sync** is the same `POST { folder, on: true }` as the Settings switch, then a toast; signed out the button is **Sign in with
+  GitHub**, with no workspace **Open the web board**, and the window's focus reads the status again. **Don't show me again** sets
+  `weft-sync-prompt-off` in localStorage; Settings → General → Reset tips (`resetOnboarding`) clears it.
 - The web board (`app/[orgSlug]/board/page.tsx`, `components/web-board/*`, pure logic in `lib/web-board.ts`): behind the same
   `requireTeam` gate as Team and Billing, read as the visitor through their cookie session, so RLS decides what they see.
   It **is** the desktop board drawn read-only, not a lookalike: the cards are `components/CardView.tsx` with `readOnly` (no drag,

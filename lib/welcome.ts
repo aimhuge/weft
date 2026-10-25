@@ -2,6 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { globalSingleton } from "./global-singleton";
+import { looksScratch } from "./scratch";
 import { DATA_DIR, listCards } from "./store";
 
 // First launch's welcome (components/WelcomeDialog.tsx): whether your Claude Code history counts on
@@ -100,11 +101,9 @@ export function countsAt(w: Welcome | null, at: number): boolean {
   return !w || w.countHistory || at >= w.at;
 }
 
-// Folders Claude Code works in that aren't projects: worktrees, the Claude app's scratch spaces, temp
-// folders. The welcome leaves them unticked.
-const SCRATCH = ["/.claude/worktrees/", "/Library/Application Support/Claude/", "/tmp/", "/private/var/folders/", "-evals-results-"];
+// Scratch folders (lib/scratch.ts) and the OS temp folder: the welcome leaves them unticked.
 export function isScratch(cwd: string): boolean {
-  return cwd.startsWith(os.tmpdir()) || SCRATCH.some((part) => cwd.includes(part));
+  return cwd.startsWith(os.tmpdir()) || looksScratch(cwd);
 }
 
 // Settings → General: count your history or not, after the welcome.

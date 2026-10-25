@@ -11,9 +11,10 @@ const BacklogBadge = guarded(() => import("./BacklogBadge"), { inline: true, wha
 const GameBadge = guarded(() => import("./GameBadge"), { inline: true, what: "streak badge" });
 const LeagueBadge = guarded(() => import("./LeagueBadge"), { inline: true, what: "league badge" });
 const WelcomeDialog = guarded(() => import("./WelcomeDialog"), { inline: true, what: "welcome" });
+const SyncPromptDialog = guarded(() => import("./SyncPromptDialog"), { inline: true, what: "sync prompt" });
 
 // The header's badges for the project in view: code quality, the uncommitted pile, the Backlog, your streak
-// and level, your league, and first launch's welcome beside the streak it introduces. They refresh whenever a turn ends or a card ships somewhere, so they follow the threads' work.
+// and level, your league, first launch's welcome beside the streak it introduces, and the ask to sync the project in view. They refresh whenever a turn ends or a card ships somewhere, so they follow the threads' work.
 // `start` begins a card (an improvement, a commit walk, a "Set it up"); it rejects when that fails.
 export default function HeaderBadges({
   cwd,
@@ -28,9 +29,6 @@ export default function HeaderBadges({
   notify: (err: unknown) => void;
   toast: (text: string) => void;
 }) {
-  // toast is reserved for future badges that need to surface a transient message.
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const _toast = toast;
   const running = cards.filter((c) => c.column === "running" && !c.archived).length;
   const turnTick = `${running}:${cards.reduce((n, c) => n + (c.turns ?? 0), 0)}`;
   const done = cards.filter((c) => c.column === "done").length;
@@ -44,6 +42,7 @@ export default function HeaderBadges({
       <GameBadge cwd={cwd} refresh={`${turnTick}:${done}`} onStart={begin} />
       <LeagueBadge refresh={done} />
       <WelcomeDialog onError={notify} />
+      <SyncPromptDialog cwd={cwd} cards={cards} toast={toast} />
     </>
   );
 }
