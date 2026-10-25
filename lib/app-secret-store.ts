@@ -98,9 +98,9 @@ export function createAppSecretStore(service: SupabaseClient): AppSecretStore {
       });
       return openRows(filtered, shareId);
     },
-    // Update the row, else insert it. Not an upsert: the unique key is an expression index on coalesce(viewer_id, …),
-    // which ON CONFLICT (share_id, name, viewer_id) can't infer, so every upsert failed. A second writer racing the
-    // insert hits the unique key (23505); its value then goes in through one more update.
+    // Update the row, else insert it. The unique key used to be an expression index on coalesce(viewer_id, …), which
+    // ON CONFLICT couldn't infer, so every upsert failed; it's UNIQUE NULLS NOT DISTINCT (share_id, name, viewer_id)
+    // now. A second writer racing the insert hits that key (23505); its value then goes in through one more update.
     async setValue(shareId, name, viewerId, value) {
       const ciphertext = seal(value, { shareId, name, viewerId });
       const update = async () => {
