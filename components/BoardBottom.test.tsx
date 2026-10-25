@@ -43,4 +43,10 @@ describe("BoardBottom", () => {
     rerender(<BoardBottom footer={footer} onHelp={vi.fn()} terminal={terminal({ cwd: "/other" })} />);
     expect(mounts).toEqual(["/r", "/other"]);
   });
+
+  it("renders nothing of its own around the footer and terminal (no stray text like a debug probe's 'none')", () => {
+    const { container } = render(<BoardBottom footer={footer} onHelp={vi.fn()} terminal={terminal({ open: false })} />);
+    expect(container.textContent).toBe("");
+    expect([...container.children].map((el) => el.getAttribute("data-what"))).toEqual(["footer"]);
+  });
 });
