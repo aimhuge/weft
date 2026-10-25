@@ -177,10 +177,12 @@ export function railBadge(vaults: VaultSummary[]) {
   };
 }
 
-export function railTitle(badge: { missing: number; nudge: boolean }) {
+export function railTitle(badge: { missing: number; nudge: boolean; vercel?: string }) {
   const parts = ["Secrets: this project's vault"];
   if (badge.missing) parts.push(`${badge.missing} blank${badge.missing === 1 ? "" : "s"} to fill in`);
   if (badge.nudge) parts.push(".env.local has values to import");
+  // The vault ⇄ Vercel drift (lib/vercel-drift.ts driftBadge).
+  if (badge.vercel) parts.push(badge.vercel);
   return parts.join(" · ");
 }
 

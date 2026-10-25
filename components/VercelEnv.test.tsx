@@ -55,10 +55,10 @@ describe("VercelEnv", () => {
   it("lists each vault name against Vercel, open when something's left to push", async () => {
     setup();
     expect(screen.getByText("Secrets: checking…")).toBeInTheDocument();
-    expect(await screen.findByText("1 to push · 1 on Vercel")).toBeInTheDocument();
+    expect(await screen.findByText("1 on Vercel not in vault · 1 missing on production: push?")).toBeInTheDocument();
     expect(screen.getByText("Vercel only")).toBeInTheDocument();
     expect(screen.getByText("no value")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: /1 to push/ }));
+    await userEvent.click(screen.getByRole("button", { name: /missing on production/ }));
     expect(screen.queryByText("SUPABASE_SECRET_KEY")).not.toBeInTheDocument();
   });
 
@@ -137,13 +137,13 @@ describe("VercelEnv", () => {
 
     it("hides with nothing in the vault", async () => {
       setup({ ...all(), envStatus: vi.fn(() => Promise.resolve({ ...STATUS, rows: [STATUS.rows[2]!] })) });
-      await screen.findByText("No vault values to push yet");
+      await screen.findByText("1 on Vercel not in vault");
       expect(screen.queryByRole("button", { name: "Push all" })).not.toBeInTheDocument();
     });
 
     it("hides on a main that started before Push all", async () => {
       setup();
-      await screen.findByText("1 to push · 1 on Vercel");
+      await screen.findByText("1 on Vercel not in vault · 1 missing on production: push?");
       expect(screen.queryByRole("button", { name: "Push all" })).not.toBeInTheDocument();
     });
   });

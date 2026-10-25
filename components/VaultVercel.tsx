@@ -1,17 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { envLine, pushAllText, toPush, vercelBridge, type VercelEnvStatus } from "@/lib/vercel-view";
+import VercelDriftActions from "./VercelDriftActions";
+import { driftLine } from "@/lib/vercel-drift";
+import { envLine, vercelBridge, type VercelEnvStatus } from "@/lib/vercel-view";
 
 // A vault's ▲ line in the 🔐 drawer: when its folder is linked to a Vercel project (the ▲ drawer, .vercel/project.json),
-// how its values stand on Vercel and, when some aren't there yet, Push all (one Touch ID, electron/vercel-env.cjs).
+// how its values stand on Vercel. When the two drift apart it says so ("4 on Vercel not in vault: pull?", "2 missing
+// on preview: push?", lib/vercel-drift.ts) with Pull and Push beside it (components/VercelDriftActions.tsx).
 // An unlinked folder, no Vercel sign-in or an older main draw nothing. changed reloads it after the vault changes.
 export default function VaultVercel({ folder, changed, notify }: { folder: string; changed: string; notify: (err: unknown) => void }) {
   const bridge = vercelBridge();
   const status = bridge?.envStatus;
-  const pushAll = bridge?.envPushAll;
   const [env, setEnv] = useState<VercelEnvStatus | null>(null);
-  const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => {
     if (!status) return Promise.resolve();
@@ -22,38 +23,15 @@ export default function VaultVercel({ folder, changed, notify }: { folder: strin
     void load();
   }, [load, changed]);
 
-  if (!env || !env.rows.some((r) => r.inVault)) return null;
-  const left = toPush(env.rows).length;
-
-  async function send() {
-    if (!pushAll) return;
-    setBusy(true);
-    try {
-      notify(pushAllText(await pushAll(folder)));
-      await load();
-    } catch (err) {
-      notify(err);
-    } finally {
-      setBusy(false);
-    }
-  }
+  if (!bridge || !env || !env.rows.length) return null;
 
   return (
     <div className="mx-1 mt-1 flex items-center gap-1.5 rounded-md border border-line px-2 py-1 text-[11px] text-muted">
       <span className="min-w-0 flex-1 truncate" title={`Linked to the Vercel project ${env.project}`}>
         <span aria-hidden>▲ </span>
-        <span className="text-ink">{env.project}</span> · {envLine(env.rows)}
+        <span className="text-ink">{env.project}</span> · {driftLine(env.rows) ?? envLine(env.rows)}
       </span>
-      {left > 0 && pushAll && (
-        <button
-          onClick={() => void send()}
-          disabled={busy}
-          className="shrink-0 rounded bg-accent px-1.5 text-[10px] leading-[16px] font-medium text-on-accent disabled:opacity-40"
-          title={`Send this vault's values to ${env.project} on Vercel, replacing what it has (one Touch ID)`}
-        >
-          {busy ? "Pushing…" : "Push to Vercel"}
-        </button>
-      )}
+      <VercelDriftActions folder={folder} rows={env.rows} bridge={bridge} notify={notify} onDone={load} />
     </div>
   );
 }

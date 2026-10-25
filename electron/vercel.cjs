@@ -244,7 +244,8 @@ function registerVercel(ipcMain, { vercel, env, isBoard }) {
   if (env) {
     handle("vercel:env-status", (folder) => env.status(String(folder)));
     handle("vercel:env-push", (folder, name, environment) => env.push(String(folder), String(name), String(environment)));
-    handle("vercel:env-push-all", (folder) => env.pushAll(String(folder)));
+    handle("vercel:env-push-all", (folder, only) => env.pushAll(String(folder), Array.isArray(only) ? only.map((o) => ({ name: String(o?.name), environment: String(o?.environment) })) : undefined));
+    handle("vercel:env-drift", (folders) => env.drift(Array.isArray(folders) ? folders.filter((f) => typeof f === "string") : []));
     handle("vercel:env-pull", (folder) => env.pull(String(folder)));
   }
 }
@@ -254,7 +255,9 @@ function registerVercel(ipcMain, { vercel, env, isBoard }) {
 function setupVercel({ ipcMain, dataDir, board, vault }) {
   const { safeStorage } = require("electron");
   const vercel = createVercel({ dataDir, safeStorage });
-  const env = vault ? require("./vercel-env.cjs").createVercelEnv({ vercel, vault }) : null;
+  // A folder's cached Vercel list changed in the background: the board asks for the drift again (lib/use-vercel-drift.ts).
+  const onDrift = (folder) => board()?.send("vercel:drift", folder);
+  const env = vault ? require("./vercel-env.cjs").createVercelEnv({ vercel, vault, onDrift }) : null;
   registerVercel(ipcMain, { vercel, env, isBoard: (sender) => Boolean(sender) && sender === board() });
   return { vercel, env };
 }

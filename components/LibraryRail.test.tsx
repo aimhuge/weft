@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // The left rail's admin group: rendered when the signed-in Weft account is
 // on the platform super-admin allowlist, hidden otherwise. Every other
-// rail hook (vault, webhooks, vercel, supabase, cloudflare, blastcp, github)
+// rail hook (vault, webhooks, vercel, supabase, cloudflare, blastcp, github, slack)
 // is mocked to a no-op so the rail's many consumers don't drag their data
 // layers into this test.
 
@@ -35,6 +35,7 @@ vi.mock("@/lib/use-supabase", () => ({ useSupabase: vi.fn(noopDataHook) }));
 vi.mock("@/lib/use-blastcp", () => ({ useBlastcp: vi.fn(noopDataHook) }));
 vi.mock("@/lib/use-cloudflare", () => ({ useCloudflare: vi.fn(noopDataHook) }));
 vi.mock("@/lib/use-github", () => ({ useGithub: vi.fn(noopDataHook) }));
+vi.mock("@/lib/use-slack", () => ({ useSlack: vi.fn(noopDataHook) }));
 vi.mock("@/lib/use-services", () => ({ useServices: () => ({ services: [], loaded: true, error: null, reload: vi.fn(), kill: vi.fn(), restart: vi.fn(), refreshMs: 2000 }) }));
 
 // Drawers' bodies are stubs — they're gated behind their own open state and
@@ -46,6 +47,7 @@ vi.mock("./SupabaseDrawer", () => ({ default: () => null }));
 vi.mock("./CloudflareDrawer", () => ({ default: () => null }));
 vi.mock("./BlastcpDrawer", () => ({ default: () => null }));
 vi.mock("./GithubDrawer", () => ({ default: () => null }));
+vi.mock("./SlackDrawer", () => ({ default: () => null }));
 vi.mock("./ServicesDrawer", () => ({ default: () => null }));
 vi.mock("./TagsDrawer", () => ({ default: () => null }));
 

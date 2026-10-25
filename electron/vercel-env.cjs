@@ -3,31 +3,54 @@
 // (vault.sendValue, after a Touch ID that names the secret and the project; Push all asks once for the lot); the board and threads only ever see
 // names. The drawer's Push button and mcp__secrets__push_to_vercel both land here. The other way, pull() brings
 // down the plain variables the vault has no value for (by hand from the drawer, or on a Vercel webhook relayed by
-// lib/vercel-hooks.ts); sensitive ones never decrypt, so they stay Vercel only.
+// lib/vercel-hooks.ts); sensitive ones never decrypt, so they stay Vercel only. drift() lines the vault up against a
+// cached list per folder (electron/vercel-env-cache.cjs), for the 🔐 and ▲ badges and the copilot's setup gaps.
+
+const { createEnvCache } = require("./vercel-env-cache.cjs");
+const { readLink } = require("./vercel-project.cjs");
 
 const ENVIRONMENTS = ["development", "preview", "production"];
 const NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 // Vercel types whose value its API hands back; "sensitive" and the old "secret" never do, "system" is Vercel's own.
 const PULLABLE = new Set(["plain", "encrypted"]);
 
-function createVercelEnv({ vercel, vault }) {
+// One row per vault name and environment: whether it has a value here and whether Vercel has it there.
+// Vercel-only names are listed too, so you can see what the vault doesn't hold.
+/** @returns {import("../lib/vercel-view").VercelEnvStatus} */
+function rowsOf({ label, secrets }, { project, envs }) {
+  const onVercel = new Set(envs.flatMap((e) => e.targets.map((t) => `${t}\n${e.key}`)));
+  const pullable = new Set(envs.filter((e) => PULLABLE.has(e.type)).flatMap((e) => e.targets.map((t) => `${t}\n${e.key}`)));
+  const row = (name, environment, inVault) => {
+    const key = `${environment}\n${name}`;
+    return { name, environment, inVault, onVercel: onVercel.has(key), ...(!inVault && pullable.has(key) ? { pullable: true } : {}) };
+  };
+  const rows = secrets.map((s) => row(s.name, s.environment, !s.missing));
+  const known = new Set(secrets.map((s) => `${s.environment}\n${s.name}`));
+  for (const e of envs) for (const t of e.targets) if (ENVIRONMENTS.includes(t) && !known.has(`${t}\n${e.key}`)) rows.push(row(e.key, t, false));
+  rows.sort((a, b) => ENVIRONMENTS.indexOf(a.environment) - ENVIRONMENTS.indexOf(b.environment) || a.name.localeCompare(b.name));
+  return { label, project, rows };
+}
+
+/** @param {{ vercel: any, vault: any, onDrift?: (folder: string) => void, linked?: (folder: string) => boolean }} deps */
+function createVercelEnv({ vercel, vault, onDrift, linked = (folder) => Boolean(readLink(folder)) }) {
+  const cache = createEnvCache({ list: (folder) => vercel.envList(folder), linked, onChange: onDrift });
   return {
-    // One row per vault name and environment: whether it has a value here and whether Vercel has it there.
-    // Vercel-only names are listed too, so you can see what the vault doesn't hold.
-    /** @returns {Promise<import("../lib/vercel-view").VercelEnvStatus>} */
     async status(folder) {
-      const [{ label, secrets }, { project, envs }] = await Promise.all([vault.names(folder), vercel.envList(folder)]);
-      const onVercel = new Set(envs.flatMap((e) => e.targets.map((t) => `${t}\n${e.key}`)));
-      const pullable = new Set(envs.filter((e) => PULLABLE.has(e.type)).flatMap((e) => e.targets.map((t) => `${t}\n${e.key}`)));
-      const row = (name, environment, inVault) => {
-        const key = `${environment}\n${name}`;
-        return { name, environment, inVault, onVercel: onVercel.has(key), ...(!inVault && pullable.has(key) ? { pullable: true } : {}) };
-      };
-      const rows = secrets.map((s) => row(s.name, s.environment, !s.missing));
-      const known = new Set(secrets.map((s) => `${s.environment}\n${s.name}`));
-      for (const e of envs) for (const t of e.targets) if (ENVIRONMENTS.includes(t) && !known.has(`${t}\n${e.key}`)) rows.push(row(e.key, t, false));
-      rows.sort((a, b) => ENVIRONMENTS.indexOf(a.environment) - ENVIRONMENTS.indexOf(b.environment) || a.name.localeCompare(b.name));
-      return { label, project, rows };
+      const [names, list] = await Promise.all([vault.names(folder), cache.listed(folder)]);
+      return rowsOf(names, list);
+    },
+
+    // Every linked folder's rows from the cached list, against the vault as it is now; a folder with no list yet is
+    // left out and fetched behind (onDrift says when it lands). Names only, like status.
+    async drift(folders) {
+      const out = [];
+      for (const folder of folders) {
+        const list = cache.peek(folder);
+        if (!list) continue;
+        const names = await vault.names(folder).catch(() => null);
+        if (names) out.push({ folder, ...rowsOf(names, list) });
+      }
+      return out;
     },
 
     // Pushes one vault value to the linked project, replacing what Vercel had for that name and environment.
@@ -35,19 +58,23 @@ function createVercelEnv({ vercel, vault }) {
       if (!NAME.test(name)) throw new Error(`${name || "A blank name"} isn't a variable name.`);
       if (!ENVIRONMENTS.includes(environment)) throw new Error(`Unknown environment: ${environment}`);
       const { project } = await vercel.envList(folder);
-      return vault.sendValue(folder, name, environment, (label) => `push ${name} (${label}, ${environment}) to Vercel project ${project}`, (value) => vercel.envSet(folder, name, environment, value));
+      const r = await vault.sendValue(folder, name, environment, (label) => `push ${name} (${label}, ${environment}) to Vercel project ${project}`, (value) => vercel.envSet(folder, name, environment, value));
+      void cache.listed(folder).catch(() => null);
+      return r;
     },
 
     // Push all: every value the vault holds for this folder, in every environment, behind one Touch ID that says how
     // many (vault.confirm, no unlock cache). Values stay in main; one Vercel refusal doesn't stop the rest.
-    async pushAll(folder) {
+    // only: just these names and environments (the drift's "2 missing on preview: push?"), else everything.
+    async pushAll(folder, only) {
+      const wanted = Array.isArray(only) ? new Set(only.map((o) => `${o.environment}\n${o.name}`)) : null;
       const { project } = await vercel.envList(folder);
       const found = [];
       let label = "";
       for (const environment of ENVIRONMENTS) {
         const r = await vault.valuesFor(folder, null, environment);
         label = r.label;
-        for (const [name, value] of Object.entries(r.values)) found.push({ name, environment, value });
+        for (const [name, value] of Object.entries(r.values)) if (!wanted || wanted.has(`${environment}\n${name}`)) found.push({ name, environment, value });
       }
       if (!found.length) return { label, project, sent: [], failed: [] };
       const n = found.length;
@@ -62,6 +89,7 @@ function createVercelEnv({ vercel, vault }) {
           failed.push({ name, environment, error: err instanceof Error ? err.message : String(err) });
         }
       }
+      void cache.listed(folder).catch(() => null);
       return { label, project, sent, failed };
     },
 
@@ -84,6 +112,7 @@ function createVercelEnv({ vercel, vault }) {
         }
       }
       for (const { name, environment, value } of entries) await vault.setValue(folder, name, environment, value, { source: "Vercel" });
+      void cache.listed(folder).catch(() => null);
       return { label, project, pulled: entries.map(({ name, environment }) => ({ name, environment })), skipped };
     },
 
@@ -97,6 +126,8 @@ function createVercelEnv({ vercel, vault }) {
 function envRoutes(env) {
   return {
     "POST /vercel/env-status": ({ folder }) => env().status(String(folder)),
+    // The copilot's setup gaps (lib/copilot-setup.ts): cached rows only, so it never waits on Vercel.
+    "POST /vercel/env-drift": ({ folders }) => env().drift(Array.isArray(folders) ? folders.map(String) : []),
     "POST /vercel/env-push": ({ folder, name, environment }) => env().push(String(folder), String(name), String(environment ?? "")),
     // The server's side of the pull webhook (lib/vercel-hooks.ts): pull a folder, and make or take off the team's hook.
     "POST /vercel/env-pull": ({ folder }) => env().pull(String(folder)),
@@ -105,4 +136,4 @@ function envRoutes(env) {
   };
 }
 
-module.exports = { createVercelEnv, envRoutes, ENVIRONMENTS, PULLABLE };
+module.exports = { createVercelEnv, envRoutes, rowsOf, ENVIRONMENTS, PULLABLE };

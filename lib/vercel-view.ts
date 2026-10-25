@@ -91,7 +91,11 @@ export interface VercelBridge {
   envStatus?: (folder: string) => Promise<VercelEnvStatus>;
   envPush?: (folder: string, name: string, environment: VercelEnvironment) => Promise<VercelPushResult>;
   // Every vault value, in every environment, behind one Touch ID (electron/vercel-env.cjs pushAll).
-  envPushAll?: (folder: string) => Promise<VercelPushAllResult>;
+  // only: just these names and environments (the drift's Push), else everything.
+  envPushAll?: (folder: string, only?: { name: string; environment: VercelEnvironment }[]) => Promise<VercelPushAllResult>;
+  // The vault ⇄ Vercel drift from main's cached lists (lib/vercel-drift.ts), and when a background fetch lands.
+  envDrift?: (folders: string[]) => Promise<(VercelEnvStatus & { folder: string })[]>;
+  onDrift?: (callback: (folder: string) => void) => () => void;
   // Vercel → vault: every plain variable the vault has no value for (electron/vercel-env.cjs pull).
   envPull?: (folder: string) => Promise<VercelPullResult>;
 }

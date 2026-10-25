@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/client";
 import VercelEnvRows from "./VercelEnvRows";
+import VercelDriftActions from "./VercelDriftActions";
+import { driftLine } from "@/lib/vercel-drift";
 import { ENV_SHORT, envLine, pullText, pushAllText, pushText, toPull, toPush, type VercelBridge, type VercelEnvRow, type VercelEnvStatus } from "@/lib/vercel-view";
 
 // A linked project's 🔐 secrets against its Vercel variables (electron/vercel-env.cjs), under its deploy in the ▲
@@ -113,7 +115,9 @@ export default function VercelEnv({ folder, team, bridge, notify }: { folder: st
 
   return (
     <div>
-      <EnvHeader rows={env.rows} shown={shown} onToggle={() => setOpen(!shown)} busy={busy} onPushAll={pushAll ? () => void sendAll() : undefined} />
+      <EnvHeader rows={env.rows} shown={shown} onToggle={() => setOpen(!shown)} busy={busy} onPushAll={pushAll ? () => void sendAll() : undefined}>
+        <VercelDriftActions folder={folder} rows={env.rows} bridge={bridge} notify={notify} onDone={load} />
+      </EnvHeader>
       {shown && (
         <VercelEnvRows
           rows={env.rows}
@@ -145,17 +149,19 @@ export default function VercelEnv({ folder, team, bridge, notify }: { folder: st
   );
 }
 
-// The 🔐 summary line that opens the list, with Push all beside it when the vault has anything to send.
-function EnvHeader({ rows, shown, onToggle, busy, onPushAll }: { rows: VercelEnvRow[]; shown: boolean; onToggle: () => void; busy: string | null; onPushAll?: () => void }) {
+// The 🔐 summary line that opens the list: the drift when there is one (lib/vercel-drift.ts) with its Pull and Push
+// (children), and Push all beside it when the vault has anything to send.
+function EnvHeader({ rows, shown, onToggle, busy, onPushAll, children }: { rows: VercelEnvRow[]; shown: boolean; onToggle: () => void; busy: string | null; onPushAll?: () => void; children?: React.ReactNode }) {
   return (
     <div className="flex items-center gap-1.5">
       <button onClick={onToggle} className="flex min-w-0 flex-1 items-center gap-1 text-left hover:text-ink" aria-expanded={shown}>
         <span aria-hidden>🔐</span>
-        <span className="min-w-0 flex-1 truncate">{envLine(rows)}</span>
+        <span className="min-w-0 flex-1 truncate">{driftLine(rows) ?? envLine(rows)}</span>
         <span aria-hidden className="text-faint">
           {shown ? "▾" : "▸"}
         </span>
       </button>
+      {children}
       {onPushAll && rows.some((r) => r.inVault) && (
         <button onClick={onPushAll} disabled={busy !== null} className="shrink-0 rounded border border-line px-1.5 text-[10px] leading-[16px] text-faint hover:text-ink disabled:opacity-40" title="Send every vault value to Vercel, replacing what it has (one Touch ID)">
           {busy === "all" ? "Pushing…" : "Push all"}

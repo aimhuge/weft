@@ -32,13 +32,13 @@ afterEach(() => {
 });
 
 describe("VaultVercel", () => {
-  it("names the linked project and offers Push to Vercel, then reloads", async () => {
+  it("names the linked project, says what drifted and pushes just that, then reloads", async () => {
     const { bridge, notify } = setup();
     expect(await screen.findByText("weft")).toBeInTheDocument();
-    expect(screen.getByText(/1 to push · 1 on Vercel/)).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Push to Vercel" }));
+    expect(screen.getByText(/1 missing on development: push\?/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Push 1" }));
     await waitFor(() => expect(notify).toHaveBeenCalled());
-    expect(bridge.envPushAll).toHaveBeenCalledWith("/dev/weft");
+    expect(bridge.envPushAll).toHaveBeenCalledWith("/dev/weft", [{ name: "APP_SECRETS_KEY", environment: "development" }]);
     expect(bridge.envStatus).toHaveBeenCalledTimes(2);
   });
 
@@ -59,7 +59,7 @@ describe("VaultVercel", () => {
     await screen.findByText("weft");
     view.rerender(<VaultVercel folder="/dev/weft" changed="b" notify={notify} />);
     await waitFor(() => expect(bridge.envStatus).toHaveBeenCalledTimes(2));
-    await userEvent.click(screen.getByRole("button", { name: "Push to Vercel" }));
+    await userEvent.click(screen.getByRole("button", { name: "Push 1" }));
     await waitFor(() => expect(notify).toHaveBeenCalledWith(new Error("Touch ID failed")));
   });
 });

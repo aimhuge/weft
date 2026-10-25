@@ -9,12 +9,14 @@ import { useDrawerWidth } from "@/lib/use-drawer-width";
 import { useSuperAdminGate } from "@/lib/use-admin-gate";
 import { useVault } from "@/lib/use-vault";
 import { filterVaults, railBadge } from "@/lib/vault-view";
+import { useVercelDrift } from "@/lib/use-vercel-drift";
+import { driftBadge, shownDrift, vaultKey } from "@/lib/vercel-drift";
 import { useServices } from "@/lib/use-services";
 import { filterServices, liveCount, servicesTitle } from "@/lib/services-view";
 import { useWebhooks } from "@/lib/use-webhooks";
 import { blankCount, failingCount, filterWebhooks, webhooksTitle } from "@/lib/webhooks-view";
 import { useVercel } from "@/lib/use-vercel";
-import { vercelTitle } from "@/lib/vercel-view";
+import { vercelTitle, type VercelStatus } from "@/lib/vercel-view";
 import { useSupabase } from "@/lib/use-supabase";
 import { pendingCount, supabaseTitle } from "@/lib/supabase-view";
 import { useBlastcp } from "@/lib/use-blastcp";
@@ -23,6 +25,8 @@ import { useCloudflare } from "@/lib/use-cloudflare";
 import { cloudflareTitle } from "@/lib/cloudflare-view";
 import { useGithub } from "@/lib/use-github";
 import { githubTitle } from "@/lib/github-view";
+import { useSlack } from "@/lib/use-slack";
+import { slackTitle } from "@/lib/slack-view";
 import { useFeatureIntro } from "@/lib/use-feature-intro";
 import { IntroButton, IntroFrame } from "./FeatureIntro";
 import BlastcpDrawer from "./BlastcpDrawer";
@@ -33,6 +37,8 @@ import SkillsDrawer from "./SkillsDrawer";
 import CloudflareLogo from "./CloudflareLogo";
 import GithubDrawer from "./GithubDrawer";
 import GithubLogo from "./GithubLogo";
+import SlackDrawer from "./SlackDrawer";
+import SlackLogo from "./SlackLogo";
 import RailIconButton from "./RailIconButton";
 import { StarRailButton, TagsRailButton, useRailCardDrag } from "./RailBoardButtons";
 import CrashGuard from "./CrashGuard";
@@ -54,12 +60,15 @@ import "./rail-drawer.css";
 // back beneath it on close; pinned, Esc leaves it out. Below a divider, 🔐 opens the same drawer on the secrets
 // vault of the board's project(s), 🪝 on the webhooks their code receives (its count is the ones still to register), and ▲ on their Vercel links, Supabase's bolt on their Supabase projects,
 // Cloudflare's cloud on their Workers and Pages projects, BlastCP's rocket on the BlastCP property each one posts as,
-// and GitHub's mark on the gh sign-in and each one's issue sync. Below 🖥 Services, the mini apps saved from the browser pane (components/AppsRail.tsx).
+// and GitHub's mark on the gh sign-in and each one's issue sync, Slack's hash on the workspace Weft posts to.
+// Below 🖥 Services, the mini apps saved from the browser pane (components/AppsRail.tsx).
 // The drawers under the divider, each with its icon, title and label.
-const TOOLS = { vault: ["🔐", "Secrets", "Secrets vault"], webhooks: ["🪝", "Webhooks", "Webhooks"], vercel: ["▲", "Vercel", "Vercel"], supabase: [<SupabaseLogo key="supabase" />, "Supabase", "Supabase"], cloudflare: [<CloudflareLogo key="cloudflare" />, "Cloudflare", "Cloudflare"], blastcp: [<BlastcpLogo key="blastcp" />, "BlastCP", "BlastCP"], github: [<GithubLogo key="github" />, "GitHub", "GitHub"], services: ["🖥", "Services", "Services"], skills: ["✦", "Skills", "Skills"] } as const;
+const TOOLS = { vault: ["🔐", "Secrets", "Secrets vault"], webhooks: ["🪝", "Webhooks", "Webhooks"], vercel: ["▲", "Vercel", "Vercel"], supabase: [<SupabaseLogo key="supabase" />, "Supabase", "Supabase"], cloudflare: [<CloudflareLogo key="cloudflare" />, "Cloudflare", "Cloudflare"], blastcp: [<BlastcpLogo key="blastcp" />, "BlastCP", "BlastCP"], github: [<GithubLogo key="github" />, "GitHub", "GitHub"], slack: [<SlackLogo key="slack" />, "Slack", "Slack"], services: ["🖥", "Services", "Services"], skills: ["✦", "Skills", "Skills"] } as const;
 type Tool = keyof typeof TOOLS;
 const DRAWER_SLIDE_MS = 200;
 const isTool = (panel: RailPanel | null): panel is Tool => panel !== null && panel in TOOLS;
+// ▲'s hover text: the drift between the vault and Vercel when there is one, else Vercel's own.
+const vercelRailTitle = (driftTitle: string, status: VercelStatus | null, project: string | null) => driftTitle || vercelTitle(status, project);
 
 export default function SideRail({
   open,
@@ -103,7 +112,9 @@ export default function SideRail({
   const router = useRouter();
   const isSuperAdmin = useSuperAdminGate();
   const vault = useVault(folders);
-  const vaultBadge = railBadge(filterVaults(vault.overview?.vaults ?? [], project));
+  // The vault ⇄ Vercel drift folds into 🔐's dot and title and ▲'s count (lib/vercel-drift.ts); no rows of its own.
+  const drift = driftBadge(shownDrift(useVercelDrift(folders, vaultKey(vault.overview?.vaults ?? [])), project));
+  const vaultBadge = { ...railBadge(filterVaults(vault.overview?.vaults ?? [], project)), vercel: drift.title };
   const webhooks = useWebhooks(folders, open === "webhooks");
   const shownHooks = filterWebhooks(webhooks.hooks, project);
   const vercel = useVercel(folders, open === "vercel");
@@ -111,6 +122,7 @@ export default function SideRail({
   const cloudflare = useCloudflare(folders, open === "cloudflare");
   const blastcp = useBlastcp(folders, open === "blastcp");
   const github = useGithub(folders, open === "github");
+  const slack = useSlack(open === "slack");
   const services = useServices(open === "services");
   const liveServices = liveCount(filterServices(services.services, project));
   const starred = starredCount(cards);
@@ -162,6 +174,7 @@ export default function SideRail({
     cloudflare: <CloudflareDrawer {...cloudflare} project={project} onOpenUrl={onOpenUrl} notify={notify} />,
     blastcp: <BlastcpDrawer {...blastcp} project={project} onOpenUrl={onOpenUrl} notify={notify} />,
     github: <GithubDrawer {...github} project={project} onOpenUrl={onOpenUrl} notify={notify} />,
+    slack: <SlackDrawer {...slack} folders={folders} project={project} onOpenUrl={onOpenUrl} notify={notify} />,
     skills: <SkillsDrawer project={project} folders={folders} notify={notify} />,
     services: <ServicesDrawer {...services} project={project} cards={cards} onOpenCard={onOpenCard} onOpenUrl={onOpenUrl} notify={notify} />,
   };
@@ -189,11 +202,12 @@ export default function SideRail({
           count={blankCount(shownHooks)}
           onClick={toggle("webhooks")}
         />
-        <RailIconButton icon="▲" label="Vercel" open={open === "vercel"} title={vercelTitle(vercel.status, project)} onClick={toggle("vercel")} />
+        <RailIconButton icon="▲" label="Vercel" open={open === "vercel"} title={vercelRailTitle(drift.title, vercel.status, project)} count={drift.count} onClick={toggle("vercel")} />
         <RailIconButton icon={<SupabaseLogo />} label="Supabase" open={open === "supabase"} title={supabaseTitle(supabase.status, project)} count={pendingCount(supabase.status, project)} tone="bad" onClick={toggle("supabase")} />
         <RailIconButton icon={<CloudflareLogo />} label="Cloudflare" open={open === "cloudflare"} title={cloudflareTitle(cloudflare.status, project)} onClick={toggle("cloudflare")} />
         <RailIconButton icon={<BlastcpLogo />} label="BlastCP" open={open === "blastcp"} title={blastcpTitle(blastcp.status, project)} onClick={toggle("blastcp")} />
         <RailIconButton icon={<GithubLogo />} label="GitHub" open={open === "github"} title={githubTitle(github.status, project)} onClick={toggle("github")} />
+        <RailIconButton icon={<SlackLogo />} label="Slack" open={open === "slack"} title={slackTitle(slack.status, slack.settings)} onClick={toggle("slack")} />
         <RailIconButton icon="✦" label="Skills" open={open === "skills"} title="Skills: what threads in this project get" onClick={toggle("skills")} />
         <RailIconButton icon="🖥" label="Services" open={open === "services"} title={servicesTitle(liveServices)} count={liveServices} tone="ok" onClick={toggle("services")} />
         {paneUrl !== undefined && <AppsRail current={paneUrl} onOpen={onOpenUrl} onClose={onClosePane} notify={notify} />}

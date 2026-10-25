@@ -102,6 +102,24 @@ blank waiting for one) and never replaces a value.
   the row. Migration: `supabase/migrations/20261013155658_vercel_webhooks.sql`. The relay needs `SUPABASE_SECRET_KEY`
   on the deployment (the GitHub relay already uses it); `WEFT_VERCEL_RELAY_URL` points hooks at another deployment.
 
+## Drift
+
+Each linked project's 🔐 vault and Vercel env are lined up by name, per environment, without anyone opening a drawer:
+which names Vercel has that the vault holds no value for, and which vault values Vercel lacks. Names only, like status.
+
+- **When.** A project landing on the board (`lib/project-open.ts`, never inline on the start-a-card path) asks main once
+  (`lib/vercel-drift-open.ts`, started from `prewarm()`); the rail asks again on focus and when the vault changes.
+- **Cache.** `electron/vercel-env-cache.cjs` keeps each linked folder's Vercel list for 10 minutes. `drift()` answers
+  from it at once; a missing or stale list is fetched behind, and `onDrift` (`window.weft.vercel.onDrift`) tells the
+  board when it lands. Every real listing (status, push, pull) refreshes it. An unlinked folder costs a file read.
+- **Shown, no new rows.** 🔐 on the rail gets its dot and a hover line ("▲ web: 4 on Vercel not in vault, 2 missing on
+  preview"), ▲ a count (`lib/vercel-drift.ts` `driftBadge`, `lib/use-vercel-drift.ts`). The ▲ drawer's 🔐 line and
+  the 🔐 drawer's ▲ line say it as questions ("4 on Vercel not in vault: pull? · 2 missing on preview: push?") with
+  **Pull** and **Push N** beside them (`components/VercelDriftActions.tsx`): Pull is `pull()`, Push N is `pushAll`
+  with only the missing pairs, behind one Touch ID.
+- **Copilot.** `lib/copilot-setup.ts` lists a drifted project as a setup gap (`/vercel/env-drift` on the control
+  server, `driftGaps`), with a few names and the fix.
+
 ## Files
 
 - `electron/vercel.cjs`: `createVercel` (status, token, projects, scopes, link, create, unlink) and `registerVercel`,
@@ -109,7 +127,10 @@ blank waiting for one) and never replaces a value.
 - `electron/vercel-project.cjs`: request building, reading Vercel's answers (`deploymentOf`, `gitOf`,
   `productionUrl`), and the folder's side (`readLink`, `writeLink`, `ignoreVercel`, `frameworkOf`, `repoOf`).
 - `electron/vercel-env.cjs`: `createVercelEnv` (status, push, pull, webhook create/delete) over `vercel.envList` /
-  `vercel.envSet` / `vercel.envValue`, `vault.sendValue` and `vault.setValue`, and `envRoutes` for threads and the server.
+  `vercel.envSet` / `vercel.envValue`, `vault.sendValue` and `vault.setValue`, `drift`, and `envRoutes` for threads and the server.
+  `electron/vercel-env-cache.cjs`: the per-folder list cache behind `drift` (see Drift).
+- `lib/vercel-drift.ts` (the drift's sums, lines, badge and copilot gaps), `lib/use-vercel-drift.ts` (the rail's hook),
+  `lib/vercel-drift-open.ts` (the project-open handler), `components/VercelDriftActions.tsx` (Pull and Push N).
 - `lib/vercel-relay.ts` + `app/api/vercel/webhook/route.ts`: the relay on the deployed Weft. `lib/vercel-hooks.ts` +
   `app/api/vercel/hooks/route.ts`: the switch and the Realtime listener (started from `prewarm()`).
 - `electron/preload.cjs`: `window.weft.vercel`. The token's own read/persist lives in `electron/provider-token.cjs`, which Vercel, Supabase, Cloudflare and BlastCP all share.
