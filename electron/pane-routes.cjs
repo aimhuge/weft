@@ -7,6 +7,7 @@ const { vaultRoutes } = require("./vault-routes.cjs");
 const { envRoutes } = require("./vercel-env.cjs");
 const { restartFor } = require("./restart-when-idle.cjs");
 const { relayKeyFromEnv, sealSecret, sealedToHex } = require("./relay-secret.cjs");
+const { appSecretsRoutes } = require("./app-secrets-push.cjs");
 const { createPageSnapshot, snapshotRoutes } = require("./page-snapshot.cjs");
 
 // The copilot's chips (lib/copilot-sources.ts): a linked service's state per folder, read-only.
@@ -20,6 +21,8 @@ function paneRoutes({ dataDir, app, dialog, shell, window, board, sendMenu, upda
     ...accountRoutesFor(dataDir),
     // mcp__secrets__add_blank and set_value: blanks into the card's vault, and a value a thread generated into one.
     ...vaultRoutes(vault),
+    // A new mini-app link's keys, pushed in the request that makes it (lib/app-share-keys.ts).
+    ...appSecretsRoutes(),
     // mcp__secrets__ask_add, and a fill or run that found a key missing: the name goes in as a blank
     // (lib/secret-ask.ts). The ask's input shows in the thread itself (components/SecretAskInput.tsx).
     "POST /secrets/ask-add": async ({ folder, name, environment }) => {

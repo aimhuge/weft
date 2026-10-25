@@ -25,6 +25,20 @@ import { errorText, NoWorkspace, ShareNote, SignedOut } from "./ShareParts";
 // Like the card's dialog it never waits: it draws from the share the app remembers (app.share) and the
 // answer replaces it, goes to document.body over the whole window, and steps the native browser pane aside.
 
+// A mini app with no link yet gets one as Share… opens, open to anyone with the link: sharing is why the dialog
+// was opened, and Only you is one click away. A folder app's keys go up in the same request (lib/app-share-keys.ts). A refusal (the plan's room for shared apps, say) leaves the unshared
+// answer, and picking a mode shows why.
+async function withFirstLink(appId: string, answer: AppShareState): Promise<AppShareState> {
+  if (answer.kind !== "ok" || answer.id !== null) return answer;
+  try {
+    const shared = await appsApi.setShare(appId, { mode: "public" });
+    void reloadApps().catch(() => {}); // My mini apps marks the shared ones
+    return shared;
+  } catch {
+    return answer;
+  }
+}
+
 function hydrateFrom(state: AppShareState, hydrate: ReturnType<typeof useShareAccess>["hydrate"]) {
   if (state.kind === "ok") hydrate({ shareMode: state.mode, editRequiresEmail: false, hasPassword: state.hasPassword });
 }
@@ -58,7 +72,7 @@ export default function ShareAppDialog({ app, onClose }: { app: MiniApp; onClose
 
   const load = useCallback(async () => {
     try {
-      const answer = await appsApi.getShare(app.id);
+      const answer = await withFirstLink(app.id, await appsApi.getShare(app.id));
       setState(answer);
       setError(null);
       hydrateFrom(answer, hydrate);
@@ -98,7 +112,7 @@ export default function ShareAppDialog({ app, onClose }: { app: MiniApp; onClose
 
 // The dialog body: the owner's choice and slug (one row, saved on blur or Enter), then the @aimhuge/share
 // access fields, then the small "Upload secrets" button when the manifest declares author secrets or
-// public names. The owner/slug saves ride on a separate appsApi.setShare call; the access fields save
+// public names, with what happened to the keys when this answer made the link (they go up with it). The owner/slug saves ride on a separate appsApi.setShare call; the access fields save
 // through the package's save (SaveShareAccess) above. Both update the state and the apps list.
 function AppShareBody({
   state,
@@ -133,7 +147,7 @@ function AppShareBody({
           </p>
           {state.shows === "site" ? null : <ShareAppQuota quota={state.quota} />}
           <ShareAppPreview appId={app.id} name={app.name} state={state} setState={setState} />
-          <UploadSecretsButton manifest={state.manifest} appId={app.id} />
+          <UploadSecretsButton manifest={state.manifest} appId={app.id} keys={state.keys} />
         </>
       );
     case "unshareable":

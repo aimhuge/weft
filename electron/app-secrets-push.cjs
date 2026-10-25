@@ -198,11 +198,27 @@ function registerAppSecretsPush(ipcMain, { push, isBoard }) {
   });
 }
 
+// The push main set up, for the control server's route below; null until setupAppSecretsPush runs.
+let current = null;
+
+// The control server's route (electron/pane-routes.cjs): Weft's server pushes a new link's keys in the request
+// that makes it (lib/app-share-keys.ts). The same push as the button, Touch ID and all.
+function appSecretsRoutes(get = () => current) {
+  return {
+    "POST /apps/push-secrets": (body) => {
+      const p = get();
+      if (!p) throw new Error("Upload secrets isn't ready yet.");
+      return p.push(String(body.appId ?? ""));
+    },
+  };
+}
+
 // Wires app-secrets-push into Electron main. main.cjs calls this once the vault, the
 // account store and the board are up.
 function setupAppSecretsPush({ ipcMain, dataDir, vault, account, confirm, isBoard, fetch: fetchImpl }) {
   const { push } = createAppSecretsPush({ dataDir, vault, account, confirm, fetch: fetchImpl });
   registerAppSecretsPush(ipcMain, { push, isBoard });
+  current = { push };
   return { push };
 }
 
@@ -210,6 +226,7 @@ module.exports = {
   createAppSecretsPush,
   registerAppSecretsPush,
   setupAppSecretsPush,
+  appSecretsRoutes,
   accessTokenFrom,
   namesToPush,
   pushTargets,

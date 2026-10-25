@@ -120,6 +120,9 @@ export interface AppShareQuota {
 }
 
 // What GET /api/apps/share answers on the desktop, for the app's Share dialog.
+// The keys a new link went up with, or why they didn't.
+export type AppShareKeys = { pushed: string[]; missing: string[] } | { error: string };
+
 export type AppShareState =
   | { kind: "signed-out" }
   | { kind: "no-workspace" }
@@ -147,6 +150,8 @@ export type AppShareState =
       // The link preview (lib/app-preview.ts), and whether the Mac is making a fresh one right now.
       preview: AppPreview | null;
       previewing: boolean;
+      // What happened to the keys when this answer made a new folder-app link (lib/app-share-keys.ts).
+      keys?: AppShareKeys;
       // The workspace's room for shared apps, or null when the server couldn't say.
       quota?: AppShareQuota | null;
     };

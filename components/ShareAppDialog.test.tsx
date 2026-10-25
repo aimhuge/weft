@@ -37,6 +37,10 @@ const BLOB_APP: MiniApp = { id: "ap1", name: "Login page", url: "file:///Users/m
 const SITE_APP: MiniApp = { id: "ap2", name: "Docs", url: "https://docs.test/handbook", addedAt: 2 };
 
 const PRIVATE: AppShareState = { kind: "ok", id: null, url: null, mode: "private", hasPassword: false, shows: "blob", owner: null, slug: null, orgId: null, publicUrl: null, owners: { user: null, orgs: [] }, manifest: null, preview: null, previewing: false };
+// A link that exists but only its owner can open: opening Share… on it makes no new link.
+const PRIVATE_LINK: AppShareState = { ...PRIVATE, id: "s0", url: "https://weft.zip/a/s0" };
+// The app as it remembers that link, so the first paint already has its id (the slug row keys on it).
+const LINKED_APP: MiniApp = { ...BLOB_APP, share: { id: "s0", mode: "private", hasPassword: false } };
 const SHARED: AppShareState = { kind: "ok", id: "s1", url: "https://weft.zip/a/s1", mode: "email", hasPassword: false, shows: "blob", owner: "user", slug: null, orgId: null, publicUrl: null, owners: { user: { username: "alice" }, orgs: [] }, manifest: null, preview: null, previewing: false };
 const UNSHAREABLE: AppShareState = { kind: "unshareable", reason: "This app runs on your Mac (localhost:5173), so a weft.zip link can't reach it." };
 
@@ -108,8 +112,8 @@ describe("ShareAppDialog", () => {
   it("saves a new email-gated link when the audience is changed from private to link", async () => {
     // Going private → link with the gate still on "none" would be a one-click open link, so
     // the package's withAxis defaults the gate to "email". The save is called with mode "email".
-    api.getShare.mockResolvedValueOnce(PRIVATE);
-    api.setShare.mockResolvedValueOnce({ ...PRIVATE, id: "sNew", url: "https://weft.zip/a/sNew", mode: "email", hasPassword: false });
+    api.getShare.mockResolvedValueOnce(PRIVATE_LINK);
+    api.setShare.mockResolvedValueOnce({ ...PRIVATE_LINK, mode: "email", hasPassword: false });
     setup(BLOB_APP);
     await userEvent.selectOptions(await screen.findByRole("combobox", { name: "Who can open this app" }), "link");
     expect(api.setShare).toHaveBeenCalledWith("ap1", { mode: "email", password: undefined });
@@ -119,7 +123,7 @@ describe("ShareAppDialog", () => {
     // The dialog's "What link holders can do" select is hidden (allowEdit={false}), so public_edit
     // can't be picked from the UI. The save callback still checks for it, defensively: invoke the
     // captured save with a public_edit mode and assert it returns an error without calling setShare.
-    api.getShare.mockResolvedValueOnce(PRIVATE);
+    api.getShare.mockResolvedValueOnce(PRIVATE_LINK);
     render(<ShareAppDialog app={BLOB_APP} onClose={vi.fn()} />);
     await screen.findByRole("dialog");
     expect(saveHolder.current).not.toBeNull();
@@ -141,7 +145,7 @@ describe("ShareAppDialog", () => {
     // package's useShareAccess can snap the UI back. Invoke the captured save with a stubbed
     // server answer that the dialog can't show as a state (a non-ok kind), and the error message
     // is exactly the one the package's alert will draw.
-    api.getShare.mockResolvedValueOnce(PRIVATE);
+    api.getShare.mockResolvedValueOnce(PRIVATE_LINK);
     render(<ShareAppDialog app={BLOB_APP} onClose={vi.fn()} />);
     await screen.findByRole("dialog");
     api.setShare.mockResolvedValueOnce({ kind: "no-workspace" });
@@ -150,7 +154,7 @@ describe("ShareAppDialog", () => {
   });
 
   it("returns the thrown message when setShare rejects", async () => {
-    api.getShare.mockResolvedValueOnce(PRIVATE);
+    api.getShare.mockResolvedValueOnce(PRIVATE_LINK);
     api.setShare.mockRejectedValueOnce(new Error("Set a password first."));
     setup(BLOB_APP);
     await userEvent.selectOptions(await screen.findByRole("combobox", { name: "Who can open this app" }), "link");
@@ -175,7 +179,7 @@ describe("ShareAppDialog", () => {
       useEscape(true, panel, { panel: true });
       return null;
     }
-    api.getShare.mockResolvedValueOnce(PRIVATE);
+    api.getShare.mockResolvedValueOnce(PRIVATE_LINK);
     const onClose = vi.fn();
     render(
       <>
@@ -190,7 +194,7 @@ describe("ShareAppDialog", () => {
   });
 
   it("renders the owner dropdown and slug field from the state", async () => {
-    api.getShare.mockResolvedValueOnce({ ...PRIVATE, owners: { user: { username: "alice" }, orgs: [] }, slug: "growth" });
+    api.getShare.mockResolvedValueOnce({ ...PRIVATE_LINK, owners: { user: { username: "alice" }, orgs: [] }, slug: "growth" });
     setup(BLOB_APP);
     await waitFor(() => expect(screen.getByRole("textbox", { name: "Slug" })).toHaveValue("growth"));
     expect(screen.getByRole("combobox", { name: "Owner" })).toHaveValue("user");
@@ -208,9 +212,9 @@ describe("ShareAppDialog", () => {
   });
 
   it("saves the new slug on Enter and reloads the apps list", async () => {
-    api.getShare.mockResolvedValueOnce(PRIVATE);
-    api.setShare.mockResolvedValueOnce({ ...PRIVATE, slug: "growth", publicUrl: "https://weft.zip/@alice/apps/growth" });
-    setup(BLOB_APP);
+    api.getShare.mockResolvedValueOnce(PRIVATE_LINK);
+    api.setShare.mockResolvedValueOnce({ ...PRIVATE_LINK, slug: "growth", publicUrl: "https://weft.zip/@alice/apps/growth" });
+    setup(LINKED_APP);
     const input = await screen.findByRole("textbox", { name: "Slug" });
     fireEvent.change(input, { target: { value: "growth" } });
     fireEvent.keyDown(input, { key: "Enter" });
@@ -219,8 +223,8 @@ describe("ShareAppDialog", () => {
   });
 
   it("rejects a slug that doesn't match the rule with a clear error", async () => {
-    api.getShare.mockResolvedValueOnce(PRIVATE);
-    setup(BLOB_APP);
+    api.getShare.mockResolvedValueOnce(PRIVATE_LINK);
+    setup(LINKED_APP);
     const input = await screen.findByRole("textbox", { name: "Slug" });
     fireEvent.change(input, { target: { value: "Bad Slug" } });
     fireEvent.keyDown(input, { key: "Enter" });
@@ -229,13 +233,13 @@ describe("ShareAppDialog", () => {
   });
 
   it("draws the Upload secrets button when the manifest declares author secrets", async () => {
-    api.getShare.mockResolvedValueOnce({ ...PRIVATE, manifest: { secrets: { STRIPE_KEY: { hosts: ["api.stripe.com"], methods: ["GET"], paths: ["/v1/charges"] } } } });
+    api.getShare.mockResolvedValueOnce({ ...PRIVATE_LINK, manifest: { secrets: { STRIPE_KEY: { hosts: ["api.stripe.com"], methods: ["GET"], paths: ["/v1/charges"] } } } });
     setup(BLOB_APP);
     expect(await screen.findByRole("button", { name: "Upload secrets" })).toBeInTheDocument();
   });
 
   it("hides the Upload secrets button when the manifest has no author secrets or public names", async () => {
-    api.getShare.mockResolvedValueOnce({ ...PRIVATE, manifest: { secrets: { USER_KEY: { from: "viewer", hosts: ["api.openai.com"] } } } });
+    api.getShare.mockResolvedValueOnce({ ...PRIVATE_LINK, manifest: { secrets: { USER_KEY: { from: "viewer", hosts: ["api.openai.com"] } } } });
     setup(BLOB_APP);
     await screen.findByRole("combobox", { name: "Who can open this app" });
     expect(screen.queryByRole("button", { name: "Upload secrets" })).not.toBeInTheDocument();
@@ -244,11 +248,46 @@ describe("ShareAppDialog", () => {
   it("calls window.weft.appSecrets.push and shows the result", async () => {
     const push = vi.fn(() => Promise.resolve({ ok: true as const, pushed: ["STRIPE_KEY", "GA4_KEY"] }));
     (window as unknown as { weft: unknown }).weft = { appSecrets: { push } };
-    api.getShare.mockResolvedValueOnce({ ...PRIVATE, manifest: { secrets: { STRIPE_KEY: { hosts: ["api.stripe.com"], methods: ["GET"] } } } });
+    api.getShare.mockResolvedValueOnce({ ...PRIVATE_LINK, manifest: { secrets: { STRIPE_KEY: { hosts: ["api.stripe.com"], methods: ["GET"] } } } });
     setup(BLOB_APP);
     const button = await screen.findByRole("button", { name: "Upload secrets" });
     fireEvent.click(button);
     await waitFor(() => expect(push).toHaveBeenCalledWith("ap1"));
     expect(await screen.findByText(/Uploaded STRIPE_KEY, GA4_KEY/)).toBeInTheDocument();
+  });
+
+  it("makes a link anyone can open when Share… opens on an app without one", async () => {
+    api.getShare.mockResolvedValueOnce(PRIVATE);
+    api.setShare.mockResolvedValueOnce({ ...PRIVATE, id: "sNew", url: "https://weft.zip/a/sNew", mode: "public" });
+    setup(BLOB_APP);
+    await waitFor(() => expect(api.setShare).toHaveBeenCalledWith("ap1", { mode: "public" }));
+    expect(reloadApps).toHaveBeenCalled();
+  });
+
+  it("leaves the app unshared when making its first link is refused", async () => {
+    api.getShare.mockResolvedValueOnce(PRIVATE);
+    api.setShare.mockRejectedValueOnce(new Error("Your plan's room for shared apps is full."));
+    setup(BLOB_APP);
+    expect(await screen.findByRole("combobox", { name: "Who can open this app" })).toHaveValue("private");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("shows the keys a new link went up with, without pressing Upload secrets", async () => {
+    const push = vi.fn();
+    (window as unknown as { weft: unknown }).weft = { appSecrets: { push } };
+    const manifest = { public: ["SUPABASE_SECRET_KEY"] };
+    api.getShare.mockResolvedValueOnce({ ...PRIVATE, manifest });
+    api.setShare.mockResolvedValueOnce({ ...PRIVATE, id: "sNew", url: "https://weft.zip/a/sNew", mode: "public", manifest, keys: { pushed: ["SUPABASE_SECRET_KEY"], missing: [] } });
+    setup(BLOB_APP);
+    expect(await screen.findByText("Uploaded SUPABASE_SECRET_KEY")).toBeInTheDocument();
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it("shows why a new link's keys didn't go up", async () => {
+    const manifest = { public: ["SUPABASE_SECRET_KEY"] };
+    api.getShare.mockResolvedValueOnce({ ...PRIVATE, manifest });
+    api.setShare.mockResolvedValueOnce({ ...PRIVATE, id: "sNew", url: "https://weft.zip/a/sNew", mode: "public", manifest, keys: { error: "Touch ID declined." } });
+    setup(BLOB_APP);
+    expect(await screen.findByText("Touch ID declined.")).toHaveClass("text-danger");
   });
 });

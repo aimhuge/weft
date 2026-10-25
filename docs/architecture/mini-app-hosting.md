@@ -197,11 +197,18 @@ limits where a key goes, the key limits what it can do there.
 ### Whose secret, and where it lives
 
 - **`"from": "author"` (default).** The app's owner sets it once in 🔐 (secrets.md); everyone who passes
-  the gate uses it, within the policy. Growth's read key works this way. The Mac uploads the value with
-  one Touch ID through `electron/app-secrets-push.cjs` (wired in `electron/app-setup.cjs`): reads the
-  manifest from the dialog's state, reads the named values from the vault, prompts Touch ID naming the
-  app, the secrets, the hosts, and `weft.zip`, and PUTs them through `app/api/apps/secrets` (a service
-  role route that seals each value with `lib/app-secrets.ts` `seal()`).
+  the gate uses it, within the policy. Growth's read key works this way. The keys go up **with the link**:
+  Share… on an app without a link makes one, open to anyone with the link (`withFirstLink` in
+  `components/ShareAppDialog.tsx`), and `setAppShare` writing a new folder-app link asks Electron main, in the
+  same request, to push them (`lib/app-share-keys.ts` → the control server's `POST /apps/push-secrets`). The
+  answer carries `keys` (what went up, or why not), which the dialog shows by Upload secrets; that button sends
+  them again after a change. The push is `electron/app-secrets-push.cjs` (wired in `electron/app-setup.cjs`):
+  reads the manifest, reads the named values from the vault of the manifest's `folder` (the project the
+  Mac's reads use; an app folder under `~/.weft/apps` has no git remote, so its own vault is empty), prompts
+  Touch ID naming the app, the secrets, the hosts, and `weft.zip`, and POSTs them to `app/api/apps/secrets`
+  (a service role route that seals each value with `lib/app-secrets.ts` `seal()`, and answers 500 naming any
+  key it couldn't store). `lib/app-secret-store.ts` `setValue` updates the row, else inserts it: the unique
+  key is an expression index on `coalesce(viewer_id, …)`, which `ON CONFLICT` can't name.
 - **`"from": "viewer"`.** Each viewer brings their own key, so a shared app can call Stripe or OpenAI as
   them. On the Mac it comes from the viewer's own 🔐 vault with their own Touch ID; on weft.zip, the
   parent page draws Weft's own form (`components/share-view/AppSecretForm.tsx`, host list from the

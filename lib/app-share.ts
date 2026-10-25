@@ -24,6 +24,7 @@ import type { MiniApp } from "./mini-apps";
 import { isCardShareMode, newShareId } from "./share-types";
 import { currentPage, pageForWrite, readShare, sameFiles, sameManifest, stateOf, type Ready } from "./app-share-row";
 import { pageBytes, quotaErrorText, roomFor } from "./app-share-quota";
+import { withKeys } from "./app-share-keys";
 import { backfillSlug, defaultAppSlug, isDuplicateSlug, writeWithFreeSlug } from "./app-share-slug";
 
 export { AppShareError } from "./app-share-errors";
@@ -199,7 +200,7 @@ export async function setAppShare(appId: string, update: AppShareUpdate): Promis
   const change = (slug: string | null) => buildChange({ update, t, now, owner: { nextOwner, nextSlug: slug }, password });
   const writeError = await writeWithSlug(t, existing, nextSlug, change);
   if (writeError) throwAsError(writeError, pageBytes(t.page));
-  return previewed(t, now);
+  return withKeys(!existing, appId, await previewed(t, now));
 }
 
 // What the row will say about who owns the link and under what address. Carries "user" / "org" with

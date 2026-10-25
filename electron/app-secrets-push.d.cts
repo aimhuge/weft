@@ -93,3 +93,6 @@ export function setupAppSecretsPush(opts: {
   isBoard: IsBoard;
   fetch?: FetchLike;
 }): { push: (appId: string) => Promise<PushResult> };
+
+// The control server's POST /apps/push-secrets: the same push, for Weft's server to call on a new link.
+export function appSecretsRoutes(get?: () => { push: (appId: string) => Promise<unknown> } | null): { "POST /apps/push-secrets": (body: { appId?: unknown }) => Promise<unknown> };
