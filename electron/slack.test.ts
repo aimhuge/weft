@@ -95,8 +95,20 @@ describe("createSlack", () => {
     expect(made?.body).toEqual({ name: "weft-updates", is_private: "false" });
   });
 
-  it("forgets the cached workspace when the token that made a channel stopped working", async () => {
-    let dead = false;
+  it("calls any Slack method with the bot token, and says to connect Slack first without one", async () => {
+    const { slack, calls } = make({
+      ...API,
+      "conversations.history": { messages: [{ text: "hi" }] },
+    });
+    await expect(slack.call("conversations.history", { channel: "C1" })).rejects.toThrow("Connect Slack first.");
+    await slack.setTokens("xoxb-a", "xapp-a");
+    expect(await slack.call("conversations.history", { channel: "C1" })).toEqual({ ok: true, messages: [{ text: "hi" }] });
+    const made = calls.find((c) => c.method === "conversations.history");
+    expect(made?.token).toBe("xoxb-a");
+    expect(made?.body).toEqual({ channel: "C1" });
+  });
+
+  it("forgets the cached workspace when the token that made a channel stopped working", async () => {    let dead = false;
     const { slack } = make({
       ...API,
       "conversations.create": () => (dead ? { body: { ok: false, error: "invalid_auth" } } : { body: { ok: true, channel: { id: "C9", name: "made" } } }),
@@ -275,6 +287,16 @@ describe("slackRoutes", () => {
     const status = { signedIn: true, team: "Acme", teamUrl: null, bot: "weft", socket: "connected", error: null };
     const routes = slackRoutes(() => ({ status: () => Promise.resolve(status) })) as unknown as Record<string, (body: Record<string, unknown>) => unknown>;
     expect(await routes["POST /slack/status"]!({})).toEqual(status);
+  });
+
+  it("calls any Slack method with the bot token, and says which method to call", async () => {
+    const call = vi.fn(() => Promise.resolve({ ok: true, messages: [] }));
+    const routes = slackRoutes(() => ({ call })) as unknown as Record<string, (body: Record<string, unknown>) => unknown>;
+    expect(await routes["POST /slack/call"]!({ method: "conversations.history", body: { channel: "C1" } })).toEqual({ ok: true, messages: [] });
+    expect(call).toHaveBeenCalledWith("conversations.history", { channel: "C1" });
+    await expect(routes["POST /slack/call"]!({ method: "" })).rejects.toThrow("Give the Slack method to call.");
+    const none = slackRoutes(() => null) as unknown as Record<string, (body: Record<string, unknown>) => unknown>;
+    await expect(none["POST /slack/call"]!({ method: "auth.test" })).rejects.toThrow("Connect Slack first.");
   });
 });
 

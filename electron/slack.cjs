@@ -208,6 +208,24 @@ function createSlack({ dataDir, safeStorage, fetch: fetchImpl = globalThis.fetch
       }
     },
 
+    // Any Slack Web API method, with the bot token: the rail can read (history, channels, a user's
+    // timezone) as well as post, without the token ever leaving main.
+    /**
+     * @param {string} method The Slack method, e.g. "conversations.history".
+     * @param {Record<string, unknown>} [body] The arguments of the method.
+     * @returns {Promise<Record<string, unknown>>}
+     */
+    async call(method, body = {}) {
+      const pair = tokens();
+      if (!pair) throw new Error("Connect Slack first.");
+      try {
+        return await slackCall(fetchImpl, pair.bot, method, body);
+      } catch (err) {
+        who.forgetIfTokenIsDead(err);
+        throw err;
+      }
+    },
+
     // Starts the socket, if there are tokens to start it with.
     start() {
       if (!tokens()) return;
@@ -246,6 +264,14 @@ function slackRoutes(slackApi) {
       const slack = api();
       if (!slack) throw new Error("Connect Slack first.");
       return slack.status();
+    },
+    // Any Slack Web API method, with the bot token main holds. The server asks for it; main makes the call.
+    "POST /slack/call": async ({ method, body }) => {
+      const slack = api();
+      if (!slack) throw new Error("Connect Slack first.");
+      const name = String(method ?? "").trim();
+      if (!name) throw new Error("Give the Slack method to call.");
+      return slack.call(name, body ?? {});
     },
   };
 }

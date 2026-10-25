@@ -18,6 +18,17 @@ beforeEach(() => {
 });
 
 describe("FeedbackDot", () => {
+  it("names itself on hover, so the dot doesn't read as decoration", () => {
+    render(<FeedbackDot />);
+    // The label is hidden until hover or focus (Tailwind's group-hover/focus-within, which jsdom doesn't compute),
+    // so the contract here is that it exists and carries the reveal classes.
+    const label = screen.getByText("Feedback", { selector: "span[aria-hidden]" });
+    expect(label).toBeInTheDocument();
+    expect(label.className).toMatch(/group-hover\/feedback:opacity-100/);
+    expect(label.className).toMatch(/focus-within:opacity-100/);
+    expect(label.className).toMatch(/opacity-0/);
+  });
+
   it("opens the interview from the dot and closes on ✕, Escape and an outside click", async () => {
     const user = userEvent.setup({ delay: null });
     render(<><FeedbackDot /><p>outside</p></>);

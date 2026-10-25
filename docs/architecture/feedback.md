@@ -8,7 +8,8 @@ interviews you about what's in your way, writes a summary you check, and sends i
 1. **The dot** (`components/FeedbackDot.tsx`, in `components/BoardFooter.tsx`). A click opens the popover
    (`components/FeedbackChat.tsx`), which opens above the dot. Escape, ✕ or a click outside closes it. While it's open,
    `useOverlay` hides the native browser pane, which would otherwise draw over it. The chat state lives in the dot,
-   so closing and reopening keeps the conversation.
+   so closing and reopening keeps the conversation. The dot is small on purpose, so it names itself: hovering or
+   focusing it shows a "Feedback" label beside the dot (to the left, since the chat opens above).
 2. **The interview** (`lib/use-feedback.ts` → `POST /api/feedback`). The chat starts with a fixed opener
    (`FEEDBACK_OPENER`), so it never waits on Haiku to say hello. Each answer sends the whole transcript.
    `turnPrompt` asks Haiku for one follow-up at a time (two to four is usually enough). It answers as JSON:
@@ -43,6 +44,37 @@ comes from every user's Mac, and most of them never connect the team's Slack.
 
 To set it up, create a Slack app at https://api.slack.com/apps, turn on Incoming Webhooks, and add one for the
 feedback channel. Fill `SLACK_FEEDBACK_WEBHOOK_URL` (production) in the 🔐 vault, then push it to Vercel.
+
+**The rail and the webhook are two different things.** The rail (the bot token in the Mac's Keychain, Socket Mode
+running) is what posts a board's commits and card updates; it works on its own. The webhook is a URL the *deployed*
+Weft holds, because the Mac's token is sealed and can never leave it. A Mac with a healthy Slack rail can still have
+feedback that never arrives, because the webhook is a separate secret on a separate machine.
+
+### Nothing sends unless both halves are up
+
+The collector stores the summary **and** posts it to Slack, and answers 204 when either worked. So a summary can
+reach weft.zip and still never appear in the channel, and the sender sees "Sent to the Weft team" either way.
+
+Two things have to be true for the Slack half, and both drifted once already:
+
+- `public.feedback` has to exist. Its migration was written but never applied, so every insert failed and the
+  collector answered 502 — with no error on the Mac, since the copy was still kept in `~/.weft/feedback`. It is
+  applied now (`20261025181607_feedback.sql`).
+- `SLACK_FEEDBACK_WEBHOOK_URL` has to be set on the deployed Weft, not just in the vault. A vault value that was never
+  pushed to Vercel leaves the collector posting nothing. Check with `vercel env ls production`.
+
+To prove both halves at once, POST a summary to `https://weft.zip/api/feedback/collect` and look for a row in
+`public.feedback` **and** a message in the channel. The first without the second means the webhook is missing.
+
+### Turning the feature on
+
+Slack has no Web API method for incoming webhooks: no create, no list, no delete. The feature is turned on either by
+the app's manifest (`features.incoming_webhooks`, which `lib/slack-manifest.json` now declares) or by hand in the
+developer console, and either way it needs an app configuration token (`xoxe-`, 12 hours) for `apps.manifest.update`.
+The webhook's URL is shown once, at creation, so it goes straight into the 🔐 vault.
+
+An incoming webhook is a channel-bound posting URL, not a way to reach any channel: the one Weft creates is bound to
+the feedback channel, and `SLACK_FEEDBACK_WEBHOOK_URL` is that URL, not a channel id.
 
 ## Storage
 

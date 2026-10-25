@@ -6,7 +6,8 @@
   },
   "features": {
     "bot_user": { "display_name": "Weft", "always_online": true },
-    "slash_commands": [{ "command": "/weft", "description": "Start a Weft card", "usage_hint": "fix the login bug", "should_escape": false }]
+    "slash_commands": [{ "command": "/weft", "description": "Start a Weft card", "usage_hint": "fix the login bug", "should_escape": false }],
+    "incoming_webhooks": { "name": "Feedback" }
   },
   "oauth_config": {
     "scopes": {

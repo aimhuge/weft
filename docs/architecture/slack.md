@@ -20,9 +20,11 @@ nothing on Supabase. It needs two tokens:
 ## The Slack app
 
 `lib/slack-manifest.json` is the app: bot user "Weft", the `/weft` slash command, the `app_mention` bot event, Socket
-Mode on, interactivity off, and the bot scopes `chat:write`, `chat:write.public` (post to a public channel it isn't in),
+Mode on, interactivity off, the bot scopes `chat:write`, `chat:write.public` (post to a public channel it isn't in),
 `commands`, `app_mentions:read`, `channels:read` and `groups:read` (the channel picker), `channels:join`, and
-`channels:manage` (the picker's **+ New channel**).
+`channels:manage` (the picker's **+ New channel**). It also declares the **incoming webhook** the deployed Weft posts
+feedback through (`features.incoming_webhooks`), which is a separate thing from the Slack rail: the rail's bot token
+stays on the Mac, while the feedback webhook is a URL the server can hold (docs/architecture/feedback.md).
 
 - **New app**: the drawer's **Create the Weft app** opens `api.slack.com/apps?new_app=1&manifest_json=…` in the pane
   (`manifestUrl()` in `lib/slack-view.ts`), then Install to Workspace.
@@ -32,12 +34,17 @@ Mode on, interactivity off, and the bot scopes `chat:write`, `chat:write.public`
   tokens last 12 hours; the script never rotates one, because the new pair would land nowhere. When the scopes
   change, Slack asks for a reinstall (OAuth & Permissions → Reinstall), which issues a new bot token.
 
+**There is no Web API method for incoming webhooks** — no create, no list, no delete. Slack's own reference lists only
+`apps.manifest.*` for them, so the feature is turned on either by the manifest (a configuration token) or by hand in
+the developer console. The webhook's URL is only ever shown once, at creation, so it belongs in the 🔐 vault
+(`SLACK_FEEDBACK_WEBHOOK_URL`, production) and nowhere else.
+
 ## Who holds what
 
 ```
 Slack ⇄ Socket Mode ⇄ Electron main (electron/slack.cjs)  ── tokens sealed in ~/.weft/slack-token.json (Keychain)
                           │   ▲
-     POST /api/slack/inbound   control route POST /slack/post
+     POST /api/slack/inbound   control route POST /slack/post, POST /slack/call
                           ▼   │
                     Next server (lib/slack*.ts)  ── ~/.weft/slack.json: settings + each card's Slack thread
 ```
@@ -50,6 +57,10 @@ Slack ⇄ Socket Mode ⇄ Electron main (electron/slack.cjs)  ── tokens seal
   public channel once on `not_in_channel` — and only when Slack says the channel is public (`is_private: false`), since a
   private channel can't be joined and a channel Slack wouldn't describe is not one to guess at. The board talks to it
   over `window.weft.slack` (status, setTokens, forgetToken, channels).
+- **Any Slack method** is one control route: `POST /slack/call` (`{"method", "body"}`) makes the call with the bot
+  token, so the rail can read as well as post (`conversations.history`, `auth.test`) without the token leaving main.
+  The server reaches it through `POST /api/slack/call` (`app/api/slack/call/route.ts`), which is the same
+  `shell("/slack/call")` hop the posting route uses.
 - **The server** (`lib/slack.ts`, started from `prewarm()`) decides what to post. No token ever reaches it.
 
 ## Projects and channels
