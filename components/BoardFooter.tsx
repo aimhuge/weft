@@ -1,5 +1,6 @@
 "use client";
 
+import FeedbackDot from "./FeedbackDot";
 import StatusStrip from "./StatusStrip";
 
 const REPO_URL = "https://github.com/fotoflo/weft";
@@ -12,7 +13,8 @@ function openLink(e: React.MouseEvent, url: string) {
   window.weft.openExternal(url);
 }
 
-// The board's footer: the open card's (or the board's) stats, the shortcuts sheet, and the credits.
+// The board's footer: the open card's (or the board's) stats, the shortcuts sheet, the credits, and the feedback dot
+// in the corner.
 export default function BoardFooter({ onHelp, ...strip }: React.ComponentProps<typeof StatusStrip> & { onHelp: () => void }) {
   return (
     <footer className="flex shrink-0 items-center justify-between gap-4 border-t border-line bg-panel px-4 py-1.5">
@@ -25,6 +27,7 @@ export default function BoardFooter({ onHelp, ...strip }: React.ComponentProps<t
         <a href={REPO_URL} onClick={(e) => openLink(e, REPO_URL)} className="font-medium text-ink hover:text-accent">Weft</a> v{process.env.NEXT_PUBLIC_APP_VERSION} built with{" "}
         <a href={COFFEE_URL} onClick={(e) => openLink(e, COFFEE_URL)} title="Buy me a coffee">☕</a> by{" "}
         <a href="mailto:alex@aimhuge.com" className="hover:text-accent">alex@aimhuge.com</a>
+        <FeedbackDot />
       </span>
     </footer>
   );
