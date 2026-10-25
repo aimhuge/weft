@@ -9,7 +9,7 @@ import path from "node:path";
 const SOURCE = /\.(tsx?|jsx?|mjs|cjs|mts|cts|py|go|rs|rb|java|kt|swift|vue|svelte)$/;
 const SKIP_DIRS = new Set(["node_modules", "dist", "build", "out", "coverage", "vendor", "venv", "__pycache__", "target"]);
 const GENERATED = /\.d\.ts$|\.min\.js$/;
-const TEST = /[._](test|spec)\.[a-z]+$|(^|\/)(__tests__|tests?)\//;
+export const TEST = /[._](test|spec)\.[a-z]+$|(^|\/)(__tests__|tests?)\//;
 const MAX_FILES = 5000;
 const MAX_BYTES = 1_000_000;
 
