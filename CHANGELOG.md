@@ -8,6 +8,10 @@ lands; a release moves those lines under its version and tags the commit `vX.Y.Z
 
 ## [Unreleased]
 
+### Changed
+
+- **New Wefters sign in with GitHub on first launch, after the welcome video and before adding projects.** A signed-out first launch now has a **Sign in to Weft** screen between Get ready and the projects. It says the account keeps your Wefter Profile and turns on Project Sync, share links, leagues and the free Puku trial, and that your code and threads stay on your Mac unless you turn on Project Sync. **Next** waits until you've signed in. If you're already signed in (including from the tour's profile beat), or sign-in isn't set up on this Weft, the screen doesn't appear. For anyone who is still signed out, the Project Sync prompt is now "Sign in to Weft?", with what an account adds and **Sign in with GitHub**, and it waits for a card to reach Review or Done instead of opening while a thread waits on a question. On Get ready, when no Claude Code, puku-cli or Codex login is found, puku-cli's row offers **Try free**. Once you're signed in, it reads "Ready · free trial on your Weft account" and your first thread runs on puku-cli's Puku trial instead of failing on a Claude Code login. (`components/WelcomeAccount.tsx`, `components/WelcomeDialog.tsx`, `components/WelcomeFooter.tsx`, `components/WelcomeIntro.tsx`, `lib/welcome-trial.ts`, `components/SyncPromptDialog.tsx`, `lib/sync-prompt.ts`, docs/architecture/welcome-dialog.md)
+
 ### Fixed
 
 - **A project whose folder has a space in its name (like Google Drive's `~/My Drive/app`) no longer asks about every command.** The folder gate split each Bash path at the first space, so `cd "/Users/you/My Drive/app"` read as `~/My`, which is outside the project, and nearly every command got an "Outside the project" prompt. A quoted path now runs to its closing quote and `\ ` escapes a space, so the gate sees the real folder. A sibling folder still gets asked about. (`lib/folder-guard.ts`, docs/architecture/thread-guards.md)
