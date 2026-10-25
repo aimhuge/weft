@@ -97,7 +97,7 @@ describe("downloadLink", () => {
     const link = downloadLink({ version: "0.3.0", dmg: "https://x/Weft.dmg", page: "https://x/tag" });
     expect(link.label).toBe("Download Weft 0.3.0 for Mac");
     expect(link.href).toBe("https://x/Weft.dmg");
-    expect(link.note).toMatch(/Apple silicon/);
+    expect(link.note).toBe("Your Mac's AI Workflow.");
   });
 
   it("points at the repo until the first release", () => {
