@@ -25,7 +25,7 @@ const { createPageLinks } = require("./page-links.cjs");
 const { createPanePages } = require("./pane-pages.cjs");
 const { paneRoutes } = require("./pane-routes.cjs");
 const { removeShellToken, writeShellToken } = require("./shell-token.cjs");
-const { attachApiToken } = require("./api-token.cjs");
+const { attachTokens } = require("./api-token.cjs");
 const { appendToolchain, fixPath } = require("./env.cjs");
 const { startServer } = require("./server.cjs");
 const { createStartupScreen } = require("./startup-screen.cjs");
@@ -66,7 +66,7 @@ const timer = createStartupTimer({
 
 // The secrets vault, set up further down; the pane types its values in for threads (fillSecret).
 // With it, commands and dev servers run with vault values (secret-run.cjs) and the push to Vercel (vercel-env.cjs).
-let vault, secretRun, vercelEnv, vercelApi, supabaseApi, blastcpApi;
+let vault, secretRun, vercelEnv, vercelApi, supabaseApi, blastcpApi, gooseApi, slackApi;
 // Small native warning dialog; shared by pageLinks (walk-through buttons) and accountLink (OAuth callback).
 const warnUser = (message, detail) => dialog.showMessageBox(win, { type: "warning", message, detail });
 const pane = createBrowserPane({
@@ -80,7 +80,7 @@ const pane = createBrowserPane({
   routes: paneRoutes({
     dataDir: dataDir(), app, dialog, shell, sendMenu,
     window: () => win, board: () => appView?.webContents, updater: () => menus.updater,
-    vault: () => vault, vercelEnv: () => vercelEnv, vercelApi: () => vercelApi, supabaseApi: () => supabaseApi, blastcpApi: () => blastcpApi,
+    vault: () => vault, vercelEnv: () => vercelEnv, vercelApi: () => vercelApi, supabaseApi: () => supabaseApi, blastcpApi: () => blastcpApi, gooseApi: () => gooseApi, slackApi: () => slackApi,
   }),
 });
 // A walk-through page's buttons: replies, and commits that run with no turn.
@@ -190,7 +190,7 @@ async function boot() {
     return;
   }
   timer.mark("server");
-  attachApiToken(session.defaultSession, server.url, TOKEN);
+  attachTokens(session, server.url, TOKEN);
   await startup.loadBoard(server.url);
   timer.mark("page");
   for (const link of pendingLinks.splice(0)) handleLink(link);
@@ -403,15 +403,15 @@ supabaseApi = require("./supabase.cjs").setupSupabase({ ipcMain, dataDir: dataDi
 // secrets" push, plus the sealed account store the push reads from (electron/app-setup.cjs).
 require("./app-setup.cjs").setupApps({
   ipcMain, vault, dataDir: dataDir(),
-  ownsPane: (wc) => pane.owns(wc),
+  ownsPane: (wc) => pane.owns(wc) || require("./page-snapshot.cjs").ownsSnapshot(wc),
   isBoard: (sender) => Boolean(sender) && sender === appView?.webContents,
   supabaseReadLink: require("./supabase.cjs").readLink,
   getSafeStorage: () => require("electron").safeStorage,
 });
-// And BlastCP: its sign-in is in the Keychain too, and which property a folder posts as is in the data folder.
-blastcpApi = require("./blastcp.cjs").setupBlastcp({ ipcMain, dataDir: dataDir(), board: () => appView?.webContents });
-// And Cloudflare: its token is in the Keychain and which Worker or Pages project a folder is is in the data folder.
-require("./cloudflare.cjs").setupCloudflare({ ipcMain, dataDir: dataDir(), board: () => appView?.webContents });
+// And BlastCP, Cloudflare, Slack and Goose, each with its secret in the Keychain (electron/providers.cjs).
+({ blastcpApi, slackApi, gooseApi } = require("./providers.cjs").setupProviders({
+  ipcMain, dataDir: dataDir(), board: () => appView?.webContents, server: () => (server ? { url: server.url, token: TOKEN } : null),
+}));
 // Keep Working (electron/keep-working.cjs): the board's Settings → General → Laptop mode card; the
 // wiring lives in electron/keep-working-ipc.cjs to keep main.cjs under the size budget.
 require("./keep-working-ipc.cjs")({ ipcMain, keepWorking: menus.keepWorking, getBoardContents: () => appView?.webContents });

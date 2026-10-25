@@ -7,29 +7,25 @@ const { vaultRoutes } = require("./vault-routes.cjs");
 const { envRoutes } = require("./vercel-env.cjs");
 const { restartFor } = require("./restart-when-idle.cjs");
 const { relayKeyFromEnv, sealSecret, sealedToHex } = require("./relay-secret.cjs");
+const { sharedSnapshot, snapshotRoutes } = require("./page-snapshot.cjs");
+const { gooseRoutes } = require("./goose-ipc.cjs");
 const { appSecretsRoutes } = require("./app-secrets-push.cjs");
-const { createPageSnapshot, snapshotRoutes } = require("./page-snapshot.cjs");
+const { slackRoutes } = require("./slack.cjs");
 
 // The copilot's chips (lib/copilot-sources.ts): a linked service's state per folder, read-only.
 function statusRoute(api) {
   return ({ folders }) => api()?.status((folders ?? []).map(String)) ?? { folders: [] };
 }
 
-function paneRoutes({ dataDir, app, dialog, shell, window, board, sendMenu, updater, vault, vercelEnv, vercelApi, supabaseApi, blastcpApi = () => null }) {
+function paneRoutes({ dataDir, app, dialog, shell, window, board, sendMenu, updater, vault, vercelEnv, vercelApi, supabaseApi, blastcpApi = () => null, gooseApi = () => null, slackApi = () => null }) {
   return {
     // The Weft account's session, sealed by safeStorage; the server reads it here instead of a plain file.
     ...accountRoutesFor(dataDir),
-    // mcp__secrets__add_blank and set_value: blanks into the card's vault, and a value a thread generated into one.
+    // mcp__secrets__add_blank, ask_add and set_value: blanks into the card's vault (a fill or run that found a key
+    // missing goes through ask-add too), and a value a thread generated into one.
     ...vaultRoutes(vault),
     // A new mini-app link's keys, pushed in the request that makes it (lib/app-share-keys.ts).
     ...appSecretsRoutes(),
-    // mcp__secrets__ask_add, and a fill or run that found a key missing: the name goes in as a blank
-    // (lib/secret-ask.ts). The ask's input shows in the thread itself (components/SecretAskInput.tsx).
-    "POST /secrets/ask-add": async ({ folder, name, environment }) => {
-      const env = String(environment || "development");
-      await vault()?.addBlanks(String(folder), [String(name)], [env], { source: "a thread" }).catch(() => null);
-      return { added: true };
-    },
     // mcp__board__request_folder_access: a thread that got "Operation not permitted" on Downloads asks;
     // macOS prompts, or a dialog opens Settings.
     "POST /folder-access/ask": ({ folder }) => createFolderAccess({ app, dialog, shell, window }).ask(folder),
@@ -65,6 +61,9 @@ function paneRoutes({ dataDir, app, dialog, shell, window, board, sendMenu, upda
     // The latest deploy and the unapplied migrations, per folder.
     "POST /vercel/status": statusRoute(vercelApi),
     "POST /supabase/status": statusRoute(supabaseApi),
+    // Goose's provider key for a subprocess: a one-time grant, then electron/goose-env.cjs claims it and starts
+    // Goose with the key in its env. The plaintext never crosses the control server (lib/goose-provider.ts).
+    ...gooseRoutes(gooseApi),
     // Connecting BlastCP with your Weft account (lib/blastcp-auto.ts): the account's access token in, swapped by
     // main for a BlastCP sign-in it keeps in the Keychain. Only the outcome goes back.
     "POST /blastcp/connect-weft": ({ subjectToken, force }) => {
@@ -73,7 +72,9 @@ function paneRoutes({ dataDir, app, dialog, shell, window, board, sendMenu, upda
       return blastcp.connectWeft(String(subjectToken ?? ""), { force: force === true });
     },
     // A mini app's link-preview screenshot (lib/app-preview-capture.ts): the page in a hidden window at 1200×630.
-    ...snapshotRoutes(() => createPageSnapshot({ BrowserWindow: require("electron").BrowserWindow })),
+    ...snapshotRoutes(sharedSnapshot),
+    // The server asks main to post to Slack, and how the socket is doing (electron/slack.cjs).
+    ...slackRoutes(slackApi),
     // mcp__board_view__*: threads see and drive the board itself, secrets redacted (electron/board-view.cjs).
     ...boardViewRoutes(createBoardView({ board })),
   };
