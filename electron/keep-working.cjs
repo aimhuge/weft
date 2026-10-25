@@ -10,6 +10,7 @@
 // watchdog's: a change while on restarts it with the new rules (electron/keep-working-prefs.cjs).
 const childProcess = require("node:child_process");
 const { dialog } = require("electron");
+const { READ_HEADERS } = require("./server-read.cjs");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
@@ -50,7 +51,7 @@ function run(proc, file, args) {
 async function countRunning(server) {
   if (!server) return null;
   try {
-    const { cards } = await (await fetch(`${server.url}/api/cards`)).json();
+    const { cards } = await (await fetch(`${server.url}/api/cards`, READ_HEADERS)).json();
     return cards.filter((card) => card.column === "running").length;
   } catch {
     return null;

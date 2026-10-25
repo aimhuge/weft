@@ -16,7 +16,7 @@ describe("resolveFolder", () => {
     const url = new URL("weft://new?prompt=hi");
     const server = { url: "http://localhost" };
     expect(await resolveFolder(url, server)).toBe("/Users/me/dev/proj");
-    expect(fetchMock).toHaveBeenCalledWith("http://localhost/api/settings");
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost/api/settings", { headers: { "x-weft-token": "1" } });
   });
 });
 

@@ -3,6 +3,7 @@
 // can't fire a thread. start=1 is ignored on purpose.
 const electron = require("electron");
 const os = require("node:os");
+const { READ_HEADERS } = require("./server-read.cjs");
 
 // folder= is taken from the link as is (pentest 2026-10-18, F-5). A clickjacked or hostile link can
 // make a card whose folder is, say, ~/.ssh, with a prompt of its choosing. What stops it is L-3 alone:
@@ -15,7 +16,7 @@ const os = require("node:os");
 async function resolveFolder(url, server) {
   const explicit = url.searchParams.get("folder");
   if (explicit) return explicit;
-  const settings = await (await fetch(`${server.url}/api/settings`)).json();
+  const settings = await (await fetch(`${server.url}/api/settings`, READ_HEADERS)).json();
   return settings.projects?.[0]?.path ?? os.homedir();
 }
 

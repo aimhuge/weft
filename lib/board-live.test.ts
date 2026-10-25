@@ -21,7 +21,7 @@ vi.mock("./chimes", () => ({ playChime: mocks.playChime }));
 vi.mock("./use-account", () => ({ announceAccountChange: mocks.announceAccountChange }));
 vi.mock("./use-events", () => ({ useBoardEvents: mocks.useBoardEvents }));
 
-import { onBoardEvent, reloadBoard, useBoardLive, type BoardLive } from "./board-live";
+import { LIST_RETRY_MS, onBoardEvent, reloadBoard, useBoardLive, type BoardLive } from "./board-live";
 import { removeNow, stopNow } from "./optimistic-cards";
 
 const card = (over: Partial<Card> = {}): Card => ({ id: "a", title: "A", column: "running", cwd: "/r", ...over }) as Card;
@@ -200,6 +200,67 @@ describe("reloadBoard", () => {
     await vi.waitFor(() => expect(l.notify).toHaveBeenCalledWith(err));
     expect(l.setProjects).not.toHaveBeenCalled();
     expect(l.loadThread).not.toHaveBeenCalled();
+  });
+
+  it("tries a failed card list again until it lands, reporting only the first failure", async () => {
+    vi.useFakeTimers();
+    try {
+      mocks.list
+        .mockRejectedValueOnce(new Error("broken build"))
+        .mockRejectedValueOnce(new Error("still"))
+        .mockResolvedValue({ cards: [card()], home: "/h", roots: {} });
+      mocks.settings.mockResolvedValue({ projects: [] });
+      const { l } = live();
+      reloadBoard(l);
+      await vi.advanceTimersByTimeAsync(LIST_RETRY_MS[0] ?? 0);
+      expect(mocks.list).toHaveBeenCalledTimes(2);
+      await vi.advanceTimersByTimeAsync(LIST_RETRY_MS[1] ?? 0);
+      expect(mocks.list).toHaveBeenCalledTimes(3);
+      expect(l.setLoaded).toHaveBeenCalledWith(true);
+      expect(l.notify).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps waiting the longest gap once the retries run out", async () => {
+    vi.useFakeTimers();
+    try {
+      mocks.list.mockRejectedValue(new Error("down"));
+      mocks.settings.mockResolvedValue({ projects: [] });
+      const { l } = live();
+      reloadBoard(l);
+      const total = LIST_RETRY_MS.reduce((a, b) => a + b, 0);
+      await vi.advanceTimersByTimeAsync(total + LIST_RETRY_MS.at(-1)!);
+      expect(mocks.list).toHaveBeenCalledTimes(LIST_RETRY_MS.length + 2);
+      mocks.list.mockReturnValue(new Promise(() => {})); // the newer reload's list never answers
+      reloadBoard(live().l); // a newer reload: the old run's next retry stops
+      const calls = mocks.list.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(LIST_RETRY_MS.at(-1)!);
+      expect(mocks.list.mock.calls.length).toBe(calls);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("a newer reload drops an older one's late answer, failed or not", async () => {
+    let failOld!: (err: Error) => void;
+    let answerOld!: (data: unknown) => void;
+    mocks.list
+      .mockReturnValueOnce(new Promise((_, reject) => (failOld = reject)))
+      .mockReturnValueOnce(new Promise((resolve) => (answerOld = resolve)))
+      .mockReturnValue(new Promise(() => {}));
+    mocks.settings.mockResolvedValue({ projects: [] });
+    const first = live().l;
+    const second = live().l;
+    reloadBoard(first);
+    reloadBoard(second);
+    reloadBoard(live().l);
+    failOld(new Error("late"));
+    answerOld({ cards: [card()], home: "/h", roots: {} });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(first.notify).not.toHaveBeenCalled();
+    expect(second.setLoaded).not.toHaveBeenCalled();
   });
 });
 

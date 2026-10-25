@@ -124,11 +124,19 @@ export function onBoardEvent(event: BoardEvent, live: BoardLive) {
   }
 }
 
-// The first connect and every reconnect: reload the cards, the projects and everything else live.
-export function reloadBoard(live: BoardLive) {
+// How long to wait before trying a failed card list again, try by try; the last repeats.
+export const LIST_RETRY_MS = [1_000, 2_000, 5_000, 10_000];
+// Each reload's number, so a newer reload stops an older one's retries and drops its late answer.
+let listRun = 0;
+
+// The card list, tried until it lands. One that fails (a build another card broke mid-edit, the server
+// restarting) used to leave every column on placeholder cards for good, while the event stream kept
+// drawing only the cards that changed. The first failure is reported; the retries are quiet.
+function loadCards(live: BoardLive, run = ++listRun, attempt = 0) {
   api
     .list()
     .then((data) => {
+      if (run !== listRun) return;
       live.columns.current = new Map(data.cards.map((c) => [c.id, c.column]));
       live.errors.current = new Map(data.cards.map((c) => [c.id, c.error]));
       for (const c of data.cards) live.resolvedFolders.current.add(c.cwd);
@@ -137,7 +145,19 @@ export function reloadBoard(live: BoardLive) {
       live.setRoots(data.roots);
       live.setLoaded(true);
     })
-    .catch(live.notify);
+    .catch((err: unknown) => {
+      if (run !== listRun) return;
+      if (attempt === 0) live.notify(err);
+      const wait = LIST_RETRY_MS[Math.min(attempt, LIST_RETRY_MS.length - 1)];
+      setTimeout(() => {
+        if (run === listRun) loadCards(live, run, attempt + 1);
+      }, wait);
+    });
+}
+
+// The first connect and every reconnect: reload the cards, the projects and everything else live.
+export function reloadBoard(live: BoardLive) {
+  loadCards(live);
   api
     .settings()
     .then((settings) => {

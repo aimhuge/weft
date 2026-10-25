@@ -4,6 +4,7 @@ const { BaseWindow, Menu, Tray, app, clipboard, dialog, nativeImage, shell, webC
 const fs = require("node:fs");
 const path = require("node:path");
 const { showAboutWindow } = require("./about.cjs");
+const { READ_HEADERS } = require("./server-read.cjs");
 const { createKeepWorking } = require("./keep-working.cjs");
 const { armRestart } = require("./restart-when-idle.cjs");
 const { createAppUpdater } = require("./updater.cjs");
@@ -246,7 +247,7 @@ function createMenus({ APP_NAME, ASSETS, COPILOT_SHORTCUT, mac, pane, getWin, ge
     const server = getServer();
     if (!server) return;
     try {
-      const { cards } = await (await fetch(`${server.url}/api/cards`)).json();
+      const { cards } = await (await fetch(`${server.url}/api/cards`, READ_HEADERS)).json();
       updateTray(cards.filter((card) => card.column === "needs_you"));
     } catch {}
   }

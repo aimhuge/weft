@@ -238,6 +238,7 @@ function createUpdater({
 // The updater with Electron's own pieces: Squirrel, dialogs, a notification, and the board's running count.
 function createAppUpdater({ getServer, onChange, openWindow }) {
   const { armRestart } = require("./restart-when-idle.cjs");
+  const { READ_HEADERS } = require("./server-read.cjs");
   const { BaseWindow, Notification, app, autoUpdater, dialog, powerMonitor, shell } = require("electron");
   let shown = null; // the last notification, held so its click handlers outlive garbage collection
   return createUpdater({
@@ -247,7 +248,7 @@ function createAppUpdater({ getServer, onChange, openWindow }) {
     countRunning: async () => {
       const server = getServer();
       if (!server) return null;
-      const { cards } = await (await fetch(`${server.url}/api/cards`)).json();
+      const { cards } = await (await fetch(`${server.url}/api/cards`, READ_HEADERS)).json();
       return cards.filter((card) => card.column === "running").length;
     },
     ask: async (message, detail) => {
