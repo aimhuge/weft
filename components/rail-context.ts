@@ -1,7 +1,7 @@
 import type { Card } from "@/lib/types";
 
-// What the left rail hands every drawer behind it (🔐, 🪝, ▲, Supabase, Cloudflare, BlastCP, GitHub, skills,
-// 🖥 Services): the board's project and cards, and the few board actions a drawer can take.
+// What the left rail hands every drawer behind it (🔐, 🪝, ▲, Supabase, Cloudflare, BlastCP, GitHub, Slack,
+// skills, 🖥 Services): the board's project and cards, and the few board actions a drawer can take.
 export interface RailContext {
   // The board's selected project folder, or null for all of them.
   project: string | null;

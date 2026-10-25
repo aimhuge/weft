@@ -1,0 +1,23 @@
+{
+  "display_information": {
+    "name": "Weft",
+    "description": "Your Weft board in Slack: commits, pushes, deploys and card updates; /weft starts a card.",
+    "background_color": "#1d1f24"
+  },
+  "features": {
+    "bot_user": { "display_name": "Weft", "always_online": true },
+    "slash_commands": [{ "command": "/weft", "description": "Start a Weft card", "usage_hint": "fix the login bug", "should_escape": false }]
+  },
+  "oauth_config": {
+    "scopes": {
+      "bot": ["chat:write", "chat:write.public", "commands", "app_mentions:read", "channels:read", "groups:read", "channels:join", "channels:manage"]
+    }
+  },
+  "settings": {
+    "event_subscriptions": { "bot_events": ["app_mention"] },
+    "interactivity": { "is_enabled": false },
+    "org_deploy_enabled": false,
+    "socket_mode_enabled": true,
+    "token_rotation_enabled": false
+  }
+}

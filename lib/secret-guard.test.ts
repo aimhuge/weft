@@ -7,7 +7,7 @@ const signal = new AbortController().signal;
 
 describe("isSecretFile", () => {
   it.each([".env", ".env.local", "apps/web/.env.production.local", "/x/.envrc", ".dev.vars", ".env*", "'.env.local'", "/Users/me/.weft/account.json", "~/.weft/account.json",
-    "/Users/me/.weft/device-key.json", "~/.weft/device-key.json", "~/.weft/vercel-token.json", "~/.weft/supabase-token.json", "~/.weft/cloudflare-token.json", "~/.weft/shell-token", "/Users/me/.weft/shell-token", "/Users/me/.weft/vault/acme-web.json", "~/.weft/vault/", "~/.weft/vault"])(
+    "/Users/me/.weft/device-key.json", "~/.weft/device-key.json", "~/.weft/vercel-token.json", "~/.weft/supabase-token.json", "~/.weft/cloudflare-token.json", "~/.weft/slack-token.json", "~/.weft/shell-token", "/Users/me/.weft/shell-token", "/Users/me/.weft/vault/acme-web.json", "~/.weft/vault/", "~/.weft/vault"])(
     "%s holds secrets",
     (file) => expect(isSecretFile(file, DATA)).toBe(true),
   );
@@ -137,7 +137,7 @@ describe("bashVerdict", () => {
     expect(performance.now() - started).toBeLessThan(2_000);
   });
 
-  it.each(["~/.weft/account.json", "~/.weft/device-key.json", "~/.weft/vercel-token.json", "~/.weft/supabase-token.json", "~/.weft/cloudflare-token.json", "~/.weft/vault/acme.json", "~/.weft/*", ".envrc", ".dev.vars", "/proc/1/environ"])(
+  it.each(["~/.weft/account.json", "~/.weft/device-key.json", "~/.weft/vercel-token.json", "~/.weft/supabase-token.json", "~/.weft/cloudflare-token.json", "~/.weft/slack-token.json", "~/.weft/vault/acme.json", "~/.weft/*", ".envrc", ".dev.vars", "/proc/1/environ"])(
     "checks %s past the quick token filter",
     (name) => expect(bashVerdict(`cat ${name}`, DATA)).toMatch(/can't be read here/),
   );

@@ -9,6 +9,7 @@ import type { VercelBridge } from "./vercel-view";
 import type { SupabaseBridge } from "./supabase-view";
 import type { BlastcpBridge } from "./blastcp-view";
 import type { CloudflareBridge } from "./cloudflare-view";
+import type { SlackBridge } from "./slack-types";
 import type { GooseBridge } from "./goose-provider";
 
 export interface BrowserState {
@@ -117,6 +118,8 @@ export interface ShellBridge {
   blastcp?: BlastcpBridge;
   // Cloudflare in Electron main (lib/cloudflare-view.ts). Missing in older shells.
   cloudflare?: CloudflareBridge;
+  // Slack in Electron main (lib/slack-types.ts): the tokens and the Socket Mode connection. Missing in older shells.
+  slack?: SlackBridge;
   // Goose's provider keys in Electron main (lib/goose-provider.ts). Missing in older shells. The board sends a key
   // once and never reads one back.
   goose?: GooseBridge;
