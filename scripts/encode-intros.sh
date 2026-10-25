@@ -15,12 +15,15 @@ out="${OUT_DIR:-$here/../build/intros}"
 frames="$out/frames/$id-$fps${portrait:+-p}"
 mkdir -p "$out/video"
 
-LEAD=2.0
-# adelay takes milliseconds, as an integer.
-LEAD_MS=$(awk "BEGIN { printf \"%d\", $LEAD * 1000 }")
 # The narration lives beside the compositions: INTROS_DIR points at that folder, so the same script renders
 # on a laptop and on a Mac mini that has the sources synced but not the whole repo.
 INTROS_DIR="${INTROS_DIR:-$here/../public/intros}"
+# The splash's lead — how long the poster is up before the story starts — is one number, in splash-timing.js,
+# which the page plays it with too. The voice waits exactly this long, so the word and the picture start together.
+LEAD=$(sed -n 's/.*lead: *\([0-9.]*\).*/\1/p' "$INTROS_DIR/splash-timing.js" | head -1)
+[ -n "$LEAD" ] || { echo "MISSING $INTROS_DIR/splash-timing.js — the splash's lead is the one number the voice's delay and the video's length both come from. Stopping." >&2; exit 1; }
+# adelay takes milliseconds, as an integer.
+LEAD_MS=$(awk "BEGIN { printf \"%d\", $LEAD * 1000 }")
 args=(-y -loglevel error -f image2 -framerate "$fps" -i "$frames/f%04d.png")
 if [ -f "$INTROS_DIR/$id.m4a" ]; then
   # The m4a suffix hides an mp4 container, so the format is stated before the decode.

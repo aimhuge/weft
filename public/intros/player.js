@@ -18,7 +18,8 @@ var FEATURE_TAGS = {
   skills: "New tricks for your AI to learn",
   services: "Your dev servers, and what they cost",
   quality: "A score, and the refactors behind it",
-  leagues: "Thirty builders, one table"
+  leagues: "Thirty builders, one table",
+  newthread: "Start a thread, and give it a plan"
 };
 
 // A better mark for the two features whose own icon doesn't carry at poster size: Vercel's is a plain triangle,
@@ -55,15 +56,18 @@ var readFeature = function (root) {
 
 // The splash every intro opens on: an OG-style poster about the feature — its own icon big in the middle, its
 // name under it, and a line saying what it's for. It's injected here rather than written into each page, so all
-// eleven intros open the same way without each one carrying the markup.
+// twelve intros open the same way without each one carrying the markup.
 //
 // It plays on a master timeline with the page's own timeline nested under it, so the story starts after the splash
 // clears instead of running underneath it — and the whole thing stays seekable (?t= holds a frame).
 //
 // Returns { master, lead }: the master is the timeline to play, and lead is how many seconds of splash come first.
 var buildSplash = function (root, tl) {
-  var SPLASH_HOLD = 1.5, SPLASH_FADE = 0.5;
-  var lead = SPLASH_HOLD + SPLASH_FADE;
+  // The timing lives in splash-timing.js, which the render scripts read too, so the picture's lead, the
+  // narration's delay and the verifier's expected length can't drift apart.
+  var timing = window.WEFT_SPLASH || { hold: 1.5, fade: 0.5, lead: 2.0 };
+  var SPLASH_HOLD = timing.hold, SPLASH_FADE = timing.fade;
+  var lead = timing.lead;
   var feature = readFeature(root);
   // The id is the page's file name, which is what the taglines are keyed by.
   var id = (location.pathname.split("/").pop() || "").replace(/\.html$/, "");

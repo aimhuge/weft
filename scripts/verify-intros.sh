@@ -9,14 +9,18 @@ set -uo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 INTROS_DIR="${INTROS_DIR:-$here/../public/intros}"
 OUT_DIR="${OUT_DIR:-$here/../build/intros}"
-ALL="vault webhooks vercel supabase cloudflare blastcp github skills services quality leagues"
+ALL="vault webhooks vercel supabase cloudflare blastcp github skills services quality leagues newthread"
 IDS="${*:-$ALL}"
+# The splash's lead comes from splash-timing.js, the same file the page and the encoder read, so the expected
+# length can't drift away from the poster's real length.
+LEAD=$(sed -n 's/.*lead: *\([0-9.]*\).*/\1/p' "$INTROS_DIR/splash-timing.js" | head -1)
+[ -n "$LEAD" ] || { echo "MISSING $INTROS_DIR/splash-timing.js — the splash's lead is the one number the video's length comes from. Stopping." >&2; exit 1; }
 for id in $IDS; do
   f="$OUT_DIR/video/$id-9x16.mp4"
   src="$INTROS_DIR/$id.html"
   if [ ! -f "$f" ]; then echo "$id: MISSING FILE"; continue; fi
   story=$(grep -o 'data-duration="[0-9.]*"' "$src" | grep -o '[0-9.]*')
-  want=$(awk "BEGIN { printf \"%.2f\", $story + 2.0 }")
+  want=$(awk "BEGIN { printf \"%.2f\", $story + $LEAD }")
   dur=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$f")
   has_a=$(ffprobe -v error -select_streams a -show_entries stream=codec_name -of csv=p=0 "$f" | head -1)
   # The first sound in the track: silence through the splash means the voice starts with the story. silencedetect

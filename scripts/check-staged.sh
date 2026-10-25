@@ -49,8 +49,9 @@ if ! node "$root/scripts/one-at-a-time.mjs" typecheck npx --no-install tsc --noE
   exit 1
 fi
 
-# Lint the staged versions of the changed files, with the same rules as `pnpm lint`.
-git -C "$root" diff --cached --name-only --diff-filter=ACMR -z -- '*.ts' '*.tsx' '*.mts' '*.cjs' '*.mjs' > "$tmp/.staged"
+# Lint the staged versions of the changed files, with the same rules as `pnpm lint`. Plain .js counts too: the
+# intro player's markup is built by string concatenation into innerHTML, which is exactly what a lint pass is for.
+git -C "$root" diff --cached --name-only --diff-filter=ACMR -z -- '*.ts' '*.tsx' '*.mts' '*.cjs' '*.mjs' '*.js' > "$tmp/.staged"
 if [ -s "$tmp/.staged" ]; then
   if ! xargs -0 npx --no-install eslint --max-warnings 0 --no-warn-ignored < "$tmp/.staged" > "$tmp/eslint.log" 2>&1; then
     echo "pre-commit: the staged files don't pass lint:" >&2

@@ -10,6 +10,7 @@
 // they live somewhere else (a Mac mini that has the sources synced but not the whole repo), and OUT_DIR moves
 // the frames and the finished video.
 import { execFileSync } from "node:child_process";
+import { createRequire } from "node:module";
 import { mkdirSync, readFileSync, rmSync, existsSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 
@@ -27,8 +28,9 @@ const [W, H] = portrait ? [1080, 1920] : [800, 1000];
 const src = join(intros, `${id}.html`);
 const duration = Number(/data-duration="([\d.]+)"/.exec(readFileSync(src, "utf8"))?.[1] ?? 20);
 // Every intro opens on the splash screen that player.js injects, so the video is the splash plus the story.
-// The splash holds for 1.5 s and fades over 0.5 s; the story then runs its own length.
-const LEAD = 2.0;
+// The splash's own timing (public/intros/splash-timing.js) is the one the page plays it with, so the frames
+// cover exactly the lead the story starts after.
+const { lead: LEAD } = createRequire(import.meta.url)(join(intros, "splash-timing.js"));
 const frames = Math.round((duration + LEAD) * fps);
 
 const dir = join(out, "frames", `${id}-${fps}${portrait ? "-p" : ""}`);
