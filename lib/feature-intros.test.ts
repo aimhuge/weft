@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from "vitest";
 import {
+  hasVideo,
   INTROS,
   INTROS_KEY,
   INTRO_TITLES,
@@ -11,6 +12,7 @@ import {
   markIntroSeen,
   muteMessage,
   resetIntros,
+  VIDEO_INTROS,
 } from "./feature-intros";
 
 function memory(initial?: string) {
@@ -48,6 +50,13 @@ describe("the intro list", () => {
     expect(isIntro("nope")).toBe(false);
     expect(isIntro(null)).toBe(false);
     expect(isIntro(7)).toBe(false);
+  });
+
+  it("knows which intros have a video yet", () => {
+    // Slack's hasn't been narrated: the rail knows it, but it plays nothing.
+    expect(hasVideo("vault")).toBe(true);
+    expect(hasVideo("slack")).toBe(false);
+    expect(VIDEO_INTROS.every((id) => INTROS.includes(id))).toBe(true);
   });
 });
 

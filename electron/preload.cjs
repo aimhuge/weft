@@ -85,7 +85,10 @@ contextBridge.exposeInMainWorld("weft", {
     // Vault → Vercel (electron/vercel-env.cjs): names only come back; a push asks Touch ID in main.
     envStatus: (folder) => ipcRenderer.invoke("vercel:env-status", folder),
     envPush: (folder, name, environment) => ipcRenderer.invoke("vercel:env-push", folder, name, environment),
-    envPushAll: (folder) => ipcRenderer.invoke("vercel:env-push-all", folder),
+    envPushAll: (folder, only) => ipcRenderer.invoke("vercel:env-push-all", folder, only),
+    // The vault ⇄ Vercel drift from main's cached lists (electron/vercel-env-cache.cjs), and when one lands.
+    envDrift: (folders) => ipcRenderer.invoke("vercel:env-drift", folders),
+    onDrift: (callback) => listen("vercel:drift", callback),
     envPull: (folder) => ipcRenderer.invoke("vercel:env-pull", folder),
   },
   // Supabase (electron/supabase.cjs): the token stays in main; links are supabase/.temp/project-ref. Board window only.
@@ -118,6 +121,15 @@ contextBridge.exposeInMainWorld("weft", {
     projects: () => ipcRenderer.invoke("cloudflare:projects"),
     link: (folder, kind, accountId, name) => ipcRenderer.invoke("cloudflare:link", folder, kind, accountId, name),
     unlink: (folder) => ipcRenderer.invoke("cloudflare:unlink", folder),
+  },
+  // Slack (electron/slack.cjs): the bot and app tokens stay in main; the board only asks what's there.
+  // Board window only.
+  slack: {
+    status: () => ipcRenderer.invoke("slack:status"),
+    setTokens: (bot, app) => ipcRenderer.invoke("slack:set-tokens", bot, app),
+    forgetToken: () => ipcRenderer.invoke("slack:forget-token"),
+    channels: () => ipcRenderer.invoke("slack:channels"),
+    createChannel: (name) => ipcRenderer.invoke("slack:create-channel", name),
   },
   // Goose (electron/goose-ipc.cjs): a provider key per provider, sealed in the Keychain. The board sends a key
   // once and never reads one back — the runner's Goose subprocess gets it in its env (electron/goose-env.cjs).

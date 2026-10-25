@@ -38,6 +38,13 @@ export const INTRO_TITLES: Record<IntroId, string> = {
 
 export const isIntro = (id: unknown): id is IntroId => INTROS.includes(id as IntroId);
 
+// The intros that have a video page in public/intros. A drawer can be on the rail without one yet (Slack's
+// hasn't been narrated); it still has an id and a title, so the rail knows it, but it plays nothing: the
+// ▶ button stays away and nothing opens on the first visit.
+export const VIDEO_INTROS = ["vault", "webhooks", "vercel", "supabase", "cloudflare", "blastcp", "github", "skills", "services", "quality", "leagues", "newthread"] as const;
+
+export const hasVideo = (id: IntroId) => (VIDEO_INTROS as readonly string[]).includes(id);
+
 // The page plays itself with ?live=1 (public/intros/player.js), voice and all: its voiceover is the track beside it,
 // made by `pnpm intros:narrate` (scripts/narrate-intros.mjs) from the page's own #narration lines, and the page plays
 // it so the frames wait for it. ?muted=1 starts it muted; muteMessage flips it after.
