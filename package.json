@@ -18,6 +18,7 @@
     "dev:web": "node electron/free-port.cjs 1024 .next && WEFT_WEB=1 next dev -H 127.0.0.1 -p 1024",
     "dev:protocol": "node scripts/dev-protocol.cjs",
     "slack:manifest": "node scripts/slack-app-manifest.mjs",
+    "slack:probe": "node scripts/slack-app-probe.mjs",
     "desktop": "node scripts/dev-protocol.cjs && electron .",
     "build": "next build",
     "start": "electron .",

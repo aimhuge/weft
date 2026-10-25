@@ -21,10 +21,11 @@ nothing on Supabase. It needs two tokens:
 
 `lib/slack-manifest.json` is the app: bot user "Weft", the `/weft` slash command, the `app_mention` bot event, Socket
 Mode on, interactivity off, the bot scopes `chat:write`, `chat:write.public` (post to a public channel it isn't in),
-`commands`, `app_mentions:read`, `channels:read` and `groups:read` (the channel picker), `channels:join`, and
-`channels:manage` (the picker's **+ New channel**). It also declares the **incoming webhook** the deployed Weft posts
-feedback through (`features.incoming_webhooks`), which is a separate thing from the Slack rail: the rail's bot token
-stays on the Mac, while the feedback webhook is a URL the server can hold (docs/architecture/feedback.md).
+`commands`, `app_mentions:read`, `channels:read` and `groups:read` (the channel picker), `channels:join`,
+`channels:manage` (the picker's **+ New channel**), and `incoming-webhook`. It also turns **Incoming Webhooks** on for
+the deployed Weft's feedback path (`settings.incoming_webhooks.incoming_webhooks_enabled` — under `settings`, not
+`features`), which is a separate thing from the Slack rail: the rail's bot token stays on the Mac, while the feedback
+webhook is a URL the server can hold (docs/architecture/feedback.md).
 
 - **New app**: the drawer's **Create the Weft app** opens `api.slack.com/apps?new_app=1&manifest_json=…` in the pane
   (`manifestUrl()` in `lib/slack-view.ts`), then Install to Workspace.
@@ -36,8 +37,11 @@ stays on the Mac, while the feedback webhook is a URL the server can hold (docs/
 
 **There is no Web API method for incoming webhooks** — no create, no list, no delete. Slack's own reference lists only
 `apps.manifest.*` for them, so the feature is turned on either by the manifest (a configuration token) or by hand in
-the developer console. The webhook's URL is only ever shown once, at creation, so it belongs in the 🔐 vault
-(`SLACK_FEEDBACK_WEBHOOK_URL`, production) and nowhere else.
+the developer console. The manifest's answer carries no URL either. Two routes reach the address: an **install**,
+whose OAuth answer includes `incoming_webhook.url` (needs the app's Client ID and Secret, from the console), or the
+console's own **Add New Webhook to Workspace**, which shows the `https://hooks.slack.com/services/…` URL once, by
+hand. Either way the URL belongs in the 🔐 vault (`SLACK_FEEDBACK_WEBHOOK_URL`, production) and nowhere else — a URL
+that reaches a chat reaches a transcript for good.
 
 ## Who holds what
 

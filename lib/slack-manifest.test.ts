@@ -6,11 +6,13 @@ import manifest from "./slack-manifest.json";
 // rejects it at the moment someone tries to apply it — with a config token in hand, on a Slack app, minutes
 // later. The mistakes worth catching are the ones that are silent until then:
 //
-// - `features.incoming_webhooks` takes `{ incoming_webhooks_enabled: true }`. The older `{ name: "Feedback" }`
-//   shape looks right and is not what Slack reads, so the feature stays off and nothing says why.
-// - `oauth_config.scopes` has `bot` and `user`. The `incoming-webhook` scope has to be a *user* scope: it's the
-//   user grant whose OAuth response carries `incoming_webhook.url`, which is where the feedback webhook's
-//   address comes from. A bot scope creates nothing to read.
+// - `incoming_webhooks` lives under `settings`, not `features`. Slack's manifest reference puts it at
+//   `settings.incoming_webhooks.incoming_webhooks_enabled`; there is no `features.incoming_webhooks`
+//   subgroup, so a manifest that puts it there is silently ignored and the feature stays off with nothing
+//   to say why.
+// - `oauth_config.scopes` has `bot` and `user`. The `incoming-webhook` scope supports **bot and legacy bot
+//   only** — Slack rejects it under `scopes.user` with `illegal_user_scopes`. It is the *install* (not the
+//   scope's type) whose OAuth answer carries `incoming_webhook.url`, and an install grants bot scopes too.
 //
 // The scope names are checked against the lists Slack publishes
 // (docs.slack.dev/reference/scopes, and the Slack SDK's own manifest types).
@@ -20,7 +22,6 @@ type Manifest = {
   features: {
     bot_user?: { display_name: string; always_online?: boolean };
     slash_commands?: { command: string; description: string; usage_hint?: string; should_escape?: boolean }[];
-    incoming_webhooks?: { incoming_webhooks_enabled?: boolean };
   };
   oauth_config: { scopes: { bot?: string[]; user?: string[] } };
   settings: {
@@ -28,6 +29,7 @@ type Manifest = {
     interactivity?: { is_enabled?: boolean };
     socket_mode_enabled?: boolean;
     token_rotation_enabled?: boolean;
+    incoming_webhooks?: { incoming_webhooks_enabled?: boolean };
   };
 };
 
@@ -35,27 +37,30 @@ const m = manifest as Manifest;
 
 describe("the Slack manifest", () => {
   it("turns Incoming Webhooks on the way Slack reads it", () => {
-    // The shape is the whole point: `{ name }` here is silently ignored by Slack.
-    expect(m.features.incoming_webhooks).toEqual({ incoming_webhooks_enabled: true });
-    expect(m.features.incoming_webhooks?.incoming_webhooks_enabled).toBe(true);
+    // Two shapes to get right, both silent when wrong: the key lives under `settings`, not `features`,
+    // and the leaf is `incoming_webhooks_enabled`, not a name.
+    expect(m.settings.incoming_webhooks).toEqual({ incoming_webhooks_enabled: true });
+    expect(m.settings.incoming_webhooks?.incoming_webhooks_enabled).toBe(true);
+    expect((m.features as { incoming_webhooks?: unknown }).incoming_webhooks).toBeUndefined();
   });
 
-  it("asks for the incoming-webhook scope as a user scope, so the OAuth answer carries the webhook's URL", () => {
-    expect(m.oauth_config.scopes.user).toContain("incoming-webhook");
-    // A bot scope for it would be accepted and would still leave the URL unreadable.
-    expect(m.oauth_config.scopes.bot ?? []).not.toContain("incoming-webhook");
+  it("asks for the incoming-webhook scope as a bot scope, so the install answer carries the webhook's URL", () => {
+    // Slack rejects this scope under `scopes.user` (`illegal_user_scopes`) — it is bot/legacy-bot only.
+    expect(m.oauth_config.scopes.bot).toContain("incoming-webhook");
+    expect(m.oauth_config.scopes.user ?? []).not.toContain("incoming-webhook");
   });
 
   it("keeps the bot scopes the rail needs, so applying the manifest doesn't unmake the app", () => {
     expect(m.oauth_config.scopes.bot).toEqual([
+      "app_mentions:read",
+      "channels:join",
+      "channels:manage",
+      "channels:read",
       "chat:write",
       "chat:write.public",
       "commands",
-      "app_mentions:read",
-      "channels:read",
       "groups:read",
-      "channels:join",
-      "channels:manage",
+      "incoming-webhook",
     ]);
   });
 

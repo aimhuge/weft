@@ -71,17 +71,22 @@ To prove both halves at once, POST a summary to `https://weft.zip/api/feedback/c
 Slack has no Web API method for incoming webhooks: no create, no list, no delete. Two different routes reach it,
 and they answer different halves of the question.
 
-**The manifest turns the feature on.** `features.incoming_webhooks` in `lib/slack-manifest.json` takes
-`{ incoming_webhooks_enabled: true }` — *not* `{ name: "Feedback" }`, which looks right and is not the shape Slack
-reads, so the feature stays off with nothing to say why. Applying the manifest needs an app configuration token
-(`xoxe-`, 12 hours) for `apps.manifest.update`; `pnpm slack:manifest A0CBFBZMTV5` does it (docs/architecture/slack.md).
-The manifest's answer is only `ok`, `app_id` and `permissions_updated`: no webhook, no URL.
+**The manifest turns the feature on.** Incoming webhooks live under `settings` in the manifest, not `features`:
+`settings.incoming_webhooks: { incoming_webhooks_enabled: true }` (`lib/slack-manifest.json`). There is no
+`features.incoming_webhooks` subgroup, so a manifest that puts it there is silently ignored and the feature stays
+off with nothing to say why. Applying the manifest needs an app configuration token (`xoxe-`, 12 hours) for
+`apps.manifest.update`; `pnpm slack:manifest A0CBFBZMTV5` does it (docs/architecture/slack.md). The manifest's
+answer is only `ok`, `app_id` and `permissions_updated`: no webhook, no URL.
 
-**The OAuth answer carries the URL.** A *user* grant of the `incoming-webhook` scope returns `incoming_webhook.url`
-in its OAuth response, and that URL is a real, listable webhook — not the once-only console one. So the manifest
-asks for `oauth_config.scopes.user: ["incoming-webhook"]`, and an install that grants it hands back the address
-programmatically. That is the only route that can put the URL in the vault without a human reading it off a page;
-the console's URL is shown once and has to be copied by hand.
+**The OAuth answer carries the URL.** An install of the app returns `incoming_webhook.url` in its OAuth response,
+and that URL is a real, listable webhook — not the once-only console one. The install needs the app to request the
+`incoming-webhook` scope, which Slack supports as a **bot** scope only: put it in `oauth_config.scopes.bot`, never
+under `scopes.user` (Slack rejects that with `illegal_user_scopes`). The install itself is the route that hands the
+address back programmatically — the Slack CLI's `apps.developerInstall` shortcut does *not*, because it skips the
+OAuth channel picker. So the flow is: send the user to the app's OAuth install page, let them pick the channel,
+exchange the returned code with `oauth.v2.access`, read `incoming_webhook.url`. That needs the app's Client ID and
+Client Secret, which only the developer console shows. It is the only route that can put the URL in the vault
+without a human reading it off a page; the console's own URL is shown once and has to be copied by hand.
 
 An incoming webhook is a channel-bound posting URL, not a way to reach any channel: the one Weft creates is bound to
 the feedback channel, and `SLACK_FEEDBACK_WEBHOOK_URL` is that URL, not a channel id.
