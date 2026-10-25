@@ -8,6 +8,8 @@ lands; a release moves those lines under its version and tags the commit `vX.Y.Z
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-10-25
+
 ### Added
 
 - **Every project has a changelog Weft keeps, so cards stop colliding on CHANGELOG.md.** Threads record what they ship with `mcp__board__changelog_add` (`_list`, `_edit`) into `~/.weft/changelog.jsonl`, mirrored to Supabase `changelog_entries` while you're signed in. Each entry links to the card that wrote it, and the card's own commit stamps it with the sha (draft → committed). Right after that commit Weft rewrites CHANGELOG.md and commits it alone as `docs(changelog): <card>`, keeping lines typed by hand; a commit that bumps package.json's version gets that version's section, so nobody runs a release step (`pnpm changelog:release <version>` stays for a bump Weft didn't see). More → **Changelog of <project>** or ⌘K opens a read-only list, Unreleased then each version. A Markdown-only commit now skips the pre-commit typecheck. (`lib/changelog*.ts`, `components/ChangelogDialog.tsx`, `scripts/check-staged.sh`, docs/architecture/changelog.md)
