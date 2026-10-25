@@ -3,7 +3,8 @@ import { act, render, renderHook } from "@testing-library/react";
 import { createElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { IntroFrame } from "@/components/FeatureIntro";
-import { INTROS_KEY, markIntroSeen, muteMessage, REPLAY_MESSAGE, TOGGLE_MESSAGE } from "./feature-intros";
+import { INTROS_KEY, markIntroSeen, muteMessage, PAUSE_MESSAGE, REPLAY_MESSAGE, TOGGLE_MESSAGE } from "./feature-intros";
+import { coverIntros } from "./intro-cover";
 import { useIntroModal } from "./intro-modal";
 import { useFeatureIntro } from "./use-feature-intro";
 
@@ -198,5 +199,36 @@ describe("useFeatureIntro", () => {
 
     act(() => fromFrame(page, { weft: "intro", event: "play" }));
     expect(result.current.paused).toBe(false);
+  });
+
+  it("pauses itself when something comes over it while it plays, and only then", () => {
+    const { result, unmount } = renderHook(() => useFeatureIntro("vault"));
+    const { container } = render(createElement(IntroFrame, { intro: result.current }));
+    const post = vi.fn();
+    const page = { postMessage: post };
+    Object.defineProperty(container.querySelector("iframe")!, "contentWindow", { value: page });
+
+    // Not started yet: the dialog it plays in has just opened, which mustn't pause it.
+    act(() => coverIntros());
+    expect(post).not.toHaveBeenCalled();
+
+    act(() => fromFrame(page, { weft: "intro", event: "start" }));
+    act(() => coverIntros());
+    expect(post).toHaveBeenCalledWith(PAUSE_MESSAGE, "*");
+
+    // Already paused, or played to the end: nothing to stop.
+    post.mockClear();
+    act(() => fromFrame(page, { weft: "intro", event: "pause" }));
+    act(() => coverIntros());
+    act(() => fromFrame(page, { weft: "intro", event: "play" }));
+    act(() => fromFrame(page, { weft: "intro", event: "done" }));
+    act(() => coverIntros());
+    expect(post).not.toHaveBeenCalled();
+
+    // Gone: it stops listening.
+    act(() => fromFrame(page, { weft: "intro", event: "start" }));
+    unmount();
+    act(() => coverIntros());
+    expect(post).not.toHaveBeenCalled();
   });
 });

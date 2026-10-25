@@ -19,6 +19,7 @@ scaled down to one feature instead of the whole product.
 | `scripts/verify-intros.sh` | Checks a finished video: duration against the story, an AAC track, the voice starting after the splash, loudness, and that the poster frame pulled out of the video is really the poster. |
 | `lib/feature-intros.ts` | The pure half: the id list, the titles, the URL and message helpers, the seen set in `localStorage`. |
 | `lib/use-feature-intro.ts` | Decides when one opens and holds its state. `components/FeatureIntro.tsx` draws it. |
+| `lib/intro-cover.ts` | The signal a dialog sends as it opens over a playing intro, which pauses it. |
 
 The three render scripts are in the repo so a video can be reproduced: `INTROS_DIR` points at the compositions and
 `OUT_DIR` at the frames and the finished videos, so the same scripts run on a machine that has the sources synced but
@@ -167,16 +168,20 @@ sources before it starts. See
   one); another frame on the page can't drive it.
 - It plays **big first**: a modal three quarters of the window (`min(75vw, 75vh × 16/9)` wide, 16:9) over a dimmed backdrop. ✕, Esc or the backdrop shrink it back into its drawer or dialog, where it **plays on** at the full width of that space; ⤢ there blows it up again, and ✕ there hides it. It is one iframe in one box whose styles switch between `fixed` and in-flow (`expanded`, `setExpanded`), so it is never moved in the DOM and never reloads. That only works because nothing above it makes a containing block for `fixed`: the rail drawer slides its body in by `margin-left`, not a transform (`components/rail-drawer.css`), and `Modal` uses none. Esc goes through `useEscape` (`lib/use-escape.ts`), so it shrinks the intro before the drawer or dialog under it reads it. While it is big, `lib/intro-modal.ts` tells `lib/use-board-dialogs.ts` an overlay is up, so the native browser pane hides under it.
 - A click anywhere on the video pauses it (▶ shows over it) and plays it on (`togglePlaying` → `TOGGLE_MESSAGE`); the page answers `pause`/`play`, which is what `paused` follows.
+- Something coming over a playing intro pauses it the same way, until you click it: every `Modal` as it opens (the achievement popup among them) and the New thread dialog (`lib/use-board-dialogs.ts`, as it isn't a Modal) call `coverIntros()` (`lib/intro-cover.ts`), and an intro the page says is playing posts `PAUSE_MESSAGE` (`{ weft: "intro-pause" }`), which `player.js` ignores when it is already paused or finished. It's a signal, not a flag: the dialog an intro plays in opens before its page starts, so it never pauses its own intro. The New thread intro that plays in the native pane isn't covered by this: nothing in the DOM can sit over the pane.
 - ▶ beside the title plays it again, big: an open intro is asked to start over, a closed one is loaded fresh (a new
   `run` remounts the iframe). ↻ Replay appears over the frame once it ends.
 
 ## New thread plays in the browser pane (`lib/pane-intro.ts`)
 
 The New thread intro is a minute of tips, and one of them is about the browser pane, so on the desktop it plays
-there, beside the dialog, at full size rather than in a frame over the composer. `usePaneIntro("newthread")` opens
-`/intros/newthread.html?live=1` in the board's pane (`openInPane`) the first time the dialog opens, marks it seen
-right away (the pane's page has no parent to post `done` to), and returns the ▶ that opens it again
-(`PlayIntroButton` in `components/FeatureIntro.tsx`). The pane refuses Weft's own server, so
+there, beside the dialog, at full size rather than in a frame over the composer. The first time the dialog opens,
+`useNewThreadPane` (`lib/use-new-thread-pane.ts`) asks `takePaneIntro("newthread")` and opens
+`/intros/newthread.html?live=1` in place of the splash, in the dialog's own pane (`NEW_THREAD_PANE`); it is marked
+seen right away (the pane's page has no parent to post `done` to). ▶ by the title (`PlayIntroButton` in
+`components/FeatureIntro.tsx`) calls `playPaneIntro`, which opens it in that same pane again. It must never go to
+the board's pane (`openInPane`): that one sits hidden behind the dialog's, so the intro used to play unseen and only
+show up once the dialog closed. The pane refuses Weft's own server, so
 `electron/self-url.cjs` lets exactly `/intros/<id>.html` through. On the web there is no pane (`hasPane()` is
 false), so the dialog plays it in its own frame like any other intro.
 

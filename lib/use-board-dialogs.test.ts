@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { act, cleanup, renderHook } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { onIntroCovered } from "./intro-cover";
 import type { LoginView } from "./types";
 
 import { dialogLayers, useBoardDialogs, type DialogFlags } from "./use-board-dialogs";
@@ -51,6 +52,18 @@ describe("dialogLayers", () => {
 });
 
 describe("useBoardDialogs", () => {
+  it("tells a playing feature intro the New thread dialog came over it, as it opens", () => {
+    const covered = vi.fn();
+    const off = onIntroCovered(covered);
+    const { result } = renderHook(() => useBoardDialogs());
+    expect(covered).not.toHaveBeenCalled();
+    act(() => result.current.setShowNew(true));
+    expect(covered).toHaveBeenCalledTimes(1);
+    act(() => result.current.setShowNew(false));
+    expect(covered).toHaveBeenCalledTimes(1);
+    off();
+  });
+
   it("starts with everything closed and the board's own keys live", () => {
     const { result } = renderHook(() => useBoardDialogs());
     expect(result.current.showNew).toBe(false);

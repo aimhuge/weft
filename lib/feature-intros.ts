@@ -64,6 +64,8 @@ export function introEvent(data: unknown): IntroEvent | null {
 export const REPLAY_MESSAGE = { weft: "intro-go" } as const;
 // The message a click on the video sends: pause it, or play it on (or again from the top, once it has ended).
 export const TOGGLE_MESSAGE = { weft: "intro-toggle" } as const;
+// The message that pauses it when something comes over it (lib/intro-cover.ts); a paused or finished page ignores it.
+export const PAUSE_MESSAGE = { weft: "intro-pause" } as const;
 
 export const INTROS_KEY = "weft-intros-seen";
 

@@ -1,6 +1,7 @@
-import { useState, type Dispatch, type SetStateAction } from "react";
+import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import { useChangelogFolder } from "./changelog-open";
 import { useOpenIntake } from "./intake-open";
+import { coverIntros } from "./intro-cover";
 import { useIntroModal } from "./intro-modal";
 import type { LoginView } from "./types";
 
@@ -70,6 +71,10 @@ export function useBoardDialogs(): BoardDialogs {
   const changelog = useChangelogFolder() !== null;
   const intro = useIntroModal();
   const intake = useOpenIntake() !== null;
+  // The New thread dialog isn't a Modal, so it says itself that it came over a playing feature intro (lib/intro-cover.ts).
+  useEffect(() => {
+    if (showNew) coverIntros();
+  }, [showNew]);
   const { overlay, boardKeys } = dialogLayers({ showNew, showSettings, showHelp, showPalette, login, menuOpen, changelog, intro, intake });
   return {
     showNew,

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { onIntroCovered } from "@/lib/intro-cover";
 import Modal from "./Modal";
 import "./test-utils";
 
@@ -26,5 +27,16 @@ describe("Modal layer", () => {
     cleanup();
     render(<Modal label="Front" layer="front" onClose={() => {}}>body</Modal>);
     expect(backdrop().className).toContain("z-[94]");
+  });
+});
+
+describe("Modal over a feature intro", () => {
+  it("tells the intros it came over them once, as it opens", () => {
+    const covered = vi.fn();
+    const off = onIntroCovered(covered);
+    const { rerender } = render(<Modal label="Achievement" layer="front" onClose={() => {}}>one</Modal>);
+    rerender(<Modal label="Achievement" layer="front" onClose={() => {}}>two</Modal>);
+    expect(covered).toHaveBeenCalledTimes(1);
+    off();
   });
 });

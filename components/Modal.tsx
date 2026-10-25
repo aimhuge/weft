@@ -1,6 +1,7 @@
 "use client";
 
-import { useId, type CSSProperties, type PointerEvent, type ReactNode } from "react";
+import { useEffect, useId, type CSSProperties, type PointerEvent, type ReactNode } from "react";
+import { coverIntros } from "@/lib/intro-cover";
 import { NO_DRAG } from "@/lib/no-drag";
 import { useEscape } from "@/lib/use-escape";
 import CrashGuard from "./CrashGuard";
@@ -23,6 +24,7 @@ const LAYER = { normal: "z-50", top: "z-[90]", palette: "z-[92]", front: "z-[94]
 // title and a close button, and Escape. Escape always closes the newest dialog; so does a click on the
 // backdrop, unless `keepOnBackdrop`. Without a title there's no header, and `label` names the dialog.
 // The body sits in a CrashGuard, so a dialog that fails to draw still has its header, ✕ and Escape.
+// Opening one pauses a feature intro that is playing under it (lib/intro-cover.ts).
 export default function Modal({
   title,
   label,
@@ -50,6 +52,7 @@ export default function Modal({
 }) {
   const titleId = useId();
   useEscape(true, onClose);
+  useEffect(coverIntros, []);
 
   return (
     <div

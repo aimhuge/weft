@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch } from "./api-client";
-import { hasVideo, introEvent, introSrc, loadSeenIntros, markIntroSeen, muteMessage, REPLAY_MESSAGE, TOGGLE_MESSAGE, type IntroId } from "./feature-intros";
+import { hasVideo, introEvent, introSrc, loadSeenIntros, markIntroSeen, muteMessage, PAUSE_MESSAGE, REPLAY_MESSAGE, TOGGLE_MESSAGE, type IntroId } from "./feature-intros";
+import { onIntroCovered } from "./intro-cover";
 import { setIntroModal } from "./intro-modal";
 import { useEscape } from "./use-escape";
 import { readMuted, writeMuted } from "./welcome-voice";
@@ -14,7 +15,8 @@ import { readMuted, writeMuted } from "./welcome-voice";
 // this intro's own iframe.
 //
 // It plays big first, in a modal three quarters of the window (expanded); closing that leaves it playing on in the
-// drawer or dialog, the width of it, and ⤢ blows it up again. A click on the video pauses it and plays it on.
+// drawer or dialog, the width of it, and ⤢ blows it up again. A click on the video pauses it and plays it on, and so
+// does something coming over it (an achievement, the New thread dialog: lib/intro-cover.ts), until you click it.
 
 export const prefersStill = () => {
   try {
@@ -46,10 +48,14 @@ export function useFeatureIntro(id: IntroId | null) {
 
   useEffect(() => {
     if (!id || !showing.open) return;
+    // Whether the page says it is playing: only then does something coming over it pause it. The dialog it plays in
+    // tells the intros it opened before the page has started, so that one never pauses it.
+    let playing = false;
     const onMessage = (e: MessageEvent) => {
       const own = frame.current?.contentWindow;
       if (!own || e.source !== own) return;
       const event = introEvent(e.data);
+      if (event) playing = event === "start" || event === "play";
       if (event === "start" || event === "play") {
         setShowing((s) => ({ ...s, ended: false, paused: false }));
       } else if (event === "pause") {
@@ -62,7 +68,13 @@ export function useFeatureIntro(id: IntroId | null) {
       }
     };
     window.addEventListener("message", onMessage);
-    return () => window.removeEventListener("message", onMessage);
+    const offCover = onIntroCovered(() => {
+      if (playing) frame.current?.contentWindow?.postMessage(PAUSE_MESSAGE, "*");
+    });
+    return () => {
+      window.removeEventListener("message", onMessage);
+      offCover();
+    };
   }, [id, showing.open]);
 
   // The modal hides the native browser pane while it is up (lib/intro-modal.ts).
