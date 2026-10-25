@@ -1,8 +1,12 @@
 // Where a feedback summary goes (lib/feedback.ts). On the Mac: forward to the deployed Weft's collector. On the
-// deployed Weft: keep it in the `feedback` table and post it to the team's Slack through an incoming webhook
-// (SLACK_FEEDBACK_WEBHOOK_URL, set on Vercel only).
+// deployed Weft: keep it in the `feedback` table and post it to the team's Slack through an incoming webhook.
+//
+// The webhook's address comes from one of two places: SLACK_FEEDBACK_WEBHOOK_URL in the environment, or the
+// `slack_webhooks` table — where the OAuth install (lib/slack-oauth.ts) puts it, so the URL never has to be
+// copied out of a console page by hand. The environment wins when both are there.
 import { cleanMessages, cleanSummary, type FeedbackMessage, type FeedbackSummary } from "./feedback";
 import { SITE } from "./site";
+import { readWebhook, FEEDBACK_PURPOSE } from "./slack-webhook-store";
 import { serviceClient } from "./web-session";
 
 export const FEEDBACK_COLLECT_URL = `${SITE}/api/feedback/collect`;
@@ -86,6 +90,9 @@ interface CollectDeps {
   env?: Record<string, string | undefined>;
   fetcher?: typeof fetch;
   service?: ReturnType<typeof serviceClient>;
+  // The stored webhook, read from the database when the environment doesn't name one. A test passes it in so it
+  // doesn't need a database.
+  storedWebhook?: string | null;
 }
 
 // Keeps it in the `feedback` table; false without the service key or when the insert fails.
@@ -96,7 +103,7 @@ async function store(service: ReturnType<typeof serviceClient>, p: FeedbackPaylo
 }
 
 // Posts it to the team's channel; false without the webhook or when Slack doesn't take it.
-async function postToSlack(hook: string | undefined, p: FeedbackPayload, fetcher: typeof fetch): Promise<boolean> {
+async function postToSlack(hook: string | null | undefined, p: FeedbackPayload, fetcher: typeof fetch): Promise<boolean> {
   if (!hook) return false;
   try {
     const res = await fetcher(hook, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text: slackText(p) }), signal: AbortSignal.timeout(8000) });
@@ -118,7 +125,8 @@ export async function collectFeedback(body: unknown, key: string, deps: CollectD
     return 400;
   }
   if (!allow(key)) return 429;
-  const hook = env.SLACK_FEEDBACK_WEBHOOK_URL;
+  // The environment names the webhook; otherwise the OAuth install put it in the database.
+  const hook = env.SLACK_FEEDBACK_WEBHOOK_URL || (deps.storedWebhook ?? (await readWebhook(FEEDBACK_PURPOSE, env)));
   const [stored, posted] = await Promise.all([store(service, payload), postToSlack(hook, payload, deps.fetcher ?? fetch)]);
   if (stored || posted) return 204;
   return service || hook ? 502 : 503;

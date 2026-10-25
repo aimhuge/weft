@@ -40,8 +40,12 @@ webhook is a URL the server can hold (docs/architecture/feedback.md).
 the developer console. The manifest's answer carries no URL either. Two routes reach the address: an **install**,
 whose OAuth answer includes `incoming_webhook.url` (needs the app's Client ID and Secret, from the console), or the
 console's own **Add New Webhook to Workspace**, which shows the `https://hooks.slack.com/services/…` URL once, by
-hand. Either way the URL belongs in the 🔐 vault (`SLACK_FEEDBACK_WEBHOOK_URL`, production) and nowhere else — a URL
-that reaches a chat reaches a transcript for good.
+hand.
+
+The install route is the better one, and Weft runs it: `/api/slack/oauth/install` → Slack's channel picker →
+`/api/slack/oauth/callback` → the URL into `public.slack_webhooks` (docs/architecture/feedback.md). Either way the
+URL is a credential — it belongs in the database or the 🔐 vault (`SLACK_FEEDBACK_WEBHOOK_URL`, production), and
+nowhere else. A URL that reaches a chat reaches a transcript for good.
 
 ## Who holds what
 

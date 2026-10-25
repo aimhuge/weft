@@ -42,8 +42,12 @@ The team channel is reached through one Slack incoming webhook on the deployed W
 Slack rail (docs/architecture/slack.md), which connects a user's own workspace through Electron main. Feedback
 comes from every user's Mac, and most of them never connect the team's Slack.
 
-To set it up, create a Slack app at https://api.slack.com/apps, turn on Incoming Webhooks, and add one for the
-feedback channel. Fill `SLACK_FEEDBACK_WEBHOOK_URL` (production) in the 🔐 vault, then push it to Vercel.
+To set it up: put the app's **Client ID** and **Client Secret** (Slack → your app → OAuth & Permissions → Basic
+Information) in the 🔐 vault as `SLACK_CLIENT_ID` and `SLACK_CLIENT_SECRET`, push them to Vercel, then open
+`https://weft.zip/api/slack/oauth/install` and pick the channel. The install's answer lands the webhook's address
+in `public.slack_webhooks`, and the collector posts there. The older route — copying the `https://hooks.slack.com/…`
+address out of the console by hand into `SLACK_FEEDBACK_WEBHOOK_URL` — still works, but it puts a credential in a
+transcript, so prefer the install.
 
 **The rail and the webhook are two different things.** The rail (the bot token in the Mac's Keychain, Socket Mode
 running) is what posts a board's commits and card updates; it works on its own. The webhook is a URL the *deployed*
@@ -60,8 +64,9 @@ Two things have to be true for the Slack half, and both drifted once already:
 - `public.feedback` has to exist. Its migration was written but never applied, so every insert failed and the
   collector answered 502 — with no error on the Mac, since the copy was still kept in `~/.weft/feedback`. It is
   applied now (`20261025181607_feedback.sql`).
-- `SLACK_FEEDBACK_WEBHOOK_URL` has to be set on the deployed Weft, not just in the vault. A vault value that was never
-  pushed to Vercel leaves the collector posting nothing. Check with `vercel env ls production`.
+- The webhook has to be where the deployed Weft can read it: a row in `public.slack_webhooks` (the install puts it
+  there) or `SLACK_FEEDBACK_WEBHOOK_URL` on the deployment. A vault value that was never pushed to Vercel leaves
+  the collector posting nothing. Check with `vercel env ls production`.
 
 To prove both halves at once, POST a summary to `https://weft.zip/api/feedback/collect` and look for a row in
 `public.feedback` **and** a message in the channel. The first without the second means the webhook is missing.
@@ -81,12 +86,28 @@ answer is only `ok`, `app_id` and `permissions_updated`: no webhook, no URL.
 **The OAuth answer carries the URL.** An install of the app returns `incoming_webhook.url` in its OAuth response,
 and that URL is a real, listable webhook — not the once-only console one. The install needs the app to request the
 `incoming-webhook` scope, which Slack supports as a **bot** scope only: put it in `oauth_config.scopes.bot`, never
-under `scopes.user` (Slack rejects that with `illegal_user_scopes`). The install itself is the route that hands the
-address back programmatically — the Slack CLI's `apps.developerInstall` shortcut does *not*, because it skips the
-OAuth channel picker. So the flow is: send the user to the app's OAuth install page, let them pick the channel,
-exchange the returned code with `oauth.v2.access`, read `incoming_webhook.url`. That needs the app's Client ID and
-Client Secret, which only the developer console shows. It is the only route that can put the URL in the vault
-without a human reading it off a page; the console's own URL is shown once and has to be copied by hand.
+under `scopes.user` (Slack rejects that with `illegal_user_scopes`). The scope's own reference says it "triggers a
+user-facing channel picker in the OAuth 2.0 installation sequence" — the picker is what creates the webhook.
+
+So the flow is three steps, and Weft runs all of them:
+
+1. `GET /api/slack/oauth/install` (`app/api/slack/oauth/install/route.ts`) redirects to
+   `https://slack.com/oauth/v2/authorize?client_id=…&scope=incoming-webhook&redirect_uri=…`. The user picks the
+   channel. Nothing secret is in that URL — only the app's public client id.
+2. Slack redirects to `GET /api/slack/oauth/callback` (`app/api/slack/oauth/callback/route.ts`) with a `code`.
+3. The callback exchanges it with `oauth.v2.access` (`lib/slack-oauth.ts`) using the app's **Client ID and Client
+   Secret** (`SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET` — console only), and the answer's `incoming_webhook.url` goes
+   straight into `public.slack_webhooks` (`lib/slack-webhook-store.ts`).
+
+The URL lands in the database rather than a Vercel environment variable, because that is what keeps it out of a
+deploy log, a transcript and a support screenshot. The collector reads it from there (`lib/feedback-send.ts`),
+preferring `SLACK_FEEDBACK_WEBHOOK_URL` when both are set.
+
+The Slack CLI's `apps.developerInstall` shortcut does *not* work for this: it skips the OAuth channel picker, so it
+never creates a webhook and never yields a URL.
+
+`oauth_config.redirect_urls` in the manifest must list the callback — without it Slack has nowhere to send the
+code.
 
 An incoming webhook is a channel-bound posting URL, not a way to reach any channel: the one Weft creates is bound to
 the feedback channel, and `SLACK_FEEDBACK_WEBHOOK_URL` is that URL, not a channel id.

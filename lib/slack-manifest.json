@@ -31,7 +31,10 @@
         "groups:read",
         "incoming-webhook"
       ]
-    }
+    },
+    "redirect_urls": [
+      "https://weft.zip/api/slack/oauth/callback"
+    ]
   },
   "settings": {
     "event_subscriptions": {

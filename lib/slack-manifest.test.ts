@@ -23,7 +23,7 @@ type Manifest = {
     bot_user?: { display_name: string; always_online?: boolean };
     slash_commands?: { command: string; description: string; usage_hint?: string; should_escape?: boolean }[];
   };
-  oauth_config: { scopes: { bot?: string[]; user?: string[] } };
+  oauth_config: { scopes: { bot?: string[]; user?: string[] }; redirect_urls?: string[] };
   settings: {
     event_subscriptions?: { bot_events?: string[] };
     interactivity?: { is_enabled?: boolean };
@@ -69,6 +69,12 @@ describe("the Slack manifest", () => {
     expect(m.settings.socket_mode_enabled).toBe(true);
     expect(m.features.slash_commands?.map((c) => c.command)).toEqual(["/weft"]);
     expect(m.settings.event_subscriptions?.bot_events).toEqual(["app_mention"]);
+  });
+
+  it("registers the OAuth redirect the install needs to hand back the webhook", () => {
+    // Without a redirect URL, Slack has nowhere to send the install code, so the answer that carries
+    // incoming_webhook.url never arrives.
+    expect(m.oauth_config.redirect_urls).toContain("https://weft.zip/api/slack/oauth/callback");
   });
 
   it("names the app and its bot, the way the drawer shows them", () => {

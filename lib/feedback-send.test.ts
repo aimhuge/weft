@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("./web-session", () => ({ serviceClient: vi.fn(() => null) }));
+vi.mock("./slack-webhook-store", () => ({ readWebhook: vi.fn(() => Promise.resolve(null)), FEEDBACK_PURPOSE: "feedback" }));
 
 const { FEEDBACK_COLLECT_URL, LIMIT, WINDOW_MS, allow, cleanPayload, collectFeedback, forwardFeedback, resetLimits, slackText } = await import("./feedback-send");
 const { serviceClient } = await import("./web-session");
+const { readWebhook } = await import("./slack-webhook-store");
 
 const summary = { title: "Cards <vanish>", body: "- **Often** & daily\n* after a restart" };
 const body = { summary, messages: [{ role: "user", text: "they vanish" }], from: { name: "Ada", email: "ada@b.co" }, version: "1.2.3" };
@@ -13,7 +15,11 @@ const table = (error: unknown = null) => {
   return { client: { from: vi.fn(() => ({ insert })) } as never, insert };
 };
 
-beforeEach(() => resetLimits());
+beforeEach(() => {
+  resetLimits();
+  vi.mocked(readWebhook).mockReset();
+  vi.mocked(readWebhook).mockResolvedValue(null);
+});
 
 describe("forwardFeedback", () => {
   it("posts the payload to the deployed collector", async () => {
@@ -96,6 +102,22 @@ describe("collectFeedback", () => {
     expect(await collectFeedback({}, "ip", { env: {}, service: null })).toBe(400);
     for (let i = 0; i < LIMIT; i++) await collectFeedback(body, "flood", { env: {}, service: null });
     expect(await collectFeedback(body, "flood", { env: {}, service: null })).toBe(429);
+  });
+
+  it("posts to the webhook the OAuth install stored, when the environment names none", async () => {
+    // The install puts the address in the database (lib/slack-webhook-store.ts), so it never has to be copied
+    // out of a console page by hand.
+    vi.mocked(readWebhook).mockResolvedValueOnce("https://hooks.slack.com/stored");
+    const fetcher = ok();
+    expect(await collectFeedback(body, "ip", { env: {}, fetcher, service: table().client })).toBe(204);
+    expect(fetcher).toHaveBeenCalledWith("https://hooks.slack.com/stored", expect.objectContaining({ method: "POST" }));
+  });
+
+  it("prefers the environment's webhook over the stored one", async () => {
+    const fetcher = ok();
+    await collectFeedback(body, "ip", { env, fetcher, service: table().client });
+    expect(fetcher).toHaveBeenCalledWith(env.SLACK_FEEDBACK_WEBHOOK_URL, expect.objectContaining({ method: "POST" }));
+    expect(readWebhook).not.toHaveBeenCalled();
   });
 
   it("reads process.env and the real service client by default", async () => {
