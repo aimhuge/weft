@@ -14,10 +14,13 @@ function attachApiToken(session, serverUrl, token) {
 
 // The pane's pages (a thread's walk-through, a commit page) show card pictures by their /api/attachments URL,
 // and an <img> can't send a header, so those GETs 403'd. The pane gets the plain read value "1" there and
-// nowhere else: never the launch token, never a write, never another route.
+// nowhere else: never the launch token, never a write, never another route. The server listens on 127.0.0.1,
+// but Next reports its own origin as localhost, so the pile prompt (lib/commit-pile.ts) and most thread pages
+// name pictures http://localhost:<port>/…: the filter covers both names for the same port.
 function attachPaneAttachments(session, serverUrl) {
-  const origin = new URL(serverUrl).origin;
-  session.webRequest.onBeforeSendHeaders({ urls: [`${origin}/api/attachments/*`] }, (details, callback) => {
+  const { protocol, port } = new URL(serverUrl);
+  const urls = ["127.0.0.1", "localhost"].map((host) => `${protocol}//${host}:${port}/api/attachments/*`);
+  session.webRequest.onBeforeSendHeaders({ urls }, (details, callback) => {
     if (details.method !== "GET" && details.method !== "HEAD") return callback({});
     callback({ requestHeaders: { ...details.requestHeaders, [API_TOKEN_HEADER]: "1" } });
   });

@@ -25,10 +25,10 @@ describe("api token", () => {
     expect(send(hook(s).listener, "POST")).toEqual({ requestHeaders: { accept: "*/*", "x-weft-token": "secret" } });
   });
 
-  it("gives the pane only the read value, only on attachment GETs", () => {
+  it("gives the pane only the read value, only on attachment GETs, by either loopback name", () => {
     const s = fakeSession();
     attachPaneAttachments(s, "http://127.0.0.1:1024");
-    expect(hook(s).filter.urls).toEqual(["http://127.0.0.1:1024/api/attachments/*"]);
+    expect(hook(s).filter.urls).toEqual(["http://127.0.0.1:1024/api/attachments/*", "http://localhost:1024/api/attachments/*"]);
     expect(send(hook(s).listener, "GET")).toEqual({ requestHeaders: { accept: "*/*", "x-weft-token": "1" } });
     expect(send(hook(s).listener, "HEAD")).toEqual({ requestHeaders: { accept: "*/*", "x-weft-token": "1" } });
     expect(send(hook(s).listener, "POST")).toEqual({});
@@ -41,6 +41,6 @@ describe("api token", () => {
     attachTokens({ defaultSession: board, fromPartition }, "http://127.0.0.1:1024", "secret");
     expect(fromPartition).toHaveBeenCalledWith("persist:threadboard-browser");
     expect(hook(board).filter.urls).toEqual(["http://127.0.0.1:1024/*"]);
-    expect(hook(pane).filter.urls).toEqual(["http://127.0.0.1:1024/api/attachments/*"]);
+    expect(hook(pane).filter.urls).toEqual(["http://127.0.0.1:1024/api/attachments/*", "http://localhost:1024/api/attachments/*"]);
   });
 });
