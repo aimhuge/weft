@@ -17,8 +17,8 @@ describe("SubagentPicker", () => {
     render(<SubagentPicker value="choose" />);
     const select = screen.getByRole("combobox", { name: "Use for subagents" });
     expect(select).toHaveValue("choose");
-    expect(screen.getByRole("group", { name: "Claude" })).toHaveTextContent("Fable 5.1");
-    expect(screen.getByRole("group", { name: "Puku" })).toHaveTextContent("Opus 4.8");
+    expect(screen.getByRole("group", { name: "Claude Code" })).toHaveTextContent("Fable 5.1");
+    expect(screen.getByRole("group", { name: "puku-cli" })).toHaveTextContent("Opus 4.8");
     await userEvent.selectOptions(select, "opus-4.8");
     expect(api.saveSettings).toHaveBeenCalledWith({ subagentModel: "opus-4.8" });
     expect(select).toHaveValue("opus-4.8");

@@ -55,19 +55,21 @@ describe("useNewCardDialog", () => {
     expect(result.current.backend).toBe("puku");
   });
 
-  it("pickBackend updates backend and the model for that backend", () => {
+  it("pickCliDefault moves to that CLI on its own default model", () => {
     const { result } = renderHook(() => useNewCardDialog("/home", undefined, undefined));
-    act(() => result.current.pickBackend("puku"));
+    act(() => result.current.setModel("claude-opus-5-5"));
+    act(() => result.current.pickCliDefault("puku"));
     expect(result.current.backend).toBe("puku");
+    expect(result.current.model).toBe("");
   });
 
-  it("pickBackend marks the user-picked flag so settings defaults are skipped", async () => {
+  it("pickCliDefault marks the user-picked flag so settings defaults are skipped", async () => {
     const { result } = renderHook(() => useNewCardDialog("/home", undefined, undefined));
-    act(() => result.current.pickBackend("puku"));
+    act(() => result.current.pickCliDefault("puku"));
     await act(async () => {
       await Promise.resolve();
     });
-    // The settings load happened, but pickBackend already set backend, so backend is still puku.
+    // The settings load happened, but pickCliDefault already set backend, so backend is still puku.
     expect(result.current.backend).toBe("puku");
   });
 

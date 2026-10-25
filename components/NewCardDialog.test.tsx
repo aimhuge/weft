@@ -6,6 +6,7 @@ import type { NewCardInput } from "@/lib/client";
 import type { Card, RestartStatus } from "@/lib/types";
 import { isMac } from "@/lib/hotkeys";
 import { formatAt } from "@/lib/schedule";
+import { markIntroSeen } from "@/lib/feature-intros";
 import { makeCard } from "./test-utils";
 import NewCardDialog from "./NewCardDialog";
 
@@ -107,13 +108,25 @@ describe("NewCardDialog", () => {
 
   // The dialog normalizes the picked effort through effortFor: puku drops xhigh, keeps low/medium/high/max.
 // (effortFor is unit-tested in lib/new-thread.test.ts; this just pins the wiring through the dialog.)
-  it("the CLI toggle passes the picked effort through effortFor, so puku keeps high", async () => {
+  it("picking a CLI's default in the model picker passes the effort through effortFor, so puku keeps high", async () => {
     const { onCreate, box } = setup();
-    await userEvent.click(screen.getByRole("button", { name: "puku-cli" }));
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Model" }), "cli:puku");
     await userEvent.type(box, "Hi");
     await userEvent.click(screen.getByRole("button", { name: "Start now" }));
     // The dialog's default effort is "high" (lastEffort), which puku accepts.
     expect(onCreate).toHaveBeenLastCalledWith(expect.objectContaining({ backend: "puku", effort: "high" }));
+  });
+
+  it("the model picker is the CLI picker: a model moves the thread to the CLI serving it", async () => {
+    const { onCreate, box } = setup();
+    const picker = screen.getByRole("combobox", { name: "Model" });
+    expect(screen.queryByRole("group", { name: "CLI" })).toBeNull();
+    await userEvent.selectOptions(picker, "opus-4.8");
+    await userEvent.selectOptions(picker, "cli:codex");
+    expect((picker as HTMLSelectElement).value).toBe("cli:codex");
+    await userEvent.type(box, "Hi");
+    await userEvent.click(screen.getByRole("button", { name: "Start now" }));
+    expect(onCreate).toHaveBeenLastCalledWith(expect.objectContaining({ backend: "codex" }));
   });
 
   it("starts in Settings' default permission mode", async () => {
@@ -185,11 +198,23 @@ describe("NewCardDialog", () => {
   });
 
   it("closes on Escape and on the close button", async () => {
+    // The intro has played before, so it isn't up: Escape belongs to the dialog (lib/use-feature-intro.ts).
+    markIntroSeen("newthread");
     const { onClose } = setup();
     await userEvent.keyboard("{Escape}");
     expect(onClose).toHaveBeenCalledOnce();
     await userEvent.click(screen.getByRole("button", { name: "Close" }));
     expect(onClose).toHaveBeenCalledTimes(2);
+  });
+
+  it("lets the first Escape shrink the intro that opened over it, and the next close the dialog", async () => {
+    // The first time the dialog opens, the intro plays big over it (lib/use-feature-intro.ts). Escape shrinks
+    // that modal; the dialog under it stays open, and the next Escape closes it.
+    const { onClose } = setup();
+    await userEvent.keyboard("{Escape}");
+    expect(onClose).not.toHaveBeenCalled();
+    await userEvent.keyboard("{Escape}");
+    expect(onClose).toHaveBeenCalledOnce();
   });
 
   describe("a model at its limit", () => {

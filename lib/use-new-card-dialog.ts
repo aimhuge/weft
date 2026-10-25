@@ -15,6 +15,7 @@ import {
   headline,
   lastEffort,
   modelFor,
+  NO_MODEL,
   problemWith,
   remember,
   rememberPicks,
@@ -42,7 +43,8 @@ export interface NewCardDialogLogic {
   started: string | null;
   draftInitial: string;
   saveDraft: (markdown: string) => void;
-  pickBackend: (b: Backend) => void;
+  // The CLI with its own default model: the model picker's "<CLI> default" row.
+  pickCliDefault: (b: Backend) => void;
   pickMode: (m: PermissionMode) => void;
   chooseFolder: (folder: string) => void;
   promptToStart: (read: () => string, focus: () => void) => string | null;
@@ -149,10 +151,11 @@ export function useNewCardDialog(home: string, defaultCwd: string | undefined, r
     );
   }, [notePrompt]);
 
-  const pickBackend = useCallback((b: Backend) => {
+  const pickCliDefault = useCallback((b: Backend) => {
     pickedBackend.current = true;
+    setPickedModel(true);
     setBackend(b);
-    setModelState(modelFor(b));
+    setModelState(NO_MODEL);
   }, []);
 
   const pickMode = useCallback((m: PermissionMode) => {
@@ -238,7 +241,7 @@ export function useNewCardDialog(home: string, defaultCwd: string | undefined, r
     started,
     draftInitial,
     saveDraft,
-    pickBackend,
+    pickCliDefault,
     pickMode,
     chooseFolder,
     promptToStart,

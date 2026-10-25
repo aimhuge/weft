@@ -2,15 +2,15 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { BACKENDS, MODELS } from "@/lib/new-thread";
-import { BackendPicker, EffortPicker, ModelPicker } from "./Pickers";
+import { MODELS } from "@/lib/new-thread";
+import { EffortPicker, ModelPicker } from "./Pickers";
 import "./test-utils";
 
 describe("ModelPicker", () => {
-  it("groups Claude, Puku and Codex by default and skips empty groups", () => {
+  it("groups the models under each CLI's own name", () => {
     render(<ModelPicker value="claude-opus-5-5" onChange={() => {}} label="Model" />);
-    expect(screen.getByRole("group", { name: "Claude" })).toBeInTheDocument();
-    expect(screen.getByRole("group", { name: "Puku" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Claude Code" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "puku-cli" })).toBeInTheDocument();
     expect(screen.getByRole("group", { name: "Codex" })).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "Codex default" })).toBeInTheDocument();
   });
@@ -42,23 +42,35 @@ describe("ModelPicker", () => {
     const opts = screen.getAllByRole("option");
     expect(opts[0]).toHaveTextContent("Card's own model");
     // The Claude group follows.
-    const claudeGroup = screen.getByRole("group", { name: "Claude" });
+    const claudeGroup = screen.getByRole("group", { name: "Claude Code" });
     expect(claudeGroup.children[0]).toHaveTextContent(MODELS.claude[0]!.label);
   });
 });
 
-describe("BackendPicker", () => {
-  it("lists every backend by default", () => {
-    render(<BackendPicker value="claude" onChange={() => {}} label="CLI" />);
-    BACKENDS.forEach((b) => {
-      expect(screen.getByRole("option", { name: b.label })).toBeInTheDocument();
-    });
+describe("ModelPicker as the CLI picker", () => {
+  it("heads each CLI with its own default, shown once, and picks the CLI with it", async () => {
+    const onPick = vi.fn();
+    const onChange = vi.fn();
+    render(<ModelPicker value="" onChange={onChange} label="Model" cli={{ backend: "puku", onPick }} />);
+    const picker = screen.getByRole("combobox", { name: "Model" });
+    expect(picker).toHaveValue("cli:puku");
+    expect(screen.getAllByRole("option", { name: "Codex default" })).toHaveLength(1);
+    await userEvent.selectOptions(picker, "cli:codex");
+    expect(onPick).toHaveBeenCalledWith("codex");
+    await userEvent.selectOptions(picker, "claude-opus-5-5");
+    expect(onChange).toHaveBeenCalledWith("claude-opus-5-5");
   });
 
-  it("filters to a subset when `available` is given", () => {
-    render(<BackendPicker value="claude" onChange={() => {}} label="CLI" available={["claude", "puku"]} />);
-    expect(screen.queryByRole("option", { name: "Codex" })).not.toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "Claude Code" })).toBeInTheDocument();
+  it("lists a Goose model only when a saved provider key serves it", async () => {
+    const listProviders = vi.fn().mockResolvedValue({ providers: [{ id: "openrouter", label: "OpenRouter", envKey: "OPENROUTER_API_KEY", hasKey: true }] });
+    const { unmount } = render(<ModelPicker value="" onChange={() => {}} label="Model" />);
+    expect(screen.queryByRole("option", { name: "GPT-4.1 (OpenRouter)" })).toBeNull();
+    expect(screen.getByRole("option", { name: "Goose default" })).toBeInTheDocument();
+    unmount();
+    (window as unknown as { weft: unknown }).weft = { goose: { listProviders } };
+    render(<ModelPicker value="" onChange={() => {}} label="Model" />);
+    expect(await screen.findByRole("option", { name: "GPT-4.1 (OpenRouter)" })).toBeInTheDocument();
+    delete (window as unknown as { weft?: unknown }).weft;
   });
 });
 

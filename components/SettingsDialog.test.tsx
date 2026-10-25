@@ -86,21 +86,21 @@ describe("SettingsDialog", () => {
     const onClose = vi.fn();
     render(<SettingsDialog onClose={onClose} />);
     await go("Models");
-    const cli = await screen.findByRole("combobox", { name: "Default CLI" });
+    const menu = await screen.findByRole("combobox", { name: "Default model" });
     expect(screen.getByText("subagent picker")).toBeInTheDocument();
     expect(screen.getByText("done picker")).toBeInTheDocument();
     expect(screen.queryByLabelText("Unsaved changes")).not.toBeInTheDocument();
 
     // The model and effort are the New thread dialog's remembered picks, so they change right away.
-    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Default model" }), "claude-haiku-5-5");
+    await userEvent.selectOptions(menu, "claude-haiku-5-5");
     expect(localStorage.getItem("weft.model.claude")).toBe("claude-haiku-5-5");
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "Default effort" }), "low");
     expect(localStorage.getItem("weft.effort")).toBe("low");
 
-    await userEvent.selectOptions(cli, "puku");
+    // The one menu is the CLI picker too: puku-cli's own default row moves the CLI.
+    await userEvent.selectOptions(menu, "cli:puku");
     expect(within(pages()).getByLabelText("Unsaved changes")).toBeInTheDocument();
-    // There's no default model: a CLI nobody picked a model for has none of its own.
-    expect(screen.getByRole("combobox", { name: "Default model" })).toHaveValue("");
+    expect(menu).toHaveValue("cli:puku");
 
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
     expect(api.saveSettings).toHaveBeenCalledWith({ defaultBackend: "puku" });

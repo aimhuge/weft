@@ -29,6 +29,7 @@ export default function SettingsSecurityPage({
             hint="What a new thread starts in. You can still change it per thread."
           />
           <ModePicker
+            end
             value={mode}
             onChange={(next) => {
               setMode(next);

@@ -1,63 +1,35 @@
 "use client";
 
-import { BACKENDS, EFFORTS, MODELS } from "@/lib/new-thread";
+import { EFFORTS, MODELS } from "@/lib/new-thread";
 import type { Backend, Effort } from "@/lib/types";
-import ModelSelect, { SELECT_CLASS, type PickerOption } from "./ModelSelect";
+import ModelSelect, { SELECT_CLASS, type CliPick, type PickerOption } from "./ModelSelect";
 
-// Three small dropdowns the Models page shares: the CLI (backend), the model (the grouped
-// Claude/Puku/Codex picker), and the effort. Each renders the same `<select>` and the same
-// SELECT_CLASS; the only reason they exist is so callers don't repeat option lists and
-// `aria-label`s. ModelSelect already groups Claude + Puku + Codex, so a model picker just
-// wraps it. BackendPicker and EffortPicker wrap a flat list.
+// The Models page's two small dropdowns: the model (ModelSelect, every model menu in Weft, which
+// also picks the CLI when given `cli`) and the effort. They exist so callers don't repeat option
+// lists and `aria-label`s.
 
-// What a backend picker is allowed to show. The New threads row only offers the installed ones.
-export function BackendPicker({
-  value,
-  onChange,
-  label = "Default CLI",
-  available,
-}: {
-  value: Backend;
-  onChange: (next: Backend) => void;
-  label?: string;
-  available?: Backend[];
-}) {
-  const list = available ?? BACKENDS.map((b) => b.id);
-  return (
-    <select
-      value={value}
-      aria-label={label}
-      onChange={(e) => onChange(e.target.value as Backend)}
-      className={SELECT_CLASS}
-    >
-      {list.map((id) => (
-        <option key={id} value={id}>
-          {BACKENDS.find((x) => x.id === id)?.label ?? id}
-        </option>
-      ))}
-    </select>
-  );
-}
-
-// The model menu: optional leading options (e.g. "Card's own model") then a Claude / Puku /
-// Codex group. Every model any CLI serves is offered — a row's choice isn't limited to one
-// CLI, and picking a model moves that row's CLI to the one serving it. `groups` is still
+// The model menu: optional leading options (e.g. "Card's own model") then a group per CLI. Every
+// model any CLI serves is offered — a row's choice isn't limited to one CLI, and picking a model
+// moves that row's CLI to the one serving it. `groups` is still
 // accepted so a caller can pass it; it no longer narrows the list.
 export function ModelPicker({
   value,
   onChange,
   label,
   leading = [],
+  cli,
 }: {
   value: string;
   onChange: (next: string) => void;
   label: string;
   leading?: PickerOption[];
+  // The row's CLI, when this menu picks it too (Settings → Models → New threads).
+  cli?: CliPick;
   // Accepted and ignored: every picker offers every model now, so narrowing a row to one CLI
   // is no longer something a caller can ask for.
   groups?: { label: string; backends: Backend[] }[];
 }) {
-  return <ModelSelect value={value} label={label} leading={leading} onChange={onChange} />;
+  return <ModelSelect value={value} label={label} leading={leading} onChange={onChange} cli={cli} />;
 }
 
 // The effort menu. `leading` defaults to "Card's own effort" for the /weft:done row and to

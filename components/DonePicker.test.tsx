@@ -35,8 +35,8 @@ describe("DonePicker", () => {
     expect(effort).toHaveValue("");
     expect(screen.getByRole("option", { name: "Card's own model" })).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "Card's own effort" })).toBeInTheDocument();
-    expect(screen.getByRole("group", { name: "Claude" })).toHaveTextContent("Fable 5.1");
-    expect(screen.getByRole("group", { name: "Puku" })).toHaveTextContent("Opus 4.8");
+    expect(screen.getByRole("group", { name: "Claude Code" })).toHaveTextContent("Fable 5.1");
+    expect(screen.getByRole("group", { name: "puku-cli" })).toHaveTextContent("Opus 4.8");
   });
 
   it("saves a Puku model", async () => {

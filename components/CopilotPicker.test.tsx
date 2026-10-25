@@ -18,8 +18,8 @@ describe("CopilotPicker", () => {
     const select = screen.getByRole("combobox", { name: "Model for the copilot" });
     expect(select).toHaveValue("claude-opus-5-5");
     // Every CLI's models are here: picking one moves the copilot to the CLI that serves it.
-    expect(screen.getByRole("group", { name: "Claude" })).toBeInTheDocument();
-    expect(screen.getByRole("group", { name: "Puku" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Claude Code" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "puku-cli" })).toBeInTheDocument();
     expect(screen.getByRole("group", { name: "Codex" })).toBeInTheDocument();
     await userEvent.selectOptions(select, "claude-sonnet-5-5");
     expect(api.saveSettings).toHaveBeenCalledWith({ copilotModel: "claude-sonnet-5-5" });

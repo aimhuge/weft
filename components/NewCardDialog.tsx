@@ -137,14 +137,13 @@ export default function NewCardDialog({
         permissionMode={dialog.permissionMode}
         onChooseFolder={dialog.chooseFolder}
         onPickModel={dialog.setModel}
+        onPickCli={dialog.pickCliDefault}
         onPickEffort={dialog.setEffort}
         onPickMode={dialog.pickMode}
         isolate={{ on: dialog.isolated, suggest: suggestIsolate(alsoHere.length, dialog.promptLength), onToggle: dialog.toggleIsolated }}
       />
 
       <NewCardDialogFooter
-        backend={dialog.backend}
-        onPickBackend={dialog.pickBackend}
         error={dialog.error}
         alsoHere={dialog.isolated ? [] : alsoHere}
         started={dialog.started}

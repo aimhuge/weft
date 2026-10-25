@@ -3,15 +3,15 @@
 import { useState } from "react";
 import { lastEffort, modelFor, NO_MODEL, resolveModel, setLastEffort, setModelFor } from "@/lib/new-thread";
 import type { Backend, Effort } from "@/lib/types";
-import { BackendPicker, EffortPicker, ModelPicker } from "./Pickers";
+import { EffortPicker, ModelPicker } from "./Pickers";
 
 // Settings → Models → New threads: the CLI, model and effort a new thread starts on. The CLI
 // waits for Save (it's a server setting the API and copilot use too); the model and effort
 // are the New thread dialog's own remembered picks, so they change right away, and picking
 // something else in that dialog moves them again.
 //
-// Every model any CLI serves is offered here, not just the ones the chosen CLI serves: picking
-// a model moves the CLI to the one that serves it, so the row is one choice, not two.
+// One menu picks the CLI and the model, the same one the New thread dialog uses: each CLI's
+// heading starts with its own default, and picking a model moves the CLI to the one serving it.
 export default function NewThreadDefaults({
   backend,
   onBackend,
@@ -36,7 +36,6 @@ export default function NewThreadDefaults({
         </p>
       </div>
       <div className="flex shrink-0 items-center gap-2">
-        <BackendPicker value={backend} onChange={onBackend} label="Default CLI" />
         <ModelPicker
           value={models[backend]}
           onChange={(next) => {
@@ -50,8 +49,15 @@ export default function NewThreadDefaults({
             setModels((m) => ({ ...m, [backend]: next, ...(resolved ? { [resolved.backend]: next } : {}) }));
           }}
           label="Default model"
-          // "" is the CLI's own choice, and it has to be pickable again after a model is set.
-          leading={[{ value: NO_MODEL, label: "Default model" }]}
+          // A CLI's own default row: that CLI, and "" (the CLI's own choice) as its model.
+          cli={{
+            backend,
+            onPick: (next) => {
+              setModelFor(next, NO_MODEL);
+              setModels((m) => ({ ...m, [next]: NO_MODEL }));
+              if (next !== backend) onBackend(next);
+            },
+          }}
         />
         <EffortPicker
           value={effort}

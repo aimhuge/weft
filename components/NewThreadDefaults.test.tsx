@@ -8,30 +8,35 @@ import "./test-utils";
 // localStorage is empty, so modelFor() returns "" for each backend: there is no default model,
 // and the CLI picks its own until the user picks one.
 describe("NewThreadDefaults", () => {
-  it("shows the CLI, model and effort pickers with no model of their own", () => {
+  it("shows one CLI-and-model menu and the effort, on the CLI's own default", () => {
     render(<NewThreadDefaults backend="claude" onBackend={() => {}} />);
-    expect(screen.getByRole("combobox", { name: "Default CLI" })).toHaveValue("claude");
-    expect(screen.getByRole("combobox", { name: "Default model" })).toHaveValue("");
+    expect(screen.queryByRole("combobox", { name: "Default CLI" })).toBeNull();
+    expect(screen.getByRole("combobox", { name: "Default model" })).toHaveValue("cli:claude");
     expect(screen.getByRole("combobox", { name: "Default effort" })).toHaveValue("high");
   });
 
   it("offers every CLI's models, since picking one moves the CLI to it", () => {
     const { rerender } = render(<NewThreadDefaults backend="claude" onBackend={() => {}} />);
-    expect(screen.getByRole("group", { name: "Claude" })).toBeInTheDocument();
-    expect(screen.getByRole("group", { name: "Puku" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Claude Code" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "puku-cli" })).toBeInTheDocument();
     expect(screen.getByRole("group", { name: "Codex" })).toBeInTheDocument();
 
     rerender(<NewThreadDefaults backend="puku" onBackend={() => {}} />);
-    expect(screen.getByRole("combobox", { name: "Default model" })).toHaveValue("");
+    expect(screen.getByRole("combobox", { name: "Default model" })).toHaveValue("cli:puku");
 
     rerender(<NewThreadDefaults backend="codex" onBackend={() => {}} />);
-    expect(screen.getByRole("combobox", { name: "Default model" })).toHaveValue("");
+    expect(screen.getByRole("combobox", { name: "Default model" })).toHaveValue("cli:codex");
   });
 
-  it("forwards a new backend pick", async () => {
+  it("picks the CLI from its default row, or by picking one of its models", async () => {
     const onBackend = vi.fn();
     render(<NewThreadDefaults backend="claude" onBackend={onBackend} />);
-    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Default CLI" }), "codex");
+    const menu = screen.getByRole("combobox", { name: "Default model" });
+    await userEvent.selectOptions(menu, "cli:codex");
     expect(onBackend).toHaveBeenCalledWith("codex");
+    await userEvent.selectOptions(menu, "opus-4.8");
+    expect(onBackend).toHaveBeenLastCalledWith("puku");
+    await userEvent.selectOptions(menu, "cli:claude");
+    expect(onBackend).toHaveBeenCalledTimes(2);
   });
 });

@@ -13,6 +13,7 @@ import {
   needsBaseUrl,
   providerById,
   providerRow,
+  setUpGooseModels,
   type GooseProviderView,
 } from "./goose-provider";
 
@@ -144,6 +145,13 @@ describe("the view", () => {
   it("lists the providers with a key, in catalog order", () => {
     const providers = [provider({ id: "openrouter", hasKey: true }), provider({ id: "anthropic", hasKey: false }), provider({ id: "custom", hasKey: true })];
     expect(configuredProviders(providers).map((p) => p.id)).toEqual(["openrouter", "custom"]);
+  });
+
+  it("names the models a saved key serves, and none without a key", () => {
+    const ready = setUpGooseModels([provider({ id: "openrouter", hasKey: true }), provider({ id: "openai", hasKey: false })]);
+    expect(ready.has("anthropic/claude-sonnet-4.5")).toBe(true);
+    expect(ready.has("gpt-4.1")).toBe(false);
+    expect(setUpGooseModels([]).size).toBe(0);
   });
 
   it("has a note for the provider that needs a typed model id", () => {

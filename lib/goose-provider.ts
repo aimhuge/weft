@@ -153,6 +153,12 @@ export function configuredProviders(providers: GooseProviderView[]): GooseProvid
   return providers.filter((p) => p.hasKey).map(providerRow);
 }
 
+/** The Goose models a saved key serves: every curated model of each provider with a key. */
+export function setUpGooseModels(providers: GooseProviderView[]): Set<string> {
+  const keyed = new Set(providers.filter((p) => p.hasKey).map((p) => p.id));
+  return new Set(GOOSE_PROVIDERS.filter((p) => keyed.has(p.id)).flatMap((p) => p.models));
+}
+
 /** The toast after a key is saved. */
 export function keySavedText(provider: GooseProviderView): string {
   return `${provider.label} key saved. Weft keeps it in the Keychain and never shows it again.`;

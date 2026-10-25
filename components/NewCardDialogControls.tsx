@@ -1,16 +1,19 @@
 "use client";
 
-// The New thread dialog's controls row: folder picker, model picker, effort picker, and the permission
-// mode picker. Extracted from NewCardDialog.tsx so the dialog body and the controls can change on
+// The New thread dialog's controls row: folder picker, model picker (which also picks the CLI), effort
+// picker, and the permission mode picker. Extracted from NewCardDialog.tsx so the dialog body and the controls can change on
 // their own schedule.
 
 import type { Backend, Effort, PermissionMode } from "@/lib/types";
-import { EFFORTS, NO_MODEL } from "@/lib/new-thread";
+import { EFFORTS } from "@/lib/new-thread";
 import ModelSelect from "./ModelSelect";
 import Icon from "./Icon";
 import ModePicker from "./ModePicker";
 import RepoPicker from "./RepoPicker";
 import IsolateToggle from "./IsolateToggle";
+
+// A select inside a bordered label that draws the box and chevron itself.
+const BARE_SELECT = "cursor-pointer appearance-none bg-transparent pr-4 font-medium outline-none";
 
 export function NewCardDialogControls({
   cwd,
@@ -21,6 +24,7 @@ export function NewCardDialogControls({
   permissionMode,
   onChooseFolder,
   onPickModel,
+  onPickCli,
   onPickEffort,
   onPickMode,
   isolate,
@@ -33,6 +37,7 @@ export function NewCardDialogControls({
   permissionMode: PermissionMode;
   onChooseFolder: (folder: string) => void;
   onPickModel: (model: string) => void;
+  onPickCli: (backend: Backend) => void;
   onPickEffort: (effort: Effort | "") => void;
   onPickMode: (mode: PermissionMode) => void;
   // The Isolated switch (components/IsolateToggle.tsx); left out where isolation isn't offered.
@@ -48,8 +53,9 @@ export function NewCardDialogControls({
         <ModelSelect
           value={model}
           label="Model"
-          leading={[{ value: NO_MODEL, label: "Default model" }]}
           onChange={onPickModel}
+          cli={{ backend, onPick: onPickCli }}
+          className={BARE_SELECT}
         />
         <Icon
           name="chevronDown"
@@ -67,7 +73,7 @@ export function NewCardDialogControls({
           <select
             value={effort}
             onChange={(e) => onPickEffort(e.target.value as Effort | "")}
-            className="cursor-pointer appearance-none bg-transparent pr-4 font-medium outline-none"
+            className={BARE_SELECT}
           >
             {EFFORTS.map((e) => (
               <option key={e.id} value={e.id}>
@@ -87,6 +93,7 @@ export function NewCardDialogControls({
         backend={backend}
         value={permissionMode}
         onChange={onPickMode}
+        up
       />
     </div>
   );

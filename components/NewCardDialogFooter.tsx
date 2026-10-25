@@ -1,30 +1,16 @@
 "use client";
 
-// The New thread dialog's footer: the CLI toggle, the busy-folder / error / started status line, the
+// The New thread dialog's footer: the busy-folder / error / started status line, the
 // Add-to-backlog button, and the Start button. Extracted from NewCardDialog.tsx so the dialog
 // body can stay focused on its own state.
 
-import type { Backend } from "@/lib/types";
-import { BACKENDS } from "@/lib/new-thread";
 import { startButton } from "@/lib/new-thread";
 import type { Card } from "@/lib/types";
 import { formatAt } from "@/lib/schedule";
 import { alsoHereLine } from "@/lib/overlap";
 import Icon, { Spinner } from "./Icon";
 
-// What each CLI needs before a thread on it can run, as the button's tooltip. The two plain
-// CLIs need nothing said; the other two need something installed, or the thread fails on its
-// first turn with a message the user never saw coming.
-const CLI_HINTS: Record<Backend, string | undefined> = {
-  claude: undefined,
-  puku: undefined,
-  codex: "Requires Codex CLI and login. Weft's browser, board, secrets and webhook tools are unavailable.",
-  goose: "Requires the Goose CLI and a provider key (Settings → Models → Bring your own key).",
-};
-
 export function NewCardDialogFooter({
-  backend,
-  onPickBackend,
   error,
   alsoHere,
   started,
@@ -35,8 +21,6 @@ export function NewCardDialogFooter({
   waitsFor,
   onSubmit,
 }: {
-  backend: Backend;
-  onPickBackend: (b: Backend) => void;
   error: string | null;
   alsoHere: Card[];
   started: string | null;
@@ -51,24 +35,6 @@ export function NewCardDialogFooter({
   const label = waitsUntil ? `Start at ${formatAt(waitsUntil)}` : startBtn.label;
   return (
     <div className="flex shrink-0 flex-wrap items-center justify-end gap-x-3 gap-y-2 px-5 pb-4 pt-3">
-      <div
-        className="flex rounded-md border border-line-strong p-0.5"
-        role="group"
-        aria-label="CLI"
-      >
-        {BACKENDS.map((b) => (
-          <button
-            key={b.id}
-            type="button"
-            title={CLI_HINTS[b.id]}
-            onClick={() => onPickBackend(b.id)}
-            aria-pressed={backend === b.id}
-            className={`whitespace-nowrap rounded px-2.5 py-1 text-[12px] ${backend === b.id ? "bg-sunken font-medium text-ink" : "text-muted hover:text-ink"}`}
-          >
-            {b.label}
-          </button>
-        ))}
-      </div>
       <p className="min-w-0 flex-1 basis-24 truncate text-[12px]">
         {error ? (
           <span className="text-danger">{error}</span>
