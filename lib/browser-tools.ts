@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
+import { recordExplore } from "./explore";
 import { asText } from "./format";
 import { SHOW_DIR } from "./show-dir";
 import { shellToken } from "./shell-token";
@@ -110,6 +111,7 @@ export function browserMcpServer(cardId: () => string | undefined) {
         ({ save_to, highlight }) =>
           attempt(async () => {
             const shot = await shell("/browser/screenshot", { key: cardId(), highlight });
+            void recordExplore("screenshot");
             const content: ToolResult["content"] = [{ type: "image", data: String(shot.png), mimeType: "image/png" }];
             if (save_to) content.push({ type: "text", text: `Saved to ${savePng(save_to, String(shot.png))}` });
             if (highlight && shot.found === false) content.push({ type: "text", text: `No element matches ${highlight}; nothing was boxed.` });

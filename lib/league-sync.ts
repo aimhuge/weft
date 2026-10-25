@@ -4,6 +4,7 @@ import { globalSingleton } from "./global-singleton";
 import { LEAGUES } from "./game";
 import { leagueEntry, toLeagueView, toTierView, type BrowseRow, type LeagueEntry, type LeagueView, type StandingRow, type TierView } from "./league";
 import { syncChangelog, watchChangelog } from "./changelog-sync";
+import { syncBadgeFacts } from "./badge-facts";
 import { syncProfileCard } from "./profile-card-sync";
 import { NOT_DEPLOYED as LIMITS_NOT_DEPLOYED, syncLimits } from "./limit-board-sync";
 import { safeClient, signedIn } from "./signed-in-client";
@@ -97,6 +98,7 @@ export function startLeagueSync(deps: LeagueDeps = {}): () => void {
       if (!(err instanceof Error && err.message === LIMITS_NOT_DEPLOYED)) console.warn("[weft] limit records sync failed:", err);
     });
     void syncProfileCard({ client: deps.client }).catch((err: unknown) => console.warn("[weft] profile card sync failed:", err));
+    void syncBadgeFacts({ client: deps.client }).catch((err: unknown) => console.warn("[weft] badge facts sync failed:", err));
     void syncChangelog({ client: deps.client }).catch((err: unknown) => console.warn("[weft] changelog sync failed:", err));
   };
   const unwatch = watchChangelog({ client: deps.client });

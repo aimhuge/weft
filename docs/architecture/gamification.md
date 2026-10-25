@@ -21,7 +21,7 @@ components/HeaderBadges.tsx → GameBadge.tsx (chip, AchievementPopup) → LoomD
 
 `~/.weft/activity.jsonl` holds one JSON event per line: `created`, `start` (with how many cards run at once),
 `turn` (with how many turns), `done` (with the card's cost and title), `quality` (a project's daily
-checklist score and coverage) and `limit` (a plan window a Weft thread ran out of, below). Every event has a stable id, so a sync can tell what it already sent.
+checklist score and coverage), `limit` (a plan window a Weft thread ran out of, below) and `explore` (the first use of a Weft feature, below). Every event has a stable id, so a sync can tell what it already sent.
 
 - **Backfill.** The first read writes events for every card on the board (`backfillEvents`): created at
   `createdAt`, its turns at its last activity, Done at `updatedAt`. Imported Claude Code sessions count.
@@ -54,6 +54,35 @@ checklist score and coverage) and `limit` (a plan window a Weft thread ran out o
   background on `/api/game` and re-reads a transcript only when its size changed; `~/.weft/craft.json` keeps
   `[size, habits]` per session id.
 - **Class**: the top attribute's noun after the second's adjective ("Roaming Shipper").
+
+## Badge families
+
+`lib/game-badges.ts` holds the first families (Milestones, Streaks, Habits, Parallel, Craft's refactor pair, Code health,
+Production-ready) and merges the rest, each a pure module of defs on `lib/badge-kit.ts` (the `Def` shape and counting helpers),
+gathered by `lib/extra-badges.ts`. Ids never change, so moving a badge between groups doesn't announce it again.
+
+- **Speed, Milestones, Calendar** (`lib/time-badges.ts`): idea to Done under 5 and 15 minutes, 10 ships in an hour, 20 made and
+  shipped in a day, a card that sat 30+ days; 1,000 and 2,500 shipped, 1k/10k/100k turns, a 100-turn card, a one-turn ship;
+  weekend, Friday after 5pm, 3am, a 14-hour day, Pi day, New Year, Halloween, Christmas, four seasons, Feb 29. Anything about
+  time reads live Done events only.
+- **Tokens & spend** (`lib/spend-badges.ts`): 1M to 1B tokens through your threads (`lib/usage-scan.ts` per day), a 10M day,
+  a day with more out than in, a card under $0.10 or over $20, $100 and $1,000 of shipped work, a month whose cost per card fell 30%.
+- **Craft, Board** (`lib/craft-badges.ts`): shipped cards whose transcripts ran /done (1, 100), a review (10), docs (25); a refactor
+  and a feature in one project the same day; 50 cards in Backlog, 50 tagged. `/security-review` folds into the review habit, so
+  the catalogue's Paranoid waits for a habit of its own.
+- **Streaks extras, Projects, Secret, Undeterred** (`lib/more-badges.ts`): 365 and 1,000-day streaks, a freeze that saved one,
+  7 ship days in a row; 10 and 25 projects, a project's first card to its tenth shipped in one day, 3 projects Production-ready,
+  5 stacks shipped in; the secret Nice (69 in a week), Blaze it (4:20), The answer (42 in a day), Typo slayer; and Undeterred
+  (Limits: a limit hit and 3 ships after it that day). A `secret` badge shows as ❓ Secret badge until earned (`shown()`).
+- **Leagues, Social** (`lib/league-badges.ts`): promoted, Gold Thread, #1 or top 3 of a finished week, promoted the week after
+  a drop, 10 weeks played; 1/5/25 builders referred, a team of 5. They read `lib/badge-facts.ts`: the `badge_facts()` RPC
+  (`supabase/migrations/20261025075041_badge_facts.sql`, your league weeks with rank and size, referrals of your workspaces,
+  your biggest team) on the league timer, kept in `~/.weft/badge-facts.json`. Signed out, or before the RPC is deployed, they stay locked.
+- **Weft explorer** (`lib/explorer-badges.ts`): the first use of each feature, logged once (id `explore:<feature>`) by
+  `recordExplore` (`lib/explore.ts`): a vault fill (`lib/secret-tools.ts`), a relay delivery (`lib/webhook-forward.ts`), a dev
+  server (`lib/devserver.ts`), a pane screenshot (`lib/browser-tools.ts`), a card or app share that isn't private, a profile post
+  (`lib/profile-card-sync.ts`), and each feature intro watched to the end (`lib/use-feature-intro.ts` → `POST /api/game`).
+  Explorer is all of them. `explore` events earn no XP and keep no streak (`tallyDays` skips them).
 
 ## Usage and limit hits
 

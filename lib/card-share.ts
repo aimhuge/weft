@@ -7,6 +7,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { hashSharePassword } from "@aimhuge/share/server";
 import { accountClient } from "./account";
 import { syncNow, syncOrgId } from "./cloud-sync";
+import { recordExplore } from "./explore";
 import { syncFolders } from "./settings";
 import { decorateCard, getCard } from "./store";
 import { isCardShareMode, newShareId, shareUrl, type CardShareMode, type CardShareState, type CardShareUpdate } from "./share-types";
@@ -111,5 +112,6 @@ export async function setCardShare(cardId: string, update: CardShareUpdate): Pro
     ? await shares.update(change).eq("org_id", t.orgId).eq("card_id", cardId)
     : await shares.insert({ ...change, id: newShareId(), org_id: t.orgId, card_id: cardId });
   check(error);
+  if (update.mode !== "private") void recordExplore("card-share");
   return remember(cardId, stateOf(await readShare(t.client, t.orgId, cardId)));
 }

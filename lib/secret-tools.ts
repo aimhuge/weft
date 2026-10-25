@@ -1,6 +1,7 @@
 import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import { attempt, shell, text } from "./browser-tools";
+import { recordExplore } from "./explore";
 import { asText } from "./format";
 import { addBlankTool, ASK_PROMPT, askAddTool, addMissingBlank, missingText } from "./secret-ask";
 import { markInUse, RUN_PROMPT, runTool } from "./secret-run";
@@ -57,6 +58,7 @@ export function secretsMcpServer(cardId: () => string | undefined, folder: () =>
             }
             if (!r.found) return text(`No element matches ${selector}`, true);
             markInUse(cardId());
+            void recordExplore("vault");
             return text(`Typed ${name} from the ${vault} vault into ${selector}.`);
           }),
       ),

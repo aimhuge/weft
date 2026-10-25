@@ -55,8 +55,11 @@ describe("eventXp and tallyDays", () => {
       ev("done", at(11)),
       ev("done", at(11), { cwd: undefined }),
       ev("start", at(11), { running: 3 }),
+      ev("explore", at(12), { feature: "vault" }),
     ];
     const days = tallyDays(events, same);
+    // A first use of a feature earns nothing and keeps no streak.
+    expect(days.has("2026-10-12")).toBe(false);
     expect(days.get("2026-10-10")).toEqual({ cards: 1, turns: 2, done: 1, xp: 2 + 2 + 10 });
     expect(days.get("2026-10-11")).toEqual({ cards: 0, turns: 0, done: 2, xp: 15 + 10 });
     expect(activeDays(new Map([["2026-10-01", { cards: 0, turns: 0, done: 0, xp: 0 }], ...days]))).toEqual(new Set(["2026-10-10", "2026-10-11"]));

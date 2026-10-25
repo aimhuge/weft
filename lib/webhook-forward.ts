@@ -1,6 +1,7 @@
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { accountClient } from "./account";
 import { shell } from "./browser-tools";
+import { recordExplore } from "./explore";
 import { globalSingleton } from "./global-singleton";
 import { HOOK_URL } from "./github-hooks";
 import { getWebhook, listWebhooks, providerFor, recordDelivery, setRelay, webhookByRelay, type Webhook } from "./webhooks";
@@ -169,6 +170,7 @@ export async function forward(row: StoredDelivery): Promise<void> {
     error = failure(err);
   }
   recordDelivery(hook.id, { at: started, method: row.method, status, ms: Date.now() - started, ...(error && { error }) });
+  if (status) void recordExplore("webhook");
   await forget(row.id);
 }
 

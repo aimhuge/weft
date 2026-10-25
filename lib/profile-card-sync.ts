@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { recordExplore } from "./explore";
 import { gameState } from "./game-server";
 import { githubProfile } from "./github-profile";
 import { globalSingleton } from "./global-singleton";
@@ -29,5 +30,6 @@ export async function syncProfileCard({ client = safeClient, card = ownCard }: P
   if (error?.code === "PGRST202") return false;
   if (error) throw new Error(error.message);
   last().json = json;
+  void recordExplore("profile");
   return true;
 }

@@ -10,6 +10,7 @@ vi.mock("./game-server", () => ({
   gameState: vi.fn(() => ({ weekXp: 50, weekShipped: 2, streak: { current: 3 }, level: { level: 4 }, badges: [] })),
 }));
 vi.mock("./profile-card-sync", () => ({ syncProfileCard: profileCardSync.sync }));
+vi.mock("./badge-facts", () => ({ syncBadgeFacts: () => Promise.resolve(false) }));
 vi.mock("./limit-board-sync", () => ({ syncLimits: limitSync.sync, NOT_DEPLOYED: "limits not deployed" }));
 
 const { FIRST_SYNC_MS, leagueView, NOT_DEPLOYED, startLeagueSync, SYNC_MS, syncWeek, tierView } = await import("./league-sync");

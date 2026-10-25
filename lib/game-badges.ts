@@ -1,12 +1,21 @@
 // The achievements: what each one asks for and whether you have it, from the activity log, your
 // records and the projects' production-ready trees. Pure (see lib/game.ts).
+import { isRefactor } from "./badge-kit";
+import type { Habit } from "./craft";
+import { EXTRA_DEFS } from "./extra-badges";
 import type { ActivityEvent, Records } from "./game";
 import { LIMIT_DEFS } from "./limit-badges";
-import type { LimitHit } from "./usage";
+import type { DayTokens, LimitHit } from "./usage";
 import { BRANCHES, branchComplete, CHECKS, productionReady, type BranchId, type CheckDef, type ProjectReport } from "./project-badges";
 
-export type BadgeGroup = "Milestones" | "Streaks" | "Habits" | "Limits" | "Code health" | "Production-ready";
-export const BADGE_GROUPS: BadgeGroup[] = ["Milestones", "Streaks", "Habits", "Limits", "Code health", "Production-ready"];
+// Kept here too: lib/game-server.ts and the tests import it from the badges.
+export { isRefactor };
+
+export const BADGE_GROUPS = [
+  "Milestones", "Streaks", "Speed", "Calendar", "Habits", "Parallel", "Tokens & spend", "Limits", "Craft", "Board", "Projects",
+  "Leagues", "Social", "Weft explorer", "Secret", "Code health", "Production-ready",
+] as const;
+export type BadgeGroup = (typeof BADGE_GROUPS)[number];
 
 export interface Badge {
   id: string;
@@ -22,6 +31,19 @@ export interface Badge {
   need?: number;
   // What a locked code badge's "Set it up" starts: a check of the tree, or the weakest check of a branch.
   fix?: { check?: string; branch?: BranchId };
+  // Shown as ❓ "Secret badge" until it's earned (components/LoomBadges.tsx).
+  secret?: boolean;
+}
+
+// One finished or running league week of yours on weft.zip (lib/badge-facts.ts): its ladder tier (0 is Cotton),
+// your rank in it and how many were in it.
+export interface LeagueWeek {
+  week: string;
+  tier: number;
+  rank: number;
+  size: number;
+  // The week is over, so its rank is final.
+  done: boolean;
 }
 
 export interface GameFacts {
@@ -39,15 +61,27 @@ export interface GameFacts {
   climbed: boolean;
   // Each plan limit you ran into, one per window (lib/usage.ts distinctHits).
   limitHits?: LimitHit[];
+  // Each day's tokens in and out across every transcript (lib/usage-scan.ts).
+  tokens?: Map<string, DayTokens>;
+  // Days a streak freeze covered (lib/game.ts streakOf).
+  frozen?: string[];
+  // The board now: cards in Backlog, and cards that carry a tag.
+  board?: { backlog: number; tagged: number };
+  // Each card's craft habits, by card id (lib/craft.ts).
+  habits?: ReadonlyMap<string, ReadonlySet<Habit>>;
+  // Each card folder's project root, and how many stacks the projects you shipped in use (lib/project-checks.ts).
+  roots?: ReadonlyMap<string, string>;
+  shippedStacks?: number;
+  // From weft.zip when you're signed in (lib/badge-facts.ts): your league weeks, oldest first, the
+  // builders your workspaces referred, and your biggest team.
+  leagueWeeks?: LeagueWeek[];
+  referrals?: number;
+  teamSize?: number;
 }
 
 type Result = Pick<Badge, "unlocked" | "at" | "have" | "need">;
 type Def = Omit<Badge, keyof Result> & { test: (f: GameFacts) => Result };
 
-// Cards a refactor scout finding starts ("Long Function: Board.tsx") or that say they refactor.
-export function isRefactor(title = "") {
-  return /refactor|extract|dedupe|split .*(file|module|component)|^[A-Z][a-z]+(?: [A-Za-z]+)*: [\w.-]+\.[a-z]+$/i.test(title);
-}
 
 const times = (f: GameFacts, kind: ActivityEvent["kind"]) =>
   f.events.filter((e) => e.kind === kind).map((e) => e.at).sort((a, b) => a - b);
@@ -104,16 +138,17 @@ const DEFS: Def[] = [
   def("Streaks", "streak-7", "🔥", "Week on the loom", "A 7-day streak (earns a streak freeze)", streakBadge(7)),
   def("Streaks", "streak-30", "☄️", "Month of making", "A 30-day streak", streakBadge(30)),
   def("Streaks", "streak-100", "🌋", "Unbroken", "A 100-day streak", streakBadge(100)),
-  def("Habits", "parallel-5", "🕸️", "Many hands", "5 cards running at once", atLeast((f) => f.records.maxRunning, 5)),
-  def("Habits", "parallel-10", "🐙", "Octopus", "10 cards running at once", atLeast((f) => f.records.maxRunning, 10)),
+  def("Parallel", "parallel-5", "🕸️", "Many hands", "5 cards running at once", atLeast((f) => f.records.maxRunning, 5)),
+  def("Parallel", "parallel-10", "🐙", "Octopus", "10 cards running at once", atLeast((f) => f.records.maxRunning, 10)),
   def("Habits", "big-day", "⚡", "Big day", "Start 25 cards in one day", atLeast((f) => f.records.biggestDay?.cards ?? 0, 25)),
   def("Habits", "huge-day", "🌩️", "Storm", "Start 50 cards in one day", atLeast((f) => f.records.biggestDay?.cards ?? 0, 50)),
   def("Habits", "night-owl", "🦉", "Night owl", "Work between midnight and 4am", hourly(0, 4)),
   def("Habits", "early-bird", "🐦", "Early bird", "Work between 5 and 7am", hourly(5, 7)),
-  def("Habits", "polymath", "🧭", "Polymath", "Work in 5 projects (3+ cards each)", atLeast((f) => f.projectCount, 5)),
+  def("Projects", "polymath", "🧭", "Polymath", "Work in 5 projects (3+ cards each)", atLeast((f) => f.projectCount, 5)),
   def("Habits", "thrifty", "🪙", "Thrifty", "Ship a card for under $0.50", flag((f) => (f.records.cheapest ?? Infinity) < 0.5)),
-  def("Habits", "refactor-5", "🧹", "Tidy", "Ship 5 refactor cards", atLeast((f) => f.refactors, 5)),
-  def("Habits", "refactor-25", "🧽", "Refactorer", "Ship 25 refactor cards", atLeast((f) => f.refactors, 25)),
+  def("Craft", "refactor-5", "🧹", "Tidy", "Ship 5 refactor cards", atLeast((f) => f.refactors, 5)),
+  def("Craft", "refactor-25", "🧽", "Refactorer", "Ship 25 refactor cards", atLeast((f) => f.refactors, 25)),
+  ...EXTRA_DEFS,
   ...LIMIT_DEFS.map(({ test, ...d }) => ({ ...d, group: "Limits" as const, test: (f: GameFacts) => test(f.limitHits ?? []) })),
   def("Code health", "tested", "🧪", "Tested", "A project with a coverage report", anyProject((p) => !!p.ok.coverage), { check: "coverage" }),
   def("Code health", "covered-80", "🥈", "Well covered", "80% of lines covered in a project", anyProject((p) => (p.coverage ?? 0) >= 80), { check: "covered80" }),

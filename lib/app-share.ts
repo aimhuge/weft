@@ -13,6 +13,7 @@ import { hashSharePassword } from "@aimhuge/share/server";
 import { accountClient } from "./account";
 import { resolvePage } from "./blob-paths";
 import { syncOrgId } from "./cloud-sync";
+import { recordExplore } from "./explore";
 import { AppShareError } from "./app-share-errors";
 import { listOwners } from "./app-share-owners";
 import { refreshAppPreview } from "./app-preview-capture";
@@ -291,6 +292,7 @@ async function writeShareRow(
   const result = existing
     ? await shares.update(change).eq("id", existing.id)
     : await shares.insert({ ...change, id: newShareId(), app_id: t.app.id });
+  if (!result.error && change.mode !== "private") void recordExplore("app-share");
   return result.error ? { message: result.error.message } : null;
 }
 

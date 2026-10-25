@@ -1,5 +1,7 @@
 import { connection } from "next/server";
 import { gameState } from "@/lib/game-server";
+import { recordExplore } from "@/lib/explore";
+import { INTROS } from "@/lib/feature-intros";
 import { cachedGithubProfile, githubProfile } from "@/lib/github-profile";
 import { fail, guard } from "@/lib/guard";
 import { profileCard } from "@/lib/profile-card";
@@ -24,4 +26,15 @@ export async function GET(req: Request) {
   } catch (err) {
     return fail(err, 500);
   }
+}
+
+// A feature intro watched to the end ({ intro: id }), for the Weft explorer badges (lib/explorer-badges.ts).
+export async function POST(req: Request) {
+  const denied = guard(req);
+  if (denied) return denied;
+  const body = (await req.json().catch(() => null)) as { intro?: unknown } | null;
+  const id = INTROS.find((x) => x === body?.intro);
+  if (!id) return Response.json({ error: "Unknown intro." }, { status: 400 });
+  await recordExplore(`intro:${id}`);
+  return Response.json({ ok: true });
 }

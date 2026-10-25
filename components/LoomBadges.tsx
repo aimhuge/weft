@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { shown } from "@/lib/badge-kit";
 import { BADGE_GROUPS, fixFor, type Badge } from "@/lib/game-badges";
 import { BRANCHES, branchProgress, CHECKS, productionReady, type CheckDef, type ProjectReport } from "@/lib/project-badges";
 import Tip from "./Tip";
@@ -69,7 +70,7 @@ export function BadgesTab({ badges, project, onSetup }: { badges: Badge[]; proje
             </h3>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               {list.map((b) => (
-                <BadgeTile key={b.id} badge={b} project={project} onSetup={onSetup} />
+                <BadgeTile key={b.id} badge={shown(b)} project={project} onSetup={onSetup} />
               ))}
             </div>
           </section>

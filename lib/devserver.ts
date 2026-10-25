@@ -1,6 +1,7 @@
 import { spawn, type ChildProcess, type ChildProcessWithoutNullStreams } from "node:child_process";
 import type { DevServerStatus } from "./types";
 import { cliEnv } from "./env";
+import { recordExplore } from "./explore";
 import { globalSingleton } from "./global-singleton";
 import { restartTarget, weftProcess } from "./restart-guard";
 import { devSecrets } from "./secret-run";
@@ -101,6 +102,7 @@ export async function startDev(cardId: string, command: string, cwd: string, tit
     run.failed = code !== 0 && code !== null && runs.get(cardId) === run;
   });
   runs.set(cardId, run);
+  void recordExplore("devserver");
   return { url, port };
 }
 

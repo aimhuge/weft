@@ -3,14 +3,15 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { readActivity, record, trackActivity } from "./activity";
+import { readBadgeFacts } from "./badge-facts";
 import { craftHabits, scanCraft } from "./craft";
 import { startLimitPoll } from "./limit-poll";
 import {
   activeDays, cloth, dayKey, LEAGUES, levelFor, records, streakOf, tallyDays, weekShipped, weekXp,
-  type DayTally, type Level, type Records, type Stitch, type Streak,
+  type ActivityEvent, type DayTally, type Level, type Records, type Stitch, type Streak,
 } from "./game";
 import { attributes, classFor, stackSkills, type Attribute, type Skill } from "./game-attributes";
-import { badges, coverageClimbed, isRefactor, type Badge } from "./game-badges";
+import { badges, coverageClimbed, isRefactor, type Badge, type GameFacts } from "./game-badges";
 import { fastestBurn, liveHit } from "./limit-badges";
 import type { GithubProfile } from "./github-profile";
 import { globalSingleton } from "./global-singleton";
@@ -20,7 +21,8 @@ import { checkProject, detectStack } from "./project-checks";
 import { projectRoot } from "./quality";
 import { listCards } from "./store";
 import { countsAt, welcome } from "./welcome";
-import { distinctHits, usageDays, type LimitHit, type UsageDay } from "./usage";
+import type { Card } from "./types";
+import { distinctHits, usageDays, type DayTokens, type LimitHit, type UsageDay } from "./usage";
 import { scanUsage, transcriptUsage } from "./usage-scan";
 
 // Puts the game together for /api/game: the activity log, the board's cards and the projects'
@@ -132,6 +134,22 @@ export function rootsToMeasure(cards: { cwd: string; createdAt: number }[], inVi
   return inView && isRepo(inView) && !busiest.includes(inView) ? [inView, ...busiest] : busiest;
 }
 
+// The facts the newer badge families read (lib/extra-badges.ts): tokens, the board now, craft habits, project roots
+// and stacks, and what weft.zip knows (lib/badge-facts.ts).
+function newerFacts(events: ActivityEvent[], cards: Card[], tokens: Map<string, DayTokens>, frozen: string[]): Partial<GameFacts> {
+  const roots = new Map(events.flatMap((e) => (e.cwd ? [[e.cwd, rootOf(e.cwd)] as [string, string]] : [])));
+  const shippedRoots = new Set(events.flatMap((e) => (e.kind === "done" && e.cwd ? [rootOf(e.cwd)] : [])));
+  return {
+    tokens,
+    frozen,
+    board: { backlog: cards.filter((c) => c.column === "backlog").length, tagged: cards.filter((c) => c.tags?.length).length },
+    habits: craftHabits(cards),
+    roots,
+    shippedStacks: new Set([...shippedRoots].flatMap((root) => stackOf(root))).size,
+    ...readBadgeFacts(),
+  };
+}
+
 export function gameState({ cwd, full, now = Date.now() }: { cwd?: string | null; full?: boolean; now?: number }): GameState {
   trackActivity();
   // The limits chart needs samples between thread turns, so a 15-minute background poll runs
@@ -162,7 +180,7 @@ export function gameState({ cwd, full, now = Date.now() }: { cwd?: string | null
   const stacks = new Set(busyRoots.flatMap((root) => stackOf(root)));
   const attrs = attributes({ events, days, today, bestStreak: streak.best, projects, projectCount: busyRoots.length, stacks: stacks.size, habits: craftHabits(cards) });
   const xp = [...days.values()].reduce((n, d) => n + d.xp, 0);
-  const facts = {
+  const facts: GameFacts = {
     events,
     bestStreak: streak.best,
     streakReached: streak.reached,
@@ -172,6 +190,7 @@ export function gameState({ cwd, full, now = Date.now() }: { cwd?: string | null
     refactors: events.filter((e) => e.kind === "done" && isRefactor(e.title)).length,
     climbed: coverageClimbed(events),
     limitHits: hits,
+    ...newerFacts(events, cards, scanned.tokens, streak.frozen),
   };
   return {
     name: userName(),

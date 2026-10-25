@@ -2,7 +2,8 @@
 // all worked out from the activity log (lib/activity.ts). Pure, so the client can import the types
 // and tests can pin every rule; lib/game-server.ts puts it together on the server.
 
-export type ActivityKind = "created" | "start" | "turn" | "done" | "quality" | "limit";
+// "explore" marks the first use of a Weft feature (lib/explore.ts); like "quality" and "limit" it earns no XP and keeps no streak.
+export type ActivityKind = "created" | "start" | "turn" | "done" | "quality" | "limit" | "explore";
 
 // One thing that happened, a line of ~/.weft/activity.jsonl.
 export interface ActivityEvent {
@@ -25,6 +26,8 @@ export interface ActivityEvent {
   title?: string;
   // limit: which plan window a Weft thread ran out of (lib/usage.ts).
   limit?: "five_hour" | "seven_day";
+  // explore: which feature was used for the first time (lib/explore.ts EXPLORE_FEATURES, or "intro:<id>").
+  feature?: string;
 }
 
 // Shipping is worth the most, so starting cards for the sake of it doesn't pay.
@@ -119,7 +122,7 @@ export function tallyDays(events: ActivityEvent[], rootOf: (cwd: string) => stri
   const score = qualityAt(events);
   const days = new Map<string, DayTally>();
   for (const e of events) {
-    if (e.kind === "quality" || e.kind === "start" || e.kind === "limit") continue;
+    if (e.kind === "quality" || e.kind === "start" || e.kind === "limit" || e.kind === "explore") continue;
     const key = dayKey(e.at);
     const day = days.get(key) ?? emptyDay();
     if (e.kind === "created") day.cards += 1;
@@ -145,7 +148,7 @@ export interface Streak {
   reached: Record<number, string>;
 }
 
-export const STREAK_MARKS = [3, 7, 30, 100];
+export const STREAK_MARKS = [3, 7, 30, 100, 365, 1000];
 
 export const MAX_FREEZES = 2;
 export const FREEZE_EVERY = 7;

@@ -9,11 +9,13 @@ vi.mock("@/lib/github-profile", () => ({
   cachedGithubProfile: vi.fn(() => null),
 }));
 vi.mock("@/lib/profile-card", () => ({ profileCard: vi.fn(() => ({ className: "Shipper" })) }));
+vi.mock("@/lib/explore", () => ({ recordExplore: vi.fn(async () => {}) }));
 vi.mock("@/lib/profile-card-sync", () => ({ syncProfileCard: vi.fn(() => Promise.reject(new Error("offline"))) }));
 
 const server = await import("@/lib/game-server");
 const sync = await import("@/lib/profile-card-sync");
 const cards = await import("@/lib/profile-card");
+const explore = await import("@/lib/explore");
 const route = await import("./game/route");
 
 const READ = { host: "localhost:3457" };
@@ -46,5 +48,24 @@ describe("GET /api/game", () => {
     });
     const res = await route.GET(new Request("http://localhost:3457/api/game", { headers: READ }));
     expect(res.status).toBe(500);
+  });
+});
+
+describe("POST /api/game", () => {
+  const post = (body: string, headers: Record<string, string> = { ...READ, "x-weft-token": "1" }) =>
+    route.POST(new Request("http://localhost:3457/api/game", { method: "POST", headers, body }));
+
+  it("logs a feature intro watched to the end", async () => {
+    const res = await post(JSON.stringify({ intro: "leagues" }));
+    expect(await res.json()).toEqual({ ok: true });
+    expect(explore.recordExplore).toHaveBeenLastCalledWith("intro:leagues");
+  });
+
+  it("refuses an unknown intro, a bad body and a missing token", async () => {
+    vi.mocked(explore.recordExplore).mockClear();
+    expect((await post(JSON.stringify({ intro: "nope" }))).status).toBe(400);
+    expect((await post("not json")).status).toBe(400);
+    expect((await post(JSON.stringify({ intro: "leagues" }), READ)).status).toBe(403);
+    expect(explore.recordExplore).not.toHaveBeenCalled();
   });
 });
