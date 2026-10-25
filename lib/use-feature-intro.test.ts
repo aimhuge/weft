@@ -36,6 +36,13 @@ describe("useFeatureIntro", () => {
     expect(renderHook(() => useFeatureIntro(null)).result.current.open).toBe(false);
   });
 
+  it("plays nothing for an intro with no video yet", () => {
+    const { result } = renderHook(() => useFeatureIntro("slack"));
+    expect(result.current.open).toBe(false);
+    const { container } = render(createElement(IntroFrame, { intro: result.current }));
+    expect(container.querySelector("iframe")).toBeNull();
+  });
+
   it("stands down for reduced motion", () => {
     const match = vi.spyOn(window, "matchMedia").mockReturnValue({ matches: true } as MediaQueryList);
     expect(renderHook(() => useFeatureIntro("vault")).result.current.open).toBe(false);

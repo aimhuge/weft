@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { introEvent, introSrc, loadSeenIntros, markIntroSeen, muteMessage, REPLAY_MESSAGE, TOGGLE_MESSAGE, type IntroId } from "./feature-intros";
+import { apiFetch } from "./api-client";
+import { hasVideo, introEvent, introSrc, loadSeenIntros, markIntroSeen, muteMessage, REPLAY_MESSAGE, TOGGLE_MESSAGE, type IntroId } from "./feature-intros";
 import { setIntroModal } from "./intro-modal";
 import { useEscape } from "./use-escape";
 import { readMuted, writeMuted } from "./welcome-voice";
@@ -29,9 +30,10 @@ type Showing = { id: IntroId | null; open: boolean; ended: boolean; paused: bool
 export function useFeatureIntro(id: IntroId | null) {
   const [muted, setMuted] = useState(readMuted);
   const [showing, setShowing] = useState<Showing>({ id: null, open: false, ended: false, paused: false, expanded: false, run: 0, muted });
-  // A new drawer or dialog: its intro opens on its own the first time.
+  // A new drawer or dialog: its intro opens on its own the first time. One with no video yet (Slack's)
+  // never opens and shows no ▶ beside its title.
   if (showing.id !== id) {
-    const open = !!id && !loadSeenIntros().has(id) && !prefersStill();
+    const open = !!id && hasVideo(id) && !loadSeenIntros().has(id) && !prefersStill();
     setShowing({ id, open, ended: false, paused: false, expanded: open, run: 0, muted });
   }
 
@@ -54,6 +56,8 @@ export function useFeatureIntro(id: IntroId | null) {
         setShowing((s) => ({ ...s, paused: true }));
       } else if (event === "done") {
         markIntroSeen(id);
+        // Watched to the end: the Cinephile badge counts it (app/api/game POST). Best effort.
+        void apiFetch("/api/game", { method: "POST", body: JSON.stringify({ intro: id }) }).catch(() => {});
         setShowing((s) => ({ ...s, ended: true }));
       }
     };

@@ -1,6 +1,6 @@
 "use client";
 
-import { INTRO_TITLES, type IntroId } from "@/lib/feature-intros";
+import { hasVideo, INTRO_TITLES, type IntroId } from "@/lib/feature-intros";
 import type { FeatureIntroState } from "@/lib/use-feature-intro";
 
 // A feature's intro video (lib/feature-intros.ts) for its rail drawer or dialog: a sandboxed iframe that only plays. It
@@ -19,7 +19,7 @@ const DOCKED = "relative w-full rounded-lg";
 
 export function IntroFrame({ intro, className = "" }: { intro: FeatureIntroState; className?: string }) {
   const { id, open, ended, expanded, run, src, attach, play, setExpanded } = intro;
-  if (!open || !id) return null;
+  if (!open || !id || !hasVideo(id)) return null;
   const title = INTRO_TITLES[id];
   return (
     <div className={`shrink-0 ${expanded ? "" : className}`}>
@@ -108,12 +108,13 @@ function CornerChips({ intro: { expanded, muted, toggleMuted, setExpanded, hide 
 }
 
 export function IntroButton({ intro }: { intro: FeatureIntroState }) {
-  if (!intro.id || intro.open) return null;
+  if (!intro.id || intro.open || !hasVideo(intro.id)) return null;
   return <PlayIntroButton id={intro.id} onPlay={intro.play} />;
 }
 
 // The ▶ itself, for an intro that plays somewhere else too (lib/pane-intro.ts plays one in the browser pane).
 export function PlayIntroButton({ id, onPlay }: { id: IntroId; onPlay: () => void }) {
+  if (!hasVideo(id)) return null;
   return (
     <button
       type="button"
