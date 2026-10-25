@@ -14,7 +14,7 @@ function answer(status: number, text: string) {
 }
 
 describe("app-read-core", () => {
-  it("sends only the page's args with defaults: false (the hosted route's rule)", async () => {
+  it("sends only the page's args with defaults: false", async () => {
     const calls: string[] = [];
     const fetch = (url: string) => { calls.push(url); return answer(200, "[]")(); };
     await runSupabase({ ...SUPABASE, declaredArgs: { days: 30, obj: { a: 1 } }, pageArgs: { obj: { b: 2 } }, fetch, defaults: false });
