@@ -26,7 +26,8 @@ import { errorText, NoWorkspace, ShareNote, SignedOut } from "./ShareParts";
 // answer replaces it, goes to document.body over the whole window, and steps the native browser pane aside.
 
 // A mini app with no link yet gets one as Share… opens, open to anyone with the link: sharing is why the dialog
-// was opened, and Only you is one click away. A folder app's keys go up in the same request (lib/app-share-keys.ts). A refusal (the plan's room for shared apps, say) leaves the unshared
+// was opened, and Only you is one click away. A folder app's keys go up in the same request, and again on any later
+// open when they changed (lib/app-share-keys.ts). A refusal (the plan's room for shared apps, say) leaves the unshared
 // answer, and picking a mode shows why.
 async function withFirstLink(appId: string, answer: AppShareState): Promise<AppShareState> {
   if (answer.kind !== "ok" || answer.id !== null) return answer;
@@ -142,7 +143,7 @@ function AppShareBody({
             {state.shows === "blob"
               ? "The link shows a copy of this page, sandboxed, with key-shaped text masked. Opening Share… again sends your latest edits."
               : state.shows === "folder"
-                ? "The link serves every file in this folder, sandboxed, by path. Opening Share… again sends your latest edits."
+                ? "The link serves every file in this folder, sandboxed, by path. Opening Share… again sends your latest edits, and your keys when they changed."
                 : "The link frames this site under weft.zip, with an Open link for sites that refuse to be framed."}
           </p>
           {state.shows === "site" ? null : <ShareAppQuota quota={state.quota} />}

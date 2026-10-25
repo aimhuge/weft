@@ -131,7 +131,12 @@ export async function target(appId: string): Promise<Target> {
   return { kind: "ready", ...account, orgId, app, page };
 }
 
+// The link as Share… opens it, with its keys sent again when they changed (lib/app-share-keys.ts).
 export async function getAppShare(appId: string): Promise<AppShareState> {
+  return withKeys(appId, await readAppShare(appId));
+}
+
+async function readAppShare(appId: string): Promise<AppShareState> {
   const t = await target(appId);
   if (t.kind === "blocked") return t.state;
   const read = await readShare(t);
@@ -200,7 +205,7 @@ export async function setAppShare(appId: string, update: AppShareUpdate): Promis
   const change = (slug: string | null) => buildChange({ update, t, now, owner: { nextOwner, nextSlug: slug }, password });
   const writeError = await writeWithSlug(t, existing, nextSlug, change);
   if (writeError) throwAsError(writeError, pageBytes(t.page));
-  return withKeys(!existing, appId, await previewed(t, now));
+  return withKeys(appId, await previewed(t, now));
 }
 
 // What the row will say about who owns the link and under what address. Carries "user" / "org" with

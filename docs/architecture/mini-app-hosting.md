@@ -199,16 +199,20 @@ limits where a key goes, the key limits what it can do there.
 - **`"from": "author"` (default).** The app's owner sets it once in 🔐 (secrets.md); everyone who passes
   the gate uses it, within the policy. Growth's read key works this way. The keys go up **with the link**:
   Share… on an app without a link makes one, open to anyone with the link (`withFirstLink` in
-  `components/ShareAppDialog.tsx`), and `setAppShare` writing a new folder-app link asks Electron main, in the
-  same request, to push them (`lib/app-share-keys.ts` → the control server's `POST /apps/push-secrets`). The
-  answer carries `keys` (what went up, or why not), which the dialog shows by Upload secrets; that button sends
-  them again after a change. The push is `electron/app-secrets-push.cjs` (wired in `electron/app-setup.cjs`):
+  `components/ShareAppDialog.tsx`), and every open or save of a folder-app link (`getAppShare`, `setAppShare`)
+  asks Electron main, in the same request, to send them if they changed (`lib/app-share-keys.ts` → the control
+  server's `POST /apps/push-secrets` with `ifChanged`). Main keeps a salted fingerprint of the link id and the
+  values it last sent per app (`electron/app-secrets-pushed.cjs`, `~/.weft/app-secrets-pushed.json`, never a
+  value): the same values answer `unchanged` with no Touch ID, and so does a set you declined this run, so the
+  preview's polls never ask twice; overlapping calls for one app share one sheet. A new link, a link from before
+  this, or a key you changed in 🔐 goes up the next time Share… opens. The answer carries `keys` (what went up, or
+  why not), which the dialog shows by Upload secrets; that button always asks and sends. The push is `electron/app-secrets-push.cjs` (wired in `electron/app-setup.cjs`):
   reads the manifest, reads the named values from the vault of the manifest's `folder` (the project the
   Mac's reads use; an app folder under `~/.weft/apps` has no git remote, so its own vault is empty), prompts
   Touch ID naming the app, the secrets, the hosts, and `weft.zip`, and POSTs them to `app/api/apps/secrets`
   (a service role route that seals each value with `lib/app-secrets.ts` `seal()`, and answers 500 naming any
-  key it couldn't store). `lib/app-secret-store.ts` `setValue` updates the row, else inserts it: the unique
-  key is an expression index on `coalesce(viewer_id, …)`, which `ON CONFLICT` can't name.
+  key it couldn't store). `lib/app-secret-store.ts` `setValue` updates the row, else inserts it, against
+  the `UNIQUE NULLS NOT DISTINCT (share_id, name, viewer_id)` key (it was an expression index `ON CONFLICT` couldn't name).
 - **`"from": "viewer"`.** Each viewer brings their own key, so a shared app can call Stripe or OpenAI as
   them. On the Mac it comes from the viewer's own 🔐 vault with their own Touch ID; on weft.zip, the
   parent page draws Weft's own form (`components/share-view/AppSecretForm.tsx`, host list from the

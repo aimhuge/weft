@@ -40,7 +40,7 @@ describe("appSecretsRoutes", () => {
     const route = appSecretsRoutes(() => ({ push }))["POST /apps/push-secrets"];
     await expect(route({ appId: "app-1" })).resolves.toEqual({ ok: true, pushed: ["SUPABASE_SECRET_KEY"], missing: [] });
     await route({});
-    expect(push).toHaveBeenLastCalledWith("");
+    expect(push).toHaveBeenLastCalledWith("", { ifChanged: false });
   });
 
   it("refuses before main has set the push up", () => {

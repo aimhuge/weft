@@ -18,6 +18,8 @@ const uploaded = vi.hoisted(() => ({ paths: [] as string[] }));
 const client = makeClient(db, uploaded);
 
 vi.mock("./account", () => ({ accountClient: () => { if (!db.configured) throw new Error("no key"); return client; } }));
+// Key sync goes through Electron main (lib/app-share-keys.test.ts covers it); stubbed so a run never reaches a live Weft.
+vi.mock("./app-share-keys", () => ({ withKeys: (_appId: string, state: unknown) => Promise.resolve(state) }));
 vi.mock("./cloud-sync", () => ({ syncOrgId: () => Promise.resolve(db.org) }));
 vi.mock("./mini-app-store", () => ({ listApps: () => db.apps, rememberAppShare: vi.fn() }));
 vi.mock("./blob-store", () => ({

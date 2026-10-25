@@ -8,19 +8,21 @@ import { errorText } from "./ShareParts";
 // "Upload secrets" appears when the manifest declares author secrets (no `from` or `from: "author"`),
 // public names, or named reads (which need the author's keys on weft.zip, lib/app-read-needs.ts). Calling window.weft.appSecrets.push(appId) ships the named vault values to the cloud;
 // Electron's preload wires the IPC, the dialog only handles the answer; this button only renders and calls it
-// when it's there. A new link's keys already went up with it (lib/app-share-keys.ts); `keys` is how that went,
-// shown until the button is pressed again. Split out from ShareAppDialog.tsx so the dialog stays under the
+// when it's there. Opening or saving the link already sent the keys when they changed (lib/app-share-keys.ts);
+// `keys` is how that went, kept over the preview's polls (which answer without it) until the button is pressed. Split out from ShareAppDialog.tsx so the dialog stays under the
 // 300-line cap (SOUL.md's ratchet).
 export function UploadSecretsButton({ manifest, appId, keys }: { manifest: AppPolicy | null; appId: string; keys?: AppShareKeys }) {
   // Hooks always run in the same order: useState is unconditional, then a guard decides whether to
   // render. The guard can't go above useState (it'd conditionally run hooks).
   const [busy, setBusy] = useState(false);
   const [answer, setAnswer] = useState<string | null>(null);
+  const [lastKeys, setLastKeys] = useState(keys);
+  if (keys && keys !== lastKeys) setLastKeys(keys);
   // The preload wires window.weft.appSecrets.push(appId) → IPC → the cloud; we call through the object
   // (not a captured reference) so the method's `this` stays bound. A button on the row needs the IPC.
   const secretsApi = typeof window !== "undefined" ? window.weft?.appSecrets : undefined;
   if (!hasUploabableSecrets(manifest)) return null;
-  const shown = answer ?? (keys ? formatPushAnswer("error" in keys ? keys : { ok: true, pushed: keys.pushed }) : null);
+  const shown = answer ?? (lastKeys ? formatPushAnswer("error" in lastKeys ? lastKeys : { ok: true, pushed: lastKeys.pushed }) : null);
   const upload = async () => {
     if (!secretsApi?.push) return;
     setBusy(true);

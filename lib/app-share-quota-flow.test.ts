@@ -23,6 +23,8 @@ vi.mock("./account", () => ({ accountClient: () => client }));
 vi.mock("./cloud-sync", () => ({ syncOrgId: () => Promise.resolve("o1") }));
 vi.mock("./mini-app-store", () => ({ listApps: () => [{ id: "a1", name: "My App", url: "https://example.com/page" }] }));
 vi.mock("./app-preview-capture", () => ({ refreshAppPreview: vi.fn(async () => {}) }));
+// Key sync goes through Electron main (lib/app-share-keys.test.ts covers it); stubbed so a run never reaches a live Weft.
+vi.mock("./app-share-keys", () => ({ withKeys: (_appId: string, state: unknown) => Promise.resolve(state) }));
 vi.mock("./app-share-owners", () => ({ listOwners: () => Promise.resolve({ user: null, orgs: [] }) }));
 vi.mock("@aimhuge/share/server", () => ({ hashSharePassword: (p: string) => `hash(${p})` }));
 vi.mock("./app-share-row", () => ({

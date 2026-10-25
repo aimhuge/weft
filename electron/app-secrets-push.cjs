@@ -12,6 +12,7 @@ const path = require("node:path");
 const { APPS_FILE, loadApps } = require("./app-data-frame.cjs");
 const { parsePolicy } = require("./app-fetch-policy.cjs");
 const { deriveNeeds } = require("./app-data-grants.cjs");
+const { createPushedLedger } = require("./app-secrets-pushed.cjs");
 
 // The session JSON the Supabase client stores (lib/account.ts, "weft-auth" key). Returns the
 // access_token; the refresh_token lives next to it but is for the client to use, not main.
@@ -113,12 +114,32 @@ function vaultFolderOf(manifest, appFolder) {
   return typeof manifest.folder === "string" && manifest.folder ? manifest.folder : appFolder;
 }
 
+// The saved app, its manifest and the names a push for it would send, or { error } saying why there's nothing to push.
+function whatToPush(dataDir, appId) {
+  if (!appId || typeof appId !== "string") return { error: "appId is missing." };
+  const app = findApp(dataDir, appId);
+  if (!app) return { error: "No such app." };
+  if (!app.share || !app.share.id) return { error: "Share the app first." };
+  let found;
+  try {
+    found = readAppManifest(dataDir, app);
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) };
+  }
+  const { manifest, folder } = found;
+  const policy = parsePolicy(manifest);
+  const reads = manifest.reads && typeof manifest.reads === "object" ? manifest.reads : {};
+  return { app, manifest, folder, policy, reads, names: namesToPush(policy, reads) };
+}
+
 function createAppSecretsPush({ dataDir, vault, account, confirm, fetch: fetchImpl = globalThis.fetch }) {
   if (!dataDir) throw new Error("createAppSecretsPush needs dataDir.");
   if (!vault) throw new Error("createAppSecretsPush needs the vault.");
   if (typeof confirm !== "function") throw new Error("createAppSecretsPush needs confirm (Touch ID).");
   if (typeof account !== "function") throw new Error("createAppSecretsPush needs an account getter.");
   if (typeof fetchImpl !== "function") throw new Error("createAppSecretsPush needs a fetch.");
+  const ledger = createPushedLedger(dataDir);
+  const inflight = new Map();
 
   // POSTs the values to weft.zip. Returns { ok: true } or { error }. Broken out so push itself
   // stays under the complexity budget — the function shape lives in two error paths only.
@@ -151,23 +172,18 @@ function createAppSecretsPush({ dataDir, vault, account, confirm, fetch: fetchIm
   // Reads the app, its manifest, the names and their values, asks Touch ID once, and POSTs the
   // values to weft.zip. Returns { ok, pushed, missing } or { error }. A name with no value in
   // the vault is skipped (not refused) and listed in `missing` so the dialog can say so.
-  async function push(appId) {
-    if (!appId || typeof appId !== "string") return { error: "appId is missing." };
-    const app = findApp(dataDir, appId);
-    if (!app) return { error: "No such app." };
-    if (!app.share || !app.share.id) return { error: "Share the app first." };
+  // ifChanged is Share… syncing on its own (lib/app-share-keys.ts): values that already went up, or that you
+  // declined this run, answer { unchanged: true } with no Touch ID, and calls for one app share one sheet.
+  function push(appId, { ifChanged = false } = {}) {
+    if (!ifChanged) return pushNow(appId, false);
+    if (!inflight.has(appId)) inflight.set(appId, pushNow(appId, true).finally(() => inflight.delete(appId)));
+    return inflight.get(appId);
+  }
 
-    let folder;
-    let manifest;
-    try {
-      ({ manifest, folder } = readAppManifest(dataDir, app));
-    } catch (e) {
-      return { error: e instanceof Error ? e.message : String(e) };
-    }
-
-    const policy = parsePolicy(manifest);
-    const reads = manifest.reads && typeof manifest.reads === "object" ? manifest.reads : {};
-    const names = namesToPush(policy, reads);
+  async function pushNow(appId, ifChanged) {
+    const found = whatToPush(dataDir, appId);
+    if (found.error) return found;
+    const { app, manifest, folder, policy, reads, names } = found;
     if (!names.length) return { ok: true, pushed: [], missing: [] };
 
     const { values, missing: missingNames, label } = await vault.valuesFor(vaultFolderOf(manifest, folder), names, manifest.env);
@@ -175,14 +191,20 @@ function createAppSecretsPush({ dataDir, vault, account, confirm, fetch: fetchIm
     if (!count) {
       return { ok: true, pushed: [], missing: names, error: `No values yet in ${label} · ${manifest.env}.` };
     }
+    const digest = ledger.digest(app.share.id, values);
+    if (ifChanged && ledger.settled(appId, digest)) return { ok: true, pushed: [], missing: missingNames, unchanged: true };
     const refused = await confirmPush({ manifest, count, label, targets: pushTargets(policy, reads) });
-    if (refused) return refused;
+    if (refused) {
+      if (ifChanged) ledger.declined(appId, digest);
+      return refused;
+    }
 
     const token = accessTokenFrom(account());
     if (!token) return { error: "Sign in to your Weft account first." };
 
     const posted = await postSecrets({ shareId: app.share.id, values, token });
     if (posted.error) return posted;
+    ledger.sent(appId, digest);
     return { ok: true, pushed: Object.keys(values), missing: missingNames };
   }
 
@@ -201,14 +223,14 @@ function registerAppSecretsPush(ipcMain, { push, isBoard }) {
 // The push main set up, for the control server's route below; null until setupAppSecretsPush runs.
 let current = null;
 
-// The control server's route (electron/pane-routes.cjs): Weft's server pushes a new link's keys in the request
-// that makes it (lib/app-share-keys.ts). The same push as the button, Touch ID and all.
+// The control server's route (electron/pane-routes.cjs): Weft's server sends a link's keys whenever Share… opens or
+// saves it (lib/app-share-keys.ts), only when they changed. The same push as the button, Touch ID and all.
 function appSecretsRoutes(get = () => current) {
   return {
     "POST /apps/push-secrets": (body) => {
       const p = get();
       if (!p) throw new Error("Upload secrets isn't ready yet.");
-      return p.push(String(body.appId ?? ""));
+      return p.push(String(body.appId ?? ""), { ifChanged: body.ifChanged === true });
     },
   };
 }

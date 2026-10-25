@@ -34,7 +34,7 @@ export type FetchLike = (
 // never cross to the page (only the names do).
 export type PushedValues = Record<string, string>;
 
-export type PushSuccess = { ok: true; pushed: string[]; missing: string[]; error?: string };
+export type PushSuccess = { ok: true; pushed: string[]; missing: string[]; error?: string; unchanged?: true };
 export type PushFailure = { error: string };
 
 export type PushResult = PushSuccess | PushFailure;
@@ -42,7 +42,8 @@ export type PushResult = PushSuccess | PushFailure;
 export interface AppSecretsPush {
   // Pushes the manifest's author secrets and public names to weft.zip. A missing appId, an
   // app that hasn't been shared, or an empty vault every short-circuit to `{ error }`.
-  push(appId: string): Promise<PushResult>;
+  // ifChanged: skip (no Touch ID) when these values already went up or were declined this run.
+  push(appId: string, opts?: { ifChanged?: boolean }): Promise<PushResult>;
 }
 
 export function accessTokenFrom(account: Account): string | null;
@@ -92,7 +93,9 @@ export function setupAppSecretsPush(opts: {
   confirm: Confirm;
   isBoard: IsBoard;
   fetch?: FetchLike;
-}): { push: (appId: string) => Promise<PushResult> };
+}): { push: (appId: string, opts?: { ifChanged?: boolean }) => Promise<PushResult> };
 
 // The control server's POST /apps/push-secrets: the same push, for Weft's server to call on a new link.
-export function appSecretsRoutes(get?: () => { push: (appId: string) => Promise<unknown> } | null): { "POST /apps/push-secrets": (body: { appId?: unknown }) => Promise<unknown> };
+export function appSecretsRoutes(
+  get?: () => { push: (appId: string, opts?: { ifChanged?: boolean }) => Promise<unknown> } | null,
+): { "POST /apps/push-secrets": (body: { appId?: unknown; ifChanged?: unknown }) => Promise<unknown> };
