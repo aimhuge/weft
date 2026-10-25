@@ -32,7 +32,7 @@ export function slackTitle(status: SlackStatus | null, settings: SlackSettings |
 }
 
 // The events the drawer switches on, in the order it shows them.
-export const EVENT_KEYS = ["commits", "pushes", "deploys", "status"] as const;
+export const EVENT_KEYS = ["commits", "pushes", "deploys", "status", "growth"] as const;
 export type SlackEventKey = (typeof EVENT_KEYS)[number];
 
 export const EVENT_LABELS: Record<SlackEventKey, string> = {
@@ -40,6 +40,7 @@ export const EVENT_LABELS: Record<SlackEventKey, string> = {
   pushes: "Pushes",
   deploys: "Deploys (Vercel)",
   status: "Card status (preview + weft.zip link)",
+  growth: "Growth (new user, new team, payment)",
 };
 
 // The socket's dot: green when it's listening, amber while it connects, grey when it's off.

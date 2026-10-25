@@ -9,11 +9,22 @@ export interface SlackEvents {
   deploys: boolean;
   // A card moved to Needs you, Review or Done: a reply in that card's Slack thread, with a preview of its latest reply.
   status: boolean;
+  // Growth: a new user, a new team, a payment.
+  growth: boolean;
 }
+
+// The kinds of update Weft posts, each of which can go to a channel of its own.
+export type SlackEventKey = keyof SlackEvents;
 
 // A project with a channel of its own: its updates go there, and a card started there runs in it.
 export interface SlackLink {
   folder: string;
+  channel: string;
+  channelName: string | null;
+}
+
+// Where each kind of update goes, when it is not the default channel: a channel id, with the name for the drawer.
+export interface SlackRoute {
   channel: string;
   channelName: string | null;
 }
@@ -27,6 +38,8 @@ export interface SlackSettings {
   // Projects mapped to their own channels, one channel per project.
   links: SlackLink[];
   events: SlackEvents;
+  // A channel per kind of update, overriding the default (and a project's own channel) for that kind.
+  routes: Partial<Record<SlackEventKey, SlackRoute>>;
 }
 
 export const DEFAULT_SLACK_SETTINGS: SlackSettings = {
@@ -34,11 +47,15 @@ export const DEFAULT_SLACK_SETTINGS: SlackSettings = {
   channelName: null,
   folder: null,
   links: [],
-  events: { commits: true, pushes: true, deploys: true, status: true },
+  events: { commits: true, pushes: true, deploys: true, status: true, growth: true },
+  routes: {},
 };
 
 // A patch from the drawer: any setting, with events switched one at a time.
-export type SlackSettingsPatch = Partial<Omit<SlackSettings, "events">> & { events?: Partial<SlackEvents> };
+export type SlackSettingsPatch = Partial<Omit<SlackSettings, "events" | "routes">> & {
+  events?: Partial<SlackEvents>;
+  routes?: Partial<Record<SlackEventKey, SlackRoute | null>>;
+};
 
 // Where a card's Slack thread is: the message its updates reply under.
 export interface SlackThread {

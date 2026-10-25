@@ -1,4 +1,5 @@
 import { configFromEnv, exchangeCode } from "@/lib/slack-oauth";
+import { readState, stateSecret } from "@/lib/slack-pkce";
 import { saveWebhook } from "@/lib/slack-webhook-store";
 
 // Slack's OAuth install, landing here (lib/slack-oauth.ts). The app asks for the `incoming-webhook` scope,
@@ -12,6 +13,9 @@ import { saveWebhook } from "@/lib/slack-webhook-store";
 // No `guard()`: Slack's redirect arrives from the internet, not from the desktop app, and the desktop app's
 // launch token means nothing to Slack. The code itself is the credential that matters — it is single-use and
 // short-lived, and it is spent the moment this handler exchanges it.
+//
+// The exchange is PKCE (lib/slack-pkce.ts): the state carries the verifier, signed, and the app's Client
+// Secret never leaves the console page.
 
 const PAGE = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>Weft feedback</title>
@@ -38,11 +42,17 @@ export async function GET(req: Request) {
   if (!config) {
     return page(
       "Not set up yet",
-      "This app's Slack credentials are missing, so the install code could not be exchanged. Set SLACK_CLIENT_ID and SLACK_CLIENT_SECRET and try again.",
+      "This app's Slack client id is missing, so the install code could not be exchanged. Set SLACK_CLIENT_ID and try again.",
     );
   }
 
-  const webhook = await exchangeCode(config, code);
+  // The verifier rides in the state; without a valid one the exchange would fail anyway, so say so plainly.
+  const state = readState(url.searchParams.get("state"), stateSecret());
+  if (!state.ok) {
+    return page("That install expired", "The install link is more than 15 minutes old, or its state was altered. Start the install again.");
+  }
+
+  const webhook = await exchangeCode(config, code, fetch, state.verifier);
   if (!webhook) {
     return page("That didn't work", "Slack would not hand over the webhook address. The code may have expired — try the install again.");
   }

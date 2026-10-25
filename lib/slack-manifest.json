@@ -34,7 +34,8 @@
     },
     "redirect_urls": [
       "https://weft.zip/api/slack/oauth/callback"
-    ]
+    ],
+    "pkce_enabled": true
   },
   "settings": {
     "event_subscriptions": {

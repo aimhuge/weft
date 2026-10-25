@@ -1014,7 +1014,10 @@ its bot token (`xoxb-…`) and an app-level token with `connections:write` (`xap
 default channel and what goes there, and map any project to a channel of its own: **commits** and **pushes** (from every board repo, whoever made them), **Vercel deploys**
 when they finish, and **card status**: when a card lands in Needs you, Review or Done, its own Slack thread gets the
 column, stage, what's left, a preview of its latest reply and a link to the card on weft.zip, where you can reply,
-review or move it (its project needs to sync). In Slack, `/weft fix the login bug` or **@Weft fix the login bug** starts
+review or move it (its project needs to sync). Any kind can have a channel of its own under **Channel per kind**, so
+commits can go to one channel and deploys to another whatever project they happened in. **Growth** is there too: a new
+user, a new team and every payment land in the growth channel as they happen, and a summary with the headline numbers
+and the growth dashboard's address goes out every morning. In Slack, `/weft fix the login bug` or **@Weft fix the login bug** starts
 a card in that channel's project (or your default one), and **@Weft** in a card's thread sends that card your next message. More in
 [docs/architecture/slack.md](docs/architecture/slack.md).
 

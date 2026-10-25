@@ -1,10 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { authorizeUrl, configFromEnv, exchangeCode, webhookFromAnswer } from "./slack-oauth";
+import { makeState } from "./slack-pkce";
 
 // The OAuth install that produces the feedback channel's webhook URL (lib/slack-oauth.ts). Slack has no Web API
 // method for incoming webhooks, so this install is the only programmatic route to the address — and the address
 // is a credential, so it must reach the database without passing through a log or a page.
+//
+// PKCE: the exchange sends a verifier instead of the Client Secret, and the authorize carries the challenge.
 
 const config = { clientId: "123.456", clientSecret: "shh", redirectUri: "https://weft.zip/api/slack/oauth/callback" };
 const answer = { ok: true, incoming_webhook: { url: "https://hooks.slack.com/services/T1/B2/xyz", channel: "#feedback" } };
@@ -21,6 +24,21 @@ describe("authorizeUrl", () => {
   it("carries a state when there is one", () => {
     expect(new URL(authorizeUrl(config, "abc")).searchParams.get("state")).toBe("abc");
     expect(new URL(authorizeUrl(config)).searchParams.get("state")).toBeNull();
+  });
+
+  it("carries the PKCE challenge and says it is S256", () => {
+    const state = makeState("key");
+    const url = new URL(authorizeUrl(config, state.value, state.verifier));
+    expect(url.searchParams.get("code_challenge_method")).toBe("S256");
+    expect(url.searchParams.get("code_challenge")).toBe(state.challenge);
+    // The verifier itself must never travel — only its hash.
+    expect(url.searchParams.get("code_challenge")).not.toContain(state.verifier);
+  });
+
+  it("sends no challenge when there is no verifier", () => {
+    const url = new URL(authorizeUrl(config));
+    expect(url.searchParams.get("code_challenge")).toBeNull();
+    expect(url.searchParams.get("code_challenge_method")).toBeNull();
   });
 });
 
@@ -71,8 +89,21 @@ describe("exchangeCode", () => {
     const fields = new URLSearchParams(call.init.body as string);
     expect(fields.get("code")).toBe("the-code");
     expect(fields.get("client_id")).toBe("123.456");
-    expect(fields.get("client_secret")).toBe("shh");
     expect(fields.get("redirect_uri")).toBe(config.redirectUri);
+  });
+
+  it("sends the verifier instead of the secret when there is one", async () => {
+    const { first, fetcher } = spy(answer);
+    await exchangeCode(config, "the-code", fetcher, "the-verifier");
+    const fields = new URLSearchParams(first().init.body as string);
+    expect(fields.get("code_verifier")).toBe("the-verifier");
+    expect(fields.get("client_secret")).toBeNull();
+  });
+
+  it("falls back to the secret when there is no verifier", async () => {
+    const { first, fetcher } = spy(answer);
+    await exchangeCode(config, "the-code", fetcher);
+    expect(new URLSearchParams(first().init.body as string).get("client_secret")).toBe("shh");
   });
 
   it("keeps the secret out of the query string", async () => {
@@ -90,10 +121,16 @@ describe("exchangeCode", () => {
 });
 
 describe("configFromEnv", () => {
-  it("needs both credentials", () => {
+  it("needs the client id", () => {
     expect(configFromEnv({})).toBeNull();
-    expect(configFromEnv({ SLACK_CLIENT_ID: "123.456" })).toBeNull();
     expect(configFromEnv({ SLACK_CLIENT_SECRET: "shh" })).toBeNull();
+  });
+
+  it("does not need the secret, which is the point of PKCE", () => {
+    expect(configFromEnv({ SLACK_CLIENT_ID: "123.456" })).toEqual({
+      clientId: "123.456",
+      redirectUri: "https://weft.zip/api/slack/oauth/callback",
+    });
   });
 
   it("defaults the redirect to the deployed callback", () => {

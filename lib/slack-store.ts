@@ -1,14 +1,17 @@
 import fs from "node:fs";
 import path from "node:path";
 import { DATA_DIR } from "./store";
-import { DEFAULT_SLACK_SETTINGS, type SlackEvents, type SlackLink, type SlackSettings, type SlackSettingsPatch, type SlackThread } from "./slack-types";
+import { DEFAULT_SLACK_SETTINGS, type SlackEventKey, type SlackEvents, type SlackLink, type SlackSettings, type SlackSettingsPatch, type SlackThread } from "./slack-types";
 
-// Slack's side of ~/.weft (docs/architecture/slack.md): the drawer's settings and each card's Slack thread, the
-// message its status updates reply under. No token lives here: those stay sealed in Electron main.
+// Slack's side of ~/.weft (docs/architecture/slack.md): the drawer's settings, each card's Slack thread, the
+// message its status updates reply under, and the growth watermark. No token lives here: those stay sealed in
+// Electron main.
 
 interface SlackFile {
   settings: SlackSettings;
   threads: Record<string, SlackThread>;
+  // Where the growth watcher got to: the time of the newest event it posted.
+  growth: { at: string | null };
 }
 
 export type { SlackSettingsPatch };
@@ -20,12 +23,23 @@ const file = () => path.join(DATA_DIR, "slack.json");
 
 const str = (v: unknown) => (typeof v === "string" && v ? v : null);
 
+// The growth watermark: only a time, or null when nothing has been posted yet.
+function cleanGrowth(value: unknown): { at: string | null } {
+  if (!value || typeof value !== "object") return { at: null };
+  const at = (value as { at?: unknown }).at;
+  return { at: typeof at === "string" && at ? at : null };
+}
+
 function read(): SlackFile {
   try {
     const data = JSON.parse(fs.readFileSync(file(), "utf8")) as Partial<SlackFile>;
-    return { settings: clean(data.settings ?? {}, DEFAULT_SLACK_SETTINGS), threads: data.threads ?? {} };
+    return {
+      settings: clean(data.settings ?? {}, DEFAULT_SLACK_SETTINGS),
+      threads: data.threads ?? {},
+      growth: cleanGrowth(data.growth),
+    };
   } catch {
-    return { settings: DEFAULT_SLACK_SETTINGS, threads: {} };
+    return { settings: DEFAULT_SLACK_SETTINGS, threads: {}, growth: { at: null } };
   }
 }
 
@@ -43,7 +57,41 @@ function clean(patch: SlackSettingsPatch, base: SlackSettings): SlackSettings {
   }
   const pick = (key: "channel" | "channelName" | "folder") => (key in patch ? str(patch[key]) : base[key]);
   const links = Array.isArray(patch.links) ? cleanLinks(patch.links) : base.links;
-  return { channel: pick("channel"), channelName: pick("channelName"), folder: pick("folder"), links, events };
+  const routes = cleanRoutes(patch.routes, base.routes);
+  return { channel: pick("channel"), channelName: pick("channelName"), folder: pick("folder"), links, events, routes };
+}
+
+// The channel each kind of update goes to, when it is not the default. A kind with no row follows the default.
+function cleanRoutes(
+  patch: SlackSettingsPatch["routes"],
+  base: SlackSettings["routes"],
+): SlackSettings["routes"] {
+  if (!patch) return base;
+  const routes: SlackSettings["routes"] = {};
+  for (const key of Object.keys(base) as SlackEventKey[]) {
+    // A kind the patch doesn't mention keeps the row it had.
+    if (!(key in patch)) {
+      const kept = base[key];
+      if (kept) routes[key] = kept;
+      continue;
+    }
+    const row = patch[key];
+    // Null clears the row: that kind goes back to the default channel.
+    if (row === null || !row) continue;
+    const channel = str(row.channel);
+    if (!channel) continue;
+    routes[key] = { channel, channelName: str(row.channelName) };
+  }
+  // A kind the base didn't have, added now.
+  for (const key of Object.keys(patch) as SlackEventKey[]) {
+    if (key in routes) continue;
+    const row = patch[key];
+    if (!row) continue;
+    const channel = str(row.channel);
+    if (!channel) continue;
+    routes[key] = { channel, channelName: str(row.channelName) };
+  }
+  return routes;
 }
 
 // Whole links only, and one per project and per channel: a later row for either replaces the earlier one.
@@ -86,4 +134,14 @@ export function saveCardThread(cardId: string, thread: SlackThread) {
   // Last saved goes last, so the trim keeps the newest threads.
   const entries = [...Object.entries(data.threads).filter(([id]) => id !== cardId), [cardId, thread] as const];
   write({ ...data, threads: Object.fromEntries(entries.slice(-MAX_THREADS)) });
+}
+
+// Where the growth watcher got to: the time of the newest event it posted.
+export function growthWatermark(): { at: string | null } {
+  return read().growth;
+}
+
+export function saveGrowthWatermark(watermark: { at: string | null }): void {
+  const data = read();
+  write({ ...data, growth: cleanGrowth(watermark) });
 }

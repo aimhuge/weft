@@ -6,6 +6,7 @@ import { EVENT_KEYS, EVENT_LABELS, SOCKET_STATE, type SlackEventKey, type SlackS
 import type { SlackChannel, SlackSettingsPatch } from "@/lib/slack-types";
 import { SlackChannelButton, SlackChannelSelect } from "./SlackChannelPicker";
 import SlackLinks from "./SlackLinks";
+import SlackRoutes from "./SlackRoutes";
 
 // The connected Slack drawer (components/SlackSettings.tsx): the workspace and its socket, the default channel
 // Weft posts to, the four things it can post about, projects mapped to channels of their own (components/SlackLinks.tsx),
@@ -69,6 +70,17 @@ export default function SlackSettings({
               <EventToggle key={key} eventKey={key} settings={settings} busy={busy} onSave={(patch) => run(() => save(patch))} />
             ))}
           </div>
+        </Field>
+
+        <Field label="Channel per kind">
+          <SlackRoutes
+            settings={settings}
+            channels={channels}
+            busy={busy}
+            onSave={(patch) => run(() => save(patch))}
+            onCreate={createChannel}
+          />
+          <p className="mt-1 text-[11px] text-faint">A kind with a channel of its own goes there, whatever project it happened in.</p>
         </Field>
 
         <Field label="Project channels">

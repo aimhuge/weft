@@ -1,11 +1,13 @@
 import { globalSingleton } from "./global-singleton";
+import { growthEvents } from "./growth-read";
 import { watchCardStatus } from "./slack-cards";
 import { createDeployWatch } from "./slack-deploys";
 import { createGitWatch } from "./slack-git";
+import { createGrowthWatch, GROWTH_MS } from "./slack-growth";
 import { commitsMessage, pushMessage, type SlackText } from "./slack-messages";
 import { sendToSlack } from "./slack-post";
 import { channelFor, hasChannel } from "./slack-route";
-import { slackSettings } from "./slack-store";
+import { growthWatermark, saveGrowthWatermark, slackSettings } from "./slack-store";
 import type { SlackEvents } from "./slack-types";
 import { listCards } from "./store";
 import { COPILOT_ID } from "./types";
@@ -29,11 +31,12 @@ export function boardFolders(): string[] {
   return [...folders];
 }
 
-// Posts to the project's channel (its own, else the default) when there is one and that kind of update is switched on.
+// Posts to the channel for that kind (its own, else the project's, else the default) when there is one and
+// that kind of update is switched on.
 function poster(kind: keyof SlackEvents) {
   return (message: SlackText, cwd: string) => {
     const settings = slackSettings();
-    const channel = channelFor(settings, cwd);
+    const channel = channelFor(settings, cwd, kind);
     if (channel && settings.events[kind]) sendToSlack(channel, message);
   };
 }
@@ -56,6 +59,13 @@ export function startSlack() {
     onPush: (cwd, ref, count) => pushes(pushMessage(cwd, ref, count), cwd),
   });
   const deploys = createDeployWatch(poster("deploys"));
+  // Growth: the new users, new teams and payments, read from production Supabase and posted to the growth
+  // channel. The watermark in ~/.weft/slack.json says where it got to, so nothing is posted twice.
+  const growth = createGrowthWatch(
+    (since) => growthEvents(since),
+    () => growthWatermark(),
+    (w) => saveGrowthWatermark(w),
+  );
   // The git watcher looks even with Slack off (a stat per repo): turning it on later then posts what comes next,
   // not everything committed while it was off.
   let gitBusy = false;
@@ -71,10 +81,14 @@ export function startSlack() {
   const deployTimer = setInterval(() => {
     if (wantsDeploys()) deploys.tick(boardFolders()).catch(warn);
   }, DEPLOY_MS);
+  const growthTimer = setInterval(() => {
+    if (slackSettings().events.growth) growth.tick().catch(warn);
+  }, GROWTH_MS);
   gitTimer.unref();
   deployTimer.unref();
+  growthTimer.unref();
   lookGit();
-  state.stops.push(watchCardStatus(), () => clearInterval(gitTimer), () => clearInterval(deployTimer));
+  state.stops.push(watchCardStatus(), () => clearInterval(gitTimer), () => clearInterval(deployTimer), () => clearInterval(growthTimer));
 }
 
 export function stopSlack() {

@@ -77,6 +77,13 @@ describe("the Slack manifest", () => {
     expect(m.oauth_config.redirect_urls).toContain("https://weft.zip/api/slack/oauth/callback");
   });
 
+  it("keeps PKCE on, so the install never needs the app's Client Secret", () => {
+    // With PKCE the exchange proves itself with a verifier (lib/slack-pkce.ts) instead of the secret, so
+    // the secret never has to be copied out of the console or stored on a server. Slack accepts PKCE with
+    // an HTTPS redirect and with bot scopes; only a *desktop* redirect cannot ask for bot scopes.
+    expect(m.oauth_config.pkce_enabled).toBe(true);
+  });
+
   it("keeps token rotation on, because Slack refuses to turn it off again", () => {
     // Token rotation was enabled on the app in the console. Slack's answer to a manifest that disables it
     // is `cannot_disable_once_enabled` — so a manifest saying `false` fails validation outright, and the

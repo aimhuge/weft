@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-// Where a project posts and which project a channel runs in (lib/slack-route.ts): a mapped project's updates go to
-// its own channel, and a card started there runs in it. Everything else falls back to the drawer's default.
+// Where an update goes and which project a channel runs in (lib/slack-route.ts): a kind with a channel of its
+// own goes there, a mapped project's updates go to its own channel, and a card started there runs in it.
+// Everything else falls back to the drawer's default.
 
 import { channelFor, folderFor, hasChannel } from "./slack-route";
 import type { SlackLink, SlackSettings } from "./slack-types";
@@ -11,7 +12,8 @@ const settings = (over: Partial<SlackSettings> = {}): SlackSettings => ({
   channelName: "general",
   folder: "/dev/default",
   links: [],
-  events: { commits: true, pushes: true, deploys: true, status: true },
+  events: { commits: true, pushes: true, deploys: true, status: true, growth: true },
+  routes: {},
   ...over,
 });
 
@@ -54,6 +56,28 @@ describe("channelFor", () => {
     expect(channelFor(s, "/dev/app/site")).toBe("C7");
     expect(channelFor(s, "/dev/app")).toBe("C7");
   });
+
+  it("gives a kind its own channel when it has one", () => {
+    const s = settings({ routes: { growth: { channel: "C9", channelName: "growth" } } });
+    expect(channelFor(s, "/dev/app", "growth")).toBe("C9");
+  });
+
+  it("gives that channel to every project, not just the mapped one", () => {
+    const s = settings({ links: [link("/dev/app", "C7")], routes: { deploys: { channel: "C9", channelName: null } } });
+    expect(channelFor(s, "/dev/app", "deploys")).toBe("C9");
+    expect(channelFor(s, "/dev/other", "deploys")).toBe("C9");
+  });
+
+  it("keeps the project's own channel for the kinds with no channel of their own", () => {
+    const s = settings({ links: [link("/dev/app", "C7")], routes: { growth: { channel: "C9", channelName: null } } });
+    expect(channelFor(s, "/dev/app", "commits")).toBe("C7");
+    expect(channelFor(s, "/dev/app", "status")).toBe("C7");
+  });
+
+  it("falls back to the default channel for a kind with no channel of its own", () => {
+    const s = settings({ routes: { growth: { channel: "C9", channelName: null } } });
+    expect(channelFor(s, "/dev/other", "commits")).toBe("C1");
+  });
 });
 
 describe("folderFor", () => {
@@ -80,6 +104,10 @@ describe("hasChannel", () => {
 
   it("is true with only a mapped channel", () => {
     expect(hasChannel(settings({ channel: null, links: [link("/dev/app", "C7")] }))).toBe(true);
+  });
+
+  it("is true with only a kind's own channel", () => {
+    expect(hasChannel(settings({ channel: null, links: [], routes: { growth: { channel: "C9", channelName: null } } }))).toBe(true);
   });
 
   it("is false with neither", () => {

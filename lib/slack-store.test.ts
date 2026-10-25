@@ -36,7 +36,8 @@ describe("slackSettings", () => {
       channelName: null,
       folder: null,
       links: [],
-      events: { commits: true, pushes: true, deploys: true, status: true },
+      events: { commits: true, pushes: true, deploys: true, status: true, growth: true },
+      routes: {},
     });
   });
 
@@ -166,6 +167,61 @@ describe("project links", () => {
   it("reads an old file with no links as having none", () => {
     fs.writeFileSync(settingsFile(), JSON.stringify({ settings: { channel: "C1", channelName: "general", folder: null, events: { commits: true, pushes: true, deploys: true, status: true } }, threads: {} }));
     expect(store.slackSettings().links).toEqual([]);
+  });
+});
+
+describe("per-kind channels", () => {
+  it("saves the channel a kind goes to", () => {
+    const saved = store.saveSlackSettings({ routes: { growth: { channel: "C9", channelName: "growth" } } });
+    expect(saved.routes.growth).toEqual({ channel: "C9", channelName: "growth" });
+    expect(store.slackSettings().routes.growth).toEqual({ channel: "C9", channelName: "growth" });
+  });
+
+  it("clears a kind's channel when it is given as null", () => {
+    store.saveSlackSettings({ routes: { growth: { channel: "C9", channelName: "growth" } } });
+    const saved = store.saveSlackSettings({ routes: { growth: null } });
+    expect(saved.routes.growth).toBeUndefined();
+  });
+
+  it("keeps the kinds a patch leaves out", () => {
+    store.saveSlackSettings({ routes: { growth: { channel: "C9", channelName: null }, deploys: { channel: "C8", channelName: null } } });
+    const saved = store.saveSlackSettings({ routes: { deploys: null } });
+    expect(saved.routes.growth).toEqual({ channel: "C9", channelName: null });
+    expect(saved.routes.deploys).toBeUndefined();
+  });
+
+  it("refuses a row with no channel in it", () => {
+    const saved = store.saveSlackSettings({ routes: { growth: { channel: "", channelName: "growth" } } });
+    expect(saved.routes.growth).toBeUndefined();
+  });
+
+  it("reads an old file with no routes as having none", () => {
+    fs.writeFileSync(settingsFile(), JSON.stringify({ settings: fake.settings, threads: {} }));
+    expect(store.slackSettings().routes).toEqual({});
+  });
+});
+
+describe("the growth watermark", () => {
+  it("starts empty", () => {
+    expect(store.growthWatermark()).toEqual({ at: null });
+  });
+
+  it("saves the time it got to, and reads it back", () => {
+    store.saveGrowthWatermark({ at: "2026-10-20T10:00:00.000Z" });
+    expect(store.growthWatermark().at).toBe("2026-10-20T10:00:00.000Z");
+  });
+
+  it("keeps the settings and the threads when it saves", () => {
+    store.saveSlackSettings({ channel: "C1" });
+    store.saveCardThread("card-1", { channel: "C1", ts: "1.0" });
+    store.saveGrowthWatermark({ at: "2026-10-20T10:00:00.000Z" });
+    expect(store.slackSettings().channel).toBe("C1");
+    expect(store.cardThread("card-1")).toEqual({ channel: "C1", ts: "1.0" });
+  });
+
+  it("reads an old file with no watermark as having none", () => {
+    fs.writeFileSync(settingsFile(), JSON.stringify({ settings: fake.settings, threads: {} }));
+    expect(store.growthWatermark()).toEqual({ at: null });
   });
 });
 

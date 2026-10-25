@@ -1,4 +1,5 @@
 import { folderName } from "./format";
+import type { GrowthEvent, GrowthOverview } from "./growth-read";
 import type { Column } from "./types";
 
 // What Weft says in Slack (docs/architecture/slack.md), as Block Kit plus the plain `text` Slack shows in
@@ -126,4 +127,74 @@ export function testMessage(): SlackText {
     text: "Weft is connected",
     blocks: [section("👋 *Weft is connected.* Commits, pushes, deploys and card updates land here; `/weft <what to build>` starts a card.")],
   };
+}
+
+// ── Growth ────────────────────────────────────────────────────────────────────────────────────────────────
+//
+// The growth channel: a new user, a new team, a payment (docs/architecture/slack.md). One message per event,
+// so a channel reads as a log rather than a digest — and a digest of one thing is the same thing.
+
+// What a person's address is called in a Slack message: the local part, so it doesn't shout the whole address.
+function address(email: string | null): string {
+  if (!email) return "someone";
+  const at = email.indexOf("@");
+  return at > 0 ? email.slice(0, at) : email;
+}
+
+export function newUserMessage(event: GrowthEvent & { kind: "user" }): SlackText {
+  const who = address(event.email);
+  const head = `👤 *New user* · ${escape(who)}`;
+  const text = escape(`New user: ${who}`);
+  return { text, blocks: [section(head)] };
+}
+
+export function newTeamMessage(event: GrowthEvent & { kind: "team" }): SlackText {
+  const head = `👥 *New team* · ${escape(event.name)} · ${String(event.members)} members`;
+  const text = escape(`New team: ${event.name} (${String(event.members)} members)`);
+  return { text, blocks: [section(head)] };
+}
+
+export function paymentMessage(event: GrowthEvent & { kind: "payment" }): SlackText {
+  const money = moneyOf(event.amount_cents, event.currency);
+  const what = PAYMENT_LABELS[event.event] ?? event.event;
+  const plan = event.plan ? ` · ${escape(event.plan)}` : "";
+  const seats = event.seats && event.seats > 1 ? ` · ${String(event.seats)} seats` : "";
+  const head = `💳 *${escape(what)}* · ${escape(event.org)}${plan}${seats}${money ? ` · ${escape(money)}` : ""}`;
+  const text = escape(`${what}: ${event.org}${money ? ` ${money}` : ""}`);
+  return { text, blocks: [section(head)] };
+}
+
+// What the billing event means, in plain words.
+const PAYMENT_LABELS: Record<string, string> = {
+  "invoice.paid": "Payment received",
+  "subscription.created": "New subscription",
+  "subscription.canceled": "Subscription canceled",
+  "subscription.resumed": "Subscription resumed",
+};
+
+// Cents as money: $20.00, or $20 when the cents are zero.
+function moneyOf(cents: number | null, currency: string | null): string | null {
+  if (cents === null) return null;
+  const symbol = currency === "usd" ? "$" : currency ? `${currency.toUpperCase()} ` : "";
+  return `${symbol}${(cents / 100).toFixed(2).replace(/\.00$/, "")}`;
+}
+
+// The message for a growth event, whichever kind it is.
+export function growthMessage(event: GrowthEvent): SlackText {
+  if (event.kind === "user") return newUserMessage(event);
+  if (event.kind === "team") return newTeamMessage(event);
+  return paymentMessage(event);
+}
+
+// The daily summary: the headline numbers and the growth dashboard's address.
+export function growthSummaryMessage(overview: GrowthOverview, dashboardUrl: string): SlackText {
+  const lines = [
+    `📈 *Growth* · ${String(overview.new_7d)} new in 7 days · ${String(overview.new_30d)} in 30`,
+    `👤 ${String(overview.accounts)} accounts · ${String(overview.signed_in_7d)} signed in this week`,
+    `👥 ${String(overview.workspaces)} workspaces · ${String(overview.paying_workspaces)} paying`,
+    `🗂️ ${String(overview.syncing_accounts)} syncing · ${String(overview.synced_cards)} cards synced`,
+  ];
+  const blocks: unknown[] = [section(lines.join("\n"))];
+  if (dashboardUrl) blocks.push(context(link(dashboardUrl, "Open the growth dashboard")));
+  return { text: escape(`Growth: ${String(overview.new_7d)} new in 7 days`), blocks };
 }

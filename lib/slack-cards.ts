@@ -33,7 +33,7 @@ async function threadFor(card: Card, link: string | null): Promise<SlackThread |
   const known = cardThread(card.id);
   if (known) return known;
   const settings = slackSettings();
-  const channel = channelFor(settings, card.cwd);
+  const channel = channelFor(settings, card.cwd, "status");
   if (!channel || !settings.events.status) return null;
   const root = await postToSlack(channel, cardRootMessage(card.title, card.cwd, link));
   if (root.ts) saveCardThread(card.id, root);

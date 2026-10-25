@@ -13,7 +13,7 @@ const CHANNELS: SlackChannel[] = [
   { id: "C1", name: "eng", isPrivate: false, isMember: true },
   { id: "C2", name: "secret", isPrivate: true, isMember: false },
 ];
-const SETTINGS: SlackSettings = { channel: "C1", channelName: "eng", folder: "/dev/app", links: [], events: { commits: true, pushes: false, deploys: true, status: false } };
+const SETTINGS: SlackSettings = { channel: "C1", channelName: "eng", folder: "/dev/app", links: [], events: { commits: true, pushes: false, deploys: true, status: false, growth: true }, routes: {} };
 
 function answer(body: unknown, ok = true) {
   return { ok, json: () => Promise.resolve(body), status: ok ? 200 : 500, statusText: "Server Error" };
@@ -238,6 +238,70 @@ describe("useSlack", () => {
     await waitFor(() => expect(result.current.settings).toEqual(SETTINGS));
     override("/api/slack", { error: "nope" });
     await expect(result.current.save({ folder: "/x" })).rejects.toThrow("nope");
+  });
+
+  it("shows the patch at once, before the server answers", async () => {
+    const { result } = renderHook(() => useSlack(true));
+    await waitFor(() => expect(result.current.settings).toEqual(SETTINGS));
+    // The save hangs until the test lets it answer.
+    let reply: (v: unknown) => void = () => undefined;
+    apiFetch.mockImplementationOnce(() => new Promise((resolve) => (reply = resolve)));
+    act(() => {
+      void result.current.save({ channel: "C2", channelName: "secret", events: { pushes: true } });
+    });
+    // The patch is in the settings while the call is still waiting.
+    expect(result.current.settings?.channel).toBe("C2");
+    expect(result.current.settings?.channelName).toBe("secret");
+    expect(result.current.settings?.events.pushes).toBe(true);
+    // The rest of the events are kept.
+    expect(result.current.settings?.events.commits).toBe(true);
+    await act(async () => {
+      reply(answer({ settings: { ...SETTINGS, channel: "C2", channelName: "secret" } }));
+      await Promise.resolve();
+    });
+    expect(result.current.settings?.channel).toBe("C2");
+  });
+
+  it("puts the old settings back when the save can't be made", async () => {
+    const { result } = renderHook(() => useSlack(true));
+    await waitFor(() => expect(result.current.settings).toEqual(SETTINGS));
+    // The save hangs until the test refuses it, so the patch is on screen first.
+    let refuse: (e: Error) => void = () => undefined;
+    apiFetch.mockImplementationOnce(() => new Promise((_, reject) => (refuse = reject)));
+    // The rejection is caught right away, so it never lands on its own.
+    const failed = result.current.save({ channel: "C2" }).catch((err: unknown) => err);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(result.current.settings?.channel).toBe("C2");
+    await act(async () => {
+      refuse(new Error("offline"));
+      await Promise.resolve();
+    });
+    expect(await failed).toBeInstanceOf(Error);
+    // The refused patch is gone and the old settings are back.
+    await waitFor(() => expect(result.current.settings).toEqual(SETTINGS));
+  });
+
+  it("puts the old settings back when the server refuses the save", async () => {
+    const { result } = renderHook(() => useSlack(true));
+    await waitFor(() => expect(result.current.settings).toEqual(SETTINGS));
+    // The save hangs until the test answers with a refusal.
+    let refuse: (v: unknown) => void = () => undefined;
+    apiFetch.mockImplementationOnce(() => new Promise((resolve) => (refuse = resolve)));
+    // The refusal is caught right away, so it never lands on its own.
+    const failed = result.current.save({ channel: "C2" }).catch((err: unknown) => err);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(result.current.settings?.channel).toBe("C2");
+    await act(async () => {
+      refuse(answer({ error: "nope" }, false));
+      await Promise.resolve();
+    });
+    expect(await failed).toBeInstanceOf(Error);
+    // The refused patch is gone and the old settings are back.
+    await waitFor(() => expect(result.current.settings).toEqual(SETTINGS));
   });
 
   it("sends a test message", async () => {

@@ -7,7 +7,7 @@ import "./test-utils";
 import SlackDrawer, { type SlackDrawerProps } from "./SlackDrawer";
 
 const STATUS: SlackStatus = { signedIn: true, team: "Acme", teamUrl: null, bot: "Weft", socket: "connected", error: null };
-const SETTINGS: SlackSettings = { channel: null, channelName: null, folder: null, links: [], events: { commits: true, pushes: true, deploys: true, status: true } };
+const SETTINGS: SlackSettings = { channel: null, channelName: null, folder: null, links: [], events: { commits: true, pushes: true, deploys: true, status: true, growth: true }, routes: {} };
 const CHANNELS: SlackChannel[] = [
   { id: "C1", name: "eng", isPrivate: false, isMember: true },
   { id: "C2", name: "secret", isPrivate: true, isMember: false },

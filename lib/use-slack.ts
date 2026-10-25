@@ -127,13 +127,43 @@ export function useSlack(active: boolean) {
   );
 
   // A patch of the settings: the channel, the folder, or which events to post.
+  // It shows at once (a "post about" box ticks the moment you click it); a refusal puts the old settings back.
   const save = useCallback(async (patch: SlackSettingsPatch) => {
+    let before: SlackSettings | null = null;
+    setSettings((s) => {
+      before = s;
+      if (!s) return s;
+      // A route's null clears that kind's row, so the merge keeps the old row out of the new one.
+      const routes: SlackSettings["routes"] = {};
+      for (const [key, row] of Object.entries(s.routes)) {
+        routes[key as keyof typeof routes] = row;
+      }
+      for (const [key, row] of Object.entries(patch.routes ?? {})) {
+        const kind = key as keyof typeof routes;
+        if (row === null) {
+          const kept: SlackSettings["routes"] = {};
+          for (const [name, value] of Object.entries(routes)) {
+            if (name !== key) kept[name as keyof typeof kept] = value;
+          }
+          Object.assign(routes, kept);
+          continue;
+        }
+        routes[kind] = row;
+      }
+      return { ...s, ...patch, events: { ...s.events, ...patch.events }, routes };
+    });
     const res = await apiFetch("/api/slack", {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(patch),
+    }).catch((err: unknown) => {
+      setSettings(before);
+      throw err;
     });
-    if (!res.ok) throw new Error(await errorText(res, "Slack's settings couldn't be saved."));
+    if (!res.ok) {
+      setSettings(before);
+      throw new Error(await errorText(res, "Slack's settings couldn't be saved."));
+    }
     const data = (await res.json()) as Partial<SlackAnswer> & { settings?: Partial<SlackSettings> };
     // The server's answer may leave a field out; the drawer reads them all.
     const answer: SlackAnswer = {
