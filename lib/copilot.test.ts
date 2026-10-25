@@ -26,7 +26,6 @@ vi.mock("./resume", () => ({ resumeInterrupted: vi.fn() }));
 vi.mock("./crash-blame", () => ({ consumeServerExit: vi.fn() }));
 vi.mock("./github-issues", () => ({ startIssueSync: vi.fn() }));
 vi.mock("./project-seed-run", () => ({ startProjectSeed: vi.fn() }));
-vi.mock("./slack", () => ({ startSlack: vi.fn() }));
 vi.mock("./github-hooks", () => ({ startHookListener: vi.fn() }));
 vi.mock("./blastcp-auto", () => ({ startBlastcpAuto: vi.fn() }));
 vi.mock("./vercel-hooks", () => ({ startVercelListener: vi.fn() }));
