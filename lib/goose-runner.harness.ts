@@ -77,6 +77,8 @@ export const runnerTurnMock = (s: State) => ({
 export const storeMock = (s: State) => ({
   DATA_DIR: "/nonexistent-weft-test-data",
   getCard: (id: string) => s.cards.get(id),
+  // lib/project-seed-find.ts reads listCards on load.
+  listCards: () => [...s.cards.values()],
   updateCard: (id: string, patch: Partial<Card>) => {
     const card = s.cards.get(id) ?? ({ id } as unknown as Card);
     if (!s.cards.has(id)) s.cards.set(id, card);

@@ -8,7 +8,7 @@ vi.mock("node:child_process", () => ({ spawn }));
 const devSecrets = vi.hoisted(() => vi.fn());
 vi.mock("./secret-run", () => ({ devSecrets }));
 vi.mock("./env", () => ({ cliEnv: () => ({ PATH: "/bin" }) }));
-vi.mock("./store", () => ({ DATA_DIR: "/tmp/weft-devserver-list", listCards: () => cards }));
+vi.mock("./store", () => ({ DATA_DIR: "/tmp/weft-devserver-list", listCards: () => cards, getCard: () => undefined }));
 
 const fetchMock = vi.fn<typeof fetch>();
 vi.stubGlobal("fetch", fetchMock);
