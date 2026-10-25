@@ -60,8 +60,20 @@ async function main([name, command, ...args]) {
     return 2;
   }
   const once = process.env.TSC_ONCE_ACTIVE ? null : onPath("tsc-once");
-  if (once) return delegate(once, name, [command, ...args].join(" "));
-  return runHolding(name, [command, ...args].join(" "));
+  const line = commandLine(command, args);
+  if (once) return delegate(once, name, line);
+  return runHolding(name, line);
+}
+
+// The command stays shell syntax (`typecheck` is `next typegen && tsc --noEmit`), but each extra arg is one
+// word: a path like app/(admin)/layout.tsx or app/[orgSlug] reached /bin/sh bare and broke on the `(`.
+// Both runHolding and tsc-once take one shell string, so quoting here covers either path.
+export function commandLine(command, args = []) {
+  return [command, ...args.map(shellQuote)].join(" ");
+}
+
+export function shellQuote(arg) {
+  return /^[\w@%+=:,./-]+$/.test(arg) ? arg : `'${arg.replace(/'/g, "'\\''")}'`;
 }
 
 // Waits for the lock named `name`, runs `command` holding it (through a shell, or as one program when `args`

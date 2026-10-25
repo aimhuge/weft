@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { lockPath, onPath, tryLock, unlock, waitForLock } from "./one-at-a-time.mjs";
+import { commandLine, lockPath, onPath, shellQuote, tryLock, unlock, waitForLock } from "./one-at-a-time.mjs";
 
 let dir: string;
 let file: string;
@@ -90,8 +90,28 @@ describe("the command line", () => {
     expect(fs.existsSync(lockPath(name))).toBe(false);
   });
 
+  it("hands a path with ( ), [ ], spaces or quotes to the command as one word", () => {
+    const paths = ["app/(admin)/admin/layout.tsx", "app/[orgSlug]/page.tsx", "my dir/it's $NOPE;`x`.ts"];
+    const out = execFileSync(process.execPath, [script, `quote-${process.pid}`, "printf '%s\\n'", ...paths], {
+      encoding: "utf8",
+      env: { ...process.env, TSC_ONCE_ACTIVE: "1" },
+    });
+    expect(out).toBe(paths.map((p) => `${p}\n`).join(""));
+  });
+
   it("explains its usage without a command", () => {
     expect(() => execFileSync(process.execPath, [script, "lint"], { stdio: "pipe" })).toThrow();
+  });
+});
+
+describe("commandLine", () => {
+  it("keeps the command as shell syntax and quotes only the args that need it", () => {
+    expect(commandLine("next typegen && tsc --noEmit")).toBe("next typegen && tsc --noEmit");
+    expect(commandLine("eslint --max-warnings 0", ["lib/x.ts", "app/(admin)/a.tsx"])).toBe(
+      "eslint --max-warnings 0 lib/x.ts 'app/(admin)/a.tsx'",
+    );
+    expect(shellQuote("it's")).toBe("'it'\\''s'");
+    expect(shellQuote("")).toBe("''");
   });
 });
 
