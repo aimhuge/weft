@@ -236,7 +236,7 @@ When a new doc lands in this folder, add it here on the same change.
 - `components/CopilotPicker.tsx`: Settings → Models → Copilot picks the model the copilot thread runs on (any model any CLI serves). The pick is read once when the
   card is first made (`lib/copilot.ts` `ensureCopilot`), so it takes effect on the next "New chat" in the copilot lane; with no pick, the copilot runs on
   whatever its CLI chooses, or the model you last picked for new threads (`lib/new-thread.ts` `modelFor`).
-- `lib/puku-trial.ts` + `lib/puku-trial-token.ts` + `lib/puku-proxy.ts` + `lib/puku-proxy-usage.ts` + `app/api/puku/*`: the Puku trial (`reserve` holds what a request could cost before it goes out; `metered` charges a reply however it ends, so a client that hangs up still pays); a puku thread with no Puku
+- `lib/puku-trial.ts` + `lib/puku-trial-token.ts` + `lib/puku-proxy.ts` + `lib/puku-proxy-usage.ts` + `app/api/puku/*`: the Puku trial (`reserve` holds what a request could cost before it goes out, against the account's and the whole trial's daily caps, `puku_trial_global_usage`; `metered` charges a reply however it ends, so a client that hangs up still pays); a puku thread with no Puku
   login, while you're signed in to Weft, runs through the deployed Weft's proxy on Weft's own key (signed day-long token read by puku's
   `apiKeyHelper` from `~/.weft/puku-trial-token`, per-account daily cap in `puku_trial_usage`; docs/architecture/puku-trial.md).
 - `lib/billing/*` + `lib/billing-actions.ts` + `app/[orgSlug]/billing` + `app/api/billing/*` + `components/BillingStatus.tsx`:

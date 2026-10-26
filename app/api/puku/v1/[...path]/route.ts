@@ -2,7 +2,7 @@ import { after } from "next/server";
 import { SUPABASE_URL } from "@/lib/account";
 import { billingService } from "@/lib/billing/billing";
 import { pukuMeter } from "@/lib/billing/puku-meter";
-import { apiError, proxy, restUsageStore, DAILY_REQUESTS, DAILY_TOKENS, type ProxyConfig } from "@/lib/puku-proxy";
+import { apiError, proxy, restUsageStore, DAILY_REQUESTS, DAILY_TOKENS, GLOBAL_DAILY_REQUESTS, GLOBAL_DAILY_TOKENS, type ProxyConfig } from "@/lib/puku-proxy";
 
 // The Puku trial's proxy to Puku's gateway, on the deployed Weft (Vercel) (lib/puku-proxy.ts,
 // docs/architecture/puku-trial.md). puku-cli reaches it as PUKU_AI_BASE_URL=…/api/puku, so it has no localhost
@@ -32,6 +32,8 @@ async function handler(req: Request, { params }: { params: Promise<{ path: strin
     store: restUsageStore(SUPABASE_URL, supabaseKey),
     dailyRequests: limit("PUKU_TRIAL_DAILY_REQUESTS", DAILY_REQUESTS),
     dailyTokens: limit("PUKU_TRIAL_DAILY_TOKENS", DAILY_TOKENS),
+    globalDailyRequests: limit("PUKU_TRIAL_GLOBAL_DAILY_REQUESTS", GLOBAL_DAILY_REQUESTS),
+    globalDailyTokens: limit("PUKU_TRIAL_GLOBAL_DAILY_TOKENS", GLOBAL_DAILY_TOKENS),
     // A client that hangs up mid-reply still gets its usage written: after() keeps the function alive for it.
     background: after,
     deadlineMs: (maxDuration - 15) * 1000,

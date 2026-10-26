@@ -14,10 +14,17 @@ export const UPSTREAM = "https://api-cli.puku.sh";
 // The free tier's daily cap (lib/billing/plans.ts FREE_TIER).
 export const DAILY_REQUESTS = FREE_TIER.dailyRequests;
 export const DAILY_TOKENS = FREE_TIER.dailyTokens;
+// The whole free trial's cap per UTC day, across every account: Weft accounts are free, so without it one person with
+// many accounts has no ceiling. About a hundred accounts using their full day. PUKU_TRIAL_GLOBAL_DAILY_* override it.
+export const GLOBAL_DAILY_REQUESTS = 100 * DAILY_REQUESTS;
+export const GLOBAL_DAILY_TOKENS = 100 * DAILY_TOKENS;
 
 export interface UsageStore {
   // Adds to the user's row for the day and returns the totals after it.
   add: (userId: string, day: string, usage: Usage) => Promise<Usage>;
+  // Adds to the whole trial's row for the day (every account's free use) and returns the totals after it. Left out,
+  // there is no global cap.
+  addGlobal?: (day: string, usage: Usage) => Promise<Usage>;
 }
 
 // The workspace paying for a user's Puku use and what's left of its allowance this period. `check` returning
@@ -37,6 +44,8 @@ export interface ProxyConfig {
   upstream?: string;
   dailyRequests?: number;
   dailyTokens?: number;
+  globalDailyRequests?: number;
+  globalDailyTokens?: number;
   now?: () => number;
   // When set, the proxy first asks the meter whether the user's workspace still has Puku tokens this period;
   // when the meter says yes, the daily cap is skipped (the day counter still updates) and tokens are billed
@@ -132,10 +141,39 @@ async function hold(config: ProxyConfig, userId: string, day: string, cost: Rese
     return apiError(429, "rate_limit_error", `This month's Weft Pro Puku allowance ${why}. It resets at the start of your next billing period.`);
   }
   const held = paid ? NO_RESERVE : cost;
-  const used = await config.store.add(userId, day, { ...NO_USAGE, requests: 1, input_tokens: held.input, output_tokens: held.output });
-  if (paid || !overCap(used, config.dailyRequests ?? DAILY_REQUESTS, config.dailyTokens ?? DAILY_TOKENS)) return undefined;
-  if (held.input || held.output) await config.store.add(userId, day, unheld(held));
-  return apiError(429, "rate_limit_error", "You've used today's free Puku trial in Weft. Log in to Puku (puku-cli auth login, or Settings → CLIs in Weft) to keep going, or try again tomorrow.");
+  const add = { ...NO_USAGE, requests: 1, input_tokens: held.input, output_tokens: held.output };
+  // The account's row and, on the free path, the whole trial's row, at once so the check costs one round trip.
+  const [used, all] = await Promise.all([config.store.add(userId, day, add), paid ? undefined : addGlobal(config, day, add)]);
+  const why = paid ? null : overWhich(config, used, all);
+  if (!why) return undefined;
+  if (held.input || held.output) await giveBack(config, userId, day, unheld(held), all !== undefined);
+  return apiError(429, "rate_limit_error", `${why} Log in to Puku (puku-cli auth login, or Settings → CLIs in Weft) to keep going, or try again tomorrow.`);
+}
+
+// Which free cap a request's totals are over, as the 429's opening line: the account's own first, then the whole
+// trial's (when it was counted there), or null when it's under both.
+function overWhich(config: ProxyConfig, used: Usage, all: Usage | undefined): string | null {
+  if (overCap(used, config.dailyRequests ?? DAILY_REQUESTS, config.dailyTokens ?? DAILY_TOKENS)) return "You've used today's free Puku trial in Weft.";
+  if (all && overCap(all, config.globalDailyRequests ?? GLOBAL_DAILY_REQUESTS, config.globalDailyTokens ?? GLOBAL_DAILY_TOKENS)) {
+    return "Weft's free Puku trial is used up for today, across everyone.";
+  }
+  return null;
+}
+
+// A change to what a free request holds, in its account's row and the whole trial's (when it was counted there).
+async function giveBack(config: ProxyConfig, userId: string, day: string, change: Usage, global: boolean) {
+  await Promise.all([config.store.add(userId, day, change), global ? addGlobal(config, day, change) : undefined]);
+}
+
+// The whole trial's row, or undefined (no global cap this time) when there's none or it can't be reached: like the
+// plan meter, an outage there (or a deploy that lands before its migration) mustn't stop every trial request.
+async function addGlobal(config: ProxyConfig, day: string, usage: Usage): Promise<Usage | undefined> {
+  try {
+    return await config.store.addGlobal?.(day, usage);
+  } catch (err) {
+    console.error(`Puku trial: global usage add failed: ${(err as Error).message}`);
+    return undefined;
+  }
 }
 
 async function forward(req: Request, path: string, body: ArrayBuffer | undefined, config: ProxyConfig): Promise<Response> {
@@ -163,7 +201,7 @@ function cutShort(usage: Usage, cost: Reserve, streaming: boolean): Usage {
 // Cache reads don't count, matching overCap.
 async function settle(config: ProxyConfig, day: string, { userId, paid, held }: Admitted, spent: Usage) {
   const change = unheld(held, spent);
-  if (change.input_tokens || change.cache_read_tokens || change.output_tokens) await config.store.add(userId, day, change);
+  if (change.input_tokens || change.cache_read_tokens || change.output_tokens) await giveBack(config, userId, day, change, !paid);
   const tokens = spent.input_tokens + spent.output_tokens;
   if (!paid || !config.plan || tokens <= 0) return;
   try {
@@ -201,28 +239,30 @@ export async function proxy(req: Request, path: string, config: ProxyConfig): Pr
 export function restUsageStore(url: string, key: string): UsageStore {
   const headers: Record<string, string> = { apikey: key, "content-type": "application/json" };
   if (!key.startsWith("sb_")) headers.authorization = `Bearer ${key}`;
+  const rpc = async (fn: string, args: Record<string, string>, usage: Usage): Promise<Usage> => {
+    const res = await fetch(`${url}/rest/v1/rpc/${fn}`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        ...args,
+        p_requests: usage.requests,
+        p_input: usage.input_tokens,
+        p_cache_read: usage.cache_read_tokens,
+        p_output: usage.output_tokens,
+      }),
+    });
+    if (!res.ok) throw new Error(`Supabase ${res.status}: ${await res.text()}`);
+    const row = (await res.json()) as Partial<Usage>;
+    return {
+      requests: count(row.requests),
+      input_tokens: count(row.input_tokens),
+      cache_read_tokens: count(row.cache_read_tokens),
+      output_tokens: count(row.output_tokens),
+    };
+  };
   return {
-    add: async (userId, day, usage) => {
-      const res = await fetch(`${url}/rest/v1/rpc/puku_trial_add`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          p_user: userId,
-          p_day: day,
-          p_requests: usage.requests,
-          p_input: usage.input_tokens,
-          p_cache_read: usage.cache_read_tokens,
-          p_output: usage.output_tokens,
-        }),
-      });
-      if (!res.ok) throw new Error(`Supabase ${res.status}: ${await res.text()}`);
-      const row = (await res.json()) as Partial<Usage>;
-      return {
-        requests: count(row.requests),
-        input_tokens: count(row.input_tokens),
-        cache_read_tokens: count(row.cache_read_tokens),
-        output_tokens: count(row.output_tokens),
-      };
-    },
+    add: (userId, day, usage) => rpc("puku_trial_add", { p_user: userId, p_day: day }, usage),
+    // puku_trial_global_add: the whole trial's row (supabase/migrations/*_puku_trial_global_usage.sql).
+    addGlobal: (day, usage) => rpc("puku_trial_global_add", { p_day: day }, usage),
   };
 }

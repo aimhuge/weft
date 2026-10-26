@@ -118,8 +118,20 @@ tomorrow." puku-cli shows it, and Weft's rate-limit handling (`lib/rate-limit.ts
 | --- | --- | --- |
 | Requests per user per day | 150 | `PUKU_TRIAL_DAILY_REQUESTS` |
 | Input + output tokens per user per day (cache reads don't count) | 1,000,000 | `PUKU_TRIAL_DAILY_TOKENS` |
+| Requests per day, the whole trial (every account) | 15,000 | `PUKU_TRIAL_GLOBAL_DAILY_REQUESTS` |
+| Input + output tokens per day, the whole trial | 100,000,000 | `PUKU_TRIAL_GLOBAL_DAILY_TOKENS` |
 
 An agent turn makes a request per tool round, so 150 requests is roughly 5 to 15 real turns a day.
+
+**The global cap.** Weft accounts are free, so one person can open many; the per-account cap alone has no ceiling.
+`supabase/migrations/20261026151000_puku_trial_global_usage.sql` adds `puku_trial_global_usage` (one row per UTC day,
+no client grants) and `puku_trial_global_add(...)`, the same atomic add-and-return as `puku_trial_add`. On the free
+path `hold()` adds to the account's row and the global row at once (`Promise.all`, one round trip), and answers 429
+when either is over: the account's own message first, else "Weft's free Puku trial is used up for today, across
+everyone." A refusal gives the hold back to both rows, and `settle` trades hold for spend in both. Pro workspaces never
+touch the global row. The defaults are about a hundred accounts at their full day (`GLOBAL_DAILY_*` in
+`lib/puku-proxy.ts`). If the global row can't be reached (an outage, or a deploy before its migration), the request
+goes on without the global cap and logs `Puku trial: global usage add failed`, like the plan meter's fallback.
 
 ## When the trial can't help
 
@@ -148,8 +160,9 @@ ends every trial token at once; desktops fetch new ones on their next 401.
 
 ## Known gaps
 
-- Weft accounts are free (magic link), so one person can open several for more trial. There's no global daily cap
-  across all users yet; Puku's own limits on the trial key are the backstop.
+- Weft accounts are free (magic link), so one person can open several for more trial, up to the global daily cap
+  (above), which then stops the trial for everyone until the next UTC day. Puku's own limits on the trial key are the
+  backstop behind it.
 - Vercel limits request bodies to 4.5 MB, so a very long session with many images can outgrow the proxy.
 - A Pro workspace's check isn't atomic: requests sent at once can each pass the allowance check and overdraw by what
   they spend together (billing.md's known gaps). The Free path's hold is atomic.
