@@ -41,10 +41,10 @@ describe("pathsOf", () => {
     expect(pathsOf("Grep", { pattern: "x" })).toEqual([]);
   });
 
-  it("takes a Glob's path and the fixed start of an absolute pattern", () => {
+  it("takes a Glob's path and an absolute pattern whole", () => {
     expect(pathsOf("Glob", { pattern: "**/*.ts", path: "/a" })).toEqual(["/a"]);
-    expect(pathsOf("Glob", { pattern: "/a/b/**/*.ts" })).toEqual(["/a/b"]);
-    expect(pathsOf("Glob", { pattern: "~/Downloads/*.mp3" })).toEqual(["~/Downloads"]);
+    expect(pathsOf("Glob", { pattern: "/a/b/**/*.ts" })).toEqual(["/a/b/**/*.ts"]);
+    expect(pathsOf("Glob", { pattern: "~/Downloads/*.mp3" })).toEqual(["~/Downloads/*.mp3"]);
     expect(pathsOf("Glob", { pattern: "src/*.ts" })).toEqual([]);
   });
 
@@ -77,6 +77,46 @@ describe("a project folder with a space in its name", () => {
 
   it("still asks about a sibling folder", () => {
     expect(outsideFolder("Bash", { command: `cd "${drive}" && cd ../other-app` }, drive, [], at)).toMatchObject({ verb: "use", directory: path.join(home, "My Drive", "other-app") });
+  });
+});
+
+describe("a glob in a path", () => {
+  // ~/dev/*weft*/node_modules from the weft project used to offer the literal folder ~/dev/*weft*, which granted nothing.
+  const dev = path.join(home, "dev");
+  const weft = path.join(dev, "weft");
+  const build = path.join(dev, "weft-build");
+  for (const d of [weft, build]) fs.mkdirSync(path.join(d, "node_modules"), { recursive: true });
+  fs.writeFileSync(path.join(build, "package.json"), "{}");
+  const cmd = { command: "ls ~/dev/*weft*/node_modules" };
+
+  it("asks only about the real folder a match lies in, naming it", () => {
+    expect(outsideFolder("Bash", cmd, weft, [], at)).toEqual({ directory: build, token: "~/dev/*weft*/node_modules", verb: "use" });
+  });
+
+  it("lets it through once that folder is granted, or when every match is in the project", () => {
+    expect(outsideFolder("Bash", cmd, weft, [build], at)).toBeUndefined();
+    expect(outsideFolder("Bash", { command: "ls ~/dev/w?ft/node_modules ~/dev/weft/{node_modules,x}" }, weft, [], at)).toBeUndefined();
+  });
+
+  it("falls back to its fixed start when nothing matches", () => {
+    expect(outsideFolder("Bash", { command: "ls ~/dev/nothing-*/x" }, weft, [], at)?.directory).toBe(dev);
+    expect(outsideFolder("Glob", { pattern: path.join(home, "dev", "zz*", "*.ts") }, weft, [], at)).toMatchObject({ directory: dev, verb: "read" });
+  });
+
+  it("checks a Glob pattern's matches, and a glob that fails to walk as its fixed start", () => {
+    expect(outsideFolder("Glob", { pattern: path.join(dev, "weft*", "node_modules") }, weft, [], at)?.directory).toBe(build);
+    expect(outsideFolder("Glob", { pattern: path.join(weft, "**") }, weft, [], at)).toBeUndefined();
+    const spy = vi.spyOn(fs, "globSync").mockImplementationOnce(() => {
+      throw new Error("bad pattern");
+    });
+    expect(outsideFolder("Bash", cmd, weft, [], at)?.directory).toBe(dev);
+    spy.mockRestore();
+  });
+
+  it("lets a granted read through only when every match is granted", () => {
+    h.card = { id: "c1", readScope: [build] };
+    expect(grantedRead("Glob", { pattern: path.join(dev, "weft-b*", "*") }, weft, "c1")).toBe(true);
+    expect(grantedRead("Glob", { pattern: path.join(dev, "*", "*") }, project, "c1")).toBe(false);
   });
 });
 

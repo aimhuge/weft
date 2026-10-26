@@ -71,17 +71,41 @@ function expand(token: string, cwd: string, home: string) {
   return path.resolve(cwd, token.replace(/^(~|\$HOME|\$\{HOME\})(?=\/|$)/, home));
 }
 
+// A glob in a path (~/dev/*weft*/node_modules) names the folders it matches, not a folder called "*weft*": its
+// real paths are its matches, the walk capped at GLOB_VISITS entries and GLOB_MATCHES matches, or, when nothing
+// matches, its fixed start (the folder before the first glob character).
+const GLOB = /[*?[{]/;
+const GLOB_VISITS = 5000;
+const GLOB_MATCHES = 300;
+const fixedStart = (abs: string) => path.dirname((abs.split(GLOB)[0] as string) + "x");
+
+function globMatches(abs: string): string[] {
+  let visits = 0;
+  try {
+    return fs.globSync(abs, { exclude: () => ++visits > GLOB_VISITS }).slice(0, GLOB_MATCHES);
+  } catch {
+    return [];
+  }
+}
+
+// The real paths a path token reaches: itself, or a glob's matches.
+function reached(token: string, cwd: string, home: string): string[] {
+  const abs = expand(token, cwd, home);
+  if (!GLOB.test(abs)) return [realish(abs)];
+  const matches = globMatches(abs);
+  return (matches.length ? matches : [fixedStart(abs)]).map(realish);
+}
+
 export const tilde = (p: string, home = os.homedir()) => (inside(p, home) ? path.join("~", path.relative(home, p)) : p);
 
 // The paths a tool call names: its file or folder argument, or for Bash every absolute, ~/ and ../ token in
-// the command (a heuristic: a path a script builds at run time isn't visible).
+// the command (a heuristic: a path a script builds at run time isn't visible). A glob stays whole; reached() expands it.
 export function pathsOf(toolName: string, input: Record<string, unknown>): string[] {
   const str = (v: unknown) => (typeof v === "string" && v ? v : undefined);
   if (toolName === "Bash") return bashPaths(str(input.command) ?? "");
   if (toolName === "Glob") {
     const pattern = str(input.pattern);
-    const fixed = pattern && /^[/~]/.test(pattern) ? path.dirname((pattern.split(/[*?[{]/)[0] ?? "") + "x") : undefined;
-    return [str(input.path), fixed].filter((p): p is string => Boolean(p));
+    return [str(input.path), pattern && /^[/~]/.test(pattern) ? pattern : undefined].filter((p): p is string => Boolean(p));
   }
   if (toolName === "Grep" || toolName === "LS") return [str(input.path)].filter((p): p is string => Boolean(p));
   const edited = editedPath(toolName, input) ?? str(input.file_path);
@@ -120,12 +144,13 @@ export function outsideFolder(toolName: string, input: Record<string, unknown>, 
   const fenced = (at.fenced ?? []).map(realish);
   // A Bash command's paths only count under the user's own files; /\d+/ in a script isn't a folder.
   const userAreas = [at.home, "/Users", "/Volumes"].map(realish);
+  const out = (abs: string) =>
+    !mine.some((r) => inside(abs, r)) &&
+    !(free.some((r) => inside(abs, r)) && !fenced.some((f) => inside(abs, f))) &&
+    (toolName !== "Bash" || userAreas.some((a) => inside(abs, a)));
   for (const token of pathsOf(toolName, input)) {
-    const abs = realish(expand(token, cwd, at.home));
-    if (mine.some((r) => inside(abs, r))) continue;
-    if (free.some((r) => inside(abs, r)) && !fenced.some((f) => inside(abs, f))) continue;
-    if (toolName === "Bash" && !userAreas.some((a) => inside(abs, a))) continue;
-    return { directory: grantRoot(abs, at.home), token, verb: verbOf(toolName) };
+    const abs = reached(token, cwd, at.home).find(out);
+    if (abs) return { directory: grantRoot(abs, at.home), token, verb: verbOf(toolName) };
   }
   return undefined;
 }
@@ -138,7 +163,7 @@ export function grantedRead(toolName: string, input: Record<string, unknown>, cw
   if (!READ_TOOLS.has(toolName)) return false;
   const granted = grantedFor(cardId).map(realish);
   const home = os.homedir();
-  const paths = pathsOf(toolName, input).map((t) => realish(expand(t, cwd, home)));
+  const paths = pathsOf(toolName, input).flatMap((t) => reached(t, cwd, home));
   return paths.length > 0 && paths.every((p) => granted.some((g) => inside(p, g)) || inside(p, realish(cwd)));
 }
 
