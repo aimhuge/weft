@@ -51,7 +51,7 @@ beforeEach(() => {
   fake.state.threads = {};
   fake.state.known = {};
   fake.state.link = null;
-  fake.state.settings = { channel: "C1", channelName: "general", folder: null, links: [], events: { commits: true, pushes: true, deploys: true, status: true } };
+  fake.state.settings = fake.freshSettings();
 });
 afterEach(() => vi.useRealTimers());
 
