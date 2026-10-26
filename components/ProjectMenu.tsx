@@ -29,6 +29,7 @@ export default function ProjectMenu({
   onSelect,
   home,
   menuId,
+  onProjectMenu,
   variant = "desktop",
 }: {
   projects: ProjectSummary[];
@@ -36,6 +37,8 @@ export default function ProjectMenu({
   onSelect: (path: string | null) => void;
   home: string;
   menuId: string;
+  // Right-clicking a project in the list opens its menu, as on its chip.
+  onProjectMenu?: (path: string, e: React.MouseEvent) => void;
   // "desktop" adds the Mac-only actions under the list (open a folder, clone a repo, make a
   // project, read a changelog). "web" is the picker on its own: weft.zip can't reach the Mac's
   // filesystem, so the list and its filter are all there is.
@@ -162,6 +165,7 @@ export default function ProjectMenu({
             <button
               key={project.path}
               onClick={() => choose(project.path)}
+              onContextMenu={onProjectMenu && ((e) => onProjectMenu(project.path, e))}
               aria-current={on ? "true" : undefined}
               className={`flex w-full items-center gap-3 rounded-md px-2.5 py-1.5 text-left ${on ? "bg-accent-soft" : "hover:bg-sunken"}`}
             >

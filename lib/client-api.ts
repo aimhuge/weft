@@ -291,6 +291,9 @@ export const api = {
   // The project menu's Re-seed Backlog (lib/project-seed-run.ts): parks starter cards again, says how many.
   seedProject: (path: string) => call<{ added: number }>("POST", "/api/projects/seed", { path }),
   removeProject: (path: string) => call<{ projects: Project[] }>("DELETE", "/api/projects", { path }),
+  // Pin or hide a project in the bar (its right-click menu, components/project-menu-handler.ts).
+  markProject: (path: string, marks: { pinned?: boolean; hidden?: boolean }) =>
+    call<{ projects: Project[] }>("PATCH", "/api/projects", { path, ...marks }),
   loginStatus: () => call<{ status: Record<Backend, CliStatus>; runs: LoginView[] }>("GET", "/api/login"),
   login: (backend: Backend, action: "start" | "input" | "cancel" | "terminal", text?: string, signal?: AbortSignal) =>
     call<{ login: LoginView | null }>("POST", "/api/login", { backend, action, text }, signal),

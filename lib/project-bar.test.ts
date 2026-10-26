@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { filterProjects, folderName, plural, shortPath, statusLabel } from "./project-bar";
+import { chipProjects, filterProjects, folderName, plural, shortPath, statusLabel } from "./project-bar";
 import type { ProjectSummary } from "./board-view";
 
 describe("folderName", () => {
@@ -76,5 +76,30 @@ describe("filterProjects", () => {
 
   it("keeps every project for a blank query", () => {
     expect(filterProjects(projects, "", "/Users/me")).toBe(projects);
+  });
+});
+
+describe("chipProjects", () => {
+  const row = (path: string, extra: Partial<ProjectSummary> = {}): ProjectSummary => ({ path, lastActivity: 0, cards: 0, running: 0, needsYou: 0, ...extra });
+  const rows = [row("/a"), row("/b"), row("/c", { pinned: true }), row("/d", { hidden: true }), row("/e")];
+  const paths = (list: ProjectSummary[]) => list.map((p) => p.path);
+
+  it("puts pinned projects first and fills up to the recent count", () => {
+    expect(paths(chipProjects(rows, null, 3))).toEqual(["/c", "/a", "/b"]);
+  });
+
+  it("keeps every pinned project even past the recent count", () => {
+    const pins = [row("/p1", { pinned: true }), row("/p2", { pinned: true }), row("/x")];
+    expect(paths(chipProjects(pins, null, 1))).toEqual(["/p1", "/p2"]);
+  });
+
+  it("leaves hidden projects out unless selected", () => {
+    expect(paths(chipProjects(rows, null, 6))).toEqual(["/c", "/a", "/b", "/e"]);
+    expect(paths(chipProjects(rows, "/d", 6))).toEqual(["/c", "/a", "/b", "/e", "/d"]);
+  });
+
+  it("adds a selected project past the recent count, or one not on the list at all", () => {
+    expect(paths(chipProjects(rows, "/e", 2))).toEqual(["/c", "/a", "/e"]);
+    expect(chipProjects(rows, "/new", 1).at(-1)).toEqual(row("/new"));
   });
 });

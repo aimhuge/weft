@@ -146,6 +146,10 @@ export interface DevServerEntry {
 export interface Project {
   path: string;
   lastUsedAt: number;
+  // Pinned from the project's right-click menu: always a chip in the project bar, never dropped from the list.
+  pinned?: boolean;
+  // Hidden from the bar ("Hide from Bar"): its chip goes until the folder is used again; "More" still lists it.
+  hidden?: boolean;
 }
 
 // When an automation runs its skill: as a thread starts, when you move a card to Review or Done, or

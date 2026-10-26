@@ -415,6 +415,14 @@ When a new doc lands in this folder, add it here on the same change.
   one IPC handler, a fresh `Menu` from the items the board sends, the click → resolve wiring behind a `setTimeout`
   (because click fires before the callback on macOS but not on every platform). `Menu` and `BrowserWindow` are
   injected so the test can pass mocks without a real Electron.
+- A project's right-click menu (on its chip in `components/ProjectChips.tsx` and its row in `components/ProjectMenu.tsx`) is
+  the same native popup: the items in `lib/project-menu.ts`, run by `components/project-menu-handler.ts` (a plain
+  function the board makes each render, through the board's own `openNew`, `chooseProject`, drawers, `archiveCards`
+  and `stopNow`). Reveal in Finder and Open in Editor/Terminal are `electron/open-in.cjs` (`shell:reveal`,
+  `shell:openIn`: the first installed app of a fixed list, `open -a`). Pin and Hide are `pinned`/`hidden` on the
+  saved project (`lib/project-list.ts`, `markProject` in `lib/settings.ts`, `PATCH /api/projects`); `chipProjects`
+  in `lib/project-bar.ts` puts pinned chips first and leaves hidden ones out unless selected, and using a hidden
+  project (`touchProject`) brings it back.
 - `lib/copilot.ts` + `lib/board-tools.ts`: the copilot thread and its `mcp__board__*` tools. `lib/copilot-suggest.ts` + `lib/copilot-context.ts` + `lib/copilot-sources.ts` + `lib/copilot-setup.ts` (what isn't linked yet, for onboarding chips and the copilot's `setup_status`) + `app/api/copilot/suggestions`: the empty chat's chips Haiku writes from the cards and every source Weft can read (pile, scout, blanks, Vercel and Supabase via the control server's `/vercel/status` and `/supabase/status`, `gh`), refreshed in the background after a move; one run labels every chip with its project and `chipsFor` (`lib/copilot-starters.ts`) filters to the board's selected project (docs/architecture/copilot-suggestions.md). `components/CopilotLane.tsx` +
   `lib/copilot-lane.ts` + `lib/use-copilot-thread.ts`: its lane on the right of the board with three states,
   like Intercom's hider: hidden (a 36px pill, the default), peek (a 236px digest column), open (a 520px chat

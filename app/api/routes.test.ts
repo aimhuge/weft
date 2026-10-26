@@ -53,6 +53,7 @@ vi.mock("@/lib/settings", () => ({
   listProjects: vi.fn(() => []),
   touchProject: vi.fn(),
   removeProject: vi.fn(),
+  markProject: vi.fn(),
   dismissSession: vi.fn(),
   dismissedSessions: vi.fn(() => []),
   threadPrompt: vi.fn(() => "tp"),
@@ -771,6 +772,18 @@ describe("/projects", () => {
     const res = await projectsRoute.DELETE(req("/projects", { method: "DELETE", body: { path: "/gone" } }));
     expect(res.status).toBe(200);
     expect(settings.removeProject).toHaveBeenCalledWith("/gone");
+  });
+
+  it("PATCH pins or hides a project, passing on only the marks sent", async () => {
+    const res = await projectsRoute.PATCH(req("/projects", { method: "PATCH", body: { path: "/p", pinned: true, hidden: "yes" } }));
+    expect(res.status).toBe(200);
+    expect(settings.markProject).toHaveBeenCalledWith("/p", { pinned: true });
+    await projectsRoute.PATCH(req("/projects", { method: "PATCH", body: { path: "/p", hidden: false } }));
+    expect(settings.markProject).toHaveBeenLastCalledWith("/p", { hidden: false });
+  });
+
+  it("PATCH 400s a missing folder", async () => {
+    expect((await projectsRoute.PATCH(req("/projects", { method: "PATCH", body: { pinned: true } }))).status).toBe(400);
   });
 
   it("POST /new creates the folder, and reuses one that exists", async () => {

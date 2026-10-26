@@ -36,6 +36,8 @@ export interface BoardProjectBarProps {
   onView: (view: ViewMode) => void;
   home: string;
   onMenuOpenChange: (open: boolean) => void;
+  // A project's right-click menu (components/project-menu-handler.ts); left out on weft.zip.
+  onProjectMenu?: (path: string, e: React.MouseEvent) => Promise<boolean>;
   // "web" is the same bar on weft.zip, where the project menu can only pick a project.
   variant?: "desktop" | "web";
 }
@@ -66,6 +68,7 @@ export default function BoardProjectBar(p: BoardProjectBarProps) {
         onView={p.onView}
         home={p.home}
         onMenuOpenChange={p.onMenuOpenChange}
+        onProjectMenu={p.onProjectMenu}
         variant={p.variant}
       />
     </CrashGuard>

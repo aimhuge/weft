@@ -34,6 +34,7 @@ export default function ProjectBar({
   onView,
   home,
   onMenuOpenChange,
+  onProjectMenu,
   variant = "desktop",
 }: {
   projects: ProjectSummary[]; // already sorted, most recent first
@@ -48,6 +49,8 @@ export default function ProjectBar({
   onView: (view: ViewMode) => void;
   home: string; // user's home dir, for shortening paths (~/dev/x) and default parent for new projects
   onMenuOpenChange?: (open: boolean) => void; // called when the dropdown opens/closes (the board hides a native browser overlay while it's open)
+  // Right-clicking a project, on its chip or in "More" (components/project-menu-handler.ts); resolves to whether an item was picked.
+  onProjectMenu?: (path: string, e: React.MouseEvent) => Promise<boolean>;
   // "web" is the same bar on weft.zip, where the project menu can only pick a project (the Mac's
   // filesystem is out of reach) and the sort's dropdown is styled dark so it isn't light-on-dark.
   variant?: "desktop" | "web";
@@ -81,7 +84,7 @@ export default function ProjectBar({
 
   return (
     <div className="flex h-10 shrink-0 items-center gap-2 border-b border-line bg-panel px-4">
-      <ProjectChips projects={projects} total={total} selected={selected} onSelect={onSelect} home={home} chipsRef={chipsRef} stepHint={stepHint} />
+      <ProjectChips projects={projects} total={total} selected={selected} onSelect={onSelect} home={home} chipsRef={chipsRef} stepHint={stepHint} onProjectMenu={onProjectMenu && ((path, e) => void onProjectMenu(path, e))} />
 
       <div ref={menuRef} className="relative shrink-0">
         <button
@@ -95,7 +98,15 @@ export default function ProjectBar({
         </button>
 
         {open && (
-          <ProjectMenu projects={projects} selected={selected} onSelect={(p) => { onSelect(p); setOpen(false); }} home={home} menuId={menuId} variant={variant} />
+          <ProjectMenu
+            projects={projects}
+            selected={selected}
+            onSelect={(p) => { onSelect(p); setOpen(false); }}
+            onProjectMenu={onProjectMenu && ((path, e) => void onProjectMenu(path, e).then((picked) => picked && setOpen(false)))}
+            home={home}
+            menuId={menuId}
+            variant={variant}
+          />
         )}
       </div>
 

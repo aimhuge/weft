@@ -11,6 +11,8 @@ export interface ProjectSummary {
   cards: number; // total cards in that folder
   running: number; // cards in the Running column
   needsYou: number; // unarchived cards in the Needs you column
+  pinned?: boolean; // always a chip, ahead of the recent ones (lib/project-menu.ts)
+  hidden?: boolean; // no chip until it's used again; "More" still lists it
 }
 
 export interface BoardView {
@@ -208,7 +210,12 @@ export function summarizeProjects(projects: Project[], cards: Card[], rootOf: (c
     if (!s) byPath.set(path, (s = { path, lastActivity: 0, cards: 0, running: 0, needsYou: 0 }));
     return s;
   };
-  for (const p of projects) summary(rootOf(p.path)).lastActivity = Math.max(summary(rootOf(p.path)).lastActivity, p.lastUsedAt);
+  for (const p of projects) {
+    const s = summary(rootOf(p.path));
+    s.lastActivity = Math.max(s.lastActivity, p.lastUsedAt);
+    if (p.pinned) s.pinned = true;
+    if (p.hidden) s.hidden = true;
+  }
   for (const card of cards) {
     const s = summary(rootOf(card.cwd));
     s.cards += 1;

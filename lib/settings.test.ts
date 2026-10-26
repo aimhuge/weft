@@ -241,6 +241,36 @@ describe("settings", () => {
     expect(s.dismissedSessions()).toEqual(["a"]);
   });
 
+  it("pins and hides projects; using one again unhides it and keeps its pin", async () => {
+    const s = await load();
+    s.touchProject("/a");
+    s.markProject("/a", { pinned: true, hidden: true });
+    expect(s.listProjects().find((p) => p.path === "/a")).toMatchObject({ pinned: true, hidden: true });
+    s.touchProject("/a");
+    const used = s.listProjects().find((p) => p.path === "/a");
+    expect(used).toMatchObject({ pinned: true });
+    expect(used?.hidden).toBeUndefined();
+    s.markProject("/a", { pinned: false });
+    expect(Object.keys(s.listProjects().find((p) => p.path === "/a") ?? {})).toEqual(["path", "lastUsedAt"]);
+  });
+
+  it("marking a folder only cards use saves it with no use of its own", async () => {
+    const s = await load();
+    s.markProject("/cards-only", { hidden: true });
+    expect(s.listProjects().find((p) => p.path === "/cards-only")).toEqual({ path: "/cards-only", lastUsedAt: 0, hidden: true });
+  });
+
+  it("a full list drops the oldest unpinned project, never a pinned one", async () => {
+    const s = await load();
+    s.touchProject("/old");
+    s.markProject("/old", { pinned: true });
+    for (let i = 0; i < 45; i++) s.touchProject(`/p${i}`);
+    const paths = s.listProjects().map((p) => p.path);
+    expect(paths).toContain("/old");
+    expect(paths).not.toContain("/p0");
+    expect(paths).toHaveLength(41);
+  });
+
   it("settings survive a reload and settingsView bundles them", async () => {
     let s = await load();
     s.setKeepAliveMinutes(30);

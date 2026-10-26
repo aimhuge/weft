@@ -31,6 +31,7 @@ contextBridge.exposeInMainWorld("weft", {
   },
   openExternal: (url) => ipcRenderer.send("shell:openExternal", url),
   revealFolder: (folder) => ipcRenderer.send("shell:reveal", folder),
+  openIn: (folder, target) => ipcRenderer.invoke("shell:openIn", folder, target),
   popupMenu: (items) => ipcRenderer.invoke("menu:popup", items),
   setBadge: (count) => ipcRenderer.send("badge:set", count),
   copilot: {
