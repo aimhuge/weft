@@ -66,6 +66,9 @@ The one exception to "a local Weft never calls home": the welcome's steps, as an
 - **Path:** the board's `trackOnboarding()` (`lib/telemetry-client.ts`) → local `POST /api/telemetry` → the Mac forwards to
   `https://weft.zip/api/telemetry/collect` (`forwardOnboarding()`, dropped when off or offline, never queued) → the deployed
   Weft captures it with posthog-node (`captureOnboarding()`, `lib/telemetry-send.ts`). The Mac never holds a PostHog key.
+- **Abuse cap:** the collector has no login, so `lib/telemetry-limit.ts` answers first: 60 posts a minute per address
+  (hashed, in-process windows from `lib/fixed-window.ts`, 429 with `retry-after`), and 403 for a post with an `Origin`
+  other than weft.zip's. The Mac posts from Node, which sends no `Origin`, so only a cross-site browser post carries one.
 - **Where they fire:** `lib/use-onboarding-stats.ts` (started, steps), `lib/use-welcome-tour.ts` (beats, mute, the tour bar's moves),
   `components/WelcomeLoop.tsx` (sign-in), `components/WelcomeIntro.tsx` (CLI log in), `components/WelcomeDialog.tsx`
   (projects answered, first thread, skip).
