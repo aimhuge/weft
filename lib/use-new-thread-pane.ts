@@ -2,12 +2,14 @@
 
 import { useEffect, useState, type RefObject } from "react";
 import { api } from "./client";
+import { takePaneIntro } from "./pane-intro";
 
 // The browser pane's page beside the New thread dialog (not a card's).
 export const NEW_THREAD_PANE = "new-thread";
 
-// While the New thread dialog is up, the browser pane beside it shows the splash. Closing it goes back to
-// the open card's browser (a card just started is open by then), or the pane as it was.
+// While the New thread dialog is up, the browser pane beside it shows the splash, or the dialog's intro the first
+// time (lib/pane-intro.ts): both go in this one pane, so the intro can't play hidden behind the splash. Closing it
+// goes back to the open card's browser (a card just started is open by then), or the pane as it was.
 //
 // Returns the pane's visibility from before the dialog opened while that is being restored, else null.
 // Opening the splash makes the pane visible, so without it the board's own pane remounts open on close
@@ -26,7 +28,8 @@ export function useNewThreadPane(showNew: boolean, selectedRef: RefObject<string
     const bridge = window.weft;
     if (!showNew || !bridge) return;
     const before = bridge.browser.getState();
-    const page = api.newThreadPage();
+    const intro = takePaneIntro("newthread");
+    const page = intro ? Promise.resolve({ url: intro }) : api.newThreadPage();
     const shown = page.then(({ url }) => bridge.browser.open(url, NEW_THREAD_PANE)).catch(() => {});
     return () => {
       void Promise.all([before, shown]).then(([state]) => {

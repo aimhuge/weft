@@ -1,45 +1,44 @@
 // @vitest-environment happy-dom
-import { renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadSeenIntros, markIntroSeen } from "./feature-intros";
-import { hasPane, paneIntroUrl, usePaneIntro } from "./pane-intro";
-
-const openInPane = vi.hoisted(() => vi.fn());
-vi.mock("./open-in-pane", () => ({ openInPane }));
+import { hasPane, paneIntroUrl, playPaneIntro, takePaneIntro } from "./pane-intro";
 
 const intro = `${window.location.origin}/intros/newthread.html?live=1`;
 
-describe("usePaneIntro", () => {
-  beforeEach(() => {
-    localStorage.clear();
-    openInPane.mockClear();
-  });
+describe("takePaneIntro", () => {
+  beforeEach(() => localStorage.clear());
   afterEach(() => vi.restoreAllMocks());
 
-  it("opens the intro in the pane the first time, once, and marks it seen", () => {
-    const { rerender } = renderHook(() => usePaneIntro("newthread"));
-    rerender();
-    expect(openInPane).toHaveBeenCalledTimes(1);
-    expect(openInPane).toHaveBeenCalledWith(intro);
+  it("hands out the intro the first time, once, and marks it seen", () => {
+    expect(takePaneIntro("newthread")).toBe(intro);
     expect(loadSeenIntros().has("newthread")).toBe(true);
-    renderHook(() => usePaneIntro("newthread"));
-    expect(openInPane).toHaveBeenCalledTimes(1);
+    expect(takePaneIntro("newthread")).toBeNull();
   });
 
-  it("stays shut once seen, for reduced motion, and with no intro", () => {
-    markIntroSeen("newthread");
-    renderHook(() => usePaneIntro("newthread"));
-    localStorage.clear();
+  it("stays shut for reduced motion", () => {
     vi.spyOn(window, "matchMedia").mockReturnValue({ matches: true } as MediaQueryList);
-    renderHook(() => usePaneIntro("newthread"));
-    expect(renderHook(() => usePaneIntro(null)).result.current).toBeNull();
-    expect(openInPane).not.toHaveBeenCalled();
+    expect(takePaneIntro("newthread")).toBeNull();
+    expect(loadSeenIntros().has("newthread")).toBe(false);
+  });
+});
+
+describe("playPaneIntro", () => {
+  afterEach(() => {
+    delete (window as { weft?: unknown }).weft;
   });
 
-  it("plays it again on ▶", () => {
+  it("plays it again in the pane it is given, seen or not", () => {
     markIntroSeen("newthread");
-    renderHook(() => usePaneIntro("newthread")).result.current!();
-    expect(openInPane).toHaveBeenCalledWith(intro);
+    const open = vi.fn().mockResolvedValue(undefined);
+    (window as { weft?: unknown }).weft = { browser: { open } };
+    playPaneIntro("newthread", "new-thread");
+    expect(open).toHaveBeenCalledWith(intro, "new-thread");
+  });
+
+  it("does nothing without a pane, and shrugs off a failed open", () => {
+    expect(() => playPaneIntro("newthread", "new-thread")).not.toThrow();
+    (window as { weft?: unknown }).weft = { browser: { open: vi.fn().mockRejectedValue(new Error("gone")) } };
+    expect(() => playPaneIntro("newthread", "new-thread")).not.toThrow();
   });
 });
 

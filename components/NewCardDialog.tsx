@@ -9,14 +9,15 @@ import { startButton, modelLabel } from "@/lib/new-thread";
 import { gateNote } from "@/lib/limit-reset";
 import { useEscape } from "@/lib/use-escape";
 import { useFeatureIntro } from "@/lib/use-feature-intro";
-import { hasPane, usePaneIntro } from "@/lib/pane-intro";
+import { hasPane, playPaneIntro } from "@/lib/pane-intro";
+import { NEW_THREAD_PANE } from "@/lib/use-new-thread-pane";
 import { useHeldModifiers } from "@/lib/use-mod-held";
 import { useNewCardDialog } from "@/lib/use-new-card-dialog";
 import { useStartGate } from "@/lib/use-start-gate";
 import { NEW_THREAD } from "@/lib/file-drop";
 import Composer, { type ComposerHandle } from "./Composer";
 import { IntroButton, IntroFrame, PlayIntroButton } from "./FeatureIntro";
-import Icon from "./Icon";
+import NewThreadHeaderActions from "./NewThreadHeaderActions";
 import { NewCardDialogControls } from "./NewCardDialogControls";
 import { NewCardDialogFooter } from "./NewCardDialogFooter";
 import { RestartRequested } from "./RestartChip";
@@ -58,10 +59,10 @@ export default function NewCardDialog({
   const composer = useRef<ComposerHandle>(null);
   useEscape(true, onClose);
   // Its intro plays the first time the dialog opens (lib/feature-intros.ts), in the browser pane on the desktop
-  // (lib/pane-intro.ts) and in a frame over the composer on the web; ▶ by the title plays it again.
+  // beside it (lib/pane-intro.ts) and in a frame over the composer on the web; ▶ by the title plays it again.
   const inPane = hasPane();
   const intro = useFeatureIntro(inPane ? null : "newthread");
-  const playInPane = usePaneIntro(inPane ? "newthread" : null);
+  const playInPane = inPane ? () => playPaneIntro("newthread", NEW_THREAD_PANE) : null;
 
   // The composer-backed submit: each call site picks its `start` and `stay` shape.
   const composerOps = {
@@ -102,13 +103,7 @@ export default function NewCardDialog({
           {playInPane ? <PlayIntroButton id="newthread" onPlay={playInPane} /> : <IntroButton intro={intro} />}
           <RestartRequested restart={restart} />
         </h2>
-        <button
-          onClick={onClose}
-          aria-label="Close"
-          className="rounded-md p-1 text-muted hover:bg-sunken hover:text-ink"
-        >
-          <Icon name="x" size={16} />
-        </button>
+        <NewThreadHeaderActions read={composerOps.read} picks={dialog} onCreated={() => { composerOps.clear(); onClose(); }} onClose={onClose} />
       </div>
       <div className="flex min-h-0 flex-1 flex-col px-5 pt-3">
         <IntroFrame intro={intro} className="mb-3" />
@@ -141,6 +136,7 @@ export default function NewCardDialog({
         onPickEffort={dialog.setEffort}
         onPickMode={dialog.pickMode}
         isolate={{ on: dialog.isolated, suggest: suggestIsolate(alsoHere.length, dialog.promptLength), onToggle: dialog.toggleIsolated }}
+        agent={{ value: dialog.agent, onPick: dialog.setAgent }}
       />
 
       <NewCardDialogFooter

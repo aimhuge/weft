@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { act, cleanup, renderHook } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { RefObject } from "react";
 import type { BrowserState, ShellBridge } from "./client";
 
@@ -8,6 +8,13 @@ const mocks = vi.hoisted(() => ({ newThreadPage: vi.fn() }));
 vi.mock("./client", () => ({ api: { newThreadPage: mocks.newThreadPage } }));
 
 import { NEW_THREAD_PANE, useNewThreadPane } from "./use-new-thread-pane";
+import { loadSeenIntros, markIntroSeen } from "./feature-intros";
+
+// The splash is what shows once the intro has played; the intro's own case clears this.
+beforeEach(() => {
+  localStorage.clear();
+  markIntroSeen("newthread");
+});
 
 afterEach(() => {
   cleanup();
@@ -74,6 +81,17 @@ describe("useNewThreadPane", () => {
     await flush();
     expect(mocks.newThreadPage).toHaveBeenCalledTimes(1);
     expect(browser.open).toHaveBeenCalledWith("file:///new-thread.html", NEW_THREAD_PANE);
+    unmount();
+  });
+
+  it("plays the intro in the same pane instead of the splash the first time", async () => {
+    localStorage.clear();
+    const browser = installBridge();
+    const { unmount } = renderHook(() => useNewThreadPane(true, refOf(null)));
+    await flush();
+    expect(mocks.newThreadPage).not.toHaveBeenCalled();
+    expect(browser.open).toHaveBeenCalledWith(`${window.location.origin}/intros/newthread.html?live=1`, NEW_THREAD_PANE);
+    expect(loadSeenIntros().has("newthread")).toBe(true);
     unmount();
   });
 

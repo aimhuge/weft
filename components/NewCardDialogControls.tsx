@@ -1,11 +1,12 @@
 "use client";
 
-// The New thread dialog's controls row: folder picker, model picker (which also picks the CLI), effort
-// picker, and the permission mode picker. Extracted from NewCardDialog.tsx so the dialog body and the controls can change on
+// The New thread dialog's controls row: folder picker, agent picker (who the thread is, lib/agents.ts), model picker
+// (which also picks the CLI), effort picker, and the permission mode picker. Extracted from NewCardDialog.tsx so the dialog body and the controls can change on
 // their own schedule.
 
 import type { Backend, Effort, PermissionMode } from "@/lib/types";
 import { EFFORTS } from "@/lib/new-thread";
+import { AGENT_ORDER, AGENTS, type ThreadAgent } from "@/lib/agents";
 import ModelSelect from "./ModelSelect";
 import Icon from "./Icon";
 import ModePicker from "./ModePicker";
@@ -28,6 +29,7 @@ export function NewCardDialogControls({
   onPickEffort,
   onPickMode,
   isolate,
+  agent,
 }: {
   cwd: string;
   home: string;
@@ -42,11 +44,14 @@ export function NewCardDialogControls({
   onPickMode: (mode: PermissionMode) => void;
   // The Isolated switch (components/IsolateToggle.tsx); left out where isolation isn't offered.
   isolate?: { on: boolean; suggest: boolean; onToggle: () => void };
+  // The agent picker; left out where the thread's agent isn't picked here.
+  agent?: { value: ThreadAgent; onPick: (agent: ThreadAgent) => void };
 }) {
   return (
     <div className="flex shrink-0 flex-wrap items-center gap-2 px-5 pt-3">
       <RepoPicker value={cwd} home={home} onChange={onChooseFolder} />
       {isolate && <IsolateToggle {...isolate} />}
+      {agent && <AgentSelect {...agent} />}
 
       <label className="relative flex items-center gap-1.5 rounded-md border border-line-strong py-1.5 pl-2.5 pr-1.5 text-[12px] text-ink">
         <span className="sr-only">Model</span>
@@ -96,5 +101,25 @@ export function NewCardDialogControls({
         up
       />
     </div>
+  );
+}
+
+// Who the thread is: its soul opens its system prompt (lib/agents.ts). Builder is Weft's own; Copywriter writes in Weft's voice.
+function AgentSelect({ value, onPick }: { value: ThreadAgent; onPick: (agent: ThreadAgent) => void }) {
+  return (
+    <label
+      className="relative flex items-center gap-1.5 rounded-md border border-line-strong py-1.5 pl-2.5 pr-1.5 text-[12px] text-ink"
+      title={`Agent: ${AGENTS[value].tagline}`}
+    >
+      <span className="sr-only">Agent</span>
+      <select value={value} onChange={(e) => onPick(e.target.value as ThreadAgent)} className={BARE_SELECT}>
+        {AGENT_ORDER.map((id) => (
+          <option key={id} value={id}>
+            {AGENTS[id].emoji} {AGENTS[id].name}
+          </option>
+        ))}
+      </select>
+      <Icon name="chevronDown" size={12} className="pointer-events-none absolute right-1.5" />
+    </label>
   );
 }
