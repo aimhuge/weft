@@ -7,9 +7,11 @@ import {
   setCopilotLanePeek,
   setShowBacklog,
   setShowProgress,
+  setViewMode,
   showBacklog,
   showProgress,
   subscribeBoardPrefs,
+  viewMode,
 } from "./board-prefs";
 
 afterEach(() => {
@@ -18,6 +20,7 @@ afterEach(() => {
   document.cookie = "weft-show-progress=; path=/; max-age=0";
   document.cookie = "weft-copilot-lane=; path=/; max-age=0";
   document.cookie = "weft-copilot-peek=; path=/; max-age=0";
+  document.cookie = "weft-view-mode=; path=/; max-age=0";
 });
 
 describe("showBacklog", () => {
@@ -85,6 +88,22 @@ describe("copilotLanePeek", () => {
   it("is hidden on the server, where there's no document", () => {
     vi.stubGlobal("document", undefined);
     expect(copilotLanePeek()).toBe(false);
+  });
+});
+
+describe("viewMode", () => {
+  it("is the board by default and follows setViewMode through the cookie", () => {
+    expect(viewMode()).toBe("board");
+    setViewMode("list");
+    expect(document.cookie).toContain("weft-view-mode=list");
+    expect(viewMode()).toBe("list");
+    setViewMode("board");
+    expect(viewMode()).toBe("board");
+  });
+
+  it("is the board on the server, where there's no document", () => {
+    vi.stubGlobal("document", undefined);
+    expect(viewMode()).toBe("board");
   });
 });
 

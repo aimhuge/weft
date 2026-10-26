@@ -1,10 +1,12 @@
 "use client";
 
-import { useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { api } from "./client";
+import { patchNow } from "./optimistic-cards";
 import { addTag } from "./rail-view";
 import type { Card, Column } from "./types";
 import { compareCardOrder, ordersForSlot } from "./card-order";
+import { publishWaits } from "./waits-on";
 
 // What the board does to a card beyond opening it: drag a card to another column, drop it on a tag in
 // the 🏷 drawer, drop it on a backlog card to reorder, and remember a move you just made so its
@@ -22,6 +24,8 @@ export interface BoardCardActions {
 export function useBoardCardActions({ cards, setCards, setDragOver, notify }: BoardCardActions) {
   // Moves you made, by card: where to and when, so the next event for that card skips its chime.
   const ownMoves = useRef(new Map<string, { column: Column; at: number }>());
+  // Who waits on whom, for the holder's You first (lib/waits-on.ts).
+  useEffect(() => publishWaits(cards), [cards]);
 
   // Moves a card for you, remembering it so the move doesn't chime. The card lands in its new
   // column right away; if the server refuses (a busy thread, Running from anywhere but Backlog),
@@ -58,7 +62,7 @@ export function useBoardCardActions({ cards, setCards, setDragOver, notify }: Bo
     (cardId: string, tag: string) => {
       const card = cards.find((c) => c.id === cardId);
       const next = card && addTag(card.tags, tag);
-      if (next) api.mark(cardId, { tags: next }).catch(notify);
+      if (next) patchNow(cardId, { tags: next }, () => api.mark(cardId, { tags: next })).catch(notify);
     },
     [cards, notify],
   );

@@ -95,6 +95,7 @@ describe("api calls", () => {
     ["warm", () => api.warm({ cwd: "/w" }), "POST", "/api/warm", { cwd: "/w" }],
     ["newThreadPage", () => api.newThreadPage(), "POST", "/api/new-thread-page", {}],
     ["mark star", () => api.mark("c1", { starred: true }), "PATCH", "/api/cards/c1", { starred: true }],
+    ["setCwd", () => api.setCwd("c1", "/dev/x"), "PATCH", "/api/cards/c1", { cwd: "/dev/x" }],
     ["mark tags", () => api.mark("c1", { tags: ["bug"] }), "PATCH", "/api/cards/c1", { tags: ["bug"] }],
     ["getShare", () => api.getShare("c1"), "GET", "/api/cards/c1/share", undefined],
     ["setShare", () => api.setShare("c1", { mode: "password", password: "pw" }), "PUT", "/api/cards/c1/share", { mode: "password", password: "pw" }],

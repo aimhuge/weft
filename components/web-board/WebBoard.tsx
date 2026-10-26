@@ -165,8 +165,8 @@ export function WebBoard({ orgId, orgSlug, userId, user, orgs, initialCommands, 
                 renderCard={(card) => (
                   <CardView key={card.id} readOnly card={card} now={now} selected={card.id === board.activeCardId} alsoHere={busyHere(cards, card)} onOpen={() => board.openCard(card.id)} />
                 )}
-                renderRow={(card, column) => (
-                  <CardRow key={card.id} card={card} column={column} now={now} selected={card.id === board.activeCardId} alsoHere={busyHere(cards, card)} onOpen={() => board.openCard(card.id)} />
+                renderRow={(card, column, nest) => (
+                  <CardRow key={card.id} card={card} column={column} nest={nest} now={now} selected={card.id === board.activeCardId} alsoHere={busyHere(cards, card)} onOpen={() => board.openCard(card.id)} />
                 )}
                 loaded
                 filtering={filtering}
