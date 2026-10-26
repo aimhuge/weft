@@ -120,9 +120,12 @@ export function useNewCardDialog(home: string, defaultCwd: string | undefined, r
   // A default you changed elsewhere (Settings → Models) lands on an open dialog right away: the
   // model and effort are re-read, and the CLI follows the model when the new model is another
   // CLI's. A model picked in this dialog is not overwritten — the user's own pick wins.
-  const [pickedModel, setPickedModel] = useState(false);
+  // The flag lives in a ref, not in state: setModelFor() below announces the pick by calling
+  // defaultsChanged() synchronously, and a state flag would still read false in that call, so the
+  // dialog would overwrite the model the user had just picked.
+  const pickedModel = useRef(false);
   const pickModel = useCallback((m: string) => {
-    setPickedModel(true);
+    pickedModel.current = true;
     setModelState(m);
     const resolved = resolveModel(m);
     if (!resolved) return;
@@ -138,12 +141,12 @@ export function useNewCardDialog(home: string, defaultCwd: string | undefined, r
   // is the newer word on the model.
   useEffect(() => subscribeDefaults(() => {
     setEffortState(lastEffort());
-    if (pickedModel) return;
+    if (pickedModel.current) return;
     const next = modelFor(backend);
     setModelState(next);
     const resolved = resolveModel(next);
     if (resolved && resolved.backend !== backend) setBackend(resolved.backend);
-  }), [backend, pickedModel]);
+  }), [backend]);
 
   const saveDraft = useCallback((markdown: string) => {
     notePrompt(markdown);
@@ -158,7 +161,7 @@ export function useNewCardDialog(home: string, defaultCwd: string | undefined, r
 
   const pickCliDefault = useCallback((b: Backend) => {
     pickedBackend.current = true;
-    setPickedModel(true);
+    pickedModel.current = true;
     setBackend(b);
     setModelState(NO_MODEL);
   }, []);

@@ -59,6 +59,20 @@ describe("/api/themes", () => {
     await list.POST(multipart(form));
     expect(themes.startThemeCard).toHaveBeenCalledWith("words", undefined);
   });
+
+  it("treats multipart whose picture isn't a file as words alone", async () => {
+    themes.startThemeCard.mockReturnValue({ id: "w", card: { id: "c4" } });
+    const form = new FormData();
+    form.set("prompt", "words");
+    form.set("picture", "not a file");
+    await list.POST(multipart(form));
+    expect(themes.startThemeCard).toHaveBeenCalledWith("words", undefined);
+  });
+
+  it("refuses a read from another host, and a write without the token", async () => {
+    expect((await list.GET(new Request("http://evil.example/api/themes", { headers: { host: "evil.example", "x-weft-token": "1" } }))).status).toBe(403);
+    expect((await list.POST(new Request("http://localhost:3457/api/themes", { method: "POST", headers: { host: "localhost:3457" } }))).status).toBe(403);
+  });
 });
 
 describe("/api/themes/[id]/picture", () => {
@@ -89,5 +103,14 @@ describe("/api/themes/[id]/picture", () => {
     expect((await picture.GET(req(), params("neon"))).status).toBe(404);
     themes.customThemePicture.mockReturnValue({ file: path.join(dir, "gone.png"), type: "image/png" });
     expect((await picture.GET(req(), params("neon"))).status).toBe(404);
+  });
+
+  it("refuses a read from another host", async () => {
+    const res = await picture.GET(
+      new Request("http://evil.example/api/themes/neon/picture", { headers: { host: "evil.example", "x-weft-token": "1" } }),
+      params("neon"),
+    );
+    expect(res.status).toBe(403);
+    expect(themes.customThemePicture).not.toHaveBeenCalled();
   });
 });

@@ -27,6 +27,9 @@ export function cpState() {
     failures: new Map<string, Error>(),
     // A failure whose stderr is blank, so the caller falls back to the process's own message.
     quietFailures: new Set<string>(),
+    // Answers the test holds back: the first call for a key waits for its release, the rest answer
+    // straight away. A test uses it to let two calls overlap.
+    delays: new Map<string, { gate: Promise<void> }>(),
   };
 }
 
@@ -39,6 +42,13 @@ export function childProcessMock(cp: Cp) {
     execFile: (file: string, args: string[], opts: unknown, cb: Callback) => {
       cp.execFile(file, args, opts, cb);
       const key = args.join(" ");
+      const delay = cp.delays.get(key);
+      // The first call for a held-back key waits for the test to release it.
+      if (delay) {
+        cp.delays.delete(key);
+        void delay.gate.then(() => cb(null, cp.answers.get(key) ?? "", ""));
+        return { stdin: { end: (input: string) => cp.stdin.push(input) } };
+      }
       const failure = cp.failures.get(key);
       if (failure) cb(failure, "", cp.quietFailures.has(key) ? "" : failure.message);
       else cb(null, cp.answers.get(key) ?? "", "");
@@ -61,6 +71,7 @@ export async function loadGog(cp: Cp) {
   cp.answers = new Map();
   cp.failures = new Map();
   cp.quietFailures = new Set();
+  cp.delays = new Map();
   cp.children = [];
   cp.stdin = [];
   cp.which.mockReset().mockImplementation(() => "/usr/local/bin/gog\n");
@@ -83,6 +94,18 @@ export function child(cp: Cp): FakeChild {
 // How `gog` answers a given argument list.
 export function says(cp: Cp, args: string, stdout: string) {
   cp.answers.set(args, stdout);
+}
+
+// Holds the next answer for a given argument list back, so a test can let two calls overlap. The
+// returned function releases it.
+export function holds(cp: Cp, args: string, stdout: string): () => void {
+  says(cp, args, stdout);
+  let release = () => {};
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  cp.delays.set(args, { gate });
+  return release;
 }
 
 // The OAuth clients gog has stored: the names it answers `auth credentials list --json` with.

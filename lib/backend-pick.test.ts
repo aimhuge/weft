@@ -23,4 +23,16 @@ describe("backendPick", () => {
   it("refuses a CLI switch on a live thread", () => {
     expect(backendPick(card({ column: "running" }), "codex", "")).toEqual({ refused: "Stop the thread before switching its CLI." });
   });
+
+  // A model id no CLI serves (a stale link, a hand-edited card): the pick stays on the CLI
+  // the user chose rather than moving to nothing.
+  it("keeps the picked CLI when the model belongs to none", () => {
+    expect(backendPick(card(), "puku", "not-a-model")).toEqual({ patch: { backend: "puku", model: undefined } });
+  });
+
+  it("refuses the CLI switch when the model belongs to none and the thread is live", () => {
+    expect(backendPick(card({ column: "running" }), "puku", "not-a-model")).toEqual({
+      refused: "Stop the thread before switching its CLI.",
+    });
+  });
 });

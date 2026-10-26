@@ -153,6 +153,16 @@ describe("createCardFromBody", () => {
     createCardFromBody({ prompt: "x" });
     expect(vi.mocked(store.createCard).mock.calls[0]?.[0]).not.toHaveProperty("tags");
   });
+
+  it("gives an isolated card its own worktree", () => {
+    createCardFromBody({ prompt: "x", isolated: true });
+    expect(vi.mocked(store.createCard).mock.calls[0]?.[0]).toMatchObject({ isolated: true });
+  });
+
+  it("leaves a card alone when isolated is anything but true", () => {
+    createCardFromBody({ prompt: "x", isolated: "yes" });
+    expect(vi.mocked(store.createCard).mock.calls[0]?.[0]).not.toHaveProperty("isolated");
+  });
 });
 
 describe("startCard", () => {
