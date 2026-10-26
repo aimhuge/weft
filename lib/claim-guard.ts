@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { addClaims, claimKey, clashQuestion, clashWhy, dropClaims, findClash, splitClaim, WHOLE_FILE } from "./claims";
 import { editedPath } from "./overlap";
+import { pruneYields } from "./yields";
 import { getCard, listCards, updateCard } from "./store";
 import type { PromptReason } from "./types";
 
@@ -111,6 +112,7 @@ export function claimGuard(cardId: () => string | undefined): HookCallback {
     if (!card) return {};
     const keys = await claimsFor(input.tool_name, (input.tool_input ?? {}) as Record<string, unknown>, input.cwd);
     if (!keys.length) return {};
+    pruneYields();
     const clash = findClash(listCards(), card, keys);
     const question = clash ? clashQuestion(clash) : undefined;
     remember(toolUseId, keys, question, clash && clashWhy(clash));

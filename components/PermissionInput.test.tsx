@@ -23,6 +23,22 @@ const edit: EditPreview = {
 };
 
 describe("PermissionInput", () => {
+  it("shows the holder's face and this thread's on a clash", () => {
+    const holder = { id: "h", title: "Fix login", claim: "/r/a.ts#one", emoji: "🔐" };
+    render(<PermissionInput input={{}} why={{ category: "same-code", detail: "d", holder }} me={{ title: "Restyle", thumb: "/t.png" }} />);
+    expect(screen.getByRole("img", { name: "Fix login" }).title).toBe("‘Fix login’ is editing this code");
+    expect(screen.getByRole("img", { name: "Restyle" }).getAttribute("src")).toBe("/t.png");
+  });
+
+  it("says the holder goes first when the user put it first, and shows no face of its own without one", () => {
+    const holder = { id: "h", title: "Fix login", claim: "/r/a.ts#one", first: true as const };
+    render(<PermissionInput input={{}} why={{ category: "whole-file", detail: "d", holder }} />);
+    const face = screen.getByRole("img", { name: "Fix login" });
+    expect(face.title).toBe("‘Fix login’ goes first on this file");
+    expect(face.textContent).toBe("F");
+    expect(screen.getByTestId("clash-faces").querySelectorAll("[role=img]")).toHaveLength(1);
+  });
+
   it("names an outside-project folder with its own chip", () => {
     render(<PermissionInput input={{ command: "ls ~/Downloads" }} why={{ category: "outside", detail: "~/Downloads isn't in this card's project folder" }} />);
     expect(screen.getByText("⚠ Outside project").parentElement?.title).toBe(REASONS.outside.tip);
@@ -94,6 +110,19 @@ describe("PermissionActions", () => {
     return { onAnswer, onWait };
   }
 
+  it("goes ahead only through Me first, beside Wait and while waiting, where the transport has it", async () => {
+    const onFirst = vi.fn();
+    const pending = { ...base, why: { category: "same-code" as const, detail: "d", holder } };
+    const { rerender } = render(<PermissionActions pending={pending} answered={false} onAnswer={vi.fn()} onWait={vi.fn()} onFirst={onFirst} />);
+    expect(screen.getAllByRole("button").map((b) => b.textContent)).toEqual(["Wait", "Me first", "Deny"]);
+    await userEvent.click(screen.getByRole("button", { name: "Me first" }));
+    expect(onFirst).toHaveBeenCalledTimes(1);
+    rerender(<PermissionActions pending={{ ...pending, waiting: true }} answered={false} onAnswer={vi.fn()} onFirst={onFirst} />);
+    expect(screen.getAllByRole("button").map((b) => b.textContent)).toEqual(["Me first", "Deny"]);
+    await userEvent.click(screen.getByRole("button", { name: "Me first" }));
+    expect(onFirst).toHaveBeenCalledTimes(2);
+  });
+
   it("offers a retry for a call auto mode's classifier blocked, or keeping it denied", async () => {
     const { onAnswer } = setup({ ...base, why: { category: "classifier", detail: "Looks like a production deploy" } });
     expect(screen.getAllByRole("button").map((b) => b.textContent)).toEqual(["Allow once and retry", "Keep denied"]);
@@ -104,19 +133,20 @@ describe("PermissionActions", () => {
     expect(REASONS.classifier.label).toBe("Auto mode blocked");
   });
 
-  it("offers Wait first when another card holds the code", async () => {
+  it("offers Wait first when another card holds the code, and a plain Go ahead without Me first", async () => {
     const { onAnswer, onWait } = setup({ ...base, why: { category: "same-code", detail: "d", holder } });
-    expect(screen.getAllByRole("button").map((b) => b.textContent)).toEqual(["Await resolution", "Go ahead", "Deny"]);
-    await userEvent.click(screen.getByRole("button", { name: "Await resolution" }));
+    expect(screen.getAllByRole("button").map((b) => b.textContent)).toEqual(["Wait", "Go ahead", "Deny"]);
+    await userEvent.click(screen.getByRole("button", { name: "Wait" }));
     expect(onWait).toHaveBeenCalled();
     await userEvent.click(screen.getByRole("button", { name: "Go ahead" }));
     expect(onAnswer).toHaveBeenLastCalledWith(true);
   });
 
   it("while waiting, says who it waits for and still lets you go ahead or deny", async () => {
+    // Without Me first (weft.zip) the way ahead is a plain Go ahead.
     const { onAnswer } = setup({ ...base, why: { category: "same-code", detail: "d", holder }, waiting: true });
     expect(screen.getByText("Waiting for ‘Fix login’ to finish…")).toBeTruthy();
-    await userEvent.click(screen.getByRole("button", { name: "Go ahead now" }));
+    await userEvent.click(screen.getByRole("button", { name: "Go ahead" }));
     expect(onAnswer).toHaveBeenLastCalledWith(true);
     await userEvent.click(screen.getByRole("button", { name: "Deny" }));
     expect(onAnswer).toHaveBeenLastCalledWith(false);

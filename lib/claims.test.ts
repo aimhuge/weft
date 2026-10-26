@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addClaims, claimKey, CLAIMS_CAP, clashes, clashQuestion, clashWhy, dropClaims, findClash, splitClaim } from "./claims";
+import { addClaims, claimKey, CLAIMS_CAP, clashes, clashQuestion, clashWhy, dropClaims, findClash, splitClaim, yieldsTo } from "./claims";
 import type { Card } from "./types";
 
 let seq = 0;
@@ -85,7 +85,38 @@ describe("findClash", () => {
   });
 });
 
+describe("Me first yields", () => {
+  it("skips a card's claims on a file it yields to this card", () => {
+    const me = card();
+    const other = card({ claims: ["/repo/a.ts#f", "/repo/b.ts#g"], yields: [{ to: me.id, file: "/repo/a.ts" }] });
+    expect(findClash([me, other], me, ["/repo/a.ts#f"])).toBeUndefined();
+    expect(findClash([me, other], me, ["/repo/b.ts#g"])).toMatchObject({ theirs: "/repo/b.ts#g" });
+  });
+
+  it("marks a clash with a card this one yields to as first, and asks about it that way", () => {
+    const ahead = card({ title: "Fix login", claims: ["/repo/Login.tsx#*"] });
+    const me = card({ yields: [{ to: ahead.id, file: "/repo/Login.tsx" }] });
+    const clash = findClash([me, ahead], me, ["/repo/Login.tsx#Form"]);
+    expect(clash).toMatchObject({ first: true, theirs: "/repo/Login.tsx#*" });
+    expect(clashQuestion(clash!)).toBe("Card ‘Fix login’ goes first on Login.tsx. Wait, or go ahead?");
+    expect(clashWhy(clash!).holder).toMatchObject({ id: ahead.id, first: true });
+  });
+
+  it("knows who yields what to whom", () => {
+    const c = card({ yields: [{ to: "x", file: "/a.ts" }] });
+    expect(yieldsTo(c, "x", "/a.ts")).toBe(true);
+    expect(yieldsTo(c, "x", "/b.ts")).toBe(false);
+    expect(yieldsTo(card(), "x", "/a.ts")).toBe(false);
+  });
+});
+
 describe("clashWhy", () => {
+  it("carries the holder's face for the prompt", () => {
+    const holder = card({ emoji: "🔐", thumb: "/t.png" });
+    expect(clashWhy({ card: holder, theirs: "/repo/a.ts#f", mine: "/repo/a.ts#f" }).holder).toMatchObject({ emoji: "🔐", thumb: "/t.png" });
+  });
+
+
   it("files a clash under same code, overlapping code or whole file, and names the holder", () => {
     const running = card({ title: "Fix login", column: "running" });
     expect(clashWhy({ card: running, theirs: "/repo/Login.tsx#LoginForm", mine: "/repo/Login.tsx#LoginForm" })).toEqual({

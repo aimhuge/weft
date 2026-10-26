@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Card } from "./types";
 
-const api = vi.hoisted(() => ({ remove: vi.fn(), stop: vi.fn() }));
+const api = vi.hoisted(() => ({ remove: vi.fn(), stop: vi.fn(), waitPermission: vi.fn(), putFirst: vi.fn() }));
 vi.mock("./client", () => ({ api }));
 
-import { applyIntents, forget, onOptimistic, overlay, overlayAll, removeNow, STOP_SETTLE_MS, stopNow, type OptimisticUpdate } from "./optimistic-cards";
+import { answerNow, applyIntents, firstNow, forget, onOptimistic, overlay, overlayAll, patchNow, removeNow, STOP_SETTLE_MS, stopNow, waitNow, type OptimisticUpdate } from "./optimistic-cards";
 
 const card = (over: Partial<Card> = {}): Card => ({ id: "a", title: "A", column: "running", cwd: "/r", ...over }) as Card;
 
@@ -90,5 +90,90 @@ describe("overlayAll / applyIntents", () => {
     api.remove.mockReturnValue(new Promise(() => {}));
     void removeNow("b");
     expect(overlayAll([card(), card({ id: "b" })]).map((c) => c.id)).toEqual(["a"]);
+  });
+});
+
+const asking = (over: Partial<NonNullable<Card["pending"]>> = {}) =>
+  card({ column: "needs_you", pending: { id: "p", title: "Edit x.ts", why: { holder: { title: "Other" } }, ...over } as Card["pending"] });
+
+describe("answerNow / waitNow / firstNow", () => {
+  beforeEach(() => {
+    api.waitPermission.mockReset().mockResolvedValue({ ok: true });
+    api.putFirst.mockReset().mockResolvedValue({ ok: true });
+  });
+
+  it("takes an answered prompt off the card at once, until the server moves past it", async () => {
+    const call = vi.fn().mockResolvedValue({ ok: true });
+    await answerNow("a", "p", false, call);
+    expect(call).toHaveBeenCalled();
+    expect(applyIntents([asking()])[0]).toMatchObject({ column: "running", pending: null, lastLine: "Denied: Edit x.ts" });
+    // A stale server copy still asking stays drawn answered; the next request ends the intent.
+    expect(overlay(asking())?.pending).toBeNull();
+    const next = asking({ id: "q" });
+    expect(overlay(next)).toBe(next);
+    expect(overlay(asking())?.pending?.id).toBe("p");
+  });
+
+  it("Me first goes ahead now and calls putFirst", async () => {
+    await firstNow("a", "p");
+    expect(api.putFirst).toHaveBeenCalledWith("a", "p");
+    expect(applyIntents([asking()])[0]).toMatchObject({ pending: null, lastLine: "Allowed: Edit x.ts" });
+  });
+
+  it("Wait shows the card waiting now, until the server shows it waiting", async () => {
+    await waitNow("a", "p");
+    expect(api.waitPermission).toHaveBeenCalledWith("a", "p");
+    expect(applyIntents([asking()])[0]).toMatchObject({ column: "running", pending: { id: "p", waiting: true }, lastLine: "Waiting for ‘Other’" });
+    const waiting = asking({ waiting: true });
+    expect(overlay(waiting)).toBe(waiting);
+  });
+
+  it("leaves a card whose prompt is another one alone", async () => {
+    await answerNow("a", "p", true, () => Promise.resolve());
+    const other = asking({ id: "z" });
+    expect(applyIntents([other])[0]).toBe(other);
+  });
+
+  it("brings the prompt back by reload when the server refuses", async () => {
+    await expect(answerNow("a", "p", true, () => Promise.reject(new Error("gone")))).rejects.toThrow("gone");
+    expect(updates).toEqual([{ kind: "apply" }, { kind: "reload" }]);
+    expect(overlay(asking())?.pending?.id).toBe("p");
+  });
+});
+
+describe("patchNow", () => {
+  it("draws the fields now and lets go once the server's card has them", async () => {
+    await patchNow("a", { starred: true }, () => Promise.resolve());
+    expect(applyIntents([card()])[0]?.starred).toBe(true);
+    expect(overlay(card())?.starred).toBe(true);
+    expect(overlay(card({ starred: true }))?.starred).toBe(true);
+    expect(overlay(card())?.starred).toBeUndefined();
+  });
+
+  it("reads false, missing and [] as the same unset value", async () => {
+    await patchNow("a", { starred: false, tags: [] }, () => Promise.resolve());
+    const plain = card();
+    expect(overlay(plain)).toBe(plain);
+  });
+
+  it("merges a second change, and an older call's timeout leaves it be", async () => {
+    vi.useFakeTimers();
+    await patchNow("a", { starred: true }, () => Promise.resolve());
+    vi.advanceTimersByTime(STOP_SETTLE_MS / 2);
+    await patchNow("a", { title: "B" }, () => Promise.resolve());
+    vi.advanceTimersByTime(STOP_SETTLE_MS / 2);
+    expect(applyIntents([card()])[0]).toMatchObject({ starred: true, title: "B" });
+    vi.advanceTimersByTime(STOP_SETTLE_MS);
+    expect(updates.at(-1)).toEqual({ kind: "reload" });
+    expect(applyIntents([card()])[0]?.title).toBe("A");
+  });
+
+  it("reloads and rethrows when the server refuses, and forget drops it", async () => {
+    await expect(patchNow("a", { archived: true }, () => Promise.reject(new Error("no")))).rejects.toThrow("no");
+    expect(updates).toEqual([{ kind: "apply" }, { kind: "reload" }]);
+    void patchNow("b", { archived: true }, () => new Promise(() => {}));
+    expect(overlayAll([card({ id: "b" })])[0]?.archived).toBe(true);
+    forget("b");
+    expect(overlayAll([card({ id: "b" })])[0]?.archived).toBeUndefined();
   });
 });

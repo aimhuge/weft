@@ -4,6 +4,7 @@
 // the reply box asks) and the reply box, or just the status strip where the review panel stands in for the box or
 // nothing can be sent. Both read what they can offer from the thread's transport (lib/thread-transport.ts): Wait,
 // folder grants and "!" commands only where the Mac itself runs the card.
+import type { TrackSend } from "@/lib/use-pending-sends";
 import type { ReactNode } from "react";
 import type { PlanResets } from "@/lib/schedule";
 import { turnCutOff } from "@/lib/reply-mode";
@@ -25,15 +26,17 @@ const ReplyBox = guarded(() => import("./ReplyBox"), { what: "reply box", classN
 // The request under the thread, with its answers unless the thread is read-only here. answer(allow) marks it answered;
 // an MCP server's form (lib/elicitation.ts) answers with its values too.
 export function PermissionRequest({ card, readOnly, answered, answer }: { card: Card; readOnly: boolean; answered: boolean; answer: (allow: boolean, answers?: Record<string, string>) => void }) {
-  const { grantFolder, waitPermission } = useThreadTransport();
+  const { grantFolder, waitPermission, putFirst } = useThreadTransport();
   const pending = card.pending;
   if (!pending || pending.questions) return null;
 
-  // "This card" / "Always" on an outside-folder prompt: grant the folder, then allow the call (lib/folder-guard.ts).
+  // "This card" / "Always" on an outside-folder prompt: grant the folder and allow the call (lib/folder-guard.ts).
+  // Both go at once, the grant first, so the prompt leaves without waiting on the grant's round trip.
   const grant = (scope: "card" | "always") => {
     const dir = pending.readScope?.directory;
     if (!dir || !grantFolder) return;
-    void grantFolder(card.id, dir, scope).catch(() => {}).finally(() => answer(true));
+    void grantFolder(card.id, dir, scope).catch(() => {});
+    answer(true);
   };
 
   return (
@@ -46,7 +49,7 @@ export function PermissionRequest({ card, readOnly, answered, answer }: { card: 
         {pending.elicitation ? (
           <ElicitationForm elicitation={pending.elicitation} answered={answered} readOnly={readOnly} onAnswer={answer} />
         ) : (
-          <PermissionInput input={pending.input} edit={pending.edit} previewUrl={pending.previewUrl} askedBy={card.title} why={pending.why} />
+          <PermissionInput input={pending.input} edit={pending.edit} previewUrl={pending.previewUrl} askedBy={card.title} why={pending.why} me={card} />
         )}
         {!readOnly && !pending.elicitation && (
           <PermissionActions
@@ -54,6 +57,7 @@ export function PermissionRequest({ card, readOnly, answered, answer }: { card: 
             answered={answered}
             onAnswer={answer}
             onWait={waitPermission && (() => void waitPermission(card.id, pending.id).catch(() => {}))}
+            onFirst={putFirst && (() => void putFirst(card.id, pending.id).catch(() => {}))}
             onGrant={grantFolder && grant}
           />
         )}
@@ -66,7 +70,7 @@ type EditLast = { text: string; canRewind: boolean; fileEdits: number; onEdit: (
 
 // The reply box, or (show false: the review panel stands in, or nothing can be sent) the status strip on its own, so
 // the context and limits stay in view.
-export function ThreadReply({ card, show, live, placeholder, question, scheduling, editLast, onEditing, onSend }: {
+export function ThreadReply({ card, show, live, placeholder, question, scheduling, editLast, onEditing, onSend, track }: {
   card: Card;
   show: boolean;
   live: boolean;
@@ -76,6 +80,8 @@ export function ThreadReply({ card, show, live, placeholder, question, schedulin
   editLast?: EditLast;
   onEditing: (editing: boolean) => void;
   onSend: (text: string) => Promise<void>;
+  // Draws a Send fresh's message in the thread while it's sent (lib/use-pending-sends.ts).
+  track?: TrackSend;
 }): ReactNode {
   const transport = useThreadTransport();
   const { shell } = transport;
@@ -88,7 +94,7 @@ export function ThreadReply({ card, show, live, placeholder, question, schedulin
       midTurn={card.role !== "copilot" && (card.backend === "claude" || card.backend === "puku")}
       sendLater={scheduling && { backend: card.backend, resets: scheduling.resets, scheduled: card.scheduled ?? [] }}
       status={status}
-      stale={cache && fresh ? { cache, onFresh: (message) => fresh(card.id, message) } : undefined}
+      stale={cache && fresh ? { cache, onFresh: (message) => (track ? track(message, () => fresh(card.id, message)) : fresh(card.id, message)) } : undefined}
       cutOff={turnCutOff(card)}
       // No live session: a model/CLI was just switched (lib/backend-switch.ts clears sessionId), or the
       // card was never started. A long-running card whose cache just lapsed still has sessionId set, so

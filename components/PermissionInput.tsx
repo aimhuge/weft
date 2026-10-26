@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { openFile } from "@/lib/open-file";
 import type { EditPreview } from "@/lib/edit-preview";
 import type { PendingPermission, PromptReason } from "@/lib/types";
+import CardFace, { type Face } from "./CardFace";
 import { EditDiff } from "./EditDiff";
 import { useFileLink } from "./file-link-context";
 import { Spinner } from "./Icon";
@@ -35,10 +36,26 @@ export const REASONS: Record<PromptReason["category"], { label: string; tip: str
   outside: { label: "Outside project", tip: "This reaches a folder beyond the card's project. Allow it once, for this card, or for every card." },
 };
 
-function Reason({ why }: { why: PromptReason }) {
+// A clash shows who is in whose way first: the holder's face, then this thread's.
+function Faces({ holder, me }: { holder: NonNullable<PromptReason["holder"]>; me?: Face }) {
+  return (
+    <span className="flex shrink-0 items-center gap-0.5" data-testid="clash-faces">
+      <CardFace face={holder} tip={holder.first ? `‘${holder.title}’ goes first on this file` : `‘${holder.title}’ is editing this code`} />
+      {me && (
+        <>
+          <span aria-hidden className="text-[10px] text-faint">›</span>
+          <CardFace face={me} tip={`‘${me.title}’ (this thread) wants to edit it`} />
+        </>
+      )}
+    </span>
+  );
+}
+
+function Reason({ why, me }: { why: PromptReason; me?: Face }) {
   const { label, tip } = REASONS[why.category];
   return (
     <div className="flex min-w-0 items-center gap-1.5 text-[12px]" title={tip}>
+      {why.holder && <Faces holder={why.holder} me={me} />}
       <span className="shrink-0 rounded bg-warn px-1.5 text-[10.5px] font-bold uppercase leading-[18px] tracking-wide text-[#1a1410]">⚠ {label}</span>
       <span className="min-w-0 truncate text-muted">{why.detail}</span>
     </div>
@@ -53,6 +70,7 @@ export default function PermissionInput({
   previewUrl,
   askedBy,
   why,
+  me,
 }: {
   input: Record<string, unknown>;
   // Why the prompt came up (lib/claims.ts clashWhy, lib/runner-ask.ts modeWhy).
@@ -62,6 +80,8 @@ export default function PermissionInput({
   previewUrl?: string;
   // The asking card's title, its one-line intent.
   askedBy?: string;
+  // The asking card's face, beside the holder's on a clash.
+  me?: Face;
 }) {
   const [raw, setRaw] = useState(false);
   const cardId = useFileLink();
@@ -70,7 +90,7 @@ export default function PermissionInput({
   useEffect(() => {
     if (previewUrl && bridge && cardId) void bridge.browser.open(previewUrl, cardId).catch(() => {});
   }, [previewUrl, bridge, cardId]);
-  const reason = why && <Reason why={why} />;
+  const reason = why && <Reason why={why} me={me} />;
   if (previewUrl && !edit) {
     const open = () => {
       if (cardId) void bridge?.browser.open(previewUrl, cardId).catch(() => {});
@@ -154,12 +174,15 @@ const PRIMARY = "rounded-md bg-accent px-3 py-1.5 text-[12.5px] font-medium text
 const SECONDARY = "rounded-md border border-line-strong bg-panel px-3 py-1.5 text-[12.5px] text-ink hover:bg-sunken disabled:opacity-50";
 
 // The prompt's buttons. An edit another card is holding offers Wait first (lib/permission-wait.ts): going
-// ahead can undo that card's uncommitted change. While it waits, Go ahead and Deny still answer it.
+// ahead can undo that card's uncommitted change. Going ahead is Me first (lib/precedence.ts): the edit goes and
+// the holder is told to leave the file to this thread, so the two don't tangle. Where the transport can't put a
+// card first (weft.zip), a plain Go ahead stands in.
 export function PermissionActions({
   pending,
   answered,
   onAnswer,
   onWait,
+  onFirst,
   onGrant,
 }: {
   pending: PendingPermission;
@@ -167,6 +190,8 @@ export function PermissionActions({
   onAnswer: (allow: boolean) => void;
   // Wait on a symbol claim; left out where the thread's transport can't (weft.zip), so only Go ahead and Deny show.
   onWait?: () => void;
+  // Me first on a symbol claim; left out where the transport can't (weft.zip), like Wait.
+  onFirst?: () => void;
   // A folder outside the project (pending.readScope): allow it for this card or for every card, then answer yes.
   onGrant?: (scope: "card" | "always") => void;
 }) {
@@ -176,6 +201,17 @@ export function PermissionActions({
       Deny
     </button>
   );
+  // Me first, or a plain Go ahead where the transport has no Me first.
+  const ahead = (primary: boolean) =>
+    onFirst ? (
+      <button onClick={onFirst} disabled={answered} className={primary ? PRIMARY : SECONDARY} title={`Go ahead, and ‘${holder?.title}’ leaves this file to this thread until it commits or finishes`}>
+        Me first
+      </button>
+    ) : (
+      <button onClick={() => onAnswer(true)} disabled={answered} className={SECONDARY}>
+        Go ahead
+      </button>
+    );
   if (holder && pending.waiting)
     return (
       <div className="mt-2 flex items-center gap-2">
@@ -184,9 +220,7 @@ export function PermissionActions({
           <span className="truncate">Waiting for ‘{holder.title}’ to finish…</span>
         </span>
         <span className="ml-auto flex shrink-0 gap-2">
-          <button onClick={() => onAnswer(true)} disabled={answered} className={SECONDARY}>
-            Go ahead now
-          </button>
+          {ahead(true)}
           {deny}
         </span>
       </div>
@@ -218,15 +252,22 @@ export function PermissionActions({
         {deny}
       </div>
     );
+  if (holder)
+    return (
+      <div className="mt-2 flex gap-2">
+        {onWait && (
+          <button onClick={onWait} disabled={answered} className={PRIMARY} title={`Hold this edit until ‘${holder.title}’ finishes or commits, then redo it on top`}>
+            Wait
+          </button>
+        )}
+        {ahead(!onWait)}
+        {deny}
+      </div>
+    );
   return (
     <div className="mt-2 flex gap-2">
-      {holder && onWait && (
-        <button onClick={onWait} disabled={answered} className={PRIMARY} title={`Hold this edit until ‘${holder.title}’ finishes or commits, then redo it on top`}>
-          Await resolution
-        </button>
-      )}
-      <button onClick={() => onAnswer(true)} disabled={answered} className={holder && onWait ? SECONDARY : PRIMARY}>
-        {holder ? "Go ahead" : "Allow"}
+      <button onClick={() => onAnswer(true)} disabled={answered} className={PRIMARY}>
+        Allow
       </button>
       {deny}
     </div>

@@ -8,7 +8,7 @@
 import { createContext, useContext } from "react";
 import { apiFetch } from "./api-client";
 import { api } from "./client";
-import { stopNow } from "./optimistic-cards";
+import { firstNow, stopNow, waitNow } from "./optimistic-cards";
 import { filesApi } from "./client-files";
 import { THREAD_PAGE_SIZE } from "./cloud-sync-types";
 import { applyThreadEvent, type ThreadPage } from "./thread-page";
@@ -35,6 +35,8 @@ export interface ThreadTransport {
   // An outside-folder prompt's "This card" (and the question form's "Read from"); "always" adds it to every card.
   grantFolder?: (cardId: string, directory: string, scope: "card" | "always") => Promise<void>;
   waitPermission?: (cardId: string, pendingId: string) => Promise<void>;
+  // Me first on a held edit: it goes ahead and the card holding the code yields the file (lib/precedence.ts).
+  putFirst?: (cardId: string, pendingId: string) => Promise<void>;
   stopTask?: (cardId: string, taskId: string) => Promise<void>;
   // The card folder's files, so file names in the thread link to the editor column (lib/use-file-index.ts).
   listFiles?: (cardId: string) => Promise<string[]>;
@@ -75,7 +77,8 @@ export const localTransport: ThreadTransport = {
   editLast: (cardId, text) => api.editLast(cardId, text).then(() => {}),
   fresh: (cardId, message) => api.fresh(cardId, message).then(() => {}),
   grantFolder: (cardId, directory, scope) => (scope === "always" ? api.allowFolder(directory) : api.setReadScope(cardId, directory)).then(() => {}),
-  waitPermission: (cardId, pendingId) => api.waitPermission(cardId, pendingId).then(() => {}),
+  waitPermission: waitNow,
+  putFirst: firstNow,
   stopTask: (cardId, taskId) => api.stopTask(cardId, taskId).then(() => {}),
   listFiles: (cardId) => filesApi.list(cardId),
   desktop: true,

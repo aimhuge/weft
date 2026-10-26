@@ -10,6 +10,7 @@ import { THREAD_PAGE_SIZE } from "@/lib/cloud-sync-types";
 import { mergeOlderPage, pageThread, type ThreadPage } from "@/lib/thread-page";
 import { useThreadTransport, type ThreadTransport } from "@/lib/thread-transport";
 import type { Card, QuestionReply, ThreadItem } from "@/lib/types";
+import { usePendingSends } from "@/lib/use-pending-sends";
 import { useEditLast } from "@/lib/use-edit-last";
 import { guarded } from "./guarded";
 import { useFileIndex } from "@/lib/use-file-index";
@@ -18,6 +19,7 @@ import { Spinner } from "./Icon";
 import { PermissionRequest, ThreadReply } from "./ThreadFooter";
 import { ThreadEntries, groupThread } from "./ThreadItems";
 import FirstMessageErrorBanner from "./FirstMessageErrorBanner";
+import YouFirst from "./YouFirst";
 import { firstMessageFailed } from "@/lib/first-message-failed";
 
 // Loaded in its own CrashGuard (components/guarded.tsx), so a broken strip leaves the thread and its reply box.
@@ -96,7 +98,9 @@ export default function ThreadView({
   const transport = useThreadTransport();
   // The folder's files, re-read as the thread grows, so the names it mentions link to the editor column.
   const fileIndex = useFileIndex(card.id, card.cwd, transport.listFiles, page.total);
-  const { editLast, editFrom, onEditing } = useEditLast(card, page.items, transport.editLast, () => (stick.current = true));
+  // Your sends, drawn in the thread the moment you press Enter until the server's copy lands (lib/pending-sends.ts).
+  const sends = usePendingSends(card.id, page);
+  const { editLast, editFrom, onEditing } = useEditLast(card, page.items, transport.editLast, () => (stick.current = true), (text, call, after) => sends.track(text, call, page.start + after));
   const question = questionFor(card, onAnswer, transport);
   const showReply = !readOnly && (!replaceReply || Boolean(question));
 
@@ -199,11 +203,11 @@ export default function ThreadView({
   }
 
   async function send(text: string) {
-    await onSend(text);
     stick.current = true;
+    await sends.track(text, () => onSend(text));
   }
 
-  const entries = groupThread(transport.useView(page.items));
+  const entries = groupThread(transport.useView(sends.items));
 
   return (
     <>
@@ -255,10 +259,11 @@ export default function ThreadView({
         />
       </div>
 
+      {!readOnly && <YouFirst cardId={card.id} />}
       <PermissionRequest card={card} readOnly={readOnly} answered={answered} answer={answer} />
       <TaskStrip cardId={card.id} tasks={card.tasks} onStop={transport.stopTask} />
       {footer}
-      <ThreadReply card={card} show={showReply} live={live} placeholder={placeholder} question={question} scheduling={scheduling} editLast={editLast} onEditing={onEditing} onSend={send} />
+      <ThreadReply card={card} show={showReply} live={live} placeholder={placeholder} question={question} scheduling={scheduling} editLast={editLast} onEditing={onEditing} onSend={send} track={sends.track} />
     </>
   );
 }
