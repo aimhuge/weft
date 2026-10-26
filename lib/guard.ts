@@ -8,13 +8,18 @@ import { shellToken } from "./shell-token";
 // not be able to read the board, its project paths or the names of the secrets in the vault. The desktop app
 // swaps the board window's x-weft-token for the launch token on all of its own requests
 // (electron/api-token.cjs), so the board keeps working and a thread's plain `1` still works for reads and
-// non-elevated writes. Where there is no token (dev in a browser, tests) every check no-ops.
+// non-elevated writes. With no token on disk the API fails closed: a missing or unreadable file must not open
+// it up. Electron main writes the token before it starts the server (electron/main.cjs `boot`), so first launch
+// has one. Only tests and a server started with WEFT_NO_TOKEN=1 (`pnpm dev` in a plain browser) run without.
 const LOCAL_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
 
+export function tokenOptional(env: Record<string, string | undefined> = process.env): boolean {
+  return Boolean(env.VITEST) || env.WEFT_NO_TOKEN === "1";
+}
+
 function hasToken(req: Request, requireOne = false): boolean {
-  if (requireOne && !shellToken()) return false;
   const want = shellToken();
-  if (!want) return true; // not the desktop app (dev in a browser, tests): no token exists
+  if (!want) return !requireOne && tokenOptional();
   const got = req.headers.get("x-weft-token") ?? "";
   return got.length === want.length && crypto.timingSafeEqual(Buffer.from(got), Buffer.from(want));
 }

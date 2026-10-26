@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { elevated, fail, guard } from "./guard";
+import { elevated, fail, guard, tokenOptional } from "./guard";
 
 const token = vi.hoisted(() => ({ value: "" }));
 vi.mock("./shell-token", () => ({ shellToken: () => token.value }));
@@ -61,6 +61,23 @@ describe("guard reads with the launch token", () => {
   it("asks nothing where there is no token (a browser, tests)", () => {
     expect(read({})).toBeNull();
     expect(read({ "x-weft-token": "1" })).toBeNull();
+  });
+
+  it("fails closed with no token outside tests and plain-browser dev", async () => {
+    vi.stubEnv("VITEST", "");
+    try {
+      const res = read({});
+      expect(res?.status).toBe(403);
+      expect(((await res!.json()) as { error: string }).error).toBe("Missing token");
+      expect(read({ "x-weft-token": "anything" })?.status).toBe(403);
+      // The board's own "1" still reads and makes ordinary writes, as it does once a token exists.
+      expect(read({ "x-weft-token": "1" })).toBeNull();
+      expect(elevated(req({ host: "localhost:3456", "x-weft-token": "1" }))?.status).toBe(403);
+      vi.stubEnv("WEFT_NO_TOKEN", "1");
+      expect(read({})).toBeNull();
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it("still checks the host first", () => {
@@ -129,5 +146,14 @@ describe("elevated writes", () => {
     token.value = "t";
     expect(elevated(req({ host: "evil.com", "x-weft-token": "t" }))?.status).toBe(403);
     expect(send({})?.status).toBe(403);
+  });
+});
+
+describe("tokenOptional", () => {
+  it("is on only under Vitest or WEFT_NO_TOKEN=1", () => {
+    expect(tokenOptional({ VITEST: "true" })).toBe(true);
+    expect(tokenOptional({ WEFT_NO_TOKEN: "1" })).toBe(true);
+    expect(tokenOptional({ WEFT_NO_TOKEN: "true" })).toBe(false);
+    expect(tokenOptional({})).toBe(false);
   });
 });

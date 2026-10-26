@@ -30,7 +30,7 @@ There is no per-route "sensitive" flag any more: it existed when reads were unau
 (account, account/team, account/billing, settings, services, github/collaborators). The desktop app adds the token to the board window's
 requests only (`electron/api-token.cjs`, a `webRequest` hook on the default session; the browser pane is another partition), and it is
 the control server's token, which threads can't read. The one thing the pane gets is the plain read value `1` on GET/HEAD of
-`/api/attachments/*` on both `127.0.0.1` and `localhost` at Weft's port (`attachPaneAttachments`; Next names its own origin `localhost`, which the commit walk-through's picture links use), so a page a thread opens can show a card's pictures: an `<img>` can't send a header. With no token on disk (tests, or before Weft has ever launched) the check is off.
+`/api/attachments/*` on both `127.0.0.1` and `localhost` at Weft's port (`attachPaneAttachments`; Next names its own origin `localhost`, which the commit walk-through's picture links use), so a page a thread opens can show a card's pictures: an `<img>` can't send a header. With no token on disk the API fails closed (`lib/guard.ts`): a read without `1` and every elevated write get 403, since main writes the token before it starts the server (`electron/main.cjs` `boot`), so a missing file means something is wrong, not a first launch. Only Vitest and a server started with `WEFT_NO_TOKEN=1` (`pnpm dev` / `pnpm dev:web` in a plain browser, which set it) run without one.
 `weft://reply|commit` links act only from a real file under `~/.weft` (`ownPage`, `electron/page-links.cjs`).
 
 ## Auto mode's classifier denials
