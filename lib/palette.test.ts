@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { type PaletteItem, paletteResults, score } from "./palette";
+import { type PaletteItem, paletteResults, RECENT_MORE_ID, score } from "./palette";
 
 const item = (id: string, group: PaletteItem["group"], label: string, extra: Partial<PaletteItem> = {}): PaletteItem => ({
   id,
@@ -47,6 +47,21 @@ describe("paletteResults", () => {
     expect(out[0]).toBe("cmd");
     expect(out).toContain("pr");
     expect(paletteResults(items, "card", { query: "old", items: [prompt] }, null).map((i) => i.id)).not.toContain("pr");
+  });
+
+  it("shows five recent moves and a row for the rest, all of them once expanded", () => {
+    const moves = Array.from({ length: 8 }, (_, i) => item(`r${i}`, "Recently changed", `moved ${i}`, { cardId: `k${i}` }));
+    const cards = Array.from({ length: 8 }, (_, i) => item(`k${i}`, "Cards", `card ${i}`, { cardId: `k${i}` }));
+    const folded = paletteResults([...moves, ...cards], "", none, null);
+    expect(folded.slice(0, 6).map((i) => i.id)).toEqual(["r0", "r1", "r2", "r3", "r4", RECENT_MORE_ID]);
+    expect(folded[5]?.label).toBe("Show 3 more");
+    expect(folded.filter((i) => i.group === "Cards").map((i) => i.id)).toEqual(["k5", "k6", "k7"]);
+    const open = paletteResults([...moves, ...cards], "", none, null, true);
+    expect(open.map((i) => i.id)).toEqual(moves.map((i) => i.id));
+  });
+
+  it("has no show-more row when every recent move fits", () => {
+    expect(paletteResults(items, "", none, null).map((i) => i.id)).not.toContain(RECENT_MORE_ID);
   });
 
   it("caps cards at 30", () => {

@@ -33,6 +33,11 @@ export type PaletteItem = {
 const GROUPS: PaletteItem["group"][] = ["Commands", "Projects", "Cards", "Prompts"];
 export const CARD_LIMIT = 30;
 export const RECENT_CARDS = 6;
+// Recent moves shown before "Show more"; the board hands the palette up to RECENT_MOVE_LIMIT of them.
+export const RECENT_MOVES = 5;
+export const RECENT_MOVE_LIMIT = 30;
+// The row that opens the rest of the recent moves in place, instead of running and closing.
+export const RECENT_MORE_ID = "recent-more";
 
 // Every word typed must appear somewhere; earlier and label matches rank higher. null means no match.
 export function score(item: PaletteItem, words: string[]): number | null {
@@ -48,6 +53,9 @@ export function score(item: PaletteItem, words: string[]): number | null {
   return total;
 }
 
+function showMoreItem(hidden: number): PaletteItem {
+  return { id: RECENT_MORE_ID, group: "Recently changed", label: `Show ${hidden} more`, detail: "newest first", icon: "clock", run: () => {} };
+}
 
 // The palette's rows for the typed query: with nothing typed, recent moves, commands, projects and the
 // latest cards; otherwise each group's hits ranked by score, plus the prompts matching this very query.
@@ -56,17 +64,21 @@ export function paletteResults(
   query: string,
   prompts: { query: string; items: PaletteItem[] },
   scope: string | null,
+  allRecent = false,
 ): PaletteItem[] {
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);
   const inScope = (i: PaletteItem) => !scope || i.root === undefined || i.root === scope;
   const byGroup = (group: PaletteItem["group"]) => items.filter((i) => i.group === group && inScope(i));
   if (words.length === 0) {
-    // Nothing typed: the cards that just changed column, every command and project, and the latest
-    // other cards (items arrive newest first).
-    const moved = byGroup("Recently changed");
+    // Nothing typed: the cards that just changed column (the first few, then a row that shows the rest),
+    // every command and project, and the latest other cards (items arrive newest first).
+    const allMoved = byGroup("Recently changed");
+    const moved = allRecent ? allMoved : allMoved.slice(0, RECENT_MOVES);
+    const hidden = allMoved.length - moved.length;
+    const more: PaletteItem[] = hidden > 0 ? [showMoreItem(hidden)] : [];
     const shown = new Set(moved.map((i) => i.cardId));
     const latest = byGroup("Cards").filter((i) => !shown.has(i.cardId));
-    return [...moved, ...byGroup("Commands"), ...byGroup("Projects"), ...latest.slice(0, RECENT_CARDS)];
+    return [...moved, ...more, ...byGroup("Commands"), ...byGroup("Projects"), ...latest.slice(0, RECENT_CARDS)];
   }
   const promptItems = prompts.query === query.trim() ? prompts.items.filter(inScope) : [];
   return GROUPS.flatMap((group) => {

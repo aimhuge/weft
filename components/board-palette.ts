@@ -7,6 +7,7 @@ import { SCENES, setTheme, THEMES } from "@/lib/theme";
 import { replayWelcome } from "@/lib/welcome-client";
 import { replayLastAchievement } from "@/lib/achievement-replay";
 import { COLUMNS, type Card, type Column } from "@/lib/types";
+import { RECENT_MOVE_LIMIT } from "@/lib/palette";
 import type { PaletteItem } from "./CommandPalette";
 import { folderName, SORTS } from "./ProjectBar";
 
@@ -169,7 +170,7 @@ export function boardPaletteItems(s: PaletteState, a: PaletteActions): PaletteIt
   });
   const cardItems = s.cards.filter((c) => c.role !== "copilot").toSorted(SORTERS.active).map(cardItem);
   // Shown only before you type; the same cards still match a search under Cards.
-  const movedItems = recentMoves(s.cards, now).map((card): PaletteItem => ({
+  const movedItems = recentMoves(s.cards, now, RECENT_MOVE_LIMIT).map((card): PaletteItem => ({
     ...cardItem(card),
     id: `moved-${card.id}`,
     group: "Recently changed",

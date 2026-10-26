@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { type PaletteItem, paletteResults } from "@/lib/palette";
+import { type PaletteItem, paletteResults, RECENT_MORE_ID } from "@/lib/palette";
 import Icon from "./Icon";
 import Modal from "./Modal";
 import { COLUMN_LABEL, COLUMN_PILL, ItemText, KeyCaps, ProjectChip, projectInk } from "./PaletteRows";
@@ -32,6 +32,7 @@ export default function CommandPalette({
   const [prompts, setPrompts] = useState<{ query: string; items: PaletteItem[] }>({ query: "", items: [] });
   const [active, setActive] = useState(0);
   const [scoped, setScoped] = useState(true);
+  const [allRecent, setAllRecent] = useState(false);
   const scope = scoped && currentProject ? currentProject.path : null;
   const list = useRef<HTMLUListElement>(null);
   // The board makes a new findPrompts on every render; a pending search shouldn't restart for that.
@@ -57,7 +58,10 @@ export default function CommandPalette({
     };
   }, [query]);
 
-  const results = useMemo(() => paletteResults(items, query, prompts, scope), [items, query, prompts, scope]);
+  const results = useMemo(
+    () => paletteResults(items, query, prompts, scope, allRecent),
+    [items, query, prompts, scope, allRecent],
+  );
 
   const current = Math.min(active, Math.max(0, results.length - 1));
 
@@ -67,6 +71,11 @@ export default function CommandPalette({
 
   function choose(item: PaletteItem | undefined) {
     if (!item) return;
+    // "Show more" opens the rest of the recent moves in place; the highlight stays put, on the first of them.
+    if (item.id === RECENT_MORE_ID) {
+      setAllRecent(true);
+      return;
+    }
     onClose();
     // After the palette has unmounted, so a command that moves focus keeps it.
     setTimeout(item.run, 0);
