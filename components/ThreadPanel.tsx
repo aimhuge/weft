@@ -24,6 +24,8 @@ import CopilotEmpty from "./CopilotEmpty";
 // The same panel opens a card on weft.zip, inside a transport that isn't the desktop's (lib/thread-transport.ts):
 // there the title, CLI and mode are read-only and the card's own actions (skills, star, archive, delete, the review
 // panel, Send later) stay on the Mac, so the callbacks for them are left out.
+// The header's ⏰: put the thread on a cron (docs/architecture/crons.md).
+const ThreadCronButton = guarded(() => import("./ThreadCronButton"), { what: "cron button" });
 const ReviewPanel = guarded(() => import("./ReviewPanel"), { what: "review panel", className: "mx-4 my-2" });
 
 export default function ThreadPanel({
@@ -120,6 +122,7 @@ export default function ThreadPanel({
             <CardActions card={card} live={live} onSend={onSend} onShare={onShare} onStar={onStar} onArchive={onArchive} onDelete={onDelete} marksInPane={marksInPane} />
           )
         )}
+        <ThreadCronButton card={card} items={items} />
         <EditorToggle open={editorOpen} onClick={onEditor} />
         {onClose && (
           <button

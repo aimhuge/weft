@@ -7,6 +7,7 @@ import type { ThreadItem } from "@/lib/types";
 import CrashGuard from "./CrashGuard";
 import Icon from "./Icon";
 import Markdown from "./Markdown";
+import RepeatFromHere from "./RepeatFromHere";
 import SecretAskInput from "./SecretAskInput";
 import ShellLine from "./ShellLine";
 import ToolLine from "./ToolLine";
@@ -86,7 +87,8 @@ export const ThreadMessage = memo(function ThreadMessage({ item, cardId }: { ite
   switch (item.kind) {
     case "user":
       return (
-        <div className="ml-10 rounded-lg bg-accent-soft px-3 py-2">
+        <div className="group relative ml-10 rounded-lg bg-accent-soft px-3 py-2">
+          <RepeatFromHere cardId={cardId} id={item.id} text={item.text} />
           <Markdown text={item.text} />
           {item.midTurn && <p className="mt-1 text-[11px] text-muted">Sent mid-turn · read after the next tool call</p>}
         </div>

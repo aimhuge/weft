@@ -9,7 +9,7 @@ import type { Card } from "./types";
 // "admin" is the SuperAdmin group (Users, Billing, Coupons, Settings) — visible only when the signed-in Weft
 // account is on SUPER_ADMIN_EMAILS (lib/admin.ts). It doesn't open a drawer; it renders a
 // popover with the two admin links, since the pages live at /admin/users and /admin/settings.
-export type RailPanel = "tags" | "vault" | "webhooks" | "vercel" | "supabase" | "cloudflare" | "blastcp" | "github" | "slack" | "services" | "skills" | "admin";
+export type RailPanel = "tags" | "vault" | "webhooks" | "vercel" | "supabase" | "cloudflare" | "blastcp" | "github" | "slack" | "services" | "skills" | "crons" | "admin";
 
 // The board narrowed to starred cards, a tag, or both. Empty shows everything.
 export interface RailFilter {

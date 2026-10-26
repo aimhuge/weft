@@ -3,11 +3,13 @@
 // The board's row of columns: the <main> sheet and one BoardColumn per visible column, with the
 // column-specific extras (Backlog's sprints and reorder, Review's Resume all / Review all / filter
 // chips, Running and Needs you's Switch all) wired by column id here so Board only passes state in.
-import type { DragEvent, MouseEvent, ReactNode } from "react";
+import { useMemo, type DragEvent, type MouseEvent, type ReactNode } from "react";
 import type { Card, Column } from "@/lib/types";
 import type { LaneState } from "@/lib/copilot-lane";
 import { reviewFilterCounts, type ReviewFilter, type ReviewFilterKey } from "@/lib/board-view";
+import { stackRuns } from "@/lib/cron-stacks";
 import BoardColumn, { COLUMN_LIMIT } from "./BoardColumn";
+import CronStack from "./CronStack";
 
 export interface BoardColumnsProps {
   columns: readonly { id: Column; label: string }[];
@@ -55,7 +57,18 @@ export interface BoardColumnsProps {
   notify: (err: unknown) => void;
 }
 
-export default function BoardColumns(props: BoardColumnsProps) {
+export default function BoardColumns(given: BoardColumnsProps) {
+  // A cron's runs fold into a stack under the thread they came from (lib/cron-stacks.ts, components/CronStack.tsx).
+  const { byColumn: folded, stacks } = useMemo(() => stackRuns(given.byColumn), [given.byColumn]);
+  const { renderCard } = given;
+  const props: BoardColumnsProps = {
+    ...given,
+    byColumn: folded,
+    renderCard: (card) => {
+      const runs = stacks.get(card.id);
+      return runs ? <CronStack holder={card} runs={runs} renderCard={renderCard} /> : renderCard(card);
+    },
+  };
   const { columns, byColumn, expanded, onNew } = props;
   return (
     <main

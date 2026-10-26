@@ -12,6 +12,8 @@ import { filterVaults, railBadge } from "@/lib/vault-view";
 import { useVercelDrift } from "@/lib/use-vercel-drift";
 import { driftBadge, shownDrift, vaultKey } from "@/lib/vercel-drift";
 import { useServices } from "@/lib/use-services";
+import { useCrons } from "@/lib/use-crons";
+import { activeCount, cronsTitle } from "@/lib/crons-view";
 import { filterServices, liveCount, servicesTitle } from "@/lib/services-view";
 import { useWebhooks } from "@/lib/use-webhooks";
 import { blankCount, failingCount, filterWebhooks, webhooksTitle } from "@/lib/webhooks-view";
@@ -33,6 +35,7 @@ import BlastcpDrawer from "./BlastcpDrawer";
 import BlastcpLogo from "./BlastcpLogo";
 import CloudflareDrawer from "./CloudflareDrawer";
 import ServicesDrawer from "./ServicesDrawer";
+import CronsDrawer from "./CronsDrawer";
 import SkillsDrawer from "./SkillsDrawer";
 import CloudflareLogo from "./CloudflareLogo";
 import GithubDrawer from "./GithubDrawer";
@@ -63,10 +66,12 @@ import "./rail-drawer.css";
 // and GitHub's mark on the gh sign-in and each one's issue sync, Slack's hash on the workspace Weft posts to.
 // Below 🖥 Services, the mini apps saved from the browser pane (components/AppsRail.tsx).
 // The drawers under the divider, each with its icon, title and label.
-const TOOLS = { vault: ["🔐", "Secrets", "Secrets vault"], webhooks: ["🪝", "Webhooks", "Webhooks"], vercel: ["▲", "Vercel", "Vercel"], supabase: [<SupabaseLogo key="supabase" />, "Supabase", "Supabase"], cloudflare: [<CloudflareLogo key="cloudflare" />, "Cloudflare", "Cloudflare"], blastcp: [<BlastcpLogo key="blastcp" />, "BlastCP", "BlastCP"], github: [<GithubLogo key="github" />, "GitHub", "GitHub"], slack: [<SlackLogo key="slack" />, "Slack", "Slack"], services: ["🖥", "Services", "Services"], skills: ["✦", "Skills", "Skills"] } as const;
+const TOOLS = { crons: ["⏰", "Crons", "Crons"], vault: ["🔐", "Secrets", "Secrets vault"], webhooks: ["🪝", "Webhooks", "Webhooks"], vercel: ["▲", "Vercel", "Vercel"], supabase: [<SupabaseLogo key="supabase" />, "Supabase", "Supabase"], cloudflare: [<CloudflareLogo key="cloudflare" />, "Cloudflare", "Cloudflare"], blastcp: [<BlastcpLogo key="blastcp" />, "BlastCP", "BlastCP"], github: [<GithubLogo key="github" />, "GitHub", "GitHub"], slack: [<SlackLogo key="slack" />, "Slack", "Slack"], services: ["🖥", "Services", "Services"], skills: ["✦", "Skills", "Skills"] } as const;
 type Tool = keyof typeof TOOLS;
 const DRAWER_SLIDE_MS = 200;
 const isTool = (panel: RailPanel | null): panel is Tool => panel !== null && panel in TOOLS;
+// The drawers with an intro video (lib/feature-intros.ts); ⏰ Crons has none yet.
+const introOf = (panel: RailPanel | null) => (isTool(panel) && panel !== "crons" ? panel : null);
 // ▲'s hover text: the drift between the vault and Vercel when there is one, else Vercel's own.
 const vercelRailTitle = (driftTitle: string, status: VercelStatus | null, project: string | null) => driftTitle || vercelTitle(status, project);
 
@@ -108,7 +113,7 @@ export default function SideRail({
   const { shown, closing } = useSlideOut(open, DRAWER_SLIDE_MS);
   const drawerWidth = useDrawerWidth();
   // The open tool drawer's intro video, played the first time it opens (lib/feature-intros.ts).
-  const intro = useFeatureIntro(isTool(shown) && !closing ? shown : null);
+  const intro = useFeatureIntro(closing ? null : introOf(shown));
   const router = useRouter();
   const isSuperAdmin = useSuperAdminGate();
   const vault = useVault(folders);
@@ -126,6 +131,8 @@ export default function SideRail({
   const services = useServices(open === "services");
   const liveServices = liveCount(filterServices(services.services, project));
   const starred = starredCount(cards);
+  // ⏰ under 🏷: the crons, counted while they'll run again (components/CronsDrawer.tsx).
+  const crons = useCrons();
 
   function pin(next: boolean) {
     setPinned(next);
@@ -167,6 +174,7 @@ export default function SideRail({
   );
 
   const toolBodies: Record<Tool, React.ReactNode> = {
+    crons: <CronsDrawer {...crons} cards={cards} onOpenCard={onOpenCard} notify={notify} />,
     vault: <VaultDrawer {...vault} project={project} notify={notify} />,
     webhooks: <WebhooksDrawer {...webhooks} project={project} folders={folders} notify={notify} />,
     vercel: <VercelDrawer {...vercel} project={project} onOpenUrl={onOpenUrl} notify={notify} />,
@@ -192,6 +200,7 @@ export default function SideRail({
       <nav className="flex w-[38px] flex-col items-center gap-1 border-r border-line bg-panel pt-2" aria-label="Rail">
         <StarRailButton on={Boolean(filter.starred)} count={starred} cardDrag={cardDrag} onClick={() => onFilter({ ...filter, starred: !filter.starred })} onDropCard={onDropStar} />
         <TagsRailButton open={open === "tags"} tag={filter.tag} cardDrag={cardDrag} onOpen={(next) => onOpen(next ? "tags" : null)} />
+        <RailIconButton icon="⏰" label="Crons" open={open === "crons"} title={cronsTitle(crons.crons)} count={activeCount(crons.crons)} tone="ok" onClick={toggle("crons")} />
         <span className="my-1 h-px w-5 bg-line" aria-hidden />
         <VaultButton open={open === "vault"} badge={vaultBadge} onClick={() => onOpen(open === "vault" ? null : "vault")} />
         <RailIconButton

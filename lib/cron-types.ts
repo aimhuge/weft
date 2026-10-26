@@ -1,5 +1,6 @@
 // A cron runs a thread again on a schedule (docs/architecture/crons.md). Shared by the server (lib/crons.ts), the
 // API (app/api/crons) and the board (the ⏰ popover, the rail's Crons drawer, the stacked source card).
+import type { ThreadAgent } from "./agents";
 import type { Backend, PermissionMode } from "./types";
 import type { Effort } from "./types-settings";
 
@@ -28,6 +29,8 @@ export interface Cron {
   permissionMode: PermissionMode;
   model?: string;
   effort?: Effort;
+  // Who each run's thread is (lib/agents.ts): the source card's agent; none is Builder.
+  agent?: ThreadAgent;
   // The card it was made from: a fork's source, and the card whose stack holds the runs on the board.
   sourceId?: string;
   // A fork's starting point: the source's session and the transcript entry each run resumes at (none: the whole session).

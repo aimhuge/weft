@@ -36,6 +36,8 @@ const created: { input: Record<string, unknown>; out: Card }[] = [];
 const updated: { id: string; patch: Partial<Card> }[] = [];
 
 vi.mock("./store", () => ({
+  // The cron tools (lib/cron-tools.ts) reach modules that read the data folder as they load.
+  DATA_DIR: "/tmp/weft-board-tools-test",
   createCard: (input: Record<string, unknown>) => {
     const card: Card = {
       id: `c${created.length + 1}`,
@@ -104,6 +106,7 @@ vi.mock("./folders", async () => {
 });
 
 import { COPILOT_PROMPT, SAFE_BOARD_TOOLS, boardMcpServer, createBoardCard, describeBoardTool, isTrustedTool, weftMcpServer } from "./board-tools";
+import { CRON_TOOL_NAMES } from "./cron-types";
 
 const card = (over: Partial<Card> = {}): Card =>
   ({
@@ -280,10 +283,12 @@ describe("weftMcpServer", () => {
     expect(nth(created, 0, "created card").input).toMatchObject({ tags: ["docs"], tagsBy: "user" });
   });
 
-  it("registers only list_cards, create_card, restart_weft_when_idle, request_folder_access and the changelog (no read, start, send, move, stop, answer)", () => {
+  it("registers only list_cards, create_card, restart_weft_when_idle, request_folder_access, the changelog, the crons and the skill tools (no read, start, send, move, stop, answer)", () => {
     weftMcpServer(() => "parent-1", { start: vi.fn() });
     expect(captures.map((t) => t.name)).toEqual([
       "list_cards", "create_card", "restart_weft_when_idle", "request_folder_access", "changelog_add", "changelog_list", "changelog_edit",
+      ...CRON_TOOL_NAMES,
+      "skill_preview", "skill_review", "skill_install",
     ]);
     expect(["list_cards", "create_card"].every((name) => SAFE_BOARD_TOOLS.has(name))).toBe(true);
     expect(SAFE_BOARD_TOOLS.has("start_card")).toBe(false);
@@ -427,7 +432,7 @@ describe("weftMcpServer", () => {
 describe("boardMcpServer (copilot)", () => {
   it("registers the full set of board tools for the copilot", () => {
     boardMcpServer({ start: vi.fn(), stop: async () => {}, answer: vi.fn(), isBusy: () => false });
-    const names = ["list_cards", "read_thread", "create_card", "set_tags", "start_card", "send_message", "move_card", "stop_card", "setup_status", "answer_permission"];
+    const names = ["list_cards", "read_thread", "create_card", "set_tags", "start_card", "send_message", "move_card", "stop_card", "setup_status", "answer_permission", ...CRON_TOOL_NAMES];
     expect(captures.map((t) => t.name)).toEqual(names);
   });
 

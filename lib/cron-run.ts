@@ -45,6 +45,7 @@ function runCard(cron: Cron, n: number, now: number): Card {
     permissionMode: cron.permissionMode,
     model: cron.model,
     effort: cron.effort,
+    ...(cron.agent ? { agent: cron.agent } : {}),
     cronId: cron.id,
     cronRun: n,
     cronOf: stackHolder(cron),

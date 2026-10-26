@@ -52,9 +52,9 @@ function sourceOf(input: CronInput): Card | undefined {
   return card;
 }
 
-// Where and how each run's card works: the source card's folder, CLI, mode, model and effort, or what was sent.
-function workOf(input: CronInput, source?: Card): Pick<Cron, "cwd" | "backend" | "permissionMode" | "model" | "effort"> {
-  if (source) return { cwd: source.cwd, backend: source.backend, permissionMode: source.permissionMode, model: source.model, effort: source.effort };
+// Where and how each run's card works: the source card's folder, CLI, mode, model, effort and agent, or what was sent.
+function workOf(input: CronInput, source?: Card): Pick<Cron, "cwd" | "backend" | "permissionMode" | "model" | "effort" | "agent"> {
+  if (source) return { cwd: source.cwd, backend: source.backend, permissionMode: source.permissionMode, model: source.model, effort: source.effort, ...(source.agent ? { agent: source.agent } : {}) };
   return {
     cwd: resolveFolder(input.cwd),
     backend: input.backend ?? "claude",

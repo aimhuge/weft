@@ -36,6 +36,7 @@ vi.mock("@/lib/use-blastcp", () => ({ useBlastcp: vi.fn(noopDataHook) }));
 vi.mock("@/lib/use-cloudflare", () => ({ useCloudflare: vi.fn(noopDataHook) }));
 vi.mock("@/lib/use-github", () => ({ useGithub: vi.fn(noopDataHook) }));
 vi.mock("@/lib/use-slack", () => ({ useSlack: vi.fn(noopDataHook) }));
+vi.mock("@/lib/use-crons", () => ({ useCrons: () => ({ crons: [], error: null, create: vi.fn(), update: vi.fn(), remove: vi.fn(), run: vi.fn() }) }));
 vi.mock("@/lib/use-services", () => ({ useServices: () => ({ services: [], loaded: true, error: null, reload: vi.fn(), kill: vi.fn(), restart: vi.fn(), refreshMs: 2000 }) }));
 
 // Drawers' bodies are stubs — they're gated behind their own open state and
