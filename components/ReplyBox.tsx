@@ -125,6 +125,13 @@ export default function ReplyBox({
     onEditing?.(on);
   }
 
+  // A send that failed: its text goes back in the box, unless you've started another message there since.
+  function putBack(text: string) {
+    if (!composer.current?.isEmpty()) return;
+    composer.current.write(text);
+    saveDraft(text, true);
+  }
+
   function cancelEdit() {
     composer.current?.clear();
     saveDraft("", true);
@@ -137,11 +144,14 @@ export default function ReplyBox({
       cancelEdit();
       return;
     }
+    // The box empties and the edit is drawn at once; a refusal brings the edit back to finish.
     setSending(true);
+    cancelEdit();
     try {
       await editLast.onEdit(text);
-      cancelEdit();
     } catch (err) {
+      putBack(text);
+      setEditing(true);
       setErrorWrap(err);
     } finally {
       setSending(false);
@@ -191,16 +201,19 @@ export default function ReplyBox({
       composer.current?.clear();
       return;
     }
+    // The box empties now and the thread draws the message (lib/use-pending-sends.ts), so a send never looks
+    // ignored; a refusal puts the text back.
     setSending(true);
+    saveDraft("", true);
+    composer.current?.clear();
     try {
       // Send now: interrupt the running turn first, then the message goes out as the next one.
       if (live && now) await onStop();
       await onSend(text);
       captureReply();
       queued.resume();
-      saveDraft("", true);
-      composer.current?.clear();
     } catch (err) {
+      putBack(text);
       setErrorWrap(err);
     } finally {
       setSending(false);
@@ -223,21 +236,22 @@ export default function ReplyBox({
       return;
     }
     setSending(true);
+    if (text === undefined) {
+      composer.current?.clear();
+      saveDraft("", true);
+    }
     try {
       await stale.onFresh(message);
-      if (text === undefined) {
-        composer.current?.clear();
-        saveDraft("", true);
-      }
       captureReply();
     } catch (err) {
+      if (text === undefined) putBack(message);
       setErrorWrap(err);
     } finally {
       setSending(false);
     }
   }
 
-  const { scheduleAt, unschedule, takeBackScheduled } = useReplySchedule(cardId, composer, saveDraft, setErrorWrap);
+  const { scheduleAt, unschedule, takeBackScheduled, scheduled } = useReplySchedule(cardId, composer, saveDraft, setErrorWrap, sendLater?.scheduled);
   const { onKeyDownCapture, onKeyDown } = useReplyKeys({
     composer,
     form,
@@ -257,7 +271,6 @@ export default function ReplyBox({
     setError: setErrorWrap,
   });
 
-  const scheduled = sendLater?.scheduled ?? [];
   // Send fresh is offered to Claude and puku (stale is set there). Codex never sets it; for codex the
   // new session in the same card isn't supported (lib/splice.ts sendFresh refuses codex), so the primary
   // falls back to plain Send with the no-prior-context chip and Continue is hidden.
