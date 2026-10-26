@@ -2,6 +2,7 @@
 // files (`pnpm test lib/x.test.ts`) is quick and goes straight through. Either way a signal that stops this
 // script reaches vitest too (scripts/one-at-a-time.mjs runHolding). Usage: node scripts/run-tests.mjs [vitest args...]
 import { spawn } from "node:child_process";
+import fs from "node:fs";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
@@ -21,13 +22,26 @@ export function isFiltered(args) {
 // Where a run of named files writes its coverage report. Vitest empties its reports folder before a coverage
 // run, so a scoped `pnpm test lib/x.test.ts --coverage` used to replace the whole-repo coverage/coverage-summary.json
 // (which the header's code quality score reads, lib/coverage.ts) with one file's numbers, or none at all.
-export const SCOPED_COVERAGE_DIR = path.join(os.tmpdir(), "weft-coverage-scoped");
+// Each run gets its own folder under this root (makeScopedCoverageDir): two at once (two cards, or a card
+// and its subagents) sharing one folder failed with "Something removed the coverage directory".
+export const SCOPED_COVERAGE_ROOT = path.join(os.tmpdir(), "weft-coverage-scoped");
 
-// A named-file run's args, its coverage report moved out of coverage/ unless it names its own folder.
-export function scopedCoverageArgs(args) {
+// True when a run asks for coverage and leaves the report folder to us.
+export function wantsScopedCoverage(args) {
   const coverage = args.some((arg) => arg === "--coverage" || arg.startsWith("--coverage."));
-  if (!coverage || args.some((arg) => arg.startsWith("--coverage.reportsDirectory"))) return args;
-  return [...args, `--coverage.reportsDirectory=${SCOPED_COVERAGE_DIR}`];
+  return coverage && !args.some((arg) => arg.startsWith("--coverage.reportsDirectory"));
+}
+
+// A fresh folder of this run's own under SCOPED_COVERAGE_ROOT, for one named-file coverage report.
+export function makeScopedCoverageDir(root = SCOPED_COVERAGE_ROOT) {
+  fs.mkdirSync(root, { recursive: true });
+  return fs.mkdtempSync(path.join(root, `${process.pid}-`));
+}
+
+// A named-file run's args, its coverage report moved out of coverage/ into dir unless it names its own folder.
+export function scopedCoverageArgs(args, dir) {
+  if (!wantsScopedCoverage(args)) return args;
+  return [...args, `--coverage.reportsDirectory=${dir}`];
 }
 
 // Vitest 4 exports only its package.json, so its bin is found beside that.
@@ -72,11 +86,15 @@ export async function main(args) {
       watchdog: { limitMb, start: startWatchdog },
     });
   }
-  const vitest = [vitestBin(), "run", ...scopedCoverageArgs(args)];
+  // The report's numbers print to the terminal; its folder is this run's alone and goes once vitest exits.
+  const dir = wantsScopedCoverage(args) ? makeScopedCoverageDir() : null;
+  const vitest = [vitestBin(), "run", ...scopedCoverageArgs(args, dir)];
   const child = spawn(process.execPath, vitest, { stdio: "inherit" });
   const forward = (signal) => child.kill(signal);
   for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) process.once(signal, forward);
-  return new Promise((resolve) => child.on("exit", (code, signal) => resolve(code ?? (signal ? 1 : 0))));
+  const code = await new Promise((resolve) => child.on("exit", (code, signal) => resolve(code ?? (signal ? 1 : 0))));
+  if (dir) fs.rmSync(dir, { recursive: true, force: true });
+  return code;
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {

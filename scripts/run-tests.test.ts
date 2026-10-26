@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { SCOPED_COVERAGE_DIR, isFiltered, scopedCoverageArgs, vitestArgs } from "./run-tests.mjs";
+import { SCOPED_COVERAGE_ROOT, isFiltered, makeScopedCoverageDir, scopedCoverageArgs, vitestArgs, wantsScopedCoverage } from "./run-tests.mjs";
 
 describe("isFiltered", () => {
   it("is false for the whole suite, with or without flags", () => {
@@ -26,19 +26,39 @@ describe("vitestArgs", () => {
 });
 
 describe("scopedCoverageArgs", () => {
-  it("sends a named-file coverage run's report to a temp folder, so the whole-repo report survives", () => {
-    expect(scopedCoverageArgs(["lib/x.test.ts", "--coverage"])).toEqual([
+  it("sends a named-file coverage run's report to its own folder, so the whole-repo report survives", () => {
+    expect(scopedCoverageArgs(["lib/x.test.ts", "--coverage"], "/tmp/run-1")).toEqual([
       "lib/x.test.ts",
       "--coverage",
-      `--coverage.reportsDirectory=${SCOPED_COVERAGE_DIR}`,
+      "--coverage.reportsDirectory=/tmp/run-1",
     ]);
-    expect(scopedCoverageArgs(["--coverage.include=lib/x.ts", "lib/x.test.ts"])).toContain(`--coverage.reportsDirectory=${SCOPED_COVERAGE_DIR}`);
+    expect(scopedCoverageArgs(["--coverage.include=lib/x.ts", "lib/x.test.ts"], "/tmp/run-1")).toContain("--coverage.reportsDirectory=/tmp/run-1");
   });
 
   it("leaves a run without coverage, or with its own report folder, as it is", () => {
-    expect(scopedCoverageArgs(["lib/x.test.ts"])).toEqual(["lib/x.test.ts"]);
+    expect(wantsScopedCoverage(["lib/x.test.ts"])).toBe(false);
+    expect(scopedCoverageArgs(["lib/x.test.ts"], null)).toEqual(["lib/x.test.ts"]);
     const own = ["lib/x.test.ts", "--coverage", "--coverage.reportsDirectory=/tmp/mine"];
-    expect(scopedCoverageArgs(own)).toEqual(own);
+    expect(wantsScopedCoverage(own)).toBe(false);
+    expect(scopedCoverageArgs(own, "/tmp/run-1")).toEqual(own);
+  });
+});
+
+describe("makeScopedCoverageDir", () => {
+  it("gives every run a fresh folder under the shared root, so two runs at once never share one", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "scoped-root-"));
+    const a = makeScopedCoverageDir(path.join(root, "nested"));
+    const b = makeScopedCoverageDir(path.join(root, "nested"));
+    expect(a).not.toBe(b);
+    expect(path.dirname(a)).toBe(path.join(root, "nested"));
+    expect(fs.statSync(a).isDirectory() && fs.statSync(b).isDirectory()).toBe(true);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("defaults to the shared root in the temp folder", () => {
+    const dir = makeScopedCoverageDir();
+    expect(path.dirname(dir)).toBe(SCOPED_COVERAGE_ROOT);
+    fs.rmSync(dir, { recursive: true, force: true });
   });
 });
 
