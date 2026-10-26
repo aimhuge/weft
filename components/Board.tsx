@@ -36,6 +36,7 @@ import { useBoardToggles } from "@/lib/use-board-toggles";
 import { removeCard } from "@/lib/use-delete-dialog";
 import { resumeActions } from "@/lib/resume-actions";
 import { useEscape } from "@/lib/use-escape";
+import { useEscapeTogglesView } from "@/lib/use-escape-view";
 import { guarded } from "./guarded";
 import { useBoardCommands } from "./use-board-commands";
 import { filterCards, railPinned, toggleTag, type RailFilter, type RailPanel } from "@/lib/rail-view";
@@ -253,6 +254,9 @@ export default function Board() {
   useEscape(browserOpen && !selectedId && !showNew, toggleBrowser, { panel: true });
   // Registered last, so an open rail drawer closes before the browser does.
   useEscape(Boolean(libraryOpen) && !selectedId && !showNew && !railPinned(), () => setLibraryOpen(null), { panel: true });
+  // With nothing left to close, Escape flips board and list view.
+  const boardLayers = { thread: Boolean(selectedId), newThread: showNew, browser: browserOpen, drawer: Boolean(libraryOpen) };
+  useEscapeTogglesView(boardLayers, viewMode, chooseView);
 
   const tagCatalog = useTagCatalog(cards, notify);
   // Open the editor column automatically when something asks for a file in this card's folder.
@@ -283,7 +287,7 @@ export default function Board() {
     notify,
   });
   const onTag = (tag: string) => setRailFilter((f) => toggleTag(f, tag));
-  const cardCtx = { openCard, resume, onCardMenu, toggleStar, toggleArchive, onTag, notify };
+  const cardCtx = { openCard, resume, move, onCardMenu, toggleStar, toggleArchive, onTag, notify };
   // How the board draws a card, as a card and as a row of the list view (lib/use-board-cards.ts).
   const { renderCard, renderRow } = useBoardCards({
     cards,

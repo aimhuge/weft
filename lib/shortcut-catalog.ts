@@ -30,6 +30,7 @@ export const FIXED_SHORTCUTS: CatalogEntry[] = [
   { id: "reply-send-later", keys: ["alt+Enter"], description: "Send a reply later (Enter again: at the 5-hour reset)", group: "Thread" },
   { id: "reply-stop", keys: ["ctrl+c"], description: "Stop the running turn (in the reply box)", group: "Thread" },
   { id: "close-thread", keys: ["Escape"], description: "Close the open thread or dialog", group: "Thread" },
+  { id: "toggle-view", keys: ["Escape"], description: "Switch between board and list view (with nothing open)", group: "General" },
   { id: "new-send", keys: ["mod+Enter"], description: "Start the new thread", group: "Writing" },
   { id: "new-send-stay", keys: ["ctrl+Enter"], description: "Start the new thread and keep the dialog open for another (macOS)", group: "Writing" },
   { id: "new-backlog", keys: ["mod+b"], description: "Add the new thread to the Backlog (in the New thread dialog)", group: "Writing" },

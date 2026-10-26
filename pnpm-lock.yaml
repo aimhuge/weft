@@ -22,6 +22,9 @@ importers:
       '@aimhuge/share':
         specifier: github:aimhuge/components#v0.8.0&path:/packages/share
         version: https://codeload.github.com/aimhuge/components/tar.gz/62d3085d0c1152174953b7f6fb0a953e5619a29c#path:/packages/share(lucide-react@1.56.0(@types/react@19.3.0)(react@19.3.0))(next@16.4.3(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react@19.3.0)
+      '@aimhuge/sheet':
+        specifier: github:aimhuge/components#v0.9.0&path:/packages/sheet
+        version: https://codeload.github.com/aimhuge/components/tar.gz/9fec93b116142a9560883d980bee1a72c5f08aab#path:/packages/sheet(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@aimhuge/teams':
         specifier: file:vendor/aimhuge-teams-0.1.0.tgz
         version: file:vendor/aimhuge-teams-0.1.0.tgz(@supabase/ssr@0.12.7(@supabase/supabase-js@2.117.3(@opentelemetry/api@1.9.1)))(@supabase/supabase-js@2.117.3(@opentelemetry/api@1.9.1))(lucide-react@1.56.0(@types/react@19.3.0)(react@19.3.0))(next@16.4.3(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react@19.3.0)
@@ -230,6 +233,13 @@ packages:
       lucide-react: '>=1.0.0'
       next: '>=16.0.0'
       react: '>=19.0.0'
+
+  '@aimhuge/sheet@https://codeload.github.com/aimhuge/components/tar.gz/9fec93b116142a9560883d980bee1a72c5f08aab#path:/packages/sheet':
+    resolution: {path: /packages/sheet, tarball: https://codeload.github.com/aimhuge/components/tar.gz/9fec93b116142a9560883d980bee1a72c5f08aab}
+    version: 0.1.0
+    peerDependencies:
+      react: '>=19.0.0'
+      react-dom: '>=19.0.0'
 
   '@aimhuge/teams@file:vendor/aimhuge-teams-0.1.0.tgz':
     resolution: {integrity: sha512-u/ybH3naXAf3vypsIUoJ2SLvsTJ8tcLsaSnMO+FdciRHQmsZrXu4C4A8W0BNF3qiF0HrQSzn8tUqUwRk/dbVlA==, tarball: file:vendor/aimhuge-teams-0.1.0.tgz}
@@ -5023,6 +5033,11 @@ snapshots:
       lucide-react: 1.56.0(@types/react@19.3.0)(react@19.3.0)
       next: 16.4.3(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       react: 19.3.0
+
+  '@aimhuge/sheet@https://codeload.github.com/aimhuge/components/tar.gz/9fec93b116142a9560883d980bee1a72c5f08aab#path:/packages/sheet(react-dom@19.3.0(react@19.3.0))(react@19.3.0)':
+    dependencies:
+      react: 19.3.0
+      react-dom: 19.3.0(react@19.3.0)
 
   '@aimhuge/teams@file:vendor/aimhuge-teams-0.1.0.tgz(@supabase/ssr@0.12.7(@supabase/supabase-js@2.117.3(@opentelemetry/api@1.9.1)))(@supabase/supabase-js@2.117.3(@opentelemetry/api@1.9.1))(lucide-react@1.56.0(@types/react@19.3.0)(react@19.3.0))(next@16.4.3(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react@19.3.0)':
     dependencies:

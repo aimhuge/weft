@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "@aimhuge/share/share.css";
+@import "@aimhuge/sheet/sheet.css";
 
 /* Light by default; <html data-theme="dark"> switches, and <html data-scene> lays a scene over either.
    A script in app/layout.tsx sets both from the user's choice, or from the OS when they pick System
@@ -235,6 +236,21 @@
   --share-ok: var(--ok);
   --share-warn: var(--warn);
   --share-danger: var(--danger);
+}
+
+/* The board's list view and superadmin Users, from @aimhuge/sheet, on Weft's palette instead of its dark default. */
+:root,
+[data-theme] {
+  --sheet-ink: var(--ink);
+  --sheet-muted: var(--muted);
+  --sheet-faint: var(--faint);
+  --sheet-line: var(--line);
+  --sheet-line-strong: var(--line-strong);
+  --sheet-panel: var(--panel);
+  --sheet-sunken: var(--sunken);
+  --sheet-danger: var(--danger);
+  --sheet-accent: var(--accent);
+  --sheet-accent-soft: var(--accent-soft);
 }
 
 @theme inline {

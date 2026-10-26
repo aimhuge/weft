@@ -9,12 +9,13 @@ import type { ReviewFilter, ReviewFilterKey } from "@/lib/board-view";
 import type { BoardColumnsProps } from "./BoardColumns";
 import BoardColumns from "./BoardColumns";
 import BoardList from "./BoardList";
+import type { RowNest } from "./CardRowCells";
 
 export interface BoardSurfaceProps extends Omit<BoardColumnsProps, "renderCard" | "drag" | "archive" | "review"> {
   mode: ViewMode;
   // The card, as the board draws it; the list draws a row of its own.
   renderCard: (card: Card) => ReactNode;
-  renderRow: (card: Card, column: Column) => ReactNode;
+  renderRow: (card: Card, column: Column, nest?: RowNest) => ReactNode;
   // The state the columns' extras are built from, so Board.tsx only hands over facts.
   drag: {
     over: Column | null;
@@ -52,7 +53,7 @@ function dragBundle(drag: BoardSurfaceProps["drag"]): BoardColumnsProps["drag"] 
 
 export default function BoardSurface({ mode, renderRow, drag, archive, review, ...props }: BoardSurfaceProps) {
   if (mode === "list") {
-    return <BoardList byColumn={props.byColumn} renderRow={renderRow} onNew={props.onNew} />;
+    return <BoardList byColumn={props.byColumn} renderRow={renderRow} onNew={props.onNew} notify={props.notify} onReorder={drag.onReorder} />;
   }
   return <BoardColumns {...props} drag={dragBundle(drag)} archive={archive} review={review} />;
 }

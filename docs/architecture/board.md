@@ -54,8 +54,8 @@ lives in its own component under `components/`.
   first and starts folded). It hands every card row to `Board` with its place in the tree (`RowNest`), so it
   holds no card details of its own, and draws subagent rows itself (`components/AgentRow.tsx`). The corner
   cell clears the filters, or with none on opens New thread.
-- `lib/list-sheet.ts` — the sheet's sorts and filters, pure: each column's values (`cellValues`; tags can be
-  several, blanks are `(blank)`), `sortRows`/`sortBy` (stages in pipeline order, statuses loudest first,
+- `lib/list-sheet.ts` — the board's columns on `@aimhuge/sheet` (the shared sheet kit, docs/architecture/sheet.md),
+  pure: `BOARD_SHEET`, each column's values (`cellValues`; tags can be several, blanks are `(blank)`), `sortRows`/`sortBy` (stages in pipeline order, statuses loudest first,
   age by real time, blanks last both ways, ties in board order), `rowMatches` (the title search, then
   unticked values, stored as the hidden ones so a new value shows by default), `flipSort` for number
   columns, `keepOnly`, folded bands, and the row status `CardRow` draws.
@@ -63,11 +63,11 @@ lives in its own component under `components/`.
   folds under it; an opened card lists its subagents (`card.tasks`, kind `agent`), then its child cards. A
   child waiting on you, or whose tree's top sits in a folded band, also stands on its own in its band; a
   parent loop leaves both top-level; a match deep in a tree keeps its path. `bandsToDraw` keeps an empty
-  Backlog and Running so there's always somewhere to type a card. `lib/typeahead.ts` ranks type-ahead matches.
-- `components/SheetHeader.tsx` + `components/SheetFilterMenu.tsx` — the header row: a click on a name opens
+  Backlog and Running so there's always somewhere to type a card. Type-ahead matches are ranked by `@aimhuge/sheet`'s `typeahead`.
+- `SheetHeader` + `SheetFilterMenu` (from `@aimhuge/sheet/client`, fed `BOARD_SHEET`) — the header row: a click on a name opens
   its menu with the cursor in the search box. Title filters cards as you type; other columns narrow their
   values (↑↓, Enter keeps only the match, Only per value, Show/Hide all) under a two-button sort bar. Age
-  flips its sort on a click. A filtered header says what it's filtered to. Menus are `components/SheetPopover.tsx`,
+  flips its sort on a click. A filtered header says what it's filtered to. Menus are the kit's `SheetPopover`,
   a portal because the cells clip. `components/use-list-sheet.ts` keeps the sort, filters, title search and
   folded bands in localStorage (`weft:list-sheet`) as an external store.
 - `components/CardRow.tsx` — one line of the list, its cells in `components/CardRowCells.tsx`: the title

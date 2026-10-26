@@ -1,0 +1,165 @@
+/* The board list view's own look on top of @aimhuge/sheet (its sheet.css): the fold toggles and the
+   tree's branch lines, the subagent rows, crons, the quick add, and dragging Backlog rows into order. */
+
+/* The fold toggle before a title, the space it keeps on a row with nothing under it, and the branch
+   line a nested row hangs from. */
+.sheet-fold {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+  min-width: 26px;
+  padding: 1px 3px;
+  border-radius: 4px;
+  color: var(--faint);
+}
+
+.sheet-fold:hover {
+  background: var(--sunken);
+  color: var(--ink);
+}
+
+.sheet-fold-space {
+  flex: none;
+  width: 26px;
+}
+
+.sheet-branch {
+  flex: none;
+  width: 26px;
+  height: 100%;
+  min-height: 18px;
+  background:
+    linear-gradient(var(--line-strong), var(--line-strong)) 8px 0 / 1px 50% no-repeat,
+    linear-gradient(var(--line-strong), var(--line-strong)) 8px 50% / 10px 1px no-repeat;
+}
+
+.sheet-row-nested {
+  background: color-mix(in srgb, var(--sunken) 30%, transparent);
+}
+
+/* A subagent under an opened card: quieter than a card, marked with its own badge. */
+.sheet-agent-row {
+  background: color-mix(in srgb, var(--accent) 4%, transparent);
+}
+
+.sheet-agent-badge {
+  flex: none;
+  color: var(--accent);
+  font-size: 10px;
+}
+
+.sheet-agent-type {
+  padding: 1px 6px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+}
+
+/* A band folds on a click, so it takes the whole width and lights under the pointer. */
+.sheet-band {
+  width: 100%;
+  cursor: pointer;
+}
+
+.sheet-band:hover {
+  background: color-mix(in srgb, var(--sunken) 100%, var(--accent) 6%);
+}
+
+/* The quick add at a band's foot: a row you just type into, lit with the accent once it has the cursor. */
+.sheet-add {
+  min-height: 34px;
+  background: color-mix(in srgb, var(--accent) 3%, transparent);
+}
+
+.sheet-add:focus-within {
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.sheet-add-chip {
+  padding: 1px 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.sheet-add-chip:hover {
+  border-color: var(--accent);
+  color: var(--ink);
+}
+
+/* A band's + : quiet until the band is under the pointer. */
+.sheet-band-add {
+  height: 22px;
+  margin-right: 8px;
+  padding: 0 10px;
+  border-radius: 6px;
+  color: var(--accent);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  opacity: 0.55;
+}
+
+.sheet-band:hover .sheet-band-add,
+.sheet-band-add:focus-visible {
+  opacity: 1;
+}
+
+.sheet-band-add:hover {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.sheet-corner-new {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  color: var(--accent);
+  font-size: 15px;
+  line-height: 1;
+}
+
+.sheet-corner-new:hover {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+/* Crons (components/crons.css owns the violet): a card's ⏰ badge, and the Crons band's rows. */
+.sheet-cron {
+  flex: none;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--cron) 14%, transparent);
+  color: var(--cron);
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+.sheet-cron-off {
+  background: var(--sunken);
+  color: var(--faint);
+}
+
+.sheet-cron-row {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--cron) 7%, transparent), transparent 60%);
+}
+
+.bg-cron {
+  background: var(--cron);
+}
+
+/* Dragging a Backlog row into order: the moving row dims, and a line marks where it lands. Its gutter is the grip. */
+.sheet-row[draggable="true"] .sheet-gutter {
+  cursor: grab;
+}
+
+.sheet-dragging {
+  opacity: 0.4;
+}
+
+.sheet-drop-before {
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+
+.sheet-drop-after {
+  box-shadow: inset 0 -2px 0 var(--accent);
+}

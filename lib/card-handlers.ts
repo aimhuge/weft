@@ -1,14 +1,16 @@
 import type React from "react";
 import type { ResumeHow } from "./card-resume";
 import { api } from "./client";
-import { stopNow } from "./optimistic-cards";
-import type { Card } from "./types";
+import { answerNow, stopNow } from "./optimistic-cards";
+import type { Card, Column } from "./types";
 
 // What the board does when you use a card's own controls, closed over the board's actions so
 // Board.tsx's renderCard spreads one object instead of listing every handler.
 export type CardActionsCtx = {
   openCard: (card: Card) => void;
   resume: (id: string, how: ResumeHow) => void;
+  // Your move to another column, as a drag does (lib/use-board-card-actions.ts).
+  move: (id: string, column: Column) => void;
   onCardMenu: (card: Card, e: React.MouseEvent) => void | Promise<void>;
   toggleStar: (card: Card) => void;
   toggleArchive: (card: Card) => void;
@@ -21,7 +23,12 @@ export type CardActionsCtx = {
 export function cardHandlers(card: Card, ctx: CardActionsCtx) {
   return {
     onOpen: () => ctx.openCard(card),
-    onAnswer: (allow: boolean) => void api.answer(card.id, allow, undefined, card.pending?.id).catch(ctx.notify),
+    // The prompt leaves the card at once (lib/optimistic-cards.ts); a refusal brings it back.
+    onAnswer: (allow: boolean) => {
+      const pendingId = card.pending?.id;
+      const send = () => api.answer(card.id, allow, undefined, pendingId);
+      void (pendingId ? answerNow(card.id, pendingId, allow, send) : send()).catch(ctx.notify);
+    },
     onStop: () => void stopNow(card.id).catch(ctx.notify),
     onResume: (how: ResumeHow) => ctx.resume(card.id, how),
     onContextMenu: (e: React.MouseEvent) => void ctx.onCardMenu(card, e),
