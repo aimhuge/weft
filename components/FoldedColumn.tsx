@@ -2,10 +2,22 @@
 
 // A folded column: a thin strip with the column's name and count, set on its side, in place of the
 // whole column. Clicking it opens the column again; a card dropped on it still lands in that column.
-// Backlog folds this way (its header's chevron, lib/board-prefs.ts `backlogFolded`).
+// Any column folds this way from the chevron in its header (FoldButton); lib/board-prefs.ts `foldedColumns` remembers which.
 import type { DragEvent } from "react";
 import type { Column } from "@/lib/types";
 import Icon from "./Icon";
+import Tip from "./Tip";
+
+// The header's chevron that folds its column to the strip below.
+export function FoldButton({ label, onFold }: { label: string; onFold: () => void }) {
+  return (
+    <Tip text={`Fold ${label} to a strip. Click the strip to open it again.`} className="inline-flex">
+      <button onClick={onFold} className="rounded p-0.5 text-muted hover:bg-hover hover:text-ink" aria-label={`Fold ${label}`}>
+        <Icon name="chevronLeft" size={13} />
+      </button>
+    </Tip>
+  );
+}
 
 export default function FoldedColumn({
   column,

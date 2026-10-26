@@ -14,17 +14,29 @@ export function setShowBacklog(on: boolean) {
   window.dispatchEvent(new Event(EVENT));
 }
 
-const FOLD_COOKIE = "weft-backlog-folded";
+const FOLD_COOKIE = "weft-folded-columns";
+// Before every column could fold, only Backlog could, under its own cookie: a Backlog folded then stays folded
+// until the next fold or open, which carries it over and clears that cookie.
+const OLD_BACKLOG_FOLD = /(?:^|; )weft-backlog-folded=1/;
 
-// Folded, the Backlog column is a thin strip with its name and count (components/FoldedColumn.tsx): the way
-// to put it out of sight while cards still wait in it, which the switch above can't.
-export function backlogFolded(): boolean {
-  if (typeof document === "undefined") return false;
-  return new RegExp(`(?:^|; )${FOLD_COOKIE}=1`).test(document.cookie);
+// The columns folded to a thin strip with their name and count (components/FoldedColumn.tsx), comma-separated:
+// a string so useSyncExternalStore gets the same snapshot until it changes. Read it with isFolded.
+export function foldedColumns(): string {
+  if (typeof document === "undefined") return "";
+  const set = new RegExp(`(?:^|; )${FOLD_COOKIE}=([^;]*)`).exec(document.cookie);
+  if (set?.[1]) return decodeURIComponent(set[1]);
+  return OLD_BACKLOG_FOLD.test(document.cookie) ? "backlog" : "";
 }
 
-export function setBacklogFolded(folded: boolean) {
-  document.cookie = `${FOLD_COOKIE}=${folded ? 1 : 0}; path=/; max-age=${10 * 365 * 24 * 60 * 60}; SameSite=Lax`;
+export function isFolded(folded: string, column: string): boolean {
+  return folded.split(",").includes(column);
+}
+
+export function setColumnFolded(column: string, fold: boolean) {
+  const rest = foldedColumns().split(",").filter((c) => c && c !== column);
+  const next = fold ? [...rest, column] : rest;
+  document.cookie = `${FOLD_COOKIE}=${encodeURIComponent(next.join(","))}; path=/; max-age=${10 * 365 * 24 * 60 * 60}; SameSite=Lax`;
+  document.cookie = "weft-backlog-folded=; path=/; max-age=0";
   window.dispatchEvent(new Event(EVENT));
 }
 

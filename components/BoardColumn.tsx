@@ -58,6 +58,10 @@ export interface BoardColumnProps {
   backlog?: BacklogLane;
   // Review only: its Errors and Restart filter chips.
   reviewFilter?: ReviewChips;
+  // The header's chevron, which folds the column to a strip (components/FoldedColumn.tsx).
+  onFold?: () => void;
+  // Two columns' width with its cards in two columns, when the board has room (lib/board-overflow.ts).
+  wide?: boolean;
 }
 
 export default function BoardColumn({
@@ -88,6 +92,8 @@ export default function BoardColumn({
   onAddBacklog,
   backlog,
   reviewFilter,
+  onFold,
+  wide = false,
 }: BoardColumnProps) {
   const style: CSSProperties = { minWidth: columnMinWidth(laneState) };
   // Which backlog card the drop indicator is on, and on which side. null when no card is hovered.
@@ -106,7 +112,7 @@ export default function BoardColumn({
       }}
       onContextMenu={onColumnContextMenu}
       style={style}
-      className={`@container flex w-[264px] shrink flex-col rounded-xl border ${dragOver ? "border-accent bg-accent-soft" : "border-transparent bg-sunken"}`}
+      className={`@container flex ${wide ? "w-[540px]" : "w-[264px]"} shrink flex-col rounded-xl border ${dragOver ? "border-accent bg-accent-soft" : "border-transparent bg-sunken"}`}
     >
       <ColumnHeader
         column={column}
@@ -123,20 +129,23 @@ export default function BoardColumn({
         onReviewAll={onReviewAll}
         backlog={backlog}
         reviewFilter={reviewFilter}
+        onFold={onFold}
       />
       <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-2 pb-2">
-        {shown.map((card) => (
-          <CardDropSlot
-            key={card.id}
-            card={card}
-            reorderable={Boolean(onReorder)}
-            marker={dropMarker?.id === card.id ? dropMarker.before : null}
-            onMarkerChange={(before) => setDropMarker(before === null ? null : { id: card.id, before })}
-            onReorder={(id, before) => onReorder?.(id, card.id, before)}
-          >
-            {renderCard(card)}
-          </CardDropSlot>
-        ))}
+        <CardList wide={wide}>
+          {shown.map((card) => (
+            <CardDropSlot
+              key={card.id}
+              card={card}
+              reorderable={Boolean(onReorder)}
+              marker={dropMarker?.id === card.id ? dropMarker.before : null}
+              onMarkerChange={(before) => setDropMarker(before === null ? null : { id: card.id, before })}
+              onReorder={(id, before) => onReorder?.(id, card.id, before)}
+            >
+              {renderCard(card)}
+            </CardDropSlot>
+          ))}
+        </CardList>
         {shown.length < count && (
           <button
             onClick={onShowMore}
@@ -157,6 +166,13 @@ export default function BoardColumn({
       </div>
     </section>
   );
+}
+
+// The column's cards: one under another, or in two columns side by side in a wide column (left to right,
+// then down, so Backlog's order still reads top first). A narrow column's cards sit straight in its list.
+function CardList({ wide, children }: { wide: boolean; children: ReactNode }) {
+  if (!wide) return <>{children}</>;
+  return <div className="grid grid-cols-2 items-start gap-2">{children}</div>;
 }
 
 // What a card draws while CardView's module loads: a card-sized blank, so the column keeps its

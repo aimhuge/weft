@@ -1,11 +1,12 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  backlogFolded,
   copilotLaneOpen,
+  foldedColumns,
+  isFolded,
   copilotLanePeek,
   setCopilotLaneOpen,
-  setBacklogFolded,
+  setColumnFolded,
   setCopilotLanePeek,
   setShowBacklog,
   setShowProgress,
@@ -20,29 +21,45 @@ afterEach(() => {
   vi.unstubAllGlobals();
   document.cookie = "weft-show-backlog=; path=/; max-age=0";
   document.cookie = "weft-backlog-folded=; path=/; max-age=0";
+  document.cookie = "weft-folded-columns=; path=/; max-age=0";
   document.cookie = "weft-show-progress=; path=/; max-age=0";
   document.cookie = "weft-copilot-lane=; path=/; max-age=0";
   document.cookie = "weft-copilot-peek=; path=/; max-age=0";
   document.cookie = "weft-view-mode=; path=/; max-age=0";
 });
 
-describe("backlogFolded", () => {
-  it("is open by default, and on the server", () => {
-    expect(backlogFolded()).toBe(false);
+describe("foldedColumns", () => {
+  it("folds nothing by default, and on the server", () => {
+    expect(foldedColumns()).toBe("");
     vi.stubGlobal("document", undefined);
-    expect(backlogFolded()).toBe(false);
+    expect(foldedColumns()).toBe("");
   });
 
-  it("follows setBacklogFolded through the cookie and tells subscribers", () => {
+  it("folds and opens each column through the cookie, and tells subscribers", () => {
     const onChange = vi.fn();
     const stop = subscribeBoardPrefs(onChange);
-    setBacklogFolded(true);
-    expect(document.cookie).toContain("weft-backlog-folded=1");
-    expect(backlogFolded()).toBe(true);
-    setBacklogFolded(false);
-    expect(backlogFolded()).toBe(false);
-    expect(onChange).toHaveBeenCalledTimes(2);
+    setColumnFolded("backlog", true);
+    setColumnFolded("done", true);
+    setColumnFolded("done", true);
+    expect(foldedColumns()).toBe("backlog,done");
+    expect(isFolded(foldedColumns(), "done")).toBe(true);
+    expect(isFolded(foldedColumns(), "review")).toBe(false);
+    setColumnFolded("backlog", false);
+    expect(foldedColumns()).toBe("done");
+    setColumnFolded("done", false);
+    expect(foldedColumns()).toBe("");
+    expect(onChange).toHaveBeenCalledTimes(5);
     stop();
+  });
+
+  it("keeps a Backlog folded under the old Backlog-only cookie, until a column is folded or opened", () => {
+    document.cookie = "weft-backlog-folded=1; path=/";
+    expect(foldedColumns()).toBe("backlog");
+    setColumnFolded("review", true);
+    expect(foldedColumns()).toBe("backlog,review");
+    document.cookie = "weft-folded-columns=; path=/; max-age=0";
+    document.cookie = "weft-backlog-folded=0; path=/";
+    expect(foldedColumns()).toBe("");
   });
 });
 

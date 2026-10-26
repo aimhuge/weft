@@ -376,8 +376,12 @@ the model gave up too early. A card whose turn you stopped or that failed also s
 message again in a fresh CLI.
 
 The Backlog column is hidden by default. Turn it on with Settings → General → Show backlog. It also shows
-whenever cards are waiting in it. To put a full Backlog out of the way, click the chevron in its header: it
-folds to a thin strip with its name and count. Click the strip to open it again; you can still drop cards on it.
+whenever cards are waiting in it.
+
+Any column folds out of the way: click the chevron in its header and it becomes a thin strip with its name and
+count. Click the strip to open it again; you can still drop cards on it. When the board has room, the fullest
+columns spread their cards over two columns: the column with the most cards first, then the next, as long as its
+cards don't fit its height and another column's width still fits. Narrow the window and they go back to one.
 
 Drag a Backlog card onto another one to set the order: drop on its top half to place the card before it,
 or its bottom half to place it after. Weft saves that order and uses it for the Backlog list, whatever

@@ -3,6 +3,7 @@
 import { useState, type ReactNode } from "react";
 import type { Column } from "@/lib/types";
 import BacklogActions, { type BacklogLane } from "./BacklogActions";
+import { FoldButton } from "./FoldedColumn";
 import Icon from "./Icon";
 import ReviewFilterChips, { type ReviewChips } from "./ReviewFilterChips";
 import SprintsMenu from "./SprintsMenu";
@@ -25,6 +26,7 @@ export default function ColumnHeader({
   onReviewAll,
   backlog,
   reviewFilter,
+  onFold,
 }: {
   column: { id: Column; label: string };
   count: number | null;
@@ -40,6 +42,8 @@ export default function ColumnHeader({
   onReviewAll?: () => Promise<void>;
   backlog?: BacklogLane;
   reviewFilter?: ReviewChips;
+  // Folds the column to a strip (components/FoldedColumn.tsx).
+  onFold?: () => void;
 }) {
   const done = column.id === "done";
   return (
@@ -75,6 +79,7 @@ export default function ColumnHeader({
           </Tip>
         )}
         {backlog && <BacklogActions lane={backlog} />}
+        {onFold && <FoldButton label={column.label} onFold={onFold} />}
         {count}
       </span>
     </div>

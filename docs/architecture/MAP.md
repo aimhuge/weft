@@ -346,7 +346,8 @@ When a new doc lands in this folder, add it here on the same change.
   touching different files (no worktrees, so overlap is the constraint); starts a sprint's cards only on your OK.
 - `lib/sprints.ts` + `lib/sprint-store.ts` + `app/api/sprints` + `lib/use-sprints.ts` + `components/BacklogActions.tsx` + `components/SprintsMenu.tsx`: saved sprints, the Backlog header's flag (Save as sprint) and
   Archive all (asks first), and the list under the "Backlog" title (Restore, rename, delete), in `~/.weft/sprints.json`; ⌘B in New thread adds to the Backlog (`isBacklogKey` in `components/submit-keys.ts`).
-  The header's chevron folds Backlog to a strip (`components/FoldedColumn.tsx`, drawn by `components/BoardColumns.tsx`), remembered in the `weft-backlog-folded` cookie (`backlogFolded` in `lib/board-prefs.ts`).
+  Every column header's chevron folds it to a strip (`components/FoldedColumn.tsx`, drawn by `components/BoardColumns.tsx`), remembered in the `weft-folded-columns` cookie (`foldedColumns` in `lib/board-prefs.ts`).
+  The fullest columns widen to two columns of cards while the board has room (`wideColumns` in `lib/board-overflow.ts`, the board measured by `lib/use-element-size.ts`, the grid in `components/BoardColumn.tsx`).
 - `lib/card-pictures.ts`: a card's thumbnail (latest thread image, or a pane capture after each turn from `lib/show.ts`) and its Haiku emoji tile; `lib/retitle.ts` renames a card with a placeholder title ("Image attachment") after its turn (`titleBy` marks a name Weft or you chose) and gives an untagged card 1 to 3 tags in the same Haiku call (`tagsBy`); `components/CardView.tsx` draws the card.
 - `lib/tags.ts` + `lib/tag-store.ts` + `app/api/tags` + `lib/rail-view.ts` + `components/LibraryRail.tsx` (`SideRail`) + `components/TagsDrawer.tsx` +
   `components/TagsDialog.tsx` + `components/CardMarks.tsx` + `components/StarButton.tsx`: ★ star (never auto-archived; the rail's ★ filters

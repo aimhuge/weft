@@ -16,13 +16,18 @@ vi.mock("./BoardColumn", () => ({
   },
 }));
 
+// The board's measured size, which decides the wide columns (lib/board-overflow.ts).
+const board = vi.hoisted(() => ({ width: 0, height: 700 }));
+vi.mock("@/lib/use-element-size", () => ({ useElementSize: () => board }));
+
 import BoardColumns, { type BoardColumnsProps } from "./BoardColumns";
-import { setBacklogFolded } from "@/lib/board-prefs";
+import { setColumnFolded } from "@/lib/board-prefs";
 
 afterEach(() => {
   cleanup();
   seen.clear();
-  document.cookie = "weft-backlog-folded=; path=/; max-age=0";
+  document.cookie = "weft-folded-columns=; path=/; max-age=0";
+  board.width = 0;
 });
 
 const card = (id: string, column: Column, over: Partial<Card> = {}): Card =>
@@ -66,19 +71,20 @@ const col = (id: Column) => seen.get(id) ?? {};
 // Calls the handler BoardColumns gave column `id` as prop `name`.
 const call = (id: Column, name: string, ...args: unknown[]) => (col(id)[name] as (...a: unknown[]) => unknown)(...args);
 
-describe("BoardColumns' folded Backlog", () => {
-  it("folds from Backlog's header to a strip with its count, which opens it again", () => {
+describe("BoardColumns' folded columns", () => {
+  it("folds any column from its header to a strip with its count, which opens it again", () => {
     setup();
-    act(() => (col("backlog").backlog as { onFold: () => void }).onFold());
-    expect(document.querySelector("[data-folded]")?.textContent).toContain("Backlog3");
-    seen.clear();
-    fireEvent.click(screen.getByRole("button", { name: "Open Backlog" }));
+    act(() => void call("done", "onFold"));
+    expect(document.querySelector("[data-folded]")?.textContent).toContain("Done1");
     expect(seen.has("backlog")).toBe(true);
+    seen.clear();
+    fireEvent.click(screen.getByRole("button", { name: "Open Done" }));
+    expect(seen.has("done")).toBe(true);
     expect(document.querySelector("[data-folded]")).toBeNull();
   });
 
   it("still takes a dropped card, and hides the count until the board loads", () => {
-    setBacklogFolded(true);
+    setColumnFolded("backlog", true);
     const p = setup({ loaded: false });
     expect(seen.has("backlog")).toBe(false);
     const strip = document.querySelector("[data-folded]") as HTMLElement;
@@ -89,6 +95,23 @@ describe("BoardColumns' folded Backlog", () => {
     expect(p.drag.onLeave).toHaveBeenCalledWith("backlog");
     fireEvent.drop(strip);
     expect(p.drag.onDrop).toHaveBeenCalledWith("backlog", expect.anything());
+  });
+});
+
+describe("BoardColumns' wide columns", () => {
+  const many = (column: Column, n: number) => Array.from({ length: n }, (_, i) => card(`${column}${i}`, column));
+
+  it("widens the fullest column when the board has room for one more", () => {
+    board.width = 1392 + 276;
+    setup({ expanded: ["review", "done"], byColumn: new Map<Column, Card[]>([["review", many("review", 9)], ["done", many("done", 12)]]) });
+    expect(col("done").wide).toBe(true);
+    expect(col("review").wide).toBe(false);
+  });
+
+  it("widens nothing on a board without the room", () => {
+    board.width = 1280;
+    setup({ expanded: ["done"], byColumn: new Map<Column, Card[]>([["done", many("done", 12)]]) });
+    expect(col("done").wide).toBe(false);
   });
 });
 
