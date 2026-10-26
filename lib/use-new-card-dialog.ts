@@ -25,6 +25,7 @@ import {
   subscribeDefaults,
 } from "@/lib/new-thread";
 import { useIsolate } from "./use-isolate";
+import type { ThreadAgent } from "./agents";
 
 // The dialog's state and the actions that drive it.
 export interface NewCardDialogLogic {
@@ -50,6 +51,9 @@ export interface NewCardDialogLogic {
   promptToStart: (read: () => string, focus: () => void) => string | null;
   isolated: boolean;
   toggleIsolated: () => void;
+  // Who the thread is (lib/agents.ts). Not remembered: every new thread starts as Builder.
+  agent: ThreadAgent;
+  setAgent: (a: ThreadAgent) => void;
   promptLength: number;
   submit: (
     start: boolean,
@@ -108,6 +112,7 @@ export function useNewCardDialog(home: string, defaultCwd: string | undefined, r
   const [started, setStarted] = useState<string | null>(null);
   const draftTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const { isolated, toggleIsolated, promptLength, notePrompt } = useIsolate(cwd);
+  const [agent, setAgent] = useState<ThreadAgent>("builder");
 
   useSettingsDefaults(pickedMode, pickedBackend, setPermissionMode, setBackend, setModelState);
   useEffect(() => () => clearTimeout(draftTimer.current), []);
@@ -202,6 +207,7 @@ export function useNewCardDialog(home: string, defaultCwd: string | undefined, r
           model,
           effort: effortFor(backend, effort),
           ...(isolated ? { isolated: true } : {}),
+          ...(agent !== "builder" ? { agent } : {}),
           start,
         };
         if (opts.stay) await opts.onCreate(input, { stay: true });
@@ -222,7 +228,7 @@ export function useNewCardDialog(home: string, defaultCwd: string | undefined, r
         setBusy(false);
       }
     },
-    [busy, cwd, backend, permissionMode, model, effort, isolated, promptToStart],
+    [busy, cwd, backend, permissionMode, model, effort, isolated, agent, promptToStart],
   );
 
   return {
@@ -247,6 +253,8 @@ export function useNewCardDialog(home: string, defaultCwd: string | undefined, r
     promptToStart,
     isolated,
     toggleIsolated,
+    agent,
+    setAgent,
     promptLength,
     submit,
   };

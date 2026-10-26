@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/client";
+import { backendPick } from "@/lib/backend-pick";
+import { patchNow } from "@/lib/optimistic-cards";
 import { isLive } from "@/lib/format";
 import { BACKENDS, CODEX_DEFAULT_MODEL, MODELS, NO_MODEL, runningOn } from "@/lib/new-thread";
 import { BACKEND_LABELS, type Backend, type Card } from "@/lib/types";
@@ -42,9 +44,14 @@ export default function BackendPicker({ card }: { card: Card }) {
     // The same model again is a no-op; "Default model" on a card already on it is too.
     if (next === card.backend && (id === selectedModel || (id === NO_MODEL && onDefault))) return;
     setError(null);
-    // A live thread can't change CLI (the server says so), but the user may still pick a model on
-    // this CLI. When the move is refused, say why instead of failing silently.
-    void api.switchBackend(card.id, next, false, id).catch((err: unknown) => {
+    // The new CLI and model show on the card at once (lib/optimistic-cards.ts). A live thread can't change CLI, but
+    // the user may still pick a model on this CLI; when a move is refused, say why instead of failing silently.
+    const pickNow = backendPick(card, next, id);
+    if ("refused" in pickNow) {
+      setError(pickNow.refused);
+      return;
+    }
+    void patchNow(card.id, pickNow.patch, () => api.switchBackend(card.id, next, false, id)).catch((err: unknown) => {
       const message = err instanceof Error ? err.message : String(err);
       setError(message.replace(/^Error:\s*/, "") || "Couldn't switch.");
     });

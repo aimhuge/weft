@@ -1,3 +1,4 @@
+import { storedAgent } from "./agents";
 import { firstMessage } from "./automations";
 import { resolveFolder } from "./folders";
 import { asText, cleanTitle, titleFromPrompt } from "./format";
@@ -47,10 +48,6 @@ export function createCardFromBody(body: Record<string, unknown>): Card {
 
   const effort = effortFor(startBackend, body.effort as Effort | "");
 
-  // Tags given here are yours, so retitle won't pick others (lib/retitle.ts); new ones join the catalog.
-  const tags = Array.isArray(body.tags) ? normalizeTags(body.tags.map((t) => asText(t))) : [];
-  rememberTags(tags);
-
   const card = createCard({
     title,
     ...(typedTitle ? { titleBy: "user" as const } : {}),
@@ -60,12 +57,21 @@ export function createCardFromBody(body: Record<string, unknown>): Card {
     permissionMode,
     model: startModel,
     effort,
-    ...(tags.length ? { tags, tagsBy: "user" as const } : {}),
+    ...marksFromBody(body),
     // Its own worktree, taken from the pool before its first turn (lib/worktree-start.ts).
     ...(body.isolated === true ? { isolated: true } : {}),
   });
   touchProject(cwd);
   return card;
+}
+
+// The card's tags and agent from the body. Tags given here are yours, so retitle won't pick others (lib/retitle.ts);
+// new ones join the catalog. The agent is who the thread is (lib/agents.ts); an unknown name or Builder stores none.
+function marksFromBody(body: Record<string, unknown>): Pick<Card, "tags" | "tagsBy" | "agent"> {
+  const tags = Array.isArray(body.tags) ? normalizeTags(body.tags.map((t) => asText(t))) : [];
+  rememberTags(tags);
+  const agent = storedAgent(body.agent);
+  return { ...(tags.length ? { tags, tagsBy: "user" as const } : {}), ...(agent ? { agent } : {}) };
 }
 
 // Sends the card's prompt (plus the skills a "thread starts" rule names) as its first turn.

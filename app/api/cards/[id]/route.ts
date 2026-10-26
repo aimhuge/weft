@@ -1,3 +1,4 @@
+import { isAgent, storedAgent } from "@/lib/agents";
 import { firstMessage, messagesForMove, doneOverrides } from "@/lib/automations";
 import { resolveFolder } from "@/lib/folders";
 import { asText, cleanTitle } from "@/lib/format";
@@ -37,6 +38,18 @@ function setMarks(id: string, body: { starred?: unknown; tags?: unknown; broke?:
   updateCard(id, { tags, tagsBy: "user" });
   // New ones join the catalog (lib/tag-store.ts), so they stay listed.
   rememberTags(tags);
+}
+
+// Who the thread is (lib/agents.ts). Its CLI read the old soul as it started, so the CLI ends here and the next
+// turn resumes the same conversation under the new one.
+async function setAgent(card: Card, value: unknown) {
+  if (!isAgent(value)) throw new Error("Unknown agent.");
+  if (card.role === "copilot") throw new Error("The copilot picks a persona, not an agent.");
+  const agent = storedAgent(value);
+  if (agent === card.agent) return;
+  if (isBusy(card.id)) throw new Error("Stop the thread before switching its agent.");
+  updateCard(card.id, { agent });
+  await endSession(card.id);
 }
 
 // Your drag to another column (Running only from Backlog; Needs you never by hand).
@@ -103,6 +116,7 @@ export async function PATCH(req: Request, { params }: Ctx) {
       tags?: unknown;
       broke?: null;
       permissionMode?: PermissionMode;
+      agent?: unknown;
       // The user clicked "Read from <path>" on a question. The directory is added to the card's
       // read scope (Card.readScope) so the live session's folder guard allows it
       // and the next session starts with it as additionalDirectories.
@@ -143,6 +157,8 @@ export async function PATCH(req: Request, { params }: Ctx) {
       validatePermissionMode(card, body.permissionMode);
       setPermissionMode(id, body.permissionMode);
     }
+
+    if (body.agent !== undefined) await setAgent(card, body.agent);
 
     // Re-points a thread whose folder moved or was renamed.
     if (body.cwd !== undefined) {

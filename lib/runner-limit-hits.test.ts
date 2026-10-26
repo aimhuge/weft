@@ -50,7 +50,10 @@ it("logs a refused request as a hit of its window, with its reset; allowed ones 
     limit({ status: "rejected" }),
   );
   await flush();
-  expect(logged.map(([kind, , card, resetsAt]) => [kind, (card as Card).id, resetsAt])).toEqual([["five_hour", "c1", 300], ["seven_day", "c1", 900]]);
+  // Only the plan's own windows are logged against the plan. A per-model cap ("seven_day_opus")
+  // is that model's own limit, so it goes to the model store and not here — filed as a plan window
+  // it would gate every model on the account (lib/limit-kind.ts).
+  expect(logged.map(([kind, , card, resetsAt]) => [kind, (card as Card).id, resetsAt])).toEqual([["five_hour", "c1", 300]]);
 });
 
 it("a reading that lands after the card switched CLI is logged under the CLI that sent it, and stays off the card", async () => {

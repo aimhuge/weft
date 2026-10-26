@@ -8,6 +8,7 @@ import { assistant, flush, makeCard, nth, resetHarness, toolUse } from "./runner
 import type { Card, ThreadItem } from "./types";
 
 const { recordLimit } = await import("./activity");
+const recorded = vi.hoisted(() => [] as { model: string; at: number; resetsAt?: number }[]);
 const h = await vi.hoisted(async () => (await import("./runner.harness")).harnessState());
 
 vi.mock("@anthropic-ai/claude-agent-sdk", async () => (await import("./runner.harness")).sdkMock(h));
@@ -18,6 +19,16 @@ vi.mock("./import", async () => (await import("./runner.harness")).importMock(h)
 vi.mock("./settings", async () => (await import("./runner.harness")).settingsMock(h));
 vi.mock("./login", async () => (await import("./runner.harness")).loginMock(h));
 vi.mock("./activity", async (importOriginal) => ({ ...(await importOriginal<typeof import("./activity")>()), recordLimit: vi.fn() }));
+// The per-model store writes to ~/.weft, so it is mocked: a test that really wrote there would
+// leave the machine's own model limits behind.
+vi.mock("./model-limit", () => ({
+  recordModelLimit: (model: string, at: number, resetsAt?: number) => recorded.push({ model, at, ...(resetsAt !== undefined && { resetsAt }) }),
+  modelLimit: () => undefined,
+  modelLimits: () => [],
+  isModelLimited: () => false,
+  limitedModels: () => [],
+  clearModelLimit: () => {},
+}));
 vi.mock("./automations", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./automations")>()),
   skillsForPrompt: () => h.skillsForPrompt,
@@ -42,6 +53,8 @@ async function send(id: string, msg = "hello") {
 
 beforeEach(async () => {
   cwd = resetHarness(h);
+  recorded.length = 0;
+  vi.mocked(recordLimit).mockClear();
   vi.resetModules();
   runner = await import("./runner");
 });
@@ -139,6 +152,19 @@ describe("limit hits", () => {
       limit({}),
     );
     await flush();
-    expect(vi.mocked(recordLimit).mock.calls.map((c) => [c[0], c[2]?.id, c[3]])).toEqual([["five_hour", "c1", 300], ["seven_day", "c1", 900]]);
+    // Only the plan's own windows are logged against the plan. A per-model cap ("seven_day_opus")
+    // is that model's own limit and goes to the model store instead — filed as a plan window it
+    // would gate every model on the account (lib/limit-kind.ts).
+    expect(vi.mocked(recordLimit).mock.calls.map((c) => [c[0], c[2]?.id, c[3]])).toEqual([["five_hour", "c1", 300]]);
+  });
+
+  it("logs a per-model cap against the model, not against the plan", async () => {
+    addCard({ id: "c1", model: "claude-opus-5-5" });
+    const q = await send("c1");
+    const limit = (info: Record<string, unknown>) => ({ type: "rate_limit_event", rate_limit_info: { status: "rejected", ...info } });
+    q.emit(limit({ rateLimitType: "seven_day_opus", utilization: 1, resetsAt: 900 }));
+    await flush();
+    expect(vi.mocked(recordLimit).mock.calls.map((c) => c[0])).toEqual([]);
+    expect(recorded.map((r) => [r.model, r.resetsAt])).toEqual([["claude-opus-5-5", 900 * 1000]]);
   });
 });

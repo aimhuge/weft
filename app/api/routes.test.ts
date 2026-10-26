@@ -46,6 +46,8 @@ vi.mock("@/lib/runner", () => ({
   retryAfterLogin: vi.fn(),
 }));
 
+vi.mock("@/lib/precedence", () => ({ putFirst: vi.fn() }));
+
 vi.mock("@/lib/settings", () => ({
   DEFAULT_THREAD_PROMPT: "You are a card on a board.",
   listProjects: vi.fn(() => []),
@@ -494,6 +496,26 @@ describe("PATCH /cards/:id", () => {
     expect((await patch(puku.id, { permissionMode: "acceptEdits" })).status).toBe(200);
   });
 
+  it("switches the agent: Builder stores none, and the CLI ends so the next turn starts under the new soul", async () => {
+    const card = addCard({ sessionId: "s1" });
+    const res = await patch(card.id, { agent: "copywriter" });
+    expect((await body(res)).card.agent).toBe("copywriter");
+    expect(runner.endSession).toHaveBeenCalledWith(card.id);
+    expect(db.cards.get(card.id)!.sessionId).toBe("s1");
+    await patch(card.id, { agent: "builder" });
+    expect(db.cards.get(card.id)!.agent).toBeUndefined();
+  });
+
+  it("leaves a card on the agent it has alone, and refuses an unknown one, a running turn and the copilot", async () => {
+    const card = addCard({ agent: "copywriter" });
+    await patch(card.id, { agent: "copywriter" });
+    expect(runner.endSession).not.toHaveBeenCalledWith(card.id);
+    expect((await patch(card.id, { agent: "poet" })).status).toBe(400);
+    vi.mocked(runner.isBusy).mockReturnValueOnce(true);
+    expect(await body(await patch(card.id, { agent: "builder" }))).toEqual({ error: "Stop the thread before switching its agent." });
+    expect((await patch(addCard({ role: "copilot" }).id, { agent: "copywriter" })).status).toBe(400);
+  });
+
   it("does nothing for a move to the column it's already in", async () => {
     const card = addCard({ column: "review" });
     expect((await patch(card.id, { column: "review" })).status).toBe(200);
@@ -578,6 +600,16 @@ describe("POST /cards/:id/permission", () => {
     expect(runner.answerPermission).toHaveBeenLastCalledWith("c1", false, undefined, undefined, { chat: "let's talk" });
     await answer("c1", { allow: false, chat: "   " });
     expect(runner.answerPermission).toHaveBeenLastCalledWith("c1", false, undefined, undefined, undefined);
+  });
+
+  it("puts a held edit first with first: true, and needs its pendingId", async () => {
+    const { putFirst } = await import("@/lib/precedence");
+    expect(await body(await answer("c1", { first: true, pendingId: "p1" }))).toEqual({ ok: true });
+    expect(putFirst).toHaveBeenCalledWith("c1", "p1");
+    expect(runner.answerPermission).not.toHaveBeenCalled();
+    const res = await answer("c1", { first: true });
+    expect(res.status).toBe(409);
+    expect((await body(res)).error).toMatch(/Me first needs/);
   });
 
   it("409s when there's nothing to answer, or bad JSON", async () => {

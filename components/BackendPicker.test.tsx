@@ -53,12 +53,20 @@ describe("BackendPicker", () => {
     expect(screen.getByText("Stop the thread to switch CLI.")).toBeInTheDocument();
   });
 
-  it("says why when the switch is refused, instead of failing silently", async () => {
-    api.switchBackend.mockRejectedValueOnce(new Error("Stop the thread before switching its CLI."));
+  it("refuses a CLI move on a live thread at once, without asking the server", async () => {
     render(<BackendPicker card={makeCard({ backend: "claude", column: "running" })} />);
     await userEvent.click(screen.getByRole("button", { name: /Switch model/ }));
     await userEvent.click(screen.getByRole("button", { name: "Puku AI 2.8" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("Stop the thread before switching its CLI.");
+    expect(screen.getByRole("alert")).toHaveTextContent("Stop the thread before switching its CLI.");
+    expect(api.switchBackend).not.toHaveBeenCalled();
+  });
+
+  it("says why when the server refuses the switch, instead of failing silently", async () => {
+    api.switchBackend.mockRejectedValueOnce(new Error("Error: No such card."));
+    render(<BackendPicker card={makeCard({ backend: "claude" })} />);
+    await userEvent.click(screen.getByRole("button", { name: /Switch model/ }));
+    await userEvent.click(screen.getByRole("button", { name: "Puku AI 2.8" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("No such card.");
   });
 
   it("the copilot doesn't get a switcher — just the static badge", () => {
