@@ -64,7 +64,8 @@ describe("the manifest", () => {
     expect(SLACK_MANIFEST.settings.event_subscriptions.bot_events).toEqual(["app_mention"]);
     expect(SLACK_MANIFEST.settings.interactivity.is_enabled).toBe(false);
     expect(SLACK_MANIFEST.settings.socket_mode_enabled).toBe(true);
-    expect(SLACK_MANIFEST.settings.token_rotation_enabled).toBe(false);
+    // On: once the console has turned it on, Slack refuses a manifest that turns it off (ab3c05b).
+    expect(SLACK_MANIFEST.settings.token_rotation_enabled).toBe(true);
     expect(SLACK_MANIFEST.settings.org_deploy_enabled).toBe(false);
   });
 
@@ -86,11 +87,12 @@ describe("the rail button's title", () => {
 });
 
 describe("the events the drawer switches on", () => {
-  it("are the four Weft posts about, each with a label", () => {
-    expect([...EVENT_KEYS]).toEqual(["commits", "pushes", "deploys", "status"]);
+  it("are the five Weft posts about, each with a label", () => {
+    expect([...EVENT_KEYS]).toEqual(["commits", "pushes", "deploys", "status", "growth"]);
     for (const key of EVENT_KEYS) expect(EVENT_LABELS[key]).toBeTruthy();
     expect(EVENT_LABELS.deploys).toContain("Vercel");
     expect(EVENT_LABELS.status).toContain("weft.zip");
+    expect(EVENT_LABELS.growth).toContain("payment");
   });
 });
 

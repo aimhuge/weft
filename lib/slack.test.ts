@@ -1,15 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { freshSettings } from "./slack-cards.harness";
+import type { SlackSettings } from "./slack-types";
 
 // Weft in Slack, the server's half: it watches the board's repos, Vercel and the board's cards, and posts each to
 // the drawer's channel. The watchers, the board's cards and the posting are fakes.
-
-interface FakeSettings {
-  channel: string | null;
-  channelName: string;
-  folder: string | null;
-  links: { folder: string; channel: string; channelName: string | null }[];
-  events: { commits: boolean; pushes: boolean; deploys: boolean; status: boolean };
-}
 
 interface FakeState {
   gitEvents: { onCommits: (cwd: string, branch: string, commits: { sha: string; subject: string }[]) => void; onPush: (cwd: string, ref: string, count: number) => void } | null;
@@ -18,7 +12,7 @@ interface FakeState {
   deployPost: ((message: { text: string }, folder: string) => void) | null;
   cardStop: ReturnType<typeof vi.fn>;
   cards: { id: string; cwd: string }[];
-  settings: FakeSettings;
+  settings: SlackSettings;
 }
 
 const fake = vi.hoisted((): FakeState => ({
@@ -28,7 +22,8 @@ const fake = vi.hoisted((): FakeState => ({
   deployPost: null,
   cardStop: vi.fn(),
   cards: [],
-  settings: { channel: "C1", channelName: "general", folder: null, links: [], events: { commits: true, pushes: true, deploys: true, status: true } },
+  // Set fresh in beforeEach (lib/slack-cards.harness.ts freshSettings).
+  settings: {} as SlackSettings,
 }));
 
 vi.mock("./slack-git", () => ({
@@ -68,7 +63,7 @@ beforeEach(() => {
   fake.deployTick.mockResolvedValue(undefined);
   fake.deployPost = null;
   fake.cards = [];
-  fake.settings = { channel: "C1", channelName: "general", folder: null, links: [], events: { commits: true, pushes: true, deploys: true, status: true } };
+  fake.settings = freshSettings();
 });
 afterEach(() => {
   slack.stopSlack();
