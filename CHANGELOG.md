@@ -10,6 +10,7 @@ lands; a release moves those lines under its version and tags the commit `vX.Y.Z
 
 ### Added
 
+- **Fold any column, and let the full ones spread out.** A chevron in every column's header folds it to a thin strip with its name and count, even while cards wait in it. Click the strip to open it again; cards dragged onto it still land there, and Weft remembers which columns are folded. When the board has room, the column with the most cards spreads them over two columns, then the next fullest, as long as its cards don't fit its height and another column's width still fits. Narrow the window and they go back to one (`components/FoldedColumn.tsx`, `components/BoardColumns.tsx`, `components/BoardColumn.tsx`, `lib/board-overflow.ts`, `lib/board-prefs.ts`).
 - **After an update, Weft says what's new in a few lines.** The first time Weft opens on a new version, a small **What's new in Weft X** splash lists up to three changes you'll notice, each with its payoff, and sometimes a short video, with a link to the full release notes. Weft's Copywriter writes the lines when the release is cut, so they read like Weft and not like a commit log. New installs meet the welcome instead, and Settings → General → Reset tips shows the current splash again. **Check for Updates…** is now in the File menu too. (`components/ReleaseSplash.tsx`, `lib/release-splash.ts`, `lib/release-splashes.json`, `lib/use-release-splash.ts`, `scripts/release-splash.mjs`, `electron/menus.cjs`)
 
 ### Fixed
