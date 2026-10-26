@@ -1,0 +1,13 @@
+permissive: {"severity":"info","category":"license","rule":"license-permissive","message":"Permissive license: free to use, keep the notice"}
+permissive+spdx: {"severity":"info","category":"license","rule":"license-permissive","message":"Permissive license: free to use, keep the notice (X-1.0)"}
+copyleft: {"severity":"warn","category":"license","rule":"license-copyleft","message":"Copyleft license: work you share that's built on it must use the same license"}
+copyleft+spdx: {"severity":"warn","category":"license","rule":"license-copyleft","message":"Copyleft license: work you share that's built on it must use the same license (X-1.0)"}
+noncommercial: {"severity":"warn","category":"license","rule":"license-noncommercial","message":"Non-commercial license: not for paid or business work"}
+noncommercial+spdx: {"severity":"warn","category":"license","rule":"license-noncommercial","message":"Non-commercial license: not for paid or business work (X-1.0)"}
+proprietary: {"severity":"warn","category":"license","rule":"license-proprietary","message":"Proprietary terms: check you're allowed to use and share it"}
+proprietary+spdx: {"severity":"warn","category":"license","rule":"license-proprietary","message":"Proprietary terms: check you're allowed to use and share it (X-1.0)"}
+unknown: {"severity":"warn","category":"license","rule":"license-unknown","message":"A license Weft doesn't recognise: read it before you rely on the skill"}
+unknown+spdx: {"severity":"warn","category":"license","rule":"license-unknown","message":"A license Weft doesn't recognise: read it before you rely on the skill (X-1.0)"}
+none: {"severity":"warn","category":"license","rule":"license-none","message":"No license in the skill's files: by default you have no right to copy or share it"}
+none+spdx: {"severity":"warn","category":"license","rule":"license-none","message":"No license in the skill's files: by default you have no right to copy or share it (X-1.0)"}
+with-file: {"severity":"info","category":"license","rule":"license-permissive","message":"Permissive license: free to use, keep the notice (MIT)","file":"LICENSE"}
