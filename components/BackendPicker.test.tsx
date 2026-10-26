@@ -23,6 +23,9 @@ describe("BackendPicker", () => {
     expect(screen.getByRole("button", { name: "Opus 5.5" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: "Opus 4.8" })).toHaveAttribute("aria-pressed", "false");
     expect(screen.getByRole("group", { name: "puku-cli" })).toBeInTheDocument();
+    // Codex and Goose run without Weft's guards, and their headings say so (lib/unguarded.ts).
+    expect(screen.getByRole("group", { name: "Codex" })).toHaveTextContent(/^Codex · no Weft guards/);
+    expect(screen.getByRole("group", { name: "puku-cli" })).not.toHaveTextContent("no Weft guards");
     await userEvent.click(screen.getByRole("button", { name: "Puku AI 2.7" }));
     expect(api.switchBackend).toHaveBeenCalledWith("c1", "puku", false, "puku-ai-2.7");
   });

@@ -12,7 +12,7 @@ matching doc below. When a feature lands, add or update its entry here and in it
 - `sheet.md` — the sheet: any list of rows as a Google-Sheets-like table on glass, from `@aimhuge/sheet` (aimhuge/components: column specs, sorts, filters, type-to-search, `SheetTable`, type-ahead menus, saved state, `sheet.css` mapped to Weft's palette in `app/globals.css`); what Weft keeps: the board list's spec, bands and tree (`lib/list-sheet.ts`, `lib/list-tree.ts`) and superadmin Users (`lib/users-sheet.ts`).
 - `desktop-shell.md` — `electron/` itself: main, preload, tray, dock, `weft://` links, the start screen, the terminal drawer.
 - `threads-and-sessions.md` — the runner: one Agent SDK `query()` per Claude Code/puku thread, the Codex runner, sessions, queues, rewind, warm spares.
-- `thread-guards.md` — what `guardedCli()` strips and hooks: secret/restart/git/check/route-import/claim guards, per-CLI limits.
+- `thread-guards.md` — what `guardedCli()` strips and hooks: secret/restart/git/check/route-import/claim guards, per-CLI limits; `lib/unguarded.ts` tags Codex and Goose "no Weft guards" wherever a CLI is picked.
 - `composer.md` — the reply box's modes: `lib/reply-mode.ts`'s table of chip, primary and ▾ menu per state, and what's still planned (one dock for every ask, one server-side queue).
 - `limits.md` — the three limit stores (the model's own cap, the CLI's weekly and 5-hour windows), the pure gate in `lib/limit-reset.ts`, the server-decides rule, and the new-thread path that waits for a spent limit instead of failing.
 - `questions.md` — a thread's AskUserQuestion end to end: the panel above the reply box, keys, previews in the pane, answers and `annotations` back to the CLI.

@@ -7,6 +7,7 @@
 import type { Backend, Effort, PermissionMode } from "@/lib/types";
 import { EFFORTS } from "@/lib/new-thread";
 import { AGENT_ORDER, AGENTS, type ThreadAgent } from "@/lib/agents";
+import { unguardedNotice } from "@/lib/unguarded";
 import ModelSelect from "./ModelSelect";
 import Icon from "./Icon";
 import ModePicker from "./ModePicker";
@@ -100,6 +101,12 @@ export function NewCardDialogControls({
         onChange={onPickMode}
         up
       />
+      {/* Only when the picked CLI runs without Weft's guards, so it costs no room otherwise (lib/unguarded.ts). */}
+      {unguardedNotice(backend) && (
+        <p role="note" className="basis-full text-[11px] leading-snug text-warn">
+          {unguardedNotice(backend)}
+        </p>
+      )}
     </div>
   );
 }

@@ -20,7 +20,7 @@ describe("CopilotPicker", () => {
     // Every CLI's models are here: picking one moves the copilot to the CLI that serves it.
     expect(screen.getByRole("group", { name: "Claude Code" })).toBeInTheDocument();
     expect(screen.getByRole("group", { name: "puku-cli" })).toBeInTheDocument();
-    expect(screen.getByRole("group", { name: "Codex" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Codex · no Weft guards" })).toBeInTheDocument();
     await userEvent.selectOptions(select, "claude-sonnet-5-5");
     expect(api.saveSettings).toHaveBeenCalledWith({ copilotModel: "claude-sonnet-5-5" });
   });

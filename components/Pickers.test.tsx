@@ -11,7 +11,7 @@ describe("ModelPicker", () => {
     render(<ModelPicker value="claude-opus-5-5" onChange={() => {}} label="Model" />);
     expect(screen.getByRole("group", { name: "Claude Code" })).toBeInTheDocument();
     expect(screen.getByRole("group", { name: "puku-cli" })).toBeInTheDocument();
-    expect(screen.getByRole("group", { name: "Codex" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Codex · no Weft guards" })).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "Codex default" })).toBeInTheDocument();
   });
 

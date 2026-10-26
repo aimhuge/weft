@@ -7,6 +7,7 @@ import { patchNow } from "@/lib/optimistic-cards";
 import { isLive } from "@/lib/format";
 import { BACKENDS, CODEX_DEFAULT_MODEL, MODELS, NO_MODEL, runningOn } from "@/lib/new-thread";
 import { BACKEND_LABELS, type Backend, type Card } from "@/lib/types";
+import { unguarded, UNGUARDED_TAG, unguardedNotice } from "@/lib/unguarded";
 import { useEscape } from "@/lib/use-escape";
 import { useLimitedModels } from "@/lib/use-plan-limits";
 import { BackendBadge } from "./CardView";
@@ -89,7 +90,10 @@ export default function BackendPicker({ card }: { card: Card }) {
           </div>
           {BACKENDS.map((b) => (
             <div key={b.id} role="group" aria-label={b.label}>
-              <p className="px-2 pb-0.5 pt-1.5 text-[11px] font-medium text-faint">{b.label}</p>
+              <p className="px-2 pb-0.5 pt-1.5 text-[11px] font-medium text-faint" title={unguardedNotice(b.id) ?? undefined}>
+                {b.label}
+                {unguarded(b.id) && <span className="font-normal text-warn"> · {UNGUARDED_TAG}</span>}
+              </p>
               {MODELS[b.id].map((m) => {
                 const on = card.backend === b.id && selectedModel === m.id;
                 return (

@@ -527,10 +527,13 @@ On every Claude Code and puku-cli thread (and its subagents):
   you'd see a build error.
 - **Symbol claims** between busy cards in one folder (above).
 
-### Do the guardrails apply to Codex?
+### Do the guardrails apply to Codex and Goose?
 
-Partly. Codex gets the filtered environment (no keys from your shell) and is asked not to read `.env` files, but the
-per-tool hooks (git, restart, check, folder and claim guards) aren't available to it.
+Mostly not, and Weft says so where you pick one: the CLI menus tag them "no Weft guards", and the New thread dialog
+shows a one-line warning while one is chosen. Codex and Goose get the filtered environment (no keys from your shell)
+and are asked not to read `.env` files, but they have no per-tool hooks, so nothing enforces it: the secret guard, the
+folder gate, the git, restart and check guards and symbol claims never see their calls. For work near secrets or
+outside the card's folder, use Claude Code or puku-cli.
 
 ### What if Weft really does need a restart?
 

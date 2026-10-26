@@ -19,7 +19,7 @@ describe("NewThreadDefaults", () => {
     const { rerender } = render(<NewThreadDefaults backend="claude" onBackend={() => {}} />);
     expect(screen.getByRole("group", { name: "Claude Code" })).toBeInTheDocument();
     expect(screen.getByRole("group", { name: "puku-cli" })).toBeInTheDocument();
-    expect(screen.getByRole("group", { name: "Codex" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Codex · no Weft guards" })).toBeInTheDocument();
 
     rerender(<NewThreadDefaults backend="puku" onBackend={() => {}} />);
     expect(screen.getByRole("combobox", { name: "Default model" })).toHaveValue("cli:puku");

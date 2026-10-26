@@ -4,6 +4,12 @@ Every board thread's CLI starts from `guardedCli()` in `lib/env.ts`: a stripped 
 turn away tool calls no permission mode should allow. They run as `PreToolUse` hooks, so they deny a call before it
 runs, in every permission mode (bypass included), and the denial's reason goes back to the model as the tool result.
 
+Codex and Goose have no per-tool hooks, so none of these run for them (the folder gate and the Bash hooks below say
+the same). Weft says so wherever a CLI is picked, from one place, `lib/unguarded.ts`: the model menus' Codex and Goose
+headings read "· no Weft guards" (`components/ModelSelect.tsx`, `components/BackendPicker.tsx`, with the full sentence
+as the tooltip), and the New thread dialog adds one line while one is chosen (`components/NewCardDialogControls.tsx`;
+nothing shows for Claude Code or puku-cli, so it costs no room). docs/FAQ.md answers it too.
+
 | Hook | File | Turns away |
 | --- | --- | --- |
 | Secret guard | `lib/secret-guard.ts` | reading `.env` files, Weft's data secrets, environment dumps (Bash, Read, Grep…) |

@@ -6,6 +6,7 @@ import { useLimitedModels } from "@/lib/use-plan-limits";
 import { useGooseProviders } from "@/lib/use-goose";
 import { setUpGooseModels } from "@/lib/goose-provider";
 import type { Backend } from "@/lib/types";
+import { unguarded, UNGUARDED_TAG, unguardedNotice } from "@/lib/unguarded";
 
 // Every model menu in Weft: the New thread dialog's, and each one in Settings → Models. One
 // optgroup per CLI, headed by the CLI's own name, so a model added to MODELS shows up under the
@@ -23,8 +24,8 @@ export type PickerOption = { value: string; label: string };
 const CLI_HINTS: Record<Backend, string | undefined> = {
   claude: undefined,
   puku: undefined,
-  codex: "Requires Codex CLI and login. Weft's browser, board, secrets and webhook tools are unavailable.",
-  goose: "Requires the Goose CLI and a provider key (Settings → Models → Bring your own key).",
+  codex: `Requires Codex CLI and login. Weft's browser, board, secrets and webhook tools are unavailable. ${unguardedNotice("codex")}`,
+  goose: `Requires the Goose CLI and a provider key (Settings → Models → Bring your own key). ${unguardedNotice("goose")}`,
 };
 
 // "This CLI, its own default model", as an option value. No model id starts with it.
@@ -76,7 +77,7 @@ export default function ModelSelect({
         </option>
       ))}
       {BACKENDS.map((b) => (
-        <optgroup key={b.id} label={b.label}>
+        <optgroup key={b.id} label={unguarded(b.id) ? `${b.label} · ${UNGUARDED_TAG}` : b.label}>
           {cli && (
             <option value={CLI_DEFAULT + b.id} title={CLI_HINTS[b.id]}>
               {b.label} default
