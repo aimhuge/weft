@@ -10,6 +10,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const teamsMock = vi.hoisted(() => ({
   roleCan: vi.fn(),
   roleAtLeast: vi.fn(),
+  // Read at load by lib/reserved-slugs.ts, which team-ops reaches through team-create.
+  RESERVED_SLUGS: [] as string[],
 }));
 
 const teamsModMock = vi.hoisted(() => ({

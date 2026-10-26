@@ -152,12 +152,13 @@ describe("weftMcpServer", () => {
     expect(nth(state.created, 0, "created card").input).toMatchObject({ tags: ["docs"], tagsBy: "user" });
   });
 
-  it("registers only list_cards, create_card, restart_weft_when_idle, request_folder_access, the changelog, the crons and the skill tools (no read, start, send, move, stop, answer)", () => {
+  it("registers only list_cards, create_card, restart_weft_when_idle, request_folder_access, the changelog, the crons, the skill tools and create_agent (no read, start, send, move, stop, answer)", () => {
     weftMcpServer(() => "parent-1", { start: vi.fn() });
     expect(state.captures.map((t) => t.name)).toEqual([
       "list_cards", "create_card", "restart_weft_when_idle", "request_folder_access", "changelog_add", "changelog_list", "changelog_edit",
       ...CRON_TOOL_NAMES,
       "skill_preview", "skill_review", "skill_install",
+      "create_agent",
     ]);
     expect(["list_cards", "create_card"].every((name) => SAFE_BOARD_TOOLS.has(name))).toBe(true);
     expect(SAFE_BOARD_TOOLS.has("start_card")).toBe(false);

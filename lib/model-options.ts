@@ -8,7 +8,7 @@
 // The Goose rows come from the provider the user configured: a model id is whatever that provider
 // serves, and a named model is one the user gave a name to (lib/goose-models.ts).
 
-import { BACKENDS, MODELS, NO_MODEL } from "./new-thread";
+import { BACKENDS, CODEX_DEFAULT_MODEL, GOOSE_DEFAULT_MODEL, MODELS, NO_MODEL } from "./new-thread";
 import { unguarded, UNGUARDED_TAG } from "./unguarded";
 import type { Backend } from "./types";
 
@@ -29,6 +29,10 @@ export interface ModelOption {
 // The row that means "let the CLI choose". It is not a model, so it carries no model id; picking it
 // leaves the model off the CLI's command line.
 export const CLI_CHOICE = "cli:";
+
+// The CLIs' own "you choose" ids in MODELS ("codex-default", "goose-default"). They mean the same as the
+// "the CLI chooses" row, so a menu that has that row leaves them out, and none of them is a model to name.
+const CLI_DEFAULT_IDS: ReadonlySet<string> = new Set([NO_MODEL, CODEX_DEFAULT_MODEL, GOOSE_DEFAULT_MODEL]);
 
 // What the "the CLI chooses" row says, per CLI. It names the CLI's own pick, which is what the
 // user gets when they take this row — the honest version of "Claude Code default".
@@ -69,7 +73,7 @@ export function cliChoiceBackend(value: string): Backend | undefined {
  */
 export function cliChoiceModel(backend: Backend): string {
   if (backend === "goose") return "";
-  return MODELS[backend].find((m) => m.id !== "")?.id ?? "";
+  return MODELS[backend].find((m) => !CLI_DEFAULT_IDS.has(m.id))?.id ?? "";
 }
 
 /** The label a CLI's own choice names, when we know the model behind it. */
@@ -120,10 +124,7 @@ export function optionsFor(
     });
   }
 
-  for (const model of MODELS[backend]) {
-    // A model the user already named shows once, under its name.
-    if (named.some((n) => n.id === model.id)) continue;
-    if (offer && !offer(backend, model.id)) continue;
+  for (const model of listedModels(backend, { named, offer, withCliChoice })) {
     rows.push({
       value: model.id,
       label: model.label,
@@ -133,6 +134,21 @@ export function optionsFor(
   }
 
   return rows;
+}
+
+// The CLI's own models a menu lists under it, leaving out the ones another row already stands for.
+function listedModels(
+  backend: Backend,
+  { named, offer, withCliChoice }: { named: NamedModel[]; offer?: (backend: Backend, id: string) => boolean; withCliChoice: boolean },
+) {
+  return MODELS[backend].filter(
+    (model) =>
+      // A model the user already named shows once, under its name.
+      !named.some((n) => n.id === model.id) &&
+      // The CLI's own sentinel would be a second "Let Codex choose" row that picks a model, not the CLI.
+      !(withCliChoice && CLI_DEFAULT_IDS.has(model.id)) &&
+      (!offer || offer(backend, model.id)),
+  );
 }
 
 /**

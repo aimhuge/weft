@@ -8,6 +8,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CloudCommandRow } from "@/lib/cloud-commands";
 import type { CloudThreadItemRow } from "@/lib/cloud-sync-types";
+import { pickModel } from "../model-picker-test-utils";
 import "../test-utils";
 import { cardRow, commandRow, db, mockState, resetHarness } from "./web-board-harness";
 
@@ -173,7 +174,7 @@ describe("WebBoard starting a thread on your Mac", () => {
     const project = within(dialog).getByRole<HTMLSelectElement>("combobox", { name: "Project" });
     expect(project.selectedOptions[0]?.textContent).toBe("app");
     fireEvent.change(within(dialog).getByLabelText("Prompt"), { target: { value: "  Add a dark mode  " } });
-    fireEvent.change(within(dialog).getByLabelText("Model"), { target: { value: "claude-opus-5-5" } });
+    pickModel("Model", "Opus 5.5", within(dialog));
     fireEvent.click(within(dialog).getByRole("button", { name: "Start on my Mac" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(mockState.inserts).toEqual([

@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import BackupModelPicker from "./BackupModelPicker";
 import { api } from "@/lib/client";
+import { openModels, pickModel } from "./model-picker-test-utils";
 import "./test-utils";
 
 vi.mock("@/lib/client", () => ({
@@ -16,23 +17,19 @@ beforeEach(() => {
 describe("BackupModelPicker", () => {
   it("shows the leading 'Off — no backup' option as the default when value is empty", () => {
     render(<BackupModelPicker value="" />);
-    const select: HTMLSelectElement = screen.getByLabelText("Backup model");
-    expect(select.value).toBe("");
-    // The leading option is the first one and the picked model menu only shows installed CLIs.
-    const offOption = screen.getByRole("option", { name: "Off — no backup" });
-    expect(offOption).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Backup model" })).toHaveValue("Off — no backup");
+    // The leading option is the first row of the list.
+    expect(within(openModels("Backup model")).getAllByRole("option")[0]).toHaveTextContent("Off — no backup");
   });
 
   it("reflects the saved value as the selected option", () => {
     render(<BackupModelPicker value="claude-sonnet-5-5" />);
-    const select: HTMLSelectElement = screen.getByLabelText("Backup model");
-    expect(select.value).toBe("claude-sonnet-5-5");
+    expect(screen.getByRole("combobox", { name: "Backup model" })).toHaveValue("Sonnet 5.5");
   });
 
   it("saves the picked model through api.saveSettings on change", async () => {
     render(<BackupModelPicker value="claude-sonnet-5-5" />);
-    const select: HTMLSelectElement = screen.getByLabelText("Backup model");
-    fireEvent.change(select, { target: { value: "claude-haiku-5-5" } });
+    pickModel("Backup model", "Haiku 5.5");
     await waitFor(() => {
       expect(api.saveSettings).toHaveBeenCalledWith({ backupModel: "claude-haiku-5-5" });
     });

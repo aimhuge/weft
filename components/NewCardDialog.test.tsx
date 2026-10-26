@@ -6,6 +6,7 @@ import type { NewCardInput } from "@/lib/client";
 import type { Card, RestartStatus } from "@/lib/types";
 import { isMac } from "@/lib/hotkeys";
 import { formatAt } from "@/lib/schedule";
+import { pickModel } from "./model-picker-test-utils";
 import { makeCard } from "./test-utils";
 import { forgetAgentList } from "@/lib/use-agents";
 import NewCardDialog from "./NewCardDialog";
@@ -145,7 +146,7 @@ describe("NewCardDialog", () => {
 // (effortFor is unit-tested in lib/new-thread.test.ts; this just pins the wiring through the dialog.)
   it("picking a CLI's default in the model picker passes the effort through effortFor, so puku keeps high", async () => {
     const { onCreate, box } = setup();
-    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Model" }), "cli:puku");
+    pickModel("Model", "Let puku-cli choose");
     await userEvent.type(box, "Hi");
     await userEvent.click(screen.getByRole("button", { name: "Start now" }));
     // The dialog's default effort is "high" (lastEffort), which puku accepts.
@@ -156,9 +157,9 @@ describe("NewCardDialog", () => {
     const { onCreate, box } = setup();
     const picker = screen.getByRole("combobox", { name: "Model" });
     expect(screen.queryByRole("group", { name: "CLI" })).toBeNull();
-    await userEvent.selectOptions(picker, "opus-4.8");
-    await userEvent.selectOptions(picker, "cli:codex");
-    expect((picker as HTMLSelectElement).value).toBe("cli:codex");
+    pickModel("Model", "Opus 4.8");
+    pickModel("Model", "Let Codex choose");
+    expect(picker).toHaveValue("Let Codex choose");
     await userEvent.type(box, "Hi");
     await userEvent.click(screen.getByRole("button", { name: "Start now" }));
     expect(onCreate).toHaveBeenLastCalledWith(expect.objectContaining({ backend: "codex" }));

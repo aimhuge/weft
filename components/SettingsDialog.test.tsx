@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SettingsView } from "@/lib/types";
 import SettingsDialog from "./SettingsDialog";
+import { pickModel } from "./model-picker-test-utils";
 import "./test-utils";
 
 const api = vi.hoisted(() => ({ settings: vi.fn(), saveSettings: vi.fn() }));
@@ -112,15 +113,15 @@ describe("SettingsDialog", () => {
     expect(screen.queryByLabelText("Unsaved changes")).not.toBeInTheDocument();
 
     // The model and effort are the New thread dialog's remembered picks, so they change right away.
-    await userEvent.selectOptions(menu, "claude-haiku-5-5");
+    pickModel("Default model", "Haiku 5.5");
     expect(localStorage.getItem("weft.model.claude")).toBe("claude-haiku-5-5");
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "Default effort" }), "low");
     expect(localStorage.getItem("weft.effort")).toBe("low");
 
-    // The one menu is the CLI picker too: puku-cli's own default row moves the CLI.
-    await userEvent.selectOptions(menu, "cli:puku");
+    // The one menu is the CLI picker too: puku-cli's own-choice row moves the CLI.
+    pickModel("Default model", "Let puku-cli choose");
     expect(within(pages()).getByLabelText("Unsaved changes")).toBeInTheDocument();
-    expect(menu).toHaveValue("cli:puku");
+    expect(menu).toHaveValue("Let puku-cli choose");
 
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
     expect(api.saveSettings).toHaveBeenCalledWith({ defaultBackend: "puku" });

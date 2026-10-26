@@ -37,6 +37,8 @@ describe("the CLI's own choice", () => {
     expect(cliChoiceNote("claude")).toBe("Runs Fable 5.1");
     // Goose's choice is whatever the configured provider picks, so there is no model to name.
     expect(cliChoiceNote("goose")).toBeUndefined();
+    // Codex's only entry is its own "you choose" id, which is no model to name.
+    expect(cliChoiceNote("codex")).toBeUndefined();
   });
 });
 
@@ -45,6 +47,14 @@ describe("the rows of a menu", () => {
     const rows = optionsFor("claude", { withCliChoice: true });
     expect(rows[0]!.value).toBe(CLI_CHOICE + "claude");
     expect(rows[0]!.label).toBe("Let Claude Code choose");
+  });
+
+  it("shows a CLI's choice once: its own sentinel row gives way to the CLI-choice row", () => {
+    for (const backend of ["codex", "goose"] as const) {
+      const labels = optionsFor(backend, { withCliChoice: true }).map((r) => r.label);
+      expect(labels.filter((l) => l === cliChoiceLabel(backend))).toHaveLength(1);
+    }
+    expect(optionsFor("codex", { withCliChoice: true }).map((r) => r.value)).toEqual([CLI_CHOICE + "codex"]);
   });
 
   it("leaves the CLI's own choice out when the menu doesn't pick the CLI", () => {

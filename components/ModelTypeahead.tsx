@@ -11,7 +11,7 @@
 // Typing filters the rows across every CLI at once; ↑/↓ move the highlight, Enter picks, Escape
 // closes. The rows come from lib/model-options.ts, so every menu in Weft says the same thing.
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { currentArea } from "@/lib/float-place";
 import { placeDropdown } from "@/lib/dropdown-place";
 import { filterGroups, labelFor, type ModelOption } from "@/lib/model-options";
@@ -56,6 +56,9 @@ export default function ModelTypeahead({
   const field = useRef<HTMLDivElement>(null);
   const list = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLInputElement>(null);
+  // The ids the field and the group headings point at. Built from useId, not the label: a label has
+  // spaces, and an id with spaces reads as several ids to aria-controls and aria-labelledby.
+  const listId = useId();
 
   const filtered = useMemo(() => filterGroups(groups, query), [groups, query]);
 
@@ -161,7 +164,7 @@ export default function ModelTypeahead({
           type="text"
           role="combobox"
           aria-expanded={open}
-          aria-controls={`${label}-model-list`}
+          aria-controls={listId}
           aria-autocomplete="list"
           aria-label={label}
           value={open ? query : showValue ? chosen : ""}
@@ -193,7 +196,7 @@ export default function ModelTypeahead({
       {open && spot && (
         <div
           ref={list}
-          id={`${label}-model-list`}
+          id={listId}
           role="listbox"
           aria-label={label}
           // A click on a row would blur the field and close the list before the click lands.
@@ -203,8 +206,18 @@ export default function ModelTypeahead({
         >
           {rows.length === 0 && <p className="px-2.5 py-2 text-[12px] text-muted">No model matches “{query.trim()}”.</p>}
           {filtered.map((group) => (
-            <div key={group.backend} className="mb-1 last:mb-0">
-              <p className="px-2.5 pb-1 pt-2 text-[10.5px] font-semibold uppercase tracking-wide text-faint">{group.heading}</p>
+            // Each CLI's rows are a group named by its heading, as the native menu's optgroups were.
+            <div
+              key={group.backend}
+              role={group.heading ? "group" : undefined}
+              aria-labelledby={group.heading ? `${listId}-${group.backend}` : undefined}
+              className="mb-1 last:mb-0"
+            >
+              {group.heading && (
+                <p id={`${listId}-${group.backend}`} className="px-2.5 pb-1 pt-2 text-[10.5px] font-semibold uppercase tracking-wide text-faint">
+                  {group.heading}
+                </p>
+              )}
               {group.rows.map((row) => {
                 const i = rows.indexOf(row);
                 return (
