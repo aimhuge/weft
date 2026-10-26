@@ -371,6 +371,22 @@ like a scheduled one. The copilot has no queue, so it still refuses a message mi
 from a page's Commit button (`moveToDone()`, `lib/pile-commit.ts`) on a busy card leaves the card
 where it is and queues the Done automations, which run after the turn.
 
+### Cap on running threads
+
+`maxThreads()` (`lib/settings.ts`, Settings → Threads → Threads running at once) is how many threads may run a turn
+at once: 6 unless set, 0 for no limit, at most 50. `holdSend` in `lib/runner.ts` asks `holdForSlot()`
+(`lib/thread-slots.ts`) after the restart and worktree holds: past the cap the message is stored on its card as a
+`ScheduledMessage` with `forSlot` (and `quiet` for a re-run already in the thread, so it isn't echoed twice), the card's
+`lastLine` says it is waiting, and the reply queue shows "when a slot frees". `releaseSlots()` sends the oldest waiting
+message of each card, in order, for as long as the cap allows. It runs when a turn ends (`hooks.sendHeld`), on every
+scheduler tick (a turn that ended unseen can't strand a card) and when the cap is raised (`app/api/settings`).
+
+What counts as running is `sessions` with `busy` and nothing pending: a thread parked on a question or permission only
+you can answer uses no CPU and would block the queue, and the copilot is not a card. Answering such a thread can put the
+count briefly over the cap; nothing is interrupted. A held `/done` wrap-up counts as pending for `archiveWhenIdle`, so the
+card is archived only after the turn that runs it. Timed messages (`dueMessage`) skip `forSlot` ones; a restart armed
+stops the release so what waits goes after it. The queue lives on the cards, so it survives a restart.
+
 ### Mid-turn messages
 
 The Claude Code CLI folds a message you send during a turn into that turn: it waits in the CLI's command queue
