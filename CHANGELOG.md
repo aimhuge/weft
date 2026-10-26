@@ -56,6 +56,8 @@ lands; a release moves those lines under its version and tags the commit `vX.Y.Z
 ### Security
 
 - **The Slack install no longer needs the app's Client Secret.** Weft's incoming-webhook install asked for the app's Client ID *and* Secret, and the Secret is the one value a person has to copy by hand out of a console page. The app now uses **PKCE**: the authorize step sends a challenge instead of the secret, and the exchange sends back the verifier that made it. The secret is never needed for the exchange at all — the install needs only the public Client ID, and the Client Secret, if you set one, is now just the key that signs the install state. The state carries that verifier and a timestamp under an HMAC, so a tampered or replayed install link is refused, and it expires after 15 minutes. The app manifest asks for it (`pkce_enabled`), and the manifest validates against the live app. Files: `lib/slack-pkce.ts`, `lib/slack-oauth.ts`, `lib/slack-manifest.json`, `app/api/slack/oauth/install/route.ts`, `app/api/slack/oauth/callback/route.ts`.
+- **The local API fails closed without its launch token.** With no token file on disk, Weft's server used to skip every token check; now reads without the board's header and every elevated write are refused. First launch is unaffected (the desktop app writes the token before it starts the server); `pnpm dev` in a plain browser opts out with `WEFT_NO_TOKEN=1`. `lib/guard.ts`, `package.json`.
+- **The onboarding-stats collector is rate-limited.** weft.zip's `/api/telemetry/collect` now takes 60 posts a minute per address (429 with `retry-after`) and refuses browser posts from other sites, so a script can't flood the stats. `lib/telemetry-limit.ts`, `lib/fixed-window.ts`.
 
 ## [0.6.1] - 2026-10-25
 
