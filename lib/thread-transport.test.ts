@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { renderHook } from "@testing-library/react";
+import { createElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ThreadPage } from "./thread-page";
 import type { BoardEvent, ThreadItem } from "./types";
@@ -12,17 +13,21 @@ const api = vi.hoisted(() => ({
   allowFolder: vi.fn(),
   setReadScope: vi.fn(),
   waitPermission: vi.fn(),
+  putFirst: vi.fn(),
   stopTask: vi.fn(),
   fresh: vi.fn(),
 }));
 vi.mock("./client", () => ({ api }));
+// The card folder's files, for the file names in a thread.
+const listFiles = vi.hoisted(() => vi.fn());
+vi.mock("./client-files", () => ({ filesApi: { list: listFiles } }));
 // The live hook's stream: the test fires its events by hand.
 const stream = vi.hoisted((): { onEvent: (e: unknown) => void; onOpen: () => void } => ({ onEvent: () => {}, onOpen: () => {} }));
 vi.mock("./use-events", () => ({
   useBoardEvents: (onEvent: (e: unknown) => void, onOpen: () => void) => Object.assign(stream, { onEvent, onOpen }),
 }));
 
-const { localTransport } = await import("./thread-transport");
+const { localTransport, ThreadTransportContext, useThreadTransport } = await import("./thread-transport");
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -93,5 +98,32 @@ describe("localTransport's actions", () => {
     api.fresh.mockResolvedValue({ ok: true });
     await localTransport.fresh?.("c1", "go on");
     expect(api.fresh).toHaveBeenCalledWith("c1", "go on");
+  });
+
+  it("putFirst answers the pending prompt with Me first", async () => {
+    api.putFirst.mockResolvedValue({ ok: true });
+    await localTransport.putFirst?.("c1", "p1");
+    expect(api.putFirst).toHaveBeenCalledWith("c1", "p1");
+  });
+
+  it("listFiles reads the card folder's files", async () => {
+    listFiles.mockResolvedValue(["a.ts", "b.ts"]);
+    expect(await localTransport.listFiles?.("c1")).toEqual(["a.ts", "b.ts"]);
+    expect(listFiles).toHaveBeenCalledWith("c1");
+  });
+});
+
+describe("useThreadTransport", () => {
+  it("is the desktop's own transport by default", () => {
+    expect(renderHook(() => useThreadTransport()).result.current).toBe(localTransport);
+  });
+
+  it("is whatever the provider put in the context", () => {
+    const web = { ...localTransport, desktop: false };
+    const wrapper = ({ children }: { children: React.ReactNode }) =>
+      createElement(ThreadTransportContext.Provider, { value: web }, children);
+    const { result } = renderHook(() => useThreadTransport(), { wrapper });
+    expect(result.current).toBe(web);
+    expect(result.current.desktop).toBe(false);
   });
 });

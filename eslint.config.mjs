@@ -18,7 +18,6 @@ const OVERSIZE = {
   "lib/login.test.ts": 553,
   "lib/import.test.ts": 568,
   "components/Composer.tsx": 556,
-  "lib/board-tools.test.ts": 536,
   "lib/library.test.ts": 510,
   "lib/board-view.test.ts": 520,
   "components/SettingsDialog.tsx": 471,

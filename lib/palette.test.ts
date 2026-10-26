@@ -64,6 +64,14 @@ describe("paletteResults", () => {
     expect(paletteResults(items, "", none, null).map((i) => i.id)).not.toContain(RECENT_MORE_ID);
   });
 
+  it("the show-more row runs without closing the palette", () => {
+    const moves = Array.from({ length: 8 }, (_, i) => item(`r${i}`, "Recently changed", `moved ${i}`, { cardId: `k${i}` }));
+    const more = paletteResults(moves, "", none, null).find((i) => i.id === RECENT_MORE_ID)!;
+    expect(more).toBeDefined();
+    // Picking it expands the list in place, so running it does nothing on its own.
+    expect(() => more.run()).not.toThrow();
+  });
+
   it("caps cards at 30", () => {
     const many = Array.from({ length: 40 }, (_, i) => item(`x${i}`, "Cards", `thing ${i}`));
     expect(paletteResults(many, "thing", none, null)).toHaveLength(30);

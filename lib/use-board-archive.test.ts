@@ -18,6 +18,15 @@ beforeEach(() => {
 
 afterEach(cleanup);
 
+// The board's own markup for a column of cards: the archive key reads it to find where the
+// keyboard focus should land after a card is filed away.
+function boardDom(ids: string[], extra = "") {
+  document.body.innerHTML = `<div data-column="done">${ids
+    .map((id) => `<div data-card-id="${id}" tabindex="0">${id}</div>`)
+    .join("")}${extra}</div>`;
+  return [...document.querySelectorAll<HTMLElement>("[data-card-id]")];
+}
+
 function makeArchive(over: Partial<{ cards: Card[]; selected: Card | null }> = {}) {
   const cards = over.cards ?? [card()];
   const selected = over.selected ?? null;
@@ -100,5 +109,67 @@ describe("useBoardArchive", () => {
       await Promise.resolve();
     });
     expect(notify).toHaveBeenCalled();
+  });
+
+  it("moves the keyboard focus to the next card in the column", () => {
+    const els = boardDom(["c1", "c2", "c3"]);
+    const { result } = makeArchive({ cards: [card({ id: "c1" }), card({ id: "c2" }), card({ id: "c3" })] });
+    act(() => result.current.archiveCards([card({ id: "c1" })]));
+    // c1 goes away, so the focus lands on the card below it.
+    expect(document.activeElement).toBe(els[1]);
+  });
+
+  it("moves the focus to the nearest card above when the last one goes", () => {
+    const els = boardDom(["c1", "c2"]);
+    const { result } = makeArchive({ cards: [card({ id: "c1" }), card({ id: "c2" })] });
+    act(() => result.current.archiveCards([card({ id: "c2" })]));
+    expect(document.activeElement).toBe(els[0]);
+  });
+
+  it("copes with a card element that names no card", () => {
+    // A card element whose data-card-id reads as nothing: the id list falls back to an empty
+    // string, so the neighbour search skips it instead of matching a card called "".
+    document.body.innerHTML = '<div data-column="done"><div data-card-id="c1" tabindex="0">c1</div></div>';
+    const column = document.querySelector<HTMLElement>("[data-column]")!;
+    const odd = document.createElement("div");
+    // happy-dom's dataset is a readonly proxy, so the element's own is replaced with a plain one.
+    Object.defineProperty(odd, "dataset", { value: { cardId: undefined } });
+    odd.setAttribute("data-card-id", "c1");
+    column.append(odd);
+    const { result } = makeArchive({ cards: [card({ id: "c1" })] });
+    expect(() => act(() => result.current.archiveCards([card({ id: "c1" })]))).not.toThrow();
+    expect(apiArchive).toHaveBeenCalledWith("c1", true);
+  });
+
+  it("focuses nothing when the column has no other card", () => {
+    boardDom(["c1"]);
+    const { result } = makeArchive({ cards: [card({ id: "c1" })] });
+    act(() => result.current.archiveCards([card({ id: "c1" })]));
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  it("unarchive surfaces an api error through notify", async () => {
+    apiArchive.mockRejectedValueOnce(new Error("down"));
+    const { result, notify } = makeArchive({ cards: [card({ id: "c1" })] });
+    await act(async () => {
+      result.current.unarchive(["c1"]);
+      await Promise.resolve();
+    });
+    expect(notify).toHaveBeenCalled();
+  });
+
+  it("the toast's Undo puts the cards back", () => {
+    const { result, setToast } = makeArchive({ cards: [card({ id: "c1" })] });
+    act(() => result.current.archiveCards([card({ id: "c1" })]));
+    const [, action] = setToast.mock.calls[0] as [string, { label: string; run: () => void }];
+    act(() => action.run());
+    expect(apiArchive).toHaveBeenCalledWith("c1", false);
+    expect(result.current.lastArchived).toEqual([]);
+  });
+
+  it("keeps the last batch for Z to undo", () => {
+    const { result } = makeArchive({ cards: [card({ id: "c1" }), card({ id: "c2" })] });
+    act(() => result.current.archiveCards([card({ id: "c1" }), card({ id: "c2" })]));
+    expect(result.current.lastArchived).toEqual(["c1", "c2"]);
   });
 });

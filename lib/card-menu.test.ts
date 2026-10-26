@@ -98,6 +98,11 @@ describe("cardMenu", () => {
     expect(item(cardMenu(card(), null, true), "vault:revoke")).toMatchObject({ label: "Revoke 🔐 Vault Access" });
     expect(ids(cardMenu(card(), null, true))).not.toContain("vault:grant");
   });
+
+  it("says when the card has hit its plan limit", () => {
+    expect(item(cardMenu(card()), "switch:puku")?.label).toBe("Run on puku-cli");
+    expect(item(cardMenu(card({ rateLimitHit: true })), "switch:puku")?.label).toBe("Run on puku-cli (hit plan limit)");
+  });
 });
 
 describe("resumeCommand", () => {

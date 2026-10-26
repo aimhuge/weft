@@ -81,6 +81,19 @@ describe("useCloudSync", () => {
     expect(result.current.folders).toEqual(["/fresh"]);
   });
 
+  it("drops an error that arrives after a newer fetch started", async () => {
+    let fail: (err: unknown) => void = () => undefined;
+    api.cloudSync.mockImplementationOnce(() => new Promise((_resolve, reject) => (fail = reject)));
+    const { result } = renderHook(() => useCloudSync());
+    api.cloudSync.mockResolvedValueOnce({ folders: ["/fresh"], status: STATUS });
+    await act(() => result.current.reload());
+    expect(result.current.error).toBeNull();
+    // The old fetch fails after the newer one landed: the stale error is dropped, not shown.
+    act(() => fail(new Error("stale failure")));
+    await act(() => Promise.resolve());
+    expect(result.current.error).toBeNull();
+  });
+
   it("setFolder posts the change and applies the server's folders + status", async () => {
     api.cloudSyncSetFolder.mockResolvedValueOnce({ folder: "/b", on: true, folders: ["/a", "/b"], status: SIGNED_OUT });
     const { result } = renderHook(() => useCloudSync());

@@ -123,6 +123,8 @@ describe("vault view", () => {
     expect(badge).toEqual({ missing: 1, nudge: true });
     expect(railTitle(badge)).toBe("Secrets: this project's vault · 1 blank to fill in · .env.local has values to import");
     expect(railTitle({ missing: 0, nudge: false })).toBe("Secrets: this project's vault");
+    expect(railTitle({ missing: 3, nudge: false })).toBe("Secrets: this project's vault · 3 blanks to fill in");
+    expect(railTitle({ missing: 0, nudge: false, vercel: "vault is ahead of Vercel" })).toBe("Secrets: this project's vault · vault is ahead of Vercel");
     expect(nudgeText({ count: 14, file: ".env.local" })).toBe("Found 14 secrets in .env.local: move them into the vault?");
     expect(nudgeText({ count: 1, file: "apps/web/.env.local" })).toBe("Found 1 secret in apps/web/.env.local: move it into the vault?");
     expect(nudgeText({ count: 1, file: ".env.local", managed: true })).toBe("You edited .env.local: import the change into the vault?");

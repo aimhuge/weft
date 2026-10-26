@@ -82,6 +82,16 @@ describe("useBoardCardActions", () => {
     expect(apiMove).toHaveBeenCalledTimes(2);
   });
 
+  it("a refusal on a card that never moved puts it back nowhere, just says why", async () => {
+    apiMove.mockRejectedValueOnce(new Error("offline"));
+    const { result, setCards, notify } = makeActions([card({ id: "c1", column: "review" })]);
+    // Moving to the card's own column never touched the board, so there is nothing to undo.
+    act(() => result.current.move("c1", "review"));
+    await Promise.resolve();
+    expect(notify).toHaveBeenCalledWith(new Error("offline"));
+    expect(setCards).not.toHaveBeenCalled();
+  });
+
   it("drop moves the dragged card when its column changed", () => {
     const preventDefault = vi.fn();
     const { result, setDragOver } = makeActions([card({ id: "c1", column: "running" })]);
@@ -198,6 +208,18 @@ describe("useBoardCardActions", () => {
   it("reorder is a no-op for an unknown card", () => {
     const { result, setCards } = makeActions([card({ id: "a", column: "backlog" })]);
     act(() => result.current.reorder("ghost", "a", true));
+    expect(apiReorder).not.toHaveBeenCalled();
+    expect(setCards).not.toHaveBeenCalled();
+  });
+
+  it("reorder is a no-op when the target isn't a sibling in the card's column", () => {
+    const cards = [
+      card({ id: "a", column: "backlog", order: 100 }),
+      card({ id: "b", column: "review", order: 200 }),
+    ];
+    const { result, setCards } = makeActions(cards);
+    // "b" is in another column, so it isn't a sibling of "a" and there's nowhere to drop.
+    act(() => result.current.reorder("a", "b", true));
     expect(apiReorder).not.toHaveBeenCalled();
     expect(setCards).not.toHaveBeenCalled();
   });

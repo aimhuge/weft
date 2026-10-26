@@ -193,6 +193,26 @@ describe("the capture loop", () => {
     await vi.advanceTimersByTimeAsync(w.FRAME_MS + 10);
     expect(h.screenshot).toHaveBeenCalledTimes(1);
   });
+
+  it("does not restart the loop of a watch that has been replaced", async () => {
+    vi.useFakeTimers();
+    await w.watch(DEV);
+    // The loop's next frame hangs, so it is still being written when the watch is replaced.
+    let release!: (b: Buffer) => void;
+    h.screenshot.mockReturnValueOnce(new Promise<Buffer>((resolve) => (release = resolve)));
+    await vi.advanceTimersByTimeAsync(w.FRAME_MS + 10);
+    // Stopping and watching again makes a fresh watch for the same device, so the frame the
+    // old loop was writing belongs to a watch that is no longer the current one.
+    w.stopWatching("SIM-1");
+    await w.watch(DEV);
+    const before = h.screenshot.mock.calls.length;
+    // The hanging frame finishes: the old loop must not schedule another one. Only the new
+    // watch's own frame is captured, so the count grows by one, not two.
+    release(Buffer.alloc(0));
+    await vi.advanceTimersByTimeAsync(w.FRAME_MS * 2);
+    expect(h.screenshot.mock.calls.length).toBe(before + 1);
+    expect(w.watching("SIM-1")).toBe(true);
+  });
 });
 
 describe("stopWatching", () => {

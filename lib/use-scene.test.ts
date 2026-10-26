@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
-import { settingsBackdrop, useScene, useSettingsBackdrop } from "./use-scene";
+import { currentSceneFromDOM, settingsBackdrop, useScene, useSettingsBackdrop } from "./use-scene";
 
 afterEach(() => {
   document.documentElement.dataset.scene = "";
@@ -27,6 +27,27 @@ describe("useScene", () => {
       document.documentElement.dataset.theme = "dark";
     });
     await waitFor(() => expect(result.current.id).toBe("twin-suns"));
+  });
+
+  it("falls back to the base's first scene when the document names none", () => {
+    // No data-scene at all: the ?? branch takes over and the theme's fallback scene is used.
+    delete document.documentElement.dataset.scene;
+    document.documentElement.dataset.theme = "dark";
+    const { result } = renderHook(() => useScene());
+    expect(result.current.id).toBe("twin-suns");
+    delete document.documentElement.dataset.theme;
+    expect(currentSceneFromDOM().id).toBe("salt-flats");
+  });
+
+  it("stops watching when it unmounts", () => {
+    document.documentElement.dataset.scene = "salt-flats";
+    const { result, unmount } = renderHook(() => useScene());
+    unmount();
+    act(() => {
+      document.documentElement.dataset.scene = "twin-suns";
+    });
+    // The observer is disconnected, so the value stays where it was.
+    expect(result.current.id).toBe("salt-flats");
   });
 });
 
@@ -54,5 +75,18 @@ describe("settingsBackdrop", () => {
       document.documentElement.dataset.scene = "custom";
     });
     await waitFor(() => expect(result.current).toContain("var(--scene)"));
+  });
+
+  it("stops watching the document when it unmounts", () => {
+    document.documentElement.dataset.scene = "twin-suns";
+    document.documentElement.dataset.theme = "dark";
+    const { result, unmount } = renderHook(() => useSettingsBackdrop());
+    expect(result.current).toContain("/api/scenes/twin-suns");
+    unmount();
+    act(() => {
+      document.documentElement.dataset.scene = "custom";
+    });
+    // The observer is disconnected, so the backdrop stays where it was.
+    expect(result.current).toContain("/api/scenes/twin-suns");
   });
 });

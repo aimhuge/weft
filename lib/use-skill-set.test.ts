@@ -120,4 +120,22 @@ describe("useSkillSet", () => {
     const next = renderHook(() => useSkillSet({ cwd: "/old" }, true, () => {}));
     await waitFor(() => expect(next.result.current.view).toEqual({ seeded: true, rows: [] }));
   });
+
+  it("reload loads the set again, as after a skill was installed", async () => {
+    const { result } = renderHook(() => useSkillSet({ cwd: "/proj" }, true, () => {}));
+    await waitFor(() => expect(result.current.view).toEqual(projectView));
+    expect(api.skillSet).toHaveBeenCalledTimes(1);
+    // The server's set has grown since the first load.
+    const grown: SkillSetView = { ...projectView, rows: [...projectView.rows, { kind: "skill", name: "deck2", description: "d2", source: "project", inProject: true, on: true, changedHere: false }] };
+    api.skillSet.mockResolvedValueOnce(grown);
+    act(() => result.current.reload());
+    await waitFor(() => expect(api.skillSet).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(result.current.view?.rows).toHaveLength(2));
+  });
+
+  it("reload does nothing when there is no set to load", () => {
+    const { result } = renderHook(() => useSkillSet(null, true, () => {}));
+    act(() => result.current.reload());
+    expect(api.skillSet).not.toHaveBeenCalled();
+  });
 });
