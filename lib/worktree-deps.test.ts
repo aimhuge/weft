@@ -6,6 +6,9 @@ import { cloneModules, installDeps, installerFor, lockHash } from "./worktree-de
 
 const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "weft-deps-")));
 afterAll(() => fs.rmSync(tmp, { recursive: true, force: true }));
+// Cloning node_modules is `/bin/cp -c` (APFS clonefile, lib/worktree-deps.ts): macOS only, like the desktop app,
+// so the tests that need a real clone run only there (GNU cp on Linux CI has no -c).
+const onMac = it.skipIf(process.platform !== "darwin");
 const dir = (name: string, files: Record<string, string> = {}) => {
   const d = path.join(tmp, name);
   fs.mkdirSync(d, { recursive: true });
@@ -36,7 +39,7 @@ describe("lockHash", () => {
 });
 
 describe("cloneModules", () => {
-  it("clones node_modules, and skips when there's none or the target has its own", async () => {
+  onMac("clones node_modules, and skips when there's none or the target has its own", async () => {
     const from = dir("from", { "node_modules/x/i.js": "1" });
     const to = dir("to");
     expect(await cloneModules(from, to)).toBe(true);
@@ -54,12 +57,12 @@ describe("cloneModules", () => {
 });
 
 describe("installDeps", () => {
-  it("says what it did with no lockfile", async () => {
+  onMac("says what it did with no lockfile", async () => {
     expect(await installDeps(dir("f1", { "node_modules/a/i.js": "1" }), dir("t1"), process.env)).toBe("cloned node_modules");
     expect(await installDeps(dir("f2"), dir("t2"), process.env)).toBe("no dependencies");
   });
 
-  it("falls back and reports a failed install", async () => {
+  onMac("falls back and reports a failed install", async () => {
     const env = { ...process.env, PATH: "/nonexistent" };
     expect(await installDeps(dir("f3"), dir("t3", { "yarn.lock": "" }), env)).toBe("install failed");
     expect(await installDeps(dir("f4", { "node_modules/a/i.js": "1" }), dir("t4", { "yarn.lock": "" }), env)).toBe("cloned node_modules (install failed)");

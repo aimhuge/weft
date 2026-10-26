@@ -5,6 +5,9 @@ import path from "node:path";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "weft-pool-")));
+// Cloning node_modules is `/bin/cp -c` (APFS clonefile, lib/worktree-deps.ts): macOS only, like the desktop app,
+// so the tests that need a real clone run only there (GNU cp on Linux CI has no -c).
+const onMac = it.skipIf(process.platform !== "darwin");
 process.env.WEFT_DATA = path.join(tmp, "data");
 const size = vi.hoisted(() => ({ n: 1 }));
 vi.mock("./settings", () => ({ worktreePoolSize: () => size.n }));
@@ -49,7 +52,7 @@ describe("recent repos", () => {
 });
 
 describe("the pool", () => {
-  it("fills to the setting with node_modules cloned in, and does nothing at 0", async () => {
+  onMac("fills to the setting with node_modules cloned in, and does nothing at 0", async () => {
     size.n = 0;
     await fillPool(repo);
     expect(readyEntries(repo)).toEqual([]);
@@ -63,7 +66,7 @@ describe("the pool", () => {
     expect(git(entry!.path, "status", "--porcelain")).toBe("");
   });
 
-  it("hands a card the ready entry at HEAD on its own branch, in its subfolder, and refills", async () => {
+  onMac("hands a card the ready entry at HEAD on its own branch, in its subfolder, and refills", async () => {
     commit("moved.ts");
     const pooled = readyEntries(repo)[0]!.path;
     const wt = await takeWorktree({ id: "card1234-x", title: "Fix login", cwd: path.join(repo, "web") });
@@ -85,7 +88,7 @@ describe("the pool", () => {
     await returnWorktree(wt);
   });
 
-  it("makes one on the spot when none is ready", async () => {
+  onMac("makes one on the spot when none is ready", async () => {
     size.n = 0;
     const wt = await takeWorktree({ id: "slow0000", title: "Slow", cwd: repo });
     expect(fs.existsSync(path.join(wt.path, "node_modules", "dep"))).toBe(true);
