@@ -134,6 +134,16 @@ describe("createCardFromBody", () => {
     expect(folders.resolveFolder).toHaveBeenCalledWith("/dev/app");
   });
 
+  it("keeps the agent it was given; Builder and unknown names store none", () => {
+    createCardFromBody({ prompt: "x", agent: "copywriter" });
+    createCardFromBody({ prompt: "x", agent: "builder" });
+    createCardFromBody({ prompt: "x", agent: "poet" });
+    const made = vi.mocked(store.createCard).mock.calls.map((c) => c[0]);
+    expect(made[0]).toMatchObject({ agent: "copywriter" });
+    expect(made[1]).not.toHaveProperty("agent");
+    expect(made[2]).not.toHaveProperty("agent");
+  });
+
   it("keeps the tags it was given and remembers them", () => {
     createCardFromBody({ prompt: "x", tags: ["ui", "dark"] });
     expect(vi.mocked(store.createCard).mock.calls[0]?.[0]).toMatchObject({ tags: ["ui", "dark"], tagsBy: "user" });

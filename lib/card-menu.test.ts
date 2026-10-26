@@ -76,8 +76,27 @@ describe("cardMenu", () => {
     expect(item(cardMenu(card()), "skill:weft:commit")).toMatchObject({ accelerator: "2" });
   });
 
+  it("ticks the card's agent, Builder when it has none, and switches only between turns", () => {
+    expect(item(cardMenu(card()), "agent:builder")).toMatchObject({ checked: true, label: "Agent: 🛠 Builder", accelerator: "Shift+W" });
+    expect(item(cardMenu(card({ agent: "copywriter" })), "agent:copywriter")).toMatchObject({ checked: true, accelerator: "W" });
+    const live = cardMenu(card({ column: "running", agent: "copywriter" }));
+    expect(item(live, "agent:builder")?.enabled).toBe(false);
+    expect(item(live, "agent:copywriter")?.enabled).toBe(true);
+  });
+
   it("labels archive by state", () => {
     expect(item(cardMenu(card({ archived: true })), "archive")?.label).toBe("Unarchive");
+  });
+
+  it("offers the vault item only when the shell says whether the card has access", () => {
+    // The shell can't say (a plain browser tab, an older shell): no item at all.
+    expect(ids(cardMenu(card(), null, undefined)).some((id) => id.startsWith("vault:"))).toBe(false);
+    // No standing access: give it.
+    expect(item(cardMenu(card(), null, false), "vault:grant")).toMatchObject({ label: "Give 🔐 Vault Access for 1 Hour" });
+    expect(ids(cardMenu(card(), null, false))).not.toContain("vault:revoke");
+    // Standing access: take it back.
+    expect(item(cardMenu(card(), null, true), "vault:revoke")).toMatchObject({ label: "Revoke 🔐 Vault Access" });
+    expect(ids(cardMenu(card(), null, true))).not.toContain("vault:grant");
   });
 });
 

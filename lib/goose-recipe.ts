@@ -25,6 +25,8 @@ export interface GooseTurnPlan {
   backend: Backend;
   copilot?: boolean;
   persona?: string;
+  // The card's agent (lib/agents.ts), whose soul opens the system prompt.
+  agent?: string;
   // The model the card runs on; undefined (or Goose's own default) means Goose picks.
   model?: string;
   // The permission mode the card runs in.
@@ -51,7 +53,7 @@ export function gooseModelFor(plan: GooseTurnPlan): string {
 // instructions and skills, which Goose doesn't load on its own.
 export function gooseSystemText(plan: GooseTurnPlan): string {
   const parts: string[] = [];
-  const weft = weftSystemPrompt({ backend: plan.backend, copilot: plan.copilot, persona: plan.persona });
+  const weft = weftSystemPrompt({ backend: plan.backend, copilot: plan.copilot, persona: plan.persona, agent: plan.agent });
   if (weft) parts.push(weft);
   // How its commits and PRs are signed: Claude Code gets this as a setting (lib/attribution.ts signAsWeft),
   // Goose has none, so it is told. The copilot does not commit.

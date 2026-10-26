@@ -1,5 +1,6 @@
 "use client";
 
+import { agentOf } from "@/lib/agents";
 import { folderName, timeAgo } from "@/lib/format";
 import { modelLabel, runningOn } from "@/lib/new-thread";
 import { isBusy } from "@/lib/overlap";
@@ -26,6 +27,7 @@ export default function CardFooterMeta({ card, now, alsoHere, marks }: { card: C
     <span className="flex min-w-0 items-center gap-1.5">
       <span className={`size-1.5 shrink-0 rounded-full ${dot}`} title={cliTip} />
       {model && <span className={`shrink-0 whitespace-nowrap font-medium ${tone}`} title={cliTip}>{modelLabel(model)}</span>}
+      {card.agent && <AgentMark agent={card.agent} />}
       <FolderOrBoard card={card} />
       {isBusy(card) && alsoHere.length > 0 && <OverlapHint others={alsoHere} />}
       <Age card={card} now={now} />
@@ -34,6 +36,12 @@ export default function CardFooterMeta({ card, now, alsoHere, marks }: { card: C
       {card.openElsewhere && <OpenElsewhere />}
     </span>
   );
+}
+
+// A thread that isn't Builder shows who it is (lib/agents.ts); Builder, every card's default, shows nothing.
+function AgentMark({ agent }: { agent: string }) {
+  const info = agentOf(agent);
+  return <span className="shrink-0 text-[11px] leading-none" title={`${info.name}: ${info.tagline}`}>{info.emoji}</span>;
 }
 
 function FolderOrBoard({ card }: { card: Card }) {
@@ -66,7 +74,7 @@ function Age({ card, now }: { card: Card; now: number }) {
 function NextSend({ scheduled, now }: { scheduled: NonNullable<Card["scheduled"]>; now: number }) {
   const next = scheduled[0];
   if (!next) return null;
-  const icon = next.afterRestart || next.afterTurn ? "reload" : "clock";
+  const icon = next.afterRestart || next.afterTurn || next.forSlot ? "reload" : "clock";
   return (
     <span className="flex shrink-0 items-center gap-0.5 text-accent" title={`${scheduled.length} message${scheduled.length > 1 ? "s" : ""} scheduled; the next sends ${next.afterRestart ? "after Weft restarts" : sendsWhen(next, now)}`}>
       <Icon name={icon} size={10} />

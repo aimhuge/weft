@@ -1,5 +1,6 @@
 import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
+import { AGENT_ORDER, storedAgent, type ThreadAgent } from "./agents";
 import { firstMessage } from "./automations";
 import { boardCard, cardLine, LIST_LIMIT, readThreadText } from "./board-tools-format";
 import { markSeen } from "./copilot-digest";
@@ -51,10 +52,13 @@ interface NewBoardCard {
   parentId?: string;
   // Tags to start with; they count as the user's, and new ones join the catalog (lib/tag-store.ts).
   tags?: string[];
+  // Who the thread is (lib/agents.ts); Builder when left out.
+  agent?: ThreadAgent;
 }
 
 // The one place a card is made on behalf of a thread, whether it is the copilot's or a board thread's.
 export function createBoardCard(args: NewBoardCard): Card {
+  const agent = storedAgent(args.agent);
   const card = createCard({
     title: cleanTitle(args.title ?? "") || titleFromPrompt(args.prompt),
     prompt: args.prompt,
@@ -63,6 +67,7 @@ export function createBoardCard(args: NewBoardCard): Card {
     permissionMode: args.permissionMode,
     parentId: args.parentId,
     ...tagsPatch(args.tags),
+    ...(agent ? { agent } : {}),
   });
   touchProject(card.cwd);
   return card;
@@ -77,6 +82,8 @@ function tagsPatch(raw: string[] = []): Pick<Card, "tags" | "tagsBy"> {
 }
 
 const TAGS = z.array(z.string()).optional().describe("Short labels for the card, like bug or launch");
+const AGENT = z.enum(AGENT_ORDER as [ThreadAgent, ...ThreadAgent[]]).optional()
+  .describe("Who the thread is: builder (default) builds; copywriter writes in Weft's voice (pages, intros, changelog, UI copy)");
 
 function listCardsTool() {
   return tool(
@@ -127,8 +134,9 @@ export function weftMcpServer(
           folder: z.string().optional().describe("Project folder; defaults to this thread's own folder"),
           start: z.boolean().optional().describe("Run it now (default true); false leaves it in Backlog"),
           tags: TAGS,
+          agent: AGENT,
         },
-        ({ prompt, title, folder, start, tags }) =>
+        ({ prompt, title, folder, start, tags, agent }) =>
           attempt(() => {
             const parentId = getCardId();
             const parent = parentId ? getCard(parentId) : undefined;
@@ -140,6 +148,7 @@ export function weftMcpServer(
               permissionMode: parent?.permissionMode ?? defaultPermissionMode(),
               parentId: parent?.id,
               tags,
+              agent,
             });
             if (start === false) return `Created ${card.id} in Backlog: ${card.title}`;
             actions.start(card.id, firstMessage(card));
@@ -180,6 +189,7 @@ export function boardMcpServer(actions: BoardActions) {
           cli: z.enum(["claude", "puku", "codex", "goose"]).optional(),
           permission_mode: z.enum(["default", "acceptEdits", "auto", "bypassPermissions"]).optional(),
           tags: TAGS,
+          agent: AGENT,
         },
         (args) =>
           attempt(() => {

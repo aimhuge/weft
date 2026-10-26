@@ -1,7 +1,7 @@
 "use client";
 
 // The client half of /admin/users: every weft.zip account from /api/admin/users as a sheet (the sheet kit,
-// components/sheet/SheetTable.tsx, columns in lib/users-sheet.ts). It loads every account, a couple of hundred at a
+// @aimhuge/sheet's SheetTable, columns in lib/users-sheet.ts). It loads every account, a couple of hundred at a
 // time, so the search (name or email, typed into the User header or anywhere on the page), the filters on provider,
 // joined and last seen, and the sorts all answer at once in the browser. A row opens that account's activity drawer
 // (UserActivity). Built on the admin kit (components/admin).
@@ -9,7 +9,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Avatar } from "@/components/admin/DataTable";
 import { AdminPage, Badge } from "@/components/admin/kit";
-import SheetTable from "@/components/sheet/SheetTable";
+import { SheetTable } from "@aimhuge/sheet/client";
 import type { AdminUserRow } from "@/app/api/admin/users/route";
 import { timeAgo } from "@/lib/format";
 import { USERS_FRESH, USERS_SHEET, msOf, type UserKey } from "@/lib/users-sheet";

@@ -145,7 +145,9 @@ export function ensureSpare(cwd: string, backend: Backend = "claude") {
 
 export function adoptSpare(card: Card): Session | undefined {
   // A spare runs in the project folder, so an isolated card (whose CLI runs in its worktree) starts its own.
-  if (card.sessionId || card.role === "copilot" || card.isolated) return undefined;
+  if (card.sessionId || card.forkOf || card.role === "copilot" || card.isolated) return undefined;
+  // A spare starts with Builder's soul, and a CLI reads its system prompt as it starts (lib/agents.ts).
+  if (card.agent) return undefined;
   const key = spareKey(card.backend, card.cwd);
   const spare = spares.get(key);
   if (!spare || spare.abort.signal.aborted || spare.ended) return undefined;

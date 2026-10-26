@@ -116,6 +116,40 @@ describe("specFor", () => {
   });
 });
 
+// A cron's fork run (lib/cron-run.ts) starts as a copy of the source's session: the card carries the
+// session and the entry to resume at in forkOf, and never writes back to the source's own session.
+describe("specFor on a forked card", () => {
+  const base: Card = { id: "c1", title: "T", prompt: "", cwd: "/", backend: "claude", permissionMode: "default", column: "backlog", createdAt: 0, updatedAt: 0 };
+
+  it("takes the session from forkOf and resumes at its anchor", () => {
+    const spec = specFor({ ...base, forkOf: { sessionId: "sess-1", at: "uuid-anchor" } });
+    expect(spec.sessionId).toBe("sess-1");
+    expect(spec.forkSession).toBe(true);
+    expect(spec.resumeAt).toBe("uuid-anchor");
+  });
+
+  it("forks with no anchor when the cron had none", () => {
+    const spec = specFor({ ...base, forkOf: { sessionId: "sess-1" } });
+    expect(spec.sessionId).toBe("sess-1");
+    expect(spec.forkSession).toBe(true);
+    expect(spec.resumeAt).toBeUndefined();
+  });
+
+  it("ignores forkOf when the card has a session of its own", () => {
+    const spec = specFor({ ...base, sessionId: "own-session", forkOf: { sessionId: "sess-1", at: "uuid-anchor" } });
+    expect(spec.sessionId).toBe("own-session");
+    expect(spec.forkSession).toBeUndefined();
+    expect(spec.resumeAt).toBeUndefined();
+  });
+
+  it("is no fork at all when the card has neither", () => {
+    const spec = specFor(base);
+    expect(spec.sessionId).toBeUndefined();
+    expect(spec.forkSession).toBeUndefined();
+    expect(spec.resumeAt).toBeUndefined();
+  });
+});
+
 // A Goose card runs the model it was given (the New thread dialog, a mid-thread switch), as a Claude Code or
 // puku-cli card does; the model picked in Settings → Models → Bring your own key only fills in "Goose default".
 describe("specFor on a Goose card", () => {

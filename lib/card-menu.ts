@@ -1,3 +1,4 @@
+import { AGENT_ORDER, AGENTS, agentOf, type ThreadAgent } from "./agents";
 import { isLive } from "./format";
 import { permissionOptions, type Backend, type Card, type Column, type DevServerStatus, type PermissionMode } from "./types";
 import { BACKENDS } from "./new-thread";
@@ -21,9 +22,12 @@ export type CardAction =
   | `skill:${string}`
   | `mode:${PermissionMode}`
   | `switch:${Backend}`
+  | `agent:${ThreadAgent}`
   | "dev:start"
   | "dev:restart"
   | "dev:stop"
+  | "vault:grant"
+  | "vault:revoke"
   | "new-here"
   | "reveal"
   | "copy-path"
@@ -77,6 +81,8 @@ const MENU_KEYS: Record<string, string> = {
   // from (BACKENDS), so a CLI added there always gets a key: a hand-written list went stale once
   // already, and the new item came out with no key at all.
   ...Object.fromEntries(BACKENDS.map((backend, i) => [`switch:${backend.id}`, switchKey(i)])),
+  "agent:builder": "Shift+W",
+  "agent:copywriter": "W",
   "new-here": "N",
   reveal: "F",
   "copy-path": "C",
@@ -95,7 +101,9 @@ const MENU_KEYS: Record<string, string> = {
 };
 
 // dev is the card's dev server, when its review plan names one.
-export function cardMenu(card: Card, dev?: DevServerStatus | null): MenuItem[] {
+// access: whether the card has standing 🔐 vault access (electron/vault-grants.cjs), or undefined when the shell
+// can't give it (a plain browser tab, an older shell), which leaves the item out.
+export function cardMenu(card: Card, dev?: DevServerStatus | null, access?: boolean): MenuItem[] {
   const live = isLive(card);
   const items: MenuItem[] = [{ id: "open", label: "Open Thread" }, { id: "rename", label: "Rename…" }, SEPARATOR];
 
@@ -112,14 +120,14 @@ export function cardMenu(card: Card, dev?: DevServerStatus | null): MenuItem[] {
     if (up) items.push({ id: "dev:restart", label: "Restart Dev Server" }, { id: "dev:stop", label: "Stop Dev Server" });
     else items.push({ id: "dev:start", label: "Start Dev Server" });
   }
-  items.push(SEPARATOR);
+  items.push(...vaultItems(access), SEPARATOR);
 
   // Applies mid-turn too; Codex maps these choices to its sandbox modes.
   for (const m of permissionOptions(card.backend)) {
     items.push({ id: `mode:${m.id}`, label: `Permissions: ${m.label}`, checked: card.permissionMode === m.id });
   }
   items.push(SEPARATOR);
-  items.push(...switchItems(card, live));
+  items.push(...switchItems(card, live), ...agentItems(card, live));
   items.push(SEPARATOR);
 
   items.push({ id: "new-here", label: "New Thread in This Folder" }, { id: "reveal", label: "Reveal Folder in Finder" });
@@ -133,12 +141,30 @@ export function cardMenu(card: Card, dev?: DevServerStatus | null): MenuItem[] {
   return withAccelerators(items, MENU_KEYS);
 }
 
+// Give or take back the card's standing 🔐 vault access: one Touch ID, then its fills, runs and dev server don't ask
+// for an hour. Extracted to keep cardMenu's complexity in check.
+function vaultItems(access: boolean | undefined): MenuItem[] {
+  if (access === undefined) return [];
+  return [access ? { id: "vault:revoke", label: "Revoke 🔐 Vault Access" } : { id: "vault:grant", label: "Give 🔐 Vault Access for 1 Hour" }];
+}
+
 // The "Run on <other>" menu item. Extracted to keep cardMenu's complexity in check.
 function switchItems(card: Card, live: boolean): MenuItem[] {
   return BACKENDS.filter((backend) => backend.id !== card.backend).map((backend) => ({
     id: `switch:${backend.id}`,
     label: `Run on ${backend.label}${card.rateLimitHit ? " (hit plan limit)" : ""}`,
     enabled: !live,
+  }));
+}
+
+// "Agent: <name>", ticked on the card's own: who the thread is (lib/agents.ts). A switch ends its CLI, so not mid-turn.
+function agentItems(card: Card, live: boolean): MenuItem[] {
+  const current = agentOf(card.agent).id;
+  return AGENT_ORDER.map((id) => ({
+    id: `agent:${id}`,
+    label: `Agent: ${AGENTS[id].emoji} ${AGENTS[id].name}`,
+    checked: current === id,
+    enabled: !live || current === id,
   }));
 }
 

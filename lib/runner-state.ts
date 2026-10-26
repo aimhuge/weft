@@ -3,6 +3,7 @@ import { messageContent } from "./attachments";
 import type { BoardActions } from "./board-tools";
 import type { ClassifierDenial } from "./classifier-denial";
 import type { CliProcess } from "./cli-process";
+import type { ThreadAgent } from "./agents";
 import type { CopilotPersona } from "./copilot-personas";
 import type { EditPreview } from "./edit-preview";
 import { allowedFolders, gooseBaseUrl, gooseModelId, gooseProviderId, keepAliveMinutes } from "./settings";
@@ -91,6 +92,8 @@ export interface Spec {
   copilot: boolean;
   // The copilot's persona, whose prompt joins its system prompt (lib/copilot-personas.ts).
   persona?: CopilotPersona;
+  // The card's agent, whose soul opens its system prompt (lib/agents.ts); none is Builder.
+  agent?: ThreadAgent;
   // The provider a Goose thread runs against (Goose's --provider). Empty means Goose's own choice.
   provider?: string;
   // The endpoint a Goose thread runs against, from Settings → Models (gooseBaseUrl). It wins over
@@ -223,9 +226,12 @@ export function specFor(card: Card): Spec {
     permissionMode: card.permissionMode,
     model: cardModel || settingsModel || undefined,
     effort: effortFor(card.backend, card.effort),
-    sessionId: card.sessionId,
+    sessionId: card.sessionId ?? card.forkOf?.sessionId,
+    // A cron's fork run starts as a copy of the source's session, never writing to it.
+    ...(!card.sessionId && card.forkOf ? { forkSession: true, resumeAt: card.forkOf.at } : {}),
     copilot: card.role === "copilot",
     persona: card.role === "copilot" ? card.persona : undefined,
+    agent: card.role === "copilot" ? undefined : card.agent,
     readScope: readScopeFor(card),
     // The copilot runs the board from your home folder; it keeps every skill, as before.
     skillsOff: card.role === "copilot" ? undefined : offFor(card),

@@ -5,6 +5,7 @@
 import type { Backend, CardStats, Column, PendingPermission, ReviewPlan, ScheduledMessage } from "./types-card";
 import type { Effort } from "./types-settings";
 import type { CardTask } from "./tasks";
+import type { ThreadAgent } from "./agents";
 import type { CopilotPersona } from "./copilot-personas";
 import type { CardShareMode } from "./share-types";
 export type { CardStats, Column };
@@ -68,6 +69,8 @@ export interface Card {
   role?: "copilot";
   // Which copilot it is (lib/copilot-personas.ts); none means Wingman. Only on the copilot card.
   persona?: CopilotPersona;
+  // Who the thread is (lib/agents.ts): its soul opens the system prompt. None means Builder, Weft's own soul.
+  agent?: ThreadAgent;
   // A CLI process is open for this thread, so a reply starts right away.
   warm?: boolean;
   // From the thread's own BOARD STATUS line (see lib/status.ts).

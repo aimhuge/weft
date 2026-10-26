@@ -1,6 +1,7 @@
 // The fetch client: a single `api` object with one method per server route, plus
 // the XHR upload and audio transcribe helpers.
 
+import type { ThreadAgent } from "./agents";
 import type { TagInfo, TagRow } from "./tags";
 import type { Webhook, WebhookInput, WebhookPatch } from "./webhooks";
 import type { IntakeResult } from "./project-intake";
@@ -55,6 +56,8 @@ export interface NewCardInput {
   tags?: string[];
   // A git worktree of its own (docs/architecture/worktrees.md); left out, the shared folder.
   isolated?: boolean;
+  // Who the thread is (lib/agents.ts); left out, Builder.
+  agent?: ThreadAgent;
   start: boolean;
 }
 
@@ -127,15 +130,29 @@ async function readJson<T>(res: Response): Promise<T & { error?: string }> {
   }
 }
 
+// The reply's body, or the server's error (else the status) thrown.
+async function reply<T>(res: Response): Promise<T & { error?: string }> {
+  const data = await readJson<T>(res);
+  if (!res.ok) throw new Error(data.error ?? (res.statusText || `Request failed (${res.status}).`));
+  return data;
+}
+
+// A theme around your own picture (app/api/themes): multipart, so the browser sets the boundary.
+async function themeFromPicture(prompt: string, picture: File) {
+  const form = new FormData();
+  form.set("prompt", prompt);
+  form.set("picture", picture);
+  const res = await send("/api/themes", { method: "POST", headers: { "x-weft-token": "1" }, body: form });
+  return reply<{ id: string; card: Card }>(res);
+}
+
 async function transcribe(audio: Blob) {
   const res = await send("/api/transcribe", {
     method: "POST",
     headers: { "x-weft-token": "1", "content-type": audio.type || "audio/webm" },
     body: audio,
   });
-  const data = await readJson<{ text?: string }>(res);
-  if (!res.ok) throw new Error(data.error ?? (res.statusText || `Request failed (${res.status}).`));
-  return data.text ?? "";
+  return (await reply<{ text?: string }>(res)).text ?? "";
 }
 
 export async function call<T>(method: string, url: string, body?: unknown, signal?: AbortSignal): Promise<T> {
@@ -145,18 +162,20 @@ export async function call<T>(method: string, url: string, body?: unknown, signa
     body: body === undefined ? undefined : JSON.stringify(body),
     ...(signal ? { signal } : {}),
   });
-  const data = await readJson<T>(res);
-  if (!res.ok) throw new Error(data.error ?? (res.statusText || `Request failed (${res.status}).`));
-  return data;
+  return reply<T>(res);
 }
 
 export const api = {
   list: () => call<{ cards: Card[]; home: string; roots: Record<string, string> }>("GET", "/api/cards"),
   create: (input: NewCardInput) => call<{ card: Card; start?: { started: boolean; at?: number } }>("POST", "/api/cards", input),
   move: (id: string, column: Column) => call<{ card: Card }>("PATCH", `/api/cards/${id}`, { column }),
+  // Re-points a card at another folder (the list view's folder picker); the server refuses a busy card.
+  setCwd: (id: string, cwd: string) => call<{ card: Card }>("PATCH", `/api/cards/${id}`, { cwd }),
   reorder: (id: string, before: string | null) => call<{ card: Card }>("PATCH", `/api/cards/${id}`, { before }),
   rename: (id: string, title: string) => call<{ card: Card }>("PATCH", `/api/cards/${id}`, { title }),
   setMode: (id: string, permissionMode: PermissionMode) => call<{ card: Card }>("PATCH", `/api/cards/${id}`, { permissionMode }),
+  // A new soul: the card's CLI ends and its next turn resumes the conversation under it (lib/agents.ts).
+  setAgent: (id: string, agent: ThreadAgent) => call<{ card: Card }>("PATCH", `/api/cards/${id}`, { agent }),
   archive: (id: string, archived: boolean) => call<{ card: Card }>("PATCH", `/api/cards/${id}`, { archived }),
   // ★ and tags. Tags are normalized on the server, become yours (tagsBy "user"), and new ones join the catalog.
   mark: (id: string, patch: { starred?: boolean; tags?: string[] }) => call<{ card: Card }>("PATCH", `/api/cards/${id}`, patch),
@@ -246,6 +265,7 @@ export const api = {
   // Themes you prompted up (lib/custom-themes.ts), and starting the thread that paints a new one.
   themes: () => call<{ themes: CustomTheme[] }>("GET", "/api/themes"),
   createTheme: (prompt: string) => call<{ id: string; card: Card }>("POST", "/api/themes", { prompt }),
+  themeFromPicture,
   saveSettings: (patch: {
     threadPrompt?: string;
     keepAliveMinutes?: number;

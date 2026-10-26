@@ -233,6 +233,7 @@ export function planFor(session: Session): GooseTurnPlan {
     backend: "goose",
     copilot: session.spec.copilot,
     persona: session.spec.persona,
+    agent: session.spec.agent,
     model: session.spec.model,
     permissionMode: session.spec.permissionMode,
     skillsOff: session.spec.skillsOff,
