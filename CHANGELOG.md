@@ -8,10 +8,6 @@ lands; a release moves those lines under its version and tags the commit `vX.Y.Z
 
 ## [Unreleased]
 
-### Added
-
-- **Right-click a project for its own menu.** A project on the board now has its own menu: pin it so it always keeps a chip in the bar, hide it until you use the folder again, open it in the first installed editor or terminal, and start a thread there. The marks live per project in the saved list (`lib/project-list.ts`), and the route passes on only the marks you sent, so pinning never clears a hidden (`app/api/projects/route.ts`, `components/project-menu-handler.ts`, `components/ProjectChips.tsx`).
-
 ## [0.6.3] - 2026-10-26
 
 ### Added
@@ -22,6 +18,7 @@ lands; a release moves those lines under its version and tags the commit `vX.Y.Z
 - **The weekly repo-analysis report now reads the real systems, instead of the numbers it was written with.** The report is a file in `~/.weft/show`, so every figure in it was a snapshot from the day it was written. Now a guarded route (`app/api/infra/live`) reads the project's actual numbers and the page asks for them on open: the database size, the file storage and its object count, the auth users, the provider states, and the quota rows with how much of each ceiling is left. **The egress is measured too** — it has no API of its own, so Weft reads the Analytics log stream and splits the response's `content_length` by cache status, which is the difference between the cheap CDN rate and the full one. A missing credential never fails the read: that half comes back unread and the report says so plainly, rather than showing a stale number as if it were live. A `file:` page reaches the route through Weft's own bridge (`electron/live-data.cjs`): it names a path, never a URL, and Electron main holds the launch token so the page never has it. `pnpm infra:probe` prints the same snapshot the report reads.
 - **Your Weft plan now comes with BlastCP, and BlastCP applies it.** If you're connected to BlastCP with your Weft account, your own BlastCP workspace moves to BlastCP Creator (every channel, unlimited posts, $3 a month of AI generation) while you're on a Team seat or own a Pro, Open Source or Education workspace. It goes back to BlastCP Free when that ends, and a BlastCP plan you pay for yourself is never touched. Weft tells BlastCP when you sign in, twice a day, and as soon as your plan changes, so a Checkout shows up in BlastCP within seconds. The pricing cards, upgrade dialog and access row list the BlastCP tier again and say who gets it ("for the owner", "for every seat"). Main files: `lib/billing/blastcp-bundle.ts`, `app/api/billing/blastcp/route.ts`, `lib/blastcp-plan.ts`, `components/home/Plans.tsx`.
 - **`Z` reopens the last card you had open.** Close a card, press `Z` on the board, and it opens again: the same card that stays outlined after you close it. Undo the last archive moves to `Shift+Z` (the toast's Undo still works). Files: `components/board-shortcuts.ts`, `components/use-board-commands.ts`, `components/board-palette.ts`.
+- **Right-click a project for its own menu.** A project on the board now has its own menu: pin it so it always keeps a chip in the bar, hide it until you use the folder again, open it in the first installed editor or terminal, and start a thread there. The marks live per project in the saved list (`lib/project-list.ts`), and the route passes on only the marks you sent, so pinning never clears a hidden (`app/api/projects/route.ts`, `components/project-menu-handler.ts`, `components/ProjectChips.tsx`).
 
 ### Changed
 
