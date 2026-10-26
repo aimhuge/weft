@@ -8,6 +8,10 @@ lands; a release moves those lines under its version and tags the commit `vX.Y.Z
 
 ## [Unreleased]
 
+### Fixed
+
+- **A "use client" module that reaches a Node built-in no longer takes the board down.** The board 500'd with nothing the UI could show — Turbopack panics on `node:fs` ("the chunking context does not support external modules") and the whole route goes with it. The model menu was the culprit: it read the models you named straight from `lib/goose-models.ts`, which reads the settings file off disk. It reads them from the server instead now (`lib/use-named-models.ts`), the way the plan limits already were. And the class of bug is now a lint rule: a "use client" file that reaches a Node built-in, "server-only" or "use cache" fails `pnpm lint` (`weft/no-client-server-leak`), so the pre-commit hook refuses the change instead of the next restart. It reuses the analysis `lib/client-graph.test.ts` already walked the real tree with, and names the chain it found. Files: `eslint-rules/no-client-server-leak.mjs`, `eslint.config.mjs`, `lib/use-named-models.ts`, `lib/settings.ts`, `lib/types-settings.ts`, `components/ModelSelect.tsx`.
+
 ## [0.6.2] - 2026-10-26
 
 ### Added
