@@ -8,6 +8,8 @@ lands; a release moves those lines under its version and tags the commit `vX.Y.Z
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-10-26
+
 ### Added
 
 - **Weft asks to turn on Project Sync for the project you're working on.** Once a thread in a project reaches Review or Done, a "Turn on Project Sync for <project>?" dialog explains that synced projects keep their cards on your web dashboard while they run on your computer, so you can manage your Weft from the web, and that teams can watch each other's work and contribute in real time. It offers **Sync**, **Not now** and a **Don't show me again** box. It asks at most once a launch and never about a project that already syncs. Settings → General → Reset tips brings it back. (`components/SyncPromptDialog.tsx`, `lib/sync-prompt.ts`, `lib/use-sync-prompt.ts`)
