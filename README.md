@@ -192,7 +192,7 @@ port.
   background, and a notification (click it for the Software Update window, or **Restart Now**) and the Weft menu offer
   **Restart to Update**. With threads running it asks: **Restart When Idle** (the default) waits for them to finish,
   **Restart Now** cuts them off. Left alone, Weft restarts into the update by itself once no thread is running and
-  nobody has touched the Mac for 10 minutes. Weft → Check for Updates… opens the Software Update window (versions, last check, release notes, the next step). What changed is in [CHANGELOG.md](CHANGELOG.md); releasing is in docs/architecture/updates.md.
+  nobody has touched the Mac for 10 minutes. Weft → Check for Updates… (or File → Check for Updates…) opens the Software Update window (versions, last check, release notes, the next step). The first time Weft opens on a new version, a short **What's new** splash says what changed in a few lines (sometimes with a video), written by the Copywriter when the release is cut. What changed is in [CHANGELOG.md](CHANGELOG.md); releasing is in docs/architecture/updates.md.
 - If the server crashes, it restarts on its own; its output is in `~/Library/Logs/Weft/server.log`
   (Help → Open Logs Folder). If the dev server dies repeatedly (4 times in 2 minutes) while the
   board is up, a small bar at the bottom-left offers **Restart server**, **Open logs**, and

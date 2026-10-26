@@ -93,6 +93,8 @@ function createMenus({ APP_NAME, ASSETS, COPILOT_SHORTCUT, mac, pane, getWin, ge
               sendMenu("new-thread");
             },
           },
+          // The app menu's update item again, where people look for it (and the only one off a Mac).
+          updater.menuItem(),
           { type: "separator" },
           { label: "Close Window", accelerator: "CmdOrCtrl+W", click: () => BaseWindow.getFocusedWindow()?.close() },
         ],

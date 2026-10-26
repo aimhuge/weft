@@ -44,8 +44,11 @@ next-env.d.ts
 # packaged app
 /dist/
 
-# Local preview config (machine-specific paths)
-/.claude/
+# Local preview config (machine-specific paths); the repo-only release skill is the one thing kept
+/.claude/*
+!/.claude/skills/
+/.claude/skills/*
+!/.claude/skills/release/
 
 # Supabase CLI scratch (created by `supabase` commands, never source)
 supabase/.temp/

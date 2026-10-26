@@ -12,9 +12,10 @@ const GameBadge = guarded(() => import("./GameBadge"), { inline: true, what: "st
 const LeagueBadge = guarded(() => import("./LeagueBadge"), { inline: true, what: "league badge" });
 const WelcomeDialog = guarded(() => import("./WelcomeDialog"), { inline: true, what: "welcome" });
 const SyncPromptDialog = guarded(() => import("./SyncPromptDialog"), { inline: true, what: "sync prompt" });
+const ReleaseSplash = guarded(() => import("./ReleaseSplash"), { inline: true, what: "what's new" });
 
 // The header's badges for the project in view: code quality, the uncommitted pile, the Backlog, your streak
-// and level, your league, first launch's welcome beside the streak it introduces, and the ask to sync the project in view. They refresh whenever a turn ends or a card ships somewhere, so they follow the threads' work.
+// and level, your league, first launch's welcome beside the streak it introduces, the ask to sync the project in view, and the "What's new" splash after an update. They refresh whenever a turn ends or a card ships somewhere, so they follow the threads' work.
 // `start` begins a card (an improvement, a commit walk, a "Set it up"); it rejects when that fails.
 export default function HeaderBadges({
   cwd,
@@ -43,6 +44,7 @@ export default function HeaderBadges({
       <LeagueBadge refresh={done} />
       <WelcomeDialog onError={notify} />
       <SyncPromptDialog cwd={cwd} cards={cards} toast={toast} />
+      <ReleaseSplash />
     </>
   );
 }
