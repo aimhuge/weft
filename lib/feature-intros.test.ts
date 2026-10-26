@@ -13,6 +13,7 @@ import {
   muteMessage,
   resetIntros,
   VIDEO_INTROS,
+  type IntroId,
 } from "./feature-intros";
 
 function memory(initial?: string) {
@@ -53,9 +54,9 @@ describe("the intro list", () => {
   });
 
   it("knows which intros have a video yet", () => {
-    // Slack's hasn't been narrated: the rail knows it, but it plays nothing.
-    expect(hasVideo("vault")).toBe(true);
-    expect(hasVideo("slack")).toBe(false);
+    // Every drawer has its video today; an id that joins INTROS before its video plays nothing.
+    for (const id of INTROS) expect(hasVideo(id)).toBe(true);
+    expect(hasVideo("nope" as IntroId)).toBe(false);
     expect(VIDEO_INTROS.every((id) => INTROS.includes(id))).toBe(true);
   });
 });

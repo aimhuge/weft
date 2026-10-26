@@ -16,6 +16,8 @@ var FEATURE_TAGS = {
   cloudflare: "Your Worker, deployed and watched",
   blastcp: "Your social media, on one queue",
   github: "Your issues, as cards on the board",
+  slack: "Your team, in the loop",
+  crons: "Your AI, on a schedule",
   skills: "New tricks for your AI to learn",
   services: "Your dev servers, and what they cost",
   quality: "A score, and the refactors behind it",
@@ -57,7 +59,7 @@ var readFeature = function (root) {
 
 // The splash every intro opens on: an OG-style poster about the feature — its own icon big in the middle, its
 // name under it, and a line saying what it's for. It's injected here rather than written into each page, so all
-// twelve intros open the same way without each one carrying the markup.
+// fourteen intros open the same way without each one carrying the markup.
 //
 // It plays on a master timeline with the page's own timeline nested under it, so the story starts after the splash
 // clears instead of running underneath it — and the whole thing stays seekable (?t= holds a frame).

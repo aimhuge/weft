@@ -1,0 +1,151 @@
+<!doctype html>
+<!--
+  The ⏰ Crons drawer's intro (components/FeatureIntro.tsx plays it the first time the drawer opens), a HyperFrames
+  composition in the shared look (./kit.css). Beats, on the words that name them:
+  0.1s run your AI again on a schedule (the repeat form) · 3.6s every hour, every morning, once a week (the presets light up,
+  Daily stays on) · 7.4s each run is a new card (the runs stack up under their thread, violet like every cron) · 11.0s a daily
+  report just happens on its own (the drawer's row: next run, the last runs as dots, Run now).
+  The voice is #narration, read by `pnpm intros:narrate` (scripts/narrate-intros.mjs) into ./crons.m4a; the beats
+  sit on its words (./crons.words.json). Seekable: no timers, no tl.call.
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width">
+<title>Weft: crons</title>
+<link rel="stylesheet" href="./kit.css">
+<style>
+  /* Violet is crons' own colour in Weft (components/crons.css). */
+  :root { --cron: #a55cf0; --cron-soft: #c79af5; }
+
+  /* The repeat form, at the top: what to send, the presets, the readback. */
+  #form { left: 26px; top: 22px; width: 688px; height: 172px; border-radius: 20px; background: #10141f;
+    border: 2px solid #2d3346; padding: 14px 22px; }
+  #form .fh { font-size: 27px; font-weight: 600; color: #e8eaf0; display: flex; align-items: center; gap: 12px; }
+  #form .fh .q { font-size: 24px; color: #8d95aa; font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #presets { margin-top: 12px; display: flex; gap: 10px; }
+  .pre { height: 48px; padding: 0 18px; border-radius: 12px; background: #1f2433; border: 2px solid #2d3346;
+    font-size: 25px; color: #c9cfdf; display: inline-flex; align-items: center; }
+  #back { margin-top: 12px; font-size: 24px; color: #8d95aa; white-space: nowrap; }
+  #back b { color: var(--cron-soft); font-weight: 600; }
+
+  /* The board, in the middle: the thread and its runs stacked under it. */
+  #stack { left: 26px; top: 210px; width: 688px; height: 212px; }
+  #src { left: 0; top: 0; width: 688px; height: 64px; border-radius: 16px; background: #1f2433; border: 2px solid #2d3346;
+    padding: 0 18px; display: flex; align-items: center; gap: 12px; font-size: 28px; font-weight: 600; }
+  #src .nx { margin-left: auto; font-size: 23px; color: #8d95aa; font-weight: 400; flex: none; }
+  .run { left: 28px; width: 660px; height: 44px; border-radius: 14px; background: #1f2433; border: 2px solid #2d3346;
+    border-left: 8px solid var(--cron); padding: 0 16px; display: flex; align-items: center; gap: 12px; font-size: 24px; }
+  .run em { font-style: normal; color: var(--cron-soft); font-weight: 600; flex: none; }
+  .run .when { color: #8d95aa; margin-left: auto; flex: none; }
+  #r1 { top: 74px; } #r2 { top: 122px; } #r3 { top: 170px; }
+
+  /* The ⏰ Crons drawer's row, at the bottom: schedule, next run, the last runs as dots, Run now. */
+  #row { left: 26px; top: 440px; width: 688px; height: 118px; border-radius: 20px; background: #1f2433;
+    border: 2px solid #2d3346; padding: 14px 20px; }
+  #row .n { font-size: 28px; font-weight: 600; display: flex; align-items: center; gap: 12px; }
+  #row .sw { margin-left: auto; width: 62px; height: 34px; border-radius: 17px; background: var(--cron); position: relative; flex: none; }
+  #row .sw i { position: absolute; right: 4px; top: 4px; width: 26px; height: 26px; border-radius: 50%; background: #fff; }
+  #row .meta { margin-top: 10px; display: flex; align-items: center; gap: 14px; font-size: 23px; color: #8d95aa; }
+  #row .dots { display: flex; gap: 7px; }
+  #row .dots i { width: 16px; height: 16px; border-radius: 50%; background: #5fd38d; }
+  #row .dots i.rv { background: #4f7cff; }
+  #runnow { margin-left: auto; height: 40px; padding: 0 16px; border-radius: 11px; background: #2a1f3d; color: var(--cron-soft);
+    font-size: 22px; font-weight: 600; display: inline-flex; align-items: center; }
+</style>
+</head>
+<body>
+<div id="root" data-composition-id="root" data-start="0" data-duration="18" data-width="1600" data-height="900">
+  <div class="abs head"><span class="ic">⏰</span>Crons</div>
+  <div class="abs art">
+    <div class="abs panel" id="panel">
+      <!-- The repeat form: what to send, how often, and when it runs next. -->
+      <div class="abs" id="form">
+        <div class="fh">⏰ Repeat<span class="q">"Summarise yesterday's sign-ups"</span></div>
+        <div id="presets">
+          <span class="pre" id="pH">Hourly</span><span class="pre" id="pD">Daily</span>
+          <span class="pre" id="pWd">Weekdays</span><span class="pre" id="pW">Weekly</span>
+        </div>
+        <div id="back">Every day at <b>9:00</b> · next run tomorrow, 9:00</div>
+      </div>
+
+      <!-- The board: the thread, and each run as its own card under it. -->
+      <div class="abs" id="stack">
+        <div class="abs" id="src">Daily sign-ups report<span class="nx" id="nruns">⏰ next in 14h</span></div>
+        <div class="abs run" id="r1"><em>⏰ run 1</em>Daily sign-ups report<span class="when">Mon</span></div>
+        <div class="abs run" id="r2"><em>⏰ run 2</em>Daily sign-ups report<span class="when">Tue</span></div>
+        <div class="abs run" id="r3"><em>⏰ run 3</em>Daily sign-ups report<span class="when">Wed</span></div>
+      </div>
+
+      <!-- The ⏰ Crons drawer's row for it. -->
+      <div class="abs" id="row">
+        <div class="n">Daily sign-ups report<span class="sw"><i></i></span></div>
+        <div class="meta">every day 9:00 · next in 14h
+          <span class="dots"><i></i><i></i><i class="rv"></i></span>
+          <span id="runnow">▶ Run now</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="abs cap" id="c1">Weft runs your AI on a <b>schedule</b>.</div>
+  <div class="abs cap" id="c2">Hourly, <b>daily</b> or weekly.</div>
+  <div class="abs cap" id="c3">Each run is a <b>new card</b>, picking up where you left off.</div>
+  <div class="abs cap" id="c4">Reports and cleanups <b>just happen</b>.</div>
+  <div class="abs" id="fade"></div>
+</div>
+
+<script type="application/json" id="narration">
+{ "duration": 18, "lines": [
+  [0.3, 6.4, "Weft's crons run your AI again on a schedule: every hour, every morning, or once a week."],
+  [6.6, 16.0, "Each run is a new card that picks up right where your thread left off, so a daily report or a weekly cleanup just happens on its own."]
+] }
+</script>
+<script src="../welcome/gsap.min.js"></script>
+<script src="./splash-timing.js"></script>
+<script src="./player.js"></script>
+<script>
+  const tl = gsap.timeline({ paused: true });
+  const caps = ["#c1", "#c2", "#c3", "#c4"];
+  const at = [0.1, 3.4, 6.6, 10.8];
+  gsap.set(["#form", "#back", "#src", "#r1", "#r2", "#r3", "#row", ...caps], { opacity: 0 });
+
+  tl.to("#fade", { opacity: 0, duration: 0.4 }, 0);
+  caps.forEach((c, i) => {
+    tl.fromTo(c, { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.4 }, at[i]);
+    if (i < caps.length - 1) tl.to(c, { opacity: 0, duration: 0.3 }, at[i + 1] - 0.3);
+  });
+
+  // Run your AI again on a schedule: the repeat form, with the thread's message in it.
+  tl.to("#form", { opacity: 1, duration: 0.4 }, 0.1)
+    .fromTo("#form", { y: 20 }, { y: 0, duration: 0.4 }, 0.1);
+
+  // Every hour, every morning, once a week: each preset lights on its word, and Daily stays on.
+  const lit = { backgroundColor: "#2a1f3d", borderColor: "#a55cf0", color: "#e8d7fb", duration: 0.2 };
+  const dim = { backgroundColor: "#1f2433", borderColor: "#2d3346", color: "#c9cfdf", duration: 0.2 };
+  tl.to("#pH", lit, 3.6).to("#pH", dim, 4.4)
+    .to("#pD", lit, 4.6).to("#pD", dim, 5.5)
+    .to("#pW", lit, 5.6).to("#pW", dim, 6.2)
+    .to("#pD", lit, 6.2)
+    .fromTo("#back", { opacity: 0, y: 8 }, { opacity: 1, y: 0, duration: 0.3 }, 6.2);
+
+  // Each run is a new card: the thread on the board, and its runs stacking up under it, a day at a time.
+  tl.fromTo("#src", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.4 }, 6.6);
+  [["#r1", 7.4], ["#r2", 8.0], ["#r3", 8.6]].forEach(([r, t]) => {
+    tl.fromTo(r, { opacity: 0, y: -30 }, { opacity: 1, y: 0, duration: 0.4 }, t);
+  });
+  tl.to("#nruns", { color: "#c79af5", duration: 0.3 }, 9.8);
+
+  // It just happens on its own: the ⏰ Crons drawer's row, next run, the last runs, Run now.
+  tl.fromTo("#row", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.4 }, 11.0)
+    .fromTo("#row .dots i", { scale: 0 }, { scale: 1, duration: 0.25, stagger: 0.2 }, 11.4)
+    .to("#row", { borderColor: "#a55cf0", duration: 0.3 }, 12.6)
+    .fromTo("#runnow", { scale: 1 }, { scale: 1.08, duration: 0.2, yoyo: true, repeat: 1 }, 13.4)
+    .to("#fade", { opacity: 0, duration: 0.01 }, 18);
+
+  window.__timelines = window.__timelines || {};
+  window.__timelines.root = tl;
+  window.weftIntro(tl);
+</script>
+</body>
+</html>

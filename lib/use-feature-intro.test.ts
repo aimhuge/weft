@@ -3,7 +3,7 @@ import { act, render, renderHook } from "@testing-library/react";
 import { createElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { IntroFrame } from "@/components/FeatureIntro";
-import { INTROS_KEY, markIntroSeen, muteMessage, PAUSE_MESSAGE, REPLAY_MESSAGE, TOGGLE_MESSAGE } from "./feature-intros";
+import { INTROS_KEY, markIntroSeen, muteMessage, PAUSE_MESSAGE, REPLAY_MESSAGE, TOGGLE_MESSAGE, type IntroId } from "./feature-intros";
 import { coverIntros } from "./intro-cover";
 import { useIntroModal } from "./intro-modal";
 import { useFeatureIntro } from "./use-feature-intro";
@@ -38,7 +38,7 @@ describe("useFeatureIntro", () => {
   });
 
   it("plays nothing for an intro with no video yet", () => {
-    const { result } = renderHook(() => useFeatureIntro("slack"));
+    const { result } = renderHook(() => useFeatureIntro("nope" as IntroId));
     expect(result.current.open).toBe(false);
     const { container } = render(createElement(IntroFrame, { intro: result.current }));
     expect(container.querySelector("iframe")).toBeNull();

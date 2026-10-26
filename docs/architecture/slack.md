@@ -6,7 +6,8 @@ Each kind of update can go to a channel of its own, and growth — new users, ne
 growth channel, with a summary every morning.
 
 Slack's four-colour mark on the left rail (after GitHub's, in `components/LibraryRail.tsx`) opens a drawer that
-connects one Slack workspace to the board.
+connects one Slack workspace to the board. The first time it opens, it plays its intro video
+(`public/intros/slack.html`, docs/architecture/feature-intros.md).
 
 ## Why Socket Mode
 

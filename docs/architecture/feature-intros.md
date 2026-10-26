@@ -1,7 +1,7 @@
 # Feature intros
 
 Every tool drawer on the left rail, the New thread dialog, the code quality dialog and the leagues play a short
-narrated video the first time you open them: what the drawer is for and what it can do. Twelve of them, each its own
+narrated video the first time you open them: what the drawer is for and what it can do. Fourteen of them, each its own
 page in `public/intros/`. This is the same HyperFrames idea as the welcome tour (see [welcome-tour.md](welcome-tour.md)),
 scaled down to one feature instead of the whole product.
 
@@ -29,8 +29,9 @@ not the whole repo.
 
 One `<id>.html` per intro, listed in `INTROS` in `lib/feature-intros.ts` — that list is the contract; an id
 without a page plays a blank frame, and a page not in the list is never shown. `VIDEO_INTROS` is the narrower list
-of the ones that actually have a page and a voice. Slack is in `INTROS` with a title, so the rail knows it, but it
-has no page and no voice yet: it plays nothing and the ▶ button stays away.
+of the ones that actually have a page and a voice. Today every drawer has both (Slack and ⏰ Crons were the last,
+2026-10-26), but a new drawer can join `INTROS` with a title before its video is made: the rail knows it, it plays
+nothing and the ▶ button stays away until it joins `VIDEO_INTROS`.
 
 Each page is plain HTML plus a paused GSAP timeline handed to `window.weftIntro(tl)`, drawn with the shared
 `kit.css` (a 16:9 1600×900 stage: the drawer's art on the left inside `<div class="abs art">`, in the 800-wide
@@ -219,7 +220,7 @@ drawer or dialog that should play it.
   `tl.call`, so any frame can be produced by seeking to a time. The live player, the `?t=` check and the frame
   renderer all use that one clock; nothing is drawn twice.
 - **The splash is injected, not authored.** `buildSplash()` in `player.js` puts the poster on every page, so all
-  twelve intros open alike and a new page gets one for free. What the poster says comes from the page itself (the
+  fourteen intros open alike and a new page gets one for free. What the poster says comes from the page itself (the
   `.head` row) plus the two tables in `player.js` (`FEATURE_TAGS`, `FEATURE_MARKS`); a page is never edited to
   change its poster.
 - **The splash is a lead, not an overlay.** It plays on a master timeline with the story nested under it, so the

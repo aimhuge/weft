@@ -9,7 +9,7 @@ set -uo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 INTROS_DIR="${INTROS_DIR:-$here/../public/intros}"
 OUT_DIR="${OUT_DIR:-$here/../build/intros}"
-ALL="vault webhooks vercel supabase cloudflare blastcp github skills services quality leagues newthread"
+ALL="vault webhooks vercel supabase cloudflare blastcp github slack crons skills services quality leagues newthread"
 IDS="${*:-$ALL}"
 # The splash's lead comes from splash-timing.js, the same file the page and the encoder read, so the expected
 # length can't drift away from the poster's real length.

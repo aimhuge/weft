@@ -1,0 +1,140 @@
+<!doctype html>
+<!--
+  The Slack drawer's intro (components/FeatureIntro.tsx plays it the first time the drawer opens), a HyperFrames
+  composition in the shared look (./kit.css). Beats, on the words that name them:
+  0.1s keeps your team in the loop (the channel) · 4.3s commits, deploys and card updates (Weft's three posts
+  land one by one) · 9.1s slash Weft starts a card (your message, Weft's answer, the card) · 11.8s reply in
+  its thread (the reply goes to your AI).
+  The voice is #narration, read by `pnpm intros:narrate` (scripts/narrate-intros.mjs) into ./slack.m4a; the beats
+  sit on its words (./slack.words.json). Seekable: no timers, no tl.call.
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width">
+<title>Weft: Slack</title>
+<link rel="stylesheet" href="./kit.css">
+<style>
+  /* The channel's header: Slack's own look, a # name and its topic. */
+  #chan { left: 26px; top: 20px; width: 688px; height: 64px; display: flex; align-items: center; gap: 14px;
+    border-bottom: 2px solid #232838; font-size: 30px; font-weight: 700; color: #e8eaf0; }
+  #chan .hash { color: #8d95aa; font-weight: 400; }
+  #chan .topic { margin-left: auto; font-size: 23px; color: #8d95aa; font-weight: 400; }
+
+  /* A Slack message: an avatar, the sender, and what they said. */
+  .msg { left: 26px; width: 688px; display: flex; gap: 16px; align-items: flex-start; }
+  .msg .av { width: 52px; height: 52px; border-radius: 12px; flex: none; display: grid; place-items: center;
+    font-size: 26px; font-weight: 700; }
+  .msg .av.weft { background: #f0b429; color: #151925; }
+  .msg .av.you { background: #4f7cff; color: #fff; }
+  .msg .who { font-size: 23px; font-weight: 700; color: #e8eaf0; }
+  .msg .who span { font-weight: 400; color: #8d95aa; margin-left: 8px; }
+  .msg .say { font-size: 27px; color: #c9cfdf; margin-top: 2px; white-space: nowrap; }
+  .msg .say b { color: #e8eaf0; font-weight: 600; }
+  .msg .say .cmd { color: #7aa7ff; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+  .msg .say .at { color: #7aa7ff; background: rgba(79,124,255,0.14); border-radius: 6px; padding: 0 5px; }
+  #m1 { top: 102px; } #m2 { top: 176px; } #m3 { top: 250px; }
+  #m4 { top: 340px; } #m5 { top: 414px; }
+
+  /* The thread under Weft's answer: your reply, which goes to your AI. */
+  #thread { left: 94px; top: 500px; width: 620px; height: 96px; border-left: 4px solid #3a4258; padding-left: 18px; }
+  #thread .msg { left: 18px; top: 4px; width: 600px; }
+  #thread .msg .av { width: 40px; height: 40px; font-size: 20px; border-radius: 10px; }
+  #sent { left: 18px; top: 60px; font-size: 22px; color: #5fd38d; white-space: nowrap; }
+
+  /* The divider between Weft's updates and you talking to it. */
+  #rule { left: 26px; top: 322px; width: 688px; height: 2px; background: #232838; }
+</style>
+</head>
+<body>
+<div id="root" data-composition-id="root" data-start="0" data-duration="17" data-width="1600" data-height="900">
+  <div class="abs head"><span class="ic"><svg viewBox="0 0 24 24" width="60" height="60" aria-hidden><path fill="#E01E5A" d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zm1.271 0a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313z"/><path fill="#36C5F0" d="M8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.527 2.527 0 0 1 2.521 2.522v2.52H8.834zm0 1.271a2.527 2.527 0 0 1 2.521 2.521 2.527 2.527 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312z"/><path fill="#2EB67D" d="M18.958 8.834a2.528 2.528 0 0 1 2.52-2.521 2.528 2.528 0 0 1 2.52 2.521 2.527 2.527 0 0 1-2.52 2.522h-2.52V8.834zm-1.271 0a2.527 2.527 0 0 1-2.521 2.521 2.527 2.527 0 0 1-2.521-2.521V2.522A2.528 2.528 0 0 1 15.166 0a2.528 2.528 0 0 1 2.521 2.522v6.312z"/><path fill="#ECB22E" d="M15.166 18.958a2.528 2.528 0 0 1 2.521 2.521A2.528 2.528 0 0 1 15.166 24a2.527 2.527 0 0 1-2.521-2.522v-2.52h2.521zm0-1.271a2.527 2.527 0 0 1-2.521-2.521 2.527 2.527 0 0 1 2.521-2.521h6.312A2.528 2.528 0 0 1 24 15.166a2.528 2.528 0 0 1-2.522 2.521h-6.312z"/></svg></span>Slack</div>
+  <div class="abs art">
+    <div class="abs panel" id="panel">
+      <!-- The channel Weft posts to. -->
+      <div class="abs" id="chan"><span><span class="hash">#</span> weft-updates</span><span class="topic">3 members</span></div>
+
+      <!-- Weft's updates: a commit, a deploy, a card moving. -->
+      <div class="abs msg" id="m1"><span class="av weft">W</span><div>
+        <div class="who">Weft<span>9:41</span></div>
+        <div class="say">✓ Committed <b>fix the login redirect</b></div></div></div>
+      <div class="abs msg" id="m2"><span class="av weft">W</span><div>
+        <div class="who">Weft<span>9:42</span></div>
+        <div class="say">▲ Deployed to <b>production</b></div></div></div>
+      <div class="abs msg" id="m3"><span class="av weft">W</span><div>
+        <div class="who">Weft<span>9:44</span></div>
+        <div class="say">→ <b>Pricing page</b> moved to Review</div></div></div>
+
+      <div class="abs" id="rule"></div>
+
+      <!-- You start a card from Slack, and Weft answers with it. -->
+      <div class="abs msg" id="m4"><span class="av you">A</span><div>
+        <div class="who">Alex<span>9:50</span></div>
+        <div class="say"><span class="cmd">/weft</span> add a dark mode toggle</div></div></div>
+      <div class="abs msg" id="m5"><span class="av weft">W</span><div>
+        <div class="who">Weft<span>9:50</span></div>
+        <div class="say">🆕 Started <b>Dark mode toggle</b></div></div></div>
+
+      <!-- Its thread: your reply goes straight to your AI. -->
+      <div class="abs" id="thread">
+        <div class="abs msg"><span class="av you">A</span><div>
+          <div class="say"><span class="at">@Weft</span> use the slate colours</div></div></div>
+        <div class="abs" id="sent">↪ sent to your AI</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="abs cap" id="c1">Weft keeps your <b>team</b> in the loop.</div>
+  <div class="abs cap" id="c2"><b>Commits</b>, deploys and cards post to Slack.</div>
+  <div class="abs cap" id="c3"><b>/weft</b> starts a card.</div>
+  <div class="abs cap" id="c4">Reply in its thread to talk to <b>your AI</b>.</div>
+  <div class="abs" id="fade"></div>
+</div>
+
+<script type="application/json" id="narration">
+{ "duration": 17, "lines": [
+  [0.3, 8.1, "Weft's Slack connector keeps your team in the loop: Weft posts your commits, deploys and card updates to the channels you choose."],
+  [8.8, 15.4, "Type slash Weft in Slack to start a card, and reply in its thread to talk to your AI from anywhere."]
+] }
+</script>
+<script src="../welcome/gsap.min.js"></script>
+<script src="./splash-timing.js"></script>
+<script src="./player.js"></script>
+<script>
+  const tl = gsap.timeline({ paused: true });
+  const caps = ["#c1", "#c2", "#c3", "#c4"];
+  const at = [0.1, 3.3, 8.8, 11.8];
+  gsap.set(["#chan", "#m1", "#m2", "#m3", "#rule", "#m4", "#m5", "#thread", "#sent", ...caps], { opacity: 0 });
+
+  tl.to("#fade", { opacity: 0, duration: 0.4 }, 0);
+  caps.forEach((c, i) => {
+    tl.fromTo(c, { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.4 }, at[i]);
+    if (i < caps.length - 1) tl.to(c, { opacity: 0, duration: 0.3 }, at[i + 1] - 0.3);
+  });
+
+  // Keeps your team in the loop: the channel Weft posts to.
+  tl.to("#chan", { opacity: 1, duration: 0.4 }, 0.1)
+    .fromTo("#chan", { y: 16 }, { y: 0, duration: 0.4 }, 0.1);
+
+  // Commits, deploys and card updates: Weft's three posts land one by one, each on its word.
+  [["#m1", 4.3], ["#m2", 4.8], ["#m3", 5.5]].forEach(([m, t]) => {
+    tl.fromTo(m, { opacity: 0, y: 22 }, { opacity: 1, y: 0, duration: 0.4 }, t);
+  });
+
+  // Slash Weft starts a card: your message, then Weft's answer with the card.
+  tl.to("#rule", { opacity: 1, duration: 0.3 }, 8.8)
+    .fromTo("#m4", { opacity: 0, y: 22 }, { opacity: 1, y: 0, duration: 0.4 }, 9.1)
+    .fromTo("#m5", { opacity: 0, y: 22 }, { opacity: 1, y: 0, duration: 0.4 }, 10.7);
+
+  // Reply in its thread: the reply goes straight to your AI.
+  tl.fromTo("#thread", { opacity: 0, x: -24 }, { opacity: 1, x: 0, duration: 0.4 }, 11.8)
+    .fromTo("#sent", { opacity: 0, y: 8 }, { opacity: 1, y: 0, duration: 0.3 }, 13.8)
+    .to("#thread", { borderLeftColor: "#5fd38d", duration: 0.3 }, 13.8)
+    .to("#fade", { opacity: 0, duration: 0.01 }, 17);
+
+  window.__timelines = window.__timelines || {};
+  window.__timelines.root = tl;
+  window.weftIntro(tl);
+</script>
+</body>
+</html>

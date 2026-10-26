@@ -70,8 +70,8 @@ const TOOLS = { crons: ["⏰", "Crons", "Crons"], vault: ["🔐", "Secrets", "Se
 type Tool = keyof typeof TOOLS;
 const DRAWER_SLIDE_MS = 200;
 const isTool = (panel: RailPanel | null): panel is Tool => panel !== null && panel in TOOLS;
-// The drawers with an intro video (lib/feature-intros.ts); ⏰ Crons has none yet.
-const introOf = (panel: RailPanel | null) => (isTool(panel) && panel !== "crons" ? panel : null);
+// Every tool drawer has an intro video (lib/feature-intros.ts).
+const introOf = (panel: RailPanel | null) => (isTool(panel) ? panel : null);
 // ▲'s hover text: the drift between the vault and Vercel when there is one, else Vercel's own.
 const vercelRailTitle = (driftTitle: string, status: VercelStatus | null, project: string | null) => driftTitle || vercelTitle(status, project);
 

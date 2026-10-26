@@ -12,6 +12,7 @@ export const INTROS = [
   "blastcp",
   "github",
   "slack",
+  "crons",
   "skills",
   "services",
   "quality",
@@ -29,6 +30,7 @@ export const INTRO_TITLES: Record<IntroId, string> = {
   blastcp: "BlastCP",
   github: "GitHub",
   slack: "Slack",
+  crons: "Crons",
   skills: "Skills",
   services: "Services",
   quality: "Code quality",
@@ -38,10 +40,10 @@ export const INTRO_TITLES: Record<IntroId, string> = {
 
 export const isIntro = (id: unknown): id is IntroId => INTROS.includes(id as IntroId);
 
-// The intros that have a video page in public/intros. A drawer can be on the rail without one yet (Slack's
-// hasn't been narrated); it still has an id and a title, so the rail knows it, but it plays nothing: the
-// ▶ button stays away and nothing opens on the first visit.
-export const VIDEO_INTROS = ["vault", "webhooks", "vercel", "supabase", "cloudflare", "blastcp", "github", "skills", "services", "quality", "leagues", "newthread"] as const;
+// The intros that have a video page in public/intros. Every drawer has one today, but a new drawer can join
+// INTROS before its video is made; it still has an id and a title, so the rail knows it, but it plays nothing:
+// the ▶ button stays away and nothing opens on the first visit.
+export const VIDEO_INTROS = ["vault", "webhooks", "vercel", "supabase", "cloudflare", "blastcp", "github", "slack", "crons", "skills", "services", "quality", "leagues", "newthread"] as const;
 
 export const hasVideo = (id: IntroId) => (VIDEO_INTROS as readonly string[]).includes(id);
 

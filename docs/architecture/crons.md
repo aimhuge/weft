@@ -16,7 +16,8 @@ is never written to, so every run starts from the same point.
 - **⏰ Crons on the left rail** (under 🏷, `components/CronsDrawer.tsx`): every cron, soonest first, with a count badge
   of the ones that will run again. Each row: schedule, next run, an on/off switch, the last runs as dots coloured by
   their card's column (`lib/crons-view.ts`; click one to open that run), Run now, Edit (the same form) and Delete.
-  A cron a thread made over MCP says so.
+  A cron a thread made over MCP says so. The first time it opens, the drawer plays its intro video
+  (`public/intros/crons.html`, docs/architecture/feature-intros.md).
 - **The board**: a run's card has a violet ticket-stub edge and `⏰ run N` before its title (`components/CronMark.tsx`,
   `components/crons.css`; violet is crons' alone). Runs fold into a stack under their source card
   (`lib/cron-stacks.ts`, `components/CronStack.tsx`, wired in `components/BoardColumns.tsx`): the first click on the
@@ -68,4 +69,4 @@ calls them through `lib/cron-client.ts`.
 ## Not yet
 
 Codex and Goose threads can't be forked on a cron (fresh only). The run page is asked for in the run's prompt, not
-written by Weft. No feature intro video for the drawer yet.
+written by Weft.
