@@ -88,6 +88,21 @@ describe("NewCardDialog", () => {
     expect(onCreate).toHaveBeenCalledWith(expect.objectContaining({ prompt: "Later idea", cwd: "/repo/web", start: false }));
   });
 
+  it("starts a Builder, sending no agent, unless you pick another", async () => {
+    const { onCreate, box } = setup();
+    await userEvent.type(box, "Fix the flicker");
+    await userEvent.click(screen.getByRole("button", { name: "Add to backlog" }));
+    expect(onCreate.mock.calls[0]?.[0]).not.toHaveProperty("agent");
+  });
+
+  it("sends the agent you picked", async () => {
+    const { onCreate, box } = setup();
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Agent" }), "copywriter");
+    await userEvent.type(box, "Draft the intro");
+    await userEvent.click(screen.getByRole("button", { name: "Add to backlog" }));
+    expect(onCreate).toHaveBeenCalledWith(expect.objectContaining({ agent: "copywriter" }));
+  });
+
   it("⌘B adds it to the backlog instead of bolding", async () => {
     const { onCreate, box } = setup();
     await userEvent.type(box, "Backlog by key");
