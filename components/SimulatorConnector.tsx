@@ -1,40 +1,55 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { call } from "@/lib/client";
-import type { SimulatorCheck, SimulatorStatus } from "@/lib/simulator-view";
+import type { InstallJob, InstallKey, SimulatorCheck, SimulatorStatus } from "@/lib/simulator-view";
 import { Spinner } from "./Icon";
 
 type Load = { kind: "loading" } | { kind: "error"; error: string } | { kind: "ready"; status: SimulatorStatus };
+type Jobs = Partial<Record<InstallKey, InstallJob>>;
 
 const BUTTON = "shrink-0 rounded-md border border-line-strong px-2 py-0.5 text-[12px] text-ink hover:bg-sunken";
+const INSTALL_URL = "/api/connectors/simulators/install";
+const POLL_MS = 1500;
 
-function Fix({ check }: { check: SimulatorCheck }) {
-  const [copied, setCopied] = useState(false);
+const runningKeys = (jobs: Jobs) => Object.keys(jobs).filter((k) => jobs[k as InstallKey]?.status === "running");
+
+// A row's fix: Install (Weft runs it), Open (a download page), or just where to click. Rows that share an Install
+// with a row above say so instead of offering it twice.
+function Fix({ check, job, first, onInstall }: { check: SimulatorCheck; job?: InstallJob; first: boolean; onInstall: (key: InstallKey) => void }) {
   const fix = check.fix;
   if (!fix) return null;
-  const { command, url } = fix;
+  const { install, url } = fix;
+  if (install && !first) return <div className="mt-1 text-[12px] text-muted">Comes with the Install above</div>;
+  const running = job?.status === "running";
   return (
     <div className="mt-1 flex flex-wrap items-center gap-2 text-[12px] text-muted">
-      <span>{fix.text}</span>
-      {command && (
-        <>
-          <code className="rounded bg-sunken px-1.5 py-0.5 text-ink">{command}</code>
-          <button className={BUTTON} onClick={() => void navigator.clipboard.writeText(command).then(() => setCopied(true))}>
-            {copied ? "Copied" : "Copy"}
-          </button>
-        </>
+      {running ? (
+        <span className="flex min-w-0 flex-1 items-center gap-1.5">
+          <Spinner size={11} />
+          <span className="truncate" title={job.line}>
+            {job.line}
+          </span>
+        </span>
+      ) : (
+        <span>{fix.text}</span>
+      )}
+      {install && !running && (
+        <button className={BUTTON} title={fix.command} onClick={() => onInstall(install)}>
+          {job?.status === "failed" ? "Try again" : "Install"}
+        </button>
       )}
       {url && (
         <button className={BUTTON} onClick={() => window.weft?.openExternal(url)}>
           Open
         </button>
       )}
+      {job?.status === "failed" && <span className="w-full text-danger">{job.line}</span>}
     </div>
   );
 }
 
-function Row({ check }: { check: SimulatorCheck }) {
+function Row({ check, ...fix }: { check: SimulatorCheck; job?: InstallJob; first: boolean; onInstall: (key: InstallKey) => void }) {
   return (
     <div className="rounded-md border border-line px-3 py-2">
       <div className="flex items-center gap-2.5">
@@ -44,13 +59,14 @@ function Row({ check }: { check: SimulatorCheck }) {
           {check.detail}
         </span>
       </div>
-      <Fix check={check} />
+      <Fix check={check} {...fix} />
     </div>
   );
 }
 
-// Settings → Connectors → Simulators: what the threads' mcp__simulator__* tools have on this Mac, and the command or
-// link for each missing piece. Weft never installs these itself; you run the fix, then Check again.
+// Settings → Connectors → Simulators: what the threads' mcp__simulator__* tools have on this Mac, and the fix for
+// each missing piece. Install runs it on the server (lib/simulator-install.ts); the panel polls its last line of
+// output and looks again when it ends.
 export default function SimulatorConnector({ titleClass, hintClass }: { titleClass: string; hintClass: string }) {
   const [load, setLoad] = useState<Load>({ kind: "loading" });
 
@@ -67,20 +83,57 @@ export default function SimulatorConnector({ titleClass, hintClass }: { titleCla
     void fetchStatus();
   }, [fetchStatus]);
 
+  const [jobs, setJobs] = useState<Jobs>({});
+  const jobsRef = useRef<Jobs>({});
+  const takeJobs = useCallback(
+    (next: Jobs) => {
+      // An install that just ended changed what's on this Mac: look again.
+      const ended = runningKeys(jobsRef.current).some((k) => next[k as InstallKey]?.status !== "running");
+      jobsRef.current = next;
+      setJobs(next);
+      if (ended) void fetchStatus();
+    },
+    [fetchStatus],
+  );
+  const busy = runningKeys(jobs).length > 0;
+
+  // Picks up an install still running from before Settings was reopened, then follows it while it runs.
+  useEffect(() => {
+    void call<Jobs>("GET", INSTALL_URL).then(takeJobs, () => {});
+  }, [takeJobs]);
+  useEffect(() => {
+    if (!busy) return;
+    const timer = setInterval(() => void call<Jobs>("GET", INSTALL_URL).then(takeJobs, () => {}), POLL_MS);
+    return () => clearInterval(timer);
+  }, [busy, takeJobs]);
+
+  function install(key: InstallKey) {
+    const set = (job: InstallJob) => takeJobs({ ...jobsRef.current, [key]: job });
+    void call<InstallJob>("POST", INSTALL_URL, { key }).then(set, (err: unknown) => set({ status: "failed", line: err instanceof Error ? err.message : String(err) }));
+  }
+
   // After you've run a fix: look again.
   function refresh() {
     setLoad({ kind: "loading" });
     void fetchStatus();
   }
 
-  const section = (status: SimulatorStatus, platform: SimulatorCheck["platform"], title: string) => (
-    <div className="flex flex-col gap-1.5">
-      <div className="text-[12px] font-medium uppercase tracking-wide text-faint">{title}</div>
-      {status.checks.filter((c) => c.platform === platform).map((c) => (
-        <Row key={c.key} check={c} />
-      ))}
-    </div>
-  );
+  const section = (status: SimulatorStatus, platform: SimulatorCheck["platform"], title: string) => {
+    const offered = new Set<InstallKey>();
+    return (
+      <div className="flex flex-col gap-1.5">
+        <div className="text-[12px] font-medium uppercase tracking-wide text-faint">{title}</div>
+        {status.checks
+          .filter((c) => c.platform === platform)
+          .map((c) => {
+            const key = c.fix?.install;
+            const first = !key || !offered.has(key);
+            if (key) offered.add(key);
+            return <Row key={c.key} check={c} job={key && jobs[key]} first={first} onInstall={install} />;
+          })}
+      </div>
+    );
+  };
 
   return (
     <div className="flex flex-col gap-3">

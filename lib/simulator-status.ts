@@ -1,14 +1,14 @@
 // Settings → Connectors → Simulators: what's on this Mac for the simulator tools (Xcode, an iOS runtime, AXe, the
-// Android SDK, adb, an emulator and an AVD), and how to fix each missing piece. It only looks: nothing is installed
-// from here, the card shows the command or link and the user runs it.
+// Android SDK, adb, an emulator and an AVD), and how to fix each missing piece. It only looks: the fixes with an
+// Install button run in lib/simulator-install-steps.ts when you click it.
 import { execFile } from "node:child_process";
 import fs from "node:fs";
 import { listDevices } from "./simulator-devices";
 import { androidSdk, bins, runText } from "./simulator-exec";
+import { STUDIO_APP, XCODE_APP } from "./simulator-install-steps";
 import type { SimulatorCheck, SimulatorStatus } from "./simulator-view";
 
-export const XCODE_APP = "/Applications/Xcode.app";
-export const STUDIO_APP = "/Applications/Android Studio.app";
+export { STUDIO_APP, XCODE_APP };
 const XCODE_STORE = "https://apps.apple.com/app/xcode/id497799835";
 const STUDIO_URL = "https://developer.android.com/studio";
 
@@ -53,9 +53,9 @@ async function iosChecks(): Promise<SimulatorCheck[]> {
   const ios = check("ios");
   return [
     ios("xcode", "Xcode", xcode, xcode ? XCODE_APP : "Not installed", { text: "Install Xcode from the App Store", url: XCODE_STORE }),
-    ios("xcode-select", "Xcode selected", selected, dir ?? "No developer folder", { text: "Point the command-line tools at Xcode", command: `sudo xcode-select -s ${XCODE_APP}/Contents/Developer` }),
-    ios("runtime", "iOS simulator runtime", runtimes.length > 0, runtimes.join(", ") || "None downloaded", { text: "Download one (several GB), or Xcode → Settings → Components", command: "xcodebuild -downloadPlatform iOS" }),
-    ios("axe", "AXe (taps, typing, UI tree)", Boolean(axe), axe ?? "Not installed", { text: "Install with Homebrew", command: "brew install cameroncooke/axe/axe" }),
+    ios("xcode-select", "Xcode selected", selected, dir ?? "No developer folder", { text: "Point the command-line tools at Xcode", command: `sudo xcode-select -s ${XCODE_APP}/Contents/Developer`, install: "xcode-select" }),
+    ios("runtime", "iOS simulator runtime", runtimes.length > 0, runtimes.join(", ") || "None downloaded", { text: "Download one (several GB), or Xcode → Settings → Components", command: "xcodebuild -downloadPlatform iOS", install: "runtime" }),
+    ios("axe", "AXe (taps, typing, UI tree)", Boolean(axe), axe ?? "Not installed", { text: "Into ~/.weft/tools, from its GitHub release", install: "axe" }),
   ];
 }
 
@@ -65,13 +65,14 @@ async function androidChecks(): Promise<SimulatorCheck[]> {
   const { adb, emulator } = bins();
   const list = await avds();
   const android = check("android");
-  const tools = "Android Studio → Settings → Languages & Frameworks → Android SDK → SDK Tools";
+  // One Install fills in every missing Android piece; the panel shows it on the first missing row.
+  const fill = (text: string) => ({ text, install: "android" as const });
   return [
     android("studio", "Android Studio", studio, studio ? STUDIO_APP : "Not installed", { text: "Download Android Studio", url: STUDIO_URL }),
-    android("sdk", "Android SDK", Boolean(sdk), sdk ?? "Not found", { text: "Open Android Studio once: its setup wizard downloads the SDK to ~/Library/Android/sdk" }),
-    android("adb", "adb", Boolean(adb), adb ?? "Not found", { text: `${tools} → Android SDK Platform-Tools` }),
-    android("emulator", "Android emulator", Boolean(emulator), emulator ?? "Not found", { text: `${tools} → Android Emulator` }),
-    android("avd", "A virtual device", list.length > 0, list.join(", ") || "None made yet", { text: "Android Studio → Device Manager → Create Virtual Device" }),
+    android("sdk", "Android SDK", Boolean(sdk), sdk ?? "Not found", fill("The SDK, adb, the emulator and a Pixel 9, several GB (accepts Google's SDK licenses)")),
+    android("adb", "adb", Boolean(adb), adb ?? "Not found", fill("Android SDK Platform-Tools")),
+    android("emulator", "Android emulator", Boolean(emulator), emulator ?? "Not found", fill("Android Emulator")),
+    android("avd", "A virtual device", list.length > 0, list.join(", ") || "None made yet", fill("A Pixel 9 with Android 16 and Google Play")),
   ];
 }
 

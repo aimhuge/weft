@@ -25,12 +25,14 @@ export function findBin(name: string, candidates: string[] = [], env: NodeJS.Pro
 }
 
 const HOMEBREW = ["/opt/homebrew/bin", "/usr/local/bin"];
+// Where Settings → Connectors → Simulators → Install puts the tools that don't need Homebrew (AXe).
+export const TOOLS_DIR = path.join(os.homedir(), ".weft", "tools");
 
 export function bins() {
   const sdk = androidSdk();
   return {
     xcrun: findBin("xcrun", ["/usr/bin/xcrun"]),
-    axe: findBin("axe", HOMEBREW.map((dir) => path.join(dir, "axe"))),
+    axe: findBin("axe", [path.join(TOOLS_DIR, "axe", "axe"), ...HOMEBREW.map((dir) => path.join(dir, "axe"))]),
     adb: findBin("adb", sdk ? [path.join(sdk, "platform-tools", "adb")] : []),
     emulator: findBin("emulator", sdk ? [path.join(sdk, "emulator", "emulator")] : []),
   };
@@ -41,7 +43,7 @@ export type Bin = keyof ReturnType<typeof bins>;
 // What to tell a thread when a tool isn't there; Settings → Connectors → Simulators shows the same fixes.
 export const MISSING: Record<Bin, string> = {
   xcrun: "Xcode's command-line tools aren't installed. Install Xcode from the App Store, then run `sudo xcode-select -s /Applications/Xcode.app`.",
-  axe: "Tapping, typing and the UI tree on iOS need AXe, which isn't installed. Ask the user before running `brew install cameroncooke/axe/axe`.",
+  axe: "Tapping, typing and the UI tree on iOS need AXe, which isn't installed. Ask the user to click Install beside it in Settings → Connectors → Simulators.",
   adb: "The Android SDK's adb isn't installed. In Android Studio: Settings → Languages & Frameworks → Android SDK → SDK Tools → Android SDK Platform-Tools.",
   emulator: "The Android emulator isn't installed. In Android Studio: Settings → Languages & Frameworks → Android SDK → SDK Tools → Android Emulator.",
 };

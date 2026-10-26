@@ -27,6 +27,7 @@ arguments go through `shellQuote()`.
 | Whole-device actions | `lib/simulator-devices.ts`: `listDevices()`, `pickDevice()`, `boot()`, `install()`, `launch()`, `openUrl()`, `screenshot()`, `logs()` |
 | Screen and touches | `lib/simulator-ui.ts`: `uiTree()` (AXe `describe-ui` JSON, uiautomator XML), `findElement()`, `tapAt()`, `swipe()`, `directionSwipe()`, `typeText()`, `press()` |
 | Live view | `lib/simulator-watch.ts`: `watch()`, `writeFrame()`, `viewerHtml()`, `stopWatching()` |
+| Setup checks + Install | `lib/simulator-status.ts` (the rows), `lib/simulator-install.ts` + `lib/simulator-install-steps.ts` (the jobs), `app/api/connectors/simulators/install/route.ts`, `components/SimulatorConnector.tsx` |
 | Tools + prompt | `lib/simulator-tools.ts`: `simulatorMcpServer()`, `SIMULATOR_PROMPT` (pinned in `lib/weft-prompts.ts`) |
 | Wiring | `lib/weft-mcp.ts`: `simulator` for threads, not the copilot; Codex gets it through the bridge |
 | Settings | `lib/simulator-status.ts` (types in `lib/simulator-view.ts`) → `app/api/connectors/simulators/route.ts` → `components/SimulatorConnector.tsx` on Settings → Connectors |
@@ -71,16 +72,27 @@ page the pane showed, and `lib/page-shots.ts` takes its picture for the rail lik
 
 ## Setup
 
-Settings → Connectors → **Simulators** checks, without installing anything:
+Settings → Connectors → **Simulators** checks what's there, and its **Install** buttons set up what isn't:
 
 - iOS: Xcode.app, `xcode-select -p` pointing into Xcode (not the CommandLineTools), an iOS runtime
   (`simctl list runtimes -j`), AXe.
 - Android: Android Studio.app, the SDK folder, adb, the emulator, at least one AVD.
 
-Each missing piece shows its fix: a command to copy (`sudo xcode-select -s …`, `xcodebuild -downloadPlatform iOS`,
-`brew install cameroncooke/axe/axe`), a link (App Store, developer.android.com/studio) or where to click in
-Android Studio. The tools' own errors name the same fixes (`MISSING` in `lib/simulator-exec.ts`), and
-`SIMULATOR_PROMPT` tells threads to ask the user before installing any of it.
+Each missing piece shows its fix: an **Install** button, or a link for the two big apps (Xcode from the App Store,
+Android Studio from developer.android.com/studio). Install runs on Weft's server, one job per fix
+(`lib/simulator-install.ts`: `startInstall()`, `installJobs()`, `runStep()` with no shell, `download()` pinned by
+sha256), and the panel polls `GET /api/connectors/simulators/install` for the job's last line of output, then looks
+again when it ends. What each one runs (`lib/simulator-install-steps.ts`):
+
+| Install | Runs |
+| --- | --- |
+| `xcode-select` | `osascript … xcode-select -s /Applications/Xcode.app/Contents/Developer with administrator privileges` (the macOS password prompt) |
+| `runtime` | `xcodebuild -downloadPlatform iOS` (~8.5 GB) |
+| `axe` | AXe's GitHub release (the build Homebrew's formula pins) unpacked to `~/.weft/tools/axe` and signed ad hoc. No Homebrew: brew refuses any formula while the Command Line Tools are older than macOS, which is common |
+| `android` | Google's command-line tools into `~/Library/Android/sdk/cmdline-tools/latest`, then `sdkmanager --licenses` (clicking Install is the yes), platform-tools, the emulator, `platforms;android-36` and a Play arm64 image, and `avdmanager create avd` for `Weft_Pixel_9`. Runs on Android Studio's bundled Java (`Contents/jbr`), so Studio has to be there first; every Android row shares this one Install |
+
+The tools' own errors name the same fixes (`MISSING` in `lib/simulator-exec.ts`), and `SIMULATOR_PROMPT` tells
+threads to point the user at Install and ask before installing any of it themselves.
 
 ## Next
 

@@ -2,16 +2,16 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { SimulatorStatus } from "@/lib/simulator-view";
+import type { InstallJob, SimulatorStatus } from "@/lib/simulator-view";
 import "./test-utils";
 import SimulatorConnector from "./SimulatorConnector";
 
 // Settings → Connectors → Simulators: the panel that lists what the threads' simulator tools have on this Mac.
 // The client call is mocked, so what these tests pin is the panel's own behaviour: the three load states, the
-// ok and missing rows, and the Copy, Open and Check again buttons.
+// ok and missing rows, and the Install, Open and Check again buttons.
 
 const api = vi.hoisted(() => ({
-  call: vi.fn<(method: string, url: string) => Promise<SimulatorStatus>>(),
+  call: vi.fn<(method: string, url: string, body?: unknown) => Promise<unknown>>(),
 }));
 vi.mock("@/lib/client", () => ({ call: api.call }));
 
@@ -20,16 +20,28 @@ const openExternal = vi.fn();
 const OK: SimulatorStatus = {
   checks: [
     { key: "xcode", platform: "ios", label: "Xcode", ok: true, detail: "/Applications/Xcode.app" },
-    { key: "axe", platform: "ios", label: "AXe (taps, typing, UI tree)", ok: false, detail: "Not installed", fix: { text: "Install with Homebrew", command: "brew install cameroncooke/axe/axe" } },
-    { key: "xcode-select", platform: "ios", label: "Xcode selected", ok: false, detail: "No developer folder", fix: { text: "Point the command-line tools at Xcode", command: "sudo xcode-select -s /Applications/Xcode.app/Contents/Developer" } },
+    { key: "axe", platform: "ios", label: "AXe (taps, typing, UI tree)", ok: false, detail: "Not installed", fix: { text: "Into ~/.weft/tools, from its GitHub release", install: "axe" } },
+    { key: "xcode-select", platform: "ios", label: "Xcode selected", ok: false, detail: "No developer folder", fix: { text: "Point the command-line tools at Xcode", command: "sudo xcode-select -s /Applications/Xcode.app/Contents/Developer", install: "xcode-select" } },
     { key: "studio", platform: "android", label: "Android Studio", ok: false, detail: "Missing", fix: { text: "Download Android Studio", url: "https://developer.android.com/studio" } },
     { key: "avd", platform: "android", label: "A virtual device", ok: true, detail: "Pixel_8_API_34" },
   ],
   devices: 1,
 };
 
+const ANDROID_ROWS: SimulatorStatus = {
+  checks: [
+    { key: "sdk", platform: "android", label: "Android SDK", ok: false, detail: "Not found", fix: { text: "The SDK, adb, the emulator and a Pixel 9", install: "android" } },
+    { key: "adb", platform: "android", label: "adb", ok: false, detail: "Not found", fix: { text: "Android SDK Platform-Tools", install: "android" } },
+    { key: "emulator", platform: "android", label: "Android emulator", ok: false, detail: "Not found", fix: { text: "Android Emulator", install: "android" } },
+  ],
+  devices: 0,
+};
+
 function setup(status: SimulatorStatus = OK) {
-  api.call.mockResolvedValue(status);
+  api.call.mockImplementation((method, url) => {
+    if (url.endsWith("/install")) return Promise.resolve({} as Partial<Record<string, InstallJob>>);
+    return Promise.resolve(status);
+  });
   render(<SimulatorConnector titleClass="title" hintClass="hint" />);
 }
 
@@ -89,18 +101,74 @@ describe("SimulatorConnector", () => {
   it("shows no fix for a piece that's there", async () => {
     setup({ checks: [{ key: "xcode", platform: "ios", label: "Xcode", ok: true, detail: "/Applications/Xcode.app" }], devices: 0 });
     expect(await screen.findByText("Xcode")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Copy" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Install" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Open" })).not.toBeInTheDocument();
   });
 
-  it("copies the command and says it did", async () => {
-    const writeText = vi.fn(() => Promise.resolve());
-    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
-    setup({ checks: [{ key: "axe", platform: "ios", label: "AXe (taps, typing, UI tree)", ok: false, detail: "Not installed", fix: { text: "Install with Homebrew", command: "brew install cameroncooke/axe/axe" } }], devices: 0 });
-    const copy = await screen.findByRole("button", { name: "Copy" });
-    await userEvent.click(copy);
-    expect(writeText).toHaveBeenCalledWith("brew install cameroncooke/axe/axe");
-    expect(await screen.findByRole("button", { name: "Copied" })).toBeInTheDocument();
+  it("starts an install and shows the job's last line while it runs", async () => {
+    let finish: ((job: InstallJob) => void) | undefined;
+    api.call.mockImplementation((method, url) => {
+      if (url.endsWith("/install") && method === "POST") return new Promise<InstallJob>((resolve) => (finish = resolve));
+      if (url.endsWith("/install")) return Promise.resolve({});
+      return Promise.resolve(OK);
+    });
+    render(<SimulatorConnector titleClass="title" hintClass="hint" />);
+    await userEvent.click((await screen.findAllByRole("button", { name: "Install" }))[0]!);
+    expect(api.call).toHaveBeenCalledWith("POST", "/api/connectors/simulators/install", { key: "axe" });
+    finish?.({ status: "running", line: "Downloading AXe 1.8.0" });
+    expect(await screen.findByText("Downloading AXe 1.8.0")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Install" })).toHaveLength(1);
+  });
+
+  it("offers Try again when an install failed", async () => {
+    api.call.mockImplementation((method, url) => {
+      if (url.endsWith("/install") && method === "POST") return Promise.reject(new Error("the disk is full"));
+      if (url.endsWith("/install")) return Promise.resolve({});
+      return Promise.resolve(OK);
+    });
+    render(<SimulatorConnector titleClass="title" hintClass="hint" />);
+    await userEvent.click((await screen.findAllByRole("button", { name: "Install" }))[0]!);
+    expect(await screen.findByRole("button", { name: "Try again" })).toBeInTheDocument();
+    expect(screen.getByText("the disk is full")).toBeInTheDocument();
+  });
+
+  it("shows a failure that isn't an Error as text", async () => {
+    api.call.mockImplementation((method, url) => {
+      if (url.endsWith("/install") && method === "POST") return Promise.reject(new Error("offline"));
+      if (url.endsWith("/install")) return Promise.resolve({});
+      return Promise.resolve(OK);
+    });
+    render(<SimulatorConnector titleClass="title" hintClass="hint" />);
+    await userEvent.click((await screen.findAllByRole("button", { name: "Install" }))[0]!);
+    expect(await screen.findByText("offline")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
+  });
+
+  it("says when a later row comes with the Install above", async () => {
+    setup(ANDROID_ROWS);
+    expect(await screen.findByText("Android SDK")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Install" })).toHaveLength(1);
+    expect(screen.getAllByText("Comes with the Install above")).toHaveLength(2);
+  });
+
+  it("looks for the tools again when an install ends", async () => {
+    let job: InstallJob = { status: "running", line: "Downloading AXe" };
+    let poll: (() => void) | undefined;
+    api.call.mockImplementation((method, url) => {
+      if (url.endsWith("/install") && method === "POST") return Promise.resolve(job);
+      if (url.endsWith("/install")) return new Promise((resolve) => {
+        poll = () => resolve({ axe: job });
+      });
+      return Promise.resolve(OK);
+    });
+    render(<SimulatorConnector titleClass="title" hintClass="hint" />);
+    await userEvent.click((await screen.findAllByRole("button", { name: "Install" }))[0]!);
+    expect((await screen.findAllByText("Downloading AXe")).length).toBeGreaterThan(0);
+    const statusCalls = () => api.call.mock.calls.filter(([, url]) => url === "/api/connectors/simulators").length;
+    expect(statusCalls()).toBe(1);
+    job = { status: "done", line: "Installed" };
+    poll?.();
+    await waitFor(() => expect(statusCalls()).toBeGreaterThan(1));
   });
 
   it("opens the download link outside the app", async () => {
@@ -112,8 +180,9 @@ describe("SimulatorConnector", () => {
   it("checks again when asked", async () => {
     setup();
     await screen.findByText("Xcode");
-    expect(api.call).toHaveBeenCalledTimes(1);
+    const statusCalls = () => api.call.mock.calls.filter(([, url]) => url === "/api/connectors/simulators").length;
+    expect(statusCalls()).toBe(1);
     await userEvent.click(screen.getByRole("button", { name: "Check again" }));
-    await waitFor(() => expect(api.call).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(statusCalls()).toBe(2));
   });
 });

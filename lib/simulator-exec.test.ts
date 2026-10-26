@@ -101,6 +101,12 @@ describe("bins", () => {
     delete process.env.ANDROID_HOME;
   });
 
+  it("finds AXe in Weft's own tools folder", () => {
+    const axe = path.join(exec.TOOLS_DIR, "axe", "axe");
+    exists.add(axe);
+    expect(exec.bins().axe).toBe(axe);
+  });
+
   it("has no adb or emulator when the SDK isn't there", () => {
     const found = exec.bins();
     expect(found.adb).toBeNull();

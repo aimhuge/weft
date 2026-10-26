@@ -153,50 +153,47 @@ describe("when everything is missing", () => {
     });
   });
 
-  it("offers the xcode-select command when no developer folder is selected", async () => {
+  it("offers to install the command-line tools when no developer folder is selected", async () => {
     const status = await simulatorStatus();
     expect(row(status, "xcode-select")).toMatchObject({
       ok: false,
       detail: "No developer folder",
-      fix: { text: "Point the command-line tools at Xcode", command: `sudo xcode-select -s ${XCODE_APP}/Contents/Developer` },
+      fix: { text: "Point the command-line tools at Xcode", command: `sudo xcode-select -s ${XCODE_APP}/Contents/Developer`, install: "xcode-select" },
     });
   });
 
-  it("offers the runtime download command when no runtime is downloaded", async () => {
+  it("offers to download the runtime when none is downloaded", async () => {
     const status = await simulatorStatus();
     expect(row(status, "runtime")).toMatchObject({
       ok: false,
       detail: "None downloaded",
-      fix: { text: "Download one (several GB), or Xcode → Settings → Components", command: "xcodebuild -downloadPlatform iOS" },
+      fix: { text: "Download one (several GB), or Xcode → Settings → Components", command: "xcodebuild -downloadPlatform iOS", install: "runtime" },
     });
   });
 
-  it("offers the Homebrew command when AXe isn't installed", async () => {
+  it("offers to install AXe when it isn't installed", async () => {
     const status = await simulatorStatus();
     expect(row(status, "axe")).toMatchObject({
       ok: false,
       detail: "Not installed",
-      fix: { text: "Install with Homebrew", command: "brew install cameroncooke/axe/axe" },
+      fix: { text: "Into ~/.weft/tools, from its GitHub release", install: "axe" },
     });
+    expect(row(status, "axe").fix?.command).toBeUndefined();
   });
 
-  it("points at Android Studio's SDK tools for a missing SDK, adb or emulator", async () => {
+  it("offers one Android install for a missing SDK, adb, emulator or virtual device", async () => {
     const status = await simulatorStatus();
     expect(row(status, "sdk")).toMatchObject({
       ok: false,
       detail: "Not found",
-      fix: { text: "Open Android Studio once: its setup wizard downloads the SDK to ~/Library/Android/sdk" },
+      fix: { text: "The SDK, adb, the emulator and a Pixel 9, several GB (accepts Google's SDK licenses)", install: "android" },
     });
-    expect(row(status, "adb").fix?.text).toContain("Android SDK Platform-Tools");
-    expect(row(status, "emulator").fix?.text).toContain("Android Emulator");
-  });
-
-  it("points at the Device Manager when no virtual device was made", async () => {
-    const status = await simulatorStatus();
+    expect(row(status, "adb").fix).toMatchObject({ text: "Android SDK Platform-Tools", install: "android" });
+    expect(row(status, "emulator").fix).toMatchObject({ text: "Android Emulator", install: "android" });
     expect(row(status, "avd")).toMatchObject({
       ok: false,
       detail: "None made yet",
-      fix: { text: "Android Studio → Device Manager → Create Virtual Device" },
+      fix: { text: "A Pixel 9 with Android 16 and Google Play", install: "android" },
     });
   });
 });
