@@ -100,7 +100,7 @@ describe("sendMessage", () => {
       env: { PATH: "/usr/bin" }, hooks: { PreToolUse: [{ hooks: [expect.any(Function)] }] },
     });
     expect((q.options.systemPrompt as { append: string }).append).toMatch(/mcp__secrets__fill_field[\s\S]*THREAD PROMPT/);
-    expect(Object.keys(q.options.mcpServers as object)).toEqual(["browser", "secrets", "webhooks", "devservers", "board_view", "board"]);
+    expect(Object.keys(q.options.mcpServers as object)).toEqual(["browser", "secrets", "webhooks", "devservers", "board_view", "simulator", "board"]);
   });
 
   it("starts puku-cli by its path and leaves out allowDangerouslySkipPermissions", async () => {
