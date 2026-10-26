@@ -1,21 +1,32 @@
 // Stages the tools Weft.app ships in Contents/Resources/toolchain, so a fresh Mac with no Node, pnpm,
-// Claude Code or puku can still build Next.js + Supabase projects (docs/architecture/updates.md, "Toolchain").
+// Claude Code or puku can still build Next.js + Supabase projects (docs/architecture/updates.md, "Toolchain"),
+// and threads can reach Google Workspace through gog (docs/architecture/connectors.md).
 // Run before electron-builder (npm run dist does):
 //   node scripts/bundle-toolchain.mjs [outDir]   (default: .toolchain-dist)
 // Layout:
-//   bin/    node npm npx pnpm pnpx puku-cli claude: wrappers that electron/main.cjs appends to the END of PATH,
+//   bin/    node npm npx pnpm pnpx puku-cli claude gog: wrappers that electron/main.cjs appends to the END of PATH,
 //           so a Mac's own node, pnpm or CLIs always win and these fill in only what's missing
 //   npm/    npm, pnpm/  pnpm (pinned, from the registry)
 //   puku/   @puku/puku-cli and its production deps, pruned (see prunePuku)
+//   gog/    gog, the Google Workspace CLI (steipete/gogcli), one Go binary from its GitHub release, checksum-pinned
 // Every wrapper runs on Weft's own Electron as Node (ELECTRON_RUN_AS_NODE), through Weft Helper so macOS
 // shows no second Dock icon, the same way electron/server.cjs runs the Next server.
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
 export const NPM_VERSION = "11.11.0";
 export const PNPM_VERSION = "10.33.0";
 export const PUKU_VERSION = "1.8.56";
+export const GOG_VERSION = "0.47.0";
+// sha256 of each gogcli_<version>_<os>_<arch>.tar.gz, from the release's checksums.txt. Bump with GOG_VERSION.
+const GOG_SHA256 = {
+  darwin_arm64: "ee0826a457f3d440e5272e4135a2bfd98a6c79e8734f5789055f6f09523120af",
+  darwin_amd64: "2670eb51d116b217f879889b16288867d1894d7128b8d3e5c3087b81424ea28d",
+  linux_arm64: "90d236ab91c6dae7139bfe0508eab94a8b4323238b62fa29e6cf479a352576f2",
+  linux_amd64: "c3ed94efca90c754cdda300e3c7f8cc2f3d7df86d3fdc5d11f996c7518a09c24",
+};
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const out = path.resolve(ROOT, process.argv[2] || ".toolchain-dist");
@@ -45,6 +56,25 @@ function installPuku() {
     throw new Error("puku-cli's bin is missing after npm install");
   }
   prunePuku(path.join(app, "node_modules"));
+}
+
+// gog is a single Go binary: download this platform's tarball, refuse it unless its sha256 matches the pin, unpack gog.
+async function installGog() {
+  const platform = `${process.platform}_${process.arch === "x64" ? "amd64" : process.arch}`;
+  const expected = GOG_SHA256[platform];
+  if (!expected) throw new Error(`No pinned gog build for ${platform}`);
+  const name = `gogcli_${GOG_VERSION}_${platform}.tar.gz`;
+  const res = await fetch(`https://github.com/steipete/gogcli/releases/download/v${GOG_VERSION}/${name}`);
+  if (!res.ok) throw new Error(`Downloading ${name} failed: HTTP ${res.status}`);
+  const tarball = Buffer.from(await res.arrayBuffer());
+  const actual = createHash("sha256").update(tarball).digest("hex");
+  if (actual !== expected) throw new Error(`${name} has sha256 ${actual}, expected ${expected}`);
+  const dir = path.join(out, "gog");
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(out, name), tarball);
+  run("tar", ["-xzf", path.join(out, name), "-C", dir, "gog"]);
+  fs.rmSync(path.join(out, name));
+  console.log(`Unpacked gog ${GOG_VERSION} (${platform}) into ${path.relative(ROOT, dir)}`);
 }
 
 // What this Mac never loads:
@@ -129,6 +159,7 @@ function writeWrappers() {
   writeWrapper("puku-cli", onNode(`"$TOOLCHAIN/puku/node_modules/@puku/puku-cli/bin/puku-cli"`));
   // The Agent SDK's own Claude Code binary, which the Next server already ships for threads.
   writeWrapper("claude", `exec "$CONTENTS/${RESOURCES}/server/node_modules/@anthropic-ai/claude-agent-sdk-${process.platform}-${process.arch}/claude" "$@"\n`);
+  writeWrapper("gog", `exec "$TOOLCHAIN/gog/gog" "$@"\n`);
 }
 
 fs.rmSync(out, { recursive: true, force: true });
@@ -136,6 +167,7 @@ fs.mkdirSync(out, { recursive: true });
 unpack(`npm@${NPM_VERSION}`, "npm");
 unpack(`pnpm@${PNPM_VERSION}`, "pnpm");
 installPuku();
+await installGog();
 writeWrappers();
 const size = execFileSync("du", ["-sh", out], { encoding: "utf8" }).split("\t")[0];
 console.log(`Toolchain ready: ${path.relative(ROOT, out)} (${size}): ${fs.readdirSync(bin).join(", ")}`);

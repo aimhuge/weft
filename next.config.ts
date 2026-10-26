@@ -3,7 +3,16 @@ import pkg from "./package.json";
 
 const nextConfig: NextConfig = {
   // NEXT_PUBLIC_SITE_URL is where @aimhuge/teams points invite links (its siteOrigin()); it's inlined at build.
-  env: { NEXT_PUBLIC_APP_VERSION: pkg.version, NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL || "https://weft.zip" },
+  // WEFT_GOOGLE_CLIENT_ID/SECRET are Weft's own Google OAuth client (a Desktop app, lib/gog.ts): with them
+  // baked in, a released build signs a Google account in without the user creating a client of their own.
+  // An installed app's client secret isn't confidential to Google, but it stays out of git and comes from
+  // GitHub secrets at release time (.github/workflows/release.yml).
+  env: {
+    NEXT_PUBLIC_APP_VERSION: pkg.version,
+    NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL || "https://weft.zip",
+    ...(process.env.WEFT_GOOGLE_CLIENT_ID ? { WEFT_GOOGLE_CLIENT_ID: process.env.WEFT_GOOGLE_CLIENT_ID } : {}),
+    ...(process.env.WEFT_GOOGLE_CLIENT_SECRET ? { WEFT_GOOGLE_CLIENT_SECRET: process.env.WEFT_GOOGLE_CLIENT_SECRET } : {}),
+  },
   // `pnpm app` builds into its own folder so it never collides with a running dev server.
   distDir: process.env.WEFT_DIST || ".next",
   // `pnpm dist` builds a self-contained server that the packaged Weft.app runs.

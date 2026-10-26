@@ -16,9 +16,10 @@ reads `~/.weft`, starts Claude Code and terminal shells, and answers only on 127
 ### Toolchain
 
 A fresh Mac has no Node, pnpm, Claude Code or puku, and Weft users should still be able to build Next.js + Supabase
-projects. `toolchain/bin` holds `node`, `npm`, `npx`, `pnpm`, `pnpx`, `puku-cli` and `claude`: shell wrappers that run
+projects. `toolchain/bin` holds `node`, `npm`, `npx`, `pnpm`, `pnpx`, `puku-cli`, `claude` and `gog`: shell wrappers that run
 on Weft Helper with `ELECTRON_RUN_AS_NODE=1` (Electron 44 is Node 24, the same major as Vercel's default), except
-`claude`, which runs the Agent SDK's binary from `Resources/server`. `electron/main.cjs` appends the folder to the
+`claude`, which runs the Agent SDK's binary from `Resources/server`, and `gog`, the Google Workspace CLI: one Go binary
+downloaded from its GitHub release and checked against a pinned sha256 (docs/architecture/connectors.md). `electron/main.cjs` appends the folder to the
 **end** of PATH after `fixPath()` (`appendToolchain()` in `electron/env.cjs`), so threads, the terminal drawer, dev
 servers and `which claude` / `which puku-cli` (login, puku threads) find them, and a Mac's own tools always win.
 
@@ -76,6 +77,8 @@ because the private key lives only in this Mac's keychain. It notarizes when the
 | `APPLE_API_KEY_P8` | An App Store Connect API key (.p8 file contents), for notarization |
 | `APPLE_API_KEY_ID` | That key's ID |
 | `APPLE_API_ISSUER` | The issuer ID shown above the keys list |
+| `WEFT_GOOGLE_CLIENT_ID` | Weft's own Google OAuth client id, baked into the build so Settings → Connectors can sign a Google account in with no setup |
+| `WEFT_GOOGLE_CLIENT_SECRET` | That client's secret |
 
 The certificate belongs to the Apple Developer team that publishes Weft; Gatekeeper shows its name. Weft publishes
 from Alex Miller's individual membership, not Flexbike Inc's.

@@ -46,6 +46,12 @@ jobs:
           CSC_KEY_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          # Weft's own Google OAuth client (Desktop app), baked into the server bundle by next.config.ts.
+          # With it, a released build signs a Google account in without the user creating a client of
+          # their own. An installed app's client secret isn't confidential to Google, but it stays out
+          # of git. Without these the build still works: Settings → Connectors asks for a client JSON.
+          WEFT_GOOGLE_CLIENT_ID: ${{ secrets.WEFT_GOOGLE_CLIENT_ID }}
+          WEFT_GOOGLE_CLIENT_SECRET: ${{ secrets.WEFT_GOOGLE_CLIENT_SECRET }}
         run: pnpm run dist:release
 
       - name: Check the signature and notarization
