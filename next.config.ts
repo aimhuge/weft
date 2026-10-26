@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import path from "node:path";
 import pkg from "./package.json";
 
 const nextConfig: NextConfig = {
@@ -69,6 +70,15 @@ const nextConfig: NextConfig = {
     turbopackServerFastRefresh: false,
     // Marks this app as upgraded by `next upgrade --agent=security` (16.4.0 → 16.4.2 for a published advisory).
     agentUpgrade: "security",
+    // The @aimhuge packages are linked, not copied: package.json points at link:../components/packages/<name>,
+    // so node_modules/@aimhuge/sheet is a symlink out of the repo and the files it resolves to live outside
+    // this root. Turbopack refuses a webpack loader on a path outside its roots ("... is outside configured
+    // roots"), so app/globals.css's @import "@aimhuge/sheet/sheet.css" panicked the whole dev server.
+    // These roots say where those symlinks may resolve into. The paths are the ones package.json links to.
+    turbopackAdditionalRoots: {
+      sheet: { path: path.join(__dirname, "../components/packages/sheet"), ignoreIfMissing: true },
+      share: { path: path.join(__dirname, "../components/packages/share"), ignoreIfMissing: true },
+    },
   },
   turbopack: {
     rules: {
