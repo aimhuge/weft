@@ -8,14 +8,6 @@ lands; a release moves those lines under its version and tags the commit `vX.Y.Z
 
 ## [Unreleased]
 
-### Added
-
-- **Right-click a project for its own menu.** A project on the board now has its own menu: pin it so it always keeps a chip in the bar, hide it until you use the folder again, open it in the first installed editor or terminal, and start a thread there. The marks live per project in the saved list (`lib/project-list.ts`), and the route passes on only the marks you sent, so pinning never clears a hidden (`app/api/projects/route.ts`, `components/project-menu-handler.ts`, `components/ProjectChips.tsx`).
-
-### Fixed
-
-- **Three tests that only failed on Linux are fixed.** None of them was a product bug — each was a test leaning on something a Mac happens to provide. The worktree pool's branch test asked for `HEAD~1`, but the commit that makes it was made by an earlier mac-only test, so on Linux there was one commit and the branch failed; it now makes its own history. The mini-app live-data test built a fetch mock and never passed it in, so the bridge made a real request to 127.0.0.1 and CI got "fetch failed"; `setupApps` and `setupMiniApps` take a fetch now, and the test asserts the bridge asks the server with the launch token. The new-thread dialog's test asserted on the create right after the click, but the create is an async effect; the assertion waits now. Files: `lib/worktree-pool.test.ts`, `electron/app-setup.cjs`, `electron/mini-apps-setup.cjs`, `electron/mini-apps-setup.test.ts`, `components/NewCardDialog.test.tsx`.
-
 ## [0.6.3] - 2026-10-26
 
 ### Added
@@ -39,6 +31,7 @@ lands; a release moves those lines under its version and tags the commit `vX.Y.Z
 - **weft.zip offers a new release within minutes.** The home page's download button and `weft.zip/download` kept pointing at the old dmg for up to an hour after a release, because the release lookup was cached for hours from the last deploy. It's now re-read at most once a minute, so a new version shows up on the site within a couple of minutes, without a redeploy. (`lib/home-release.ts`)
 - **Slim scrollbars, and cards that stay inside their column.** Every scroll area now has a slim rounded thumb in the theme's line colour on a clear track, brighter on hover, instead of the heavy grey default bar. A board column no longer scrolls sideways: a card with a long footer (several tags, "+1 here", age) used to push past the column's edge and add a horizontal bar. The tags now shrink with an ellipsis and the footer clips to the card. Files: `app/globals.css`, `components/BoardColumn.tsx`, `components/CardMarks.tsx`, `components/CardFooterMeta.tsx`.
 - **The model picker shows "Let Codex choose" once.** In a menu that also picks the CLI (New thread, Settings → Models' default), Codex and Goose each showed two "Let … choose" rows. The second one picked the sentinel model id instead of moving the thread to that CLI, and Codex's row was noted "Runs Let Codex choose". Now each CLI gets one row that picks it. The typeahead's CLI groups are also named for screen readers again, as the old menu's groups were. Files: `lib/model-options.ts`, `components/ModelTypeahead.tsx`. The picker's tests now drive the typeahead itself through `components/model-picker-test-utils.ts`.
+- **Three tests that only failed on Linux are fixed.** None of them was a product bug — each was a test leaning on something a Mac happens to provide. The worktree pool's branch test asked for `HEAD~1`, but the commit that makes it was made by an earlier mac-only test, so on Linux there was one commit and the branch failed; it now makes its own history. The mini-app live-data test built a fetch mock and never passed it in, so the bridge made a real request to 127.0.0.1 and CI got "fetch failed"; `setupApps` and `setupMiniApps` take a fetch now, and the test asserts the bridge asks the server with the launch token. The new-thread dialog's test asserted on the create right after the click, but the create is an async effect; the assertion waits now. Files: `lib/worktree-pool.test.ts`, `electron/app-setup.cjs`, `electron/mini-apps-setup.cjs`, `electron/mini-apps-setup.test.ts`, `components/NewCardDialog.test.tsx`.
 
 ## [0.6.2] - 2026-10-26
 
