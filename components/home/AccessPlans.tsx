@@ -1,4 +1,4 @@
-import { freeTierCapLabel, REGIONAL_PRO_CENTS, STARTUP_TEAM } from "@/lib/billing/plans";
+import { BLASTCP_CREATOR, freeTierCapLabel, REGIONAL_PRO_CENTS, STARTUP_TEAM } from "@/lib/billing/plans";
 
 // The row under the three plans: Startups, Open Source, Education and Regional pricing (docs/architecture/billing.md,
 // "Planned"). Each is a way into Free, Pro or Team rather than a plan of its own, so they're smaller than the plan
@@ -13,8 +13,7 @@ interface AccessCard {
 
 const dollars = (cents: number) => `$${(cents / 100).toLocaleString("en-US")}`;
 
-// Only what billing delivers: the grant's BlastCP tier stays off until BlastCP applies it (docs/architecture/billing.md).
-const FREE_PERKS = `teams, free, on the free tier's ${freeTierCapLabel()} of Puku`;
+const FREE_PERKS = `teams and ${BLASTCP_CREATOR.name}, free, on the free tier's ${freeTierCapLabel()} of Puku`;
 
 // 6 → "six months", 12 → "a year"; anything else as digits.
 const months = (n: number) => (n === 6 ? "six months" : n === 12 ? "a year" : `${n} months`);

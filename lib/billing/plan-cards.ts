@@ -46,7 +46,7 @@ export function planCards(interval: UpgradeInterval): PlanCard[] {
       price: dollars(yearly ? catalog.totalCents("pro", "yearly", 1) : catalog.priceCents("pro", "monthly")),
       cadence: yearly ? "/year" : "/month",
       note: yearly ? `Save ${dollars(catalog.yearlySavingsCents("pro"))} a year` : null,
-      features: [PUKU, "Invite your team", shareRoom("pro")],
+      features: [PUKU, "Invite your team", shareRoom("pro"), "BlastCP Creator for the owner"],
     },
     {
       id: "team",
@@ -54,7 +54,7 @@ export function planCards(interval: UpgradeInterval): PlanCard[] {
       price: dollars(catalog.priceCents("team", "monthly")),
       cadence: "per seat / month",
       note: yearly ? "Billed monthly on your seats" : "Billed on your seats",
-      features: ["Pro's allowance for the team", "Roles, invites, a shared board", shareRoom("team")],
+      features: ["Pro's allowance for the team", "Roles, invites, a shared board", shareRoom("team"), "BlastCP Creator for every seat"],
     },
   ];
 }

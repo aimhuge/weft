@@ -9,6 +9,9 @@ describe("planCards", () => {
     expect(team).toMatchObject({ id: "team", price: "$9", cadence: "per seat / month", note: "Billed on your seats" });
     expect(free?.features).toContain("25 MB of shared mini apps");
     expect(pro?.features).toContain("300M Puku tokens a month");
+    // Who gets BlastCP Creator, as lib/billing/blastcp-bundle.ts applies it.
+    expect(pro?.features).toContain("BlastCP Creator for the owner");
+    expect(team?.features).toContain("BlastCP Creator for every seat");
   });
 
   it("shows Pro's yearly price and saving; Team stays monthly per seat", () => {

@@ -55,10 +55,21 @@ describe("Plans", () => {
     }
   });
 
-  it("promises no BlastCP tier, since nothing applies it yet", () => {
-    // plan.blastcp stays in the catalog for when BlastCP reads the Weft plan (docs/architecture/billing.md "BlastCP usage").
+  it("lists the BlastCP tier each plan includes, and who on it gets it", () => {
     const { container } = render(<Plans />);
-    expect(container.querySelector(".wz-planGrid")?.textContent).not.toMatch(/BlastCP/);
+    const lists = Array.from(container.querySelectorAll(".wz-planFeatures")).map((l) =>
+      Array.from(l.querySelectorAll("li")).map((li) => li.textContent),
+    );
+    expect(lists).toHaveLength(3);
+    expect(lists[0]).toContain("BlastCP Free: 1 brand, 3 channels, 30 posts a month");
+    expect(lists[0]).toContain("$0.50 of BlastCP AI generation, once");
+    expect(lists[1]).toContain("BlastCP Creator for the owner: 1 brand, every channel, unlimited posts");
+    expect(lists[2]).toContain("BlastCP Creator for every seat: 1 brand, every channel, unlimited posts");
+    for (const list of lists.slice(1)) {
+      expect(list).toContain("$3 a month of BlastCP AI generation");
+      // The closing "Everything in …" stays last, after the BlastCP lines.
+      expect(list.at(-1)).toMatch(/^Everything in /);
+    }
   });
 
   it("links Pro and Team through /billing to Checkout, and Free to the download", () => {

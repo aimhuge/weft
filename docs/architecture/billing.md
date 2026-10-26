@@ -48,16 +48,40 @@ Each plan includes a BlastCP tier (`plan.blastcp`, a `BlastcpTier`). The figures
 | | Brands | Channels | Posts / month | AI generation credit |
 | --- | ---: | ---: | ---: | ---: |
 | `BLASTCP_FREE` (Weft Free) | 1 | 3 | 30 | $0.50, once (`creditResets: false`) |
-| `BLASTCP_CREATOR` (Weft Pro, Team) | 1 | every (`null`) | unlimited (`null`) | $3 a month |
+| `BLASTCP_CREATOR` (Weft Pro, Team, Open Source, Education) | 1 | every (`null`) | unlimited (`null`) | $3 a month |
 
 Team also gets Creator, not BlastCP Pro: BlastCP Pro is $29 flat, and a one-seat Team only pays $9. BlastCP Pro and Agency
-(more brands and seats) are sold on BlastCP itself, so Weft has no fourth tier for them. **Not enforced, so not
-advertised.** No Weft subscription reaches a BlastCP workspace: BlastCP would have to read the Weft plan when an account
-connects through the token exchange ([blastcp.md](blastcp.md)) and set its own `org_subscriptions` row to match. That is
-work in the BlastCP repo, not here, so on 2026-10-26 the tier came off everything that sells a plan (the home page's
-cards and access row, the upgrade dialog, the billing page's Open Source card), and `plan.blastcp` stays in the catalog
-as the spec for that work. Put the lines back (`components/home/Plans.tsx` had `blastcpLines`) in the same change that
-makes BlastCP apply them.
+(more brands and seats) are sold on BlastCP itself, so Weft has no fourth tier for them.
+
+**Who gets it** (`lib/billing/blastcp-bundle.ts` `blastcpBundle`), one tier per person, on their own BlastCP workspace:
+
+- **Team**: every member gets Creator, since each is a paid seat.
+- **Pro, Open Source, Education**: the workspace's owners get Creator. Pro is priced per workspace, and the grants are
+  free, so the people a workspace invites don't each get a paid BlastCP plan.
+- Anything not `active`/`trialing` (a failing card, a cancel) and a lapsed grant give Free. Someone in several
+  workspaces gets the best one.
+
+The cards say so ("BlastCP Creator for the owner", "… for every seat").
+
+**How BlastCP applies it** (built 2026-10-27; BlastCP's side is aimhuge/blastcp
+`docs/architecture/weft-token-exchange.md` "The Weft plan"):
+
+```
+Weft (desktop)                                   BlastCP                                   weft.zip
+lib/blastcp-plan.ts syncBlastcpPlan ─ POST /api/weft/plan (Bearer Weft JWT) ─►
+  on sign-in, every 12 h (blastcp-auto.ts),       verify like the exchange, find the
+  and when the billing row sees a new plan         identity link ─ GET /api/billing/blastcp ─► { tier, until }
+  (app/api/account/billing, notePlan)             comp its own oldest owned workspace
+the token exchange itself also syncs ─────────►   (setPlanByAdmin), record weft_plan_bundles
+```
+
+- `/api/billing/blastcp` (`app/api/billing/blastcp/route.ts`, deployed Weft) answers only for the token's own user:
+  `{ tier: "free" | "creator", until }`, where `until` is the latest period or grant end that gives Creator.
+- BlastCP never touches a workspace that pays BlastCP through Stripe or is above Creator, takes back only what it
+  bundled, and lapses a bundle on its own `until` + 3 days if Weft goes quiet (a daily cron), so an uninstalled Weft
+  doesn't leave Creator on forever.
+- A BlastCP account connected only through the browser (no Weft identity link) gets nothing: the bundle needs Connect
+  with Weft.
 
 Team follows `@aimhuge/billing`'s DeckCP catalog: `perSeat: true` means the Stripe price is a **per-unit** recurring
 price and the seat count rides on the subscription's `quantity`, so a five-seat workspace is 5 × 900 cents.
@@ -452,6 +476,8 @@ endpoint and hands its signing secret to Vercel over the CLI's stdin, never prin
 - `lib/billing/stripe-env.ts` + `lib/billing/stripe-env.test.ts` — `requiredStripeEnv`, `missingStripeEnv`, `isBillingConfigError`: the
   STRIPE_* the provider demands, and the price script held to it.
 - `lib/billing/seats.ts` + `lib/billing/seats.test.ts` — `syncTeamSeats`, `syncTeamSeatsQuietly`: Team's quantity follows the roster.
+- `lib/billing/blastcp-bundle.ts` (+ test), `app/api/billing/blastcp/route.ts` (+ test) — the BlastCP tier a user's plan gives them, which BlastCP reads.
+- `lib/blastcp-plan.ts` (+ test) — the desktop's nudge to BlastCP (`syncBlastcpPlan`, `notePlan`), from `lib/blastcp-auto.ts` and `app/api/account/billing`.
 - `lib/billing/plan-link.ts` (+ test), `app/billing/page.tsx`, `components/team/OpenUpgrade.tsx` (+ test) — the pricing cards' way to Checkout.
 - `lib/billing/checkout.ts`, `app/api/billing/checkout/route.ts`, `app/api/account/billing/checkout/route.ts`, `app/checkout/done/page.tsx` (+ tests) — starting Checkout.
 - `lib/billing/plan-gate.ts` + `lib/billing/plan-gate.test.ts` — `TEAM_PLANS`, `GRANT_PLANS`, `grantLapsed`, `canHaveMembers`, `workspacePlan`,

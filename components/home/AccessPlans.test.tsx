@@ -16,8 +16,7 @@ describe("AccessPlans", () => {
     expect(startup!.body).toContain("free for six months and half price for six months more");
     for (const c of [oss, edu]) {
       expect(c!.body).toContain(freeTierCapLabel());
-      // BlastCP stays off until it applies the tier (docs/architecture/billing.md "BlastCP usage").
-      expect(c!.body).not.toContain("BlastCP");
+      expect(c!.body).toContain("BlastCP Creator");
     }
     expect(regional!.headline).toBe("Pro from $5");
     expect(regional!.body).toContain("$5 a month in low-income countries and $10 in lower-middle-income ones");

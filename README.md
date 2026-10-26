@@ -1017,7 +1017,10 @@ every workspace you're in, best name match first, or **+ New property** makes on
 search or the project, in the workspace you pick) and links it. A linked project shows its next scheduled posts with their
 platform and time, a line of drafts, posts to approve and failures, and when the last one went out; clicking any of
 them opens it in the browser pane. BlastCP sign-ins last 30 days: one made through your Weft account renews itself in its
-last week, and one made in the browser warns and offers Reconnect. More in [docs/architecture/blastcp.md](docs/architecture/blastcp.md).
+last week, and one made in the browser warns and offers Reconnect. Your Weft plan comes with BlastCP: connected with
+your Weft account, your own BlastCP workspace goes on BlastCP Creator while you're on Team, or own a Pro, Open Source
+or Education workspace, and back to BlastCP Free when that ends (a BlastCP plan you pay for yourself is never touched).
+More in [docs/architecture/blastcp.md](docs/architecture/blastcp.md).
 
 ## Connectors
 

@@ -57,8 +57,10 @@ catalog**, not typed:
   hero's download link, which `Home.tsx` passes in as `download`; Pro and Team link to `/billing?plan=pro|team`
   (`lib/billing/plan-link.ts`), which signs the visitor in, lands on `/<slug>/billing` and opens the upgrade dialog, whose
   button starts Stripe Checkout ([billing.md](billing.md#the-pieces)).
-- Only what billing delivers is listed. The BlastCP tier in the catalog (`plan.blastcp`) stays off the cards and the
-  access row until BlastCP applies it ([billing.md](billing.md#blastcp-usage)).
+- `blastcpLines(id, plan.blastcp)` turns each plan's BlastCP tier into two bullets, naming who gets it as BlastCP
+  applies it ("BlastCP Creator for the owner: 1 brand, every channel, unlimited posts" on Pro, "… for every seat" on
+  Team, "$3 a month of BlastCP AI generation"), placed before the closing "Everything in …"
+  ([billing.md](billing.md#blastcp-usage)). The access row names Creator for Open Source and Education too.
 
 So a price change in `lib/billing/plans.ts` moves the marketing page with it, and the page cannot drift from what
 the app actually charges. `Plans.test.tsx` (jsdom) asserts exactly that: the card names equal `catalog.order`'s

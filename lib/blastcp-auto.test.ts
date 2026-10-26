@@ -24,6 +24,8 @@ vi.mock("./account", () => ({
 }));
 const shell = vi.hoisted(() => vi.fn());
 vi.mock("./browser-tools", () => ({ shell }));
+const syncBlastcpPlan = vi.hoisted(() => vi.fn(() => Promise.resolve(null)));
+vi.mock("./blastcp-plan", () => ({ syncBlastcpPlan }));
 
 const { connectBlastcpWithWeft, startBlastcpAuto } = await import("./blastcp-auto");
 
@@ -74,6 +76,7 @@ describe("startBlastcpAuto", () => {
     expect(shell).toHaveBeenCalledTimes(2);
     await vi.advanceTimersByTimeAsync(12 * 60 * 60_000);
     expect(shell).toHaveBeenCalledTimes(3);
+    expect(syncBlastcpPlan).toHaveBeenCalledTimes(3);
     stop();
     expect(t.unsubscribe).toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(12 * 60 * 60_000);

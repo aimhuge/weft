@@ -43,7 +43,7 @@ export function FreePlansSection({
       {granted && lapsed ? <p className="wz-billingSub">This grant has ended, so the workspace is on Free until it&apos;s renewed.</p> : null}
       <p className="wz-billingSub">
         Maintain an active, non-fork public repo with an open-source licence? Weft checks your GitHub when you sign in and
-        moves the workspace onto Open Source for a year: teams, free. Students and teachers get the same
+        moves the workspace onto Open Source for a year: teams and BlastCP Creator, free. Students and teachers get the same
         through the GitHub Student Developer Pack.
       </p>
       {canManage && (plan === "free" || lapsed || plan === "oss") ? (

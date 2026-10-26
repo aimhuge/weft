@@ -1,4 +1,4 @@
-import { catalog, freeTierCapLabel, PRO_PUKU_TOKENS, TEAM_SEAT_CENTS, type PlanId } from "@/lib/billing/plans";
+import { catalog, freeTierCapLabel, PRO_PUKU_TOKENS, TEAM_SEAT_CENTS, type BlastcpTier, type PlanId } from "@/lib/billing/plans";
 import { planLink } from "@/lib/billing/plan-link";
 import AccessPlans from "./AccessPlans";
 
@@ -7,8 +7,9 @@ import AccessPlans from "./AccessPlans";
 // Each card ends in its way in: Free downloads the app, Pro and Team go through /billing to the upgrade dialog and
 // Stripe Checkout (lib/billing/plan-link.ts). A server component with no client JS, like the rest of the home page.
 //
-// Only what billing delivers is listed. The BlastCP tier each plan carries in the catalog (plan.blastcp) stays off the
-// cards until BlastCP reads the Weft plan and applies it (docs/architecture/billing.md "BlastCP usage").
+// Each card also lists the BlastCP tier its plan includes (plan.blastcp), which BlastCP applies to the person's own
+// BlastCP workspace: Team's to every seat, Pro's to the workspace owner (lib/billing/blastcp-bundle.ts,
+// docs/architecture/billing.md "BlastCP usage").
 
 export interface PlanCta {
   label: string;
@@ -32,6 +33,22 @@ function pukuAllowanceLabel(): string {
   return `${(PRO_PUKU_TOKENS / 1_000_000).toLocaleString("en-US")}M Puku tokens a month`;
 }
 
+// Who on a plan gets its BlastCP tier, as blastcpBundle (lib/billing/blastcp-bundle.ts) decides it.
+const BLASTCP_WHO: Partial<Record<PlanId, string>> = { pro: " for the owner", team: " for every seat" };
+
+// The BlastCP tier a plan includes, as two bullets: what it posts, and its generation credit.
+// "BlastCP Free: 1 brand, 3 channels, 30 posts a month" / "$3 a month of BlastCP AI generation".
+function blastcpLines(id: PlanId, tier: BlastcpTier): string[] {
+  const brands = `${tier.brands} brand${tier.brands === 1 ? "" : "s"}`;
+  const channels = tier.channels === null ? "every channel" : `${tier.channels} channels`;
+  const posts = tier.postsPerMonth === null ? "unlimited posts" : `${tier.postsPerMonth} posts a month`;
+  const credit = `$${tier.creditDollars.toFixed(2).replace(/\.00$/, "")}`;
+  const generation = tier.creditResets
+    ? `${credit} a month of BlastCP AI generation`
+    : `${credit} of BlastCP AI generation, once`;
+  return [`${tier.name}${BLASTCP_WHO[id] ?? ""}: ${brands}, ${channels}, ${posts}`, generation];
+}
+
 // A plan's headline price: "$20", "$9" per seat. Free reads as "Free" rather than "$0".
 function priceFor(id: PlanId): { price: string; cadence: string } {
   const plan = catalog.get(id);
@@ -44,7 +61,10 @@ function priceFor(id: PlanId): { price: string; cadence: string } {
 function cardFor(id: PlanId, features: string[], featured: boolean, cta: PlanCta | null): PlanCard {
   const plan = catalog.get(id);
   const { price, cadence } = priceFor(id);
-  return { id: plan.id, name: plan.name, blurb: plan.blurb, price, cadence, features, featured, cta };
+  // The BlastCP bullets go after the plan's own, before its closing "Everything in …".
+  const last = features.at(-1)?.startsWith("Everything in") ? features.length - 1 : features.length;
+  const all = [...features.slice(0, last), ...blastcpLines(id, plan.blastcp), ...features.slice(last)];
+  return { id: plan.id, name: plan.name, blurb: plan.blurb, price, cadence, features: all, featured, cta };
 }
 
 // The three cards; Free's button is the page's download, which the home page passes in (null leaves it off).

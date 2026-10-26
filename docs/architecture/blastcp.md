@@ -103,12 +103,13 @@ own wording from `weftConnectNote()`, so no server or BlastCP string reaches the
 ### What a Weft plan buys
 
 Every Weft plan includes a BlastCP tier (`plan.blastcp`, a `BlastcpTier` in `lib/billing/plans.ts`): Free carries
-`BLASTCP_FREE` (1 brand, 3 channels, 30 posts a month, $0.50 of generation credit once), and Pro and Team carry
-`BLASTCP_CREATOR` (1 brand, every channel, unlimited posts, $3 a month of credit). weft.zip's pricing says so
-([billing.md](billing.md#blastcp-usage), [marketing-site.md](marketing-site.md)). **Nothing enforces it yet**: the token
-exchange above carries only the Weft JWT, so BlastCP knows who you are and not which plan you're on. BlastCP would read
-the plan there and set its own `org_subscriptions` row; until then the drawer and the posting queue behave exactly as they
-do for any BlastCP account.
+`BLASTCP_FREE` (1 brand, 3 channels, 30 posts a month, $0.50 of generation credit once); Pro, Open Source and Education
+give their workspace owners `BLASTCP_CREATOR` (1 brand, every channel, unlimited posts, $3 a month of credit), and Team
+gives it to every seat. **BlastCP enforces it** (2026-10-27): it reads `GET weft.zip/api/billing/blastcp` with the
+user's Weft token during the exchange above and whenever Weft nudges `POST blastcp.com/api/weft/plan`
+(`lib/blastcp-plan.ts`: on sign-in, every 12 hours, and when the billing row sees a new plan), then comps the person's
+own BlastCP workspace to that tier. Only a Weft-linked account gets it. The full rules are in
+[billing.md](billing.md#blastcp-usage).
 
 ## Reading
 

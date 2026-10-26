@@ -6,6 +6,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("next/server", () => ({ connection: async () => {} }));
 const { fetchBillingStatus } = vi.hoisted(() => ({ fetchBillingStatus: vi.fn() }));
 vi.mock("@/lib/billing-client", () => ({ fetchBillingStatus }));
+const notePlan = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/blastcp-plan", () => ({ notePlan }));
 
 const route = await import("./route");
 
@@ -18,6 +20,15 @@ beforeEach(() => {
 });
 
 describe("GET /api/account/billing", () => {
+  it("tells the BlastCP nudge which plan it saw", async () => {
+    fetchBillingStatus.mockResolvedValueOnce({ plan: { id: "team", name: "Team" } });
+    await get();
+    expect(notePlan).toHaveBeenCalledWith("team");
+    fetchBillingStatus.mockResolvedValueOnce(null);
+    await get();
+    expect(notePlan).toHaveBeenLastCalledWith(null);
+  });
+
   it("refuses other hosts", async () => {
     const res = await get({ host: "evil.com" });
     expect(res.status).toBe(403);
