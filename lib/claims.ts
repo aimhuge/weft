@@ -56,14 +56,22 @@ export interface Clash {
   // Their claim and the one it clashes with.
   theirs: string;
   mine: string;
+  // The user put that card first on this file (lib/precedence.ts): this card yields to it.
+  first?: boolean;
 }
 
-// The first other busy card in this card's tree holding a claim that clashes with one of these.
+// Whether `from` leaves this file to the card `to` (Me first, lib/precedence.ts).
+export const yieldsTo = (from: Card, to: string, file: string) => Boolean(from.yields?.some((y) => y.to === to && y.file === file));
+
+// The first other busy card in this card's tree holding a claim that clashes with one of these. A card that
+// yields a file to this one is skipped there: the user put this card first.
 export function findClash(cards: Card[], card: Card, keys: string[]): Clash | undefined {
   for (const other of busyInFolder(cards, workDir(card), card.id)) {
     for (const theirs of other.claims ?? []) {
+      const { file } = splitClaim(theirs);
+      if (yieldsTo(other, card.id, file)) continue;
       const mine = keys.find((k) => clashes(k, theirs));
-      if (mine) return { card: other, theirs, mine };
+      if (mine) return { card: other, theirs, mine, ...(yieldsTo(card, other.id, file) && { first: true }) };
     }
   }
   return undefined;
@@ -71,8 +79,10 @@ export function findClash(cards: Card[], card: Card, keys: string[]): Clash | un
 
 // What the permission prompt says: "Card ‘Fix login’ is editing LoginForm in Login.tsx. Wait, or go ahead?",
 // or "is editing styles.css" for a whole-file claim.
-export function clashQuestion({ card, theirs }: Clash) {
+// One the user put first reads "Card ‘Fix login’ goes first on Login.tsx. Wait, or go ahead?".
+export function clashQuestion({ card, theirs, first }: Clash) {
   const { file, symbol } = splitClaim(theirs);
+  if (first) return `Card ‘${card.title}’ goes first on ${path.basename(file)}. Wait, or go ahead?`;
   const what = symbol === WHOLE_FILE ? path.basename(file) : `${symbol} in ${path.basename(file)}`;
   return `Card ‘${card.title}’ is editing ${what}. Wait, or go ahead?`;
 }
@@ -82,7 +92,7 @@ const symbolText = (symbol: string) => symbol.split("/").map((part) => part.repl
 // Why the prompt came up, by category: the same symbol, one symbol inside the other, or a whole-file
 // claim on either side; the detail names the holding card and what it has uncommitted. The shared-tree
 // explanation is the same every time, so the prompt keeps it in the chip's tooltip.
-export function clashWhy({ card, theirs, mine }: Clash): PromptReason {
+export function clashWhy({ card, theirs, mine, first }: Clash): PromptReason {
   const t = splitClaim(theirs);
   const m = splitClaim(mine);
   // A holder waiting on its own holder is still holding the code, so it reads as running.
@@ -92,6 +102,6 @@ export function clashWhy({ card, theirs, mine }: Clash): PromptReason {
   return {
     category,
     detail: `‘${card.title}’ (${state}) has uncommitted edits to ${held}`,
-    holder: { id: card.id, title: card.title, claim: theirs },
+    holder: { id: card.id, title: card.title, claim: theirs, emoji: card.emoji, thumb: card.thumb, ...(first && { first: true as const }) },
   };
 }
