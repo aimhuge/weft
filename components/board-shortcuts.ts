@@ -35,6 +35,8 @@ export interface BoardShortcutContext {
   moveFocus: (move: { dx?: number; dy?: number; edge?: "first" | "last" }) => void;
   openFocused: (e: KeyboardEvent) => false | undefined;
   jumpToNeedsYou: () => false | undefined;
+  // Opens the card you had open last (still outlined on the board); false when there's none to open.
+  reopenLast: () => false | undefined;
   stepProject: (by: number) => void;
   stepSort: () => void;
   archiveTarget: () => Card | undefined;
@@ -156,6 +158,7 @@ export function boardShortcuts(c: BoardShortcutContext): ShortcutDef[] {
       enabled: c.boardKeys,
       handler: c.jumpToNeedsYou,
     },
+    { id: "reopen-last", keys: ["z"], description: "Reopen the last card you had open", group: "Board", enabled: c.boardKeys, handler: c.reopenLast },
     { id: "project-next", keys: ["]"], description: "Next project", group: "Board", enabled: c.boardKeys, handler: () => c.stepProject(1) },
     {
       id: "project-previous",
@@ -203,7 +206,7 @@ export function boardShortcuts(c: BoardShortcutContext): ShortcutDef[] {
     },
     {
       id: "archive-undo",
-      keys: ["z"],
+      keys: ["shift+z"],
       description: "Undo the last archive",
       group: "Board",
       enabled: c.boardKeys,

@@ -32,8 +32,8 @@ Discoverability is built on the same registry: tooltips, key badges, native righ
 ## Current shortcuts
 
 General: `?` or ⌘/ help, `n` new thread, `/` filter, `,` settings, `c` copilot, `b` browser, Shift+`S` add a secret (opens the 🔐 drawer on its Add form; the ask waits in `lib/use-vault.ts` until the drawer has loaded a vault).
-Board: `j`/`k` or ↓/↑ between cards, `h`/`l` or ←/→ between columns, Home/End first and last card, Enter or `o` open the focused card, `a` jump to a card that needs you, `[`/`]` previous and next project, `s` cycle sort.
-Thread: `r` reply in the open thread, Shift+`A` archive or unarchive it (plain `a` stays "needs you"), ⌘⇧↵ (or `mod+shift+Enter`) send "continue" through the same `onSend` path a typed message uses — the same call the card-level ▶ makes (`lib/resume-actions.ts`); the shortcut greys out while a turn runs, a question waits, the box is a `!` shell command, or you're editing the last message (`lib/use-reply-continue.ts`).
+Board: `j`/`k` or ↓/↑ between cards, `h`/`l` or ←/→ between columns, Home/End first and last card, Enter or `o` open the focused card, `a` jump to a card that needs you, `z` reopen the last card you had open (`lastOpenId` from `lib/use-open-card.ts`, the card still outlined after you close it; stands down while a card is open), `[`/`]` previous and next project, `s` cycle sort.
+Thread: `r` reply in the open thread, Shift+`A` archive or unarchive it (plain `a` stays "needs you"), Shift+`E` archive every Done card on screen, Shift+`Z` undo the last archive (plain `z` reopens the last card), ⌘⇧↵ (or `mod+shift+Enter`) send "continue" through the same `onSend` path a typed message uses — the same call the card-level ▶ makes (`lib/resume-actions.ts`); the shortcut greys out while a turn runs, a question waits, the box is a `!` shell command, or you're editing the last message (`lib/use-reply-continue.ts`).
 
 Writing, terminal and app shortcuts (⌘↵, ⌘B, ⌘\\, ⌘J, ⌃⌥Space and more) are listed from `FIXED_SHORTCUTS`.
 

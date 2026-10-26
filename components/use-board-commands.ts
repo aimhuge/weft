@@ -26,6 +26,8 @@ export interface BoardCommandsInput {
   selected: Card | null;
   // The open card's id, set even before its card has loaded.
   selectedId: string | null;
+  // The card opened last, still outlined after you close it (lib/use-open-card.ts); Z reopens it.
+  lastOpenId: string | null;
   projectSummaries: ProjectSummary[];
   project: string | null;
   sort: SortKey;
@@ -108,6 +110,11 @@ export function useBoardCommands(c: BoardCommandsInput) {
       moveFocus: (move) => moveFocus(move, c.columns, c.selectedId, c.selected?.column ?? null),
       openFocused: (e) => openFocused(e, cards, openCard),
       jumpToNeedsYou,
+      reopenLast: () => {
+        const card = c.selectedId ? undefined : cards.find((x) => x.id === c.lastOpenId);
+        if (!card) return false;
+        openCard(card);
+      },
       stepProject,
       stepSort,
       archiveTarget: c.archiveTarget,

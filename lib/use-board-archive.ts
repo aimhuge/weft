@@ -8,7 +8,7 @@ import type { Card } from "./types";
 
 // What the board does around archiving: archive (with an Undo toast), unarchive, and find the
 // focused card the archive key acts on. The keyboard focus moves to the next card in the column
-// so E, E, E clears it, and the last batch is kept for Z to undo. Both land on the board at once (lib/optimistic-cards.ts).
+// so E, E, E clears it, and the last batch is kept for Shift+Z to undo. Both land on the board at once (lib/optimistic-cards.ts).
 const fileAway = (id: string, archived: boolean) => patchNow(id, { archived }, () => api.archive(id, archived));
 export interface BoardArchiveDeps {
   cards: readonly Card[];
@@ -34,7 +34,7 @@ export function useBoardArchive({ cards, selected, selectedIdRef, select, setToa
     [notify, setToast],
   );
 
-  // Archives the cards and offers an Undo (the toast's button, or Z). Keyboard focus moves to the next card
+  // Archives the cards and offers an Undo (the toast's button, or Shift+Z). Keyboard focus moves to the next card
   // in the column, so E, E, E clears a column.
   const archiveCards = useCallback(
     (list: Card[], message = archivedMessage(list.map((c) => c.title))) => {

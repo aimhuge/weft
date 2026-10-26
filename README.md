@@ -406,7 +406,8 @@ shown beside it, that picks it while the menu is open: right-click, then `D` for
 
 Archive from the keyboard: `Shift+A` archives the card you've moved to with `j`/`k`, or else the
 open thread, and focus steps to the next card, so `Shift+A` three times clears three cards. `Shift+E`
-archives every Done card on screen, and `Z` (or the toast's Undo) brings back the last archive. The command palette (`Cmd+K`) has all of them too.
+archives every Done card on screen, and `Shift+Z` (or the toast's Undo) brings back the last archive. `Z` reopens the last card you had open
+(the one still outlined on the board). The command palette (`Cmd+K`) has all of them too.
 
 Cards share one working tree by default, so two cards in one folder see each other's edits. When that
 would hurt (a big change, or other cards busy in the folder), switch **Shared** to **Isolated** beside the

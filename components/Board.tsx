@@ -61,7 +61,7 @@ import BoardProjectBar from "./BoardProjectBar";
 // fails as its module loads, breaks only its own spot on the board.
 const AccountButton = guarded(() => import("./AccountButton"), { inline: true, what: "account button" });
 const CopilotButton = guarded(() => import("./CopilotButton"), { inline: true, what: "copilot button" });
-const CopilotLane = guarded(() => import("./CopilotLane"), { what: "copilot", className: "self-stretch shrink-0" });
+const CopilotLane = guarded(() => import("./CopilotLane"), { what: "copilot", className: "fixed bottom-4 right-4 z-[96]" });
 const EmptyBoardStart = guarded(() => import("./EmptyBoardStart"), { what: "start panel", inline: true });
 const RestartChip = guarded(() => import("./RestartChip"), { inline: true, what: "restart chip" });
 const CardView = guarded(() => import("./CardView"), { what: "card", placeholder: <CardSkeleton /> });
@@ -238,7 +238,7 @@ export default function Board() {
 
   // Shortcuts, the command palette and the app menu (components/use-board-commands.ts).
   const { openPalette, paletteItems, findPrompts } = useBoardCommands({
-    cards, selected, selectedId, projectSummaries, project, sort, home, columns: visibleColumns, query, boardKeys,
+    cards, selected, selectedId, lastOpenId, projectSummaries, project, sort, home, columns: visibleColumns, query, boardKeys,
     dialogs: { showNew, showSettings, showHelp, showPalette, login },
     doneToArchive, lastArchived, archivedCount, showArchived, rootOf, restart: restartView.restart,
     openNew: () => openNew(), openCard, select, toggleCopilot, toggleBrowser, toggleTerminal, toggleColumn: workspace.toggle,
@@ -405,16 +405,6 @@ export default function Board() {
           notify={notify}
         />
         <EmptyBoardStart cards={cards} loaded={loaded} filtering={filtering} />
-        <CopilotLane
-          state={laneState}
-          cards={cards}
-          project={project}
-          onOpenCard={openCard}
-          onHide={() => setCopilotState("hidden")}
-          onPeek={() => setCopilotState("peek")}
-          onOpen={() => setCopilotState("open")}
-          toggleTip={hint("copilot", "Copilot")}
-        />
       </div>
 
       <BoardBottom
@@ -448,6 +438,18 @@ export default function Board() {
           switchAllDialog, deleteDialog, newOpen: showNew, onDropCard: openCard, onDropNew: () => openNew(),
           toast, onDismissToast: () => setToast(null),
         }}
+      />
+
+      {/* The copilot floats bottom-right over the board and every dialog (lib/copilot-float.ts). */}
+      <CopilotLane
+        state={laneState}
+        cards={cards}
+        project={project}
+        onOpenCard={openCard}
+        onHide={() => setCopilotState("hidden")}
+        onPeek={() => setCopilotState("peek")}
+        onOpen={() => setCopilotState("open")}
+        toggleTip={hint("copilot", "Copilot")}
       />
     </div>
     </TagColors.Provider>

@@ -167,7 +167,7 @@ describe("useBoardArchive", () => {
     expect(result.current.lastArchived).toEqual([]);
   });
 
-  it("keeps the last batch for Z to undo", () => {
+  it("keeps the last batch for Shift+Z to undo", () => {
     const { result } = makeArchive({ cards: [card({ id: "c1" }), card({ id: "c2" })] });
     act(() => result.current.archiveCards([card({ id: "c1" }), card({ id: "c2" })]));
     expect(result.current.lastArchived).toEqual(["c1", "c2"]);

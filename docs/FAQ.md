@@ -209,7 +209,7 @@ watchdog if Weft crashes.
 ### What are the main keyboard shortcuts?
 
 ⌘N new thread, ⌘J copilot, ⌃⌥Space copilot from any app, ⇧⌘B browser pane, ⌘K command palette, `/` (or ⌘F) filter
-cards, ⌘, settings, ⌃\` terminal, ⌘L tags, `j`/`k` move between cards, ⇧A archive, `Z` undo. Press `?` for the full,
+cards, ⌘, settings, ⌃\` terminal, ⌘L tags, `j`/`k` move between cards, ⇧A archive, ⇧Z undo, `Z` reopen the last card. Press `?` for the full,
 searchable sheet. Hold ⌘ or Shift on the board and a card shows what that modifier does.
 
 ---
@@ -273,7 +273,7 @@ your last message again in a fresh CLI.
 
 ### How do I archive cards?
 
-⇧A archives the focused card (or the open thread) and steps to the next. ⇧E archives every Done card on screen. `Z` or
+⇧A archives the focused card (or the open thread) and steps to the next. ⇧E archives every Done card on screen. ⇧Z or
 the toast's Undo brings the last one back. Right-click Done for show/hide archived.
 
 ### What's the difference between a star and a tag?
