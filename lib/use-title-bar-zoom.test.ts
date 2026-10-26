@@ -2,7 +2,7 @@
 import { cleanup, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ShellBridge } from "./client";
-import { useTitleBarZoom } from "./use-title-bar-zoom";
+import { useMacTitleBar, useTitleBarZoom } from "./use-title-bar-zoom";
 
 const zoomVar = () => document.documentElement.style.getPropertyValue("--zoom");
 
@@ -40,5 +40,18 @@ describe("useTitleBarZoom", () => {
     withZoom(vi.fn(() => 0));
     renderHook(() => useTitleBarZoom());
     expect(zoomVar()).toBe("1");
+  });
+});
+
+describe("useMacTitleBar", () => {
+  it("is false in a plain browser tab", () => {
+    expect(renderHook(() => useMacTitleBar()).result.current).toBe(false);
+  });
+
+  it("is true in the desktop app on a Mac, and false on other platforms", () => {
+    window.weft = { platform: "darwin", zoomFactor: () => 1 } as unknown as ShellBridge;
+    expect(renderHook(() => useMacTitleBar()).result.current).toBe(true);
+    window.weft = { platform: "win32", zoomFactor: () => 1 } as unknown as ShellBridge;
+    expect(renderHook(() => useMacTitleBar()).result.current).toBe(false);
   });
 });

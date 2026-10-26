@@ -3,7 +3,7 @@ import { fireEvent, render } from "@testing-library/react";
 import { createElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import "@/components/test-utils";
-import AdminEscape from "./AdminEscape";
+import AdminEscape, { isTyping } from "./AdminEscape";
 
 const push = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
@@ -35,5 +35,43 @@ describe("AdminEscape", () => {
     handled.preventDefault();
     window.dispatchEvent(handled);
     expect(push).not.toHaveBeenCalled();
+  });
+});
+
+describe("isTyping", () => {
+  const el = (html: string) => {
+    const box = document.createElement("div");
+    box.innerHTML = html;
+    return box.firstElementChild;
+  };
+
+  it("counts fields you type into", () => {
+    expect(isTyping(el('<input type="text">'))).toBe(true);
+    expect(isTyping(el('<input type="search">'))).toBe(true);
+    expect(isTyping(el("<input>"))).toBe(true);
+    expect(isTyping(el("<textarea></textarea>"))).toBe(true);
+  });
+
+  it("leaves out controls you click, so Esc on a ticked filter still goes back", () => {
+    expect(isTyping(el('<input type="checkbox">'))).toBe(false);
+    expect(isTyping(el('<input type="radio">'))).toBe(false);
+    expect(isTyping(el("<select></select>"))).toBe(false);
+    expect(isTyping(el("<button></button>"))).toBe(false);
+    expect(isTyping(null)).toBe(false);
+  });
+});
+
+describe("AdminEscape on a focused checkbox", () => {
+  beforeEach(() => push.mockReset());
+
+  it("goes back to the board", () => {
+    render(createElement(AdminEscape));
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    document.body.appendChild(box);
+    box.focus();
+    fireEvent.keyDown(box, { key: "Escape" });
+    expect(push).toHaveBeenCalledWith("/");
+    box.remove();
   });
 });

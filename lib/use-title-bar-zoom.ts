@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 
 // macOS draws the traffic lights in window pixels, but the page zooms (View > Zoom In/Out), so a
 // header sized in CSS pixels shrinks under them when zoomed out. This keeps `--zoom` on the root
@@ -15,4 +15,13 @@ export function useTitleBarZoom() {
     window.addEventListener("resize", apply);
     return () => window.removeEventListener("resize", apply);
   }, []);
+}
+
+const noopSubscribe = () => () => {};
+
+// Whether this page's header doubles as a macOS title bar, under the window's traffic lights: true only in
+// the desktop app on a Mac. It keeps `--zoom` current too, for the `mac-title-bar` sizes.
+export function useMacTitleBar(): boolean {
+  useTitleBarZoom();
+  return useSyncExternalStore(noopSubscribe, () => window.weft?.platform ?? "", () => "") === "darwin";
 }

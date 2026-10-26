@@ -7,12 +7,14 @@
 //
 // A small top bar with a "← Board" link sits above the page so the SuperAdmin
 // can return to the board without using the browser back button (which on
-// the deployed weft.zip would walk into the marketing site instead). Esc does the same (AdminEscape).
+// the deployed weft.zip would walk into the marketing site instead). Esc does the same (AdminEscape). In the
+// desktop app on a Mac the bar is the title bar too, clear of the traffic lights (AdminBar).
 // The pages are built from the admin kit in components/admin.
 import Link from "next/link";
 import { connection } from "next/server";
 import { Suspense } from "react";
 import { accountView } from "@/lib/account";
+import AdminBar from "./AdminBar";
 import AdminEscape from "./AdminEscape";
 import AdminNav from "./AdminNav";
 
@@ -33,7 +35,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   return (
     <div className="admin-root flex h-full min-h-0 flex-col overflow-auto bg-canvas text-ink">
       <AdminEscape />
-      <header className="sticky top-0 z-10 flex items-center gap-3 border-b border-line bg-panel/90 px-5 py-2 text-[13px] backdrop-blur">
+      <AdminBar>
         <Link href="/" className="rounded-lg px-2 py-1 text-muted transition-colors hover:bg-sunken hover:text-ink" title="Back to the board (Esc)">
           ← Board
         </Link>
@@ -47,7 +49,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <SignedIn />
           </Suspense>
         </div>
-      </header>
+      </AdminBar>
       {/* Each page's gate reads the session (connection()), which can't prerender: the Suspense lets the
           bar render at once and the page stream in, instead of Next's "blocking route" error. */}
       <Suspense fallback={<p className="px-6 py-6 text-[13px] text-faint">Loading…</p>}>{children}</Suspense>
