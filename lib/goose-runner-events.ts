@@ -10,10 +10,14 @@
 //
 // Pure: no fs, no env, no I/O. Everything it needs is the line it is given.
 
-/** A message from Goose: the assistant's text. */
+/**
+ * A message from Goose: the assistant's text. Goose 1.x streams one reply as many lines that share the
+ * message's id, each with the next slice of its text, so id says which reply a slice belongs to.
+ */
 export interface GooseMessageEvent {
   kind: "message";
   text: string;
+  id?: string;
 }
 
 /** A progress note from Goose: what it is doing, not what it said. */
@@ -78,6 +82,38 @@ function kindOf(line: RawLine): string {
     if (kind) return kind;
   }
   return "";
+}
+
+/** A Goose 1.x message, `{ id, role, content: [{ type: "text", text }] }`, when the line carries one. */
+interface GooseMessage {
+  id?: unknown;
+  role?: unknown;
+  content?: unknown;
+}
+
+function messageObject(line: RawLine): GooseMessage | null {
+  const message = line.message;
+  return message && typeof message === "object" && !Array.isArray(message) ? message : null;
+}
+
+/** The text parts of a Goose 1.x message, joined. Its tool requests and other parts carry no text. */
+function contentText(message: GooseMessage): string {
+  if (!Array.isArray(message.content)) return str(message.content);
+  return message.content
+    .map((part: unknown) => (part && typeof part === "object" && (part as { type?: unknown }).type === "text" ? str((part as { text?: unknown }).text) : ""))
+    .join("");
+}
+
+/**
+ * The event a Goose 1.x message line is. The assistant's text is a message; a message from any other role
+ * (Goose echoing a tool's response back as the user) is not the assistant speaking, so it is skipped.
+ */
+function messageEvent(message: GooseMessage): GooseEvent {
+  if (str(message.role) !== "assistant") return { kind: "unknown", type: "message" };
+  const text = contentText(message);
+  if (!text) return { kind: "unknown", type: "message" };
+  const id = str(message.id);
+  return id ? { kind: "message", text, id } : { kind: "message", text };
 }
 
 /** The text of a message-ish payload: its own `message`, `text` or `content`. */
@@ -148,6 +184,8 @@ export function parseGooseEvent(line: string): GooseEvent | null {
   // A notification has no kind of its own, so it is recognised by the key it carries.
   if (isGooseNotification(raw)) return { kind: "notification", progress: progressOf(raw) };
   if (isTextKind(kind)) {
+    const message = messageObject(raw);
+    if (message) return messageEvent(message);
     const body = textOf(raw);
     if (body) return { kind: "message", text: body };
   }

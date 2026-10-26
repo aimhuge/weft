@@ -125,16 +125,24 @@ function registerGoose(ipcMain, { goose, isBoard }) {
 }
 
 // The control-server routes: the server's Goose runner asks for a grant and claims it.
-function gooseRoutes(goose) {
+// getGoose is a getter, like the other providers' routes (electron/pane-routes.cjs): main sets Goose up after the
+// routes are built. Handed the getter as if it were Goose, every grant threw, and Goose ran with no key at all.
+function gooseRoutes(getGoose) {
+  const goose = () => {
+    const api = getGoose();
+    if (!api) throw new Error("Goose isn't set up in Weft yet.");
+    return api;
+  };
   return {
-    "POST /goose/env-grant": (body) => goose.grantEnv(body && typeof body === "object" ? body : {}),
-    "POST /goose/env-claim": (body) => goose.claim(body?.grant),
+    "POST /goose/env-grant": (body) => goose().grantEnv(body && typeof body === "object" ? body : {}),
+    "POST /goose/env-claim": (body) => goose().claim(body?.grant),
   };
 }
 
 // Wires Goose into Electron main for the board window (board() is its webContents).
 function setupGoose({ ipcMain, dataDir, board }) {
-  const safeStorage = require("./keychain-audit.cjs").keychainFor("Goose provider keys");
+  const { keychainFor } = /** @type {typeof import("./keychain-audit.cjs")} */ (require("./keychain-audit.cjs"));
+  const safeStorage = keychainFor("Goose provider keys");
   const goose = createGoose({ dataDir, safeStorage });
   registerGoose(ipcMain, { goose, isBoard: (sender) => Boolean(sender) && sender === board() });
   return { goose };

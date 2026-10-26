@@ -143,6 +143,8 @@ export function setupGoose(s: State) {
     s.cards.clear();
     s.threads.clear();
     const cwd = await import("node:fs").then((fs) => fs.realpathSync(fs.mkdtempSync("/tmp/weft-goose-")));
+    // Goose's state root (recipes, sessions) goes under WEFT_DATA: a temp one, or the tests write into ~/.weft.
+    vi.stubEnv("WEFT_DATA", await import("node:fs").then((fs) => fs.mkdtempSync("/tmp/weft-goose-data-")));
     vi.spyOn(console, "error").mockImplementation(() => {});
     const goose = await import("./goose-runner");
     const session = makeSession(cwd);

@@ -19,10 +19,13 @@ import { spawnCli } from "./cli-process";
 import { cliEnv } from "./env";
 import { gooseArgs, gooseRecipeYaml, GOOSE_RECIPE_CODE, type GooseTurnPlan } from "./goose-recipe";
 import { gooseLaunch } from "./goose-launch";
+import { openGooseMcp } from "./goose-mcp";
+import { addToReply, flushReply, lastReply, resetReply } from "./goose-reply";
+import { replacesSystemPrompt } from "./goose-provider";
 import { progressPaths } from "./goose-progress-paths";
 import { writeRecipe } from "./goose-recipe-store";
-import { gooseStateRoot } from "./goose-state";
-import { endsGooseTurn, parseGooseEvent, type GooseEvent } from "./goose-runner-events";
+import { gooseHasSession, gooseStateRoot } from "./goose-state";
+import { endsGooseTurn, parseGooseEvent, type GooseEvent, type GooseNotificationEvent } from "./goose-runner-events";
 import { GOOSE_DEFAULT_MODEL } from "./new-thread";
 import { handle } from "./runner-turn";
 import { getCard, updateCard } from "./store";
@@ -39,6 +42,8 @@ export const GOOSE_ENV = {
 
 // How much of Goose's stderr is kept for the error a failed turn shows.
 const STDERR_TAIL = 4_000;
+// How many plain-text lines of Goose's stdout a failed turn keeps, from its error on.
+const PLAIN_LINES = 12;
 
 function sdkMessage(message: unknown) {
   return message as SDKMessage;
@@ -166,16 +171,18 @@ export function eventText(event: GooseEvent): string {
  */
 export async function handleGooseEvent(session: Session, event: GooseEvent): Promise<boolean> {
   if (event.kind === "message") {
-    if (event.text) await assistant(session, event.text);
+    if (event.text) await addToReply(session, event.text, event.id, (text) => assistant(session, text));
     return false;
   }
-  if (event.kind === "notification") {
-    // A progress note: what Goose is doing, not what it said. The thread shows it as a tool row.
-    // The note also names the files Goose is working on, so the card's overlap warning sees them.
-    noteFileChanges(session, progressPaths(event.progress));
-    const use = gooseToolUse(event);
-    if (!use) return false;
-    const id = event.progress;
+  // Anything else ends the reply being streamed, so it is filed before the event lands after it.
+  await flushReply(session, (text) => assistant(session, text));
+  // A progress note: what Goose is doing, not what it said. The thread shows it as a tool row.
+  // The note also names the files Goose is working on, so the card's overlap warning sees them.
+  const use = gooseToolUse(event);
+  if (use) {
+    const progress = (event as GooseNotificationEvent).progress;
+    noteFileChanges(session, progressPaths(progress));
+    const id = progress;
     if (!id || session.toolIndex.has(id)) return false;
     await handle(session.cardId as string, session, sdkMessage({
       type: "assistant",
@@ -198,7 +205,8 @@ export async function handleGooseEvent(session: Session, event: GooseEvent): Pro
     return true;
   }
   if (event.kind === "complete") {
-    await result(session, event.text);
+    // Goose 1.x ends with token counts and no text: the result is the last reply, as Claude Code's is.
+    await result(session, event.text || lastReply(session));
     return true;
   }
   return false;
@@ -208,17 +216,33 @@ export async function handleGooseEvent(session: Session, event: GooseEvent): Pro
  * Reads Goose's stdout as JSON lines and applies each one. A line that isn't a JSON object, or that
  * names a kind Weft doesn't act on, is skipped: Goose prints the odd line of noise on stdout.
  */
-export async function readGooseEvents(session: Session, stdout: NodeJS.ReadableStream): Promise<boolean> {
+export async function readGooseEvents(session: Session, stdout: NodeJS.ReadableStream, plain: string[] = []): Promise<boolean> {
   let completed = false;
+  resetReply(session);
   const lines = readline.createInterface({ input: stdout, crlfDelay: Infinity });
   for await (const line of lines) {
     if (!line.trim()) continue;
     const event = parseGooseEvent(line);
-    if (!event) continue;
+    if (!event) {
+      keepPlainError(plain, line);
+      continue;
+    }
     if (await handleGooseEvent(session, event)) completed = true;
   }
   lines.close();
+  // A stream that ends mid-reply still files what Goose said.
+  await flushReply(session, (text) => assistant(session, text));
   return completed;
+}
+
+/**
+ * Keeps the plain-text lines from Goose's stdout that start at an error. Goose prints a failure before a session
+ * (no key, a bad provider) as text on stdout, not as an event, so it is the only word on why the turn died.
+ */
+function keepPlainError(plain: string[], line: string) {
+  if (!plain.length && !/error/i.test(line)) return;
+  plain.push(line.trim());
+  if (plain.length > PLAIN_LINES) plain.shift();
 }
 
 /** The turn's prompt, as Goose takes it: the user's text, with a /name turned into the skill's own text. */
@@ -238,6 +262,8 @@ export function planFor(session: Session): GooseTurnPlan {
     permissionMode: session.spec.permissionMode,
     skillsOff: session.spec.skillsOff,
     provider: session.spec.provider,
+    resume: Boolean(session.cardId) && gooseHasSession(session.cardId as string),
+    instructionsInPrompt: replacesSystemPrompt(session.spec.gooseBaseUrl, session.spec.model),
   };
 }
 
@@ -321,6 +347,17 @@ export async function driveGoose(session: Session, executable: string) {
  * One turn on Goose: start the CLI, read its events, and fail the turn if it ends without a `complete`.
  */
 async function runGooseTurn(session: Session, executable: string, prompt: string) {
+  // Weft's own tools (mcp__browser__open_url and the rest) reach Goose for this turn only (lib/goose-mcp.ts).
+  const closeMcp = openGooseMcp(session);
+  try {
+    await runGooseProcess(session, executable, prompt);
+  } finally {
+    closeMcp();
+  }
+}
+
+/** Starts the turn's `goose run`, reads its events, and fails the turn if it ends without a `complete`. */
+async function runGooseProcess(session: Session, executable: string, prompt: string) {
   // The recipe is written before Goose is started, from the same plan and prompt the argv is built
   // from, so the file on disk is exactly what the run used. A write that fails doesn't stop the turn.
   saveTurnRecipe(session, prompt);
@@ -331,7 +368,8 @@ async function runGooseTurn(session: Session, executable: string, prompt: string
   // The provider's key stays in Electron main: the launch helper starts Goose with it in its env, so
   // this process never holds the plaintext. Without a saved key the plain binary is started, which is
   // what Goose wants when the user configured a provider itself.
-  const launch = session.spec.provider ? await gooseLaunch(session.spec.provider, argv, env, session.spec.cwd, session.spec.gooseBaseUrl ?? "") : undefined;
+  // The helper spawns argv[0] as the program, so the Goose binary leads; without it the helper tried to run `run`.
+  const launch = session.spec.provider ? await gooseLaunch(session.spec.provider, [executable, ...argv], env, session.spec.cwd, session.spec.gooseBaseUrl ?? "") : undefined;
   const command = launch ? launch.bin : executable;
   const args = launch ? launch.args : argv;
   const childEnv: Record<string, string> = launch ? { ...env, ...launch.env } : env;
@@ -349,12 +387,13 @@ async function runGooseTurn(session: Session, executable: string, prompt: string
     // process's own emitter: the event fires with the code and the signal that ended the process.
     (proc as unknown as { once(event: "close", listener: () => void): void }).once("close", () => resolve());
   });
-  const completed = await readGooseEvents(session, proc.stdout);
+  const plain: string[] = [];
+  const completed = await readGooseEvents(session, proc.stdout, plain);
   await exited;
   if (spawnError) throw spawnError;
   if (completed || session.abort.signal.aborted) return;
   // The turn ended without a `complete` event: Goose failed, and its stderr says why.
-  const tail = proc.stderrTail().slice(-STDERR_TAIL);
+  const tail = (proc.stderrTail() || plain.join("\n")).slice(-STDERR_TAIL);
   const signal = proc.signalCode;
   throw new Error(tail || `Goose exited ${signal ? `on ${signal}` : `with code ${proc.exitCode ?? "unknown"}`} without finishing the turn.`);
 }
@@ -364,5 +403,6 @@ async function runGooseTurn(session: Session, executable: string, prompt: string
 export const GOOSE_RUNNER_CODE = [
   driveGoose, assistant, result, noteFileChanges, handleGooseEvent, readGooseEvents, promptFor, argsFor, gooseEnv,
   gooseToolUse, gooseToolResult, isTurnEnd, eventText, messageText, modelName, planFor, saveTurnRecipe,
+  openGooseMcp, addToReply, flushReply, lastReply, resetReply, replacesSystemPrompt, parseGooseEvent,
   ...GOOSE_RECIPE_CODE,
 ];

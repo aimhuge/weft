@@ -24,6 +24,8 @@ or a local Ollama and doesn't want to route it through Anthropic.
 | `lib/goose-state.ts` | Where a card's Goose state lives: `~/.weft/goose/<card id>` |
 | `lib/goose-runner.ts` | One Goose process per turn; `gooseEnv()`; the events turned into thread rows |
 | `lib/goose-runner-events.ts` | Parses Goose's `stream-json` output into five kinds of event |
+| `lib/goose-mcp.ts` | Weft's own tools (browser, board, secrets…) for a turn: a bridge token in the card's Goose config |
+| `lib/goose-reply.ts` | Gathers the slices Goose streams one reply in, and files each reply whole |
 | `lib/goose-launch.ts` | The grant-based key injection: asks main for a one-time grant over the control server |
 | `lib/goose-provider.ts` | The board's copy of the provider catalog; `gooseEnvFor`, `gooseModelFor`, `needsBaseUrl` |
 | `lib/use-goose.ts` | The board-side hook: list providers, save a key, forget one |
@@ -387,8 +389,27 @@ access any process you start there has.
 - **No effort.** Goose has no effort flag, so `EFFORT_BY_BACKEND.goose` is empty and `effortFor()` drops every
   effort for it: the effort is never put on Goose's command line, and the header's chip names the model without
   one.
-- **No session to resume.** One process per turn, like Codex. `ensureSpare()` skips Goose, so a Goose card
-  starts cold on every turn — there is no warm spare to answer in two seconds.
+- **No warm session.** One process per turn, like Codex. `ensureSpare()` skips Goose, so a Goose card
+  starts cold on every turn — there is no warm spare to answer in two seconds. The conversation still carries on:
+  once the card has a session database (`gooseHasSession()` in `lib/goose-state.ts`), `gooseArgs()` adds
+  `--resume`, which picks up the latest session under the card's own root. Without it every turn was a new
+  session and Goose forgot the thread.
+- **Puku's gateway drops the system prompt.** `api-cli.puku.sh` replaces a client's system block with its own
+  Puku CLI identity (a Goose turn through it reports fewer input tokens than Goose's own prompt), so SOUL, the
+  BOARD STATUS rules and the project instructions never reached the model. `replacesSystemPrompt()` in
+  `lib/goose-provider.ts` spots that endpoint (its host, or a `puku-` model id); `gooseArgs()` then opens a new
+  session's first message with the instructions in `<weft-instructions>`, and `--resume` keeps them for the
+  turns after. A card whose session started before this keeps its old session, so it never gets them.
+- **Weft's tools over HTTP.** Goose can't take Weft's MCP servers in-process, so like Codex it reaches them through
+  `app/api/mcp/[server]` with a per-turn bridge token (`lib/mcp-bridge.ts`). `--with-streamable-http-extension`
+  takes no header, and a token on the command line shows in `ps`, so `openGooseMcp()` writes the extensions with
+  the token in an `Authorization` header into the card's own `<root>/config/config.yaml` (mode 0600) before the turn
+  and removes it after. Each is named `mcp__<server>`, so Goose calls `mcp__browser__open_url`, the name Weft's
+  instructions give. Without them Goose opened links with `open`, in the system browser.
+- **Replies arrive in slices.** Goose 1.x streams a reply as many `message` lines sharing one id, each
+  `{ role, content: [{ type: "text", text }] }`, and ends with a `complete` that carries only token counts.
+  `lib/goose-runner-events.ts` reads the assistant's text parts (skipping the user-role tool echoes);
+  `lib/goose-reply.ts` gathers each reply and `lib/goose-runner.ts` files it as one row, and the turn's result is the last reply.
 - **No cost.** The result row reports zero tokens and zero dollars: Weft can't know what a provider charges
   for a Goose turn, and a made-up number would be worse than none.
 - **No skills as slash commands.** Goose has no slash commands, so a `/name` in the prompt is turned into the

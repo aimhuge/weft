@@ -55,6 +55,15 @@ export const PUKU_GOOSE = {
   modelId: "puku-ai-2.8",
 } as const;
 
+/**
+ * Whether a Goose endpoint replaces the client's system prompt with its own. Puku's gateway does: a Goose turn
+ * through it reports fewer input tokens than Goose's own prompt, and the model knows only Puku's identity. Known
+ * by its host, or by a puku- model id when the endpoint is only saved beside the key.
+ */
+export function replacesSystemPrompt(baseUrl = "", model = ""): boolean {
+  return /(^|\.)puku\.sh(\/|$|:)/.test(baseUrl.replace(/^https?:\/\//, "")) || /^puku-/i.test(model.trim());
+}
+
 // The catalog, as the board knows it. The same providers as electron/goose-provider.cjs, in the same order.
 //
 // extraEnv names the extra variable a provider needs beside its key; the base URL is written under

@@ -32,8 +32,10 @@ export async function gooseEnvGrant(providerId: string, baseUrl = ""): Promise<G
     const reply = (await shell("/goose/env-grant", { providerId, ...(baseUrl ? { baseUrl } : {}) })) as Partial<GooseEnvGrant>;
     if (typeof reply.grant !== "string" || !reply.grant) return undefined;
     return { grant: reply.grant, node: reply.node ?? "", runner: reply.runner ?? "", model: reply.model ?? "", names: Array.isArray(reply.names) ? reply.names.map(String) : [] };
-  } catch {
-    // No key saved, or main isn't ready: the caller starts Goose the plain way.
+  } catch (err) {
+    // No key saved, or main isn't ready: the caller starts Goose the plain way. Said in the log, because a
+    // grant that always fails looks just like no key, and Goose then dies asking for one.
+    console.error(`No Goose key grant for ${providerId}: ${err instanceof Error ? err.message : String(err)}`);
     return undefined;
   }
 }

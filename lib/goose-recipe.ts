@@ -35,6 +35,11 @@ export interface GooseTurnPlan {
   skillsOff?: string[];
   // The provider the card runs against (Goose's --provider). Empty means Goose's own choice.
   provider?: string;
+  // Whether the card already has a Goose session to carry on (Goose's --resume), so a turn remembers the last.
+  resume?: boolean;
+  // Whether the endpoint swaps out the client's system prompt for its own (Puku's gateway does), so Weft's
+  // instructions go in the session's first message instead (lib/goose-provider.ts replacesSystemPrompt).
+  instructionsInPrompt?: boolean;
 }
 
 // The provider id Goose is given: the one the card names, else empty (Goose picks its configured one).
@@ -69,21 +74,34 @@ export function gooseSystemText(plan: GooseTurnPlan): string {
 // The turn's prompt: the user's text, with a /name turned into the skill's own instructions (Goose has no
 // slash commands for skills).
 export function goosePrompt(plan: GooseTurnPlan, text: string): string {
-  return skillInvocation(text, plan.cwd, { weft: true });
+  const prompt = skillInvocation(text, plan.cwd, { weft: true });
+  // Goose runs a prompt that starts with "!" as a shell command (it trims whitespace first), so a pasted
+  // image, `![name](path)`, went to bash. A zero-width space in front keeps it a message to the model.
+  return prompt.trimStart().startsWith("!") ? `\u200B${prompt}` : prompt;
 }
 
 // The argv a `goose run` is started with. The working directory is not among them: Goose takes the
 // session's folder from the process it runs in, so the runner spawns it with the card's folder as its cwd.
 export function gooseArgs(plan: GooseTurnPlan, text: string): string[] {
   const args = ["run", "--output-format", "stream-json", "--max-turns", String(GOOSE_MAX_TURNS)];
+  // Each turn is its own `goose run`: without --resume it starts a new session and forgets the thread so far.
+  // The card's Goose state root holds only its own sessions, so the latest one is the thread's.
+  if (plan.resume) args.push("--resume");
   const provider = gooseProviderFor(plan);
   if (provider) args.push("--provider", provider);
   const model = gooseModelFor(plan);
   if (model) args.push("--model", model);
   const system = gooseSystemText(plan);
   if (system) args.push("--system", system);
-  args.push("--text", goosePrompt(plan, text));
+  args.push("--text", openingPrompt(plan, system, goosePrompt(plan, text)));
   return args;
+}
+
+// The --text a turn sends. Behind an endpoint that replaces the system prompt, a new session's first message
+// carries Weft's instructions ahead of the user's text; --resume then keeps them in the conversation.
+function openingPrompt(plan: GooseTurnPlan, system: string, prompt: string): string {
+  if (!plan.instructionsInPrompt || plan.resume || !system) return prompt;
+  return `<weft-instructions>\nThese are your system instructions from Weft; follow them for the whole session.\n\n${system}\n</weft-instructions>\n\n${prompt}`;
 }
 
 // A YAML scalar: quoted, with the escapes YAML needs.
@@ -116,4 +134,4 @@ export function gooseRecipeYaml(plan: GooseTurnPlan, text: string, title = "Weft
 
 // The code in this module, fed into the runner's BUILD fingerprint (lib/runner-session.ts) so a change to
 // the prompt or the argv replaces idle sessions.
-export const GOOSE_RECIPE_CODE = [gooseProviderFor, gooseModelFor, gooseSystemText, goosePrompt, gooseArgs, yamlString, gooseRecipeYaml];
+export const GOOSE_RECIPE_CODE = [gooseProviderFor, gooseModelFor, gooseSystemText, goosePrompt, openingPrompt, gooseArgs, yamlString, gooseRecipeYaml];

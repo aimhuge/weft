@@ -139,3 +139,30 @@ describe("endsGooseTurn", () => {
     expect(endsGooseTurn(null)).toBe(false);
   });
 });
+
+describe("Goose 1.x message lines", () => {
+  const line = (message: Record<string, unknown>) => JSON.stringify({ type: "message", message });
+
+  it("reads the assistant's text out of the message's content, with its id", () => {
+    const event = parseGooseEvent(line({ id: "m1", role: "assistant", content: [{ type: "text", text: "Hi " }, { type: "text", text: "there." }] }));
+    expect(event).toEqual({ kind: "message", text: "Hi there.", id: "m1" });
+  });
+
+  it("leaves the id off when the message has none", () => {
+    expect(parseGooseEvent(line({ role: "assistant", content: [{ type: "text", text: "Hi." }] }))).toEqual({ kind: "message", text: "Hi." });
+  });
+
+  it("reads a message whose content is a plain string", () => {
+    expect(parseGooseEvent(line({ id: "m1", role: "assistant", content: "Hi." }))).toEqual({ kind: "message", text: "Hi.", id: "m1" });
+  });
+
+  it("skips a message from any role but the assistant's", () => {
+    const echo = line({ id: "m2", role: "user", content: [{ type: "toolResponse", id: "t1" }] });
+    expect(parseGooseEvent(echo)).toEqual({ kind: "unknown", type: "message" });
+  });
+
+  it("skips an assistant message with no text, such as a bare tool request", () => {
+    const request = line({ id: "m3", role: "assistant", content: [{ type: "toolRequest", id: "t1" }, null, "x"] });
+    expect(parseGooseEvent(request)).toEqual({ kind: "unknown", type: "message" });
+  });
+});

@@ -2,6 +2,8 @@
 // Drive lib/goose-runner.ts's turn loop against a fake `goose run` child: what argv/env it is started with,
 // what its JSON event stream becomes in the card's thread, the recipe it writes beside the turn, and the
 // files a progress note marks on the card.
+import fs from "node:fs";
+import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { EXE, setupGoose } from "./goose-runner.harness";
 import type { Card } from "./types";
@@ -82,6 +84,30 @@ describe("the turn's recipe on disk", () => {
     expect(written).toContain("anthropic/claude-sonnet-4");
     expect(r.opts().args).toContain("--model");
     expect(r.opts().args[r.opts().args.indexOf("--model") + 1]).toBe("anthropic/claude-sonnet-4");
+  });
+
+  it("resumes the card's Goose session once it has one, so a turn remembers the thread", async () => {
+    const { gooseStateRoot } = await import("./goose-state");
+    const sessions = path.join(gooseStateRoot("card-1"), "data", "sessions");
+    fs.mkdirSync(sessions, { recursive: true });
+    fs.writeFileSync(path.join(sessions, "sessions.db"), "");
+    const r = rig();
+    await r.run([]);
+    expect(r.opts().args).toContain("--resume");
+  });
+
+  it("opens a new session with Weft's instructions in the message when Puku's gateway drops the system prompt", async () => {
+    const r = rig();
+    r.session.spec.gooseBaseUrl = "https://api-cli.puku.sh";
+    await r.run([]);
+    const args = r.opts().args;
+    expect(args[args.indexOf("--text") + 1]).toMatch(/^<weft-instructions>/);
+  });
+
+  it("starts a new Goose session on the card's first turn", async () => {
+    const r = rig();
+    await r.run([]);
+    expect(r.opts().args).not.toContain("--resume");
   });
 
   it("runs the turn even when the recipe cannot be written", async () => {

@@ -12,6 +12,7 @@ import {
   keySavedText,
   needsBaseUrl,
   providerById,
+  replacesSystemPrompt,
   providerRow,
   setUpGooseModels,
   type GooseProviderView,
@@ -169,5 +170,20 @@ describe("the toasts", () => {
 describe("gooseBridge", () => {
   it("is null outside the desktop app", () => {
     expect(gooseBridge()).toBeNull();
+  });
+});
+
+describe("replacesSystemPrompt", () => {
+  it("knows Puku's gateway by its host or a puku- model id", () => {
+    expect(replacesSystemPrompt("https://api-cli.puku.sh")).toBe(true);
+    expect(replacesSystemPrompt("https://api-cli.puku.sh/")).toBe(true);
+    expect(replacesSystemPrompt("puku.sh")).toBe(true);
+    expect(replacesSystemPrompt("", "puku-ai-2.8")).toBe(true);
+  });
+
+  it("leaves other endpoints and models alone", () => {
+    expect(replacesSystemPrompt()).toBe(false);
+    expect(replacesSystemPrompt("https://api.anthropic.com", "claude-sonnet-4")).toBe(false);
+    expect(replacesSystemPrompt("https://notpuku.sh.example.com")).toBe(false);
   });
 });

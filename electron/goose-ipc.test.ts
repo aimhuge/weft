@@ -131,10 +131,17 @@ describe("the control-server routes", () => {
   it("grant and claim, with no plaintext crossing them", async () => {
     const goose = make(tmp());
     goose.setProviderKey({ providerId: "openrouter", token: "sk-or-abc123" });
-    const routes = gooseRoutes(goose);
+    // The routes take a getter, as electron/pane-routes.cjs hands them one.
+    const routes = gooseRoutes(() => goose);
     const grant = (await routes["POST /goose/env-grant"]({ providerId: "openrouter" })) as { grant: string };
     expect(JSON.stringify(grant)).not.toContain("sk-or-abc123");
     const claimed = (await routes["POST /goose/env-claim"]({ grant: grant.grant })) as { env: Record<string, string> };
     expect(claimed.env.OPENROUTER_API_KEY).toBe("sk-or-abc123");
+  });
+
+  it("says Goose isn't set up when main has no Goose yet", () => {
+    const routes = gooseRoutes(() => null);
+    const grant = () => void routes["POST /goose/env-grant"]({ providerId: "anthropic" });
+    expect(grant).toThrow("isn't set up");
   });
 });
