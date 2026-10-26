@@ -31,6 +31,7 @@ const SETTINGS: SettingsView = {
   threadPrompt: "be nice",
   defaultThreadPrompt: "be nice",
   keepAliveMinutes: 0,
+  maxThreads: 6,
   defaultPermissionMode: "auto",
   defaultBackend: "claude",
   automations: [],
@@ -105,6 +106,28 @@ describe("SettingsDialog", () => {
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
     expect(api.saveSettings).toHaveBeenCalledWith({ defaultBackend: "puku" });
     await waitFor(() => expect(onClose).toHaveBeenCalled());
+  });
+
+  it("sets how many threads run at once on Threads, and marks the page unsaved", async () => {
+    render(<SettingsDialog onClose={() => {}} />);
+    await go("Threads");
+    const menu = await screen.findByRole("combobox", { name: "Threads running at once" });
+    expect(menu).toHaveValue("6");
+    await userEvent.selectOptions(menu, "0");
+    expect(within(pages()).getByLabelText("Unsaved changes")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(api.saveSettings).toHaveBeenCalledWith({ maxThreads: 0 });
+  });
+
+  it("keeps a cap that isn't on the menu, in order", async () => {
+    api.settings.mockResolvedValue({ ...SETTINGS, maxThreads: 5 });
+    render(<SettingsDialog onClose={() => {}} />);
+    await go("Threads");
+    const menu = await screen.findByRole("combobox", { name: "Threads running at once" });
+    expect(menu).toHaveValue("5");
+    expect(within(menu).getAllByRole("option").map((o) => o.textContent)).toEqual([
+      "2 threads", "3 threads", "4 threads", "5 threads", "6 threads", "8 threads", "12 threads", "No limit",
+    ]);
   });
 
   it("says when the settings didn't load, on the pages that need them", async () => {

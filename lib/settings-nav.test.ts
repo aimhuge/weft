@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { SETTINGS_PAGES, pageInfo, rememberPage, rememberedPage, settingsScene, unsavedPages } from "./settings-nav";
 
-const none = { prompt: false, keepAlive: false, mode: false, backend: false, rules: false };
+const none = { prompt: false, keepAlive: false, maxThreads: false, mode: false, backend: false, rules: false };
 
 describe("settings nav", () => {
   it("lists each page once", () => {

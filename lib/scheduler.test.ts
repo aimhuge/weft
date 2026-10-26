@@ -14,7 +14,9 @@ vi.mock("./store", () => ({
 }));
 vi.mock("./splice", () => ({ prebakeBriefs }));
 vi.mock("./restart-when-idle", () => ({ restartArmed: () => restartArmed }));
+const freeSlots = vi.fn();
 vi.mock("./runner", () => ({
+  freeSlots,
   isBusy: (id: string) => busy.has(id),
   sendUserMessage: (id: string, text: string) => {
     if (text === "boom") throw new Error("folder gone");
@@ -60,6 +62,15 @@ describe("scheduleMessage", () => {
 });
 
 describe("sendDueMessages", () => {
+  it("frees the threads waiting for a slot first, and leaves their held message out of the timed sends", () => {
+    freeSlots.mockClear();
+    card("a", { scheduled: [{ id: "h", text: "held", at: NOW - 5, forSlot: true }, { id: "1", text: "timed", at: NOW - 1 }] });
+    sendDueMessages(NOW);
+    expect(freeSlots).toHaveBeenCalledOnce();
+    expect(sent).toEqual([["a", "timed"]]);
+    expect(cards.get("a")!.scheduled!.map((m) => m.id)).toEqual(["h"]);
+  });
+
   it("sends what came due, one per card per check, and leaves the rest", () => {
     card("a", { scheduled: [{ id: "1", text: "first", at: NOW - 2 }, { id: "2", text: "second", at: NOW - 1 }, { id: "3", text: "future", at: NOW + 1e6 }] });
     sendDueMessages(NOW);

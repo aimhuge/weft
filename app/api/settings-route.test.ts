@@ -18,6 +18,9 @@ vi.mock("@/lib/automations", async (importOriginal) => ({
   doneOverrides: vi.fn(() => ({})),
 }));
 
+const freeSlots = vi.fn();
+vi.mock("@/lib/runner", () => ({ freeSlots }));
+
 vi.mock("@/lib/settings", () => ({
   DEFAULT_THREAD_PROMPT: "You are a card on a board.",
   listProjects: vi.fn(() => []),
@@ -29,6 +32,8 @@ vi.mock("@/lib/settings", () => ({
   setThreadPrompt: vi.fn(),
   keepAliveMinutes: vi.fn(() => 5),
   setKeepAliveMinutes: vi.fn(),
+  MAX_THREADS_CEILING: 50,
+  setMaxThreads: vi.fn(),
   defaultPermissionMode: vi.fn(() => "auto"),
   setDefaultPermissionMode: vi.fn(),
   defaultBackend: vi.fn(() => "claude"),
@@ -109,11 +114,24 @@ describe("/settings", () => {
     expect(rules[1]!.id).toBeTruthy();
   });
 
+  it("PATCH saves the cap on running threads, then lets the waiting threads go", async () => {
+    expect((await patch({ maxThreads: 3 })).status).toBe(200);
+    expect(settings.setMaxThreads).toHaveBeenCalledWith(3);
+    expect(freeSlots).toHaveBeenCalled();
+    vi.mocked(settings.setMaxThreads).mockClear();
+    expect((await patch({ maxThreads: 0 })).status).toBe(200);
+    expect(settings.setMaxThreads).toHaveBeenCalledWith(0);
+  });
+
   it("PATCH rejects bad values with 400 and saves nothing", async () => {
     for (const body of [
       { threadPrompt: 5 },
       { keepAliveMinutes: -1 },
       { keepAliveMinutes: "10" },
+      { maxThreads: -1 },
+      { maxThreads: 2.5 },
+      { maxThreads: 51 },
+      { maxThreads: "4" },
       { defaultPermissionMode: "yolo" },
       { pushOnDone: "no" },
       { subagentModel: "gpt-5" },

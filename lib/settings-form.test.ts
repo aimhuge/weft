@@ -6,6 +6,7 @@ const BASE: SettingsView = {
   threadPrompt: "be nice",
   defaultThreadPrompt: "be nice",
   keepAliveMinutes: 0,
+  maxThreads: 6,
   defaultPermissionMode: "auto",
   defaultBackend: "claude",
   automations: [{ id: "a1", skill: "lint", on: "start" }],
@@ -43,6 +44,7 @@ describe("computeDirty", () => {
     expect(d).toEqual({
       promptChanged: false,
       keepAliveChanged: false,
+      maxThreadsChanged: false,
       modeChanged: false,
       defaultBackendChanged: false,
       rulesChanged: false,

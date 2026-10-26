@@ -17,6 +17,7 @@ import { archiveAfter, close, errorText, hooks, isBusy, queued, safeUpdate, sess
 import { panePage } from "./pane-page";
 import { findDescendantGroups, signalGroups } from "./process-tree";
 import { skillInvocation } from "./skills";
+import { holdForSlot, releaseSlots, waitingForSlot } from "./thread-slots";
 import { appendThread, foldThread, getCard, getThread, updateCard } from "./store";
 import { takeTaskNote } from "./task-ledger";
 import { takeBreakNote } from "./crash-blame";
@@ -73,13 +74,16 @@ export function setModel(cardId: string, model: string) {
   if (session) switchSpare(session.query, session.spec, { permissionMode: session.spec.permissionMode, model });
 }
 
-// A message that can't go yet waits: for a restart the running turns hold up (it goes after it), or for an
-// isolated card's worktree (lib/worktree-start.ts), which it then goes out in.
+// A message that can't go yet waits: for a restart the running turns hold up (it goes after it), for an
+// isolated card's worktree (lib/worktree-start.ts), which it then goes out in, or for a free slot when the
+// cap on running threads is reached (lib/thread-slots.ts).
 function holdSend(card: Card, text: string, { echo, cli }: { echo: boolean; cli: string }) {
   if (holdForRestart(card.id, text, { echo })) return true;
-  if (!awaitingWorktree(card)) return false;
-  void isolate(card.id, () => sendMessage(card.id, text, { echo, cli }));
-  return true;
+  if (awaitingWorktree(card)) {
+    void isolate(card.id, () => sendMessage(card.id, text, { echo, cli }));
+    return true;
+  }
+  return holdForSlot(card.id, text, { echo });
 }
 
 // `cli` is what the CLI gets when it differs from what the thread shows (the copilot's board digest).
@@ -184,6 +188,11 @@ function sendHeld(cardId: string) {
   }
 }
 
+// Sends what waits for a slot, as far as the cap allows (a turn ended, the cap went up, or the scheduler's check).
+export function freeSlots() {
+  return releaseSlots((cardId, text, opts) => sendMessage(cardId, text, opts));
+}
+
 // ↑ in the reply box: your last message, rewritten. Its turn is stopped if it's still running, rewound
 // out of the conversation and folded away in the thread, then the new text goes out in its place.
 // Files that turn changed stay as they are. A message the CLI's transcript doesn't hold (a picked-up
@@ -228,7 +237,7 @@ export function queueMessages(cardId: string, texts: string[]) {
 // then it's wrappingUp and the board draws it in Done. A stopped or failed turn sends it to Review
 // unarchived, and a starred card stays on the board (★: worth keeping).
 export function archiveWhenIdle(cardId: string) {
-  if (queued.has(cardId) || isBusy(cardId)) archiveAfter.add(cardId);
+  if (queued.has(cardId) || isBusy(cardId) || waitingForSlot(cardId)) archiveAfter.add(cardId);
   // With no wrap-up turn to wait for, an isolated card lands its branch now (lib/worktree-done.ts).
   if (!archiveAfter.has(cardId) && getCard(cardId)?.worktree) {
     hooks.land(cardId);
@@ -326,7 +335,10 @@ export async function retry(cardId: string) {
 
 // What the session and turn modules call back into (lib/runner-state.ts hooks), and the board tools' actions.
 hooks.sendQueued = sendQueued;
-hooks.sendHeld = sendHeld;
+hooks.sendHeld = (cardId) => {
+  sendHeld(cardId);
+  freeSlots();
+};
 hooks.needLogin = needLogin;
 hooks.land = (id) => void landCard(id, (cardId, text) => sendMessage(cardId, text));
 hooks.boardActions = {

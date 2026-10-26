@@ -42,12 +42,14 @@ export function ReplyQueue({
           title={
             m.afterRestart
               ? "Sent while Weft waits to restart; it goes out once Weft is back"
-              : m.afterTurn
-                ? "Sent while the thread was busy; it goes out as this turn ends"
-                : `Sends ${new Date(m.at).toLocaleString("en-US", { weekday: "long", hour: "numeric", minute: "2-digit" })}, even if this thread is closed`
+              : m.forSlot
+                ? "Waiting for a free slot: it goes out when a running thread finishes its turn"
+                : m.afterTurn
+                  ? "Sent while the thread was busy; it goes out as this turn ends"
+                  : `Sends ${new Date(m.at).toLocaleString("en-US", { weekday: "long", hour: "numeric", minute: "2-digit" })}, even if this thread is closed`
           }
         >
-          <Icon name={m.afterRestart || m.afterTurn ? "reload" : "clock"} size={11} className="shrink-0" />
+          <Icon name={m.afterRestart || m.afterTurn || m.forSlot ? "reload" : "clock"} size={11} className="shrink-0" />
           <span className="shrink-0 font-mono text-[11px]">{sendsWhen(m, now)}</span>
           <button
             type="button"

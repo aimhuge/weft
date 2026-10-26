@@ -13,6 +13,8 @@ export interface SettingsView {
   defaultThreadPrompt: string;
   // Minutes a thread's CLI stays open with no messages before it closes; 0 keeps it open.
   keepAliveMinutes: number;
+  // The most threads running a turn at once; the next waits for a free slot. 0 means no limit.
+  maxThreads: number;
   // The mode the new-thread dialog, the API and the copilot's create_card start a card in.
   defaultPermissionMode: PermissionMode;
   // What new threads start on; puku-cli is the escape hatch when Claude hits a plan limit.

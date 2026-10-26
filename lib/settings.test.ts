@@ -1,27 +1,9 @@
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
+import { g, load, settingsDir, withSettingsDir } from "./settings.harness";
 
-let dir: string;
-const g = globalThis as unknown as { __weftState?: unknown; __weftSettings?: unknown };
-
-async function load() {
-  vi.resetModules();
-  delete g.__weftState;
-  delete g.__weftSettings;
-  return import("./settings");
-}
-
-beforeEach(() => {
-  dir = fs.mkdtempSync(path.join(os.tmpdir(), "weft-settings-"));
-  process.env.WEFT_DATA = dir;
-});
-afterEach(() => {
-  delete g.__weftSettings;
-  delete g.__weftState;
-  fs.rmSync(dir, { recursive: true, force: true });
-});
+withSettingsDir();
 
 describe("settings", () => {
   it("starts with the default prompt, no keep-alive and the done automation", async () => {
@@ -30,6 +12,22 @@ describe("settings", () => {
     expect(s.keepAliveMinutes()).toBe(0);
     expect(s.automations()).toEqual([{ id: "default-done", on: "done", skill: "weft:done" }]);
     expect(s.listProjects()).toEqual([]);
+  });
+
+  it("caps running threads at 6 unless set, clamps what's set, and keeps only a non-default on disk", async () => {
+    const s = await load();
+    expect(s.maxThreads()).toBe(6);
+    s.setMaxThreads(3.4);
+    expect(s.maxThreads()).toBe(3);
+    s.setMaxThreads(0);
+    expect(s.maxThreads()).toBe(0);
+    s.setMaxThreads(500);
+    expect(s.maxThreads()).toBe(50);
+    s.setMaxThreads(-2);
+    expect(s.maxThreads()).toBe(0);
+    s.setMaxThreads(6);
+    expect((JSON.parse(fs.readFileSync(path.join(settingsDir.path, "settings.json"), "utf8")) as { maxThreads?: number }).maxThreads).toBeUndefined();
+    expect(s.settingsView().maxThreads).toBe(6);
   });
 
   it("the default prompt still asks for the BOARD STATUS line", async () => {
@@ -82,7 +80,7 @@ describe("settings", () => {
     s.setPushOnDone(false);
     s = await load();
     expect(s.pushOnDone()).toBe(false);
-    expect(fs.readFileSync(path.join(dir, "settings.json"), "utf8")).toContain('"pushOnDone": false');
+    expect(fs.readFileSync(path.join(settingsDir.path, "settings.json"), "utf8")).toContain('"pushOnDone": false');
   });
 
   it("subagents default to letting the model choose, which is stored as unset", async () => {
@@ -93,11 +91,11 @@ describe("settings", () => {
     s = await load();
     expect(s.subagentModel()).toBe("opus-4.8");
     s.setSubagentModel("choose");
-    expect(fs.readFileSync(path.join(dir, "settings.json"), "utf8")).not.toContain("subagentModel");
+    expect(fs.readFileSync(path.join(settingsDir.path, "settings.json"), "utf8")).not.toContain("subagentModel");
   });
 
   it("an unknown saved subagent model reads as choose", async () => {
-    fs.writeFileSync(path.join(dir, "settings.json"), JSON.stringify({ subagentModel: "gpt" }));
+    fs.writeFileSync(path.join(settingsDir.path, "settings.json"), JSON.stringify({ subagentModel: "gpt" }));
     expect((await load()).subagentModel()).toBe("choose");
   });
 
@@ -114,14 +112,14 @@ describe("settings", () => {
     expect(s.doneEffort()).toBe("xhigh");
     s.setDoneModel("");
     s.setDoneEffort("");
-    const saved = JSON.parse(fs.readFileSync(path.join(dir, "settings.json"), "utf8")) as Record<string, unknown>;
+    const saved = JSON.parse(fs.readFileSync(path.join(settingsDir.path, "settings.json"), "utf8")) as Record<string, unknown>;
     expect("doneModel" in saved).toBe(false);
     expect("doneEffort" in saved).toBe(false);
   });
 
   it("an unknown saved done model or effort reads as empty", async () => {
     fs.writeFileSync(
-      path.join(dir, "settings.json"),
+      path.join(settingsDir.path, "settings.json"),
       JSON.stringify({ doneModel: "gpt-7", doneEffort: "extreme" }),
     );
     const s = await load();
@@ -140,12 +138,12 @@ describe("settings", () => {
     s = await load();
     expect(s.copilotModel()).toBe("puku-ai-2.8");
     s.setCopilotModel("");
-    const saved = JSON.parse(fs.readFileSync(path.join(dir, "settings.json"), "utf8")) as Record<string, unknown>;
+    const saved = JSON.parse(fs.readFileSync(path.join(settingsDir.path, "settings.json"), "utf8")) as Record<string, unknown>;
     expect("copilotModel" in saved).toBe(false);
   });
 
   it("a saved copilot model no CLI serves reads as empty", async () => {
-    fs.writeFileSync(path.join(dir, "settings.json"), JSON.stringify({ copilotModel: "gone-1" }));
+    fs.writeFileSync(path.join(settingsDir.path, "settings.json"), JSON.stringify({ copilotModel: "gone-1" }));
     expect((await load()).copilotModel()).toBe("");
   });
 
@@ -160,9 +158,9 @@ describe("settings", () => {
     s = await load();
     expect(s.reviewAllModel()).toBe("puku-ai-2.8");
     s.setReviewAllModel("");
-    const saved = JSON.parse(fs.readFileSync(path.join(dir, "settings.json"), "utf8")) as Record<string, unknown>;
+    const saved = JSON.parse(fs.readFileSync(path.join(settingsDir.path, "settings.json"), "utf8")) as Record<string, unknown>;
     expect("reviewAllModel" in saved).toBe(false);
-    fs.writeFileSync(path.join(dir, "settings.json"), JSON.stringify({ reviewAllModel: "gone-1" }));
+    fs.writeFileSync(path.join(settingsDir.path, "settings.json"), JSON.stringify({ reviewAllModel: "gone-1" }));
     expect((await load()).reviewAllModel()).toBe("");
   });
 
@@ -178,7 +176,7 @@ describe("settings", () => {
   });
 
   it("an unknown saved Goose provider reads as none", async () => {
-    fs.writeFileSync(path.join(dir, "settings.json"), JSON.stringify({ gooseProviderId: "gone" }));
+    fs.writeFileSync(path.join(settingsDir.path, "settings.json"), JSON.stringify({ gooseProviderId: "gone" }));
     expect((await load()).gooseProviderId()).toBe("");
   });
 
@@ -195,7 +193,7 @@ describe("settings", () => {
     expect(s.gooseBaseUrl()).toBe("https://api.example.com/v1");
     s.setGooseModelId("");
     s.setGooseBaseUrl("");
-    const saved = JSON.parse(fs.readFileSync(path.join(dir, "settings.json"), "utf8")) as Record<string, unknown>;
+    const saved = JSON.parse(fs.readFileSync(path.join(settingsDir.path, "settings.json"), "utf8")) as Record<string, unknown>;
     expect("gooseModelId" in saved).toBe(false);
     expect("gooseBaseUrl" in saved).toBe(false);
   });
@@ -243,87 +241,6 @@ describe("settings", () => {
     expect(s.dismissedSessions()).toEqual(["a"]);
   });
 
-  it("touchProject puts the folder first without duplicating; removeProject drops it", async () => {
-    const s = await load();
-    vi.spyOn(Date, "now").mockReturnValueOnce(1).mockReturnValueOnce(2).mockReturnValueOnce(3);
-    s.touchProject("/a");
-    s.touchProject("/b");
-    s.touchProject("/a");
-    expect(s.listProjects().map((p) => p.path)).toEqual(["/a", "/b"]);
-    s.removeProject("/a");
-    expect(s.listProjects().map((p) => p.path)).toEqual(["/b"]);
-    vi.restoreAllMocks();
-  });
-
-  it("keeps at most 40 recent projects", async () => {
-    const s = await load();
-    for (let i = 0; i < 45; i++) s.touchProject(`/p${i}`);
-    expect(s.listProjects()).toHaveLength(40);
-  });
-
-  it("turns GitHub issue sync on and off per folder, without duplicates, and keeps it across a reload", async () => {
-    let s = await load();
-    expect(s.issueFolders()).toEqual([]);
-    s.setIssueSync("/a", true);
-    s.setIssueSync("/b", true);
-    s.setIssueSync("/a", true);
-    expect(s.issueFolders()).toEqual(["/b", "/a"]);
-    s = await load();
-    expect(s.issueFolders()).toEqual(["/b", "/a"]);
-    s.setIssueSync("/b", false);
-    expect(s.issueFolders()).toEqual(["/a"]);
-  });
-
-  it("remembers the folders allowed for every card, without duplicates, across a reload", async () => {
-    let s = await load();
-    expect(s.allowedFolders()).toEqual([]);
-    s.allowFolder("/Users/me/Downloads");
-    s.allowFolder("/Users/me/Music");
-    s.allowFolder("/Users/me/Downloads");
-    expect(s.allowedFolders()).toEqual(["/Users/me/Downloads", "/Users/me/Music"]);
-    s = await load();
-    expect(s.allowedFolders()).toEqual(["/Users/me/Downloads", "/Users/me/Music"]);
-  });
-
-  it("takes a trusted folder back out, leaving the others in the order they were allowed", async () => {
-    let s = await load();
-    s.allowFolder("/Users/me/Downloads");
-    s.allowFolder("/Users/me/Music");
-    s.allowFolder("/Users/me/Pictures");
-    s.unallowFolder("/Users/me/Music");
-    expect(s.allowedFolders()).toEqual(["/Users/me/Downloads", "/Users/me/Pictures"]);
-    s = await load();
-    expect(s.allowedFolders()).toEqual(["/Users/me/Downloads", "/Users/me/Pictures"]);
-  });
-
-  it("is quiet revoking a folder that was never allowed", async () => {
-    const s = await load();
-    s.unallowFolder("/Users/me/Never");
-    expect(s.allowedFolders()).toEqual([]);
-  });
-
-  it("turns cloud sync on and off per folder, without duplicates, and keeps it across a reload", async () => {
-    let s = await load();
-    expect(s.syncFolders()).toEqual([]);
-    s.setSyncFolder("/a", true);
-    s.setSyncFolder("/b", true);
-    s.setSyncFolder("/a", true);
-    expect(s.syncFolders()).toEqual(["/b", "/a"]);
-    s = await load();
-    expect(s.syncFolders()).toEqual(["/b", "/a"]);
-    s.setSyncFolder("/b", false);
-    expect(s.syncFolders()).toEqual(["/a"]);
-  });
-
-  it("settingsView exposes syncFolders alongside issueFolders", async () => {
-    const s = await load();
-    s.setIssueSync("/iss", true);
-    s.setSyncFolder("/sync", true);
-    const view = s.settingsView();
-    expect(view.issueFolders).toEqual(["/iss"]);
-    expect(view.syncFolders).toEqual(["/sync"]);
-  });
-
   it("settings survive a reload and settingsView bundles them", async () => {
     let s = await load();
     s.setKeepAliveMinutes(30);
@@ -333,6 +250,6 @@ describe("settings", () => {
     expect(view.keepAliveMinutes).toBe(30);
     expect(view.projects[0]!.path).toBe("/x");
     expect(view.defaultThreadPrompt).toBe(s.DEFAULT_THREAD_PROMPT);
-    expect(fs.existsSync(path.join(dir, "settings.json"))).toBe(true);
+    expect(fs.existsSync(path.join(settingsDir.path, "settings.json"))).toBe(true);
   });
 });

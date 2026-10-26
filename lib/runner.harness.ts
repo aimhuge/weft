@@ -93,6 +93,8 @@ export function harnessState() {
     threads: new Map<string, ThreadItem[]>(),
     queries: [] as FakeQuery[],
     keepAlive: 0,
+    // The cap on threads running at once (lib/thread-slots.ts); 0 is no limit.
+    maxThreads: 0,
     subagentModel: "choose" as SubagentModel,
     openElsewhere: false,
     // sessionId → transcript file, as lib/import.ts finds them.
@@ -181,6 +183,7 @@ export const importMock = (h: Harness) => ({ isOpenElsewhere: () => h.openElsewh
 
 export const settingsMock = (h: Harness) => ({
   keepAliveMinutes: () => h.keepAlive,
+  maxThreads: () => h.maxThreads,
   allowedFolders: () => [] as string[],
   threadPrompt: () => "THREAD PROMPT",
   DEFAULT_THREAD_PROMPT: "DEFAULT THREAD PROMPT",

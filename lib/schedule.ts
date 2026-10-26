@@ -74,15 +74,17 @@ export function addScheduled(list: ScheduledMessage[] | undefined, message: Sche
   return [...(list ?? []), message].sort((a, b) => a.at - b.at);
 }
 
-// The message whose time has come, if any (the soonest).
+// The message whose time has come, if any (the soonest). A message held for a free slot isn't timed: it goes when
+// one frees (lib/thread-slots.ts), not when the scheduler finds it due.
 export function dueMessage(card: Card, now = Date.now()): ScheduledMessage | undefined {
-  const first = card.scheduled?.[0];
+  const first = card.scheduled?.find((m) => !m.forSlot);
   return first && first.at <= now ? first : undefined;
 }
 
 // When a scheduled message goes, as its chip says it: "after restart", "after this turn" or its time.
 export function sendsWhen(m: ScheduledMessage, now = Date.now()) {
   if (m.afterRestart) return "after restart";
+  if (m.forSlot) return "when a slot frees";
   return m.afterTurn ? "after this turn" : formatAt(m.at, now);
 }
 

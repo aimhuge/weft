@@ -5,7 +5,8 @@ import { asText } from "@/lib/format";
 import { elevated, fail, guard } from "@/lib/guard";
 import { EFFORTS, ALL_MODEL_IDS, BACKEND_IDS } from "@/lib/new-thread";
 import { GOOSE_PROVIDERS } from "@/lib/goose-provider";
-import { setAutomations, setBackupModel, setCopilotModel, setDefaultBackend, setDefaultPermissionMode, setDoneEffort, setDoneModel, setGooseBaseUrl, setGooseModelId, setGooseProviderId, setKeepAliveMinutes, setPushOnDone, setReviewAllModel, setSubagentModel, setThreadPrompt, settingsView } from "@/lib/settings";
+import { setAutomations, setBackupModel, setCopilotModel, setDefaultBackend, setDefaultPermissionMode, setDoneEffort, setDoneModel, setGooseBaseUrl, setGooseModelId, setGooseProviderId, setKeepAliveMinutes, setMaxThreads, MAX_THREADS_CEILING, setPushOnDone, setReviewAllModel, setSubagentModel, setThreadPrompt, settingsView } from "@/lib/settings";
+import { freeSlots } from "@/lib/runner";
 import { SKILL_NAME } from "@/lib/skills";
 import { isSubagentModel } from "@/lib/subagents";
 import { AUTOMATION_TRIGGERS, MODES, type Automation, type Backend, type PermissionMode } from "@/lib/types";
@@ -92,9 +93,25 @@ function validateGooseText(field: "gooseModelId" | "gooseBaseUrl", value: unknow
   if (typeof value !== "string") throw new Error(`${field} must be text.`);
 }
 
+// How many threads may run at once: a whole number, 0 for no limit.
+function validateMaxThreads(value: unknown) {
+  if (value === undefined) return;
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > MAX_THREADS_CEILING) {
+    throw new Error(`maxThreads must be a whole number from 0 (no limit) to ${MAX_THREADS_CEILING}.`);
+  }
+}
+
+// Saves the cap, then lets the threads that were waiting for a slot go if it went up.
+function applyMaxThreads(value: unknown) {
+  if (typeof value !== "number") return;
+  setMaxThreads(value);
+  freeSlots();
+}
+
 function validate(body: {
   threadPrompt?: unknown;
   keepAliveMinutes?: unknown;
+  maxThreads?: unknown;
   defaultPermissionMode?: unknown;
   defaultBackend?: unknown;
   automations?: unknown;
@@ -118,6 +135,7 @@ function validate(body: {
   ) {
     throw new Error("keepAliveMinutes must be a number of minutes, 0 or more.");
   }
+  validateMaxThreads(body.maxThreads);
   if (body.defaultPermissionMode !== undefined && !MODES.includes(body.defaultPermissionMode as PermissionMode)) {
     throw new Error(`defaultPermissionMode must be one of ${MODES.join(", ")}.`);
   }
@@ -143,6 +161,7 @@ function validate(body: {
 function commit(body: {
   threadPrompt?: unknown;
   keepAliveMinutes?: unknown;
+  maxThreads?: unknown;
   defaultPermissionMode?: unknown;
   defaultBackend?: unknown;
   pushOnDone?: unknown;
@@ -158,6 +177,7 @@ function commit(body: {
 }, rules: Automation[] | undefined) {
   if (typeof body.threadPrompt === "string") setThreadPrompt(body.threadPrompt);
   if (typeof body.keepAliveMinutes === "number") setKeepAliveMinutes(body.keepAliveMinutes);
+  applyMaxThreads(body.maxThreads);
   if (body.defaultPermissionMode !== undefined) setDefaultPermissionMode(body.defaultPermissionMode as PermissionMode);
   if (body.defaultBackend !== undefined) setDefaultBackend(body.defaultBackend as Backend);
   if (typeof body.pushOnDone === "boolean") setPushOnDone(body.pushOnDone);

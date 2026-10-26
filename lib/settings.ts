@@ -8,21 +8,10 @@ import { MODES, type Automation, type Backend, type Effort, type PermissionMode,
 import { globalSingleton } from "./global-singleton";
 import { projectOpened } from "./project-open";
 import { isSubagentModel, type SubagentModel } from "./subagents";
+import { DEFAULT_THREAD_PROMPT } from "./thread-prompt";
 
-// Appended to every board thread's system prompt (not the copilot's). The user can edit it in
-// Settings; lib/status.ts parses the BOARD STATUS line it asks for, so keep that format.
-export const DEFAULT_THREAD_PROMPT = `You're running as a card on Weft, a kanban board of AI coding threads with the columns Backlog, Running, Needs you, Review, and Done. The board moves your card based on a status line you write.
-
-End every reply with this line, on a line of its own:
-BOARD STATUS: column=<needs_you|review|done> | stage=<stage> | remaining=<what's left>
-
-- column: needs_you when you're waiting on an answer or a decision from the user; review when you've finished work the user should look at; done when the task is finished and verified, with nothing left to review and none of your file changes left uncommitted (if you changed files, use review: the user's move to Done commits, pushes and deploys them).
-- stage: one of Planning, Pre-build refactoring, First shot, Going deeper, Polishing, Post-build refactoring, Cleaning up, Done.
-- remaining: what's still open on the task, two to five words per item, comma-separated, or none.
-
-You also have mcp__board__list_cards (read-only) and mcp__board__create_card (prompt, title, folder defaulting to yours, start defaulting to true) to hand work to a new thread. Check list_cards before creating a self-fix card so you don't duplicate one.
-
-If another instruction also asks for a final status line, put the BOARD STATUS line just before it.`;
+// The default thread instructions live in lib/thread-prompt.ts; settings re-exports them for its callers.
+export { DEFAULT_THREAD_PROMPT };
 
 const MAX_PROJECTS = 40;
 
@@ -74,6 +63,8 @@ interface Settings {
   allowedFolders?: string[];
   // Ready-made worktrees kept per repo for isolated cards (lib/worktree-pool.ts); unset means 1, 0 turns the pool off.
   worktreePool?: number;
+  // The most threads running a turn at once; unset means DEFAULT_MAX_THREADS, 0 means no limit (lib/thread-slots.ts).
+  maxThreads?: number;
 }
 
 const FILE = path.join(DATA_DIR, "settings.json");
@@ -102,6 +93,7 @@ function settings(): Settings {
       syncFolders: saved.syncFolders ?? [],
       allowedFolders: saved.allowedFolders ?? [],
       worktreePool: saved.worktreePool,
+      maxThreads: saved.maxThreads,
     };
   });
 }
@@ -167,6 +159,18 @@ export function worktreePoolSize(): number {
 
 export function setWorktreePoolSize(n: number) {
   writeSetting("worktreePool", Math.min(3, Math.max(0, Math.round(n))), (v) => v === 1);
+}
+
+// How many threads may run a turn at once before the next waits for a free slot: 0 to 50, 0 for no limit.
+export const DEFAULT_MAX_THREADS = 6;
+export const MAX_THREADS_CEILING = 50;
+
+export function maxThreads(): number {
+  return readSetting("maxThreads", (v): v is number => typeof v === "number" && v >= 0 && v <= MAX_THREADS_CEILING, DEFAULT_MAX_THREADS);
+}
+
+export function setMaxThreads(n: number) {
+  writeSetting("maxThreads", Math.min(MAX_THREADS_CEILING, Math.max(0, Math.round(n))), (v) => v === DEFAULT_MAX_THREADS);
 }
 
 export function defaultPermissionMode(): PermissionMode {
@@ -419,6 +423,7 @@ export function settingsView(): SettingsView {
     threadPrompt: threadPrompt(),
     defaultThreadPrompt: DEFAULT_THREAD_PROMPT,
     keepAliveMinutes: keepAliveMinutes(),
+    maxThreads: maxThreads(),
     defaultPermissionMode: defaultPermissionMode(),
     defaultBackend: defaultBackend(),
     automations: automations(),

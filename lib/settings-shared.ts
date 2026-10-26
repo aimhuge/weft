@@ -9,6 +9,9 @@ export const KEEP_ALIVE: { minutes: number; label: string }[] = [
   { minutes: 15, label: "15 minutes" },
 ];
 
+// The caps the Threads page offers on running threads; 0 is no limit. A saved value off this list is added to the menu.
+export const MAX_THREADS_CHOICES: number[] = [2, 3, 4, 6, 8, 12, 0];
+
 // A dark wash over a dark scene, a light one over a light scene, so the header and frosted cards read.
 export const SCRIM: Record<Base, string> = {
   dark: "linear-gradient(180deg, rgb(0 0 0 / 0.45), rgb(0 0 0 / 0.15) 35%, rgb(0 0 0 / 0.5))",

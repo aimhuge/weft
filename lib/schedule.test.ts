@@ -126,3 +126,17 @@ describe("formatAt and toLocalInput", () => {
     expect(toLocalInput(new Date(2026, 0, 2, 3, 4).getTime())).toBe("2026-01-02T03:04");
   });
 });
+
+describe("messages held for a slot", () => {
+  const base = { id: "c", title: "c", prompt: "", cwd: "/", backend: "claude", permissionMode: "default", column: "review", createdAt: 0, updatedAt: 0 } as const;
+
+  it("aren't due on a timer, and a timed one behind them still is", () => {
+    const held = { id: "h", text: "held", at: 1, forSlot: true };
+    expect(dueMessage({ ...base, scheduled: [held] }, 100)).toBeUndefined();
+    expect(dueMessage({ ...base, scheduled: [held, { id: "t", text: "t", at: 50 }] }, 100)?.id).toBe("t");
+  });
+
+  it("read as waiting for a slot", () => {
+    expect(sendsWhen({ id: "h", text: "held", at: 1, forSlot: true })).toBe("when a slot frees");
+  });
+});

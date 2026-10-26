@@ -1,7 +1,7 @@
 import { FIRST_SCENES, SCENES, sceneOf, type Base, type Scene, type SceneId } from "./theme";
 
 // The Settings screen's pages, down the left. Each is one scrolling page of cards; no tabs.
-export type SettingsPage = "general" | "laptop" | "models" | "threads" | "security" | "automations" | "shortcuts" | "accounts" | "team" | "sync";
+export type SettingsPage = "general" | "laptop" | "models" | "threads" | "security" | "automations" | "shortcuts" | "accounts" | "connectors" | "team" | "sync";
 
 export const SETTINGS_PAGES: { id: SettingsPage; label: string; hint: string }[] = [
   { id: "general", label: "General", hint: "How the board looks and sounds." },
@@ -12,6 +12,7 @@ export const SETTINGS_PAGES: { id: SettingsPage; label: string; hint: string }[]
   { id: "automations", label: "Automations", hint: "Skills that run on their own." },
   { id: "shortcuts", label: "Shortcuts", hint: "Keys for the board's global actions." },
   { id: "accounts", label: "Accounts", hint: "Your Weft account and the CLIs' logins." },
+  { id: "connectors", label: "Connectors", hint: "Outside services your threads can work in, like Gmail, Calendar and Drive." },
   { id: "team", label: "Teams", hint: "Every Weft team you're in, and the people in each." },
   { id: "sync", label: "Sync", hint: "Which projects upload their cards to your workspace, and how it's going." },
 ];
@@ -23,6 +24,7 @@ export const pageInfo = (id: SettingsPage) => BY_ID[id];
 export type PendingEdits = {
   prompt: boolean;
   keepAlive: boolean;
+  maxThreads: boolean;
   mode: boolean;
   backend: boolean;
   rules: boolean;
@@ -31,7 +33,7 @@ export type PendingEdits = {
 export function unsavedPages(p: PendingEdits): Set<SettingsPage> {
   const pages = new Set<SettingsPage>();
   if (p.backend) pages.add("models");
-  if (p.prompt || p.keepAlive) pages.add("threads");
+  if (p.prompt || p.keepAlive || p.maxThreads) pages.add("threads");
   if (p.mode) pages.add("security");
   if (p.rules) pages.add("automations");
   return pages;
