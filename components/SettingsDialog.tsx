@@ -4,16 +4,15 @@ import { useEffect, useState, type ReactNode } from "react";
 import { showBacklog, showProgress } from "@/lib/board-prefs";
 import { api } from "@/lib/client";
 import { pageInfo, rememberPage, rememberedPage, SETTINGS_PAGES, type SettingsPage } from "@/lib/settings-nav";
-import { sceneUrl } from "@/lib/theme";
 import { computeDirty, initialSettingsForm, settingsDirtyPages, settingsPatch, type SettingsForm } from "@/lib/settings-form";
-import { SCRIM } from "@/lib/settings-shared";
-import { useScene } from "@/lib/use-scene";
+import { useSettingsBackdrop } from "@/lib/use-scene";
 import type { SettingsView } from "@/lib/types";
 import { SettingsCard, SettingsUnsavedDot } from "./SettingsLayout";
 import Icon, { Spinner } from "./Icon";
 import Modal from "./Modal";
 import SettingsAccountsPage from "./SettingsAccountsPage";
 import SettingsAutomationsPage from "./SettingsAutomationsPage";
+import SettingsConnectorsPage from "./SettingsConnectorsPage";
 import SettingsGeneralPage from "./SettingsGeneralPage";
 import LaptopModeCard from "./LaptopModeCard";
 import SettingsModelsPage from "./SettingsModelsPage";
@@ -40,7 +39,7 @@ export default function SettingsDialog({ onClose }: { onClose: () => void }) {
   const [backlog, setBacklog] = useState(showBacklog);
   const [progress, setProgress] = useState(showProgress);
   const [page, setPageState] = useState<SettingsPage>(rememberedPage);
-  const scene = useScene();
+  const backdrop = useSettingsBackdrop();
 
   function setPage(next: SettingsPage) {
     rememberPage(next);
@@ -125,6 +124,8 @@ export default function SettingsDialog({ onClose }: { onClose: () => void }) {
           <SettingsThreadsPage
             keepAlive={form.keepAlive}
             setKeepAlive={(next) => updateForm("keepAlive", next)}
+            maxThreads={form.maxThreads}
+            setMaxThreads={(next) => updateForm("maxThreads", next)}
             prompt={form.prompt}
             setPrompt={(next) => updateForm("prompt", next)}
             defaultThreadPrompt={s.defaultThreadPrompt}
@@ -156,6 +157,8 @@ export default function SettingsDialog({ onClose }: { onClose: () => void }) {
         return <SettingsShortcutsPage />;
       case "accounts":
         return <SettingsAccountsPage />;
+      case "connectors":
+        return <SettingsConnectorsPage />;
       case "team":
         // TeamSettings draws its own cards, one per section.
         return <TeamSettings />;
@@ -194,7 +197,7 @@ export default function SettingsDialog({ onClose }: { onClose: () => void }) {
       onClose={onClose}
       layer="top"
       className="h-full w-full overflow-hidden"
-      style={{ background: `${SCRIM[scene.base]}, url(${sceneUrl(scene.id)}) center 62% / cover no-repeat, var(--canvas)` }}
+      style={{ background: backdrop }}
     >
       <div
         // The whole panel is the scene photo; a mousedown anywhere on it closes, like a backdrop.

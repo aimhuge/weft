@@ -1,12 +1,14 @@
 // The Threads page: the keep-conversations-open select and the thread-instructions textarea (with a
 // reset-to-default button). The default permission mode lives on Security.
-import { KEEP_ALIVE } from "@/lib/settings-shared";
+import { KEEP_ALIVE, MAX_THREADS_CHOICES } from "@/lib/settings-shared";
 import { SELECT_CLASS } from "./ModelSelect";
 import { SettingsCard, SettingsSectionHeader } from "./SettingsLayout";
 
 export default function SettingsThreadsPage({
   keepAlive,
   setKeepAlive,
+  maxThreads,
+  setMaxThreads,
   prompt,
   setPrompt,
   defaultThreadPrompt,
@@ -15,6 +17,8 @@ export default function SettingsThreadsPage({
 }: {
   keepAlive: number;
   setKeepAlive: (next: number) => void;
+  maxThreads: number;
+  setMaxThreads: (next: number) => void;
   prompt: string;
   setPrompt: (next: string) => void;
   defaultThreadPrompt: string;
@@ -26,8 +30,35 @@ export default function SettingsThreadsPage({
     ? KEEP_ALIVE
     : [...KEEP_ALIVE, { minutes: keepAlive, label: `${keepAlive} minutes` }];
 
+  const maxThreadsOptions = MAX_THREADS_CHOICES.includes(maxThreads)
+    ? MAX_THREADS_CHOICES
+    : [...MAX_THREADS_CHOICES.slice(0, -1), maxThreads, 0].sort((a, b) => (a || Infinity) - (b || Infinity));
+
   return (
     <>
+      <SettingsCard>
+        <section className="flex items-center justify-between gap-4">
+          <SettingsSectionHeader
+            title="Threads running at once"
+            hint="Past this many, a thread waits for a free slot and starts as another's turn ends. Threads waiting on your answer don't count."
+          />
+          <select
+            value={maxThreads}
+            aria-label="Threads running at once"
+            onChange={(e) => {
+              setMaxThreads(Number(e.target.value));
+              clearSaveError();
+            }}
+            className={SELECT_CLASS}
+          >
+            {maxThreadsOptions.map((n) => (
+              <option key={n} value={n}>
+                {n === 0 ? "No limit" : `${n} threads`}
+              </option>
+            ))}
+          </select>
+        </section>
+      </SettingsCard>
       <SettingsCard>
         <section className="flex items-center justify-between gap-4">
           <SettingsSectionHeader
