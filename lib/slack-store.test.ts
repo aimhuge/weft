@@ -199,6 +199,57 @@ describe("per-kind channels", () => {
     fs.writeFileSync(settingsFile(), JSON.stringify({ settings: fake.settings, threads: {} }));
     expect(store.slackSettings().routes).toEqual({});
   });
+
+  it("adds a kind the settings had no row for", () => {
+    // The base knows nothing about pushes, so the patch is the first word about it.
+    const saved = store.saveSlackSettings({ routes: { pushes: { channel: "C5", channelName: "pushes" } } });
+    expect(saved.routes.pushes).toEqual({ channel: "C5", channelName: "pushes" });
+    expect(store.slackSettings().routes.pushes).toEqual({ channel: "C5", channelName: "pushes" });
+  });
+
+  it("moves a kind the settings already had to another channel", () => {
+    store.saveSlackSettings({ routes: { growth: { channel: "C9", channelName: "growth" } } });
+    const saved = store.saveSlackSettings({ routes: { growth: { channel: "C8", channelName: "other" } } });
+    expect(saved.routes.growth).toEqual({ channel: "C8", channelName: "other" });
+    expect(store.slackSettings().routes.growth).toEqual({ channel: "C8", channelName: "other" });
+  });
+
+  it("refuses a kind moved to a channel with no name", () => {
+    store.saveSlackSettings({ routes: { growth: { channel: "C9", channelName: "growth" } } });
+    const saved = store.saveSlackSettings({ routes: { growth: { channel: "C8", channelName: null } } });
+    expect(saved.routes.growth).toEqual({ channel: "C8", channelName: null });
+  });
+
+  it("refuses a kind added with no channel in it", () => {
+    const saved = store.saveSlackSettings({ routes: { pushes: { channel: "", channelName: "pushes" } } });
+    expect(saved.routes.pushes).toBeUndefined();
+  });
+
+  it("refuses a kind added with no row at all", () => {
+    // A drawer that sends a kind with nothing in it gets no row for it.
+    const saved = store.saveSlackSettings({ routes: { pushes: undefined as unknown as null } });
+    expect(saved.routes.pushes).toBeUndefined();
+  });
+
+  it("keeps the kinds the patch leaves out, and forgets one with no row", () => {
+    // A row the settings had that holds nothing is not kept.
+    fs.writeFileSync(settingsFile(), JSON.stringify({ settings: { ...fake.settings, routes: { growth: null } }, threads: {} }));
+    const saved = store.saveSlackSettings({ routes: { pushes: { channel: "C5", channelName: "pushes" } } });
+    expect(saved.routes.growth).toBeUndefined();
+    expect(saved.routes.pushes).toEqual({ channel: "C5", channelName: "pushes" });
+  });
+
+  it("forgets a kind the settings had that held nothing at all", () => {
+    fs.writeFileSync(settingsFile(), JSON.stringify({ settings: { ...fake.settings, routes: { growth: undefined } }, threads: {} }));
+    const saved = store.saveSlackSettings({ routes: { pushes: { channel: "C5", channelName: "pushes" } } });
+    expect(saved.routes.growth).toBeUndefined();
+  });
+
+  it("forgets a kind moved to a channel that is not there", () => {
+    store.saveSlackSettings({ routes: { growth: { channel: "C9", channelName: "growth" } } });
+    const saved = store.saveSlackSettings({ routes: { growth: { channel: "", channelName: "growth" } } });
+    expect(saved.routes.growth).toBeUndefined();
+  });
 });
 
 describe("the growth watermark", () => {

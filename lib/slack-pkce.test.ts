@@ -74,6 +74,38 @@ describe("makeState and readState", () => {
     expect(readState("", secret).ok).toBe(false);
     expect(readState("not-a-state", secret).ok).toBe(false);
   });
+
+  it("refuses a state whose signature is the wrong length", () => {
+    // A signature of another length is refused before the comparison, so nothing leaks about the bytes.
+    const made = makeState(secret);
+    const parts = made.value.split(".");
+    const short = [parts[0], parts[1], parts[2], "abc"].join(".");
+    expect(readState(short, secret).ok).toBe(false);
+    expect(readState(short, secret).verifier).toBe("");
+  });
+
+  it("refuses a state with no signature at all", () => {
+    const made = makeState(secret);
+    const parts = made.value.split(".");
+    const empty = [parts[0], parts[1], parts[2], ""].join(".");
+    expect(readState(empty, secret).ok).toBe(false);
+    expect(readState(empty, secret).verifier).toBe("");
+  });
+
+  it("refuses a state from the future", () => {
+    const now = 1_700_000_000_000;
+    const made = makeState(secret, now);
+    // A timestamp ahead of the clock is not a fresh state; it is a tampered one.
+    expect(readState(made.value, secret, now - 60_000).ok).toBe(false);
+  });
+
+  it("refuses a state whose timestamp is not a number", () => {
+    const made = makeState(secret);
+    const parts = made.value.split(".");
+    const broken = [parts[0], parts[1], "not-a-time", parts[3]].join(".");
+    // The signature no longer matches the payload, so it is refused before the age is read.
+    expect(readState(broken, secret).ok).toBe(false);
+  });
 });
 
 describe("stateSecret", () => {

@@ -72,7 +72,9 @@ function cleanRoutes(
     // A kind the patch doesn't mention keeps the row it had.
     if (!(key in patch)) {
       const kept = base[key];
+      /* v8 ignore start -- a cleaned base never holds a falsy row: cleanRoutes filters them out */
       if (kept) routes[key] = kept;
+      /* v8 ignore stop */
       continue;
     }
     const row = patch[key];

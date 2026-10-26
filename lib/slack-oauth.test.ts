@@ -106,6 +106,17 @@ describe("exchangeCode", () => {
     expect(new URLSearchParams(first().init.body as string).get("client_secret")).toBe("shh");
   });
 
+  it("sends neither a verifier nor a secret when it has neither", async () => {
+    // A public client with PKCE on sends the verifier; one with neither is still asked to try.
+    const { first, fetcher } = spy(answer);
+    const withoutSecret = { clientId: "123.456", redirectUri: config.redirectUri };
+    await exchangeCode(withoutSecret, "the-code", fetcher);
+    const fields = new URLSearchParams(first().init.body as string);
+    expect(fields.get("code_verifier")).toBeNull();
+    expect(fields.get("client_secret")).toBeNull();
+    expect(fields.get("code")).toBe("the-code");
+  });
+
   it("keeps the secret out of the query string", async () => {
     const { first, fetcher } = spy(answer);
     await exchangeCode(config, "the-code", fetcher);

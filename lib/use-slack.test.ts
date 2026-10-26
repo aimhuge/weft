@@ -1,45 +1,15 @@
 // @vitest-environment happy-dom
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { SlackChannel, SlackSettings, SlackStatus } from "./slack-types";
+import { answer, bridge, CHANNELS, override, routes, SETTINGS, STATUS } from "./use-slack.harness";
+
+// The Slack drawer's reading half (lib/use-slack.ts): the status main says, the settings the server decides,
+// and the channels the picker offers. The writing half lives in lib/use-slack-save.test.ts.
 
 const apiFetch = vi.hoisted(() => vi.fn());
 vi.mock("./api-client", () => ({ apiFetch }));
 
 const { useSlack } = await import("./use-slack");
-
-const STATUS: SlackStatus = { signedIn: true, team: "Acme", teamUrl: null, bot: "Weft", socket: "connected", error: null };
-const CHANNELS: SlackChannel[] = [
-  { id: "C1", name: "eng", isPrivate: false, isMember: true },
-  { id: "C2", name: "secret", isPrivate: true, isMember: false },
-];
-const SETTINGS: SlackSettings = { channel: "C1", channelName: "eng", folder: "/dev/app", links: [], events: { commits: true, pushes: false, deploys: true, status: false, growth: true }, routes: {} };
-
-function answer(body: unknown, ok = true) {
-  return { ok, json: () => Promise.resolve(body), status: ok ? 200 : 500, statusText: "Server Error" };
-}
-
-// The mock answers per URL: the settings live at /api/slack, the test message at /api/slack/test and the
-// folder's sync at /api/cloud-sync. `overrides` replaces one of them for a single test.
-const routes: Record<string, () => unknown> = {
-  "/api/slack": () => answer({ settings: SETTINGS, folderSynced: false }),
-  "/api/slack/test": () => answer({ ok: true, text: "sent" }),
-  "/api/cloud-sync": () => answer({ settings: SETTINGS, folderSynced: true }),
-};
-
-function override(url: string, body: unknown, ok = false) {
-  routes[url] = () => answer(body, ok);
-}
-
-function bridge() {
-  return {
-    status: vi.fn(() => Promise.resolve(STATUS)),
-    setTokens: vi.fn(() => Promise.resolve(STATUS)),
-    forgetToken: vi.fn(() => Promise.resolve({ ...STATUS, signedIn: false })),
-    channels: vi.fn(() => Promise.resolve(CHANNELS)),
-    createChannel: vi.fn((name: string) => Promise.resolve({ id: "C9", name, isPrivate: false, isMember: true })),
-  };
-}
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -104,6 +74,75 @@ describe("useSlack", () => {
     const { result } = renderHook(() => useSlack(true));
     await waitFor(() => expect(result.current.note).toMatch(/desktop app/));
     expect(result.current.status).toBeNull();
+  });
+
+  it("connects and disconnects with no Slack side to talk to", async () => {
+    // A browser tab has no bridge: the calls still work, they just have nothing to answer.
+    const { result } = renderHook(() => useSlack(true));
+    await waitFor(() => expect(result.current.settings).toEqual(SETTINGS));
+    await act(() => result.current.connect("xoxb-1", "xapp-1"));
+    expect(result.current.status).toBeNull();
+    await act(() => result.current.disconnect());
+    expect(result.current.status).toBeNull();
+  });
+
+  it("has no channels to list with no Slack side to ask", async () => {
+    const { result } = renderHook(() => useSlack(true));
+    await waitFor(() => expect(result.current.settings).toEqual(SETTINGS));
+    await act(() => result.current.loadChannels());
+    expect(result.current.channels).toEqual([]);
+    expect(result.current.channelsError).toBeNull();
+  });
+
+  it("drops an answer that lands after a newer one", async () => {
+    // Two loads overlap; the first one to answer is the one that counts.
+    const slack = bridge();
+    (window as unknown as { weft: unknown }).weft = { slack };
+    let release = () => {};
+    slack.status.mockImplementationOnce(() => new Promise((resolve) => (release = () => resolve(STATUS))));
+    const { result } = renderHook(() => useSlack(true));
+    // A second load starts and finishes first.
+    await act(() => result.current.refresh());
+    await waitFor(() => expect(result.current.status).toEqual(STATUS));
+    // The slow first one answers now: it is stale, so it changes nothing.
+    await act(async () => {
+      release();
+      await Promise.resolve();
+    });
+    expect(result.current.status).toEqual(STATUS);
+    expect(result.current.error).toBeNull();
+  });
+
+  it("keeps a failure that isn't an Error as text", async () => {
+    // A rejection that is not an Error: a fetch can refuse with anything, and the drawer still has to say
+    // what happened. The rule wants Errors, which is why it is off on this line only.
+    // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+    apiFetch.mockImplementation(() => Promise.reject({ toString: () => "offline" }));
+    const { result } = renderHook(() => useSlack(true));
+    await waitFor(() => expect(result.current.error).toBe("offline"));
+  });
+
+  it("does not report a failure from an answer that landed too late", async () => {
+    // The first load is slow and fails; a newer load has already succeeded, so the old failure is dropped.
+    let release = () => {};
+    apiFetch.mockImplementationOnce(() => new Promise((_, reject) => (release = () => reject(new Error("too late")))));
+    const { result } = renderHook(() => useSlack(true));
+    await act(() => result.current.refresh());
+    await waitFor(() => expect(result.current.settings).toEqual(SETTINGS));
+    await act(async () => {
+      release();
+      await Promise.resolve();
+    });
+    expect(result.current.error).toBeNull();
+    expect(result.current.loading).toBe(false);
+  });
+
+  it("says a plain thing when a refusal carries no words", async () => {
+    const { result } = renderHook(() => useSlack(true));
+    await waitFor(() => expect(result.current.settings).toEqual(SETTINGS));
+    // A refusal with an answer that names no reason.
+    override("/api/slack", {}, false);
+    await expect(result.current.save({ folder: "/x" })).rejects.toThrow("Slack's settings couldn't be saved.");
   });
 
   it("reports what went wrong when the settings can't be read", async () => {
@@ -211,131 +250,5 @@ describe("useSlack", () => {
     const { result } = renderHook(() => useSlack(true));
     await waitFor(() => expect(result.current.status).toEqual(STATUS));
     await expect(result.current.createChannel("weft-updates")).rejects.toThrow("Restart Weft");
-  });
-
-  it("saves a patch and applies the server's answer", async () => {
-    const { result } = renderHook(() => useSlack(true));
-    await waitFor(() => expect(result.current.settings).toEqual(SETTINGS));
-    override("/api/slack", { settings: { ...SETTINGS, channel: "C2", channelName: "secret" }, folderSynced: true }, true);
-    await act(() => result.current.save({ channel: "C2", channelName: "secret" }));
-    expect(apiFetch).toHaveBeenCalledWith("/api/slack", expect.objectContaining({ method: "PUT" }));
-    const init = apiFetch.mock.calls.find((call) => (call[1] as RequestInit | undefined)?.method === "PUT")?.[1] as RequestInit;
-    expect(JSON.parse(init.body as string)).toEqual({ channel: "C2", channelName: "secret" });
-    expect(result.current.settings?.channel).toBe("C2");
-    expect(result.current.folderSynced).toBe(true);
-  });
-
-  it("takes the synced projects the save answers with", async () => {
-    const { result } = renderHook(() => useSlack(true));
-    await waitFor(() => expect(result.current.settings).toEqual(SETTINGS));
-    override("/api/slack", { settings: SETTINGS, folderSynced: true, synced: ["/dev/mapped"] }, true);
-    await act(() => result.current.save({ links: [{ folder: "/dev/mapped", channel: "C7", channelName: "mapped" }] }));
-    expect(result.current.synced).toEqual(["/dev/mapped"]);
-  });
-
-  it("says so when a patch can't be saved", async () => {
-    const { result } = renderHook(() => useSlack(true));
-    await waitFor(() => expect(result.current.settings).toEqual(SETTINGS));
-    override("/api/slack", { error: "nope" });
-    await expect(result.current.save({ folder: "/x" })).rejects.toThrow("nope");
-  });
-
-  it("shows the patch at once, before the server answers", async () => {
-    const { result } = renderHook(() => useSlack(true));
-    await waitFor(() => expect(result.current.settings).toEqual(SETTINGS));
-    // The save hangs until the test lets it answer.
-    let reply: (v: unknown) => void = () => undefined;
-    apiFetch.mockImplementationOnce(() => new Promise((resolve) => (reply = resolve)));
-    act(() => {
-      void result.current.save({ channel: "C2", channelName: "secret", events: { pushes: true } });
-    });
-    // The patch is in the settings while the call is still waiting.
-    expect(result.current.settings?.channel).toBe("C2");
-    expect(result.current.settings?.channelName).toBe("secret");
-    expect(result.current.settings?.events.pushes).toBe(true);
-    // The rest of the events are kept.
-    expect(result.current.settings?.events.commits).toBe(true);
-    await act(async () => {
-      reply(answer({ settings: { ...SETTINGS, channel: "C2", channelName: "secret" } }));
-      await Promise.resolve();
-    });
-    expect(result.current.settings?.channel).toBe("C2");
-  });
-
-  it("puts the old settings back when the save can't be made", async () => {
-    const { result } = renderHook(() => useSlack(true));
-    await waitFor(() => expect(result.current.settings).toEqual(SETTINGS));
-    // The save hangs until the test refuses it, so the patch is on screen first.
-    let refuse: (e: Error) => void = () => undefined;
-    apiFetch.mockImplementationOnce(() => new Promise((_, reject) => (refuse = reject)));
-    // The rejection is caught right away, so it never lands on its own.
-    const failed = result.current.save({ channel: "C2" }).catch((err: unknown) => err);
-    await act(async () => {
-      await Promise.resolve();
-    });
-    expect(result.current.settings?.channel).toBe("C2");
-    await act(async () => {
-      refuse(new Error("offline"));
-      await Promise.resolve();
-    });
-    expect(await failed).toBeInstanceOf(Error);
-    // The refused patch is gone and the old settings are back.
-    await waitFor(() => expect(result.current.settings).toEqual(SETTINGS));
-  });
-
-  it("puts the old settings back when the server refuses the save", async () => {
-    const { result } = renderHook(() => useSlack(true));
-    await waitFor(() => expect(result.current.settings).toEqual(SETTINGS));
-    // The save hangs until the test answers with a refusal.
-    let refuse: (v: unknown) => void = () => undefined;
-    apiFetch.mockImplementationOnce(() => new Promise((resolve) => (refuse = resolve)));
-    // The refusal is caught right away, so it never lands on its own.
-    const failed = result.current.save({ channel: "C2" }).catch((err: unknown) => err);
-    await act(async () => {
-      await Promise.resolve();
-    });
-    expect(result.current.settings?.channel).toBe("C2");
-    await act(async () => {
-      refuse(answer({ error: "nope" }, false));
-      await Promise.resolve();
-    });
-    expect(await failed).toBeInstanceOf(Error);
-    // The refused patch is gone and the old settings are back.
-    await waitFor(() => expect(result.current.settings).toEqual(SETTINGS));
-  });
-
-  it("sends a test message", async () => {
-    const { result } = renderHook(() => useSlack(true));
-    await waitFor(() => expect(result.current.settings).toEqual(SETTINGS));
-    await act(() => result.current.test());
-    expect(apiFetch).toHaveBeenCalledWith("/api/slack/test", expect.objectContaining({ method: "POST" }));
-  });
-
-  it("says so when the test message can't be sent", async () => {
-    const { result } = renderHook(() => useSlack(true));
-    await waitFor(() => expect(result.current.settings).toEqual(SETTINGS));
-    override("/api/slack/test", { error: "no channel" });
-    await expect(result.current.test()).rejects.toThrow("no channel");
-  });
-
-  it("turns a folder's sync on and reloads", async () => {
-    const slack = bridge();
-    (window as unknown as { weft: unknown }).weft = { slack };
-    const { result } = renderHook(() => useSlack(true));
-    await waitFor(() => expect(result.current.settings).toEqual(SETTINGS));
-    // Once the folder is on, the settings answer says so.
-    override("/api/slack", { settings: SETTINGS, folderSynced: true }, true);
-    await act(() => result.current.syncFolder("/dev/app"));
-    const call = apiFetch.mock.calls.find((c) => c[0] === "/api/cloud-sync");
-    expect(call).toBeTruthy();
-    expect(JSON.parse((call?.[1] as RequestInit).body as string)).toEqual({ folder: "/dev/app", on: true });
-    expect(result.current.folderSynced).toBe(true);
-  });
-
-  it("says so when the folder's sync can't be turned on", async () => {
-    const { result } = renderHook(() => useSlack(true));
-    await waitFor(() => expect(result.current.settings).toEqual(SETTINGS));
-    override("/api/cloud-sync", { error: "no folder" });
-    await expect(result.current.syncFolder("/dev/app")).rejects.toThrow("no folder");
   });
 });

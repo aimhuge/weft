@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { freshSettings } from "./slack-cards.harness";
+import { GROWTH_MS } from "./slack-growth";
 import type { SlackSettings } from "./slack-types";
 
 // Weft in Slack, the server's half: it watches the board's repos, Vercel and the board's cards, and posts each to
@@ -13,6 +14,11 @@ interface FakeState {
   cardStop: ReturnType<typeof vi.fn>;
   cards: { id: string; cwd: string }[];
   settings: SlackSettings;
+  // The growth watcher's own fakes: the read, the watermark it starts at, and where it saves it.
+  growthRead: ReturnType<typeof vi.fn<(since: Date) => Promise<{ kind: string; id: string; at: string }[]>>>;
+  growthWatermark: { at: string | null };
+  growthSaved: { at: string | null }[];
+  growthTick: ReturnType<typeof vi.fn<() => Promise<void>>>;
 }
 
 const fake = vi.hoisted((): FakeState => ({
@@ -24,6 +30,10 @@ const fake = vi.hoisted((): FakeState => ({
   cards: [],
   // Set fresh in beforeEach (lib/slack-cards.harness.ts freshSettings).
   settings: {} as SlackSettings,
+  growthRead: vi.fn<(since: Date) => Promise<{ kind: string; id: string; at: string }[]>>(),
+  growthWatermark: { at: null },
+  growthSaved: [],
+  growthTick: vi.fn<() => Promise<void>>(),
 }));
 
 vi.mock("./slack-git", () => ({
@@ -44,9 +54,21 @@ vi.mock("./slack-cards", () => ({ watchCardStatus: () => fake.cardStop }));
 const sent = vi.hoisted(() => ({ calls: [] as { channel: string; message: { text: string }; threadTs?: string }[] }));
 vi.mock("./slack-post", () => ({
   sendToSlack: (channel: string, message: { text: string }, threadTs?: string) => sent.calls.push({ channel, message, threadTs }),
+  // The growth watcher posts and waits for the answer, so it needs its own fake.
+  postToSlack: (channel: string, message: { text: string }) => {
+    sent.calls.push({ channel, message });
+    return Promise.resolve({ channel, ts: "1" });
+  },
 }));
 
-vi.mock("./slack-store", () => ({ slackSettings: () => fake.settings }));
+vi.mock("./slack-store", () => ({
+  slackSettings: () => fake.settings,
+  growthWatermark: () => fake.growthWatermark,
+  saveGrowthWatermark: (w: { at: string | null }) => fake.growthSaved.push(w),
+}));
+
+vi.mock("./growth-read", () => ({ growthEvents: (since: Date) => fake.growthRead(since) }));
+
 vi.mock("./store", () => ({ listCards: () => fake.cards }));
 
 const slack = await import("./slack");
@@ -64,6 +86,10 @@ beforeEach(() => {
   fake.deployPost = null;
   fake.cards = [];
   fake.settings = freshSettings();
+  fake.growthRead.mockResolvedValue([]);
+  fake.growthWatermark = { at: null };
+  fake.growthSaved = [];
+  fake.growthTick.mockResolvedValue(undefined);
 });
 afterEach(() => {
   slack.stopSlack();
@@ -242,6 +268,47 @@ describe("startSlack", () => {
     slack.startSlack();
     await vi.advanceTimersByTimeAsync(slack.DEPLOY_MS);
     expect(warn).toHaveBeenCalledWith("[weft] slack: vercel is down");
+  });
+});
+
+describe("the growth watcher", () => {
+  it("reads the growth events and posts the new ones", async () => {
+    fake.growthRead.mockResolvedValue([{ kind: "user", id: "u1", at: "2026-10-20T10:00:00Z" }]);
+    slack.startSlack();
+    await vi.advanceTimersByTimeAsync(GROWTH_MS);
+    expect(fake.growthRead).toHaveBeenCalledTimes(1);
+    expect(sent.calls).toHaveLength(1);
+    expect(sent.calls[0]?.message.text).toContain("New user");
+  });
+
+  it("reads from the watermark it was left at", async () => {
+    fake.growthWatermark = { at: "2026-10-20T10:00:00.000Z" };
+    slack.startSlack();
+    await vi.advanceTimersByTimeAsync(GROWTH_MS);
+    const since = fake.growthRead.mock.calls[0]?.[0] as Date;
+    expect(since.toISOString()).toBe("2026-10-20T10:00:00.000Z");
+  });
+
+  it("saves where it got to", async () => {
+    fake.growthRead.mockResolvedValue([{ kind: "user", id: "u1", at: "2026-10-20T10:00:00Z" }]);
+    slack.startSlack();
+    await vi.advanceTimersByTimeAsync(GROWTH_MS);
+    expect(fake.growthSaved.at(-1)?.at).toBe("2026-10-20T10:00:00.000Z");
+  });
+
+  it("reads nothing when growth is switched off", async () => {
+    fake.settings.events.growth = false;
+    slack.startSlack();
+    await vi.advanceTimersByTimeAsync(GROWTH_MS);
+    expect(fake.growthRead).not.toHaveBeenCalled();
+  });
+
+  it("says so when the growth read fails", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    fake.growthRead.mockRejectedValue(new Error("supabase is down"));
+    slack.startSlack();
+    await vi.advanceTimersByTimeAsync(GROWTH_MS);
+    expect(warn).toHaveBeenCalledWith("[weft] slack: supabase is down");
   });
 });
 

@@ -47,16 +47,18 @@ export function makeState(secret: string, now: number = Date.now()): PkceState {
 
 /** Reads a state back: the verifier it carries, and whether it is ours and still fresh. */
 export function readState(value: string | null | undefined, secret: string, now: number = Date.now()): PkceState {
-  const parts = (value ?? "").split(".");
-  if (parts.length !== 4) return { verifier: "", challenge: "", value: value ?? "", ok: false };
+  // The state is normalised once: past here it is a string, so the answers can carry it as it came.
+  const state = value ?? "";
+  const parts = state.split(".");
+  if (parts.length !== 4) return { verifier: "", challenge: "", value: state, ok: false };
   const [challenge, verifier, at, mac] = parts as [string, string, string, string];
   const payload = `${challenge}.${verifier}.${at}`;
-  if (!timingSafeEqual(sign(payload, secret), mac)) return { verifier: "", challenge: "", value: value ?? "", ok: false };
+  if (!timingSafeEqual(sign(payload, secret), mac)) return { verifier: "", challenge: "", value: state, ok: false };
   const age = now - Number(at);
   if (!Number.isFinite(age) || age < 0 || age > STATE_TTL_MS) {
-    return { verifier: "", challenge: "", value: value ?? "", ok: false };
+    return { verifier: "", challenge: "", value: state, ok: false };
   }
-  return { verifier, challenge, value: value ?? "", ok: true };
+  return { verifier, challenge, value: state, ok: true };
 }
 
 // The signing key: the app's Client Secret when there is one, else the server's own secret. Either way the

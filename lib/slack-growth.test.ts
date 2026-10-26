@@ -1,7 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { growthEvents, type GrowthEvent } from "./growth-read";
-import { createGrowthWatch, newEvents, nextWatermark, postGrowthEvents } from "./slack-growth";
+import { growthEvents, type GrowthEvent, type GrowthOverview } from "./growth-read";
+import type { SlackSettings } from "./slack-types";
+import {
+  createGrowthWatch,
+  FIRST_WINDOW_MS,
+  growthDashboardUrl,
+  growthTestMessage,
+  newEvents,
+  nextWatermark,
+  postGrowthEvents,
+  postGrowthSummary,
+  summaryLines,
+} from "./slack-growth";
 
 // Growth in Slack (lib/slack-growth.ts): the new users, new teams and payments, posted to the growth channel.
 //
@@ -9,18 +20,43 @@ import { createGrowthWatch, newEvents, nextWatermark, postGrowthEvents } from ".
 // got to, every poll would post the same sign-up again.
 
 vi.mock("./slack-post", () => ({ postToSlack: vi.fn(() => Promise.resolve({ channel: "C9", ts: "1" })) }));
-vi.mock("./slack-store", () => ({
-  slackSettings: vi.fn(() => ({
+
+// The settings and the growth overview are the two things the daily summary needs, so both are fakes.
+// The settings are typed so a test can change them the way the drawer would.
+const fake = vi.hoisted(() => {
+  const settings: SlackSettings = {
     channel: "C1",
     channelName: "general",
     folder: null,
     links: [],
     events: { commits: true, pushes: true, deploys: true, status: true, growth: true },
     routes: { growth: { channel: "C9", channelName: "growth" } },
-  })),
-}));
+  };
+  return { settings, overview: null as GrowthOverview | null };
+});
+
+vi.mock("./slack-store", () => ({ slackSettings: () => fake.settings }));
+vi.mock("./growth-read", async () => {
+  const actual = await vi.importActual<typeof import("./growth-read")>("./growth-read");
+  return { ...actual, growthOverview: vi.fn(() => Promise.resolve(fake.overview)) };
+});
 
 const { postToSlack } = await import("./slack-post");
+const { growthOverview } = await import("./growth-read");
+
+const OVERVIEW: GrowthOverview = {
+  accounts: 12,
+  new_7d: 3,
+  new_30d: 9,
+  signed_in_7d: 5,
+  signed_in_30d: 8,
+  never_signed_in: 2,
+  workspaces: 6,
+  invites_pending: 1,
+  syncing_accounts: 4,
+  synced_cards: 21,
+  paying_workspaces: 2,
+};
 
 const user = (id: string, at: string): GrowthEvent => ({ kind: "user", id, email: "someone@example.com", at });
 const team = (id: string, at: string): GrowthEvent => ({ kind: "team", id, name: "Acme", slug: "acme", members: 3, at });
@@ -42,6 +78,16 @@ const payment = (id: string, at: string): GrowthEvent => ({
 beforeEach(() => {
   vi.mocked(postToSlack).mockClear();
   vi.mocked(postToSlack).mockResolvedValue({ channel: "C9", ts: "1" });
+  vi.mocked(growthOverview).mockClear();
+  fake.settings = {
+    channel: "C1",
+    channelName: "general",
+    folder: null,
+    links: [],
+    events: { commits: true, pushes: true, deploys: true, status: true, growth: true },
+    routes: { growth: { channel: "C9", channelName: "growth" } },
+  };
+  fake.overview = OVERVIEW;
 });
 
 describe("newEvents", () => {
@@ -128,6 +174,27 @@ describe("postGrowthEvents", () => {
     expect(vi.mocked(postToSlack).mock.calls[0]?.[0]).toBe("C9");
     expect(saved.at(-1)?.at).toBe("2026-10-21T10:00:00.000Z");
   });
+
+  it("posts nothing when growth is switched off", async () => {
+    fake.settings = { ...fake.settings, events: { commits: true, pushes: true, deploys: true, status: true, growth: false } };
+    const posted = await postGrowthEvents([user("u1", "2026-10-20T10:00:00Z")], { at: null }, () => {});
+    expect(posted).toBe(0);
+    expect(postToSlack).not.toHaveBeenCalled();
+  });
+
+  it("posts nothing when there is no growth channel", async () => {
+    fake.settings = { ...fake.settings, channel: null, channelName: null, links: [], routes: {} };
+    const posted = await postGrowthEvents([user("u1", "2026-10-20T10:00:00Z")], { at: null }, () => {});
+    expect(posted).toBe(0);
+    expect(postToSlack).not.toHaveBeenCalled();
+  });
+
+  it("says so when the failure is not an Error", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.mocked(postToSlack).mockRejectedValueOnce("offline");
+    await postGrowthEvents([user("u1", "2026-10-20T10:00:00Z")], { at: null }, () => {});
+    expect(warn).toHaveBeenCalledWith("[weft] slack growth: offline");
+  });
 });
 
 describe("createGrowthWatch", () => {
@@ -156,6 +223,101 @@ describe("createGrowthWatch", () => {
     release.fn?.();
     await first;
     expect(read).toHaveBeenCalledTimes(1);
+  });
+
+  it("looks a week back on the very first look", async () => {
+    const read = vi.fn<(since: Date) => Promise<GrowthEvent[]>>(() => Promise.resolve([]));
+    const watch = createGrowthWatch(read, () => ({ at: null }), () => {});
+    const before = Date.now();
+    await watch.tick();
+    const since = read.mock.calls[0]?.[0] as Date;
+    // The window is a week, and it is measured from now.
+    expect(before - since.getTime()).toBeGreaterThan(FIRST_WINDOW_MS - 5_000);
+    expect(before - since.getTime()).toBeLessThanOrEqual(FIRST_WINDOW_MS);
+  });
+
+  it("reads from the watermark when there is one", async () => {
+    const read = vi.fn<(since: Date) => Promise<GrowthEvent[]>>(() => Promise.resolve([]));
+    const watch = createGrowthWatch(read, () => ({ at: "2026-10-20T10:00:00.000Z" }), () => {});
+    await watch.tick();
+    expect((read.mock.calls[0]?.[0] as Date).toISOString()).toBe("2026-10-20T10:00:00.000Z");
+  });
+});
+
+describe("the growth dashboard's address", () => {
+  it("is the deployed dashboard", () => {
+    expect(growthDashboardUrl({})).toBe("https://weft.zip/apps/growth");
+  });
+
+  it("takes an explicit address", () => {
+    expect(growthDashboardUrl({ WEFT_GROWTH_DASHBOARD_URL: "https://x.test/growth" })).toBe("https://x.test/growth");
+  });
+
+  it("ignores an address that is only spaces", () => {
+    expect(growthDashboardUrl({ WEFT_GROWTH_DASHBOARD_URL: "   " })).toBe("https://weft.zip/apps/growth");
+  });
+
+  it("reads the environment when it is given none", () => {
+    expect(growthDashboardUrl()).toBe("https://weft.zip/apps/growth");
+  });
+});
+
+describe("the daily summary", () => {
+  it("posts the summary to the growth channel", async () => {
+    expect(await postGrowthSummary({})).toBe(true);
+    expect(postToSlack).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(postToSlack).mock.calls[0]?.[0]).toBe("C9");
+  });
+
+  it("posts nothing when there is no growth channel", async () => {
+    fake.settings = { ...fake.settings, channel: null, channelName: null, links: [], routes: {} };
+    expect(await postGrowthSummary({})).toBe(false);
+    expect(postToSlack).not.toHaveBeenCalled();
+  });
+
+  it("posts nothing when the numbers can't be read", async () => {
+    fake.overview = null;
+    expect(await postGrowthSummary({})).toBe(false);
+    expect(postToSlack).not.toHaveBeenCalled();
+  });
+
+  it("says so when Slack refuses the summary", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.mocked(postToSlack).mockRejectedValueOnce(new Error("channel_not_found"));
+    expect(await postGrowthSummary({})).toBe(false);
+    expect(warn).toHaveBeenCalledWith("[weft] slack growth: channel_not_found");
+  });
+
+  it("says so when the refusal is not an Error", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.mocked(postToSlack).mockRejectedValueOnce("offline");
+    expect(await postGrowthSummary({})).toBe(false);
+    expect(warn).toHaveBeenCalledWith("[weft] slack growth: offline");
+  });
+
+  it("reads the numbers with the environment it is given", async () => {
+    await postGrowthSummary({ SUPABASE_SECRET_KEY: "key" });
+    expect(growthOverview).toHaveBeenCalledWith({ SUPABASE_SECRET_KEY: "key" });
+  });
+
+  it("reads the environment when it is given none", async () => {
+    await postGrowthSummary();
+    expect(growthOverview).toHaveBeenCalledWith(process.env);
+  });
+
+  it("says the numbers in four lines", () => {
+    expect(summaryLines(OVERVIEW)).toEqual([
+      "3 new in 7 days (9 in 30)",
+      "12 accounts, 5 signed in this week",
+      "6 workspaces, 2 paying",
+      "21 cards synced by 4 accounts",
+    ]);
+  });
+
+  it("has a test message for the drawer's button", () => {
+    const message = growthTestMessage();
+    expect(message.text).toBe("Growth is on");
+    expect(JSON.stringify(message.blocks)).toContain("Growth is on");
   });
 });
 
