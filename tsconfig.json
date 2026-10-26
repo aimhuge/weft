@@ -43,7 +43,13 @@
     ".next-scout/types/**/*.ts",
     ".next-scout/dev/types/**/*.ts",
     ".next-demo/types/**/*.ts",
-    ".next-demo/dev/types/**/*.ts"
+    ".next-demo/dev/types/**/*.ts",
+    ".next-tprobe/types/**/*.ts",
+    ".next-tprobe/dev/types/**/*.ts",
+    ".next-upgrade-check/types/**/*.ts",
+    ".next-upgrade-check/dev/types/**/*.ts",
+    ".next-gogtest/types/**/*.ts",
+    ".next-gogtest/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",
