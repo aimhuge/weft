@@ -64,7 +64,7 @@ describe("accountRoutes", () => {
     let made = 0;
     const routes = accountRoutesFor(dir, () => {
       made++;
-      return safeStorage() as unknown as Electron.SafeStorage;
+      return safeStorage();
     });
     expect(made).toBe(0);
     routes["POST /account/write"]({ data: SESSION });

@@ -113,6 +113,9 @@ const eslintConfig = defineConfig([
     // Leftover installs (node_modules.npm-old) and scratch: ESLint skips only a folder named exactly node_modules.
     "node_modules.*/**",
     ".scratch/**",
+    // Vendored, minified third-party bundles (public/welcome/gsap.min.js): not our code to lint.
+    "**/*.min.js",
+    "**/*.bundle.js",
   ]),
 ]);
 
