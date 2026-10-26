@@ -17,17 +17,20 @@ const BIG = script("big.js", `process.stdout.write('first-line\\n' + 'x'.repeat(
 
 const URL = "postgres://app:hunter2-very-secret@db.example.com/app";
 
-type Options = { values?: Record<string, string>; missing?: string[]; allows?: boolean; choice?: string | null };
+type Options = { values?: Record<string, string>; missing?: string[]; allows?: boolean; choice?: string | null; granted?: boolean; audit?: (entry: Record<string, unknown>) => unknown };
 type Runner = ReturnType<typeof createSecretRun>;
 
-function make({ values = { DATABASE_URL: URL }, missing = [], allows = false, choice = "once" }: Options = {}) {
-  const vault = { valuesFor: vi.fn(() => Promise.resolve({ id: "github:o/r", label: "o/r", values, missing })) };
+function make({ values = { DATABASE_URL: URL }, missing = [], allows = false, choice = "once", granted = false, audit = undefined as ((entry: Record<string, unknown>) => unknown) | undefined }: Options = {}) {
+  const vault = { valuesFor: vi.fn(() => Promise.resolve({ id: "github:o/r", label: "o/r", values, missing })), granted: vi.fn(() => granted) };
   const rules = { allows: vi.fn(() => allows), remember: vi.fn() };
   const ask = vi.fn(() => Promise.resolve(choice));
+  const auditFn = audit ?? vi.fn();
   let t = 1000;
-  const runner = createSecretRun({ vault, rules, ask, spawn, env: { ...process.env, WEFT_SHELL_TOKEN: "tok" }, now: () => (t += 100), randomId: () => "grant-1", node: "/Electron", runner: "/app/secret-env.cjs" });
-  return { runner, vault, rules, ask };
+  const runner = createSecretRun({ vault, rules, ask, spawn, audit: auditFn, env: { ...process.env, WEFT_SHELL_TOKEN: "tok" }, now: () => (t += 100), randomId: () => "grant-1", node: "/Electron", runner: "/app/secret-env.cjs" });
+  return { runner, vault, rules, ask, audit: auditFn as ReturnType<typeof vi.fn> };
 }
+
+const lines = (audit: ReturnType<typeof vi.fn>) => audit.mock.calls.map((c) => c[0] as Record<string, unknown>);
 
 const request = { key: "c1", folder: dir, cwd: dir, command: "node print.js", names: ["DATABASE_URL"], environment: "development", script: undefined };
 
@@ -35,7 +38,7 @@ describe("createSecretRun.run", () => {
   it("runs the command with the values in its env only, and hands back redacted output and the exit code", async () => {
     const { runner, vault, ask, rules } = make();
     const r = await runner.run({ ...request, argv: PRINT, env: { MODE: "job" } });
-    expect(vault.valuesFor).toHaveBeenCalledWith(dir, ["DATABASE_URL"], "development");
+    expect(vault.valuesFor).toHaveBeenCalledWith(dir, ["DATABASE_URL"], "development", false);
     expect(ask).toHaveBeenCalledWith(expect.objectContaining({ message: "A thread wants to run a command with secrets from o/r." }));
     expect(rules.remember).not.toHaveBeenCalled();
     expect(r).toMatchObject({ label: "o/r", exitCode: 3, signal: null, timedOut: false, truncated: false });
@@ -55,6 +58,31 @@ describe("createSecretRun.run", () => {
     const covered = make({ allows: true });
     await covered.runner.run({ ...request, argv: PRINT });
     expect(covered.ask).not.toHaveBeenCalled();
+  });
+
+  it("skips the ask and the rules entirely when the card has a grant", async () => {
+    const { runner, vault, ask, rules } = make({ granted: true });
+    const r = await runner.run({ ...request, argv: PRINT });
+    expect(vault.granted).toHaveBeenCalledWith("c1", "github:o/r");
+    expect(ask).not.toHaveBeenCalled();
+    expect(rules.allows).not.toHaveBeenCalled();
+    expect(rules.remember).not.toHaveBeenCalled();
+    expect(r.exitCode).toBe(3);
+  });
+
+  it("audits a run as once after a yes, as a rule when a rule allows, and as denied on a no", async () => {
+    const once = make({ choice: "once" });
+    await once.runner.run({ ...request, argv: PRINT, thread: "Build card" });
+    expect(lines(once.audit)).toContainEqual(expect.objectContaining({ kind: "vault", action: "run", by: "thread", card: "c1", via: "once", outcome: "ok" }));
+
+    const ruled = make({ allows: true });
+    await ruled.runner.run({ ...request, argv: PRINT });
+    expect(lines(ruled.audit)).toContainEqual(expect.objectContaining({ action: "run", card: "c1", via: "rule", outcome: "ok" }));
+
+    const no = make({ choice: null });
+    await no.runner.run({ ...request, argv: PRINT });
+    expect(lines(no.audit)).toContainEqual(expect.objectContaining({ action: "run", card: "c1", outcome: "denied" }));
+    expect(lines(no.audit)[0]!.via).toBeUndefined();
   });
 
   it("stops at missing names or a no, without running anything", async () => {
@@ -113,12 +141,31 @@ describe("createSecretRun dev grants", () => {
   it("grants a dev server every development value once, after approval", async () => {
     const { runner, vault, ask } = make({ values: { A: "alpha-value-1", B: "bravo-value-2" } });
     const g = await runner.devGrant({ key: "c2", folder: dir, cwd: dir, command: "npm run dev", script: "dev: next dev" });
-    expect(vault.valuesFor).toHaveBeenCalledWith(dir, null, "development");
+    expect(vault.valuesFor).toHaveBeenCalledWith(dir, null, "development", false);
     expect(ask).toHaveBeenCalledWith(expect.objectContaining({ message: "Start this card's dev server with o/r's development secrets?" }));
     expect(g).toEqual({ grant: "grant-1", names: ["A", "B"], label: "o/r", node: "/Electron", runner: "/app/secret-env.cjs" });
     expect(runner.claim("grant-1")).toEqual({ env: { A: "alpha-value-1", B: "bravo-value-2" } });
     expect(() => runner.claim("grant-1")).toThrow(/already used or has expired/);
     expect(runner.redact("c2", "alpha-value-1")).toBe("‹A›");
+  });
+
+  it("skips the ask and the rules for a dev server too when the card has a grant", async () => {
+    const { runner, vault, ask, rules } = make({ granted: true, values: { A: "alpha-value-1" } });
+    const g = await runner.devGrant({ key: "c2", folder: dir, cwd: dir, command: "npm run dev" });
+    expect(vault.granted).toHaveBeenCalledWith("c2", "github:o/r");
+    expect(ask).not.toHaveBeenCalled();
+    expect(rules.allows).not.toHaveBeenCalled();
+    expect(g).toMatchObject({ grant: "grant-1", names: ["A"] });
+  });
+
+  it("audits a dev server grant as its own action", async () => {
+    const once = make({ values: { A: "alpha-value-1" } });
+    await once.runner.devGrant({ key: "c2", folder: dir, cwd: dir, command: "npm run dev" });
+    expect(lines(once.audit)).toContainEqual(expect.objectContaining({ kind: "vault", action: "dev server", by: "thread", card: "c2", via: "once", outcome: "ok" }));
+
+    const no = make({ choice: null, values: { A: "alpha-value-1" } });
+    await no.runner.devGrant({ key: "c2", folder: dir, cwd: dir, command: "npm run dev" });
+    expect(lines(no.audit)).toContainEqual(expect.objectContaining({ action: "dev server", card: "c2", outcome: "denied" }));
   });
 
   it("has nothing to grant without values, or after a no; grants expire", async () => {

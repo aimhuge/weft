@@ -272,6 +272,60 @@ that opens the file itself (`~/.weft/shell-token` included). This is a strong de
 - Without gitleaks the commit scan knows only the key shapes in `lib/secret-detect.ts`. CI pins gitleaks but
   hasn't run yet.
 
+## Audit log
+
+Every time Weft opens something it keeps in the macOS Keychain, and every time a vault value is used, there's a line
+for it. Built 2026-10-26.
+
+- **Two layers, one log.** `electron/keychain-audit.cjs` wraps Electron's `safeStorage` once per thing it seals
+  (`keychainFor("vault key")`, `"run rules"`, `"Vercel token"`, `"Supabase token"`, `"Cloudflare token"`,
+  `"BlastCP sign-in"`, `"Slack tokens"`, `"Goose provider keys"`, `"Weft sign-in"`), so every open and seal is a line
+  however it was reached. The vault adds what the Keychain can't see: which secret, for whom, where, and how it was
+  allowed (`electron/vault.cjs`: reveal, copy, fill, send, read, set, add blank, import, copy to, remove,
+  write `.env.local`, a denied Touch ID; `electron/secret-run.cjs`: run, dev server; `electron/vault-grants.cjs`:
+  grant, revoke). A line names who (`you`, `thread` with card and title, `weft`) and, read back from your account,
+  whose it is (the account's name, so a thread's line reads "Alex Miller's thread “…”"), the names, the site or command,
+  `via` (`grant`, `touch-id`, `unlocked`, `rule`, `once`, `always`) and the outcome (`ok`, `denied`, `missing`,
+  `error`). Never a value, not even a tail.
+- **Kept in the database, not on the Mac.** A file on your own disk is one you can edit, so the record is the
+  `keychain_events` table in your Weft account and `~/.weft/vault/audit.jsonl` (0600; `lib/secret-guard-files.ts`
+  keeps every thread out of `vault/`) is only the outbox: one JSON line per event not uploaded yet, with an id and a
+  `seq`, this Mac's 1, 2, 3… (counter in `audit-seq.json`). Signed out, the outbox keeps the newest 4,000–5,000 lines;
+  what's cut shows as a gap. Weft reading the same Keychain item
+  again within 10 minutes (the sign-in is read on every Supabase call) is one more line with a `count` when the window
+  ends, so its own repeats can't push your events out of the outbox.
+- **Uploaded within seconds.** While you're signed in, `lib/keychain-audit-sync.ts` (started from `lib/copilot.ts`)
+  reads the outbox every 5 s (`POST /secrets/audit-outbox`), upserts it into `keychain_events` and has main delete
+  what went up (`POST /secrets/audit-synced`). Signed out, the lines wait and go up after the next sign-in. The line
+  id is the row's primary key, so a retry never duplicates. The table
+  (`supabase/migrations/20261025182200_keychain_events.sql`, `20261025194633_keychain_events_record.sql`): RLS read and
+  insert your own rows, no update or delete; `created_at` is set by a trigger to the database's clock; `seq` is unique
+  per account and Mac. So what's held back shows how late it came, and what's taken out of the outbox shows as a gap.
+  A user can't edit the record, only add to it or stop Weft adding.
+- **Where you see it.** Settings → Security → **Keychain access** (`components/KeychainAccess.tsx`,
+  `lib/use-keychain-access.ts`, `lib/keychain-audit-view.ts`): the threads with standing access, each with Revoke,
+  then the log as sentences ("Alex Miller's thread “Fix login” typed STRIPE_KEY (o/r) into dashboard.stripe.com ·
+  standing access"), newest first. The lines come from your account (`GET /api/account/keychain-events`,
+  `lib/keychain-audit-record.ts`) merged with the ones still waiting on the Mac (IPC `vault:activity`, board window
+  only, `electron/vault-ipc.cjs`), which say "waiting on this Mac". A line that reached the account over 10 minutes
+  late says so, and missing numbers show as "2 lines from this Mac never reached your account". The line under the
+  log says where it's kept.
+
+## Thread grants
+
+One Touch ID lets one card use one project's vault for an hour without being asked again
+(`electron/vault-grants.cjs`). Built 2026-10-26.
+
+- **Covers** `mcp__secrets__fill_field` on any https site, `mcp__secrets__run` and the card's dev server secrets
+  (`vault.useFor` and `secret-run.cjs`'s `approve` check `granted(card, vault id)` first). **Doesn't cover** writes
+  (`set_value`), pushes to Vercel or a relay, or anything that would show the thread a value: the one rule holds.
+- **Two ways in.** The card's right-click menu: **Give 🔐 Vault Access for 1 Hour** / **Revoke 🔐 Vault Access**
+  (`lib/card-menu.ts`, `components/use-board-menus.ts`, IPC `vault:grant` / `vault:revoke`). Or the thread asks with
+  `mcp__secrets__request_access` and a `why` (`POST /secrets/request-access`), which the Touch ID prompt quotes.
+- **Always a fresh Touch ID**, never the drawer's unlock or a fill's per-site unlock. Kept in memory only: quitting Weft
+  ends every grant. The drawer's idle lock doesn't (it would end them every three minutes). Every grant, revoke and use
+  under a grant is an audit line with `via: "grant"`.
+
 ## Already exposed today
 
 - Fixed 2026-10-12: the Supabase session, refresh token included, is `~/.weft/account.sealed`, encrypted by
