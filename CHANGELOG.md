@@ -8,6 +8,10 @@ lands; a release moves those lines under its version and tags the commit `vX.Y.Z
 
 ## [Unreleased]
 
+### Added
+
+- **Right-click a project for its own menu.** A project on the board now has its own menu: pin it so it always keeps a chip in the bar, hide it until you use the folder again, open it in the first installed editor or terminal, and start a thread there. The marks live per project in the saved list (`lib/project-list.ts`), and the route passes on only the marks you sent, so pinning never clears a hidden (`app/api/projects/route.ts`, `components/project-menu-handler.ts`, `components/ProjectChips.tsx`).
+
 ## [0.6.3] - 2026-10-26
 
 ### Added
