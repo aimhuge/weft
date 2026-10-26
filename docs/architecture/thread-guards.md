@@ -169,35 +169,65 @@ into each other. Claims catch that at the moment it happens, instead of a standi
   before <tool>" (`modeWhy` in `lib/runner-ask.ts`, labels from `MODE_OPTIONS`). The explanation every clash shares
   (one working tree, going ahead can undo their uncommitted change) is the chip's tooltip, `REASONS` in the component.
 - **Wait** (`lib/permission-wait.ts`, `PermissionActions` in `components/PermissionInput.tsx`): a clash prompt's
-  buttons are **Wait** (first), **Go ahead** and **Deny**. Wait (`POST /api/cards/:id/permission { wait, pendingId }`)
+  buttons are **Wait** (first), **Me first** and **Deny** (a plain **Go ahead** stands in for Me first on weft.zip). Wait (`POST /api/cards/:id/permission { wait, pendingId }`)
   keeps the edit held, marks it `waiting`, moves the card back to Running ("Waiting for ‘<holder>’") and polls every 3 s
   (`checkWaits`). Once the holder lets go (no longer busy, archived or deleted, or its claim dropped because its change
   was committed), the held edit is denied with a message telling the thread to re-read the file and redo the edit on top
-  of that change: the old_string it planned to replace may be gone, and a Write would clobber it. Go ahead now and Deny
+  of that change: the old_string it planned to replace may be gone, and a Write would clobber it. Me first and Deny
   still answer it while it waits. Waits live in memory; a restart ends the turn and them with it.
 - **Waiting by itself** (`askUser` in `lib/runner-ask.ts`, `startWaiting` in `lib/permission-wait.ts`): a clash prompt
   doesn't park the card in Needs you at all. The card is already editing code another card holds, so the answer is
   almost always "wait": the card goes straight to Running with the request marked `waiting`, and the watcher starts
-  with it. The buttons stay where they were — **Go ahead now** and **Deny** in the thread's prompt and on the card —
+  with it. The buttons stay where they were — **Me first** and **Deny** in the thread's prompt and on the card —
   so the wait can still be cut short. Every other prompt (the card's permission mode, an outside folder, a question)
   still parks in Needs you, because those really need the user; so does a thread whose own
   `BOARD STATUS: column=needs_you` asks for something. A waiting card reads as held, not as working: a lock instead
   of a spinner, and Needs you's amber border.
+- **Me first / You first** (`lib/precedence.ts`, `lib/yields.ts`, `lib/waits-on.ts`, `components/YouFirst.tsx`): the user
+  can put the held card ahead of the holder. **Me first** sits on the held card's prompt and on its card, beside Wait (and
+  alone with Deny while it waits). It replaced Go ahead: going ahead on code another card holds now always tells that
+  card to leave the file, since an edit going in under a thread that doesn't know is what tangles two changes.
+  **You first** is a one-line strip on the holder's thread, above its prompt, for each card waiting on it (`useWaitersOn`, fed from the board's card list in
+  `lib/use-board-card-actions.ts`, so no props run through the thread components). Either posts
+  `POST /api/cards/:id/permission { first, pendingId }` for the held card, and `putFirst`:
+  1. gives the held card a whole-file claim on the file (`/abs/Login.tsx#*`) and drops any yield it had to the holder;
+  2. puts `{ to, file }` on the holder's `card.yields`, so `findClash` skips the holder's claims on that file for the
+     first card (its edits there stop asking), while the holder's own edits there clash with the whole-file claim and
+     wait on it like any clash, marked `first` ("Card ‘X’ goes first on Login.tsx. Wait, or go ahead?");
+  3. tells the holder at once through a mid-turn message (`lib/runner-steer.ts`, "Weft: the user put card ‘X’ first on
+     Login.tsx…"), so it moves to other work instead of finding out at its next edit; Codex and Goose holders find out
+     from their prompt;
+  4. answers the held edit with allow.
+
+  A yield lasts while the first card is busy and still claims the file (`yieldHolds`): its commit drops the claim and
+  so the yield, and its turn ending does too. `pruneYields` runs in both claim guards before `findClash`, so a stale
+  yield never outlives that. Pressing Me first on the holder's own held prompt turns the order around the same way.
+  The clash prompt shows both faces before its reason chip (`components/CardFace.tsx`: thumbnail, else emoji, else
+  initial; `clashWhy` copies the holder's `emoji` and `thumb` onto `why.holder`), holder first, then this thread, so
+  who is in whose way reads at a glance without a new row. weft.zip's transport leaves `putFirst` out, like Wait.
 - **Recording**: the PreToolUse hook keeps what the edit will claim by tool use id, and the PostToolUse hook puts
   it on `card.claims` (most recent first, last 50) once the edit has run, so a denied edit claims nothing.
 - **Dropping**: `updateCard` (`lib/store.ts`) clears a card's claims when it reaches Done or is archived;
   `lib/pile-commit.ts` calls `releaseClaims` for the paths it committed, on every card (the whole file went in).
   After every Bash call in a git repo, `releaseClean` (`lib/bash-claims.ts`) drops every card's claims on files
   `git status` no longer lists, so a thread's own `git commit`, a checkout or a revert releases them too.
-- **Bash** (`lib/bash-claims.ts`, `lib/bash-writes.ts`, `lib/dirty-files.ts`, `lib/failure-owners.ts`): before a Bash
+- **Bash** (`lib/bash-claims.ts`, `lib/bash-writes.ts`, `lib/bash-writers.ts`, `lib/dirty-files.ts`, `lib/failure-owners.ts`): before a Bash
   call, the files its line names as written (`>`/`>>` targets, `sed -i`, `perl -i`, `tee`, `cp`/`mv`/`rm`/`touch`,
   `prettier --write`, `eslint --fix`, also through `npx`/`pnpm exec`) are checked as whole-file claims and ask on a
   clash like an edit. After it, the repo's dirty files whose mtime is past the call's start become this card's
   whole-file claims, except ones another busy card already claims (most likely its edit, made meanwhile); a
-  formatter or codegen run is claimed this way even though the line names no file. A failed check (`tsc`,
+  formatter or codegen run is claimed this way even though the line names no file. But a file has only an mtime,
+  not a writer: while this card's `pnpm test` runs, another card's `node gen.mjs` or a `puku-cli` it started writes
+  files too, and those used to land on whichever card's call ended first (and hop to the next one once it went
+  idle). So `lib/bash-writers.ts` keeps a window per Bash call, by tool use id, from PreToolUse to PostToolUse (a
+  `run_in_background` call stays open 30 minutes, Bash's default background timeout, since its process outlives
+  the call), and a written file is claimed only when this card's windows are the only ones open at its mtime, or
+  the line names it as written. Otherwise its writer is unknown: no card claims it, and a failed check that names
+  it hears "unknown", never another card's title. A busy Codex or Goose card in the tree runs no such hooks, so
+  while one is, every Bash-written file's writer is unknown. A failed check (`tsc`,
   `typecheck`, `test`, `lint`, `build` in the line, an error word in the output; Bash failures arrive as
   PostToolUseFailure, so the hook listens to both) gets `additionalContext`: the failing paths another busy card
-  claims, with "leave those to that card", or else the files other cards have open, since a signature changed
+  claims, with "leave those to that card", the ones whose writer is unknown, or else the files other cards have open, since a signature changed
   there can break a caller here. One `git status` per Bash call (~30–80 ms in this repo); not on the start path.
   What it can't fix: cards still see each other's half-done edits at run time. That's what opt-in worktrees are for.
 - **Speed**: `typescript` loads on the first edit of a source file (~170 ms, once per server), never on the

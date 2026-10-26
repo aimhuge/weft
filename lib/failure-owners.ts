@@ -52,27 +52,53 @@ export function failurePaths(output: string, cwd: string, root: string): string[
   return [...found];
 }
 
-export function failureNote(command: string, output: string, cwd: string, root: string, card: Card, cards: Card[]): string | undefined {
+// Files a Bash command wrote while other cards ran one too (lib/bash-writers.ts) are named "unknown", never
+// as another card's: the writer may well be this card, and telling it to leave its own breakage is worse.
+const UNKNOWN = [
+  "Weft can't tell which card wrote these (a Bash command or a process it started, like a subagent, wrote them while other cards ran commands too):",
+  "If your own commands or subagents wrote them, they're yours to fix.",
+];
+
+// The failing files whose writer is unknown and that no card claims, as the note's lines; none when there are none.
+function unknownLines(failing: string[], unknown: ReadonlySet<string>, claimed: (file: string) => boolean, root: string): string[] {
+  const files = failing.filter((p) => unknown.has(p) && !claimed(p));
+  if (!files.length) return [];
+  return [UNKNOWN[0] as string, ...files.slice(0, MAX_LINES).map((f) => `- ${path.relative(root, f)}: unknown`), UNKNOWN[1] as string];
+}
+
+export function failureNote(
+  command: string,
+  output: string,
+  cwd: string,
+  root: string,
+  card: Card,
+  cards: Card[],
+  unknown: ReadonlySet<string> = new Set(),
+): string | undefined {
   if (!FAILED.test(output) || !runsCheck(command, cwd)) return undefined;
   const owner = new Map<string, Card>();
   for (const other of busyInFolder(cards, workDir(card), card.id)) {
     for (const key of other.claims ?? []) if (!owner.has(splitClaim(key).file)) owner.set(splitClaim(key).file, other);
   }
-  if (!owner.size) return undefined;
-  const show = (file: string) => `- ${path.relative(root, file)}: ‘${(owner.get(file) as Card).title}’`;
+  const mine = new Set((card.claims ?? []).map((k) => splitClaim(k).file));
   const failing = failurePaths(output, cwd, root);
+  const unsureLines = unknownLines(failing, unknown, (f) => owner.has(f) || mine.has(f), root);
+  const unsure = unsureLines.length ? unsureLines.join("\n") : undefined;
+  if (!owner.size) return unsure;
+  const show = (file: string) => `- ${path.relative(root, file)}: ‘${(owner.get(file) as Card).title}’`;
   const theirs = failing.filter((p) => owner.has(p));
   if (theirs.length)
     return [
       "Some of these failures are in files another card is editing right now (cards share this working tree, so you see its unfinished work):",
       ...theirs.slice(0, MAX_LINES).map(show),
       "Leave those to that card: don't fix, revert or reformat them. Fix only what your own edits broke.",
+      ...unsureLines,
     ].join("\n");
   // Only source files can break a caller, and failures all in this card's own files are its own.
-  const mine = new Set((card.claims ?? []).map((k) => splitClaim(k).file));
   const open = [...owner.keys()].filter((f) => SOURCE.test(f));
-  if (!open.length || (failing.length && failing.every((p) => mine.has(p)))) return undefined;
+  if (!open.length || (failing.length && failing.every((p) => mine.has(p)))) return unsure;
   return [
+    ...unsureLines,
     "Other cards are mid-edit in this tree, so a failure here may be theirs (a signature they changed breaking a caller of yours, say):",
     ...open.slice(0, MAX_LINES).map(show),
     "If a failure traces back to one of those files, leave it to that card and say so, instead of fixing it yourself.",

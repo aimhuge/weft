@@ -40,13 +40,18 @@ export function dirtyFiles(root: string): string[] | undefined {
   }
 }
 
-// Of these files, the ones written at or after `since` (ms); a deleted one has no mtime and isn't.
-export function writtenSince(files: string[], since: number): string[] {
-  return files.filter((f) => {
+// Of these files, the ones written at or after `since` (ms), with when; a deleted one has no mtime and isn't.
+export function writtenAt(files: string[], since: number): Map<string, number> {
+  const at = new Map<string, number>();
+  for (const f of files) {
     try {
-      return fs.statSync(f).mtimeMs >= since;
+      const m = fs.statSync(f).mtimeMs;
+      if (m >= since) at.set(f, m);
     } catch {
-      return false;
+      // gone
     }
-  });
+  }
+  return at;
 }
+
+export const writtenSince = (files: string[], since: number): string[] => [...writtenAt(files, since).keys()];

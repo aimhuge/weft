@@ -22,13 +22,16 @@ vi.mock("./store", () => ({
 const dirty = { root: undefined as string | undefined, list: undefined as string[] | undefined };
 const repoRoot = vi.fn(() => dirty.root);
 const dirtyFiles = vi.fn(() => dirty.list);
-const writtenSince = vi.fn((files: string[]) => files);
+// Each file was written the moment the run started, unless a test says otherwise.
+const stamped = (files: string[], since: number) => new Map(files.map((f) => [f, since]));
+const writtenAt = vi.fn(stamped);
 
-vi.mock("./dirty-files", () => ({ repoRoot, dirtyFiles, writtenSince }));
+vi.mock("./dirty-files", () => ({ repoRoot, dirtyFiles, writtenAt }));
 
 const store = await import("./store");
 const { claimQuestion, claimWhy } = await import("./claim-guard");
 const { bashClaimHooks } = await import("./bash-claims");
+const writers = await import("./bash-writers");
 
 // A fake repo tree, all of it real under one root so the guards compare like paths.
 const root = "/weft-tree";
@@ -66,7 +69,8 @@ function post(
 beforeEach(() => {
   cards.clear();
   vi.clearAllMocks();
-  writtenSince.mockImplementation((files: string[]) => files);
+  writtenAt.mockImplementation(stamped);
+  writers.resetWriters();
   dirty.root = root;
   dirty.list = [];
   cards.set("me", card("me"));
@@ -119,11 +123,10 @@ describe("the PostToolUse hook", () => {
     cards.set("other", holder());
     await pre(() => "me", "pnpm build", "run1");
     dirty.list = [held, free];
-    writtenSince.mockImplementation((files: string[]) => files);
     await post(() => "me", "run1");
     // `held` is another busy card's, so it isn't claimed; `free` is.
     expect(cards.get("me")?.claims).toEqual([`${free}#*`]);
-    expect(writtenSince).toHaveBeenCalledWith(dirty.list, expect.any(Number));
+    expect(writtenAt).toHaveBeenCalledWith(dirty.list, expect.any(Number));
     expect(repoRoot).toHaveBeenCalledWith(root);
     expect(dirtyFiles).toHaveBeenCalledWith(root);
   });
@@ -132,7 +135,7 @@ describe("the PostToolUse hook", () => {
     dirty.list = [free];
     await post(() => "me", "never");
     expect(cards.get("me")?.claims).toBeUndefined();
-    expect(writtenSince).not.toHaveBeenCalled();
+    expect(writtenAt).not.toHaveBeenCalled();
   });
 
   it("ignores other events and a call with no tool use id", async () => {
@@ -150,7 +153,7 @@ describe("the PostToolUse hook", () => {
     dirty.root = root;
     dirty.list = undefined;
     expect(await post(() => "me", "r")).toEqual({});
-    expect(writtenSince).not.toHaveBeenCalled();
+    expect(writtenAt).not.toHaveBeenCalled();
     // A post with no tool use id never has a start time, so it claims nothing even inside a repo.
     dirty.list = [free];
     expect(await post(() => undefined, undefined)).toEqual({});
@@ -164,7 +167,7 @@ describe("the PostToolUse hook", () => {
     dirty.list = [held];
     await pre(() => "me", "git commit -m x", "commit");
     // Nothing new was written since the run, so only the release runs.
-    writtenSince.mockImplementation(() => []);
+    writtenAt.mockImplementation(() => new Map());
     await post(() => "me", "commit");
     // `free` and `committed.ts` are clean now; `held` is still dirty, and both outside-root files stay.
     expect(cards.get("me")?.claims).toEqual([`${other}/outside.ts#*`, "/other-tree/x.ts#*"]);
@@ -177,7 +180,7 @@ describe("the PostToolUse hook", () => {
     cards.set("other", card("other", { title: "Fix login" }));
     dirty.list = [free];
     await pre(() => "me", "ls", "keep");
-    writtenSince.mockImplementation(() => []);
+    writtenAt.mockImplementation(() => new Map());
     await post(() => "me", "keep");
     expect(store.updateCard).not.toHaveBeenCalled();
   });
@@ -189,7 +192,7 @@ describe("the PostToolUse hook", () => {
     const claims = cards.get("me")?.claims;
     await post(() => "me", "once");
     expect(cards.get("me")?.claims).toEqual(claims);
-    expect(writtenSince).toHaveBeenCalledTimes(1);
+    expect(writtenAt).toHaveBeenCalledTimes(1);
     expect(store.updateCard).toHaveBeenCalledTimes(1);
   });
 });

@@ -116,6 +116,34 @@ describe("failureNote", () => {
     expect(note).toContain("‘Fix login’");
   });
 });
+describe("files whose writer is unknown", () => {
+  const me = card("me");
+  const other = card("other", { title: "Fix login", claims: [`${a}#*`] });
+  const unknown = new Set([b]);
+
+  it("calls them unknown, never another card's, whether or not another card holds claims", () => {
+    const alone = failureNote("pnpm typecheck", `${b}(1,1): error TS1`, root, root, me, [me], unknown) as string;
+    expect(alone).toContain("- lib/b.ts: unknown");
+    expect(alone).toContain("they're yours to fix");
+    const both = failureNote("pnpm typecheck", `${a}(1,1): error TS1\n${b}(1,1): error TS1`, root, root, me, [me, other], unknown) as string;
+    expect(both).toContain("- lib/a.ts: ‘Fix login’");
+    expect(both).toContain("- lib/b.ts: unknown");
+    const maybe = failureNote("pnpm typecheck", `${b}(1,1): error TS1`, root, root, me, [me, other], unknown) as string;
+    expect(maybe).toContain("- lib/b.ts: unknown");
+    expect(maybe).toContain("may be theirs");
+    expect(maybe).not.toContain("lib/b.ts: ‘");
+  });
+
+  it("leaves out unknown files this card or another card claims, and stays quiet without a failure", () => {
+    const mine = card("me", { claims: [`${b}#*`] });
+    expect(failureNote("pnpm typecheck", `${b}(1,1): error TS1`, root, root, mine, [mine], unknown)).toBeUndefined();
+    expect(failureNote("pnpm typecheck", `${a}(1,1): error TS1`, root, root, me, [me, other], new Set([a]))).not.toContain("unknown");
+    expect(failureNote("pnpm typecheck", "No errors found", root, root, me, [me], unknown)).toBeUndefined();
+    // Only non-source files open elsewhere: the unknown list alone.
+    const docs = card("docs", { title: "Docs", claims: [`${path.join(root, "CHANGELOG.md")}#*`] });
+    expect(failureNote("pnpm typecheck", `${b}(1,1): error TS1`, root, root, me, [me, docs], unknown)).toMatch(/^Weft can't tell[\s\S]*lib\/b\.ts: unknown/);
+  });
+});
 describe("what counts as a check", () => {
   const me = card("me");
   const other = card("other", { title: "Fix login", claims: [`${a}#*`] });

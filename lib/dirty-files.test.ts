@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { dirtyFiles, parsePorcelain, repoRoot, writtenSince } from "./dirty-files";
+import { dirtyFiles, parsePorcelain, repoRoot, writtenAt, writtenSince } from "./dirty-files";
 
 const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "weft-dirty-")));
 const repo = path.join(tmp, "repo");
@@ -64,5 +64,6 @@ describe("writtenSince", () => {
     const since = Date.now() - 1000;
     fs.utimesSync(fresh, new Date(), new Date());
     expect(writtenSince([old, fresh, path.join(repo, "gone.ts")], since)).toEqual([fresh]);
+    expect(writtenAt([old, fresh], since)).toEqual(new Map([[fresh, fs.statSync(fresh).mtimeMs]]));
   });
 });
