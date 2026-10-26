@@ -21,9 +21,10 @@ const { serverInfo } = require("./server-info.cjs");
  * @param {() => object} opts.getSafeStorage Electron's safeStorage, once app is ready
  * @param {() => { url: string } | null} opts.getServer the running local server
  * @param {string} opts.token the launch token
+ * @param {(input: URL | RequestInfo, init?: RequestInit) => Promise<{ ok: boolean; status: number; text: () => Promise<string> }>} [opts.fetch] the fetch the live-data bridge uses (the real one, unless a test says)
  * @returns {{ account: () => Record<string, string> }} the handle main keeps
  */
-function setupMiniApps({ ipcMain, vault, dataDir, ownsPane, isBoard, supabaseReadLink, getSafeStorage, getServer, token }) {
+function setupMiniApps({ ipcMain, vault, dataDir, ownsPane, isBoard, supabaseReadLink, getSafeStorage, getServer, token, fetch: fetchImpl }) {
   return setupApps({
     ipcMain,
     vault,
@@ -33,6 +34,7 @@ function setupMiniApps({ ipcMain, vault, dataDir, ownsPane, isBoard, supabaseRea
     supabaseReadLink,
     getSafeStorage,
     server: serverInfo(getServer, token),
+    fetch: fetchImpl,
   });
 }
 

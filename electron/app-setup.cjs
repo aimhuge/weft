@@ -12,7 +12,7 @@ const { createAccountStore } = require("./account-store.cjs");
 // (touchIdConfirm bound, then app-data, app-data-fetch, app-secrets-push, account store).
 // getSafeStorage is a callback because Electron's safeStorage is only available after app
 // whenReady (electron/account-store.cjs).
-function setupApps({ ipcMain, vault, ownsPane, isBoard, dataDir, supabaseReadLink, getSafeStorage, server }) {
+function setupApps({ ipcMain, vault, ownsPane, isBoard, dataDir, supabaseReadLink, getSafeStorage, server, fetch: fetchImpl }) {
   if (!ipcMain) throw new Error("setupApps needs ipcMain.");
   if (!vault) throw new Error("setupApps needs the vault.");
   if (typeof ownsPane !== "function") throw new Error("setupApps needs ownsPane (pane.owns).");
@@ -79,6 +79,7 @@ function setupApps({ ipcMain, vault, ownsPane, isBoard, dataDir, supabaseReadLin
     serverUrl: () => server()?.url ?? "",
     token: () => server()?.token ?? "",
     owns: ownsPane,
+    fetch: fetchImpl,
   });
 
   return { account };

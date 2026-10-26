@@ -62,14 +62,42 @@ describe("setupMiniApps", () => {
       getSafeStorage: () => safeStorage,
       getServer: () => ({ url: "http://127.0.0.1:1024" }),
       token: "launch-token",
+      fetch: fetchImpl,
     });
     // The handler exists and answers only the pane's own main frame.
     const handler = handlers.get("live-data:read")!;
     const main = { id: "pane" };
     const owned = { ...main, mainFrame: main };
     const res = (await handler({ sender: owned, senderFrame: owned.mainFrame }, "/api/infra/live")) as { ok: boolean };
-    // No server is running, so the answer says so rather than throwing.
+    // The bridge asks the server with the launch token, on the path it was given.
+    expect(res.ok).toBe(true);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchImpl.mock.calls[0] as unknown as [URL, RequestInit];
+    expect(url.pathname).toBe("/api/infra/live");
+    expect((init.headers as Record<string, string>)["x-weft-token"]).toBe("launch-token");
+  });
+
+  it("says the server isn't running instead of throwing when there is no server", async () => {
+    handlers.clear();
+    const fetchImpl = vi.fn(() => Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve("{}") }));
+    setupMiniApps({
+      ipcMain,
+      vault: goodVault(),
+      dataDir: "/tmp",
+      ownsPane: () => true,
+      isBoard: () => true,
+      supabaseReadLink: vi.fn(() => Promise.resolve(null)),
+      getSafeStorage: () => safeStorage,
+      getServer: () => null,
+      token: "launch-token",
+      fetch: fetchImpl,
+    });
+    const handler = handlers.get("live-data:read")!;
+    const main = { id: "pane" };
+    const owned = { ...main, mainFrame: main };
+    const res = (await handler({ sender: owned, senderFrame: owned.mainFrame }, "/api/infra/live")) as { ok: boolean; error: string };
     expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/isn't running/);
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 });

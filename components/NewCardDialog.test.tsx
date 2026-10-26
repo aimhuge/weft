@@ -150,7 +150,11 @@ describe("NewCardDialog", () => {
     await userEvent.type(box, "Hi");
     await userEvent.click(screen.getByRole("button", { name: "Start now" }));
     // The dialog's default effort is "high" (lastEffort), which puku accepts.
-    expect(onCreate).toHaveBeenLastCalledWith(expect.objectContaining({ backend: "puku", effort: "high" }));
+    // waitFor, not an immediate assertion: the create is an async effect, and on a loaded machine
+    // (CI) it hasn't landed by the time the click's promise resolves.
+    await waitFor(() =>
+      expect(onCreate).toHaveBeenLastCalledWith(expect.objectContaining({ backend: "puku", effort: "high" })),
+    );
   });
 
   it("the model picker is the CLI picker: a model moves the thread to the CLI serving it", async () => {

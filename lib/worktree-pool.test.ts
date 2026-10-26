@@ -97,6 +97,9 @@ describe("the pool", () => {
   });
 
   it("checks out a branch you named that exists, makes a new one at HEAD, and keeps both after landing", async () => {
+    // Its own history: the commit that makes HEAD~1 exists must not depend on another test's side effect
+    // (the mac-only tests above are skipped on Linux CI).
+    commit("named-branch.ts");
     git(repo, "branch", "feat/old", "HEAD~1");
     const old = git(repo, "rev-parse", "feat/old");
     const wt = await takeWorktree({ id: "named000", title: "Named", cwd: repo, worktreeBranch: "feat/old" });
