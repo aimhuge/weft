@@ -1,3 +1,5 @@
+import { CRON_TOOL_NAMES } from "./cron-types";
+
 // The trust gate and prompts around the board's MCP tools. lib/board-tools.ts builds the tools
 // themselves; this file decides which ones skip the permission prompt and which is for the copilot.
 
@@ -13,7 +15,11 @@ You're in a small chat window, so keep replies short.`;
 // Starting, replying to, and answering for a thread run agents, so the user approves those.
 export const SAFE_BOARD_TOOLS = new Set(["list_cards", "read_thread", "create_card", "move_card", "stop_card", "set_tags", "setup_status", "request_folder_access",
   // The changelog tools only write the user's own log in ~/.weft (lib/changelog.ts).
-  "changelog_add", "changelog_list", "changelog_edit"]);
+  "changelog_add", "changelog_list", "changelog_edit",
+  // A cron only makes cards, as create_card does; the rail's Crons drawer shows every one a thread made (lib/cron-tools.ts).
+  ...CRON_TOOL_NAMES,
+  // Looking a skills.sh skill over only writes Weft's own copy and its review; skill_install asks (lib/skill-tools.ts).
+  "skill_preview", "skill_review"]);
 
 // This app's own tools (the browser pane, and the board tools: list_cards, create_card, and the copilot's others) skip the prompt.
 // source is the MCP server's type; only in-process ("sdk") servers are Weft's own.

@@ -14,7 +14,7 @@ const logError = (err: unknown) => console.error(err);
 export default function SkillsChip({ card, notify = logError }: { card: Card; notify?: (err: unknown) => void }) {
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
-  const { view, toggle } = useSkillSet({ card: card.id }, true, notify);
+  const { view, toggle, reload } = useSkillSet({ card: card.id }, true, notify);
   const changed = (card.skillsOn?.length ?? 0) + (card.skillsOff?.length ?? 0);
   useEscape(open, () => setOpen(false));
 
@@ -43,7 +43,7 @@ export default function SkillsChip({ card, notify = logError }: { card: Card; no
           <p className="border-b border-line px-3 py-2 text-[11.5px] text-muted">
             For this card only. Applies from your next message; the project’s default is in ✦ on the rail.
           </p>
-          <SkillSetList view={view} forCard onToggle={toggle} />
+          <SkillSetList view={view} forCard onToggle={toggle} cwd={card.cwd} onInstalled={reload} />
         </div>
       )}
     </div>

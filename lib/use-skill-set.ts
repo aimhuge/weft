@@ -15,6 +15,10 @@ export function useSkillSet(where: SkillSetWhere | null, active: boolean, notify
   const view = loaded?.key === key ? loaded.view : null;
   const setView = useCallback((next: SkillSetView) => setLoaded({ key, view: next }), [key]);
 
+  // Bumped to load again, as when a skill was just installed.
+  const [loads, setLoads] = useState(0);
+  const reload = useCallback(() => setLoads((n) => n + 1), []);
+
   useEffect(() => {
     if (!where || !active) return;
     let live = true;
@@ -24,7 +28,7 @@ export function useSkillSet(where: SkillSetWhere | null, active: boolean, notify
     };
     // `key` stands for `where`, which callers build fresh each render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, active, setView]);
+  }, [key, active, setView, loads]);
 
   const toggle = useCallback(
     (name: string, on: boolean) => {
@@ -36,5 +40,5 @@ export function useSkillSet(where: SkillSetWhere | null, active: boolean, notify
     [key, notify, setView],
   );
 
-  return { view, toggle };
+  return { view, toggle, reload };
 }

@@ -11,7 +11,7 @@ import SkillSetList from "./SkillSetList";
 export default function SkillsDrawer({ project, folders, notify }: { project: string | null; folders: string[]; notify: (err: unknown) => void }) {
   const [picked, setPicked] = useState<string | null>(null);
   const cwd = project ?? picked ?? folders[0] ?? null;
-  const { view, toggle } = useSkillSet(cwd ? { cwd } : null, true, notify);
+  const { view, toggle, reload } = useSkillSet(cwd ? { cwd } : null, true, notify);
   if (!cwd) return <p className="px-3 py-3 text-[12px] text-muted">Open a project on the board to see its skills.</p>;
   const hidden = view ? skillsOffCount(view.rows) : 0;
   return (
@@ -26,7 +26,7 @@ export default function SkillsDrawer({ project, folders, notify }: { project: st
         )}
         <p className="mt-1">New threads here get these. {hidden > 0 && `${hidden} skills kept out.`} Hidden skills still run when you type /name.</p>
       </div>
-      <SkillSetList view={view} forCard={false} onToggle={toggle} />
+      <SkillSetList view={view} forCard={false} onToggle={toggle} cwd={cwd} onInstalled={reload} />
     </div>
   );
 }
