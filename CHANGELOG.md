@@ -8,6 +8,8 @@ lands; a release moves those lines under its version and tags the commit `vX.Y.Z
 
 ## [Unreleased]
 
+## [0.6.3] - 2026-10-26
+
 ### Added
 
 - **A progress bar when you clone a repo.** Cloning from the repo picker or the project menu's Clone from GitHub now shows how far git has got (receiving objects with size and speed, resolving deltas, checking out) instead of a bare "Cloning…" (`lib/clone-progress.ts`, `components/CloneProgress.tsx`, `components/ProjectCloneForm.tsx`).
