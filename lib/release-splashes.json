@@ -1,4 +1,11 @@
 {
+  "0.6.3": {
+    "lines": [
+      "Cloning shows its progress, so you know what's happening before your thread starts.",
+      "Fold any column to a strip, and let the fullest ones spread out when you need the room.",
+      "Press Z to reopen the last card you had open, so you never lose your place."
+    ]
+  },
   "0.6.2": {
     "lines": [
       "Your board now reads like a spreadsheet: every card on one sheet, searchable as you type",
