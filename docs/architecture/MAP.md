@@ -30,6 +30,7 @@ matching doc below. When a feature lands, add or update its entry here and in it
 - `blastcp.md` — the BlastCP rail drawer: OAuth+PKCE, MCP-tool reads, `~/.weft/blastcp-links.json`.
 - `connectors.md` — Settings → Connectors: CLIs your threads use for your own accounts; gog (Google Workspace) shipped in the toolchain, its OAuth client and browser sign-in.
 - `simulators.md` — `mcp__simulator__*`: iOS simulators and Android emulators through simctl, adb and AXe, the live view in the pane, Settings → Connectors → Simulators.
+- `site-notes.md` — shared notes about the sites the browser pane drives: the per-card trail, the after-turn Haiku capture, what `open_url` hands a card (wrapped as untrusted reference data), the local / team / public tiers on weft.zip (`site_notes`, `site_note_versions`, `site_note_reports`, service-role only), confirmation by 3 other users, staleness, and the scrub and safety pipeline.
 - `agent-browser.md` — how threads drive the browser pane: the accessibility snapshot and its refs, real mouse and key input, hover, viewport sizes, and CDP console and network errors (`electron/pane-ax.cjs`, `pane-input.cjs`, `pane-keys.cjs`, `pane-cdp.cjs`).
 - `crons.md` — crons: a thread run again on a schedule as a new card (fork or fresh), the ⏰ editors in the rail, thread header and New thread, run stacks on the board, the create_cron tools, and the two crons Weft runs for itself (the weekly repo analysis and the daily growth summary).
 - `slack.md` — the Slack rail drawer: bot + app tokens in the Keychain, Socket Mode in main, commits/pushes (reflog), deploys and card status to a channel, `/weft` and @Weft start cards, weft.zip card links, a channel per kind of update, and growth (new user, new team, payment) with a daily summary.
@@ -54,14 +55,14 @@ matching doc below. When a feature lands, add or update its entry here and in it
 - `welcome-tour.md` — the welcome's narrated 96-second tour: three HyperFrames pages, the live player and beat messages, Kokoro voice and pad, the MP4 render for weft.zip.
 - `welcome-dialog.md` — the welcome dialog itself: first launch vs. the replay preview, the steps and their chrome, and why a replay closes on Escape, the backdrop and ✕ while first launch does not.
 - `feedback.md` — the feedback dot in the footer's corner: Haiku's interview (`lib/feedback.ts`, `lib/use-feedback.ts`, `app/api/feedback`), the summary-only wrap-up, the copy in `~/.weft/feedback`, and weft.zip's collector (`lib/feedback-send.ts`, `app/api/feedback/collect`) that stores it in `public.feedback` and posts it to the team's Slack webhook. The dot names itself on hover ("Feedback"); the collector needs both halves up (the table applied and the webhook on Vercel) or a summary reaches weft.zip and no channel.
-- `feature-intros.md` — the narrated video each tool drawer, the New thread dialog (in the browser pane, `lib/pane-intro.ts`), the code quality dialog and the leagues play once: the pages in `public/intros/`, the splash poster every one opens on (the feature's own icon, its name and one line about what it does), `pnpm intros:narrate`, the render (`pnpm intros:render` / `pnpm intros:encode` / `pnpm intros:verify`, `scripts/render-intros.mjs`, `scripts/encode-intros.sh` and `scripts/verify-intros.sh`) and the blank-frame trap that makes a broken render look finished, when `useFeatureIntro` opens one (big, in a ¾-window modal that shrinks into the drawer and plays on; a click pauses it, and so does a dialog or achievement opening over it, `lib/intro-cover.ts`), the seen set in `localStorage` and Reset tips.
+- `feature-intros.md` — the narrated video each tool drawer, the New thread dialog (in the browser pane, `lib/pane-intro.ts`; the pane shows the splash with rotating tips from `lib/new-thread-tips.ts`, each drawer's with ▶ Watch), the code quality dialog and the leagues play on ▶, never on their own: the pages in `public/intros/`, the splash poster every one opens on (the feature's own icon, its name and one line about what it does), `pnpm intros:narrate`, the render (`pnpm intros:render` / `pnpm intros:encode` / `pnpm intros:verify`, `scripts/render-intros.mjs`, `scripts/encode-intros.sh` and `scripts/verify-intros.sh`) and the blank-frame trap that makes a broken render look finished, when `useFeatureIntro` opens one (big, in a ¾-window modal that shrinks into the drawer and plays on; a click pauses it, and so does a dialog or achievement opening over it, `lib/intro-cover.ts`), the seen set in `localStorage` and Reset tips.
 - `gamification.md` — the header's 🔥 chip and "Your loom" dialog: streaks, XP, badges, the builder card, the production-ready tree.
 - `quality.md` — the header's code quality checklist: coverage, file size, lint, types, guardrails; the refactor scout and the score's last 10 points.
 - `commit-pile.md` — the header's "+N/-N" uncommitted counter and the Review card that walks the pile to a clean commit.
 - `updates.md` — the Squirrel.Mac JSON feed, the download fallback, the tag-triggered signed release, `CHANGELOG.md` notes.
 - `changelog.md` — every project's changelog in `~/.weft/changelog.jsonl` and `changelog_entries`: the `mcp__board__changelog_*` tools, the commit stamp, the Changelog dialog, releasing into CHANGELOG.md.
 - `keep-working.md` — the menu bar icon's switch to keep the Mac awake with the lid shut so threads keep running in a bag.
-- `analytics.md` — GA4 and PostHog on every weft.zip page, never on a local board: the host and `isDeployed()` gates, `track()`, the event table, `data-track` links.
+- `analytics.md` — GA4 and PostHog on every weft.zip page after the visitor's consent, never on a local board: the consent banner, the host and `isDeployed()` gates, `track()`, the event table, `data-track` links.
 - `faq-site.md` — `docs/FAQ.md` as the weft.zip FAQ: the home page's six questions, `/faq` rendering the whole file, how GitHub-shaped paths, image rows and heading ids map onto the site.
 - `marketing-site.md` — the weft.zip home page's own sections: the content split across `lib/home.ts` / `lib/home-release.ts` / `components/home/*`, the pricing section reading its prices off the billing catalog, `loadHome()`'s parse-error fallback, and `data-track`.
 - `cloud-sync.md` — server-side cards: the outbox, the content-addressed blob store, thread paging, the `cloud_*` tables and their policies.
@@ -72,7 +73,7 @@ matching doc below. When a feature lands, add or update its entry here and in it
 - `limits-burndown.md` — the status strip's `5hr` / `7d` hover chart: a week of 15-minute bars for the 5-hour limit left against the weekly one, and why each CLI has its own plan.
 - `worktrees.md` — isolated cards, the opt-in git worktree per card: its CLI, Bash, dev server and commits live there, and Done lands its branch back.
 - `copilot-personas.md` — the copilot's personas (Wingman, Founder, Captain): the prompt each adds, the lane header picker, why a switch starts a new chat.
-- `agents.md` — a card's agent, the soul that opens its system prompt (Builder, Weft's own; Copywriter, Weft's voice): the New thread picker, the card menu switch that resumes under the new soul, why agents skip spares.
+- `agents.md` — a card's agent: the soul that opens its system prompt and the skills it turns off (Builder, Weft's own; Copywriter, Weft's voice; yours from Settings → Agents): editing and resetting built-ins from GitHub, each project's default, the pickers, why agents skip spares.
 
 When a new doc lands in this folder, add it here on the same change.
 
@@ -88,7 +89,8 @@ When a new doc lands in this folder, add it here on the same change.
   `electron/pane-error.cjs` shows a failed load's reason, with Try again and Back, instead of Chromium's blank page.
   `electron/pane-cdp.cjs` is each page's one CDP session (console and failed-request buffers); `electron/pane-input.cjs`
   drives the page through it (trusted click, keys, type, select, scroll, wait, viewport, snapshot routes) with
-  `electron/pane-ax.cjs` (the accessibility outline and its refs) and `electron/pane-keys.cjs` (docs/architecture/agent-browser.md).
+  `electron/pane-ax.cjs` (the accessibility outline and its refs), `electron/pane-keys.cjs` and `electron/pane-element.cjs`
+  (the one way a page's element is found, by ref or selector; docs/architecture/agent-browser.md).
 - `electron/menus.cjs` + `electron/keep-working.cjs`: app menu, menu bar icon, dock; Keep Working (awake with the lid shut, until threads finish).
 - `electron/updater.cjs` (+ `electron/update-window.cjs`, the Software Update window) + `scripts/release-feed.mjs` + `.github/workflows/release.yml`: updates from GitHub Releases (Squirrel.Mac's JSON
   feed, a download fallback when unsigned, a quiet install once nothing runs and nobody's at the Mac) and the tag-triggered signed release; `CHANGELOG.md` holds each version's notes, which Weft commits itself after a version bump (docs/architecture/updates.md).
@@ -100,6 +102,14 @@ When a new doc lands in this folder, add it here on the same change.
   isolated cards, opt-in: `card.isolated` / `card.worktree`, a worktree under `~/.weft/worktrees/<repo>/<id>` on `weft/<slug>` from a warm pool (APFS clone of node_modules, offline install; ~20 ms to take), held first send (`sendMessage` → `isolate`), `workDir(card)` for the CLI, claims, `!` shell and dev servers (own `PORT`), the folder gate's fence and the git guard's own-worktree rule, and landing on Done (`settleWrapUp`/`archiveWhenIdle` → `hooks.land`: commit, rebase, `merge --ff-only`) (docs/architecture/worktrees.md).
 - `lib/folder-guard.ts` + `app/api/folders`: the folder gate, a PreToolUse hook that asks before a file tool or Bash command reaches outside the card's project (Allow once / This card / Always, `settings.allowedFolders`; Settings → General's **Trusted folders** row adds one through the same POST and `DELETE` on that route is the revoke, since "Always" is otherwise a one-way door); in every thread via `guardedCli()` (docs/architecture/thread-guards.md).
 - `electron/terminal.cjs` + `components/TerminalDrawer.tsx`: the terminal drawer (node-pty shell over IPC, xterm.js).
+- `lib/card-repoint.ts`: the one rule for re-pointing a card that is already running — refuse while a turn is
+  running, end the CLI's session, then patch the card. The order is the point: the session's wind-down can write the
+  card's session id and stats back, so the patch comes last. Its callers keep the runner they already reach for
+  (`lib/backend-switch.ts` through `runner-state`'s hooks, the card route through `lib/runner.ts`).
+- `lib/card-starter.ts`: the one way to start a card to do one thing — make it, let the caller set it up, then start
+  its first turn. The setup step is where a Slack card is posted to its channel and saved (`lib/slack-inbound.ts`), so a
+  turn that fails at once lands in the card's own thread rather than opening a stray one; the theme card
+  (`lib/custom-themes.ts`) and the cloud inbox (`lib/cloud-inbox.ts`) start their cards the same way.
 - `lib/runner.ts`: one Agent SDK `query()` per Claude Code or puku thread, its public API (send, queue, stop, retry, login); Codex uses `lib/codex-runner.ts` with `codex exec --json` and resumes by session id. Behind it
   `lib/runner-state.ts` (sessions, shared maps, `hooks` back into runner.ts: the modules below it, `lib/backend-switch.ts` and `lib/classifier-denial.ts` among them, send, end and re-point a thread through `hooks.send`/`endSession`/`setModel`, so nothing imports runner.ts back and no load-time cycle runs through it), `lib/done-override.ts` (puts back the model a Done move swapped in), `lib/runner-session.ts` (start and drive a CLI,
   warm spares, the BUILD fingerprint), `lib/runner-turn.ts` (what the CLI sends during a turn; `lib/runner-tasks.ts` writes a `<task-notification>` row when a background task ends) `lib/runner-steer.ts` (a message sent mid-turn goes into the CLI, which takes it in after its next tool call; docs/architecture/threads-and-sessions.md#mid-turn-messages) and `lib/runner-ask.ts` (permissions; an MCP server's elicitation, such as the Supabase MCP confirming destructive SQL, comes to Needs you through `onElicitation` in `lib/elicitation.ts` with its form in `components/ElicitationForm.tsx`, docs/architecture/thread-guards.md#mcp-elicitations; auto mode's classifier denials, which never reach `canUseTool`, are asked about after the turn by `lib/classifier-denial.ts`: **Allow once and retry** / **Keep denied**, docs/architecture/thread-guards.md#auto-modes-classifier-denials);
@@ -139,7 +149,7 @@ When a new doc lands in this folder, add it here on the same change.
   checkout/restore or `clean -f` in the shared tree), `lib/check-guard.ts` (no `tsc` or `eslint` run directly where the
   project's `pnpm typecheck`/`pnpm lint` take turns through `scripts/one-at-a-time.mjs`; plain Claude Code sessions get it from `.claude/settings.json`), `lib/route-import-guard.ts` (refuses an edit that makes `app/**/page.tsx`,
   a layout, a `route.ts` or middleware import a module that isn't there yet, or export a segment config cacheComponents refuses; `lib/prerender-check.ts`), `lib/claim-guard.ts` (symbol claims: asks before an edit to a top-level
-  symbol another busy card is editing, with **Wait** until it lets go, `lib/permission-wait.ts`, or **Me first** / the holder's **You first** to put the held card ahead, `lib/precedence.ts` + `lib/yields.ts` + `lib/waits-on.ts` + `components/YouFirst.tsx`, with both cards' faces on the prompt, `components/CardFace.tsx`; `lib/claims.ts`, parsed by `lib/symbols.ts`; the prompt's readable diff and reason chip are `lib/edit-preview.ts` + `components/PermissionInput.tsx`), and for Bash `lib/bash-claims.ts` (asks before a line that writes a claimed file, claims what Bash wrote while no other card's Bash ran (`lib/bash-writers.ts`; else the writer is unknown and nobody claims it), drops claims on files `git status` sees clean, tells a failed check which failures are another card's: `lib/bash-writes.ts`, `lib/dirty-files.ts`, `lib/failure-owners.ts`) (docs/architecture/thread-guards.md).
+  symbol another busy card is editing, with **Wait** until it lets go, `lib/permission-wait.ts`, or **Me first** / the holder's **You first** to put the held card ahead, `lib/precedence.ts` + `lib/yields.ts` + `lib/waits-on.ts` + `components/YouFirst.tsx`, with both cards' faces on the prompt, `components/CardFace.tsx`; `lib/claims.ts`, parsed by `lib/symbols.ts`; the prompt's readable diff and reason chip are `lib/edit-preview.ts` + `components/PermissionInput.tsx`), and for Bash `lib/bash-claims.ts` (asks before a line that writes a claimed file, claims what Bash wrote while no other card's Bash ran (`lib/bash-writers.ts`; else the writer is unknown and nobody claims it), drops claims on files `git status` sees clean, tells a failed check which failures are another card's: `lib/bash-writes.ts`, `lib/dirty-files.ts`, `lib/failure-owners.ts`) (docs/architecture/thread-guards.md). The two guards share the flow itself — read the card, prune the yields, look for a clash, ask — in `lib/claim-hooks.ts`; they differ only in how the claim keys are worked out.
   Codex gets the filtered `cliEnv()` but not these per-tool hooks; `lib/codex-runner.ts` asks it not to read `.env` files. It does get
   Weft's MCP tools, over HTTP: `lib/weft-mcp.ts` builds the servers every CLI gets, `lib/mcp-bridge.ts` opens a per-turn token and
   `app/api/mcp/[server]` serves them to `codex exec --config mcp_servers.*`. Puku and Codex don't read `.claude/skills` or Codex `CLAUDE.md`,
@@ -155,9 +165,11 @@ When a new doc lands in this folder, add it here on the same change.
   Weft writes and commits CHANGELOG.md alone, in the background; a commit that bumps package.json's version gets that version's section.
   Nobody runs a release step (`pnpm changelog:release`, `lib/changelog-release.ts`, is only for a bump Weft didn't see). The read-only dialog opens from the project menu and the palette (docs/architecture/changelog.md).
 - `lib/schedule.ts` + `lib/scheduler.ts` + `components/SendLater.tsx`: "Send later" replies; the server sends them at their
-  time, by default the next 5-hour reset.
+  time, by default the next 5-hour reset. A message held on a card waits for a reason — the restart, the card's own turn, a free
+  thread slot, or a time the user picked — and `lib/scheduled-hold.ts` is the one place that writes it, so the flag saying when it
+  goes lives in one file. The server's polls run on `lib/tick-clock.ts`, the one 15-second clock the scheduler and the crons share.
 - `lib/cron-schedule.ts` + `lib/crons.ts` + `lib/cron-run.ts` (+ `lib/cron-store.ts`, `lib/cron-tools.ts`, `lib/cron-form.ts`, `lib/cron-stacks.ts`,
-  `components/CronButton.tsx`, `CronsDrawer.tsx`, `CronStack.tsx`): crons, a thread run again on a schedule, each run a new
+  `lib/cron-fold.ts`, `components/CronButton.tsx`, `CronsDrawer.tsx`, `CronSwitch.tsx`, `CronStack.tsx`): crons, a thread run again on a schedule, each run a new
   card forked from the source (`Card.forkOf` → `forkSession` in `specFor`) or fresh; the rail's ⏰ drawer and the stacked runs
   (docs/architecture/crons.md).
 - `lib/thread-slots.ts` (+ `maxThreads()` in `lib/settings.ts`, `holdSend` in `lib/runner.ts`, `freeSlots` from the turn end and `lib/scheduler.ts`):
@@ -192,6 +204,8 @@ When a new doc lands in this folder, add it here on the same change.
   the plan, and picking another model in the composer changed nothing.
 - `components/SettingsDialog.tsx` + `lib/settings-nav.ts`: Settings, full window over a scene, pages down the left (General, Laptop mode, Models,
   Threads, Security, Automations, Shortcuts, Accounts, Teams, Sync); Laptop mode is `components/LaptopModeCard.tsx` + `LaptopModeRules.tsx` over `electron/keep-working*.cjs`; Models holds every model pick, new threads' through `components/NewThreadDefaults.tsx`;
+  the settings themselves live in `lib/settings.ts` (the front every caller imports), with the model picks in
+  `lib/settings-models.ts` and the file on disk and its read/write pair in `lib/settings-store.ts`;
   the four rows (NewThreadDefaults, SubagentPicker, CopilotPicker, DonePicker) share `components/Pickers.tsx`
   (`ModelPicker`, `EffortPicker`) on top of `components/ModelSelect.tsx`, every model menu in Weft: one optgroup per CLI ("Claude Code", "puku-cli", "Codex", "Goose") driven by `MODELS` in `lib/new-thread.ts`, Goose's models only when a saved provider key serves them (`setUpGooseModels` in `lib/goose-provider.ts`). Given `cli`, the menu is the CLI picker too (a `<CLI> default` row heads each CLI): the New thread dialog (`pickCliDefault` in `lib/use-new-card-dialog.ts`) and Settings → Models → New threads use it, so neither has a separate CLI control. `components/ModePicker.tsx` is a menu, not a native select, so each permission mode shows what it does under its name.
   Every model any CLI serves is on offer in every one of them, and there is no default model: `NO_MODEL` ("") is
@@ -266,6 +280,9 @@ When a new doc lands in this folder, add it here on the same change.
   Analytics: GA4 (`components/GoogleAnalytics.tsx`, in `app/layout.tsx` when `isDeployed()`) and PostHog (`instrumentation-client.ts`) on every
   weft.zip page and never on a local board (`lib/analytics-gate.ts` refuses local hosts, `lib/analytics-server.ts` the server off Vercel);
   `lib/analytics.ts` `track()` sends one event to both, and `data-track` attributes let server components' links opt in (docs/architecture/analytics.md).
+  Both wait for consent: `components/ConsentBanner.tsx` (in `app/layout.tsx` when `isDeployed()`) stores the visitor's answer through `lib/consent.ts`
+  (`whenConsented()` starts PostHog, the GA snippet fetches gtag.js only on a yes); `app/privacy/page.tsx` is the Privacy Policy, beside
+  `app/terms/page.tsx`, with `components/ConsentChoice.tsx` to change the answer; both are in the footer (`components/home/HomeChrome.tsx`).
   The one desktop exception: anonymous onboarding stats (`lib/telemetry.ts` + `lib/telemetry-events.ts` allow-list + `lib/telemetry-send.ts` + `app/api/telemetry` → weft.zip `app/api/telemetry/collect` (capped per address and refused cross-site by `lib/telemetry-limit.ts` on `lib/fixed-window.ts`) → PostHog; switch `components/StatsSwitch.tsx`, `~/.weft/telemetry.json`).
 - `components/FeedbackDot.tsx` + `components/FeedbackChat.tsx` + `lib/use-feedback.ts` + `lib/feedback.ts` + `lib/feedback-store.ts` + `lib/feedback-send.ts` + `app/api/feedback` (`/send`, and weft.zip's `/collect`): the feedback dot at the right end of the footer. Haiku interviews you, you check its summary, and it's kept in `~/.weft/feedback`, stored in `public.feedback` and posted to the team's Slack (docs/architecture/feedback.md).
 - `lib/slack-oauth.ts` + `lib/slack-webhook-store.ts` + `app/api/slack/oauth` (`/install`, `/callback`): the Slack OAuth install that hands over the feedback channel's incoming webhook. Slack has no Web API method for incoming webhooks, so the address can only be *given*, by an install — `/install` sends the user to the channel picker, `/callback` exchanges the code (with the app's Client ID and Secret) and stores the URL in `public.slack_webhooks`, where the collector reads it. The URL is a credential, so it never passes through a log or a page (docs/architecture/feedback.md).
@@ -297,7 +314,7 @@ When a new doc lands in this folder, add it here on the same change.
   `lib/use-anchor-rect.ts` + `components/EmptyBoardStart.tsx`: after the welcome, the empty board's start panel (New thread, the welcome's starters) once the board has loaded with no cards and no filter.
 - `public/intros/<id>.html` + `public/intros/player.js` + `public/intros/kit.css` + `public/intros/splash-timing.js` + `lib/feature-intros.ts` + `lib/use-feature-intro.ts` +
   `components/FeatureIntro.tsx`: the short narrated video each tool drawer, the New thread dialog, the code quality dialog and the
-  leagues play the first time you open them (docs/architecture/feature-intros.md). Each page is plain HTML plus a paused GSAP
+  leagues play when you press ▶ by the title, never on their own (docs/architecture/feature-intros.md). Each page is plain HTML plus a paused GSAP
   timeline; `player.js` plays it live (`?live=1`, with its own voice), injects the splash poster every intro opens on (the feature's
   own icon, its name and one line about what it does, read out of the page's `.head` row) and takes `?t=` to hold a frame. The
   splash's timing (hold, fade, lead) is in `splash-timing.js`, which the page and the three render scripts read, so the poster's
@@ -329,6 +346,7 @@ When a new doc lands in this folder, add it here on the same change.
   touching different files (no worktrees, so overlap is the constraint); starts a sprint's cards only on your OK.
 - `lib/sprints.ts` + `lib/sprint-store.ts` + `app/api/sprints` + `lib/use-sprints.ts` + `components/BacklogActions.tsx` + `components/SprintsMenu.tsx`: saved sprints, the Backlog header's flag (Save as sprint) and
   Archive all (asks first), and the list under the "Backlog" title (Restore, rename, delete), in `~/.weft/sprints.json`; ⌘B in New thread adds to the Backlog (`isBacklogKey` in `components/submit-keys.ts`).
+  The header's chevron folds Backlog to a strip (`components/FoldedColumn.tsx`, drawn by `components/BoardColumns.tsx`), remembered in the `weft-backlog-folded` cookie (`backlogFolded` in `lib/board-prefs.ts`).
 - `lib/card-pictures.ts`: a card's thumbnail (latest thread image, or a pane capture after each turn from `lib/show.ts`) and its Haiku emoji tile; `lib/retitle.ts` renames a card with a placeholder title ("Image attachment") after its turn (`titleBy` marks a name Weft or you chose) and gives an untagged card 1 to 3 tags in the same Haiku call (`tagsBy`); `components/CardView.tsx` draws the card.
 - `lib/tags.ts` + `lib/tag-store.ts` + `app/api/tags` + `lib/rail-view.ts` + `components/LibraryRail.tsx` (`SideRail`) + `components/TagsDrawer.tsx` +
   `components/TagsDialog.tsx` + `components/CardMarks.tsx` + `components/StarButton.tsx`: ★ star (never auto-archived; the rail's ★ filters
@@ -337,6 +355,9 @@ When a new doc lands in this folder, add it here on the same change.
 - `lib/project-open.ts` (the project-open hook `touchProject` fires for a folder new to the list) + `lib/project-seed.ts` + `lib/project-seed-find.ts` +
   `lib/project-seed-run.ts` + `app/api/projects/seed`: a new project's starter Backlog, up to 6 parked cards once per project (`~/.weft/project-seeds.json`),
   Re-seed Backlog (`components/ReseedButton.tsx` in `components/ProjectMenu.tsx`), and the copilot's `SEED_SOURCE` chips (docs/architecture/project-seed.md).
+- `lib/repos.ts` + `lib/clone-progress.ts` + `app/api/repos/clone` + `lib/use-clone-progress.ts` + `components/CloneProgress.tsx`: cloning a GitHub
+  repo from the repo picker (`components/RepoChoiceRow.tsx`) or the project menu (`components/ProjectCloneForm.tsx`) runs `gh repo clone … -- --progress`,
+  turns git's redrawn progress lines into one weighted percent per repo in memory, and the row or form polls `GET /api/repos/clone?fullName=` every 400 ms for a bar.
 - `lib/github-issues.ts` + `app/api/github/issues`: a project's open GitHub issues become Backlog cards through the `gh` CLI, labels as tags,
   one direction; opt-in folders in settings `issueFolders`, polled from `prewarm()` every 5 min (docs/architecture/github-issues.md).
   `lib/github-status.ts` + `app/api/github` + `lib/github-view.ts` + `lib/use-github.ts` + `components/GithubDrawer.tsx`: the rail's GitHub drawer
@@ -358,7 +379,7 @@ When a new doc lands in this folder, add it here on the same change.
 - `lib/teams.ts` + `lib/team-actions.ts` + `lib/web-session.ts` + `lib/web-auth.ts` + `proxy.ts` + `app/auth/*` + `app/team` +
   `app/[orgSlug]/*` + `app/invite/[token]` + `components/team/*`: Weft teams on weft.zip (workspaces, roles, email invites; every
   account gets one through `supabase/migrations/20261013155754_teams.sql`), on the visitor's own cookie session. Uses `@aimhuge/teams`
-  (`vendor/*.tgz`) for its helpers only: its `requireOrg` and actions pass a client into `"use cache"`, which Next 16 refuses, so the
+  (`vendor/*.tgz`) for its helpers only; workspace slugs skip `lib/reserved-slugs.ts` (the package's words plus every `app/` root folder, kept in step with `private.org_slug_for` by its test): its `requireOrg` and actions pass a client into `"use cache"`, which Next 16 refuses, so the
   gate is Weft's own. Never pass the gate's `service` client to a client component (docs/architecture/teams.md, teams-vault.md).
   Project access: `lib/team-project-access.ts` (who sees each linked project, `org_project_members`) + `components/team/ProjectAccess.tsx`
   (the **Access** checklist on a project row, for owners and admins).
@@ -381,11 +402,13 @@ When a new doc lands in this folder, add it here on the same change.
   on a name that already has a value it says so and changes nothing. `mcp__secrets__set_value` stores a value the thread made or got
   (adds, fills a blank, or with `replace: true` overwrites), Touch ID each time (`electron/vault-routes.cjs`).
   `electron/vault-ipc.cjs` is the board window's IPC, `electron/vault-unlock.cjs` the Touch ID unlock timer.
+  `electron/vault-access.cjs` is the one place that decides whether a card may use a vault and how it was allowed
+  (the audit log's `via` word): the fill, a command run with secrets, and a grant all ask it.
 - `electron/keychain-audit.cjs` + `lib/keychain-audit-sync.ts` + `components/KeychainAccess.tsx`: the Keychain audit log
   (docs/architecture/secrets.md#audit-log). Every `safeStorage` open or seal (`keychainFor(what)`) and every vault value use is a line,
   kept in the `keychain_events` table, not on the Mac: `~/.weft/vault/audit.jsonl` is only the outbox (numbered, deleted once uploaded,
   every 5 s while signed in). Settings → Security → Keychain access reads it back with whose it was (`lib/keychain-audit-record.ts`,
-  `app/api/account/keychain-events`, `lib/keychain-audit-view.ts`, `lib/use-keychain-access.ts`).
+  `app/api/account/keychain-events`, `lib/keychain-audit-view.ts`, `lib/keychain-audit-types.ts` for the shapes, `lib/use-keychain-access.ts`).
 - `electron/vault-grants.cjs`: thread grants (docs/architecture/secrets.md#thread-grants). One Touch ID lets a card fill, run and
   start its dev server with one vault's secrets for an hour; from the card menu or `mcp__secrets__request_access`.
 - `lib/project-intake.ts` + `lib/intake-scan.ts` + `lib/provider-hints.ts` + `app/api/projects/intake` + `electron/vault-intake.cjs`: the project
@@ -428,15 +451,22 @@ When a new doc lands in this folder, add it here on the same change.
   are `@container`s that drop thumbnails and header extras. `lib/copilot-personas.ts` + `components/CopilotPersonaMenu.tsx`: who the copilot is (Wingman, Founder after
   founder-skill, Captain after gstack), picked from its name in the lane header; `card.persona` → `Spec.persona` → its prompt after
   `COPILOT_PROMPT`, and a switch starts a new chat (docs/architecture/copilot-personas.md).
-- `lib/agents.ts`: who a card's thread is, its soul (Builder, Weft's own; Copywriter, Weft's voice and style guide);
-  `card.agent` → `Spec.agent` → `weftSystemPrompt` opens with that soul. Picked in the New thread dialog
-  (`NewCardDialogControls` `AgentSelect`) or by the `create_card` tools, switched from the card menu (`PATCH { agent }`
-  ends the CLI; the next turn resumes under the new soul), shown as an emoji in `CardFooterMeta` (docs/architecture/agents.md).
+- `lib/agents.ts` + `lib/agents-built-in.json` + `lib/agent-store.ts` + `app/api/agents/*`: who a card's thread is, its soul and
+  the skills it turns off (Builder, Weft's own; Copywriter, Weft's voice; yours). `~/.weft/agents.json` keeps your agents, your
+  edits over the built-ins (Reset pulls the JSON from GitHub) and each project's default; `card.agent` → `Spec.agent` →
+  `weftSystemPrompt` opens with that soul and `offFor` adds its skills off. `components/SettingsAgentsPage.tsx` +
+  `components/AgentEditor.tsx` (Settings → Agents), `lib/use-agents.ts` for the board's pickers: the New thread dialog
+  (`AgentSelect`, with Manage agents…), the card menu (`PATCH { agent }` ends the CLI; the next turn resumes under the new
+  soul) and the emoji in `CardFooterMeta` (docs/architecture/agents.md).
 - `lib/workspace-layout.ts` + `components/CardWorkspace.tsx` + `components/EditorColumn.tsx` + `lib/file-access.ts` + `app/api/cards/[id]/files` + `lib/open-file.ts`: the open card's four columns and the editor column (CodeMirror, TipTap markdown, Changes vs. HEAD); any file path in the thread opens it (docs/architecture/editor.md).
 - `lib/browser-tools.ts`: `mcp__browser__*` tools every thread gets; `lib/browser-act-tools.ts` the ones that act on the page
   (snapshot with refs, click, hover, type_text, press_key, select_option, scroll, wait_for, set_viewport, console_logs,
   network_errors; docs/architecture/agent-browser.md); `lib/browser-shell.ts` the control-server call every Weft tool uses.
+- `lib/site-notes-*.ts` + `app/api/site-notes` + `app/api/site-notes/cloud` + `components/SiteNotesSwitch.tsx`: site notes. `-url` keys and generalized paths, `-scrub` and `-safety` the safety pipeline, `-format` the note and its untrusted wrapper, `-store` local notes, the public switch and the outbox, `-trail` the per-card trail the pane tools record, `-read` what open_url adds, `-capture` the after-turn pass `lib/show.ts` fires, `-send` the outbox, `-remote` the desktop's client, `-live` the wiring; `-status`, `-cloud` and `-db` are weft.zip's side (docs/architecture/site-notes.md).
 - `lib/simulator-tools.ts` + `lib/simulator-devices.ts` + `lib/simulator-ui.ts` + `lib/simulator-exec.ts` + `lib/simulator-watch.ts` + `lib/simulator-status.ts` + `lib/simulator-install.ts` + `lib/simulator-install-steps.ts` + `components/SimulatorConnector.tsx`: `mcp__simulator__*` for threads (list, boot, install, launch, open_url, ui_tree, tap, swipe, type_text, press, screenshot, logs, watch) over simctl / adb / AXe, the live view page in `~/.weft/show/simulator/`, and the setup checks on Settings → Connectors with an Install button per missing piece (docs/architecture/simulators.md).
+  `lib/cli-exec.ts` is how every CLI connector runs a tool (find it on PATH, exec it with a timeout, hear what it
+  said) — gog (`lib/gog.ts`) and the simulator tools (`lib/simulator-exec.ts`) both go through it. `lib/use-connector-status.ts`
+  is how a connector panel on Settings → Connectors loads its status and polls it while the tool is working.
 - `lib/mini-apps.ts` + `lib/mini-app-store.ts` + `app/api/apps` + `lib/use-mini-apps.ts` + `components/AppsRail.tsx` + `components/SaveAppButton.tsx`: mini apps, pages
   saved from the browser pane (its toolbar's grid button) as tiles on the left rail below 🖥 Services (rendered inside `components/LibraryRail.tsx`), in `~/.weft/apps.json`; a tile opens its page in the board's pane. No apps, nothing on the rail (docs/architecture/mini-apps.md).
   `components/LoomApps.tsx` lists them as My mini apps on the Loom's You tab. `lib/app-share.ts` + `lib/app-share-types.ts` + `app/api/apps/share` + `components/ShareAppDialog.tsx` (with `components/ShareParts.tsx`, shared with the card's dialog): Share… on an app, a `weft.zip/a/<id>` link (`cloud_app_shares`) to an uploaded copy of a local page (with the files it links to beside it, `lib/page-assets.ts`) or a framed https site; `lib/app-share-access.ts` + `app/a/[id]` + `app/api/a/[id]/{page,unlock}` serve it behind the card link's gate (`gateVerdict`, `lib/share-unlock.ts`, `lib/share-page-serve.ts`). `lib/app-share-frame.ts` (versioned frame URLs) + `lib/app-share-serve.ts` (the page, `page/[sha]`, `f/` and `v/[ver]/` routes: CDN headers for public links, version checks) + `lib/app-page-limit.ts` (per-address and per-share cap) keep views unlimited and cheap; `lib/app-share-quota.ts` + `components/ShareAppQuota.tsx` + `supabase/migrations/20261024124411_app_share_quota.sql` gate a workspace's open links' bytes by plan (`APP_SHARE_BYTES` in `lib/billing/plans.ts`; docs/architecture/mini-app-hosting.md).
@@ -467,6 +497,7 @@ When a new doc lands in this folder, add it here on the same change.
 - `lib/cloud-sync.ts` + `lib/cloud-outbox.ts` + `lib/cloud-sync-start.ts` + `lib/cloud-sync-cards.ts` + `lib/cloud-sync-upload.ts` + `lib/blob-store.ts` + `lib/blob-paths.ts` + `lib/device-id.ts` + `lib/cloud-sync-types.ts`:
   server-side cards, opt-in per folder (settings `syncFolders`): an outbox in `~/.weft/sync-outbox.jsonl` uploads cards, thread items
   and long tool outputs to Supabase (`supabase/migrations/20261015155756_card_sync.sql`), images and pages by content hash.
+  `lib/cloud-sync-repos.ts` keeps the switch per GitHub repo too (`cloud_sync_repos`), so your other Macs turn sync on for their own clone.
   `lib/sync-prompt.ts` + `lib/use-sync-prompt.ts` + `components/SyncPromptDialog.tsx` (mounted in `components/HeaderBadges.tsx`): once the welcome is
   answered and a thread in the project you're working on has reached Review, "Turn on Project Sync for <project>?" asks once a launch (signed out, "Sign in to Weft?", Weft's one sign-in ask), with a
   "Don't show me again" box (localStorage, cleared by Reset tips); `lib/scratch.ts` is the scratch-folder list it shares with `lib/welcome.ts`.

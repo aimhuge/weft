@@ -114,6 +114,12 @@ port.
   browser, only for the hosts, methods and paths its `weft-app.json` allows. The value is the author's, or each viewer's
   own (`"from": "viewer"`, asked for in Weft's own form); on weft.zip it's stored encrypted under a server-only key
   (docs/architecture/mini-app-hosting.md).
+- **Site notes**: what a card learns driving a dashboard in the pane (Supabase, Vercel, Stripe, GitHub settings…) becomes
+  a short note per page: what it's for, the steps to each goal, the labels and selectors that worked, the gotchas. The
+  next card that opens that page gets the note with `open_url`, as reference data it may use but never obey. Notes stay on
+  your Mac and go to your team; Settings → Security → Site notes shares them with every Weft user, each one shown to you
+  before it's sent, and served to others once 3 people's cards have succeeded with it. Ids, emails and keys are scrubbed
+  out first, and anything about secrets, other sites or commands is stripped (docs/architecture/site-notes.md).
 - **Show rail**: a 72 px column right of the page in the browser pane, one mini per turn of the open thread
   (status dot, its first words, how long ago) and per page the pane showed, newest at the bottom like the chat. Each page
   is a small picture of what the pane showed (a few-KB WebP per page in `~/.weft/shots/`). Every message keeps the page on
@@ -316,11 +322,11 @@ The new-thread dialog (⌘N) and every card's reply box use the same editor:
 
 The folder picker lists your recent projects, the git repos in `~/dev` and other usual code folders
 (with their branch), and your GitHub repos from `gh`. Picking a GitHub repo that isn't on this Mac
-clones it into `~/dev`. **New project…** names an empty folder in `~/dev` and starts the thread there. You can also paste a path or browse for a folder. A new thread starts on the CLI, model and effort set in Settings → Models (the dialog remembers your last pick the same way). The dialog's one model menu is also its CLI picker, the same menu as Settings → Models: each CLI is a heading with its own default first, picking a model moves the thread to the CLI that serves it, and Goose lists only the models a saved provider key serves. Cards are titled from the
+clones it into `~/dev`, with a progress bar that follows git (receiving objects, resolving deltas, checking out). **New project…** names an empty folder in `~/dev` and starts the thread there. You can also paste a path or browse for a folder. A new thread starts on the CLI, model and effort set in Settings → Models (the dialog remembers your last pick the same way). The dialog's one model menu is also its CLI picker, the same menu as Settings → Models: each CLI is a heading with its own default first, picking a model moves the thread to the CLI that serves it, and Goose lists only the models a saved provider key serves. Cards are titled from the
 prompt's first line (click the title in the open thread to rename it), and new threads start in the default permission mode from Settings → Security (Auto at first: a classifier
 approves safe calls and blocks risky ones, and a blocked call comes to Needs you with the classifier's reason and
 **Allow once and retry** / **Keep denied**; an MCP server that asks you to confirm something, like the Supabase MCP before
-destructive SQL, comes to Needs you too, with **Accept** / **Decline** and any form it asks for); the mode menu beside the model and effort menus changes that per thread, and says under each mode what it does. The **Agent** menu picks who the thread is: **🛠 Builder**, Weft's own soul that plans, builds, tests and ships, or **✍️ Copywriter**, who writes in Weft's voice (pages, feature intros, changelog entries, UI copy) with every tool a thread has. Right-click a card → **Agent: …** to switch it between turns: its conversation carries on under the new soul, and a ✍️ in the card's footer marks a copywriter (`lib/agents.ts`, docs/architecture/agents.md). Effort starts at High and
+destructive SQL, comes to Needs you too, with **Accept** / **Decline** and any form it asks for); the mode menu beside the model and effort menus changes that per thread, and says under each mode what it does. The **Agent** menu picks who the thread is: **🛠 Builder**, Weft's own soul that plans, builds, tests and ships, **✍️ Copywriter**, who writes in Weft's voice (pages, feature intros, changelog entries, UI copy), or one of your own. **Settings → Agents** (or **Manage agents…** at the bottom of that menu) is where you make them: an emoji, a name, a line saying what it's for, its soul (the start of every system prompt its threads get) and the skills it turns off. Built-ins can be edited too, and **Reset** pulls a built-in's latest text from Weft's repo on GitHub. Pick a default agent for each project there, and new threads in that project start as it. Right-click a card → **Agent: …** to switch it between turns: its conversation carries on under the new soul, and the agent's emoji in the card's footer says who it is (`lib/agents.ts`, docs/architecture/agents.md). Effort starts at High and
 then follows whatever the last new thread used. To change it later, even mid-turn,
 use the mode menu in the open thread's header or the card's right-click menu. Sessions picked up from
 Claude Code keep the mode they last ran in (say `auto`).
@@ -370,7 +376,8 @@ the model gave up too early. A card whose turn you stopped or that failed also s
 message again in a fresh CLI.
 
 The Backlog column is hidden by default. Turn it on with Settings → General → Show backlog. It also shows
-whenever cards are waiting in it.
+whenever cards are waiting in it. To put a full Backlog out of the way, click the chevron in its header: it
+folds to a thin strip with its name and count. Click the strip to open it again; you can still drop cards on it.
 
 Drag a Backlog card onto another one to set the order: drop on its top half to place the card before it,
 or its bottom half to place it after. Weft saves that order and uses it for the Backlog list, whatever
@@ -833,7 +840,8 @@ card you delete stays deleted. It's one direction for now; Weft never edits an i
 Weft asks once, after a thread in your project has reached Review: "Turn on Project Sync for <project>?" with **Sync**, **Not now**
 and a **Don't show me again** box (it asks again next launch until you sync or tick it; Settings → General → Reset tips brings it back).
 Signed out, it is Weft's one sign-in ask instead: "Sign in to Weft?" with what an account gets you (Project Sync, share links,
-leagues, the Puku trial) and **Sign in with GitHub**; once you're in, it offers to sync the project. Settings → Sync lists your recent projects with a switch each. A project that's on uploads its cards and threads to your
+leagues, the Puku trial) and **Sign in with GitHub**; once you're in, it offers to sync the project. Settings → Sync lists your recent projects with a switch each, and the switch follows you between Macs: sign in on a second Mac
+and each project you sync elsewhere turns on there too, matched by its GitHub repo (a clone you make on that Mac included). A project that's on uploads its cards and threads to your
 workspace on Supabase while you're signed in: an outbox sends a batch when a turn ends (never on the way to starting one),
 pictures and pages go up once each by content, and the page shows the last sync, how many items went up, how many wait and the
 last error, with **Sync now**. At `weft.zip/<workspace>/board` the same cards show live, drawn by the desktop's **own
@@ -1136,7 +1144,9 @@ Nothing runs on your Mac. `pnpm resend -- create|verify|webhook` sets up the Res
   working page the moment its turn starts: a dimmed, slowly drifting scene of the Weft hovercar (one per card, from
   `electron/assets/backdrop-*.jpg` plus the splash's desert) behind the card's title, your ask with pasted images as
   thumbnails, and a running clock; the splash screen's desert scene sits beside the New thread
-  dialog while you write the prompt, and starting the thread opens its card. A turn that ends without opening
+  dialog while you write the prompt, with a tip under it that changes every 8 seconds (a shortcut, or a drawer with
+  **▶ Watch** for its intro; `lib/new-thread-tips.ts`), and starting the thread opens its card. Nothing plays there on
+  its own: an intro and its voice start only when you click ▶ Watch or ▶ by the dialog's title. A turn that ends without opening
   anything in the pane gets a teammate's update page (how it's going, what we did, what's next),
   written in the background by Haiku with a bare CLI (~12s) and opened in that card's pane. A live app
   (an http page) and pages the thread opened itself are left alone. Pages live in `~/.weft/glance/`.
@@ -1194,6 +1204,12 @@ Under the five pillars sits a short FAQ (`components/home/FaqTeaser.tsx`, six qu
 `lib/faq.ts`), each linking to its full answer on `weft.zip/faq`. That page renders `docs/FAQ.md` itself
 (`app/faq/page.tsx`, `components/home/FaqDoc.tsx`) with the home page's nav and footer, so the repo and the site never
 drift; the FAQ's pictures live in `public/brand/faq/` so GitHub and the site show the same files.
+
+`weft.zip/terms` and `weft.zip/privacy` are the Terms of Service and the Privacy Policy (`app/terms/page.tsx`,
+`app/privacy/page.tsx`), linked from the footer. Google Analytics and PostHog (with session replay) load on weft.zip only
+after a visitor presses Accept in a small corner banner (`components/ConsentBanner.tsx`, the choice in `lib/consent.ts`);
+the privacy page's Cookies section switches it back (`components/ConsentChoice.tsx`). One rule for every visitor, no
+geo check. A local Weft never shows the banner, because it never loads either tool.
 
 `weft.zip/login` is a real sign-in page (GitHub only) so a visitor can leave the marketing site with
 a Weft account without the desktop app first. It has its own cookie session (`/auth/sign-in`, `/auth/callback`,
