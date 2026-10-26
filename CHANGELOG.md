@@ -8,14 +8,6 @@ lands; a release moves those lines under its version and tags the commit `vX.Y.Z
 
 ## [Unreleased]
 
-### Added
-
-- **Right-click a project for its own menu.** A project on the board now has its own menu: pin it so it always keeps a chip in the bar, hide it until you use the folder again, open it in the first installed editor or terminal, and start a thread there. The marks live per project in the saved list (`lib/project-list.ts`), and the route passes on only the marks you sent, so pinning never clears a hidden (`app/api/projects/route.ts`, `components/project-menu-handler.ts`, `components/ProjectChips.tsx`).
-
-### Fixed
-
-- **Three tests that only failed on Linux are fixed.** None of them was a product bug — each was a test leaning on something a Mac happens to provide. The worktree pool's branch test asked for `HEAD~1`, but the commit that makes it was made by an earlier mac-only test, so on Linux there was one commit and the branch failed; it now makes its own history. The mini-app live-data test built a fetch mock and never passed it in, so the bridge made a real request to 127.0.0.1 and CI got "fetch failed"; `setupApps` and `setupMiniApps` take a fetch now, and the test asserts the bridge asks the server with the launch token. The new-thread dialog's test asserted on the create right after the click, but the create is an async effect; the assertion waits now. Files: `lib/worktree-pool.test.ts`, `electron/app-setup.cjs`, `electron/mini-apps-setup.cjs`, `electron/mini-apps-setup.test.ts`, `components/NewCardDialog.test.tsx`.
-
 ## [0.6.3] - 2026-10-26
 
 ### Added
