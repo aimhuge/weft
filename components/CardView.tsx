@@ -16,7 +16,6 @@ import { ContinueButton, RestartButton, type ResumeHow } from "./CardResume";
 import CardMarks from "./CardMarks";
 import RestartMark, { restartCardClass } from "./RestartMark";
 import StarButton from "./StarButton";
-import Tip from "./Tip";
 
 // Re-exports so existing import sites keep working.
 export { default as BackendBadge } from "./BackendBadge";
@@ -175,6 +174,7 @@ export default function CardView({
       <div className="flex items-start gap-2.5">
         <div className="min-w-0 flex-1">
           <div className={`line-clamp-2 text-[13px] font-medium leading-snug ${card.column === "done" ? "text-muted" : "text-ink"}`}>
+            <RestartMark requested={restartRequested} />
             <CronMark card={card} />
             {card.title}
           </div>
@@ -182,13 +182,6 @@ export default function CardView({
           {!readOnly && <RateLimitSwitch card={card} />}
         </div>
         <div className="flex shrink-0 items-start gap-1.5">
-          {restartRequested && (
-            <Tip text="This thread asked Weft to restart. Weft restarts once the running threads finish; click the pill in the header to cancel.">
-              <span className="mt-0.5 inline-flex">
-                <RestartMark requested />
-              </span>
-            </Tip>
-          )}
           <CardPicture card={card} />
         </div>
       </div>

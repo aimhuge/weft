@@ -1,21 +1,9 @@
 /* A card that asked Weft to restart (docs/architecture/board.md): red is the restart's colour on the board, the
-   same one the header's pill uses, so the card and the pill read as one thing. */
-.text-restart {
-  color: var(--danger);
-}
-
-/* The asking card: a red edge down its left side, like a ticket marked for the gate. */
-.restart-stub {
-  padding-left: 1rem !important;
-  border-color: color-mix(in srgb, var(--danger) 42%, transparent) !important;
-  background-image: linear-gradient(90deg, color-mix(in srgb, var(--danger) 9%, transparent), transparent 55%);
-}
-.restart-stub::before {
-  content: "";
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 5px;
-  border-radius: 0.5rem 0 0 0.5rem;
-  background: var(--danger);
-  pointer-events: none;
+   same one the header's pill uses, so the card and the pill read as one thing. Only a thin ring and a soft glow:
+   the card keeps its own layout, and the pill before the title says why. */
+.restart-asked {
+  border-color: color-mix(in srgb, var(--danger) 55%, transparent) !important;
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--danger) 16%, transparent),
+    0 6px 18px -10px color-mix(in srgb, var(--danger) 65%, transparent);
 }

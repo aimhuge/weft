@@ -26,17 +26,17 @@ describe("the card that asked for a restart", () => {
     const chip = screen.getByText("Restart asked");
     expect(chip).toBeInTheDocument();
     // The red edge, the same red the header's restart pill uses.
-    expect(chip.closest("[data-card-id]")?.className).toContain("restart-stub");
+    expect(chip.closest("[data-card-id]")?.className).toContain("restart-asked");
   });
 
   it("leaves a card that asked for nothing unmarked", () => {
     renderCard();
     expect(screen.queryByText("Restart asked")).not.toBeInTheDocument();
-    expect(screen.getByText("Fix the login page").closest("[data-card-id]")?.className).not.toContain("restart-stub");
+    expect(screen.getByText("Fix the login page").closest("[data-card-id]")?.className).not.toContain("restart-asked");
   });
 
   it("marks the card class only when a restart was asked for", () => {
-    expect(restartCardClass(true)).toBe("restart-stub");
+    expect(restartCardClass(true)).toBe("restart-asked");
     expect(restartCardClass(false)).toBe("");
   });
 
