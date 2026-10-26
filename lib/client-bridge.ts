@@ -73,6 +73,9 @@ export interface ShellBridge {
   openExternal(url: string): void;
   // Opens a local folder in Finder.
   revealFolder(folder: string): void;
+  // Opens the folder in the first installed editor or terminal app (electron/open-in.cjs); resolves to its
+  // name, or null when none is installed. Missing in a shell from before it.
+  openIn?(folder: string, target: "editor" | "terminal"): Promise<string | null>;
   // A native context menu at the pointer (lib/card-menu.ts); resolves to the picked id, or null.
   popupMenu(items: MenuItem[]): Promise<string | null>;
   // The dock badge, e.g. how many cards need the user.

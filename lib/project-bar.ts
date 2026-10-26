@@ -33,3 +33,15 @@ export function statusLabel(project: ProjectSummary) {
 export function filterProjects(projects: ProjectSummary[], query: string, home: string): ProjectSummary[] {
   return filterByQuery(projects, query, (p) => [folderName(p.path), shortPath(p.path, home)]);
 }
+
+// The projects that get a chip, in order: every pinned one, then the most recent up to `recent` chips in
+// all, then the selected project if it isn't among them, so the current filter is always visible. A
+// hidden project only gets one while it's selected.
+export function chipProjects(projects: ProjectSummary[], selected: string | null, recent: number): ProjectSummary[] {
+  const shown = projects.filter((p) => !p.hidden);
+  const pinned = shown.filter((p) => p.pinned);
+  const chips = [...pinned, ...shown.filter((p) => !p.pinned).slice(0, Math.max(0, recent - pinned.length))];
+  if (!selected || chips.some((p) => p.path === selected)) return chips;
+  const extra = projects.find((p) => p.path === selected) ?? { path: selected, lastActivity: 0, cards: 0, running: 0, needsYou: 0 };
+  return [...chips, extra];
+}

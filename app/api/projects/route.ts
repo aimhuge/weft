@@ -2,7 +2,7 @@ import { connection } from "next/server";
 import { resolveFolder } from "@/lib/folders";
 import { asText } from "@/lib/format";
 import { fail, guard } from "@/lib/guard";
-import { listProjects, removeProject, touchProject } from "@/lib/settings";
+import { listProjects, markProject, removeProject, touchProject } from "@/lib/settings";
 
 export async function GET(req: Request) {
   const denied = guard(req, { write: false });
@@ -34,6 +34,24 @@ export async function DELETE(req: Request) {
   try {
     const body = (await req.json()) as Record<string, unknown>;
     removeProject(asText(body.path));
+    return Response.json({ projects: listProjects() });
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+// Pins or hides a project in the bar, from its right-click menu (lib/project-menu.ts). Only the marks sent change.
+export async function PATCH(req: Request) {
+  const denied = guard(req);
+  if (denied) return denied;
+  try {
+    const body = (await req.json()) as Record<string, unknown>;
+    const path = asText(body.path);
+    if (!path.trim()) throw new Error("Choose a folder.");
+    const marks: { pinned?: boolean; hidden?: boolean } = {};
+    if (typeof body.pinned === "boolean") marks.pinned = body.pinned;
+    if (typeof body.hidden === "boolean") marks.hidden = body.hidden;
+    markProject(path, marks);
     return Response.json({ projects: listProjects() });
   } catch (err) {
     return fail(err);

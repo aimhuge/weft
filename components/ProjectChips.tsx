@@ -1,7 +1,9 @@
-// The horizontal row of project chips in the project bar — "All", the recent six, and the selected
-// project if it isn't one of them. Scrolls horizontally and keeps the selected chip in view.
+// The horizontal row of project chips in the project bar — "All", the pinned ones, the recent ones up to
+// six, and the selected project if it isn't one of them. Scrolls horizontally and keeps the selected chip
+// in view. Right-clicking a chip opens its menu (components/project-menu-handler.ts).
 import { type RefObject } from "react";
-import { folderName, shortPath, statusLabel } from "@/lib/project-bar";
+import { chipProjects, folderName, shortPath, statusLabel } from "@/lib/project-bar";
+import Icon from "./Icon";
 import ProjectStatusDot from "./ProjectStatusDot";
 import type { ProjectSummary } from "@/lib/board-view";
 
@@ -9,7 +11,7 @@ const CHIP = "flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1 t
 const CHIP_ON = "border-accent bg-accent-soft text-accent";
 const CHIP_OFF = "border-line-strong text-ink hover:bg-sunken";
 
-// How many of the most recent projects get a chip; the rest are under "More".
+// How many chips the pinned and most recent projects get between them; the rest are under "More".
 const RECENT_CHIPS = 6;
 
 export default function ProjectChips({
@@ -20,6 +22,7 @@ export default function ProjectChips({
   home,
   chipsRef,
   stepHint,
+  onProjectMenu,
 }: {
   projects: ProjectSummary[]; // already sorted, most recent first
   total: number; // total card count, for the "All" chip
@@ -28,15 +31,9 @@ export default function ProjectChips({
   home: string;
   chipsRef: RefObject<HTMLDivElement | null>;
   stepHint: string; // appended to chip titles, e.g. "← → step through projects"
+  onProjectMenu?: (path: string, e: React.MouseEvent) => void;
 }) {
-  // A project picked from "More" (or just added) that isn't one of the recent six still gets a chip,
-  // so the current filter is always visible.
-  const recent = projects.slice(0, RECENT_CHIPS);
-  const extra =
-    selected && !recent.some((p) => p.path === selected)
-      ? (projects.find((p) => p.path === selected) ?? { path: selected, lastActivity: 0, cards: 0, running: 0, needsYou: 0 })
-      : null;
-  const chips = extra ? [...recent, extra] : recent;
+  const chips = chipProjects(projects, selected, RECENT_CHIPS);
 
   return (
     <div ref={chipsRef} className="flex min-w-0 items-center gap-1.5 overflow-x-auto [scrollbar-width:thin]">
@@ -55,11 +52,13 @@ export default function ProjectChips({
           <button
             key={project.path}
             onClick={() => onSelect(project.path)}
+            onContextMenu={onProjectMenu && ((e) => onProjectMenu(project.path, e))}
             aria-pressed={on}
             title={`${shortPath(project.path, home)}${stepHint}`}
             className={`${CHIP} ${on ? CHIP_ON : CHIP_OFF}`}
           >
             <ProjectStatusDot project={project} />
+            {project.pinned && <Icon name="pin" size={11} className="text-faint" />}
             <span className="max-w-[160px] truncate">{folderName(project.path)}</span>
             <span className={`tabular-nums ${on ? "text-accent/70" : "text-faint"}`}>{project.cards}</span>
             <span className="sr-only">{statusLabel(project)}</span>

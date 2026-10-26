@@ -3,6 +3,7 @@ import { GOOSE_PROVIDERS } from "./goose-provider";
 import { MODES, type Automation, type Backend, type PermissionMode, type Project, type SettingsView } from "./types";
 import { projectOpened } from "./project-open";
 import { DEFAULT_MAX_THREADS, MAX_THREADS_CEILING } from "./settings-shared";
+import { marked, touched, type ProjectMarks } from "./project-list";
 import { isSubagentModel, type SubagentModel } from "./subagents";
 import { DEFAULT_THREAD_PROMPT } from "./thread-prompt";
 import { isEmpty, readSetting, save, settings, writeSetting } from "./settings-store";
@@ -260,23 +261,27 @@ export function listProjects(): Project[] {
   return [...settings().projects].sort((a, b) => b.lastUsedAt - a.lastUsedAt);
 }
 
-// Marks a project folder as just used, adding it to the recent list if it's new.
+// Marks a project folder as just used, adding it to the recent list if it's new (lib/project-list.ts).
 export function touchProject(folder: string) {
-  const s = settings();
-  const fresh = !s.projects.some((p) => p.path === folder);
-  s.projects = [{ path: folder, lastUsedAt: Date.now() }, ...s.projects.filter((p) => p.path !== folder)].slice(
-    0,
-    MAX_PROJECTS,
-  );
-  save();
-  publish({ type: "projects", projects: listProjects() });
+  const fresh = !settings().projects.some((p) => p.path === folder);
+  updateProjects((list) => touched(list, folder, Date.now(), MAX_PROJECTS));
   // A folder new to the list: whatever looks at a project once it lands (lib/project-open.ts), on a later tick.
   if (fresh) projectOpened(folder);
 }
 
+// Pins or hides a project, from its right-click menu (lib/project-menu.ts).
+export function markProject(folder: string, marks: ProjectMarks) {
+  updateProjects((list) => marked(list, folder, marks));
+}
+
 export function removeProject(folder: string) {
+  updateProjects((list) => list.filter((p) => p.path !== folder));
+}
+
+// Changes the saved project list, saves it and tells the board.
+function updateProjects(change: (projects: Project[]) => Project[]) {
   const s = settings();
-  s.projects = s.projects.filter((p) => p.path !== folder);
+  s.projects = change(s.projects);
   save();
   publish({ type: "projects", projects: listProjects() });
 }

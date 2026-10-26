@@ -404,6 +404,13 @@ in Done, also show or hide archived cards and archive all the Done cards on scre
 shown beside it, that picks it while the menu is open: right-click, then `D` for Done, `1` for `/weft:done`,
 `Y` for YOLO. (Desktop app only.)
 
+Right-click a project chip in the project bar, or a project under **More**, for its own menu: start a new
+thread in it, reveal it in Finder, open it in your editor or terminal (the first one installed: Cursor,
+VS Code, Zed… and Ghostty, iTerm, Warp or Terminal), open it on GitHub, copy its path, open its 🔐
+Secrets, Dev Servers or Changelog, **Pin to Bar** (a pinned project always has a chip, ahead of the recent
+ones), **Hide from Bar** (its chip goes until you use it again; **More** still lists it), archive its Done
+cards and stop its running ones. (Desktop app only.)
+
 Archive from the keyboard: `Shift+A` archives the card you've moved to with `j`/`k`, or else the
 open thread, and focus steps to the next card, so `Shift+A` three times clears three cards. `Shift+E`
 archives every Done card on screen, and `Shift+Z` (or the toast's Undo) brings back the last archive. `Z` reopens the last card you had open

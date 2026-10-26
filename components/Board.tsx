@@ -43,6 +43,7 @@ import { filterCards, railPinned, toggleTag, type RailFilter, type RailPanel } f
 import { TagColors } from "./TagPill";
 import { useTagCatalog } from "./use-tag-catalog";
 import { useBoardMenus } from "./use-board-menus";
+import { projectMenuHandler } from "./project-menu-handler";
 import { useSwitchAll } from "./switch-all-button";
 import { folderName } from "./ProjectBar";
 import { showPage } from "@/lib/board-helpers";
@@ -286,6 +287,9 @@ export default function Board() {
     toast: setToast,
     notify,
   });
+  const onProjectMenu = projectMenuHandler({
+    projects: projectSummaries, cards, rootOf, openNew, chooseProject, openDrawer: setLibraryOpen, archive: archiveCards, toast: setToast, notify,
+  });
   const onTag = (tag: string) => setRailFilter((f) => toggleTag(f, tag));
   const cardCtx = { openCard, resume, move, onCardMenu, toggleStar, toggleArchive, onTag, notify };
   // How the board draws a card, as a card and as a row of the list view (lib/use-board-cards.ts).
@@ -346,6 +350,7 @@ export default function Board() {
         onView={chooseView}
         home={home}
         onMenuOpenChange={setMenuOpen}
+        onProjectMenu={onProjectMenu}
       />
 
       <div className="flex min-h-0 flex-1">

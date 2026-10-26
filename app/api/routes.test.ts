@@ -53,6 +53,7 @@ vi.mock("@/lib/settings", () => ({
   listProjects: vi.fn(() => []),
   touchProject: vi.fn(),
   removeProject: vi.fn(),
+  markProject: vi.fn(),
   dismissSession: vi.fn(),
   dismissedSessions: vi.fn(() => []),
   threadPrompt: vi.fn(() => "tp"),
