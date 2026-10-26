@@ -42,20 +42,16 @@ export function bashClaimGuard(cardId: () => string | undefined): HookCallback {
   };
 }
 
-// Codex and Goose run no Weft hooks, so a busy one in the tree could have written anything, unseen.
-const UNHOOKED = new Set(["codex", "goose"]);
-
 // This card's claim on each file it wrote (by mtime), skipping the ones another busy card holds. One written
 // while only this card's Bash ran, or that the command line names, is this card's; any other is unknown.
 export function claimWritten(card: Card, written: Map<string, number>, named: Set<string>) {
   const busy = busyInFolder(listCards(), workDir(card), card.id);
   const held = new Set(busy.flatMap((c) => [...claimFiles(c)]));
-  const unseen = busy.some((c) => UNHOOKED.has(c.backend));
   const mine: string[] = [];
   for (const [file, at] of written) {
     if (held.has(file)) continue;
     const writers = writersAt(at);
-    if (named.has(file) || (!unseen && writers.size === 1 && writers.has(card.id))) {
+    if (named.has(file) || (writers.size === 1 && writers.has(card.id))) {
       mine.push(file);
       markKnown(file);
     } else markUnknown(file);

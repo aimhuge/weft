@@ -69,6 +69,12 @@ export interface ShellBridge {
     // A native folder picker; resolves to null when cancelled.
     openFolder(): Promise<string | null>;
   };
+  // The printers macOS has (names), and printing a page of HTML through the system print dialog
+  // (electron/print.cjs). Missing in older shells.
+  print?: {
+    printers(): Promise<string[]>;
+    html(html: string): Promise<{ ok: boolean; reason?: string }>;
+  };
   // Opens an http(s) URL in the default browser.
   openExternal(url: string): void;
   // Opens a local folder in Finder.

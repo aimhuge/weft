@@ -10,6 +10,7 @@ import type { Card } from "./types";
 
 const s = await vi.hoisted(async () => (await import("./goose-runner.harness")).gooseState());
 
+vi.mock("./guards/goose", async () => (await import("./goose-runner.harness")).gooseGuardsMock());
 vi.mock("./runner-turn", async () => (await import("./goose-runner.harness")).runnerTurnMock(s));
 vi.mock("./store", async () => (await import("./goose-runner.harness")).storeMock(s));
 vi.mock("node:child_process", async () => (await import("./goose-runner.harness")).childProcessMock(s));
@@ -35,6 +36,27 @@ describe("driveGoose starts goose run", () => {
     expect(rig().opts().env.GOOSE_PATH_ROOT).toContain("goose");
     expect(rig().opts().env.GOOSE_MODE).toBe("auto");
     expect(rig().opts().env.GOOSE_DISABLE_KEYRING).toBe("1");
+  });
+
+  it("runs every turn behind Weft's guards and closes them after", async () => {
+    const closed = vi.fn();
+    const { openGooseGuards } = await import("./guards/goose");
+    vi.mocked(openGooseGuards).mockReturnValueOnce(closed);
+    await rig().run([]);
+    expect(openGooseGuards).toHaveBeenCalledWith(rig().session);
+    expect(closed).toHaveBeenCalled();
+  });
+
+  it("refuses to start a turn whose guards can't be installed, and says why", async () => {
+    const { openGooseGuards } = await import("./guards/goose");
+    vi.mocked(openGooseGuards).mockImplementationOnce(() => {
+      throw new Error("Weft didn't start this turn: its guards couldn't be installed (no port).");
+    });
+    const r = rig();
+    const turn = r.goose.driveGoose(r.session, EXE);
+    r.session.inbox.push("do it");
+    await expect(turn).rejects.toThrow("guards couldn't be installed");
+    expect(s.spawned).toHaveLength(0);
   });
 
   it("stops before starting a turn once the session is aborted", async () => {

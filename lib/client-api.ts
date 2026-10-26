@@ -59,6 +59,8 @@ export interface NewCardInput {
   tags?: string[];
   // A git worktree of its own (docs/architecture/worktrees.md); left out, the shared folder.
   isolated?: boolean;
+  // The branch that worktree works on (lib/branch-name.ts); left out, its own weft/* branch.
+  branch?: string;
   // Who the thread is (lib/agents.ts); left out, Builder.
   agent?: ThreadAgent;
   start: boolean;

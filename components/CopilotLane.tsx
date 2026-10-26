@@ -1,10 +1,13 @@
 "use client";
 
+import { useEffect, useState, type ReactNode } from "react";
 import { answerNow, stopNow } from "@/lib/optimistic-cards";
 import { api } from "@/lib/client";
-import { LANE_WIDTH, type LaneState } from "@/lib/copilot-lane";
+import { COPILOT_LAYER, LAUNCHER, PANEL, PANEL_BOTTOM, panelBox, setCopilotPanel } from "@/lib/copilot-float";
+import type { LaneState } from "@/lib/copilot-lane";
 import { personaOf } from "@/lib/copilot-personas";
 import { isLive } from "@/lib/format";
+import { NO_DRAG } from "@/lib/no-drag";
 import { COPILOT_ID, type Card } from "@/lib/types";
 import { useCopilotThread } from "@/lib/use-copilot-thread";
 import CopilotEmpty from "./CopilotEmpty";
@@ -28,10 +31,11 @@ function Status({ card }: { card: Card | null }) {
   return <span className="text-[11px] text-muted">{card.warm ? "Ready" : "Idle"}</span>;
 }
 
-// The copilot's lane on the right of the board. Three states, like Intercom's hider: hidden is a 36px
-// pill pinned to the right edge, peek is the 236px digest column, open is the 520px chat over the
-// cockpit. The hider pill hovers into peek; the copilot needing you auto-expands into peek; ⌘J
-// cycles hidden → peek → open → hidden.
+// The copilot floats in the window's bottom-right corner, like Intercom's messenger, over the board,
+// the card window and every dialog, the welcome included (lib/copilot-float.ts). Three states: hidden is
+// the round launcher alone; peek adds the digest above it; open adds the chat. Resting
+// on the launcher peeks; the copilot needing you auto-expands into peek; a click on the launcher opens
+// or closes the chat; ⌘J cycles hidden → peek → open → hidden.
 export default function CopilotLane(props: {
   state: LaneState;
   cards: Card[];
@@ -47,24 +51,19 @@ export default function CopilotLane(props: {
   const live = card ? isLive(card) : false;
   const persona = personaOf(card?.persona);
 
-  if (props.state === "hidden") {
-    return (
-      <aside
-        data-copilot-lane="hidden"
-        style={{ width: LANE_WIDTH.hidden }}
-        className="shrink-0 self-stretch border-l border-line-strong bg-sunken"
-      >
-        <CopilotHider
-          card={card}
-          cards={props.cards}
-          items={items}
-          onPeek={props.onPeek}
-          onOpen={props.onOpen}
-          toggleTip={props.toggleTip}
-        />
-      </aside>
-    );
-  }
+  const launcher = (
+    <CopilotHider
+      card={card}
+      cards={props.cards}
+      items={items}
+      state={props.state}
+      onPeek={props.onPeek}
+      onOpen={props.onOpen}
+      onHide={props.onHide}
+      toggleTip={props.toggleTip}
+    />
+  );
+  if (props.state === "hidden") return launcher;
 
   const isOpen = props.state === "open";
 
@@ -93,101 +92,112 @@ export default function CopilotLane(props: {
           {resetting ? "Starting…" : "New chat"}
         </button>
       )}
+      {!isOpen && (
+        <button
+          onClick={props.onOpen}
+          title="Open the chat"
+          aria-label="Open the chat"
+          className="grid h-6 w-6 place-items-center rounded-md bg-black/30 text-muted hover:bg-black/50 hover:text-ink"
+        >
+          <Icon name="expand" size={12} />
+        </button>
+      )}
       <button
         onClick={props.onHide}
         title={`Hide — ${props.toggleTip}`}
         aria-label="Hide the copilot"
         className="grid h-6 w-6 place-items-center rounded-md bg-black/30 text-muted hover:bg-black/50 hover:text-ink"
       >
-        <Icon name="chevronRight" size={13} />
+        <Icon name="chevronDown" size={13} />
       </button>
     </header>
   );
 
   if (!isOpen) {
     return (
-      <aside
-        data-copilot-lane="peek"
-        style={{ width: LANE_WIDTH.peek }}
-        className="flex shrink-0 flex-col border-l border-line-strong bg-sunken"
-      >
-        {header}
-        <CopilotPeek
-          cards={props.cards}
-          persona={persona}
-          items={items}
-          error={error}
-          onHide={props.onHide}
-          onOpen={props.onOpen}
-          onOpenCard={props.onOpenCard}
-          onAsk={(text) => {
-            props.onOpen();
-            send(text).catch(fail);
-          }}
-        />
-      </aside>
+      <>
+        <FloatPanel state="peek" className="bg-sunken">
+          {header}
+          <CopilotPeek
+            cards={props.cards}
+            persona={persona}
+            items={items}
+            error={error}
+            onHide={props.onHide}
+            onOpen={props.onOpen}
+            onOpenCard={props.onOpenCard}
+            onAsk={(text) => {
+              props.onOpen();
+              send(text).catch(fail);
+            }}
+          />
+        </FloatPanel>
+        {launcher}
+      </>
     );
   }
 
   return (
+    <>
+      <FloatPanel state="open" className="bg-canvas">
+        <div className="relative z-10 border-b border-line">{header}</div>
+        {error && <p className="relative z-10 mx-3 rounded-md bg-danger-soft px-3 py-2 text-[12px] text-danger">{error}</p>}
+        {card ? (
+          <div className="relative z-10 flex min-h-0 flex-1 flex-col bg-canvas">
+            <CrashGuard what="conversation" className="m-3">
+              <ThreadView
+                card={card}
+                items={items}
+                streaming={streaming}
+                onSend={send}
+                onAnswer={(allow, answers, reply) => {
+                  // A plain Allow or Deny leaves at once, as on any card (lib/thread-handlers.ts).
+                  const pendingId = card.pending?.id;
+                  const send = () => api.answer(COPILOT_ID, allow, answers, pendingId, reply);
+                  return (pendingId && !answers && !reply ? answerNow(COPILOT_ID, pendingId, allow, send) : send()).catch((err: unknown) => {
+                    fail(err);
+                    throw err;
+                  });
+                }}
+                placeholder="Ask about your threads, or tell me what to start"
+                empty={<CopilotEmpty project={props.project} onAsk={(text) => void send(text).catch(fail)} />}
+              />
+            </CrashGuard>
+          </div>
+        ) : (
+          <div className="relative flex flex-1 items-center justify-center text-faint">
+            <Spinner size={16} />
+          </div>
+        )}
+      </FloatPanel>
+      {launcher}
+    </>
+  );
+}
+
+// The peek or the chat: a rounded window stacked above the launcher, sized to the window and never
+// past its edges. It publishes its box so the native browser pane steps aside while they overlap.
+function FloatPanel({ state, className, children }: { state: "peek" | "open"; className: string; children: ReactNode }) {
+  const [win, setWin] = useState(() =>
+    typeof window === "undefined" ? { width: 1280, height: 800 } : { width: window.innerWidth, height: window.innerHeight },
+  );
+  useEffect(() => {
+    const resize = () => setWin({ width: window.innerWidth, height: window.innerHeight });
+    window.addEventListener("resize", resize);
+    return () => window.removeEventListener("resize", resize);
+  }, []);
+  const box = panelBox(win, PANEL[state]);
+  useEffect(() => setCopilotPanel(box), [box.x, box.y, box.width, box.height]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => setCopilotPanel(null), []);
+
+  return (
     <aside
-      data-copilot-lane="open"
-      data-drop-target={COPILOT_ID}
-      style={{ width: LANE_WIDTH.open }}
-      className="relative flex shrink-0 flex-col overflow-hidden border-l border-line-strong bg-canvas"
+      data-copilot-lane={state}
+      data-drop-target={state === "open" ? COPILOT_ID : undefined}
+      style={{ ...NO_DRAG, right: LAUNCHER.inset, bottom: PANEL_BOTTOM, width: box.width, height: box.height }}
+      className={`fixed ${COPILOT_LAYER} flex flex-col overflow-hidden rounded-2xl border border-line-strong shadow-[0_24px_60px_-12px_rgba(0,0,0,0.65)] ${className}`}
     >
-      {/* The cockpit sits in a small modal window at the top, behind a header bar on a dark surface,
-          so the copilot photo reads like a framed card rather than a background the chat sits on. */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-x-0 top-0 z-0 h-[44%]"
-        style={{ background: "linear-gradient(180deg, rgb(0 0 0 / 0.92) 0, rgb(0 0 0 / 0.85) 100%)" }}
-      />
-      <div className="pointer-events-none absolute inset-x-3 top-[3.25rem] z-0 h-[26%] overflow-hidden rounded-xl ring-1 ring-white/10 shadow-[0_20px_50px_-20px_rgba(0,0,0,0.7)]">
-        <div
-          aria-hidden="true"
-          className="absolute inset-0"
-          style={{ background: `url(${persona.picture.src}) ${persona.picture.frame}` }}
-        />
-        <div
-          aria-hidden="true"
-          className="absolute inset-0"
-          style={{ background: "linear-gradient(180deg, rgb(0 0 0 / 0.15) 0, rgb(0 0 0 / 0.45) 100%)" }}
-        />
-      </div>
-      <div className="relative z-10">{header}</div>
-      {/* Spacer for the framed cockpit panel above. */}
-      <div className="h-[26%] shrink-0" aria-hidden="true" />
-      {error && <p className="relative z-10 mx-3 rounded-md bg-danger-soft px-3 py-2 text-[12px] text-danger">{error}</p>}
-      {card ? (
-        // Conversation lives on the light canvas below the modal — every line stays fully visible, no
-        // fade-out as messages scroll up.
-        <div className="relative z-10 flex min-h-0 flex-1 flex-col bg-canvas">
-          <CrashGuard what="conversation" className="m-3">
-            <ThreadView
-              card={card}
-              items={items}
-              streaming={streaming}
-              onSend={send}
-              onAnswer={(allow, answers, reply) => {
-                // A plain Allow or Deny leaves at once, as on any card (lib/thread-handlers.ts).
-                const pendingId = card.pending?.id;
-                const send = () => api.answer(COPILOT_ID, allow, answers, pendingId, reply);
-                return (pendingId && !answers && !reply ? answerNow(COPILOT_ID, pendingId, allow, send) : send()).catch((err: unknown) => {
-                  fail(err);
-                  throw err;
-                });
-              }}
-              placeholder="Ask about your threads, or tell me what to start"
-              empty={<CopilotEmpty project={props.project} onAsk={(text) => void send(text).catch(fail)} />}
-            />
-          </CrashGuard>
-        </div>
-      ) : (
-        <div className="relative flex flex-1 items-center justify-center text-faint">
-          <Spinner size={16} />
-        </div>
-      )}
+      {children}
     </aside>
   );
 }

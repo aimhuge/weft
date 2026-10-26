@@ -51,7 +51,11 @@ export interface NewCardDialogLogic {
   chooseFolder: (folder: string) => void;
   promptToStart: (read: () => string, focus: () => void) => string | null;
   isolated: boolean;
+  setIsolated: (on: boolean) => void;
   toggleIsolated: () => void;
+  // The branch its worktree works on ("" for its own weft/* one); picking one turns isolation on.
+  branch: string;
+  pickBranch: (name: string) => void;
   // Who the thread is (lib/agents.ts): the folder's default (Settings → Agents) until you pick one, Builder when it has none.
   agent: ThreadAgent;
   setAgent: (a: ThreadAgent) => void;
@@ -112,7 +116,7 @@ export function useNewCardDialog(home: string, defaultCwd: string | undefined, r
   const [busy, setBusy] = useState<false | "start" | "backlog">(false);
   const [started, setStarted] = useState<string | null>(null);
   const draftTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const { isolated, toggleIsolated, promptLength, notePrompt } = useIsolate(cwd);
+  const { isolated, setIsolated, toggleIsolated, branch, pickBranch, promptLength, notePrompt } = useIsolate(cwd);
   // The agent you picked here; a new folder goes back to its own default.
   const [pickedAgent, setAgent] = useState<ThreadAgent | null>(null);
   const { projects: projectAgents } = useAgentList();
@@ -214,7 +218,7 @@ export function useNewCardDialog(home: string, defaultCwd: string | undefined, r
           permissionMode,
           model,
           effort: effortFor(backend, effort),
-          ...(isolated ? { isolated: true } : {}),
+          ...(isolated ? { isolated: true, ...(branch ? { branch } : {}) } : {}),
           // Always named, so Builder picked here wins over the folder's default.
           agent,
           start,
@@ -237,7 +241,7 @@ export function useNewCardDialog(home: string, defaultCwd: string | undefined, r
         setBusy(false);
       }
     },
-    [busy, cwd, backend, permissionMode, model, effort, isolated, agent, promptToStart],
+    [busy, cwd, backend, permissionMode, model, effort, isolated, branch, agent, promptToStart],
   );
 
   return {
@@ -261,7 +265,10 @@ export function useNewCardDialog(home: string, defaultCwd: string | undefined, r
     chooseFolder,
     promptToStart,
     isolated,
+    setIsolated,
     toggleIsolated,
+    branch,
+    pickBranch,
     agent,
     setAgent,
     promptLength,

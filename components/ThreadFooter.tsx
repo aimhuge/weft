@@ -11,6 +11,8 @@ import { turnCutOff } from "@/lib/reply-mode";
 import { modelOn } from "@/lib/new-thread";
 import { useThreadTransport } from "@/lib/thread-transport";
 import type { Card } from "@/lib/types";
+import type { CacheState } from "@/lib/types-card";
+import BackendPicker from "./BackendPicker";
 import CrashGuard from "./CrashGuard";
 import ElicitationForm from "./ElicitationForm";
 import { guarded } from "./guarded";
@@ -69,7 +71,21 @@ export function PermissionRequest({ card, readOnly, answered, answer }: { card: 
 type EditLast = { text: string; canRewind: boolean; fileEdits: number; onEdit: (text: string) => Promise<void> };
 
 // The reply box, or (show false: the review panel stands in, or nothing can be sent) the status strip on its own, so
-// the context and limits stay in view.
+// the context and limits stay in view. The copilot keeps it short: the board's footer already shows the limits, so
+// under its box sits only the model it runs on, to switch; no cold-cache split and no Done (it has no project).
+// The cold-cache split on Send fresh: the reply box asks to resend without the cache, and `track` draws the
+// message in the thread while it is sent (lib/use-pending-sends.ts). Copilot threads have no cache to split.
+function staleSplit(
+  card: Card,
+  fresh: ((cardId: string, message: string) => Promise<void>) | undefined,
+  track?: TrackSend,
+): { cache: CacheState; onFresh: (message: string) => Promise<void> } | undefined {
+  const cache = card.stats?.cache;
+  if (!cache || !fresh) return undefined;
+  const onFresh = (message: string) => (track ? track(message, () => fresh(card.id, message)) : fresh(card.id, message));
+  return { cache, onFresh };
+}
+
 export function ThreadReply({ card, show, live, placeholder, question, scheduling, editLast, onEditing, onSend, track }: {
   card: Card;
   show: boolean;
@@ -86,20 +102,21 @@ export function ThreadReply({ card, show, live, placeholder, question, schedulin
   const transport = useThreadTransport();
   const { shell } = transport;
   const { fresh } = transport;
-  const cache = card.stats?.cache;
-  const status = <StatusStrip stats={card.stats} cwd={card.cwd} backend={card.backend} />;
+  const pilot = card.role === "copilot";
+  const status = pilot ? <BackendPicker card={card} up /> : <StatusStrip stats={card.stats} cwd={card.cwd} backend={card.backend} />;
   if (!show) return <div className="shrink-0 border-t border-line px-4 py-1.5">{status}</div>;
   return (
     <ReplyBox key={card.id} question={question} cardId={card.id} cwd={card.cwd} live={live} placeholder={placeholder} suggestion={card.suggestion}
-      midTurn={card.role !== "copilot" && (card.backend === "claude" || card.backend === "puku")}
+      midTurn={!pilot && (card.backend === "claude" || card.backend === "puku")}
       sendLater={scheduling && { backend: card.backend, resets: scheduling.resets, scheduled: card.scheduled ?? [] }}
       status={status}
-      stale={cache && fresh ? { cache, onFresh: (message) => (track ? track(message, () => fresh(card.id, message)) : fresh(card.id, message)) } : undefined}
+      stale={pilot ? undefined : staleSplit(card, fresh, track)}
       cutOff={turnCutOff(card)}
       // No live session: a model/CLI was just switched (lib/backend-switch.ts clears sessionId), or the
       // card was never started. A long-running card whose cache just lapsed still has sessionId set, so
       // this is false there — Continue still works on cold cache with history.
       noPriorContext={!card.sessionId}
+      noDone={pilot}
       fiveHour={card.stats?.fiveHour}
       backend={card.backend}
       // The model the thread runs on: the one it was started with, else the one its session runs on

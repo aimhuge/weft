@@ -133,15 +133,15 @@ describe("whose Bash wrote a file", () => {
     expect(writers.unknownWriters().has(crons)).toBe(false);
   });
 
-  it("calls a write unknown while a Codex or Goose card, which runs no hooks, is busy in the tree", async () => {
+  it("claims a write while a Codex or Goose card is busy too: their Bash runs through the same hooks (lib/guards)", async () => {
     cards.set("other", card("other", { title: "Codex card", backend: "codex" }));
     at(1000);
     await pre(() => "me", "node gen.mjs", "mine");
     writes(crons, 1050);
     at(1100);
     await post(() => "me", "mine", { command: "node gen.mjs" });
-    expect(cards.get("me")?.claims).toBeUndefined();
-    expect(writers.unknownWriters().has(crons)).toBe(true);
+    expect(cards.get("me")?.claims).toBeDefined();
+    expect(writers.unknownWriters().has(crons)).toBe(false);
   });
 
   it("forgets an unknown writer once the file is clean", async () => {

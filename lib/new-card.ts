@@ -1,6 +1,7 @@
 import { storedAgent } from "./agents";
 import { listAgents, projectAgent } from "./agent-store";
 import { firstMessage } from "./automations";
+import { validBranch } from "./branch-name";
 import { resolveFolder } from "./folders";
 import { asText, cleanTitle, titleFromPrompt } from "./format";
 import { effortFor, BACKEND_IDS } from "./new-thread";
@@ -60,10 +61,18 @@ export function createCardFromBody(body: Record<string, unknown>): Card {
     effort,
     ...marksFromBody(body, cwd),
     // Its own worktree, taken from the pool before its first turn (lib/worktree-start.ts).
-    ...(body.isolated === true ? { isolated: true } : {}),
+    ...isolationFromBody(body),
   });
   touchProject(cwd);
   return card;
+}
+
+// Its own worktree, taken from the pool before its first turn (lib/worktree-start.ts), on the branch named when it
+// names a valid one (an existing branch is checked out, a new name made from HEAD), else on its own weft/* branch.
+function isolationFromBody(body: Record<string, unknown>): Pick<Card, "isolated" | "worktreeBranch"> {
+  if (body.isolated !== true) return {};
+  const branch = asText(body.branch).trim();
+  return { isolated: true, ...(validBranch(branch) ? { worktreeBranch: branch } : {}) };
 }
 
 // The card's tags and agent from the body. Tags given here are yours, so retitle won't pick others (lib/retitle.ts);

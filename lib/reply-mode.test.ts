@@ -96,6 +96,9 @@ describe("Done button", () => {
     expect(at({ live: true }).done).toBeUndefined();
     expect(at({ shell: true }).done).toBeUndefined();
   });
+  it("is left out where the thread has no project to wrap up (the copilot)", () => {
+    expect(at({ noDone: true }).done).toBeUndefined();
+  });
 });
 
 describe("limitResetAt", () => {

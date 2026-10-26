@@ -61,6 +61,8 @@ export interface ReplyModeInput {
   // Continue has no meaning here — the reply box defaults to Send fresh, or to Send for codex, and the
   // ▾ menu and ⌘⇧↵ Continue keybinding are hidden.
   noPriorContext?: boolean;
+  // No Done: the thread has no project to wrap up (the copilot).
+  noDone?: boolean;
   now: number;
 }
 
@@ -209,7 +211,7 @@ export function replyMode(input: ReplyModeInput): ReplyModeView {
   // No prior context: Continue has no meaning here (the menu item is hidden and ⌘⇧↵ is a no-op, in
   // components/ReplyBox.tsx). Otherwise, hide it only when the primary is already Continue.
   const cont = input.noPriorContext || idle.primary.action === "continue" ? undefined : CONTINUE;
-  return { ...idle, done: DONE, cont };
+  return { ...idle, done: input.noDone ? undefined : DONE, cont };
 }
 
 // When this thread's 5-hour window is used up, the time it resets (ms): the window's own reset when it's still ahead,
@@ -252,6 +254,7 @@ export interface ReplyBoxState {
   noPriorContext?: boolean;
   // The CLI can start a new session from a brief (lib/splice.ts). False for codex.
   canFresh?: boolean;
+  noDone?: boolean;
   now: number;
 }
 
@@ -276,6 +279,7 @@ export function replyBoxMode(s: ReplyBoxState): { view: ReplyModeView; resetAt?:
     canSchedule: Boolean(s.sendLater),
     canFresh: s.canFresh,
     noPriorContext: s.noPriorContext,
+    noDone: s.noDone,
     now: s.now,
   });
   return { view, resetAt };

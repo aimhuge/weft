@@ -130,6 +130,9 @@ export interface Card {
   // cwd stays the project; code runs in workDir(card) (lib/work-dir.ts).
   isolated?: boolean;
   worktree?: CardWorktree;
+  // The branch its worktree works on, when you picked one in the New thread dialog: an existing branch is checked
+  // out there, a new name is made from HEAD. Left out, its own weft/<slug> (lib/worktrees.ts branchFor).
+  worktreeBranch?: string;
   // Short labels (lib/tags.ts), the same rules as GitHub labels so they sync with an issue's. Weft's
   // retitle picks them after a turn (tagsBy "auto") until you edit them (tagsBy "user").
   tags?: string[];
@@ -150,9 +153,10 @@ export interface Card {
   updatedAt: number;
 }
 
-// An isolated card's worktree (lib/worktrees.ts): ~/.weft/worktrees/<repo>/<id> on branch weft/<slug>, made from the
-// main tree's HEAD at `base`, landing back on `repo` (the main tree's root). `sub` is the card's folder inside the repo
-// when it isn't the root ("packages/web"), so the thread starts in the same place in its worktree.
+// An isolated card's worktree (lib/worktrees.ts): ~/.weft/worktrees/<repo>/<id> on branch weft/<slug> (or the card's
+// worktreeBranch), made from the main tree's HEAD at `base`, landing back on `repo` (the main tree's root). `sub` is the
+// card's folder inside the repo when it isn't the root ("packages/web"), so the thread starts in the same place in its
+// worktree.
 export interface CardWorktree {
   path: string;
   branch: string;

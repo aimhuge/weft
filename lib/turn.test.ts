@@ -252,8 +252,9 @@ describe("usageWindow", () => {
 
 describe("modelStats", () => {
   it("empty or undefined usage gives undefined model, tokens and contextUsed", () => {
-    expect(modelStats(undefined, undefined)).toEqual({ model: undefined, contextUsed: undefined, tokens: undefined });
-    expect(modelStats({}, undefined)).toEqual({ model: undefined, contextUsed: undefined, tokens: undefined });
+    const empty = { model: undefined, contextUsed: undefined, contextTokens: undefined, contextWindow: undefined, tokens: undefined };
+    expect(modelStats(undefined, undefined)).toEqual(empty);
+    expect(modelStats({}, undefined)).toEqual(empty);
   });
 
   it("picks the model with the highest costUSD", () => {
@@ -276,9 +277,14 @@ describe("modelStats", () => {
   it("reports contextUsed from the top model, rounded and capped at 100", () => {
     const u = { top: usage({ contextWindow: 200_000 }), other: usage({ contextWindow: 100_000 }) };
     // 150k of 200k -> 75
-    expect(modelStats(u, 150_000)).toEqual({ model: "top", contextUsed: 75, tokens: undefined });
+    expect(modelStats(u, 150_000)).toEqual({ model: "top", contextUsed: 75, contextTokens: 150_000, contextWindow: 200_000, tokens: undefined });
     // 250k of 200k -> capped at 100
-    expect(modelStats(u, 250_000)).toEqual({ model: "top", contextUsed: 100, tokens: undefined });
+    expect(modelStats(u, 250_000)).toEqual({ model: "top", contextUsed: 100, contextTokens: 250_000, contextWindow: 200_000, tokens: undefined });
+  });
+
+  it("keeps the stack size even without a window to measure it against", () => {
+    const u = { top: usage({ contextWindow: 0 }) };
+    expect(modelStats(u, 50_000)).toEqual({ model: "top", contextUsed: undefined, contextTokens: 50_000, contextWindow: undefined, tokens: undefined });
   });
 
   it("contextUsed is undefined without contextTokens or contextWindow", () => {

@@ -105,12 +105,21 @@ export function cacheAfter(u: RequestUsage | undefined, at: number, previousTtl 
   return { at, ttl, hit: Math.round((read / tokens) * 100), tokens };
 }
 
-// The model that cost the most this turn, how full its context is, and the turn's tokens.
-export function modelStats(modelUsage: Record<string, ModelUsage> | undefined, contextTokens: number | undefined): Pick<CardStats, "model" | "contextUsed" | "tokens"> {
+// The model that cost the most this turn, how full its context is, and the turn's tokens. The stack
+// itself is kept too: the tokens the last request carried and the window they were measured against,
+// so the strip can say how big the stack is and not only how full it is.
+export function modelStats(modelUsage: Record<string, ModelUsage> | undefined, contextTokens: number | undefined): Pick<CardStats, "model" | "contextUsed" | "contextTokens" | "contextWindow" | "tokens"> {
   const models = Object.entries(modelUsage ?? {});
   const [model, main] = models.sort((a, b) => b[1].costUSD - a[1].costUSD)[0] ?? [];
   const tokens = models.reduce((sum, [, u]) => sum + u.inputTokens + u.outputTokens, 0);
+  const contextWindow = main?.contextWindow || undefined;
   const contextUsed =
-    main?.contextWindow && contextTokens ? Math.min(100, Math.round((contextTokens / main.contextWindow) * 100)) : undefined;
-  return { model, contextUsed, tokens: tokens || undefined };
+    contextWindow && contextTokens ? Math.min(100, Math.round((contextTokens / contextWindow) * 100)) : undefined;
+  return {
+    model,
+    contextUsed,
+    contextTokens: contextTokens || undefined,
+    contextWindow,
+    tokens: tokens || undefined,
+  };
 }

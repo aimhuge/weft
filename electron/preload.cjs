@@ -30,6 +30,11 @@ contextBridge.exposeInMainWorld("weft", {
     openFolder: () => ipcRenderer.invoke("dialog:openFolder"),
   },
   openExternal: (url) => ipcRenderer.send("shell:openExternal", url),
+  // The printers macOS has, and printing a page of HTML through the system print dialog (electron/print.cjs).
+  print: {
+    printers: () => ipcRenderer.invoke("print:printers"),
+    html: (html) => ipcRenderer.invoke("print:html", html),
+  },
   revealFolder: (folder) => ipcRenderer.send("shell:reveal", folder),
   popupMenu: (items) => ipcRenderer.invoke("menu:popup", items),
   setBadge: (count) => ipcRenderer.send("badge:set", count),

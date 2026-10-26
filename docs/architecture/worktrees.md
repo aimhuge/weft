@@ -15,7 +15,7 @@ Isolation is opt-in per card. With it off, nothing here runs: no git call, no po
 | Field | What |
 | --- | --- |
 | `path` | `~/.weft/worktrees/<repo>/<id>`: never inside the project folder, so no stray folders in it |
-| `branch` | `weft/<card-slug>-<id6>` |
+| `branch` | `weft/<card-slug>-<id6>`, or `Card.worktreeBranch` when you picked or named one |
 | `base` | the main tree's HEAD commit the branch started from |
 | `repo` | the main tree's root (the project the card lands on) |
 
@@ -59,9 +59,13 @@ So the pool does the 15 seconds ahead of time and taking one is a move and a bra
    checked out at the new HEAD (`git checkout --detach`, clean tree, milliseconds), and reinstalled only when the
    lockfile changed.
 3. **Take** (`takeWorktree(card)`): the newest ready entry, `git worktree move` to the card's path, checked out at
-   the main tree's HEAD if it moved, `git switch -c <branch>`. With no entry ready, it makes one on the spot (the
+   the main tree's HEAD if it moved, `git checkout -B <branch>`. With a `worktreeBranch` that already exists, the
+   entry checks that branch out as it is instead (never moved or reset; reinstalled if its lockfile differs), and a
+   branch checked out in another worktree (the main tree's own, say) is refused up front, naming where: git won't
+   check a branch out twice. A new name is made at HEAD like `weft/*`. With no entry ready, it makes one on the spot (the
    15 s path) and says so in the log. Then it refills in the background.
-4. **Return** (after landing): the worktree is clean at the landed commit; its branch is deleted (merged), it
+4. **Return** (after landing): the worktree is clean at the landed commit; its `weft/*` branch is deleted (merged;
+   a branch you named stays), it
    moves back to `pool-<random>`, unless the pool is full, when it's removed.
 
 Which repos get a pool: the ones an isolated card used in the last 7 days (`~/.weft/worktrees/repos.json`, three at
@@ -112,6 +116,9 @@ doesn't land), or at once when there's no wrap-up turn (`archiveWhenIdle`), `hoo
    ("Landed on main (abc1234), pushed"). The card stays `isolated`: a reply after Done takes a fresh worktree from a
    HEAD that now holds its work.
 
+Landing a branch you picked rebases it like a `weft/*` one, so a picked branch that was pushed diverges from its
+remote; Weft doesn't push it (only the main tree's branch).
+
 A card you delete takes its worktree with it; its branch stays when it has commits that never landed (`git branch -d`).
 
 The main tree's HEAD can move between steps 2 and 3 (another card landed); the merge then isn't a fast-forward,
@@ -119,10 +126,16 @@ so it rebases once more and retries.
 
 ## UI
 
-- **New thread** (`components/IsolateToggle.tsx` in `components/NewCardDialogControls.tsx`): a Shared / Isolated
-  switch beside the folder picker, not a new row. It reads "Isolate?" with an amber dot when `busyInFolder` finds busy
-  cards in the folder or the prompt is over 1,500 characters (`suggestIsolate`, `lib/use-isolate.ts`); the "Also
-  running here" line hides while it's on. Switching it on warms the pool for that repo (`POST /api/worktrees`).
+- **New thread** (`components/IsolateMenu.tsx` in `components/NewCardDialogControls.tsx`): one chip beside the folder
+  picker, not a new row, reading Shared, the branch, or "Worktree". It reads "Isolate?" with an amber dot when
+  `busyInFolder` finds busy cards in the folder or the prompt is over 1,500 characters (`suggestIsolate`,
+  `lib/use-isolate.ts`); the "Also running here" line hides while it's on. It opens a menu: a Shared / Worktree
+  switch, and with Worktree a branch picker (`lib/use-branches.ts` over `GET /api/worktrees?cwd=`, the repo's local
+  branches newest first via `git for-each-ref`, `listBranches` in `lib/worktrees.ts`). Search filters them; one checked
+  out in another worktree is greyed "in use"; a search that's a valid new name (`validBranch`, `lib/branch-name.ts`,
+  also checked server-side in `lib/new-card.ts`) offers "Create". Enter takes the exact match, else the new name.
+  Picking a branch turns Worktree on; another folder resets it to the card's own. The card's input sends `branch`,
+  stored as `Card.worktreeBranch`. Switching to Worktree warms the pool for that repo (`POST /api/worktrees`).
 - **The first send** (`lib/worktree-start.ts`): `sendMessage` holds an isolated card's message until `takeWorktree`
   gives it one, whichever way the turn starts (New thread, Backlog → Running, the scheduler). If none can be had (not a
   git repo), the card goes to Needs you, stops being isolated and says so; it never falls back to the shared tree on
@@ -137,6 +150,5 @@ so it rebases once more and retries.
   checked out under `~/.weft/worktrees/` (without it, a thread that runs `push.sh` anyway publishes its `weft/*` branch).
 - A test for the fast-forward retry when another card lands between the rebase and the merge.
 
-- Picking up an existing branch as a card's worktree.
 - A spare CLI kept warm inside a pool entry (the path changes on take, so the spare would have to move too).
 - Isolation for picked-up Claude Code sessions (they keep their own cwd).

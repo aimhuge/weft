@@ -20,6 +20,7 @@ import { cliEnv } from "./env";
 import { gooseArgs, gooseRecipeYaml, GOOSE_RECIPE_CODE, type GooseTurnPlan } from "./goose-recipe";
 import { gooseLaunch } from "./goose-launch";
 import { openGooseMcp } from "./goose-mcp";
+import { openGooseGuards } from "./guards/goose";
 import { addToReply, flushReply, lastReply, resetReply } from "./goose-reply";
 import { replacesSystemPrompt } from "./goose-provider";
 import { progressPaths } from "./goose-progress-paths";
@@ -347,12 +348,15 @@ export async function driveGoose(session: Session, executable: string) {
  * One turn on Goose: start the CLI, read its events, and fail the turn if it ends without a `complete`.
  */
 async function runGooseTurn(session: Session, executable: string, prompt: string) {
+  // Weft's guards, through Goose's own plugin hooks (lib/guards/goose.ts). Without them the turn doesn't start.
+  const closeGuards = openGooseGuards(session);
   // Weft's own tools (mcp__browser__open_url and the rest) reach Goose for this turn only (lib/goose-mcp.ts).
   const closeMcp = openGooseMcp(session);
   try {
     await runGooseProcess(session, executable, prompt);
   } finally {
     closeMcp();
+    closeGuards();
   }
 }
 
@@ -403,6 +407,6 @@ async function runGooseProcess(session: Session, executable: string, prompt: str
 export const GOOSE_RUNNER_CODE = [
   driveGoose, assistant, result, noteFileChanges, handleGooseEvent, readGooseEvents, promptFor, argsFor, gooseEnv,
   gooseToolUse, gooseToolResult, isTurnEnd, eventText, messageText, modelName, planFor, saveTurnRecipe,
-  openGooseMcp, addToReply, flushReply, lastReply, resetReply, replacesSystemPrompt, parseGooseEvent,
+  openGooseMcp, openGooseGuards, addToReply, flushReply, lastReply, resetReply, replacesSystemPrompt, parseGooseEvent,
   ...GOOSE_RECIPE_CODE,
 ];

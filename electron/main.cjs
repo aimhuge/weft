@@ -372,6 +372,7 @@ ipcMain.handle("dialog:openFolder", async () => {
 });
 ipcMain.on("shell:openExternal", (_e, url) => /^https?:\/\//i.test(String(url)) && shell.openExternal(String(url)));
 createMenuPopup({ ipcMain, Menu, BrowserWindow });
+require("./print.cjs").setupPrint({ ipcMain, BrowserWindow, isBoard: (sender) => Boolean(sender) && sender === appView?.webContents });
 ipcMain.on("shell:reveal", (_e, folder) => path.isAbsolute(String(folder)) && fs.existsSync(String(folder)) && shell.openPath(String(folder)));
 // The secrets vault answers the board window only; threads reach values only through the pane typing them in, behind Touch ID.
 vault = require("./vault.cjs").setupVault({ ipcMain, dataDir: dataDir(), window: () => win, board: () => appView?.webContents });

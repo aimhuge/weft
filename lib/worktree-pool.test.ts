@@ -96,6 +96,25 @@ describe("the pool", () => {
     expect(fs.existsSync(wt.path)).toBe(false);
   });
 
+  it("checks out a branch you named that exists, makes a new one at HEAD, and keeps both after landing", async () => {
+    git(repo, "branch", "feat/old", "HEAD~1");
+    const old = git(repo, "rev-parse", "feat/old");
+    const wt = await takeWorktree({ id: "named000", title: "Named", cwd: repo, worktreeBranch: "feat/old" });
+    expect(git(wt.path, "branch", "--show-current")).toBe("feat/old");
+    expect(git(wt.path, "rev-parse", "HEAD")).toBe(old);
+    await returnWorktree(wt);
+    expect(git(repo, "branch", "--list", "feat/old")).toContain("feat/old");
+    const fresh = await takeWorktree({ id: "named111", title: "Named", cwd: repo, worktreeBranch: "feat/new" });
+    expect(git(fresh.path, "branch", "--show-current")).toBe("feat/new");
+    expect(git(fresh.path, "rev-parse", "HEAD")).toBe(git(repo, "rev-parse", "HEAD"));
+    await dropWorktree(fresh);
+    expect(git(repo, "branch", "--list", "feat/new")).toContain("feat/new");
+  });
+
+  it("refuses a branch you named that's checked out somewhere else", async () => {
+    await expect(takeWorktree({ id: "named222", title: "Named", cwd: repo, worktreeBranch: "main" })).rejects.toThrow(/main is checked out in .*repo/);
+  });
+
   it("refuses a folder outside git", async () => {
     await expect(takeWorktree({ id: "x", title: "x", cwd: tmp })).rejects.toThrow(/isn't in a git repo/);
   });

@@ -45,6 +45,20 @@ describe("StatusStrip", () => {
     expect(out).toBe("weft (main)[claude · opus-5-5]ctx:70%5hr:84%7d:85%");
   });
 
+  it("shows the context stack size next to the percentage", () => {
+    const out = text(
+      <StatusStrip backend="claude" stats={{ contextUsed: 75, contextTokens: 150_000, contextWindow: 200_000 }} />,
+    );
+    expect(out).toContain("ctx:25%");
+    expect(out).toContain("150.0k/200.0k");
+  });
+
+  it("shows the stack size alone when there is no window to measure it against", () => {
+    const out = text(<StatusStrip backend="claude" stats={{ contextUsed: 30, contextTokens: 50_000 }} />);
+    expect(out).toContain("ctx:70%");
+    expect(out).not.toContain("50.0k/");
+  });
+
   it("falls back on the last turn's model, then on the CLI alone", () => {
     expect(text(<StatusStrip backend="puku" stats={{ model: "opus-4.8" }} />)).toContain("[puku · opus-4.8]");
     cleanup();

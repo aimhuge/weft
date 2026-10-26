@@ -9,7 +9,6 @@
 // serves, and a named model is one the user gave a name to (lib/goose-models.ts).
 
 import { BACKENDS, CODEX_DEFAULT_MODEL, GOOSE_DEFAULT_MODEL, MODELS, NO_MODEL } from "./new-thread";
-import { unguarded, UNGUARDED_TAG } from "./unguarded";
 import type { Backend } from "./types";
 
 // A row in a model menu.
@@ -168,7 +167,7 @@ export function modelGroups(
   const { named = {}, atLimit = new Set<string>(), offer, withCliChoice = false } = options;
   return BACKENDS.map((b) => ({
     backend: b.id,
-    heading: unguarded(b.id) ? `${b.label} · ${UNGUARDED_TAG}` : b.label,
+    heading: b.label,
     rows: optionsFor(b.id, { named: named[b.id], atLimit, offer, withCliChoice }),
   })).filter((g) => g.rows.length > 0);
 }

@@ -1,7 +1,7 @@
 "use client";
 
-// The copilot lane's peek state: the 236px digest column with a quick-ask box; it closes itself
-// 6s after the mouse leaves.
+// The copilot's peek: the digest above the launcher with a quick-ask box (the header's maximize opens
+// the chat); it closes itself 6s after the mouse leaves.
 import { useEffect, useState } from "react";
 import { laneDigest } from "@/lib/copilot-lane";
 import type { PersonaInfo } from "@/lib/copilot-personas";
@@ -22,7 +22,7 @@ export default function Peek(props: {
   const waiting = digest.needsYou.length;
 
   // The peek is the kind of pane you glance at, then look away. Auto-close 6s after the mouse leaves
-  // the peek, so the board reclaims the 236px without you having to find the ×.
+  // the peek, so it gets out of the board's way without you having to find the ×.
   const [armed, setArmed] = useState(true);
   useEffect(() => {
     if (!armed) return;
@@ -60,16 +60,8 @@ export default function Peek(props: {
           </button>
         )}
       </div>
-      <button
-        onClick={props.onOpen}
-        className="relative mt-auto h-[150px] shrink-0 overflow-hidden rounded-lg border border-line-strong text-left"
-        style={{ background: `url(${props.persona.picture.src}) ${props.persona.picture.peek}` }}
-      >
-        <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 to-transparent px-2.5 pb-1.5 pt-5 text-[11.5px] font-semibold text-white">
-          Open the cockpit
-        </span>
-      </button>
       <form
+        className="mt-auto"
         onSubmit={(e) => {
           e.preventDefault();
           const text = draft.trim();

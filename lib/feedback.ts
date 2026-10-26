@@ -1,7 +1,7 @@
-// The feedback dot (components/FeedbackDot.tsx): Haiku interviews you about what's in your way, then writes a summary
+// Feedback: Haiku interviews you about what's in your way, then writes a summary
 // you check before it's sent. Every sent summary is kept in ~/.weft/feedback/ (lib/feedback-store.ts) and goes on to
 // the Weft team's Slack through the deployed Weft (lib/feedback-send.ts). Pure, so the board's hook
-// (lib/use-feedback.ts) can import it.
+// can import it.
 
 export interface FeedbackMessage {
   role: "user" | "assistant";

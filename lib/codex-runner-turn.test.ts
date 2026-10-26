@@ -8,6 +8,7 @@ import { EXE, setupCodex } from "./codex-runner.harness";
 
 const s = await vi.hoisted(async () => (await import("./codex-runner.harness")).codexState());
 
+vi.mock("./guards/turn", async (o) => (await import("./codex-runner.harness")).guardsTurnMock(o));
 vi.mock("./runner-turn", async () => (await import("./codex-runner.harness")).runnerTurnMock(s));
 vi.mock("./store", async () => (await import("./codex-runner.harness")).storeMock(s));
 vi.mock("./weft-mcp", async () => (await import("./codex-runner.harness")).weftMcpMock());

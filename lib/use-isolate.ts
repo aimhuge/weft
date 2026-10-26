@@ -3,9 +3,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "./api-client";
 
-// The New thread dialog's Isolated switch (docs/architecture/worktrees.md): off by default, so a shared card's start
-// path never touches git. On, it warms the folder's worktree pool so Start takes a ready one. It's suggested when other
-// cards are busy in the folder (passed in) or the prompt is long enough to be a big change.
+// The New thread dialog's isolate menu (components/IsolateMenu.tsx, docs/architecture/worktrees.md): shared by
+// default, so a shared card's start path never touches git. A worktree warms the folder's pool so Start takes a ready
+// one, on its own weft/* branch or one you picked or named (`branch`, "" for its own). It's suggested when other cards
+// are busy in the folder (passed in) or the prompt is long enough to be a big change.
 
 export const BIG_PROMPT = 1500;
 
@@ -19,12 +20,23 @@ function warm(cwd: string) {
 
 export function useIsolate(cwd: string) {
   const [isolated, setIsolated] = useState(false);
+  // A branch belongs to its repo: picked for one folder, another folder starts back on the card's own.
+  const [picked, setPicked] = useState({ cwd, name: "" });
+  const branch = picked.cwd === cwd ? picked.name : "";
   const [promptLength, setPromptLength] = useState(0);
   // Warmed when it goes on, and again when the folder changes while it's on.
   useEffect(() => {
     if (isolated && cwd) warm(cwd);
   }, [isolated, cwd]);
   const toggleIsolated = useCallback(() => setIsolated((v) => !v), []);
+  // Picking a branch picks a worktree too: a branch is only for one.
+  const pickBranch = useCallback(
+    (name: string) => {
+      setPicked({ cwd, name });
+      setIsolated(true);
+    },
+    [cwd],
+  );
   const notePrompt = useCallback((markdown: string) => setPromptLength(markdown.length), []);
-  return { isolated, toggleIsolated, promptLength, notePrompt };
+  return { isolated, setIsolated, toggleIsolated, branch, pickBranch, promptLength, notePrompt };
 }
