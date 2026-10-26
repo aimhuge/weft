@@ -222,6 +222,8 @@ When a new doc lands in this folder, add it here on the same change.
   used-up model ("— at its limit"). `fallbackFor` moves an exhausted model to the user's backup (across CLIs, if need be), and every thread kind asks it:
   the New thread dialog (`lib/use-new-card-dialog.ts`), a running thread (`lib/runner-turn.ts`), the copilot (`lib/copilot.ts`), the Review all card
   (`lib/use-board-actions.ts`) and the `/weft:done` wrap-up (`lib/automations.ts`). With no backup set, Weft never guesses a model the user didn't pick.
+  The reset a limit message names is read in the zone the message names, on that zone's own calendar day — "resets 1:00am (Asia/Bangkok)" at 2am
+  Bangkok is tomorrow's 1am, not yesterday's — so the window ends when the CLI says it does.
 - `lib/subagents.ts` + `components/SubagentPicker.tsx`: when threads delegate to subagents and on which model (Settings → Models → Use for subagents,
   any model any CLI serves: forced through `CLAUDE_CODE_SUBAGENT_MODEL` / `PUKU_CLI_SUBAGENT_MODEL` on its own CLI, a headless `-p` run on the other).
   `lib/tasks.ts` + `lib/task-ledger.ts` + `lib/tasks-view.ts` + `components/TaskStrip.tsx`: each thread's subagents and background commands from the CLI's

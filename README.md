@@ -340,7 +340,9 @@ one, a subagent, the `/weft:done` wrap-up, the Review all card, the copilot — 
 model instead of dying in Needs you. The backup may live on another CLI: the card's CLI moves with
 it. With no backup set, Weft never guesses a model you didn't pick, and the card waits in Needs you
 with its error for you to choose. The card's line says what happened: "Opus 5.5 hit its limit — moved
-to Sonnet 5.5".
+to Sonnet 5.5". The reset time comes from the limit message itself and is read in the timezone the
+message names, on that timezone's own day: a window that resets at 1:00am in Bangkok ends at 1:00am
+there, whichever day that is.
 
 Pick **Codex** in the New thread dialog to run the OpenAI Codex CLI. Install `codex` on your PATH and sign in with `codex login` first; Weft can open Codex's device login in Terminal from Settings → Accounts. Codex uses its own tools and saved sessions. Weft's browser, board, secrets and webhook MCP tools reach Codex over HTTP, and a folder's `CLAUDE.md` and `.claude/skills` are passed along (Codex reads neither); the per-tool `.env`, git, restart and check guards aren't available to Codex threads. Codex's sandbox mode and reasoning effort are fixed when a session starts.
 
