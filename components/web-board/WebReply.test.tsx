@@ -49,8 +49,9 @@ describe("the web reply box", () => {
     expect(within(dialog).getByText(/Waiting for your Mac/)).toBeInTheDocument();
   });
 
-  it("holds a reply while the card runs, as the desktop does, and Send now stops the turn first", async () => {
-    const dialog = await board({ column: "running" });
+  // A Claude Code or puku turn takes a reply mid-turn (components/ReplyBox.tsx midTurn), so a Codex card is the one that queues.
+  it("holds a reply while a Codex card runs, as the desktop does, and Send now stops the turn first", async () => {
+    const dialog = await board({ column: "running", card: { backend: "codex" } });
     const box = await within(dialog).findByRole("textbox", { name: "Message" });
     fireEvent.change(box, { target: { value: "and lint" } });
     fireEvent.keyDown(box, { key: "Enter" });

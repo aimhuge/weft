@@ -8,6 +8,8 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
+    # A hung test file (a render loop) once ran the job for 20+ minutes toward the 6-hour default; the suite takes ~8.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
