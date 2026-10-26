@@ -26,6 +26,9 @@ import { grantLapsed, isPaid } from "@/lib/billing/plan-gate";
 import { IP_COUNTRY_HEADER, regionalPick } from "@/lib/billing/regional-pick";
 import { missingStripeEnv } from "@/lib/billing/stripe-env";
 import { cancelForm, checkOpenSourceForm, manageForm, resumeForm, upgradeForm } from "@/lib/billing-actions";
+import { wantedPlan } from "@/lib/billing/plan-link";
+import type { UpgradePlan } from "@/lib/billing/upgrade";
+import OpenUpgrade from "@/components/team/OpenUpgrade";
 import { FreePlansSection, RegionalNote } from "./free-plans";
 import { ReferralSection } from "./referral-card";
 import { storedReferralCode } from "@/lib/billing/referrals";
@@ -57,15 +60,20 @@ function NotDeployedCard({ slug }: { slug: string }) {
 
 // The page body, kept as a plain async function so the gate, the reconcile and the renders can be
 // linear. It reads the query inside the Suspense wrapper, since under cacheComponents a searchParams read outside one
-// blocks the route: ?checkout=done after Stripe Checkout, ?error=… from a refused action.
+// blocks the route: ?checkout=done after Stripe Checkout, ?error=… from a refused action, ?plan=pro|team from a
+// pricing card's link (lib/billing/plan-link.ts).
 type Query = Record<string, string | string[] | undefined>;
 async function readQuery(searchParams?: Promise<Query>) {
   const query = searchParams ? await searchParams : {};
-  return { checkoutDone: query.checkout === "done", actionError: typeof query.error === "string" ? query.error : null };
+  return {
+    checkoutDone: query.checkout === "done",
+    actionError: typeof query.error === "string" ? query.error : null,
+    wanted: wantedPlan(query.plan),
+  };
 }
 
 async function BillingPageBody({ orgSlug, searchParams }: { orgSlug: string; searchParams?: Promise<Query> }) {
-  const { checkoutDone, actionError } = await readQuery(searchParams);
+  const { checkoutDone, actionError, wanted } = await readQuery(searchParams);
   const ctx = await requireTeam(orgSlug, `/${orgSlug}/billing`);
   const canManage = roleCan(ctx.role, "workspace.manage");
   const configured = billingConfigured();
@@ -120,6 +128,7 @@ async function BillingPageBody({ orgSlug, searchParams }: { orgSlug: string; sea
 
   return (
     <div className="wz-billingPage">
+      <UpgradeOnArrival wanted={wanted} current={plan.id} canManage={canManage} configured={configured} />
       <header className="wz-billingHeader wz-hero wz-heroCanyon">
         <h1 className="wz-billingTitle">Billing</h1>
         <p className="wz-billingSub">
@@ -175,6 +184,13 @@ async function BillingPageBody({ orgSlug, searchParams }: { orgSlug: string; sea
       {isPaidPlan && account ? <InvoicesSection orgSlug={orgSlug} invoices={account.invoices} /> : null}
     </div>
   );
+}
+
+// A pricing card's link opens the upgrade dialog (mounted in the layout) on arrival, for someone who can buy and isn't
+// already on that plan; a member sees the page's own "Ask an owner" instead.
+function UpgradeOnArrival(p: { wanted: UpgradePlan | null; current: string; canManage: boolean; configured: boolean }) {
+  const opens = p.canManage && p.configured && p.wanted !== null && p.wanted !== p.current;
+  return opens ? <OpenUpgrade /> : null;
 }
 
 // The regional price a workspace on Free or a grant would pay for Pro; a paying workspace has no use for it.

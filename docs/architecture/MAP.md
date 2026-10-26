@@ -247,6 +247,8 @@ When a new doc lands in this folder, add it here on the same change.
   The upgrade dialog (`components/UpgradeDialog.tsx`, `lib/use-upgrade.ts`, `lib/billing/upgrade.ts` + `plan-cards.ts`): in-app pricing opened by every paywall
   (an invite on Free, shared-app room, the free Puku cap, the Upgrade buttons); `lib/billing/checkout.ts` `startUpgrade` starts Checkout for the billing page, the
   weft.zip dialog and the desktop's `/api/account/billing/checkout` → weft.zip `/api/billing/checkout`, back to `app/checkout/done` (billing.md "The upgrade dialog").
+  Team seats (`lib/billing/seats.ts`): adding, inviting in or removing a person moves a Team subscription's quantity to the member count (billing.md "Team seats").
+  The pricing cards' way in (`lib/billing/plan-link.ts`, `app/billing/page.tsx`, `components/team/OpenUpgrade.tsx`): `/billing?plan=pro|team` → sign-in → `/<slug>/billing`, which opens the upgrade dialog.
   The admin console (`lib/billing/admin/*`, `app/(admin)/admin/billing`, `app/api/admin/billing/*`): one workspace's plan changes, seats, cancel and Free-now, refunds,
   people, discounts and **Reset billing state**, each on the Stripe client for the mode its ids live in (`stripe-keys.ts` `detectMode`), each leaving an `admin.<op>` audit row.
   Coupons and referrals (`lib/billing/admin/coupons.ts`, `/admin/coupons`, `lib/billing/referrals.ts` + `referral-webhook.ts`, `referral_codes`/`referrals` tables):
@@ -259,6 +261,7 @@ When a new doc lands in this folder, add it here on the same change.
   which drops CSS-module exports. `HomeErrorFallback` (the dark plain page both routes render when `loadHome()` returns an error) is a server component.
   Its sections: `components/home/Pillars.tsx` (the five things Weft stands on, `PILLARS` in `lib/home.ts`), `components/home/Plans.tsx`
   (Free, Pro and Team priced off the billing catalog in `lib/billing/plans.ts` — a price change moves the page, nothing is retyped —
+  each card ending in its way in: the download, or **Get Pro** / **Get Team** through `/billing` to Checkout —
   and `components/home/FaqTeaser.tsx` for the six questions).
   Analytics: GA4 (`components/GoogleAnalytics.tsx`, in `app/layout.tsx` when `isDeployed()`) and PostHog (`instrumentation-client.ts`) on every
   weft.zip page and never on a local board (`lib/analytics-gate.ts` refuses local hosts, `lib/analytics-server.ts` the server off Vercel);

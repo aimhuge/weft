@@ -44,6 +44,9 @@ const createMock = vi.hoisted(() => ({ runRenameTeam: vi.fn() }));
 vi.mock("./team-create", () => createMock);
 const deleteMock = vi.hoisted(() => ({ runDeleteTeam: vi.fn() }));
 vi.mock("./team-delete", () => deleteMock);
+// Team's Stripe quantity follows the roster (lib/billing/seats.ts, tested beside it); here only that it's asked.
+const seatsMock = vi.hoisted(() => ({ syncTeamSeatsQuietly: vi.fn() }));
+vi.mock("./billing/seats", () => seatsMock);
 
 import { runInvite, runTeamOp, teamSnapshot, TEAM_GATE_MESSAGE } from "./team-ops";
 import { ORG, USER, actorAtLeast, makeService } from "./team-ops.harness";
@@ -169,6 +172,7 @@ describe("runInvite", () => {
     const svc = makeService({ profiles: [{ id: "u2" }], org_memberships: [], org_subscriptions: [{ plan: "pro", status: "active" }] });
     const ctx = { ...CTX, service: svc.client as never };
     expect(await runInvite(ctx, "x@y.com", "admin")).toEqual({ ok: true, message: "Added x@y.com." });
+    expect(seatsMock.syncTeamSeatsQuietly).toHaveBeenCalledWith(svc.client, ORG, USER.email);
   });
 
   it("reports an insert error when adding an existing profile fails", async () => {

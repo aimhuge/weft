@@ -55,20 +55,28 @@ describe("Plans", () => {
     }
   });
 
-  it("lists the BlastCP tier each plan includes, from the catalog", () => {
+  it("promises no BlastCP tier, since nothing applies it yet", () => {
+    // plan.blastcp stays in the catalog for when BlastCP reads the Weft plan (docs/architecture/billing.md "BlastCP usage").
     const { container } = render(<Plans />);
-    const lists = Array.from(container.querySelectorAll(".wz-planFeatures")).map((l) =>
-      Array.from(l.querySelectorAll("li")).map((li) => li.textContent),
-    );
-    expect(lists).toHaveLength(3);
-    expect(lists[0]).toContain("BlastCP Free: 1 brand, 3 channels, 30 posts a month");
-    expect(lists[0]).toContain("$0.50 of BlastCP AI generation, once");
-    for (const list of lists.slice(1)) {
-      expect(list).toContain("BlastCP Creator: 1 brand, every channel, unlimited posts");
-      expect(list).toContain("$3 a month of BlastCP AI generation");
-      // The closing "Everything in …" stays last, after the BlastCP lines.
-      expect(list.at(-1)).toMatch(/^Everything in /);
-    }
+    expect(container.querySelector(".wz-planGrid")?.textContent).not.toMatch(/BlastCP/);
+  });
+
+  it("links Pro and Team through /billing to Checkout, and Free to the download", () => {
+    const { container } = render(<Plans download={{ label: "Download for Mac", href: "https://example.com/weft.dmg" }} />);
+    const ctas = Array.from(container.querySelectorAll<HTMLAnchorElement>(".wz-planCta")).map((a) => [a.textContent, a.getAttribute("href")]);
+    expect(ctas).toEqual([
+      ["Download for Mac", "https://example.com/weft.dmg"],
+      ["Get Pro", "/billing?plan=pro"],
+      ["Get Team", "/billing?plan=team"],
+    ]);
+    // The featured card's button is the clay one, and each click is counted.
+    expect(container.querySelector(".wz-planFeatured .wz-planCta")?.classList.contains("wz-planCtaFeatured")).toBe(true);
+    expect(container.querySelector('.wz-planCta[href="/billing?plan=team"]')?.getAttribute("data-track")).toBe("plan_clicked");
+  });
+
+  it("leaves Free without a button when the page has no download", () => {
+    const { container } = render(<Plans />);
+    expect(container.querySelectorAll(".wz-planCta")).toHaveLength(2);
   });
 
   it("quotes the free tier cap on Free, from the catalog", () => {

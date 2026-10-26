@@ -446,6 +446,37 @@
   background: var(--clay-2);
 }
 
+/* Each card's way in (Plans.tsx): a quiet outline pill, clay on the featured card, like the hero's download. */
+.wz-root .wz-planCta {
+  align-self: flex-start;
+  margin-top: 24px;
+  padding: 10px 20px;
+  border-radius: 999px;
+  border: 1px solid rgb(236 229 216 / 0.28);
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--thread);
+  transition:
+    border-color 0.2s,
+    background 0.2s;
+}
+
+.wz-root .wz-planCta:hover {
+  border-color: var(--clay-2);
+  color: var(--thread);
+}
+
+.wz-root .wz-planCtaFeatured {
+  border-color: transparent;
+  background: var(--clay);
+  color: #1a0e07;
+}
+
+.wz-root .wz-planCtaFeatured:hover {
+  background: var(--clay-2);
+  color: #1a0e07;
+}
+
 .wz-planNote {
   margin: 24px 0 0;
   font-size: 14px;

@@ -20,8 +20,8 @@ Having people is the one thing a plan unlocks, and it is a real gate in code, no
 
 An unreadable, missing or non-paying subscription reads as Free rather than letting people in, so a Supabase hiccup
 locks the invite form instead of 500-ing it. One consequence worth knowing: the gate says a workspace *may* have
-members; nothing yet keeps a Team subscription's seat count in step with the roster (no billing page yet), so a Team
-workspace that adds a person is under-charged until that lands.
+members. On Team each person is a seat: adding, inviting in or removing someone moves the Stripe subscription's
+quantity to the member count ([billing.md](billing.md#team-seats)).
 
 ## Where it runs
 

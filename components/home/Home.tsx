@@ -52,7 +52,7 @@ export default async function Home() {
 
         <Pillars />
 
-        <Plans />
+        <Plans download={{ label: download.label, href: download.href }} />
 
         <FaqTeaser />
 

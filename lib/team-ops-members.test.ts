@@ -19,6 +19,9 @@ const teamsModMock = vi.hoisted(() => ({
 
 vi.mock("@aimhuge/teams", () => teamsMock);
 vi.mock("./teams", () => teamsModMock);
+// Team's Stripe quantity follows the roster (lib/billing/seats.ts, tested beside it); here only that it's asked.
+const seatsMock = vi.hoisted(() => ({ syncTeamSeatsQuietly: vi.fn() }));
+vi.mock("./billing/seats", () => seatsMock);
 
 import { runChangeRole, runRemove, runRevokeInvite } from "./team-ops";
 import { ORG, USER, actorAtLeast, makeService } from "./team-ops.harness";
@@ -147,12 +150,14 @@ describe("runRemove", () => {
     const svc = makeService({ org_memberships: [{ role: "member" }] }, {}, { org_memberships: { error: null } });
     const ctx = { ...CTX, service: svc.client as never };
     expect(await runRemove(ctx, "u2")).toEqual({ ok: true, message: "Removed." });
+    expect(seatsMock.syncTeamSeatsQuietly).toHaveBeenCalledWith(svc.client, ORG, USER.email);
   });
 
   it("lets the actor leave a workspace they're a member of", async () => {
     const svc = makeService({ org_memberships: [{ role: "admin" }] }, {}, { org_memberships: { error: null } });
     const ctx = { ...CTX, role: "admin" as const, service: svc.client as never };
     expect(await runRemove(ctx, USER.id)).toEqual({ ok: true, message: "You left the workspace." });
+    expect(seatsMock.syncTeamSeatsQuietly).toHaveBeenCalledTimes(1);
   });
 
   it("reports an error when the delete fails", async () => {

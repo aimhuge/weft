@@ -57,7 +57,7 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // The weft.zip pages that read the session: sign-in, the workspace's team page and invite links.
+  // The weft.zip pages that read the session: sign-in, the workspace's team page, /billing (the pricing cards' way in) and invite links.
   // /s/:path* is included so a private share's redirect-to-login sees the visitor's cookie state.
   // The app-link matchers let the proxy decide on every request; non-matches still hit the function
   // but return NextResponse.next() at once (no session work for them).
@@ -65,6 +65,7 @@ export const config = {
     "/login",
     "/app",
     "/team",
+    "/billing",
     "/invite/:token*",
     "/:orgSlug/team/:path*",
     "/:orgSlug/billing/:path*",

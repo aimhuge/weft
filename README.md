@@ -164,17 +164,18 @@ port.
   daily cap per account (150 requests, 1M tokens); Weft's key never ships in the app. Signed out, the login pop-up
   offers **Sign in to Weft** or Puku's own login. See docs/architecture/puku-trial.md.
 - **Weft Pro**: every workspace has a plan. **Free** keeps the Puku trial's daily cap. **Pro** ($20/month or
-  $200/year) replaces it with a 300M Puku token allowance, refreshed every billing period. Every plan includes BlastCP
-  usage: Free has BlastCP Free (1 brand, 3 channels, 30 posts a month, $0.50 of AI generation once), and Pro and Team
-  have BlastCP Creator (every channel, unlimited posts, $3 a month of AI generation); BlastCP doesn't apply them yet.
+  $200/year) replaces it with a 300M Puku token allowance, refreshed every billing period. **Team** ($9 a seat a month)
+  bills the workspace's member count, and adding or removing a person moves the Stripe quantity with it.
+  weft.zip's pricing cards link to Checkout: **Get Pro** and **Get Team** sign you in and open the upgrade dialog on
+  your workspace's billing page.
   **Open Source** is free for a year for maintainers of an active, OSI-licensed public repo, checked on GitHub when you
-  sign in to weft.zip (or with **Check my GitHub now** on the billing page): teams and BlastCP Creator on the free tier's
+  sign in to weft.zip (or with **Check my GitHub now** on the billing page): teams on the free tier's
   Puku cap. **Education** (the GitHub Student Developer Pack) and **Regional pricing** (Pro at $5/month in low-income and
   $10 in lower-middle-income countries) are built in Weft and wait on the pack partnership and the billing package's price variants.
   Settings → Accounts shows your plan, workspace and the meter. **Upgrade** opens Weft's own pricing dialog (Free, Pro and Team,
   monthly or yearly) and goes on to Stripe Checkout; it also opens by itself whenever you hit something a plan unlocks, like
   inviting a teammate on Free, running out of room for shared apps, or the free Puku cap. **Manage billing** opens the
-  workspace's billing page on weft.zip (the Stripe-hosted portal to manage). Billing is per workspace, not per seat;
+  workspace's billing page on weft.zip (the Stripe-hosted portal to manage). Pro is billed per workspace and Team per seat;
   owner or admin manages. The billing page also gives each workspace a referral code: the team you refer gets 20% off
   three months and you get $20 off your bill. Super-admins run plans from **Admin → Billing** (upgrade, downgrade,
   switch, seats, refunds in full or part, people, discounts, and a reset for sandbox ids on a real workspace, each in the

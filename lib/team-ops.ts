@@ -16,6 +16,7 @@ import { runDeleteTeam } from "./team-delete";
 import { runLinkProject, runUnlinkProject } from "./team-projects";
 import { listVisibleProjects, runSetProjectAccess } from "./team-project-access";
 import { workspaceCanHaveMembers } from "./billing/plan-gate";
+import { syncTeamSeatsQuietly } from "./billing/seats";
 import { TEAM_GATE_MESSAGE } from "./billing/upgrade";
 import type { TeamActionResult, TeamInvite, TeamMember, TeamOp, TeamOrg, TeamSnapshot, TeamUser } from "./team-types";
 
@@ -78,6 +79,8 @@ async function addExistingAccount(
     .from("org_memberships")
     .insert({ org_id: ctx.org.id, user_id: profile.id, role });
   if (error) return fail(`Could not add member: ${error.message}`);
+  // On Team the new person is a seat: the Stripe quantity follows (lib/billing/seats.ts).
+  await syncTeamSeatsQuietly(ctx.service, ctx.org, ctx.user.email);
   return ok(`Added ${email}.`);
 }
 
@@ -273,6 +276,8 @@ export async function runRemove(ctx: TeamContext, userId: string): Promise<TeamA
   // points at a workspace the user can no longer open, which the gate
   // will heal.
   await ctx.service.from("profiles").update({ current_org_id: null }).eq("id", userId).eq("current_org_id", ctx.org.id);
+  // One seat fewer on Team, prorated back (lib/billing/seats.ts).
+  await syncTeamSeatsQuietly(ctx.service, ctx.org, ctx.user.email);
   return ok(isSelf ? "You left the workspace." : "Removed.");
 }
 
