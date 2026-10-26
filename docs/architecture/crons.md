@@ -61,6 +61,21 @@ in every thread and the copilot, trusted like `create_card` (`CRON_TOOL_NAMES` i
 `create_cron` forks itself by default. `cron-tools` loads `cron-run` only when a run fires: `cron-run` reaches the
 runner, which builds these tools.
 
+## Crons Weft runs for itself
+
+Two crons are not a user's scheduled job but Weft's own upkeep, both in `~/.weft/crons.json` and both made
+over MCP from a thread:
+
+- **Weekly repo analysis** (Mondays 10:00, fresh thread, `~/dev/weft`): runs the repo-analysis skill's
+  four scripts over the repo (docs/architecture/skills.md) and writes a report to
+  `~/.weft/show/repo-analysis/report-YYYY-MM-DD.html`, so the weekly runs accumulate rather than overwrite
+  each other. It **diffs against the previous run** — the point is what moved since last week, not what
+  is — and leads with what got worse, what got better, and a short read on whether the repo is getting
+  healthier. The first report is `~/.weft/show/repo-analysis/index.html`, and its style is the house style
+  the later ones copy.
+- **Daily growth summary** (daily 9:00): posts the day's growth numbers to the #user-growth Slack channel
+  through the board's own API.
+
 ## API
 
 `GET/POST /api/crons` (list; make, with `runNow`), `PATCH/DELETE /api/crons/[id]`, `POST /api/crons/[id]/run`. The board

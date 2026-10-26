@@ -66,6 +66,42 @@ Checked against the CLI on 2026-10-19:
   (a plugin counts as its skills). Both draw `components/SkillSetList.tsx` from `lib/use-skill-set.ts`,
   laid out by `lib/skill-set-view.ts`.
 
+## The repo-analysis skill
+
+`plugin/skills/repo-analysis/` measures the repo a thread is working in. It is a **scripts-only** skill: no
+SKILL.md, no slash command — the scripts are run directly, and a card reads their output.
+
+Five scripts, all **read-only** (they change nothing in the repo) and all taking the project directory as
+their first argument (default: the current directory):
+
+- `scripts/measure.sh` — size, shape and test adjacency. Counts only tracked files, so `node_modules` and
+  build output never inflate a number, and reports hand-written source apart from generated and binary
+  files. Test files are counted separately from source, never folded in. It calls `coupling.mjs` at the end.
+- `scripts/coupling.mjs` — the import graph, built in one pass in JS. Resolves local imports **by path, not
+  by basename**: two modules can share a basename in different folders, and matching on the bare name would
+  credit the wrong importer. Separates **runtime** cycles (static value imports — a module can load
+  half-initialised) from cycles that close only through type-only or dynamic imports, which are a smell in
+  the type graph, not a load-order hazard. Reports fan-in, fan-out, orphan modules and the layering edges
+  (`lib/ → components/`, `lib/ → app/`, `lib/ → electron/` — the wrong-way ones).
+- `scripts/docs-drift.mjs` — the docs against the code: paths a doc names that no longer exist, symbols a
+  doc names that no longer exist, source directories no doc mentions, numeric claims the code has outgrown,
+  and docs older than the code they name. A doc marked `Status: design` names files it plans to add, so
+  those are counted apart rather than as drift.
+- `scripts/history.sh` — commit and changelog facts over a window (default 30 days): commit types,
+  conventional-commit compliance, **changelog pairing** (a feat/fix is documented by a `docs(changelog)`
+  commit within 6 commits, or by a `CHANGELOG.md` edit inside its own commit), rework rate, batching, and
+  activity by day and hour.
+- `scripts/docs-drift.sh` — the earlier shell version of `docs-drift.mjs`, kept for reference. **Nothing
+  calls it**: `docs-drift.mjs` is the one the cron runs and the one to use.
+
+The scripts are fast on purpose: `measure.sh` was four minutes of per-file walks and is now one
+classification pass, and the import graph was O(files²) greps (ten minutes on a 1,400-file repo) and is now
+one graph built once, with every question answered from it. Together they take about 50 seconds on the
+weft repo — `measure.sh` about 4s, `history.sh` about 6s, and `docs-drift.mjs` the remaining 40s, which is
+the one that reads every doc and every source file to compare them.
+
+**The weekly repo-analysis cron** runs them and writes the report; see docs/architecture/crons.md.
+
 ## Finding skills on skills.sh
 
 Typing in either ✦ list's filter also searches skills.sh, the open skill registry, below your own matches

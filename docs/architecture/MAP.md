@@ -16,7 +16,7 @@ matching doc below. When a feature lands, add or update its entry here and in it
 - `composer.md` — the reply box's modes: `lib/reply-mode.ts`'s table of chip, primary and ▾ menu per state, and what's still planned (one dock for every ask, one server-side queue).
 - `limits.md` — the three limit stores (the model's own cap, the CLI's weekly and 5-hour windows), the pure gate in `lib/limit-reset.ts`, the server-decides rule, and the new-thread path that waits for a spent limit instead of failing.
 - `questions.md` — a thread's AskUserQuestion end to end: the panel above the reply box, keys, previews in the pane, answers and `annotations` back to the CLI.
-- `skills.md` — skill sets: the library (Weft's, project, yours, plugins), a project's default set seeded from usage, a card's own, and how each runner gets it at session start.
+- `skills.md` — skill sets: the library (Weft's, project, yours, plugins), a project's default set seeded from usage, a card's own, and how each runner gets it at session start; and the repo-analysis skill's four read-only scripts (size, import graph, docs drift, commit history).
 - `subagents.md` — how threads delegate to subagents and how Settings → Models picks their model.
 - `account.md` — the optional Weft account (Supabase Auth, PKCE, `weft://account-callback`, `~/.weft/account.json` in the Keychain).
 - `teams.md` — workspaces, members, roles, email invites on weft.zip; the `requireOrg` gate and why it's not `@aimhuge/teams`'s.
@@ -31,7 +31,7 @@ matching doc below. When a feature lands, add or update its entry here and in it
 - `connectors.md` — Settings → Connectors: CLIs your threads use for your own accounts; gog (Google Workspace) shipped in the toolchain, its OAuth client and browser sign-in.
 - `simulators.md` — `mcp__simulator__*`: iOS simulators and Android emulators through simctl, adb and AXe, the live view in the pane, Settings → Connectors → Simulators.
 - `agent-browser.md` — how threads drive the browser pane: the accessibility snapshot and its refs, real mouse and key input, hover, viewport sizes, and CDP console and network errors (`electron/pane-ax.cjs`, `pane-input.cjs`, `pane-keys.cjs`, `pane-cdp.cjs`).
-- `crons.md` — crons: a thread run again on a schedule as a new card (fork or fresh), the ⏰ editors in the rail, thread header and New thread, run stacks on the board, and the create_cron tools.
+- `crons.md` — crons: a thread run again on a schedule as a new card (fork or fresh), the ⏰ editors in the rail, thread header and New thread, run stacks on the board, the create_cron tools, and the two crons Weft runs for itself (the weekly repo analysis and the daily growth summary).
 - `slack.md` — the Slack rail drawer: bot + app tokens in the Keychain, Socket Mode in main, commits/pushes (reflog), deploys and card status to a channel, `/weft` and @Weft start cards, weft.zip card links, a channel per kind of update, and growth (new user, new team, payment) with a daily summary.
 - `puku-trial.md` — the puku trial: a puku thread with no Puku login runs through the deployed Weft's proxy on Weft's own key, day-long token, per-account daily cap.
 - `goose.md` — the Goose backend: one `goose run` process per turn and its `stream-json` events, the provider catalog and the BYO key, the grant that puts the key in Goose's env without it ever reaching the board, and the per-card `GOOSE_PATH_ROOT`.
