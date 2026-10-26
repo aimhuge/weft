@@ -11,15 +11,18 @@
 //   pnpm welcome:render                      default names (my-app, api, site; @you)
 //   pnpm welcome:render -- --projects=a,b,c  other project names on the loop's cards
 import { spawnSync } from "node:child_process";
-import { copyFileSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { copyFileSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { SCENES } from "../lib/welcome-scenes.ts";
 
 const HYPERFRAMES = "hyperframes@0.8.186";
 const root = resolve(import.meta.dirname, "..");
 const src = join(root, "public/welcome");
 const brand = join(root, "public/brand");
 const projects = process.argv.find((a) => a.startsWith("--projects="))?.slice("--projects=".length);
+// The one list of the beats page's scenes (lib/welcome-scenes.ts), which lib/welcome-loop.ts and the page read too.
+const scenes = SCENES;
 
 const run = (cmd, args, cwd) => {
   const r = spawnSync(cmd, args, { cwd, stdio: "inherit", env: { ...process.env, HYPERFRAMES_SKIP_SKILLS: "1" } });
@@ -42,14 +45,13 @@ function render(file, out, variables) {
   }
 }
 
-// Where beats.html's keyboard shortcuts start, from its SCENES list (each [beat, element, seconds, draw]): the sum of
-// the scenes before "keys", or the whole page if it has none.
-function keysStart(html) {
-  const list = html.slice(html.indexOf("var SCENES"));
+// Where beats.html's keyboard shortcuts start, from the one list of scenes (lib/welcome-scenes.ts): the sum of the
+// scenes before "keys", or the whole page if it has none.
+function keysStart() {
   let at = 0;
-  for (const [, beat, length] of list.matchAll(/\["(\w+)", "#\w+", ([\d.]+)/g)) {
-    if (beat === "keys") return Math.round(at * 100) / 100;
-    at += Number(length);
+  for (const scene of scenes) {
+    if (scene.beat === "keys") return Math.round(at * 100) / 100;
+    at += scene.seconds;
   }
   return null;
 }
@@ -76,7 +78,7 @@ try {
   render("beats.html", beats);
   const outro = join(work, "outro.mp4");
   render("outro.html", outro);
-  join4([intro, loop, beats, outro], keysStart(readFileSync(join(src, "beats.html"), "utf8")), tour);
+  join4([intro, loop, beats, outro], keysStart(), tour);
   console.log(`Rendered ${loop}\nRendered ${tour}`);
 } finally {
   rmSync(work, { recursive: true, force: true });

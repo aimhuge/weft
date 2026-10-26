@@ -624,8 +624,9 @@
         .fromTo("#sheet", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.35, ease: "back.out(1.6)" }, t + 14.9);
     }
 
-    // The order, build → ship → show: each scene's beat (lib/welcome-loop.ts BEATS), element and length in seconds.
-    // The voiceover's cues (scripts/narrate-welcome.mjs) follow these starts.
+    // The order, build → ship → show: each scene's beat, element and length in seconds. The one list of them is
+    // lib/welcome-scenes.ts, which the tour (lib/welcome-loop.ts), the voiceover's cues
+    // (scripts/narrate-welcome.mjs) and the render script read; a test keeps this copy the same.
     var SCENES = [
       ["tools", "#sceneT", 5, tools],
       ["vault", "#sceneV", 5.8, vault],
