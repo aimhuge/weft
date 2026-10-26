@@ -27,6 +27,18 @@ describe("the privacy policy", () => {
     expect(screen.getAllByRole("link", { name: "legal@weft.zip" })[0]).toHaveAttribute("href", "mailto:legal@weft.zip");
   });
 
+  it("states Google's Limited Use terms under #google, which Google's OAuth review reads", () => {
+    const { container } = render(<PrivacyPage />);
+    const google = container.querySelector("#google")?.parentElement?.textContent ?? "";
+    expect(container.querySelector("#google")).not.toBeNull();
+    expect(google).toContain("Limited Use");
+    expect(google).toMatch(/train AI or machine-learning models/);
+    expect(screen.getByRole("link", { name: "Google API Services User Data Policy" })).toHaveAttribute(
+      "href",
+      "https://developers.google.com/terms/api-services-user-data-policy",
+    );
+  });
+
   it("is a reserved first segment, so no workspace or app link can take /privacy", () => {
     expect(allReserved()).toContain("privacy");
   });

@@ -15,7 +15,7 @@ export const metadata: Metadata = {
   description: "What weft.zip and the Weft app collect, why, who processes it, how long we keep it, and your choices.",
 };
 
-const UPDATED = "October 26, 2026";
+const UPDATED = "October 27, 2026";
 const CONTACT = "legal@weft.zip";
 
 export default function PrivacyPage() {
@@ -43,6 +43,7 @@ export default function PrivacyPage() {
           <li>Analytics on weft.zip (Google Analytics and PostHog, with session replay) start only after you accept them.</li>
           <li>The app sends anonymous onboarding stats by default; you can switch them off in Settings → Security.</li>
           <li>We don&apos;t sell your data, and we don&apos;t use your content to train AI models.</li>
+          <li>If you connect a Google account, its data goes from Google to your Mac and nowhere we can see. See <a href="#google">Google user data</a>.</li>
         </ul>
 
         <h2>2. What we collect, and why</h2>
@@ -100,6 +101,42 @@ export default function PrivacyPage() {
         <p>
           <strong>Server logs.</strong> Our hosts keep request logs (IP address, time, page, browser) for security and
           debugging.
+        </p>
+
+        <h3 id="google">Google user data</h3>
+        <p>
+          You can connect a Google account in the app (Settings → Connectors) so your AI agents can work with your
+          Gmail, Calendar, Drive, Docs, Sheets, Slides, Contacts and Tasks. Weft asks Google only for the access
+          those tasks need, and you see each permission on Google&apos;s consent screen before you grant it.
+        </p>
+        <ul>
+          <li>
+            <strong>Where it lives.</strong> Google&apos;s sign-in token is kept in your Mac&apos;s Keychain. Your mail,
+            events, files, contacts and tasks are fetched by the app on your Mac straight from Google; they don&apos;t
+            pass through or get stored on weft.zip, and we never see them.
+          </li>
+          <li>
+            <strong>How it&apos;s used.</strong> Only to do what you ask: an agent reads, drafts, sends, files or edits
+            when you tell it to. When an agent works with Google data, the part it needs goes to the AI provider that
+            agent runs on (for example Anthropic), under that provider&apos;s terms, to produce the answer you asked for.
+          </li>
+          <li>
+            <strong>What we never do.</strong> We don&apos;t sell Google user data, use it for advertising, let people
+            read it (except with your permission, for security, or when the law requires it), or use it to develop,
+            improve or train AI or machine-learning models.
+          </li>
+          <li>
+            <strong>Removing access.</strong> Remove the account in Settings → Connectors, which deletes its token from
+            your Keychain, or revoke Weft at{" "}
+            <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a>.
+          </li>
+        </ul>
+        <p>
+          Weft&apos;s use and transfer of information received from Google APIs adheres to the{" "}
+          <a href="https://developers.google.com/terms/api-services-user-data-policy">
+            Google API Services User Data Policy
+          </a>
+          , including the Limited Use requirements.
         </p>
 
         <h2>3. Legal bases</h2>

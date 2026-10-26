@@ -45,6 +45,8 @@ each token (`token:<client>:<email>`) without opening it, and the OAuth client c
 `gog auth list` and `auth status` decrypt tokens, and when the gog asking isn't the one that stored them (Homebrew's
 vs Weft's own copy), macOS asks for the login password on every read. Only Sign in and Remove touch the keyring.
 
+**Google's review.** Weft's own client lives in Google Cloud project `weft-512507` (Desktop app, External, in Testing, up to 100 test users whose sign-ins expire after 7 days). Its consent screen links `weft.zip`, `/privacy` and `/terms`; `app/privacy/page.tsx#google` states the Limited Use terms the review reads. Taking it out of Testing needs brand verification and a CASA assessment for the restricted scopes (`drive`, `gmail.modify`, `gmail.settings.basic`, `gmail.settings.sharing`).
+
 The version: `GOG_VERSION` lives in both `lib/gog.ts` and `scripts/bundle-toolchain.mjs`, and
 `lib/gog.test.ts` checks they match. The toolchain sits at the end of PATH, so a gog the user installed
 (Homebrew) wins. When that copy is older than the shipped one, the card says so and hides Read-only,
