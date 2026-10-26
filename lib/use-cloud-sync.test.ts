@@ -10,7 +10,7 @@ const api = vi.hoisted(() => ({
 }));
 vi.mock("./client", () => ({ api }));
 
-const { POLL_MS, useCloudSync } = await import("./use-cloud-sync");
+const { IDLE_POLL_MS, POLL_MS, avatarPollMs, useCloudSync } = await import("./use-cloud-sync");
 
 const EMPTY: CloudSyncStatus = { waiting: 0, lastSyncAt: null, uploaded: 0, lastError: null, signedOut: false, noWorkspace: false };
 const STATUS: CloudSyncStatus = { waiting: 2, lastSyncAt: 1000, uploaded: 5, lastError: null, signedOut: false, noWorkspace: false };
@@ -23,6 +23,14 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
+});
+
+describe("poll intervals", () => {
+  it("polls the avatar slowly and the open Sync page quickly", () => {
+    expect(IDLE_POLL_MS).toBeGreaterThan(POLL_MS);
+    expect(avatarPollMs(true)).toBe(POLL_MS);
+    expect(avatarPollMs(false)).toBe(IDLE_POLL_MS);
+  });
 });
 
 describe("useCloudSync", () => {
@@ -67,6 +75,27 @@ describe("useCloudSync", () => {
     unmount();
     await act(() => vi.advanceTimersByTimeAsync(POLL_MS * 2));
     expect(api.cloudSync.mock.calls.length).toBe(before + 2);
+  });
+
+  it("polls at the interval it's given", async () => {
+    vi.useFakeTimers();
+    renderHook(() => useCloudSync(true, 1000));
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    const before = api.cloudSync.mock.calls.length;
+    await act(() => vi.advanceTimersByTimeAsync(3000));
+    expect(api.cloudSync.mock.calls.length).toBe(before + 3);
+  });
+
+  it("restarts the poll when the interval changes", async () => {
+    vi.useFakeTimers();
+    const { rerender } = renderHook(({ ms }) => useCloudSync(true, ms), { initialProps: { ms: 30_000 } });
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    const before = api.cloudSync.mock.calls.length;
+    await act(() => vi.advanceTimersByTimeAsync(5000));
+    expect(api.cloudSync.mock.calls.length).toBe(before);
+    rerender({ ms: 5000 });
+    await act(() => vi.advanceTimersByTimeAsync(5000));
+    expect(api.cloudSync.mock.calls.length).toBeGreaterThan(before + 1);
   });
 
   it("drops an answer that arrives after a newer fetch started", async () => {

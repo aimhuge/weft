@@ -1,6 +1,7 @@
 import type { Card } from "./types";
 import { isFiltering, type RailFilter } from "./rail-view";
 import type { latestLimits } from "./board-view";
+import { looksScratch } from "./scratch";
 
 // Small values the board reads off its state each render, kept out of Board.tsx so its body is state
 // and wiring, not branches.
@@ -28,6 +29,14 @@ export function footerFor(selected: Card | null) {
 // The folder the board is about right now: the open card's, the selected project, else the latest card's.
 export function workFolder(selected: Card | null, project: string | null, latest: Latest) {
   return selected?.cwd ?? project ?? latest?.cwd;
+}
+
+// The project the avatar menu offers to sync or stop syncing (components/AccountSync.tsx): the board's work folder as
+// its main checkout, and never a scratch folder.
+export function menuProject(folder: string | null | undefined, rootOf: (cwd: string) => string): string | null {
+  if (!folder) return null;
+  const root = rootOf(folder);
+  return looksScratch(root) ? null : root;
 }
 
 // The copilot opens in the same window as any card, though it lives apart from cards.

@@ -350,7 +350,9 @@ When a new doc lands in this folder, add it here on the same change.
   `{ state, busy, error, waiting, signIn, sendLink, signOut }` shape the top bar expects. Session in
   `~/.weft/account.json` (Keychain-sealed by `electron/account-store.cjs`), drawn by
   `components/AccountButton.tsx` (top bar; its avatar menu `components/AccountMenu.tsx` opens on your team, plan and an
-  Upgrade to Pro button, `components/AccountPlan.tsx` + `lib/use-billing-status.ts`) and `components/AccountSettings.tsx`; schema in
+  Upgrade to Pro button, `components/AccountPlan.tsx` + `lib/use-billing-status.ts`, then board sync's status line with Resync now
+  and Sync / Don't sync for the board's project, `components/AccountSync.tsx` + `lib/sync-menu.ts`, which also colour the avatar's
+  dot while an upload runs or after one failed) and `components/AccountSettings.tsx`; schema in
   `supabase/migrations/`, MCP server in `.mcp.json`.
 - `lib/teams.ts` + `lib/team-actions.ts` + `lib/web-session.ts` + `lib/web-auth.ts` + `proxy.ts` + `app/auth/*` + `app/team` +
   `app/[orgSlug]/*` + `app/invite/[token]` + `components/team/*`: Weft teams on weft.zip (workspaces, roles, email invites; every

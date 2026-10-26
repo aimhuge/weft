@@ -20,7 +20,7 @@ import { useBoardLive } from "@/lib/board-live";
 import { useBoardDialogs } from "@/lib/use-board-dialogs";
 import { useOpenCard } from "@/lib/use-open-card";
 import { useNewThreadPane } from "@/lib/use-new-thread-pane";
-import { filterState, footerFor, headerCounts, openCardOf, workFolder } from "@/lib/board-derive";
+import { filterState, footerFor, headerCounts, menuProject, openCardOf, workFolder } from "@/lib/board-derive";
 import { useRestart } from "@/lib/use-restart";
 import { useDesktopBridge } from "@/lib/use-desktop-bridge";
 import { useStartupCheck } from "@/lib/use-startup-check";
@@ -324,7 +324,7 @@ export default function Board() {
           restart: <RestartChip restart={restartView.restart} notify={notify} />,
           badges: <HeaderBadges cwd={folder} cards={cards} start={improveQuality} notify={notify} toast={setToast} />,
           copilot: <CopilotButton open={laneOpen} needsYou={copilotNeedsYou} title={hint("copilot", "Copilot")} onClick={toggleCopilot} />,
-          account: <AccountButton onOpenSettings={() => setShowSettings(true)} onShareBoard={() => setSharingBoard(true)} />,
+          account: <AccountButton onOpenSettings={() => setShowSettings(true)} onShareBoard={() => setSharingBoard(true)} project={menuProject(folder, rootOf)} />,
         }}
       />
 

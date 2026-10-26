@@ -53,6 +53,12 @@ is the contract between the parts:
   and, when on, `queueFolder()` queues its existing cards and items; `POST { sync: true }` flushes now). The status
   (`cloudSyncStatus()`, type in `lib/cloud-sync-view.ts`) is `waiting` (outbox lines), `lastSyncAt`, `uploaded` since start,
   `lastError`, `signedOut`, `noWorkspace`. Folders live in settings `syncFolders` (`setSyncFolder`).
+- The avatar menu (`components/AccountSync.tsx`, lines from `lib/sync-menu.ts`): under your plan, one status line from the same
+  `/api/cloud-sync` answer ("Synced 2m ago" + how many projects, "Syncing N items…", "Sync failed" + `lastError`, "Sync is off",
+  "No workspace yet" with **Open the web board**), then **Resync now** (`POST { sync: true }`) and **Sync <project>** / **Don't sync
+  <project>** (`POST { folder, on }`) for the board's work folder as its main checkout (`menuProject` in `lib/board-derive.ts`, never a
+  scratch folder). These items keep the menu open, so the line shows the answer. `components/AccountButton.tsx` owns the hook, polling every
+  30 s (`IDLE_POLL_MS`) for the avatar's dot (amber pulsing while `waiting`, red after an error, none otherwise) and every 5 s while the menu is open.
 - The sync prompt (`components/SyncPromptDialog.tsx`, mounted beside the welcome in `components/HeaderBadges.tsx`; rules in
   `lib/sync-prompt.ts`, state in `lib/use-sync-prompt.ts`): "Turn on Project Sync for <project>?" for the project you're working on — the
   one the board is narrowed to, else the folder of the card that moved last, never the copilot, an archived card or a scratch folder

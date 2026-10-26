@@ -835,7 +835,9 @@ Signed out, it is Weft's one sign-in ask instead: "Sign in to Weft?" with what a
 leagues, the Puku trial) and **Sign in with GitHub**; once you're in, it offers to sync the project. Settings → Sync lists your recent projects with a switch each. A project that's on uploads its cards and threads to your
 workspace on Supabase while you're signed in: an outbox sends a batch when a turn ends (never on the way to starting one),
 pictures and pages go up once each by content, and the page shows the last sync, how many items went up, how many wait and the
-last error, with **Sync now**. At `weft.zip/<workspace>/board` the same cards show live, drawn by the desktop's **own
+last error, with **Sync now**. The avatar menu says it in one line under your plan ("Synced 2m ago · 3 projects", "Syncing 12
+items…", "Sync failed" with why), with **Resync now** and **Sync <project>** / **Don't sync <project>** for the board's project,
+and the avatar wears a dot while an upload runs (amber) or after one failed (red). At `weft.zip/<workspace>/board` the same cards show live, drawn by the desktop's **own
 components** — the same header (New thread on N, your avatar with workspaces, Team, Billing and Sign out), the same project
 chips, filter and sort, the same 38px rail (★ starred, 🏷 tags, Board, Team, Billing), the same columns and cards (stage,
 tags, model, picture or emoji, what's left) and the same open-card window. One implementation, two hosts: a `variant="web"`
