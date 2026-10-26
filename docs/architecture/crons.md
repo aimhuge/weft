@@ -68,12 +68,15 @@ Two crons are not a user's scheduled job but Weft's own upkeep, both in `~/.weft
 over MCP from a thread:
 
 - **Weekly repo analysis** (Mondays 10:00, fresh thread, `~/dev/weft`): runs the repo-analysis skill's
-  four scripts over the repo (docs/architecture/skills.md) and writes a report to
+  four scripts over the repo (docs/architecture/skills.md; the skill ships five, but `docs-drift.sh` is the
+  superseded shell version of `docs-drift.mjs` and nothing calls it) and writes a report to
   `~/.weft/show/repo-analysis/report-YYYY-MM-DD.html`, so the weekly runs accumulate rather than overwrite
   each other. It **diffs against the previous run** — the point is what moved since last week, not what
   is — and leads with what got worse, what got better, and a short read on whether the repo is getting
   healthier. The first report is `~/.weft/show/repo-analysis/index.html`, and its style is the house style
-  the later ones copy.
+  the later ones copy. Its infrastructure and quota numbers are **live, not baked**: the page reads
+  `/api/infra/live` through Weft's own bridge on open, so the database, storage and egress figures are
+  true at the moment you read the report (docs/architecture/infra-live.md).
 - **Daily growth summary** (daily 9:00): posts the day's growth numbers to the #user-growth Slack channel
   through the board's own API.
 

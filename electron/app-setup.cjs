@@ -12,7 +12,7 @@ const { createAccountStore } = require("./account-store.cjs");
 // (touchIdConfirm bound, then app-data, app-data-fetch, app-secrets-push, account store).
 // getSafeStorage is a callback because Electron's safeStorage is only available after app
 // whenReady (electron/account-store.cjs).
-function setupApps({ ipcMain, vault, ownsPane, isBoard, dataDir, supabaseReadLink, getSafeStorage }) {
+function setupApps({ ipcMain, vault, ownsPane, isBoard, dataDir, supabaseReadLink, getSafeStorage, server }) {
   if (!ipcMain) throw new Error("setupApps needs ipcMain.");
   if (!vault) throw new Error("setupApps needs the vault.");
   if (typeof ownsPane !== "function") throw new Error("setupApps needs ownsPane (pane.owns).");
@@ -20,6 +20,7 @@ function setupApps({ ipcMain, vault, ownsPane, isBoard, dataDir, supabaseReadLin
   if (!dataDir) throw new Error("setupApps needs dataDir.");
   if (typeof supabaseReadLink !== "function") throw new Error("setupApps needs supabaseReadLink.");
   if (typeof getSafeStorage !== "function") throw new Error("setupApps needs getSafeStorage.");
+  if (typeof server !== "function") throw new Error("setupApps needs server (the local server's url and token).");
 
   // The app-secrets-push's Touch ID goes through the vault's own confirm: same prompt helper,
   // no separate dialog. Bound here so the closure the push captures resolves to vault.confirm
@@ -67,6 +68,17 @@ function setupApps({ ipcMain, vault, ownsPane, isBoard, dataDir, supabaseReadLin
     account,
     confirm,
     isBoard,
+  });
+
+  // And the live-data bridge (electron/live-data.cjs): a file: page asks for a PATH on Weft's own
+  // server and main does the GET with the launch token, so a report can show numbers that are
+  // true now instead of the ones baked in when it was written. The server accessor is a callback:
+  // the server may not be up yet when main wires this.
+  require("./live-data.cjs").setupLiveData({
+    ipcMain,
+    serverUrl: () => server()?.url ?? "",
+    token: () => server()?.token ?? "",
+    owns: ownsPane,
   });
 
   return { account };

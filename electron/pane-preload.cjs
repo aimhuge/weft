@@ -27,5 +27,8 @@ if (typeof location !== "undefined" && location.protocol === "file:") {
     },
     env: () => ipcRenderer.invoke("app-data:env"),
     requestSecret: (name) => ipcRenderer.invoke("app-data:request-secret", String(name ?? "")),
+    // Live read: a JSON GET on Weft's own server (electron/live-data.cjs). The page names a PATH,
+    // never a URL; main holds the launch token and does the fetch, so the page never sees it.
+    liveData: (path) => ipcRenderer.invoke("live-data:read", String(path ?? "")),
   });
 }

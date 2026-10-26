@@ -42,6 +42,7 @@
     "postinstall": "chmod +x node_modules/node-pty/prebuilds/darwin-*/spawn-helper 2>/dev/null || true; node scripts/patch-next-hmr.mjs",
     "resend": "node scripts/resend-domain.mjs",
     "league:test-mail": "jiti scripts/league-mail-test.ts",
+    "infra:probe": "jiti scripts/probe-infra-live.ts",
     "changelog:release": "jiti scripts/changelog-release.ts"
   },
   "dependencies": {

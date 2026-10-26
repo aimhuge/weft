@@ -381,39 +381,25 @@ secretRun = require("./secret-run.cjs").setupSecretRun({ vault, dataDir: dataDir
 // And Supabase: its token is in the Keychain and its links are supabase/.temp/project-ref.
 supabaseApi = require("./supabase.cjs").setupSupabase({ ipcMain, dataDir: dataDir(), board: () => appView?.webContents, vault });
 // Mini apps: data reads + the hosted fetch/env/requestSecret + the Share dialog's "Upload
-// secrets" push, plus the sealed account store the push reads from (electron/app-setup.cjs).
-require("./app-setup.cjs").setupApps({
+// secrets" push + the live-data bridge, plus the sealed account store the push reads from
+// (electron/mini-apps-setup.cjs).
+require("./mini-apps-setup.cjs").setupMiniApps({
   ipcMain, vault, dataDir: dataDir(),
   ownsPane: (wc) => pane.owns(wc) || require("./page-snapshot.cjs").ownsSnapshot(wc),
   isBoard: (sender) => Boolean(sender) && sender === appView?.webContents,
   supabaseReadLink: require("./supabase.cjs").readLink,
   getSafeStorage: () => require("./keychain-audit.cjs").keychainFor("Weft sign-in"),
+  getServer: () => server, token: TOKEN,
 });
-// And BlastCP, Cloudflare, Slack and Goose, each with its secret in the Keychain (electron/providers.cjs).
-({ blastcpApi, slackApi, gooseApi } = require("./providers.cjs").setupProviders({
-  ipcMain, dataDir: dataDir(), board: () => appView?.webContents, server: () => (server ? { url: server.url, token: TOKEN } : null),
+
+// And the modules that need the running server and the board window: the provider drawers, the
+// server supervisor's IPC, the splash screen's IPC and Keep Working (electron/server-wiring.cjs).
+({ blastcpApi, slackApi, gooseApi } = require("./server-wiring.cjs").setupServerWiring({
+  ipcMain, dataDir: dataDir(), shell, app, timer, boot, startup,
+  getServer: () => server, getBoardContents: () => appView?.webContents,
+  getMenus: () => menus, keepWorking: menus.keepWorking, getHandleLink: () => handleLink,
+  token: TOKEN,
 }));
-// Keep Working (electron/keep-working.cjs): the board's Settings → General → Laptop mode card; the
-// wiring lives in electron/keep-working-ipc.cjs to keep main.cjs under the size budget.
-require("./keep-working-ipc.cjs")({ ipcMain, keepWorking: menus.keepWorking, getBoardContents: () => appView?.webContents });
-// Server supervisor IPC (electron/server-ipc.cjs): the board's ServerErrorBar calls server:retry
-// to relaunch, server:open-logs to reveal the log, and weft:create-fix-card to queue a New
-// thread dialog with the fatal + log tail pre-filled (lib/server-status.ts).
-require("./server-ipc.cjs")({
-  ipcMain,
-  shell,
-  getServer: () => server,
-  getBoardContents: () => appView?.webContents,
-  getHandleLink: () => handleLink,
-  logPath: () => server?.logPath,
-});
-// Splash IPC: the start screen's button row, the launch timing handshake and the dock badge count
-// (electron/startup-ipc.cjs). server and menus are getters: they're set later, at boot.
-require("./startup-ipc.cjs")({
-  ipcMain, app, shell, timer, boot, startup,
-  getServer: () => server,
-  getMenus: () => menus,
-});
 
 // ---- Lifecycle ----
 

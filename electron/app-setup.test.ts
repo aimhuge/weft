@@ -45,6 +45,9 @@ let vault: ReturnType<typeof goodVault>;
 let ownsPane: (wc: WebContentsLike | null | undefined) => boolean;
 let isBoard: (sender: SenderLike | null | undefined) => boolean;
 let readLink: (folder: string) => Promise<{ ref: string } | null>;
+// The local server's address and launch token (electron/main.cjs). The live-data bridge reads
+// it fresh on each call, because the server may not be up when setupApps runs.
+let server: () => { url: string; token: string } | null;
 
 beforeEach(() => {
   handlers.clear();
@@ -61,6 +64,7 @@ beforeEach(() => {
     return s.id === "b1";
   });
   readLink = vi.fn((): Promise<{ ref: string } | null> => Promise.resolve({ ref: "abcdefghijkl" }));
+  server = vi.fn(() => ({ url: "http://127.0.0.1:1024", token: "tok" }));
 });
 
 afterEach(() => {
@@ -77,6 +81,7 @@ describe("setupApps", () => {
       dataDir,
       supabaseReadLink: readLink,
       getSafeStorage: () => safeStorage,
+      server,
     });
     expect(typeof account).toBe("function");
     // From app-data.cjs — env grant + reads:
@@ -90,10 +95,12 @@ describe("setupApps", () => {
     expect(handlers.has("app-data:request-secret")).toBe(true);
     // From app-secrets-push.cjs — Share dialog's "Upload secrets":
     expect(handlers.has("apps:push-secrets")).toBe(true);
+    // From live-data.cjs — a file: page reading a live snapshot off Weft's own server:
+    expect(handlers.has("live-data:read")).toBe(true);
   });
 
   it("binds the push's confirm to vault.confirm", async () => {
-    setupApps({ ipcMain, vault, ownsPane, isBoard, dataDir, supabaseReadLink: readLink, getSafeStorage: () => safeStorage });
+    setupApps({ ipcMain, vault, ownsPane, isBoard, dataDir, supabaseReadLink: readLink, getSafeStorage: () => safeStorage, server });
     // A "stranger" sender must be rejected before push runs (the board check is from
     // app-secrets-push.cjs, not from setupApps itself, so confirm must be a forwarder).
     await expect(handlers.get("apps:push-secrets")!({ sender: { id: "stranger" } }, "app-1")).rejects.toThrow(/only answers the board window/);
@@ -110,7 +117,7 @@ describe("setupApps", () => {
       getSafeStorageCalls++;
       return safeStorage;
     };
-    const { account } = setupApps({ ipcMain, vault, ownsPane, isBoard, dataDir, supabaseReadLink: readLink, getSafeStorage });
+    const { account } = setupApps({ ipcMain, vault, ownsPane, isBoard, dataDir, supabaseReadLink: readLink, getSafeStorage, server });
     // The store isn't built until the first read — same lazy pattern main.cjs used to use.
     expect(getSafeStorageCalls).toBe(0);
     const session = account();
@@ -123,7 +130,7 @@ describe("setupApps", () => {
   });
 
   it("registers handlers that refuse senders outside the pane (data reads) and outside the board (push)", async () => {
-    setupApps({ ipcMain, vault, ownsPane, isBoard, dataDir, supabaseReadLink: readLink, getSafeStorage: () => safeStorage });
+    setupApps({ ipcMain, vault, ownsPane, isBoard, dataDir, supabaseReadLink: readLink, getSafeStorage: () => safeStorage, server });
     // The defaults in beforeEach already make ownsPane and isBoard picky; a stranger sender
     // can't reach the real handlers.
     await expect(handlers.get("app-data:access")!({ sender: { id: "x" }, senderFrame: { url: "file:///nope" } })).rejects.toThrow();
@@ -133,15 +140,17 @@ describe("setupApps", () => {
   it("throws when required deps are missing and registers nothing", () => {
     expect(() => setupApps({
       ipcMain, vault, ownsPane, isBoard, dataDir, supabaseReadLink: readLink, getSafeStorage: () => safeStorage,
+      server,
     })).not.toThrow();
     handlers.clear();
-    expect(() => setupApps({ ipcMain: undefined, vault, ownsPane, isBoard, dataDir, supabaseReadLink: readLink, getSafeStorage: () => safeStorage })).toThrow(/ipcMain/);
-    expect(() => setupApps({ ipcMain, vault: undefined, ownsPane, isBoard, dataDir, supabaseReadLink: readLink, getSafeStorage: () => safeStorage })).toThrow(/vault/);
-    expect(() => setupApps({ ipcMain, vault, ownsPane: undefined, isBoard, dataDir, supabaseReadLink: readLink, getSafeStorage: () => safeStorage })).toThrow(/ownsPane/);
-    expect(() => setupApps({ ipcMain, vault, ownsPane, isBoard: undefined, dataDir, supabaseReadLink: readLink, getSafeStorage: () => safeStorage })).toThrow(/isBoard/);
-    expect(() => setupApps({ ipcMain, vault, ownsPane, isBoard, dataDir: "", supabaseReadLink: readLink, getSafeStorage: () => safeStorage })).toThrow(/dataDir/);
-    expect(() => setupApps({ ipcMain, vault, ownsPane, isBoard, dataDir, supabaseReadLink: undefined, getSafeStorage: () => safeStorage })).toThrow(/supabaseReadLink/);
-    expect(() => setupApps({ ipcMain, vault, ownsPane, isBoard, dataDir, supabaseReadLink: readLink, getSafeStorage: undefined })).toThrow(/getSafeStorage/);
+    expect(() => setupApps({ ipcMain: undefined, vault, ownsPane, isBoard, dataDir, supabaseReadLink: readLink, getSafeStorage: () => safeStorage, server })).toThrow(/ipcMain/);
+    expect(() => setupApps({ ipcMain, vault: undefined, ownsPane, isBoard, dataDir, supabaseReadLink: readLink, getSafeStorage: () => safeStorage, server })).toThrow(/vault/);
+    expect(() => setupApps({ ipcMain, vault, ownsPane: undefined, isBoard, dataDir, supabaseReadLink: readLink, getSafeStorage: () => safeStorage, server })).toThrow(/ownsPane/);
+    expect(() => setupApps({ ipcMain, vault, ownsPane, isBoard: undefined, dataDir, supabaseReadLink: readLink, getSafeStorage: () => safeStorage, server })).toThrow(/isBoard/);
+    expect(() => setupApps({ ipcMain, vault, ownsPane, isBoard, dataDir: "", supabaseReadLink: readLink, getSafeStorage: () => safeStorage, server })).toThrow(/dataDir/);
+    expect(() => setupApps({ ipcMain, vault, ownsPane, isBoard, dataDir, supabaseReadLink: undefined, getSafeStorage: () => safeStorage, server })).toThrow(/supabaseReadLink/);
+    expect(() => setupApps({ ipcMain, vault, ownsPane, isBoard, dataDir, supabaseReadLink: readLink, getSafeStorage: undefined, server })).toThrow(/getSafeStorage/);
+    expect(() => setupApps({ ipcMain, vault, ownsPane, isBoard, dataDir, supabaseReadLink: readLink, getSafeStorage: () => safeStorage, server: undefined })).toThrow(/server/);
     expect(handlers.size).toBe(0);
   });
 });
