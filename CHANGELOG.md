@@ -8,9 +8,14 @@ lands; a release moves those lines under its version and tags the commit `vX.Y.Z
 
 ## [Unreleased]
 
+### Added
+
+- **After an update, Weft says what's new in a few lines.** The first time Weft opens on a new version, a small **What's new in Weft X** splash lists up to three changes you'll notice, each with its payoff, and sometimes a short video, with a link to the full release notes. Weft's Copywriter writes the lines when the release is cut, so they read like Weft and not like a commit log. New installs meet the welcome instead, and Settings → General → Reset tips shows the current splash again. **Check for Updates…** is now in the File menu too. (`components/ReleaseSplash.tsx`, `lib/release-splash.ts`, `lib/release-splashes.json`, `lib/use-release-splash.ts`, `scripts/release-splash.mjs`, `electron/menus.cjs`)
+
 ### Fixed
 
 - **A "use client" module that reaches a Node built-in no longer takes the board down.** The board 500'd with nothing the UI could show — Turbopack panics on `node:fs` ("the chunking context does not support external modules") and the whole route goes with it. The model menu was the culprit: it read the models you named straight from `lib/goose-models.ts`, which reads the settings file off disk. It reads them from the server instead now (`lib/use-named-models.ts`), the way the plan limits already were. And the class of bug is now a lint rule: a "use client" file that reaches a Node built-in, "server-only" or "use cache" fails `pnpm lint` (`weft/no-client-server-leak`), so the pre-commit hook refuses the change instead of the next restart. It reuses the analysis `lib/client-graph.test.ts` already walked the real tree with, and names the chain it found. Files: `eslint-rules/no-client-server-leak.mjs`, `eslint.config.mjs`, `lib/use-named-models.ts`, `lib/settings.ts`, `lib/types-settings.ts`, `components/ModelSelect.tsx`.
+- **weft.zip offers a new release within minutes.** The home page's download button and `weft.zip/download` kept pointing at the old dmg for up to an hour after a release, because the release lookup was cached for hours from the last deploy. It's now re-read at most once a minute, so a new version shows up on the site within a couple of minutes, without a redeploy. (`lib/home-release.ts`)
 
 ## [0.6.2] - 2026-10-26
 
