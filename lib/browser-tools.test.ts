@@ -121,10 +121,25 @@ describe("openInPane", () => {
 });
 
 describe("browserMcpServer", () => {
-  it("is the always-loaded browser server with the five pane tools", () => {
+  it("is the always-loaded browser server with the pane and act tools", () => {
     expect(server.name).toBe("browser");
     expect(server.alwaysLoad).toBe(true);
-    expect(server.tools.map((t) => t.name)).toEqual(["open_url", "read_page", "screenshot", "click", "type_text"]);
+    expect(server.tools.map((t) => t.name)).toEqual([
+      "open_url",
+      "read_page",
+      "screenshot",
+      "snapshot",
+      "click",
+      "hover",
+      "type_text",
+      "press_key",
+      "select_option",
+      "scroll",
+      "wait_for",
+      "set_viewport",
+      "console_logs",
+      "network_errors",
+    ]);
   });
 
   it("open_url opens the page in this card's pane and names it", async () => {
@@ -151,17 +166,17 @@ describe("browserMcpServer", () => {
     expect(sent()).toMatchObject({ url: expect.stringMatching(/\/browser\/text$/) as unknown, body: { key: "c1" } });
   });
 
-  it("click and type_text report success, or an error when nothing matches", async () => {
-    reply({ found: true });
+  it("click and type_text report success, or the error the shell raises when nothing matches", async () => {
+    reply({ ok: true });
     expect((await run("click", { selector: "#go" })).content[0]!.text).toBe("Clicked #go");
     expect(sent(0).body).toEqual({ selector: "#go", key: "c1" });
-    reply({ found: false });
+    reply({ error: "No element matches #nope" }, false);
     expect(await run("click", { selector: "#nope" })).toMatchObject({ isError: true, content: [{ text: "No element matches #nope" }] });
 
-    reply({ found: true });
+    reply({ ok: true });
     expect((await run("type_text", { selector: "input", text: "hi" })).content[0]!.text).toBe("Typed into input");
     expect(sent(2).body).toEqual({ selector: "input", text: "hi", key: "c1" });
-    reply({ found: false });
+    reply({ error: "No element matches #x" }, false);
     expect(await run("type_text", { selector: "#x", text: "hi" })).toMatchObject({ isError: true, content: [{ text: "No element matches #x" }] });
   });
 

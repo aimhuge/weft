@@ -8,7 +8,9 @@ const path = require("node:path");
 const { isSelfUrl } = require("./self-url.cjs");
 const { createPaneSecrets } = require("./pane-secrets.cjs");
 const { secretRunRoutes } = require("./secret-run.cjs");
-const { click, typeText } = require("./pane-actions.cjs");
+const { typeText } = require("./pane-actions.cjs");
+const { createPaneCdp } = require("./pane-cdp.cjs");
+const { createPaneInput, agentRoutes } = require("./pane-input.cjs");
 const { controlHandler } = require("./control-server.cjs");
 const { failedUrl, watchLoadFailures } = require("./pane-error.cjs");
 const { authorizeThreadOpen, originOf, rememberBoardOrigin } = require("./pane-origins.cjs");
@@ -46,6 +48,9 @@ function createBrowserPane({ getWindow, getAppView, token, onContents, pages, on
   // When a view is showing a file in ~/.weft/apps/<slug>/, rebuilds of that app should reload the page
   // (electron/app-reload.cjs). One watcher per folder shared by the views currently on it.
   const appReload = createAppReload({ appsDir: appsDir(), fs, setTimeout, reloadIgnoringCache: (v) => v.webContents.reloadIgnoringCache() });
+  // The agent tools' CDP session per page and what they do with it (electron/pane-cdp.cjs, pane-input.cjs).
+  const cdp = createPaneCdp();
+  const input = createPaneInput({ cdp });
 
   function state() {
     const wc = views.get(active)?.webContents;
@@ -98,6 +103,8 @@ function createBrowserPane({ getWindow, getAppView, token, onContents, pages, on
     views.set(key, view);
     const wc = view.webContents;
     onContents?.(wc);
+    // Before the first load, so the console and network buffers catch it from the start.
+    cdp.tryAttach(wc);
     // A focused page swallows keys the board never sees, so Escape is replayed into the board too,
     // where it closes the newest layer as usual. A fullscreen video keeps it to leave fullscreen.
     let fullscreen = false;
@@ -335,8 +342,8 @@ function createBrowserPane({ getWindow, getAppView, token, onContents, pages, on
       "POST /browser/url": (body) => ({ url: views.get(body.key)?.webContents.getURL() || "" }),
       "POST /browser/screenshot": (body) => screenshot(body.key, body.highlight),
       "POST /browser/thumb": (body) => thumbnail(body.key),
-      "POST /browser/click": (body) => click(requirePage(body.key), body.selector),
-      "POST /browser/type": (body) => typeText(requirePage(body.key), body.selector, body.text),
+      // click, type, keys, scroll, snapshot, console, network and the rest (electron/pane-input.cjs).
+      ...agentRoutes({ input, cdp, page: (body) => ({ wc: requirePage(body.key), key: body.key ?? active }), redact: paneSecrets.redact }),
       "POST /secrets/list": (body) => paneSecrets.list(body.folder),
       "POST /secrets/fill": (body) => paneSecrets.fill({ ...body, key: body.key ?? active }),
       // Commands and dev servers with vault values in their env (electron/secret-run.cjs).
