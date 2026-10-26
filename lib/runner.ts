@@ -6,7 +6,7 @@ import { showStarter } from "./show";
 import { isOpenElsewhere } from "./import";
 import { holdForRestart } from "./restart-when-idle";
 import { sessionRewindPoint } from "./rewind";
-import { addScheduled } from "./schedule";
+import { holdMessage } from "./scheduled-hold";
 import { answerPermission, settle } from "./runner-pending";
 import { needLogin } from "./runner-login";
 import { canSteer, steer } from "./runner-steer";
@@ -174,7 +174,7 @@ function holdForTurn(card: Card, text: string) {
     steer(card.id, session, text, withShellContext(card.id, text));
     return true;
   }
-  updateCard(card.id, { scheduled: addScheduled(card.scheduled, { id: randomUUID(), text, at: Date.now(), afterTurn: true }) });
+  holdMessage(card, text, { reason: "afterTurn" });
   return true;
 }
 
@@ -247,7 +247,7 @@ export function archiveWhenIdle(cardId: string) {
     hooks.land(cardId);
     return;
   }
-  updateCard(cardId, archiveAfter.has(cardId) ? { wrappingUp: true } : { archived: !getCard(cardId)?.starred });
+  updateCard(cardId, archiveAfter.has(cardId) ? { wrappingUp: true } : { column: "done", archived: !getCard(cardId)?.starred });
 }
 
 function sendQueued(cardId: string) {

@@ -16,7 +16,7 @@ Sheets, Slides, Contacts, Tasks, Forms and more, with `--json` output for script
 | Shipped binary | `scripts/bundle-toolchain.mjs` `installGog()`: downloads `gogcli_<GOG_VERSION>_<os>_<arch>.tar.gz` from the GitHub release, refuses it unless the sha256 matches `GOG_SHA256`, unpacks to `toolchain/gog/gog`, wrapper `toolchain/bin/gog` |
 | Status and actions | `lib/gog.ts` (types in `lib/gog-view.ts`): `gogStatus()`, `setGogCredentials()`, `addGogAccount()`, `cancelGogAdd()`, `removeGogAccount()` |
 | Route | `app/api/connectors/gog/route.ts`: GET status, POST `{action: credentials \| add \| cancel \| remove}` |
-| UI | `components/SettingsConnectorsPage.tsx` → `components/GogConnector.tsx` |
+| UI | `components/SettingsConnectorsPage.tsx` → `components/GogConnector.tsx` (the panel's status and poll: `lib/use-connector-status.ts`) |
 | Threads | `GOG_PROMPT` in `lib/gog.ts`, pinned in `lib/weft-prompts.ts` |
 
 How a sign-in works:

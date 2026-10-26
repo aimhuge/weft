@@ -14,7 +14,8 @@ is never written to, so every run starts from the same point.
 - **⏰ in the New thread window** (`components/NewThreadHeaderActions.tsx`): puts the prompt being written on a cron
   instead of starting it once, with the window's folder, CLI, model and mode; "Also run now" fires the first run.
 - **⏰ Crons on the left rail** (under 🏷, `components/CronsDrawer.tsx`): every cron, soonest first, with a count badge
-  of the ones that will run again. Each row: schedule, next run, an on/off switch, the last runs as dots coloured by
+  of the ones that will run again. Each row: schedule, next run, an on/off switch (`components/CronSwitch.tsx`, the
+  same switch the thread header's popover puts beside its crons), the last runs as dots coloured by
   their card's column (`lib/crons-view.ts`; click one to open that run), Run now, Edit (the same form) and Delete.
   A cron a thread made over MCP says so. The first time it opens, the drawer plays its intro video
   (`public/intros/crons.html`, docs/architecture/feature-intros.md).

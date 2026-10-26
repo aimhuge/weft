@@ -3,6 +3,7 @@ import path from "node:path";
 import { globalSingleton } from "./global-singleton";
 import { DATA_DIR } from "./store";
 import type { Card } from "./types";
+import type { Habit } from "./craft-types";
 
 // The craft habits each shipped card showed: the skills its Claude Code transcript ran, sorted into
 // the craft attribute's categories (lib/game-attributes.ts). A run in Weft and one in the terminal
@@ -10,7 +11,10 @@ import type { Card } from "./types";
 // transcript again only when its size changed; ~/.weft/craft.json keeps what it found, by session id:
 // [size, habits].
 
-export type Habit = "wrap" | "commit" | "review" | "docs" | "refactor";
+// The habit lives in lib/craft-types.ts (types only, no node:fs), so the board's palette can name it
+// without dragging this module into the browser chunk. Re-exported here: the server's own imports of
+// "./craft" keep working.
+export type { Habit };
 
 // Each habit's skills, as they follow the slash; "weft:" or another plugin's prefix is optional.
 export const HABIT_SKILLS: Record<Habit, string[]> = {

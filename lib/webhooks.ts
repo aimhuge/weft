@@ -3,6 +3,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { DATA_DIR } from "./store";
 import { isKnownProvider } from "./webhook-signatures";
+import type { Delivery, Webhook, WebhookInput, WebhookPatch } from "./webhook-types";
 
 // The 🪝 webhooks of each project (docs/architecture/webhooks.md), kept in ~/.weft/webhooks.json. A webhook is what
 // a provider (Stripe, GitHub, Resend…) posts to and the local route that should get it. Until the user (or a thread)
@@ -11,47 +12,10 @@ import { isKnownProvider } from "./webhook-signatures";
 // (lib/webhook-relay.ts), whose deliveries this Weft hears through Supabase Realtime and forwards to target
 // (lib/webhook-forward.ts). Names and URLs only: a webhook's signing secret lives in the 🔐 vault, by name.
 
-// One delivery forwarded to target: when, how it went, and how long the local route took.
-export interface Delivery {
-  at: number;
-  method: string;
-  // The local route's HTTP status, or 0 when it couldn't be reached.
-  status: number;
-  ms: number;
-  error?: string;
-}
-
-export interface Webhook {
-  id: string;
-  folder: string;
-  // What it's for, e.g. "stripe"; one per name in a folder.
-  name: string;
-  // The local URL a delivery goes to, e.g. http://localhost:3000/api/stripe/webhook.
-  target: string;
-  // The provider's events it should send, e.g. ["checkout.session.completed"].
-  events?: string[];
-  // Where the user registers it, e.g. "Stripe dashboard → Developers → Webhooks".
-  hint?: string;
-  // The vault name of its signing secret, e.g. STRIPE_WEBHOOK_SECRET.
-  secret?: string;
-  // The provider whose signature the relay verifies (lib/webhook-signatures.ts): `stripe`, `github`,
-  // `vercel`, or `svix` (the wire shape Resend and Clerk use). Defaults to the lowercased name when
-  // that matches; a "resend" webhook can declare "svix" so the local Weft and the deployed relay agree
-  // before the user registers it. Required for a relay URL, since the relay refuses unsigned requests.
-  provider?: string;
-  // The provider sends to it now; until then it's a blank.
-  registered?: boolean;
-  // Its public URL on the deployed Weft, and that relay's row id (webhook_relays).
-  url?: string;
-  relayId?: string;
-  // The latest deliveries, newest first, at most MAX_DELIVERIES.
-  deliveries?: Delivery[];
-  createdAt: number;
-  updatedAt: number;
-}
-
-export type WebhookInput = Pick<Webhook, "folder" | "name"> & Partial<Pick<Webhook, "target" | "events" | "hint" | "secret" | "provider">>;
-export type WebhookPatch = Partial<Pick<Webhook, "name" | "target" | "events" | "hint" | "secret" | "provider" | "registered">>;
+// The webhook shapes live in lib/webhook-types.ts (types only, no node:fs), so the board can name them
+// without dragging this module into the browser chunk. Re-exported here: the server's own imports of
+// "./webhooks" keep working.
+export type { Delivery, Webhook, WebhookInput, WebhookPatch };
 
 export const MAX_DELIVERIES = 10;
 // A bare path goes to the usual Next dev server.

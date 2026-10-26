@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { activeCount, cronSummary, cronsTitle, runTone, sortCrons, TONE_CLASS, TONE_LABEL } from "./crons-view";
+import { activeCount, cronSummary, cronsTitle, isLiveCron, runTone, sortCrons, TONE_CLASS, TONE_LABEL } from "./crons-view";
 import type { Cron, CronRun } from "./cron-types";
 
 const cron = (over: Partial<Cron> = {}): Cron => ({
@@ -55,6 +55,18 @@ describe("activeCount", () => {
     expect(activeCount([cron({ nextAt: 100 }), cron({ id: "c2", enabled: false, nextAt: 200 })])).toBe(1);
     // Enabled, but its last run has passed and there's no next one.
     expect(activeCount([cron({ enabled: true })])).toBe(0);
+  });
+});
+
+describe("isLiveCron", () => {
+  it("is true for a cron that is on and has a next run", () => {
+    expect(isLiveCron(cron({ nextAt: 100 }))).toBe(true);
+  });
+
+  it("is false for a cron that is switched off, or has no next run", () => {
+    expect(isLiveCron(cron({ enabled: false, nextAt: 100 }))).toBe(false);
+    expect(isLiveCron(cron({ enabled: true }))).toBe(false);
+    expect(isLiveCron(cron({ enabled: false }))).toBe(false);
   });
 });
 

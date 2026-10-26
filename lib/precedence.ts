@@ -1,10 +1,9 @@
 import path from "node:path";
-import { addClaims, claimKey, splitClaim } from "./claims";
+import { addClaims, claimKey, splitClaim, withoutYield } from "./claims";
 import { settle } from "./runner-pending";
 import { sessions } from "./runner-state";
 import { canSteer, steer } from "./runner-steer";
 import { getCard, updateCard } from "./store";
-import type { Card } from "./types";
 
 // Me first: a card held on a symbol claim (lib/claims.ts) can be put ahead of the card holding the code.
 // The user presses Me first on the held card's prompt, or You first on the holder's thread; either way:
@@ -23,9 +22,6 @@ export function yieldMessage(first: string, file: string) {
   return `Weft: the user put card ‘${first}’ first on ${name}. Leave ${name} to it for now and carry on with other work; if you need to edit ${name}, the edit is held until ‘${first}’ lets go of it.`;
 }
 
-// The card's yields without the one to `to` on this file.
-const without = (card: Card, to: string, file: string) => (card.yields ?? []).filter((y) => y.to !== to || y.file !== file);
-
 // The user put this card's held request first: it goes ahead, and the card holding that code yields the file.
 export function putFirst(cardId: string, pendingId: string) {
   const p = sessions.get(cardId)?.pending.find((x) => x.id === pendingId);
@@ -35,12 +31,12 @@ export function putFirst(cardId: string, pendingId: string) {
   const { file } = splitClaim(holder.claim);
   const card = getCard(cardId);
   if (card) {
-    const yields = without(card, holder.id, file);
+    const yields = withoutYield(card, holder.id, file);
     updateCard(cardId, { claims: addClaims(card.claims, [claimKey(file)]) ?? card.claims, yields });
   }
   const other = getCard(holder.id);
   if (other) {
-    updateCard(other.id, { yields: [...without(other, cardId, file), { to: cardId, file }] });
+    updateCard(other.id, { yields: [...withoutYield(other, cardId, file), { to: cardId, file }] });
     const session = sessions.get(other.id);
     if (canSteer(session)) steer(other.id, session, yieldMessage(card?.title ?? "another card", file));
   }

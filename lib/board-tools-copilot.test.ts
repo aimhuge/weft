@@ -26,7 +26,7 @@ beforeEach(() => {
 describe("boardMcpServer (copilot)", () => {
   it("registers the full set of board tools for the copilot", () => {
     boardMcpServer(fakeActions());
-    const names = ["list_cards", "read_thread", "create_card", "set_tags", "start_card", "send_message", "move_card", "stop_card", "setup_status", "answer_permission", ...CRON_TOOL_NAMES];
+    const names = ["list_cards", "read_thread", "create_card", "set_tags", "start_card", "send_message", "move_card", "stop_card", "setup_status", "answer_permission", ...CRON_TOOL_NAMES, "create_agent"];
     expect(state.captures.map((t) => t.name)).toEqual(names);
   });
 

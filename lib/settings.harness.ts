@@ -1,5 +1,6 @@
-// The temp data dir and fresh-module load the settings tests share (lib/settings.test.ts, lib/settings-folders.test.ts).
-// Call withSettingsDir() at the top of a test file; load() re-imports ./settings with no cached state.
+// The temp data dir and fresh-module load the settings tests share (lib/settings.test.ts, lib/settings-folders.test.ts,
+// lib/settings-models.test.ts). Call withSettingsDir() at the top of a test file; load() re-imports ./settings with
+// no cached state — or the module named, for a test that wants one part of the settings on its own.
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -13,6 +14,15 @@ export async function load() {
   delete g.__weftState;
   delete g.__weftSettings;
   return import("./settings");
+}
+
+// The model picks on their own (lib/settings-models.ts): the same fresh-module load, for a test
+// that wants that one part of the settings rather than the whole front.
+export async function loadModels() {
+  vi.resetModules();
+  delete g.__weftState;
+  delete g.__weftSettings;
+  return import("./settings-models");
 }
 
 export function withSettingsDir() {

@@ -15,7 +15,7 @@ import { answerBody, newCardBody, replyBody, stopBody, type CloudCommandRow } fr
 import { syncNow, syncOrgId } from "./cloud-sync";
 import { deviceId } from "./device-id";
 import { globalSingleton } from "./global-singleton";
-import { createCardFromBody, startCard } from "./new-card";
+import { startFeatureCard } from "./card-starter";
 import { answerPermission, sendUserMessage, stop } from "./runner";
 import { syncFolders } from "./settings";
 import { getCard } from "./store";
@@ -169,8 +169,7 @@ async function startFromCommand(client: SupabaseClient, uid: string, command: Cl
   if (kind === "reply") return replyFromCommand(command);
   if (kind === "answer") return answerFromCommand(command);
   if (kind === "stop") return stopFromCommand(command);
-  const card = createCardFromBody(newCardBody(command));
-  startCard(card);
+  const card = await startFeatureCard(newCardBody(command));
   // The card and its first items are already in the outbox; send them now so the board sees it start.
   syncNow();
   return card.id;

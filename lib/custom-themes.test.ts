@@ -68,19 +68,19 @@ describe("customThemePicture", () => {
 });
 
 describe("startThemeCard", () => {
-  it("makes the folder and starts a theme card in the themes folder", () => {
-    const { id } = startThemeCard("  Rainy Tokyo alley at night ");
+  it("makes the folder and starts a theme card in the themes folder", async () => {
+    const { id } = await startThemeCard("  Rainy Tokyo alley at night ");
     expect(id).toBe("rainy-tokyo-alley");
     expect(fs.existsSync(path.join(themesDir(), id))).toBe(true);
     const body = vi.mocked(newCard.createCardFromBody).mock.calls[0]![0];
     expect(body).toMatchObject({ title: "Theme: Rainy Tokyo alley at night", cwd: themesDir(), backend: "claude", tags: ["theme"] });
     expect(body.prompt).toContain(path.join(themesDir(), id));
     expect(newCard.startCard).toHaveBeenCalled();
-    expect(startThemeCard("rainy tokyo alley").id).toBe("rainy-tokyo-alley-2");
+    expect((await startThemeCard("rainy tokyo alley")).id).toBe("rainy-tokyo-alley-2");
   });
 
-  it("refuses an empty description", () => {
-    expect(() => startThemeCard("   ")).toThrow("Describe the theme");
+  it("refuses an empty description", async () => {
+    await expect(startThemeCard("   ")).rejects.toThrow("Describe the theme");
   });
 });
 
@@ -110,25 +110,25 @@ describe("uploadedPictureName", () => {
 describe("startThemeCard with your picture", () => {
   const brief = () => String(vi.mocked(newCard.createCardFromBody).mock.calls.at(-1)![0].prompt);
 
-  it("saves the picture first and briefs the thread to build around it", () => {
-    const { id } = startThemeCard("warm and quiet", { bytes: PNG, name: "beach.png" });
+  it("saves the picture first and briefs the thread to build around it", async () => {
+    const { id } = await startThemeCard("warm and quiet", { bytes: PNG, name: "beach.png" });
     expect(id).toBe("warm-and-quiet");
     expect(fs.readFileSync(path.join(themesDir(), id, "picture.png"))).toEqual(Buffer.from(PNG));
     expect(brief()).toContain(`${path.join(themesDir(), id)}/picture.png, which I uploaded`);
     expect(brief()).toContain('with this in mind: "warm and quiet"');
   });
 
-  it("needs no words: the file's name names it, else 'picture'", () => {
-    expect(startThemeCard("", { bytes: JPEG, name: "Sunset Beach.JPG" }).id).toBe("sunset-beach");
+  it("needs no words: the file's name names it, else 'picture'", async () => {
+    expect((await startThemeCard("", { bytes: JPEG, name: "Sunset Beach.JPG" })).id).toBe("sunset-beach");
     expect(vi.mocked(newCard.createCardFromBody).mock.calls[0]![0].title).toBe("Theme: from your picture");
     expect(brief()).toContain("around the picture I uploaded.");
-    expect(startThemeCard(" ", { bytes: WEBP }).id).toBe("picture");
+    expect((await startThemeCard(" ", { bytes: WEBP })).id).toBe("picture");
     expect(fs.existsSync(path.join(themesDir(), "picture", "picture.webp"))).toBe(true);
   });
 
-  it("refuses a picture too big or not a photo, before making a folder", () => {
-    expect(() => startThemeCard("x", { bytes: new Uint8Array(MAX_PICTURE_BYTES + 1) })).toThrow("over 20 MB");
-    expect(() => startThemeCard("x", { bytes: new TextEncoder().encode("<svg/>") })).toThrow("JPEG, PNG or WebP");
+  it("refuses a picture too big or not a photo, before making a folder", async () => {
+    await expect(startThemeCard("x", { bytes: new Uint8Array(MAX_PICTURE_BYTES + 1) })).rejects.toThrow("over 20 MB");
+    await expect(startThemeCard("x", { bytes: new TextEncoder().encode("<svg/>") })).rejects.toThrow("JPEG, PNG or WebP");
     expect(fs.existsSync(themesDir())).toBe(false);
     expect(newCard.startCard).not.toHaveBeenCalled();
   });

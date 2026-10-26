@@ -9,6 +9,7 @@ import { createBlobStore, type BlobStoreBundle } from "./blob-store";
 import type { BlobStore } from "./cloud-sync-types";
 import { startCloudInbox } from "./cloud-inbox";
 import { startCloudSync } from "./cloud-sync";
+import { startSyncRepos } from "./cloud-sync-repos";
 
 export function startAccountCloudSync(): () => void {
   let store: BlobStoreBundle | null = null;
@@ -21,7 +22,10 @@ export function startAccountCloudSync(): () => void {
   const stopSync = startCloudSync({ blobs: lazy });
   const stopInbox = startCloudInbox();
   const stopPreviews = startPreviewRefresh();
+  // Turn sync on for projects you sync from another Mac (lib/cloud-sync-repos.ts).
+  const stopRepos = startSyncRepos();
   return () => {
+    stopRepos();
     stopPreviews();
     stopInbox();
     stopSync();

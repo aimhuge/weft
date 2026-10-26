@@ -8,7 +8,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { accountClient } from "./account";
 import { shell } from "./browser-tools";
 import { deviceId } from "./device-id";
-import type { AuditEntry } from "./keychain-audit-view";
+import type { AuditEntry } from "./keychain-audit-types";
 
 // Often, so a line sits on the Mac, where it could be edited, for seconds; the outbox is a small file, usually empty.
 const CHECK_MS = 5_000;

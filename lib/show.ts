@@ -6,8 +6,10 @@ import { emojiPrompt, parseEmoji } from "./card-pictures";
 import { complete } from "./haiku";
 import { clip } from "./format";
 import { nameNeeds, namePrompt, parseName, tagVocabulary, titleEmoji } from "./retitle";
+import { siteNotesAfterTurn } from "./site-notes-live";
 import { DATA_DIR, decorateCard, getCard, listCards } from "./store";
 import { listTags } from "./tag-store";
+import { nextTipIndex, tipCard, TIPS, TIP_CSS } from "./new-thread-tips";
 import type { Card } from "./types";
 
 // The pane is never empty or stale: a card with no page gets a starter page when its turn starts, and a
@@ -115,12 +117,13 @@ function askHtml(ask: string) {
   return escape(ask).replace(/\n*!\[([^\]]*)\]\((\/[^)]+)\)\n*/g, (_, alt: string, file: string) => `<img src="${encodeURI(`file://${file}`)}" alt="${alt}">`);
 }
 
-// Beside the New thread dialog while you write the prompt.
-export function newThreadPage(scene = "splash-speeder.jpg") {
-  return splashPage({ title: "New thread", note: "Engineering the future, one thread at a time", status: "Waiting for your prompt…", scene });
+// Beside the New thread dialog while you write the prompt, with a tip that changes as you write (lib/new-thread-tips.ts).
+export function newThreadPage(scene = "splash-speeder.jpg", tip = { start: 0, origin: undefined as string | undefined }) {
+  const tips = tipCard(TIPS, tip.start, tip.origin);
+  return splashPage({ title: "New thread", note: "Engineering the future, one thread at a time", status: "Waiting for your prompt…", scene, tips });
 }
 
-function splashPage({ title, note, ask, status, scene = "splash-speeder.jpg" }: { title: string; note: string; ask?: string; status: string; scene?: string }) {
+function splashPage({ title, note, ask, status, scene = "splash-speeder.jpg", tips = "" }: { title: string; note: string; ask?: string; status: string; scene?: string; tips?: string }) {
   return `<!doctype html><html><head><meta charset="utf-8"><title>${escape(title)}</title><style>
 html,body{height:100%;margin:0}
 body{--ink:#f4efe6;--muted:#d9d0c3;--faint:#b9afa2;--line:rgb(255 250 240/.2);--accent:#d9774b;--accent2:#8f97d6;
@@ -143,6 +146,7 @@ h1{margin:6px 0 0;font-size:24px;line-height:1.25;font-weight:700;letter-spacing
 @keyframes float{to{transform:translateY(-6px)}}
 @keyframes sheen{to{background-position:100% 0}}
 @keyframes push{from{transform:scale(1.08)}}
+${TIP_CSS}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important}}
 </style></head><body><main>
 <div class="mark"><img src="${asset("emblem.png")}" alt="" onerror="this.style.visibility='hidden'"></div>
@@ -151,6 +155,7 @@ h1{margin:6px 0 0;font-size:24px;line-height:1.25;font-weight:700;letter-spacing
 ${ask === undefined ? "" : `<div class="ask">${escape(clip(ask, MAX_ASK_CHARS))}</div>`}
 <div class="thread" aria-hidden="true"></div>
 <div class="status">${escape(status)}</div>
+${tips}
 </main></body></html>`;
 }
 
@@ -167,9 +172,9 @@ export function nextScene(names = backdrops()) {
   return names[sceneTurn++ % names.length] ?? "splash-speeder.jpg";
 }
 
-// The New thread dialog's page, as a url the browser pane can load.
-export function newThreadUrl() {
-  return `file://${write("new-thread", newThreadPage(nextScene()))}`;
+// The New thread dialog's page, as a url the browser pane can load. `origin` is Weft's own, for the tips' ▶ Watch.
+export function newThreadUrl(origin?: string) {
+  return `file://${write("new-thread", newThreadPage(nextScene(), { start: nextTipIndex(), origin }))}`;
 }
 
 // Fire and forget from the start-a-card path: a file write and one local request, nothing awaited.
@@ -188,6 +193,8 @@ export async function showAfterTurn(
     await writeShow(cardId, turn.ask, turn.reply, isCurrent).catch(() => {});
   }
   retitleAfterTurn(cardId, turn);
+  // What the card learned in the pane becomes a site note; fire and forget, like the title (lib/site-notes-capture.ts).
+  void siteNotesAfterTurn(cardId, turn.ask);
   await pictureAfterTurn(cardId, isCurrent);
 }
 

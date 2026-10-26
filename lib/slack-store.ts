@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { DATA_DIR } from "./store";
-import { DEFAULT_SLACK_SETTINGS, type SlackEventKey, type SlackEvents, type SlackLink, type SlackSettings, type SlackSettingsPatch, type SlackThread } from "./slack-types";
+import { DEFAULT_SLACK_SETTINGS, type SlackEventKey, type SlackLink, type SlackSettings, type SlackSettingsPatch, type SlackThread } from "./slack-types";
 
 // Slack's side of ~/.weft (docs/architecture/slack.md): the drawer's settings, each card's Slack thread, the
 // message its status updates reply under, and the growth watermark. No token lives here: those stay sealed in
@@ -51,7 +51,7 @@ function write(next: SlackFile) {
 // Only the fields the drawer may set, each of its type; anything else keeps what `base` had.
 function clean(patch: SlackSettingsPatch, base: SlackSettings): SlackSettings {
   const events = { ...base.events };
-  for (const key of Object.keys(events) as (keyof SlackEvents)[]) {
+  for (const key of Object.keys(events) as SlackEventKey[]) {
     const on = patch.events?.[key];
     if (typeof on === "boolean") events[key] = on;
   }

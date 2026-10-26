@@ -6,7 +6,7 @@ export function POST(req: Request) {
   const denied = guard(req);
   if (denied) return denied;
   try {
-    return Response.json({ url: newThreadUrl() });
+    return Response.json({ url: newThreadUrl(new URL(req.url).origin) });
   } catch (err) {
     return fail(err);
   }

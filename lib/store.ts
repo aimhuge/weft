@@ -55,6 +55,7 @@ function loadState(): State {
       card.tasks = orphanTasks(card.tasks, Date.now()) ?? card.tasks;
       if (card.column === "running" || card.pending) {
         card.column = "review";
+        delete card.archived; // as updateCard does: a card back in Review isn't filed away
         card.pending = null;
         card.lastLine = CLOSED_LINE;
         // lib/resume.ts carries the turn on, unless it's been cut off MAX_RESUMES carry-ons in a row.
@@ -190,6 +191,9 @@ export function updateCard(id: string, patch: Partial<Card>): Card {
   const now = Date.now();
   const moved = patch.column !== undefined && patch.column !== card.column;
   Object.assign(card, patch, { updatedAt: now }, moved ? { columnAt: now } : {});
+  // Archived means filed away from Done. Any other move (a turn ending in Review, a closed session, a drag)
+  // brings it back, or a card that still needs you would vanish; a patch that sets archived itself decides.
+  if (moved && card.column !== "done" && patch.archived === undefined) delete card.archived;
   // A card's symbol claims (lib/claims.ts) end with its work: at Done, or when it's archived.
   if (card.column === "done" || card.archived) delete card.claims;
   saveBoard();

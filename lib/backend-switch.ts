@@ -1,8 +1,9 @@
 import { hooks, isBusy } from "./runner-state";
 import { getCard, getThread, updateCard } from "./store";
 import type { Backend, Card } from "./types";
-import { backendFor, effortFor, modelLabel, modelOn } from "./new-thread";
+import { effortFor, modelLabel, modelOn, resolveModel } from "./new-thread";
 import { fallbackFor, fallbackLine } from "./model-fallback";
+import { repointCard } from "./card-repoint";
 
 // Moves a card off a model that has hit its limit, onto the user's backup model, and replays the
 // turn that was cut off there. This is what happens by itself when a thread's model runs out
@@ -42,7 +43,7 @@ export async function rerunOnModel(cardId: string, model: string) {
   if (!card) throw new Error("No such card.");
   if (isBusy(cardId)) throw new Error("Stop the thread before rerunning it.");
   await hooks.endSession(cardId);
-  const backend = backendFor(model);
+  const backend = resolveModel(model)?.backend;
   if (backend && backend !== card.backend) {
     // Another CLI's model: the card moves there, in a fresh session on that CLI.
     updateCard(cardId, { backend, model, sessionId: undefined, error: undefined, rateLimitHit: false });
@@ -71,15 +72,21 @@ export async function switchBackend(cardId: string, backend: Backend, { replay =
   if (!card) throw new Error("No such card.");
   // A model from another CLI moves the card to the CLI that serves it: one pick, one thread, and
   // the CLI and the model always agree. "" is the CLI's own default, which it already is.
-  const target = model ? (backendFor(model) ?? backend) : backend;
+  // resolveModel is the one rule for "the CLI that serves a model" — the same one the board predicts
+  // with (lib/backend-pick.ts), so the card can't flash one CLI and land on another.
+  const target = (model ? resolveModel(model)?.backend : undefined) ?? backend;
   if (card.backend === target) {
     // Same CLI, another of its models: no new session needed.
     if (model !== undefined && model !== card.model) hooks.setModel(cardId, model);
     return;
   }
-  if (isBusy(cardId)) throw new Error("Stop the thread before switching its CLI.");
-  await hooks.endSession(cardId);
-  updateCard(cardId, switchPatch(card, target, model));
+  // The one re-point rule (lib/card-repoint.ts): refuse while a turn is running, end the session,
+  // then patch the card — the patch last, so the session's wind-down can't write its session id
+  // and stats back over the new CLI's.
+  await repointCard(card, switchPatch(card, target, model), "Stop the thread before switching its CLI.", {
+    isBusy,
+    endSession: hooks.endSession,
+  });
   if (replay) {
     const last = [...getThread(cardId)].reverse().find((item) => item.kind === "user");
     if (last?.kind === "user") hooks.send(cardId, last.text, { echo: false });

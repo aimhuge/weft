@@ -1248,7 +1248,7 @@ Weft™ and the Weft logo aren't covered by the license: a fork you share needs 
   it was last read from disk, not live, until you reply in Weft.
 - Automated tests are thin: `pnpm test` runs a Vitest suite over `lib/` (status parser, review tour,
   API guard, automations, formatting, settings, store, board tools) and over the API routes, with the
-  runner and store mocked, and over the runner's SDK loop with a fake `query()`. UI tests have only started: the card, the reply box and the new-thread dialog (`components/*.test.tsx`, jsdom + Testing Library); the board and thread view have none. CI runs lint, typecheck and tests; a pre-commit hook type-checks what's staged.
+  runner and store mocked, and over the runner's SDK loop with a fake `query()`. UI tests have only started: the card, the reply box and the new-thread dialog (`components/*.test.tsx`, jsdom + Testing Library); the board and thread view have none. CI runs lint, typecheck and tests; a pre-commit hook type-checks what's staged. A "use client" module that reaches a Node built-in or a server-only module fails lint (`weft/no-client-server-leak`), because Turbopack panics on it and the board route 500s with nothing the UI can show.
 - The packaged app's terminal drawer (`node-pty` now ships in the Electron bundle) hasn't been tried on a fresh Mac yet.
 - Cards share a working tree unless you make one Isolated (docs/architecture/worktrees.md). An isolated card
   starts a cold CLI (no warm spare in its worktree yet), and its dev server's own port reaches it as `PORT`, which

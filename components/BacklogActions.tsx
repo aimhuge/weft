@@ -18,6 +18,8 @@ export interface BacklogLane {
   onRestore: (ids: string[]) => void;
   toast: (message: string) => void;
   notify: (err: unknown) => void;
+  // Folds the column to a thin strip (components/FoldedColumn.tsx), there even while it's empty.
+  onFold?: () => void;
 }
 
 const plural = (n: number) => `${n} card${n === 1 ? "" : "s"}`;
@@ -28,12 +30,14 @@ export async function saveLaneAsSprint(lane: BacklogLane) {
   lane.toast(`Saved ${plural(lane.cards.length)} as “${sprint.name}”`);
 }
 
-// The Backlog header's two actions: Save as sprint (the flag) and Archive all (the box), which asks first.
+// The Backlog header's actions: Save as sprint (the flag) and Archive all (the box), which asks first,
+// then Fold (the chevron), which tucks the column away.
 export default function BacklogActions({ lane }: { lane: BacklogLane }) {
   const [confirming, setConfirming] = useState(false);
   const [saving, setSaving] = useState(false);
   const n = lane.cards.length;
-  if (!n) return null;
+  const fold = lane.onFold && <FoldButton onFold={lane.onFold} />;
+  if (!n) return fold || null;
 
   async function save() {
     if (saving) return;
@@ -62,7 +66,18 @@ export default function BacklogActions({ lane }: { lane: BacklogLane }) {
         </button>
       </Tip>
       {confirming && <ConfirmArchive lane={lane} onClose={() => setConfirming(false)} />}
+      {fold}
     </>
+  );
+}
+
+function FoldButton({ onFold }: { onFold: () => void }) {
+  return (
+    <Tip text="Fold Backlog to a strip. Click the strip to open it again." className="inline-flex">
+      <button onClick={onFold} className="rounded p-0.5 hover:bg-hover hover:text-ink" aria-label="Fold Backlog">
+        <Icon name="chevronLeft" size={13} />
+      </button>
+    </Tip>
   );
 }
 

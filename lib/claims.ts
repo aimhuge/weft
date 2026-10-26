@@ -1,6 +1,6 @@
-import path from "node:path";
 import { busyInFolder, TOUCHED_CAP } from "./overlap";
-import type { Card, PromptReason } from "./types";
+import { baseName, claimFileName, claimKey, splitClaim, WHOLE_FILE } from "./claim-keys";
+import type { Card, CardYield, PromptReason } from "./types";
 import { workDir } from "./work-dir";
 
 // Symbol claims: cards share one working tree (no worktree per card, SOUL.md), so a card claims the
@@ -9,22 +9,13 @@ import { workDir } from "./work-dir";
 // When another busy card in the same tree goes to edit a claimed symbol, lib/claim-guard.ts asks the user
 // to wait or go ahead. Board data only, no git, so the check costs next to nothing.
 
-export const WHOLE_FILE = "*";
+// The key's parts live in lib/claim-keys.ts (pure, no node:path), so the board's thread panel can name a
+// claim's file (lib/waits-on.ts) without dragging this module into the browser chunk. Re-exported here:
+// the server's own imports of "./claims" keep working.
+export { claimFileName, claimKey, splitClaim, WHOLE_FILE };
 
 // How many claims a card keeps, like its edited files.
 export const CLAIMS_CAP = TOUCHED_CAP;
-
-// A path's own # is escaped (and %, so it reads back), so a key's first # is where its symbol starts:
-// symbols hold # of their own, order numbers anywhere along them (`Board/return/div#2/main`).
-export function claimKey(file: string, symbol: string = WHOLE_FILE) {
-  return `${file.replace(/%/g, "%25").replace(/#/g, "%23")}#${symbol}`;
-}
-
-// A key's file and symbol.
-export function splitClaim(key: string) {
-  const at = key.indexOf("#");
-  return { file: key.slice(0, at).replace(/%23/g, "#").replace(/%25/g, "%"), symbol: key.slice(at + 1) };
-}
 
 // One symbol inside the other: `Board` holds `Board/useEffect#3`.
 const within = (inner: string, outer: string) => inner.startsWith(`${outer}/`);
@@ -51,6 +42,18 @@ export function dropClaims(list: string[] | undefined, files: Set<string>) {
   return kept.length === (list ?? []).length ? undefined : kept;
 }
 
+// The files a card claims, by path.
+export function claimFiles(card: Card): Set<string> {
+  return new Set((card.claims ?? []).map((k) => splitClaim(k).file));
+}
+
+// The card that claims each file, for these cards: the first card in the list that claims it wins.
+export function claimFilesOf(cards: Card[]): Map<string, Card> {
+  const owner = new Map<string, Card>();
+  for (const card of cards) for (const file of claimFiles(card)) if (!owner.has(file)) owner.set(file, card);
+  return owner;
+}
+
 export interface Clash {
   card: Card;
   // Their claim and the one it clashes with.
@@ -62,6 +65,9 @@ export interface Clash {
 
 // Whether `from` leaves this file to the card `to` (Me first, lib/precedence.ts).
 export const yieldsTo = (from: Card, to: string, file: string) => Boolean(from.yields?.some((y) => y.to === to && y.file === file));
+
+// The card's yields without the one to `to` on this file.
+export const withoutYield = (card: Card, to: string, file: string): CardYield[] => (card.yields ?? []).filter((y) => y.to !== to || y.file !== file);
 
 // The first other busy card in this card's tree holding a claim that clashes with one of these. A card that
 // yields a file to this one is skipped there: the user put this card first.
@@ -82,8 +88,8 @@ export function findClash(cards: Card[], card: Card, keys: string[]): Clash | un
 // One the user put first reads "Card ‘Fix login’ goes first on Login.tsx. Wait, or go ahead?".
 export function clashQuestion({ card, theirs, first }: Clash) {
   const { file, symbol } = splitClaim(theirs);
-  if (first) return `Card ‘${card.title}’ goes first on ${path.basename(file)}. Wait, or go ahead?`;
-  const what = symbol === WHOLE_FILE ? path.basename(file) : `${symbol} in ${path.basename(file)}`;
+  if (first) return `Card ‘${card.title}’ goes first on ${baseName(file)}. Wait, or go ahead?`;
+  const what = symbol === WHOLE_FILE ? baseName(file) : `${symbol} in ${baseName(file)}`;
   return `Card ‘${card.title}’ is editing ${what}. Wait, or go ahead?`;
 }
 
@@ -97,7 +103,7 @@ export function clashWhy({ card, theirs, mine, first }: Clash): PromptReason {
   const m = splitClaim(mine);
   // A holder waiting on its own holder is still holding the code, so it reads as running.
   const state = card.column === "needs_you" ? "waiting on you" : card.pending?.waiting ? "waiting" : "running";
-  const held = t.symbol === WHOLE_FILE ? path.basename(t.file) : symbolText(t.symbol);
+  const held = t.symbol === WHOLE_FILE ? baseName(t.file) : symbolText(t.symbol);
   const category = t.symbol === WHOLE_FILE || m.symbol === WHOLE_FILE ? "whole-file" : m.symbol === t.symbol ? "same-code" : "overlap";
   return {
     category,

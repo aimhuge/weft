@@ -1076,3 +1076,9 @@
 .wz-root .wz-legal a {
   color: var(--clay-2);
 }
+
+/* The privacy page's analytics switch (components/ConsentChoice.tsx): a link-looking button in the legal column. */
+.wz-root .wz-legal .wz-legalButton {
+  color: var(--clay-2);
+  text-decoration: underline;
+}

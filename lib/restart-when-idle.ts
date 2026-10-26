@@ -3,8 +3,8 @@ import { shell } from "./browser-tools";
 import { publish, subscribe } from "./bus";
 import { globalSingleton } from "./global-singleton";
 import { busyCards, queued } from "./runner-state";
-import { addScheduled } from "./schedule";
-import { getCard, updateCard } from "./store";
+import { holdMessage } from "./scheduled-hold";
+import { getCard } from "./store";
 import type { RestartStatus } from "./types";
 
 // Restart when idle: restarting Weft cuts off every running turn, so instead you arm a restart. From then no new
@@ -153,7 +153,6 @@ export function holdForRestart(cardId: string, text: string, { echo = true } = {
   const card = getCard(cardId);
   if (!card) throw new Error("No such card.");
   if (card.role === "copilot") throw new Error(COPILOT_HELD);
-  const held = { id: randomUUID(), text, at: Date.now(), afterRestart: true };
-  updateCard(cardId, { scheduled: addScheduled(card.scheduled, held) });
+  holdMessage(card, text, { reason: "afterRestart" });
   return true;
 }

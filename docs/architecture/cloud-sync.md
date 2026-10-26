@@ -53,6 +53,14 @@ is the contract between the parts:
   and, when on, `queueFolder()` queues its existing cards and items; `POST { sync: true }` flushes now). The status
   (`cloudSyncStatus()`, type in `lib/cloud-sync-view.ts`) is `waiting` (outbox lines), `lastSyncAt`, `uploaded` since start,
   `lastError`, `signedOut`, `noWorkspace`. Folders live in settings `syncFolders` (`setSyncFolder`).
+- Across your Macs (`lib/cloud-sync-repos.ts`, `supabase/migrations/20261026145209_cloud_sync_repos.sql`): `syncFolders` holds
+  local paths, which differ from Mac to Mac, so a second Mac used to start with every project off. The switch is also kept per
+  GitHub repo in `cloud_sync_repos` (`owner_user`, `repo`, `enabled`; each user reads and writes only their own rows): the POST
+  above records it (`rememberSyncRepo`, never holding up the answer), and every Mac publishes the repos it already syncs without
+  overriding a switch made elsewhere (`ignoreDuplicates`), then turns sync on (and `queueFolder`s) for each recent project whose
+  origin (`githubRepoOf` in `lib/repos.ts`) is an enabled repo: at start, every minute (`ADOPT_EVERY_MS`, which catches a fresh
+  sign-in), and the moment a project lands on the board (`onProjectOpen("sync-repos")`, so a clone made on the new Mac syncs at
+  once). It only turns sync on: a repo switched off elsewhere stays on where it already is. A folder with no GitHub origin stays per Mac.
 - The sync prompt (`components/SyncPromptDialog.tsx`, mounted beside the welcome in `components/HeaderBadges.tsx`; rules in
   `lib/sync-prompt.ts`, state in `lib/use-sync-prompt.ts`): "Turn on Project Sync for <project>?" for the project you're working on — the
   one the board is narrowed to, else the folder of the card that moved last, never the copilot, an archived card or a scratch folder

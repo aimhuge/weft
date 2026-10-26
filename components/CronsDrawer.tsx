@@ -8,6 +8,7 @@ import type { CronsState } from "@/lib/use-crons";
 import { useNow } from "@/lib/use-now";
 import type { Card } from "@/lib/types";
 import CronEditor from "./CronEditor";
+import CronSwitch from "./CronSwitch";
 import { Note } from "./VaultParts";
 import "./crons.css";
 
@@ -57,9 +58,12 @@ function CronItem({ cron, cards, now, onOpenCard, act, update, remove, run }: { 
           <p className="text-[11.5px] text-muted">{cronSummary(cron, source?.title)}</p>
           <p className="text-[11.5px] text-muted">{nextLine(cron, now)}</p>
         </div>
-        <button type="button" role="switch" aria-checked={cron.enabled} aria-label={cron.enabled ? `Pause ${cron.name}` : `Turn on ${cron.name}`} onClick={() => act(() => update(cron.id, { enabled: !cron.enabled }))} className={`relative mt-0.5 h-4 w-7 shrink-0 rounded-full ${cron.enabled ? "bg-[var(--cron)]" : "bg-line-strong"}`}>
-          <span className={`absolute top-0.5 size-3 rounded-full bg-white transition-all ${cron.enabled ? "right-0.5" : "left-0.5"}`} />
-        </button>
+        <CronSwitch
+          enabled={cron.enabled}
+          label={cron.enabled ? `Pause ${cron.name}` : `Turn on ${cron.name}`}
+          onToggle={() => act(() => update(cron.id, { enabled: !cron.enabled }))}
+          className="mt-0.5"
+        />
       </div>
       {cron.runs.length > 0 && <RunDots cron={cron} cards={cards} now={now} onOpen={open} />}
       <div className="mt-1 flex gap-3">

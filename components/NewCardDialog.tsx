@@ -34,6 +34,7 @@ export default function NewCardDialog({
   restart,
   onClose,
   onCreate,
+  onManageAgents,
 }: {
   // The board's cards, to warn when the chosen folder already has busy ones (lib/overlap.ts).
   cards?: Card[];
@@ -47,6 +48,8 @@ export default function NewCardDialog({
   onClose: () => void;
   // stay: started with ⌃↵, so the dialog stays open for the next thread.
   onCreate: (input: NewCardInput, opts?: { stay?: boolean }) => Promise<void>;
+  // Opens Settings → Agents, from the Agent menu's "Manage agents…".
+  onManageAgents?: () => void;
 }) {
   const dialog = useNewCardDialog(home, defaultCwd, recentCwd);
   // ⌘ or ⌃ held: the Start button names what ⌘↵ or ⌃↵ will do.
@@ -58,8 +61,8 @@ export default function NewCardDialog({
   const gate = useStartGate(dialog.backend, dialog.model);
   const composer = useRef<ComposerHandle>(null);
   useEscape(true, onClose);
-  // Its intro plays the first time the dialog opens (lib/feature-intros.ts), in the browser pane on the desktop
-  // beside it (lib/pane-intro.ts) and in a frame over the composer on the web; ▶ by the title plays it again.
+  // Its intro plays when you press ▶ by the title (lib/feature-intros.ts), never on its own: in the browser pane on the
+  // desktop beside it (lib/pane-intro.ts) and in a frame over the composer on the web.
   const inPane = hasPane();
   const intro = useFeatureIntro(inPane ? null : "newthread");
   const playInPane = inPane ? () => playPaneIntro("newthread", NEW_THREAD_PANE) : null;
@@ -136,7 +139,7 @@ export default function NewCardDialog({
         onPickEffort={dialog.setEffort}
         onPickMode={dialog.pickMode}
         isolate={{ on: dialog.isolated, suggest: suggestIsolate(alsoHere.length, dialog.promptLength), onToggle: dialog.toggleIsolated }}
-        agent={{ value: dialog.agent, onPick: dialog.setAgent }}
+        agent={{ value: dialog.agent, onPick: dialog.setAgent, onManage: onManageAgents }}
       />
 
       <NewCardDialogFooter

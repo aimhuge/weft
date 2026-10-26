@@ -1,12 +1,49 @@
 // Settings, permissions, logins and account types.
 
 import type { Automation, Backend, PermissionMode } from "./types-card";
-import type { SubagentModel } from "./subagents";
 
 export type { Backend, PermissionMode, Automation };
 export { BACKEND_LABELS, MODES, MODE_OPTIONS, permissionOptions, toPermissionMode } from "./types-card";
 
 export type Effort = "low" | "medium" | "high" | "xhigh" | "max";
+
+// The model board threads' subagents run on: "choose", "inherit", or a model id from MODELS
+// (lib/new-thread.ts); isSubagentModel checks one (lib/subagents.ts).
+//
+// It lives here, not in lib/subagents.ts, because this file is part of the types graph the client
+// imports (lib/types.ts). A type-only import of a runtime module still pulls that module into the
+// client's module graph, and lib/subagents.ts reads the settings file — node:fs — which a browser
+// chunk can't hold, so the whole board failed to compile.
+export type SubagentModel = string;
+
+// What each setting holds: one list of the fields, so the patch the client sends, the patch the
+// route reads and the view it answers with can't drift apart. A field added here reaches all three.
+export interface SettingsFields {
+  threadPrompt: string;
+  keepAliveMinutes: number;
+  maxThreads: number;
+  defaultPermissionMode: PermissionMode;
+  defaultBackend: Backend;
+  automations: Automation[];
+  pushOnDone: boolean;
+  subagentModel: SubagentModel;
+  doneModel: string;
+  doneEffort: Effort | "";
+  copilotModel: string;
+  reviewAllModel: string;
+  backupModel: string;
+  gooseProviderId: string;
+  gooseModelId: string;
+  gooseBaseUrl: string;
+}
+
+// What a client sends, and what the route reads: the settings that changed, each of its own type.
+// Only the fields that are present are sent, so a patch of one setting leaves the rest alone.
+//
+// The route's body is parsed JSON, so nothing here is trusted: each field is checked by its own
+// validator before it is saved (app/api/settings/route.ts). The types say what a field holds when
+// it is right; the validators say what happens when it isn't.
+export type SettingsPatch = { [K in keyof SettingsFields]?: SettingsFields[K] };
 
 export interface SettingsView {
   threadPrompt: string;
@@ -41,6 +78,10 @@ export interface SettingsView {
   gooseModelId: string;
   // The endpoint for the providers that need one (custom, azure, litellm); "" means none.
   gooseBaseUrl: string;
+  // The models the user gave a name to, so a model menu shows a name instead of a raw id
+  // (lib/goose-models.ts). The board's model picker reads them from here rather than importing
+  // lib/goose-models.ts, which reads the settings file off disk and so can't run in the browser.
+  gooseNamedModels: { id: string; name: string }[];
   projects: { path: string; lastUsedAt: number }[];
   // Project folders whose cards sync to the cloud (lib/cloud-sync.ts). Off by default; mirrors the
   // saved settings, the same shape /api/settings sends.

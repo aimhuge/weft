@@ -2,7 +2,7 @@
 // to keep types-card.ts under the line limit; re-exported by it so the public shape
 // of ./types is unchanged.
 
-import type { Backend, CardStats, Column, PendingPermission, ReviewPlan, ScheduledMessage } from "./types-card";
+import type { Backend, CardStats, CardYield, Column, PendingPermission, ReviewPlan, ScheduledMessage } from "./types-card";
 import type { Effort } from "./types-settings";
 import type { CardTask } from "./tasks";
 import type { ThreadAgent } from "./agents";
@@ -71,6 +71,9 @@ export interface Card {
   persona?: CopilotPersona;
   // Who the thread is (lib/agents.ts): its soul opens the system prompt. None means Builder, Weft's own soul.
   agent?: ThreadAgent;
+  // The agent this thread authored (lib/agent-tools.ts): it saved one with create_agent. The link goes the other
+  // way from `agent` (who the thread is), so Settings can say which thread built which agent.
+  agentId?: string;
   // A CLI process is open for this thread, so a reply starts right away.
   warm?: boolean;
   // From the thread's own BOARD STATUS line (see lib/status.ts).
@@ -89,7 +92,7 @@ export interface Card {
   claims?: string[];
   // Files this card leaves to another card for now: the user put that card first ("Me first", lib/precedence.ts).
   // While it holds a claim on the file, its edits there don't ask this card, and this card's edits there wait on it.
-  yields?: { to: string; file: string }[];
+  yields?: CardYield[];
   // Weft crashed, failed to build or reloaded right after this thread did something that does that (lib/crash-blame.ts):
   // the card has a red ring and a "Broke Weft" chip until you dismiss it, and the thread hears why with its next message.
   broke?: CardBreak;

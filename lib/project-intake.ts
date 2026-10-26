@@ -8,6 +8,7 @@ import { providerHint } from "./provider-hints";
 import { listFiles, listSources, TEST } from "./quality-files";
 import { DATA_DIR } from "./store";
 import { addWebhook, DEFAULT_ORIGIN, listWebhooks } from "./webhooks";
+import type { IntakeBlank, IntakeDetails, IntakeResult } from "./intake-types";
 
 // When a project opens on the board (lib/use-board-view.ts), Weft takes in what it can learn about its secrets
 // and webhooks without a thread (docs/architecture/secrets.md#project-intake): its untracked .env files' new values
@@ -16,27 +17,10 @@ import { addWebhook, DEFAULT_ORIGIN, listWebhooks } from "./webhooks";
 // start-a-card path; once per folder until HEAD or an .env file changes. What an intake offered is remembered in
 // ~/.weft/intake.json, so a blank or secret the user removed never comes back.
 
-export type IntakeBlank = { name: string; hint?: string; source: string };
-
-// What the board's intake screen lists (components/IntakeDialog.tsx): names, files, hints and routes, never a value.
-export type IntakeDetails = {
-  imported: { name: string; file: string }[];
-  blanks: IntakeBlank[];
-  hooks: FoundHook[];
-};
-
-export type IntakeResult = {
-  // Values moved into the vault from these .env files.
-  imported: number;
-  importedFrom: string[];
-  // Names now blanks in the vault, and webhooks now blanks in 🪝.
-  blanks: number;
-  hooks: number;
-  // .env files git tracks that hold values the vault lacks: those are in history, so rotate, don't import.
-  tracked: string[];
-  // Left out when nothing was taken in.
-  details?: IntakeDetails;
-};
+// The intake's shapes live in lib/intake-types.ts (types only, no node:child_process), so the board can
+// name them without dragging this module into the browser chunk. Re-exported here: the server's own
+// imports of "./project-intake" keep working.
+export type { IntakeBlank, IntakeDetails, IntakeResult };
 
 type VaultIntake = { imported?: { file: string; name: string }[]; blanked?: string[]; tracked?: string[]; keys?: string[] };
 

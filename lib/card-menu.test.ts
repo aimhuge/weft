@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { cardMenu, columnMenu, resumeCommand, type MenuItem } from "./card-menu";
+import { BUILT_IN_AGENTS } from "./agents";
 import type { Card } from "./types";
 
 function card(over: Partial<Card> = {}): Card {
@@ -82,6 +83,15 @@ describe("cardMenu", () => {
     const live = cardMenu(card({ column: "running", agent: "copywriter" }));
     expect(item(live, "agent:builder")?.enabled).toBe(false);
     expect(item(live, "agent:copywriter")?.enabled).toBe(true);
+  });
+
+  it("lists the agents you made after the built-ins, keyed ⌥1 on", () => {
+    const agents = [...BUILT_IN_AGENTS, { id: "a-1", name: "Reviewer", emoji: "🔍", tagline: "", soul: "s" }];
+    const menu = cardMenu(card({ agent: "a-1" }), null, undefined, agents);
+    expect(item(menu, "agent:a-1")).toMatchObject({ label: "Agent: 🔍 Reviewer", checked: true, accelerator: "Alt+1" });
+    expect(item(menu, "agent:builder")?.checked).toBe(false);
+    const many = Array.from({ length: 12 }, (_, i) => ({ id: `a-${i}`, name: `A${i}`, emoji: "🤖", tagline: "", soul: "s" }));
+    expect(item(cardMenu(card(), null, undefined, [...BUILT_IN_AGENTS, ...many]), "agent:a-11")?.accelerator).toBeUndefined();
   });
 
   it("labels archive by state", () => {

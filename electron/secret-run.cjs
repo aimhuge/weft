@@ -7,6 +7,7 @@
 const crypto = require("node:crypto");
 const path = require("node:path");
 const { redactor } = require("./secret-redact.cjs");
+const { decideAccess } = require("./vault-access.cjs");
 
 // Output kept while a command runs, and what goes back to the thread.
 const KEEP_CHARS = 1_000_000;
@@ -61,12 +62,17 @@ function createSecretRun({ vault, ask, rules, spawn, audit = /** @type {(entry: 
   // (electron/vault-grants.cjs), a remembered rule, or the user's yes ("always" adds a rule).
   // asker ({ key, thread, why }) is only shown, never part of the rule.
   async function approve(request, names, label, asker = {}) {
-    if (vault.granted?.(asker.key, request.id)) return "grant";
-    if (rules.allows(request, names)) return "rule";
-    const choice = await ask(describe({ ...request, thread: asker.thread, why: asker.why, names, label }));
-    if (!choice) return null;
-    if (choice === "always") rules.remember(request, names);
-    return choice === "always" ? "always" : "once";
+    // Whether this card may run this command with these secrets, and how it was allowed
+    // (electron/vault-access.cjs).
+    const access = await decideAccess({
+      grants: { allows: (card, id) => Boolean(vault.granted?.(card, id)) },
+      card: asker.key,
+      vaultId: request.id,
+      rule: { allows: () => rules.allows(request, names) },
+      ask: () => ask(describe({ ...request, thread: asker.thread, why: asker.why, names, label })),
+      remember: () => rules.remember(request, names),
+    });
+    return access.allowed ? access.via : null;
   }
 
   // The audit line for a run or a dev server's secrets, allowed or not.

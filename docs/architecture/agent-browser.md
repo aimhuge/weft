@@ -56,7 +56,8 @@ Password fields come out of Chrome already masked.
   (checked at 150%). A click whose centre is covered by something else (a modal, a cookie banner) is refused, naming
   what's on top. A label on top of its own input counts as the input. Each click leaves a short orange ripple where it
   landed, so you can watch the agent work. Every remote object an operation makes is in one object group, released
-  when the route answers.
+  when the route answers. The element itself is found the one way (`electron/pane-element.cjs`), by the ref from a
+  snapshot or by a CSS selector.
 - **macOS shortcuts.** Chrome on the Mac doesn't run editing shortcuts from synthetic keys, so `Meta+a/c/x/v/z` are
   sent with CDP's `commands` (`selectAll`, `copy`…).
 
@@ -66,12 +67,13 @@ The routes sit on the pane's token-guarded control server like the rest of `/bro
 arbitrary JavaScript: each operation is a fixed script with its arguments JSON-encoded in. Navigation stays behind
 the per-card origin allowlist and Touch ID (`electron/pane-origins.cjs`). Snapshot text, titles, console text and
 failed-request URLs go through `paneSecrets.redact`, so a vault value a thread typed into the page reads back as
-`‹NAME›`. The vault's own fill still uses `electron/pane-actions.cjs` `typeText`.
+`‹NAME›`. The vault's own fill still uses `electron/pane-actions.cjs` `typeText`, on the same element lookup.
 
 ## Tested
 
 `electron/pane-ax-refs.test.ts`, `pane-ax-tree.test.ts`, `pane-ax-states.test.ts` and `pane-ax-limits.test.ts` cover the
-outline and its refs; `pane-keys.test.ts`, `pane-cdp-console.test.ts`, `pane-cdp-session.test.ts`, `pane-cdp-buffers.test.ts` and the
+outline and its refs; `pane-element.test.ts` and `pane-actions.test.ts` cover the element lookup and the fill;
+`pane-keys.test.ts`, `pane-cdp-console.test.ts`, `pane-cdp-session.test.ts`, `pane-cdp-buffers.test.ts` and the
 `pane-input-*.test.ts` files cover the rest, all against fakes. The
 CDP calls themselves were checked end to end in Electron 44 against a test page: a trusted `pointerdown` menu, typing
 and Enter submitting a form, select, Escape, wait, wheel scroll, phone viewport, console and a 404, a covered button

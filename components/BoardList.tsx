@@ -12,7 +12,7 @@ import { useMemo, useRef, useState } from "react";
 import type { Card, Column } from "@/lib/types";
 import { listGroups } from "@/lib/board-view";
 import { BOARD_SHEET, filterCount } from "@/lib/list-sheet";
-import { bandsToDraw, sheetGroups, type SheetRow } from "@/lib/list-tree";
+import { bandsToDraw, sheetGroups, type SheetRow as SheetRowData } from "@/lib/list-tree";
 import { knownFolders } from "@/lib/list-actions";
 import { cronBadge, cronRows } from "@/lib/list-crons";
 import { useCrons } from "@/lib/use-crons";
@@ -20,8 +20,9 @@ import { useNow } from "@/lib/use-now";
 import { FunnelGlyph, SheetHeader, type HeaderMenu } from "@aimhuge/sheet/client";
 import { LIST_GRID } from "./list-grid";
 import type { RowNest } from "./CardRowCells";
-import SheetBand from "./SheetBand";
+import SheetBand, { type BandArchive } from "./SheetBand";
 import SheetQuickAdd from "./SheetQuickAdd";
+import SheetRow from "./SheetRow";
 import AgentRow from "./AgentRow";
 import SheetCrons from "./SheetCrons";
 import { useListSheet } from "./use-list-sheet";
@@ -38,9 +39,11 @@ export interface BoardListProps {
   notify?: (err: unknown) => void;
   // Put a Backlog card above or below another (the board's own reorder).
   onReorder?: (id: string, target: string, before: boolean) => void;
+  // Show or hide archived cards, from the Done band.
+  archive?: BandArchive;
 }
 
-export default function BoardList({ byColumn, renderRow, onNew, notify, onReorder }: BoardListProps) {
+export default function BoardList({ byColumn, renderRow, onNew, notify, onReorder, archive }: BoardListProps) {
   const now = useNow();
   const sheet = useListSheet();
   const crons = useCrons();
@@ -77,27 +80,20 @@ export default function BoardList({ byColumn, renderRow, onNew, notify, onReorde
       return next;
     });
 
-  const drawRow = (row: SheetRow) =>
+  const drawRow = (row: SheetRowData) =>
     row.kind === "agent" ? (
-      <div key={`${row.parent.id}:${row.task.id}`} className="sheet-row flex">
-        <span className="sheet-gutter" aria-hidden />
-        <div className="min-w-0 flex-1">
-          <AgentRow task={row.task} depth={row.depth} now={now} />
-        </div>
-      </div>
+      <SheetRow key={`${row.parent.id}:${row.task.id}`}>
+        <AgentRow task={row.task} depth={row.depth} now={now} />
+      </SheetRow>
     ) : (
-      <div
+      <SheetRow
         key={`${row.card.id}:${row.depth}`}
-        className={`sheet-row flex ${row.depth ? "sheet-row-nested" : ""} ${drag.dropClass(row.card.id)}`}
+        className={`${row.depth ? "sheet-row-nested" : ""} ${drag.dropClass(row.card.id)}`}
+        gutter={row.number}
         {...drag.rowProps(row.card.id, row.column === "backlog" && row.depth === 0 && !sheet.state.sort)}
       >
-        <span className="sheet-gutter" aria-hidden>
-          {row.number}
-        </span>
-        <div className="min-w-0 flex-1">
-          {renderRow(row.card, row.column, { depth: row.depth, kids: row.kids, expanded: row.expanded, onToggle: () => toggle(row.card.id), cron: cronBadge(row.card, crons.crons, now) })}
-        </div>
-      </div>
+        {renderRow(row.card, row.column, { depth: row.depth, kids: row.kids, expanded: row.expanded, onToggle: () => toggle(row.card.id), cron: cronBadge(row.card, crons.crons, now) })}
+      </SheetRow>
     );
 
   return (
@@ -132,7 +128,7 @@ export default function BoardList({ byColumn, renderRow, onNew, notify, onReorde
             <SheetHeader spec={BOARD_SHEET} grid={LIST_GRID} state={sheet.state} rows={all} shown={shown} now={now} actions={sheet} menu={menu} setMenu={setMenu} trailing={1} />
           </div>
         </div>
-        {bandsToDraw(groups, sheet.state.collapsed).map((group) => {
+        {bandsToDraw(groups, sheet.state.collapsed, Boolean(archive?.count)).map((group) => {
           const addable = group.column === "backlog" || group.column === "running" ? group.column : null;
           return (
             <section key={group.column} className="flex flex-col">
@@ -140,6 +136,7 @@ export default function BoardList({ byColumn, renderRow, onNew, notify, onReorde
                 group={group}
                 onFold={() => sheet.toggleBand(group.column)}
                 onAdd={addable ? () => addTo(addable) : undefined}
+                archive={group.column === "done" ? archive : undefined}
               />
               {group.rows.map(drawRow)}
               {addable && !group.collapsed && (

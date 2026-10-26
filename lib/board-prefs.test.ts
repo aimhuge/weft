@@ -1,9 +1,11 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  backlogFolded,
   copilotLaneOpen,
   copilotLanePeek,
   setCopilotLaneOpen,
+  setBacklogFolded,
   setCopilotLanePeek,
   setShowBacklog,
   setShowProgress,
@@ -17,10 +19,31 @@ import {
 afterEach(() => {
   vi.unstubAllGlobals();
   document.cookie = "weft-show-backlog=; path=/; max-age=0";
+  document.cookie = "weft-backlog-folded=; path=/; max-age=0";
   document.cookie = "weft-show-progress=; path=/; max-age=0";
   document.cookie = "weft-copilot-lane=; path=/; max-age=0";
   document.cookie = "weft-copilot-peek=; path=/; max-age=0";
   document.cookie = "weft-view-mode=; path=/; max-age=0";
+});
+
+describe("backlogFolded", () => {
+  it("is open by default, and on the server", () => {
+    expect(backlogFolded()).toBe(false);
+    vi.stubGlobal("document", undefined);
+    expect(backlogFolded()).toBe(false);
+  });
+
+  it("follows setBacklogFolded through the cookie and tells subscribers", () => {
+    const onChange = vi.fn();
+    const stop = subscribeBoardPrefs(onChange);
+    setBacklogFolded(true);
+    expect(document.cookie).toContain("weft-backlog-folded=1");
+    expect(backlogFolded()).toBe(true);
+    setBacklogFolded(false);
+    expect(backlogFolded()).toBe(false);
+    expect(onChange).toHaveBeenCalledTimes(2);
+    stop();
+  });
 });
 
 describe("showBacklog", () => {

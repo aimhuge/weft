@@ -1,16 +1,11 @@
-import { randomUUID } from "node:crypto";
 import { restartArmed } from "./restart-when-idle";
 import { freeSlots, isBusy, sendUserMessage } from "./runner";
-import { addScheduled, dueMessage } from "./schedule";
+import { holdMessage } from "./scheduled-hold";
+import { dueMessage } from "./schedule";
 import { prebakeBriefs } from "./splice";
+import { startClock } from "./tick-clock";
 import { getCard, listCards, updateCard } from "./store";
 import { COPILOT_ID, type Card } from "./types";
-
-// How often the server looks for scheduled messages whose time has come. A Mac that slept past
-// one sends it on the first check after waking; a Weft that was closed, on the first after starting.
-const CHECK_EVERY_MS = 15_000;
-
-const g = globalThis as unknown as { __weftScheduleTimer?: ReturnType<typeof setInterval> };
 
 export function scheduleMessage(cardId: string, text: string, at: number): Card {
   const card = getCard(cardId);
@@ -18,7 +13,7 @@ export function scheduleMessage(cardId: string, text: string, at: number): Card 
   if (cardId === COPILOT_ID) throw new Error("The copilot can't take a scheduled message.");
   if (!Number.isFinite(at)) throw new Error("Pick a time to send it.");
   if (at <= Date.now()) throw new Error("That time has already passed.");
-  return updateCard(cardId, { scheduled: addScheduled(card.scheduled, { id: randomUUID(), text, at }) });
+  return holdMessage(card, text, { reason: "timed", at });
 }
 
 export function unscheduleMessage(cardId: string, messageId: string): Card {
@@ -49,12 +44,13 @@ export function sendDueMessages(now = Date.now()) {
   }
 }
 
-// Once per server process.
+// Once per server process. How often the server looks for scheduled messages whose time has come.
+// A Mac that slept past one sends it on the first check after waking; a Weft that was closed, on
+// the first after starting.
 export function startScheduler() {
-  if (g.__weftScheduleTimer) return;
-  g.__weftScheduleTimer = setInterval(() => {
+  // The first check looks only for due messages; the briefs are baked after that, on the interval.
+  startClock("schedule", () => {
     sendDueMessages();
     prebakeBriefs();
-  }, CHECK_EVERY_MS);
-  sendDueMessages();
+  }, { first: () => sendDueMessages() });
 }

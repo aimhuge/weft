@@ -1,9 +1,11 @@
 import posthog from "posthog-js";
 import { isLocalHost, posthogConfig } from "./analytics-gate";
+import { CONSENT_EVENT, whenConsented, type Consent } from "./consent";
 
 // Browser analytics for weft.zip: PostHog (started here from instrumentation-client.ts) and GA4 (the gtag snippet
 // components/GoogleAnalytics.tsx puts on every deployed page). On a local board neither exists, so track() and
-// identify calls fall through without a word (lib/analytics-gate.ts says why).
+// identify calls fall through without a word (lib/analytics-gate.ts says why). On weft.zip both wait for the visitor's
+// yes in the consent banner (lib/consent.ts).
 
 type Props = Record<string, string | number | boolean | null | undefined>;
 
@@ -18,7 +20,13 @@ export function startAnalytics(hostname: string = location.hostname, doc: Docume
   doc.addEventListener("click", trackClick, { capture: true });
   const config = posthogConfig();
   if (!config) return false;
-  posthog.init(config.token, { api_host: config.host, defaults: "2026-05-30", capture_exceptions: true });
+  whenConsented(() => {
+    posthog.init(config.token, { api_host: config.host, defaults: "2026-05-30", capture_exceptions: true });
+  });
+  // A later "no" (the privacy page's switch) stops capture and replay on this page; the next load never starts them.
+  window.addEventListener(CONSENT_EVENT, (event) => {
+    if ((event as CustomEvent<Consent>).detail === "denied" && analyticsOn()) posthog.opt_out_capturing();
+  });
   return true;
 }
 

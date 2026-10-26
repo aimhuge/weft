@@ -1,7 +1,7 @@
 // The Craft and Board badges: the habits your shipped cards showed (the skills their transcripts ran,
 // lib/craft.ts) and the shape of your board right now. Pure.
 import { atLeast, crossing, def, isRefactor, shipped, type Def, type Result } from "./badge-kit";
-import type { Habit } from "./craft";
+import type { Habit } from "./craft-types";
 import { dayKey, type ActivityEvent } from "./game";
 import type { GameFacts } from "./game-badges";
 

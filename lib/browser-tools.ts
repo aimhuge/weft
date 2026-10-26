@@ -7,6 +7,8 @@ import { actTools } from "./browser-act-tools";
 import { attempt, shell, text, type ToolResult } from "./browser-shell";
 import { asText } from "./format";
 import { SHOW_DIR } from "./show-dir";
+import { siteNotesForUrl } from "./site-notes-live";
+import { noteUrl } from "./site-notes-trail";
 
 // Where they lived first; a dozen modules still import them from here.
 export { attempt, shell, text, type ToolResult };
@@ -65,12 +67,16 @@ export function browserMcpServer(cardId: () => string | undefined) {
       tool("open_url", "Open a URL in the browser pane beside the board and show the pane.", { url: z.string() }, ({ url }) =>
         attempt(async () => {
           const page = await shell("/browser/open", { url, key: cardId() });
-          return text(`Opened ${asText(page.url)} — ${asText(page.title)}`);
+          noteUrl(cardId(), asText(page.url));
+          // What Weft's cards learned about this page before, framed as untrusted reference (lib/site-notes-read.ts).
+          const notes = await siteNotesForUrl(cardId(), asText(page.url));
+          return text(`Opened ${asText(page.url)} — ${asText(page.title)}${notes ? `\n\n${notes}` : ""}`);
         }),
       ),
       tool("read_page", "Return the URL, title, and visible text of the page in the browser pane.", {}, () =>
         attempt(async () => {
           const page = await shell("/browser/text", { key: cardId() });
+          noteUrl(cardId(), asText(page.url));
           return text(`URL: ${asText(page.url)}\nTitle: ${asText(page.title)}\n\n${asText(page.text)}`);
         }),
       ),

@@ -3,7 +3,7 @@
 import type { Effort, LoginView } from "./types-settings";
 import type { PendingElicitation, Question, ThreadItem } from "./types-thread";
 import type { Card } from "./types-card-detail";
-import type { EditPreview } from "./edit-preview";
+import type { EditPreview } from "./edit-preview-types";
 
 export const COLUMNS = [
   { id: "backlog", label: "Backlog" },
@@ -100,6 +100,14 @@ export interface ScheduledMessage {
   forSlot?: boolean;
   // A re-run of the last message (a retry or a limit resume): it is already in the thread, so it goes out without an echo.
   quiet?: boolean;
+}
+
+// A file this card leaves to another card for now: the user put that card first ("Me first",
+// lib/precedence.ts). The file is a plain path, not a claim key (lib/claims.ts).
+export interface CardYield {
+  // The card that goes first on the file.
+  to: string;
+  file: string;
 }
 
 // A thread's tour of what it built, for the user to step through in Review (see lib/review.ts).

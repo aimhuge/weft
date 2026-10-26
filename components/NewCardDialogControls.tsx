@@ -6,7 +6,8 @@
 
 import type { Backend, Effort, PermissionMode } from "@/lib/types";
 import { EFFORTS } from "@/lib/new-thread";
-import { AGENT_ORDER, AGENTS, type ThreadAgent } from "@/lib/agents";
+import { agentOf, type ThreadAgent } from "@/lib/agents";
+import { useAgents } from "@/lib/use-agents";
 import { unguardedNotice } from "@/lib/unguarded";
 import ModelSelect from "./ModelSelect";
 import Icon from "./Icon";
@@ -46,7 +47,7 @@ export function NewCardDialogControls({
   // The Isolated switch (components/IsolateToggle.tsx); left out where isolation isn't offered.
   isolate?: { on: boolean; suggest: boolean; onToggle: () => void };
   // The agent picker; left out where the thread's agent isn't picked here.
-  agent?: { value: ThreadAgent; onPick: (agent: ThreadAgent) => void };
+  agent?: AgentPick;
 }) {
   return (
     <div className="flex shrink-0 flex-wrap items-center gap-2 px-5 pt-3">
@@ -111,20 +112,28 @@ export function NewCardDialogControls({
   );
 }
 
-// Who the thread is: its soul opens its system prompt (lib/agents.ts). Builder is Weft's own; Copywriter writes in Weft's voice.
-function AgentSelect({ value, onPick }: { value: ThreadAgent; onPick: (agent: ThreadAgent) => void }) {
+type AgentPick = { value: ThreadAgent; onPick: (agent: ThreadAgent) => void; onManage?: () => void };
+
+// The Agent menu's last row: Settings → Agents, where you make and edit them.
+const MANAGE = "__manage";
+
+// Who the thread is: its soul opens its system prompt (lib/agents.ts). Builder is Weft's own, Copywriter writes in Weft's
+// voice, and the ones you made in Settings → Agents follow.
+function AgentSelect({ value, onPick, onManage }: AgentPick) {
+  const agents = useAgents();
   return (
     <label
       className="relative flex items-center gap-1.5 rounded-md border border-line-strong py-1.5 pl-2.5 pr-1.5 text-[12px] text-ink"
-      title={`Agent: ${AGENTS[value].tagline}`}
+      title={`Agent: ${agentOf(value, agents).tagline}`}
     >
       <span className="sr-only">Agent</span>
-      <select value={value} onChange={(e) => onPick(e.target.value as ThreadAgent)} className={BARE_SELECT}>
-        {AGENT_ORDER.map((id) => (
-          <option key={id} value={id}>
-            {AGENTS[id].emoji} {AGENTS[id].name}
+      <select value={value} onChange={(e) => (e.target.value === MANAGE ? onManage?.() : onPick(e.target.value))} className={BARE_SELECT}>
+        {agents.map((a) => (
+          <option key={a.id} value={a.id}>
+            {a.emoji} {a.name}
           </option>
         ))}
+        {onManage && <option value={MANAGE}>Manage agents…</option>}
       </select>
       <Icon name="chevronDown" size={12} className="pointer-events-none absolute right-1.5" />
     </label>

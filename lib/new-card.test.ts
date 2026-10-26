@@ -26,6 +26,11 @@ vi.mock("./start-gate", () => ({ startGate: vi.fn(() => undefined) }));
 vi.mock("./store", () => ({ createCard: vi.fn((body: Record<string, unknown>) => ({ id: "card-1", ...body })) }));
 vi.mock("./tag-store", () => ({ rememberTags: vi.fn() }));
 vi.mock("./tags", () => ({ normalizeTags: vi.fn((tags: string[]) => tags) }));
+// Settings → Agents: the built-ins, and /dev/docs defaults to the Copywriter.
+vi.mock("./agent-store", async () => {
+  const { BUILT_IN_AGENTS } = await import("./agents");
+  return { listAgents: () => BUILT_IN_AGENTS, projectAgent: (cwd: string) => (cwd === "/dev/docs" ? "copywriter" : undefined) };
+});
 
 const automations = await import("./automations");
 const folders = await import("./folders");
@@ -142,6 +147,14 @@ describe("createCardFromBody", () => {
     expect(made[0]).toMatchObject({ agent: "copywriter" });
     expect(made[1]).not.toHaveProperty("agent");
     expect(made[2]).not.toHaveProperty("agent");
+  });
+
+  it("starts as the project's default agent unless the body names one; Builder named wins", () => {
+    createCardFromBody({ prompt: "x", cwd: "/dev/docs" });
+    createCardFromBody({ prompt: "x", cwd: "/dev/docs", agent: "builder" });
+    const made = vi.mocked(store.createCard).mock.calls.map((c) => c[0]);
+    expect(made[0]).toMatchObject({ agent: "copywriter" });
+    expect(made[1]).not.toHaveProperty("agent");
   });
 
   it("keeps the tags it was given and remembers them", () => {

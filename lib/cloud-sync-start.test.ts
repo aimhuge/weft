@@ -25,6 +25,9 @@ vi.mock("./cloud-sync", () => ({
 }));
 
 vi.mock("./cloud-inbox", () => ({ startCloudInbox: () => startCloudInbox() }));
+const stopRepos = vi.fn();
+const startSyncRepos = vi.fn(() => stopRepos);
+vi.mock("./cloud-sync-repos", () => ({ startSyncRepos: () => startSyncRepos() }));
 
 const { startAccountCloudSync } = await import("./cloud-sync-start");
 
@@ -38,9 +41,11 @@ describe("startAccountCloudSync", () => {
     const end = startAccountCloudSync();
     expect(passed).toBeDefined();
     expect(startCloudInbox).toHaveBeenCalledTimes(1);
+    expect(startSyncRepos).toHaveBeenCalledTimes(1);
     end();
     expect(stop).toHaveBeenCalledTimes(1);
     expect(stopInbox).toHaveBeenCalledTimes(1);
+    expect(stopRepos).toHaveBeenCalledTimes(1);
   });
 
   it("makes no client or blob store until a flush needs one", () => {

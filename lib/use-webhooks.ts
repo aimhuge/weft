@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./client";
 import { upsertWebhook, type WebhookAsk } from "./webhooks-view";
-import type { Webhook, WebhookInput, WebhookPatch } from "./webhooks";
+import type { Webhook, WebhookInput, WebhookPatch } from "./webhook-types";
 
 // How often the open drawer asks again, so deliveries show up while a provider is being tested.
 export const POLL_MS = 5000;

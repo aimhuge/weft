@@ -25,7 +25,9 @@ vi.mock("./LaptopModeCard", () => ({ default: () => <p>laptop mode card</p> }));
 vi.mock("./TeamSettings", () => ({ default: () => <p>team settings</p> }));
 // SyncSettings is the real component on the new "sync" page; it has its own test. Here it just
 // needs to render so we can reach the page without firing useCloudSync / useAccount.
-vi.mock("./SyncSettings", () => ({ default: () => <p>sync settings</p> }));
+vi.mock("./SyncSettings", () => ({ default: ({ recentProjects }: { recentProjects: string[] }) => <p>sync settings: {recentProjects.join(",")}</p> }));
+// The Agents page has its own test; here it shows the folders it was handed.
+vi.mock("./SettingsAgentsPage", () => ({ default: ({ projects }: { projects: string[] }) => <p>agents page: {projects.join(",")}</p> }));
 
 const SETTINGS: SettingsView = {
   threadPrompt: "be nice",
@@ -45,6 +47,7 @@ const SETTINGS: SettingsView = {
   gooseProviderId: "",
   gooseModelId: "",
   gooseBaseUrl: "",
+  gooseNamedModels: [],
   projects: [],
   issueFolders: [],
   syncFolders: [],
@@ -61,6 +64,22 @@ const pages = () => screen.getByRole("navigation", { name: "Settings pages" });
 const go = (name: string) => userEvent.click(within(pages()).getByRole("button", { name }));
 
 describe("SettingsDialog", () => {
+  it("draws Agents and Sync before the settings load, then hands them the recent folders", async () => {
+    let load: (s: SettingsView) => void = () => {};
+    api.settings.mockReturnValue(new Promise<SettingsView>((resolve) => (load = resolve)));
+    render(<SettingsDialog onClose={() => {}} />);
+    await go("Agents");
+    expect(screen.getByText("agents page:")).toBeInTheDocument();
+    await go("Sync");
+    expect(screen.getByText("sync settings:")).toBeInTheDocument();
+    load({ ...SETTINGS, projects: [{ path: "/dev/app" }] } as SettingsView);
+    expect(await screen.findByText("sync settings: /dev/app")).toBeInTheDocument();
+    await go("Agents");
+    expect(screen.getByText("agents page: /dev/app")).toBeInTheDocument();
+    // The dialog reopens on the last page; leave it where the other tests expect it.
+    await go("General");
+  });
+
   it("puts a scene behind it and shows one page at a time", async () => {
     render(<SettingsDialog onClose={() => {}} />);
     expect(screen.getByRole("dialog").style.background).toContain("/api/scenes/salt-flats");

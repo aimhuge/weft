@@ -1,22 +1,17 @@
 import { describe, expect, it } from "vitest";
 import {
   BLANK,
+  BOARD_SHEET,
   cellValues,
   CRON_TAG,
   EMPTY_SHEET,
   filterCount,
-  flipSort,
-  keepOnly,
-  nextSort,
-  NUMERIC,
   parseSheetState,
   rowMatches,
   rowStatus,
-  sortRows,
-  toggleCollapsed,
-  toggleHidden,
-  valueCounts,
+  sortBy,
 } from "./list-sheet";
+import { columnOf, valueCountsOf } from "@aimhuge/sheet";
 import type { Card, PendingPermission } from "./types";
 
 const NOW = 1_800_000_000_000;
@@ -38,7 +33,6 @@ function card(overrides: Partial<Card> = {}): Card {
   };
 }
 const pending = (p: Partial<PendingPermission>) => p as PendingPermission;
-const ids = (cards: Card[]) => cards.map((c) => c.id);
 
 describe("rowStatus", () => {
   it("names an error, a wait, a question, a permission, a running turn and a card that needs you", () => {
@@ -76,48 +70,6 @@ describe("cellValues", () => {
   });
 });
 
-describe("sortRows", () => {
-  it("leaves the order alone with no sort", () => {
-    const cards = [card(), card()];
-    expect(sortRows(cards, null, NOW)).toBe(cards);
-  });
-
-  it("sorts titles A→Z and Z→A, numbers naturally, ties in board order", () => {
-    const a = card({ title: "item 10" });
-    const b = card({ title: "Item 2" });
-    const c = card({ title: "item 2" });
-    expect(ids(sortRows([a, b, c], { key: "title", dir: "asc" }, NOW))).toEqual([b.id, c.id, a.id]);
-    expect(ids(sortRows([a, b, c], { key: "title", dir: "desc" }, NOW))).toEqual([a.id, b.id, c.id]);
-  });
-
-  it("orders stages by the pipeline and statuses loudest first, blanks last both ways", () => {
-    const plan = card({ stage: "Planning" });
-    const done = card({ stage: "Done" });
-    const odd = card({ stage: "Mystery" });
-    const none = card();
-    expect(ids(sortRows([none, done, odd, plan], { key: "stage", dir: "asc" }, NOW))).toEqual([plan.id, done.id, odd.id, none.id]);
-    expect(ids(sortRows([none, done, odd, plan], { key: "stage", dir: "desc" }, NOW))).toEqual([odd.id, done.id, plan.id, none.id]);
-    const err = card({ error: "x" });
-    const run = card({ column: "running" });
-    expect(ids(sortRows([none, run, err], { key: "status", dir: "asc" }, NOW))).toEqual([err.id, run.id, none.id]);
-    expect(ids(sortRows([run, none], { key: "status", dir: "desc" }, NOW))).toEqual([run.id, none.id]);
-  });
-
-  it("sorts age by the real time, youngest first ascending", () => {
-    const old = card({ updatedAt: NOW - 5 * HOUR });
-    const young = card({ updatedAt: NOW - HOUR, lastActivity: NOW - 1000 });
-    expect(ids(sortRows([old, young], { key: "age", dir: "asc" }, NOW))).toEqual([young.id, old.id]);
-    expect(ids(sortRows([old, young], { key: "age", dir: "desc" }, NOW))).toEqual([old.id, young.id]);
-  });
-
-  it("sorts folders and tags A→Z", () => {
-    const z = card({ cwd: "/zeta", tags: ["ui"] });
-    const a = card({ cwd: "/alpha", tags: ["bug"] });
-    expect(ids(sortRows([z, a], { key: "folder", dir: "asc" }, NOW))).toEqual([a.id, z.id]);
-    expect(ids(sortRows([z, a], { key: "tags", dir: "asc" }, NOW))).toEqual([a.id, z.id]);
-  });
-});
-
 describe("rowMatches", () => {
   const bug = card({ tags: ["bug"], stage: "Planning" });
   const both = card({ tags: ["bug", "ui"] });
@@ -145,58 +97,73 @@ describe("rowMatches", () => {
     expect(rowMatches(card({ title: "Alpha beta" }), {}, "alpha", NOW)).toBe(true);
     expect(rowMatches(card({ title: "Alpha beta" }), {}, "alpha gamma", NOW)).toBe(false);
   });
-});
 
-describe("valueCounts", () => {
-  it("counts each value once per card, in the column's order, blanks last", () => {
-    const cards = [card({ stage: "Done" }), card(), card({ stage: "Planning" }), card({ stage: "Planning" })];
-    expect(valueCounts(cards, "stage", NOW)).toEqual([
-      { value: "Planning", count: 2 },
-      { value: "Done", count: 1 },
-      { value: BLANK, count: 1 },
-    ]);
-    expect(valueCounts([card({ tags: ["b", "a"] }), card({ tags: ["a"] }), card()], "tags", NOW)).toEqual([
-      { value: "a", count: 2 },
-      { value: "b", count: 1 },
-      { value: BLANK, count: 1 },
-    ]);
-    expect(valueCounts([card(), card({ tags: ["x"] })], "tags", NOW).at(-1)?.value).toBe(BLANK);
-    expect(valueCounts([card({ updatedAt: NOW - 30 * 86_400_000 }), card()], "age", NOW).map((v) => v.value)).toEqual(["Last hour", "Older"]);
+  it("filters by the age bucket, which the age column's own values name", () => {
+    const today = card({ updatedAt: NOW - 2 * HOUR });
+    const older = card({ updatedAt: NOW - 30 * 86_400_000 });
+    // The list names the buckets that are unticked, so a card is kept when it has another bucket.
+    expect(rowMatches(today, { age: ["Older"] }, "", NOW)).toBe(true);
+    expect(rowMatches(older, { age: ["Older"] }, "", NOW)).toBe(false);
+    expect(rowMatches(today, { age: ["Today"] }, "", NOW)).toBe(false);
   });
 });
 
-describe("nextSort, flipSort, toggleHidden, keepOnly, toggleCollapsed, filterCount", () => {
-  it("cycles a header A→Z, Z→A, off, and starts a new column at A→Z", () => {
-    expect(nextSort(null, "title")).toEqual({ key: "title", dir: "asc" });
-    expect(nextSort({ key: "title", dir: "asc" }, "title")).toEqual({ key: "title", dir: "desc" });
-    expect(nextSort({ key: "title", dir: "desc" }, "title")).toBeNull();
-    expect(nextSort({ key: "title", dir: "desc" }, "age")).toEqual({ key: "age", dir: "asc" });
+describe("the age column's checklist", () => {
+  // The sheet header's filter menu (components/BoardList.tsx) counts each value of a column, in the
+  // column's own order: the age buckets, newest first, with the blanks last.
+  it("counts the age buckets in the column's order", () => {
+    const age = columnOf(BOARD_SHEET, "age")!;
+    const cards = [card({ updatedAt: NOW - 30 * 86_400_000 }), card({ updatedAt: NOW - 2 * HOUR }), card({ updatedAt: NOW - 30 * 60_000 })];
+    expect(valueCountsOf(cards, age, NOW).map((v) => v.value)).toEqual(["Last hour", "Today", "Older"]);
+    expect(valueCountsOf(cards, age, NOW).map((v) => v.count)).toEqual([1, 1, 1]);
+  });
+});
+
+describe("sortBy", () => {
+  const ids = (cards: Card[]) => cards.map((c) => c.id);
+
+  it("leaves the order alone with no sort", () => {
+    const cards = [card(), card()];
+    expect(sortBy(cards, (c) => c, null, NOW)).toBe(cards);
   });
 
-  it("flips a number column between ascending and descending", () => {
-    expect(flipSort(null, "age")).toEqual({ key: "age", dir: "asc" });
-    expect(flipSort({ key: "age", dir: "asc" }, "age")).toEqual({ key: "age", dir: "desc" });
-    expect(flipSort({ key: "age", dir: "desc" }, "age")).toEqual({ key: "age", dir: "asc" });
-    expect(flipSort({ key: "title", dir: "asc" }, "age")).toEqual({ key: "age", dir: "asc" });
-    expect(NUMERIC).toEqual(["age"]);
+  it("sorts titles A→Z and Z→A, numbers naturally, ties in board order", () => {
+    const a = card({ title: "item 10" });
+    const b = card({ title: "Item 2" });
+    const c = card({ title: "item 2" });
+    expect(ids(sortBy([a, b, c], (c) => c, { key: "title", dir: "asc" }, NOW))).toEqual([b.id, c.id, a.id]);
+    expect(ids(sortBy([a, b, c], (c) => c, { key: "title", dir: "desc" }, NOW))).toEqual([a.id, b.id, c.id]);
   });
 
-  it("ticks and unticks a value", () => {
-    const once = toggleHidden({}, "tags", "bug");
-    expect(once).toEqual({ tags: ["bug"] });
-    expect(toggleHidden(once, "tags", "bug")).toEqual({ tags: [] });
+  it("orders stages by the pipeline and statuses loudest first, blanks last both ways", () => {
+    const plan = card({ stage: "Planning" });
+    const done = card({ stage: "Done" });
+    const odd = card({ stage: "Mystery" });
+    const none = card();
+    expect(ids(sortBy([none, done, odd, plan], (c) => c, { key: "stage", dir: "asc" }, NOW))).toEqual([plan.id, done.id, odd.id, none.id]);
+    expect(ids(sortBy([none, done, odd, plan], (c) => c, { key: "stage", dir: "desc" }, NOW))).toEqual([odd.id, done.id, plan.id, none.id]);
+    const err = card({ error: "x" });
+    const run = card({ column: "running" });
+    expect(ids(sortBy([none, run, err], (c) => c, { key: "status", dir: "asc" }, NOW))).toEqual([err.id, run.id, none.id]);
+    expect(ids(sortBy([run, none], (c) => c, { key: "status", dir: "desc" }, NOW))).toEqual([run.id, none.id]);
   });
 
-  it("keeps only the ticked values and clears the column when none are kept", () => {
-    expect(keepOnly({}, "tags", ["bug", "ui"], ["bug"])).toEqual({ tags: ["ui"] });
-    expect(keepOnly({ stage: ["Planning"] }, "tags", ["bug"], [])).toEqual({ stage: ["Planning"], tags: [] });
+  it("sorts age by the real time, youngest first ascending", () => {
+    const old = card({ updatedAt: NOW - 5 * HOUR });
+    const young = card({ updatedAt: NOW - HOUR, lastActivity: NOW - 1000 });
+    expect(ids(sortBy([old, young], (c) => c, { key: "age", dir: "asc" }, NOW))).toEqual([young.id, old.id]);
+    expect(ids(sortBy([old, young], (c) => c, { key: "age", dir: "desc" }, NOW))).toEqual([old.id, young.id]);
   });
 
-  it("folds and opens a band", () => {
-    expect(toggleCollapsed([], "backlog")).toEqual(["backlog"]);
-    expect(toggleCollapsed(["backlog"], "backlog")).toEqual([]);
+  it("sorts folders and tags A→Z", () => {
+    const z = card({ cwd: "/zeta", tags: ["ui"] });
+    const a = card({ cwd: "/alpha", tags: ["bug"] });
+    expect(ids(sortBy([z, a], (c) => c, { key: "folder", dir: "asc" }, NOW))).toEqual([a.id, z.id]);
+    expect(ids(sortBy([z, a], (c) => c, { key: "tags", dir: "asc" }, NOW))).toEqual([a.id, z.id]);
   });
+});
 
+describe("filterCount", () => {
   it("counts the filtered columns and the title search", () => {
     expect(filterCount({ tags: ["bug"], stage: [], age: ["Older"] })).toBe(2);
     expect(filterCount({}, "")).toBe(0);

@@ -10,9 +10,8 @@ import { useCallback, useEffect, useState } from "react";
 import { Avatar } from "@/components/admin/DataTable";
 import { AdminPage, Badge } from "@/components/admin/kit";
 import { SheetTable } from "@aimhuge/sheet/client";
-import type { AdminUserRow } from "@/app/api/admin/users/route";
 import { timeAgo } from "@/lib/format";
-import { USERS_FRESH, USERS_SHEET, msOf, type UserKey } from "@/lib/users-sheet";
+import { USERS_FRESH, USERS_SHEET, msOf, type AdminUserRow, type UserKey } from "@/lib/users-sheet";
 import { adminGet, day } from "../admin-api";
 import UserActivityDrawer from "./UserActivity";
 

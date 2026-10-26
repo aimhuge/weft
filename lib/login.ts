@@ -1,4 +1,5 @@
-import { execFileSync, spawn, type ChildProcess } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
+import { whichBin } from "./cli-exec";
 import { cliEnv } from "./env";
 import { publish } from "./bus";
 import type { Backend, LoginState, LoginTrial, LoginView } from "./types";
@@ -42,11 +43,7 @@ export function binary(backend: Backend) {
   let path = binaries.get(backend);
   if (!path) {
     const command = COMMANDS[backend];
-    try {
-      path = execFileSync("/usr/bin/which", [command], { encoding: "utf8" }).trim();
-    } catch {
-      path = "";
-    }
+    path = whichBin(command) ?? "";
     if (!path) throw new Error(`${command} isn't on this app's PATH, so it can't log in.`);
     binaries.set(backend, path);
   }

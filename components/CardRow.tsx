@@ -5,6 +5,7 @@
 // in the sheet's tree (lib/list-tree.ts) is indented and folds open to what's under it; its status
 // opens a menu of what it can do, and its folder a picker to move it.
 import type { Card, Column } from "@/lib/types";
+import { activeAt } from "@/lib/board-view";
 import type { ResumeHow } from "@/lib/card-resume";
 import type { StatusAction } from "@/lib/list-actions";
 import { LIST_GRID } from "./list-grid";
@@ -68,7 +69,7 @@ export default function CardRow(props: CardRowProps) {
         <StageCell card={card} column={column} />
         <TagsCell card={card} onTag={props.onTag} />
         <RowFolderCell card={card} alsoHere={alsoHere} folders={props.folders} onFolder={props.onFolder} />
-        <AgeCell at={card.lastActivity ?? card.updatedAt} now={now} />
+        <AgeCell at={activeAt(card)} now={now} />
         <ActionsCell card={card} onStop={props.onStop} onResume={props.onResume} onStar={props.onStar} onArchive={props.onArchive} />
       </div>
     </div>

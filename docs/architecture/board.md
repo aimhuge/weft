@@ -54,16 +54,28 @@ lives in its own component under `components/`.
   first and starts folded). It hands every card row to `Board` with its place in the tree (`RowNest`), so it
   holds no card details of its own, and draws subagent rows itself (`components/AgentRow.tsx`). The corner
   cell clears the filters, or with none on opens New thread.
+- `components/SheetRow.tsx` — one row of the sheet: the numbered gutter and the row's content beside it.
+  Every row of the list view is one of these — a card, a subagent, a cron's run — so the grid lines up
+  down the sheet.
 - `lib/list-sheet.ts` — the board's columns on `@aimhuge/sheet` (the shared sheet kit, docs/architecture/sheet.md),
-  pure: `BOARD_SHEET`, each column's values (`cellValues`; tags can be several, blanks are `(blank)`), `sortRows`/`sortBy` (stages in pipeline order, statuses loudest first,
+  pure: `BOARD_SHEET`, each column's values (`cellValues`; tags can be several, blanks are `(blank)`), `sortBy` (stages in pipeline order, statuses loudest first,
   age by real time, blanks last both ways, ties in board order), `rowMatches` (the title search, then
-  unticked values, stored as the hidden ones so a new value shows by default), `flipSort` for number
-  columns, `keepOnly`, folded bands, and the row status `CardRow` draws.
+  unticked values, stored as the hidden ones so a new value shows by default), `filterCount`, and the row
+  status `CardRow` draws. The sorts, filters and value counts themselves are the kit's
+  (`@aimhuge/sheet`), driven by `SheetHeader`; Weft keeps only the board's own names and rules.
+- `lib/column-tone.ts` — each column's colour, in one place (`COLUMN_TONE`): the text a column's name and
+  stage take, the bar its stage steps fill with and the dot its band is marked by. The card's progress
+  line, the list view's row cells and the sheet's band all read it, so a column that changes colour
+  changes in one edit.
 - `lib/list-tree.ts` — the rows as a tree: a card started by another (`parentId`) or a cron run (`cronOf`)
   folds under it; an opened card lists its subagents (`card.tasks`, kind `agent`), then its child cards. A
   child waiting on you, or whose tree's top sits in a folded band, also stands on its own in its band; a
   parent loop leaves both top-level; a match deep in a tree keeps its path. `bandsToDraw` keeps an empty
   Backlog and Running so there's always somewhere to type a card. Type-ahead matches are ranked by `@aimhuge/sheet`'s `typeahead`.
+- `lib/cron-fold.ts` — the one rule for which card a card folds under (`foldParentOf`): a cron run under
+  its holder (`Card.cronOf`), anything else under the thread that started it (`Card.parentId`). The board's
+  stacks, the list view's tree and the crons drawer all read it, so the column view and the sheet never
+  disagree about who owns a run.
 - `SheetHeader` + `SheetFilterMenu` (from `@aimhuge/sheet/client`, fed `BOARD_SHEET`) — the header row: a click on a name opens
   its menu with the cursor in the search box. Title filters cards as you type; other columns narrow their
   values (↑↓, Enter keeps only the match, Only per value, Show/Hide all) under a two-button sort bar. Age

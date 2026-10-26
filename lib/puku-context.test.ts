@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { codexProjectInstructions, projectInstructions, pukuContext } from "./puku-context";
+import { codexProjectInstructions, gooseReadsProjectInstructions, projectInstructions, pukuContext } from "./puku-context";
 
 let dir: string;
 const write = (name: string, text: string) => {
@@ -80,6 +80,19 @@ describe("codexProjectInstructions", () => {
   it("cuts a very long one", () => {
     write("CLAUDE.md", "z".repeat(110_000));
     expect(codexProjectInstructions(dir)).toMatch(/\[cut at 100000 characters\]$/);
+  });
+});
+
+describe("gooseReadsProjectInstructions", () => {
+  it("is true when the folder has an AGENTS.md, which Goose loads itself", () => {
+    expect(gooseReadsProjectInstructions(dir)).toBe(false);
+    write("AGENTS.md", "use pnpm");
+    expect(gooseReadsProjectInstructions(dir)).toBe(true);
+  });
+
+  it("is false for a folder with only a CLAUDE.md, which Goose reads no", () => {
+    write("CLAUDE.md", "ship small");
+    expect(gooseReadsProjectInstructions(dir)).toBe(false);
   });
 });
 

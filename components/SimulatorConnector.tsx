@@ -3,9 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { call } from "@/lib/client";
 import type { InstallJob, InstallKey, SimulatorCheck, SimulatorStatus } from "@/lib/simulator-view";
+import { useConnectorStatus } from "@/lib/use-connector-status";
 import { Spinner } from "./Icon";
 
-type Load = { kind: "loading" } | { kind: "error"; error: string } | { kind: "ready"; status: SimulatorStatus };
 type Jobs = Partial<Record<InstallKey, InstallJob>>;
 
 const BUTTON = "shrink-0 rounded-md border border-line-strong px-2 py-0.5 text-[12px] text-ink hover:bg-sunken";
@@ -68,20 +68,9 @@ function Row({ check, ...fix }: { check: SimulatorCheck; job?: InstallJob; first
 // each missing piece. Install runs it on the server (lib/simulator-install.ts); the panel polls its last line of
 // output and looks again when it ends.
 export default function SimulatorConnector({ titleClass, hintClass }: { titleClass: string; hintClass: string }) {
-  const [load, setLoad] = useState<Load>({ kind: "loading" });
-
-  const fetchStatus = useCallback(
-    () =>
-      call<SimulatorStatus>("GET", "/api/connectors/simulators").then(
-        (status) => setLoad({ kind: "ready", status }),
-        (err: unknown) => setLoad({ kind: "error", error: err instanceof Error ? err.message : String(err) }),
-      ),
-    [],
-  );
-
-  useEffect(() => {
-    void fetchStatus();
-  }, [fetchStatus]);
+  const { load, refresh, reload } = useConnectorStatus<SimulatorStatus>({
+    load: () => call<SimulatorStatus>("GET", "/api/connectors/simulators"),
+  });
 
   const [jobs, setJobs] = useState<Jobs>({});
   const jobsRef = useRef<Jobs>({});
@@ -91,9 +80,9 @@ export default function SimulatorConnector({ titleClass, hintClass }: { titleCla
       const ended = runningKeys(jobsRef.current).some((k) => next[k as InstallKey]?.status !== "running");
       jobsRef.current = next;
       setJobs(next);
-      if (ended) void fetchStatus();
+      if (ended) void reload();
     },
-    [fetchStatus],
+    [reload],
   );
   const busy = runningKeys(jobs).length > 0;
 
@@ -112,12 +101,7 @@ export default function SimulatorConnector({ titleClass, hintClass }: { titleCla
     void call<InstallJob>("POST", INSTALL_URL, { key }).then(set, (err: unknown) => set({ status: "failed", line: err instanceof Error ? err.message : String(err) }));
   }
 
-  // After you've run a fix: look again.
-  function refresh() {
-    setLoad({ kind: "loading" });
-    void fetchStatus();
-  }
-
+  // The rows under one platform, each with the fix for it.
   const section = (status: SimulatorStatus, platform: SimulatorCheck["platform"], title: string) => {
     const offered = new Set<InstallKey>();
     return (

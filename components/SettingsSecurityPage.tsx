@@ -1,10 +1,11 @@
 // The Security page: what threads may do without asking (the default permission mode, the folders outside a
 // project they may use), how long the saved sign-ins last, who used the Keychain and the vault (KeychainAccess), and
-// the anonymous setup stats switch (lib/telemetry.ts).
+// the site-notes sharing switch (lib/site-notes-store.ts) and the anonymous setup stats switch (lib/telemetry.ts).
 import DeleteConfirmSwitch from "./DeleteConfirmSwitch";
 import KeychainAccess from "./KeychainAccess";
 import ModePicker from "./ModePicker";
 import { SettingsCard, SettingsSectionHeader } from "./SettingsLayout";
+import { SiteNotesSwitch } from "./SiteNotesSwitch";
 import { StatsSwitch } from "./StatsSwitch";
 import TokenExpiry from "./TokenExpiry";
 import TrustedFolders from "./TrustedFolders";
@@ -51,6 +52,10 @@ export default function SettingsSecurityPage({
       </SettingsCard>
       <SettingsCard>
         <KeychainAccess />
+      </SettingsCard>
+      <SettingsCard>
+        <SettingsSectionHeader title="Site notes" hint="What your cards learn about dashboards in the pane, so the next card goes straight there. Kept on this Mac and shared with your team." />
+        <SiteNotesSwitch />
       </SettingsCard>
       <SettingsCard>
         <SettingsSectionHeader title="Setup stats" hint="Which welcome steps people finish, so the welcome gets better. Nothing from your board." />

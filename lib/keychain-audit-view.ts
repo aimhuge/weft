@@ -2,50 +2,11 @@
 // the audit log's lines as your Weft account keeps them (lib/keychain-audit-record.ts) plus those still waiting on
 // the Mac (electron/keychain-audit.cjs), the threads with standing access from
 // electron/vault-grants.cjs, and the sentence each line reads as. Names and events only, never a value.
+//
+// The shapes themselves live in lib/keychain-audit-types.ts, which the record, the sync and this view all read.
+import type { AuditEntry, VaultGrant } from "./keychain-audit-types";
 
-/** One line of the audit log, as electron/keychain-audit.cjs writes it. */
-export type AuditEntry = {
-  id: string;
-  // This Mac's number for the line (a gap is a line that never reached your account).
-  seq?: number;
-  at: string;
-  kind: "keychain" | "vault";
-  action: string;
-  outcome: string;
-  by: string;
-  count?: number;
-  what?: string;
-  card?: string;
-  thread?: string;
-  vault?: string;
-  names?: string[];
-  environment?: string;
-  site?: string;
-  command?: string;
-  detail?: string;
-  via?: string;
-  // Read back from your Weft account (lib/keychain-audit-record.ts): whose line it is, the Mac it came from and
-  // when the database got it. A line still waiting on the Mac has none of these.
-  owner?: string;
-  device?: string;
-  savedAt?: string;
-};
-
-/** A thread's standing access to one vault (electron/vault-grants.cjs); at and until are epoch ms. */
-export type VaultGrant = { card: string; thread?: string; id: string; label: string; at: number; until: number };
-
-/** vault:activity: the newest lines, how many wait to upload to your Weft account, and when the last upload landed. */
-export type AuditActivity = { entries: AuditEntry[]; waiting: number; syncedAt: string | null };
-
-export type GrantResult = { granted?: boolean; denied?: boolean; label: string; until?: number };
-
-/** The vault bridge's grant and log calls (electron/preload.cjs). Missing in older shells. */
-export interface KeychainBridge {
-  grants?: () => Promise<VaultGrant[]>;
-  grant?: (folder: string, card: string, thread?: string) => Promise<GrantResult>;
-  revoke?: (card: string, id?: string) => Promise<{ revoked: number }>;
-  activity?: (limit?: number) => Promise<AuditActivity>;
-}
+export type { AuditActivity, AuditEntry, GrantResult, KeychainBridge, VaultGrant } from "./keychain-audit-types";
 
 // A thread named with whose it is when the line knows: "Alex's thread “Fix login”".
 function threadOf(e: AuditEntry): string {

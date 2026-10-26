@@ -24,6 +24,7 @@ const BASE: SettingsView = {
   gooseProviderId: "",
   gooseModelId: "",
   gooseBaseUrl: "",
+  gooseNamedModels: [],
 };
 
 describe("initialSettingsForm", () => {

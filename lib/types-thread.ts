@@ -1,6 +1,6 @@
 // Thread-item types (what the chat panel shows, and the agent's questions).
 
-import type { EditPreview } from "./edit-preview";
+import type { EditPreview } from "./edit-preview-types";
 import type { SecretAsk } from "./vault-view";
 
 // A question the agent asked with its AskUserQuestion tool.

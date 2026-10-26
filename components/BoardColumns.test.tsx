@@ -3,7 +3,7 @@
 // per-column wiring Board.tsx used to do inline (Backlog's reorder and sprints, Review's Resume all,
 // Review all and filter chips, Running and Needs you's Switch all, Show more, double-click to add).
 
-import { cleanup, fireEvent, render } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Card, Column } from "@/lib/types";
 
@@ -17,10 +17,12 @@ vi.mock("./BoardColumn", () => ({
 }));
 
 import BoardColumns, { type BoardColumnsProps } from "./BoardColumns";
+import { setBacklogFolded } from "@/lib/board-prefs";
 
 afterEach(() => {
   cleanup();
   seen.clear();
+  document.cookie = "weft-backlog-folded=; path=/; max-age=0";
 });
 
 const card = (id: string, column: Column, over: Partial<Card> = {}): Card =>
@@ -63,6 +65,32 @@ function setup(over: Partial<BoardColumnsProps> = {}) {
 const col = (id: Column) => seen.get(id) ?? {};
 // Calls the handler BoardColumns gave column `id` as prop `name`.
 const call = (id: Column, name: string, ...args: unknown[]) => (col(id)[name] as (...a: unknown[]) => unknown)(...args);
+
+describe("BoardColumns' folded Backlog", () => {
+  it("folds from Backlog's header to a strip with its count, which opens it again", () => {
+    setup();
+    act(() => (col("backlog").backlog as { onFold: () => void }).onFold());
+    expect(document.querySelector("[data-folded]")?.textContent).toContain("Backlog3");
+    seen.clear();
+    fireEvent.click(screen.getByRole("button", { name: "Open Backlog" }));
+    expect(seen.has("backlog")).toBe(true);
+    expect(document.querySelector("[data-folded]")).toBeNull();
+  });
+
+  it("still takes a dropped card, and hides the count until the board loads", () => {
+    setBacklogFolded(true);
+    const p = setup({ loaded: false });
+    expect(seen.has("backlog")).toBe(false);
+    const strip = document.querySelector("[data-folded]") as HTMLElement;
+    expect(strip.textContent).toBe("Backlog");
+    fireEvent.dragOver(strip);
+    expect(p.drag.onOver).toHaveBeenCalledWith("backlog");
+    fireEvent.dragLeave(strip);
+    expect(p.drag.onLeave).toHaveBeenCalledWith("backlog");
+    fireEvent.drop(strip);
+    expect(p.drag.onDrop).toHaveBeenCalledWith("backlog", expect.anything());
+  });
+});
 
 describe("BoardColumns", () => {
   it("renders one column per visible column, capped at COLUMN_LIMIT unless expanded", () => {

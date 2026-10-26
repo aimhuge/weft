@@ -96,6 +96,7 @@ describe("store cards", () => {
         cards: [
           { ...base, id: "r", title: "r", column: "running", wrappingUp: true },
           { ...base, id: "p", title: "p", column: "needs_you", pending: { id: "1" } },
+          { ...base, id: "a", title: "a", column: "done", archived: true, pending: { id: "2" } },
           { ...base, id: "d", title: "d", column: "done" },
         ],
       }),
@@ -110,6 +111,9 @@ describe("store cards", () => {
     expect(store.getCard("p")!.column).toBe("review");
     expect(store.getCard("p")!.pending).toBeNull();
     expect(store.getCard("d")!.column).toBe("done");
+    // Archived in Done with a question still pending: back in Review, it's on the board again.
+    expect(store.getCard("a")).toMatchObject({ column: "review" });
+    expect(store.getCard("a")!.archived).toBeUndefined();
   });
 
   it("marks a carry-on turn cut off again for another resume, until three in a row", async () => {

@@ -3,6 +3,7 @@
 // The board's framed window: the New thread form, or the open card's thread, in the frame that
 // sits over the columns. It is its own component so Board.tsx stays a short list of what the board
 // shows rather than a long pile of prop bundles.
+import { rememberPage } from "@/lib/settings-nav";
 import { useMemo } from "react";
 import type { BrowserState, NewCardInput } from "@/lib/client";
 import { planResets } from "@/lib/schedule";
@@ -61,7 +62,10 @@ export default function BoardFrame(props: BoardFrameProps) {
     <CardFrame framed={Boolean(selected) || showNew} bottom={props.bottom} onBackdrop={props.onBackdrop}>
       {showNew ? (
         <NewThreadWindow
-          form={{ cards, home, defaultCwd: newCwd ?? project ?? undefined, recentCwd, restart, onCreate }}
+          form={{ cards, home, defaultCwd: newCwd ?? project ?? undefined, recentCwd, restart, onCreate, onManageAgents: () => {
+            rememberPage("agents");
+            props.onOpenSettings();
+          } }}
           browser={{ desktop: props.desktop, state: props.browser, obscured: props.obscured, width: props.browserWidth, onWidth: props.onBrowserWidth }}
           onClose={onCloseNew}
         />

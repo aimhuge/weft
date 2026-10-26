@@ -9,6 +9,7 @@ import { isBusy, sendMessage } from "./runner";
 import { scheduleMessage } from "./scheduler";
 import { startGate } from "./start-gate";
 import { createCard, DATA_DIR, getCard } from "./store";
+import { startClock } from "./tick-clock";
 import type { Card } from "./types";
 
 // A cron's runs (docs/architecture/crons.md): each one a new card, forked from the source thread or fresh, that
@@ -98,14 +99,8 @@ export async function runDueCrons(now = Date.now()) {
   }
 }
 
-// How often the server looks for crons whose time has come; the same as the scheduled messages' check.
-const CHECK_EVERY_MS = 15_000;
-const g = globalThis as unknown as { __weftCronTimer?: ReturnType<typeof setInterval> };
-
-// Once per server process. A run that came due while the Mac slept or Weft was closed goes on the first check.
+// Once per server process, on the same 15-second beat as the scheduled messages' check. A run that
+// came due while the Mac slept or Weft was closed goes on the first check.
 export function startCronClock() {
-  if (g.__weftCronTimer) return;
-  const tick = () => void runDueCrons().catch((err: unknown) => console.error("[weft] cron check failed:", err));
-  g.__weftCronTimer = setInterval(tick, CHECK_EVERY_MS);
-  tick();
+  startClock("cron", () => void runDueCrons().catch((err: unknown) => console.error("[weft] cron check failed:", err)));
 }

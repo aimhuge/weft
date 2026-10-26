@@ -198,6 +198,27 @@ describe("settings", () => {
     expect("gooseBaseUrl" in saved).toBe(false);
   });
 
+  it("the named models read as none until one is saved, and a malformed list reads as none", async () => {
+    let s = await load();
+    expect(s.gooseNamedModels()).toEqual([]);
+    expect(s.settingsView().gooseNamedModels).toEqual([]);
+    fs.writeFileSync(
+      path.join(settingsDir.path, "settings.json"),
+      JSON.stringify({ gooseNamedModels: [{ id: "gpt-5", name: "The one I like" }] }),
+    );
+    s = await load();
+    expect(s.gooseNamedModels()).toEqual([{ id: "gpt-5", name: "The one I like" }]);
+    expect(s.settingsView().gooseNamedModels).toEqual([{ id: "gpt-5", name: "The one I like" }]);
+
+    // A list that isn't pairs of strings is not a list of named models: it reads as none.
+    fs.writeFileSync(
+      path.join(settingsDir.path, "settings.json"),
+      JSON.stringify({ gooseNamedModels: [{ id: "gpt-5" }] }),
+    );
+    s = await load();
+    expect(s.gooseNamedModels()).toEqual([]);
+  });
+
   it("an empty automations list is kept, not replaced by the defaults", async () => {
     const s = await load();
     s.setAutomations([]);

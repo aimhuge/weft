@@ -6,9 +6,10 @@
 import { norm, rankItems } from "./db-picker";
 import { folderName } from "./format";
 import manifest from "./slack-manifest.json";
-import type { SlackBridge, SlackChannel, SlackSettings, SlackStatus } from "./slack-types";
+import { type SlackBridge, type SlackChannel, type SlackEventKey, type SlackSettings, type SlackStatus } from "./slack-types";
 
-export type { SlackBridge, SlackChannel, SlackSettings, SlackStatus };
+export { EVENT_LABELS, SLACK_KINDS } from "./slack-types";
+export type { SlackBridge, SlackChannel, SlackEventKey, SlackSettings, SlackStatus };
 
 // window.weft.slack, from electron/preload.cjs. Null in a plain browser tab.
 export function slackBridge(): SlackBridge | null {
@@ -30,18 +31,6 @@ export function slackTitle(status: SlackStatus | null, settings: SlackSettings |
   if (settings?.channelName) return `Slack: posting to #${settings.channelName}`;
   return "Slack: pick a channel";
 }
-
-// The events the drawer switches on, in the order it shows them.
-export const EVENT_KEYS = ["commits", "pushes", "deploys", "status", "growth"] as const;
-export type SlackEventKey = (typeof EVENT_KEYS)[number];
-
-export const EVENT_LABELS: Record<SlackEventKey, string> = {
-  commits: "Commits",
-  pushes: "Pushes",
-  deploys: "Deploys (Vercel)",
-  status: "Card status (preview + weft.zip link)",
-  growth: "Growth (new user, new team, payment)",
-};
 
 // The socket's dot: green when it's listening, amber while it connects, grey when it's off.
 export const SOCKET_STATE: Record<SlackStatus["socket"], { label: string; tone: "ok" | "warn" | "muted" }> = {

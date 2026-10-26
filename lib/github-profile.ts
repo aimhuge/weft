@@ -1,23 +1,16 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { globalSingleton } from "./global-singleton";
+import type { GithubProfile } from "./welcome-types";
 
 // Your GitHub profile for the Loom's "You" tab, read through the gh CLI you're already signed in to
 // (`gh api user`). Kept for hours since it rarely changes; a missing or signed-out gh is remembered
 // briefly so the dialog doesn't wait on it every time it opens.
 
-export interface GithubProfile {
-  login: string;
-  name: string | null;
-  bio: string | null;
-  avatarUrl: string | null;
-  url: string;
-  company: string | null;
-  location: string | null;
-  blog: string | null;
-  followers: number;
-  publicRepos: number;
-}
+// The profile's shape lives in lib/welcome-types.ts (types only, no node:child_process), so the board
+// can name it without dragging this module into the browser chunk. Re-exported here: the server's own
+// imports of "./github-profile" keep working.
+export type { GithubProfile };
 
 export const PROFILE_TTL = 6 * 60 * 60 * 1000;
 export const MISS_TTL = 10 * 60 * 1000;

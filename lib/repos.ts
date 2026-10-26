@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
+import { runClone } from "./clone-progress";
 import { worktreeParent } from "./format";
 import { listProjects } from "./settings";
 import type { GithubRepo, LocalRepo } from "./types";
@@ -74,6 +75,12 @@ function originOf(dir: string) {
   const origin = /\[remote "origin"\]([^[]*)/.exec(config)?.[1] ?? "";
   const url = /^\s*url\s*=\s*(.+)$/m.exec(origin)?.[1];
   return url ? githubSlug(url) : undefined;
+}
+
+// The GitHub repo ("owner/name") a folder's origin points at, read from its git config; undefined for anything else.
+export function githubRepoOf(folder: string) {
+  const dir = gitDir(folder);
+  return dir ? originOf(dir) : undefined;
 }
 
 // When the repo last changed: the latest of its HEAD, index, and last fetch.
@@ -206,7 +213,7 @@ export async function cloneRepo(fullName: string): Promise<string> {
   let target = path.join(parent, name);
   for (let n = 2; fs.existsSync(target); n++) target = path.join(parent, `${name}-${n}`);
   try {
-    await run("gh", ["repo", "clone", fullName, target], { timeout: 10 * 60_000, maxBuffer: 8 * 1024 * 1024 });
+    await runClone(fullName, target);
   } catch (err) {
     throw new Error(`Couldn't clone ${fullName}: ${errorText(err)}`);
   }

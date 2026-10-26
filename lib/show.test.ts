@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { backdropFor, extractHtml, showPrompt, newThreadPage, nextScene, starterPage } from "./show";
+import { TIPS } from "./new-thread-tips";
 
 describe("extractHtml", () => {
   it("takes the page out of a code fence and chat around it", () => {
@@ -91,6 +92,12 @@ describe("newThreadPage", () => {
     expect(html).toContain("Waiting for your prompt…");
     expect(html).not.toContain('class="ask"');
     expect(html).not.toContain('class="recipes"');
+  });
+
+  it("carries a rotating tip, linked to its intro when it knows Weft's origin", () => {
+    expect(newThreadPage()).toContain('<div class="tip" id="tip">');
+    const vault = TIPS.findIndex((t) => t.intro === "vault");
+    expect(newThreadPage(undefined, { start: vault, origin: "http://localhost:3000" })).toContain('href="http://localhost:3000/intros/vault.html?live=1"');
   });
 
 });

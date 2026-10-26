@@ -3,6 +3,7 @@
 // The bands run Backlog (folded to start with) then the order you act on them, Needs you first, and a folded
 // band keeps its count but draws no rows. Pure, so components/BoardList.tsx only draws what this lays out.
 import type { ListGroup } from "./board-view";
+import { foldParentOf } from "./cron-fold";
 import { rowMatches, sortBy, type Band, type SheetState } from "./list-sheet";
 import type { CardTask } from "./tasks";
 import type { Card, Column } from "./types";
@@ -25,8 +26,7 @@ export interface SheetGroup {
 
 // The card a card folds under: a cron run's holder, or the thread that started it.
 export function parentOf(card: Card): string | undefined {
-  if (card.cronOf && card.cronOf !== card.id) return card.cronOf;
-  return card.parentId;
+  return foldParentOf(card);
 }
 
 // A card's subagents, the ones it started with the Agent tool, oldest first.
@@ -121,12 +121,13 @@ export function sheetGroups(groups: ListGroup[], state: SheetState, expanded: Re
 export const ADDABLE: Partial<Record<Column, string>> = { backlog: "Backlog", running: "Running" };
 
 // The bands the sheet draws: every band with cards, plus the Backlog and Running even when they're empty,
-// so there is always somewhere to type a new card.
-export function bandsToDraw(groups: SheetGroup[], collapsed: Band[]): SheetGroup[] {
+// so there is always somewhere to type a new card. With archived cards to reveal (keepDone), Done stays too,
+// since its band carries the Show archived toggle.
+export function bandsToDraw(groups: SheetGroup[], collapsed: Band[], keepDone = false): SheetGroup[] {
   return LIST_ORDER.flatMap((column) => {
     const group = groups.find((g) => g.column === column);
     if (group) return [group];
-    const label = ADDABLE[column];
+    const label = ADDABLE[column] ?? (keepDone && column === "done" ? "Done" : undefined);
     return label ? [{ column, label, rows: [], shown: 0, total: 0, collapsed: collapsed.includes(column) }] : [];
   });
 }

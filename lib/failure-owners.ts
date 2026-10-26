@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { splitClaim } from "./claims";
+import { claimFiles, claimFilesOf } from "./claims";
 import { busyInFolder } from "./overlap";
 import { steps } from "./restart-guard";
 import type { Card } from "./types";
@@ -76,11 +76,8 @@ export function failureNote(
   unknown: ReadonlySet<string> = new Set(),
 ): string | undefined {
   if (!FAILED.test(output) || !runsCheck(command, cwd)) return undefined;
-  const owner = new Map<string, Card>();
-  for (const other of busyInFolder(cards, workDir(card), card.id)) {
-    for (const key of other.claims ?? []) if (!owner.has(splitClaim(key).file)) owner.set(splitClaim(key).file, other);
-  }
-  const mine = new Set((card.claims ?? []).map((k) => splitClaim(k).file));
+  const owner = claimFilesOf(busyInFolder(cards, workDir(card), card.id));
+  const mine = claimFiles(card);
   const failing = failurePaths(output, cwd, root);
   const unsureLines = unknownLines(failing, unknown, (f) => owner.has(f) || mine.has(f), root);
   const unsure = unsureLines.length ? unsureLines.join("\n") : undefined;

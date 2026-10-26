@@ -10,6 +10,7 @@ const { MANAGED_FILE, createEnvWatcher, ignoreLocalEnv, isManaged, planWrite, re
 const { touchIdPrompt } = require("./touch-id.cjs");
 const { git, parseRemote, vaultIdFor } = require("./vault-id.cjs");
 const { createGrants, grantMethods } = require("./vault-grants.cjs");
+const { decideAccess } = require("./vault-access.cjs");
 const { audit, configureAudit, keychainFor } = require("./keychain-audit.cjs");
 const { createUnlock, UNLOCK_MS } = require("./vault-unlock.cjs");
 const { registerVault } = require("./vault-ipc.cjs");
@@ -305,12 +306,20 @@ function createVault({ dataDir, safeStorage, sodium, prompt, clipboard, run = gi
       const value = s.exists(id) ? s.get(id, name, environment) : undefined;
       const line = { action: "fill", by: "thread", card, thread, vault: label, names: [name], environment, site };
       if (value === undefined) return log({ ...line, outcome: "missing" }) && { missing: true, label };
-      if (grants.allows(card, id)) return log({ ...line, via: "grant" }) && { value, label };
+      // Whether this card may use this vault on this site, and how it was allowed (electron/vault-access.cjs).
       const key = `${card}\n${site}\n${id}`;
-      if (!threadUnlocks.has(key)) threadUnlocks.set(key, createUnlock({ prompt, now }));
-      const via = threadUnlocks.get(key).unlocked() ? "unlocked" : "touch-id";
-      if (!(await threadUnlocks.get(key).ensure(`let a thread type ${name} (${label}) into ${site}`))) return log({ ...line, via, outcome: "denied" }) && { denied: true, label };
-      log({ ...line, via });
+      const access = await decideAccess({
+        grants,
+        card,
+        vaultId: id,
+        unlockFor: () => {
+          if (!threadUnlocks.has(key)) threadUnlocks.set(key, createUnlock({ prompt, now }));
+          return threadUnlocks.get(key);
+        },
+        reason: `let a thread type ${name} (${label}) into ${site}`,
+      });
+      if (!access.allowed) return log({ ...line, via: access.via, outcome: "denied" }) && { denied: true, label };
+      log({ ...line, via: access.via });
       return { value, label };
     },
 

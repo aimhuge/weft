@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addClaims, claimKey, CLAIMS_CAP, clashes, clashQuestion, clashWhy, dropClaims, findClash, splitClaim, yieldsTo } from "./claims";
+import { addClaims, claimFileName, claimFiles, claimFilesOf, claimKey, CLAIMS_CAP, clashes, clashQuestion, clashWhy, dropClaims, findClash, splitClaim, withoutYield, yieldsTo } from "./claims";
 import type { Card } from "./types";
 
 let seq = 0;
@@ -20,6 +20,13 @@ describe("claim keys", () => {
     const key = claimKey("/r/#1 100%/a.ts", "Board/useEffect#3");
     expect(key).toBe("/r/%231 100%25/a.ts#Board/useEffect#3");
     expect(splitClaim(key)).toEqual({ file: "/r/#1 100%/a.ts", symbol: "Board/useEffect#3" });
+  });
+
+  it("names a key's file: its last segment, unescaped, with or without a symbol", () => {
+    expect(claimFileName("/r/a%23b%25.ts#Form")).toBe("a#b%.ts");
+    expect(claimFileName("/r/a.ts")).toBe("a.ts");
+    expect(claimFileName("/r/a.ts#*")).toBe("a.ts");
+    expect(claimFileName("/r/dir%23x/f.ts#Sym")).toBe("f.ts");
   });
 });
 
@@ -68,6 +75,22 @@ describe("dropClaims", () => {
   });
 });
 
+describe("claim files", () => {
+  it("reads a card's claims as the files they hold", () => {
+    expect([...claimFiles(card({ claims: ["/repo/a.ts#f", "/repo/b.ts#*"] }))]).toEqual(["/repo/a.ts", "/repo/b.ts"]);
+    expect([...claimFiles(card())]).toEqual([]);
+  });
+
+  it("maps each file to the first card that claims it", () => {
+    const first = card({ title: "First", claims: ["/repo/a.ts#f"] });
+    const second = card({ title: "Second", claims: ["/repo/a.ts#g", "/repo/b.ts#*"] });
+    const owner = claimFilesOf([first, second]);
+    expect(owner.get("/repo/a.ts")).toBe(first);
+    expect(owner.get("/repo/b.ts")).toBe(second);
+    expect(claimFilesOf([card()]).size).toBe(0);
+  });
+});
+
 describe("findClash", () => {
   it("finds another busy card in the same tree holding a clashing claim", () => {
     const me = card();
@@ -107,6 +130,12 @@ describe("Me first yields", () => {
     expect(yieldsTo(c, "x", "/a.ts")).toBe(true);
     expect(yieldsTo(c, "x", "/b.ts")).toBe(false);
     expect(yieldsTo(card(), "x", "/a.ts")).toBe(false);
+  });
+
+  it("drops the yield to a card on a file, keeping the others", () => {
+    const c = card({ yields: [{ to: "x", file: "/a.ts" }, { to: "x", file: "/b.ts" }, { to: "y", file: "/a.ts" }] });
+    expect(withoutYield(c, "x", "/a.ts")).toEqual([{ to: "x", file: "/b.ts" }, { to: "y", file: "/a.ts" }]);
+    expect(withoutYield(card(), "x", "/a.ts")).toEqual([]);
   });
 });
 

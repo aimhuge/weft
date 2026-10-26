@@ -7,9 +7,8 @@ import { fail, guard } from "@/lib/guard";
 import type { AdminUserRow } from "@/lib/users-sheet";
 import { normalizeEmail } from "@aimhuge/teams";
 
-// The row type lives with the sheet that reads it (lib/users-sheet.ts); re-exported here for the
-// admin page's own importers.
-export type { AdminUserRow };
+// The row type lives with the sheet that reads it (lib/users-sheet.ts), so the admin page's client
+// components import it from there and never from this route.
 
 const PAGE_SIZE = 20;
 // The most one request may take: the Users sheet loads every account in pages this size and sorts and filters them

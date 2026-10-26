@@ -3,13 +3,15 @@
 // The board's row of columns: the <main> sheet and one BoardColumn per visible column, with the
 // column-specific extras (Backlog's sprints and reorder, Review's Resume all / Review all / filter
 // chips, Running and Needs you's Switch all) wired by column id here so Board only passes state in.
-import { useMemo, type DragEvent, type MouseEvent, type ReactNode } from "react";
+import { useMemo, useSyncExternalStore, type DragEvent, type MouseEvent, type ReactNode } from "react";
 import type { Card, Column } from "@/lib/types";
 import type { LaneState } from "@/lib/copilot-lane";
+import { backlogFolded, setBacklogFolded, subscribeBoardPrefs } from "@/lib/board-prefs";
 import { reviewFilterCounts, type ReviewFilter, type ReviewFilterKey } from "@/lib/board-view";
 import { stackRuns } from "@/lib/cron-stacks";
 import BoardColumn, { COLUMN_LIMIT } from "./BoardColumn";
 import CronStack from "./CronStack";
+import FoldedColumn from "./FoldedColumn";
 
 export interface BoardColumnsProps {
   columns: readonly { id: Column; label: string }[];
@@ -70,6 +72,8 @@ export default function BoardColumns(given: BoardColumnsProps) {
     },
   };
   const { columns, byColumn, expanded, onNew } = props;
+  // Backlog folded to a strip (its header's chevron), remembered in a cookie like the other board prefs.
+  const backlogShut = useSyncExternalStore(subscribeBoardPrefs, backlogFolded, () => false);
   return (
     <main
       className="board-sheet flex min-w-0 flex-1 gap-3 overflow-x-auto p-3"
@@ -81,9 +85,27 @@ export default function BoardColumns(given: BoardColumnsProps) {
       {columns.map((column) => {
         const list = byColumn.get(column.id) ?? [];
         const shown = expanded.includes(column.id) ? list : list.slice(0, COLUMN_LIMIT);
+        if (backlogShut && column.id === "backlog") return <FoldedBacklog key={column.id} {...props} column={column} count={list.length} />;
         return <OneColumn key={column.id} {...props} column={column} list={list} shown={shown} />;
       })}
     </main>
+  );
+}
+
+function FoldedBacklog({ column, count, ...p }: BoardColumnsProps & { column: { id: Column; label: string }; count: number }) {
+  return (
+    <FoldedColumn
+      column={column}
+      count={p.loaded ? count : null}
+      dragOver={p.drag.over === column.id}
+      onUnfold={() => setBacklogFolded(false)}
+      onDragOver={(e) => {
+        e.preventDefault();
+        p.drag.onOver(column.id);
+      }}
+      onDragLeave={() => p.drag.onLeave(column.id)}
+      onDrop={(e) => p.drag.onDrop(column.id, e)}
+    />
   );
 }
 
@@ -126,7 +148,7 @@ function OneColumn({ column, list, shown, ...p }: BoardColumnsProps & { column: 
       onAddBacklog={p.onNew}
       // Backlog's sprints, Save as sprint and Archive all act on the unarchived cards it shows.
       backlog={backlog ? { cards: unarchived(), allCards: p.allCards, onRestore: p.archive.restore, toast: p.toast, notify: p.notify,
-        onArchiveAll: () => p.archive.cards(unarchived()) } : undefined}
+        onArchiveAll: () => p.archive.cards(unarchived()), onFold: () => setBacklogFolded(true) } : undefined}
     />
   );
 }

@@ -13,9 +13,12 @@ export interface Plan extends BasePlan<PlanId> {
 }
 
 // A BlastCP tier as Weft's pricing sells it. The numbers mirror BlastCP's own catalog (aimhuge/blastcp,
-// src/lib/billing/plans.ts), so keep them in step with it. BlastCP enforces them, not Weft, and nothing
-// links a Weft subscription to a BlastCP workspace yet (docs/architecture/billing.md).
+// src/lib/billing/plans.ts), so keep them in step with it. BlastCP enforces them: it reads the tier a user's plan gives
+// (lib/billing/blastcp-bundle.ts, on /api/billing/status) and sets its own workspace's plan to `id`
+// (docs/architecture/billing.md "BlastCP usage").
 export interface BlastcpTier {
+  // BlastCP's own plan id for this tier.
+  id: "free" | "creator";
   name: string;
   brands: number;
   // null is every channel and unlimited posts, as in BlastCP's catalog; not zero.
@@ -27,6 +30,7 @@ export interface BlastcpTier {
 }
 
 export const BLASTCP_FREE: BlastcpTier = {
+  id: "free",
   name: "BlastCP Free",
   brands: 1,
   channels: 3,
@@ -37,6 +41,7 @@ export const BLASTCP_FREE: BlastcpTier = {
 
 // Open Source, Education, Pro and Team carry Creator: BlastCP Pro is $29 flat, more than a one-seat Team's $9.
 export const BLASTCP_CREATOR: BlastcpTier = {
+  id: "creator",
   name: "BlastCP Creator",
   brands: 1,
   channels: null,

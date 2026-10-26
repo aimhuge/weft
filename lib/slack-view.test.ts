@@ -5,12 +5,12 @@ import {
   channelRows,
   channelScore,
   channelLabel,
-  EVENT_KEYS,
   EVENT_LABELS,
   manifestUrl,
   slackBridge,
   slackChannelName,
   slackTitle,
+  SLACK_KINDS,
   SLACK_MANIFEST,
   SOCKET_STATE,
 } from "./slack-view";
@@ -88,8 +88,8 @@ describe("the rail button's title", () => {
 
 describe("the events the drawer switches on", () => {
   it("are the five Weft posts about, each with a label", () => {
-    expect([...EVENT_KEYS]).toEqual(["commits", "pushes", "deploys", "status", "growth"]);
-    for (const key of EVENT_KEYS) expect(EVENT_LABELS[key]).toBeTruthy();
+    expect([...SLACK_KINDS]).toEqual(["commits", "pushes", "deploys", "status", "growth"]);
+    for (const key of SLACK_KINDS) expect(EVENT_LABELS[key]).toBeTruthy();
     expect(EVENT_LABELS.deploys).toContain("Vercel");
     expect(EVENT_LABELS.status).toContain("weft.zip");
     expect(EVENT_LABELS.growth).toContain("payment");

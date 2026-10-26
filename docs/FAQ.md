@@ -843,8 +843,11 @@ pages and settings. The CLIs keep their own transcripts as usual. Set `WEFT_DATA
 
 ### Does Weft track me?
 
-Google Analytics runs on the weft.zip home page only, never on the board. The bundled puku-cli has its telemetry
-removed.
+On weft.zip (the home page, FAQ, profiles, share links and the web board), Google Analytics and PostHog, including
+PostHog's session replay, load only after you accept them in the banner; signed in, PostHog links your visits to your
+account. A Weft on your own Mac never loads either. The desktop app does send anonymous onboarding stats (which
+welcome steps you went through, never prompts, paths or card content), on by default: switch them off in Settings →
+Security. The bundled puku-cli has its telemetry removed. The details are in the [privacy policy](https://weft.zip/privacy).
 
 ### Can other websites or apps drive Weft?
 

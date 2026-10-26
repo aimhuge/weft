@@ -1,11 +1,14 @@
 // The fetch client: a single `api` object with one method per server route, plus
 // the XHR upload and audio transcribe helpers.
 
-import type { ThreadAgent } from "./agents";
+import type { AgentInfo, ThreadAgent } from "./agents";
 import type { TagInfo, TagRow } from "./tags";
-import type { Webhook, WebhookInput, WebhookPatch } from "./webhooks";
-import type { IntakeResult } from "./project-intake";
-import type { SubagentModel } from "./subagents";
+// The webhook, intake and clone shapes come from their own type-only modules, not from the server modules
+// that hold them: naming a server module's type still makes Turbopack resolve that module (node:fs,
+// node:child_process), and a browser chunk can't hold those — the board failed to compile.
+import type { Webhook, WebhookInput, WebhookPatch } from "./webhook-types";
+import type { IntakeResult } from "./intake-types";
+import type { CloneJob } from "./clone-progress-types";
 import type { CloudSyncStatus } from "./cloud-sync-view";
 import type { CardShareState, CardShareUpdate } from "./share-types";
 import type { GithubStatus } from "./github-view";
@@ -19,7 +22,6 @@ import type { CustomTheme } from "./custom-theme";
 import type {
   AccountProvider,
   AccountView,
-  Automation,
   Backend,
   Card,
   CliStatus,
@@ -36,6 +38,7 @@ import type {
   QuestionReply,
   RestartStatus,
   ServiceEntry,
+  SettingsPatch,
   SettingsView,
   SkillInfo,
   SkillSetView,
@@ -60,6 +63,12 @@ export interface NewCardInput {
   agent?: ThreadAgent;
   start: boolean;
 }
+
+// Whose skill set: a project's, a card's or an agent's.
+export type SkillSetWhere = { cwd: string } | { card: string } | { agent: string };
+
+// What Settings → Agents sends to make or edit one.
+export type AgentDraft = Pick<AgentInfo, "name" | "emoji" | "tagline" | "soul">;
 
 export interface UploadedAttachment {
   name: string;
@@ -176,6 +185,17 @@ export const api = {
   setMode: (id: string, permissionMode: PermissionMode) => call<{ card: Card }>("PATCH", `/api/cards/${id}`, { permissionMode }),
   // A new soul: the card's CLI ends and its next turn resumes the conversation under it (lib/agents.ts).
   setAgent: (id: string, agent: ThreadAgent) => call<{ card: Card }>("PATCH", `/api/cards/${id}`, { agent }),
+  // Settings → Agents (lib/agent-store.ts): every agent, and yours to make, edit, delete or (built-ins) reset.
+  agents: () => call<{ agents: AgentInfo[]; projects: Record<string, string> }>("GET", "/api/agents"),
+  // A project's default agent; null puts it back on Builder.
+  setProjectAgent: (cwd: string, agent: string | null) => call<{ projects: Record<string, string> }>("PUT", "/api/agents", { cwd, agent }),
+  createAgent: (agent: AgentDraft) => call<{ agent: AgentInfo }>("POST", "/api/agents", agent),
+  updateAgent: (id: string, agent: AgentDraft) => call<{ agent: AgentInfo }>("PATCH", `/api/agents/${encodeURIComponent(id)}`, agent),
+  deleteAgent: (id: string) => call<{ ok: true }>("DELETE", `/api/agents/${encodeURIComponent(id)}`),
+  resetAgent: (id: string) => call<{ agent: AgentInfo; from: "github" | "shipped" }>("POST", `/api/agents/${encodeURIComponent(id)}/reset`),
+  // A thread that writes an agent's soul (lib/agent-author.ts): the card comes back, already running.
+  authorAgent: (input: { what: string; cwd?: string; backend?: Backend }) =>
+    call<{ card: Card; start: { started: boolean; at?: number } }>("POST", "/api/agents/author", input),
   archive: (id: string, archived: boolean) => call<{ card: Card }>("PATCH", `/api/cards/${id}`, { archived }),
   // ★ and tags. Tags are normalized on the server, become yours (tagsBy "user"), and new ones join the catalog.
   mark: (id: string, patch: { starred?: boolean; tags?: string[] }) => call<{ card: Card }>("PATCH", `/api/cards/${id}`, patch),
@@ -266,25 +286,7 @@ export const api = {
   themes: () => call<{ themes: CustomTheme[] }>("GET", "/api/themes"),
   createTheme: (prompt: string) => call<{ id: string; card: Card }>("POST", "/api/themes", { prompt }),
   themeFromPicture,
-  saveSettings: (patch: {
-    threadPrompt?: string;
-    keepAliveMinutes?: number;
-    maxThreads?: number;
-    defaultPermissionMode?: PermissionMode;
-    defaultBackend?: Backend;
-    automations?: Automation[];
-    pushOnDone?: boolean;
-    subagentModel?: SubagentModel;
-    doneModel?: string;
-    doneEffort?: Effort | "";
-    copilotModel?: string;
-    reviewAllModel?: string;
-    backupModel?: string;
-    gooseProviderId?: string;
-    gooseModelId?: string;
-    gooseBaseUrl?: string;
-  }) =>
-    call<SettingsView>("PATCH", "/api/settings", patch),
+  saveSettings: (patch: SettingsPatch) => call<SettingsView>("PATCH", "/api/settings", patch),
   addProject: (path: string) => call<{ path: string; projects: Project[] }>("POST", "/api/projects", { path }),
   newProject: (parent: string, name: string) =>
     call<{ path: string; projects: Project[] }>("POST", "/api/projects/new", { parent, name }),
@@ -312,9 +314,11 @@ export const api = {
   skills: (cwd?: string) =>
     call<{ skills: SkillInfo[] }>("GET", `/api/skills${cwd ? `?cwd=${encodeURIComponent(cwd)}` : ""}`),
   // A project's skill set, or a card's, and turning one skill or plugin on or off there (lib/skill-sets.ts).
-  skillSet: (where: { cwd: string } | { card: string }) =>
-    call<SkillSetView>("GET", `/api/skills/set?${"card" in where ? `card=${encodeURIComponent(where.card)}` : `cwd=${encodeURIComponent(where.cwd)}`}`),
-  setSkill: (where: { cwd: string } | { card: string }, name: string, on: boolean) => call<SkillSetView>("PUT", "/api/skills/set", { ...where, name, on }),
+  skillSet: (where: SkillSetWhere) => {
+    const [[key, value]] = Object.entries(where) as [[string, string]];
+    return call<SkillSetView>("GET", `/api/skills/set?${key}=${encodeURIComponent(value)}`);
+  },
+  setSkill: (where: SkillSetWhere, name: string, on: boolean) => call<SkillSetView>("PUT", "/api/skills/set", { ...where, name, on }),
   uploadAttachment: upload,
   dictation: () => call<{ available: boolean; reason?: string; model?: string }>("GET", "/api/transcribe"),
   transcribe,
@@ -332,6 +336,8 @@ export const api = {
   billingCheckout: (plan: UpgradePlan, interval: UpgradeInterval) =>
     call<CheckoutAnswer>("POST", "/api/account/billing/checkout", { plan, interval }),
   cloneRepo: (fullName: string) => call<{ path: string; projects: Project[] }>("POST", "/api/repos/clone", { fullName }),
+  // How far that clone has got, polled while it runs (lib/clone-progress.ts).
+  cloneProgress: (fullName: string) => call<CloneJob | null>("GET", `/api/repos/clone?fullName=${encodeURIComponent(fullName)}`),
   // A folder's open GitHub issues as Backlog cards, now and every 5 minutes after (lib/github-issues.ts).
   importIssues: (folder: string) =>
     call<{ folder: string; added: number; updated: number; archived: number }>("POST", "/api/github/issues", { folder }),

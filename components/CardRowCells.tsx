@@ -4,6 +4,7 @@
 // tags, the age and the card's own buttons. The status and the folder, which open menus, have files of
 // their own (components/RowStatusCell.tsx, components/RowFolderCell.tsx).
 import { stageStep, timeAgo, STAGES, isLive } from "@/lib/format";
+import { COLUMN_TONE } from "@/lib/column-tone";
 import type { Card, Column } from "@/lib/types";
 import type { ResumeHow } from "@/lib/card-resume";
 import type { CronBadge } from "@/lib/list-crons";
@@ -13,15 +14,6 @@ import Icon from "./Icon";
 import { ContinueButton } from "./CardResume";
 import StarButton from "./StarButton";
 import ArchiveButton from "./ArchiveButton";
-
-// The column's colour, the same map the card's progress line uses (components/CardProgress.tsx).
-export const TONE: Record<Column, { text: string; bar: string }> = {
-  running: { text: "text-accent", bar: "bg-accent" },
-  needs_you: { text: "text-warn", bar: "bg-warn" },
-  review: { text: "text-ok", bar: "bg-ok" },
-  backlog: { text: "text-muted", bar: "bg-muted" },
-  done: { text: "text-faint", bar: "bg-faint" },
-};
 
 // Where a row sits in the sheet's tree (lib/list-tree.ts): how deep, how much folds under it, and its toggle.
 export interface RowNest {
@@ -80,7 +72,7 @@ export function TitleCell({ card, unseen, nest }: { card: Card; unseen: boolean;
 
 // The stage it has reached, and what is left of it.
 export function StageCell({ card, column }: { card: Card; column: Column }) {
-  const tone = TONE[column];
+  const tone = COLUMN_TONE[column];
   const step = card.stage ? stageStep(card.stage) : 0;
   const left = card.remaining && card.remaining !== "none";
   if (!card.stage && !left) return <span className="min-w-0 truncate text-[11px]" />;

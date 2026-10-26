@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Habit } from "./craft";
+import type { Habit } from "./craft-types";
 import type { ActivityEvent, DayTally } from "./game";
 import { attributes, classFor, stackSkills, type Attribute, type AttributeInput } from "./game-attributes";
 import { CHECKS, type ProjectReport } from "./project-badges";

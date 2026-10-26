@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CRAFT_DEFS } from "./craft-badges";
-import type { Habit } from "./craft";
+import type { Habit } from "./craft-types";
 import type { ActivityEvent, Records } from "./game";
 import type { GameFacts } from "./game-badges";
 

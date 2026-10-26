@@ -1,6 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
+import { claimFileName } from "./claim-keys";
 import type { Card } from "./types";
 
 // Who is waiting on whom, for the holder's side of a claim clash: a card held on another card's code
@@ -16,12 +17,6 @@ export interface Waiter {
   // The waiting request, for Me first; and the file it waits on, by name.
   pendingId: string;
   file: string;
-}
-
-// A claim key's file name: the path before its first # (lib/claims.ts claimKey), its last segment, unescaped.
-export function claimFileName(key: string) {
-  const [file = ""] = key.split("#");
-  return file.slice(file.lastIndexOf("/") + 1).replace(/%23/g, "#").replace(/%25/g, "%");
 }
 
 // The waiting cards, by the card they wait on.

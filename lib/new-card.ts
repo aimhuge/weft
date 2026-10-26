@@ -1,4 +1,5 @@
 import { storedAgent } from "./agents";
+import { listAgents, projectAgent } from "./agent-store";
 import { firstMessage } from "./automations";
 import { resolveFolder } from "./folders";
 import { asText, cleanTitle, titleFromPrompt } from "./format";
@@ -57,7 +58,7 @@ export function createCardFromBody(body: Record<string, unknown>): Card {
     permissionMode,
     model: startModel,
     effort,
-    ...marksFromBody(body),
+    ...marksFromBody(body, cwd),
     // Its own worktree, taken from the pool before its first turn (lib/worktree-start.ts).
     ...(body.isolated === true ? { isolated: true } : {}),
   });
@@ -66,11 +67,12 @@ export function createCardFromBody(body: Record<string, unknown>): Card {
 }
 
 // The card's tags and agent from the body. Tags given here are yours, so retitle won't pick others (lib/retitle.ts);
-// new ones join the catalog. The agent is who the thread is (lib/agents.ts); an unknown name or Builder stores none.
-function marksFromBody(body: Record<string, unknown>): Pick<Card, "tags" | "tagsBy" | "agent"> {
+// new ones join the catalog. The agent is who the thread is (lib/agents.ts): the one named, else the project's default
+// (Settings → Agents); an unknown name or Builder stores none.
+function marksFromBody(body: Record<string, unknown>, cwd: string): Pick<Card, "tags" | "tagsBy" | "agent"> {
   const tags = Array.isArray(body.tags) ? normalizeTags(body.tags.map((t) => asText(t))) : [];
   rememberTags(tags);
-  const agent = storedAgent(body.agent);
+  const agent = storedAgent(body.agent ?? projectAgent(cwd), listAgents());
   return { ...(tags.length ? { tags, tagsBy: "user" as const } : {}), ...(agent ? { agent } : {}) };
 }
 

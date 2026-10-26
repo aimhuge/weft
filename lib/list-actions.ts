@@ -2,6 +2,7 @@
 // on, or park it. Only what the card can do right now is listed. Done is left out on purpose: moving a card
 // there runs /weft:done, which commits and pushes, and that shouldn't be one slip of a status menu away.
 // Pure, so the menu (components/RowStatusCell.tsx) only draws the list.
+import { activeAt } from "./board-view";
 import { canContinue, canRestart } from "./card-resume";
 import { isLive } from "./format";
 import type { Card, Column } from "./types";
@@ -34,7 +35,7 @@ export function knownFolders(cards: Card[]): string[] {
   const latest = new Map<string, number>();
   for (const card of cards) {
     if (card.role === "copilot") continue;
-    latest.set(card.cwd, Math.max(latest.get(card.cwd) ?? 0, card.lastActivity ?? card.updatedAt));
+    latest.set(card.cwd, Math.max(latest.get(card.cwd) ?? 0, activeAt(card)));
   }
   return [...latest.entries()].sort((a, b) => b[1] - a[1]).map(([cwd]) => cwd);
 }

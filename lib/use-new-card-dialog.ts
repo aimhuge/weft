@@ -26,6 +26,7 @@ import {
 } from "@/lib/new-thread";
 import { useIsolate } from "./use-isolate";
 import type { ThreadAgent } from "./agents";
+import { useAgentList } from "./use-agents";
 
 // The dialog's state and the actions that drive it.
 export interface NewCardDialogLogic {
@@ -51,7 +52,7 @@ export interface NewCardDialogLogic {
   promptToStart: (read: () => string, focus: () => void) => string | null;
   isolated: boolean;
   toggleIsolated: () => void;
-  // Who the thread is (lib/agents.ts). Not remembered: every new thread starts as Builder.
+  // Who the thread is (lib/agents.ts): the folder's default (Settings → Agents) until you pick one, Builder when it has none.
   agent: ThreadAgent;
   setAgent: (a: ThreadAgent) => void;
   promptLength: number;
@@ -112,7 +113,10 @@ export function useNewCardDialog(home: string, defaultCwd: string | undefined, r
   const [started, setStarted] = useState<string | null>(null);
   const draftTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const { isolated, toggleIsolated, promptLength, notePrompt } = useIsolate(cwd);
-  const [agent, setAgent] = useState<ThreadAgent>("builder");
+  // The agent you picked here; a new folder goes back to its own default.
+  const [pickedAgent, setAgent] = useState<ThreadAgent | null>(null);
+  const { projects: projectAgents } = useAgentList();
+  const agent = pickedAgent ?? projectAgents[cwd] ?? "builder";
 
   useSettingsDefaults(pickedMode, pickedBackend, setPermissionMode, setBackend, setModelState);
   useEffect(() => () => clearTimeout(draftTimer.current), []);
@@ -173,6 +177,7 @@ export function useNewCardDialog(home: string, defaultCwd: string | undefined, r
 
   const chooseFolder = useCallback((folder: string) => {
     setCwd(folder);
+    setAgent(null);
     setError(null);
     api.warm({ cwd: folder, backend }).catch(() => {}); // best-effort prefetch
   }, [backend]);
@@ -210,7 +215,8 @@ export function useNewCardDialog(home: string, defaultCwd: string | undefined, r
           model,
           effort: effortFor(backend, effort),
           ...(isolated ? { isolated: true } : {}),
-          ...(agent !== "builder" ? { agent } : {}),
+          // Always named, so Builder picked here wins over the folder's default.
+          agent,
           start,
         };
         if (opts.stay) await opts.onCreate(input, { stay: true });

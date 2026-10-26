@@ -65,6 +65,12 @@ a gate (/s, /a, /u) call `connection()` themselves (`lib/prerender-check.ts` fla
   trigger and a backfill. Weft keeps its own copy because the package's 0001 replaces `on_auth_user_created`, which
   would drop the name and avatar Weft's trigger fills in. Slugs come from the GitHub login (`private.org_slug_for`),
   skipping the package's reserved words and Weft's root routes.
+- `lib/reserved-slugs.ts`: the one list of names a workspace slug can't take (`RESERVED_WORKSPACE_SLUGS`,
+  `isReservedWorkspaceSlug`): the package's `RESERVED_SLUGS` plus `lib/app-routes.ts` `allReserved()` (every folder under
+  `app/`), so a GitHub user named `privacy` gets `privacy-2`, not a `/privacy/board` that 404s behind the static page.
+  `lib/team-create.ts` `freeSlug()` reads it; `private.org_slug_for` carries the same array
+  (`20261026145850_org_slug_reserved_roots.sql`), and `lib/reserved-slugs.test.ts` fails when the newest migration
+  defining it drifts from the list. A new top-level folder means a new migration redefining the function.
 - `lib/supabase-project.ts`: the project URL and publishable key, with no Node imports so `proxy.ts` can use them.
 - `lib/web-session.ts`: the weft.zip visitor's cookie session (`webClient`, `webUser` from the JWT claims) and the
   service-role client (`serviceClient`, from `SUPABASE_SECRET_KEY`, set on the deployment only).

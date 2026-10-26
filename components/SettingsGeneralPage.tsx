@@ -33,7 +33,7 @@ export default function SettingsGeneralPage({
       <SettingsCard>
         <SwitchRow
           title="Show backlog"
-          hint="A column for threads you add without starting. It still shows while cards wait in it."
+          hint="A column for threads you add without starting. It still shows while cards wait in it; its chevron folds it to a strip."
           on={backlog}
           onChange={(on) => {
             setShowBacklog(on);

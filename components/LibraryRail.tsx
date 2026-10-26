@@ -112,7 +112,7 @@ export default function SideRail({
   // The drawer to draw: the open one, or the one sliding back under the board (DRAWER_SLIDE_MS, as in rail-drawer.css).
   const { shown, closing } = useSlideOut(open, DRAWER_SLIDE_MS);
   const drawerWidth = useDrawerWidth();
-  // The open tool drawer's intro video, played the first time it opens (lib/feature-intros.ts).
+  // The open tool drawer's intro video, played when you press ▶ by its title (lib/feature-intros.ts).
   const intro = useFeatureIntro(closing ? null : introOf(shown));
   const router = useRouter();
   const isSuperAdmin = useSuperAdminGate();

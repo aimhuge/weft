@@ -9,7 +9,7 @@ import { setAutomations, setBackupModel, setCopilotModel, setDefaultBackend, set
 import { freeSlots } from "@/lib/runner";
 import { SKILL_NAME } from "@/lib/skills";
 import { isSubagentModel } from "@/lib/subagents";
-import { AUTOMATION_TRIGGERS, MODES, type Automation, type Backend, type PermissionMode } from "@/lib/types";
+import { AUTOMATION_TRIGGERS, MODES, type Automation, type Backend, type SettingsPatch } from "@/lib/types";
 
 // Every CLI a setting may name. Shared (lib/new-thread.ts), so a CLI added there is
 // settable here too.
@@ -108,24 +108,9 @@ function applyMaxThreads(value: unknown) {
   freeSlots();
 }
 
-function validate(body: {
-  threadPrompt?: unknown;
-  keepAliveMinutes?: unknown;
-  maxThreads?: unknown;
-  defaultPermissionMode?: unknown;
-  defaultBackend?: unknown;
-  automations?: unknown;
-  pushOnDone?: unknown;
-  subagentModel?: unknown;
-  doneModel?: unknown;
-  doneEffort?: unknown;
-  copilotModel?: unknown;
-  reviewAllModel?: unknown;
-  backupModel?: unknown;
-  gooseProviderId?: unknown;
-  gooseModelId?: unknown;
-  gooseBaseUrl?: unknown;
-}): Automation[] | undefined {
+// The body as it arrived: every field checked before anything is saved. The checks are runtime
+// checks on untrusted JSON, so they read each field as it is rather than trusting its type.
+function validate(body: SettingsPatch): Automation[] | undefined {
   if (body.threadPrompt !== undefined && typeof body.threadPrompt !== "string") {
     throw new Error("threadPrompt must be text.");
   }
@@ -136,10 +121,10 @@ function validate(body: {
     throw new Error("keepAliveMinutes must be a number of minutes, 0 or more.");
   }
   validateMaxThreads(body.maxThreads);
-  if (body.defaultPermissionMode !== undefined && !MODES.includes(body.defaultPermissionMode as PermissionMode)) {
+  if (body.defaultPermissionMode !== undefined && !MODES.includes(body.defaultPermissionMode)) {
     throw new Error(`defaultPermissionMode must be one of ${MODES.join(", ")}.`);
   }
-  if (body.defaultBackend !== undefined && !BACKENDS.includes(body.defaultBackend as Backend)) {
+  if (body.defaultBackend !== undefined && !BACKENDS.includes(body.defaultBackend)) {
     throw new Error(`defaultBackend must be one of ${BACKENDS.join(", ")}.`);
   }
   if (body.pushOnDone !== undefined && typeof body.pushOnDone !== "boolean") throw new Error("pushOnDone must be true or false.");
@@ -158,32 +143,19 @@ function validate(body: {
   return body.automations === undefined ? undefined : readAutomations(body.automations);
 }
 
-function commit(body: {
-  threadPrompt?: unknown;
-  keepAliveMinutes?: unknown;
-  maxThreads?: unknown;
-  defaultPermissionMode?: unknown;
-  defaultBackend?: unknown;
-  pushOnDone?: unknown;
-  subagentModel?: unknown;
-  doneModel?: unknown;
-  doneEffort?: unknown;
-  copilotModel?: unknown;
-  reviewAllModel?: unknown;
-  backupModel?: unknown;
-  gooseProviderId?: unknown;
-  gooseModelId?: unknown;
-  gooseBaseUrl?: unknown;
-}, rules: Automation[] | undefined) {
+// The rules arrive already read and checked (readAutomations), so commit saves them as they are.
+// The body type is the shared one (lib/types-settings.ts); the automations field on it is left
+// alone here — the checked rules are what gets saved.
+function commit(body: SettingsPatch, rules: Automation[] | undefined) {
   if (typeof body.threadPrompt === "string") setThreadPrompt(body.threadPrompt);
   if (typeof body.keepAliveMinutes === "number") setKeepAliveMinutes(body.keepAliveMinutes);
   applyMaxThreads(body.maxThreads);
-  if (body.defaultPermissionMode !== undefined) setDefaultPermissionMode(body.defaultPermissionMode as PermissionMode);
-  if (body.defaultBackend !== undefined) setDefaultBackend(body.defaultBackend as Backend);
+  if (body.defaultPermissionMode !== undefined) setDefaultPermissionMode(body.defaultPermissionMode);
+  if (body.defaultBackend !== undefined) setDefaultBackend(body.defaultBackend);
   if (typeof body.pushOnDone === "boolean") setPushOnDone(body.pushOnDone);
   if (isSubagentModel(body.subagentModel)) setSubagentModel(body.subagentModel);
   if (typeof body.doneModel === "string") setDoneModel(body.doneModel);
-  if (typeof body.doneEffort === "string") setDoneEffort(body.doneEffort as "" | "low" | "medium" | "high" | "xhigh" | "max");
+  if (typeof body.doneEffort === "string") setDoneEffort(body.doneEffort);
   if (typeof body.copilotModel === "string") setCopilotModel(body.copilotModel);
   if (typeof body.reviewAllModel === "string") setReviewAllModel(body.reviewAllModel);
   if (typeof body.backupModel === "string") setBackupModel(body.backupModel);
@@ -197,7 +169,9 @@ export async function PATCH(req: Request) {
   const denied = elevated(req);
   if (denied) return denied;
   try {
-    const body = (await req.json()) as Parameters<typeof validate>[0];
+    // The body is parsed JSON, so it is untrusted whatever the type says: the cast gives the
+    // fields their names, and validate() checks each one before anything is saved.
+    const body = (await req.json()) as SettingsPatch;
     const rules = validate(body);
     commit(body, rules);
     return Response.json(settingsView());

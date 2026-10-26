@@ -8,10 +8,15 @@ const deps = vi.hoisted(() => ({
   weft: "WEFT PROMPT",
   project: "",
   skills: "",
+  // Whether Goose reads the folder's instructions on its own (it does when the folder has an AGENTS.md).
+  gooseReads: false,
 }));
 
 vi.mock("./weft-prompts", () => ({ weftSystemPrompt: () => deps.weft }));
-vi.mock("./puku-context", () => ({ codexProjectInstructions: () => deps.project }));
+vi.mock("./puku-context", () => ({
+  codexProjectInstructions: () => deps.project,
+  gooseReadsProjectInstructions: () => deps.gooseReads,
+}));
 vi.mock("./skills", () => ({
   skillIndex: () => deps.skills,
   skillInvocation: (text: string) => text,
@@ -38,6 +43,7 @@ beforeEach(() => {
   deps.weft = "WEFT PROMPT";
   deps.project = "";
   deps.skills = "";
+  deps.gooseReads = false;
 });
 
 describe("the provider and model Goose is given", () => {
@@ -74,6 +80,17 @@ describe("the instructions a turn runs under", () => {
     deps.skills = "";
     // The copilot is the one turn with no attribution line, so it is the one with nothing at all.
     expect(gooseSystemText(plan({ copilot: true }))).toBe("");
+  });
+
+  it("sends the project's instructions itself only when Goose can't read them", () => {
+    deps.project = "PROJECT RULES";
+    // No AGENTS.md in the folder: Goose reads no CLAUDE.md of its own, so Weft sends them.
+    deps.gooseReads = false;
+    expect(gooseSystemText(plan())).toContain("# Project instructions\nPROJECT RULES");
+    // An AGENTS.md is there: Goose loads it, and the `@./path` imports in it, so sending them again
+    // would put the same instructions in the prompt twice.
+    deps.gooseReads = true;
+    expect(gooseSystemText(plan())).not.toContain("PROJECT RULES");
   });
 
   it("tells the copilot how to sign its commits, and the copilot doesn't commit", () => {

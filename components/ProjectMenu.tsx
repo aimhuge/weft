@@ -7,15 +7,13 @@ import { openChangelog } from "@/lib/changelog-open";
 import { filterProjects, folderName, plural, shortPath } from "@/lib/project-bar";
 import type { ProjectSummary } from "@/lib/board-view";
 import Icon from "./Icon";
+import ProjectCloneForm from "./ProjectCloneForm";
+import { FIELD, SUBMIT } from "./project-menu-styles";
 import ReseedButton from "./ReseedButton";
 import SearchField from "./SearchField";
 
-const FIELD =
-  "w-full min-w-0 rounded-md border border-line-strong bg-canvas px-2.5 py-1.5 text-[12px] text-ink outline-none placeholder:text-faint focus:border-accent";
 const MENU_ACTION =
   "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] text-ink hover:bg-sunken disabled:opacity-50";
-const SUBMIT =
-  "shrink-0 rounded-md bg-accent px-3 py-1.5 text-[12px] font-medium text-on-accent hover:opacity-90 disabled:opacity-50";
 
 type Form = "none" | "open" | "new" | "clone";
 
@@ -104,17 +102,6 @@ export default function ProjectMenu({
       return;
     }
     void run(async () => (await api.addProject(path)).path);
-  }
-
-  // Accepts owner/name or a github.com URL; the clone lands in ~/dev and becomes a project.
-  function cloneFromGithub(e: React.SubmitEvent) {
-    e.preventDefault();
-    const slug = folder.trim().replace(/^(https?:\/\/)?(www\.)?github\.com\//, "").replace(/\.git$/, "").replace(/\/+$/, "");
-    if (!/^[\w.-]+\/[\w.-]+$/.test(slug)) {
-      setError("Use owner/name, like aimhuge/weft.");
-      return;
-    }
-    void run(async () => (await api.cloneRepo(slug)).path);
   }
 
   function createProject(e: React.SubmitEvent) {
@@ -217,22 +204,16 @@ export default function ProjectMenu({
           <Icon name="download" size={14} className="text-muted" /> Clone from GitHub…
         </button>
         {form === "clone" && (
-          <form onSubmit={cloneFromGithub} className="flex gap-1.5 px-2.5 pb-2 pt-1">
-            <input
-              autoFocus
-              value={folder}
-              onChange={(e) => {
-                setFolder(e.target.value);
-                setError(null);
-              }}
-              placeholder="owner/name or github.com URL"
-              aria-label="GitHub repo"
-              className={`${FIELD} font-mono`}
-            />
-            <button type="submit" disabled={busy} className={SUBMIT}>
-              {busy ? "Cloning…" : "Clone"}
-            </button>
-          </form>
+          <ProjectCloneForm
+            value={folder}
+            onChange={(next) => {
+              setFolder(next);
+              setError(null);
+            }}
+            busy={busy}
+            onError={setError}
+            run={run}
+          />
         )}
 
         <button onClick={() => showForm("new")} disabled={busy} className={MENU_ACTION}>

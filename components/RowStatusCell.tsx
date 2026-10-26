@@ -5,10 +5,11 @@
 import { useState } from "react";
 import { rowStatus } from "@/lib/list-sheet";
 import { statusActions, type StatusAction } from "@/lib/list-actions";
+import { COLUMN_TONE } from "@/lib/column-tone";
 import type { Card, Column } from "@/lib/types";
 import Icon, { Spinner } from "./Icon";
 import { SheetPopover } from "@aimhuge/sheet/client";
-import { Chevron, TONE } from "./CardRowCells";
+import { Chevron } from "./CardRowCells";
 
 export default function RowStatusCell({ card, column, onAction }: { card: Card; column: Column; onAction: (action: StatusAction) => void }) {
   const [anchor, setAnchor] = useState<DOMRect | null>(null);
@@ -26,7 +27,7 @@ export default function RowStatusCell({ card, column, onAction }: { card: Card; 
         aria-haspopup="menu"
         aria-label={`${status?.word ?? "Status"}: what this card can do`}
         title={status?.tip ?? "Stop, run or move this card"}
-        className={`flex min-w-0 flex-1 items-center gap-1.5 self-stretch text-left ${status?.tone ?? TONE[column].text}`}
+        className={`flex min-w-0 flex-1 items-center gap-1.5 self-stretch text-left ${status?.tone ?? COLUMN_TONE[column].text}`}
       >
         {status && (status.spinner ? <Spinner size={10} /> : <Icon name={status.icon} size={11} />)}
         <span className="truncate">{status?.word ?? ""}</span>

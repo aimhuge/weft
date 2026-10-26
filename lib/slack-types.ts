@@ -2,19 +2,24 @@
 // Mode connection (electron/slack.cjs), the server decides what to post (lib/slack*.ts), and the rail's Slack drawer
 // (components/SlackDrawer.tsx) connects it and picks the channel and events.
 
-// What the server posts about. Each one is a switch in the drawer.
-export interface SlackEvents {
-  commits: boolean;
-  pushes: boolean;
-  deploys: boolean;
-  // A card moved to Needs you, Review or Done: a reply in that card's Slack thread, with a preview of its latest reply.
-  status: boolean;
-  // Growth: a new user, a new team, a payment.
-  growth: boolean;
-}
+// The kinds of update Weft posts, each of which can go to a channel of its own. One list: the drawer's "Post about"
+// checkboxes, the settings' defaults and the server's switch all read it, so a kind can't be added to one and
+// forgotten in another.
+export const SLACK_KINDS = ["commits", "pushes", "deploys", "status", "growth"] as const;
 
-// The kinds of update Weft posts, each of which can go to a channel of its own.
-export type SlackEventKey = keyof SlackEvents;
+export type SlackEventKey = (typeof SLACK_KINDS)[number];
+
+// What each kind is called in the drawer, beside the kind itself.
+export const EVENT_LABELS: Record<SlackEventKey, string> = {
+  commits: "Commits",
+  pushes: "Pushes",
+  deploys: "Deploys (Vercel)",
+  status: "Card status (preview + weft.zip link)",
+  growth: "Growth (new user, new team, payment)",
+};
+
+// Which kinds the server posts about, all of them on by default.
+export type SlackEvents = Record<SlackEventKey, boolean>;
 
 // A project with a channel of its own: its updates go there, and a card started there runs in it.
 export interface SlackLink {
@@ -47,7 +52,7 @@ export const DEFAULT_SLACK_SETTINGS: SlackSettings = {
   channelName: null,
   folder: null,
   links: [],
-  events: { commits: true, pushes: true, deploys: true, status: true, growth: true },
+  events: Object.fromEntries(SLACK_KINDS.map((kind) => [kind, true])) as SlackEvents,
   routes: {},
 };
 

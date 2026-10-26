@@ -49,6 +49,8 @@ vi.mock("node:child_process", () => ({
 vi.mock("./simulator-exec", () => ({
   androidSdk: () => state.sdk,
   bins: () => state.bins,
+  XCODE_APP: "/Applications/Xcode.app",
+  STUDIO_APP: "/Applications/Android Studio.app",
   runText: (name: string, args: string[]): Promise<string> => {
     if (name === "xcrun" && args[0] === "simctl") return Promise.resolve(state.runtimesJson);
     if (name === "emulator" && args[0] === "-list-avds") {

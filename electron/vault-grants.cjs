@@ -4,6 +4,8 @@
 // shows the thread a value, and it doesn't cover writes or pushes to another service: those still ask every time.
 // Kept in memory only, so quitting Weft ends every grant; Revoke (card menu or the 🔐 drawer's Activity) ends one.
 
+const { decideAccess } = require("./vault-access.cjs");
+
 // How long a grant lasts from the Touch ID that gave it.
 const GRANT_MS = 60 * 60_000;
 
@@ -62,7 +64,10 @@ function grantMethods({ grants, prompt, idOf, log }) {
       const who = thread ? `"${thread}"` : "a thread";
       const reason = `let ${who} use ${label}'s secrets for ${spoken(grants.ms)} without asking each time${why ? ` (${why})` : ""}`;
       const line = { action: "grant", by, card, thread, vault: label, detail: why };
-      if (!(await prompt(reason))) return log({ ...line, outcome: "denied" }) && { denied: true, label };
+      // A grant always takes a fresh Touch ID, never the drawer's unlock or a thread's fill unlock, so it
+      // asks even when the card already has access (electron/vault-access.cjs decides it).
+      const access = await decideAccess({ card, vaultId: id, ask: () => prompt(reason) });
+      if (!access.allowed) return log({ ...line, outcome: "denied" }) && { denied: true, label };
       const g = grants.add({ card, thread, id, label });
       log(line);
       return { granted: true, label, until: g.until };

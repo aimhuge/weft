@@ -2,6 +2,7 @@ import { backendFor, MODELS } from "./new-thread";
 import { fallbackFor } from "./model-fallback";
 import { subagentModel } from "./settings";
 import { BACKEND_SHORT, type Backend } from "./types";
+import type { SubagentModel } from "./types-settings";
 
 // Subagents: when a board thread should hand work to a subagent, and on which model. The user picks in
 // Settings ("Use … for subagents") from every model either CLI serves; "choose" leaves it to the thread,
@@ -13,7 +14,9 @@ import { BACKEND_SHORT, type Backend } from "./types";
 //   (`claude -p` or `puku-cli -p`) with Bash instead, told how in its prompt.
 
 // "choose", "inherit", or a model id from MODELS (lib/new-thread.ts); isSubagentModel checks one.
-export type SubagentModel = string;
+// The type itself lives in lib/types-settings.ts, so the types graph the client imports doesn't
+// reach this module (and the settings file it reads) — see the note there.
+export type { SubagentModel };
 
 const COMMAND: Record<Backend, string> = { claude: "claude", puku: "puku-cli", codex: "codex", goose: "goose" };
 

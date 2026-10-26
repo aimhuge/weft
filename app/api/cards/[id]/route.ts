@@ -1,5 +1,7 @@
 import { isAgent, storedAgent } from "@/lib/agents";
+import { listAgents } from "@/lib/agent-store";
 import { firstMessage, messagesForMove, doneOverrides } from "@/lib/automations";
+import { repointCard } from "@/lib/card-repoint";
 import { resolveFolder } from "@/lib/folders";
 import { asText, cleanTitle } from "@/lib/format";
 import { elevated, fail, guard } from "@/lib/guard";
@@ -43,13 +45,12 @@ function setMarks(id: string, body: { starred?: unknown; tags?: unknown; broke?:
 // Who the thread is (lib/agents.ts). Its CLI read the old soul as it started, so the CLI ends here and the next
 // turn resumes the same conversation under the new one.
 async function setAgent(card: Card, value: unknown) {
-  if (!isAgent(value)) throw new Error("Unknown agent.");
+  const agents = listAgents();
+  if (!isAgent(value, agents)) throw new Error("Unknown agent.");
   if (card.role === "copilot") throw new Error("The copilot picks a persona, not an agent.");
-  const agent = storedAgent(value);
+  const agent = storedAgent(value, agents);
   if (agent === card.agent) return;
-  if (isBusy(card.id)) throw new Error("Stop the thread before switching its agent.");
-  updateCard(card.id, { agent });
-  await endSession(card.id);
+  await repointCard(card, { agent }, "Stop the thread before switching its agent.", { isBusy, endSession });
 }
 
 // Your drag to another column (Running only from Backlog; Needs you never by hand).

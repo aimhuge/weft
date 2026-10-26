@@ -60,7 +60,8 @@ export default function TermsPage() {
           Your cards, threads, code, pages, images and files are yours. You give us permission to store, copy,
           process and show them only as needed to run the services for you and the people you share them with, for
           example to sync a card to your other devices or show it to your workspace. We don&apos;t sell your content,
-          and we don&apos;t use it to train AI models.
+          and we don&apos;t use it to train AI models. Our <Link href="/privacy">Privacy Policy</Link> explains
+          what we collect and why.
         </p>
         <p>
           You confirm you have the right to upload what you upload, and that it doesn&apos;t break the law or anyone

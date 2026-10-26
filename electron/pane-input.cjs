@@ -5,8 +5,9 @@
 // An element is a ref from the snapshot (pane-ax.cjs) or a CSS selector. Each operation is a fixed page function;
 // there's no route for arbitrary JS (docs/architecture/agent-browser.md).
 
-const { formatAxTree, parseRef } = require("./pane-ax.cjs");
+const { formatAxTree } = require("./pane-ax.cjs");
 const { keyEvents } = require("./pane-keys.cjs");
+const { callOn, FOCUS, GROUP, resolveElement } = require("./pane-element.cjs");
 
 const VIEWPORTS = {
   phone: { width: 390, height: 844, deviceScaleFactor: 3, mobile: true },
@@ -15,8 +16,6 @@ const VIEWPORTS = {
 const WAIT_DEFAULT_MS = 5000;
 const WAIT_MAX_MS = 30_000;
 const POLL_MS = 150;
-// Every remote object an operation makes is in this group, let go of when the route answers.
-const GROUP = "weft-agent";
 
 // Scrolls the element to the middle and says where its centre is, or what's on top of it there. A label on top of
 // its own input counts as the input, and so does anything inside the element (a button's icon).
@@ -30,14 +29,6 @@ const POINT = `function () {
   if (!top || top === this || this.contains(top) || top.control === this || (top.closest && top.closest("label")?.control === this)) return { x, y };
   const name = top.tagName.toLowerCase() + (top.id ? "#" + top.id : "") + (typeof top.className === "string" && top.className.trim() ? "." + top.className.trim().split(/\\s+/)[0] : "");
   return { x, y, covered: name + (top.innerText ? ' "' + top.innerText.trim().slice(0, 40) + '"' : "") };
-}`;
-const FOCUS = `function () {
-  const field = this.matches("input, textarea, select") || this.isContentEditable;
-  if (!field) return { notField: true };
-  this.focus();
-  if (typeof this.select === "function") this.select();
-  else document.execCommand("selectAll");
-  return {};
 }`;
 const SELECT = `function (values) {
   if (this.tagName !== "SELECT") return { notSelect: true };
@@ -64,40 +55,19 @@ function createPaneInput(/** @type {{ cdp: any, wait?: (ms: number) => Promise<u
     return result.value;
   }
 
-  // An element by ref or selector, as a remote object the page functions run on.
-  async function element(wc, { ref, selector }) {
-    if (ref) {
-      const backendNodeId = parseRef(ref);
-      if (!backendNodeId) throw new Error(`${ref} isn't a ref; refs look like e123 and come from snapshot.`);
-      try {
-        const { object } = await cdp.send(wc, "DOM.resolveNode", { backendNodeId, objectGroup: GROUP });
-        return { objectId: object.objectId, label: ref };
-      } catch {
-        throw new Error(`${ref} isn't on the page any more; take a new snapshot.`);
-      }
-    }
-    const sel = String(selector ?? "").trim();
-    if (!sel) throw new Error("Give a ref from snapshot, or a CSS selector.");
-    const { result, exceptionDetails } = await cdp.send(wc, "Runtime.evaluate", { expression: `document.querySelector(${q(sel)})`, objectGroup: GROUP });
-    if (exceptionDetails) throw new Error(`${sel} isn't a valid CSS selector.`);
-    if (!result.objectId) throw new Error(`No element matches ${sel}`);
-    return { objectId: result.objectId, label: sel };
+  // An element by ref or selector, as a remote object the page functions run on. A selector that matches
+  // nothing is an error here: the agent asked for something that isn't there.
+  async function element(wc, target) {
+    const el = await resolveElement(cdp, wc, target);
+    if (!el) throw new Error(`No element matches ${target.selector}`);
+    return el;
   }
 
-  async function callOn(wc, el, fn, args = []) {
-    const { result, exceptionDetails } = await cdp.send(wc, "Runtime.callFunctionOn", {
-      objectId: el.objectId,
-      functionDeclaration: fn,
-      arguments: args.map((value) => ({ value })),
-      returnByValue: true,
-    });
-    if (exceptionDetails) throw new Error(exceptionDetails.exception?.description || `Couldn't act on ${el.label}.`);
-    return result.value ?? {};
-  }
+  const call = (wc, el, fn, args = []) => callOn(cdp, wc, el, fn, args);
 
   async function point(wc, target) {
     const el = await element(wc, target);
-    const p = await callOn(wc, el, POINT);
+    const p = await call(wc, el, POINT);
     if (p.hidden) throw new Error(`${el.label} has no size on the page (hidden?); try its label, or snapshot for what's visible.`);
     if (p.covered) throw new Error(`${p.covered} is on top of ${el.label}; close or click that first.`);
     return { ...p, label: el.label };
@@ -124,7 +94,7 @@ function createPaneInput(/** @type {{ cdp: any, wait?: (ms: number) => Promise<u
 
   async function press(wc, keys, target) {
     const events = keyEvents(keys);
-    if (target?.ref || target?.selector) await callOn(wc, await element(wc, target), "function () { this.focus(); return {}; }");
+    if (target?.ref || target?.selector) await call(wc, await element(wc, target), "function () { this.focus(); return {}; }");
     for (const e of events) await cdp.send(wc, "Input.dispatchKeyEvent", e);
     return { pressed: String(keys) };
   }
@@ -132,7 +102,7 @@ function createPaneInput(/** @type {{ cdp: any, wait?: (ms: number) => Promise<u
   // Replaces the field's contents, as if typed: the page's own input handlers run. submit presses Enter after.
   async function type(wc, target, text, { submit = false } = {}) {
     const el = await element(wc, target);
-    const r = await callOn(wc, el, FOCUS);
+    const r = await call(wc, el, FOCUS);
     if (r.notField) throw new Error(`${el.label} isn't a text field.`);
     const value = String(text ?? "");
     if (value) await cdp.send(wc, "Input.insertText", { text: value });
@@ -144,7 +114,7 @@ function createPaneInput(/** @type {{ cdp: any, wait?: (ms: number) => Promise<u
   async function select(wc, target, values) {
     const el = await element(wc, target);
     const wanted = (Array.isArray(values) ? values : [values]).map(String);
-    const r = await callOn(wc, el, SELECT, [wanted]);
+    const r = await call(wc, el, SELECT, [wanted]);
     if (r.notSelect) throw new Error(`${el.label} isn't a <select>; click it and pick the option instead.`);
     if (r.missing) throw new Error(`No option matches ${wanted.join(", ")}. The options are: ${r.missing.join(", ")}`);
     return { picked: r.picked };
@@ -156,7 +126,7 @@ function createPaneInput(/** @type {{ cdp: any, wait?: (ms: number) => Promise<u
     const target = { ref, selector };
     if ((ref || selector) && !direction) {
       const el = await element(wc, target);
-      await callOn(wc, el, `function () { this.scrollIntoView({ block: "center", behavior: "instant" }); return {}; }`);
+      await call(wc, el, `function () { this.scrollIntoView({ block: "center", behavior: "instant" }); return {}; }`);
       return { scrolled: el.label };
     }
     const dir = String(direction || "down");

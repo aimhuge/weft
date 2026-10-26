@@ -91,8 +91,19 @@ the one thing in a turn that can't be passed as a flag.
 `--max-turns 40` (`GOOSE_MAX_TURNS`) is the other flag on the line, and it is the one guard a Weft thread has
 that a hand-run Goose doesn't: it caps how many model turns Goose may take before it has to stop and ask. The
 instructions themselves go in `--system`, and they are Weft's own prompt for the card (`weftSystemPrompt()`)
-plus the project's `CLAUDE.md` and the skill index — Goose reads a folder's instructions and skills on its own,
-but not a `CLAUDE.md`, so Weft puts that in the system prompt instead.
+plus the skill index — and plus the project's `CLAUDE.md` only when Goose cannot read it itself.
+
+### Who reads the project's instructions
+
+Goose loads `AGENTS.md` from the folder it runs in, and resolves that file's `@./path` imports, so a project
+that puts its instructions behind `AGENTS.md` needs nothing from us. Goose reads no `CLAUDE.md` and no
+`SOUL.md` by itself, so a project that keeps them elsewhere is still Weft's to inject. `gooseSystemText()`
+asks `gooseReadsProjectInstructions()` which of the two it is, and sends the `CLAUDE.md` only when the folder
+has no `AGENTS.md` for Goose to load.
+
+Sending both is not harmless duplication: the same instructions in the prompt twice is twice the tokens, and
+the model reads the copy in `--system` as authoritative. Weft's own repo keeps `AGENTS.md` importing
+`@./CLAUDE.md`, which imports `SOUL.md`, so a Goose turn there gets the soul once, from Goose.
 
 The recipe is the third input shape, and Weft does not use it to run: `--recipe` excludes both `--text` and
 `--system`, so a recipe-driven turn would lose Weft's instructions. But the same plan is rendered as a Goose

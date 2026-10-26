@@ -2,8 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "./api-client";
-import type { KeychainRecord } from "./keychain-audit-record";
-import type { AuditActivity, VaultGrant } from "./keychain-audit-view";
+import type { AuditActivity, KeychainRecord, VaultGrant } from "./keychain-audit-types";
 import { vaultBridge } from "./vault-view";
 
 // How often the open card looks again, so a thread's fill shows up while you watch.

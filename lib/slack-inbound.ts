@@ -1,4 +1,4 @@
-import { createCardFromBody, startCard } from "./new-card";
+import { startFeatureCard } from "./card-starter";
 import { sendMessage } from "./runner";
 import { cardLink } from "./slack-link";
 import { cardRootMessage, noticeMessage } from "./slack-messages";
@@ -39,16 +39,17 @@ export async function handleInbound(inbound: SlackInbound): Promise<InboundResul
   const folder = folderFor(slackSettings(), inbound.channel);
   if (!folder) return refuse(inbound, "Map this channel to a project, or pick a default one: Weft → Slack on the left rail.");
 
-  const card = createCardFromBody({ prompt: text, cwd: folder, tags: ["slack"] });
-  const link = await cardLink(card.id, card.cwd);
-  const root = cardRootMessage(card.title, card.cwd, link, inbound.user);
-  // A mention's card replies under the mention; a slash command leaves no message, so the card's first one is the root.
-  const under = inbound.kind === "mention" ? (inbound.threadTs ?? inbound.ts) : undefined;
-  const posted = await postToSlack(inbound.channel, root, under);
-  const ts = under ?? posted.ts;
-  if (ts) saveCardThread(card.id, { channel: posted.channel, ts });
-  // Started only once its thread is saved: a turn that fails at once lands in Needs you, and that update has to find
-  // this thread rather than open a stray one in the drawer's channel.
-  startCard(card);
+  // The card's Slack thread is posted and saved before its thread starts (the helper's beforeStart): a turn
+  // that fails at once lands in Needs you, and that update has to find this thread rather than open a stray
+  // one in the drawer's channel.
+  const card = await startFeatureCard({ prompt: text, cwd: folder, tags: ["slack"] }, async (made) => {
+    const link = await cardLink(made.id, made.cwd);
+    const root = cardRootMessage(made.title, made.cwd, link, inbound.user);
+    // A mention's card replies under the mention; a slash command leaves no message, so the card's first one is the root.
+    const under = inbound.kind === "mention" ? (inbound.threadTs ?? inbound.ts) : undefined;
+    const posted = await postToSlack(inbound.channel, root, under);
+    const ts = under ?? posted.ts;
+    if (ts) saveCardThread(made.id, { channel: posted.channel, ts });
+  });
   return { kind: "started", cardId: card.id };
 }

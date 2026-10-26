@@ -4,7 +4,7 @@ import { createElement } from "react";
 import { renderToString } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { Card } from "./types";
-import { claimFileName, publishWaits, useWaitersOn, waitersOf } from "./waits-on";
+import { publishWaits, useWaitersOn, waitersOf } from "./waits-on";
 
 function card(id: string, over: Partial<Card> = {}): Card {
   return { id, title: id, prompt: "", cwd: "/repo", backend: "claude", permissionMode: "default", column: "running", createdAt: 0, updatedAt: 0, ...over };
@@ -15,13 +15,6 @@ const waiting = (id: string, holderId: string) =>
     emoji: "🧪",
     pending: { id: `p-${id}`, toolName: "Edit", title: "t", input: {}, waiting: true, why: { category: "same-code", detail: "d", holder: { id: holderId, title: holderId, claim: "/repo/%231/Login.tsx#Form" } } },
   });
-
-describe("claimFileName", () => {
-  it("reads a claim key's file name, unescaped", () => {
-    expect(claimFileName("/r/a%23b%25.ts#Form")).toBe("a#b%.ts");
-    expect(claimFileName("/r/a.ts")).toBe("a.ts");
-  });
-});
 
 describe("waitersOf", () => {
   it("lists the waiting cards by the card they wait on, skipping the rest", () => {

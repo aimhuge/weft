@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { RESET_GRACE_MS, addScheduled, dueMessage, formatAt, nextFiveHourReset, nextWeeklyReset, planResets, sendLaterOptions, sendsWhen, toLocalInput } from "./schedule";
+import { RESET_GRACE_MS, dueMessage, formatAt, nextFiveHourReset, nextWeeklyReset, planResets, sendLaterOptions, sendsWhen, toLocalInput } from "./schedule";
 import type { Card } from "./types";
 
 const NOW = new Date(2026, 9, 10, 22, 30).getTime();
@@ -100,16 +100,7 @@ describe("sendLaterOptions", () => {
   });
 });
 
-describe("addScheduled and dueMessage", () => {
-  it("keeps the soonest first", () => {
-    const list = addScheduled([{ id: "b", text: "b", at: NOW + 2 }], { id: "a", text: "a", at: NOW + 1 });
-    expect(list.map((m) => m.id)).toEqual(["a", "b"]);
-  });
-
-  it("starts a list for a card that has none", () => {
-    expect(addScheduled(undefined, { id: "a", text: "a", at: NOW })).toEqual([{ id: "a", text: "a", at: NOW }]);
-  });
-
+describe("dueMessage", () => {
   it("finds the message whose time has come", () => {
     const scheduled = [{ id: "a", text: "hi", at: NOW }];
     expect(dueMessage(card({ scheduled }), NOW - 1)).toBeUndefined();

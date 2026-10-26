@@ -1,9 +1,10 @@
 import { apiFetch, API_HEADERS } from "./api-client";
 import { resetIntros } from "./feature-intros";
-import type { GithubProfile } from "./github-profile";
 import { resetSyncPrompt } from "./sync-prompt";
-import type { Welcome } from "./welcome";
-import type { WelcomeProfile, WelcomeProject } from "./welcome-preview";
+// The welcome's shapes come from lib/welcome-types.ts (types only), not from the server modules that
+// hold them: naming a server module's type still makes Turbopack resolve that module (node:fs,
+// node:child_process), and a browser chunk can't hold those — the board failed to compile.
+import type { GithubProfile, Welcome, WelcomeProfile, WelcomeProject } from "./welcome-types";
 
 // The board's side of /api/welcome (lib/welcome.ts): load it, answer it, change it in Settings.
 

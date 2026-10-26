@@ -246,4 +246,8 @@ describe("bandsToDraw", () => {
       ["review", false, 1],
     ]);
   });
+
+  it("keeps an empty Done band when there are archived cards to show from it", () => {
+    expect(bandsToDraw([], [], true).map((g) => g.column)).toEqual(["backlog", "running", "done"]);
+  });
 });

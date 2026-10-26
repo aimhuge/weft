@@ -1,7 +1,8 @@
 import { tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
-import { attempt, shell, text } from "./browser-shell";
+import { attempt, shell, text, type ToolResult } from "./browser-shell";
 import { asText } from "./format";
+import { noteSnapshot, recordStep, type StepArgs } from "./site-notes-trail";
 
 // mcp__browser__* for acting on the pane's page: an accessibility snapshot with refs, trusted clicks, keys and
 // typing, select, scroll, waits, the viewport, and the page's console and failed requests. Electron main does
@@ -34,6 +35,13 @@ function list(entries: unknown, line: (e: Entry) => string, none: string) {
 export function actTools(cardId: () => string | undefined) {
   const on = (route: string, body: Record<string, unknown>) => shell(`/browser/${route}`, { ...body, key: cardId() });
   const label = (args: { ref?: string; selector?: string }) => args.ref ?? args.selector ?? "";
+  // An action on the page, kept in the card's trail for its site notes (lib/site-notes-trail.ts): by label, never by value.
+  const act = (name: string, args: StepArgs, run: () => Promise<ToolResult>) =>
+    attempt(run).then((r) => {
+      const first = r.content[0];
+      recordStep(cardId(), name, args, !r.isError, r.isError && first?.type === "text" ? first.text : undefined);
+      return r;
+    });
   return [
     tool(
       "snapshot",
@@ -42,6 +50,7 @@ export function actTools(cardId: () => string | undefined) {
       () =>
         attempt(async () => {
           const r = await on("snapshot", {});
+          noteSnapshot(cardId(), `URL: ${asText(r.url)}\n${asText(r.text)}`);
           const more = Number(r.dropped) > 0 ? `\n… ${String(r.dropped)} more elements didn't fit; scroll or use read_page for the rest.` : "";
           return text(`URL: ${asText(r.url)}\nTitle: ${asText(r.title)}\n\n${asText(r.text)}${more}`);
         }),
@@ -51,13 +60,13 @@ export function actTools(cardId: () => string | undefined) {
       "Click an element in the browser pane, by ref (from snapshot) or CSS selector, with a real mouse click. Fails, naming what's in the way, when something covers it.",
       { ...target, double: z.boolean().optional().describe("Double-click") },
       (args) =>
-        attempt(async () => {
+        act("click", args, async () => {
           await on("click", args);
           return text(`Clicked ${label(args)}`);
         }),
     ),
     tool("hover", "Move the mouse over an element in the browser pane, so hover menus and tooltips open.", target, (args) =>
-      attempt(async () => {
+      act("hover", args, async () => {
         await on("hover", args);
         return text(`Hovering over ${label(args)}`);
       }),
@@ -67,7 +76,7 @@ export function actTools(cardId: () => string | undefined) {
       "Replace the contents of a text field in the browser pane (by ref or CSS selector) with text, typed so the page's own handlers run. submit presses Enter after.",
       { ...target, text: z.string(), submit: z.boolean().optional().describe("Press Enter after typing") },
       (args) =>
-        attempt(async () => {
+        act("type_text", args, async () => {
           await on("type", args);
           return text(`Typed into ${label(args)}${args.submit ? " and pressed Enter" : ""}`);
         }),
@@ -77,7 +86,7 @@ export function actTools(cardId: () => string | undefined) {
       'Press a key or combo in the browser pane: "Enter", "Escape", "Tab", "Shift+Tab", "ArrowDown", "Meta+a". With a ref or selector, focuses that element first.',
       { keys: z.string(), ...target },
       (args) =>
-        attempt(async () => {
+        act("press_key", args, async () => {
           await on("press", args);
           return text(`Pressed ${args.keys}`);
         }),
@@ -87,7 +96,7 @@ export function actTools(cardId: () => string | undefined) {
       "Choose an option in a <select> in the browser pane, by the option's value or its visible label. Several values for a multi-select.",
       { ...target, values: z.array(z.string()).min(1) },
       (args) =>
-        attempt(async () => {
+        act("select_option", args, async () => {
           const r = await on("select", args);
           return text(`Selected ${(r.picked as string[]).join(", ")}`);
         }),
@@ -97,7 +106,7 @@ export function actTools(cardId: () => string | undefined) {
       "Scroll the browser pane's page (or the scrolling box under an element) up, down, left or right by amount pixels (default 600); with only a ref or selector, scroll that element into view.",
       { ...target, direction: z.enum(["up", "down", "left", "right"]).optional(), amount: z.number().optional() },
       (args) =>
-        attempt(async () => {
+        act("scroll", args, async () => {
           const r = await on("scroll", args);
           if (r.scrolled) return text(`Scrolled ${asText(r.scrolled)} into view`);
           return text(`Scrolled ${args.direction ?? "down"}; now at ${String(r.scrollY)}px of ${String(r.height)}px (${String(r.viewport)}px visible)`);

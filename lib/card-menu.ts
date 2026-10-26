@@ -1,4 +1,4 @@
-import { AGENT_ORDER, AGENTS, agentOf, type ThreadAgent } from "./agents";
+import { agentOf, BUILT_IN_AGENTS, type AgentInfo, type ThreadAgent } from "./agents";
 import { isLive } from "./format";
 import { permissionOptions, type Backend, type Card, type Column, type DevServerStatus, type PermissionMode } from "./types";
 import { BACKENDS } from "./new-thread";
@@ -81,8 +81,6 @@ const MENU_KEYS: Record<string, string> = {
   // from (BACKENDS), so a CLI added there always gets a key: a hand-written list went stale once
   // already, and the new item came out with no key at all.
   ...Object.fromEntries(BACKENDS.map((backend, i) => [`switch:${backend.id}`, switchKey(i)])),
-  "agent:builder": "Shift+W",
-  "agent:copywriter": "W",
   "new-here": "N",
   reveal: "F",
   "copy-path": "C",
@@ -103,7 +101,8 @@ const MENU_KEYS: Record<string, string> = {
 // dev is the card's dev server, when its review plan names one.
 // access: whether the card has standing 🔐 vault access (electron/vault-grants.cjs), or undefined when the shell
 // can't give it (a plain browser tab, an older shell), which leaves the item out.
-export function cardMenu(card: Card, dev?: DevServerStatus | null, access?: boolean): MenuItem[] {
+// agents: every agent there is (lib/use-agents.ts), for the "Agent: …" items; the built-ins when left out.
+export function cardMenu(card: Card, dev?: DevServerStatus | null, access?: boolean, agents: AgentInfo[] = BUILT_IN_AGENTS): MenuItem[] {
   const live = isLive(card);
   const items: MenuItem[] = [{ id: "open", label: "Open Thread" }, { id: "rename", label: "Rename…" }, SEPARATOR];
 
@@ -127,7 +126,7 @@ export function cardMenu(card: Card, dev?: DevServerStatus | null, access?: bool
     items.push({ id: `mode:${m.id}`, label: `Permissions: ${m.label}`, checked: card.permissionMode === m.id });
   }
   items.push(SEPARATOR);
-  items.push(...switchItems(card, live), ...agentItems(card, live));
+  items.push(...switchItems(card, live), ...agentItems(card, live, agents));
   items.push(SEPARATOR);
 
   items.push({ id: "new-here", label: "New Thread in This Folder" }, { id: "reveal", label: "Reveal Folder in Finder" });
@@ -157,15 +156,25 @@ function switchItems(card: Card, live: boolean): MenuItem[] {
   }));
 }
 
+// Each agent's key, by its place in the list: Shift+W for Builder, W for Copywriter, then ⌥1 to ⌥9 for the ones you made.
+function agentKey(index: number): string | undefined {
+  if (index < 2) return index === 0 ? "Shift+W" : "W";
+  return index <= 10 ? `Alt+${index - 1}` : undefined;
+}
+
 // "Agent: <name>", ticked on the card's own: who the thread is (lib/agents.ts). A switch ends its CLI, so not mid-turn.
-function agentItems(card: Card, live: boolean): MenuItem[] {
-  const current = agentOf(card.agent).id;
-  return AGENT_ORDER.map((id) => ({
-    id: `agent:${id}`,
-    label: `Agent: ${AGENTS[id].emoji} ${AGENTS[id].name}`,
-    checked: current === id,
-    enabled: !live || current === id,
-  }));
+function agentItems(card: Card, live: boolean, agents: AgentInfo[]): MenuItem[] {
+  const current = agentOf(card.agent, agents).id;
+  return agents.map((agent, i) => {
+    const key = agentKey(i);
+    return {
+      id: `agent:${agent.id}`,
+      label: `Agent: ${agent.emoji} ${agent.name}`,
+      checked: current === agent.id,
+      enabled: !live || current === agent.id,
+      ...(key ? { accelerator: key } : {}),
+    };
+  });
 }
 
 // A starred card is never auto-archived. Tags are the card's own, or ones Weft picked (lib/tags.ts).

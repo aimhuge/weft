@@ -47,6 +47,14 @@ describe("CardActions", () => {
     renderActions({ live: true });
     expect(screen.getByRole("button", { name: "Archive card" })).toHaveProperty("disabled", true);
   });
+
+  it("toggles: an archived card shows it pressed and unarchives, even mid-turn", async () => {
+    const props = renderActions({ card: makeCard({ archived: true }), live: true });
+    const button = screen.getByRole("button", { name: "Unarchive card" });
+    expect(button).toHaveAttribute("aria-pressed", "true");
+    await userEvent.click(button);
+    expect(props.onArchive).toHaveBeenCalledOnce();
+  });
 });
 
 describe("CardActions beside the browser pane", () => {

@@ -1,5 +1,6 @@
 import { licenseFinding, readLicense } from "./skill-license";
 import { BINARY_EXT, CODE_EXT, HIDDEN_CHARS, LOCAL_HOST, RULES, TEST_PATH } from "./skill-scan-rules";
+import { SCAN_VERDICT_RANK } from "./skill-verdict";
 import type { ScanFinding, SkillFile, SkillScan } from "./types";
 
 // Weft's skill scan: every text file of a skill against the rules in lib/skill-scan-rules.ts, plus its
@@ -58,8 +59,6 @@ export function callHosts(files: SkillFile[]): string[] {
   return [...hosts].sort();
 }
 
-const RANK = { danger: 0, warn: 1, info: 2 } as const;
-
 export function scanFiles(files: SkillFile[]): SkillScan {
   const findings: ScanFinding[] = [];
   for (const file of files) {
@@ -75,7 +74,7 @@ export function scanFiles(files: SkillFile[]): SkillScan {
   findings.push(licenseFinding(license));
   const hosts = callHosts(files);
   if (hosts.length) findings.push({ severity: "info", category: "telemetry", rule: "hosts", message: `Its scripts call ${hosts.length === 1 ? "1 host" : `${hosts.length} hosts`}: ${hosts.slice(0, 6).join(", ")}${hosts.length > 6 ? "…" : ""}` });
-  findings.sort((a, b) => RANK[a.severity] - RANK[b.severity]);
+  findings.sort((a, b) => SCAN_VERDICT_RANK[a.severity] - SCAN_VERDICT_RANK[b.severity]);
   const verdict = findings.some((f) => f.severity === "danger") ? "danger" : findings.some((f) => f.severity === "warn") ? "warn" : "clean";
   return { verdict, findings: findings.slice(0, MAX_FINDINGS), license, hosts, files: files.length, bytes: files.reduce((n, f) => n + f.contents.length, 0) };
 }

@@ -15,6 +15,8 @@ vi.mock("./settings", () => ({ listProjects: vi.fn(() => projects.list) }));
 type Callback = (err: unknown, out?: { stdout: string }) => void;
 const execFile = vi.hoisted(() => vi.fn());
 vi.mock("node:child_process", () => ({ execFile }));
+const runClone = vi.hoisted(() => vi.fn<(fullName: string, target: string) => Promise<void>>(() => Promise.resolve()));
+vi.mock("./clone-progress", () => ({ runClone }));
 
 const { cloneRepo, githubRepos, githubSlug, localRepos, projectRoot } = await import("./repos");
 const { listProjects } = await import("./settings");
@@ -29,6 +31,7 @@ beforeEach(() => {
   g.__weftRoots.clear();
   projects.list = [];
   execFile.mockReset();
+  runClone.mockClear();
   vi.mocked(listProjects).mockClear();
 });
 
@@ -315,13 +318,13 @@ describe("cloneRepo", () => {
     for (const bad of ["app", "a/b/c", "me/app;rm", " me/app", "me/"]) {
       await expect(cloneRepo(bad), bad).rejects.toThrow("Pick a repo like owner/name.");
     }
-    expect(execFile).not.toHaveBeenCalled();
+    expect(runClone).not.toHaveBeenCalled();
   });
 
   it("returns an existing clone without running gh, ignoring case", async () => {
     repo(at("dev", "app"), { origin: "https://github.com/Me/App.git" });
     expect(await cloneRepo("me/app")).toBe(at("dev", "app"));
-    expect(execFile).not.toHaveBeenCalled();
+    expect(runClone).not.toHaveBeenCalled();
   });
 
   it("scans fresh before looking for an existing clone", async () => {
@@ -336,12 +339,7 @@ describe("cloneRepo", () => {
     ghReturns("");
     localRepos();
     expect(await cloneRepo("me/app")).toBe(at("dev", "app-3"));
-    expect(execFile).toHaveBeenCalledWith(
-      "gh",
-      ["repo", "clone", "me/app", at("dev", "app-3")],
-      { timeout: 600_000, maxBuffer: 8 * 1024 * 1024 },
-      expect.any(Function),
-    );
+    expect(runClone).toHaveBeenCalledWith("me/app", at("dev", "app-3"));
     expect(g.__weftRepos).toBeUndefined();
   });
 
@@ -351,7 +349,7 @@ describe("cloneRepo", () => {
   });
 
   it("explains a failed clone", async () => {
-    ghFails(Object.assign(new Error("exit 1"), { stderr: "GraphQL: Could not resolve to a Repository\n" }));
+    runClone.mockRejectedValueOnce(new Error("GraphQL: Could not resolve to a Repository\n"));
     await expect(cloneRepo("me/missing")).rejects.toThrow("Couldn't clone me/missing: GraphQL: Could not resolve to a Repository");
   });
 });

@@ -331,7 +331,7 @@ function createBrowserPane({ getWindow, getAppView, token, onContents, pages, on
     return { jpg: image.toJPEG(78).toString("base64") };
   }
 
-  const paneSecrets = createPaneSecrets({ secrets, requirePage, typeText });
+  const paneSecrets = createPaneSecrets({ secrets, requirePage, typeText, cdp });
 
   // Resolves to the control server's base URL.
   function startControlServer() {

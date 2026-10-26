@@ -69,11 +69,6 @@ export function sendLaterOptions(backend: Card["backend"], resets: PlanResets, n
   return options;
 }
 
-// The card's scheduled messages with this one added, soonest first.
-export function addScheduled(list: ScheduledMessage[] | undefined, message: ScheduledMessage): ScheduledMessage[] {
-  return [...(list ?? []), message].sort((a, b) => a.at - b.at);
-}
-
 // The message whose time has come, if any (the soonest). A message held for a free slot isn't timed: it goes when
 // one frees (lib/thread-slots.ts), not when the scheduler finds it due.
 export function dueMessage(card: Card, now = Date.now()): ScheduledMessage | undefined {

@@ -1,5 +1,8 @@
 Read SOUL.md first: it says who Weft is, what it values, and where things live.
 
+<!-- Goose reads this file on its own, and imports other files as @./path. CLAUDE.md pulls in SOUL.md. -->
+@./CLAUDE.md
+
 <!-- BEGIN:nextjs-agent-rules -->
 
 ## This is NOT the Next.js you know

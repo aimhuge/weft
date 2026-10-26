@@ -5,7 +5,8 @@ import { cardMenu, columnMenu, resumeCommand, withAccelerators, type CardAction,
 import { toAccelerator, useShortcutList } from "@/lib/hotkeys";
 import { BACKEND_LABELS, type Backend, type Card, type Column, type DevServerStatus, type PermissionMode } from "@/lib/types";
 import { useDeleteDialog } from "@/lib/use-delete-dialog";
-import { AGENTS, type ThreadAgent } from "@/lib/agents";
+import { findAgent } from "@/lib/agents";
+import { useAgents } from "@/lib/use-agents";
 
 // What the board's right-click menus act through: the same functions its buttons, drag and command palette use.
 export interface BoardMenuDeps {
@@ -34,6 +35,8 @@ export function useBoardMenus(deps: BoardMenuDeps) {
   // Menu items that have a board shortcut use its key, read from the registry: menu item id -> shortcut id.
   // Keys the open menu handles itself (Return, arrows…) are skipped, so card-open shows O, not ↩.
   const shortcuts = useShortcutList();
+  // Every agent, for the "Agent: …" items (lib/use-agents.ts).
+  const agents = useAgents();
   // The card whose tags are being edited (Tags…); the board shows components/TagsDialog.tsx for it.
   const [tagging, setTagging] = useState<Card | null>(null);
   // The card whose share link is open (Share…); the board shows components/ShareCardDialog.tsx for it.
@@ -54,7 +57,7 @@ export function useBoardMenus(deps: BoardMenuDeps) {
     e.stopPropagation();
     const dev = card.review?.dev ? await api.devStatus(card.id).then((r) => r.status, () => null) : null;
     const access = await hasVaultAccess(card);
-    const picked = (await shell.popupMenu(withAccelerators(cardMenu(card, dev, access), keys({ open: "card-open", archive: "archive" })))) as CardAction | null;
+    const picked = (await shell.popupMenu(withAccelerators(cardMenu(card, dev, access, agents), keys({ open: "card-open", archive: "archive" })))) as CardAction | null;
     if (picked) runCardAction(card, picked).catch(deps.notify);
   }
 
@@ -92,7 +95,8 @@ export function useBoardMenus(deps: BoardMenuDeps) {
   // "Agent: <name>" — a new soul for the thread; its next message resumes the conversation under it.
   async function runAgentAction(card: Card, action: CardAction) {
     if (!action.startsWith("agent:")) return false;
-    const agent = AGENTS[action.slice(6) as ThreadAgent];
+    const agent = findAgent(action.slice(6), agents);
+    if (!agent) return true;
     await api.setAgent(card.id, agent.id);
     deps.toast(`“${card.title}” is now the ${agent.name}: its next message starts under the new soul.`);
     return true;

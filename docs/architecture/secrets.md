@@ -163,7 +163,8 @@ denied). A file watcher notices hand edits and offers "Import changes", so editi
   - `useFor` asks for Touch ID ("let a thread type NAME (owner/repo) into site"). Approvals are their own, one per card,
     site and vault, open for `UNLOCK_MS` from the last use: the drawer being unlocked never lets a thread in, and a yes for
     one site never covers another. Lock clears them.
-  - The pane types the value (`electron/pane-actions.cjs`), masks the field with `-webkit-text-security` so screenshots
+  - The pane types the value (`electron/pane-actions.cjs`, finding the field the one way the agent tools do, `electron/pane-element.cjs`),
+    masks the field with `-webkit-text-security` so screenshots
     don't show it, and `read_page` swaps the value for `‹NAME›` in the page's text and title.
   - The tools are trusted (`isTrustedTool`): Touch ID is the one yes, with no permission prompt before it.
   - Limits: a page's own script can still read a field it was given (that's what the field is for), so the https rule
@@ -286,7 +287,8 @@ for it. Built 2026-10-26.
   grant, revoke). A line names who (`you`, `thread` with card and title, `weft`) and, read back from your account,
   whose it is (the account's name, so a thread's line reads "Alex Miller's thread “…”"), the names, the site or command,
   `via` (`grant`, `touch-id`, `unlocked`, `rule`, `once`, `always`) and the outcome (`ok`, `denied`, `missing`,
-  `error`). Never a value, not even a tail.
+  `error`). Never a value, not even a tail. The `via` words are decided in one place (`electron/vault-access.cjs`),
+  so the fill, a command run with secrets and a grant all say the same thing.
 - **Kept in the database, not on the Mac.** A file on your own disk is one you can edit, so the record is the
   `keychain_events` table in your Weft account and `~/.weft/vault/audit.jsonl` (0600; `lib/secret-guard-files.ts`
   keeps every thread out of `vault/`) is only the outbox: one JSON line per event not uploaded yet, with an id and a
@@ -303,7 +305,7 @@ for it. Built 2026-10-26.
   per account and Mac. So what's held back shows how late it came, and what's taken out of the outbox shows as a gap.
   A user can't edit the record, only add to it or stop Weft adding.
 - **Where you see it.** Settings → Security → **Keychain access** (`components/KeychainAccess.tsx`,
-  `lib/use-keychain-access.ts`, `lib/keychain-audit-view.ts`): the threads with standing access, each with Revoke,
+  `lib/use-keychain-access.ts`, `lib/keychain-audit-view.ts`, the shapes in `lib/keychain-audit-types.ts`): the threads with standing access, each with Revoke,
   then the log as sentences ("Alex Miller's thread “Fix login” typed STRIPE_KEY (o/r) into dashboard.stripe.com ·
   standing access"), newest first. The lines come from your account (`GET /api/account/keychain-events`,
   `lib/keychain-audit-record.ts`) merged with the ones still waiting on the Mac (IPC `vault:activity`, board window

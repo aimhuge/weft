@@ -34,12 +34,14 @@ export function CardMarks({ card, live, onShare, onStar, onArchive }: CardMarkPr
         </button>
       )}
       <CrashGuard inline what="star"><StarButton variant="header" starred={Boolean(card.starred)} onClick={onStar} /></CrashGuard>
+      {/* A toggle: lit while the card is archived, and unarchiving works even mid-turn (only archiving waits). */}
       <button
         onClick={onArchive}
-        disabled={live}
+        disabled={live && !card.archived}
+        aria-pressed={Boolean(card.archived)}
         title={hint("archive", card.archived ? "Unarchive card" : "Archive card")}
         aria-label={card.archived ? "Unarchive card" : "Archive card"}
-        className={BUTTON}
+        className={card.archived ? `${BUTTON} bg-sunken !text-accent` : BUTTON}
       >
         <Icon name="archive" size={15} />
       </button>

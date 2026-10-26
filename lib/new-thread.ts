@@ -76,9 +76,9 @@ export const MODELS: Record<Backend, { id: string; label: string }[]> = {
     { id: "puku-ai-2.8", label: "Puku AI 2.8" },
     { id: "puku-ai-2.7", label: "Puku AI 2.7" },
   ],
-  codex: [{ id: CODEX_DEFAULT_MODEL, label: "Codex default" }],
+  codex: [{ id: CODEX_DEFAULT_MODEL, label: "Let Codex choose" }],
   goose: [
-    { id: GOOSE_DEFAULT_MODEL, label: "Goose default" },
+    { id: GOOSE_DEFAULT_MODEL, label: "Let Goose choose" },
     { id: "anthropic/claude-sonnet-4.5", label: "Claude Sonnet 4.5 (OpenRouter)" },
     { id: "anthropic/claude-opus-4.1", label: "Claude Opus 4.1 (OpenRouter)" },
     { id: "openai/gpt-4.1", label: "GPT-4.1 (OpenRouter)" },

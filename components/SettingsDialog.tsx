@@ -11,6 +11,7 @@ import { SettingsCard, SettingsUnsavedDot } from "./SettingsLayout";
 import Icon, { Spinner } from "./Icon";
 import Modal from "./Modal";
 import SettingsAccountsPage from "./SettingsAccountsPage";
+import SettingsAgentsPage from "./SettingsAgentsPage";
 import SettingsAutomationsPage from "./SettingsAutomationsPage";
 import SettingsConnectorsPage from "./SettingsConnectorsPage";
 import SettingsGeneralPage from "./SettingsGeneralPage";
@@ -23,6 +24,15 @@ import SyncSettings from "./SyncSettings";
 import TeamSettings from "./TeamSettings";
 
 const NEEDS_SETTINGS = new Set<SettingsPage>(["models", "threads", "security", "automations"]);
+
+// The pages that draw themselves, needing nothing from the settings form.
+const SELF_DRAWN: Partial<Record<SettingsPage, () => ReactNode>> = {
+  shortcuts: () => <SettingsShortcutsPage />,
+  accounts: () => <SettingsAccountsPage />,
+  connectors: () => <SettingsConnectorsPage />,
+  // TeamSettings draws its own cards, one per section.
+  team: () => <TeamSettings />,
+};
 
 function message(err: unknown) {
   return err instanceof Error ? err.message : String(err);
@@ -90,8 +100,14 @@ export default function SettingsDialog({ onClose }: { onClose: () => void }) {
     }
   }
 
+  // The board's recent folders, for Agents and Sync. Those pages draw before the server's settings are in (they aren't
+  // in NEEDS_SETTINGS), so this is empty until then rather than read off the stand-in.
+  const recentFolders = settings?.projects.map((p) => p.path) ?? [];
+
   // What each page draws: a few cards. Pages in NEEDS_SETTINGS only draw once the server's settings are in.
   function pageBody(s: SettingsView): ReactNode {
+    const own = SELF_DRAWN[page];
+    if (own) return own();
     switch (page) {
       case "general":
         return (
@@ -153,18 +169,14 @@ export default function SettingsDialog({ onClose }: { onClose: () => void }) {
             clearSaveError={clearSaveError}
           />
         );
-      case "shortcuts":
-        return <SettingsShortcutsPage />;
-      case "accounts":
-        return <SettingsAccountsPage />;
-      case "connectors":
-        return <SettingsConnectorsPage />;
-      case "team":
-        // TeamSettings draws its own cards, one per section.
-        return <TeamSettings />;
+      case "agents":
+        // Saves as you go, like Shortcuts; the project list is the board's recent folders.
+        return <SettingsAgentsPage projects={recentFolders} />;
       case "sync":
-        // SyncSettings draws its own cards, one per section. The recent folders live in s.projects.
-        return <SyncSettings recentProjects={s.projects.map((p) => p.path)} />;
+        // SyncSettings draws its own cards, one per section.
+        return <SyncSettings recentProjects={recentFolders} />;
+      default:
+        return null;
     }
   }
 

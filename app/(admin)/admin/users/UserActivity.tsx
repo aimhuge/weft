@@ -7,9 +7,10 @@
 import { useEffect, useState } from "react";
 import { Avatar } from "@/components/admin/DataTable";
 import { Badge, Button, Notice, type Tone } from "@/components/admin/kit";
-import type { AdminUserRow } from "@/app/api/admin/users/route";
 import { lifecycle, weekColumns, type ActivityDay, type ActivitySummary, type Lifecycle, type UserActivity } from "@/lib/admin-activity";
 import { timeAgo } from "@/lib/format";
+import { useEscape } from "@/lib/use-escape";
+import type { AdminUserRow } from "@/lib/users-sheet";
 import { adminGet, day } from "../admin-api";
 
 type Answer = UserActivity & { summary: ActivitySummary };
@@ -135,16 +136,9 @@ export default function UserActivityDrawer({ user, onClose }: { user: AdminUserR
   const [now] = useState(() => Date.now());
   const [tone, label] = LIFECYCLE[lifecycle(user.lastSeenAt, user.createdAt, now)];
 
-  // Capture phase, so Esc closes the drawer and AdminEscape (which skips handled keys) stays on the page.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      e.preventDefault();
-      onClose();
-    };
-    window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
-  }, [onClose]);
+  // Esc closes the drawer, and AdminEscape (which skips handled keys) stays on the page: the repo's one Escape
+  // stack, whose top layer is the newest one up.
+  useEscape(true, onClose);
 
   return (
     <div className="fixed inset-0 z-20 flex justify-end">

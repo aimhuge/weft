@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { EVENT_KEYS, EVENT_LABELS, type SlackEventKey } from "@/lib/slack-view";
+import { EVENT_LABELS, SLACK_KINDS, type SlackEventKey } from "@/lib/slack-view";
 import type { SlackChannel, SlackSettings, SlackSettingsPatch } from "@/lib/slack-types";
 import { SlackChannelButton, SlackChannelSelect } from "./SlackChannelPicker";
 
@@ -22,7 +22,7 @@ export interface SlackRoutesProps {
 export default function SlackRoutes({ settings, channels, busy, onSave, onCreate }: SlackRoutesProps) {
   return (
     <div className="flex flex-col gap-1.5">
-      {EVENT_KEYS.map((key) => (
+      {SLACK_KINDS.map((key) => (
         <RouteRow key={key} eventKey={key} settings={settings} channels={channels} busy={busy} onSave={onSave} onCreate={onCreate} />
       ))}
     </div>

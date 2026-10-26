@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import BuildErrorBar from "@/components/BuildErrorBar";
+import ConsentBanner from "@/components/ConsentBanner";
 import GoogleAnalytics from "@/components/GoogleAnalytics";
 import ServerErrorBar from "@/components/ServerErrorBar";
 import ThemeSync from "@/components/ThemeSync";
@@ -29,8 +30,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="h-full overflow-hidden">
         <ThemeSync />
         {children}
-        {/* GA4 on every weft.zip page (home, FAQ, profiles, shares, the web board); never on a local board. */}
+        {/* GA4 and PostHog on every weft.zip page (home, FAQ, profiles, shares, the web board), only after the
+            visitor's yes in the banner (lib/consent.ts); never on a local board. */}
         {isDeployed() && <GoogleAnalytics />}
+        {isDeployed() && <ConsentBanner />}
         <BuildErrorBar />
         <ServerErrorBar />
       </body>

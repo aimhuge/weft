@@ -5,6 +5,7 @@ import { recordExplore } from "./explore";
 import { asText } from "./format";
 import { addBlankTool, ASK_PROMPT, askAddTool, addMissingBlank, missingText } from "./secret-ask";
 import { markInUse, RUN_PROMPT, runTool } from "./secret-run";
+import { recordStep } from "./site-notes-trail";
 
 // The vault for threads (docs/architecture/secrets.md): names only, and values typed into a pane field by
 // Electron main after the user's Touch ID. A value never comes back through these tools.
@@ -59,6 +60,8 @@ export function secretsMcpServer(cardId: () => string | undefined, folder: () =>
             }
             if (!r.found) return text(`No element matches ${selector}`, true);
             markInUse(cardId());
+            // The site notes keep the selector only, never the name or the value (lib/site-notes-trail.ts).
+            recordStep(cardId(), "fill_field", { selector }, true);
             void recordExplore("vault");
             return text(`Typed ${name} from the ${vault} vault into ${selector}.`);
           }),

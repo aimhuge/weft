@@ -53,7 +53,7 @@ function dragBundle(drag: BoardSurfaceProps["drag"]): BoardColumnsProps["drag"] 
 
 export default function BoardSurface({ mode, renderRow, drag, archive, review, ...props }: BoardSurfaceProps) {
   if (mode === "list") {
-    return <BoardList byColumn={props.byColumn} renderRow={renderRow} onNew={props.onNew} notify={props.notify} onReorder={drag.onReorder} />;
+    return <BoardList byColumn={props.byColumn} renderRow={renderRow} onNew={props.onNew} notify={props.notify} onReorder={drag.onReorder} archive={{ count: archive.count, shown: archive.shown, onToggle: archive.onToggleShown }} />;
   }
   return <BoardColumns {...props} drag={dragBundle(drag)} archive={archive} review={review} />;
 }

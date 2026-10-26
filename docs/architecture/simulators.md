@@ -23,7 +23,7 @@ arguments go through `shellQuote()`.
 
 | Piece | Where |
 | --- | --- |
-| Finding and running the CLIs | `lib/simulator-exec.ts`: `bins()` (xcrun, axe, adb, emulator: Homebrew and SDK folders by name, then PATH), `androidSdk()` (`ANDROID_HOME`, `ANDROID_SDK_ROOT`, `~/Library/Android/sdk`), `run()` / `runText()`, `MISSING` (the fix a tool error names) |
+| Finding and running the CLIs | `lib/simulator-exec.ts`: `bins()` (xcrun, axe, adb, emulator: Homebrew and SDK folders by name, then PATH), `androidSdk()` (`ANDROID_HOME`, `ANDROID_SDK_ROOT`, `~/Library/Android/sdk`), `run()` / `runText()`, `MISSING` (the fix a tool error names), `XCODE_APP` / `STUDIO_APP` (where the apps live) |
 | Whole-device actions | `lib/simulator-devices.ts`: `listDevices()`, `pickDevice()`, `boot()`, `install()`, `launch()`, `openUrl()`, `screenshot()`, `logs()` |
 | Screen and touches | `lib/simulator-ui.ts`: `uiTree()` (AXe `describe-ui` JSON, uiautomator XML), `findElement()`, `tapAt()`, `swipe()`, `directionSwipe()`, `typeText()`, `press()` |
 | Live view | `lib/simulator-watch.ts`: `watch()`, `writeFrame()`, `viewerHtml()`, `stopWatching()` |

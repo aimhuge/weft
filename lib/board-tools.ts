@@ -1,6 +1,8 @@
 import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
-import { AGENT_ORDER, storedAgent, type ThreadAgent } from "./agents";
+import { storedAgent, type ThreadAgent } from "./agents";
+import { listAgents, projectAgent } from "./agent-store";
+import { agentTools } from "./agent-tools";
 import { firstMessage } from "./automations";
 import { boardCard, cardLine, LIST_LIMIT, readThreadText } from "./board-tools-format";
 import { markSeen } from "./copilot-digest";
@@ -58,11 +60,13 @@ interface NewBoardCard {
 
 // The one place a card is made on behalf of a thread, whether it is the copilot's or a board thread's.
 export function createBoardCard(args: NewBoardCard): Card {
-  const agent = storedAgent(args.agent);
+  const cwd = resolveFolder(args.folder);
+  // The agent named, else the project's default (Settings → Agents).
+  const agent = storedAgent(args.agent ?? projectAgent(cwd), listAgents());
   const card = createCard({
     title: cleanTitle(args.title ?? "") || titleFromPrompt(args.prompt),
     prompt: args.prompt,
-    cwd: resolveFolder(args.folder),
+    cwd,
     backend: args.cli ?? "claude",
     permissionMode: args.permissionMode,
     parentId: args.parentId,
@@ -82,8 +86,9 @@ function tagsPatch(raw: string[] = []): Pick<Card, "tags" | "tagsBy"> {
 }
 
 const TAGS = z.array(z.string()).optional().describe("Short labels for the card, like bug or launch");
-const AGENT = z.enum(AGENT_ORDER as [ThreadAgent, ...ThreadAgent[]]).optional()
-  .describe("Who the thread is: builder (default) builds; copywriter writes in Weft's voice (pages, intros, changelog, UI copy)");
+// Who the thread is, from the agents there are as the server is made (Settings → Agents adds more; lib/agent-store.ts).
+const agentParam = () =>
+  z.string().optional().describe(`Who the thread is, by id (default builder): ${listAgents().map((a) => `${a.id} (${a.name}${a.tagline ? `: ${a.tagline}` : ""})`).join("; ")}`);
 
 function listCardsTool() {
   return tool(
@@ -134,7 +139,7 @@ export function weftMcpServer(
           folder: z.string().optional().describe("Project folder; defaults to this thread's own folder"),
           start: z.boolean().optional().describe("Run it now (default true); false leaves it in Backlog"),
           tags: TAGS,
-          agent: AGENT,
+          agent: agentParam(),
         },
         ({ prompt, title, folder, start, tags, agent }) =>
           attempt(() => {
@@ -160,6 +165,7 @@ export function weftMcpServer(
       ...changelogTools(getCardId, getCwd),
       ...cronTools(getCardId),
       ...skillTools(getCwd),
+      ...agentTools(getCardId),
     ],
   });
 }
@@ -189,7 +195,7 @@ export function boardMcpServer(actions: BoardActions) {
           cli: z.enum(["claude", "puku", "codex", "goose"]).optional(),
           permission_mode: z.enum(["default", "acceptEdits", "auto", "bypassPermissions"]).optional(),
           tags: TAGS,
-          agent: AGENT,
+          agent: agentParam(),
         },
         (args) =>
           attempt(() => {
@@ -271,6 +277,8 @@ export function boardMcpServer(actions: BoardActions) {
       ),
       // The copilot has no thread to fork: its crons are fresh ones in a folder, or forks of a card it names.
       ...cronTools(() => undefined),
+      // The copilot writes agents too, the same way any other thread does.
+      ...agentTools(() => undefined),
     ],
   });
 }

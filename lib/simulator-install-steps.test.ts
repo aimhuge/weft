@@ -62,6 +62,8 @@ const exec = vi.hoisted(() => ({ androidSdk: vi.fn(), TOOLS_DIR: "/Users/me/.wef
 vi.mock("./simulator-exec", () => ({
   androidSdk: exec.androidSdk,
   TOOLS_DIR: exec.TOOLS_DIR,
+  XCODE_APP: "/Applications/Xcode.app",
+  STUDIO_APP: "/Applications/Android Studio.app",
 }));
 
 const { ANDROID_API, ANDROID_IMAGE, AVD_NAME, INSTALLERS, STUDIO_APP, XCODE_APP } = await import("./simulator-install-steps");

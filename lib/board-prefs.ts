@@ -14,6 +14,20 @@ export function setShowBacklog(on: boolean) {
   window.dispatchEvent(new Event(EVENT));
 }
 
+const FOLD_COOKIE = "weft-backlog-folded";
+
+// Folded, the Backlog column is a thin strip with its name and count (components/FoldedColumn.tsx): the way
+// to put it out of sight while cards still wait in it, which the switch above can't.
+export function backlogFolded(): boolean {
+  if (typeof document === "undefined") return false;
+  return new RegExp(`(?:^|; )${FOLD_COOKIE}=1`).test(document.cookie);
+}
+
+export function setBacklogFolded(folded: boolean) {
+  document.cookie = `${FOLD_COOKIE}=${folded ? 1 : 0}; path=/; max-age=${10 * 365 * 24 * 60 * 60}; SameSite=Lax`;
+  window.dispatchEvent(new Event(EVENT));
+}
+
 const PROGRESS_COOKIE = "weft-show-progress";
 
 // On by default: the header's streak and level chip (components/GameBadge.tsx). Off is quiet mode.

@@ -6,13 +6,15 @@ import type { NewCardInput } from "@/lib/client";
 import type { Card, RestartStatus } from "@/lib/types";
 import { isMac } from "@/lib/hotkeys";
 import { formatAt } from "@/lib/schedule";
-import { markIntroSeen } from "@/lib/feature-intros";
 import { makeCard } from "./test-utils";
+import { forgetAgentList } from "@/lib/use-agents";
 import NewCardDialog from "./NewCardDialog";
 
 const api = vi.hoisted(() => ({
   settings: vi.fn(() => Promise.resolve({ defaultPermissionMode: "default", defaultBackend: "claude" })),
   warm: vi.fn(() => Promise.resolve()),
+  // Every agent and each folder's default (Settings → Agents): /repo/api starts as the Copywriter.
+  agents: vi.fn(async () => ({ agents: (await import("@/lib/agents")).BUILT_IN_AGENTS, projects: { "/repo/api": "copywriter" } })),
 }));
 vi.mock("@/lib/client", () => ({ api }));
 // The gate reads the plan log off the server; the tests say what it answers.
@@ -42,6 +44,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   localStorage.clear();
   gate.at = undefined;
+  forgetAgentList();
 });
 
 describe("NewCardDialog", () => {
@@ -88,11 +91,28 @@ describe("NewCardDialog", () => {
     expect(onCreate).toHaveBeenCalledWith(expect.objectContaining({ prompt: "Later idea", cwd: "/repo/web", start: false }));
   });
 
-  it("starts a Builder, sending no agent, unless you pick another", async () => {
+  it("names Builder in a folder with no default, so it wins over any default the server knows", async () => {
     const { onCreate, box } = setup();
     await userEvent.type(box, "Fix the flicker");
     await userEvent.click(screen.getByRole("button", { name: "Add to backlog" }));
-    expect(onCreate.mock.calls[0]?.[0]).not.toHaveProperty("agent");
+    expect(onCreate).toHaveBeenCalledWith(expect.objectContaining({ agent: "builder" }));
+  });
+
+  it("starts on the folder's default agent, and a new folder goes back to its own", async () => {
+    const { onCreate, box } = setup();
+    const picker = screen.getByRole("combobox", { name: "Agent" });
+    await userEvent.click(screen.getByRole("button", { name: "Pick /repo/api" }));
+    await waitFor(() => expect(picker).toHaveValue("copywriter"));
+    await userEvent.type(box, "Draft the intro");
+    await userEvent.click(screen.getByRole("button", { name: "Add to backlog" }));
+    expect(onCreate).toHaveBeenCalledWith(expect.objectContaining({ cwd: "/repo/api", agent: "copywriter" }));
+  });
+
+  it("opens Settings → Agents from Manage agents…", async () => {
+    const onManageAgents = vi.fn();
+    render(<NewCardDialog home="/home" defaultCwd="/repo/web" onCreate={vi.fn()} onClose={vi.fn()} onManageAgents={onManageAgents} />);
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Agent" }), "Manage agents…");
+    expect(onManageAgents).toHaveBeenCalled();
   });
 
   it("sends the agent you picked", async () => {
@@ -213,8 +233,6 @@ describe("NewCardDialog", () => {
   });
 
   it("closes on Escape and on the close button", async () => {
-    // The intro has played before, so it isn't up: Escape belongs to the dialog (lib/use-feature-intro.ts).
-    markIntroSeen("newthread");
     const { onClose } = setup();
     await userEvent.keyboard("{Escape}");
     expect(onClose).toHaveBeenCalledOnce();
@@ -222,14 +240,10 @@ describe("NewCardDialog", () => {
     expect(onClose).toHaveBeenCalledTimes(2);
   });
 
-  it("lets the first Escape shrink the intro that opened over it, and the next close the dialog", async () => {
-    // The first time the dialog opens, the intro plays big over it (lib/use-feature-intro.ts). Escape shrinks
-    // that modal; the dialog under it stays open, and the next Escape closes it.
-    const { onClose } = setup();
-    await userEvent.keyboard("{Escape}");
-    expect(onClose).not.toHaveBeenCalled();
-    await userEvent.keyboard("{Escape}");
-    expect(onClose).toHaveBeenCalledOnce();
+  it("opens no intro over itself: the video plays only from ▶", () => {
+    setup();
+    expect(document.querySelector("iframe")).toBeNull();
+    expect(screen.getByRole("button", { name: "Play the New thread intro" })).toBeInTheDocument();
   });
 
   describe("a model at its limit", () => {

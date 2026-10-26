@@ -15,6 +15,9 @@ vi.mock("@anthropic-ai/claude-agent-sdk", () => ({
 // The shell URL and token are read when the module loads.
 vi.stubEnv("WEFT_SHELL_URL", "http://127.0.0.1:4567");
 vi.mock("./shell-token", () => ({ shellToken: () => "tok" }));
+// Site notes for the opened page (lib/site-notes-read.ts); none unless a test says so.
+const siteNotes = vi.hoisted(() => vi.fn(() => Promise.resolve("")));
+vi.mock("./site-notes-live", () => ({ siteNotesForUrl: siteNotes }));
 const bt = await import("./browser-tools");
 
 const fetchMock = vi.fn();
@@ -140,6 +143,14 @@ describe("browserMcpServer", () => {
       "console_logs",
       "network_errors",
     ]);
+  });
+
+  it("open_url adds the site notes for the page it opened", async () => {
+    reply({ url: "https://supabase.com/dashboard", title: "Supabase" });
+    siteNotes.mockResolvedValueOnce("Site notes for supabase.com.");
+    const result = await run("open_url", { url: "https://supabase.com/dashboard" });
+    expect(result.content[0]?.text).toBe("Opened https://supabase.com/dashboard — Supabase\n\nSite notes for supabase.com.");
+    expect(siteNotes).toHaveBeenLastCalledWith("c1", "https://supabase.com/dashboard");
   });
 
   it("open_url opens the page in this card's pane and names it", async () => {

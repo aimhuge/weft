@@ -9,6 +9,7 @@ import { useCrons } from "@/lib/use-crons";
 import { useEscape } from "@/lib/use-escape";
 import type { Card } from "@/lib/types";
 import CronEditor from "./CronEditor";
+import CronSwitch from "./CronSwitch";
 import Icon from "./Icon";
 import "./crons.css";
 
@@ -31,9 +32,7 @@ function CronRow({ cron, now, onToggle, onDelete }: { cron: Cron; now: number; o
           {describeCron(cron.expr)} · {cron.enabled && cron.nextAt ? `next ${runLabel(cron.nextAt, now)}` : "off"} · {cron.count} runs
         </p>
       </div>
-      <button type="button" role="switch" aria-checked={cron.enabled} aria-label={cron.enabled ? "Pause" : "Turn on"} onClick={onToggle} className={`relative h-4 w-7 shrink-0 rounded-full ${cron.enabled ? "bg-[var(--cron)]" : "bg-line-strong"}`}>
-        <span className={`absolute top-0.5 size-3 rounded-full bg-white transition-all ${cron.enabled ? "right-0.5" : "left-0.5"}`} />
-      </button>
+      <CronSwitch enabled={cron.enabled} label={cron.enabled ? "Pause" : "Turn on"} onToggle={onToggle} />
       <button type="button" aria-label={`Delete ${cron.name}`} onClick={onDelete} className="shrink-0 rounded p-0.5 text-faint hover:text-danger">
         <Icon name="x" size={13} />
       </button>

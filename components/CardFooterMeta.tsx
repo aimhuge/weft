@@ -1,6 +1,8 @@
 "use client";
 
-import { agentOf } from "@/lib/agents";
+import { findAgent } from "@/lib/agents";
+import { useAgents } from "@/lib/use-agents";
+import { activeAt } from "@/lib/board-view";
 import { folderName, timeAgo } from "@/lib/format";
 import { modelLabel, runningOn } from "@/lib/new-thread";
 import { isBusy } from "@/lib/overlap";
@@ -38,9 +40,11 @@ export default function CardFooterMeta({ card, now, alsoHere, marks }: { card: C
   );
 }
 
-// A thread that isn't Builder shows who it is (lib/agents.ts); Builder, every card's default, shows nothing.
+// A thread that isn't Builder shows who it is (lib/agents.ts); Builder, every card's default, shows nothing, and so does
+// an agent that was deleted.
 function AgentMark({ agent }: { agent: string }) {
-  const info = agentOf(agent);
+  const info = findAgent(agent, useAgents());
+  if (!info) return null;
   return <span className="shrink-0 text-[11px] leading-none" title={`${info.name}: ${info.tagline}`}>{info.emoji}</span>;
 }
 
@@ -65,7 +69,7 @@ function OverlapHint({ others }: { others: Card[] }) {
 function Age({ card, now }: { card: Card; now: number }) {
   return (
     <span className="shrink-0 whitespace-nowrap">
-      {timeAgo(card.lastActivity ?? card.updatedAt, now).replace(" ago", "")}
+      {timeAgo(activeAt(card), now).replace(" ago", "")}
       {card.turns ? ` · ${card.turns}t` : ""}
     </span>
   );

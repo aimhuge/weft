@@ -2,10 +2,11 @@
 // The Users page's activity drawer: it loads one account's activity, draws the stats, calendar and cards-per-day
 // bars, and Esc closes it without the page's own Esc (back to the board) firing.
 
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, renderHook, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import "@/components/test-utils";
-import type { AdminUserRow } from "@/app/api/admin/users/route";
+import { useEscape } from "@/lib/use-escape";
+import type { AdminUserRow } from "@/lib/users-sheet";
 
 const api = vi.hoisted(() => ({ adminGet: vi.fn() }));
 vi.mock("../admin-api", () => ({ adminGet: api.adminGet, day: (iso: string | null) => (iso ? iso.slice(0, 10) : "—") }));
@@ -87,5 +88,17 @@ describe("UserActivityDrawer", () => {
     fireEvent.click(screen.getByTitle("Close (Esc)"));
     expect(onClose).toHaveBeenCalledTimes(3);
     await screen.findByText("2/7");
+  });
+
+  it("takes the Esc for itself, so the page's own Esc (back to the board) doesn't fire", () => {
+    api.adminGet.mockResolvedValue(ANSWER);
+    const onClose = vi.fn();
+    const page = vi.fn();
+    // The page's own Esc (AdminEscape) is the layer under the drawer in the repo's Escape stack.
+    renderHook(() => useEscape(true, page));
+    render(<UserActivityDrawer user={USER} onClose={onClose} />);
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(onClose).toHaveBeenCalledOnce();
+    expect(page).not.toHaveBeenCalled();
   });
 });

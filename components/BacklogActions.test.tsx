@@ -20,7 +20,7 @@ const { default: ColumnHeader } = await import("./ColumnHeader");
 const card = (over: Partial<Card>) => ({ id: "a", title: "A", column: "backlog", ...over }) as Card;
 
 function setup(cards: Card[] = [card({ id: "a" }), card({ id: "b" })], allCards: Card[] = cards) {
-  const lane = { cards, allCards, onArchiveAll: vi.fn(), onRestore: vi.fn(), toast: vi.fn(), notify: vi.fn() };
+  const lane = { cards, allCards, onArchiveAll: vi.fn(), onRestore: vi.fn(), toast: vi.fn(), notify: vi.fn(), onFold: vi.fn() };
   render(
     <ColumnHeader
       column={{ id: "backlog", label: "Backlog" }}
@@ -47,6 +47,16 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("Backlog header", () => {
+  it("folds the column, even while it's empty", async () => {
+    const lane = setup();
+    await userEvent.click(screen.getByRole("button", { name: "Fold Backlog" }));
+    expect(lane.onFold).toHaveBeenCalledOnce();
+    cleanup();
+    setup([]);
+    expect(screen.getByRole("button", { name: "Fold Backlog" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Archive all/ })).toBeNull();
+  });
+
   it("saves the lane's cards as a sprint and says so", async () => {
     const lane = setup();
     await userEvent.click(screen.getByRole("button", { name: /as a sprint/ }));

@@ -841,6 +841,17 @@ describe("/login", () => {
   });
 });
 
+describe("GET /repos/clone", () => {
+  it("answers null for a repo that isn't cloning", async () => {
+    expect(await body(await cloneRoute.GET(req("/repos/clone?fullName=me/none")))).toBeNull();
+    expect(await body(await cloneRoute.GET(req("/repos/clone")))).toBeNull();
+  });
+
+  it("refuses a foreign host", async () => {
+    expect((await cloneRoute.GET(req("/repos/clone", { headers: { host: "evil.com" } }))).status).toBe(403);
+  });
+});
+
 describe("POST /repos/clone", () => {
   it("clones and adds the folder to projects", async () => {
     const res = await cloneRoute.POST(req("/repos/clone", { method: "POST", body: { fullName: " aimhuge/weft " } }));

@@ -2,6 +2,7 @@ import { defineConfig, globalIgnores } from "eslint/config";
 import nextVitals from "eslint-config-next/core-web-vitals";
 import nextTs from "eslint-config-next/typescript";
 import tseslint from "typescript-eslint";
+import noClientServerLeak from "./eslint-rules/no-client-server-leak.mjs";
 
 const TS_FILES = ["**/*.{ts,tsx,mts,cts}"];
 const LINE_COUNT = { skipBlankLines: true, skipComments: true };
@@ -30,7 +31,7 @@ const OVERSIZE = {
   "lib/hotkeys.test.ts": 322,
   "lib/web-board.test.ts": 431,
   "lib/board-tools.ts": 316,
-  "lib/login.ts": 316,
+  "lib/login.ts": 297,
   "lib/repos.test.ts": 307,
   "components/RepoPicker.tsx": 304,
   "lib/cloud-sync.test.ts": 561,
@@ -92,6 +93,14 @@ const eslintConfig = defineConfig([
       "max-lines": ["error", { max: 300, ...LINE_COUNT }],
       complexity: ["error", 15],
     },
+  },
+  // The client/server boundary: a "use client" module must not reach a Node built-in or a server-only
+  // module. Turbopack panics on those and the board route 500s with nothing the UI can show, so a change
+  // that breaks the board fails lint here instead of the next restart. The analysis is lib/client-graph.ts's.
+  {
+    files: TS_FILES,
+    plugins: { weft: { rules: { "no-client-server-leak": noClientServerLeak } } },
+    rules: { "weft/no-client-server-leak": "error" },
   },
   // The ratchet: files over those limits today, each held at its current size so it can only shrink.
   ...Object.entries(OVERSIZE).map(([file, max]) => ({ files: [file], rules: { "max-lines": ["error", { max, ...LINE_COUNT }] } })),
