@@ -8,6 +8,7 @@ const thread = vi.fn<(id: string) => Promise<{ items: ThreadItem[] }>>();
 const send = vi.fn<(id: string, text: string) => Promise<void>>();
 const resetCopilot = vi.fn<() => Promise<{ card: Card }>>();
 const copilotPersona = vi.fn<(persona: string) => Promise<{ card: Card }>>();
+const remove = vi.fn<(id: string) => Promise<unknown>>();
 vi.mock("./client", () => ({
   api: {
     copilot: () => copilot(),
@@ -15,6 +16,7 @@ vi.mock("./client", () => ({
     send: (id: string, text: string) => send(id, text),
     resetCopilot: () => resetCopilot(),
     copilotPersona: (persona: string) => copilotPersona(persona),
+    remove: (id: string) => remove(id),
   },
   // The real merge keeps live items past the snapshot; enough here to tell merge from replace.
   mergeThread: (items: ThreadItem[], live: ThreadItem[]) => [...items, ...live.slice(items.length)],
@@ -33,6 +35,7 @@ vi.mock("./use-events", () => ({
 }));
 
 const { useCopilotThread } = await import("./use-copilot-thread");
+const { forget, patchNow, removeNow } = await import("./optimistic-cards");
 
 const pilot = (over: Partial<Card> = {}) => ({ id: "copilot", role: "copilot", title: "Copilot", column: "review", ...over }) as Card;
 const say = (text: string, at = 1): ThreadItem => ({ kind: "assistant", text, at });
@@ -42,6 +45,9 @@ beforeEach(() => {
   thread.mockReset().mockResolvedValue({ items: [say("hello")] });
   send.mockReset().mockResolvedValue();
   resetCopilot.mockReset().mockResolvedValue({ card: pilot({ column: "backlog" }) });
+  copilotPersona.mockReset();
+  remove.mockReset().mockResolvedValue(undefined);
+  forget("copilot");
 });
 
 afterEach(cleanup);
@@ -156,5 +162,76 @@ describe("useCopilotThread", () => {
     act(() => stream.onEvent({ type: "thread_cleared", cardId: "copilot" }));
     expect(result.current.items).toEqual([]);
     expect(result.current.streaming).toBe("");
+  });
+
+  it("draws a rename on the copilot's card at once, and on the card it loads", async () => {
+    const { result } = renderHook(() => useCopilotThread());
+    act(() => stream.onOpen());
+    await waitFor(() => expect(result.current.card?.id).toBe("copilot"));
+    act(() => void patchNow("copilot", { title: "Renamed" }, () => new Promise(() => {})));
+    expect(result.current.card?.title).toBe("Renamed");
+    // A server card still shows the old title: the rename stays drawn.
+    act(() => stream.onEvent({ type: "card", card: pilot({ title: "Copilot" }) }));
+    expect(result.current.card?.title).toBe("Renamed");
+    forget("copilot");
+  });
+
+  it("draws a rename on the copilot's card when it loads it", async () => {
+    act(() => void patchNow("copilot", { title: "Renamed" }, () => new Promise(() => {})));
+    const { result } = renderHook(() => useCopilotThread());
+    act(() => stream.onOpen());
+    await waitFor(() => expect(result.current.card?.title).toBe("Renamed"));
+    forget("copilot");
+  });
+
+  it("puts the old persona back when the server refuses the new one", async () => {
+    copilot.mockResolvedValue({ card: pilot({ persona: "captain" }) });
+    copilotPersona.mockRejectedValueOnce(new Error("down"));
+    const { result } = renderHook(() => useCopilotThread());
+    act(() => stream.onOpen());
+    await waitFor(() => expect(result.current.card?.persona).toBe("captain"));
+    await act(() => expect(result.current.setPersona("founder")).rejects.toThrow("down"));
+    expect(result.current.card?.persona).toBe("captain");
+    expect(result.current.resetting).toBe(false);
+  });
+
+  it("shows the new persona at once, before the server answers", async () => {
+    copilot.mockResolvedValue({ card: pilot({ persona: "captain" }) });
+    let answer!: (value: { card: Card }) => void;
+    copilotPersona.mockReturnValueOnce(new Promise((resolve) => (answer = resolve)));
+    const { result } = renderHook(() => useCopilotThread());
+    act(() => stream.onOpen());
+    await waitFor(() => expect(result.current.card?.persona).toBe("captain"));
+    act(() => void result.current.setPersona("founder"));
+    expect(result.current.card?.persona).toBe("founder");
+    await act(async () => {
+      answer({ card: pilot({ persona: "founder" }) });
+      await Promise.resolve();
+    });
+    expect(result.current.card?.persona).toBe("founder");
+  });
+
+  it("keeps the copilot's card when the overlay has nothing to draw", async () => {
+    // A delete on the copilot: the overlay drops it, so the loaded and the live card are used as they are.
+    remove.mockReturnValue(new Promise(() => {}));
+    act(() => void removeNow("copilot"));
+    const { result } = renderHook(() => useCopilotThread());
+    act(() => stream.onOpen());
+    await waitFor(() => expect(result.current.card?.id).toBe("copilot"));
+    act(() => stream.onEvent({ type: "card", card: pilot({ column: "running" }) }));
+    expect(result.current.card?.column).toBe("running");
+  });
+
+  it("draws nothing when the copilot is gone and something changes", async () => {
+    const { result } = renderHook(() => useCopilotThread());
+    // No copilot yet: an optimistic change leaves it empty.
+    act(() => void patchNow("copilot", { title: "x" }, () => new Promise(() => {})));
+    expect(result.current.card).toBeNull();
+    act(() => stream.onOpen());
+    await waitFor(() => expect(result.current.card?.id).toBe("copilot"));
+    // A delete on it: the redraw has nothing to draw, and the copilot keeps its card.
+    remove.mockReturnValue(new Promise(() => {}));
+    act(() => void removeNow("copilot"));
+    expect(result.current.card?.id).toBe("copilot");
   });
 });

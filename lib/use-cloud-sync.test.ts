@@ -91,6 +91,51 @@ describe("useCloudSync", () => {
     expect(result.current.status.signedOut).toBe(true);
   });
 
+  it("adds a folder to the list at once, before the server answers", async () => {
+    let answer: (v: unknown) => void = () => undefined;
+    api.cloudSyncSetFolder.mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)));
+    const { result } = renderHook(() => useCloudSync());
+    await waitFor(() => expect(result.current.folders).toEqual(["/a"]));
+    act(() => {
+      void result.current.setFolder("/b", true);
+    });
+    // The switch is already on while the call is still waiting.
+    expect(result.current.folders).toEqual(["/a", "/b"]);
+    await act(async () => {
+      answer({ folders: ["/a", "/b"], status: STATUS });
+      await Promise.resolve();
+    });
+    expect(result.current.folders).toEqual(["/a", "/b"]);
+  });
+
+  it("takes a folder off the list at once, before the server answers", async () => {
+    let answer: (v: unknown) => void = () => undefined;
+    api.cloudSyncSetFolder.mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)));
+    const { result } = renderHook(() => useCloudSync());
+    await waitFor(() => expect(result.current.folders).toEqual(["/a"]));
+    act(() => {
+      void result.current.setFolder("/a", false);
+    });
+    // The folder is gone while the call is still waiting.
+    expect(result.current.folders).toEqual([]);
+    await act(async () => {
+      answer({ folders: [], status: STATUS });
+      await Promise.resolve();
+    });
+    expect(result.current.folders).toEqual([]);
+  });
+
+  it("reloads what the server has when a folder can't be set, and says why", async () => {
+    const { result } = renderHook(() => useCloudSync());
+    await waitFor(() => expect(result.current.folders).toEqual(["/a"]));
+    expect(api.cloudSync).toHaveBeenCalledTimes(1);
+    api.cloudSyncSetFolder.mockRejectedValueOnce(new Error("nope"));
+    await act(() => expect(result.current.setFolder("/b", true)).rejects.toThrow("nope"));
+    // The refusal asks the server what it has.
+    await waitFor(() => expect(api.cloudSync).toHaveBeenCalledTimes(2));
+    expect(result.current.folders).toEqual(["/a"]);
+  });
+
   it("syncNow posts { sync: true } and applies the returned status", async () => {
     api.cloudSyncNow.mockResolvedValueOnce({ status: { ...STATUS, waiting: 0 } });
     const { result } = renderHook(() => useCloudSync());

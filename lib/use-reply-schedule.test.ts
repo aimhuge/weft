@@ -7,13 +7,14 @@ import type { ScheduledMessage } from "@/lib/types";
 const api = vi.hoisted(() => ({ schedule: vi.fn(), unschedule: vi.fn() }));
 vi.mock("@/lib/client", () => ({ api }));
 
+import { STOP_SETTLE_MS } from "./optimistic-cards";
 import { useReplySchedule } from "./use-reply-schedule";
 
-function setup(handle: Partial<ComposerHandle> | null) {
+function setup(handle: Partial<ComposerHandle> | null, server?: ScheduledMessage[]) {
   const composer = { current: handle as ComposerHandle | null };
   const saveDraft = vi.fn();
   const setError = vi.fn();
-  const hook = renderHook(() => useReplySchedule("c1", composer, saveDraft, setError));
+  const hook = renderHook(({ list }) => useReplySchedule("c1", composer, saveDraft, setError, list), { initialProps: { list: server } });
   return { ...hook, saveDraft, setError };
 }
 
@@ -56,14 +57,71 @@ describe("useReplySchedule", () => {
     expect(b.setError).toHaveBeenCalledWith("Write a message first.");
   });
 
-  it("reports a server failure and keeps the text", async () => {
-    api.schedule.mockRejectedValue(new Error("nope"));
+  it("draws the row and empties the box before the server answers, until the server's row lands", async () => {
+    let resolve!: () => void;
+    api.schedule.mockReturnValue(new Promise<void>((r) => (resolve = r)));
     const handle = { read: () => "hi", clear: vi.fn() };
+    const { result, rerender } = setup(handle, []);
+    let done!: Promise<void>;
+    act(() => {
+      done = result.current.scheduleAt(9);
+    });
+    expect(handle.clear).toHaveBeenCalled();
+    expect(result.current.scheduled).toEqual([expect.objectContaining({ text: "hi", at: 9 })]);
+    // A pending row has no id on the server, so its X does nothing yet.
+    act(() => result.current.unschedule(result.current.scheduled[0]!.id));
+    expect(api.unschedule).not.toHaveBeenCalled();
+    rerender({ list: [{ id: "s1", text: "hi ", at: 9 }] });
+    expect(result.current.scheduled).toEqual([{ id: "s1", text: "hi ", at: 9 }]);
+    await act(async () => {
+      resolve();
+      await done;
+    });
+  });
+
+  it("drops the drawn row after the server took it, so it can't linger", async () => {
+    vi.useFakeTimers();
+    const { result } = setup({ read: () => "hi", clear: vi.fn() });
+    await act(() => result.current.scheduleAt(1));
+    expect(result.current.scheduled).toHaveLength(1);
+    act(() => {
+      vi.advanceTimersByTime(STOP_SETTLE_MS);
+    });
+    expect(result.current.scheduled).toEqual([]);
+    vi.useRealTimers();
+  });
+
+  it("on a server failure takes the row back and puts the text back in an empty box", async () => {
+    api.schedule.mockRejectedValue(new Error("nope"));
+    const handle = { read: () => "hi", clear: vi.fn(), isEmpty: () => true, write: vi.fn() };
     const { result, setError, saveDraft } = setup(handle);
     await act(() => result.current.scheduleAt(1));
     expect(setError).toHaveBeenCalledWith(expect.any(Error));
-    expect(saveDraft).not.toHaveBeenCalled();
-    expect(handle.clear).not.toHaveBeenCalled();
+    expect(handle.write).toHaveBeenCalledWith("hi");
+    expect(saveDraft).toHaveBeenLastCalledWith("hi", true);
+    expect(result.current.scheduled).toEqual([]);
+  });
+
+  it("on a server failure leaves a box you've typed in since alone", async () => {
+    api.schedule.mockRejectedValue(new Error("nope"));
+    const handle = { read: () => "hi", clear: vi.fn(), isEmpty: () => false, write: vi.fn() };
+    const { result } = setup(handle);
+    await act(() => result.current.scheduleAt(1));
+    expect(handle.write).not.toHaveBeenCalled();
+  });
+
+  it("hides an X'd row at once and brings it back if the server refuses", async () => {
+    let reject!: (err: Error) => void;
+    api.unschedule.mockReturnValue(new Promise((_, r) => (reject = r)));
+    const { result, setError } = setup({}, [msg]);
+    act(() => result.current.unschedule("m1"));
+    expect(result.current.scheduled).toEqual([]);
+    await act(async () => {
+      reject(new Error("x"));
+      await Promise.resolve();
+    });
+    expect(result.current.scheduled).toEqual([msg]);
+    expect(setError).toHaveBeenCalledWith(expect.any(Error));
   });
 
   it("unschedules, reporting a failure", async () => {

@@ -117,6 +117,35 @@ describe("useWebhooks", () => {
     expect(result.current.hooks.map((h) => h.id)).toEqual(["w2"]);
   });
 
+  it("shows a change at once, before the server answers", async () => {
+    const { result } = renderHook(() => useWebhooks(["/a"]));
+    await waitFor(() => expect(result.current.loaded).toBe(true));
+    // The update hangs until the test lets it answer.
+    let answer: (v: unknown) => void = () => undefined;
+    api.updateWebhook.mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)));
+    act(() => {
+      void result.current.update("w1", { registered: true });
+    });
+    // The patch is in the list while the call is still waiting.
+    expect(result.current.hooks[0]?.registered).toBe(true);
+    await act(async () => {
+      answer({ hook: hook({ registered: true }) });
+      await Promise.resolve();
+    });
+    expect(result.current.hooks[0]?.registered).toBe(true);
+  });
+
+  it("reloads what the server has when a change is refused, and says why", async () => {
+    const { result } = renderHook(() => useWebhooks(["/a"]));
+    await waitFor(() => expect(result.current.loaded).toBe(true));
+    expect(api.webhooks).toHaveBeenCalledTimes(1);
+    api.updateWebhook.mockRejectedValueOnce(new Error("nope"));
+    await act(() => expect(result.current.update("w1", { registered: true })).rejects.toThrow("nope"));
+    // The refusal asks the server what it has, and the old row is back.
+    await waitFor(() => expect(api.webhooks).toHaveBeenCalledTimes(2));
+    expect(result.current.hooks[0]?.registered).toBeUndefined();
+  });
+
   it("lets a failed call throw and leaves the list alone", async () => {
     const { result } = renderHook(() => useWebhooks(["/a"]));
     await waitFor(() => expect(result.current.loaded).toBe(true));

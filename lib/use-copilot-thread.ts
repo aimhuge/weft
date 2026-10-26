@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api, mergeThread } from "./client";
+import { applyIntents, onOptimistic, overlay } from "./optimistic-cards";
 import type { CopilotPersona } from "./copilot-personas";
 import { useBoardEvents } from "./use-events";
 import { COPILOT_ID, type Card, type ThreadItem } from "./types";
@@ -20,7 +21,7 @@ export function useCopilotThread() {
     const merge = !opened.current;
     opened.current = true;
     const { card } = await api.copilot();
-    setCard(card);
+    setCard(overlay(card) ?? card);
     const { items } = await api.thread(card.id);
     setItems((prev) => (merge ? mergeThread(items, prev) : items));
   }, []);
@@ -29,7 +30,8 @@ export function useCopilotThread() {
     (event) => {
       switch (event.type) {
         case "card":
-          if (event.card.id === COPILOT_ID) setCard(event.card);
+          // Through the board's overlay, so a Stop or a rename stays drawn until the server catches up.
+          if (event.card.id === COPILOT_ID) setCard(overlay(event.card) ?? event.card);
           break;
         case "thread":
           if (event.cardId !== COPILOT_ID) break;
@@ -55,6 +57,9 @@ export function useCopilotThread() {
     },
   );
 
+  // A Stop, answer, rename or mode on the copilot (lib/optimistic-cards.ts) draws the moment it's pressed.
+  useEffect(() => onOptimistic((update) => update.kind === "apply" && setCard((c) => (c && applyIntents([c])[0]) ?? c)), []);
+
   const fail = useCallback((err: unknown) => setError(err instanceof Error ? err.message : String(err)), []);
 
   const send = useCallback(async (text: string) => {
@@ -78,13 +83,22 @@ export function useCopilotThread() {
   }, []);
 
   // Another persona is a new chat on its prompt (lib/copilot.ts setCopilotPersona), so it shares the reset's lock.
+  // The new persona shows at once; a refusal puts the old one back.
   const setPersona = useCallback(async (persona: CopilotPersona) => {
     setItems([]);
     setStreaming("");
     setResetting(true);
+    let before: Card["persona"];
+    setCard((c) => {
+      before = c?.persona;
+      return c && { ...c, persona };
+    });
     try {
       const { card } = await api.copilotPersona(persona);
       setCard(card);
+    } catch (err) {
+      setCard((c) => c && { ...c, persona: before });
+      throw err;
     } finally {
       setResetting(false);
     }

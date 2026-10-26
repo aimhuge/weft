@@ -53,7 +53,16 @@ export function useWebhooks(folders: string[], active = false) {
     put(answer.hook);
     return answer;
   };
-  const update = async (id: string, patch: WebhookPatch) => put((await api.updateWebhook(id, patch)).hook);
+  // The change shows at once (Mark registered flips the moment you click it); a refusal reloads what the server has.
+  const update = async (id: string, patch: WebhookPatch) => {
+    setHooks((list) => list.map((h) => (h.id === id ? { ...h, ...patch } : h)));
+    try {
+      put((await api.updateWebhook(id, patch)).hook);
+    } catch (err) {
+      void reload();
+      throw err;
+    }
+  };
   const remove = async (id: string) => {
     await api.removeWebhook(id);
     setHooks((list) => list.filter((h) => h.id !== id));

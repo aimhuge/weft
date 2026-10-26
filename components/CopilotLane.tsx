@@ -1,5 +1,6 @@
 "use client";
 
+import { answerNow, stopNow } from "@/lib/optimistic-cards";
 import { api } from "@/lib/client";
 import { LANE_WIDTH, type LaneState } from "@/lib/copilot-lane";
 import { personaOf } from "@/lib/copilot-personas";
@@ -76,7 +77,7 @@ export default function CopilotLane(props: {
       </div>
       {isOpen && live && (
         <button
-          onClick={() => void api.stop(COPILOT_ID).catch(fail)}
+          onClick={() => void stopNow(COPILOT_ID).catch(fail)}
           className="flex items-center gap-1 rounded-md bg-black/30 px-2 py-1 text-[11.5px] text-ink hover:bg-black/50"
         >
           <Icon name="stop" size={11} /> Stop
@@ -168,12 +169,15 @@ export default function CopilotLane(props: {
               items={items}
               streaming={streaming}
               onSend={send}
-              onAnswer={(allow, answers, reply) =>
-                api.answer(COPILOT_ID, allow, answers, card.pending?.id, reply).catch((err: unknown) => {
+              onAnswer={(allow, answers, reply) => {
+                // A plain Allow or Deny leaves at once, as on any card (lib/thread-handlers.ts).
+                const pendingId = card.pending?.id;
+                const send = () => api.answer(COPILOT_ID, allow, answers, pendingId, reply);
+                return (pendingId && !answers && !reply ? answerNow(COPILOT_ID, pendingId, allow, send) : send()).catch((err: unknown) => {
                   fail(err);
                   throw err;
-                })
-              }
+                });
+              }}
               placeholder="Ask about your threads, or tell me what to start"
               empty={<CopilotEmpty project={props.project} onAsk={(text) => void send(text).catch(fail)} />}
             />

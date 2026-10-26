@@ -43,9 +43,10 @@ export interface BoardLive {
 
 // A card changed: chime and highlight it if it moved or newly failed, then put it on the board.
 function onCard(serverCard: Card, live: BoardLive) {
-  // The copilot is a thread too, but it has its own lane and no project.
+  // The copilot is a thread too, but it has its own lane and no project. Its rename, mode and Stop draw at once
+  // like any card's, so its server updates go through the same overlay.
   if (serverCard.role === "copilot") {
-    live.updateCopilot(serverCard);
+    live.updateCopilot(overlay(serverCard) ?? serverCard);
     return;
   }
   // A card you just deleted or stopped stays drawn that way until the server catches up (lib/optimistic-cards.ts).

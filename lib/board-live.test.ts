@@ -22,7 +22,7 @@ vi.mock("./use-account", () => ({ announceAccountChange: mocks.announceAccountCh
 vi.mock("./use-events", () => ({ useBoardEvents: mocks.useBoardEvents }));
 
 import { LIST_RETRY_MS, onBoardEvent, reloadBoard, useBoardLive, type BoardLive } from "./board-live";
-import { removeNow, stopNow } from "./optimistic-cards";
+import { forget, patchNow, removeNow, stopNow } from "./optimistic-cards";
 
 const card = (over: Partial<Card> = {}): Card => ({ id: "a", title: "A", column: "running", cwd: "/r", ...over }) as Card;
 
@@ -81,6 +81,24 @@ describe("onBoardEvent: card", () => {
     onBoardEvent({ type: "card", card: copilot }, l);
     expect(l.updateCopilot).toHaveBeenCalledWith(copilot);
     expect(l.setCards).not.toHaveBeenCalled();
+  });
+
+  it("draws an open rename on the copilot it hands over", () => {
+    const { l } = live();
+    void patchNow("cp", { title: "Renamed" }, () => new Promise(() => {}));
+    onBoardEvent({ type: "card", card: card({ id: "cp", role: "copilot", title: "Copilot" }) }, l);
+    expect(l.updateCopilot).toHaveBeenCalledWith(expect.objectContaining({ id: "cp", title: "Renamed" }));
+    forget("cp");
+  });
+
+  it("hands the copilot over as it is when the overlay has nothing to draw", () => {
+    mocks.remove.mockReturnValue(new Promise(() => {}));
+    const { l } = live();
+    void removeNow("cp");
+    const copilot = card({ id: "cp", role: "copilot" });
+    onBoardEvent({ type: "card", card: copilot }, l);
+    expect(l.updateCopilot).toHaveBeenCalledWith(copilot);
+    forget("cp");
   });
 
   it("replaces a known card in place and records its column and error", () => {

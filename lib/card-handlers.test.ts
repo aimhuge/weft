@@ -12,7 +12,7 @@ const card: Card = {
 };
 
 const ctx = () => ({
-  openCard: vi.fn(), resume: vi.fn(), onCardMenu: vi.fn(), toggleStar: vi.fn(),
+  openCard: vi.fn(), resume: vi.fn(), move: vi.fn(), onCardMenu: vi.fn(), toggleStar: vi.fn(),
   toggleArchive: vi.fn(), onTag: vi.fn(), notify: vi.fn(),
 });
 

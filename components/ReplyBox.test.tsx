@@ -46,6 +46,14 @@ describe("ReplyBox", () => {
     expect(box).toHaveValue("");
   });
 
+  it("empties the box the moment you send, before the server answers", async () => {
+    const { onSend, box } = setup();
+    onSend.mockReturnValueOnce(new Promise(() => {}));
+    await userEvent.type(box, "Ship it{Enter}");
+    expect(onSend).toHaveBeenCalledWith("Ship it");
+    expect(box).toHaveValue("");
+  });
+
   it("Enter sends; Shift+Enter adds a line", async () => {
     const { onSend, box } = setup();
     await userEvent.type(box, "one{Shift>}{Enter}{/Shift}two");
@@ -294,13 +302,18 @@ describe("ReplyBox", () => {
 
     it("lists scheduled messages; one can be cancelled or taken back to edit", async () => {
       const scheduled: ScheduledMessage[] = [{ id: "m1", text: "Run the nightly", at: Date.now() + 3600_000 }];
-      const { box } = setup({ sendLater: later(scheduled) });
+      setup({ sendLater: later(scheduled) });
       await userEvent.click(screen.getByRole("button", { name: "Cancel scheduled message" }));
       expect(api.unschedule).toHaveBeenCalledWith("c1", "m1");
+      // The row leaves at once, before the server answers, so it can't be cancelled twice.
+      expect(screen.queryByRole("button", { name: "Run the nightly" })).toBeNull();
+      cleanup();
 
+      const { box } = setup({ sendLater: later(scheduled) });
       await userEvent.click(screen.getByRole("button", { name: "Run the nightly" }));
       expect(box).toHaveValue("Run the nightly");
       expect(api.unschedule).toHaveBeenCalledTimes(2);
+      expect(screen.queryByRole("button", { name: "Run the nightly" })).toBeNull();
     });
   });
 });

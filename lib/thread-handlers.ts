@@ -1,5 +1,5 @@
 import { api } from "./client";
-import { removeNow } from "./optimistic-cards";
+import { answerNow, patchNow, removeNow } from "./optimistic-cards";
 import type { Card, PermissionMode, QuestionReply } from "./types";
 
 // What the open card's thread does with the server: send, answer, release, delete, rename, mode and the
@@ -25,12 +25,17 @@ export function threadHandlers(card: Card, ctx: ThreadActionsCtx) {
       }
       await api.send(card.id, text);
     },
-    // A failure is shown and rethrown, so the question form re-enables.
-    onAnswer: (allow: boolean, answers?: Record<string, string>, reply?: QuestionReply) =>
-      api.answer(card.id, allow, answers, card.pending?.id, reply).catch((err: unknown) => {
+    // A failure is shown and rethrown, so the question form re-enables. A plain Allow or Deny leaves the thread at
+    // once (lib/optimistic-cards.ts); a form with answers waits, so one that doesn't fit stays filled in.
+    onAnswer: (allow: boolean, answers?: Record<string, string>, reply?: QuestionReply) => {
+      const pendingId = card.pending?.id;
+      const send = () => api.answer(card.id, allow, answers, pendingId, reply);
+      const sent = pendingId && !answers && !reply ? answerNow(card.id, pendingId, allow, send) : send();
+      return sent.catch((err: unknown) => {
         ctx.notify(err);
         throw err;
-      }),
+      });
+    },
     onRelease: () => void api.release(card.id).catch(ctx.notify),
     onDelete: () => {
       close();
@@ -40,8 +45,8 @@ export function threadHandlers(card: Card, ctx: ThreadActionsCtx) {
     onClose: close,
     // The first-message-error banner's Delete closes the thread so the open card id doesn't linger.
     onDeleted: close,
-    onRename: (title: string) => void api.rename(card.id, title).catch(ctx.notify),
-    onMode: (mode: PermissionMode) => void api.setMode(card.id, mode).catch(ctx.notify),
+    onRename: (title: string) => void patchNow(card.id, { title }, () => api.rename(card.id, title)).catch(ctx.notify),
+    onMode: (mode: PermissionMode) => void patchNow(card.id, { permissionMode: mode }, () => api.setMode(card.id, mode)).catch(ctx.notify),
     onNewChat: () => void api.resetCopilot().then(() => ctx.select(card.id)).catch(ctx.notify),
   };
 }

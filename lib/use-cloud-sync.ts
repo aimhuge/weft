@@ -44,13 +44,24 @@ export function useCloudSync(active = false) {
     };
   }, [reload, active]);
 
-  // Turn a folder on or off. The server replies with the new list and the live status, so we apply both
-  // optimistically only after it confirms (a folder that isn't on the board still 400s on the server).
-  const setFolder = useCallback(async (folder: string, on: boolean) => {
-    const answer = await api.cloudSyncSetFolder(folder, on);
-    setFolders(answer.folders);
-    setStatus(answer.status);
-  }, []);
+  // Turn a folder on or off: the switch flips at once, then the server's answer (the new list and the live status)
+  // replaces it. A refusal (a folder that isn't on the board 400s) reloads what the server has.
+  const setFolder = useCallback(
+    async (folder: string, on: boolean) => {
+      // A poll that left before the click would answer with the old list.
+      latest.current++;
+      setFolders((list) => (on ? [...list.filter((f) => f !== folder), folder] : list.filter((f) => f !== folder)));
+      try {
+        const answer = await api.cloudSyncSetFolder(folder, on);
+        setFolders(answer.folders);
+        setStatus(answer.status);
+      } catch (err) {
+        void reload();
+        throw err;
+      }
+    },
+    [reload],
+  );
 
   // Ask for an immediate flush. The page shows the status from the answer; the poll will catch up.
   const syncNow = useCallback(async () => {

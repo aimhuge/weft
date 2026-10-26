@@ -27,14 +27,19 @@ export default function GithubDrawer({
   notify: (err: unknown) => void;
 }) {
   const [busy, setBusy] = useState<string | null>(null);
+  // A folder's switches as you just set them, drawn until the reload after the change brings the server's.
+  const [drawn, setDrawn] = useState<Record<string, Partial<GithubFolder>>>({});
 
   if (error) return <Note>{error}</Note>;
   if (!status) return <Note>Asking GitHub…</Note>;
   const account = status.account;
   if (!account) return <SignIn error={status.error} onCheck={reload} />;
 
-  async function change(folder: string, run: () => Promise<unknown>) {
+  // show: what the switch now says, drawn at once so the click never looks ignored; a refusal (and the reload
+  // after any change) puts the server's back.
+  async function change(folder: string, run: () => Promise<unknown>, show?: Partial<GithubFolder>) {
     setBusy(folder);
+    if (show) setDrawn((d) => ({ ...d, [folder]: show }));
     try {
       await run();
       await reload();
@@ -42,10 +47,11 @@ export default function GithubDrawer({
       notify(err);
     } finally {
       setBusy(null);
+      setDrawn((d) => Object.fromEntries(Object.entries(d).filter(([k]) => k !== folder)));
     }
   }
 
-  const sync = (folder: string) => change(folder, async () => notify(syncToast(folder, await api.importIssues(folder))));
+  const sync = (folder: string, show?: Partial<GithubFolder>) => change(folder, async () => notify(syncToast(folder, await api.importIssues(folder))), show);
   const shown = shownGithubFolders(status.folders, project);
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -66,14 +72,18 @@ export default function GithubDrawer({
         {shown.map((f) => (
           <FolderSection
             key={f.folder}
-            folder={f}
+            folder={{ ...f, ...drawn[f.folder] }}
             busy={busy === f.folder}
-            onSync={() => void sync(f.folder)}
+            onSync={() => void sync(f.folder, f.syncing ? undefined : { syncing: true })}
             onStop={() =>
-              void change(f.folder, async () => {
-                await api.stopIssues(f.folder);
-                notify(`Stopped syncing GitHub issues for ${folderName(f.folder)}; its cards stay`);
-              })
+              void change(
+                f.folder,
+                async () => {
+                  await api.stopIssues(f.folder);
+                  notify(`Stopped syncing GitHub issues for ${folderName(f.folder)}; its cards stay`);
+                },
+                { syncing: false },
+              )
             }
             weft={status.weft}
             onInstant={(on) =>
@@ -85,7 +95,7 @@ export default function GithubDrawer({
                   await api.removeHook(f.folder);
                   notify(`Took the webhook off ${f.repo ?? folderName(f.folder)}; it syncs every 5 minutes`);
                 }
-              })
+              }, { instant: on })
             }
             onOpenUrl={onOpenUrl}
           />

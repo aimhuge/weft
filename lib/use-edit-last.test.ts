@@ -41,6 +41,29 @@ describe("useEditLast", () => {
     expect(onEdited).toHaveBeenCalled();
   });
 
+  it("hands the edit to the tracker, which sends it at the next index", async () => {
+    const order: string[] = [];
+    const track = vi.fn(async (text: string, send: () => Promise<void>, after: number) => {
+      order.push("track");
+      expect(after).toBe(3);
+      await send();
+    });
+    const { result } = renderHook(() => useEditLast(card(), items, edit, () => order.push("edited"), track));
+    await act(() => result.current.editLast!.onEdit("make it red"));
+    expect(track).toHaveBeenCalledWith("make it red", expect.any(Function), 3);
+    expect(edit).toHaveBeenCalledWith("c1", "make it red");
+    // The callback comes first: the tracker draws the edit while it goes out.
+    expect(order).toEqual(["edited", "track"]);
+  });
+
+  it("sends nothing when the tracker doesn't send", async () => {
+    const track = vi.fn(async () => {});
+    const { result } = renderHook(() => useEditLast(card(), items, edit, () => {}, track));
+    await act(() => result.current.editLast!.onEdit("make it red"));
+    expect(track).toHaveBeenCalled();
+    expect(edit).not.toHaveBeenCalled();
+  });
+
   it("marks nothing for a message that can't rewind", () => {
     const { result } = renderHook(() => useEditLast(card(), [{ kind: "user", text: "old", at: 1 }], edit, () => {}));
     act(() => result.current.onEditing(true));

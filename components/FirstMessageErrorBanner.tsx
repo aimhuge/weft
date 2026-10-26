@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/client";
-import { removeNow } from "@/lib/optimistic-cards";
+import { patchNow, removeNow } from "@/lib/optimistic-cards";
 import { modelLabel } from "@/lib/new-thread";
 import { rememberPage } from "@/lib/settings-nav";
 import type { Card } from "@/lib/types";
@@ -77,7 +77,8 @@ export default function FirstMessageErrorBanner({
     setBusy("rerun");
     setError(null);
     try {
-      await api.rerunModel(card.id, backupModel);
+      // The banner goes and the card runs again at once (lib/optimistic-cards.ts); a refusal brings it back.
+      await patchNow(card.id, { column: "running", error: undefined }, () => api.rerunModel(card.id, backupModel));
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
