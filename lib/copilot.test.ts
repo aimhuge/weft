@@ -35,8 +35,24 @@ vi.mock("./vercel-hooks", () => ({ startVercelListener: vi.fn() }));
 vi.mock("./webhook-forward", () => ({ startWebhookRelay: vi.fn() }));
 vi.mock("./cloud-sync-start", () => ({ startAccountCloudSync: vi.fn() }));
 vi.mock("./league-sync", () => ({ startLeagueSync: vi.fn() }));
-vi.mock("./cli-reaper", () => ({ reapStrayClis: vi.fn(() => Promise.resolve([])) }));
+// The reaper's check can fail; the server logs it and carries on.
+const reaper = vi.hoisted(() => ({ fails: false }));
+vi.mock("./cli-reaper", () => ({
+  reapStrayClis: vi.fn(() => (reaper.fails ? Promise.reject(new Error("disk gone")) : Promise.resolve([]))),
+}));
 vi.mock("./worker-reaper", () => ({ startWorkerReaper: vi.fn() }));
+// The three modules prewarm() loads lazily. Their watchers are faked here, and the app-build one
+// throws so the failure path is covered too (lib/copilot-lazy-start.test.ts has the other half).
+const lazy = vi.hoisted(() => ({ appBuildFails: false }));
+vi.mock("./app-build-watch", () => ({
+  startAppBuildWatcher: () => {
+    // eslint-disable-next-line @typescript-eslint/only-throw-error -- the watcher throws a plain string, and the server logs it as it is
+    if (lazy.appBuildFails) throw "no esbuild";
+    return { stop: () => {}, rebuild: () => {}, pendingCount: () => 0 };
+  },
+}));
+vi.mock("./worktree-pool", () => ({ startWorktreePool: vi.fn() }));
+vi.mock("./cron-run", () => ({ startCronClock: vi.fn() }));
 vi.mock("./settings", () => ({
   listProjects: vi.fn(() => db.projects),
   defaultPermissionMode: () => "auto",
@@ -76,6 +92,8 @@ beforeEach(() => {
   db.projects = [];
   delete g.__weftPrewarmed;
   delete g.__weftCopilotSeen;
+  reaper.fails = false;
+  lazy.appBuildFails = false;
 });
 
 describe("ensureCopilot", () => {
@@ -235,5 +253,42 @@ describe("prewarm", () => {
   it("opens no spare on an empty board", () => {
     prewarm();
     expect(runner.ensureSpare).not.toHaveBeenCalled();
+  });
+
+  it("starts the watchers it loads lazily, once the imports land", async () => {
+    const { startWorktreePool } = await import("./worktree-pool");
+    const { startCronClock } = await import("./cron-run");
+    prewarm();
+    // The lazy imports settle a tick or two later.
+    await vi.waitFor(() => expect(startWorktreePool).toHaveBeenCalled());
+    expect(startCronClock).toHaveBeenCalled();
+    lazy.appBuildFails = false;
+  });
+
+  it("logs a watcher that won't start, and carries on", async () => {
+    const errors: string[] = [];
+    const spy = vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+      errors.push(args.map(String).join(" "));
+    });
+    lazy.appBuildFails = true;
+    prewarm();
+    await vi.waitFor(() => expect(errors.join("\n")).toContain("app-build-watch: not started:"));
+    // The failure is reported as it is, not as an Error's message.
+    expect(errors.join("\n")).toContain("no esbuild");
+    lazy.appBuildFails = false;
+    spy.mockRestore();
+  });
+
+  it("logs a stray-CLI check that failed, and carries on", async () => {
+    const errors: string[] = [];
+    const spy = vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+      errors.push(args.map(String).join(" "));
+    });
+    reaper.fails = true;
+    prewarm();
+    await vi.waitFor(() => expect(errors.join("\n")).toContain("[weft] stray CLI check failed:"));
+    expect(errors.join("\n")).toContain("disk gone");
+    reaper.fails = false;
+    spy.mockRestore();
   });
 });

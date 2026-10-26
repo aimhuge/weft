@@ -135,4 +135,31 @@ describe("releaseSlots", () => {
     expect(releaseSlots(() => { throw new Error("folder gone"); })).toBe(0);
     expect(cards.get("x")!.error).toMatch(/folder gone/);
   });
+
+  it("puts a failure that isn't an Error on the card too", () => {
+    card("x", { scheduled: [{ id: "m1", text: "held", at: 1, forSlot: true }] });
+    // eslint-disable-next-line @typescript-eslint/only-throw-error -- a non-Error throw is the branch under test
+    expect(releaseSlots(() => { throw "offline"; })).toBe(0);
+    expect(cards.get("x")!.error).toMatch(/offline/);
+  });
+
+  it("skips a card that was deleted while its message waited", () => {
+    card("x", { scheduled: [{ id: "m1", text: "first", at: 1, forSlot: true }] });
+    card("y", { scheduled: [{ id: "m2", text: "second", at: 2, forSlot: true }] });
+    // The first message goes out, and the card waiting behind it is deleted before its turn comes.
+    const send = vi.fn((id: string) => {
+      if (id === "x") cards.delete("y");
+    });
+    expect(() => releaseSlots(send)).not.toThrow();
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves a card with nothing held for a slot out of the queue", () => {
+    card("x", { scheduled: [{ id: "t", text: "timed", at: 1 }] });
+    card("y", { scheduled: [{ id: "m1", text: "held", at: 2, forSlot: true }] });
+    const send = vi.fn();
+    expect(releaseSlots(send)).toBe(1);
+    expect(send).toHaveBeenCalledExactlyOnceWith("y", "held", { echo: true });
+    expect(cards.get("x")!.scheduled).toHaveLength(1);
+  });
 });

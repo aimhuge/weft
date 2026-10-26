@@ -116,6 +116,14 @@ describe("clashWhy", () => {
     expect(clashWhy({ card: holder, theirs: "/repo/a.ts#f", mine: "/repo/a.ts#f" }).holder).toMatchObject({ emoji: "🔐", thumb: "/t.png" });
   });
 
+  it("calls a holder parked on its own prompt 'waiting', and one in needs_you 'waiting on you'", () => {
+    // A holder that chose Wait is still holding the code, so it reads as running: only needs_you counts.
+    const parked = card({ title: "Fix login", pending: { waiting: true } as Card["pending"] });
+    expect(clashWhy({ card: parked, theirs: "/repo/a.ts#f", mine: "/repo/a.ts#f" }).detail).toBe("‘Fix login’ (waiting) has uncommitted edits to f");
+    const asked = card({ title: "Fix login", column: "needs_you", pending: { waiting: true } as Card["pending"] });
+    expect(clashWhy({ card: asked, theirs: "/repo/a.ts#f", mine: "/repo/a.ts#f" }).detail).toBe("‘Fix login’ (waiting on you) has uncommitted edits to f");
+  });
+
 
   it("files a clash under same code, overlapping code or whole file, and names the holder", () => {
     const running = card({ title: "Fix login", column: "running" });

@@ -25,6 +25,13 @@ describe("nextFiveHourReset", () => {
     expect(nextFiveHourReset([withReset(soon), withReset(later), withReset(NOW - 1)], NOW)).toBe(later);
   });
 
+  it("keeps the latest when another thread's reset is earlier than it", () => {
+    const soon = NOW + 3600_000;
+    const later = NOW + 2 * 3600_000;
+    // The second card's window resets before the first's, so it doesn't move the answer.
+    expect(nextFiveHourReset([withReset(later), withReset(soon)], NOW)).toBe(later);
+  });
+
   it("skips puku threads", () => {
     expect(nextFiveHourReset([withReset(NOW + 3600_000, { backend: "puku" })], NOW)).toBeUndefined();
   });
@@ -97,6 +104,10 @@ describe("addScheduled and dueMessage", () => {
   it("keeps the soonest first", () => {
     const list = addScheduled([{ id: "b", text: "b", at: NOW + 2 }], { id: "a", text: "a", at: NOW + 1 });
     expect(list.map((m) => m.id)).toEqual(["a", "b"]);
+  });
+
+  it("starts a list for a card that has none", () => {
+    expect(addScheduled(undefined, { id: "a", text: "a", at: NOW })).toEqual([{ id: "a", text: "a", at: NOW }]);
   });
 
   it("finds the message whose time has come", () => {

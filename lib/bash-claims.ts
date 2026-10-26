@@ -79,7 +79,8 @@ export function releaseClean(root: string, dirty: Set<string>) {
 }
 
 // A Bash result's text, from PostToolUse's response or PostToolUseFailure's error.
-function outputOf(input: Parameters<HookCallback>[0]): string {
+// Exported so the shape of a result can be pinned directly (lib/bash-claims.test.ts).
+export function outputOf(input: Parameters<HookCallback>[0]): string {
   if (input.hook_event_name === "PostToolUseFailure") return input.error;
   if (input.hook_event_name !== "PostToolUse") return "";
   const r = input.tool_response as { stdout?: unknown; stderr?: unknown } | string | null;

@@ -54,10 +54,12 @@ vi.mock("./scheduler", () => ({
 const gate = vi.hoisted(() => vi.fn<() => { at: number } | undefined>());
 vi.mock("./start-gate", () => ({ startGate: gate }));
 
+// The pane refuses to open when `paneFails` is set, so the run's own error handling is exercised.
+const paneFails = vi.hoisted(() => ({ value: false }));
 vi.mock("./browser-tools", () => ({
   openInPane: (url: string, cardId: string) => {
     opened.push([url, cardId]);
-    return Promise.resolve();
+    return paneFails.value ? Promise.reject(new Error("no pane")) : Promise.resolve();
   },
 }));
 
@@ -292,5 +294,15 @@ describe("runCron", () => {
     const cron = createCron({ prompt: "p", expr: "0 9 * * *", cardId: "source" }, NOW);
     await runCron(cron.id, NOW);
     expect(sent).toHaveLength(1);
+  });
+
+  it("keeps the run going when the pane refuses the page outright", async () => {
+    card("source", { sessionId: "sess-1" });
+    pane.mockReturnValue("http://localhost/source-page");
+    paneFails.value = true;
+    const cron = createCron({ prompt: "p", expr: "0 9 * * *", cardId: "source" }, NOW);
+    await runCron(cron.id, NOW);
+    expect(sent).toHaveLength(1);
+    paneFails.value = false;
   });
 });

@@ -69,7 +69,10 @@ export function releaseSlots(send: (cardId: string, text: string, opts: { echo: 
   for (const { card, id, text, quiet } of waiting()) {
     if (full(card.id)) break;
     if (sessions.get(card.id)?.busy) continue;
-    const rest = (getCard(card.id)?.scheduled ?? []).filter((m) => m.id !== id);
+    // The card can be gone by now (deleted while its message waited), so nothing is sent for it.
+    const scheduled = getCard(card.id)?.scheduled;
+    if (!scheduled) continue;
+    const rest = scheduled.filter((m) => m.id !== id);
     updateCard(card.id, { scheduled: rest.length ? rest : undefined });
     try {
       send(card.id, text, { echo: !quiet });

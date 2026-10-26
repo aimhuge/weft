@@ -191,6 +191,10 @@ export const settingsMock = (h: Harness) => ({
   defaultPermissionMode: () => "bypassPermissions",
   touchProject: () => {},
   automations: () => [],
+  // A Goose card reads the provider the user picked in Settings.
+  gooseModelId: () => "",
+  gooseProviderId: () => "",
+  gooseBaseUrl: () => "",
 });
 
 export const loginMock = (h: Harness) => ({

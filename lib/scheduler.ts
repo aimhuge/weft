@@ -35,9 +35,11 @@ export function sendDueMessages(now = Date.now()) {
   // Threads waiting for a slot go before the timed ones, so a turn that ended unseen doesn't strand them.
   freeSlots();
   for (const card of listCards()) {
+    // The list is read once, so a card with nothing scheduled takes the same path as one with a due message.
+    const scheduled = card.scheduled ?? [];
     const due = dueMessage(card, now);
     if (!due || isBusy(card.id)) continue;
-    const rest = (card.scheduled ?? []).filter((m) => m.id !== due.id);
+    const rest = scheduled.filter((m) => m.id !== due.id);
     updateCard(card.id, { scheduled: rest.length ? rest : undefined });
     try {
       sendUserMessage(card.id, due.text);

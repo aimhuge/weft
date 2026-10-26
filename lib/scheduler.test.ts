@@ -78,6 +78,14 @@ describe("sendDueMessages", () => {
     expect(cards.get("a")!.scheduled!.map((m) => m.id)).toEqual(["2", "3"]);
   });
 
+  it("leaves a card with nothing scheduled alone", () => {
+    card("empty");
+    card("a", { scheduled: [{ id: "1", text: "hi", at: NOW - 1 }] });
+    sendDueMessages(NOW);
+    expect(sent).toEqual([["a", "hi"]]);
+    expect(cards.get("empty")!.scheduled).toBeUndefined();
+  });
+
   it("waits while the card is mid-turn", () => {
     card("a", { scheduled: [{ id: "1", text: "hi", at: NOW - 1 }] });
     busy.add("a");

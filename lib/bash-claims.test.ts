@@ -30,7 +30,7 @@ vi.mock("./dirty-files", () => ({ repoRoot, dirtyFiles, writtenAt }));
 
 const store = await import("./store");
 const { claimQuestion, claimWhy } = await import("./claim-guard");
-const { bashClaimHooks } = await import("./bash-claims");
+const { bashClaimHooks, outputOf } = await import("./bash-claims");
 const writers = await import("./bash-writers");
 
 // A fake repo tree, all of it real under one root so the guards compare like paths.
@@ -247,6 +247,25 @@ describe("the failure note", () => {
     expect(await post(() => "me", "blank", { command: "pnpm typecheck" }, null)).toEqual({});
     await pre(() => "me", "pnpm typecheck", "nums");
     expect(await post(() => "me", "nums", { command: "pnpm typecheck" }, { stdout: 1, stderr: 2 })).toEqual({});
+  });
+});
+
+describe("the result's text", () => {
+  it("is the error on a failure, the response on a post, and nothing at all on any other event", () => {
+    expect(outputOf({ hook_event_name: "PostToolUseFailure", error: "boom" } as never)).toBe("boom");
+    expect(outputOf({ hook_event_name: "PostToolUse", tool_response: "all good" } as never)).toBe("all good");
+    expect(outputOf({ hook_event_name: "PostToolUse", tool_response: { stdout: "out", stderr: "err" } } as never)).toBe("out\nerr");
+    // Any other event carries no result at all.
+    expect(outputOf({ hook_event_name: "PreToolUse" } as never)).toBe("");
+  });
+});
+
+describe("an unknown writer under the root", () => {
+  it("is forgotten once the file is clean", async () => {
+    writers.markUnknown(`${root}/lib/unknown.ts`);
+    dirty.list = [];
+    await post(() => "me", "none");
+    expect([...writers.unknownWriters()]).toEqual([]);
   });
 });
 
