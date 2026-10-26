@@ -124,7 +124,7 @@ tomorrow." puku-cli shows it, and Weft's rate-limit handling (`lib/rate-limit.ts
 An agent turn makes a request per tool round, so 150 requests is roughly 5 to 15 real turns a day.
 
 **The global cap.** Weft accounts are free, so one person can open many; the per-account cap alone has no ceiling.
-`supabase/migrations/20261026151000_puku_trial_global_usage.sql` adds `puku_trial_global_usage` (one row per UTC day,
+`supabase/migrations/20261026164353_puku_trial_global_usage.sql` adds `puku_trial_global_usage` (one row per UTC day,
 no client grants) and `puku_trial_global_add(...)`, the same atomic add-and-return as `puku_trial_add`. On the free
 path `hold()` adds to the account's row and the global row at once (`Promise.all`, one round trip), and answers 429
 when either is over: the account's own message first, else "Weft's free Puku trial is used up for today, across
