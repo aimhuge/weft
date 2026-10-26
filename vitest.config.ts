@@ -21,7 +21,7 @@ export default defineConfig({
   },
   test: {
     // Component tests opt into jsdom per file (`// @vitest-environment jsdom`); everything else stays on node.
-    include: ["lib/**/*.test.ts", "app/**/*.test.ts", "components/**/*.test.tsx", "electron/**/*.test.ts", "scripts/**/*.test.ts", "scripts/**/*.test.mjs", "plugin/**/*.test.ts"],
+    include: ["lib/**/*.test.ts", "app/**/*.test.ts", "components/**/*.test.tsx", "app/**/*.test.tsx", "electron/**/*.test.ts", "scripts/**/*.test.ts", "scripts/**/*.test.mjs", "plugin/**/*.test.ts"],
     environment: "node",
     // Vitest 4's default threads pool times out spawning workers in CI under load (a few
     // files "fail to start forks worker" with no error in the worker). Forks is stable.

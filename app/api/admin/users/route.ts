@@ -7,6 +7,9 @@ import { fail, guard } from "@/lib/guard";
 import { normalizeEmail } from "@aimhuge/teams";
 
 const PAGE_SIZE = 20;
+// The most one request may take: the Users sheet loads every account in pages this size and sorts and filters them
+// in the browser. Kept well under what one profiles lookup (an in.(...) list of ids in the URL) can carry.
+const MAX_TAKE = 200;
 const MAX_SKIP = 100 * PAGE_SIZE;
 
 export interface AdminUserRow {
@@ -17,6 +20,9 @@ export interface AdminUserRow {
   provider: string | null;
   createdAt: string | null;
   lastSignInAt: string | null;
+  // The latest of a token refresh, a sign-in and synced card work (admin_users_last_seen); the sign-in alone until
+  // supabase/migrations/20261025181950_user_active_days.sql is applied.
+  lastSeenAt: string | null;
 }
 
 // A user as GoTrue's admin API returns it (auth.admin.listUsers). auth.users
@@ -41,10 +47,14 @@ interface ProfileRow {
   avatar_url: string | null;
 }
 
-// The whitelisted sort columns. Anything else would be an injection surface.
-const SORTABLE: Record<string, "created_at" | "last_sign_in_at" | "email"> = {
+type SortColumn = "created_at" | "last_seen_at" | "email";
+
+// The whitelisted sort columns. Anything else would be an injection surface. last_sign_in_at is the old name for
+// "Recently seen", kept so a saved link still sorts.
+const SORTABLE: Record<string, SortColumn> = {
   created_at: "created_at",
-  last_sign_in_at: "last_sign_in_at",
+  last_seen_at: "last_seen_at",
+  last_sign_in_at: "last_seen_at",
   email: "email",
 };
 
@@ -53,7 +63,7 @@ const SORTABLE: Record<string, "created_at" | "last_sign_in_at" | "email"> = {
 const LIST_PAGE = 1000;
 const MAX_LIST_PAGES = 10;
 
-function parseSort(sort: string): { column: "created_at" | "last_sign_in_at" | "email"; dir: "asc" | "desc" } {
+function parseSort(sort: string): { column: SortColumn; dir: "asc" | "desc" } {
   const [field, dirRaw] = sort.split(/\s+/, 2);
   const dir = dirRaw === "asc" ? "asc" : "desc";
   return { column: SORTABLE[field ?? ""] ?? "created_at", dir };
@@ -77,6 +87,7 @@ function pickString(meta: Record<string, unknown>, ...keys: string[]): string | 
 function mapUserToRow(
   u: AuthUser,
   profiles: Map<string, { name: string | null; avatar_url: string | null }>,
+  lastSeen: Map<string, string>,
 ): AdminUserRow {
   const meta = u.user_metadata ?? {};
   const profile = profiles.get(u.id);
@@ -89,6 +100,7 @@ function mapUserToRow(
     provider,
     createdAt: u.created_at ?? null,
     lastSignInAt: u.last_sign_in_at ?? null,
+    lastSeenAt: seenAt(u, lastSeen),
   };
 }
 
@@ -119,13 +131,31 @@ async function listAllUsers(admin: AuthAdmin): Promise<AuthUser[]> {
   return all;
 }
 
-function compareBy(column: "created_at" | "last_sign_in_at" | "email", dir: "asc" | "desc") {
+function seenAt(u: AuthUser, lastSeen: Map<string, string>): string | null {
+  return lastSeen.get(u.id) ?? u.last_sign_in_at ?? null;
+}
+
+// Each account's last activity from admin_users_last_seen. An error (the migration not applied yet) answers an empty
+// map, so the page falls back to sign-in times rather than failing.
+async function loadLastSeen(service: { rpc: (fn: string) => PromiseLike<{ data: unknown; error: unknown }> }): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  const { data, error } = await service.rpc("admin_users_last_seen");
+  if (error || !Array.isArray(data)) return map;
+  for (const r of data as Array<{ user_id?: unknown; last_seen_at?: unknown }>) {
+    // PostgREST answers timestamptz as "2026-10-25T17:48:29+00:00"; ISO with Z keeps the string sort right.
+    if (typeof r.user_id === "string" && typeof r.last_seen_at === "string") map.set(r.user_id, new Date(r.last_seen_at).toISOString());
+  }
+  return map;
+}
+
+function compareBy(column: SortColumn, dir: "asc" | "desc", lastSeen: Map<string, string>) {
   const sign = dir === "asc" ? 1 : -1;
+  const value = (u: AuthUser) => (column === "last_seen_at" ? seenAt(u, lastSeen) : u[column]) ?? "";
   // Missing values sort last either way, like Postgres's NULLS LAST on desc.
   return (a: AuthUser, b: AuthUser) => {
     // Emails compare case-blind; the ISO timestamps compare as strings.
-    const x = (a[column] ?? "").toLowerCase();
-    const y = (b[column] ?? "").toLowerCase();
+    const x = value(a).toLowerCase();
+    const y = value(b).toLowerCase();
     if (x === y) return 0;
     if (x === "") return 1;
     if (y === "") return -1;
@@ -140,7 +170,7 @@ export async function GET(req: Request) {
     await requireSuperAdminWeft();
     const url = new URL(req.url);
     const skip = Math.min(Math.max(parseInt32(url.searchParams.get("skip"), 0), 0), MAX_SKIP);
-    const take = Math.min(Math.max(parseInt32(url.searchParams.get("take"), PAGE_SIZE), 1), PAGE_SIZE);
+    const take = Math.min(Math.max(parseInt32(url.searchParams.get("take"), PAGE_SIZE), 1), MAX_TAKE);
     const q = (url.searchParams.get("q") ?? "").trim();
     const sort = parseSort(url.searchParams.get("sort") ?? "created_at desc");
     const service = await adminServiceClient();
@@ -159,9 +189,10 @@ export async function GET(req: Request) {
 
     const all = await listAllUsers((service as unknown as { auth: { admin: AuthAdmin } }).auth.admin);
     const matching = emailTerm ? all.filter((u) => normalizeEmail(u.email ?? "").includes(emailTerm)) : all;
-    const pageUsers = [...matching].sort(compareBy(sort.column, sort.dir)).slice(skip, skip + take);
+    const lastSeen = await loadLastSeen(service);
+    const pageUsers = [...matching].sort(compareBy(sort.column, sort.dir, lastSeen)).slice(skip, skip + take);
     const profiles = await loadProfilesFor(service, pageUsers.map((u) => u.id));
-    const rows = pageUsers.map((u) => mapUserToRow(u, profiles));
+    const rows = pageUsers.map((u) => mapUserToRow(u, profiles, lastSeen));
 
     return Response.json({ rows, total: matching.length });
   } catch (err) {

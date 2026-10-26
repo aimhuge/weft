@@ -1,128 +1,119 @@
 "use client";
 
-// The client half of /admin/users: every weft.zip account from /api/admin/users, searchable by email, sortable,
-// a page of 20 at a time. Built on the admin kit (components/admin).
+// The client half of /admin/users: every weft.zip account from /api/admin/users as a sheet (the sheet kit,
+// components/sheet/SheetTable.tsx, columns in lib/users-sheet.ts). It loads every account, a couple of hundred at a
+// time, so the search (name or email, typed into the User header or anywhere on the page), the filters on provider,
+// joined and last seen, and the sorts all answer at once in the browser. A row opens that account's activity drawer
+// (UserActivity). Built on the admin kit (components/admin).
 
-import { useEffect, useState } from "react";
-import { Avatar, DataTable, Pager, type Column } from "@/components/admin/DataTable";
-import { AdminPage, Badge, Input, Select } from "@/components/admin/kit";
+import { useCallback, useEffect, useState } from "react";
+import { Avatar } from "@/components/admin/DataTable";
+import { AdminPage, Badge } from "@/components/admin/kit";
+import SheetTable from "@/components/sheet/SheetTable";
 import type { AdminUserRow } from "@/app/api/admin/users/route";
 import { timeAgo } from "@/lib/format";
+import { USERS_FRESH, USERS_SHEET, msOf, type UserKey } from "@/lib/users-sheet";
 import { adminGet, day } from "../admin-api";
+import UserActivityDrawer from "./UserActivity";
 
-const TAKE = 20;
-
-const SORTS: Array<[string, string]> = [
-  ["created_at desc", "Newest"],
-  ["created_at asc", "Oldest"],
-  ["last_sign_in_at desc", "Recently seen"],
-  ["email asc", "Email A–Z"],
-];
-
-function seen(iso: string | null): string {
-  return iso ? timeAgo(Date.parse(iso), Date.now()) : "never";
-}
-
-const columns: Column<AdminUserRow>[] = [
-  {
-    key: "user",
-    header: "User",
-    cell: (u) => (
-      <div className="flex min-w-0 items-center gap-2.5">
-        <Avatar src={u.avatarUrl} name={u.name ?? u.email ?? "?"} />
-        <div className="flex min-w-0 flex-col">
-          <span className="truncate font-medium">{u.name ?? "—"}</span>
-          <span className="truncate text-[12px] text-muted">{u.email ?? "no email"}</span>
-        </div>
-      </div>
-    ),
-  },
-  { key: "provider", header: "Provider", cell: (u) => (u.provider ? <Badge>{u.provider}</Badge> : <span className="text-faint">—</span>) },
-  { key: "joined", header: "Joined", cell: (u) => <span className="text-muted">{day(u.createdAt)}</span>, className: "whitespace-nowrap" },
-  { key: "seen", header: "Last seen", cell: (u) => <span className="text-muted" title={u.lastSignInAt ?? ""}>{seen(u.lastSignInAt)}</span>, className: "whitespace-nowrap" },
-  { key: "id", header: "ID", cell: (u) => <span className="font-mono text-[11px] text-faint" title={u.id}>…{u.id.slice(-6)}</span>, className: "w-0" },
-];
+// How many accounts one request brings (the route's most), and how many pages it will go to.
+const TAKE = 200;
+const MAX_PAGES = 50;
 
 interface Answer {
   rows: AdminUserRow[];
   total: number;
 }
 
-function useUsers(q: string, sort: string, skip: number) {
-  const [answer, setAnswer] = useState<Answer | null>(null);
+// Every account, page after page until the total is in; newest first, as the sheet starts.
+function useAllUsers() {
+  const [rows, setRows] = useState<AdminUserRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
-    let live = true;
-    // Debounced so typing in the search doesn't fire a request per key.
-    const timer = setTimeout(() => {
-      setLoading(true);
-      const params = new URLSearchParams({ skip: String(skip), take: String(TAKE), sort });
-      if (q) params.set("q", q);
-      adminGet<Answer>(`/api/admin/users?${params}`)
-        .then((a) => {
-          if (!live) return;
-          setAnswer(a);
-          setError(null);
-        })
-        .catch((e: unknown) => {
-          if (live) setError(e instanceof Error ? e.message : String(e));
-        })
-        .finally(() => {
-          if (live) setLoading(false);
-        });
-    }, 200);
+    // Read after each await, so a page that unmounted mid-load stops writing.
+    const run = { live: true };
+    void (async () => {
+      try {
+        const all: AdminUserRow[] = [];
+        for (let page = 0; page < MAX_PAGES; page++) {
+          const params = new URLSearchParams({ skip: String(page * TAKE), take: String(TAKE), sort: "created_at desc" });
+          const answer = await adminGet<Answer>(`/api/admin/users?${params}`);
+          all.push(...answer.rows);
+          if (!run.live) return;
+          setRows([...all]);
+          if (answer.rows.length < TAKE || all.length >= answer.total) break;
+        }
+        setError(null);
+      } catch (e) {
+        if (run.live) setError(e instanceof Error ? e.message : String(e));
+      } finally {
+        if (run.live) setLoading(false);
+      }
+    })();
     return () => {
-      live = false;
-      clearTimeout(timer);
+      run.live = false;
     };
-  }, [q, sort, skip]);
-  return { answer, error, loading };
+  }, []);
+  return { rows, error, loading };
 }
 
+function seen(iso: string | null): string {
+  const at = msOf(iso);
+  return at === null ? "never" : timeAgo(at, Date.now());
+}
+
+const CELLS: Partial<Record<UserKey, (u: AdminUserRow) => React.ReactNode>> = {
+  user: (u) => (
+    <span className="flex min-w-0 items-center gap-2.5">
+      <Avatar src={u.avatarUrl} name={u.name ?? u.email ?? "?"} />
+      <span className="flex min-w-0 flex-col">
+        <span className="sheet-title truncate font-medium">{u.name ?? "—"}</span>
+        <span className="truncate text-[11.5px] text-muted">{u.email ?? "no email"}</span>
+      </span>
+    </span>
+  ),
+  provider: (u) => (u.provider ? <Badge>{u.provider}</Badge> : <span className="text-faint">—</span>),
+  joined: (u) => <span className="text-muted">{day(u.createdAt)}</span>,
+  seen: (u) => (
+    <span className="text-muted" title={u.lastSeenAt ?? ""}>
+      {seen(u.lastSeenAt)}
+    </span>
+  ),
+  id: (u) => (
+    <span className="font-mono text-[11px] text-faint" title={u.id}>
+      …{u.id.slice(-6)}
+    </span>
+  ),
+};
+
+const WIDTHS = ["minmax(0, 2.6fr)", "minmax(0, 0.9fr)", "minmax(0, 1fr)", "minmax(0, 1fr)", "88px"];
+
 export default function UsersTable() {
-  const [q, setQ] = useState("");
-  const [sort, setSort] = useState("created_at desc");
-  const [skip, setSkip] = useState(0);
-  const { answer, error, loading } = useUsers(q.trim(), sort, skip);
-  const total = answer?.total ?? 0;
+  const [open, setOpen] = useState<AdminUserRow | null>(null);
+  const close = useCallback(() => setOpen(null), []);
+  const { rows, error, loading } = useAllUsers();
 
   return (
-    <AdminPage title="Users" subtitle={answer ? `${total} account${total === 1 ? "" : "s"}${q.trim() ? " match" : " on weft.zip"}` : "Every weft.zip account"}>
-      <div className="flex flex-wrap items-center gap-2">
-        <Input
-          className="min-w-0 flex-1"
-          placeholder="Search by email"
-          value={q}
-          onChange={(e) => {
-            setQ(e.target.value);
-            setSkip(0);
-          }}
-        />
-        <Select
-          aria-label="Sort"
-          value={sort}
-          onChange={(e) => {
-            setSort(e.target.value);
-            setSkip(0);
-          }}
-        >
-          {SORTS.map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
-            </option>
-          ))}
-        </Select>
-      </div>
-      <DataTable
-        columns={columns}
-        rows={answer?.rows ?? []}
+    <AdminPage
+      title="Users"
+      subtitle={loading && !rows.length ? "Every weft.zip account" : `${rows.length} account${rows.length === 1 ? "" : "s"} on weft.zip${loading ? " (loading…)" : ""} · start typing to search`}
+    >
+      <SheetTable
+        spec={USERS_SHEET}
+        rows={rows}
         rowKey={(u) => u.id}
+        cells={CELLS}
+        widths={WIDTHS}
+        storageKey="weft:admin-users-sheet"
+        fresh={USERS_FRESH}
+        onRowClick={setOpen}
         loading={loading}
         error={error}
-        empty={q.trim() ? `No account's email contains “${q.trim()}”.` : "No accounts yet."}
+        empty="No accounts yet."
+        className="max-h-[calc(100vh-170px)]"
       />
-      <Pager skip={skip} take={TAKE} total={total} onSkip={setSkip} />
+      {open && <UserActivityDrawer user={open} onClose={close} />}
     </AdminPage>
   );
 }

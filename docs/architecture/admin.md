@@ -42,9 +42,17 @@ The check happens in three places:
 - `app/api/admin/users/route.ts` — every account from GoTrue's admin API
   (`auth.admin.listUsers`, up to 10 pages of 1000; `auth.users` isn't
   reachable over PostgREST), joined to `profiles` for name and avatar, then
-  filtered by email-contains, sorted by `created_at` / `last_sign_in_at` /
-  `email` (case-blind, missing values last) and paged in memory. 503 when
-  `SUPABASE_SECRET_KEY` is missing (the desktop case).
+  filtered by email-contains, sorted by `created_at` / `last_seen_at` /
+  `email` (case-blind, missing values last; `last_sign_in_at` still sorts by last
+  seen) and paged in memory: 20 a page by default, up to 200 on request (the Users sheet loads every account that
+  way). Each row's `lastSeenAt` comes from
+  `admin_users_last_seen()` (see "Last seen and activity"), falling back to the
+  sign-in when that function errors. 503 when `SUPABASE_SECRET_KEY` is missing
+  (the desktop case).
+- `app/api/admin/users/[id]/activity/route.ts` — one account's last 84 days
+  from `admin_user_activity(uid, days)`, read through `lib/admin-activity.ts`
+  (`toUserActivity`) with its `summarize()` (active 7/30, current and longest
+  streak, peak cards a day). 400 for an id that isn't a uuid.
 - `app/api/admin/local/route.ts` — local stats from `~/.weft/`: data dir,
   uptime, board / thread / archived counts, activity log size, last
   activity timestamp, page store size, keep-alive minutes. No service key
@@ -67,8 +75,14 @@ board in light and dark:
   boundary in the layout doesn't cover a tab-to-tab click (a client navigation only re-renders below the shared
   layout), so without one per page Next reports a blocking route.
 - `app/(admin)/admin/admin-api.ts` — `adminGet` / `adminPost` (with `x-weft-token`), `money`, `day`.
-- `app/(admin)/admin/users/` — the server page gates; `UsersTable` searches by email, sorts, pages by 20, and shows
-  avatar, name and email, provider, joined and last seen.
+- `app/(admin)/admin/users/` — the server page gates; `UsersTable` loads every account and shows them as a sheet
+  (docs/architecture/sheet.md, spec in `lib/users-sheet.ts`): avatar, name and email, provider, joined, last seen
+  and ID; type anywhere to search name or email, filter provider / joined / last seen by value, and click Joined or
+  Last seen to flip newest ↔ oldest, kept in localStorage. A row opens `UserActivity.tsx`, a drawer on the right: a
+  lifecycle badge (never, new, active, dormant, gone 30d+), active 7d / 30d and streak, a 12-week calendar (Monday
+  first, shaded by cards run for a sync account, flat for a day it only had Weft open), cards per day over 30 days,
+  and counts of synced cards, signed-in devices, workspaces, shares, apps, invites sent and Puku trial requests. Esc
+  closes it in the capture phase, so `AdminEscape` doesn't also leave the page.
 - `app/(admin)/admin/settings/page.tsx` — server component, calls
   `requireSuperAdminWeft()`, then reads the local overview
   (`loadAdminLocalOverview`) and shows it as stats.
@@ -80,6 +94,24 @@ workspace's plan, seats, refunds, people, discounts and reset, each on the Strip
 and the coupon codes and referrals. Their routes (`/api/admin/billing`, `/api/admin/billing/[orgId]`,
 `/api/admin/coupons`) gate again in `lib/billing/admin/route-gate.ts`. See billing.md "Admin console" and
 "Coupons and referrals".
+
+## Last seen and activity
+
+`auth.users.last_sign_in_at` only moves on a full GitHub sign-in, and the desktop app stays signed in for weeks on
+refresh tokens, so it read "10d ago" for someone using Weft every day. While Weft is open it refreshes its token
+about hourly, and each refresh updates the account's `auth.sessions` row.
+`supabase/migrations/20261025181950_user_active_days.sql` turns that into history:
+
+- `public.user_active_days (user_id, day, last_at)` — one row per account per UTC day. RLS on, no policies: service
+  role only. Backfilled from synced thread items, Puku trial days, sign-ins and the sessions' own times.
+- Trigger `on_auth_session_active` (after insert or update on `auth.sessions`) runs `private.note_active_day()`,
+  which upserts today. Its insert sits in an exception block: a sign-in or refresh never fails over bookkeeping.
+- `admin_users_last_seen()` — the latest of the ledger, the sessions' `refreshed_at`, the sign-in and the account's
+  synced cards. `admin_user_activity(uid, days)` — the drawer's days and counts. Both service role only.
+- `private.growth_activity` counts the ledger too, so 📈 Growth sees a day someone only had Weft open.
+
+An account that doesn't sync cards has active days but no cards per day; its history starts the day the migration
+was applied (its sessions' last refresh and sign-in are the only earlier points).
 
 ## Rail
 
@@ -102,8 +134,12 @@ kit uses the board's tokens directly.
   `notFound` to throw `NEXT_NOT_FOUND`, mirrors the package's gate.
 - `app/api/admin-routes.test.ts` — `/api/admin/gate`, `/api/admin/users`
   (the no-service-key 503, rows + total from `listUsers` joined to profiles,
-  search, sort and paging, reading every page, the auth error's message),
+  search, sort and paging, reading every page, the auth error's message,
+  Last seen from `admin_users_last_seen` and its fallback),
   `/api/admin/local` (the overview shape).
+- `lib/admin-activity.test.ts` — reading the RPC's answer, streaks, lifecycle labels, the calendar's week columns.
+- `app/api/admin-user-activity.test.ts` — `/api/admin/users/[id]/activity`: gate, id check, 503, the RPC's error.
+- `app/(admin)/admin/users/UserActivity.test.tsx` — the drawer's stats, calendar, bars, error and Esc.
 - `components/admin/kit.test.tsx` — the table's error / loading / empty lines, the pager, the kit's pieces.
 - `app/(admin)/admin/AdminNav.test.tsx` — the current tab is lit.
 - `components/LibraryRail.test.tsx` — admin icon shown only when

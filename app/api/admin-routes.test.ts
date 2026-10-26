@@ -98,6 +98,16 @@ describe("/api/admin/users", () => {
     expect(rows[0]).toMatchObject({ id: "u2", email: "lin@b.co", name: null, provider: "google", lastSignInAt: null });
   });
 
+  it("hands out up to 200 accounts a page, so the Users sheet can load them all", async () => {
+    adminMock.requireSuperAdminWeft.mockResolvedValueOnce(ADMIN);
+    const many = Array.from({ length: 250 }, (_, i) => ({ id: `u${i}`, email: `u${i}@b.co` }));
+    const { service } = serviceWith(many, []);
+    adminMock.adminServiceClient.mockResolvedValueOnce(service);
+    const data = await body(await get(users, "/api/admin/users?skip=0&take=500"));
+    expect(data.total).toBe(250);
+    expect(data.rows as unknown[]).toHaveLength(200);
+  });
+
   it("names a user from metadata when there's no profile", async () => {
     adminMock.requireSuperAdminWeft.mockResolvedValueOnce(ADMIN);
     const { service } = serviceWith([{ id: "u3", email: "kim@b.co", user_metadata: { user_name: "kim" } }], []);
@@ -136,6 +146,39 @@ describe("/api/admin/users", () => {
     expect((data.rows as Array<{ id: string }>).map((r) => r.id)).toEqual(["y", "z", "x"]);
   });
 
+  it("reads Last seen from admin_users_last_seen and sorts by it, over a stale sign-in", async () => {
+    adminMock.requireSuperAdminWeft.mockResolvedValueOnce(ADMIN);
+    const { service } = serviceWith(
+      [
+        { id: "old", email: "o@b.co", last_sign_in_at: "2026-10-16T03:00:00Z" },
+        { id: "mid", email: "m@b.co", last_sign_in_at: "2026-10-20T00:00:00Z" },
+        { id: "nev", email: "n@b.co", last_sign_in_at: null },
+      ],
+      [],
+      [
+        { user_id: "old", last_seen_at: "2026-10-25T17:48:29+00:00" },
+        { user_id: 7, last_seen_at: "junk" },
+      ],
+    );
+    adminMock.adminServiceClient.mockResolvedValueOnce(service);
+    const data = await body(await get(users, "/api/admin/users?sort=last_seen_at+desc"));
+    const rows = data.rows as Array<{ id: string; lastSeenAt: string | null; lastSignInAt: string | null }>;
+    expect(rows.map((r) => r.id)).toEqual(["old", "mid", "nev"]);
+    expect(rows[0]).toMatchObject({ lastSeenAt: "2026-10-25T17:48:29.000Z", lastSignInAt: "2026-10-16T03:00:00Z" });
+    // No ledger row: the sign-in stands in.
+    expect(rows[1]?.lastSeenAt).toBe("2026-10-20T00:00:00Z");
+    expect(rows[2]?.lastSeenAt).toBeNull();
+  });
+
+  it("falls back to sign-in times when admin_users_last_seen errors (migration not applied)", async () => {
+    adminMock.requireSuperAdminWeft.mockResolvedValueOnce(ADMIN);
+    const listUsers = vi.fn(() => Promise.resolve({ data: { users: [{ id: "a", email: "a@b.co", last_sign_in_at: "2026-10-01T00:00:00Z" }] }, error: null }));
+    const rpc = vi.fn(() => Promise.resolve({ data: null, error: { message: "function not found" } }));
+    adminMock.adminServiceClient.mockResolvedValueOnce({ auth: { admin: { listUsers } }, from: profilesFrom([]), rpc });
+    const rows = (await body(await get(users, "/api/admin/users"))).rows as Array<{ lastSeenAt: string }>;
+    expect(rows[0]?.lastSeenAt).toBe("2026-10-01T00:00:00Z");
+  });
+
   it("reads every page of users until a short one", async () => {
     adminMock.requireSuperAdminWeft.mockResolvedValueOnce(ADMIN);
     const full = Array.from({ length: 1000 }, (_, i) => ({ id: `p${i}`, email: `p${i}@b.co` }));
@@ -143,7 +186,7 @@ describe("/api/admin/users", () => {
       .fn<(p: { page: number; perPage: number }) => Promise<{ data: { users: unknown[] } | null; error: unknown }>>()
       .mockResolvedValueOnce({ data: { users: full }, error: null })
       .mockResolvedValueOnce({ data: null, error: null });
-    adminMock.adminServiceClient.mockResolvedValueOnce({ auth: { admin: { listUsers } }, from: profilesFrom([]) });
+    adminMock.adminServiceClient.mockResolvedValueOnce({ auth: { admin: { listUsers } }, from: profilesFrom([]), rpc: lastSeenRpc([]) });
     const data = await body(await get(users, "/api/admin/users"));
     expect(listUsers).toHaveBeenCalledTimes(2);
     expect(listUsers).toHaveBeenLastCalledWith({ page: 2, perPage: 1000 });
@@ -153,7 +196,7 @@ describe("/api/admin/users", () => {
   it("answers the auth API's error message, not [object Object]", async () => {
     adminMock.requireSuperAdminWeft.mockResolvedValueOnce(ADMIN);
     const listUsers = vi.fn(() => Promise.resolve({ data: null, error: { message: "User not allowed", status: 403 } }));
-    adminMock.adminServiceClient.mockResolvedValueOnce({ auth: { admin: { listUsers } }, from: profilesFrom([]) });
+    adminMock.adminServiceClient.mockResolvedValueOnce({ auth: { admin: { listUsers } }, from: profilesFrom([]), rpc: lastSeenRpc([]) });
     const res = await get(users, "/api/admin/users");
     expect(res.status).toBe(400);
     expect((await body(res)).error).toBe("User not allowed");
@@ -248,8 +291,13 @@ function profilesFrom(profiles: ProfileFixture[]) {
   };
 }
 
+// admin_users_last_seen's answer.
+function lastSeenRpc(rows: unknown[]) {
+  return vi.fn((fn: string) => Promise.resolve(fn === "admin_users_last_seen" ? { data: rows, error: null } : { data: null, error: { message: fn } }));
+}
+
 // A service client whose auth admin API answers one short page of users.
-function serviceWith(list: AuthUser[], profiles: ProfileFixture[] = FIXTURE_PROFILES) {
+function serviceWith(list: AuthUser[], profiles: ProfileFixture[] = FIXTURE_PROFILES, lastSeen: unknown[] = []) {
   const listUsers = vi.fn(() => Promise.resolve({ data: { users: list }, error: null }));
-  return { listUsers, service: { auth: { admin: { listUsers } }, from: profilesFrom(profiles) } };
+  return { listUsers, service: { auth: { admin: { listUsers } }, from: profilesFrom(profiles), rpc: lastSeenRpc(lastSeen) } };
 }
