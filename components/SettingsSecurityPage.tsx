@@ -1,6 +1,8 @@
 // The Security page: what threads may do without asking (the default permission mode, the folders outside a
-// project they may use), how long the saved sign-ins last, and the anonymous setup stats switch (lib/telemetry.ts).
+// project they may use), how long the saved sign-ins last, who used the Keychain and the vault (KeychainAccess), and
+// the anonymous setup stats switch (lib/telemetry.ts).
 import DeleteConfirmSwitch from "./DeleteConfirmSwitch";
+import KeychainAccess from "./KeychainAccess";
 import ModePicker from "./ModePicker";
 import { SettingsCard, SettingsSectionHeader } from "./SettingsLayout";
 import { StatsSwitch } from "./StatsSwitch";
@@ -46,6 +48,9 @@ export default function SettingsSecurityPage({
       </SettingsCard>
       <SettingsCard>
         <TokenExpiry />
+      </SettingsCard>
+      <SettingsCard>
+        <KeychainAccess />
       </SettingsCard>
       <SettingsCard>
         <SettingsSectionHeader title="Setup stats" hint="Which welcome steps people finish, so the welcome gets better. Nothing from your board." />

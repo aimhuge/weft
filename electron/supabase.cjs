@@ -259,7 +259,7 @@ function registerSupabase(ipcMain, { supabase, isBoard }) {
 // Wires Supabase into Electron main for the board window (board() is its webContents). vault keeps a new
 // project's database password (electron/vault.cjs).
 function setupSupabase({ ipcMain, dataDir, board, vault }) {
-  const { safeStorage } = require("electron");
+  const safeStorage = require("./keychain-audit.cjs").keychainFor("Supabase token");
   const supabase = createSupabase({ dataDir, safeStorage, vault });
   registerSupabase(ipcMain, { supabase, isBoard: (sender) => Boolean(sender) && sender === board() });
   return supabase;

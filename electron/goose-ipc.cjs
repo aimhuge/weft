@@ -134,7 +134,7 @@ function gooseRoutes(goose) {
 
 // Wires Goose into Electron main for the board window (board() is its webContents).
 function setupGoose({ ipcMain, dataDir, board }) {
-  const { safeStorage } = require("electron");
+  const safeStorage = require("./keychain-audit.cjs").keychainFor("Goose provider keys");
   const goose = createGoose({ dataDir, safeStorage });
   registerGoose(ipcMain, { goose, isBoard: (sender) => Boolean(sender) && sender === board() });
   return { goose };

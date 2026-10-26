@@ -31,7 +31,7 @@ const { startServer } = require("./server.cjs");
 const { createStartupScreen } = require("./startup-screen.cjs");
 const { createStartupTimer } = require("./startup-timer.cjs");
 const { registerTerminal } = require("./terminal.cjs");
-const { themeSource } = require("./theme-source.cjs");
+const { followThemeChoice } = require("./theme-source.cjs");
 const { loadWindowState, trackWindowState } = require("./window-state.cjs");
 const { createAccountLink } = require("./account-link.cjs");
 const { argvLink } = require("./argv-link.cjs");
@@ -115,25 +115,6 @@ app.on("open-url", (event, url) => {
 
 function background() {
   return nativeTheme.shouldUseDarkColors ? "#131312" : "#f4f3ef";
-}
-
-// The board keeps the user's Appearance choice in a cookie (lib/theme.ts). Following it here gives
-// the window background, menus, and the startup screen the same theme as the board.
-const THEME_COOKIE = "weft-theme";
-
-function setThemeSource(value) {
-  nativeTheme.themeSource = themeSource(value);
-}
-
-async function followThemeChoice() {
-  const { cookies } = session.defaultSession;
-  const [saved] = await cookies.get({ name: THEME_COOKIE }).catch(() => []);
-  setThemeSource(saved?.value);
-  cookies.on("changed", (_event, cookie, cause, removed) => {
-    // Rewriting the cookie first reports the old value as removed; wait for the new one.
-    if (cookie.name !== THEME_COOKIE || (removed && cause === "overwrite")) return;
-    setThemeSource(removed ? undefined : cookie.value);
-  });
 }
 
 function dataDir() {
@@ -406,7 +387,7 @@ require("./app-setup.cjs").setupApps({
   ownsPane: (wc) => pane.owns(wc) || require("./page-snapshot.cjs").ownsSnapshot(wc),
   isBoard: (sender) => Boolean(sender) && sender === appView?.webContents,
   supabaseReadLink: require("./supabase.cjs").readLink,
-  getSafeStorage: () => require("electron").safeStorage,
+  getSafeStorage: () => require("./keychain-audit.cjs").keychainFor("Weft sign-in"),
 });
 // And BlastCP, Cloudflare, Slack and Goose, each with its secret in the Keychain (electron/providers.cjs).
 ({ blastcpApi, slackApi, gooseApi } = require("./providers.cjs").setupProviders({
@@ -439,7 +420,7 @@ require("./startup-ipc.cjs")({
 app.whenReady().then(async () => {
   if (!primary) return;
   timer.mark("ready");
-  await followThemeChoice();
+  await followThemeChoice(session.defaultSession.cookies, nativeTheme);
   registerAboutBridge({ tagline: TAGLINE, dataDir, getServer: () => server });
   if (app.isPackaged) app.setAsDefaultProtocolClient(PROTOCOL);
   menus.buildMenu();

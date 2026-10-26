@@ -61,7 +61,7 @@ function accountRoutes(store) {
 }
 
 // The routes over Electron's safeStorage, made on the first request (safeStorage needs the app ready).
-function accountRoutesFor(dataDir, safeStorage = () => require("electron").safeStorage) {
+function accountRoutesFor(dataDir, safeStorage = () => require("./keychain-audit.cjs").keychainFor("Weft sign-in")) {
   let store;
   return accountRoutes(() => (store ??= createAccountStore({ dataDir, safeStorage: safeStorage() })));
 }

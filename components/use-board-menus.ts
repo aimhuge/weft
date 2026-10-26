@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { api } from "@/lib/client";
-import { stopNow } from "@/lib/optimistic-cards";
+import { patchNow, stopNow } from "@/lib/optimistic-cards";
 import { cardMenu, columnMenu, resumeCommand, withAccelerators, type CardAction, type ColumnAction } from "@/lib/card-menu";
 import { toAccelerator, useShortcutList } from "@/lib/hotkeys";
 import { BACKEND_LABELS, type Backend, type Card, type Column, type DevServerStatus, type PermissionMode } from "@/lib/types";
 import { useDeleteDialog } from "@/lib/use-delete-dialog";
+import { AGENTS, type ThreadAgent } from "@/lib/agents";
 
 // What the board's right-click menus act through: the same functions its buttons, drag and command palette use.
 export interface BoardMenuDeps {
@@ -52,18 +53,20 @@ export function useBoardMenus(deps: BoardMenuDeps) {
     e.preventDefault();
     e.stopPropagation();
     const dev = card.review?.dev ? await api.devStatus(card.id).then((r) => r.status, () => null) : null;
-    const picked = (await shell.popupMenu(withAccelerators(cardMenu(card, dev), keys({ open: "card-open", archive: "archive" })))) as CardAction | null;
+    const access = await hasVaultAccess(card);
+    const picked = (await shell.popupMenu(withAccelerators(cardMenu(card, dev, access), keys({ open: "card-open", archive: "archive" })))) as CardAction | null;
     if (picked) runCardAction(card, picked).catch(deps.notify);
   }
 
   // ★ on or off, from the menu or the ☆ on a card or thread. A starred card is never auto-archived.
   function toggleStar(card: Card) {
-    api.mark(card.id, { starred: !card.starred }).catch(deps.notify);
+    const starred = !card.starred;
+    patchNow(card.id, { starred }, () => api.mark(card.id, { starred })).catch(deps.notify);
   }
 
   // Every change in the Tags… dialog saves right away.
   function saveTags(tags: string[]) {
-    if (tagging) api.mark(tagging.id, { tags }).catch(deps.notify);
+    if (tagging) patchNow(tagging.id, { tags }, () => api.mark(tagging.id, { tags })).catch(deps.notify);
   }
 
   // Star, Tags… and Share…: true when the action was one of these.
@@ -86,6 +89,15 @@ export function useBoardMenus(deps: BoardMenuDeps) {
     return true;
   }
 
+  // "Agent: <name>" — a new soul for the thread; its next message resumes the conversation under it.
+  async function runAgentAction(card: Card, action: CardAction) {
+    if (!action.startsWith("agent:")) return false;
+    const agent = AGENTS[action.slice(6) as ThreadAgent];
+    await api.setAgent(card.id, agent.id);
+    deps.toast(`“${card.title}” is now the ${agent.name}: its next message starts under the new soul.`);
+    return true;
+  }
+
   // "Run /<skill>" — sends a slash command to the card's CLI.
   async function runSkillAction(card: Card, action: CardAction) {
     if (!action.startsWith("skill:")) return false;
@@ -98,6 +110,29 @@ export function useBoardMenus(deps: BoardMenuDeps) {
     if (!action.startsWith("move:")) return false;
     deps.move(card.id, action.slice(5) as Column);
     return true;
+  }
+
+  // Whether the card has standing 🔐 vault access, or undefined when this shell can't give it (electron/vault-grants.cjs).
+  async function hasVaultAccess(card: Card): Promise<boolean | undefined> {
+    const vault = shell?.vault;
+    if (!vault?.grants || !vault.grant) return undefined;
+    return vault.grants().then((all) => all.some((g) => g.card === card.id), () => undefined);
+  }
+
+  // "Give 🔐 Vault Access" asks for Touch ID in main; "Revoke" ends every grant the card holds.
+  async function runVaultAction(card: Card, action: CardAction) {
+    const vault = shell?.vault;
+    if (action === "vault:grant" && vault?.grant) {
+      const r = await vault.grant(card.cwd, card.id, card.title);
+      deps.toast(r.granted ? `“${card.title}” can use ${r.label}'s secrets for an hour without asking.` : `No access given to ${r.label}.`);
+      return true;
+    }
+    if (action === "vault:revoke" && vault?.revoke) {
+      await vault.revoke(card.id);
+      deps.toast(`“${card.title}” asks again before using a secret.`);
+      return true;
+    }
+    return false;
   }
 
   // "Permissions: …" — flip the card's mode. Extracted to keep runCardAction's complexity in check.
@@ -121,7 +156,9 @@ export function useBoardMenus(deps: BoardMenuDeps) {
     if (await runSkillAction(card, action)) return;
     if (await runModeAction(card, action)) return;
     if (await runDevAction(card, action)) return;
+    if (await runVaultAction(card, action)) return;
     if (await runSwitchAction(card, action)) return;
+    if (await runAgentAction(card, action)) return;
     await runSimpleAction(card, action, shell);
   }
 

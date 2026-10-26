@@ -4,10 +4,24 @@ import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import * as sodium from "./vault-crypto.cjs";
 import { createVault } from "./vault.cjs";
+import { createRequire } from "node:module";
 import { vaultRoutes as rawRoutes } from "./vault-routes.cjs";
 
+// vault-routes.cjs is CommonJS and loads the audit log through require, so the test drives the same
+// instance of it (createRequire) rather than Vite's copy of the module.
+const requireCjs = createRequire(import.meta.url);
+const { audit, configureAudit, resetAudit } = requireCjs("./keychain-audit.cjs") as typeof import("./keychain-audit.cjs");
+
 type Route = (body: Record<string, unknown>) => Promise<unknown>;
-const vaultRoutes = (get: () => unknown) => rawRoutes(get) as unknown as { "POST /secrets/add-blank": Route; "POST /secrets/set": Route; "POST /secrets/ask-add": Route };
+const vaultRoutes = (get: () => unknown) =>
+  rawRoutes(get) as unknown as {
+    "POST /secrets/add-blank": Route;
+    "POST /secrets/set": Route;
+    "POST /secrets/ask-add": Route;
+    "POST /secrets/request-access": Route;
+    "POST /secrets/audit-outbox": Route;
+    "POST /secrets/audit-synced": Route;
+  };
 
 const safeStorage = {
   isEncryptionAvailable: () => true,
@@ -129,6 +143,44 @@ describe("vaultRoutes", () => {
     expect(await vaultRoutes(() => undefined)["POST /secrets/ask-add"]({ folder, name: "K" })).toEqual({ added: true });
     const failing = { addBlanks: () => Promise.reject(new Error("locked")) };
     expect(await vaultRoutes(() => failing)["POST /secrets/ask-add"]({ folder, name: "K" })).toEqual({ added: true });
+  });
+
+  it("grants a thread standing access, naming the card and its reason", async () => {
+    const { routes, folder, vault, prompt } = make();
+    const result = (await routes["POST /secrets/request-access"]({ key: "c1", folder, thread: "Build card", why: "Need to run migrations" })) as { granted?: boolean; label: string };
+    expect(result).toMatchObject({ granted: true, label: "Owner/Repo" });
+    expect(prompt).toHaveBeenCalledTimes(1);
+    expect(prompt.mock.calls.flat().join("\n")).toContain("Build card");
+    expect(vault.grantList()).toEqual([expect.objectContaining({ card: "c1", thread: "Build card", label: "Owner/Repo" })]);
+  });
+
+  it("serves the audit outbox and marks it synced", async () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "weft-audit-"));
+    configureAudit({ dataDir });
+    try {
+      const folder = fs.mkdtempSync(path.join(os.tmpdir(), "weft-proj-"));
+      const audited = createVault({
+        dataDir,
+        safeStorage,
+        sodium,
+        prompt: () => Promise.resolve(true),
+        clipboard: { writeText: vi.fn(), readText: () => "" },
+        run: () => Promise.resolve("git@github.com:Owner/Repo.git"),
+        audit,
+      });
+      const routes = vaultRoutes(() => audited);
+      await audited.setValue(folder, "A", "development", "value");
+
+      const outbox = (await routes["POST /secrets/audit-outbox"]({})) as { entries: { id: string; action: string }[] };
+      expect(outbox.entries.length).toBeGreaterThan(0);
+      expect(outbox.entries.map((e) => e.action)).toContain("set");
+      const id = outbox.entries[outbox.entries.length - 1]!.id;
+      expect(await routes["POST /secrets/audit-synced"]({ id })).toEqual({ ok: true });
+      const after = (await routes["POST /secrets/audit-outbox"]({})) as { entries: { id: string }[] };
+      expect(after.entries.some((e) => e.id === id)).toBe(false);
+    } finally {
+      resetAudit();
+    }
   });
 
   it("asks Touch ID for each set even while the drawer and a thread's fill are unlocked", async () => {

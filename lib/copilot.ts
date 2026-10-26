@@ -9,6 +9,7 @@ import { startVercelListener } from "./vercel-hooks";
 import { startWebhookRelay } from "./webhook-forward";
 import { startAccountCloudSync } from "./cloud-sync-start";
 import { startBlastcpAuto } from "./blastcp-auto";
+import { startKeychainAuditSync } from "./keychain-audit-sync";
 import { consumeServerExit } from "./crash-blame";
 import { startLeagueSync } from "./league-sync";
 import { startIssueSync } from "./github-issues";
@@ -123,6 +124,8 @@ export function prewarm() {
   startSearchIndex();
   // Send the messages queued for a set time (lib/scheduler.ts), including any that came due while closed.
   startScheduler();
+  // Run the crons whose time has come (lib/cron-run.ts), one new card per run. Loaded after the board's own start.
+  void import("./cron-run").then((m) => m.startCronClock(), (err: unknown) => console.error("[weft] cron clock failed to start:", err));
   // Sync the GitHub issues of the folders that opted in, every 5 minutes (lib/github-issues.ts).
   startIssueSync();
   // Park a few starter cards in a project's Backlog the first time it lands on the board (lib/project-seed-run.ts).
@@ -139,6 +142,8 @@ export function prewarm() {
   startAccountCloudSync();
   // Give a signed-in Weft user a BlastCP account and connect the drawer, no browser (lib/blastcp-auto.ts).
   startBlastcpAuto();
+  // Upload the Keychain audit log to your Weft account while you're signed in (lib/keychain-audit-sync.ts).
+  startKeychainAuditSync();
   // Post your week to your league while you are signed in to Weft (lib/league-sync.ts).
   startLeagueSync();
   // Keep Weft's Puku trial token fresh, and give puku threads waiting on a login the trial when you sign in to Weft.

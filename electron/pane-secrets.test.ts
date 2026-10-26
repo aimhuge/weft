@@ -24,6 +24,12 @@ describe("createPaneSecrets", () => {
     expect(ps.redact("c2", "s3cret-value")).toBe("s3cret-value");
   });
 
+  it("passes the thread's title through to the vault", async () => {
+    const { ps, vault } = make();
+    await ps.fill({ ...ask, thread: "Build card" });
+    expect(vault.useFor).toHaveBeenCalledWith("/proj", "GITHUB_CLIENT_SECRET", "development", { card: "c1", site: "supabase.com", thread: "Build card" });
+  });
+
   it("refuses pages that aren't https before asking for Touch ID", async () => {
     for (const url of ["http://localhost:3000/", "file:///tmp/x.html"]) {
       const { ps, vault } = make({ url });

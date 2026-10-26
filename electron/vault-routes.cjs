@@ -3,6 +3,7 @@
 // (mcp__secrets__set_value), and the project intake (electron/vault-intake.cjs). Names and what happened come back,
 // never a value.
 const { intakeVault, cleanBlanks } = require("./vault-intake.cjs");
+const { auditOutbox, markAuditSynced } = require("./keychain-audit.cjs");
 
 // Stores one value a thread made or got itself (a signing secret, new Stripe price ids): adds a name that isn't
 // there, fills a blank, and overwrites a value only with replace (set_value's replace: true), so a thread can't
@@ -48,6 +49,17 @@ function vaultRoutes(getVault) {
       fillBlank(vault(), String(folder), String(name), env(environment), String(value ?? ""), replace === true),
     // The ask's input shows in the thread itself (components/SecretAskInput.tsx).
     "POST /secrets/ask-add": ({ folder, name, environment }) => askAdd(getVault(), String(folder), String(name), env(environment)),
+    // A thread asking for standing access to the vault (mcp__secrets__request_access, electron/vault-grants.cjs):
+    // the user's Touch ID names the card and its reason, and the card is asked nothing more for an hour.
+    "POST /secrets/request-access": ({ key, folder, thread, why }) =>
+      vault().grant(String(folder), { card: String(key || ""), thread: thread ? String(thread).slice(0, 120) : undefined, why: why ? String(why).slice(0, 200) : undefined, by: "thread" }),
+    // The audit log's lines not uploaded yet, and the cursor after an upload (lib/keychain-audit-sync.ts). Names and
+    // events only: the log never holds a value.
+    "POST /secrets/audit-outbox": ({ limit }) => ({ entries: auditOutbox(Number(limit) || undefined) }),
+    "POST /secrets/audit-synced": ({ id }) => {
+      if (id) markAuditSynced(String(id));
+      return { ok: true };
+    },
     // A project opened on the board (lib/project-intake.ts): untracked .env values in, the code's names as blanks.
     "POST /secrets/intake": ({ folder, blanks, skip }) =>
       intakeVault(vault(), String(folder), { blanks: cleanBlanks(blanks), skip: Array.isArray(skip) ? skip.map(String) : [] }),

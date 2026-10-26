@@ -40,7 +40,8 @@ function describe({ kind, command, cwd, script, names, environment, label, threa
  * @typedef {{ names: string[], grant?: string, denied?: boolean, label?: string, node?: string, runner?: string }} DevGrant
  */
 
-function createSecretRun({ vault, ask, rules, spawn, env = process.env, now = Date.now, setTimer = setTimeout, clearTimer = clearTimeout, randomId = () => crypto.randomBytes(32).toString("hex"), killGraceMs = KILL_GRACE_MS, node = process.execPath, runner = path.join(__dirname, "secret-env.cjs") }) {
+// audit writes the run's line in the audit log (electron/keychain-audit.cjs); the vault's own read line is skipped.
+function createSecretRun({ vault, ask, rules, spawn, audit = /** @type {(entry: Record<string, unknown>) => unknown} */ ((entry) => entry), env = process.env, now = Date.now, setTimer = setTimeout, clearTimer = clearTimeout, randomId = () => crypto.randomBytes(32).toString("hex"), killGraceMs = KILL_GRACE_MS, node = process.execPath, runner = path.join(__dirname, "secret-env.cjs") }) {
   const used = new Map(); // card key -> Map(name -> value)
   const grants = new Map(); // grant -> { values, until }
 
@@ -56,14 +57,21 @@ function createSecretRun({ vault, ask, rules, spawn, env = process.env, now = Da
     return redactor([...values].map(([name, value]) => ({ name, value })))(text);
   }
 
-  // A remembered rule, or the user's yes ("always" adds a rule).
-  // asker ({ thread, why }) is only shown, never part of the rule.
+  // How it was allowed ("grant", "rule", "once", "always"), or null for a no: the card's standing grant
+  // (electron/vault-grants.cjs), a remembered rule, or the user's yes ("always" adds a rule).
+  // asker ({ key, thread, why }) is only shown, never part of the rule.
   async function approve(request, names, label, asker = {}) {
-    if (rules.allows(request, names)) return true;
-    const choice = await ask(describe({ ...request, ...asker, names, label }));
-    if (!choice) return false;
+    if (vault.granted?.(asker.key, request.id)) return "grant";
+    if (rules.allows(request, names)) return "rule";
+    const choice = await ask(describe({ ...request, thread: asker.thread, why: asker.why, names, label }));
+    if (!choice) return null;
     if (choice === "always") rules.remember(request, names);
-    return true;
+    return choice === "always" ? "always" : "once";
+  }
+
+  // The audit line for a run or a dev server's secrets, allowed or not.
+  function log({ action, key, thread, why, command, names, environment, label, via }) {
+    audit({ kind: "vault", action, by: "thread", card: key, thread, detail: why, command, names, environment, vault: label, via: via ?? undefined, outcome: via ? "ok" : "denied" });
   }
 
   function execute({ argv, cwd, env: extra, values, timeoutMs }) {
@@ -130,11 +138,17 @@ function createSecretRun({ vault, ask, rules, spawn, env = process.env, now = Da
   return {
     redact,
 
-    /** @returns {Promise<RunReply>} */
+    /**
+     * @param {{ key?: string, thread?: string, why?: string, folder: string, cwd: string, command: string, argv: string[],
+     *   env?: Record<string, string>, names: string[], environment?: string, script?: string, timeoutMs?: number }} request
+     * @returns {Promise<RunReply>}
+     */
     async run({ key, thread = undefined, why = undefined, folder, cwd, command, argv, env: extra = {}, names, environment = "development", script, timeoutMs = 120_000 }) {
-      const { id, label, values, missing } = await vault.valuesFor(folder, names, environment);
+      const { id, label, values, missing } = await vault.valuesFor(folder, names, environment, false);
       if (missing.length) return { missing, label };
-      if (!(await approve({ id, environment, cwd, command, script, kind: "run" }, names, label, { thread, why }))) return { denied: true, label };
+      const via = await approve({ id, environment, cwd, command, script, kind: "run" }, names, label, { key, thread, why });
+      log({ action: "run", key, thread, why, command, names, environment, label, via });
+      if (!via) return { denied: true, label };
       remember(key, values);
       const result = await execute({ argv, cwd, env: extra, values, timeoutMs });
       return reply(result, Object.entries(values).map(([name, value]) => ({ name, value })), label);
@@ -148,10 +162,12 @@ function createSecretRun({ vault, ask, rules, spawn, env = process.env, now = Da
      */
     async devGrant({ key, thread, folder, cwd, command, script }) {
       const environment = "development";
-      const { id, label, values } = await vault.valuesFor(folder, null, environment);
+      const { id, label, values } = await vault.valuesFor(folder, null, environment, false);
       const names = Object.keys(values);
       if (!names.length) return { names };
-      if (!(await approve({ id, environment, cwd, command, script, kind: "dev" }, names, label, { thread }))) return { denied: true, names, label };
+      const via = await approve({ id, environment, cwd, command, script, kind: "dev" }, names, label, { key, thread });
+      log({ action: "dev server", key, thread, command, names, environment, label, via });
+      if (!via) return { denied: true, names, label };
       remember(key, values);
       const grant = randomId();
       grants.set(grant, { values, until: now() + GRANT_MS });
@@ -220,12 +236,13 @@ function secretRunRoutes(get, active = () => undefined) {
 
 // Wires it into Electron main with the vault, the approval dialog and the sealed rules file.
 function setupSecretRun({ vault, dataDir, window }) {
-  const { BrowserWindow, dialog, safeStorage, systemPreferences } = require("electron");
+  const { BrowserWindow, dialog, systemPreferences } = require("electron");
+  const { audit, keychainFor } = require("./keychain-audit.cjs");
   const { askInWindow } = require("./approval-window.cjs");
   const { spawn } = require("node:child_process");
   const { createRunRules } = require("./run-rules.cjs");
-  const rules = createRunRules({ file: path.join(dataDir, "vault", "run-rules.json"), safeStorage });
-  return createSecretRun({ vault, rules, spawn, ask: runApproval({ dialog, systemPreferences, window, askWindow: (opts) => askInWindow({ BrowserWindow, ...opts }) }) });
+  const rules = createRunRules({ file: path.join(dataDir, "vault", "run-rules.json"), safeStorage: keychainFor("run rules") });
+  return createSecretRun({ vault, rules, spawn, audit, ask: runApproval({ dialog, systemPreferences, window, askWindow: (opts) => askInWindow({ BrowserWindow, ...opts }) }) });
 }
 
 module.exports = { setupSecretRun, createSecretRun, runApproval, secretRunRoutes, describe, baseEnv, REPLY_CHARS, KEEP_CHARS, GRANT_MS, KILL_GRACE_MS };

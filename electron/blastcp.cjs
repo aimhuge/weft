@@ -280,7 +280,8 @@ function registerBlastcp(ipcMain, { blastcp, isBoard }) {
 
 // Wires BlastCP into Electron main for the board window (board() is its webContents).
 function setupBlastcp({ ipcMain, dataDir, board }) {
-  const { safeStorage, shell } = require("electron");
+  const { shell } = require("electron");
+  const safeStorage = require("./keychain-audit.cjs").keychainFor("BlastCP sign-in");
   const blastcp = createBlastcp({ dataDir, safeStorage, openExternal: (url) => shell.openExternal(url) });
   registerBlastcp(ipcMain, { blastcp, isBoard: (sender) => Boolean(sender) && sender === board() });
   return blastcp;

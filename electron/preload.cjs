@@ -69,6 +69,11 @@ contextBridge.exposeInMainWorld("weft", {
     remove: (id, name, environment) => ipcRenderer.invoke("vault:remove", id, name, environment),
     lock: () => ipcRenderer.invoke("vault:lock"),
     writeBack: (folder) => ipcRenderer.invoke("vault:write-back", folder),
+    // Threads' standing access (electron/vault-grants.cjs) and the audit log (electron/keychain-audit.cjs).
+    grants: () => ipcRenderer.invoke("vault:grants"),
+    grant: (folder, card, thread) => ipcRenderer.invoke("vault:grant", folder, card, thread),
+    revoke: (card, id) => ipcRenderer.invoke("vault:revoke", card, id),
+    activity: (limit) => ipcRenderer.invoke("vault:activity", limit),
     // A managed .env.local was edited by hand: load the vaults again.
     onChange: (callback) => listen("vault:changed", callback),
   },

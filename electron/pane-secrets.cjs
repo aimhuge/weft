@@ -17,12 +17,14 @@ function createPaneSecrets({ secrets, requirePage, typeText }) {
     return out;
   }
 
-  async function fill({ key, folder, name, environment = "development", selector }) {
+  // thread is the card's title, for the audit log's line (electron/keychain-audit.cjs).
+  /** @param {{ key: string, folder: string, name: string, environment?: string, selector: string, thread?: string }} request */
+  async function fill({ key, folder, name, environment = "development", selector, thread }) {
     const v = vault();
     const wc = requirePage(key);
     const url = new URL(wc.getURL());
     if (url.protocol !== "https:") throw new Error(`Secrets only go into https pages, and this one is ${url.protocol}//${url.host}${url.pathname}.`);
-    const got = await v.useFor(String(folder), String(name), String(environment), { card: key, site: url.host });
+    const got = await v.useFor(String(folder), String(name), String(environment), { card: key, site: url.host, thread: thread ? String(thread) : undefined });
     if (got.denied || got.missing) return got;
     const { found } = await typeText(wc, selector, got.value);
     if (!found) return { found, label: got.label };

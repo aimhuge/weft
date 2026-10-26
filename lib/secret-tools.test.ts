@@ -24,6 +24,10 @@ const server = st.secretsMcpServer(() => "c1", () => "/proj") as unknown as { na
 const run = (name: string, args: Record<string, unknown> = {}) => server.tools.find((t) => t.name === name)!.handler(args);
 const said = (r: Result) => r.content[0]?.text;
 
+// The same server, with the thread's name, so the tools that say which thread they run for can be seen.
+const titled = st.secretsMcpServer(() => "c1", () => "/proj", () => "Fix login") as unknown as { tools: Array<{ name: string; handler: Handler }> };
+const runTitled = (name: string, args: Record<string, unknown> = {}) => titled.tools.find((t) => t.name === name)!.handler(args);
+
 beforeEach(() => fetchMock.mockReset());
 
 describe("secretsMcpServer", () => {
@@ -36,7 +40,7 @@ describe("secretsMcpServer", () => {
     expect(st.SECRETS_PROMPT).toContain("mcp__secrets__push_to_vercel");
     expect(st.SECRETS_PROMPT).toContain("mcp__secrets__add_blank");
     expect(st.SECRETS_PROMPT).toContain("mcp__secrets__set_value");
-    expect(server.tools.map((t) => t.name)).toEqual(["list", "fill_field", "push_to_vercel", "set_value", "add_blank", "ask_add", "run"]);
+    expect(server.tools.map((t) => t.name)).toEqual(["list", "fill_field", "push_to_vercel", "set_value", "request_access", "add_blank", "ask_add", "run"]);
   });
 
   it("lists names for the card's folder, or another project's", async () => {
@@ -56,12 +60,18 @@ describe("secretsMcpServer", () => {
     const r = await run("fill_field", { name: "GITHUB_CLIENT_SECRET", selector: "#secret" });
     expect(sent()).toEqual({
       url: "http://127.0.0.1:4567/secrets/fill",
-      body: { key: "c1", folder: "/proj", name: "GITHUB_CLIENT_SECRET", environment: "development", selector: "#secret" },
+      body: { key: "c1", thread: undefined, folder: "/proj", name: "GITHUB_CLIENT_SECRET", environment: "development", selector: "#secret" },
     });
     expect(r.isError).toBe(false);
     expect(said(r)).toBe("Typed GITHUB_CLIENT_SECRET from the aimhuge/weft vault into #secret.");
     // The card's stored tool results go through redaction from now on.
     expect((await import("./secret-run")).usesSecrets("c1")).toBe(true);
+  });
+
+  it("says which thread the fill is for", async () => {
+    reply({ found: true, label: "aimhuge/weft" });
+    await runTitled("fill_field", { name: "K", selector: "#k" });
+    expect(sent().body).toMatchObject({ key: "c1", thread: "Fix login", name: "K" });
   });
 
   it("reports a no, a missing value, a missing field and a shell error", async () => {
@@ -205,6 +215,36 @@ describe("secretsMcpServer", () => {
       const err = await run("set_value", { name: "K", value: VALUE });
       expect(said(err)).toBe("The secrets vault isn't ready yet.");
       for (const r of [added, filled, no, err]) clean(r);
+    });
+  });
+
+  describe("request_access", () => {
+    it("asks for standing access, naming the thread and the reason", async () => {
+      reply({ granted: true, label: "aimhuge/weft" });
+      const r = await run("request_access", { why: "to fill the dashboard" });
+      expect(sent()).toEqual({
+        url: "http://127.0.0.1:4567/secrets/request-access",
+        body: { key: "c1", thread: undefined, folder: "/proj", why: "to fill the dashboard" },
+      });
+      expect([r.isError, said(r)]).toEqual([
+        false,
+        "For the next hour this thread can use the aimhuge/weft vault's secrets without asking: fill_field, run and the dev server.",
+      ]);
+    });
+
+    it("says which thread is asking, and which project's vault", async () => {
+      reply({ granted: true });
+      await runTitled("request_access", { why: "w", project: "/other" });
+      expect(sent().body).toEqual({ key: "c1", thread: "Fix login", folder: "/other", why: "w" });
+    });
+
+    it("reports a no, and says each use will ask instead", async () => {
+      reply({ granted: false, label: "aimhuge/weft" });
+      const r = await run("request_access", { why: "w" });
+      expect([r.isError, said(r)]).toEqual([
+        true,
+        "The user didn't give standing access to the aimhuge/weft vault. Each use will ask for Touch ID instead.",
+      ]);
     });
   });
 });

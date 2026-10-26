@@ -253,7 +253,7 @@ function registerVercel(ipcMain, { vercel, env, isBoard }) {
 // Wires Vercel into Electron main for the board window (board() is its webContents). With the vault, it also
 // pushes vault values to the linked project (electron/vercel-env.cjs); env is what threads reach it through.
 function setupVercel({ ipcMain, dataDir, board, vault }) {
-  const { safeStorage } = require("electron");
+  const safeStorage = require("./keychain-audit.cjs").keychainFor("Vercel token");
   const vercel = createVercel({ dataDir, safeStorage });
   // A folder's cached Vercel list changed in the background: the board asks for the drift again (lib/use-vercel-drift.ts).
   const onDrift = (folder) => board()?.send("vercel:drift", folder);

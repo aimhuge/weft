@@ -1,3 +1,4 @@
+import type { KeychainBridge } from "./keychain-audit-view";
 import type { MenuItem } from "./card-menu";
 
 // What the 🔐 drawer and its rail icon show, from what Electron main's vault (electron/vault.cjs) sends:
@@ -74,7 +75,8 @@ export interface ImportScan {
 export type RevealResult = { value: string } | { denied: true } | { missing: true };
 
 // window.weft.vault, from electron/preload.cjs.
-export interface VaultBridge {
+// The grant and log calls are in lib/keychain-audit-view.ts.
+export interface VaultBridge extends KeychainBridge {
   overview(folders: string[]): Promise<VaultOverview>;
   scan(folder: string): Promise<ImportScan>;
   import(folder: string, picks: { file: string; name: string }[]): Promise<{ imported: number }>;

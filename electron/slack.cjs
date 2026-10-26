@@ -280,7 +280,7 @@ function slackRoutes(slackApi) {
 // Next server's { url, token }, or null when there is none: without it there's nowhere to forward to.
 // safeStorage comes from Electron here and nowhere else; a test passes its own in.
 function setupSlack({ ipcMain, dataDir, board, server, safeStorage: given, fetch: fetchImpl = globalThis.fetch, WebSocketImpl, setTimer, clearTimer }) {
-  const safeStorage = given ?? require("electron").safeStorage;
+  const safeStorage = given ?? require("./keychain-audit.cjs").keychainFor("Slack tokens");
   // Slack talks to the server, not to the board: main forwards each message to /api/slack/inbound.
   const forward = async (inbound) => {
     const target = server?.();

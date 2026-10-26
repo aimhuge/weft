@@ -255,7 +255,7 @@ describe("createVault", () => {
       [two, "git@github.com:o/two.git"],
     ]);
     const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "weft-data-"));
-    const run = (folder: string, args: string[]) => Promise.resolve(args[0] === "remote" ? (remotes.get(folder) ?? null) : "");
+    const run = (folder: string, args: string[]) => Promise.resolve(args[0] === "remote" ? (remotes.get(folder) ?? "") : "");
     const vault = createVault({ dataDir, safeStorage, sodium, prompt: () => Promise.resolve(true), clipboard: { writeText: () => {}, readText: () => "" }, run });
     await vault.setValue(one, "A", "development", LONG);
     await vault.importPicks(one, [{ file: ".env.example", name: "NEEDED" }]);

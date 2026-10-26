@@ -243,7 +243,7 @@ function registerCloudflare(ipcMain, { cloudflare, isBoard }) {
 
 // Wires Cloudflare into Electron main for the board window (board() is its webContents).
 function setupCloudflare({ ipcMain, dataDir, board }) {
-  const { safeStorage } = require("electron");
+  const safeStorage = require("./keychain-audit.cjs").keychainFor("Cloudflare token");
   const cloudflare = createCloudflare({ dataDir, safeStorage });
   registerCloudflare(ipcMain, { cloudflare, isBoard: (sender) => Boolean(sender) && sender === board() });
   return cloudflare;
