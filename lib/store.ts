@@ -11,6 +11,7 @@ import { globalSingleton } from "./global-singleton";
 import { normalizeTags } from "./tags";
 import { compareCardOrder, ordersForSlot } from "./card-order";
 import { orphanTasks } from "./tasks";
+import { writeFileAtomic } from "./atomic-write";
 
 // The app was called Threadboard and kept its data in ~/.threadboard. Move that folder to
 // ~/.weft the first time, unless ~/.weft already exists. If the move fails, keep using the old one.
@@ -61,7 +62,7 @@ function loadState(): State {
       }
       cards.set(card.id, card);
     }
-    if (migrateLibrary([...cards.values()])) fs.writeFileSync(BOARD_FILE, JSON.stringify({ cards: [...cards.values()] }, null, 2));
+    if (migrateLibrary([...cards.values()])) writeFileAtomic(BOARD_FILE, JSON.stringify({ cards: [...cards.values()] }, null, 2));
   }
   return { cards, threads: new Map() };
 }
@@ -107,7 +108,8 @@ function libraryKinds(): Map<string, string> {
 
 function saveBoard() {
   const cards = [...state().cards.values()];
-  fs.writeFileSync(BOARD_FILE, JSON.stringify({ cards }, null, 2));
+  // Temp file, fsync, rename (lib/atomic-write.ts): a crash mid-write can't leave a half-written board.
+  writeFileAtomic(BOARD_FILE, JSON.stringify({ cards }, null, 2));
 }
 
 function threadFile(id: string) {

@@ -265,9 +265,9 @@ describe("store pictures", () => {
     store.createCard(input(), "c");
     store.replaceThread("c", [shot("/api/attachments/a.png", 1), shot("/api/attachments/b.png", 2)]);
     expect(store.getCard("c")).toMatchObject({ pictures: 2, thumb: "/api/attachments/b.png" });
-    const write = vi.spyOn(fs, "writeFileSync");
+    const write = vi.spyOn(fs, "renameSync"); // board.json saves rename a temp file over it (lib/atomic-write.ts)
     store.replaceThread("c", [shot("/api/attachments/a.png", 1), shot("/api/attachments/b.png", 2)]);
-    expect(write.mock.calls.filter(([f]) => String(f).endsWith("board.json"))).toHaveLength(0);
+    expect(write.mock.calls.filter(([, to]) => String(to).endsWith("board.json"))).toHaveLength(0);
     write.mockRestore();
   });
 

@@ -460,7 +460,7 @@ When a new doc lands in this folder, add it here on the same change.
   (one of Weft's pictures behind the board with its own palette, in `app/globals.css`; docs/architecture/themes.md).
 - `lib/custom-theme.ts` + `lib/custom-themes.ts` + `app/api/themes` + `lib/use-custom-themes.ts` + `components/ThemeDescriber.tsx`:
   themes you prompted up (or built around a picture you uploaded), painted by a card into `~/.weft/themes/<id>/` and applied from a second cookie (docs/architecture/themes.md#prompted-themes).
-- `lib/store.ts`: storage in `~/.weft` (board.json, threads/, attachments/). `lib/attachments.ts` saves every PNG, JPEG and GIF as WebP (uploads, tool screenshots, pane thumbnails; transcript reads add one beside the original); `scripts/webp-backfill.mjs` converts the old ones (docs/architecture/threads-and-sessions.md).
+- `lib/store.ts`: storage in `~/.weft` (board.json, threads/, attachments/); board.json is written atomically by `lib/atomic-write.ts` (temp file, fsync, rename). `lib/attachments.ts` saves every PNG, JPEG and GIF as WebP (uploads, tool screenshots, pane thumbnails; transcript reads add one beside the original); `scripts/webp-backfill.mjs` converts the old ones (docs/architecture/threads-and-sessions.md).
 - `lib/cloud-sync.ts` + `lib/cloud-outbox.ts` + `lib/cloud-sync-start.ts` + `lib/cloud-sync-cards.ts` + `lib/cloud-sync-upload.ts` + `lib/blob-store.ts` + `lib/blob-paths.ts` + `lib/device-id.ts` + `lib/cloud-sync-types.ts`:
   server-side cards, opt-in per folder (settings `syncFolders`): an outbox in `~/.weft/sync-outbox.jsonl` uploads cards, thread items
   and long tool outputs to Supabase (`supabase/migrations/20261015155756_card_sync.sql`), images and pages by content hash.

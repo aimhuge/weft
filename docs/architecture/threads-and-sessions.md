@@ -139,6 +139,16 @@ every API route shares it), and returns the running `Session`. `drive()` (`lib/r
   over); omitted for the puku backend because puku-cli's CLI rejects the flag,
   and omitted for the copilot card
 
+### Crash-safe board.json
+
+`board.json` holds every card, and a crash or power cut in the middle of a plain `writeFileSync` used to leave it
+half-written, which loses the board on the next load. `saveBoard()` (and the library migration's one-off save) now go
+through `writeFileAtomic()` in `lib/atomic-write.ts`: write `.board.json.<pid>.tmp` beside it, `fsync` it, rename it
+over `board.json`, then `fsync` the folder (best effort) so the rename itself survives. A failed write removes the temp
+file and leaves the old board whole. The fsync costs ~7–10 ms on a 3.8 MB board, paid at turn boundaries (a turn
+starting or ending, a move, a session id), not per streamed message. Thread files (`threads/<id>.json`) are still
+written in place, since they're rewritten on every item; append-only JSONL is the ROADMAP's fix for those.
+
 ### Resume after a restart
 
 A CLI process doesn't outlive the app, so `loadState()` (`lib/store.ts`) moves a card that was `running` or had a
