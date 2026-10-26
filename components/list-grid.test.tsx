@@ -13,10 +13,11 @@ import path from "node:path";
 
 const css = readFileSync(path.join(__dirname, "list-grid.css"), "utf8");
 
-// The grid-template-columns of the .list-grid rule.
+// The columns of the .list-grid rule. They are declared as --sheet-cols, which @aimhuge/sheet
+// reads in its own grid-template-columns: var(--sheet-cols).
 function template() {
-  const rule = css.match(/\.list-grid\s*\{[^}]*grid-template-columns:\s*([^;]+);/);
-  expect(rule, ".list-grid must set grid-template-columns").toBeTruthy();
+  const rule = css.match(/\.list-grid\s*\{[^}]*--sheet-cols:\s*([^;]+);/);
+  expect(rule, ".list-grid must set --sheet-cols").toBeTruthy();
   return (rule?.[1] ?? "").trim();
 }
 
