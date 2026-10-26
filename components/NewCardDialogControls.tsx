@@ -8,12 +8,11 @@ import type { Backend, Effort, PermissionMode } from "@/lib/types";
 import { EFFORTS } from "@/lib/new-thread";
 import { agentOf, type ThreadAgent } from "@/lib/agents";
 import { useAgents } from "@/lib/use-agents";
-import { unguardedNotice } from "@/lib/unguarded";
 import ModelSelect from "./ModelSelect";
 import Icon from "./Icon";
 import ModePicker from "./ModePicker";
 import RepoPicker from "./RepoPicker";
-import IsolateToggle from "./IsolateToggle";
+import IsolateMenu, { type IsolatePick } from "./IsolateMenu";
 
 // A select inside a bordered label that draws the box and chevron itself.
 const BARE_SELECT = "cursor-pointer appearance-none bg-transparent pr-4 font-medium outline-none";
@@ -44,15 +43,15 @@ export function NewCardDialogControls({
   onPickCli: (backend: Backend) => void;
   onPickEffort: (effort: Effort | "") => void;
   onPickMode: (mode: PermissionMode) => void;
-  // The Isolated switch (components/IsolateToggle.tsx); left out where isolation isn't offered.
-  isolate?: { on: boolean; suggest: boolean; onToggle: () => void };
+  // Shared or a worktree, and its branch (components/IsolateMenu.tsx); left out where isolation isn't offered.
+  isolate?: IsolatePick;
   // The agent picker; left out where the thread's agent isn't picked here.
   agent?: AgentPick;
 }) {
   return (
     <div className="flex shrink-0 flex-wrap items-center gap-2 px-5 pt-3">
       <RepoPicker value={cwd} home={home} onChange={onChooseFolder} />
-      {isolate && <IsolateToggle {...isolate} />}
+      {isolate && <IsolateMenu cwd={cwd} {...isolate} />}
       {agent && <AgentSelect {...agent} />}
 
       <label className="relative flex items-center gap-1.5 rounded-md border border-line-strong py-1.5 pl-2.5 pr-1.5 text-[12px] text-ink">
@@ -102,12 +101,6 @@ export function NewCardDialogControls({
         onChange={onPickMode}
         up
       />
-      {/* Only when the picked CLI runs without Weft's guards, so it costs no room otherwise (lib/unguarded.ts). */}
-      {unguardedNotice(backend) && (
-        <p role="note" className="basis-full text-[11px] leading-snug text-warn">
-          {unguardedNotice(backend)}
-        </p>
-      )}
     </div>
   );
 }

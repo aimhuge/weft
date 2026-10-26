@@ -126,6 +126,28 @@ function Cache({ cache }: { cache?: CacheState }) {
   );
 }
 
+// How full the thread's context is, and how big the stack is: the tokens the last request carried out
+// of the window they were measured against.
+function Context({ stats }: { stats: CardStats }) {
+  const { contextUsed, contextTokens, contextWindow } = stats;
+  if (contextUsed === undefined) return null;
+  const left = 100 - contextUsed;
+  const stack = contextTokens && contextWindow;
+  return (
+    <Tip text={`Context window: ${left}% left (${contextUsed}% filled by the last request)${
+      stack ? `, ${contextTokens.toLocaleString()} of ${contextWindow.toLocaleString()} tokens` : ""
+    }. Near zero the thread is compacted or loses detail.`}>
+      ctx:<span className={tone(left)}>{left}%</span>
+      {stack && (
+        <span className="text-faint">
+          {" "}
+          {formatTokens(contextTokens)}/{formatTokens(contextWindow)}
+        </span>
+      )}
+    </Tip>
+  );
+}
+
 // Two parts. The thread's, only when a card is open (stats): folder, CLI and model, context left, cache,
 // tokens. The plan's, always: the 5-hour and weekly limits of that card's CLI, or of every CLI when no card
 // is open. The folder's uncommitted lines moved to the header (components/PileBadge.tsx).
@@ -142,8 +164,6 @@ export default function StatusStrip({
   backend?: Backend;
   className?: string;
 }) {
-  const left = stats?.contextUsed === undefined ? undefined : 100 - stats.contextUsed;
-
   return (
     <div
       className={`flex flex-wrap items-center gap-x-4 gap-y-0.5 font-mono text-[11px] text-muted ${className}`}
@@ -156,11 +176,7 @@ export default function StatusStrip({
           </Tip>
         )}
         {stats && <ModelChip backend={backend} stats={stats} />}
-        {stats && left !== undefined && (
-          <Tip text={`Context window: ${left}% left (${stats.contextUsed}% filled by the last request). Near zero the thread is compacted or loses detail.`}>
-            ctx:<span className={tone(left)}>{left}%</span>
-          </Tip>
-        )}
+        {stats && <Context stats={stats} />}
         <Cache cache={stats?.cache} />
         {stats?.tokens && (
           <Tip text={`${stats.tokens.toLocaleString()} input and output tokens used in this thread`}>

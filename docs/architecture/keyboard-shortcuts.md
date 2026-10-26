@@ -39,6 +39,23 @@ Writing, terminal and app shortcuts (⌘↵, ⌘B, ⌘\\, ⌘J, ⌃⌥Space and 
 
 Buttons and menus that have a shortcut show it: header tooltips, the `N` cap on New thread, the `/` badge in the filter box, "? Shortcuts" in the footer, and the right-click menus. Hold a modifier outside a text field for the cheat card (`ModifierHint`); it renders nothing until first used, since macOS key names differ between server and client.
 
+## The printed sheet
+
+Every shortcut on one landscape page, to keep by the screen. `shortcutSheetHtml()` (`lib/shortcut-sheet.ts`) renders
+the same `shortcutSections` the `?` dialog lists (`components/use-shortcut-sections.ts` shares them), dropping each
+description's fine print so it stays one page, as plain HTML with no script and `@page { size: landscape }`.
+
+- **Printing.** `printHtml()` (`lib/print-sheet.ts`): on desktop it hands the HTML to Electron main (`print:html` in
+  `electron/print.cjs`), which loads it as a data URL in a hidden, sandboxed window with JavaScript off and calls
+  `webContents.print({ silent: false })`, so the system print dialog opens (with no printer, it still saves a PDF). In a
+  browser tab it prints from a hidden `srcdoc` iframe and removes it on `afterprint`.
+- **Where it's offered.** The `?` dialog's footer has a **Print** button for everyone (`PrintSheetButton`). The welcome's
+  last screen (`components/WelcomeFirst.tsx`) shows `PrintSheetOffer`, a short pitch for the keyboard with a **Print the
+  sheet** button, only when `print:printers` (`webContents.getPrintersAsync()`, macOS's added printers; no prompt, no
+  network) names at least one. On the web, or a shell from before this, it lists none and the pitch stays hidden.
+- An AirPrint printer on the network that was never added in System Settings isn't listed, and Save as PDF isn't a
+  printer, so neither turns the pitch on.
+
 ## Gotchas
 
 - Enter opens a card only when the card itself has focus, so it still presses a button inside one.

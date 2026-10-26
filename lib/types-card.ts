@@ -78,6 +78,9 @@ export interface CardStats {
   branch?: string;
   // Share of the model's context window the last turn filled, 0-100.
   contextUsed?: number;
+  // The stack itself: the tokens the last request carried, and the window they were measured against.
+  contextTokens?: number;
+  contextWindow?: number;
   tokens?: number;
   // Lines added and removed in the folder's working tree (git diff against HEAD).
   added?: number;

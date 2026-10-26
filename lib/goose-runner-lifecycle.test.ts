@@ -8,6 +8,7 @@ import type { Card } from "./types";
 
 const s = await vi.hoisted(async () => (await import("./goose-runner.harness")).gooseState());
 
+vi.mock("./guards/goose", async () => (await import("./goose-runner.harness")).gooseGuardsMock());
 vi.mock("./runner-turn", async () => (await import("./goose-runner.harness")).runnerTurnMock(s));
 vi.mock("./store", async () => (await import("./goose-runner.harness")).storeMock(s));
 vi.mock("node:child_process", async () => (await import("./goose-runner.harness")).childProcessMock(s));

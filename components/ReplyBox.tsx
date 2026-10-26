@@ -47,6 +47,7 @@ export default function ReplyBox({
   stale,
   cutOff = false,
   noPriorContext: noPriorContextProp = false,
+  noDone = false,
   fiveHour,
   backend,
   model,
@@ -73,6 +74,8 @@ export default function ReplyBox({
   // No prior assistant context: the model/CLI was just switched, or the card was never started.
   // When true, the reply box defaults to Send fresh and Continue is hidden.
   noPriorContext?: boolean;
+  // No Done button: the thread has no project to wrap up (the copilot).
+  noDone?: boolean;
   // The plan's 5-hour window on this thread; when it's used up, Enter schedules for its reset.
   fiveHour?: LimitWindow;
   // The thread's CLI and model, so the reply box can ask the shared limit stores (lib/limit-reset.ts)
@@ -298,6 +301,7 @@ export default function ReplyBox({
     // whose cache lapsed but whose session is still alive is NOT no-prior-context: Continue still
     // makes sense there, and the chip stays "Cache cold · 184k".
     noPriorContext: noPriorContextProp,
+    noDone,
     now,
   });
 

@@ -59,7 +59,8 @@ port.
 - **Shortcuts sheet**: `?` (or the "? Shortcuts" link in the footer) lists every shortcut in the app,
   board, thread, composer, terminal and app menu, and searches them by what they do or by key ("archive",
   "cmd k", "esc"). Hold ⌘ on the board for a moment, or Shift, and a card lists what that modifier does.
-  Buttons, the filter box and right-click menus show their keys too.
+  Buttons, the filter box and right-click menus show their keys too. **Print** puts them all on one landscape
+  page, and when your Mac has a printer the welcome's last screen offers it too.
 - **Full screen threads**: clicking a card opens its thread and its browser together in one large
   overlay over the board; Esc (or clicking outside) closes it, and so does sending `/done`. A card
   running `/done` sits in Done while it works and is archived when it finishes.
@@ -296,7 +297,9 @@ The new-thread dialog (⌘N) and every card's reply box use the same editor:
   The plan limits are per CLI — each CLI has its own plan (Claude Code on Anthropic's, puku-cli on
   Puku's) — so the chart draws that CLI's own history.
 - **Status strip: the thread and the plan.** An open card's strip names its CLI and model (`[puku · opus-4-8]`,
-  the model its session started on), then context, cache and tokens, then that CLI's plan limits. Every card
+  the model its session started on), then context, cache and tokens, then that CLI's plan limits. The context
+  reads as how much is left and how big the stack is (`ctx:44% 112.0k/200.0k` — the tokens the last request
+  carried, out of the model's window). Every card
   on one CLI shows the same limits, the newest any of them read, and a window whose reset has passed reads
   full. With no card open, the footer lists each CLI's plan by name and nothing else.
 - **Suggested next message.** After a turn, a Claude thread's reply box shows the CLI's guess at what
@@ -351,7 +354,7 @@ to Sonnet 5.5". The reset time comes from the limit message itself and is read i
 message names, on that timezone's own day: a window that resets at 1:00am in Bangkok ends at 1:00am
 there, whichever day that is.
 
-Pick **Codex** in the New thread dialog to run the OpenAI Codex CLI. Install `codex` on your PATH and sign in with `codex login` first; Weft can open Codex's device login in Terminal from Settings → Accounts. Codex uses its own tools and saved sessions. Weft's browser, board, secrets and webhook MCP tools reach Codex over HTTP, and a folder's `CLAUDE.md` and `.claude/skills` are passed along (Codex reads neither); the per-tool `.env`, git, restart and check guards aren't available to Codex threads. Codex's sandbox mode and reasoning effort are fixed when a session starts.
+Pick **Codex** in the New thread dialog to run the OpenAI Codex CLI. Install `codex` on your PATH and sign in with `codex login` first; Weft can open Codex's device login in Terminal from Settings → Accounts. Codex uses its own tools and saved sessions. Weft's browser, board, secrets and webhook MCP tools reach Codex over HTTP, and a folder's `CLAUDE.md` and `.claude/skills` are passed along (Codex reads neither); and every tool call goes through Weft's guards first, the same ones Claude Code threads run behind ([thread guards](docs/architecture/thread-guards.md)). Codex's sandbox mode and reasoning effort are fixed when a session starts.
 
 Pick **Goose** to run the Goose CLI agent (the Rust one from Block), and bring your own key: Settings → Models → **Bring your own key** takes a provider's API key — OpenRouter, Anthropic, OpenAI, Google, Groq, Mistral, DeepSeek, xAI, Azure, LiteLLM, Perplexity, Cerebras, a local Ollama, or any OpenAI-compatible endpoint — and Weft keeps it in your Keychain. The key never reaches the board and never crosses Weft's control server: the thread's Goose process is started with the key in its env, and that is the only place it exists. The provider you pick is what new Goose threads run on. A card runs the model you gave it (in the New thread dialog or by switching mid-thread); a card left on **Goose default** runs the model you picked for the provider, and with none, Goose chooses. A provider that needs an endpoint beside its key takes one (Anthropic's host, Azure's resource address, LiteLLM's proxy), and a provider whose model ids aren't known ahead of time lets you type the id. **Puku** is one click: the button beside the Provider picker fills in the Anthropic provider, `https://api-cli.puku.sh` and `puku-ai-2.8`, so all that is left is your Puku key. A Goose thread is a plain CLI process, so like a Codex thread it has no per-tool guards and no session to resume — one fresh `goose run` per turn — and it takes no effort setting. It has no Agent tool either, so its subagents are `goose run --text` calls from Bash on the same provider and model, and its commits are signed `Co-Authored-By: Goose (<model>) on Weft`. Install `goose` on your PATH first.
 
@@ -417,9 +420,9 @@ archives every Done card on screen, and `Shift+Z` (or the toast's Undo) brings b
 (the one still outlined on the board). The command palette (`Cmd+K`) has all of them too.
 
 Cards share one working tree by default, so two cards in one folder see each other's edits. When that
-would hurt (a big change, or other cards busy in the folder), switch **Shared** to **Isolated** beside the
-folder in New thread (it reads **Isolate?** with an amber dot when Weft suggests it): the card gets a git
-worktree of its own on a `weft/<title>` branch, taken in milliseconds from a warm pool under `~/.weft/worktrees`
+would hurt (a big change, or other cards busy in the folder), open the **Shared** menu beside the folder in New
+thread (it reads **Isolate?** with an amber dot when Weft suggests it) and pick **Worktree**: the card gets a git
+worktree of its own on a `weft/<title>` branch, or on a branch you search for or name new in the same menu, taken in milliseconds from a warm pool under `~/.weft/worktrees`
 with `node_modules` already in (an APFS clone), and shows ⑃ on the card. Its CLI, Bash, `!` commands, tests and dev
 server (on a port of its own) all run there. On Done it commits what's left, rebases on the project's branch and
 fast-forwards it, never touching other cards' uncommitted work; a conflict goes back to the thread to resolve
@@ -1097,21 +1100,14 @@ the GitHub CLI's sign-in, Vercel, Supabase, Cloudflare, analytics), offers one "
 on "Help me get started" (or when a task needs it) reads `setup_status` and walks you through one link at a time, pointing
 at the right rail drawer or offering a thread that adds PostHog or GA4 to a project.
 
-On the board the copilot is a lane of its own on the right, after Done, instead of a card. Minimized (236px) it reads
-like a column: what finished since you last asked it something, the cards waiting on you (click one to open it), its
-latest reply, a peek into the cockpit and an ask box that sends your question and opens the lane. Open (520px), it's
-the conversation over a picture of the cockpit: you in the driver's seat of the hovercaddy, the copilot in a flight
-helmet beside you. The board's columns narrow beside it (thumbnails and header extras like Review all drop away in a
-narrow column) so all five stay in view. The top bar's ✨ Copilot button, ⌘J and the command palette open and minimize
-it, and the choice sticks; ⌃⌥Space still opens the separate copilot window, which works with the board hidden.
-
-## Feedback
-
-The little dot at the right end of the board's footer is a line to the people building Weft. Click it and an AI asks
-you what's in your way, then a few short follow-ups: what you were doing, what happened, how often, what you'd want.
-Once it has enough (or you click "That's all"), it writes a short summary for you to check. Send it, and it goes to
-the Weft team's Slack, signed with your Weft account when you're signed in so they can write back. A copy stays in
-`~/.weft/feedback/`.
+On the board the copilot floats in the bottom-right corner like Intercom's messenger: a round launcher with its face
+and a count of what's new, over the board, the New thread and card windows, Settings, the welcome and every other
+dialog, so it's there wherever you are. Rest the mouse on it to peek (what finished since you last asked, the cards
+waiting on you, its latest reply and an ask box; the maximize button opens the chat); click it to open the chat above
+it, click again (the ×) to close it. The board keeps its full width. The browser pane stops short of the launcher and
+steps aside while the chat covers it, since nothing in the page can draw over that native view. The top bar's ✨ Copilot
+button, ⌘J and the command palette open and close it, and the choice sticks; ⌃⌥Space still opens the separate copilot
+window, which works with the board hidden.
 
 ## Terminal
 

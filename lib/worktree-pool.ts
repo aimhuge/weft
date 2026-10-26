@@ -5,7 +5,7 @@ import { cliEnv } from "./env";
 import { globalSingleton } from "./global-singleton";
 import { worktreePoolSize } from "./settings";
 import { installDeps, lockHash } from "./worktree-deps";
-import { branchFor, cardWorktreePath, createWorktree, dirtyIn, git, headOf, listWorktrees, moveWorktree, removeWorktree, repoDir, repoRootOf, worktreesRoot } from "./worktrees";
+import { branchFor, cardWorktreePath, createWorktree, dirtyIn, git, headOf, listBranches, listWorktrees, moveWorktree, removeWorktree, repoDir, repoRootOf, worktreesRoot } from "./worktrees";
 import type { Card, CardWorktree } from "./types";
 
 // The warm pool (docs/architecture/worktrees.md), like the runner's warm spare CLIs: per repo an isolated card used
@@ -132,34 +132,55 @@ export async function warmPool(folder: string): Promise<void> {
   void fillPool(root);
 }
 
-// The card's own worktree: a ready entry moved into place (or, with none ready, one made now: the slow path), at the
-// main tree's current HEAD, on the card's weft/* branch. Refills the pool behind it.
-export async function takeWorktree(card: Pick<Card, "id" | "title" | "cwd">): Promise<CardWorktree> {
+// The branch a card's worktree works on, and whether it's one that already exists (checked out as it is) or a new one
+// (made at the main tree's HEAD). A branch you named that's checked out somewhere else can't be had: git refuses a
+// branch in two worktrees, so it says where.
+async function branchToTake(root: string, card: Pick<Card, "id" | "title" | "worktreeBranch">): Promise<{ branch: string; existing: boolean }> {
+  if (!card.worktreeBranch) return { branch: branchFor(card), existing: false };
+  const branch = card.worktreeBranch;
+  const found = (await listBranches(root)).find((b) => b.name === branch);
+  if (found?.worktree && found.worktree !== cardWorktreePath(root, card.id)) {
+    throw new Error(`${branch} is checked out in ${found.worktree}, and git won't check a branch out twice. Pick another branch, or switch that folder off it.`);
+  }
+  return { branch, existing: Boolean(found) };
+}
+
+// A ready entry moved to `dest` and put on what the card works from: the existing branch, or HEAD. Reinstalls only
+// when that changed the lockfile.
+async function placeEntry(root: string, entry: { path: string; ready: Ready }, dest: string, head: string, existing?: string) {
+  state().busy.add(entry.path);
+  fs.rmSync(markerOf(entry.path), { force: true });
+  try {
+    await moveWorktree(root, entry.path, dest);
+  } finally {
+    state().busy.delete(entry.path);
+  }
+  if (existing) await git(dest, ["checkout", "--quiet", existing], 60_000);
+  else if (entry.ready.base !== head) await git(dest, ["checkout", "--quiet", "--detach", head], 60_000);
+  if (lockHash(dest) !== entry.ready.lock) await installDeps(root, dest, cliEnv());
+}
+
+// The card's own worktree: a ready entry moved into place (or, with none ready, one made now: the slow path), on the
+// branch it named (lib/branch-name.ts) or its own weft/* one at the main tree's current HEAD. Refills the pool behind it.
+export async function takeWorktree(card: Pick<Card, "id" | "title" | "cwd" | "worktreeBranch">): Promise<CardWorktree> {
   const root = await repoRootOf(card.cwd);
   if (!root) throw new Error(`${card.cwd} isn't in a git repo, so this card can't have a worktree of its own.`);
   noteRepo(root);
   const dest = cardWorktreePath(root, card.id);
-  const branch = branchFor(card);
+  const { branch, existing } = await branchToTake(root, card);
   const head = await headOf(root);
   const entry = fs.existsSync(dest) ? undefined : readyEntries(root)[0];
   if (fs.existsSync(dest)) {
     // Taken before (a restart between take and save): reuse it as it is.
   } else if (entry) {
-    state().busy.add(entry.path);
-    fs.rmSync(markerOf(entry.path), { force: true });
-    try {
-      await moveWorktree(root, entry.path, dest);
-    } finally {
-      state().busy.delete(entry.path);
-    }
-    if (entry.ready.base !== head) await git(dest, ["checkout", "--quiet", "--detach", head], 60_000);
-    if (lockHash(dest) !== entry.ready.lock) await installDeps(root, dest, cliEnv());
+    await placeEntry(root, entry, dest, head, existing ? branch : undefined);
   } else {
     log(`no pool entry ready for ${path.basename(root)}; making one now`);
-    await createWorktree(root, dest, head);
+    await createWorktree(root, dest, existing ? branch : head);
     await installDeps(root, dest, cliEnv());
   }
-  await git(dest, ["checkout", "--quiet", "-B", branch], 30_000);
+  // A new branch starts where the worktree is; an existing one is only ever checked out, never moved.
+  await git(dest, ["checkout", "--quiet", ...(existing ? [] : ["-B"]), branch], 30_000);
   void fillPool(root);
   const sub = path.relative(root, fs.realpathSync(card.cwd));
   return { path: dest, branch, base: head, repo: root, ...(sub && !sub.startsWith("..") ? { sub } : {}) };
@@ -171,7 +192,8 @@ export async function returnWorktree(wt: CardWorktree): Promise<void> {
   const full = readyEntries(root).length >= worktreePoolSize();
   if (full || (await dirtyIn(wt.path))?.length !== 0) return removeWorktree(root, wt.path, wt.branch, { force: true });
   await git(wt.path, ["checkout", "--quiet", "--detach"], 30_000);
-  await git(root, ["branch", "-D", wt.branch], 10_000).catch(() => "");
+  // Weft's own weft/* branch has landed and goes; a branch you named stays yours.
+  if (wt.branch.startsWith("weft/")) await git(root, ["branch", "-D", wt.branch], 10_000).catch(() => "");
   const entry = path.join(repoDir(root), `pool-${randomBytes(4).toString("hex")}`);
   await moveWorktree(root, wt.path, entry);
   fs.writeFileSync(markerOf(entry), JSON.stringify({ base: await headOf(entry), lock: lockHash(entry), at: Date.now() } satisfies Ready));

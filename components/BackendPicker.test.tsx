@@ -23,9 +23,8 @@ describe("BackendPicker", () => {
     expect(screen.getByRole("button", { name: "Opus 5.5" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: "Opus 4.8" })).toHaveAttribute("aria-pressed", "false");
     expect(screen.getByRole("group", { name: "puku-cli" })).toBeInTheDocument();
-    // Codex and Goose run without Weft's guards, and their headings say so (lib/unguarded.ts).
-    expect(screen.getByRole("group", { name: "Codex" })).toHaveTextContent(/^Codex · no Weft guards/);
-    expect(screen.getByRole("group", { name: "puku-cli" })).not.toHaveTextContent("no Weft guards");
+    // Every CLI runs behind Weft's guards (lib/guards), so no heading carries a warning.
+    expect(screen.getByRole("group", { name: "Codex" })).not.toHaveTextContent("guards");
     await userEvent.click(screen.getByRole("button", { name: "Puku AI 2.7" }));
     expect(api.switchBackend).toHaveBeenCalledWith("c1", "puku", false, "puku-ai-2.7");
   });
@@ -72,9 +71,11 @@ describe("BackendPicker", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("No such card.");
   });
 
-  it("the copilot doesn't get a switcher — just the static badge", () => {
-    render(<BackendPicker card={makeCard({ id: "copilot", backend: "claude", role: "copilot" })} />);
-    expect(screen.queryByRole("button", { name: /Switch model/ })).not.toBeInTheDocument();
-    expect(screen.getByText("Claude Code")).toBeInTheDocument();
+  it("the copilot switches model too, from a menu that opens upward under its reply box", async () => {
+    render(<BackendPicker card={makeCard({ id: "copilot", backend: "claude", role: "copilot" })} up />);
+    await userEvent.click(screen.getByRole("button", { name: /Switch model/ }));
+    expect(screen.getByRole("group", { name: "Default" }).parentElement).toHaveClass("bottom-full");
+    await userEvent.click(screen.getByRole("button", { name: "Puku AI 2.8" }));
+    expect(api.switchBackend).toHaveBeenCalledWith("copilot", "puku", false, expect.any(String));
   });
 });

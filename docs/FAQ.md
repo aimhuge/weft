@@ -529,11 +529,11 @@ On every Claude Code and puku-cli thread (and its subagents):
 
 ### Do the guardrails apply to Codex and Goose?
 
-Mostly not, and Weft says so where you pick one: the CLI menus tag them "no Weft guards", and the New thread dialog
-shows a one-line warning while one is chosen. Codex and Goose get the filtered environment (no keys from your shell)
-and are asked not to read `.env` files, but they have no per-tool hooks, so nothing enforces it: the secret guard, the
-folder gate, the git, restart and check guards and symbol claims never see their calls. For work near secrets or
-outside the card's folder, use Claude Code or puku-cli.
+Yes, the same ones. Every tool call a Codex or Goose thread makes goes through Weft's guards before it runs, through
+each CLI's own hooks: the secret guard, the folder gate, the git, restart and check guards, broken-import warnings
+and symbol claims all see it, and refuse or ask in the same words as on Claude Code. If Weft can't install its guards
+for a turn, the turn doesn't start, and the card says why. One thing stays Claude Code and puku-cli only: an MCP
+server's own mid-call form.
 
 ### What if Weft really does need a restart?
 

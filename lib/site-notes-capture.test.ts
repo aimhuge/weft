@@ -99,7 +99,8 @@ describe("stepLine", () => {
   });
 
   it("scrubs the target and the error", () => {
-    const line = stepLine({ tool: "fill", ok: false, target: "ada@example.com", error: "token ghp_abcdefghijklmnopqrstuvwx failed" }, 0, ["ada@example.com"]);
+    const token = `ghp_${"a".repeat(36)}`;
+    const line = stepLine({ tool: "fill", ok: false, target: "ada@example.com", error: `token ${token} failed` }, 0, ["ada@example.com"]);
     expect(line).toContain("<account>");
     expect(line).not.toContain("ada@example.com");
     expect(line).toContain("<token>");

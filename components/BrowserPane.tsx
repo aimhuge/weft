@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { BrowserState } from "@/lib/client";
+import { clearOfCopilot, useCopilotCover } from "@/lib/copilot-float";
 import { setPaneBox } from "@/lib/float-place";
 import { appFor } from "@/lib/mini-apps";
 import { paneAddress } from "@/lib/app-share-types";
@@ -43,6 +44,10 @@ export default function BrowserPane({
   const [resizing, setResizing] = useState(false);
   const overlay = useAnyOverlay();
   const hide = obscured || overlay || resizing;
+  // The copilot floats over everything, but nothing in the page can cover the native view, so the view
+  // keeps clear of the launcher and steps aside under the peek or the chat (measured on the placeholder,
+  // which stays put).
+  const copilot = useCopilotCover();
   // A shell from before zoom reporting sends no zoom.
   const zoom = state.zoom ?? 100;
 
@@ -52,7 +57,8 @@ export default function BrowserPane({
     if (!bridge || !el) return;
     const report = () => {
       const r = el.getBoundingClientRect();
-      const box = hide ? HIDDEN : { x: r.left, y: r.top, width: r.width, height: r.height };
+      const clear = hide ? null : clearOfCopilot({ x: r.left, y: r.top, width: r.width, height: r.height }, copilot);
+      const box = clear ?? HIDDEN;
       bridge.browser.setBounds(box);
       // Hover bubbles keep clear of the native view; they read this rather than asking the shell.
       setPaneBox(box);
@@ -67,7 +73,7 @@ export default function BrowserPane({
       bridge.browser.setBounds(HIDDEN);
       setPaneBox(null);
     };
-  }, [hide, expanded]);
+  }, [hide, expanded, copilot]);
 
   // The native view swallows pointer events, so it's hidden while dragging the divider.
   // The standalone pane sits left of the board (components/StandaloneBrowserPane.tsx), so its divider is its right edge.

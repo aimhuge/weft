@@ -138,7 +138,13 @@ export default function NewCardDialog({
         onPickCli={dialog.pickCliDefault}
         onPickEffort={dialog.setEffort}
         onPickMode={dialog.pickMode}
-        isolate={{ on: dialog.isolated, suggest: suggestIsolate(alsoHere.length, dialog.promptLength), onToggle: dialog.toggleIsolated }}
+        isolate={{
+          on: dialog.isolated,
+          suggest: suggestIsolate(alsoHere.length, dialog.promptLength),
+          branch: dialog.branch,
+          onSet: dialog.setIsolated,
+          onBranch: dialog.pickBranch,
+        }}
         agent={{ value: dialog.agent, onPick: dialog.setAgent, onManage: onManageAgents }}
       />
 

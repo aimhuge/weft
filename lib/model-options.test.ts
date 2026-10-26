@@ -100,9 +100,9 @@ describe("the menu's groups", () => {
     expect(groups.map((g) => g.backend)).toEqual(["claude", "puku", "codex", "goose"]);
   });
 
-  it("says which CLIs run without Weft's guards", () => {
+  it("heads each group with its CLI's name alone: every CLI runs behind Weft's guards (lib/guards)", () => {
     const groups = modelGroups();
-    expect(groups.find((g) => g.backend === "codex")?.heading).toContain("no Weft guards");
+    expect(groups.find((g) => g.backend === "codex")?.heading).toBe("Codex");
     expect(groups.find((g) => g.backend === "claude")?.heading).toBe("Claude Code");
   });
 

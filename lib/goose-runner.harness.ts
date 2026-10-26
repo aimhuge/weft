@@ -112,6 +112,9 @@ export const childProcessMock = (s: State) => ({
   },
 });
 
+// Weft's guards for the turn (lib/guards/goose.ts), which need the server's port; their own tests are lib/guards/*.
+export const gooseGuardsMock = () => ({ openGooseGuards: vi.fn(() => () => {}) });
+
 export const EXE = "/opt/bin/goose";
 
 /** The per-test session under drive, and the fake child the newest spawn() returned. */

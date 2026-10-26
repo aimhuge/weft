@@ -1,11 +1,14 @@
 "use client";
 
-// The copilot lane's hidden state: the 36px pill on the right edge, and the persona's avatar the
-// header shares with it.
+// The copilot's launcher: the round avatar in the window's bottom-right corner, and the persona's avatar
+// the header shares with it.
 import { useEffect, useRef } from "react";
-import { laneDigest } from "@/lib/copilot-lane";
+import { COPILOT_LAYER, LAUNCHER, launcherBox, setCopilotLauncher } from "@/lib/copilot-float";
+import { laneDigest, type LaneState } from "@/lib/copilot-lane";
 import { personaOf, type PersonaInfo } from "@/lib/copilot-personas";
-import type { Card } from "@/lib/types";
+import { NO_DRAG } from "@/lib/no-drag";
+import { COPILOT_ID, type Card } from "@/lib/types";
+import Icon from "./Icon";
 
 // The persona's face, cropped from its picture (Wingman's: the hovercaddy cockpit, the copilot beside you).
 export function Avatar({ size, picture }: { size: number; picture: PersonaInfo["picture"] }) {
@@ -18,70 +21,75 @@ export function Avatar({ size, picture }: { size: number; picture: PersonaInfo["
   );
 }
 
-// The 36px pill pinned to the right edge: avatar, needs-you dot, count, rotated "Copilot" label. Resting
-// the mouse on it for PEEK_DELAY_MS peeks (a pass on the way to the window edge doesn't); click opens the chat.
+// The launcher: the persona's face in a round button pinned to the window's bottom-right corner, like
+// Intercom's, with a needs-you dot and the news count. Resting the mouse on it for PEEK_DELAY_MS peeks
+// (a pass on the way to the window edge doesn't); a click opens the chat, or closes it when it's open.
 export const PEEK_DELAY_MS = 350;
 
 export default function CopilotHider(props: {
   card: Card | null;
   cards: Card[];
   items: Parameters<typeof laneDigest>[1];
+  state: LaneState;
   onPeek: () => void;
   onOpen: () => void;
+  onHide: () => void;
   toggleTip: string;
 }) {
-  // The peeking digest, the same one the peek column shows, so the hider knows what to glance at.
+  // The peeking digest, the same one the peek shows, so the launcher knows what to badge.
   const digest = laneDigest(props.cards, props.items);
   const waiting = digest.needsYou.length;
   const news = waiting + digest.finished;
   const persona = personaOf(props.card?.persona);
+  const open = props.state === "open";
   const peekTimer = useRef<number | undefined>(undefined);
   useEffect(() => () => window.clearTimeout(peekTimer.current), []);
+  // Tell the browser pane where the launcher sits, so its native view stops short of it.
+  useEffect(() => {
+    const place = () => setCopilotLauncher(launcherBox({ width: window.innerWidth, height: window.innerHeight }));
+    place();
+    window.addEventListener("resize", place);
+    return () => {
+      window.removeEventListener("resize", place);
+      setCopilotLauncher(null);
+    };
+  }, []);
+  const press = () => {
+    window.clearTimeout(peekTimer.current);
+    if (open) props.onHide();
+    else props.onOpen();
+  };
 
   return (
-    <div
-      role="button"
-      tabIndex={0}
-      onClick={() => {
-        window.clearTimeout(peekTimer.current);
-        props.onOpen();
-      }}
+    <button
+      type="button"
+      data-drop-target={COPILOT_ID}
+      onClick={press}
       onMouseEnter={() => {
         window.clearTimeout(peekTimer.current);
-        peekTimer.current = window.setTimeout(props.onPeek, PEEK_DELAY_MS);
+        if (props.state === "hidden") peekTimer.current = window.setTimeout(props.onPeek, PEEK_DELAY_MS);
       }}
       onMouseLeave={() => window.clearTimeout(peekTimer.current)}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          props.onOpen();
-        }
-      }}
-      title={`Open the copilot (${persona.name}) — ${props.toggleTip}`}
-      aria-label={`Open the copilot${news > 0 ? ` (${news} new)` : ""}`}
-      className="group flex h-full cursor-pointer flex-col items-center gap-2 px-1 py-3 hover:bg-sunken/80 focus:bg-sunken/80 focus:outline-none"
+      title={`${open ? "Hide" : "Open"} the copilot (${persona.name}) — ${props.toggleTip}`}
+      aria-label={open ? "Close the copilot" : `Open the copilot${news > 0 ? ` (${news} new)` : ""}`}
+      aria-expanded={open}
+      style={{ ...NO_DRAG, right: LAUNCHER.inset, bottom: LAUNCHER.bottom, width: LAUNCHER.size, height: LAUNCHER.size }}
+      className={`fixed ${COPILOT_LAYER} grid place-items-center rounded-full shadow-[0_8px_24px_-6px_rgba(0,0,0,0.6)] transition-transform hover:scale-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent`}
     >
-      <div className="relative">
-        <Avatar size={26} picture={persona.picture} />
-        {waiting > 0 && (
-          <span
-            aria-hidden="true"
-            className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-warn ring-2 ring-sunken"
-            title="The copilot needs you"
-          />
-        )}
-      </div>
-      {news > 0 && (
+      <Avatar size={LAUNCHER.size} picture={persona.picture} />
+      {open && (
+        <span aria-hidden="true" className="absolute inset-0 grid place-items-center rounded-full bg-black/55 text-white">
+          <Icon name="x" size={20} />
+        </span>
+      )}
+      {!open && news > 0 && (
         <span
           aria-hidden="true"
-          className="rounded-full bg-warn px-1.5 text-[10px] font-bold leading-4 text-[#1a1410] tabular-nums"
+          className={`absolute -right-1 -top-1 min-w-[20px] rounded-full px-1.5 text-center text-[11px] font-bold leading-5 tabular-nums text-[#1a1410] ring-2 ring-canvas ${waiting > 0 ? "bg-warn" : "bg-accent"}`}
         >
           {news}
         </span>
       )}
-      <span className="mt-auto select-none text-[10.5px] font-medium uppercase tracking-wider text-muted group-hover:text-ink [writing-mode:vertical-rl]">
-        Copilot
-      </span>
-    </div>
+    </button>
   );
 }

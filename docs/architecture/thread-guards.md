@@ -1,14 +1,60 @@
 # Thread guards
 
-Every board thread's CLI starts from `guardedCli()` in `lib/env.ts`: a stripped environment and a set of hooks that
-turn away tool calls no permission mode should allow. They run as `PreToolUse` hooks, so they deny a call before it
+Every board thread runs behind one guard set, whatever its CLI: a stripped environment and a set of hooks that turn
+away tool calls no permission mode should allow. They run before a call (`PreToolUse`), so they deny it before it
 runs, in every permission mode (bypass included), and the denial's reason goes back to the model as the tool result.
 
-Codex and Goose have no per-tool hooks, so none of these run for them (the folder gate and the Bash hooks below say
-the same). Weft says so wherever a CLI is picked, from one place, `lib/unguarded.ts`: the model menus' Codex and Goose
-headings read "· no Weft guards" (`components/ModelSelect.tsx`, `components/BackendPicker.tsx`, with the full sentence
-as the tooltip), and the New thread dialog adds one line while one is chosen (`components/NewCardDialogControls.tsx`;
-nothing shows for Claude Code or puku-cli, so it costs no room). docs/FAQ.md answers it too.
+## One guard layer, every CLI
+
+The guards live in `lib/guards/`, apart from any one CLI:
+
+- `hooks.ts` `guardHooks(otherTurns, cardId)` is the guard set: one list of hooks per event (the table below).
+- `decide.ts` `decide(hooks, call)` runs it on one call in Claude Code's terms (`tool`, `input`, `cwd`, `id`) and folds
+  what the hooks said the way the Agent SDK does: any deny wins, then any ask, then allow (with any context or
+  feedback for after the call). Matchers read as Claude Code reads them (`matches()`).
+- `ask.ts` `askAboutCall()` is what an ask becomes: the card asks you in the guard's words (outside folder, another
+  card's symbol), with the one-shot retry grant and granted-folder reads first. The SDK's `canUseTool`
+  (`lib/runner-session.ts`) and the guard route both call it, so an ask looks the same on every CLI.
+
+Each CLI reaches the set through its own enforcement point:
+
+| CLI | How the guards see a call | Adapter |
+| --- | --- | --- |
+| Claude Code, puku-cli | Agent SDK in-process hooks (`Options.hooks`) | `lib/env.ts` `guardedCli()` |
+| Codex 0.162 | its own `PreToolUse`/`PostToolUse` hooks, given per turn on the command line | `lib/guards/codex.ts` |
+| Goose 1.56 | an open-plugin's `hooks/hooks.json` in the card's Goose state root | `lib/guards/goose.ts` |
+
+Codex and Goose hooks are commands, so their calls come to Weft over HTTP: the hook runs an inline `curl` to
+`/api/guards/<cli>/<event>` (`app/api/guards/[cli]/[event]/route.ts`) with the turn's bearer token
+(`lib/guards/turn.ts` `openGuards`), and `lib/guards/hook.ts` `answerHook` maps the payload to Claude Code's tools
+(`lib/guards/calls.ts`: Codex's `Bash`, `apply_patch` split per file by `lib/guards/patch.ts`; Goose's `shell`,
+`write`, `edit`, `tree`, `read_image`, `analyze`), runs `decide()`, waits on the card for an ask, and prints the
+answer in the CLI's words (`lib/guards/answer.ts`). Codex reads Claude Code's own hook output; Goose reads
+`{"decision":"allow"|"block","reason"}`.
+
+- **Codex**: `--enable hooks` (on even if your `config.toml` turned it off), `--dangerously-bypass-hook-trust` (Codex
+  asks you to trust a new hook in its TUI; `codex exec` has none, and Weft wrote the hook), `hooks.PreToolUse` and
+  `hooks.PostToolUse` with `matcher="*"` and `timeout=3600`, and `shell_environment_policy.exclude` so the guard and
+  MCP tokens stay out of the model's shell (hooks still get them). Nothing is written to `~/.codex`.
+- **Goose**: `<GOOSE_PATH_ROOT>/.agents/plugins/weft-guards/` (`.plugin/plugin.json`, `hooks/hooks.json` mode 0600,
+  matcher `.*` on `PreToolUse`, `PostToolUse` and `PostToolUseFailure`, `timeout` 3600), written before the turn and
+  its hooks removed after. The token is written into the file, not Goose's env, which its shell would show.
+
+**Fail closed.** A turn whose guards can't be installed doesn't start: `openGuards` throws `GuardsUnavailable` without
+the server's port or a card, and `openGooseGuards` when its plugin can't be written; the card says why. Both CLIs let a
+call through when their hook can't run or times out (verified on 0.162.1 and 1.56.0: a hook without its exec bit, and
+Goose's 30-second default), so the hook is inline (no script file to lose), prints a refusal when Weft doesn't answer
+(server down, turn closed, timeout: `UNANSWERED`), both hooks get an hour, and the route refuses an ask nobody answers
+a minute before that (`ASK_LIMIT_MS`). A guard that throws refuses the call too.
+
+**Cost.** Opening the guards adds nothing slow to a turn's start: a random token, and for Goose two small files. Each
+tool call on Codex or Goose adds one local `curl` round trip, ~5 ms warm on the dev server (4-11 ms over 20 calls,
+measured 2026-10-27; the route's first call after a restart compiles it, ~0.3 s), plus the guards' own work, which
+Claude Code pays in-process too.
+
+**Proof.** `lib/guards/parity.test.ts` sends the same four calls as Claude Code, Codex and Goose make them (read `.env`,
+`git reset --hard`, kill Weft's server while another card runs, write outside the card's folder) through the real
+guard set: each is refused, or asked about, in the same words on all three.
 
 | Hook | File | Turns away |
 | --- | --- | --- |
@@ -93,8 +139,8 @@ it's the server asking, not a tool call.
   fit, so the board gets a 409 and you can answer again. `elicitationResult` turns the settled prompt into the server's
   answer: `accept` (with the typed `content` when there was a form), `decline` for Decline, and `cancel` when the call
   was stopped before anyone answered.
-- Codex (`codex exec`, no interactive approvals) and Goose have no channel for a prompt mid-call, so this is Claude Code
-  and puku-cli only.
+- Codex (`codex exec`, no interactive approvals) and Goose have no channel for an MCP server's prompt mid-call, so this
+  is Claude Code and puku-cli only. (Weft's own guards do ask on them: the guard route holds the hook, above.)
 
 ## Folder gate
 
@@ -126,7 +172,7 @@ symlinks, a file not created yet by its nearest folder).
   could never be untrusted. The revoke takes effect for new work; a card already holding the folder in `readScope` keeps
   it until that turn ends, since a permission already handed out isn't retracted. `allowFolder` dedups with a `Set`, so
   re-adding a folder already on the list is a no-op rather than a second row.
-- **Not covered**: Codex (no per-tool hooks), the copilot, and the macOS layer. If the OS still says "Operation not
+- **Not covered**: the copilot and the macOS layer (Codex and Goose are, through the guard route above). If the OS still says "Operation not
   permitted" after Weft allows it, that's `mcp__board__request_folder_access` (`electron/folder-access.cjs`), and the
   grant macOS needs is for the app that actually runs (dev Weft is `Electron.app`, not the `~/Applications/Weft.app` launcher).
 
@@ -201,8 +247,8 @@ into each other. Claims catch that at the moment it happens, instead of a standi
      first card (its edits there stop asking), while the holder's own edits there clash with the whole-file claim and
      wait on it like any clash, marked `first` ("Card ‘X’ goes first on Login.tsx. Wait, or go ahead?");
   3. tells the holder at once through a mid-turn message (`lib/runner-steer.ts`, "Weft: the user put card ‘X’ first on
-     Login.tsx…"), so it moves to other work instead of finding out at its next edit; Codex and Goose holders find out
-     from their prompt;
+     Login.tsx…"), so it moves to other work instead of finding out at its next edit; Codex and Goose holders, which
+     can't be messaged mid-turn, find out at their next edit there;
   4. answers the held edit with allow.
 
   A yield lasts while the first card is busy and still claims the file (`yieldHolds`): its commit drops the claim and
@@ -229,8 +275,8 @@ into each other. Claims catch that at the moment it happens, instead of a standi
   `run_in_background` call stays open 30 minutes, Bash's default background timeout, since its process outlives
   the call), and a written file is claimed only when this card's windows are the only ones open at its mtime, or
   the line names it as written. Otherwise its writer is unknown: no card claims it, and a failed check that names
-  it hears "unknown", never another card's title. A busy Codex or Goose card in the tree runs no such hooks, so
-  while one is, every Bash-written file's writer is unknown. A failed check (`tsc`,
+  it hears "unknown", never another card's title. Codex and Goose cards open the same windows through
+  the guard route, so their Bash writes are seen too. A failed check (`tsc`,
   `typecheck`, `test`, `lint`, `build` in the line, an error word in the output; Bash failures arrive as
   PostToolUseFailure, so the hook listens to both) gets `additionalContext`: the failing paths another busy card
   claims, with "leave those to that card", the ones whose writer is unknown, or else the files other cards have open, since a signature changed

@@ -15,7 +15,7 @@ whole design of this dialog:
 The first screen's narrated tour is a separate thing; see [welcome-tour.md](welcome-tour.md). The board
 keeps `lib/welcome.ts` + `lib/welcome-preview.ts` + `lib/welcome-client.ts` + `app/api/welcome` +
 `components/WelcomeDialog.tsx` + `components/WelcomeIntro.tsx` (Get ready) +
-`components/WelcomeSteps.tsx` (the projects) + `components/WelcomeFirst.tsx` (the first thread, starters)
+`components/WelcomeSteps.tsx` (the projects) + `components/WelcomeFirst.tsx` (the first thread, starters, and the printed shortcut sheet's pitch, `PrintSheetOffer`, shown only when macOS lists a printer)
 + `components/WelcomeFooter.tsx` + `components/HistorySettings.tsx` (Settings → General).
 
 ## Steps and the chrome

@@ -38,6 +38,8 @@ export interface FeatureCard {
   agent?: ThreadAgent;
   // A git worktree of its own (docs/architecture/worktrees.md); left out, the shared folder.
   isolated?: boolean;
+  // The branch that worktree works on (lib/branch-name.ts); left out, its own weft/* branch.
+  branch?: string;
 }
 
 // What a caller may hand the helper: the fields above, or a body read off the network whose types

@@ -176,6 +176,15 @@ describe("createCardFromBody", () => {
     createCardFromBody({ prompt: "x", isolated: "yes" });
     expect(vi.mocked(store.createCard).mock.calls[0]?.[0]).not.toHaveProperty("isolated");
   });
+
+  it("keeps the branch an isolated card names, and drops one git would refuse", () => {
+    createCardFromBody({ prompt: "x", isolated: true, branch: " feat/login " });
+    expect(vi.mocked(store.createCard).mock.calls[0]?.[0]).toMatchObject({ isolated: true, worktreeBranch: "feat/login" });
+    createCardFromBody({ prompt: "x", isolated: true, branch: "bad..name" });
+    expect(vi.mocked(store.createCard).mock.calls[1]?.[0]).not.toHaveProperty("worktreeBranch");
+    createCardFromBody({ prompt: "x", branch: "feat/login" });
+    expect(vi.mocked(store.createCard).mock.calls[2]?.[0]).not.toHaveProperty("worktreeBranch");
+  });
 });
 
 describe("startCard", () => {
