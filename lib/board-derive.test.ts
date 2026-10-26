@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Card } from "./types";
-import { filterState, footerFor, headerCounts, openCardOf, workFolder } from "./board-derive";
+import { filterState, footerFor, headerCounts, menuProject, openCardOf, workFolder } from "./board-derive";
 
 const card = (over: Partial<Card>): Card => ({ id: "a", cwd: "/card", backend: "claude", column: "running", ...over }) as Card;
 const latest = { cwd: "/latest", backend: "codex" as const, model: "m" };
@@ -19,6 +19,23 @@ describe("footerFor", () => {
     const open = card({ stats: { model: "o" } });
     expect(footerFor(open)).toEqual({ stats: open.stats, cwd: "/card", backend: "claude" });
     expect(footerFor(null)).toEqual({ stats: undefined, cwd: undefined, backend: undefined });
+  });
+});
+
+describe("menuProject", () => {
+  const rootOf = (cwd: string) => (cwd === "/p/.claude/worktrees/feat" ? "/p" : cwd);
+
+  it("is the folder's main checkout", () => {
+    expect(menuProject("/p", rootOf)).toBe("/p");
+    expect(menuProject("/p/.claude/worktrees/feat", rootOf)).toBe("/p");
+  });
+
+  it("is null with no folder, or a scratch one", () => {
+    expect(menuProject(null, rootOf)).toBeNull();
+    expect(menuProject(undefined, rootOf)).toBeNull();
+    expect(menuProject("", rootOf)).toBeNull();
+    expect(menuProject("/tmp/x", rootOf)).toBeNull();
+    expect(menuProject("/Users/a/.claude/worktrees/orphan", rootOf)).toBeNull();
   });
 });
 

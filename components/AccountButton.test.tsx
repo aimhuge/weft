@@ -3,6 +3,7 @@ import { act, render, renderHook, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { BillingClientView } from "@/lib/client";
+import type { CloudSyncStatus } from "@/lib/cloud-sync-view";
 import type { AccountView } from "@/lib/types";
 import { resetBillingStatus } from "@/lib/use-billing-status";
 import { closeUpgrade, useUpgradeReason } from "@/lib/use-upgrade";
@@ -15,6 +16,7 @@ const api = vi.hoisted(() => ({
   magicLink: vi.fn(),
   signOut: vi.fn(),
   billingStatus: vi.fn<() => Promise<BillingClientView>>(() => Promise.resolve(null)),
+  cloudSync: vi.fn<() => Promise<{ folders: string[]; status: CloudSyncStatus }>>(),
 }));
 vi.mock("@/lib/client", () => ({ api }));
 
@@ -33,6 +35,7 @@ const billing = {
   puku: null,
   manageUrl: "https://weft.zip/acme/billing",
 };
+const IDLE: CloudSyncStatus = { waiting: 0, lastSyncAt: null, uploaded: 0, lastError: null, signedOut: false, noWorkspace: false };
 const ada = { id: "u1", email: "ada@b.co", name: "Ada", avatar: "https://img/ada.png", provider: "github" };
 
 function setup() {
@@ -44,6 +47,7 @@ function setup() {
 beforeEach(() => {
   vi.clearAllMocks();
   resetBillingStatus();
+  api.cloudSync.mockResolvedValue({ folders: [], status: IDLE });
   // The pane path and the system-browser path both stub the shell bridge; specific tests
   // overwrite `window.weft` to exercise each branch.
   window.weft = { openExternal, browser: { open: browserOpen } } as unknown as typeof window.weft;
@@ -259,5 +263,43 @@ describe("AccountButton", () => {
     api.account.mockResolvedValue({ configured: true, user: { ...ada, name: null, email: null, avatar: null } });
     setup();
     expect(await screen.findByRole("button", { name: "Signed in as your account" })).toHaveTextContent("?");
+  });
+
+  it("puts a dot on the avatar while the board uploads", async () => {
+    api.account.mockResolvedValue({ configured: true, user: ada });
+    api.cloudSync.mockResolvedValue({ folders: ["/p"], status: { ...IDLE, waiting: 2 } });
+    setup();
+    expect(await screen.findByRole("status", { name: "Board syncing" })).toBeInTheDocument();
+  });
+
+  it("puts a red dot on the avatar when sync failed", async () => {
+    api.account.mockResolvedValue({ configured: true, user: ada });
+    api.cloudSync.mockResolvedValue({ folders: ["/p"], status: { ...IDLE, lastError: "HTTP 500" } });
+    setup();
+    const dot = await screen.findByRole("status", { name: "Board sync failed" });
+    expect(dot).toHaveClass("bg-danger");
+  });
+
+  it("shows no dot when sync is idle, off or waiting with nothing to sync", async () => {
+    api.account.mockResolvedValue({ configured: true, user: ada });
+    api.cloudSync.mockResolvedValue({ folders: [], status: { ...IDLE, waiting: 2 } });
+    setup();
+    await screen.findByRole("button", { name: "Signed in as Ada" });
+    await vi.waitFor(() => expect(api.cloudSync).toHaveBeenCalled());
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("shows the Sync section in the open menu, with the board's project", async () => {
+    api.account.mockResolvedValue({ configured: true, user: ada });
+    api.cloudSync.mockResolvedValue({ folders: ["/dev/weft"], status: { ...IDLE, lastSyncAt: Date.now() } });
+    render(<AccountButton onOpenSettings={vi.fn()} project="/dev/weft" />);
+    await userEvent.click(await screen.findByRole("button", { name: "Signed in as Ada" }));
+    const menu = screen.getByRole("menu");
+    expect(await screen.findByRole("menuitem", { name: "Resync now" })).toBeInTheDocument();
+    expect(menu).toHaveTextContent("1 project sync to weft.zip");
+    expect(screen.getByRole("menuitem", { name: "Don't sync weft" })).toBeInTheDocument();
+    // Its items keep the menu open.
+    await userEvent.click(screen.getByRole("menuitem", { name: "Resync now" }));
+    expect(screen.getByRole("menu")).toBeInTheDocument();
   });
 });

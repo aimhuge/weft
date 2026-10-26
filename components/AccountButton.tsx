@@ -3,9 +3,11 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { useAccount } from "@/lib/use-account";
 import { useBillingPrefetch } from "@/lib/use-billing-status";
+import { avatarPollMs, useCloudSync } from "@/lib/use-cloud-sync";
 import { useEscape } from "@/lib/use-escape";
 import { useTeamPrefetch } from "@/lib/use-team";
 import AccountMenu from "./AccountMenu";
+import { SyncDot } from "./AccountSync";
 import Avatar from "./Avatar";
 import Icon, { Spinner } from "./Icon";
 
@@ -15,11 +17,13 @@ function signedInId(state: ReturnType<typeof useAccount>["state"]): string | und
 
 // The top bar's account control, right of Copilot. Signed out: "Sign in" with GitHub, which finishes in
 // your browser. Signed in: a share icon (Share the board) and your avatar, which opens a tiny menu
-// (components/AccountMenu.tsx). Hidden while
+// (components/AccountMenu.tsx), with a dot on it while board sync uploads (amber) or has failed (red). Hidden while
 // loading, on errors, and in builds without a Supabase key, so it never costs header room for nothing.
-export default function AccountButton({ onOpenSettings, onShareBoard }: { onOpenSettings: () => void; onShareBoard?: () => void }) {
+export default function AccountButton({ onOpenSettings, onShareBoard, project = null }: { onOpenSettings: () => void; onShareBoard?: () => void; project?: string | null }) {
   const { state, busy, waiting, error, signIn } = useAccount();
   const [menuOpen, setMenuOpen] = useState(false);
+  const signedIn = !!signedInId(state);
+  const sync = useCloudSync(signedIn, avatarPollMs(menuOpen));
   const menuRef = useRef<HTMLDivElement>(null);
   const menuId = useId();
   useEscape(menuOpen, () => setMenuOpen(false));
@@ -49,11 +53,14 @@ export default function AccountButton({ onOpenSettings, onShareBoard }: { onOpen
           aria-controls={menuOpen ? menuId : undefined}
           title={`Signed in as ${who}`}
           aria-label={`Signed in as ${who}`}
-          className="rounded-full p-0.5 hover:bg-sunken"
+          className="relative rounded-full p-0.5 hover:bg-sunken"
         >
           <Avatar user={user} size={24} />
+          <SyncDot status={sync.status} folders={sync.folders} />
         </button>
-        {menuOpen && <AccountMenu id={menuId} onClose={() => setMenuOpen(false)} onOpenSettings={onOpenSettings} onShareBoard={onShareBoard} />}
+        {menuOpen && (
+          <AccountMenu id={menuId} onClose={() => setMenuOpen(false)} onOpenSettings={onOpenSettings} onShareBoard={onShareBoard} sync={sync} project={project} />
+        )}
       </div>
     );
   }

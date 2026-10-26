@@ -3,23 +3,30 @@
 import { useSyncExternalStore } from "react";
 import { replayLastAchievement } from "@/lib/achievement-replay";
 import { showProgress, subscribeBoardPrefs } from "@/lib/board-prefs";
+import type { useCloudSync } from "@/lib/use-cloud-sync";
 import { replayWelcome } from "@/lib/welcome-client";
 import AccountPlan from "./AccountPlan";
+import AccountSync from "./AccountSync";
 import { openTeamPage } from "./board-palette";
 import Icon, { type IconName } from "./Icon";
 
-// The avatar's tiny menu (components/AccountButton.tsx): your team, plan and an upgrade button on top, then Settings, Share the board, Your team, Replay the welcome,
-// and Replay last achievement while Settings > Show progress is on. Every item closes the menu, then acts.
+// The avatar's tiny menu (components/AccountButton.tsx): your team, plan and an upgrade button on top, then board sync
+// (components/AccountSync.tsx), then Settings, Share the board, Your team, Replay the welcome, and Replay last achievement
+// while Settings > Show progress is on. Every item below sync closes the menu, then acts.
 export default function AccountMenu({
   id,
   onClose,
   onOpenSettings,
   onShareBoard,
+  sync,
+  project,
 }: {
   id: string;
   onClose: () => void;
   onOpenSettings: () => void;
   onShareBoard?: () => void;
+  sync: ReturnType<typeof useCloudSync>;
+  project: string | null;
 }) {
   const progress = useSyncExternalStore(subscribeBoardPrefs, showProgress, () => true);
   const pick = (act: () => void) => () => {
@@ -29,6 +36,7 @@ export default function AccountMenu({
   return (
     <div id={id} role="menu" className="absolute right-0 top-full z-40 mt-1.5 w-[240px] rounded-lg border border-line bg-panel p-1 shadow-lg">
       <AccountPlan onClose={onClose} />
+      <AccountSync sync={sync} project={project} />
       <MenuItem icon="sliders" label="Settings…" onClick={pick(onOpenSettings)} />
       {onShareBoard && <MenuItem icon="share" label="Share the board…" onClick={pick(onShareBoard)} />}
       <MenuItem icon="globe" label="Your team" sub="Invite teammates on weft.zip" onClick={pick(openTeamPage)} />

@@ -4,15 +4,19 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { CloudSyncStatus } from "./cloud-sync-view";
 import { api } from "./client";
 
-// The Settings → Sync page (components/SyncSettings.tsx) polls this every POLL_MS while open. The page
+// The Settings → Sync page (components/SyncSettings.tsx) polls this every POLL_MS while open, and the avatar
+// (components/AccountButton.tsx) every IDLE_POLL_MS for its dot, POLL_MS while its menu is open. The page
 // itself is what shows the status: waiting, lastSyncAt, uploaded, the last error, and the signed-out /
 // no-workspace flags. A failing fetch surfaces the server's error to the page; the empty-state shape
 // is what the page shows before the first answer lands.
 export const POLL_MS = 5000;
+export const IDLE_POLL_MS = 30_000;
+// How often the avatar asks: quickly while its menu shows the status, slowly just to keep its dot true.
+export const avatarPollMs = (menuOpen: boolean) => (menuOpen ? POLL_MS : IDLE_POLL_MS);
 
 const EMPTY: CloudSyncStatus = { waiting: 0, lastSyncAt: null, uploaded: 0, lastError: null, signedOut: false, noWorkspace: false };
 
-export function useCloudSync(active = false) {
+export function useCloudSync(active = false, pollMs = POLL_MS) {
   const [folders, setFolders] = useState<string[]>([]);
   const [status, setStatus] = useState<CloudSyncStatus>(EMPTY);
   const [error, setError] = useState<string | null>(null);
@@ -37,12 +41,12 @@ export function useCloudSync(active = false) {
     const load = () => void reload();
     load();
     window.addEventListener("focus", load);
-    const poll = active ? setInterval(load, POLL_MS) : null;
+    const poll = active ? setInterval(load, pollMs) : null;
     return () => {
       window.removeEventListener("focus", load);
       if (poll) clearInterval(poll);
     };
-  }, [reload, active]);
+  }, [reload, active, pollMs]);
 
   // Turn a folder on or off: the switch flips at once, then the server's answer (the new list and the live status)
   // replaces it. A refusal (a folder that isn't on the board 400s) reloads what the server has.
