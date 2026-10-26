@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useImperativeHandle, useState, type KeyboardEvent, type Ref, type RefObject } from "react";
+import { useEffect, useImperativeHandle, useState, type Ref, type RefObject } from "react";
 import {
   advance,
   buildReply,
@@ -18,30 +18,12 @@ import {
   type AnswerState,
 } from "@/lib/question-answers";
 import { keyAction, type KeyAction } from "@/lib/question-keys";
-import type { PendingPermission, Question, QuestionReply } from "@/lib/types";
+import type { QuestionFormHandle, QuestionProps } from "@/lib/question-form-types";
+import type { Question } from "@/lib/types";
 import type { ComposerHandle } from "./Composer";
 import { FormFooter, Options, QuestionTabs, ReadFrom, Review } from "./QuestionParts";
 
-export interface QuestionFormHandle {
-  // A key pressed in the reply box; true when the form used it (only with an empty box and no modifiers).
-  key(e: KeyboardEvent, boxEmpty: boolean): boolean;
-  // Enter in the reply box: answers the shown question with the box's text, then moves on or sends.
-  enter(): void;
-}
-
-export interface QuestionProps {
-  questions: Question[];
-  // A folder outside the project that a question names (lib/runner-ask.ts): "Read from <path>" grants it.
-  readScope?: PendingPermission["readScope"];
-  // The options' preview page (lib/question-preview.ts), shown in the card's browser pane.
-  previewUrl?: string;
-  // A promise that rejects brings the form back, so a failed send can be tried again.
-  onAnswer: (answers: Record<string, string>, annotations: NonNullable<QuestionReply["annotations"]>) => unknown;
-  // Declines the question: "Skip" (empty chat) or "Chat about this" with the box's text, which the agent reads instead.
-  onDecline?: (chat: string) => unknown;
-  // The parent persists the read scope, which the live session's folder guard reads (lib/read-scope.ts).
-  onReadScope?: (path: string) => void;
-}
+export type { QuestionFormHandle, QuestionProps };
 
 // A send, a number key or a click this soon after the question appears is held: it was meant for the box
 // (Enter on a message you were finishing), not an answer to a question you haven't read yet.

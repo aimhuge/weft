@@ -1,10 +1,24 @@
 // The superadmin Users page as a sheet (@aimhuge/sheet, its SheetTable): every weft.zip account, with
 // the search on the User column (name and email), filters on provider, when they joined and when they were last seen,
 // and the two dates flipping newest ↔ oldest on a click. Pure.
-import type { AdminUserRow } from "@/app/api/admin/users/route";
 import { BLANK, TIME_ORDER, timeBucket, type SheetSpec, type SheetStateOf } from "@aimhuge/sheet";
 
 export type UserKey = "user" | "provider" | "joined" | "seen" | "id";
+
+// One weft.zip account, as the Users admin page's route returns it. The type lives here, with the
+// sheet that reads it, so lib doesn't reach up into the route.
+export interface AdminUserRow {
+  id: string;
+  email: string | null;
+  name: string | null;
+  avatarUrl: string | null;
+  provider: string | null;
+  createdAt: string | null;
+  lastSignInAt: string | null;
+  // The latest of a token refresh, a sign-in and synced card work (admin_users_last_seen); the sign-in alone until
+  // supabase/migrations/20261025181950_user_active_days.sql is applied.
+  lastSeenAt: string | null;
+}
 
 // A time an account carries, as ms, or null when it has none.
 export function msOf(iso: string | null): number | null {

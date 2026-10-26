@@ -3,7 +3,7 @@
 // go to whichever is on screen.
 import { useImperativeHandle, type Ref } from "react";
 import type { Editor } from "@tiptap/react";
-import { pendingMedia } from "@/components/MediaNode";
+import { pendingMedia } from "@/lib/media-uploads";
 
 export interface ComposerHandle {
   focus(): void;

@@ -31,15 +31,19 @@ vi.mock("./store", () => ({
   getThread: (id: string) => store.threads.get(id) ?? [],
 }));
 
-vi.mock("./runner", () => ({
-  isBusy: vi.fn((id: string) => busyIds.has(id)),
+// backend-switch reaches runner.ts through runner-state's hooks, so its sends, ends and model picks are stubbed there.
+const runner = vi.hoisted(() => ({
+  isBusy: vi.fn<(id: string) => boolean>(),
   endSession: vi.fn(),
   sendMessage: vi.fn(),
   setModel: vi.fn((id: string, model: string) => Object.assign(store.cards.get(id)!, { model })),
 }));
+vi.mock("./runner-state", () => ({
+  isBusy: runner.isBusy,
+  hooks: { send: runner.sendMessage, endSession: runner.endSession, setModel: runner.setModel },
+}));
 
 const busyIds = new Set<string>();
-const runner = await import("./runner");
 const { switchBackend, rerunOnModel } = await import("./backend-switch");
 
 function addCard(over: Partial<Card> = {}): Card {

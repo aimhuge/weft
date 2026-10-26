@@ -34,7 +34,7 @@ one of Weft's own pictures behind the board, with a palette drawn from it and cl
 - `components/AppearancePicker.tsx`: the Settings control: three buttons, then a picture tile per scene.
   `components/board-palette.ts` adds a "Theme: …" command per theme and scene.
 - `electron/theme-source.cjs`: what `nativeTheme.themeSource` should be for the cookie's value (a scene follows its
-  base; unknown values follow the system). `electron/main.cjs` `setThemeSource()` uses it, so window chrome, native
+  base; unknown values follow the system). `electron/main.cjs` `followThemeChoice()` uses it, so window chrome, native
   menus and the splash match the scene. Its test checks the table against `SCENES`.
 
 ## Data flow

@@ -15,25 +15,14 @@ import {
   type VaultEnvironment,
   type VaultSummary,
 } from "@/lib/vault-view";
+import type { Editing } from "@/lib/vault-row-types";
 import Icon from "./Icon";
 import { SecretValueField } from "./SecretValueField";
 
 // The pieces of the 🔐 drawer (components/VaultDrawer.tsx): the form that types a secret in, the project
 // filter, and the .env import's preview. A secret's row is components/SecretRow.tsx.
 
-// A secret being added to one or more environments (fixed false), or given a new value (fixed true: the
-// name stays, from is the environment it was opened in; ticking others saves it there too, unticking from
-// moves it out; blank says it has no value yet, so it can move without one).
-export interface Editing {
-  vault: string;
-  folder: string;
-  name: string;
-  environments: VaultEnvironment[];
-  value: string;
-  fixed: boolean;
-  from?: VaultEnvironment;
-  blank?: boolean;
-}
+export type { Editing };
 
 // The three environments as toggles, in any combination. only limits which can be ticked: removing a
 // secret offers just the environments it's in (components/RemoveSecretDialog.tsx).

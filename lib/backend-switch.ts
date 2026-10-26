@@ -1,4 +1,4 @@
-import { endSession, isBusy, sendMessage, setModel } from "./runner";
+import { hooks, isBusy } from "./runner-state";
 import { getCard, getThread, updateCard } from "./store";
 import type { Backend, Card } from "./types";
 import { backendFor, effortFor, modelLabel, modelOn } from "./new-thread";
@@ -23,12 +23,12 @@ export async function switchToBackup(cardId: string): Promise<{ from: string; to
   // A card that's mid-turn can't have its session swapped under it; the turn that hit the limit
   // has already ended by the time we get here, so this is only a guard.
   if (isBusy(cardId)) return undefined;
-  await endSession(cardId);
+  await hooks.endSession(cardId);
   const patch = switchPatch(card, backend, fallback.model);
   // The error and the limit flag go: the card is running again, on a model that works.
   updateCard(cardId, { ...patch, error: undefined, rateLimitHit: false, lastLine: fallbackLine(modelLabel(fallback.from), modelLabel(fallback.model)) });
   const last = [...getThread(cardId)].reverse().find((item) => item.kind === "user");
-  if (last?.kind === "user") sendMessage(cardId, last.text, { echo: false });
+  if (last?.kind === "user") hooks.send(cardId, last.text, { echo: false });
   return { from: fallback.from, to: fallback.model };
 }
 
@@ -41,7 +41,7 @@ export async function rerunOnModel(cardId: string, model: string) {
   const card = getCard(cardId);
   if (!card) throw new Error("No such card.");
   if (isBusy(cardId)) throw new Error("Stop the thread before rerunning it.");
-  await endSession(cardId);
+  await hooks.endSession(cardId);
   const backend = backendFor(model);
   if (backend && backend !== card.backend) {
     // Another CLI's model: the card moves there, in a fresh session on that CLI.
@@ -59,7 +59,7 @@ export async function rerunOnModel(cardId: string, model: string) {
     }
   }
   const last = [...getThread(cardId)].reverse().find((item) => item.kind === "user");
-  if (last?.kind === "user") sendMessage(cardId, last.text, { echo: false });
+  if (last?.kind === "user") hooks.send(cardId, last.text, { echo: false });
 }
 
 // Flips a card to another CLI (right-click menu, rate-limit banner). replay re-sends the
@@ -74,15 +74,15 @@ export async function switchBackend(cardId: string, backend: Backend, { replay =
   const target = model ? (backendFor(model) ?? backend) : backend;
   if (card.backend === target) {
     // Same CLI, another of its models: no new session needed.
-    if (model !== undefined && model !== card.model) setModel(cardId, model);
+    if (model !== undefined && model !== card.model) hooks.setModel(cardId, model);
     return;
   }
   if (isBusy(cardId)) throw new Error("Stop the thread before switching its CLI.");
-  await endSession(cardId);
+  await hooks.endSession(cardId);
   updateCard(cardId, switchPatch(card, target, model));
   if (replay) {
     const last = [...getThread(cardId)].reverse().find((item) => item.kind === "user");
-    if (last?.kind === "user") sendMessage(cardId, last.text, { echo: false });
+    if (last?.kind === "user") hooks.send(cardId, last.text, { echo: false });
   }
 }
 

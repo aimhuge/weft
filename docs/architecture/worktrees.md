@@ -38,8 +38,8 @@ Plain git over `execFile` (no shell), each call with a timeout:
 
 ## The warm pool (lib/worktree-pool.ts)
 
-Making a worktree is cheap; its dependencies aren't. Measured on this repo (2,185 files, 1.5 GB hoisted
-`node_modules`, M-series Mac, APFS):
+Making a worktree is cheap; its dependencies aren't. Measured on this repo (measured 2026-10-25: ~2,200 files,
+1.5 GB hoisted `node_modules`, M-series Mac, APFS):
 
 | Step | Time |
 | --- | --- |

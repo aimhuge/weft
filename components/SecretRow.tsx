@@ -7,14 +7,14 @@ import { openInPane } from "@/lib/open-in-pane";
 import { useCountdown } from "@/lib/use-countdown";
 import { useModHeld } from "@/lib/use-mod-held";
 import { blankTitle, masked, type VaultSecret } from "@/lib/vault-view";
+import type { RowAction } from "@/lib/vault-row-types";
 import CountdownButton, { CONFIRM_WAIT_MS } from "./CountdownButton";
 import Icon from "./Icon";
 import { Tag } from "./VaultParts";
 
 // A row in the 🔐 drawer (components/VaultDrawer.tsx).
 
-// choose-remove asks which environments to remove it from (components/RemoveSecretDialog.tsx).
-export type RowAction = "reveal" | "copy" | "edit" | "remove" | "choose-remove";
+export type { RowAction };
 
 // One secret: its name and masked tail, with change, reveal, copy and remove on hover and its value once
 // revealed. 🗑 turns into the countdown's red button (components/CountdownButton.tsx); leaving the row

@@ -4,9 +4,16 @@ Status: design. Step 4 of [secrets.md](./secrets.md) ("Supabase sync"), with the
 local vault, device keypair, `.env` import, Touch ID, `mcp__secrets__*` tools, `.env.local` write-back and
 redaction are already built (2026-10-12). Org tables (`orgs`, `org_memberships`, `invitations`, every account
 with a personal workspace) shipped in `supabase/migrations/20261013155754_teams.sql`; billing landed in
-`20261014010429_billing.sql`. The team pages (`/team`, `/{orgSlug}/team`, `/invite/:token`, the mailer, and the
-`lib/teams.ts` / `lib/team-actions.ts` contracts) are in flight on other cards. This card adds the shared
-🔐 vault on top.
+`20261014010429_billing.sql`; the membership RLS helpers landed in `20261013161111_teams_rls.sql`. The team
+pages (`/team`, `/{orgSlug}/team`, `/invite/:token`, the mailer, and the `lib/teams.ts` / `lib/team-actions.ts`
+contracts) are built. This card adds the shared 🔐 vault on top.
+
+**What exists today.** Only the schema: `supabase/drafts/20261013190000_team_vault.sql` (the five tables, their
+RLS, the `private.share_vault` RPC and the Realtime publication) is written, and it is still a draft. None of
+the desktop half is built — there is no account client in `electron/`, no device registration, no sync engine,
+no grant/rotate/recovery code, and no shared-vault UI in `components/`. Every path named in the build order
+below that is not the migration is a file this card would add, not one that exists; the tables section below
+describes the draft as it stands.
 
 The point of the shared vault is the same as the local one — a secret's value never enters an agent's context
 — extended to a workspace: a thread on a teammate's machine runs the same `mcp__secrets__list`, the same
@@ -36,6 +43,11 @@ The split:
   sealed Supabase session (`electron/account-store.cjs`), never through the service role key.
 - **The Next server** on Vercel is in this card only to host the RLS, the `private.is_org_member` helper, and
   the realtime publication. It does not see plaintext or unwrap keys.
+
+All of the Supabase-side tables, policies and the `private.share_vault` RPC above are in the draft migration;
+`private.is_org_member` itself already ships in `supabase/migrations/20261013161111_teams_rls.sql` (the draft
+re-declares it so the migration stands alone). The Electron main half — the shadow file, the per-user JWT
+client and the sync — is not built yet.
 
 ## Tables (Supabase)
 
@@ -111,8 +123,9 @@ devices only (and only if they are a member of the vault's org). Without RLS, an
 org could fetch a grant that isn't theirs and unwrap nothing (they don't have the private key), but the row
 still leaks a fingerprint; the policy keeps it scoped to its device's owner.
 
-A recovery key is a grant whose `device_id` is a sentinel — `private.recovery_device_id()`, a deterministic
-uuid so the recovery card can find it without a join. The private half of the recovery keypair is the
+A recovery key is a grant whose `device_id` is a sentinel: the recovery keypair's public half is a `devices`
+row with `user_id = null` and `fingerprint = 'recovery'`, so the recovery card finds it by that fingerprint
+rather than by a join on a special uuid. The private half of the recovery keypair is the
 "recovery key" string the user is shown once at vault creation; it is not stored anywhere Weft keeps.
 **Q1: where the recovery key string lives.** Recommend: nowhere. Show it once in the drawer at creation,
 copy with a "I've saved it" button, then re-derive it from a user-entered pass-phrase on recovery
@@ -225,14 +238,21 @@ planner caches one result per row in a single query. Both are `revoke`d from `an
 `grant execute to authenticated` — they sit in the public function catalog so the planner can inline them,
 but only the policies call them.
 
+`private.is_org_member` already ships in `supabase/migrations/20261013161111_teams_rls.sql`, alongside
+`private.org_role(org uuid)` (which returns the caller's role as text, and is what the applied team policies
+use). The draft re-declares `is_org_member` so the migration stands alone, and adds `is_org_role(p_org,
+p_min)` — the minimum-role check the vault's policies want.
+
 **Q3: granting in `private` vs. an `internal` schema.** Recommend: `private`, matching the rest of the
 migrations (`handle_new_user`, `touch_updated_at`, `org_slug_for`). The team card already uses it.
 
 **Q4: do we ever need `security definer` for inserts?** Recommend: yes, exactly one — the **vault creation**
-trigger that runs on the user's first INSERT into a not-yet-existent `(org_id, repo)`. The trigger runs as
-the function owner and so can call the `private.handle_new_vault()` that wraps the user's own device's
-public key in a `vault_grants` row. This keeps RLS simple (only the trigger can write the very first grant
-on a vault) and matches how `org_subscriptions` is lazily created today.
+function that runs on the user's first INSERT into a not-yet-existent `(org_id, repo)`. The function runs as
+the function owner and so can write the user's own device's `vault_grants` row. This keeps RLS simple (only
+the function can write the very first grant on a vault) and matches how `org_subscriptions` is lazily created
+today. (In the draft this is `private.share_vault(p_org_id, p_repo, p_label, p_device_id, p_wrapped_key)`,
+which does exactly that: it checks `is_org_role(p_org_id, 'admin')`, inserts the vault, and inserts the first
+`vault_grants` row in the same transaction.)
 
 ## How Electron main authenticates to Supabase
 
@@ -241,12 +261,18 @@ sealed by `safeStorage`). What the team's shared vault needs on top of that is a
 write the vault tables **as that user** — RLS is what keeps a member of org A from reading org B's vaults,
 and RLS only checks the JWT, not the source IP.
 
-**The shape**: a small `createAccountClient()` in main that wraps `@supabase/supabase-js` with the same
+**The shape**: a small account client in main that wraps `@supabase/supabase-js` with the same
 sealed storage adapter that `lib/account.ts` uses (`shellStorage` in `lib/account-storage.ts`). Main reads
 the session from `~/.weft/account.sealed` on every call, decrypts it in process, hands the access token to
 `supabase-js`. The refresh token is also reachable from main, so a 401 from Supabase triggers a refresh
 inside the same wrapper, and the new tokens are written back through `account-store.cjs`'s `write`. The
 sealed file is the single source of truth for the session; the board and main read the same file.
+
+The board's own client is `accountClient()` in `lib/account.ts` — it builds the `supabase-js` client from
+`SUPABASE_URL`/`SUPABASE_KEY` with `shellStorage` (or the file-backed `fileStorage`) as its storage adapter,
+and it's what the board's own code reads the session through. Main has no equivalent yet: `electron/account-store.cjs`
+exposes `createAccountStore({ dataDir, safeStorage })` with `read`/`write`/`sealed` over the same sealed file,
+but nothing in `electron/` turns that session into a `supabase-js` client.
 
 **The key rule**: this card's main never holds the service-role key. The service role is what the deployed
 Weft's API routes use (`lib/web-session.ts` `serviceClient()`); main is the desktop. RLS scopes main's
@@ -267,8 +293,9 @@ than main (they don't today, but the seam is what makes the next card cheap).
 
 The first time a signed-in Weft opens a shared vault, main does:
 
-1. **Ensure the device row exists.** `loadDeviceKey()` already returns the keypair. Call a new
-   `accountClient.devices.upsert({ public_key, fingerprint, name, platform }, { onConflict: "user_id,public_key" })`.
+1. **Ensure the device row exists.** `loadDeviceKey()` in `electron/device-key.cjs` already returns the
+   keypair. Call a new
+   `accountClient.from("devices").upsert({ public_key, fingerprint, name, platform }, { onConflict: "user_id,public_key" })`.
    Conflict is a no-op (`last_seen_at = now()` is the only thing the trigger updates). The user_id comes
    from the JWT, not the client. The display name is the device's hostname; the user can rename it in
    `Settings → Threads → Devices` (not in this card).
@@ -295,16 +322,17 @@ the org) signs in and the folder is the GitHub repo, the drawer offers **"Share 
 `<org name>`"**. The first time it's pressed for an org, main:
 
 1. Creates a `vaults` row for `(org_id, repo)`. This is the one INSERT that goes through a `security
-   definer` trigger, because it has to write the first `vault_grants` row for the user's own device in the
-   same transaction. The trigger reads the user's `devices.public_key` and produces the wrapped key
-   locally… actually no, the trigger can't. The wrapped key is a libsodium `crypto_box_seal` over the
-   user's *own* public key, which only that user's private key opens. The trigger needs the public key; the
-   ciphertext is computed **client-side** in main, then the trigger inserts the row with the pre-computed
+   definer` function, because it has to write the first `vault_grants` row for the user's own device in the
+   same transaction. The function reads the user's `devices.public_key` and produces the wrapped key
+   locally… actually no, the function can't. The wrapped key is a libsodium `crypto_box_seal` over the
+   user's *own* public key, which only that user's private key opens. The function needs the public key; the
+   ciphertext is computed **client-side** in main, then the function inserts the row with the pre-computed
    wrapped key. This is the same split as `puku_trial_add` (the trial's meter is updated by a `security
    invoker` SQL function, but the input it accepts is the user's count, not the user's token). The
-   migration's `private.share_vault(p_org, p_repo, p_wrapped_key)` is `security definer`, checks
-   `is_org_role('admin')`, and inserts both rows in one transaction with a row-locking `select … for
-   update` on `(org_id, repo)` to prevent two clients racing to create the same vault.
+   migration's `private.share_vault(p_org_id, p_repo, p_label, p_device_id, p_wrapped_key)` is
+   `security definer`, checks `is_org_role(p_org_id, 'admin')`, and inserts both rows in one transaction; a
+   race on `(org_id, repo)` is caught by the unique index and returns the existing vault's id, so two
+   clients sharing the same local vault get the same result.
 2. Imports the existing local `vault.id` ciphertext rows as new `vault_secrets` rows. The wrapped key is
    already what it was (the local vault key is *kept* as version 1 of the shared vault key — a team member
    who joins later gets the same key sealed to their own public key, not a new one). The `id` of the
@@ -369,10 +397,11 @@ round-trip is sub-200ms, so the optimism isn't worth the rollback code.
 
 ## Granting a teammate's devices
 
-The owner (or any `admin`) opens the team's **Devices** page on the deployed weft.zip
-(`app/[orgSlug]/team/devices/page.tsx`, the user-side of this card). The page shows every registered device
-across the team: name, platform, last seen, fingerprint. The page is a static list (RLS scopes it to
-members of the org) and three buttons:
+The owner (or any `admin`) opens the team's **Devices** page on the deployed weft.zip (a
+`app/[orgSlug]/team/devices/page.tsx` this card would add; today the team page is
+`app/[orgSlug]/team/page.tsx`, which has Members, Pending, Projects and the role picker, but no Devices
+tab). The page shows every registered device across the team: name, platform, last seen, fingerprint. The
+page is a static list (RLS scopes it to members of the org) and three buttons:
 
 - **Invite a teammate's device**: opens a small dialog asking for the device's fingerprint. The teammate
   reads theirs from their own Weft's `Settings → Threads → Devices → "Show fingerprint"` (which is just the
@@ -383,8 +412,8 @@ members of the org) and three buttons:
   signed-in user (RLS: a user sees rows where `target_user_id = auth.uid()`). A banner shows up: "`<granter
   name>` wants to add a device to `<vault>`. Show the fingerprint?" — yes reveals the fingerprint and the
   expected key (the user has to read both out of band, by voice or by being next to the granter, because
-  the whole point is to keep a compromised server from substituting its own). Accept writes a
-  `device_match` row that links the pending grant to the user's actual `devices.id`, and from there
+  the whole point is to keep a compromised server from substituting its own). Accept sets the pending row's
+  `matched_device_id` (and `target_public_key`) to the user's actual `devices.id`, and from there
   `vault_grants` is inserted in a server-side transaction (the wrap happens client-side on the granter's
   Weft — see "who wraps" below). The user has now accepted the new device.
 - **The granter's Weft wraps the new device.** A `vault_grants` row needs the wrapped key. The granter
@@ -448,10 +477,10 @@ their grants. RLS prevents the removed device from reading any new grant.
 
 ## Recovery key
 
-A vault's recovery key is a separate device row, owned by no one, with a deterministic uuid (so the
-recovery card can find it). The keypair is generated at vault creation:
+A vault's recovery key is a separate device row, owned by no one, found by its `fingerprint = 'recovery'`
+(the recovery card looks it up that way, not by a special uuid). The keypair is generated at vault creation:
 
-- The **public key** is the `recovery_device_id()` lookup, returned as a `devices` row with
+- The **public key** is returned as a `devices` row with
   `user_id = null` and `name = 'recovery'`. RLS lets members of the org read it (just the public key +
   fingerprint, no wrapped key).
 - The **private key** is the recovery key string the user is shown once. It is encoded as 24 words from a
@@ -461,10 +490,10 @@ recovery card can find it). The keypair is generated at vault creation:
 
 **Showing the recovery key** is its own page, with a single button: "Show recovery key for `<vault>`".
 Touch ID opens it, the words are revealed in a 4×6 grid, **Copy words** puts them on the clipboard for
-60 seconds (the existing `CLIPBOARD_MS`), and a checkbox the user must tick to continue: "I've saved
-these words somewhere safe." Closing the page or un-ticking re-locks it. The key is shown once per vault;
-**a re-show requires a Touch ID and a fresh 24-word generation** (so the old words stop working), which is
-the same shape as Signal's safety number re-roll.
+60 seconds (the existing `CLIPBOARD_MS` in `electron/vault.cjs`), and a checkbox the user must tick to
+continue: "I've saved these words somewhere safe." Closing the page or un-ticking re-locks it. The key is
+shown once per vault; **a re-show requires a Touch ID and a fresh 24-word generation** (so the old words
+stop working), which is the same shape as Signal's safety number re-roll.
 
 **Recovering.** A new device, signed in to the same Weft account, opens the **Recover a vault** flow:
 pastes the 24 words, the passphrase (if any), and the vault name (`owner/name`). Main re-derives the
@@ -548,6 +577,10 @@ The cards below are scoped so each touches a different set of files and can run 
 worktrees. Dependencies are listed; cards with no dependency can run in any order. **Files added** are new;
 **files edited** are existing.
 
+Only card 1 has shipped. Everything else is still to build, so the file lists below name the files each
+card would add or edit — the ones that don't exist in the repo today are the ones to create, not files to
+look up.
+
 ### Card 1: schema + RLS — the migration
 
 **Files added**: `supabase/drafts/20261013190000_team_vault.sql` (the migration in this task's second
@@ -592,10 +625,10 @@ of the file).
 **Files edited**:
 - `electron/device-key.cjs` — `loadDeviceKey()` already returns the keypair; add a sibling
   `registerDevice({ accountClient, name, platform })` that calls
-  `accountClient.from(sealedSession).from('devices').upsert(...)`. The function is idempotent
+  `accountClient.from('devices').upsert(...)`. The function is idempotent
   (`onConflict: 'user_id,public_key'`, only `last_seen_at` changes on conflict).
-- `electron/preload.cjs` — add `weft.account.devices` (list, register, fingerprint) so the board
-  can read its own devices.
+- `electron/preload.cjs` — add a `devices` entry (list, register, fingerprint) to the `weft.vault`
+  namespace, so the board can read its own devices.
 
 **Test**: `electron/device-fingerprint.test.ts` covers the grouping. `electron/device-key.cjs` is
 unchanged for the local-vault flow; the new `registerDevice` is integration-tested in card 7.
@@ -647,12 +680,12 @@ events).
 ### Card 6: the 🔐 drawer's "shared" badge + "Share this vault" button
 
 **Files added**:
-- `components/VaultParts.tsx` — add `<SharedBadge vault={…} />` (a chip in the vault header) and
-  `<ShareOffer folder={…} org={…} onShared={reload} />` (a banner at the top of a local vault when
-  the user is in an org).
 - `components/VaultParts.test.tsx` — vitest jsdom, the existing test setup.
 
 **Files edited**:
+- `components/VaultParts.tsx` — add `<SharedBadge vault={…} />` (a chip in the vault header) and
+  `<ShareOffer folder={…} org={…} onShared={reload} />` (a banner at the top of a local vault when
+  the user is in an org).
 - `lib/vault-view.ts` — `VaultSummary` grows `shared?: { org: { id, slug, name }, keyVersion,
   serverVersion, recoveryShownAt }`. The IPC bridge returns it; local vaults have `shared: undefined`.
 - `lib/use-vault.ts` — `useVault` reloads when `shared.serverVersion` changes (a pub/sub on the local
@@ -674,8 +707,9 @@ because the `shared` block is purely additive.
   components for the page.
 - `app/api/team/devices/route.ts` — `POST` creates a `pending_device_grants` row; `DELETE` removes
   one. RLS gates; the route is just a thin wrapper.
-- `app/api/team/devices/accept/route.ts` — `POST` from the accepting device, writes the
-  `device_match` row, returns the new device's `public_key` so the granter's main can wrap.
+- `app/api/team/devices/accept/route.ts` — `POST` from the accepting device, sets the pending row's
+  `matched_device_id` and `target_public_key`, returns the new device's `public_key` so the granter's
+  main can wrap.
 - `lib/team-devices-view.ts` and `.test.ts` — the helpers the page calls.
 
 **Files edited**:
@@ -691,19 +725,22 @@ because the `shared` block is purely additive.
 
 **Files added**:
 - `electron/vault-grant.cjs` — `wrapForDevice({ vault, granterDevice, newDevice })` and
-  `acceptGrant({ vault, myDevice, wrappedKey })`. The wrap is a libsodium `crypto_box_seal`. Both
-  functions are one screen of code, mostly the same shape.
+  `acceptGrant({ vault, myDevice, wrappedKey })`. The wrap is a libsodium `crypto_box_seal`, which
+  `electron/vault-crypto.cjs`'s `wrapKey(vaultKey, publicKey)` already does. Both functions are one
+  screen of code, mostly the same shape.
 - `electron/vault-grant.test.ts` — fixtures for a granter + new device keypair, asserts the
   wrap/unwrap round-trips and the AAD.
 
 **Files edited**:
-- `electron/vault.cjs` — `setupVault` exposes a new IPC handler `vault:grant` (board-only) that the
-  deployed Weft's "Accept" button calls. The handler reads the granter's pending row, fetches the
-  new device's `public_key`, wraps the vault key, and posts the `vault_grants` row through
-  `accountClient`.
+- `electron/vault-ipc.cjs` — a new IPC handler the deployed Weft's "Accept" button calls. It reads
+  the granter's pending row, fetches the new device's `public_key`, wraps the vault key, and posts
+  the `vault_grants` row through `accountClient`. (The name has to differ from the existing
+  `vault:grant`, which hands a card's thread access to the vault — that one is already in
+  `electron/vault-ipc.cjs` and means something else.)
 
 **Test**: `electron/vault-grant.test.ts` (libsodium fixtures), plus the existing
-`electron/vault-crypto.cjs` test (already covers the unwrap path).
+`electron/vault-store.test.ts` (already covers the wrap/unwrap round-trip through
+`electron/vault-crypto.cjs`).
 
 **Depends on**: cards 3, 4, 5, 7.
 
@@ -720,8 +757,8 @@ because the `shared` block is purely additive.
 **Files edited**:
 - `app/[orgSlug]/team/page.tsx` — the "Remove member" form gains a "Rotate shared vaults"
   checkbox, defaulting to on.
-- `app/api/team/members/route.ts` (the existing removeMember handler) — when the box is ticked,
-  triggers the rotate before the membership delete.
+- `lib/team-actions.ts` — `removeMember(orgSlug, userId)` gains the rotate: when the box is ticked,
+  it triggers the rotate before the membership delete.
 
 **Test**: `electron/vault-rotate.test.ts`.
 
@@ -731,9 +768,9 @@ because the `shared` block is purely additive.
 
 **Files added**:
 - `electron/vault-recovery.cjs` — `generate({ vault, accountClient })` (creates the
-  `recovery_device_id` row, the BIP-39 wordlist encode), `show({ vault })` (returns the words once,
-  gated by `vault_events.vault.recovery_shown`), `recover({ words, passphrase, vault })` (re-derives
-  the keypair, fetches the grant, opens the vault).
+  `devices` row with `fingerprint = 'recovery'`, the BIP-39 wordlist encode), `show({ vault })`
+  (returns the words once, gated by a `vault_events` row with action `vault.recovery_shown`),
+  `recover({ words, passphrase, vault })` (re-derives the keypair, fetches the grant, opens the vault).
 - `app/[orgSlug]/team/vaults/[vaultId]/recovery/page.tsx` — the "Show recovery key" page.
 - `app/api/team/vaults/[vaultId]/recovery/route.ts` — `GET` returns the words (Touch ID in main, the
   page is a thin shell), `POST` acknowledges the "I've saved it" tick.
@@ -765,15 +802,14 @@ component test for the page's "I've saved it" gating.
 
 ### Card 12: conflict UX in the drawer
 
-**Files added**: small additions to `components/SecretRow.tsx` (the conflict banner) and
-`lib/vault-view.ts` (a `vaultConflict` field on the response of `vault:set`).
-
 **Files edited**:
+- `components/SecretRow.tsx` — the conflict banner.
+- `lib/vault-view.ts` — a `vaultConflict` field on the response of `vault:set`.
 - `electron/vault-store.cjs` — `set` returns `{ conflict: true, current }` instead of throwing on a
   row_version mismatch (the existing `set` is in-process and doesn't have a version to check; the new
   one does, through the sync engine).
 
-**Test**: an extension to `electron/vault-store.cjs`'s test that fakes a row_version mismatch.
+**Test**: an extension to `electron/vault-store.test.ts` that fakes a row_version mismatch.
 
 **Depends on**: card 5.
 
@@ -785,7 +821,7 @@ component test for the page's "I've saved it" gating.
   recovery keypair's private seed.* Keeps the recovery flow usable with a paper backup and resistant to
   a leaked screenshot.
 - **Q3 — `private` vs. `internal` schema.** *`private`, matching every other migration.*
-- **Q4 — `security definer` for inserts.** *Yes, one — the `share_vault` trigger that creates the
+- **Q4 — `security definer` for inserts.** *Yes, one — the `private.share_vault` function that creates the
   first grant alongside the vault row.*
 - **Q5 — where the account client lives.** *`electron/account-client.cjs`.* A new file, not folded into
   `account-store.cjs`, so the storage adapter and the Supabase wrapper stay separate.
@@ -815,7 +851,8 @@ component test for the page's "I've saved it" gating.
 `electron/account-client.test.ts`, `electron/device-fingerprint.test.ts`,
 `electron/vault-sync.test.ts`, `electron/vault-grant.test.ts`,
 `electron/vault-rotate.test.ts`, `electron/vault-recovery.test.ts`,
-`lib/team-devices-view.test.ts`. Component tests in `components/VaultParts.test.tsx` and
-`components/VaultEventsList.test.tsx` are extensions of the existing test files, not new ones. The
+`lib/team-devices-view.test.ts`, `components/VaultParts.test.tsx` and
+`components/VaultEventsList.test.tsx` (both new — the drawer's parts have no test file of their own
+today). The
 migration is hand-tested against a fresh `supabase db reset`; the route tests in
 `app/api/routes.test.ts` cover the new `app/api/team/devices*` routes.

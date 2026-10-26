@@ -38,14 +38,16 @@ export { answerPermission } from "./runner-pending";
 export { waitPermission } from "./permission-wait";
 export { ensureSpare, warmUp } from "./runner-session";
 export { isBusy } from "./runner-state";
+export { restoreDoneOverride } from "./done-override";
 // Re-exports for the login module (used by app/api/login and lib/copilot.ts).
 export { clearLoginWaiters, retryAfterLogin, retryPukuWithTrial } from "./runner-login";
 
 // A picked-up session that's open in another app, or that changed outside Weft in the last 10 minutes.
 function activeElsewhere(card: Card) {
   if (card.source !== "claude-code" || !card.sessionId || card.forkedFrom) return false;
-  const outside = (card.lastActivity ?? 0) > (card.lastWeftTurn ?? 0) + 5_000;
-  if (outside && Date.now() - (card.lastActivity ?? 0) < 10 * 60_000) return true;
+  const last = card.lastActivity ?? 0;
+  const outside = last > (card.lastWeftTurn ?? 0) + 5_000;
+  if (outside && Date.now() - last < 10 * 60_000) return true;
   return isOpenElsewhere(card.sessionId);
 }
 
@@ -130,7 +132,9 @@ function sessionFor(card: Card) {
   const session = currentSession(card.id);
   if (session?.busy) throw new Error("This thread is already running.");
   if (session) return session;
+  /* v8 ignore start -- an isolated card with no worktree is held by holdSend, which starts one (lib/worktree-start.ts), so it never reaches here */
   if (awaitingWorktree(card)) throw new Error("This card's worktree isn't ready yet; it starts as soon as it is.");
+  /* v8 ignore stop */
   if (!fs.existsSync(workDir(card))) throw new Error(`This thread's folder ${workDir(card)} doesn't exist anymore.`);
   if (activeElsewhere(card)) {
     // Two apps writing one session would split the conversation, so continue it as a copy.
@@ -246,32 +250,6 @@ export function archiveWhenIdle(cardId: string) {
   updateCard(cardId, archiveAfter.has(cardId) ? { wrappingUp: true } : { archived: !getCard(cardId)?.starred });
 }
 
-// Restores the card's model/effort if a Done move patched them for the /weft:done turn (app/api/cards/[id]
-// moveCard applies the override from lib/automations doneOverrides). The card stores the originals as
-// preDoneModel / preDoneEffort; clearing them here returns the card to its real picks. A no-op when the
-// turn wasn't started by a Done move (e.g. the user typed /weft:done themselves).
-export function restoreDoneOverride(cardId: string) {
-  const card = getCard(cardId);
-  if (!card) return;
-  if (card.preDoneModel === undefined && card.preDoneEffort === undefined && card.preDoneBackend === undefined) return;
-  const patch: {
-    preDoneModel: undefined;
-    preDoneEffort: undefined;
-    preDoneBackend: undefined;
-    model?: string;
-    effort?: typeof card.effort;
-    backend?: typeof card.backend;
-  } = {
-    preDoneModel: undefined,
-    preDoneEffort: undefined,
-    preDoneBackend: undefined,
-  };
-  if (card.preDoneModel !== undefined) patch.model = card.preDoneModel;
-  if (card.preDoneEffort !== undefined) patch.effort = card.preDoneEffort;
-  if (card.preDoneBackend !== undefined) patch.backend = card.preDoneBackend;
-  updateCard(cardId, patch);
-}
-
 function sendQueued(cardId: string) {
   if (isBusy(cardId)) return;
   const queue = queued.get(cardId) ?? [];
@@ -340,6 +318,9 @@ hooks.sendHeld = (cardId) => {
   freeSlots();
 };
 hooks.needLogin = needLogin;
+hooks.send = sendMessage;
+hooks.endSession = endSession;
+hooks.setModel = setModel;
 hooks.land = (id) => void landCard(id, (cardId, text) => sendMessage(cardId, text));
 hooks.boardActions = {
   start: (cardId: string, text: string) => sendMessage(cardId, text),

@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { AdminUserRow } from "@/app/api/admin/users/route";
 import { BLANK, columnOf, rowPasses, sortRows, valueCountsOf } from "@aimhuge/sheet";
-import { msOf, USERS_FRESH, USERS_SHEET, type UserKey } from "./users-sheet";
+import { msOf, USERS_FRESH, USERS_SHEET, type AdminUserRow, type UserKey } from "./users-sheet";
 
 const NOW = Date.parse("2026-10-26T12:00:00.000Z");
 

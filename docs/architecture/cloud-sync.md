@@ -225,7 +225,7 @@ Three rules, written in the migration's comments:
 
 - **Members of the org may read all three tables and the bucket.** A card that was opened on one Mac is
   visible to the rest of the workspace; the `is_org_member(uuid)` helper from
-  `20261013171000_teams_rls.sql` is the only check.
+  `20261013161111_teams_rls.sql` is the only check.
 - **Only the owner may write a card's row.** `owner_user = auth.uid()` on `cloud_cards` directly, and on
   `cloud_thread_items` and `cloud_tool_outputs` through the new `private.is_card_owner(org, card)`
   helper, which reads `cloud_cards` as its owner (`security definer`) so an item's policy doesn't

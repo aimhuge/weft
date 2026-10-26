@@ -288,7 +288,7 @@ The override is turn-scoped. When you move a card to Done, `moveCard` in
 move's `/weft:done` message): if `doneOverrides(card)` (`lib/automations.ts`) returns a
 non-empty patch, the card's `model` / `effort` are saved to `preDoneModel` / `preDoneEffort`
 and replaced with the override. The next turn (the queued `/weft:done`) starts on the
-override; `lib/runner.ts` `restoreDoneOverride(cardId)` then puts the originals back.
+override; `lib/done-override.ts` `restoreDoneOverride(cardId)` then puts the originals back.
 `finishResult` in `lib/runner-turn.ts` calls it once the `/weft:done` turn settles — success,
 failure, or stop — so the next turn on the card sees its real picks, and a card that never
 moved to Done (a `/weft:done` you typed yourself) is a no-op for the restore.

@@ -4,9 +4,8 @@
 // has one capture handler (question keys, Alt+Enter, Tab, Escape, ↑) and one bubble handler (Ctrl+C
 // while a turn runs).
 import { useCallback, type KeyboardEvent, type RefObject } from "react";
-import type { ComposerHandle } from "@/components/Composer";
-import type { QuestionFormHandle } from "@/components/QuestionForm";
-import type { QuestionProps } from "@/components/QuestionForm";
+import type { ComposerHandle } from "@/lib/composer-handle";
+import type { QuestionFormHandle, QuestionProps } from "@/lib/question-form-types";
 import type { Backend, ScheduledMessage } from "@/lib/types";
 import type { PlanResets } from "@/lib/schedule";
 

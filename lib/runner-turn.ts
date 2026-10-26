@@ -20,7 +20,7 @@ import { extractReview } from "./review";
 import { archiveAfter, hooks, queued, safeUpdate, scheduleIdle, type Session } from "./runner-state";
 import { handleTaskEvent } from "./runner-tasks";
 import { waitingInCli } from "./runner-steer";
-import { restoreDoneOverride } from "./runner";
+import { restoreDoneOverride } from "./done-override";
 import { withRedacted } from "./secret-run";
 import { secretAskOf } from "./vault-view";
 import { recordTask } from "./task-ledger";

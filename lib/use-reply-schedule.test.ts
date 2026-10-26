@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { ComposerHandle } from "@/components/Composer";
+import type { ComposerHandle } from "@/lib/composer-handle";
 import type { ScheduledMessage } from "@/lib/types";
 
 const api = vi.hoisted(() => ({ schedule: vi.fn(), unschedule: vi.fn() }));

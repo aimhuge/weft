@@ -15,17 +15,17 @@ const cards: Record<string, { id: string; title?: string; cwd: string }> = {
 vi.mock("./store", () => ({ DATA_DIR: dir, getCard: (id: string) => cards[id] }));
 
 const { addEntry, changelogFile, readChangelog } = await import("./changelog");
-const { changelogStampHooks, head, stampAfterCommit } = await import("./changelog-stamp");
+const { changelogStampHooks, head, stampAfterCommit, stampNote } = await import("./changelog-stamp");
 
 const git = (...args: string[]) => execFileSync("git", ["-C", repo, ...args], { encoding: "utf8" }).trim();
 git("init", "-q");
 git("config", "user.email", "t@t");
 git("config", "user.name", "t");
-const commit = (name: string) => {
+const commit = (name: string, message = name) => {
   fs.mkdirSync(path.dirname(path.join(repo, name)), { recursive: true });
   fs.writeFileSync(path.join(repo, name), name);
   git("add", name);
-  git("commit", "-qm", name);
+  git("commit", "-qm", message);
 };
 
 type Hook = (input: Record<string, unknown>, id: string | undefined, opts: unknown) => Promise<Record<string, unknown>>;
@@ -154,6 +154,33 @@ describe("changelog stamp", () => {
       await pre(bash("PreToolUse", "git commit"), "s4", {});
       commit("other.ts");
       expect(JSON.stringify(await post(bash("PostToolUse", "git commit"), "s4", {}))).toContain("2 draft entries of this card stayed draft: the commit touched none of their files");
+    });
+  });
+
+  describe("a feat or fix with no entry", () => {
+    const land = async (cardId: string, file: string, message: string, id: string) => {
+      const { pre, post } = hooks(cardId);
+      await pre(bash("PreToolUse", "git commit"), id, {});
+      commit(file, message);
+      const sha = git("rev-parse", "--short", "HEAD");
+      return { out: JSON.stringify(await post(bash("PostToolUse", "git commit"), id, {})), sha };
+    };
+
+    it("reminds the card to record one, naming the commit to stamp it on", async () => {
+      const { out, sha } = await land("c1", "f1.ts", "feat(board): a thing", "r1");
+      expect(out).toContain(`This call committed a feat or fix (${sha}), and this card has no changelog entry for this project yet.`);
+      expect(out).toContain(`mcp__board__changelog_edit with its id and sha ${sha}`);
+      expect((await land("c1", "f2.ts", "fix!: a breaking fix", "r2")).out).toContain("committed a feat or fix");
+    });
+
+    it("stays quiet for other commit types, a card that has an entry there already, and no card", async () => {
+      expect((await land("c1", "f3.ts", "docs: words", "r3")).out).not.toContain("feat or fix");
+      expect((await land("c1", "f4.ts", "feature: not conventional", "r4")).out).not.toContain("feat or fix");
+      addEntry({ project: repo, kind: "added", text: "recorded before", cardId: "c2" });
+      expect((await land("c2", "f5.ts", "fix: follow-up", "r5")).out).not.toContain("feat or fix");
+      const was = git("rev-parse", "HEAD");
+      commit("f6.ts", "feat: no card");
+      expect(stampNote(undefined, repo, was, git("rev-parse", "HEAD"))).toBe("");
     });
   });
 });

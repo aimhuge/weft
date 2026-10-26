@@ -172,6 +172,11 @@ export interface RunnerHooks {
   boardActions: BoardActions;
   // Lands an isolated card's branch once its wrap-up ends, then files it away (lib/worktree-done.ts).
   land: (cardId: string) => void;
+  // runner.ts's sendMessage, endSession and setModel, for the modules below it that start, end or re-point a
+  // thread (lib/classifier-denial.ts, lib/backend-switch.ts) without importing runner.ts back.
+  send: (cardId: string, text: string, options?: { echo?: boolean }) => void;
+  endSession: (cardId: string) => Promise<void>;
+  setModel: (cardId: string, model: string) => void;
 }
 // Every session starts through lib/runner.ts, which sets these as it loads, so none is called before then.
 export const hooks = {} as RunnerHooks;

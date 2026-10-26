@@ -7,7 +7,7 @@
 import { useCallback, useState, type RefObject } from "react";
 import { api } from "@/lib/client";
 import { STOP_SETTLE_MS } from "@/lib/optimistic-cards";
-import type { ComposerHandle } from "@/components/Composer";
+import type { ComposerHandle } from "@/lib/composer-handle";
 import type { ScheduledMessage } from "@/lib/types";
 
 export interface UseReplySchedule {

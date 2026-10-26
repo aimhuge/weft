@@ -8,8 +8,7 @@ const safeUpdate = vi.fn();
 const sendMessage = vi.fn();
 
 vi.mock("./store", () => ({ appendThread, replaceThreadItem }));
-vi.mock("./runner", () => ({ sendMessage }));
-vi.mock("./runner-state", () => ({ safeUpdate }));
+vi.mock("./runner-state", () => ({ safeUpdate, hooks: { send: sendMessage } }));
 vi.mock("./runner-pending", () => ({ pendingView: (p: { id: string; title: string; why?: unknown }) => ({ id: p.id, title: p.title, why: p.why }) }));
 
 const { askAboutDenials, callKey, dropDenialPrompts, noteDenial, retryMessage, takeGrant, withRetryGrant } = await import("./classifier-denial");

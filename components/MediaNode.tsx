@@ -5,33 +5,17 @@ import { NodeSelection } from "@tiptap/pm/state";
 import { useSyncExternalStore } from "react";
 import { api } from "@/lib/client";
 import { mediaKind, mediaMarkdown, mediaUrl, type MediaKind } from "@/lib/media";
+import { finishUpload, onUploadChange, setUpload, uploadOf, type Upload } from "@/lib/media-uploads";
 import Icon, { Spinner } from "./Icon";
 
 // An image, video, or file pasted or dropped into the composer. It sits where it was pasted, and
-// serializes to ![name](path) once its upload has finished.
-
-interface Upload {
-  // A local preview, shown while the file uploads.
-  preview?: string;
-  progress: number;
-  error?: string;
-}
-
-const uploads = new Map<string, Upload>();
-const listeners = new Set<() => void>();
-
-function setUpload(id: string, patch: Partial<Upload>) {
-  uploads.set(id, { progress: 0, ...uploads.get(id), ...patch });
-  listeners.forEach((l) => l());
-}
+// serializes to ![name](path) once its upload has finished. The uploads in flight live in
+// lib/media-uploads.ts.
 
 function useUpload(id: string | null) {
   return useSyncExternalStore(
-    (onChange) => {
-      listeners.add(onChange);
-      return () => listeners.delete(onChange);
-    },
-    () => (id ? uploads.get(id) : undefined),
+    (onChange) => onUploadChange(onChange),
+    () => (id ? uploadOf(id) : undefined),
     () => undefined,
   );
 }
@@ -68,9 +52,7 @@ export function insertFiles(editor: Editor, files: File[], pos?: number) {
           });
         }
         // The node shows the saved file now; let it load before dropping the local copy.
-        const preview = uploads.get(id)?.preview;
-        uploads.delete(id);
-        listeners.forEach((l) => l());
+        const preview = finishUpload(id);
         if (preview) setTimeout(() => URL.revokeObjectURL(preview), 10_000);
       })
       .catch((err: unknown) => setUpload(id, { error: err instanceof Error ? err.message : String(err) }));
@@ -90,18 +72,7 @@ export function insertFiles(editor: Editor, files: File[], pos?: number) {
 }
 
 // Uploads still running, and ones that failed, in the editor's document.
-export function pendingMedia(editor: Editor) {
-  let uploading = 0;
-  let failed = 0;
-  editor.state.doc.descendants((node) => {
-    if (node.type.name !== "media") return;
-    const { uploadId } = node.attrs as MediaAttrs;
-    if (!uploadId) return;
-    if (uploads.get(uploadId)?.error) failed++;
-    else uploading++;
-  });
-  return { uploading, failed };
-}
+export { pendingMedia } from "@/lib/media-uploads";
 
 function formatPercent(fraction: number) {
   return `${Math.round(fraction * 100)}%`;

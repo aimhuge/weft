@@ -44,7 +44,7 @@ If you are an agent editing this repo, you are working on me. Read README.md for
     A file at its cap gets code moved out (Extract Function or Module) and its number lowered; never joined lines,
     dropped blank lines or deleted comments, which only hide the smell
   - hotspots, and what has already moved out of them: docs/architecture/MAP.md#hotspots
-  - tests sit beside the code (`pnpm test`, ~3,500 Vitest tests, every line of `lib/` and `app/api/` covered); keep new
+  - tests sit beside the code (`pnpm test`, over 12,000 Vitest tests, every line of `lib/` and `app/api/` covered); keep new
     lib code at 100% and add tests with any risky change to the untested `components/` and `electron/` (docs/architecture/MAP.md#tests)
 
 ## Where things live

@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Editor } from "@tiptap/react";
 
 const media = vi.hoisted(() => ({ pendingMedia: vi.fn(() => ({ uploading: 0, failed: 0 })) }));
-vi.mock("@/components/MediaNode", () => media);
+vi.mock("@/lib/media-uploads", () => media);
 
 import { useComposerHandle, type ComposerHandle } from "./composer-handle";
 

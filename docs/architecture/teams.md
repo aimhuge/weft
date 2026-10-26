@@ -129,7 +129,7 @@ board ── useTeam() ──▶ /api/account/team (local, guarded) ──Bearer
 
 ## Row-level security
 
-`20261013171000_teams_rls.sql`: members read their workspaces and memberships, owners and admins read pending invites
+`20261013161111_teams_rls.sql`: members read their workspaces and memberships, owners and admins read pending invites
 (never the token column), everyone reads the profiles of people they share a workspace with. Writes stay with the
 service role. The checks are security-definer helpers in `private` (`is_org_member`, `org_role`, `shares_org`).
 

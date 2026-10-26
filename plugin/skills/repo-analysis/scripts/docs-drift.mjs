@@ -95,8 +95,13 @@ console.log("");
 console.log("=== 1. Paths named in docs that no longer exist ===");
 const PATH_RE = /`([A-Za-z0-9_./@\[\]-]+\.(?:ts|tsx|cjs|mjs|sql|md|json|css|html|sh|yaml|yml))`/g;
 const brokenPaths = [];
+// A design doc (a "Status: design" line near its top) names the files it plans to add, which don't exist yet
+// by definition: those are counted apart, not as drift.
+const isDesign = (text) => /^Status:\s*design\b/im.test(text.split("\n").slice(0, 8).join("\n"));
+const planned = [];
 for (const [doc, text] of docText) {
   const seen = new Set();
+  const into = isDesign(text) ? planned : brokenPaths;
   for (const m of text.matchAll(PATH_RE)) {
     const p = m[1];
     if (seen.has(p)) continue;
@@ -116,11 +121,12 @@ for (const [doc, text] of docText) {
     const base = path.basename(p);
     if (byBase.has(base)) continue;
     if (byBaseNoExt.has(base.replace(/\.[^.]+$/, ""))) continue;
-    brokenPaths.push([doc, p]);
+    into.push([doc, p]);
   }
 }
 for (const [doc, p] of brokenPaths) console.log(`  ${doc} -> ${p}`);
 console.log(`broken path references: ${brokenPaths.length}`);
+if (planned.length) console.log(`paths design docs plan to add (not drift): ${planned.length} in ${new Set(planned.map(([d]) => d)).size} doc(s)`);
 
 // 2. Symbols named in docs that no longer exist.
 console.log("");

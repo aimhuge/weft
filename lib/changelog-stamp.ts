@@ -1,6 +1,6 @@
 import type { HookCallback, HookCallbackMatcher } from "@anthropic-ai/claude-agent-sdk";
-import { draftsOf, stampCard } from "./changelog";
-import { commitFiles, commitsSince, head } from "./changelog-git";
+import { draftsOf, entriesFor, stampCard } from "./changelog";
+import { commitFiles, commitsSince, head, subjectOf } from "./changelog-git";
 import { writeChangelog, writeNote } from "./changelog-write";
 import { projectRoot } from "./quality-files";
 import { getCard } from "./store";
@@ -39,7 +39,20 @@ export function stampNote(cardId: string | undefined, cwd: string, was: string, 
   const drafts = left.length
     ? `${left.length} draft entr${left.length === 1 ? "y" : "ies"} of this card stayed draft: the commit touched none of ${left.length === 1 ? "its" : "their"} files (${left.map((e) => e.id).join(", ")}). If one belongs to this commit, call mcp__board__changelog_edit with its id and sha ${now.slice(0, 7)}, or with files.`
     : "";
-  return [stamped, drafts].filter(Boolean).join(" ");
+  return [stamped, drafts, unrecorded(cardId, projectRoot(cwd), shas)].filter(Boolean).join(" ");
+}
+
+// A feat or fix the user can see, by its conventional-commit subject.
+const USER_VISIBLE = /^(feat|fix)(\([^)]*\))?!?:/;
+
+// The reminder for a card that commits a feat or fix without ever recording a changelog entry in that project. Half of
+// Weft's own feat and fix commits used to land that way (275 of 509 in the 30 days to 2026-10-26): the entry is one
+// call, but at 27 commits a day it was the step that got skipped. A card with any entry there, draft or shipped, has
+// recorded its change; its follow-up commits are part of it and get no reminder.
+function unrecorded(cardId: string | undefined, root: string, shas: string[]): string {
+  const shipped = cardId ? shas.filter((sha) => USER_VISIBLE.test(subjectOf(root, sha))).at(-1) : undefined;
+  if (!shipped || entriesFor(root).some((e) => e.cardId === cardId)) return "";
+  return `This call committed a feat or fix (${shipped.slice(0, 7)}), and this card has no changelog entry for this project yet. If the user can see the change, call mcp__board__changelog_add (kind, a bold one-line summary, the files), then mcp__board__changelog_edit with its id and sha ${shipped.slice(0, 7)} so it reaches CHANGELOG.md.`;
 }
 
 const commandOf = (input: unknown) => {

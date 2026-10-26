@@ -70,7 +70,9 @@ failed-request URLs go through `paneSecrets.redact`, so a vault value a thread t
 
 ## Tested
 
-`electron/pane-ax.test.ts`, `pane-keys.test.ts`, `pane-cdp.test.ts` and `pane-input.test.ts` run against fakes. The
+`electron/pane-ax-refs.test.ts`, `pane-ax-tree.test.ts`, `pane-ax-states.test.ts` and `pane-ax-limits.test.ts` cover the
+outline and its refs; `pane-keys.test.ts`, `pane-cdp-console.test.ts`, `pane-cdp-session.test.ts`, `pane-cdp-buffers.test.ts` and the
+`pane-input-*.test.ts` files cover the rest, all against fakes. The
 CDP calls themselves were checked end to end in Electron 44 against a test page: a trusted `pointerdown` menu, typing
 and Enter submitting a form, select, Escape, wait, wheel scroll, phone viewport, console and a 404, a covered button
 refused, stale refs, and a click at 150% zoom.

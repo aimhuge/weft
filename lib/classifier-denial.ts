@@ -1,8 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { HookCallback, HookCallbackMatcher, Options, SDKMessage, SDKPermissionDenial } from "@anthropic-ai/claude-agent-sdk";
 import { shortToolName, summarizeInput } from "./format";
-import { sendMessage } from "./runner";
-import { safeUpdate, type Pending, type Session } from "./runner-state";
+import { hooks, safeUpdate, type Pending, type Session } from "./runner-state";
 import { pendingView } from "./runner-pending";
 import { appendThread, replaceThreadItem } from "./store";
 import type { Column } from "./types";
@@ -82,7 +81,7 @@ function denialPrompt(cardId: string, session: Session, d: ClassifierDenial, inp
         return;
       }
       try {
-        sendMessage(cardId, retryMessage(granted.map((key) => key.slice(0, key.indexOf("\n")))));
+        hooks.send(cardId, retryMessage(granted.map((key) => key.slice(0, key.indexOf("\n")))));
       } catch (err) {
         safeUpdate(cardId, { column, error: err instanceof Error ? err.message : String(err) });
       }

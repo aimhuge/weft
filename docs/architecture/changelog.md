@@ -62,6 +62,15 @@ with no files known stamps on any commit, as before; so does a call with no `cha
 - A draft its commit missed (files named wrong) stays draft; the hook's note names it and says to call
   `changelog_edit { id, sha }`. A draft never reaches CHANGELOG.md, so that note is the safety net.
 
+**A feat or fix with no entry gets a reminder** (`unrecorded` in `lib/changelog-stamp.ts`). When the call landed a
+commit whose subject is `feat` or `fix` (conventional, `subjectOf` in `lib/changelog-git.ts`) and the card has no entry
+in that project at all, draft, committed or released, the note asks the thread to `changelog_add` one and then
+`changelog_edit { id, sha }` it onto that commit. Half of Weft's own feat and fix commits used to ship with no entry (280
+of 511 in the 30 days to 2026-10-26, counted by `plugin/skills/repo-analysis/scripts/history.sh`): the call is cheap,
+but at 27 commits a day it was the step that got skipped. A card that already has an entry gets no reminder, so a
+feature's follow-up commits don't nag. It is a nudge, not a gate: a pre-commit hook that refused feat/fix commits
+would block the user's own commits and the commit walk-through, and couldn't tell a user-visible fix from an internal one.
+
 ## The Supabase mirror
 
 `lib/changelog-sync.ts` + `supabase/migrations/20261023153730_changelog_entries.sql`. While you're signed in, the

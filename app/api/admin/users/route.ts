@@ -4,26 +4,18 @@
 // client is what reads across users (RLS on profiles allows only self-read).
 import { adminServiceClient, requireSuperAdminWeft } from "@/lib/admin";
 import { fail, guard } from "@/lib/guard";
+import type { AdminUserRow } from "@/lib/users-sheet";
 import { normalizeEmail } from "@aimhuge/teams";
+
+// The row type lives with the sheet that reads it (lib/users-sheet.ts); re-exported here for the
+// admin page's own importers.
+export type { AdminUserRow };
 
 const PAGE_SIZE = 20;
 // The most one request may take: the Users sheet loads every account in pages this size and sorts and filters them
 // in the browser. Kept well under what one profiles lookup (an in.(...) list of ids in the URL) can carry.
 const MAX_TAKE = 200;
 const MAX_SKIP = 100 * PAGE_SIZE;
-
-export interface AdminUserRow {
-  id: string;
-  email: string | null;
-  name: string | null;
-  avatarUrl: string | null;
-  provider: string | null;
-  createdAt: string | null;
-  lastSignInAt: string | null;
-  // The latest of a token refresh, a sign-in and synced card work (admin_users_last_seen); the sign-in alone until
-  // supabase/migrations/20261025181950_user_active_days.sql is applied.
-  lastSeenAt: string | null;
-}
 
 // A user as GoTrue's admin API returns it (auth.admin.listUsers). auth.users
 // isn't reachable through PostgREST (the auth schema isn't exposed), so the
@@ -64,9 +56,12 @@ const LIST_PAGE = 1000;
 const MAX_LIST_PAGES = 10;
 
 function parseSort(sort: string): { column: SortColumn; dir: "asc" | "desc" } {
-  const [field, dirRaw] = sort.split(/\s+/, 2);
-  const dir = dirRaw === "asc" ? "asc" : "desc";
-  return { column: SORTABLE[field ?? ""] ?? "created_at", dir };
+  const parts = sort.split(/\s+/, 2);
+  // split() always answers at least one element, so the first part is always a string; an empty one
+  // is a column nobody may sort by, and falls back with the rest.
+  const field: string = parts[0] as string;
+  const dir = parts[1] === "asc" ? "asc" : "desc";
+  return { column: SORTABLE[field] ?? "created_at", dir };
 }
 
 function parseInt32(value: string | null, fallback: number): number {

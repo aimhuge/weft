@@ -19,8 +19,7 @@ import {
   type VaultSecret,
   type VaultSummary,
 } from "@/lib/vault-view";
-import type { RowAction } from "@/components/SecretRow";
-import type { Editing } from "@/components/VaultParts";
+import type { Editing, RowAction } from "@/lib/vault-row-types";
 
 // The drawer state and the actions the layout buttons trigger, returned by useVaultActions.
 export interface VaultActions {

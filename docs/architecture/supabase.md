@@ -42,7 +42,8 @@ up linked in the drawer.
 For a linked folder: project and org, its state (Healthy, Paused, Restoring…; `projectState`), region, the API URL
 (click to open the project's dashboard in the browser pane), the folder's migrations against the ones Supabase has
 applied (`GET /v1/projects/:ref/database/migrations`, matched by the version before `_` in
-`supabase/migrations/<version>_<name>.sql`, then by the name after it; "2 of 5 migrations not applied: …" in amber; each name links to the card that wrote its file, the latest card whose
+`supabase/migrations/<version>_<name>.sql`, then by the name after it; "2 of 5 migrations not applied: …" in amber (the
+counts are the folder's own: Weft's own `supabase/migrations/` holds ~46); each name links to the card that wrote its file, the latest card whose
 `touchedFiles` hold it, `migrationOwner`), and links into the
 dashboard on one line: Auth, Logs, Keys, Usage and Dash (`supabaseActions`). A paused project (free
 projects pause after a week) gets **Restore** (`POST /v1/projects/:ref/restore`).

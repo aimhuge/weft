@@ -101,7 +101,7 @@ merge by seq, so one that changed in place is replaced. `?before=<seq>` pages ba
 per-(ip, share_id) cap of 10 attempts per 10 minutes lives in Supabase, not in the route's
 memory, so a Vercel redeploy or a new instance doesn't reset it.
 
-- `share_unlock_attempts` (one row per (ip_hash, share_id); `20261018120000_share_unlock_attempts.sql`):
+- `share_unlock_attempts` (one row per (ip_hash, share_id); `20261018042225_share_unlock_attempts.sql`):
   `ip_hash`, `share_id`, `count`, `first_at`. RLS off; only the service role reads or writes.
 - `ip_hash` is `SHA-256(ip || SHARE_UNLOCK_PEPPER)` (`lib/share-unlock-rate.ts` `hashIp`), so two
   Weft deployments don't share a bucket space and a stolen DB row can't be matched back to a

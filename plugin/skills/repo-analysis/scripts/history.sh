@@ -40,53 +40,47 @@ fi
 
 echo ""
 echo "=== Changelog pairing ==="
-# Weft pairs a code commit with a changelog commit. The changelog is written
-# after the code, and `git log` is newest-first, so in the log the changelog
-# commit appears *before* the code commit it documents. So for each code
-# commit, look *backwards* in the log for a changelog entry.
-log_lines=$(git log --since="${DAYS} days ago" --pretty=format:"%s" 2>/dev/null)
-code_count=$(echo "$log_lines" | grep -cE '^(feat|fix|refactor)')
+# Does every user-visible change (feat, fix) get a changelog entry? An entry reaches the log one of two ways:
+# CHANGELOG.md edited in the commit itself (how Weft did it before its changelog store), or a docs(changelog)
+# commit Weft writes right after (lib/changelog-write.ts). git log is newest-first, so that commit sits *above*
+# the code commit it documents: look back up to 6 lines. refactor is not counted: the user can't see it.
+log_lines=$(git log --since="${DAYS} days ago" --pretty=format:"@@%s" --name-only 2>/dev/null | awk '
+  /^@@/ { if (seen) print s "\t" t; s = substr($0, 3); t = 0; seen = 1; next }
+  $0 == "CHANGELOG.md" { t = 1 }
+  END { if (seen) print s "\t" t }')
+code_count=$(echo "$log_lines" | grep -cE '^(feat|fix)(\(|!|:)')
 changelog_count=$(echo "$log_lines" | grep -cE '^docs\(changelog\)')
-paired=$(echo "$log_lines" | awk '
-  { line[NR]=$0 }
+pairing=$(echo "$log_lines" | awk -F '\t' '
+  { subj[NR] = $1; touched[NR] = $2 }
   END {
-    paired=0;
-    for (i=1; i<=NR; i++) {
-      if (line[i] ~ /^(feat|fix|refactor)/) {
-        found=0;
-        for (j=i-1; j>=1 && j>=i-6; j--)
-          if (line[j] ~ /^docs\(changelog\)/) { found=1; break }
-        if (found) paired++;
-      }
+    inside = 0; after = 0; missing = 0; sample = "";
+    for (i = 1; i <= NR; i++) {
+      if (subj[i] !~ /^(feat|fix)(\(|!|:)/) continue;
+      if (touched[i] == 1) { inside++; continue }
+      found = 0;
+      for (j = i - 1; j >= 1 && j >= i - 6; j--)
+        if (subj[j] ~ /^docs\(changelog\)/) { found = 1; break }
+      if (found) after++;
+      else { missing++; if (missing <= 10) sample = sample "  " subj[i] "\n" }
     }
-    print paired+0;
+    printf "%d %d %d\n%s", inside, after, missing, sample;
   }')
-echo "feat/fix/refactor commits : $code_count"
+read -r inside after missing <<< "$(echo "$pairing" | head -1)"
+echo "feat/fix commits          : $code_count"
 echo "changelog commits         : $changelog_count"
-echo "changelog-after-code pairs: $paired"
+echo "entry inside the commit   : $inside"
+echo "changelog commit after it : $after"
 if [ "$code_count" -gt 0 ]; then
-  echo "pairing rate              : $(( paired * 100 / code_count ))%"
+  echo "pairing rate              : $(( (inside + after) * 100 / code_count ))%"
 fi
 
 echo ""
 echo "=== Undocumented user-visible changes ==="
-# feat/fix commits with no changelog commit within 6 commits of them.
-echo "$log_lines" | awk '
-  { line[NR]=$0 }
-  END {
-    missing=0;
-    for (i=1; i<=NR; i++) {
-      if (line[i] ~ /^(feat|fix)/) {
-        found=0;
-        for (j=i-1; j>=1 && j>=i-6; j--)
-          if (line[j] ~ /^docs\(changelog\)/) { found=1; break }
-        if (!found) { missing++; if (missing<=10) print "  " line[i] }
-      }
-    }
-    printf "total: %d\n", missing;
-  }'
+# feat/fix commits that neither touched CHANGELOG.md nor have a changelog commit within 6 commits of them. One
+# feature often lands as several commits under one entry, so this is an upper bound, not a count of features.
+echo "$pairing" | tail -n +2 | grep -v '^$'
+echo "total: $missing"
 
-echo ""
 echo "=== Authors ==="
 git log --since="${DAYS} days ago" --pretty=format:"%an" 2>/dev/null \
   | sort | uniq -c | sort -rn | awk -v t="$total" '{printf "%-24s %5d  %5.1f%%\n", substr($0, index($0,$2)), $1, $1*100/t}'
