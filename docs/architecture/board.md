@@ -48,18 +48,58 @@ lives in its own component under `components/`.
   column. Each column's extras are wired **by column id** here, so `Board` only passes state in: Backlog
   gets the reorder and the sprints, Review gets Resume all / Review all / the filter chips, Running and
   Needs you get Switch all. Grouped props: `drag`, `archive`, `review`.
-- `components/BoardList.tsx` — the list view: the same cards as a sheet, a table with a header row and a
-  line each, grouped by column. It draws the groups and the header and hands every row to `Board`, so it
-  holds no card details of its own.
-- `components/CardRow.tsx` — one line of the list: the title, the status, the stage, the tags, the folder
-  and the age, each in its own cell. The status reads *Needs you* for a card waiting on you, and the
-  folder carries a `+N` when other cards share its working tree.
-- `components/list-grid.css` — the sheet's columns. The template lives in CSS because it needs
+- `components/BoardList.tsx` — the list view: the same cards as a slightly futuristic Google Sheet on a pane
+  of frosted glass (`.list-glass`), with grid lines across and down, a numbered gutter, and the column
+  bands stuck under the header (`components/SheetBand.tsx`; a click folds a band, the Backlog band comes
+  first and starts folded). It hands every card row to `Board` with its place in the tree (`RowNest`), so it
+  holds no card details of its own, and draws subagent rows itself (`components/AgentRow.tsx`). The corner
+  cell clears the filters, or with none on opens New thread.
+- `lib/list-sheet.ts` — the sheet's sorts and filters, pure: each column's values (`cellValues`; tags can be
+  several, blanks are `(blank)`), `sortRows`/`sortBy` (stages in pipeline order, statuses loudest first,
+  age by real time, blanks last both ways, ties in board order), `rowMatches` (the title search, then
+  unticked values, stored as the hidden ones so a new value shows by default), `flipSort` for number
+  columns, `keepOnly`, folded bands, and the row status `CardRow` draws.
+- `lib/list-tree.ts` — the rows as a tree: a card started by another (`parentId`) or a cron run (`cronOf`)
+  folds under it; an opened card lists its subagents (`card.tasks`, kind `agent`), then its child cards. A
+  child waiting on you, or whose tree's top sits in a folded band, also stands on its own in its band; a
+  parent loop leaves both top-level; a match deep in a tree keeps its path. `bandsToDraw` keeps an empty
+  Backlog and Running so there's always somewhere to type a card. `lib/typeahead.ts` ranks type-ahead matches.
+- `components/SheetHeader.tsx` + `components/SheetFilterMenu.tsx` — the header row: a click on a name opens
+  its menu with the cursor in the search box. Title filters cards as you type; other columns narrow their
+  values (↑↓, Enter keeps only the match, Only per value, Show/Hide all) under a two-button sort bar. Age
+  flips its sort on a click. A filtered header says what it's filtered to. Menus are `components/SheetPopover.tsx`,
+  a portal because the cells clip. `components/use-list-sheet.ts` keeps the sort, filters, title search and
+  folded bands in localStorage (`weft:list-sheet`) as an external store.
+- `components/CardRow.tsx` — one line of the list, its cells in `components/CardRowCells.tsx`: the title
+  (indented, a fold toggle with a count, underlined under the pointer), the status (`RowStatusCell.tsx`: a
+  click or right-click opens Stop / Run now / Continue / Restart / Move to Backlog or Review from
+  `lib/list-actions.ts`; Done is left out because it runs /weft:done), the stage, the tags, the folder
+  (`RowFolderCell.tsx`: a click opens a type-ahead picker of `knownFolders`, a typed path, or Choose folder…,
+  and moves the card with `api.setCwd`) and the age.
+- `components/SheetQuickAdd.tsx` — the row at the foot of the Backlog and Running bands: type a title and
+  Enter files a Backlog card (`start: false`, the cursor stays for the next); in Running it starts a thread.
+  Its folder chip picks the folder (the most recently busy one on the sheet by default), More… opens New thread.
+- `lib/list-keys.ts` + `components/use-list-keys.ts` — the list's keyboard, a capture-phase listener: a typed letter
+  starts the title search (`HeaderMenu`, held by `BoardList`, opens Title with that letter), and Space is a leader:
+  Space then B or R puts the cursor in the Backlog's or Running's quick add, any other key goes on to the board's own
+  shortcut, so n, b, t, c… are Space n, Space b… in the list. j, k, ?, / keep their meaning; nothing fires in a field,
+  with a modifier, or with a dialog or a thread open. A pill at the sheet's foot shows while Space waits (1.5 s).
+- `components/use-sheet-drag.ts` — drag a top-level Backlog row onto another (its gutter is the grip) to reorder,
+  through the board's `drag.onReorder`; off while the sheet is sorted, since a sort would undo it.
+- `components/SheetCrons.tsx` + `lib/list-crons.ts` — crons in the sheet. The ⏰ Crons band at the foot has a
+  row per cron (`cronRows`: soonest first, matched by the title search): on with its next run or off, its
+  schedule, fork or fresh, folder, last run and run count; its status opens Run now and Switch on/off
+  (`useCrons`, read by the sheet itself so Board.tsx stays out of it), and its toggle folds open the run cards
+  as the board's own rows. Elsewhere a run row carries `⏰ run N` and the card its runs fold under
+  `⏰ next in 3h` (or off), through `RowNest.cron` (`cronBadge`); "⏰ cron" is a value in the Tags filter.
+- `components/list-grid.css` — the sheet's columns (the rest of its look is `components/list-sheet.css`). The template lives in CSS because it needs
   `minmax()`, and Tailwind drops an arbitrary value holding a comma. The tracks are fractional, so the
   sheet always fits the board it is drawn in; a narrow board drops the tags and the folder, then the age,
   through **container queries** (the board's width follows the rail and the thread panel, not the window).
 - `components/ViewToggle.tsx` — the board / list toggle in the project bar. The choice is a preference
   (`lib/board-prefs.ts`), read through `lib/use-view-mode.ts`.
+  Escape flips it too, from `lib/use-escape-view.ts`: the bottom Escape layer, on only while no thread,
+  new-thread dialog, browser or closable drawer is up, and never for an Escape typed in a field.
 - `components/BoardBrowserPane.tsx` — the standalone browser pane, drawn while no card is open (an open
   card's pane lives in its workspace's `pane` column, `components/OpenCard.tsx`).
 - `components/OpenCard.tsx` — `CardFrame` (the backdrop and the framed window over the board, a
@@ -94,8 +134,10 @@ lives in its own component under `components/`.
   deleted card disappears, a stopped one moves to Review with its Stop gone. Server cards (events and
   reloads) pass through `overlay` / `overlayAll`, so a late update can't undo the intent; an intent ends when
   the server's card shows the stop done, on `card_deleted`, or on a refusal, which reloads the board. A stop
-  whose card never leaves Running gives up after `STOP_SETTLE_MS` (10 s) and reloads. The copilot lane's Stop
-  and the web board are not covered.
+  whose card never leaves Running gives up after `STOP_SETTLE_MS` (10 s) and reloads. The copilot's card goes
+  through the same overlay (`onCard` overlays it before `updateCopilot`; `useCopilotCard` and `useCopilotThread`
+  overlay their loads and redraw on `onOptimistic`), so its Stop, answers, rename and mode draw at once too. The
+  web board is not covered.
   A permission prompt's answers are intents too: Allow and Deny (`answerNow`, from the card row and a thread's
   plain Allow/Deny), Me first and You first (`firstNow`) and Wait (`waitNow`, through `localTransport`) draw
   the card as the runner will leave it (prompt gone and Running, or waiting on the holder) until the server's
@@ -103,6 +145,21 @@ lives in its own component under `components/`.
   Card fields go through `patchNow`: star, tags (Tags… and a drop on the 🏷 drawer), archive and unarchive
   (with Undo), rename, permission mode and dismissing the broke chip draw at once; a patch ends when the server's
   card has every field (false, missing and [] read alike), after `STOP_SETTLE_MS`, or on a refusal (reload).
+  More `patchNow` users: ▶ Resume / Restart and Resume all (`lib/resume-actions.ts`, `column: "running"`), the
+  first-message banner's Rerun on the backup model (running, error gone), and the thread header's model picker
+  (`components/BackendPicker.tsx` with `lib/backend-pick.ts`: the new CLI and model; a CLI move on a live thread is
+  refused at once in the server's words, without a call).
+- `lib/pending-sends.ts` + `lib/use-pending-sends.ts` — a reply shows in the thread the moment you send it. The reply
+  box empties at once (Send, Send now, ↑ edit, Send fresh) and puts the text back if the send fails (unless you've
+  typed since). `ThreadView` sends through `usePendingSends().track`, which draws the message after the page's items
+  until a user item lands at or after its index (`unsent`: each new user item stands for the oldest send waiting
+  there; texts aren't compared, since the server may reword one), or `PENDING_SEND_MS` (30 s) after the server took it.
+  An edit's message lands after the one it replaces (`useEditLast`'s `track`).
+- Send later (`lib/use-reply-schedule.ts`) draws its queue row and empties the box at once; an X'd or taken-back row
+  leaves at once and comes back on a refusal, so a second click can't schedule or cancel twice.
+- Drawer switches draw at once and reload (or restore) on a refusal: cron on/off (`useCrons().update`), cloud sync
+  folders (`useCloudSync().setFolder`), Slack settings (`useSlack().save`), webhook Mark registered
+  (`useWebhooks().update`) and the GitHub drawer's sync and instant boxes (a `drawn` override until its reload).
 - `lib/board-derive.ts` — the small values read off the board's state each render: `filterState`,
   `footerFor`, `workFolder`, `openCardOf`, `headerCounts`.
 - `lib/use-board-dialogs.ts` — the dialog flags (`useBoardDialogs`, `DialogFlags`) and what they cover:

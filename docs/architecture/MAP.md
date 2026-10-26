@@ -8,7 +8,8 @@ matching doc below. When a feature lands, add or update its entry here and in it
 
 - `admin.md` — the super-admin gate (`SUPER_ADMIN_EMAILS` or a `super_admins` row, via `lib/admin.ts`), the `/admin/users` (real Last seen from `user_active_days`, a per-account activity drawer), `/admin/billing`, `/admin/coupons` and `/admin/settings` pages and the admin kit they share (`components/admin/`), the rail's 🛡 Admin icon, the data routes in `app/api/admin/*`.
 - `overview.md` — what Weft is end to end: the Electron shell, the Next.js server, cards-as-threads, the loop with the user.
-- `board.md` — the board screen's structure: `Board.tsx` owns state and wiring, hooks under `lib/` decide, layer components draw; the column view and the list view (the board as a sheet, `components/list-grid.css`); how to add a column extra, shortcut, palette item or dialog flag.
+- `board.md` — the board screen's structure: `Board.tsx` owns state and wiring, hooks under `lib/` decide, layer components draw; the column view and the list view (the board as a sheet on glass, on the sheet kit with its columns in `lib/list-sheet.ts`, `components/list-grid.css`); how to add a column extra, shortcut, palette item or dialog flag.
+- `sheet.md` — the sheet kit: any list of rows as a Google-Sheets-like table on glass (`lib/sheet.ts` column specs, sorts, filters; `lib/sheet-keys.ts` type-to-search; `components/sheet/` `SheetTable`, header, type-ahead menus, saved state); used by the board's list view and superadmin Users (`lib/users-sheet.ts`).
 - `desktop-shell.md` — `electron/` itself: main, preload, tray, dock, `weft://` links, the start screen, the terminal drawer.
 - `threads-and-sessions.md` — the runner: one Agent SDK `query()` per Claude Code/puku thread, the Codex runner, sessions, queues, rewind, warm spares.
 - `thread-guards.md` — what `guardedCli()` strips and hooks: secret/restart/git/check/route-import/claim guards, per-CLI limits.
@@ -28,6 +29,9 @@ matching doc below. When a feature lands, add or update its entry here and in it
 - `cloudflare.md` — the orange-cloud rail drawer: API token in the Keychain, Worker/Pages links in `~/.weft/cloudflare-links.json`, wrangler `account_id` and deploys.
 - `blastcp.md` — the BlastCP rail drawer: OAuth+PKCE, MCP-tool reads, `~/.weft/blastcp-links.json`.
 - `connectors.md` — Settings → Connectors: CLIs your threads use for your own accounts; gog (Google Workspace) shipped in the toolchain, its OAuth client and browser sign-in.
+- `simulators.md` — `mcp__simulator__*`: iOS simulators and Android emulators through simctl, adb and AXe, the live view in the pane, Settings → Connectors → Simulators.
+- `agent-browser.md` — how threads drive the browser pane: the accessibility snapshot and its refs, real mouse and key input, hover, viewport sizes, and CDP console and network errors (`electron/pane-ax.cjs`, `pane-input.cjs`, `pane-keys.cjs`, `pane-cdp.cjs`).
+- `crons.md` — crons: a thread run again on a schedule as a new card (fork or fresh), the ⏰ editors in the rail, thread header and New thread, run stacks on the board, and the create_cron tools.
 - `slack.md` — the Slack rail drawer: bot + app tokens in the Keychain, Socket Mode in main, commits/pushes (reflog), deploys and card status to a channel, `/weft` and @Weft start cards, weft.zip card links, a channel per kind of update, and growth (new user, new team, payment) with a daily summary.
 - `puku-trial.md` — the puku trial: a puku thread with no Puku login runs through the deployed Weft's proxy on Weft's own key, day-long token, per-account daily cap.
 - `goose.md` — the Goose backend: one `goose run` process per turn and its `stream-json` events, the provider catalog and the BYO key, the grant that puts the key in Goose's env without it ever reaching the board, and the per-card `GOOSE_PATH_ROOT`.
@@ -68,6 +72,7 @@ matching doc below. When a feature lands, add or update its entry here and in it
 - `limits-burndown.md` — the status strip's `5hr` / `7d` hover chart: a week of 15-minute bars for the 5-hour limit left against the weekly one, and why each CLI has its own plan.
 - `worktrees.md` — isolated cards, the opt-in git worktree per card: its CLI, Bash, dev server and commits live there, and Done lands its branch back.
 - `copilot-personas.md` — the copilot's personas (Wingman, Founder, Captain): the prompt each adds, the lane header picker, why a switch starts a new chat.
+- `agents.md` — a card's agent, the soul that opens its system prompt (Builder, Weft's own; Copywriter, Weft's voice): the New thread picker, the card menu switch that resumes under the new soul, why agents skip spares.
 
 When a new doc lands in this folder, add it here on the same change.
 
@@ -418,10 +423,15 @@ When a new doc lands in this folder, add it here on the same change.
   are `@container`s that drop thumbnails and header extras. `lib/copilot-personas.ts` + `components/CopilotPersonaMenu.tsx`: who the copilot is (Wingman, Founder after
   founder-skill, Captain after gstack), picked from its name in the lane header; `card.persona` → `Spec.persona` → its prompt after
   `COPILOT_PROMPT`, and a switch starts a new chat (docs/architecture/copilot-personas.md).
+- `lib/agents.ts`: who a card's thread is, its soul (Builder, Weft's own; Copywriter, Weft's voice and style guide);
+  `card.agent` → `Spec.agent` → `weftSystemPrompt` opens with that soul. Picked in the New thread dialog
+  (`NewCardDialogControls` `AgentSelect`) or by the `create_card` tools, switched from the card menu (`PATCH { agent }`
+  ends the CLI; the next turn resumes under the new soul), shown as an emoji in `CardFooterMeta` (docs/architecture/agents.md).
 - `lib/workspace-layout.ts` + `components/CardWorkspace.tsx` + `components/EditorColumn.tsx` + `lib/file-access.ts` + `app/api/cards/[id]/files` + `lib/open-file.ts`: the open card's four columns and the editor column (CodeMirror, TipTap markdown, Changes vs. HEAD); any file path in the thread opens it (docs/architecture/editor.md).
 - `lib/browser-tools.ts`: `mcp__browser__*` tools every thread gets; `lib/browser-act-tools.ts` the ones that act on the page
   (snapshot with refs, click, hover, type_text, press_key, select_option, scroll, wait_for, set_viewport, console_logs,
   network_errors; docs/architecture/agent-browser.md); `lib/browser-shell.ts` the control-server call every Weft tool uses.
+- `lib/simulator-tools.ts` + `lib/simulator-devices.ts` + `lib/simulator-ui.ts` + `lib/simulator-exec.ts` + `lib/simulator-watch.ts` + `lib/simulator-status.ts` + `lib/simulator-install.ts` + `lib/simulator-install-steps.ts` + `components/SimulatorConnector.tsx`: `mcp__simulator__*` for threads (list, boot, install, launch, open_url, ui_tree, tap, swipe, type_text, press, screenshot, logs, watch) over simctl / adb / AXe, the live view page in `~/.weft/show/simulator/`, and the setup checks on Settings → Connectors with an Install button per missing piece (docs/architecture/simulators.md).
 - `lib/mini-apps.ts` + `lib/mini-app-store.ts` + `app/api/apps` + `lib/use-mini-apps.ts` + `components/AppsRail.tsx` + `components/SaveAppButton.tsx`: mini apps, pages
   saved from the browser pane (its toolbar's grid button) as tiles on the left rail below 🖥 Services (rendered inside `components/LibraryRail.tsx`), in `~/.weft/apps.json`; a tile opens its page in the board's pane. No apps, nothing on the rail (docs/architecture/mini-apps.md).
   `components/LoomApps.tsx` lists them as My mini apps on the Loom's You tab. `lib/app-share.ts` + `lib/app-share-types.ts` + `app/api/apps/share` + `components/ShareAppDialog.tsx` (with `components/ShareParts.tsx`, shared with the card's dialog): Share… on an app, a `weft.zip/a/<id>` link (`cloud_app_shares`) to an uploaded copy of a local page (with the files it links to beside it, `lib/page-assets.ts`) or a framed https site; `lib/app-share-access.ts` + `app/a/[id]` + `app/api/a/[id]/{page,unlock}` serve it behind the card link's gate (`gateVerdict`, `lib/share-unlock.ts`, `lib/share-page-serve.ts`). `lib/app-share-frame.ts` (versioned frame URLs) + `lib/app-share-serve.ts` (the page, `page/[sha]`, `f/` and `v/[ver]/` routes: CDN headers for public links, version checks) + `lib/app-page-limit.ts` (per-address and per-share cap) keep views unlimited and cheap; `lib/app-share-quota.ts` + `components/ShareAppQuota.tsx` + `supabase/migrations/20261024124411_app_share_quota.sql` gate a workspace's open links' bytes by plan (`APP_SHARE_BYTES` in `lib/billing/plans.ts`; docs/architecture/mini-app-hosting.md).
@@ -447,7 +457,7 @@ When a new doc lands in this folder, add it here on the same change.
 - `lib/theme.ts` + `app/api/scenes` + `components/AppearancePicker.tsx` + `electron/theme-source.cjs`: System, Light, Dark or a scene
   (one of Weft's pictures behind the board with its own palette, in `app/globals.css`; docs/architecture/themes.md).
 - `lib/custom-theme.ts` + `lib/custom-themes.ts` + `app/api/themes` + `lib/use-custom-themes.ts` + `components/ThemeDescriber.tsx`:
-  themes you prompted up, painted by a card into `~/.weft/themes/<id>/` and applied from a second cookie (docs/architecture/themes.md#prompted-themes).
+  themes you prompted up (or built around a picture you uploaded), painted by a card into `~/.weft/themes/<id>/` and applied from a second cookie (docs/architecture/themes.md#prompted-themes).
 - `lib/store.ts`: storage in `~/.weft` (board.json, threads/, attachments/). `lib/attachments.ts` saves every PNG, JPEG and GIF as WebP (uploads, tool screenshots, pane thumbnails; transcript reads add one beside the original); `scripts/webp-backfill.mjs` converts the old ones (docs/architecture/threads-and-sessions.md).
 - `lib/cloud-sync.ts` + `lib/cloud-outbox.ts` + `lib/cloud-sync-start.ts` + `lib/cloud-sync-cards.ts` + `lib/cloud-sync-upload.ts` + `lib/blob-store.ts` + `lib/blob-paths.ts` + `lib/device-id.ts` + `lib/cloud-sync-types.ts`:
   server-side cards, opt-in per folder (settings `syncFolders`): an outbox in `~/.weft/sync-outbox.jsonl` uploads cards, thread items
@@ -507,7 +517,7 @@ Everything else is under 300 (2026-10-16): big files became re-exporting fronts 
 Pure logic already moved out: `lib/board-view.ts` (columns and their order: Backlog by drag, Review by last update, the rest by the sort menu; project chips, chime/unseen rules, Review's Errors/Restart filter chips drawn by `components/ReviewFilterChips.tsx`) and
 `lib/turn.ts` (how a turn's result reads, where its card goes, cost, limits); Board's hooks into `lib/use-*.ts` (`use-now`,
 `use-toast`, `use-desktop-bridge`, `use-copilot-card`, `use-board-actions`, `use-board-toggles`, `use-board-view`, `use-board-archive`,
-`use-board-card-actions`, plus `lib/board-focus.ts`, `lib/board-helpers.ts`), its live events into `lib/board-live.ts` (Delete, Stop, prompt answers (Allow, Deny, Wait, Me first) and card fields (star, tags, archive, rename, mode) drawn at once by `lib/optimistic-cards.ts`; a failed card list is tried again on `LIST_RETRY_MS` until it lands, so the columns never sit on placeholders), the menu/dock/tray
+`use-board-card-actions`, plus `lib/board-focus.ts`, `lib/board-helpers.ts`), its live events into `lib/board-live.ts` (Delete, Stop, prompt answers (Allow, Deny, Wait, Me first) and card fields (star, tags, archive, rename, mode, resume, rerun, model switch) drawn at once by `lib/optimistic-cards.ts`, the copilot's card included; a sent reply drawn in the thread at once by `lib/use-pending-sends.ts`; a failed card list is tried again on `LIST_RETRY_MS` until it lands, so the columns never sit on placeholders), the menu/dock/tray
 actions into `lib/board-menu-bridge.ts`, its derived values into `lib/board-derive.ts`, and its JSX into `BoardHeader`, `BoardProjectBar`,
 `BoardColumns` (each column's extras by id), `BoardBrowserPane`, `OpenCard` (the framed window and the open card's four columns),
 `NewThreadWindow` (the New thread form and desktop browser pane), `BoardBottom`

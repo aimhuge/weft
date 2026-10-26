@@ -63,9 +63,15 @@ port.
 - **Full screen threads**: clicking a card opens its thread and its browser together in one large
   overlay over the board; Esc (or clicking outside) closes it, and so does sending `/done`. A card
   running `/done` sits in Done while it works and is archived when it finishes.
-- **List view**: the board as a sheet. The toggle in the project bar swaps the columns for a table —
+- **List view**: the board as a sheet. The toggle in the project bar (or Esc, with nothing open) swaps the columns for a table —
   title, status, stage, tags, folder, age — one line per card, with the header stuck to the top and the
-  columns lined up down the sheet. The status reads *Needs you* for a card waiting on you. A narrow
+  columns lined up down the sheet, on frosted glass with grid lines and numbered rows. Click a header
+  and type: the Title filters cards as you go, any other column narrows its values (↑↓, Enter keeps
+  only the match), and Age flips its sort on a click; the sheet remembers it all. Bands fold (the
+  Backlog starts folded), and a card folds open to its subagents and the cards it started. Click a
+  status to stop, run or continue a card, a folder to move the card, and type a title at the foot of
+  the Backlog to file a card (or into Running to start one). Just start typing to search titles; Space then B jumps to the Backlog's add row; Backlog rows drag into order. The status reads *Needs you* for a card
+  waiting on you. A narrow
   board drops the roomiest columns instead of squeezing them, so the title is always readable
   (docs/architecture/board.md).
 - **Board view for threads**: a thread can screenshot, click, hover, type into and read Weft's own board window
@@ -133,7 +139,8 @@ port.
   (`lib/theme.ts`, colors in `app/globals.css`; docs/architecture/themes.md).
   **Your own** describes a theme in words ("a rainy Tokyo alley at night, neon pink"): a card paints the picture and
   draws a palette from it into `~/.weft/themes/<id>/`, and the tile shows up and is picked the moment it lands
-  (`lib/custom-themes.ts`, `app/api/themes`).
+  (`lib/custom-themes.ts`, `app/api/themes`). Or bring your own picture (pick it, or drop it on the tile): it stays the
+  backdrop and the card writes the palette, base and name around its colours, words optional.
 - **Menu bar icon**: shows how many cards need you and lists them; click one to open it.
 - **Keep Working** (menu bar icon, and its own **Laptop mode** page in Settings): your Mac stays awake with the lid shut, so threads keep running in a bag.
   Choose **Until threads finish** (sleep comes back once no card has been running for two minutes, 8 hours at most) or 1, 2, 3 or 8 hours,
@@ -312,7 +319,7 @@ clones it into `~/dev`. **New project…** names an empty folder in `~/dev` and 
 prompt's first line (click the title in the open thread to rename it), and new threads start in the default permission mode from Settings → Security (Auto at first: a classifier
 approves safe calls and blocks risky ones, and a blocked call comes to Needs you with the classifier's reason and
 **Allow once and retry** / **Keep denied**; an MCP server that asks you to confirm something, like the Supabase MCP before
-destructive SQL, comes to Needs you too, with **Accept** / **Decline** and any form it asks for); the mode menu beside the model and effort menus changes that per thread, and says under each mode what it does. Effort starts at High and
+destructive SQL, comes to Needs you too, with **Accept** / **Decline** and any form it asks for); the mode menu beside the model and effort menus changes that per thread, and says under each mode what it does. The **Agent** menu picks who the thread is: **🛠 Builder**, Weft's own soul that plans, builds, tests and ships, or **✍️ Copywriter**, who writes in Weft's voice (pages, feature intros, changelog entries, UI copy) with every tool a thread has. Right-click a card → **Agent: …** to switch it between turns: its conversation carries on under the new soul, and a ✍️ in the card's footer marks a copywriter (`lib/agents.ts`, docs/architecture/agents.md). Effort starts at High and
 then follows whatever the last new thread used. To change it later, even mid-turn,
 use the mode menu in the open thread's header or the card's right-click menu. Sessions picked up from
 Claude Code keep the mode they last ran in (say `auto`).
@@ -1004,6 +1011,12 @@ through [gog](https://github.com/steipete/gogcli), which Weft.app ships: Gmail, 
 Contacts and Tasks from any thread's Bash. Choose a Google Cloud OAuth client JSON (Desktop app) once, then **Sign in
 with Google** for each account; tick **Read-only** to keep threads from changing anything. Threads ask before
 they send mail, change events or share files. More in [docs/architecture/connectors.md](docs/architecture/connectors.md).
+
+**Simulators** sits beside it: threads drive iOS simulators and Android emulators with `mcp__simulator__*` (boot,
+install and launch an app, open a deep link or your dev server in mobile Safari or Chrome, read the screen, tap and
+type by element, screenshot, logs), and `watch` puts the device live in the browser pane. The card shows what's on
+your Mac (Xcode, an iOS runtime, AXe, the Android SDK, adb, a virtual device), and **Install** beside each missing
+piece downloads and sets it up for you, showing its progress in the row (Xcode and Android Studio themselves get a link). More in [docs/architecture/simulators.md](docs/architecture/simulators.md).
 
 ## Slack
 
