@@ -64,12 +64,13 @@ look scenes up by id (`FIRST_SCENES`, `lib/settings-nav.ts`).
 
 ## Prompted themes
 
-Settings → Appearance ends with a **Your own** tile: describe a theme in words and a thread makes it.
+Settings → Appearance ends with a **Your own** tile: describe a theme in words, bring your own picture, or both, and a thread makes it.
 
 ```
 "rainy Tokyo alley, neon pink" ─► POST /api/themes ─► startThemeCard(): mkdir ~/.weft/themes/<id>, start a card
                                                         (cwd ~/.weft/themes, tag "theme", brief = themeCardPrompt)
-card ─► picture.(jpg|png|webp|svg) + theme.json ─► GET /api/themes lists it ─► picker polls every 4s, picks it on arrival
+  (multipart with a picture: picture.(jpg|png|webp) saved first)
+card ─► picture.(jpg|png|webp|svg) (or keeps yours) + theme.json ─► GET /api/themes lists it ─► picker polls every 4s, picks it on arrival
 ```
 
 - `lib/custom-theme.ts` (pure, shared): `THEME_VARS` (the twelve palette variables a scene sets), `parseCustomTheme()` keeps
@@ -78,6 +79,17 @@ card ─► picture.(jpg|png|webp|svg) + theme.json ─► GET /api/themes lists
 - `lib/custom-themes.ts` (server): reads `~/.weft/themes/*/theme.json`, newest first, skipping folders still being painted;
   `startThemeCard()` names the folder from the first words (`themeIdFrom`) and starts the card. The brief asks for an image
   tool's render when the thread has one, a hand-drawn SVG otherwise, and a contrast check (ink on card 7:1, muted 4.5:1).
+- **Your own picture.** The describe box has a picture slot beside the words (`components/ThemeDescriber.tsx`
+  `PictureSlot`: click to pick, drop on the slot, the form or the collapsed **Your own** tile, × to clear); with a picture
+  the words are optional and the button reads "Theme it". `api.themeFromPicture()` posts multipart (prompt, picture) to
+  `POST /api/themes`, which reads `req.formData()` when the content type says multipart (`/api/themes` is outside
+  `proxy.ts`'s matcher, so Next's 10 MB proxy body cap doesn't apply). `startThemeCard(text, upload)` refuses anything
+  over `MAX_PICTURE_BYTES` (20 MB) and anything `uploadedPictureName()` doesn't know by its first bytes (JPEG, PNG, WebP;
+  never SVG, which could carry script), then writes `picture.<ext>` into the new folder **before** the card starts. The
+  folder is named from the words, else the file's name, else `picture`. The brief (`themeCardPrompt(…, picture)`) says the
+  picture is already there and must stay untouched, to open it and draw the palette and base from it, and to make the scrim
+  strong enough over its brightest, busiest parts that columns and cards read clearly; later edits touch theme.json only.
+  Until theme.json lands the folder is skipped by the list like any theme being painted.
 - `app/api/themes/[id]/picture`: only a `THEME_ID` folder and a `PICTURES` file name resolve; an SVG goes out with a
   `default-src 'none'` CSP so a thread-drawn file can't run script; `no-cache`, since a thread may repaint it.
 - Applying: the theme cookie holds `custom-<id>`; a second cookie, `weft-custom-theme`, holds its id, base and properties
