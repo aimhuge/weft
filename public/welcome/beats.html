@@ -7,7 +7,8 @@
   shared as a weft.zip link),
   22.7–28.3s code quality (the score climbing, the refactor scout turning a finding into a card), 28.3–38.6s BlastCP built
   in (your socials, a launch post with its image, video and voice), 38.6–43.2s the Wefter Profile (streak, XP, badges at
-  weft.zip/@you), 43.2–51s Weft is open source (make a pull request), 51–54.5s "Now let's get started". scripts/render-welcome-loop.mjs renders it after loop.html and joins the
+  weft.zip/@you), 43.2–51s Weft is open source (make a pull request), 51–68.4s Weft is driven by keyboard shortcuts (double-click the
+  board or ⌘N for a new thread, Esc closes it, ⌘K opens the search and action HUD, ? lists the shortcuts). scripts/render-welcome-loop.mjs renders it after loop.html and joins the
   two into public/brand/weft-tour.mp4 for weft.zip; the welcome itself plays only loop.html.
   ?live=1 plays it on repeat for a preview. Seekable on purpose: counters tween textContent with snap, no timers.
 -->
@@ -33,9 +34,6 @@
   .cap .w.lit { color: #ffd166; text-shadow: 0 0 26px rgba(240,180,41,.5); }
   /* A word already inside a <b> is amber; lit it goes brighter rather than changing colour. */
   .cap b .w.lit { color: #fff3d0; }
-  /* The closing line is its own big statement, not a caption, but it lights the same way. */
-  #cta .w { transition: color .12s linear, text-shadow .12s linear; }
-  #cta .w.lit { color: #ffd166; text-shadow: 0 0 40px rgba(240,180,41,.5); }
   #fade { inset: 0; background: #0d0f14; }
 
   /* Scene T: connect your tools. */
@@ -178,15 +176,48 @@
   #tid .btn { margin-top: 12px; height: 54px; border-radius: 27px; font-size: 25px; display: flex; align-items: center; justify-content: center; }
   #tid .blue { margin-top: 26px; background: #0a84ff; color: #fff; }
   #tid .grey { background: #e3e3e6; color: #1d1d1f; }
-  /* Scene C: the call to action that hands over to the welcome's next step. */
-  #cta { left: 0; top: 270px; width: 1920px; text-align: center; font-size: 120px; font-weight: 700; letter-spacing: -0.03em; }
-  #ctaNext { left: 860px; top: 470px; width: 200px; text-align: center; font-size: 40px; font-weight: 600; padding: 14px 0; border-radius: 16px;
-    background: #b4466a; color: #fff; }
+  /* Scene Y: Weft is driven by keyboard shortcuts. The keys on the left light as they're said; the board on the right
+     opens New thread on a double-click, closes it on Esc, opens the ⌘K palette, and shows the ? sheet
+     (components/board-shortcuts.ts). */
+  #keys { left: 30px; width: 900px; }
+  .krow { left: 44px; width: 812px; height: 112px; border-radius: 20px; background: #1f2433; border: 2px solid #2d3346; padding: 0 26px;
+    display: flex; align-items: center; gap: 14px; font-size: 32px; }
+  .krow .or { font-size: 26px; color: #8d95aa; margin: 0 6px; }
+  .krow .does { margin-left: auto; font-weight: 600; color: #c9cfdf; }
+  kbd { display: inline-flex; align-items: center; justify-content: center; min-width: 74px; height: 74px; padding: 0 18px; border-radius: 14px;
+    background: #2a3044; border: 2px solid #464e68; border-bottom-width: 7px; font: 600 34px ui-monospace, "SF Mono", Menlo, monospace; color: #fff; }
+  #kboard { left: 960px; width: 930px; overflow: hidden; }
+  .kcol { top: 96px; width: 196px; height: 500px; border-radius: 16px; background: #1b2030; }
+  .kcol span { display: block; margin: 16px 18px 0; font-size: 20px; color: #8d95aa; }
+  .kcard { left: 14px; width: 168px; height: 64px; border-radius: 12px; background: #262c3d; border: 1.5px solid #343b51; }
+  #ripple { left: 0; top: 0; width: 70px; height: 70px; border-radius: 50%; border: 4px solid #f0b429; }
+  #newdlg { left: 120px; top: 150px; width: 690px; border-radius: 22px; background: #1f2433; border: 2px solid #f0b429; padding: 28px 32px;
+    box-shadow: 0 30px 80px #000b; }
+  #newdlg .h { font-size: 32px; font-weight: 700; }
+  #newdlg .p { margin-top: 18px; height: 120px; border-radius: 14px; background: #151925; border: 2px solid #343b51; padding: 18px 22px;
+    font-size: 28px; color: #c9cfdf; }
+  #newdlg .p i { display: inline-block; width: 3px; height: 32px; margin-left: 4px; vertical-align: middle; background: #f0b429; }
+  #newdlg .go { margin-top: 18px; display: inline-block; padding: 10px 22px; border-radius: 12px; background: #b4466a; color: #fff; font-size: 24px; font-weight: 600; }
+  #pal { left: 120px; top: 130px; width: 690px; border-radius: 22px; background: #1f2433; border: 2px solid #2d3346; padding: 14px;
+    box-shadow: 0 30px 80px #000b; font-size: 26px; }
+  #pal .q { height: 72px; border-radius: 14px; background: #151925; border: 2px solid #f0b429; padding: 0 22px; display: flex; align-items: center;
+    gap: 14px; font-size: 28px; color: #e8eaf0; }
+  #pal .q i { width: 3px; height: 32px; background: #f0b429; }
+  #pal .q .ph { color: #6d7590; }
+  #pal .r { display: flex; align-items: center; gap: 14px; height: 66px; padding: 0 20px; border-radius: 12px; color: #c9cfdf; margin-top: 6px; }
+  #pal .r.on { background: #2a3044; color: #fff; }
+  #pal .r b { margin-left: auto; font-size: 21px; font-weight: 500; color: #8d95aa; }
+  #sheet { left: 120px; top: 110px; width: 690px; border-radius: 22px; background: #1f2433; border: 2px solid #2d3346; padding: 26px 32px;
+    box-shadow: 0 30px 80px #000b; font-size: 26px; }
+  #sheet .h { font-size: 30px; font-weight: 700; margin-bottom: 10px; }
+  #sheet .r { display: flex; align-items: center; gap: 12px; height: 58px; color: #c9cfdf; }
+  #sheet kbd { min-width: 50px; height: 46px; padding: 0 12px; font-size: 22px; border-bottom-width: 5px; border-radius: 10px; }
+  #sheet .r b { margin-left: auto; font-weight: 500; color: #8d95aa; }
   #cursor { left: 1120px; top: 300px; width: 48px; height: 48px; }
 </style>
 </head>
 <body>
-<div id="root" data-composition-id="root" data-width="1920" data-height="800" data-start="0" data-duration="54.5">
+<div id="root" data-composition-id="root" data-width="1920" data-height="800" data-start="0" data-duration="68.4">
 
   <div id="sceneT" class="abs" style="inset:0">
     <div id="tools" class="abs panel">
@@ -356,14 +387,46 @@
     <div class="abs cap" style="font-size:46px">Weft is <b>open source</b>: something broken, or a feature you want? Make a <b>pull request</b>.</div>
   </div>
 
-  <div id="sceneC" class="abs" style="inset:0">
-    <div class="abs" id="cta">Now let's get started.</div>
-    <div class="abs" id="ctaNext">Next ↵</div>
+  <div id="sceneY" class="abs" style="inset:0">
+    <div id="keys" class="abs panel">
+      <div class="label">Weft runs on your keyboard</div>
+      <div class="abs krow" id="kNew" style="top:90px"><span>Double-click</span><span class="or">or</span><kbd>⌘</kbd><kbd>N</kbd><span class="does">New thread</span></div>
+      <div class="abs krow" id="kEsc" style="top:216px"><kbd>esc</kbd><span class="does">Close it</span></div>
+      <div class="abs krow" id="kPal" style="top:342px"><kbd>⌘</kbd><kbd>K</kbd><span class="does">Search and actions</span></div>
+      <div class="abs krow" id="kHelp" style="top:468px"><kbd>?</kbd><span class="does">The shortcut list</span></div>
+    </div>
+    <div id="kboard" class="abs panel">
+      <div class="label">Your board</div>
+      <div class="abs kcol" style="left:44px"><span>Backlog</span><div class="abs kcard" style="top:56px"></div></div>
+      <div class="abs kcol" style="left:254px"><span>Running</span><div class="abs kcard" style="top:56px"></div><div class="abs kcard" style="top:132px"></div></div>
+      <div class="abs kcol" style="left:464px"><span>Needs you</span></div>
+      <div class="abs kcol" style="left:674px"><span>Review</span><div class="abs kcard" style="top:56px"></div></div>
+      <div class="abs" id="ripple"></div>
+      <div class="abs" id="newdlg"><div class="h">New thread</div><div class="p"><span id="typed"></span><i></i></div><div class="go">Start ⌘↵</div></div>
+      <div class="abs" id="pal"><div class="q">⌕ <span class="ph" id="palPh">Search cards and commands</span><span id="palq"></span><i></i></div>
+        <div class="r on" id="pr1">🧵 Add a dark mode toggle<b>Card · Running</b></div>
+        <div class="r" id="pr2">🎨 Theme: Night Cockpit<b>Command</b></div>
+        <div class="r" id="pr3">🌗 Toggle dark board<b>Command</b></div>
+      </div>
+      <div class="abs" id="sheet"><div class="h">Keyboard shortcuts</div>
+        <div class="r"><kbd>⌘</kbd><kbd>N</kbd><b>New thread</b></div>
+        <div class="r"><kbd>⌘</kbd><kbd>K</kbd><b>Command palette</b></div>
+        <div class="r"><kbd>/</kbd><b>Filter cards</b></div>
+        <div class="r"><kbd>J</kbd><kbd>K</kbd><b>Move between cards</b></div>
+        <div class="r"><kbd>C</kbd><b>Open the copilot</b></div>
+        <div class="r"><kbd>B</kbd><b>Toggle the browser</b></div>
+      </div>
+    </div>
+    <div class="abs cap" id="y1">Weft is driven by <b>keyboard shortcuts</b>.</div>
+    <div class="abs cap" id="y2" style="font-size:48px"><b>Double-click</b> the board or hit <b>Command N</b> to start a new thread.</div>
+    <div class="abs cap" id="y3">Press <b>Escape</b> to close it.</div>
+    <div class="abs cap" id="y4">Hit <b>Command K</b> to open the search and action HUD.</div>
+    <div class="abs cap" id="y5">And hit <b>question mark</b> for the shortcut list.</div>
   </div>
 
   <svg id="cursor" class="abs" viewBox="0 0 24 24"><path d="M3 2l7 19 2.6-7.4L20 11z" fill="#fff" stroke="#111" stroke-width="1.2"/></svg>
   <!-- The voiceover (scripts/narrate-welcome.mjs): the renderer mixes it into the MP4; live, the welcome plays it itself. -->
-  <audio id="voice" src="./narration-beats.m4a" data-start="0" data-duration="54.5" data-volume="1"></audio>
+  <audio id="voice" src="./narration-beats.m4a" data-start="0" data-duration="68.4" data-volume="1"></audio>
   <div id="fade" class="abs"></div>
 </div>
 
@@ -401,7 +464,7 @@
     var tl = gsap.timeline({ paused: true });
     gsap.set("#toast", { opacity: 0 });
     gsap.set("#tid", { opacity: 0, scale: 0.92 });
-    gsap.set(["#sceneV", "#v1", "#v2", "#v3", "#v4", "#vask", "#vfill", "#fpOk", "#sceneP", "#urlShared", "#s1", "#s2", "#shareBtn", "#shared", "#sceneA", "#t1on", "#t2on", "#t3on", "#t4on", "#u1", "#u2", "#u3", "#sceneB", "#sceneC", "#k1", "#k2", "#k3", "#startCard", "#newcard", "#sceneK", "#c1on", "#c2on", "#c3on", "#c4on", "#c5on", "#c6on", "#lp", "#gImg", "#gVid", "#gVoc", "#sched", "#sceneO", "#w1", "#w2", "#pr", "#prBtn", "#prOpen", "#prMerged", "#thanks", "#cursor"], { opacity: 0 });
+    gsap.set(["#sceneV", "#v1", "#v2", "#v3", "#v4", "#vask", "#vfill", "#fpOk", "#sceneP", "#urlShared", "#s1", "#s2", "#shareBtn", "#shared", "#sceneA", "#t1on", "#t2on", "#t3on", "#t4on", "#u1", "#u2", "#u3", "#sceneB", "#sceneY", "#y2", "#y3", "#y4", "#y5", "#ripple", "#newdlg", "#pal", "#pr1", "#pr2", "#pr3", "#sheet", "#k1", "#k2", "#k3", "#startCard", "#newcard", "#sceneK", "#c1on", "#c2on", "#c3on", "#c4on", "#c5on", "#c6on", "#lp", "#gImg", "#gVid", "#gVoc", "#sched", "#sceneO", "#w1", "#w2", "#pr", "#prBtn", "#prOpen", "#prMerged", "#thanks", "#cursor"], { opacity: 0 });
     tl.fromTo("#fade", { opacity: 1 }, { opacity: 0, duration: 0.5 }, 0);
 
     // Each scene draws itself from its start time t, so SCENES below sets the order and the beats in one place.
@@ -520,11 +583,45 @@
         .fromTo("#thanks", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.35 }, t + 6.3);
     }
 
-    // "Now let's get started", with the welcome's Next button under it.
-    function cta(t) {
-      tl.fromTo("#cta", { y: 24 }, { y: 0, duration: 0.6, ease: "power2.out" }, t)
-        .fromTo("#ctaNext", { opacity: 0, scale: 0.8 }, { opacity: 1, scale: 1, duration: 0.4, ease: "back.out(2)" }, t + 1.1)
-        .to("#ctaNext", { scale: 1.06, duration: 0.4, yoyo: true, repeat: 1 }, t + 1.7);
+    // Weft is driven by keyboard shortcuts: each caption is one voice line (KEY_LINES, the cues in
+    // scripts/narrate-welcome.mjs less the scene's start), stamped with its own cue so live.js lights it with that line.
+    // A double-click on the board opens New thread, ⌘N is pressed, Esc closes it, ⌘K opens the palette and finds a
+    // card, and ? brings up the sheet.
+    var KEY_LINES = [["#y1", 0.4], ["#y2", 3.3], ["#y3", 7.8], ["#y4", 10], ["#y5", 14]];
+    // A row lights as its line starts, its keys go down as they're named, and it dims when the next line starts.
+    var press = function (sel, lit, push, off) {
+      tl.to(sel, { borderColor: "#f0b429", duration: 0.2 }, lit)
+        .to(sel + " kbd", { y: 4, borderBottomWidth: 3, duration: 0.08, yoyo: true, repeat: 1 }, push)
+        .to(sel, { borderColor: "#2d3346", duration: 0.3 }, off);
+    };
+    function keys(t) {
+      KEY_LINES.forEach(function (line, i) {
+        document.querySelector(line[0]).setAttribute("data-scene", t + line[1]);
+        if (i > 0) tl.to(KEY_LINES[i - 1][0], { opacity: 0, duration: 0.2 }, t + line[1] - 0.2).to(line[0], { opacity: 1, duration: 0.2 }, t + line[1]);
+      });
+      var typed = { n: 0 }, typedEl = document.getElementById("typed"), prompt = "Add a dark mode toggle";
+      var asked = { n: 0 }, askedEl = document.getElementById("palq"), query = "dark";
+      press("#kNew", t + 3.3, t + 5.2, t + 7.6);
+      press("#kEsc", t + 7.8, t + 8.3, t + 9.8);
+      press("#kPal", t + 10, t + 10.4, t + 13.8);
+      press("#kHelp", t + 14, t + 14.5, t + 17.4);
+      // The cursor (at 1120, 300 before its x/y) double-clicks the empty Needs you column, about (1520, 420); the
+      // ripple sits in #kboard's own coordinates, where that point is (560, 380).
+      tl.set("#cursor", { x: 300, y: 40 }, t + 3.2)
+        .to("#cursor", { opacity: 1, duration: 0.2 }, t + 3.2)
+        .to("#cursor", { x: 400, y: 120, duration: 0.6 }, t + 3.3)
+        .set("#ripple", { x: 525, y: 345, scale: 0.4 }, t + 3.9)
+        .to("#ripple", { opacity: 1, scale: 1.4, duration: 0.2, yoyo: true, repeat: 3 }, t + 3.9)
+        .to("#cursor", { opacity: 0, duration: 0.2 }, t + 4.6)
+        .fromTo("#newdlg", { opacity: 0, scale: 0.9 }, { opacity: 1, scale: 1, duration: 0.35, ease: "back.out(1.6)" }, t + 4.7)
+        .to(typed, { n: prompt.length, duration: 1.6, ease: "none", onUpdate: function () { typedEl.textContent = prompt.slice(0, Math.round(typed.n)); } }, t + 5.6)
+        .to("#newdlg", { opacity: 0, scale: 0.94, duration: 0.25 }, t + 8.35)
+        .fromTo("#pal", { opacity: 0, scale: 0.94 }, { opacity: 1, scale: 1, duration: 0.3, ease: "back.out(1.6)" }, t + 11)
+        .set("#palPh", { display: "none" }, t + 11.6)
+        .to(asked, { n: query.length, duration: 0.8, ease: "none", onUpdate: function () { askedEl.textContent = query.slice(0, Math.round(asked.n)); } }, t + 11.6);
+      ["#pr1", "#pr2", "#pr3"].forEach(function (id, i) { tl.fromTo(id, { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.25 }, t + 12.5 + i * 0.15); });
+      tl.to("#pal", { opacity: 0, duration: 0.25 }, t + 13.8)
+        .fromTo("#sheet", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.35, ease: "back.out(1.6)" }, t + 14.9);
     }
 
     // The order, build → ship → show: each scene's beat (lib/welcome-loop.ts BEATS), element and length in seconds.
@@ -537,7 +634,7 @@
       ["blastcp", "#sceneK", 10.3, blastcp],
       ["profile", "#sceneA", 4.6, profile],
       ["opensource", "#sceneO", 7.8, opensource],
-      ["cta", "#sceneC", 3.5, cta],
+      ["keys", "#sceneY", 17.4, keys],
     ];
     var at = 0, beats = [];
     SCENES.forEach(function (scene, i) {
@@ -555,12 +652,8 @@
     window.__timelines.root = tl;
 
     // Word-by-word caption highlight (public/welcome/live.js). It reads the lines and their word times out of
-    // narration-beats.words.json, so the copy lives in one place: scripts/narrate-welcome.mjs. The closing
-    // statement is not a caption but lights with its line too, so it is passed as an extra.
-    if (window.weftCaptions) {
-      window.weftCaptions(tl, Array.prototype.slice.call(document.querySelectorAll(".cap")), "beats",
-        [[document.getElementById("cta"), Number(document.querySelector("#sceneC").getAttribute("data-scene"))]]);
-    }
+    // narration-beats.words.json, so the copy lives in one place: scripts/narrate-welcome.mjs.
+    if (window.weftCaptions) window.weftCaptions(tl, Array.prototype.slice.call(document.querySelectorAll(".cap")), "beats");
 
     if (live) window.weftLive(tl, beats, "intro.html");
   })();

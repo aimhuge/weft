@@ -36,7 +36,7 @@ describe("beatMessage", () => {
 
 describe("the tour's order", () => {
   it("runs build → ship → show, with a title for every beat", () => {
-    expect(BEATS).toEqual(["intro", "loop", "tools", "vault", "pane", "quality", "blastcp", "profile", "opensource", "cta"]);
+    expect(BEATS).toEqual(["intro", "loop", "tools", "vault", "pane", "quality", "blastcp", "profile", "opensource", "keys"]);
     expect(BEATS.every((b) => BEAT_TITLES[b].length > 0)).toBe(true);
   });
 
@@ -44,7 +44,7 @@ describe("the tour's order", () => {
     expect(stepBeat("tools", 1)).toBe("vault");
     expect(stepBeat("tools", -1)).toBe("loop");
     expect(stepBeat("intro", -1)).toBeNull();
-    expect(stepBeat("cta", 1)).toBeNull();
+    expect(stepBeat("keys", 1)).toBeNull();
   });
 
   it("knows each beat's page, its voiceover, and the message that jumps there", () => {
@@ -67,7 +67,7 @@ describe("voiceFor", () => {
     expect(voiceFor("quality")).toBeNull();
     expect(voiceFor("blastcp")).toBeNull();
     expect(voiceFor("opensource")).toBeNull();
-    expect(voiceFor("cta")).toBeNull();
+    expect(voiceFor("keys")).toBeNull();
   });
 });
 

@@ -40,7 +40,7 @@ export default function WelcomeDialog({ onError }: { onError?: (err: unknown) =>
   // Screen 1 polls each agent CLI's login while the welcome shows, so a login finished in the browser ticks itself.
   // Signed in to Weft with no agent logged in, the first thread runs on puku-cli's free trial (lib/welcome-trial.ts).
   const { status: cliStatus, trial, cli, ready: cliReady } = useAgents(preview !== null);
-  // Step 1's tour ends on "Now let's get started"; the next steps say what to do (lib/use-welcome-tour.ts).
+  // Step 1's tour ends on Weft's keyboard shortcuts; the next steps say what to do (lib/use-welcome-tour.ts).
   useStepVoice(preview ? step : "closed");
   // Anonymous setup stats, unless they're switched off in Settings → Security (lib/telemetry.ts).
   useOnboardingStats({ preview, replay, step, cliReady });

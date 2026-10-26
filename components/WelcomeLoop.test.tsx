@@ -118,7 +118,7 @@ describe("WelcomeLoop", () => {
     fireEvent.click(screen.getByRole("button", { name: "Your Wefter Profile" }));
     expect(sent).toHaveBeenLastCalledWith({ weft: "go", beat: "profile", page: "beats.html" }, "*");
 
-    post(frame, "cta");
+    post(frame, "keys");
     expect(screen.getByRole("button", { name: "Next beat" })).toBeDisabled();
   });
 

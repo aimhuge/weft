@@ -20,7 +20,8 @@ window.weftCaptions = function (tl, caps, track, extra) {
   if (!caps.length) return;
   caps.forEach(function (cap) { cap.__words = splitWords(cap); cap.__line = -1; });
   // `extra` is [[element, sceneStart], ...] for text outside the caption band that still lights with the voice
-  // (the closing statement, #cta). It lights from the line that starts at its scene's time.
+  // (a big statement over a scene, say). It lights from the line that starts at its scene's time. A caption can also
+  // carry its own data-scene, the cue of its line, when one scene speaks several (beats.html's keyboard scene).
   var others = (extra || []).map(function (pair) {
     return { el: pair[0], words: splitWords(pair[0]), at: pair[1] };
   });

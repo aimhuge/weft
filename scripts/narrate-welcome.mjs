@@ -7,6 +7,7 @@
 // ffmpeg (bedSource below). Needs ffmpeg.
 //   pnpm welcome:narrate                 af_heart
 //   pnpm welcome:narrate -- --voice=am_michael
+//   pnpm welcome:narrate -- --only=beats   one track, so the others aren't re-encoded
 import { join, resolve } from "node:path";
 import { narrate } from "./narrate-lib.mjs";
 
@@ -33,7 +34,7 @@ const NARRATION = {
     ],
   },
   beats: {
-    duration: 54.5,
+    duration: 68.4,
     lines: [
       [0.5, 4.8, "Connect your tools to Weft, so your threads can use them."],
       [5.5, 10.6, "Your vault stores your credentials and lets your AI securely use them."],
@@ -42,7 +43,21 @@ const NARRATION = {
       [28.5, 38.4, "Weft comes with BlastCP built in, so you can easily connect all your social accounts, make images, video and voice for your posts, and build in public."],
       [38.8, 43, "Share your Wefter Profile, and show the world what you ship."],
       [43.4, 50.8, "Weft is open source. If something is broken, or you want to add a feature, please feel free to make a pullrequest."],
-      [51.2, 54.2, "Now let's get started."],
+      [51.4, 54.2, "Weft is driven by keyboard shortcuts."],
+      [54.3, 58.6, "Double-click the board or hit Command N to start a new thread."],
+      [58.8, 60.8, "Press Escape to close it."],
+      [61, 64.8, "Hit Command K to open the search and action HUD."],
+      [65, 67.9, "And hit question mark for the shortcut list."],
+    ],
+  },
+
+  // weft.zip's ending (outro.html): the homepage tour swaps beats.html's keyboard shortcuts for downloading Weft.
+  outro: {
+    duration: 13,
+    lines: [
+      [0.3, 4.3, "Weft runs right on your Mac, with the AI you already use."],
+      [4.6, 8.6, "Download Weft, and engineer the future with us."],
+      [9, 11.6, "Weft. Engineering the future."],
     ],
   },
 
@@ -52,4 +67,7 @@ const NARRATION = {
 };
 
 const root = resolve(import.meta.dirname, "..");
-await narrate(NARRATION, (page) => join(root, "public", "welcome", `narration-${page}.m4a`));
+const only = process.argv.find((a) => a.startsWith("--only="))?.slice("--only=".length);
+const tracks = only ? { [only]: NARRATION[only] } : NARRATION;
+if (only && !NARRATION[only]) throw new Error(`No track "${only}": ${Object.keys(NARRATION).join(", ")}`);
+await narrate(tracks, (page) => join(root, "public", "welcome", `narration-${page}.m4a`));

@@ -1,6 +1,6 @@
 // The welcome's tour: public/welcome/intro.html (Welcome to Weft, the agents it runs on), loop.html (a card from prompt
-// to Done), then beats.html (connect your tools, the 🔐 vault, panes, code quality, BlastCP, the Wefter Profile, open source, "Now
-// let's get started"), three HyperFrames compositions that play live in the Get ready hero
+// to Done), then beats.html (connect your tools, the 🔐 vault, panes, code quality, BlastCP, the Wefter Profile, open source, and
+// Weft is driven by keyboard shortcuts), three HyperFrames compositions that play live in the Get ready hero
 // (components/WelcomeLoop.tsx) and render to MP4s for weft.zip (scripts/render-welcome-loop.mjs).
 // This builds the first page's address: ?live=1 plays it, ?tour=1 hands intro → loop → beats → intro (public/welcome/live.js),
 // ?p= puts up to three of your own project names on the cards. It also reads the beat messages the pages post, and
@@ -20,7 +20,7 @@ export function loopSrc(names: string[]): string {
 
 // The tour's beats in order (build → ship → show), the page each one is on, and the title the welcome's tour bar
 // shows for it (components/WelcomeTourBar.tsx). beats.html's SCENES must keep the same order.
-export const BEATS = ["intro", "loop", "tools", "vault", "pane", "quality", "blastcp", "profile", "opensource", "cta"] as const;
+export const BEATS = ["intro", "loop", "tools", "vault", "pane", "quality", "blastcp", "profile", "opensource", "keys"] as const;
 export type Beat = (typeof BEATS)[number];
 
 export const BEAT_TITLES: Record<Beat, string> = {
@@ -33,7 +33,7 @@ export const BEAT_TITLES: Record<Beat, string> = {
   blastcp: "Build in public",
   profile: "Your Wefter Profile",
   opensource: "Weft is open source",
-  cta: "Let's get started",
+  keys: "Keyboard shortcuts",
 };
 
 type Page = "intro" | "loop" | "beats";

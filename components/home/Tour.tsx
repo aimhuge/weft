@@ -16,7 +16,7 @@ export default function Tour() {
           controls
           playsInline
           preload="none"
-          aria-label="A narrated tour of Weft: the board, the browser pane, your tools, your profile and code quality"
+          aria-label="A narrated tour of Weft: the board, the browser pane, your tools, your profile and code quality, ending on downloading Weft for Mac"
         />
       </div>
     </section>

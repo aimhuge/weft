@@ -47,11 +47,11 @@ describe("useWelcomeTour's tour bar", () => {
     const { result } = renderHook(() => useWelcomeTour({ current: null }, null));
     act(() => result.current.go("loop", "next"));
     act(() => result.current.go("intro", "back"));
-    act(() => result.current.go("cta"));
+    act(() => result.current.go("keys"));
     expect(vi.mocked(trackOnboarding).mock.calls).toEqual([
       ["onboarding_tour_nav", { action: "next", from: "intro", to: "loop" }],
       ["onboarding_tour_nav", { action: "back", from: "loop", to: "intro" }],
-      ["onboarding_tour_nav", { action: "jump", from: "intro", to: "cta" }],
+      ["onboarding_tour_nav", { action: "jump", from: "intro", to: "keys" }],
     ]);
   });
 });

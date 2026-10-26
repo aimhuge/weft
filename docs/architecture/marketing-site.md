@@ -25,7 +25,7 @@ home-release.ts ─────┘         home.css (prefixed CSS)  PILLARS  cat
 - `components/home/Home.tsx`: the page, in order — nav, hero over the twin suns, the board screenshot, `<Tour />` (the narrated welcome tour), `<Pillars />`,
   **`<Plans />`**, `<FaqTeaser />`, footer.
 - `components/home/Plans.tsx` + `components/home/Plans.test.tsx`: the pricing section (below).
-- `components/home/Tour.tsx`: `public/brand/weft-tour.mp4` with `preload="none"` and its 3 s title card as the poster
+- `components/home/Tour.tsx`: `public/brand/weft-tour.mp4` (the welcome tour, ending on Download for Mac instead of the shortcuts: docs/architecture/welcome-tour.md#rendering-scriptsrender-welcome-loopmjs) with `preload="none"` and its 3 s title card as the poster
   (`public/brand/weft-tour-poster.webp`); retake the poster when `pnpm welcome:render` changes the opening.
 - `components/home/Pillars.tsx`, `FaqTeaser.tsx`, `HomeChrome.tsx` (nav and footer), `faq.css`.
 - `components/home/home.css`: the page's whole look. Plain `wz-*` classes, not CSS modules, because

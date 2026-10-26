@@ -1,5 +1,5 @@
 {
- "duration": 54.5,
+ "duration": 68.4,
  "lines": [
   [
    0.5,
@@ -37,9 +37,29 @@
    "Weft is open source. If something is broken, or you want to add a feature, please feel free to make a pullrequest."
   ],
   [
-   51.2,
+   51.4,
    54.2,
-   "Now let's get started."
+   "Weft is driven by keyboard shortcuts."
+  ],
+  [
+   54.3,
+   58.6,
+   "Double-click the board or hit Command N to start a new thread."
+  ],
+  [
+   58.8,
+   60.8,
+   "Press Escape to close it."
+  ],
+  [
+   61,
+   64.8,
+   "Hit Command K to open the search and action HUD."
+  ],
+  [
+   65,
+   67.9,
+   "And hit question mark for the shortcut list."
   ]
  ],
  "words": [
@@ -560,20 +580,168 @@
    49.644
   ],
   [
-   "Now",
-   51.2
+   "Weft",
+   51.4
   ],
   [
-   "let's",
-   51.496
+   "is",
+   51.742
   ],
   [
-   "get",
-   51.989
+   "driven",
+   51.913
   ],
   [
-   "started.",
-   52.285
+   "by",
+   52.426
+  ],
+  [
+   "keyboard",
+   52.597
+  ],
+  [
+   "shortcuts.",
+   53.281
+  ],
+  [
+   "Double-click",
+   54.3
+  ],
+  [
+   "the",
+   55.181
+  ],
+  [
+   "board",
+   55.421
+  ],
+  [
+   "or",
+   55.822
+  ],
+  [
+   "hit",
+   55.982
+  ],
+  [
+   "Command",
+   56.222
+  ],
+  [
+   "N",
+   56.783
+  ],
+  [
+   "to",
+   56.863
+  ],
+  [
+   "start",
+   57.023
+  ],
+  [
+   "a",
+   57.424
+  ],
+  [
+   "new",
+   57.504
+  ],
+  [
+   "thread.",
+   57.744
+  ],
+  [
+   "Press",
+   58.8
+  ],
+  [
+   "Escape",
+   59.294
+  ],
+  [
+   "to",
+   59.886
+  ],
+  [
+   "close",
+   60.084
+  ],
+  [
+   "it.",
+   60.577
+  ],
+  [
+   "Hit",
+   61
+  ],
+  [
+   "Command",
+   61.3
+  ],
+  [
+   "K",
+   62
+  ],
+  [
+   "to",
+   62.1
+  ],
+  [
+   "open",
+   62.3
+  ],
+  [
+   "the",
+   62.7
+  ],
+  [
+   "search",
+   63
+  ],
+  [
+   "and",
+   63.6
+  ],
+  [
+   "action",
+   63.9
+  ],
+  [
+   "HUD.",
+   64.5
+  ],
+  [
+   "And",
+   65
+  ],
+  [
+   "hit",
+   65.231
+  ],
+  [
+   "question",
+   65.463
+  ],
+  [
+   "mark",
+   66.079
+  ],
+  [
+   "for",
+   66.388
+  ],
+  [
+   "the",
+   66.619
+  ],
+  [
+   "shortcut",
+   66.85
+  ],
+  [
+   "list.",
+   67.467
   ]
  ]
 }
