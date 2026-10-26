@@ -26,7 +26,7 @@ export default function CardFooterMeta({ card, now, alsoHere, marks }: { card: C
   const { tone, dot } = cliColours(card.backend);
   const cliTip = `${cli}${model ? ` on ${model}${effort ? ` · ${effort} effort` : ""}` : ""}${card.source === "claude-code" ? " · picked up from Claude Code" : ""}`;
   return (
-    <span className="flex min-w-0 items-center gap-1.5">
+    <span className="flex min-w-0 items-center gap-1.5 overflow-hidden">
       <span className={`size-1.5 shrink-0 rounded-full ${dot}`} title={cliTip} />
       {model && <span className={`shrink-0 whitespace-nowrap font-medium ${tone}`} title={cliTip}>{modelLabel(model)}</span>}
       {card.agent && <AgentMark agent={card.agent} />}

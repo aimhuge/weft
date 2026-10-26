@@ -294,6 +294,29 @@ button:disabled {
   cursor: default;
 }
 
+/* Slim scrollbars everywhere: a rounded thumb in the theme's line colour on a clear track, inset by a
+   transparent border so it floats off the edge, and a touch stronger on hover. */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  background-clip: padding-box;
+  border: 3px solid transparent;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--faint);
+}
+
 /* macOS title bars: the traffic lights sit in window pixels, so these sizes divide by the page's zoom
    (lib/use-title-bar-zoom.ts sets --zoom) to stay clear of them at any View > Zoom. */
 :root {

@@ -16,7 +16,7 @@ export default function CardMarks({ card, onTag, onDismissBreak }: { card: Card;
   const tasks = runningBadge(card.tasks);
   if (!hasMarks(card, shown.length > 0 || Boolean(tasks))) return null;
   return (
-    <span className="flex shrink-0 items-center gap-1">
+    <span className="flex min-w-0 items-center gap-1">
       {card.broke && <BrokeChip broke={card.broke} onDismiss={onDismissBreak} />}
       <IsolatedMark card={card} />
       {tasks && (
@@ -52,10 +52,10 @@ export default function CardMarks({ card, onTag, onDismissBreak }: { card: Card;
             e.stopPropagation();
             onTag(tag);
           }}
-          className="flex shrink-0"
+          className="flex min-w-0"
           tabIndex={onTag ? 0 : -1}
         >
-          <TagPill tag={tag} className="max-w-[60px]" title={onTag ? `#${tag} · show only this tag` : undefined} />
+          <TagPill tag={tag} className="min-w-0 max-w-[60px] shrink" title={onTag ? `#${tag} · show only this tag` : undefined} />
         </button>
       ))}
       {more > 0 && (

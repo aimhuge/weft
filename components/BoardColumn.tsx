@@ -131,7 +131,7 @@ export default function BoardColumn({
         reviewFilter={reviewFilter}
         onFold={onFold}
       />
-      <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-2 pb-2">
+      <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto overflow-x-hidden px-2 pb-2">
         <CardList wide={wide}>
           {shown.map((card) => (
             <CardDropSlot
