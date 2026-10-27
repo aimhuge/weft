@@ -8,14 +8,17 @@
 # 3. On the mini: pnpm install, `next build` (standalone), prepare-standalone, bundle-toolchain.
 # 4. rsyncs .next-dist and .toolchain-dist back, so the heavy work (the Next build) ran off this Mac.
 # 5. Here: electron-builder packs, signs with the Flexbike Developer ID in this Mac's keychain
-#    (the minis don't have the private key, so signing never leaves this Mac) and, when APPLE_API_KEY,
-#    APPLE_API_KEY_ID and APPLE_API_ISSUER are set, notarizes. Output: dist/Weft-<version>-arm64.{dmg,zip}.
+#    (the minis don't have the private key, so signing never leaves this Mac) and notarizes with the
+#    notarytool keychain profile WEFT_NOTARY_PROFILE (default weft-notary; store it once with
+#    scripts/store-notary-profile.sh), else with APPLE_API_KEY, APPLE_API_KEY_ID and APPLE_API_ISSUER.
+#    Output: dist/Weft-<version>-arm64.{dmg,zip}.
 #
 # --check does steps 1 and the signing identity lookup only. --no-sign stops after step 4 and packs unsigned.
 set -eu
 cd "${0:A:h}/.."
 
 IDENTITY="${WEFT_SIGN_IDENTITY:-Flexbike, Inc. (H78XB55WG8)}"
+NOTARY="${WEFT_NOTARY_PROFILE:-weft-notary}"
 REMOTE_DIR="dev/weft-build"
 # alias -> ssh target; m1mini comes from ~/.ssh/config, m2mini from the zprofile alias.
 typeset -A TARGETS=(m1mini m1mini m2mini alexmiller@m2mini.local)
@@ -51,6 +54,11 @@ if (( sign )); then
   security find-identity -v -p codesigning | grep -q "$IDENTITY" \
     || { echo "signing identity \"$IDENTITY\" not in this Mac's keychain" >&2; exit 1; }
   echo "signing as: $IDENTITY"
+  # electron-builder notarizes when APPLE_KEYCHAIN_PROFILE is set; history proves the profile's key works.
+  if xcrun notarytool history --keychain-profile "$NOTARY" >/dev/null 2>&1; then
+    export APPLE_KEYCHAIN_PROFILE="$NOTARY"
+    echo "notarizing with keychain profile: $NOTARY"
+  fi
 fi
 (( check )) && { echo "check ok"; exit 0; }
 
@@ -79,6 +87,10 @@ if (( sign )); then
   app="$(ls -d dist/mac-arm64/*.app)"
   codesign --verify --deep --strict --verbose=2 "$app"
   codesign -dv "$app" 2>&1 | grep -E "Authority|TeamIdentifier"
-  [[ -n "${APPLE_API_KEY:-}" ]] || echo "note: not notarized (APPLE_API_KEY, APPLE_API_KEY_ID, APPLE_API_ISSUER unset); Gatekeeper on another Mac will warn"
+  if [[ -n "${APPLE_KEYCHAIN_PROFILE:-}${APPLE_API_KEY:-}" ]]; then
+    xcrun stapler validate "$app"
+  else
+    echo "note: not notarized (no $NOTARY keychain profile, APPLE_API_* unset); Gatekeeper on another Mac will refuse it"
+  fi
 fi
 ls -lh dist/Weft-*-arm64.dmg dist/Weft-*-arm64.zip
