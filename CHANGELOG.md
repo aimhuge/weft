@@ -8,6 +8,18 @@ lands; a release moves those lines under its version and tags the commit `vX.Y.Z
 
 ## [Unreleased]
 
+## [0.6.4] - 2026-10-27
+
+### Changed
+
+- **The copilot is now your product partner, not a second inbox.** It helps you decide what to build next, shape an idea into cards and keep the code healthy. It no longer recites the board. The launcher's number (90 and climbing) is now a dot that only lights when the copilot has said something you haven't read, and the peek shows its latest idea instead of a list of cards. It also speaks first, at most three times a day and never from 21:00 to 7:00: a morning idea drawn from your roadmap, recent commits and analytics, and a refactor worth doing after work lands in a project. When it has nothing worth your time, it answers QUIET and the check-in leaves the chat. Turn this off with "Checks in on its own" in the copilot's name menu. (`lib/copilot-initiative.ts`, `lib/copilot-initiative-run.ts`, `lib/board-tools-trust.ts`, `components/CopilotHider.tsx`, `components/CopilotPeek.tsx`, `lib/copilot-sources-product.ts`)
+
+### Fixed
+
+- **The Skills menu no longer gets cut off in a narrow thread panel.** It now opens over the whole window: under the Skills button, slid back inside the window and clear of the browser pane, and only as tall as the room below. Before, it was drawn inside the thread panel, so its left side was cut off. (`components/SkillMenu.tsx`, `lib/float-place.ts`)
+- **Puku threads no longer say "Not logged in" in projects that use Puku's API themselves.** puku-cli loads the `.env` files of the folder it starts in, so a project's own `PUKU_AI_API_KEY` (BlastCP's, say) replaced your Puku login. Logging in again didn't help, because Weft checks your login from its own folder. Now a puku thread ignores the project's Puku keys when it signs in, and its commands still see them, so the project's dev server and tests keep working. (`lib/puku-dotenv.ts`, `plugin/env/puku-bash-env.sh`, `lib/puku-idle.ts`)
+- **"Allow once and retry" now works on every call auto mode blocks.** Auto mode treats some calls as classifier-only: Weft's allow didn't count for them, so when the classifier gave no verdict ("it skipped this action"), the retry was blocked again with the same error. Now the thread leaves auto mode just for the retry, Weft lets the call you allowed through, and the thread goes back to auto mode right after. The card's own mode never changes. (`lib/classifier-denial.ts`, `docs/architecture/thread-guards.md`)
+
 ## [0.6.3] - 2026-10-26
 
 ### Added
