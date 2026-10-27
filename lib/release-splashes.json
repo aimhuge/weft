@@ -1,4 +1,11 @@
 {
+  "0.6.4": {
+    "lines": [
+      "The copilot now brings you ideas, not a list of cards, and speaks up at most three times a day.",
+      "The Skills menu opens over the whole window now, so nothing gets cut off in a narrow panel.",
+      "Puku threads no longer say \"Not logged in\" in projects that use Puku's API themselves."
+    ]
+  },
   "0.6.3": {
     "lines": [
       "Cloning shows its progress, so you know what's happening before your thread starts.",
