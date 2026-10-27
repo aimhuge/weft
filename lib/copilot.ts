@@ -21,6 +21,8 @@ import { endSession, ensureSpare, retryPukuWithTrial, sendUserMessage, warmUp } 
 import { resumeInterrupted } from "./resume";
 import { startScheduler } from "./scheduler";
 import { chipCardId, startSuggestRefresh } from "./copilot-suggest";
+import { startCheckIns } from "./copilot-initiative-run";
+import { isBusy } from "./runner-state";
 import type { CopilotPersona } from "./copilot-personas";
 import { backendFor, modelFor } from "./new-thread";
 import { fallbackFor } from "./model-fallback";
@@ -150,6 +152,8 @@ export function prewarm() {
   startPukuTrial(() => void retryPukuWithTrial());
   // Keep the copilot's board-made chips fresh as cards move (lib/copilot-suggest.ts).
   startSuggestRefresh();
+  // Let the copilot speak first: a morning idea, and a refactor look after work lands (lib/copilot-initiative.ts).
+  startCheckIns(() => isBusy(COPILOT_ID));
   // Post commits, pushes, deploys and card status to the Slack drawer's channel (lib/slack.ts).
   startSlack();
   // Build every app folder on save (lib/app-build-watch.ts). Loaded lazily and never awaited: esbuild must stay off every

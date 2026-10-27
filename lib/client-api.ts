@@ -277,6 +277,8 @@ export const api = {
   resetCopilot: () => call<{ card: Card }>("POST", "/api/copilot/reset"),
   // Switching persona starts a new chat (lib/copilot.ts setCopilotPersona).
   copilotPersona: (persona: CopilotPersona) => call<{ card: Card }>("POST", "/api/copilot/persona", { persona }),
+  copilotCheckIns: () => call<{ on: boolean }>("GET", "/api/copilot/check-ins"),
+  setCopilotCheckIns: (on: boolean) => call<{ on: boolean }>("POST", "/api/copilot/check-ins", { on }),
   copilotSuggestions: () => call<{ chips: { text: string; cardId?: string; project?: string; covers?: string[] }[]; covers: string[] }>("GET", "/api/copilot/suggestions"),
   copilotChipClicked: (text: string) => call<{ ok: true }>("POST", "/api/copilot/suggestions", { text }),
   // Restart when idle (lib/restart-when-idle.ts): nothing new starts, and Weft restarts once the running turns end.

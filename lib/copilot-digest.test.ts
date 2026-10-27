@@ -26,7 +26,7 @@ describe("boardDigest", () => {
     ];
     const digest = boardDigest(now, seen);
     expect(digest.split("\n")).toEqual([
-      "[Weft board update since your last message, not written by the user]",
+      "[Weft board update since your last message, not written by the user. Context only: the swim lanes already show this, so mention it only when it changes your answer]",
       '- Finished, in Review: "Card a" (a): Added the login page',
       '- Needs you: "Card b" (b): Run npm test',
       '- Error: "Card c" (c): Rate limited',

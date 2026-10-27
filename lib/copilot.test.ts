@@ -21,6 +21,8 @@ vi.mock("./import", () => ({ startSessionSync: vi.fn() }));
 vi.mock("./search", () => ({ startSearchIndex: vi.fn() }));
 vi.mock("./scheduler", () => ({ startScheduler: vi.fn() }));
 const suggest = vi.hoisted(() => ({ startSuggestRefresh: vi.fn(), chipCardId: vi.fn<(text: string) => string | undefined>() }));
+vi.mock("./copilot-initiative-run", () => ({ startCheckIns: vi.fn() }));
+vi.mock("./runner-state", () => ({ isBusy: vi.fn(() => false) }));
 vi.mock("./copilot-suggest", () => suggest);
 vi.mock("./resume", () => ({ resumeInterrupted: vi.fn() }));
 vi.mock("./crash-blame", () => ({ consumeServerExit: vi.fn() }));

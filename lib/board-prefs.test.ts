@@ -5,6 +5,8 @@ import {
   foldedColumns,
   isFolded,
   copilotLanePeek,
+  copilotReadAt,
+  setCopilotReadAt,
   setCopilotLaneOpen,
   setColumnFolded,
   setCopilotLanePeek,
@@ -128,6 +130,20 @@ describe("copilotLanePeek", () => {
   it("is hidden on the server, where there's no document", () => {
     vi.stubGlobal("document", undefined);
     expect(copilotLanePeek()).toBe(false);
+  });
+});
+
+describe("copilotReadAt", () => {
+  it("is 0 until you've looked, then follows setCopilotReadAt", () => {
+    expect(copilotReadAt()).toBe(0);
+    setCopilotReadAt(1234);
+    expect(document.cookie).toContain("weft-copilot-read=1234");
+    expect(copilotReadAt()).toBe(1234);
+  });
+
+  it("is 0 on the server, where there's no document", () => {
+    vi.stubGlobal("document", undefined);
+    expect(copilotReadAt()).toBe(0);
   });
 });
 

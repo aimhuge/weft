@@ -35,7 +35,7 @@ export function boardDigest(cards: Card[], seen: Seen | undefined, since = 0): s
   if (!lines.length) return "";
   const shown = lines.slice(0, MAX_ITEMS);
   if (lines.length > MAX_ITEMS) shown.push(`- …and ${lines.length - MAX_ITEMS} more (see list_cards)`);
-  return `[Weft board update since your last message, not written by the user]\n${shown.join("\n")}`;
+  return `[Weft board update since your last message, not written by the user. Context only: the swim lanes already show this, so mention it only when it changes your answer]\n${shown.join("\n")}`;
 }
 
 // The text the copilot's CLI gets: the digest, then the user's message unchanged.

@@ -5,6 +5,7 @@ import type { Card } from "./types";
 
 const sources = vi.hoisted(() => ({ gatherSections: vi.fn(() => Promise.resolve([] as { title: string; lines: string[] }[])), SOURCES: [{ title: "S" }], activeProjects: vi.fn(() => ["/x/weft", "/x/groove"]), safeRoot: (cwd: string) => cwd }));
 vi.mock("./copilot-sources", () => sources);
+vi.mock("./copilot-sources-product", () => ({ PRODUCT_SOURCES: [{ title: "Roadmap" }] }));
 vi.mock("./copilot-setup", () => ({ SETUP_SOURCE: { title: "Not set up yet" }, SEED_SOURCE: { title: "Starter work Weft found" } }));
 vi.mock("./store", () => ({ listCards: vi.fn(() => []) }));
 
@@ -38,7 +39,7 @@ describe("contextText and suggestPrompt", () => {
   it("tells Haiku to spell out an option's meaning and lists the starters", () => {
     const prompt = suggestPrompt("CTX");
     expect(prompt).toContain('"Pick Option A, GitHub only, for the auth card", not "Pick Option A for the auth card"');
-    expect(prompt).toContain("Let's commit all the new stuff");
+    expect(prompt).toContain("What should I build next?");
     expect(prompt).toContain('"Link weft to Vercel so I can watch its deploys"');
     expect(prompt.endsWith("CTX")).toBe(true);
     expect(prompt).toContain("Suggest 4 things");
@@ -50,17 +51,17 @@ describe("parseSuggestions", () => {
   it("takes the JSON object: trimmed, deduplicated, capped chips, known card ids, real starters only", () => {
     const reply = `Here:\n${JSON.stringify({
       chips: ["  Plain  ", { text: "Plain" }, { text: "Commit billing", cardId: "a" }, { text: "Ghost", cardId: "zzz" }, { text: "" }, 7, { text: "x".repeat(200) }, { text: "Fourth" }, { text: "Fifth" }],
-      covers: ["Let's commit all the new stuff", "Let's commit all the new stuff", "Made up", 3],
+      covers: ["What should I build next?", "What should I build next?", "Made up", 3],
     })}`;
     expect(parseSuggestions(reply, new Set(["a"]))).toEqual({
       chips: [{ text: "Plain" }, { text: "Commit billing", cardId: "a" }, { text: "Ghost" }, { text: "Fourth" }],
-      covers: ["Let's commit all the new stuff"],
+      covers: ["What should I build next?"],
     });
   });
   it("labels each chip with its card's project, else the project it names, and keeps its own covers", () => {
     const reply = JSON.stringify({
       chips: [
-        { text: "Commit billing", cardId: "a", project: "groove", covers: ["Let's commit all the new stuff", "Made up"] },
+        { text: "Commit billing", cardId: "a", project: "groove", covers: ["What should I build next?", "Made up"] },
         { text: "Fix deploy", project: "groove" },
         { text: "Sign in", project: "nowhere" },
       ],
@@ -68,11 +69,11 @@ describe("parseSuggestions", () => {
     const known = { ids: new Set(["a"]), cardProject: new Map([["a", "/x/weft"]]), projects: new Map([["weft", "/x/weft"], ["groove", "/x/groove"]]) };
     expect(parseSuggestions(reply, known)).toEqual({
       chips: [
-        { text: "Commit billing", cardId: "a", project: "/x/weft", covers: ["Let's commit all the new stuff"] },
+        { text: "Commit billing", cardId: "a", project: "/x/weft", covers: ["What should I build next?"] },
         { text: "Fix deploy", project: "/x/groove" },
         { text: "Sign in" },
       ],
-      covers: ["Let's commit all the new stuff"],
+      covers: ["What should I build next?"],
     });
   });
   it("gives none for no object, bad JSON or missing lists", () => {
@@ -176,7 +177,7 @@ describe("boardContext and chipCardId", () => {
     sources.gatherSections.mockResolvedValueOnce([{ title: "Not set up yet", lines: ["- weft: analytics not set up"] }]);
     const text = await boardContext([card({})]);
     expect(text).toContain("## Not set up yet\n- weft: analytics not set up");
-    expect(sources.gatherSections).toHaveBeenLastCalledWith([card({})], [{ title: "S" }, { title: "Not set up yet" }, { title: "Starter work Weft found" }]);
+    expect(sources.gatherSections).toHaveBeenLastCalledWith([card({})], [{ title: "Roadmap" }, { title: "S" }, { title: "Not set up yet" }, { title: "Starter work Weft found" }]);
     expect(await boardContext([card({})], { gather: () => Promise.resolve([]), now: () => NOW })).toMatch(/^Now: Friday/);
   });
 

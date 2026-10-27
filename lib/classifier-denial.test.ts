@@ -32,7 +32,7 @@ function denied(over: Record<string, unknown> = {}) {
 }
 
 function session(): Session {
-  return { pending: [] } as unknown as Session;
+  return { pending: [], spec: { permissionMode: "default" } } as unknown as Session;
 }
 
 beforeEach(() => vi.clearAllMocks());
@@ -156,6 +156,81 @@ describe("answering the prompt", () => {
     const s = asked("tu1");
     answer(s, true);
     expect(safeUpdate).toHaveBeenLastCalledWith("c1", { column: "review", error: "closing" });
+  });
+});
+
+describe("a classifier-only retry in auto mode", () => {
+  // Auto mode denies a classifier-only call the classifier gave no verdict on, whatever a hook says, and never asks
+  // canUseTool: so the retry runs with the live CLI in default mode, and the grant answers it from canUseTool.
+  function live(mode = "auto") {
+    const setPermissionMode = vi.fn(() => Promise.resolve());
+    const s = session();
+    s.spec = { permissionMode: mode } as Session["spec"];
+    s.query = { setPermissionMode } as unknown as Session["query"];
+    noteDenial(s, denied());
+    askAboutDenials("c1", s, [{ tool_name: MIGRATE, tool_use_id: "tu1", tool_input: input }], "review");
+    s.pending.shift()!.resolve({ behavior: "allow", updatedInput: input });
+    return { s, setPermissionMode };
+  }
+
+  it("steps the CLI out of auto mode before the retry is sent, keeping the card's own mode", () => {
+    const { s, setPermissionMode } = live();
+    expect(setPermissionMode).toHaveBeenCalledWith("default");
+    expect(setPermissionMode.mock.invocationCallOrder[0]).toBeLessThan(sendMessage.mock.invocationCallOrder[0] ?? 0);
+    expect(s.retryOutOfAuto).toBe(true);
+    expect(s.spec.permissionMode).toBe("auto");
+  });
+
+  it("goes back to auto once the grant answers the retry", () => {
+    const { s, setPermissionMode } = live();
+    expect(takeGrant(s, MIGRATE, input)).toBe(true);
+    expect(setPermissionMode).toHaveBeenLastCalledWith("auto");
+    expect(s.retryOutOfAuto).toBeUndefined();
+  });
+
+  it("waits for every granted call before going back", () => {
+    const { s, setPermissionMode } = live();
+    s.retryGrants = [callKey(MIGRATE, input), callKey("Bash", { command: "ls" })];
+    takeGrant(s, MIGRATE, input);
+    expect(setPermissionMode).toHaveBeenCalledTimes(1);
+    takeGrant(s, "Bash", { command: "ls" });
+    expect(setPermissionMode).toHaveBeenLastCalledWith("auto");
+  });
+
+  it("goes back when the retry turn ends without using the grant, to the mode you switched to meanwhile", () => {
+    const { s, setPermissionMode } = live();
+    s.spec.permissionMode = "acceptEdits";
+    askAboutDenials("c1", s, [], "review");
+    expect(setPermissionMode).toHaveBeenLastCalledWith("acceptEdits");
+    expect(s.retryOutOfAuto).toBeUndefined();
+  });
+
+  it("leaves the PreToolUse hook out of it, so the grant is kept for canUseTool", async () => {
+    const { s } = live();
+    const hook = nth(nth(withRetryGrant({ env: {} }, s).hooks?.PreToolUse ?? [], 0).hooks, 0);
+    const ev = { hook_event_name: "PreToolUse", tool_name: MIGRATE, tool_input: input } as HookInput;
+    expect(await hook(ev, undefined, { signal: new AbortController().signal })).toEqual({});
+    expect(s.retryGrants).toEqual([callKey(MIGRATE, input)]);
+  });
+
+  it("doesn't touch a card in another mode, or one with no live CLI", () => {
+    const { s, setPermissionMode } = live("default");
+    expect(setPermissionMode).not.toHaveBeenCalled();
+    expect(s.retryOutOfAuto).toBeUndefined();
+    const idle = session();
+    idle.spec = { permissionMode: "auto" } as Session["spec"];
+    noteDenial(idle, denied());
+    askAboutDenials("c1", idle, [{ tool_name: MIGRATE, tool_use_id: "tu1", tool_input: input }], "review");
+    idle.pending.shift()!.resolve({ behavior: "allow", updatedInput: input });
+    expect(idle.retryOutOfAuto).toBeUndefined();
+  });
+
+  it("ignores a refused mode change", async () => {
+    const { s, setPermissionMode } = live();
+    setPermissionMode.mockReturnValueOnce(Promise.reject(new Error("closed")));
+    takeGrant(s, MIGRATE, input);
+    await Promise.resolve();
+    expect(s.retryOutOfAuto).toBeUndefined();
   });
 });
 

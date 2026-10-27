@@ -73,6 +73,7 @@ matching doc below. When a feature lands, add or update its entry here and in it
 - `limits.md` — the three limits a thread can meet (the model's own cap, the CLI's weekly and 5-hour windows), their stores and the start gate.
 - `limits-burndown.md` — the status strip's `5hr` / `7d` hover chart: a week of 15-minute bars for the 5-hour limit left against the weekly one, and why each CLI has its own plan.
 - `worktrees.md` — isolated cards, the opt-in git worktree per card: its CLI, Bash, dev server and commits live there, and Done lands its branch back.
+- `copilot-initiative.md` — the copilot's check-ins: when it speaks first (a morning idea, a refactor after work lands), the caps, QUIET, the launcher's dot and the off switch.
 - `copilot-personas.md` — the copilot's personas (Wingman, Founder, Captain): the prompt each adds, the lane header picker, why a switch starts a new chat.
 - `agents.md` — a card's agent: the soul that opens its system prompt and the skills it turns off (Builder, Weft's own; Copywriter, Weft's voice; yours from Settings → Agents): editing and resetting built-ins from GitHub, each project's default, the pickers, why agents skip spares.
 
@@ -251,6 +252,7 @@ When a new doc lands in this folder, add it here on the same change.
 - `components/CopilotPicker.tsx`: Settings → Models → Copilot picks the model the copilot thread runs on (any model any CLI serves). The pick is read once when the
   card is first made (`lib/copilot.ts` `ensureCopilot`), so it takes effect on the next "New chat" in the copilot lane; with no pick, the copilot runs on
   whatever its CLI chooses, or the model you last picked for new threads (`lib/new-thread.ts` `modelFor`).
+- `lib/puku-dotenv.ts` + `plugin/env/puku-bash-env.sh`: puku-cli is a Bun binary that loads the `.env` files of its folder, so a project keeping its own `PUKU_AI_API_KEY` there (BlastCP) made puku threads "Not logged in" while `auth status` said logged in. A puku thread starts with each Puku sign-in variable you didn't set as blank (Bun skips a set one), and `PUKU_CLI_ENV_FILE` unsets the blanks before each Bash command so the project's own tools still read its `.env`; joined in by `backendEnv` (`lib/puku-idle.ts`).
 - `lib/puku-trial.ts` + `lib/puku-trial-token.ts` + `lib/puku-proxy.ts` + `lib/puku-proxy-usage.ts` + `app/api/puku/*`: the Puku trial (`reserve` holds what a request could cost before it goes out, against the account's and the whole trial's daily caps, `puku_trial_global_usage`; `metered` charges a reply however it ends, so a client that hangs up still pays); a puku thread with no Puku
   login, while you're signed in to Weft, runs through the deployed Weft's proxy on Weft's own key (signed day-long token read by puku's
   `apiKeyHelper` from `~/.weft/puku-trial-token`, per-account daily cap in `puku_trial_usage`; docs/architecture/puku-trial.md).
@@ -457,8 +459,9 @@ When a new doc lands in this folder, add it here on the same change.
 - `lib/copilot.ts` + `lib/board-tools.ts`: the copilot thread and its `mcp__board__*` tools. `lib/copilot-suggest.ts` + `lib/copilot-context.ts` + `lib/copilot-sources.ts` + `lib/copilot-setup.ts` (what isn't linked yet, for onboarding chips and the copilot's `setup_status`) + `app/api/copilot/suggestions`: the empty chat's chips Haiku writes from the cards and every source Weft can read (pile, scout, blanks, Vercel and Supabase via the control server's `/vercel/status` and `/supabase/status`, `gh`), refreshed in the background after a move; one run labels every chip with its project and `chipsFor` (`lib/copilot-starters.ts`) filters to the board's selected project (docs/architecture/copilot-suggestions.md). `components/CopilotLane.tsx` +
   `lib/copilot-lane.ts` + `lib/use-copilot-thread.ts` + `lib/copilot-float.ts`: it floats in the window's bottom-right
   corner like Intercom's messenger, at `COPILOT_LAYER` (z-[96]) over the board, the card window, every `Modal` layer and
-  the welcome, with three states: hidden (the round launcher, `components/CopilotHider.tsx`, the default), peek (a 280px
-  digest above it, with a maximize button) and open (a 400px chat above it); ⌘J cycles them via `LANE_CYCLE` and the two
+  the welcome, with three states: hidden (the round launcher, `components/CopilotHider.tsx`, the default, with a dot
+  for a reply you haven't seen and never a card count, `lib/use-copilot-unread.ts`), peek (a 280px panel above it with the
+  copilot's latest reply or idea, and a maximize button) and open (a 400px chat above it); ⌘J cycles them via `LANE_CYCLE` and the two
   `weft-copilot-lane` / `weft-copilot-peek` cookies in `lib/board-prefs.ts`. The launcher and the panel publish their
   boxes, and `components/BrowserPane.tsx` keeps the native view clear of them (`clearOfCopilot`: stops short above the
   launcher, hides under the panel). The board's columns
@@ -466,7 +469,10 @@ When a new doc lands in this folder, add it here on the same change.
   the peek auto-closes 6s after the mouse leaves. They
   are `@container`s that drop thumbnails and header extras. `lib/copilot-personas.ts` + `components/CopilotPersonaMenu.tsx`: who the copilot is (Wingman, Founder after
   founder-skill, Captain after gstack), picked from its name in the lane header; `card.persona` → `Spec.persona` → its prompt after
-  `COPILOT_PROMPT`, and a switch starts a new chat (docs/architecture/copilot-personas.md).
+  `COPILOT_PROMPT`, and a switch starts a new chat (docs/architecture/copilot-personas.md). `lib/copilot-initiative.ts` +
+  `lib/copilot-initiative-run.ts` + `app/api/copilot/check-ins`: the copilot speaks first, a morning idea and a refactor
+  look after work lands, at most 3 a day, a QUIET answer dropped from the thread (docs/architecture/copilot-initiative.md).
+  `lib/copilot-sources-product.ts`: the chips' roadmap and last-week's-commits sources.
 - `lib/agents.ts` + `lib/agents-built-in.json` + `lib/agent-store.ts` + `app/api/agents/*`: who a card's thread is, its soul and
   the skills it turns off (Builder, Weft's own; Copywriter, Weft's voice; yours). `~/.weft/agents.json` keeps your agents, your
   edits over the built-ins (Reset pulls the JSON from GitHub) and each project's default; `card.agent` → `Spec.agent` →

@@ -1067,26 +1067,36 @@ a card in that channel's project (or your default one), and **@Weft** in a card'
 
 ## Copilot
 
-Press ⌘J (or the Copilot button) to open the copilot, an orchestrator thread in its own window.
+Press ⌘J (or the Copilot button) to open the copilot, your product partner: it helps you decide what to build next,
+shapes an idea into cards, answers anything about your projects, and keeps an eye on refactors and your analytics. It
+doesn't report the board back to you (the swim lanes do that), so its launcher shows a dot only when it has said
+something you haven't read, never a count.
 It uses `mcp__board__*` tools to list cards, read threads, create cards, start them, reply to
 them, move and stop them, and answer their permission requests. Reading and rearranging the board
 happen without asking; starting a thread, replying to one, or answering for one asks you first in
 the copilot window. Each message you send it also carries a short note, which only the copilot
 sees, of what finished, needs you or failed on the board since your last message
-(`lib/copilot-digest.ts`); nothing runs a copilot turn on its own. "New chat" starts a fresh copilot session. In a normal browser tab the
+(`lib/copilot-digest.ts`), as context it brings up only when it changes the answer.
+
+The copilot also speaks first, at most three times a day and never from 21:00 to 7:00: once in the morning, with the one
+thing it would build or fix next (from the roadmap, recent commits and, when it can read them, your analytics), and after
+work lands in a project, with the refactor worth doing now. When it has nothing worth your time it answers QUIET and the
+check-in leaves the chat. Turn it off with "Checks in on its own" in the copilot's name menu
+(`lib/copilot-initiative.ts`, docs/architecture/copilot-initiative.md). "New chat" starts a fresh copilot session. In a normal browser tab the
 copilot opens as a pop-up at `/copilot`.
 
-Pick who your copilot is from its name in the lane header (`lib/copilot-personas.ts`). **Wingman**, the default, runs the
-board. **Founder** tests the business before you build it: competitors, buyers, pricing, offer and unit economics, one
+Pick who your copilot is from its name in the lane header (`lib/copilot-personas.ts`). **Wingman**, the default, is your
+partner on what to build next. **Founder** tests the business before you build it: competitors, buyers, pricing, offer and unit economics, one
 thread per step writing to a `founder/` folder, every number traced to an input (adapted from
 [founder-skill](https://github.com/Jakeschincariol/founder-skill), MIT). **Captain** runs the work as a sprint: office
 hours, CEO, engineering and design reviews, build, a staff-engineer review, QA, ship, retro, each step a thread (adapted
 from [gstack](https://github.com/garrytan/gstack), MIT). Both run those projects' own skills when they're installed.
 Switching persona starts a new chat, since the copilot reads its persona only when its CLI starts.
 
-A new copilot chat suggests what to ask: up to four chips Haiku writes from what Weft knows about your work, most
-urgent first ("Restart the deckcp auth wiring card, it was killed by SIGTERM", "Fill the Stripe vault blanks in weft:
-STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET"). It reads every open card in full (how long it has waited, its latest reply,
+A new copilot chat suggests what to ask: up to four chips Haiku writes from what Weft knows about your work, about
+direction more than status: what to build next, a refactor worth doing, your users, then anything blocking ("Build the
+diff view in Review next, 20 cards wait on review", "Fill the Stripe vault blanks in weft: STRIPE_SECRET_KEY and
+STRIPE_WEBHOOK_SECRET"). It also reads each project's roadmap and last week's commits (`lib/copilot-sources-product.ts`). It reads every open card in full (how long it has waited, its latest reply,
 an open question with each option's meaning, the error, rate limits), the last day's finished cards, cards editing the
 same file, spend and plan limits, the uncommitted pile, code quality and the refactor scout, your streak, Backlog, vault
 and webhook blanks, what you asked the copilot lately and which chips you clicked, the latest Vercel deploy, unapplied

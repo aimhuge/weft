@@ -1,13 +1,15 @@
 // The copilot's fixed starter chips, shown under the board-made ones (components/CopilotEmpty.tsx). The server sends
 // them to Haiku too (lib/copilot-suggest.ts), so a board chip that covers one can hide it.
+// The copilot is a product partner, not a status feed, so its starters are about direction: what to build, the
+// code's health and the users. What needs you or finished is the swim lanes' job.
 export const STARTERS = [
   "Help me get started with Weft",
-  "How can I improve my codebase?",
+  "What should I build next?",
+  "Help me shape an idea into cards",
+  "What's worth refactoring?",
   "How many users did I get last week?",
-  "Tell me about my productivity over the last 2 months",
-  "Let's make a new feature",
   "How did a feature change user behavior?",
-  "Let's commit all the new stuff",
+  "What did I ship this week?",
 ] as const;
 
 export const VISIBLE_CHIPS = 4;

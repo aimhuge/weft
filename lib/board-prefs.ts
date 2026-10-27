@@ -94,6 +94,19 @@ export function setCopilotLanePeek(peek: boolean) {
   window.dispatchEvent(new Event(EVENT));
 }
 
+const READ_COOKIE = "weft-copilot-read";
+
+// When you last looked at the copilot (its peek or chat), in ms: the launcher's dot lights for a reply after it.
+export function copilotReadAt(): number {
+  if (typeof document === "undefined") return 0;
+  return Number(new RegExp(`(?:^|; )${READ_COOKIE}=(\\d+)`).exec(document.cookie)?.[1] ?? 0);
+}
+
+export function setCopilotReadAt(at: number) {
+  document.cookie = `${READ_COOKIE}=${String(at)}; path=/; max-age=${10 * 365 * 24 * 60 * 60}; SameSite=Lax`;
+  window.dispatchEvent(new Event(EVENT));
+}
+
 // For useSyncExternalStore.
 export function subscribeBoardPrefs(onChange: () => void) {
   window.addEventListener(EVENT, onChange);

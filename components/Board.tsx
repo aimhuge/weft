@@ -448,9 +448,7 @@ export default function Board() {
       {/* The copilot floats bottom-right over the board and every dialog (lib/copilot-float.ts). */}
       <CopilotLane
         state={laneState}
-        cards={cards}
         project={project}
-        onOpenCard={openCard}
         onHide={() => setCopilotState("hidden")}
         onPeek={() => setCopilotState("peek")}
         onOpen={() => setCopilotState("open")}

@@ -10,6 +10,7 @@ import { isLive } from "@/lib/format";
 import { NO_DRAG } from "@/lib/no-drag";
 import { COPILOT_ID, type Card } from "@/lib/types";
 import { useCopilotThread } from "@/lib/use-copilot-thread";
+import { useCopilotUnread } from "@/lib/use-copilot-unread";
 import CopilotEmpty from "./CopilotEmpty";
 import CopilotHider, { Avatar } from "./CopilotHider";
 import CopilotPeek from "./CopilotPeek";
@@ -33,15 +34,13 @@ function Status({ card }: { card: Card | null }) {
 
 // The copilot floats in the window's bottom-right corner, like Intercom's messenger, over the board,
 // the card window and every dialog, the welcome included (lib/copilot-float.ts). Three states: hidden is
-// the round launcher alone; peek adds the digest above it; open adds the chat. Resting
+// the round launcher alone; peek adds its latest reply or idea above it; open adds the chat. Resting
 // on the launcher peeks; the copilot needing you auto-expands into peek; a click on the launcher opens
 // or closes the chat; ⌘J cycles hidden → peek → open → hidden.
 export default function CopilotLane(props: {
   state: LaneState;
-  cards: Card[];
   // The board's selected project (null: All), so the empty chat's chips match it.
   project?: string | null;
-  onOpenCard: (card: Card) => void;
   onHide: () => void;
   onPeek: () => void;
   onOpen: () => void;
@@ -50,12 +49,12 @@ export default function CopilotLane(props: {
   const { card, items, streaming, error, fail, send, newChat, setPersona, resetting } = useCopilotThread();
   const live = card ? isLive(card) : false;
   const persona = personaOf(card?.persona);
+  const unread = useCopilotUnread(items, props.state);
 
   const launcher = (
     <CopilotHider
       card={card}
-      cards={props.cards}
-      items={items}
+      unread={unread}
       state={props.state}
       onPeek={props.onPeek}
       onOpen={props.onOpen}
@@ -119,13 +118,11 @@ export default function CopilotLane(props: {
         <FloatPanel state="peek" className="bg-sunken">
           {header}
           <CopilotPeek
-            cards={props.cards}
             persona={persona}
             items={items}
             error={error}
             onHide={props.onHide}
             onOpen={props.onOpen}
-            onOpenCard={props.onOpenCard}
             onAsk={(text) => {
               props.onOpen();
               send(text).catch(fail);

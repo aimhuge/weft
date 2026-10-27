@@ -1,11 +1,10 @@
-import type { Card, ThreadItem } from "./types";
+import type { ThreadItem } from "./types";
 
 // The copilot floats in the window's bottom-right corner (components/CopilotLane.tsx, placed by
 // lib/copilot-float.ts). It has three states, like Intercom's messenger:
 //
-//   hidden  — the round launcher alone (avatar, news count). The default.
-//   peek    — the digest above the launcher: what needs you, what finished since you last asked, the
-//             latest reply, and an ask box. Reached by resting on the launcher or the copilot having news.
+//   hidden  — the round launcher alone (avatar, a dot when the copilot has said something you haven't read). The default.
+//   peek    — the copilot's latest reply or idea above the launcher, and an ask box. Reached by resting on the launcher.
 //   open    — the chat above the launcher. Reached by a click on the launcher, ⌘J, the top bar button,
 //             or the peek's maximize button.
 export type LaneState = "hidden" | "peek" | "open";
@@ -24,33 +23,20 @@ export function columnMinWidth(state: LaneState): number {
   return state === "open" || state === "peek" ? 120 : 170;
 }
 
-export interface LaneDigest {
-  // Cards waiting on you, newest first.
-  needsYou: Card[];
-  // Cards that reached Review or Done since you last asked the copilot something.
-  finished: number;
-  // The copilot's latest reply, flattened to one line, or null before it said anything.
-  lastReply: string | null;
-}
+const STATUS_LINE = /^\s*(BOARD STATUS:|`?=-=\[)/;
 
-// When you last asked the copilot something: the time of the last message you sent it.
-export function lastAsked(items: ThreadItem[]): number {
-  for (let i = items.length - 1; i >= 0; i--) {
-    const item = items[i];
-    if (item?.kind === "user") return item.at;
-  }
-  return 0;
-}
+// The copilot's answer to a check-in (lib/copilot-initiative.ts) when it had nothing worth showing.
+export const isQuiet = (text: string) => /^\s*QUIET\.?\s*$/.test(text.split("\n").filter((l) => !STATUS_LINE.test(l)).join("\n"));
 
 // The copilot's latest reply as one plain line: Markdown marks and status lines (BOARD STATUS, a
 // "=-=[ SESSION STATUS" line some CLAUDE.md files ask for) dropped.
 export function lastReply(items: ThreadItem[], max = 220): string | null {
   for (let i = items.length - 1; i >= 0; i--) {
     const item = items[i];
-    if (item?.kind !== "assistant" || !item.text.trim()) continue;
+    if (item?.kind !== "assistant" || !item.text.trim() || isQuiet(item.text)) continue;
     const text = item.text
       .split("\n")
-      .filter((line) => !/^\s*(BOARD STATUS:|`?=-=\[)/.test(line) && !/^\s*```/.test(line))
+      .filter((line) => !STATUS_LINE.test(line) && !/^\s*```/.test(line))
       .join(" ")
       .replace(/[*_`#>]+/g, "")
       .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
@@ -62,13 +48,15 @@ export function lastReply(items: ThreadItem[], max = 220): string | null {
   return null;
 }
 
-// What the peek shows: what needs you, what finished since you last asked, the latest reply.
-export function laneDigest(cards: Card[], items: ThreadItem[]): LaneDigest {
-  const since = lastAsked(items);
-  const live = cards.filter((c) => !c.archived && c.role !== "copilot");
-  return {
-    needsYou: live.filter((c) => c.column === "needs_you").sort((a, b) => b.updatedAt - a.updatedAt),
-    finished: live.filter((c) => (c.column === "review" || c.column === "done") && c.updatedAt > since).length,
-    lastReply: lastReply(items),
-  };
+// When the copilot last said something worth reading: its latest reply with text, or 0 before it said anything.
+export function lastReplyAt(items: ThreadItem[]): number {
+  for (let i = items.length - 1; i >= 0; i--) {
+    const item = items[i];
+    if (item?.kind === "assistant" && item.text.trim() && !isQuiet(item.text)) return item.at;
+  }
+  return 0;
 }
+
+// Whether the launcher's dot is lit: the copilot replied (or brought an idea of its own, lib/copilot-initiative.ts)
+// after you last looked. The board's own counts stay in the swim lanes; this dot is only the copilot's news.
+export const hasUnread = (items: ThreadItem[], readAt: number) => lastReplyAt(items) > readAt;

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it } from "vitest";
-import { currentArea, fitWidth, paneBox, placeAbove, placeBeside, setPaneBox, visibleArea } from "./float-place";
+import { currentArea, fitWidth, paneBox, placeAbove, placeBeside, placeMenuBelow, setPaneBox, visibleArea } from "./float-place";
 
 const WIN = { width: 1280, height: 800 };
 // The pane on the right, from x=700 to the window's edge.
@@ -111,5 +111,26 @@ describe("placeBeside", () => {
   it("is clamped into the area at its edges", () => {
     expect(placeBeside(rect(300, 20, 52, 52), preview, area)).toEqual({ left: 8, top: 8 });
     expect(placeBeside(rect(100, 700, 52, 52), preview, area).top).toBe(492);
+  });
+});
+
+describe("placeMenuBelow", () => {
+  const area = visibleArea(WIN, PANE);
+
+  it("opens under the trigger, ending at its right edge", () => {
+    expect(placeMenuBelow(rect(500, 100, 80, 30), 340, area, 480)).toEqual({ left: 240, top: 136, maxHeight: 480 });
+  });
+
+  it("slides right to stay inside a narrow panel's window edge", () => {
+    expect(placeMenuBelow(rect(240, 100, 80, 30), 340, area, 480).left).toBe(8);
+  });
+
+  it("slides left to stay clear of the pane", () => {
+    expect(placeMenuBelow(rect(600, 100, 200, 30), 340, area, 480).left).toBe(352);
+  });
+
+  it("is no taller than the room below", () => {
+    expect(placeMenuBelow(rect(500, 600, 80, 30), 340, area, 480).maxHeight).toBe(156);
+    expect(placeMenuBelow(rect(500, 900, 80, 30), 340, area, 480).maxHeight).toBe(0);
   });
 });

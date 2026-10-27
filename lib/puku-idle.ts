@@ -1,3 +1,4 @@
+import { pukuDotenvShield } from "./puku-dotenv";
 import type { Backend } from "./types";
 
 // Why an idle puku-cli burned 10-30% CPU: in headless mode it runs `setInterval(gc, 1000)`, a line
@@ -8,8 +9,9 @@ import type { Backend } from "./types";
 // The price: Node's default heap limit (~4 GB on a 16 GB Mac) instead of puku's 8 GB.
 export const PUKU_IDLE_ENV = { PUKU_CLI_DISABLE_HEAP_RELAUNCH: "1" } as const;
 
-export function backendEnv(backend: Backend): Record<string, string> {
-  return backend === "puku" ? { ...PUKU_IDLE_ENV } : {};
+// A puku thread also starts with the project's .env kept out of its sign-in (lib/puku-dotenv.ts).
+export function backendEnv(backend: Backend, env: Partial<Record<string, string>> = process.env): Record<string, string> {
+  return backend === "puku" ? { ...PUKU_IDLE_ENV, ...pukuDotenvShield(env) } : {};
 }
 
 // Idle puku CLIs kept open at most, under the overall cap, and their keep-alive. Each one is a whole

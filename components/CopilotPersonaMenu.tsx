@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { api } from "@/lib/client";
 import { PERSONA_ORDER, PERSONAS, personaOf, type CopilotPersona } from "@/lib/copilot-personas";
 import { useEscape } from "@/lib/use-escape";
 import { Avatar } from "./CopilotHider";
@@ -17,7 +18,14 @@ export default function CopilotPersonaMenu(props: {
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
   const current = personaOf(props.persona);
+  // Whether the copilot checks in on its own (lib/copilot-initiative.ts); read each time the menu opens.
+  const [checkIns, setCheckIns] = useState<boolean | null>(null);
   useEscape(open, () => setOpen(false));
+
+  useEffect(() => {
+    if (!open) return;
+    api.copilotCheckIns().then((r) => setCheckIns(r.on), () => setCheckIns(null));
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -70,6 +78,24 @@ export default function CopilotPersonaMenu(props: {
             );
           })}
           <p className="px-2 pb-1 pt-1.5 text-[11px] text-faint">Switching starts a new chat.</p>
+          {checkIns !== null && (
+            <button
+              role="menuitemcheckbox"
+              aria-checked={checkIns}
+              onClick={() => {
+                const on = !checkIns;
+                setCheckIns(on);
+                api.setCopilotCheckIns(on).catch(() => setCheckIns(!on));
+              }}
+              className="mt-1 flex w-full items-start gap-2 rounded-md border-t border-line px-2 py-1.5 text-left hover:bg-sunken"
+            >
+              <span className="min-w-0 flex-1 leading-tight">
+                <span className="block text-[12.5px] font-semibold text-ink">Checks in on its own</span>
+                <span className="block text-[11.5px] text-muted">A morning idea, and a refactor after work lands. At most 3 a day.</span>
+              </span>
+              <Icon name={checkIns ? "check" : "x"} size={13} className={checkIns ? "text-accent" : "text-faint"} />
+            </button>
+          )}
         </div>
       )}
     </div>

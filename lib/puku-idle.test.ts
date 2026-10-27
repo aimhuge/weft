@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { backendEnv, idleToClose, keepAliveFor, MAX_IDLE_PUKU, PUKU_KEEP_ALIVE_MINUTES, refillsSpare } from "./puku-idle";
+import { PUKU_BASH_ENV } from "./puku-dotenv";
 import type { Backend } from "./types";
 
 const s = (name: string, backend: Backend) => ({ name, spec: { backend } });
@@ -7,7 +8,11 @@ const names = (list: { name: string }[]) => list.map((x) => x.name);
 
 describe("backendEnv", () => {
   it("turns off puku-cli's heap relaunch, so its once-a-second gc() never starts", () => {
-    expect(backendEnv("puku")).toEqual({ PUKU_CLI_DISABLE_HEAP_RELAUNCH: "1" });
+    expect(backendEnv("puku")).toMatchObject({ PUKU_CLI_DISABLE_HEAP_RELAUNCH: "1" });
+  });
+
+  it("keeps a project's .env out of puku-cli's sign-in", () => {
+    expect(backendEnv("puku", {})).toMatchObject({ PUKU_AI_API_KEY: "", PUKU_CLI_ENV_FILE: PUKU_BASH_ENV });
   });
 
   it("adds nothing for Claude Code", () => {

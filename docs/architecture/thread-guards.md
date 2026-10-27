@@ -109,6 +109,12 @@ What the CLI does send is a `system`/`permission_denied` message (`decision_reas
 - `withRetryGrant` adds a PreToolUse hook that answers `allow` for the granted call, which skips the classifier, and
   uses the grant up. `canUseTool` checks the grant too, in case the retry asks instead. A deny hook (the secret guard, say)
   still wins, and a grant the retry turn didn't use is dropped when that turn ends.
+- Auto mode marks some calls **classifier-only**: hook allows and allow rules don't count for them, and when the
+  classifier gives no verdict ("it skipped this action", a hard failure) the CLI denies them with no prompt fallback,
+  so the PreToolUse allow alone let the retry be blocked again. So before the retry message goes out, the live CLI
+  steps out of auto mode into `default` (`query.setPermissionMode`; the card's saved mode stays `auto`), the hook
+  stands aside (`session.retryOutOfAuto`), and the retry reaches `canUseTool`, where the grant allows it. The CLI goes
+  back to the card's mode once the last grant is used, or when the retry turn ends.
 - A reply instead of a click (`sendMessage`) drops the prompts and marks them denied in the thread.
 
 The mode's hint in `MODE_OPTIONS` (`lib/types-card.ts`) says this: "A classifier approves or blocks; Weft asks you about blocks".

@@ -7,7 +7,7 @@ Tags: `Now` is being built this session; `P1` is next and high value; `P2` is cl
 ## Top 10 next
 
 1. **Diff view in Review** — show what a card changed since it started, so reviewing a finished turn doesn't mean switching to an editor.
-2. **Copilot acts on its own** — the copilot now hears what finished, failed, or needs you with each of your messages; next, let it start a turn when that happens instead of waiting to be asked.
+2. **Copilot acts on its own** — the copilot now checks in on its own with a morning idea and a refactor after work lands (docs/architecture/copilot-initiative.md); next, a weekly analytics note and "Later" ideas parked as chips.
 3. **Markdown in threads** — render agent replies with headings, code blocks, and tables instead of plain text.
 4. **Always-allow rules** — "allow always for this card / this project" on permission prompts, so the same `npm test` doesn't ask twenty times.
 5. **Commit, push, and open a PR from a card** — finish the loop from Review without leaving the board, and keep the PR link on the card.
@@ -153,7 +153,8 @@ Tags: `Now` is being built this session; `P1` is next and high value; `P2` is cl
 - `Done` **Copilot onboarding** — `lib/copilot-setup.ts` finds what isn't linked per project (Weft account, `gh`, Vercel, Supabase, Cloudflare, analytics); the chips offer one link, and the copilot's `setup_status` tool and prompt walk you through linking one step at a time.
 - `Done` **Copilot launcher** — the lane became an Intercom-style round launcher fixed in the bottom-right corner, above the board, the New thread and card windows, Settings, the welcome and every dialog (z-[96]); hover peeks the digest, a click opens a 400px floating chat, the board keeps its full width, and the native browser pane keeps clear of it (`lib/copilot-float.ts`, `components/CopilotHider.tsx`, `components/CopilotLane.tsx`). The cockpit photo left the peek and the chat for a maximize button. Next: drop the now-unneeded `laneState` column-width plumbing.
 - `P1` **Copilot crew** — pick from several copilots in the top bar (Founder and Eng Manager from gstack, Marketer on BlastCP, Market Researcher on last30days), each a `persona.md` plus a `skills/` folder under `~/.weft/copilots/<id>/`, with its own pilot in the cockpit picture (renders in `~/.weft/show/copilot-cockpit/`).
-- `P2` **Copilot acts on its own** — start a copilot turn when a card finishes or needs you, instead of waiting for your next message.
+- `Done` **Copilot speaks first** — a morning check-in (what to build next, from the roadmap, commits and analytics) and a refactor check-in after work lands in a project, at most 3 a day, quiet 21:00–7:00, one waiting at a time; a QUIET answer leaves the chat; the launcher shows a dot for an unread reply instead of a card count, and the peek shows the copilot's latest idea (docs/architecture/copilot-initiative.md).
+- `P2` **Check-in follow-ups** — a weekly analytics note, "Later" / "Not for me" buttons on an idea (later parks it as a chip, not-for-me tunes the kinds it sends), a release check-in.
 - `P1` **Away digest** — "what happened while I was away": a short per-card summary of results since you last looked.
 - `P2` **Spec to cards** — paste a spec; the copilot proposes a set of cards with folders and order, and creates them after you approve.
 - `P2` **Review triage** — the copilot reads finished threads and suggests Done, a follow-up reply, or a reviewer card.

@@ -4,7 +4,7 @@
 // the header shares with it.
 import { useEffect, useRef } from "react";
 import { COPILOT_LAYER, LAUNCHER, launcherBox, setCopilotLauncher } from "@/lib/copilot-float";
-import { laneDigest, type LaneState } from "@/lib/copilot-lane";
+import type { LaneState } from "@/lib/copilot-lane";
 import { personaOf, type PersonaInfo } from "@/lib/copilot-personas";
 import { NO_DRAG } from "@/lib/no-drag";
 import { COPILOT_ID, type Card } from "@/lib/types";
@@ -22,24 +22,20 @@ export function Avatar({ size, picture }: { size: number; picture: PersonaInfo["
 }
 
 // The launcher: the persona's face in a round button pinned to the window's bottom-right corner, like
-// Intercom's, with a needs-you dot and the news count. Resting the mouse on it for PEEK_DELAY_MS peeks
+// Intercom's, with a dot when the copilot said something you haven't read. It never counts cards: what needs you or
+// finished is the swim lanes' job, and a count that duplicates them only grows. Resting the mouse on it for PEEK_DELAY_MS peeks
 // (a pass on the way to the window edge doesn't); a click opens the chat, or closes it when it's open.
 export const PEEK_DELAY_MS = 350;
 
 export default function CopilotHider(props: {
   card: Card | null;
-  cards: Card[];
-  items: Parameters<typeof laneDigest>[1];
+  unread: boolean;
   state: LaneState;
   onPeek: () => void;
   onOpen: () => void;
   onHide: () => void;
   toggleTip: string;
 }) {
-  // The peeking digest, the same one the peek shows, so the launcher knows what to badge.
-  const digest = laneDigest(props.cards, props.items);
-  const waiting = digest.needsYou.length;
-  const news = waiting + digest.finished;
   const persona = personaOf(props.card?.persona);
   const open = props.state === "open";
   const peekTimer = useRef<number | undefined>(undefined);
@@ -71,7 +67,7 @@ export default function CopilotHider(props: {
       }}
       onMouseLeave={() => window.clearTimeout(peekTimer.current)}
       title={`${open ? "Hide" : "Open"} the copilot (${persona.name}) — ${props.toggleTip}`}
-      aria-label={open ? "Close the copilot" : `Open the copilot${news > 0 ? ` (${news} new)` : ""}`}
+      aria-label={open ? "Close the copilot" : `Open the copilot${props.unread ? " (new message)" : ""}`}
       aria-expanded={open}
       style={{ ...NO_DRAG, right: LAUNCHER.inset, bottom: LAUNCHER.bottom, width: LAUNCHER.size, height: LAUNCHER.size }}
       className={`fixed ${COPILOT_LAYER} grid place-items-center rounded-full shadow-[0_8px_24px_-6px_rgba(0,0,0,0.6)] transition-transform hover:scale-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent`}
@@ -82,13 +78,8 @@ export default function CopilotHider(props: {
           <Icon name="x" size={20} />
         </span>
       )}
-      {!open && news > 0 && (
-        <span
-          aria-hidden="true"
-          className={`absolute -right-1 -top-1 min-w-[20px] rounded-full px-1.5 text-center text-[11px] font-bold leading-5 tabular-nums text-[#1a1410] ring-2 ring-canvas ${waiting > 0 ? "bg-warn" : "bg-accent"}`}
-        >
-          {news}
-        </span>
+      {!open && props.unread && (
+        <span aria-hidden="true" className="absolute right-0 top-0 h-3.5 w-3.5 rounded-full bg-accent ring-2 ring-canvas" />
       )}
     </button>
   );

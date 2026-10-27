@@ -130,6 +130,8 @@ export interface Session {
   // Auto mode's classifier denials this turn, asked about when it ends, and the calls you then allowed once (lib/classifier-denial.ts).
   denials?: ClassifierDenial[];
   retryGrants?: string[];
+  // True while the live CLI is out of auto mode for those calls' retry, so they reach canUseTool (lib/classifier-denial.ts).
+  retryOutOfAuto?: boolean;
   toolIndex: Map<string, number>;
   // Ids of the messages sent mid-turn that the CLI hasn't taken in yet (lib/runner-steer.ts).
   steered?: Set<string>;

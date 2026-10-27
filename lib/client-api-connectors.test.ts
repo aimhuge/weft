@@ -29,6 +29,10 @@ describe("the api methods", () => {
     expect(callOf().url).toBe("/api/copilot/suggestions");
     await api.copilotChipClicked("ship it");
     expect(bodyOf()).toEqual({ text: "ship it" });
+    await api.copilotCheckIns();
+    expect(callOf().url).toBe("/api/copilot/check-ins");
+    await api.setCopilotCheckIns(false);
+    expect(bodyOf()).toEqual({ on: false });
   });
 
   it("reads and drives the restart", async () => {

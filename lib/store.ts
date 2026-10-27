@@ -316,6 +316,15 @@ export function foldThread(cardId: string, from: number) {
   if (folded) publish({ type: "thread", cardId, item: folded, index: items.length - 1, truncate: true });
 }
 
+// Drops the thread from `from` on (a copilot check-in it answered QUIET, lib/copilot-initiative-run.ts).
+export function dropThreadFrom(cardId: string, from: number) {
+  const items = getThread(cardId).slice(0, from);
+  state().threads.set(cardId, items);
+  saveThread(cardId);
+  const last = items[items.length - 1];
+  publish(last ? { type: "thread", cardId, item: last, index: items.length - 1, truncate: true } : { type: "thread_cleared", cardId });
+}
+
 export function replaceThreadItem(cardId: string, index: number, item: ThreadItem) {
   const items = getThread(cardId);
   const before = items[index];

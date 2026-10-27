@@ -40,7 +40,7 @@ export const PERSONAS: Record<CopilotPersona, PersonaInfo> = {
   wingman: {
     id: "wingman",
     name: "Wingman",
-    tagline: "Runs your board: checks threads, starts and answers them",
+    tagline: "Your partner: what to build next, and getting it built",
     picture: { src: "/copilots/wingman.jpg", avatar: "90% 36% / 520%", peek: "78% 38% / 260%", frame: "75% 30% / cover" },
     prompt: "",
   },
