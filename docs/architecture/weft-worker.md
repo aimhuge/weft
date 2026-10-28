@@ -2,7 +2,7 @@
 
 Status: designed, not built (2026-10-28). The design of the **Weft Worker**: a headless agent runner that sits on a
 host — a Linux VPS, a home server, a spare machine — and does the actual compute for a card, while the board stays on
-your laptop or on the web at `weft.zip/<workspace>/board`. This is the ROADMAP's "Remote runners"
+your laptop or on the web at `weft.zip/<workspace>/board`. This is the ROADMAP's "Remote workers"
 (docs/ROADMAP.md), now P2. Nothing here is implemented yet; what follows is the design, the parts of the code it
 leans on, and the parts it has to add.
 
@@ -501,7 +501,7 @@ for — "run this card on my server".
    closed here.
 4. **Host-side MCP and secrets.** The worker serves its own board tools and draws from the team vault.
 5. **The worker's own board.** `workerTransport`; the worker serves a board to any browser. This is where
-   "Headless server mode" (docs/ROADMAP.md) and "Remote runners" converge: a headless Weft *is* a worker plus a
+   "Headless server mode" (docs/ROADMAP.md) and "Remote workers" converge: a headless Weft *is* a worker plus a
    board.
 
 ## Files
