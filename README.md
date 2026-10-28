@@ -66,9 +66,9 @@ port.
   running `/done` sits in Done while it works and is archived when it finishes.
 - **List view**: the board as a sheet. The toggle in the project bar (or Esc, with nothing open) swaps the columns for a table —
   title, status, stage, tags, folder, age — one line per card, with the header stuck to the top and the
-  columns lined up down the sheet, on frosted glass with grid lines and numbered rows. Esc pops a small
-  pane under the toggle naming the view you landed in ("List view. Esc goes back."), so the swap is
-  never silent; it closes itself a moment later. Click a header
+  columns lined up down the sheet, on frosted glass with grid lines and numbered rows. Esc pops a toast
+  under the toggle naming the view you landed in and what the next Esc does ("List view · hit Esc again
+  for board view"), so the swap is never silent; it closes itself a moment later. Click a header
   and type: the Title filters cards as you go, any other column narrows its values (↑↓, Enter keeps
   only the match), and Age flips its sort on a click; the sheet remembers it all. Bands fold (the
   Backlog starts folded), and a card folds open to its subagents and the cards it started. Click a
@@ -254,7 +254,8 @@ The new-thread dialog (⌘N) and every card's reply box use the same editor:
   New thread opens with them attached. A pill says where they'll go and the card under the cursor
   lights up; dropped right on a composer, they land where you let go.
 - **The mic dictates** on this Mac with whisper.cpp: click it, talk, click again, and the text lands
-  at the cursor (Esc throws the recording away). It needs `brew install whisper-cpp ffmpeg` and a
+  at the cursor (Esc throws the recording away). `⌥'` starts and stops it, and `⌘⌥'` works too; rebind it
+  in Settings → Shortcuts. It needs `brew install whisper-cpp ffmpeg` and a
   model; it uses superwhisper's or Homebrew's models, or the one in `WEFT_WHISPER_MODEL`. In a
   normal browser tab without whisper it falls back to the browser's speech recognition.
 - **Drafts are kept** per card and for the new-thread dialog until sent, so closing it loses nothing.
@@ -843,17 +844,33 @@ in the project menu runs it again; the copilot's chips offer the same finds. Mor
 ### GitHub issues
 
 GitHub's mark at the bottom of the left rail opens the GitHub drawer: who the `gh` CLI is signed in as (or how to sign
-in, with `gh auth login --web`), and each board project's repo with an **Issues → Backlog cards** switch, its last sync
+in, with `gh auth login --web`), and each board project's repo with an **Issues → cards** switch, its last sync
 ("Synced 3m ago · 2 added"), **Sync now** and links to the repo and its issues in the browser pane. Weft never holds a
 GitHub token; `gh` keeps its own. ⌘K → **Import GitHub issues into <project>** turns sync on too. Signed in to a Weft
 account, **Instant, by webhook** adds a webhook to the repo (you need admin on it), relayed by the deployed Weft on Vercel and Weft's Supabase, so
 cards follow issue changes within seconds instead of on the next 5-minute check.
 
-A synced project's open issues become Backlog cards, through the `gh` CLI. Each card gets the issue's title, its body plus a link and a reminder to put `Fixes owner/name#N` in the commit,
+A synced project's open issues become cards, through the `gh` CLI. Each card gets the issue's title, its body plus a link and a reminder to put `Fixes owner/name#N` in the commit,
 and its labels as tags (in their GitHub colours). The card shows "#N", linked to the issue. Weft checks again every 5
 minutes: a closed issue archives its card if the card never started, and a card that has started is never touched. A
 card you delete stays deleted. It's one direction for now; Weft never edits an issue. More in
 [docs/architecture/github-issues.md](docs/architecture/github-issues.md).
+
+#### The project's workflow
+
+Each project picks where its issue cards land, in the GitHub drawer under the sync switch:
+
+- **Backlog** — a cold card, yours to pick up.
+- **Needs you** — the card is made in Needs you, so a fresh import stands out. It never starts on its own, and it keeps
+  following its issue until you run it: a new label reaches it, a closed issue archives it.
+- **Run** — the card's thread starts at once and the agent works the issue, parking in Needs you when it needs a
+  decision and going to Review when it finishes, exactly as any other thread does.
+
+A **Run** card can be checked before any work happens: **Checks with** picks the skill that runs as the card's first
+turn, and **Works as** picks the agent that works it. **Design the agent** writes that agent for you from a short
+interview — what it should check, what it must refuse, what it leaves behind, when it stops and asks, and its name —
+and saves it as a real agent, whose soul opens every system prompt its threads get. The workflow is per project and
+saved with your settings; changing it changes where the *next* cards land.
 
 ### Server-side cards (off by default)
 

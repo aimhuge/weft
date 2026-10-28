@@ -4,7 +4,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
 import { globalSingleton } from "./global-singleton";
-import { defaultPermissionMode, issueFolders, setIssueSync } from "./settings";
+import { landingColumn, landingRuns } from "./issue-landing";
+import { startIssueCard } from "./issue-run";
+import { defaultPermissionMode, issueFolders, issueWorkflow, setIssueSync } from "./settings";
 import { addCards, DATA_DIR, listCards, updateCard } from "./store";
 import { createTag } from "./tag-store";
 import { normalizeTags } from "./tags";
@@ -152,9 +154,12 @@ export function issuePrompt(repo: string, issue: GhIssue) {
 function newCard(folder: string, repo: string, issue: GhIssue, now: number): Card {
   const tags = labelTags(issue);
   catalogLabels(issue);
+  // Where the card lands is the project's choice (lib/issue-landing.ts): a cold Backlog card, one in
+  // Needs you so it stands out, or one whose thread starts at once under the project's agent.
+  const workflow = issueWorkflow(folder);
   return {
     id: randomUUID(),
-    column: "backlog",
+    column: landingColumn(workflow.landing),
     title: issue.title.trim() || `${repo}#${issue.number}`,
     titleBy: "user",
     prompt: issuePrompt(repo, issue),
@@ -162,6 +167,7 @@ function newCard(folder: string, repo: string, issue: GhIssue, now: number): Car
     backend: "claude",
     permissionMode: defaultPermissionMode(),
     ...(tags.length ? { tags, tagsBy: "user" as const } : {}),
+    ...(workflow.agent ? { agent: workflow.agent } : {}),
     issue: issueMeta(repo, issue),
     createdAt: now,
     updatedAt: now,
@@ -169,8 +175,15 @@ function newCard(folder: string, repo: string, issue: GhIssue, now: number): Car
 }
 
 // A card the user (or an automation) has run: sync never touches it.
+//
+// A card parked in Needs you without ever running (the "needs_you" landing, lib/issue-landing.ts)
+// hasn't started: it just sits where you can see it. It still follows its issue — a new label
+// reaches it, and closing the issue archives it. Once it has a session or a turn, it is yours.
 function started(card: Card) {
-  return card.column !== "backlog" || Boolean(card.sessionId) || (card.turns ?? 0) > 0;
+  if (card.column !== "backlog" && !(card.column === "needs_you" && !card.sessionId && !(card.turns ?? 0))) {
+    return true;
+  }
+  return Boolean(card.sessionId) || (card.turns ?? 0) > 0;
 }
 
 const sameTags = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every((t, i) => t === b[i]);
@@ -191,6 +204,10 @@ function cardPatch(card: Card & { issue: CardIssue }, meta: CardIssue, issue: Gh
 }
 
 // Makes or updates the cards for these issues (also how lib/project-seed-run.ts parks a few on a new project).
+//
+// When the project's landing is "run" (lib/issue-landing.ts), each new card's thread starts right
+// away: the agent works the issue and parks in Needs you when it asks something. A card that can't
+// start yet (its CLI's model is at its limit) waits in Backlog for its turn (lib/start-gate.ts).
 export function applyIssues(folder: string, repo: string, issues: GhIssue[]): SyncCounts {
   const counts: SyncCounts = { added: 0, updated: 0, archived: 0 };
   const key = repo.toLowerCase();
@@ -223,8 +240,24 @@ export function applyIssues(folder: string, repo: string, issues: GhIssue[]): Sy
     counts.added = fresh.length;
     record[key] = [...known, ...fresh.flatMap((c) => (c.issue ? [c.issue.number] : []))];
     saveImported(record);
+    const workflow = issueWorkflow(folder);
+    if (landingRuns(workflow.landing)) startIssueCards(fresh, workflow.skill);
   }
   return counts;
+}
+
+// Starts each new card's first turn: the validation skill when the project named one, so the card
+// is checked before any work happens. A card whose CLI can't take the turn yet (its model is at its
+// limit) waits for the window to open instead of failing, and stays in Backlog until then.
+function startIssueCards(cards: Card[], skill?: string) {
+  for (const card of cards) {
+    // The runner is imported inside lib/issue-run.ts, not here: lib/github-issues.ts is imported by
+    // modules that only need a type or an error message from it (lib/project-seed-find.ts).
+    void startIssueCard(card, skill).catch((err: unknown) => {
+      // One card that won't start shouldn't stop the others; it waits in Backlog for you to run.
+      console.warn(`[weft] issue card ${card.id} didn't start: ${(err as Error).message}`);
+    });
+  }
 }
 
 async function runSync(folder: string): Promise<SyncCounts> {

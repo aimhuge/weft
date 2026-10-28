@@ -1,6 +1,8 @@
 import { publish } from "./bus";
 import { GOOSE_PROVIDERS } from "./goose-provider";
+import { DEFAULT_LANDING, workflowOf } from "./issue-landing";
 import { MODES, type Automation, type Backend, type PermissionMode, type Project, type SettingsView } from "./types";
+import type { IssueWorkflow } from "./types-settings";
 import { projectOpened } from "./project-open";
 import { DEFAULT_MAX_THREADS, MAX_THREADS_CEILING } from "./settings-shared";
 import { marked, touched, type ProjectMarks } from "./project-list";
@@ -222,6 +224,37 @@ export function setIssueSync(folder: string, on: boolean) {
   save();
 }
 
+// Where a folder's issue cards land and how a "run" card works (lib/issue-landing.ts): the landing,
+// plus the validation skill and the agent when the folder named them.
+export function issueWorkflow(folder: string): IssueWorkflow {
+  return workflowOf(settings().issueLandings?.[folder]);
+}
+
+// The landing for each folder that has one. A folder that's absent reads as "backlog" (issueWorkflow).
+export function issueLandings(): Record<string, IssueWorkflow> {
+  const out: Record<string, IssueWorkflow> = {};
+  for (const [folder, value] of Object.entries(settings().issueLandings ?? {})) {
+    const w = workflowOf(value);
+    // A folder that only ever chose the default isn't worth a row.
+    if (w.landing !== DEFAULT_LANDING || w.skill || w.agent) out[folder] = w;
+  }
+  return out;
+}
+
+export function setIssueWorkflow(folder: string, workflow: IssueWorkflow) {
+  const s = settings();
+  const w = workflowOf(workflow);
+  // The default isn't stored, so settings.json holds only what differs from it. A folder that chose
+  // only the default is left out of the map entirely.
+  const map: Record<string, IssueWorkflow> = {};
+  for (const [key, value] of Object.entries(s.issueLandings ?? {})) {
+    if (key !== folder) map[key] = workflowOf(value);
+  }
+  if (w.landing !== DEFAULT_LANDING || w.skill || w.agent) map[folder] = w;
+  s.issueLandings = Object.keys(map).length ? map : undefined;
+  save();
+}
+
 // The folders outside any project that threads may use without asking (lib/folder-guard.ts), in the order they were allowed.
 export function allowedFolders(): string[] {
   return [...(settings().allowedFolders ?? [])];
@@ -308,6 +341,7 @@ export function settingsView(): SettingsView {
     gooseNamedModels: gooseNamedModels(),
     projects: listProjects(),
     issueFolders: issueFolders(),
+    issueLandings: issueLandings(),
     syncFolders: syncFolders(),
     allowedFolders: allowedFolders(),
   };

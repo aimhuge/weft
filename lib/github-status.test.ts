@@ -59,8 +59,8 @@ describe("githubStatus", () => {
     const status = await githubStatus([HERE, GONE]);
     expect(status.account?.login).toBe("fotoflo");
     expect(status.folders).toEqual([
-      { folder: HERE, repo: `acme/${HERE.split("/").pop()}`, error: null, syncing: true, last: { at: 5, repo: "acme/x", counts: { added: 1, updated: 0, archived: 0 } }, instant: false },
-      { folder: GONE, repo: null, error: "folder isn't there anymore.", syncing: false, last: null, instant: false },
+      { folder: HERE, repo: `acme/${HERE.split("/").pop()}`, error: null, syncing: true, last: { at: 5, repo: "acme/x", counts: { added: 1, updated: 0, archived: 0 } }, instant: false, workflow: { landing: "backlog" } },
+      { folder: GONE, repo: null, error: "folder isn't there anymore.", syncing: false, last: null, instant: false, workflow: { landing: "backlog" } },
     ]);
   });
 

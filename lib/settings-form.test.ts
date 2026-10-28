@@ -19,6 +19,7 @@ const BASE: SettingsView = {
   backupModel: "",
   projects: [],
   issueFolders: [],
+  issueLandings: {},
   syncFolders: [],
   allowedFolders: [],
   gooseProviderId: "",

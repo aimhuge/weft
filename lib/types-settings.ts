@@ -7,6 +7,32 @@ export { BACKEND_LABELS, MODES, MODE_OPTIONS, permissionOptions, toPermissionMod
 
 export type Effort = "low" | "medium" | "high" | "xhigh" | "max";
 
+// Where a project's GitHub issue cards land when the importer makes them (lib/issue-landing.ts):
+// "backlog" (cold, waiting for you), "needs_you" (parked, so they stand out) or "run" (the thread
+// starts at once and parks in Needs you when it asks something).
+export type IssueLanding = "backlog" | "needs_you" | "run";
+
+// One project's landing and how a "run" card works: the skill that validates it first, and the
+// agent that does the work. Both are optional — no skill means no validation pass, no agent means
+// the project's default (the builder).
+export interface IssueWorkflow {
+  landing: IssueLanding;
+  // The skill that runs as the card's first turn, e.g. "weft:plan". Its name is what follows the
+  // slash; empty means the card starts on the issue itself.
+  skill?: string;
+  // The agent the card's thread is (lib/agents.ts); empty means the project's default agent.
+  agent?: string;
+}
+
+// One question in the interview that designs an agent (lib/agent-interview.ts). The key is what the
+// answer is stored under; the options are the choices, each a value the answer is stored as.
+export interface InterviewQuestion {
+  key: string;
+  ask: string;
+  hint?: string;
+  options?: { value: string; label: string; description?: string }[];
+}
+
 // The model board threads' subagents run on: "choose", "inherit", or a model id from MODELS
 // (lib/new-thread.ts); isSubagentModel checks one (lib/subagents.ts).
 //
@@ -88,6 +114,9 @@ export interface SettingsView {
   // Project folders whose cards sync to the cloud (lib/cloud-sync.ts). Off by default; mirrors the
   // saved settings, the same shape /api/settings sends.
   issueFolders: string[];
+  // Where each project's GitHub issue cards land, and how a "run" card works (lib/issue-landing.ts);
+  // a folder that's absent reads as "backlog".
+  issueLandings: Record<string, IssueWorkflow>;
   syncFolders: string[];
   // Folders outside a project every thread may use without asking (lib/folder-guard.ts), granted with
   // "Always" on a folder-guard prompt. Settings → Security's trusted-folders row shows and revokes these.

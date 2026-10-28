@@ -30,6 +30,8 @@ import type {
   DevServerStatus,
   Effort,
   GithubRepo,
+  IssueWorkflow,
+  InterviewQuestion,
   LocalRepo,
   LoginView,
   MachineInfo,
@@ -198,6 +200,10 @@ export const api = {
   // A thread that writes an agent's soul (lib/agent-author.ts): the card comes back, already running.
   authorAgent: (input: { what: string; cwd?: string; backend?: Backend }) =>
     call<{ card: Card; start: { started: boolean; at?: number } }>("POST", "/api/agents/author", input),
+  // The interview that designs an agent from a few answers (lib/agent-interview.ts): the questions,
+  // then the agent it saved.
+  interviewQuestions: () => call<{ questions: InterviewQuestion[] }>("GET", "/api/agents/interview"),
+  saveInterviewedAgent: (answers: Record<string, string>) => call<{ agent: AgentInfo }>("POST", "/api/agents/interview", { answers }),
   archive: (id: string, archived: boolean) => call<{ card: Card }>("PATCH", `/api/cards/${id}`, { archived }),
   // ★ and tags. Tags are normalized on the server, become yours (tagsBy "user"), and new ones join the catalog.
   mark: (id: string, patch: { starred?: boolean; tags?: string[] }) => call<{ card: Card }>("PATCH", `/api/cards/${id}`, patch),
@@ -345,10 +351,14 @@ export const api = {
   cloneRepo: (fullName: string) => call<{ path: string; projects: Project[] }>("POST", "/api/repos/clone", { fullName }),
   // How far that clone has got, polled while it runs (lib/clone-progress.ts).
   cloneProgress: (fullName: string) => call<CloneJob | null>("GET", `/api/repos/clone?fullName=${encodeURIComponent(fullName)}`),
-  // A folder's open GitHub issues as Backlog cards, now and every 5 minutes after (lib/github-issues.ts).
+  // A folder's open GitHub issues as cards, now and every 5 minutes after (lib/github-issues.ts).
   importIssues: (folder: string) =>
     call<{ folder: string; added: number; updated: number; archived: number }>("POST", "/api/github/issues", { folder }),
   stopIssues: (folder: string) => call<{ folders: string[] }>("DELETE", "/api/github/issues", { folder }),
+  // Where that folder's cards land and how a "run" card works: the landing, the validation skill and
+  // the agent (lib/issue-landing.ts).
+  setIssueWorkflow: (folder: string, workflow: IssueWorkflow) =>
+    call<{ folder: string; workflow: IssueWorkflow }>("PATCH", "/api/github/issues", { folder, ...workflow }),
   // A webhook on the folder's repo, relayed by Weft's Supabase, so its issues sync within seconds (lib/github-hooks.ts).
   addHook: (folder: string) => call<{ repo: string }>("POST", "/api/github/hooks", { folder }),
   removeHook: (folder: string) => call<{ ok: true }>("DELETE", "/api/github/hooks", { folder }),

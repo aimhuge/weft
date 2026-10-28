@@ -3,6 +3,7 @@ import path from "node:path";
 import { DATA_DIR } from "./store";
 import { globalSingleton } from "./global-singleton";
 import type { Automation, Backend, Effort, PermissionMode, Project } from "./types";
+import type { IssueWorkflow } from "./types-settings";
 import type { SubagentModel } from "./subagents";
 
 // The settings file on disk (~/.weft/settings.json) and the read/write pair every setting goes
@@ -51,8 +52,13 @@ export interface Settings {
   projects: Project[];
   // Claude Code sessions whose cards were deleted, so syncing doesn't bring them back.
   dismissedSessions?: string[];
-  // Project folders whose open GitHub issues become Backlog cards (lib/github-issues.ts).
+  // Project folders whose open GitHub issues become cards (lib/github-issues.ts).
   issueFolders?: string[];
+  // Where each project's issue cards land, and how a "run" card works (lib/issue-landing.ts):
+  // "backlog" (cold), "needs_you" (parked, waiting on a person) or "run" (the thread starts at once
+  // and parks in Needs you when it asks something). A map of folder → workflow; a folder that's absent
+  // reads as "backlog".
+  issueLandings?: Record<string, IssueWorkflow>;
   // Project folders whose cards sync to the cloud (lib/cloud-sync.ts). Off by default.
   syncFolders?: string[];
   // Folders outside a card's project that every thread may use without asking (lib/folder-guard.ts), granted with "Always".

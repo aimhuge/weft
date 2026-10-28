@@ -5,6 +5,7 @@ import { promisify } from "node:util";
 import { globalSingleton } from "./global-singleton";
 import { hookedRepos } from "./github-hooks";
 import { ghError, issueSyncFolders, issueSyncStatus, repoOf } from "./github-issues";
+import { issueWorkflow } from "./settings";
 import type { GithubAccount, GithubFolder, GithubStatus } from "./github-view";
 
 // The GitHub drawer's status (lib/github-view.ts): who the gh CLI is signed in as, and each board folder's repo,
@@ -66,7 +67,15 @@ export async function githubStatus(folders: string[], now = Date.now()): Promise
       // Signed out, every gh call fails the same way: say it once, at the top.
       const { repo, error: repoError } = account ? await folderRepo(folder, now) : { repo: null, error: null };
       const instant = Boolean(repo && hooked.has(repo.toLowerCase()));
-      return { folder, repo, error: repoError, syncing: syncing.has(folder), last: last[folder] ?? null, instant };
+      return {
+        folder,
+        repo,
+        error: repoError,
+        syncing: syncing.has(folder),
+        last: last[folder] ?? null,
+        instant,
+        workflow: issueWorkflow(folder),
+      };
     }),
   );
   return { account, error, weft: hooks.signedIn, instantError: hooks.error, folders: rows };

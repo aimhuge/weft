@@ -368,9 +368,11 @@ When a new doc lands in this folder, add it here on the same change.
 - `lib/repos.ts` + `lib/clone-progress.ts` + `app/api/repos/clone` + `lib/use-clone-progress.ts` + `components/CloneProgress.tsx`: cloning a GitHub
   repo from the repo picker (`components/RepoChoiceRow.tsx`) or the project menu (`components/ProjectCloneForm.tsx`) runs `gh repo clone … -- --progress`,
   turns git's redrawn progress lines into one weighted percent per repo in memory, and the row or form polls `GET /api/repos/clone?fullName=` every 400 ms for a bar.
-- `lib/github-issues.ts` + `app/api/github/issues`: a project's open GitHub issues become Backlog cards through the `gh` CLI, labels as tags,
+- `lib/github-issues.ts` + `app/api/github/issues`: a project's open GitHub issues become cards through the `gh` CLI, labels as tags,
   one direction; opt-in folders in settings `issueFolders`, polled from `prewarm()` every 5 min (docs/architecture/github-issues.md).
-  `lib/github-status.ts` + `app/api/github` + `lib/github-view.ts` + `lib/use-github.ts` + `components/GithubDrawer.tsx`: the rail's GitHub drawer
+  `lib/issue-landing.ts` + `lib/issue-run.ts` + `components/IssueWorkflowPicker.tsx` + `lib/agent-interview.ts` + `app/api/agents/interview`:
+  the project's workflow — where its issue cards land (Backlog, Needs you, or Run), the skill that checks a card first and the agent that works it;
+  the interview designs that agent from a few answers and saves its soul. `lib/github-status.ts` + `app/api/github` + `lib/github-view.ts` + `lib/use-github.ts` + `components/GithubDrawer.tsx`: the rail's GitHub drawer
   (the `gh` sign-in, each project's repo and its issue sync switch). `lib/github-hooks.ts` + `app/api/github/hooks` +
   `lib/github-relay.ts` + `app/api/github/webhook`: instant sync, a repo webhook relayed by the deployed Weft on Vercel (→ `github_events` on Supabase → Realtime).
 - `lib/email-forward.ts` + `app/api/email/webhook` + `scripts/resend-domain.mjs`: mail to weft.zip, received by Resend (the domain's MX) and
@@ -566,6 +568,10 @@ When a new doc lands in this folder, add it here on the same change.
 - `lib/import.ts`, `lib/search.ts`: pick up `~/.claude/projects` sessions as cards; search index.
 - `lib/hotkeys.ts` + `lib/shortcut-catalog.ts`: the keyboard shortcut registry and what the `?` sheet lists; tooltips, key badges,
   right-click menus and `ModifierHint` read their keys from it (docs/architecture/keyboard-shortcuts.md).
+- `lib/shortcuts.ts` + `lib/use-dictation.ts` + `lib/use-composer-keys.ts`: the one rebindable binding (dictation, `⌥'` by
+  default) and the mic it starts. The binding is a set of modifiers, so `⌥'` also fires on `⌘⌥'`; the hook reads a ref, so a
+  second press while the microphone is opening cancels the recording instead of opening a second one
+  (docs/architecture/keyboard-shortcuts.md#the-rebindable-dictation-binding).
 - `lib/shortcut-sheet.ts` + `lib/print-sheet.ts` + `electron/print.cjs` + `components/PrintShortcutSheet.tsx`: the printable
   one-page shortcut sheet, the `?` dialog's Print button and the welcome's pitch for it, shown only when macOS has a printer
   (docs/architecture/keyboard-shortcuts.md#the-printed-sheet).

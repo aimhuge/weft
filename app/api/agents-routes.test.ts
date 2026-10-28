@@ -38,6 +38,7 @@ const route = await import("./agents/route");
 const agentRoute = await import("./agents/[id]/route");
 const resetRoute = await import("./agents/[id]/reset/route");
 const authorRoute = await import("./agents/author/route");
+const interviewRoute = await import("./agents/interview/route");
 const URL = "http://localhost:3457/api/agents";
 const READ = { host: "localhost:3457" };
 const WRITE = { host: "localhost:3457", "x-weft-token": "1", "content-type": "application/json" };
@@ -229,5 +230,46 @@ describe("/api/agents/author", () => {
     const res = await authorRoute.POST(req("POST", { what: "   " }));
     expect(res.status).toBe(400);
     expect((await body(res)).error).toContain("Say what the agent is for");
+  });
+});
+
+describe("/api/agents/interview", () => {
+  it("GET asks the questions", async () => {
+    const res = interviewRoute.GET(new Request(URL, { headers: READ }));
+    expect(res.status).toBe(200);
+    const questions = (await body(res)).questions as { key: string }[];
+    expect(questions.map((q) => q.key)).toEqual(["checks", "refuses", "shows", "stops", "name"]);
+  });
+
+  it("GET is refused when the guard denies", () => {
+    state.guardDenied = true;
+    expect(interviewRoute.GET(new Request(URL, { headers: READ })).status).toBe(403);
+  });
+
+  it("POST saves the agent the answers make, and answers { agent }", async () => {
+    const agent = { id: "a-1", name: "Triage", emoji: "🔍", tagline: "Checks the cause is understood before the work starts", soul: "You are the Triage" };
+    vi.mocked(store.createAgent).mockReturnValueOnce(agent);
+    const res = await interviewRoute.POST(req("POST", { answers: { checks: "causes", name: "Triage" } }));
+    expect(res.status).toBe(200);
+    expect(await body(res)).toEqual({ agent });
+    const made = vi.mocked(store.createAgent).mock.calls[0]?.[0];
+    expect(made?.name).toBe("Triage");
+    expect(made?.soul).toContain("You are the Triage");
+  });
+
+  it("POST keeps only the answers to the questions it asks", async () => {
+    vi.mocked(store.createAgent).mockReturnValueOnce({ id: "a-1", name: "Validator", emoji: "🛡️", tagline: "t", soul: "s" });
+    await interviewRoute.POST(req("POST", { answers: { checks: "scope", somethingElse: "ignored", name: "  " } }));
+    const call = vi.mocked(store.createAgent).mock.calls[0]?.[0] as { name: string; soul: string };
+    // The name it was given is empty, so it takes one from the job.
+    expect(call.name).toBe("Validator");
+    expect(call.soul).not.toContain("somethingElse");
+  });
+
+  it("POST answers 400 when the job wasn't said", async () => {
+    const res = await interviewRoute.POST(req("POST", { answers: { name: "Triage" } }));
+    expect(res.status).toBe(400);
+    expect((await body(res)).error).toContain("Say what the agent should check");
+    expect(store.createAgent).not.toHaveBeenCalled();
   });
 });

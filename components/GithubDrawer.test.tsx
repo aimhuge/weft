@@ -10,12 +10,17 @@ const api = vi.hoisted(() => ({
   stopIssues: vi.fn(() => Promise.resolve({ folders: [] })),
   addHook: vi.fn(() => Promise.resolve({ repo: "acme/app" })),
   removeHook: vi.fn(() => Promise.resolve({ ok: true })),
+  setIssueWorkflow: vi.fn((folder: string, workflow: unknown) => Promise.resolve({ folder, workflow })),
+  skills: vi.fn(() => Promise.resolve({ skills: [{ name: "weft:plan", description: "Makes a plan" }] })),
+  agents: vi.fn(() => Promise.resolve({ agents: [{ id: "triage", name: "Triage", emoji: "🔍", tagline: "Checks the issue" }] })),
+  interviewQuestions: vi.fn(() => Promise.resolve({ questions: [{ key: "checks", ask: "What should it check?", options: [{ value: "reproduce", label: "The bug reproduces" }] }, { key: "name", ask: "What should it be called?" }] })),
+  saveInterviewedAgent: vi.fn(() => Promise.resolve({ agent: { id: "made", name: "Reproducer" } })),
 }));
 vi.mock("@/lib/client", () => ({ api }));
 
 const { default: GithubDrawer } = await import("./GithubDrawer");
 
-const folder = (path: string, over: Partial<GithubFolder> = {}): GithubFolder => ({ folder: path, repo: null, error: null, syncing: false, last: null, instant: false, ...over });
+const folder = (path: string, over: Partial<GithubFolder> = {}): GithubFolder => ({ folder: path, repo: null, error: null, syncing: false, last: null, instant: false, workflow: { landing: "backlog" }, ...over });
 const signedIn = (folders: GithubFolder[]): GithubStatus => ({ account: { login: "fotoflo", url: "https://github.com/fotoflo" }, error: null, weft: true, instantError: null, folders });
 
 function setup(status: GithubStatus | null, project: string | null = null, error: string | null = null) {
@@ -28,7 +33,36 @@ function setup(status: GithubStatus | null, project: string | null = null, error
   return { reload, notify, onOpenUrl, openExternal };
 }
 
-beforeEach(() => vi.clearAllMocks());
+// A drawer whose reload brings the server's answer back, the way the real one does: the workflow a
+// folder was given is what the next draw shows.
+function setupLive(folders: GithubFolder[]) {
+  const current = { folders };
+  const notify = vi.fn();
+  const reload = vi.fn(() => {
+    rerender(<GithubDrawer status={signedIn(current.folders)} error={null} reload={reload} project={null} onOpenUrl={vi.fn()} notify={notify} />);
+    return Promise.resolve();
+  });
+  const { rerender } = render(<GithubDrawer status={signedIn(current.folders)} error={null} reload={reload} project={null} onOpenUrl={vi.fn()} notify={notify} />);
+  api.setIssueWorkflow.mockImplementation((folder: string, workflow: unknown) => {
+    current.folders = current.folders.map((f) => (f.folder === folder ? { ...f, workflow: workflow as GithubFolder["workflow"] } : f));
+    return Promise.resolve({ folder, workflow });
+  });
+  return { reload, notify };
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  // clearAllMocks drops the implementations the hoisted factory gave the api mocks.
+  api.importIssues.mockImplementation(() => Promise.resolve({ folder: "/dev/app", added: 2, updated: 0, archived: 0 }));
+  api.stopIssues.mockImplementation(() => Promise.resolve({ folders: [] }));
+  api.addHook.mockImplementation(() => Promise.resolve({ repo: "acme/app" }));
+  api.removeHook.mockImplementation(() => Promise.resolve({ ok: true }));
+  api.setIssueWorkflow.mockImplementation((folder: string, workflow: unknown) => Promise.resolve({ folder, workflow }));
+  api.skills.mockImplementation(() => Promise.resolve({ skills: [{ name: "weft:plan", description: "Makes a plan" }] }));
+  api.agents.mockImplementation(() => Promise.resolve({ agents: [{ id: "triage", name: "Triage", emoji: "🔍", tagline: "Checks the issue" }] }));
+  api.interviewQuestions.mockImplementation(() => Promise.resolve({ questions: [{ key: "checks", ask: "What should it check?", options: [{ value: "reproduce", label: "The bug reproduces" }] }, { key: "name", ask: "What should it be called?" }] }));
+  api.saveInterviewedAgent.mockImplementation(() => Promise.resolve({ agent: { id: "made", name: "Reproducer" } }));
+});
 afterEach(() => {
   delete (window as unknown as { weft?: unknown }).weft;
 });
@@ -128,5 +162,57 @@ describe("GithubDrawer", () => {
     setup({ ...signedIn([folder("/dev/app", { repo: "acme/app", syncing: true })]), weft: false, instantError: "Couldn't read your webhooks: offline" });
     expect(screen.getByRole("checkbox", { name: "Instant: sign in to Weft first" })).toBeDisabled();
     expect(screen.getByText("Couldn't read your webhooks: offline")).toBeInTheDocument();
+  });
+});
+
+describe("the project's workflow", () => {
+  it("shows where the cards land, and only offers the workflow once a folder syncs", () => {
+    setup(signedIn([folder("/dev/app", { repo: "acme/app" })]));
+    expect(screen.getByRole("checkbox", { name: /Issues → Backlog/ })).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Where issue cards land" })).not.toBeInTheDocument();
+  });
+
+  it("sends the cards to Needs you when the project asks for that", async () => {
+    const { notify } = setupLive([folder("/dev/app", { repo: "acme/app", syncing: true })]);
+    await userEvent.click(screen.getByRole("button", { name: "Needs you" }));
+    await waitFor(() => expect(api.setIssueWorkflow).toHaveBeenCalledWith("/dev/app", { landing: "needs_you" }));
+    expect(notify).toHaveBeenCalledWith("New issues for app land in Needs you");
+  });
+
+  it("says what a run card does, and offers the skill and the agent", async () => {
+    const { notify } = setupLive([folder("/dev/app", { repo: "acme/app", syncing: true })]);
+    await userEvent.click(screen.getByRole("button", { name: "Run" }));
+    await waitFor(() => expect(api.setIssueWorkflow).toHaveBeenCalledWith("/dev/app", { landing: "run" }));
+    expect(notify).toHaveBeenCalledWith("New issues for app run on their own");
+    expect(screen.getByRole("button", { name: /Checks with/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Works as/ })).toBeInTheDocument();
+  });
+
+  it("picks the skill that validates the card first", async () => {
+    setupLive([folder("/dev/app", { repo: "acme/app", syncing: true, workflow: { landing: "run" } })]);
+    await userEvent.click(screen.getByRole("button", { name: /Checks with/ }));
+    await waitFor(() => expect(screen.getByText("weft:plan")).toBeInTheDocument());
+    await userEvent.click(screen.getByText("weft:plan"));
+    await waitFor(() => expect(api.setIssueWorkflow).toHaveBeenCalledWith("/dev/app", { landing: "run", skill: "weft:plan" }));
+  });
+
+  it("picks the agent that works the card", async () => {
+    setupLive([folder("/dev/app", { repo: "acme/app", syncing: true, workflow: { landing: "run" } })]);
+    await userEvent.click(screen.getByRole("button", { name: /Works as/ }));
+    await waitFor(() => expect(screen.getByText(/Triage/)).toBeInTheDocument());
+    await userEvent.click(screen.getByText(/Triage/));
+    await waitFor(() => expect(api.setIssueWorkflow).toHaveBeenCalledWith("/dev/app", { landing: "run", agent: "triage" }));
+  });
+
+  it("designs the agent with the interview, and picks the agent it makes", async () => {
+    const { notify } = setupLive([folder("/dev/app", { repo: "acme/app", syncing: true, workflow: { landing: "run" } })]);
+    await userEvent.click(screen.getByRole("button", { name: "Design the agent" }));
+    await waitFor(() => expect(screen.getByText("What should it check?")).toBeInTheDocument());
+    await userEvent.click(screen.getByRole("button", { name: "The bug reproduces" }));
+    await userEvent.type(screen.getByPlaceholderText("Validator"), "Triage");
+    await userEvent.click(screen.getByRole("button", { name: "Make the agent" }));
+    await waitFor(() => expect(api.saveInterviewedAgent).toHaveBeenCalledWith({ checks: "reproduce", name: "Triage" }));
+    await waitFor(() => expect(api.setIssueWorkflow).toHaveBeenCalledWith("/dev/app", { landing: "run", agent: "made" }));
+    expect(notify).toHaveBeenCalledWith("New issues for app run on their own");
   });
 });

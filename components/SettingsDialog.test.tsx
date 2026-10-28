@@ -51,6 +51,7 @@ const SETTINGS: SettingsView = {
   gooseNamedModels: [],
   projects: [],
   issueFolders: [],
+  issueLandings: {},
   syncFolders: [],
   allowedFolders: [],
 };
