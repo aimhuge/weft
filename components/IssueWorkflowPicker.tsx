@@ -1,10 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { api } from "@/lib/client";
 import { LANDING_LABELS } from "@/lib/issue-landing";
 import type { IssueWorkflow } from "@/lib/github-view";
-import type { InterviewQuestion } from "@/lib/types";
 
 // Where a new issue's card lands, and how a "run" card works: the skill that validates it first and
 // the agent that does the work (lib/issue-landing.ts).
@@ -16,14 +15,20 @@ export default function IssueWorkflowPicker({
   workflow,
   folder,
   busy,
+  designed,
   onChange,
+  onDesignAgent,
 }: {
   workflow: IssueWorkflow;
   folder: string;
   busy: boolean;
+  // This project already has a design thread, so the button stays off.
+  designed: boolean;
   onChange: (workflow: IssueWorkflow) => void;
+  // Starts the thread that designs the agent, and opens it (lib/agent-thread.ts).
+  onDesignAgent: (folder: string) => Promise<void>;
 }) {
-  const [picking, setPicking] = useState<"skill" | "agent" | "design" | null>(null);
+  const [picking, setPicking] = useState<"skill" | "agent" | null>(null);
   const runs = workflow.landing === "run";
   return (
     <div className="space-y-1">
@@ -67,26 +72,9 @@ export default function IssueWorkflowPicker({
             disabled={busy}
             onClick={() => setPicking(picking === "agent" ? null : "agent")}
           />
-          <button
-            onClick={() => setPicking(picking === "design" ? null : "design")}
-            disabled={busy}
-            title="Answer a few questions and Weft writes the agent: the one that checks an issue before the work starts"
-            className="text-[11px] text-accent underline decoration-dotted underline-offset-2 disabled:opacity-40"
-          >
-            Design the agent
-          </button>
+          <DesignAgentButton folder={folder} busy={busy} designed={designed} onDesign={onDesignAgent} />
           {picking === "skill" && <SkillPicker folder={folder} busy={busy} onPick={(skill) => { setPicking(null); onChange({ ...workflow, skill }); }} />}
           {picking === "agent" && <AgentPicker busy={busy} onPick={(agent) => { setPicking(null); onChange({ ...workflow, agent }); }} />}
-          {picking === "design" && (
-            <AgentInterview
-              busy={busy}
-              onClose={() => setPicking(null)}
-              onDone={(agent) => {
-                setPicking(null);
-                onChange({ ...workflow, agent: agent.id });
-              }}
-            />
-          )}
         </div>
       )}
     </div>
@@ -156,76 +144,28 @@ function AgentPicker({ busy, onPick }: { busy: boolean; onPick: (agent: string) 
   );
 }
 
-// The interview that designs the validating agent (lib/agent-interview.ts): a few questions, and
-// the agent they make, saved and picked as the card's agent.
-function AgentInterview({ busy, onClose, onDone }: { busy: boolean; onClose: () => void; onDone: (agent: { id: string; name: string }) => void }) {
-  const [questions, setQuestions] = useState<InterviewQuestion[] | null>(null);
-  const [answers, setAnswers] = useState<Record<string, string>>({});
+// The button that starts the thread which designs the agent (lib/agent-thread.ts). The thread asks
+// the questions itself — one at a time — and writes the soul from the answers. Weft's part is the
+// brief and the page the thread opens on.
+//
+// It goes off once the thread is made: the thread is on the board and open, and a second click
+// would make a second one.
+function DesignAgentButton({ folder, busy, designed, onDesign }: { folder: string; busy: boolean; designed: boolean; onDesign: (folder: string) => Promise<void> }) {
   const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  useEffect(() => {
-    let alive = true;
-    void api
-      .interviewQuestions()
-      .then((r) => alive && setQuestions(r.questions))
-      .catch((err: unknown) => alive && setError(err instanceof Error ? err.message : String(err)));
-    return () => {
-      alive = false;
-    };
-  }, []);
-  if (error) return <p className="text-danger">{error}</p>;
-  if (!questions) return <p className="text-faint">Asking…</p>;
-  const named = questions.every((q) => answers[q.key]?.trim());
   return (
-    <div className="space-y-1.5 rounded-md border border-line bg-sunken p-2">
-      {questions.map((q) => (
-        <div key={q.key}>
-          <p className="text-[11px] font-medium text-ink">{q.ask}</p>
-          {q.hint && <p className="text-[10.5px] text-faint">{q.hint}</p>}
-          {q.options ? (
-            <div className="mt-0.5 flex flex-wrap gap-1">
-              {q.options.map((o) => (
-                <button
-                  key={o.value}
-                  onClick={() => setAnswers((a) => ({ ...a, [q.key]: o.value }))}
-                  title={o.description}
-                  className={`rounded-md border px-1.5 py-0.5 text-[10.5px] ${
-                    answers[q.key] === o.value ? "border-accent bg-accent text-on-accent" : "border-line text-muted hover:text-ink"
-                  }`}
-                >
-                  {o.label}
-                </button>
-              ))}
-            </div>
-          ) : (
-            <input
-              value={answers[q.key] ?? ""}
-              onChange={(e) => setAnswers((a) => ({ ...a, [q.key]: e.target.value }))}
-              placeholder="Validator"
-              className="mt-0.5 w-full rounded-md border border-line bg-card px-1.5 py-0.5 text-[11px] text-ink"
-            />
-          )}
-        </div>
-      ))}
-      <div className="flex items-center gap-1.5 pt-0.5">
-        <button
-          onClick={() => {
-            setSaving(true);
-            void api
-              .saveInterviewedAgent(answers)
-              .then((r) => onDone(r.agent))
-              .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)))
-              .finally(() => setSaving(false));
-          }}
-          disabled={busy || saving || !named}
-          className="rounded-md bg-accent px-2 py-0.5 text-[11px] font-medium text-on-accent disabled:opacity-40"
-        >
-          {saving ? "Saving…" : "Make the agent"}
-        </button>
-        <button onClick={onClose} className="text-[11px] text-faint hover:text-ink">
-          Cancel
-        </button>
-      </div>
+    <div className="space-y-0.5">
+      <button
+        onClick={() => {
+          setError(null);
+          void onDesign(folder).catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)));
+        }}
+        disabled={busy || designed}
+        title={designed ? "This project already has a thread designing its agent" : "Starts a thread that asks what the agent should do, then writes its soul"}
+        className="text-[11px] text-accent underline decoration-dotted underline-offset-2 disabled:opacity-40"
+      >
+        Design the agent
+      </button>
+      {error && <p className="text-[10.5px] text-danger">{error}</p>}
     </div>
   );
 }

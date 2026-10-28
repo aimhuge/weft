@@ -181,7 +181,7 @@ export default function SideRail({
     supabase: <SupabaseDrawer {...supabase} project={project} cards={cards} onOpenCard={onOpenCard} onStart={onStartCard} onOpenUrl={onOpenUrl} notify={notify} />,
     cloudflare: <CloudflareDrawer {...cloudflare} project={project} onOpenUrl={onOpenUrl} notify={notify} />,
     blastcp: <BlastcpDrawer {...blastcp} project={project} onOpenUrl={onOpenUrl} notify={notify} />,
-    github: <GithubDrawer {...github} project={project} onOpenUrl={onOpenUrl} notify={notify} />,
+    github: <GithubDrawer {...github} project={project} onOpenUrl={onOpenUrl} onOpenCard={onOpenCard} notify={notify} />,
     slack: <SlackDrawer {...slack} folders={folders} project={project} onOpenUrl={onOpenUrl} notify={notify} />,
     skills: <SkillsDrawer project={project} folders={folders} notify={notify} />,
     services: <ServicesDrawer {...services} project={project} cards={cards} onOpenCard={onOpenCard} onOpenUrl={onOpenUrl} notify={notify} />,

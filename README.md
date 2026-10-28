@@ -867,10 +867,11 @@ Each project picks where its issue cards land, in the GitHub drawer under the sy
   decision and going to Review when it finishes, exactly as any other thread does.
 
 A **Run** card can be checked before any work happens: **Checks with** picks the skill that runs as the card's first
-turn, and **Works as** picks the agent that works it. **Design the agent** writes that agent for you from a short
-interview — what it should check, what it must refuse, what it leaves behind, when it stops and asks, and its name —
-and saves it as a real agent, whose soul opens every system prompt its threads get. The workflow is per project and
-saved with your settings; changing it changes where the *next* cards land.
+turn, and **Works as** picks the agent that works it. **Design the agent** starts a new thread that designs that agent
+for you: it asks what it should check, what it must refuse, what it leaves behind, when it stops and asks, and its
+name — one question at a time — then writes the soul and saves it as a real agent, whose soul opens every system prompt
+its threads get. The workflow is per project and saved with your settings; changing it changes where the *next* cards
+land.
 
 ### Server-side cards (off by default)
 

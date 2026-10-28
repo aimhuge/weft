@@ -24,15 +24,6 @@ export interface IssueWorkflow {
   agent?: string;
 }
 
-// One question in the interview that designs an agent (lib/agent-interview.ts). The key is what the
-// answer is stored under; the options are the choices, each a value the answer is stored as.
-export interface InterviewQuestion {
-  key: string;
-  ask: string;
-  hint?: string;
-  options?: { value: string; label: string; description?: string }[];
-}
-
 // The model board threads' subagents run on: "choose", "inherit", or a model id from MODELS
 // (lib/new-thread.ts); isSubagentModel checks one (lib/subagents.ts).
 //

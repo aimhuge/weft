@@ -166,6 +166,17 @@ function write(cardId: string, html: string) {
   return file;
 }
 
+// The card's default page, written before its thread starts: the pane falls back to this file when
+// the card has no page of its own yet (electron/pane-pages.cjs), so a thread that opens on a blank
+// pane still has something to show. Fire and forget: a failed write leaves the pane as it was.
+export function writeShowFile(cardId: string, html: string) {
+  try {
+    return write(cardId, html);
+  } catch {
+    return undefined;
+  }
+}
+
 // Each New thread opens on the next scene, so the dialog never looks the same twice in a row.
 let sceneTurn = 0;
 export function nextScene(names = backdrops()) {
@@ -178,9 +189,21 @@ export function newThreadUrl(origin?: string) {
 }
 
 // Fire and forget from the start-a-card path: a file write and one local request, nothing awaited.
+//
+// A card that already has a page keeps it: a thread that was handed its own page before it started
+// (the agent-design thread's brief, lib/agent-brief-page.ts) shows that page, not the generic scene.
 export async function showStarter(cardId: string, title: string, ask: string) {
   if ((await paneUrl(cardId)) !== "") return;
+  if (fs.existsSync(showFile(cardId))) return;
   await openInPane(`file://${write(cardId, starterPage(title, ask, new Date(), cardId))}`, cardId);
+}
+
+// The card's page, opened in its pane: the brief a thread was handed before it started. Fire and
+// forget from the start-a-card path.
+export async function openShowFile(cardId: string) {
+  const file = showFile(cardId);
+  if (!fs.existsSync(file)) return;
+  await openInPane(`file://${file}`, cardId);
 }
 
 // After a turn ends, off the reply's path. `isCurrent` drops the page if a newer turn started meanwhile.

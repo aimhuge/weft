@@ -13,8 +13,7 @@ const api = vi.hoisted(() => ({
   setIssueWorkflow: vi.fn((folder: string, workflow: unknown) => Promise.resolve({ folder, workflow })),
   skills: vi.fn(() => Promise.resolve({ skills: [{ name: "weft:plan", description: "Makes a plan" }] })),
   agents: vi.fn(() => Promise.resolve({ agents: [{ id: "triage", name: "Triage", emoji: "🔍", tagline: "Checks the issue" }] })),
-  interviewQuestions: vi.fn(() => Promise.resolve({ questions: [{ key: "checks", ask: "What should it check?", options: [{ value: "reproduce", label: "The bug reproduces" }] }, { key: "name", ask: "What should it be called?" }] })),
-  saveInterviewedAgent: vi.fn(() => Promise.resolve({ agent: { id: "made", name: "Reproducer" } })),
+  designAgent: vi.fn(() => Promise.resolve({ card: { id: "card-1", title: "Design an agent for app" }, start: { started: true } })),
 }));
 vi.mock("@/lib/client", () => ({ api }));
 
@@ -27,10 +26,11 @@ function setup(status: GithubStatus | null, project: string | null = null, error
   const reload = vi.fn(() => Promise.resolve());
   const notify = vi.fn();
   const onOpenUrl = vi.fn();
+  const onOpenCard = vi.fn();
   const openExternal = vi.fn();
   (window as unknown as { weft: unknown }).weft = { openExternal };
-  render(<GithubDrawer status={status} error={error} reload={reload} project={project} onOpenUrl={onOpenUrl} notify={notify} />);
-  return { reload, notify, onOpenUrl, openExternal };
+  render(<GithubDrawer status={status} error={error} reload={reload} project={project} onOpenUrl={onOpenUrl} onOpenCard={onOpenCard} notify={notify} />);
+  return { reload, notify, onOpenUrl, onOpenCard, openExternal };
 }
 
 // A drawer whose reload brings the server's answer back, the way the real one does: the workflow a
@@ -38,16 +38,17 @@ function setup(status: GithubStatus | null, project: string | null = null, error
 function setupLive(folders: GithubFolder[]) {
   const current = { folders };
   const notify = vi.fn();
+  const onOpenCard = vi.fn();
   const reload = vi.fn(() => {
-    rerender(<GithubDrawer status={signedIn(current.folders)} error={null} reload={reload} project={null} onOpenUrl={vi.fn()} notify={notify} />);
+    rerender(<GithubDrawer status={signedIn(current.folders)} error={null} reload={reload} project={null} onOpenUrl={vi.fn()} onOpenCard={onOpenCard} notify={notify} />);
     return Promise.resolve();
   });
-  const { rerender } = render(<GithubDrawer status={signedIn(current.folders)} error={null} reload={reload} project={null} onOpenUrl={vi.fn()} notify={notify} />);
+  const { rerender } = render(<GithubDrawer status={signedIn(current.folders)} error={null} reload={reload} project={null} onOpenUrl={vi.fn()} onOpenCard={onOpenCard} notify={notify} />);
   api.setIssueWorkflow.mockImplementation((folder: string, workflow: unknown) => {
     current.folders = current.folders.map((f) => (f.folder === folder ? { ...f, workflow: workflow as GithubFolder["workflow"] } : f));
     return Promise.resolve({ folder, workflow });
   });
-  return { reload, notify };
+  return { reload, notify, onOpenCard };
 }
 
 beforeEach(() => {
@@ -60,8 +61,7 @@ beforeEach(() => {
   api.setIssueWorkflow.mockImplementation((folder: string, workflow: unknown) => Promise.resolve({ folder, workflow }));
   api.skills.mockImplementation(() => Promise.resolve({ skills: [{ name: "weft:plan", description: "Makes a plan" }] }));
   api.agents.mockImplementation(() => Promise.resolve({ agents: [{ id: "triage", name: "Triage", emoji: "🔍", tagline: "Checks the issue" }] }));
-  api.interviewQuestions.mockImplementation(() => Promise.resolve({ questions: [{ key: "checks", ask: "What should it check?", options: [{ value: "reproduce", label: "The bug reproduces" }] }, { key: "name", ask: "What should it be called?" }] }));
-  api.saveInterviewedAgent.mockImplementation(() => Promise.resolve({ agent: { id: "made", name: "Reproducer" } }));
+  api.designAgent.mockImplementation(() => Promise.resolve({ card: { id: "card-1", title: "Design an agent for app" }, start: { started: true } }));
 });
 afterEach(() => {
   delete (window as unknown as { weft?: unknown }).weft;
@@ -204,15 +204,18 @@ describe("the project's workflow", () => {
     await waitFor(() => expect(api.setIssueWorkflow).toHaveBeenCalledWith("/dev/app", { landing: "run", agent: "triage" }));
   });
 
-  it("designs the agent with the interview, and picks the agent it makes", async () => {
-    const { notify } = setupLive([folder("/dev/app", { repo: "acme/app", syncing: true, workflow: { landing: "run" } })]);
+  it("designs the agent with a new thread, and opens it", async () => {
+    const { notify, onOpenCard } = setupLive([folder("/dev/app", { repo: "acme/app", syncing: true, workflow: { landing: "run" } })]);
     await userEvent.click(screen.getByRole("button", { name: "Design the agent" }));
-    await waitFor(() => expect(screen.getByText("What should it check?")).toBeInTheDocument());
-    await userEvent.click(screen.getByRole("button", { name: "The bug reproduces" }));
-    await userEvent.type(screen.getByPlaceholderText("Validator"), "Triage");
-    await userEvent.click(screen.getByRole("button", { name: "Make the agent" }));
-    await waitFor(() => expect(api.saveInterviewedAgent).toHaveBeenCalledWith({ checks: "reproduce", name: "Triage" }));
-    await waitFor(() => expect(api.setIssueWorkflow).toHaveBeenCalledWith("/dev/app", { landing: "run", agent: "made" }));
-    expect(notify).toHaveBeenCalledWith("New issues for app run on their own");
+    await waitFor(() => expect(api.designAgent).toHaveBeenCalledWith({ project: "/dev/app", job: "triages this project's GitHub issues" }));
+    await waitFor(() => expect(onOpenCard).toHaveBeenCalledWith(expect.objectContaining({ id: "card-1" })));
+    expect(notify).toHaveBeenCalledWith("A thread is designing the agent for app");
+  });
+
+  it("makes one thread, not two, when the button is clicked twice", async () => {
+    setupLive([folder("/dev/app", { repo: "acme/app", syncing: true, workflow: { landing: "run" } })]);
+    const button = screen.getByRole("button", { name: "Design the agent" });
+    await userEvent.dblClick(button);
+    await waitFor(() => expect(api.designAgent).toHaveBeenCalledTimes(1));
   });
 });

@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { api } from "@/lib/client";
 import { folderName } from "@/lib/format";
 import { LANDING_LABELS } from "@/lib/issue-landing";
 import { INSTALL_URL, issuesUrl, LOGIN_COMMAND, repoUrl, shownGithubFolders, syncLine, syncToast, workflowOfFolder, type GithubFolder, type GithubStatus, type IssueWorkflow } from "@/lib/github-view";
+import type { Card } from "@/lib/types";
 import GithubLogo from "./GithubLogo";
 import IssueWorkflowPicker from "./IssueWorkflowPicker";
 import { Note } from "./VaultParts";
@@ -22,6 +23,7 @@ export default function GithubDrawer({
   reload,
   project,
   onOpenUrl,
+  onOpenCard,
   notify,
 }: {
   status: GithubStatus | null;
@@ -30,11 +32,18 @@ export default function GithubDrawer({
   project: string | null;
   // Shows a page in the board's browser pane.
   onOpenUrl: (url: string) => void;
+  // Opens a card's thread — the agent-design thread, once it is on the board.
+  onOpenCard: (card: Card) => void;
   notify: (err: unknown) => void;
 }) {
   const [busy, setBusy] = useState<string | null>(null);
   // A folder's switches as you just set them, drawn until the reload after the change brings the server's.
   const [drawn, setDrawn] = useState<Record<string, Partial<GithubFolder>>>({});
+  // A latch for the design thread: two clicks in the same tick both see the same `busy` state, so the
+  // state cannot be the guard. This one is set the moment the click lands.
+  const designing = useRef(false);
+  // The folders that already have a design thread, so the button stays off for them.
+  const [designed, setDesigned] = useState<Record<string, boolean>>({});
 
   if (error) return <Note>{error}</Note>;
   if (!status) return <Note>Asking GitHub…</Note>;
@@ -58,6 +67,31 @@ export default function GithubDrawer({
   }
 
   const sync = (folder: string, show?: Partial<GithubFolder>) => change(folder, async () => notify(syncToast(folder, await api.importIssues(folder))), show);
+
+  // "Design the agent" starts a new thread that asks the questions and writes the soul
+  // (lib/agent-thread.ts), and opens it so the thread is in front of you.
+  //
+  // The brief says what the agent is for; the thread works out the rest by asking. It names the
+  // job, not the answers — the thread is better at deciding what a good soul needs than a form is.
+  //
+  // A folder that already has a design thread keeps its button off: the thread is on the board and
+  // open, and a second click would make a second one. The latch covers the click that lands while
+  // the first request is still in flight.
+  const designAgent = async (folder: string) => {
+    if (designing.current || designed[folder]) return;
+    designing.current = true;
+    setBusy(folder);
+    try {
+      const { card } = await api.designAgent({ project: folder, job: "triages this project's GitHub issues" });
+      setDesigned((d) => ({ ...d, [folder]: true }));
+      onOpenCard(card);
+      notify(`A thread is designing the agent for ${folderName(folder)}`);
+    } finally {
+      designing.current = false;
+      setBusy(null);
+    }
+  };
+
   const shown = shownGithubFolders(status.folders, project);
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -104,6 +138,8 @@ export default function GithubDrawer({
               }, { instant: on })
             }
             onOpenUrl={onOpenUrl}
+            designed={Boolean(designed[f.folder])}
+            onDesignAgent={designAgent}
             onWorkflow={(workflow) =>
               void change(
                 f.folder,
@@ -194,6 +230,8 @@ function FolderSection({
   onStop,
   onInstant,
   onOpenUrl,
+  designed,
+  onDesignAgent,
   onWorkflow,
 }: {
   folder: GithubFolder;
@@ -204,6 +242,9 @@ function FolderSection({
   onStop: () => void;
   onInstant: (on: boolean) => void;
   onOpenUrl: (url: string) => void;
+  // This folder already has a design thread, so its button stays off.
+  designed: boolean;
+  onDesignAgent: (folder: string) => Promise<void>;
   onWorkflow: (workflow: IssueWorkflow) => void;
 }) {
   const line = syncLine(f);
@@ -227,7 +268,7 @@ function FolderSection({
             <span className="text-ink">Issues → {LANDING_LABELS.find((l) => l.id === workflow.landing)?.label ?? "cards"}</span>
           </label>
           {f.syncing && <InstantSwitch folder={f} busy={busy} weft={weft} onInstant={onInstant} />}
-          {f.syncing && <IssueWorkflowPicker workflow={workflow} folder={f.folder} busy={busy} onChange={onWorkflow} />}
+          {f.syncing && <IssueWorkflowPicker workflow={workflow} folder={f.folder} busy={busy} designed={designed} onChange={onWorkflow} onDesignAgent={onDesignAgent} />}
           {line && <p className={line.bad ? "text-danger" : "text-faint"}>{busy ? "Syncing…" : line.text}</p>}
           <div className="flex flex-wrap gap-x-2.5 gap-y-0.5">
             {f.syncing && (

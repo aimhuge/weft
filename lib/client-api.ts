@@ -31,7 +31,6 @@ import type {
   Effort,
   GithubRepo,
   IssueWorkflow,
-  InterviewQuestion,
   LocalRepo,
   LoginView,
   MachineInfo,
@@ -200,10 +199,10 @@ export const api = {
   // A thread that writes an agent's soul (lib/agent-author.ts): the card comes back, already running.
   authorAgent: (input: { what: string; cwd?: string; backend?: Backend }) =>
     call<{ card: Card; start: { started: boolean; at?: number } }>("POST", "/api/agents/author", input),
-  // The interview that designs an agent from a few answers (lib/agent-interview.ts): the questions,
-  // then the agent it saved.
-  interviewQuestions: () => call<{ questions: InterviewQuestion[] }>("GET", "/api/agents/interview"),
-  saveInterviewedAgent: (answers: Record<string, string>) => call<{ agent: AgentInfo }>("POST", "/api/agents/interview", { answers }),
+  // The new thread that designs an agent (lib/agent-thread.ts): the card comes back, already running,
+  // with the brief page as its pane.
+  designAgent: (input: { project: string; job: string; backend?: Backend }) =>
+    call<{ card: Card; start: { started: boolean; at?: number } }>("POST", "/api/agents/design", input),
   archive: (id: string, archived: boolean) => call<{ card: Card }>("PATCH", `/api/cards/${id}`, { archived }),
   // ★ and tags. Tags are normalized on the server, become yours (tagsBy "user"), and new ones join the catalog.
   mark: (id: string, patch: { starred?: boolean; tags?: string[] }) => call<{ card: Card }>("PATCH", `/api/cards/${id}`, patch),
