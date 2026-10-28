@@ -8,6 +8,10 @@ lands; a release moves those lines under its version and tags the commit `vX.Y.Z
 
 ## [Unreleased]
 
+### Added
+
+- **Issue cards now stand out, and a project can work them itself.** Each project picks where its imported GitHub issue cards land, in the GitHub drawer under the sync switch: **Backlog** (what it did before — a cold card, yours to pick up), **Needs you** (the card is made there, so a fresh import is visible at a glance and still follows its issue until you run it: a new label reaches it, a closed issue archives it), or **Run** (the card's thread starts at once and the agent works the issue, parking in Needs you when it needs a decision and going to Review when it finishes, exactly as any other thread does). A **Run** card can be checked before any work happens: **Checks with** names the skill that runs as the card's first turn, and **Works as** names the agent that works it. **Design the agent** writes that agent for you from a short interview — what it should check, what it must refuse, what it leaves behind, when it stops and asks, and its name — and saves it as a real agent whose soul opens every system prompt its threads get. The workflow is per project and saved with your settings; changing it changes where the *next* cards land, and the cards already on the board stay where they are. The landing and its skill and agent live in `lib/issue-landing.ts` and `lib/issue-run.ts`, the interview in `lib/agent-interview.ts`, the drawer in `components/IssueWorkflowPicker.tsx`, and the route in `PATCH /api/github/issues`.
+
 ## [0.6.5] - 2026-10-28
 
 ### Added
