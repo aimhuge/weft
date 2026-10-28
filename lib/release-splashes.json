@@ -1,4 +1,11 @@
 {
+  "0.6.5": {
+    "lines": [
+      "Your vault now follows you across machines, so your AI finds the same keys on every Mac.",
+      "Esc says where it took you, so you know which view you landed in.",
+      "Name your models, so every menu shows the model you'll actually run."
+    ]
+  },
   "0.6.4": {
     "lines": [
       "The copilot now brings you ideas, not a list of cards, and speaks up at most three times a day.",
