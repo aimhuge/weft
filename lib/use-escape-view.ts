@@ -19,19 +19,26 @@ export function bareBoard({ thread, newThread, browser, drawer }: BoardLayers) {
 // and dialogs and menus sit above every panel anyway. Escape typed in a field (the search box, a
 // composer, the terminal's textarea) leaves the view alone.
 //
+// The rest of the hook's inputs, as one object rather than a long parameter list: a sixth
+// positional argument is a question nobody can answer at the call site.
+//
 // `onFlip` hears the view it switched to, so the board can pop a little pane saying where Escape
 // just took you (lib/use-view-hint.ts). It never fires without a flip.
 //
 // `hintUp` says the pane is showing. The pane says what the next Escape does, so Escape has to
 // mean that: while it is up, the next Escape puts it away instead of flipping the view again.
 // `onDismiss` is called instead of the flip.
+export type ViewFlipOptions = {
+  onFlip?: (next: ViewMode) => void;
+  hintUp?: boolean;
+  onDismiss?: () => void;
+};
+
 export function useEscapeTogglesView(
   open: BoardLayers,
   mode: ViewMode,
   choose: (next: ViewMode) => void,
-  onFlip?: (next: ViewMode) => void,
-  hintUp?: boolean,
-  onDismiss?: () => void,
+  { onFlip, hintUp, onDismiss }: ViewFlipOptions = {},
 ) {
   useEscape(
     bareBoard(open),

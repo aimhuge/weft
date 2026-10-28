@@ -74,7 +74,7 @@ describe("useEscapeTogglesView", () => {
   it("tells the caller which view it switched to", () => {
     const choose = vi.fn();
     const onFlip = vi.fn();
-    const { rerender } = renderHook(({ mode }) => useEscapeTogglesView(bare, mode, choose, onFlip), {
+    const { rerender } = renderHook(({ mode }) => useEscapeTogglesView(bare, mode, choose, { onFlip }), {
       initialProps: { mode: "board" as "board" | "list" },
     });
     press();
@@ -86,14 +86,14 @@ describe("useEscapeTogglesView", () => {
 
   it("says nothing when the view did not move", () => {
     const onFlip = vi.fn();
-    renderHook(() => useEscapeTogglesView({ ...bare, browser: true }, "board", vi.fn(), onFlip));
+    renderHook(() => useEscapeTogglesView({ ...bare, browser: true }, "board", vi.fn(), { onFlip }));
     press();
     expect(onFlip).not.toHaveBeenCalled();
   });
 
   it("says nothing when Escape is typed in a field", () => {
     const onFlip = vi.fn();
-    renderHook(() => useEscapeTogglesView(bare, "board", vi.fn(), onFlip));
+    renderHook(() => useEscapeTogglesView(bare, "board", vi.fn(), { onFlip }));
     const input = document.body.appendChild(document.createElement("input"));
     press(input);
     expect(onFlip).not.toHaveBeenCalled();
@@ -102,7 +102,7 @@ describe("useEscapeTogglesView", () => {
   it("puts the hint away instead of flipping back while it is up", () => {
     const choose = vi.fn();
     const onDismiss = vi.fn();
-    renderHook(() => useEscapeTogglesView(bare, "board", choose, vi.fn(), true, onDismiss));
+    renderHook(() => useEscapeTogglesView(bare, "board", choose, { hintUp: true, onDismiss }));
     press();
     expect(onDismiss).toHaveBeenCalled();
     expect(choose).not.toHaveBeenCalled();
@@ -112,7 +112,7 @@ describe("useEscapeTogglesView", () => {
     const choose = vi.fn();
     const onDismiss = vi.fn();
     const { rerender } = renderHook(
-      ({ up }: { up: boolean }) => useEscapeTogglesView(bare, "board", choose, vi.fn(), up, onDismiss),
+      ({ up }: { up: boolean }) => useEscapeTogglesView(bare, "board", choose, { hintUp: up, onDismiss }),
       { initialProps: { up: true } },
     );
     press();
