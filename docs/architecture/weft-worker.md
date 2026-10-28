@@ -23,7 +23,8 @@ These were settled before the design was written, and each one narrows what foll
 | The repo is a **persistent checkout per project**, cards work in worktrees of it | Exactly what the Mac does. No clone-per-card, no credentials churn. |
 | The host **authenticates with a service key** | A per-worker key, not a human session. See [Identity](#identity). |
 | **All four backends**, on the worker's own toolchain | Claude Code, puku-cli, Codex and Goose all work on a worker, and each uses the version the project pins. |
-| **No container image** | The install is a bootstrap script on any Linux box with `apt-get`. See [Installing on a box you already have](#installing-on-a-box-you-already-have). |
+| **No container image** | The install is a bootstrap script on any Linux or macOS box. See [Installing on a box you already have](#installing-on-a-box-you-already-have). |
+| **A worker runs on macOS too**, not just Linux | The daemon is platform-neutral; the install script branches on the platform. A Mac mini is a first-class worker. |
 
 ## What the code already gives us
 
@@ -93,12 +94,12 @@ box, permission prompts, the web board, the share view — is unaffected.
 
 ## The three new pieces
 
-**A worker registry.** A `cloud_workers` table: id, org, name, platform, labels, capabilities, status,
+**A worker registry.** A `cloud_workers` table: id, org, name, platform, arch, labels, capabilities, status,
 `last_seen_at`. A worker enrols itself and heartbeats. This is what turns the web's "Waiting for your Mac" into a
 real liveness signal: a sleeping Mac's presence is unknowable, a worker's is not. `public.devices`
 (`supabase/migrations/20261027163113_team_vault.sql:116`) is close in shape — it already has a platform (and already
 allows `'linux'`) and `last_seen_at` — but it is scoped to vault keys and has no `org_id`, so a separate table is the
-cleaner fit.
+cleaner fit. The `platform` check constraint is the existing one: `('darwin', 'linux', 'win32')`.
 
 **The worker daemon.** `weft worker`: headless Weft, no Electron. It enrols, claims the commands addressed to it,
 materialises the repo, spawns the CLI, and publishes the turn back as thread items. It is the same `lib/runner.ts`
@@ -286,8 +287,8 @@ of it is instant; and the worker's `node_modules` is the one the project actuall
   credentials are the worker's own — a deploy key or a token the user adds on the box, not the user's laptop keys.
 - **The worktree** is per card, in the worker's own pool under `~/.weft-worker/worktrees/`. `lib/worktree-deps.ts`
   clones `node_modules` with `cp -c`, which is an **APFS clone** and does not exist on Linux
-  (`lib/worktree-deps.ts:36`). The worker needs a Linux implementation: `cp --reflink=auto -a` where the volume
-  supports it, and a plain copy or a fresh install where it does not.
+  (`lib/worktree-deps.ts:36`). The worker picks per platform: `cp -c` on macOS, `cp --reflink=auto -a` on Linux
+  where the volume supports it, and a plain copy or a fresh install from the lockfile where it does not.
 - **The path translation** is the piece that makes claims work. The card's `cwd` is a repo-relative path; the
   worker resolves it against its own checkout root. The Mac and the worker then agree on "the same file" because
   they agree on the repo and the relative path.
@@ -310,13 +311,14 @@ curl -fsSL https://weft.zip/worker.sh | sh
 
 It does four things:
 
-1. **Installs the toolchain.** Checks for `git`, `curl`, `node` 20+ and `build-essential`; missing ones go in with
-   `apt-get install -y`. Any Linux with `apt-get` — Ubuntu, Debian, and the many VPS images built on them.
+1. **Installs the toolchain.** Checks for `git`, `curl` and `node` 20+, and installs what is missing — with
+   `apt-get` on Linux, with `brew` on macOS. A compiler toolchain is added only if the project needs one.
 2. **Clones the worker.** Pulls Weft's worker into `~/.weft-worker`. A `git pull` updates it later;
    `weft-worker update` does that for you.
 3. **Enrols itself.** Calls the API with the workspace's service key, gets back a worker id and its own key, and
    writes both to `~/.weft-worker/worker.json` with mode `600`.
-4. **Runs as a service.** A `systemd` unit that starts on boot, restarts on crash, and heartbeats every 20 seconds.
+4. **Runs as a service.** A `systemd` unit on Linux, a `launchd` agent on macOS. It starts on boot, restarts on
+   crash, and heartbeats every 20 seconds.
 
 Two things this design has to be honest about. First, the script runs code as the user who ran it — it is
 `curl | sh`, and the same caution applies as to any installer. Second, it needs the workspace's service key to
@@ -326,6 +328,46 @@ key never leaves the app.
 
 The script is also where a "cloned sub-repo" would fit if Weft ever splits the worker out of the main repo: the
 clone URL is one line in the script, so the shape survives that move.
+
+### macOS and Linux, side by side
+
+**A worker runs on macOS too.** The daemon is the same Node process on both; only the install and the worktree
+mechanics differ. A Mac mini is a perfectly good worker — it is idle most of the time, it is on a fast disk, and
+it is already trusted with the user's credentials.
+
+| | Linux | macOS |
+| --- | --- | --- |
+| Package manager | `apt-get` (Debian, Ubuntu, and the VPS images built on them) | Homebrew (`brew install node git`) |
+| Service manager | `systemd` unit, `systemctl enable --now` | `launchd` agent under `~/Library/LaunchAgents/`, `launchctl bootstrap` |
+| Toolchain install | `apt-get install -y` | `brew install` |
+| `node_modules` copy | `cp --reflink=auto -a` where the volume supports it, plain copy otherwise | `cp -c` — the APFS clone, already in `lib/worktree-deps.ts:36` |
+| Firewall / ports | `ufw` or the VPS provider's rules | macOS asks once, per binary, on first listen |
+| Secrets | the worker's own `.env` and git credentials | the same, plus the macOS Keychain where the CLI wants it |
+
+**The one place macOS is genuinely better is the worktree pool.** `lib/worktree-deps.ts` clones `node_modules`
+with `cp -c`, an APFS copy-on-write clone: 1.5 GB costs no disk and takes ~13 s. Linux has no equivalent, so the
+worker falls back to `cp --reflink=auto` (reflink, on btrfs/XFS) or a plain copy, or a fresh install from the
+lockfile. **So a macOS worker takes a warm worktree in ~20 ms and a Linux worker takes ~15 s.** That is not a
+reason to prefer one — it is a reason the worker should keep a pool on both, and it is the same pool the desktop
+already keeps (`lib/worktree-pool.ts`).
+
+**Apple Silicon is not a special case, and there is one thing to watch.** The four backends ship arm64 macOS
+binaries, so an M1 or M2 runs them natively; the worker itself is a Node process and is architecture-agnostic. The
+watch item is **Rosetta**: a repo whose native dependencies are x86-only (`node_modules` with a prebuilt
+x64 binary) will not install on arm64 without Rosetta 2. The worker should detect the mismatch at install time —
+`process.arch` of the worker against the lockfile's platform markers — and say so plainly rather than failing with
+a linker error 3,000 lines deep. If Rosetta is present, the worker can run the CLI under it and say which mode it
+is in, so a card's output explains itself.
+
+**A Mac mini worker also has one advantage nobody designs for: the guards' local half is already good.** The
+secret guard reads a local `.env`, the git guard reads local git, the import guard reads local files — all of
+that is the same code the desktop runs. A macOS worker is the *least* surprising worker, because it is the desktop
+minus the window.
+
+**And one thing to be careful about:** a macOS worker is a Mac. The desktop app and a worker on the same machine
+must not fight over the same store, the same `~/.weft` directory or the same git credentials. The worker uses its
+own `WEFT_DATA` (`lib/store.ts`), its own `~/.weft-worker`, and its own checkout root — the same separation the
+desktop already uses for its own worktrees.
 
 ## The hard parts
 
@@ -349,8 +391,9 @@ imagined.
 8. **Leases.** A crashed worker leaves rows `claimed` forever (`lib/cloud-inbox.ts:151`) — that is true of the Mac
    today too, but on a Mac a human sees the board and clicks Cancel. On a headless box nobody does.
    `cloud_worker_leases` with an expiry, renewed on heartbeat, makes them reclaimable.
-9. **Worktrees.** `cp -c` is an APFS clone; it does not exist on Linux. Isolated cards need a Linux worktree
-   implementation.
+9. **Worktrees.** `cp -c` is an APFS clone; it does not exist on Linux. A macOS worker gets the fast path the
+   desktop already has; a Linux worker needs `cp --reflink=auto` or a plain copy. Isolated cards need a worktree
+   implementation that picks per platform.
 10. **Secrets.** The 🔐 vault is device-keyed and Touch-ID gated on the Mac (`electron/vault.cjs`). The team
     vault (`public.devices` + `vault_grants`) is the model for a worker: another enrolled machine with its own
     sealed key.
@@ -444,7 +487,7 @@ for — "run this card on my server".
 
 1. **The daemon, single worker, no board.** `weft worker` starts, enrols, claims `run` commands, spawns the CLI,
    publishes items. The board stays on the laptop; the worker is a black box with one job. This phase also ships
-   the bootstrap script and the service-key enrolment.
+   the bootstrap script (Linux **and** macOS), the service-key enrolment, and the `launchd`/`systemd` service.
 2. **Addressing and liveness.** `cloud_workers`, heartbeats, the worker picker, the worker chip, "worker offline",
    leases and reclaim.
 3. **Guards and claims go shared.** The centralised claim, yield and folder-grant authority in Supabase, keyed by
@@ -459,7 +502,8 @@ for — "run this card on my server".
 
 New: `lib/worker-daemon.ts` (the daemon), `lib/worker-registry.ts` (enrolment, heartbeat), `lib/worker-transport.ts`,
 `lib/worker-paths.ts` (path translation, repo materialisation), `lib/shared-claims.ts` (the shared claim authority and
-its RPC), and migrations for `cloud_workers` + `cloud_worker_leases` + `cloud_claims` + `cloud_yields`.
+its RPC), `install/worker.sh` (the Linux and macOS bootstrap), and migrations for `cloud_workers` +
+`cloud_worker_leases` + `cloud_claims` + `cloud_yields`.
 
 Touched: `lib/cloud-commands.ts` (the `run` kind), `lib/cloud-inbox.ts` (share the claim and lease logic),
 `lib/cloud-sync-cards.ts` (worker identity), `lib/runner-state.ts` (`Spec` gains a worker target),
