@@ -70,4 +70,32 @@ describe("useEscapeTogglesView", () => {
     expect(close).toHaveBeenCalled();
     expect(choose).not.toHaveBeenCalled();
   });
+
+  it("tells the caller which view it switched to", () => {
+    const choose = vi.fn();
+    const onFlip = vi.fn();
+    const { rerender } = renderHook(({ mode }) => useEscapeTogglesView(bare, mode, choose, onFlip), {
+      initialProps: { mode: "board" as "board" | "list" },
+    });
+    press();
+    expect(onFlip).toHaveBeenLastCalledWith("list");
+    rerender({ mode: "list" });
+    press();
+    expect(onFlip).toHaveBeenLastCalledWith("board");
+  });
+
+  it("says nothing when the view did not move", () => {
+    const onFlip = vi.fn();
+    renderHook(() => useEscapeTogglesView({ ...bare, browser: true }, "board", vi.fn(), onFlip));
+    press();
+    expect(onFlip).not.toHaveBeenCalled();
+  });
+
+  it("says nothing when Escape is typed in a field", () => {
+    const onFlip = vi.fn();
+    renderHook(() => useEscapeTogglesView(bare, "board", vi.fn(), onFlip));
+    const input = document.body.appendChild(document.createElement("input"));
+    press(input);
+    expect(onFlip).not.toHaveBeenCalled();
+  });
 });

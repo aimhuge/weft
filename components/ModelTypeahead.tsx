@@ -18,7 +18,7 @@ import { filterGroups, labelFor, type ModelOption } from "@/lib/model-options";
 import Icon from "./Icon";
 
 // How tall the list may be before it scrolls.
-const MAX_LIST_HEIGHT = 320;
+const MAX_LIST_HEIGHT = 480;
 
 export interface ModelTypeaheadProps {
   // The picked model id, or the "let the CLI choose" value.
@@ -201,6 +201,9 @@ export default function ModelTypeahead({
           aria-label={label}
           // A click on a row would blur the field and close the list before the click lands.
           onMouseDown={(e) => e.preventDefault()}
+          // The field usually sits inside a <label>, and a click inside a label focuses its input, which
+          // opened the list again right after a pick. Cancelling the click keeps the pick's close.
+          onClick={(e) => e.preventDefault()}
           className="fixed z-50 overflow-y-auto rounded-lg border border-line bg-panel p-1 shadow-2xl"
           style={{ left: spot.left, top: spot.top, width: spot.width, maxHeight: spot.maxHeight }}
         >

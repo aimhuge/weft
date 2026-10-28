@@ -16,7 +16,7 @@ or a local Ollama and doesn't want to route it through Anthropic.
 | File | Role |
 | --- | --- |
 | `lib/types-card.ts` | `Backend` is `"claude" \| "puku" \| "codex" \| "goose"`; `BACKEND_LABELS` names it |
-| `lib/new-thread.ts` | `BACKENDS` lists it; `MODELS.goose` is its starter model set; `GOOSE_DEFAULT_MODEL` is the "let Goose decide" sentinel; `EFFORT_BY_BACKEND.goose` is empty |
+| `lib/new-thread.ts` | `BACKENDS` lists it; `MODELS.goose` holds one row, its configured-model row; `GOOSE_DEFAULT_MODEL` is that row's sentinel; `EFFORT_BY_BACKEND.goose` is empty |
 | `lib/cli-path.ts` | `executableFor("goose")` resolves the `goose` binary on the app's PATH |
 | `lib/goose-recipe.ts` | The pure turn plan: `gooseSystemText`, `goosePrompt`, `gooseArgs`, `gooseRecipeYaml` |
 | `lib/goose-recipe-store.ts` | The recipe on disk, under the card's own Goose state root |
@@ -27,12 +27,13 @@ or a local Ollama and doesn't want to route it through Anthropic.
 | `lib/goose-mcp.ts` | Weft's own tools (browser, board, secrets…) for a turn: a bridge token in the card's Goose config |
 | `lib/goose-reply.ts` | Gathers the slices Goose streams one reply in, and files each reply whole |
 | `lib/goose-launch.ts` | The grant-based key injection: asks main for a one-time grant over the control server |
-| `lib/goose-provider.ts` | The board's copy of the provider catalog; `gooseEnvFor`, `gooseModelFor`, `needsBaseUrl` |
+| `lib/goose-provider.ts` | The board's copy of the provider catalog; `gooseEnvFor`, `gooseModelFor`, `needsBaseUrl`, `gooseModelsFor` (the chosen provider's own model ids) |
 | `lib/use-goose.ts` | The board-side hook: list providers, save a key, forget one |
 | `lib/use-goose-selection.ts` | The board-side hook: the chosen provider, model and endpoint, saved as they change |
 | `components/GooseProviderKey.tsx` | Settings → Models → **Bring your own key** |
 | `components/GooseKeyRow.tsx` | One provider's row: the key input, Save, Forget, the endpoint and the model |
 | `components/GooseSavedKeys.tsx` | The providers that already have a key saved, with a **Use** for each |
+| `components/GooseNamedModels.tsx` | Settings → Models → **Bring your own key** → **Model names**: a name for a model id, so every menu shows the name instead of the raw id |
 | `components/SettingsModelsPage.tsx` | Where the BYO-key form is mounted |
 | `lib/settings.ts` | `gooseProviderId()`, `gooseModelId()`, `gooseBaseUrl()` — the persisted selection |
 | `app/api/settings/route.ts` | `PATCH` for the three, validated against the catalog |
@@ -289,13 +290,46 @@ The chosen provider is a board setting (`gooseProviderId`), and a new Goose thre
 (`lib/runner-state.ts` `specFor()`). The card's own model is what runs it:
 
 - The card's model, when it isn't the `GOOSE_DEFAULT_MODEL` sentinel, becomes `--model`.
-- `GOOSE_DEFAULT_MODEL` ("Goose default") means no `--model` at all: Goose's own provider picks.
+- `GOOSE_DEFAULT_MODEL` ("Your BYOK model") means no `--model` at all: Goose's own provider picks.
 - The chosen provider becomes `--provider`; with no provider picked, no `--provider` either, and Goose uses the
   one it was configured with.
 
 So the model id maps to Goose's provider the way the model id maps to Weft's CLI: by which list names it. A
 model id no list names belongs to Claude Code, and a Goose card never runs a Claude model — `modelOn()` drops
 it and the CLI's own default runs.
+
+### The models a menu lists
+
+**Goose's models are not a list Weft holds.** Every provider serves ids of its own — OpenRouter's
+`anthropic/claude-opus-4.1` is not Anthropic's `claude-opus-4-1`, and neither is what a local Ollama runs — so
+a fixed list was wrong for all but one of them. `MODELS.goose` held five OpenRouter ids as a "starter set", and
+every provider's menu showed them, which is exactly the question the card asked: *why do we have those other
+models in goose?*
+
+The list a menu shows is now the **chosen provider's** own ids (`gooseModelsFor()` in `lib/goose-provider.ts`):
+the catalog's curated set for that provider, plus the model it is actually configured to run when that id
+isn't one of them (a gateway behind the Anthropic API serves its own ids, e.g. `puku-ai-2.8`). The
+curated set is a suggestion for a provider marked `freeModel`, whose gateway may serve anything.
+
+Two things make that work:
+
+- **A Goose id is recognised by the catalog, not by a list.** `backendFor()` in `lib/new-thread.ts` asks
+  `GOOSE_PROVIDERS` whether any provider serves the id, so a bare `anthropic/claude-opus-4.1` still resolves
+  to Goose — which is what keeps subagents and the rerun-on-model path routing to the right CLI now that
+  `MODELS.goose` is empty.
+- **A picker value carries a prefix.** A provider's id can be another CLI's id too (`puku-ai-2.8` through a
+  Puku key), so a Goose row's value is `goose:<id>` (`gooseValue()`), and `bareModel()` takes the prefix off
+  before the id reaches Goose.
+
+### Naming the models
+
+A model id is what a provider serves; a name is what a person reads. `components/GooseNamedModels.tsx`
+(Settings → Models → Bring your own key → **Model names**) is a row per model with an id field and a name
+field, saved as one setting (`gooseNamedModels`, validated in `app/api/settings/route.ts`). Every model menu
+in Weft then shows "Big Opus" instead of the raw id, with the id beside the name so the row stays honest about
+what will run. The names are read by the board through `lib/use-named-models.ts`, which reads
+`/api/settings` rather than importing `lib/goose-models.ts` — that module reads the settings file off disk
+with `node:fs`, which a browser chunk can't hold.
 
 The model and the endpoint are saved twice, in two places with two jobs. The board setting (`gooseModelId`,
 `gooseBaseUrl`) is what the Settings UI shows and edits. The copy in Electron main's key store is what the
@@ -304,7 +338,7 @@ explicitly is the endpoint the grant uses (`lib/goose-launch.ts` `gooseEnvGrant`
 `electron/goose-ipc.cjs` `grantEnv` prefers it over the copy kept beside the key). The model is the other way round:
 **the card's own model wins**, as it does on Claude Code and puku-cli, because it is what the New thread dialog or a
 mid-thread switch picked (`lib/runner-state.ts` `specFor`). The model the user picked for the provider in Settings
-only fills in a card left on "Goose default"; with neither, Goose's provider picks. It once ran the other way, and a
+only fills in a card left on "Your BYOK model"; with neither, Goose's provider picks. It once ran the other way, and a
 model picked on the New thread dialog was silently replaced by the Settings one.
 
 ## Subagents
@@ -439,12 +473,15 @@ access any process you start there has.
   right formula is `block-goose-cli`; the plain `goose` formula is a different tool (a database migration tool),
   and it conflicts with it.
 - The provider catalog is a short curated list. A provider Weft doesn't know can't be picked.
-- Weft's own model list for Goose is a starter set of OpenRouter-style ids, so a card on, say, a local Ollama
-  model has to have that id typed into the card's model, not chosen from a menu. A Goose card keeps whatever
+- Weft doesn't hold a model list for Goose. A menu lists the **chosen provider's** own ids
+  (`gooseModelsFor()` in `lib/goose-provider.ts`), so a card on, say, a local Ollama model gets that provider's
+  ids — the one it is configured to run included — rather than another provider's list. A provider whose
+  gateway serves ids Weft can't know (a free-model provider, a local Ollama) has to have its id typed, and
+  can be given a name for it in Settings → Models → Bring your own key. A Goose card keeps whatever
   id it is given: its providers are gateways that serve their own ids, so no list can name them all
   (`modelOn()` in `lib/new-thread.ts`).
 - A Goose card's model is the card's own, as on every other CLI: `lib/runner-state.ts` `specFor` gives it
-  priority and the Settings model only fills in a card left on "Goose default".
+  priority and the Settings model only fills in a card left on "Your BYOK model".
 - A Goose thread's subagents are headless `goose run --text` calls from Bash, because Goose has no Agent
   tool: `lib/subagents.ts` `crossCli` has the Goose branch and `goosePrompt` builds the prompt around it.
 - A Goose thread's commits are unsigned; the Done flow signs commits for Claude Code and puku-cli threads.

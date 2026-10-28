@@ -24,7 +24,7 @@ import { chipCardId, startSuggestRefresh } from "./copilot-suggest";
 import { startCheckIns } from "./copilot-initiative-run";
 import { isBusy } from "./runner-state";
 import type { CopilotPersona } from "./copilot-personas";
-import { backendFor, modelFor } from "./new-thread";
+import { backendFor, cardModel, modelFor } from "./new-thread";
 import { fallbackFor } from "./model-fallback";
 import { copilotModel, defaultPermissionMode, listProjects } from "./settings";
 import { clearThread, createCard, getCard, listCards, updateCard } from "./store";
@@ -35,10 +35,12 @@ import { COPILOT_ID } from "./types";
 // changes the model again by editing the pick and starting a new chat.
 // A model that has hit its limit is replaced by the backup model, so the copilot starts on one
 // that can actually answer.
+// The card's model is the id the CLI takes, so a Goose pick loses its "goose:" prefix here; the
+// card's backend says it runs on Goose.
 function copilotInitialModel() {
   const picked = copilotModel();
   const wanted = picked || modelFor("claude");
-  return fallbackFor(wanted)?.model ?? (wanted || undefined);
+  return cardModel(fallbackFor(wanted)?.model ?? (wanted || undefined));
 }
 
 // The CLI the copilot starts on: the one that serves its model. Every model is offered in the

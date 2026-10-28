@@ -118,10 +118,10 @@ describe("SettingsDialog", () => {
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "Default effort" }), "low");
     expect(localStorage.getItem("weft.effort")).toBe("low");
 
-    // The one menu is the CLI picker too: puku-cli's own-choice row moves the CLI.
-    pickModel("Default model", "Let puku-cli choose");
+    // The one menu is the CLI picker too: a puku model moves the CLI to puku-cli.
+    pickModel("Default model", "Opus 4.8");
     expect(within(pages()).getByLabelText("Unsaved changes")).toBeInTheDocument();
-    expect(menu).toHaveValue("Let puku-cli choose");
+    expect(menu).toHaveValue("Opus 4.8");
 
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
     expect(api.saveSettings).toHaveBeenCalledWith({ defaultBackend: "puku" });

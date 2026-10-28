@@ -43,10 +43,11 @@ export async function rerunOnModel(cardId: string, model: string) {
   if (!card) throw new Error("No such card.");
   if (isBusy(cardId)) throw new Error("Stop the thread before rerunning it.");
   await hooks.endSession(cardId);
-  const backend = resolveModel(model)?.backend;
-  if (backend && backend !== card.backend) {
-    // Another CLI's model: the card moves there, in a fresh session on that CLI.
-    updateCard(cardId, { backend, model, sessionId: undefined, error: undefined, rateLimitHit: false });
+  const resolved = resolveModel(model);
+  const backend = resolved?.backend;
+  if (resolved && backend !== card.backend) {
+    // Another CLI's model: the card moves there, in a fresh session on that CLI, with the id that CLI runs.
+    updateCard(cardId, { backend, model: resolved.model, sessionId: undefined, error: undefined, rateLimitHit: false });
   } else {
     // The model's own CLI, or one it doesn't serve: it drops to that CLI's own choice.
     const normalized = modelOn(card.backend, model);

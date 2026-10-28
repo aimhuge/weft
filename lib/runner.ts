@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import { randomUUID } from "node:crypto";
 import { isDoneCommand, skillsForPrompt } from "./automations";
+import { cardModel } from "./new-thread";
 import { lastSent } from "./edit-last";
 import { showStarter } from "./show";
 import { isOpenElsewhere } from "./import";
@@ -64,16 +65,20 @@ export function setPermissionMode(cardId: string, mode: PermissionMode) {
 // switchSpare also signs its commits as the new model.
 // The stats' runsOn follows the model, so the header's chip and the status strip name the model the
 // thread is on now, not the one it was on when it last reported.
+//
+// The card's model is the id the CLI takes, so a pick's "goose:" prefix comes off here; the card's
+// backend says which CLI it is.
 export function setModel(cardId: string, model: string) {
   const card = getCard(cardId);
   const effort = card?.effort;
   const stats = card?.stats;
+  const id = cardModel(model) ?? model;
   updateCard(cardId, {
-    model,
-    ...(stats ? { stats: { ...stats, runsOn: { model, effort } } } : {}),
+    model: id,
+    ...(stats ? { stats: { ...stats, runsOn: { model: id, effort } } } : {}),
   });
   const session = sessions.get(cardId);
-  if (session) switchSpare(session.query, session.spec, { permissionMode: session.spec.permissionMode, model });
+  if (session) switchSpare(session.query, session.spec, { permissionMode: session.spec.permissionMode, model: id });
 }
 
 // A message that can't go yet waits: for a restart the running turns hold up (it goes after it), for an

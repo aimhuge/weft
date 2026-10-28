@@ -122,6 +122,23 @@ describe("createCardFromBody", () => {
     expect(vi.mocked(store.createCard).mock.calls[0]?.[0]).toMatchObject({ model: "claude-opus-5-5" });
   });
 
+  // A Goose model's picker value carries a "goose:" prefix, and its id has a "/" in it
+  // ("anthropic/claude-opus-4.1"). The card's model is the bare id the CLI takes, so the
+  // prefix comes off. It used to be dropped by a regex that allowed neither ":" nor "/",
+  // and the card silently ran on the provider's default instead.
+  it("keeps a Goose model, without the picker prefix", () => {
+    createCardFromBody({ prompt: "x", backend: "goose", model: "goose:anthropic/claude-opus-4.1" });
+    expect(vi.mocked(store.createCard).mock.calls[0]?.[0]).toMatchObject({
+      backend: "goose",
+      model: "anthropic/claude-opus-4.1",
+    });
+  });
+
+  it("drops a Goose prefix that names no model", () => {
+    createCardFromBody({ prompt: "x", backend: "goose", model: "goose:" });
+    expect(vi.mocked(store.createCard).mock.calls[0]?.[0]).toMatchObject({ model: undefined });
+  });
+
   it("starts on the backup model when the picked one is spent", () => {
     vi.mocked(fallback.fallbackFor).mockReturnValue({ backend: "puku", model: "puku-2" });
     createCardFromBody({ prompt: "x", backend: "claude", model: "opus" });

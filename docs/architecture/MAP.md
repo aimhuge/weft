@@ -93,6 +93,10 @@ When a new doc lands in this folder, add it here on the same change.
   drives the page through it (trusted click, keys, type, select, scroll, wait, viewport, snapshot routes) with
   `electron/pane-ax.cjs` (the accessibility outline and its refs), `electron/pane-keys.cjs` and `electron/pane-element.cjs`
   (the one way a page's element is found, by ref or selector; docs/architecture/agent-browser.md).
+  `electron/pane-escape.cjs` decides which key the pane replays into the board: a focused page swallows
+  the keys the board never sees, so Escape is replayed there, where it closes the newest layer (and with
+  nothing open, flips board and list view). Escape types nothing, so it arrives as a rawKeyDown — the
+  rule takes that too, or the board never hears the key.
 - `electron/menus.cjs` + `electron/keep-working.cjs`: app menu, menu bar icon, dock; Keep Working (awake with the lid shut, until threads finish).
 - `electron/updater.cjs` (+ `electron/update-window.cjs`, the Software Update window) + `scripts/release-feed.mjs` + `.github/workflows/release.yml`: updates from GitHub Releases (Squirrel.Mac's JSON
   feed, a download fallback when unsigned, a quiet install once nothing runs and nobody's at the Mac) and the tag-triggered signed release; `CHANGELOG.md` holds each version's notes, which Weft commits itself after a version bump (docs/architecture/updates.md). `lib/release-splash.ts` + `lib/release-splashes.json` + `lib/use-release-splash.ts` + `components/ReleaseSplash.tsx` + `scripts/release-splash.mjs`: the "What's new" splash shown once after an update, written by the Copywriter at release time. `.claude/skills/release/SKILL.md`: the repo-only `/release` run (commit, bump, splash, tag, build on a mini, publish, check weft.zip).
@@ -138,7 +142,7 @@ When a new doc lands in this folder, add it here on the same change.
   Goose has **no `goose auth`**: its status is `goose info --check`, a provider check whose "Provider/Model/Auth" lines are read for a
   configured, working key (`lib/login-status.ts` `parseGooseStatus`), and its login is the interactive `goose configure` wizard, which
   needs a real TTY — so, like Codex, it opens in a Terminal window (`lib/login.ts`, `lib/login-terminal.ts`).
-  A Goose card runs its own model (`lib/runner-state.ts` `specFor`; the Settings model only fills in "Goose default"), its
+  A Goose card runs its own model (`lib/runner-state.ts` `specFor`; the Settings model only fills in "Your BYOK model"), its
   subagents are Bash `goose run --text` calls that inherit `GOOSE_PROVIDER`/`GOOSE_MODEL` from `gooseEnv()` (`lib/subagents.ts`
   `GOOSE_DELEGATE`, no Agent tool), and its commits are signed `Co-Authored-By: Goose (<model>) on Weft` through its system
   text (`lib/attribution.ts` `gooseAttributionPrompt`), since Goose has no attribution setting.
@@ -209,11 +213,12 @@ When a new doc lands in this folder, add it here on the same change.
   the settings themselves live in `lib/settings.ts` (the front every caller imports), with the model picks in
   `lib/settings-models.ts` and the file on disk and its read/write pair in `lib/settings-store.ts`;
   the four rows (NewThreadDefaults, SubagentPicker, CopilotPicker, DonePicker) share `components/Pickers.tsx`
-  (`ModelPicker`, `EffortPicker`) on top of `components/ModelSelect.tsx`, every model menu in Weft: one optgroup per CLI ("Claude Code", "puku-cli", "Codex", "Goose") driven by `MODELS` in `lib/new-thread.ts`, Goose's models only when a saved provider key serves them (`setUpGooseModels` in `lib/goose-provider.ts`). Given `cli`, the menu is the CLI picker too (a `<CLI> default` row heads each CLI): the New thread dialog (`pickCliDefault` in `lib/use-new-card-dialog.ts`) and Settings → Models → New threads use it, so neither has a separate CLI control. `components/ModePicker.tsx` is a menu, not a native select, so each permission mode shows what it does under its name.
-  Every model any CLI serves is on offer in every one of them, and there is no default model: `NO_MODEL` ("") is
-  "let the CLI decide" (`lib/new-thread.ts`), picking a model moves the card to the CLI that serves it
-  (`lib/backend-switch.ts`), and a changed default reaches an open New thread dialog at once through
-  `subscribeDefaults` (`lib/new-thread.ts`, `lib/use-new-card-dialog.ts`).
+  (`ModelPicker`, `EffortPicker`) on top of `components/ModelSelect.tsx`, every model menu in Weft: one group per CLI ("Claude Code", "puku-cli", "Codex", "Goose") driven by `MODELS` in `lib/new-thread.ts`. **No row lets the CLI choose** — every row is a model, and a menu with nothing picked shows the model that CLI runs; the two CLIs whose model lives in their own config (Codex, Goose) each keep one row for it ("Codex’s configured model", "Your BYOK model"), and a `cli` prop makes that row move the thread to its CLI, so the New thread dialog and Settings → Models → New threads have no separate CLI control. The Goose group's rows are the **chosen provider's** own models (`gooseModelsFor` in `lib/goose-provider.ts`) plus the ones the user named (`components/GooseNamedModels.tsx`, Settings → Models → Bring your own key), each provider serving its own ids — OpenRouter's `anthropic/claude-opus-4.1` is not Anthropic's `claude-opus-4-1` — and a Goose row's picker value is prefixed `goose:` so it can't be mistaken for another CLI's same id (`lib/new-thread.ts` `gooseValue`/`bareModel`). `components/ModePicker.tsx` is a menu, not a native select, so each permission mode shows what it does under its name.
+  Every model any CLI serves is on offer in every one of them, and picking a model moves the card to the CLI
+  that serves it (`lib/backend-switch.ts`), and a changed default reaches an open New thread dialog at once through
+  `subscribeDefaults` (`lib/new-thread.ts`, `lib/use-new-card-dialog.ts`). The menu itself is a combobox
+  (`components/ModelTypeahead.tsx`), not a native select: it can be typed into, searches every CLI's rows at once
+  (by label, by id, by the id in the row's value), and closes on a pick.
   Security (`components/SettingsSecurityPage.tsx`) holds the default permission mode and `components/TrustedFolders.tsx` (the folders threads may read outside their project, from `SettingsView.allowedFolders`, each revocable through `DELETE /api/folders`); Security also holds `components/TokenExpiry.tsx` (when each saved sign-in runs out, reusing `expiryNote()`; only BlastCP expires, and only the expiry crosses from main — the tokens stay in the Keychain; a BlastCP sign-in made through your Weft account renews itself, one made in the browser never re-consents quietly).
 - `components/DbSelect.tsx` + `lib/db-picker.ts` `rankItems`: the one "Link <folder> to…" picker every provider drawer shares
   (▲ Vercel, Supabase, Cloudflare, 🚀 BlastCP — `components/VercelPicker.tsx`, `SupabasePicker.tsx`, `CloudflarePicker.tsx`, `BlastcpPicker.tsx`).

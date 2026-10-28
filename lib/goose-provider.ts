@@ -168,6 +168,22 @@ export function setUpGooseModels(providers: GooseProviderView[]): Set<string> {
   return new Set(GOOSE_PROVIDERS.filter((p) => keyed.has(p.id)).flatMap((p) => p.models));
 }
 
+/**
+ * The models the chosen provider serves, as a menu can list them: its curated ids, plus the model
+ * it is actually configured to run when that isn't one of them (a gateway behind the Anthropic API
+ * serves its own ids, e.g. "puku-ai-2.8").
+ *
+ * A provider takes any id when it is a free-model one, so its curated list is a suggestion rather
+ * than the whole truth — which is why the configured model is added even when the list is empty.
+ */
+export function gooseModelsFor(providerId: string, configured = ""): string[] {
+  const provider = providerById(providerId);
+  const models = [...(provider?.models ?? [])];
+  const model = configured.trim();
+  if (model && !models.includes(model)) models.push(model);
+  return models;
+}
+
 /** The toast after a key is saved. */
 export function keySavedText(provider: GooseProviderView): string {
   return `${provider.label} key saved. Weft keeps it in the Keychain and never shows it again.`;

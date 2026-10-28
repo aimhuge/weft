@@ -6,11 +6,13 @@ import { useEscape } from "@/lib/use-escape";
 import { useMenuOpen } from "@/lib/use-menu-open";
 import type { ProjectSummary, SortKey } from "@/lib/board-view";
 import type { ViewMode } from "@/lib/board-prefs";
+import type { ViewHint } from "@/lib/use-view-hint";
 import { SORTS } from "./project-bar-shared";
 import Icon from "./Icon";
 import ProjectChips from "./ProjectChips";
 import ProjectMenu from "./ProjectMenu";
 import ViewToggle from "./ViewToggle";
+import ViewHintPane from "./ViewHint";
 
 export type { ProjectSummary, SortKey };
 export { folderName, shortPath } from "@/lib/project-bar";
@@ -32,6 +34,8 @@ export default function ProjectBar({
   onSort,
   view,
   onView,
+  viewHint,
+  onDismissViewHint,
   home,
   onMenuOpenChange,
   onProjectMenu,
@@ -47,6 +51,9 @@ export default function ProjectBar({
   // The board's layout: cards in columns or in one list.
   view: ViewMode;
   onView: (view: ViewMode) => void;
+  // The little pane under the toggle, shown after Escape flips the view (lib/use-view-hint.ts).
+  viewHint?: ViewHint | null;
+  onDismissViewHint?: () => void;
   home: string; // user's home dir, for shortening paths (~/dev/x) and default parent for new projects
   onMenuOpenChange?: (open: boolean) => void; // called when the dropdown opens/closes (the board hides a native browser overlay while it's open)
   // Right-clicking a project, on its chip or in "More" (components/project-menu-handler.ts); resolves to whether an item was picked.
@@ -114,7 +121,12 @@ export default function ProjectBar({
 
       {filter}
 
-      <ViewToggle mode={view} onChange={onView} />
+      <div className="relative shrink-0">
+        <ViewToggle mode={view} onChange={onView} />
+        {viewHint && (
+          <ViewHintPane mode={viewHint.mode} onDismiss={onDismissViewHint ?? (() => {})} />
+        )}
+      </div>
 
       <select
         value={sort}

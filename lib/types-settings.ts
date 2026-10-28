@@ -35,6 +35,8 @@ export interface SettingsFields {
   gooseProviderId: string;
   gooseModelId: string;
   gooseBaseUrl: string;
+  // The names the user gave their Goose models (lib/goose-models.ts); the whole list, as it should be saved.
+  gooseNamedModels: { id: string; name: string }[];
 }
 
 // What a client sends, and what the route reads: the settings that changed, each of its own type.

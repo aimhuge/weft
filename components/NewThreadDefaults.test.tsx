@@ -8,19 +8,20 @@ import "./test-utils";
 // localStorage is empty, so modelFor() returns "" for each backend: there is no default model,
 // and the CLI picks its own until the user picks one.
 describe("NewThreadDefaults", () => {
-  it("shows one CLI-and-model menu and the effort, on the CLI's own default", () => {
+  it("shows one CLI-and-model menu and the effort, on the model the CLI runs", () => {
     render(<NewThreadDefaults backend="claude" onBackend={() => {}} />);
     expect(screen.queryByRole("combobox", { name: "Default CLI" })).toBeNull();
-    expect(screen.getByRole("combobox", { name: "Default model" })).toHaveValue("Let Claude Code choose");
+    expect(screen.getByRole("combobox", { name: "Default model" })).toHaveValue("Fable 5.1");
     expect(screen.getByRole("combobox", { name: "Default effort" })).toHaveValue("high");
   });
 
   it("offers every CLI's models, since picking one moves the CLI to it", () => {
     const { rerender } = render(<NewThreadDefaults backend="puku" onBackend={() => {}} />);
-    expect(screen.getByRole("combobox", { name: "Default model" })).toHaveValue("Let puku-cli choose");
+    expect(screen.getByRole("combobox", { name: "Default model" })).toHaveValue("Opus 4.8");
 
     rerender(<NewThreadDefaults backend="codex" onBackend={() => {}} />);
-    expect(screen.getByRole("combobox", { name: "Default model" })).toHaveValue("Let Codex choose");
+    // Codex's model lives in its own config, so its row names that model.
+    expect(screen.getByRole("combobox", { name: "Default model" })).toHaveValue("Codex’s configured model");
 
     const list = openModels("Default model");
     expect(within(list).getByRole("group", { name: "Claude Code" })).toBeInTheDocument();
@@ -28,14 +29,14 @@ describe("NewThreadDefaults", () => {
     expect(within(list).getByRole("group", { name: /^Codex/ })).toBeInTheDocument();
   });
 
-  it("picks the CLI from its own-choice row, or by picking one of its models", () => {
+  it("picks the CLI from its configured-model row, or by picking one of its models", () => {
     const onBackend = vi.fn();
     render(<NewThreadDefaults backend="claude" onBackend={onBackend} />);
-    pickModel("Default model", "Let Codex choose");
+    pickModel("Default model", "Codex’s configured model");
     expect(onBackend).toHaveBeenCalledWith("codex");
     pickModel("Default model", "Opus 4.8");
     expect(onBackend).toHaveBeenLastCalledWith("puku");
-    pickModel("Default model", "Let Claude Code choose");
+    // No "the CLI chooses" row left to pick: the count is the two picks above.
     expect(onBackend).toHaveBeenCalledTimes(2);
   });
 });

@@ -1,5 +1,6 @@
 import type { Backend, Card, Effort } from "./types";
 import type { HeldModifiers } from "./use-mod-held";
+import { GOOSE_PROVIDERS } from "./goose-provider";
 
 // What the New thread dialog offers and remembers (components/NewCardDialog.tsx draws it).
 
@@ -63,7 +64,7 @@ export const CODEX_DEFAULT_MODEL = "codex-default";
 export const GOOSE_DEFAULT_MODEL = "goose-default";
 
 // The Puku gateway serves these three and answers any other id as puku-ai-2.8.
-// Goose serves many providers, so its list is a starter set of OpenRouter-style ids.
+// Goose's models are not here: each provider serves its own ids (lib/goose-provider.ts).
 export const MODELS: Record<Backend, { id: string; label: string }[]> = {
   claude: [
     { id: "claude-fable-5-1", label: "Fable 5.1" },
@@ -76,15 +77,11 @@ export const MODELS: Record<Backend, { id: string; label: string }[]> = {
     { id: "puku-ai-2.8", label: "Puku AI 2.8" },
     { id: "puku-ai-2.7", label: "Puku AI 2.7" },
   ],
-  codex: [{ id: CODEX_DEFAULT_MODEL, label: "Let Codex choose" }],
-  goose: [
-    { id: GOOSE_DEFAULT_MODEL, label: "Let Goose choose" },
-    { id: "anthropic/claude-sonnet-4.5", label: "Claude Sonnet 4.5 (OpenRouter)" },
-    { id: "anthropic/claude-opus-4.1", label: "Claude Opus 4.1 (OpenRouter)" },
-    { id: "openai/gpt-4.1", label: "GPT-4.1 (OpenRouter)" },
-    { id: "google/gemini-2.5-pro", label: "Gemini 2.5 Pro (OpenRouter)" },
-    { id: "qwen/qwen3-coder", label: "Qwen3 Coder (OpenRouter)" },
-  ],
+  codex: [{ id: CODEX_DEFAULT_MODEL, label: "Codex’s configured model" }],
+  // Goose's models come from the provider the user set up (lib/goose-provider.ts): each provider
+  // serves its own ids, so a fixed list here would be wrong for all but one of them. This is the
+  // one row every Goose menu has — the provider's own pick.
+  goose: [{ id: GOOSE_DEFAULT_MODEL, label: "Your BYOK model" }],
 };
 
 // Every model id any CLI serves. The pickers offer them all — picking a model moves the
@@ -94,10 +91,54 @@ export const ALL_MODEL_IDS: Set<string> = new Set(
   (Object.keys(MODELS) as Backend[]).flatMap((b) => MODELS[b].map((m) => m.id)),
 );
 
+// A Goose model's value in a model picker: "goose:<id>". A Goose provider serves ids no list can know
+// ("puku-ai-2.8" through a Puku key, a local Ollama tag), and one of them can be another CLI's id too,
+// so the picker can't tell a Goose row from puku-cli's by the id alone. The prefix says "this runs on
+// Goose"; bareModel() takes it off before the id reaches Goose (modelOn, resolveModel).
+export const GOOSE_PREFIX = "goose:";
+
+/** The picker value of a model id on Goose. */
+export function gooseValue(id: string): string {
+  return GOOSE_PREFIX + id;
+}
+
+/** Whether a picker value is a Goose model's ("goose:<id>", with an id). */
+export function isGooseValue(value: string): boolean {
+  return value.startsWith(GOOSE_PREFIX) && value.length > GOOSE_PREFIX.length;
+}
+
+/** The model id a picker value runs: the value itself, or a Goose value's id without its prefix. */
+export function bareModel(value: string): string {
+  return isGooseValue(value) ? value.slice(GOOSE_PREFIX.length) : value;
+}
+
+/** Whether a value is a model a picker can hand back: one of the CLIs' own ids, or any Goose model. */
+export function isModelValue(value: string): boolean {
+  return ALL_MODEL_IDS.has(value) || isGooseValue(value);
+}
+
+/**
+ * The model a card runs on, from a picked value. A card's model is the id the CLI takes, so the
+ * "goose:" prefix a picker uses to tell a Goose row from another CLI's same id comes off here.
+ * The card's backend says which CLI it is, and that is what carries the distinction.
+ */
+export function cardModel(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  return bareModel(value);
+}
+
 // The CLI that serves a model id, or undefined for an id neither serves.
+//
+// A Goose model is recognised two ways: by the "goose:" prefix a picker gives it, and by the
+// provider catalog (lib/goose-provider.ts), because each provider serves its own ids and the
+// menu no longer holds a fixed list of them. The catalog is asked by its model ids, so a bare
+// id like "anthropic/claude-opus-4.1" still resolves to Goose.
 export function backendFor(model: string): Backend | undefined {
   if (model === CODEX_DEFAULT_MODEL) return undefined;
-  return (Object.keys(MODELS) as Backend[]).find((b) => MODELS[b].some((m) => m.id === model));
+  if (isGooseValue(model)) return "goose";
+  const own = (Object.keys(MODELS) as Backend[]).find((b) => MODELS[b].some((m) => m.id === model));
+  if (own) return own;
+  return GOOSE_PROVIDERS.some((p) => p.models.includes(model)) ? "goose" : undefined;
 }
 
 // The CLI that owns a model id when no list names it: Claude Code, the CLI every id is
@@ -113,7 +154,10 @@ export const NO_MODEL = "";
 // lands on the model you last picked for that CLI, or on its own default.
 export function modelFor(backend: Backend): string {
   const saved = remembered(`${LAST_MODEL}.${backend}`);
-  return saved !== null && MODELS[backend].some((m) => m.id === saved) ? saved : NO_MODEL;
+  if (saved === null) return NO_MODEL;
+  // A Goose model the user named or configured is remembered as its picker value ("goose:<id>").
+  if (backend === "goose" && isGooseValue(saved)) return saved;
+  return MODELS[backend].some((m) => m.id === saved) ? saved : NO_MODEL;
 }
 
 // The model a card runs on this CLI: its own when the CLI serves it, else nothing (the CLI's own
@@ -126,6 +170,8 @@ export function modelFor(backend: Backend): string {
 // hint on the same model, so it is stripped before the lookup and kept on the way out.
 export function modelOn(backend: Backend, model: string | undefined): string | undefined {
   if (!model) return undefined;
+  // A Goose picker value runs on Goose only, as its bare id.
+  if (isGooseValue(model)) return backend === "goose" ? modelOn(backend, bareModel(model)) : undefined;
   if (model === CODEX_DEFAULT_MODEL) return undefined;
   // Goose's own sentinel too: "goose-default" means the provider picks, so the card pins no model id.
   if (model === GOOSE_DEFAULT_MODEL) return undefined;
@@ -139,12 +185,12 @@ export function modelOn(backend: Backend, model: string | undefined): string | u
 
 // The CLI that serves a model, and the model as it should be sent to that CLI. Any model from any
 // CLI can be picked anywhere; the CLI moves with the model. Returns undefined for "" (the CLI's
-// own default) and for a model no CLI serves.
+// own default) and for a model no CLI serves. A Goose picker value comes back as its bare id.
 export function resolveModel(model: string): { backend: Backend; model: string } | undefined {
   if (!model || model === CODEX_DEFAULT_MODEL) return undefined;
   const backend = backendFor(model);
   if (!backend) return undefined;
-  return { backend, model };
+  return { backend, model: bareModel(model) };
 }
 
 // "" leaves it to the model's own default. A new thread uses the last card's choice, High at first.
@@ -236,7 +282,7 @@ export function startButton(held: HeldModifiers) {
 
 // A model id as the thread header shows it: "Fable 5.1" for one of ours, otherwise the id without "claude-" or a "[1m]" suffix.
 export function modelLabel(id: string) {
-  const bare = id.replace(/\[[^\]]*\]$/, "");
+  const bare = bareModel(id).replace(/\[[^\]]*\]$/, "");
   return Object.values(MODELS).flat().find((m) => m.id === bare)?.label ?? bare.replace(/^claude-/, "");
 }
 

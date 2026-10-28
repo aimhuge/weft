@@ -37,6 +37,7 @@ import { removeCard } from "@/lib/use-delete-dialog";
 import { resumeActions } from "@/lib/resume-actions";
 import { useEscape } from "@/lib/use-escape";
 import { useEscapeTogglesView } from "@/lib/use-escape-view";
+import { useViewHint } from "@/lib/use-view-hint";
 import { guarded } from "./guarded";
 import { useBoardCommands } from "./use-board-commands";
 import { filterCards, railPinned, toggleTag, type RailFilter, type RailPanel } from "@/lib/rail-view";
@@ -255,9 +256,11 @@ export default function Board() {
   useEscape(browserOpen && !selectedId && !showNew, toggleBrowser, { panel: true });
   // Registered last, so an open rail drawer closes before the browser does.
   useEscape(Boolean(libraryOpen) && !selectedId && !showNew && !railPinned(), () => setLibraryOpen(null), { panel: true });
-  // With nothing left to close, Escape flips board and list view.
+  // With nothing left to close, Escape flips board and list view. The flip pops a little pane
+  // saying where it took you, so the switch isn't silent.
+  const { hint: viewHint, show: showViewHint, clear: clearViewHint } = useViewHint();
   const boardLayers = { thread: Boolean(selectedId), newThread: showNew, browser: browserOpen, drawer: Boolean(libraryOpen) };
-  useEscapeTogglesView(boardLayers, viewMode, chooseView);
+  useEscapeTogglesView(boardLayers, viewMode, chooseView, showViewHint);
 
   const tagCatalog = useTagCatalog(cards, notify);
   // Open the editor column automatically when something asks for a file in this card's folder.
@@ -348,6 +351,8 @@ export default function Board() {
         onSort={chooseSort}
         view={viewMode}
         onView={chooseView}
+        viewHint={viewHint}
+        onDismissViewHint={clearViewHint}
         home={home}
         onMenuOpenChange={setMenuOpen}
         onProjectMenu={onProjectMenu}

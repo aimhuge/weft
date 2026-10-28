@@ -13,6 +13,7 @@ const { createPaneCdp } = require("./pane-cdp.cjs");
 const { createPaneInput, agentRoutes } = require("./pane-input.cjs");
 const { controlHandler } = require("./control-server.cjs");
 const { failedUrl, watchLoadFailures } = require("./pane-error.cjs");
+const { escapeToReplay } = require("./pane-escape.cjs");
 const { authorizeThreadOpen, originOf, rememberBoardOrigin } = require("./pane-origins.cjs");
 const { touchIdPrompt } = require("./touch-id.cjs");
 const { appsDir, attachWebContentsView, createAppReload } = require("./app-reload.cjs");
@@ -111,12 +112,12 @@ function createBrowserPane({ getWindow, getAppView, token, onContents, pages, on
     wc.on("enter-html-full-screen", () => (fullscreen = true));
     wc.on("leave-html-full-screen", () => (fullscreen = false));
     wc.on("before-input-event", (_e, input) => {
-      if (input.type !== "keyDown" || input.key !== "Escape" || fullscreen) return;
-      if (input.shift || input.control || input.alt || input.meta) return;
+      const escape = escapeToReplay(input, { fullscreen });
+      if (!escape) return;
       const board = boardContents();
       if (!board) return;
       board.focus();
-      board.sendInputEvent({ type: "keyDown", keyCode: "Escape" });
+      board.sendInputEvent(escape);
       board.sendInputEvent({ type: "keyUp", keyCode: "Escape" });
     });
     // Trackpad pinch magnifies like Safari; Cmd+scroll changes the page zoom.

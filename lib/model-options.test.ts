@@ -1,70 +1,37 @@
 import { describe, expect, it } from "vitest";
-import {
-  CLI_CHOICE,
-  cliChoiceBackend,
-  cliChoiceLabel,
-  cliChoiceNote,
-  filterGroups,
-  isCliChoice,
-  labelFor,
-  modelGroups,
-  optionsFor,
-} from "./model-options";
+import { cliChoiceModel, filterGroups, labelFor, modelGroups, optionsFor } from "./model-options";
 
-describe("the CLI's own choice", () => {
-  it("is named for what it does, not for being a default", () => {
-    expect(cliChoiceLabel("claude")).toBe("Let Claude Code choose");
-    expect(cliChoiceLabel("puku")).toBe("Let puku-cli choose");
-    expect(cliChoiceLabel("codex")).toBe("Let Codex choose");
-    expect(cliChoiceLabel("goose")).toBe("Let Goose choose");
+describe("the model a CLI runs", () => {
+  it("is the first model of the CLI's own list", () => {
+    expect(cliChoiceModel("claude")).toBe("claude-fable-5-1");
+    expect(cliChoiceModel("puku")).toBe("opus-4.8");
   });
 
-  it("says nothing about a default anywhere in its label", () => {
-    for (const label of (["claude", "puku", "codex", "goose"] as const).map((b) => cliChoiceLabel(b))) {
-      expect(label.toLowerCase()).not.toContain("default");
-    }
-  });
-
-  it("round-trips through its value", () => {
-    expect(isCliChoice(CLI_CHOICE + "goose")).toBe(true);
-    expect(isCliChoice("puku-ai-2.8")).toBe(false);
-    expect(cliChoiceBackend(CLI_CHOICE + "goose")).toBe("goose");
-    expect(cliChoiceBackend("cli:nope")).toBeUndefined();
-    expect(cliChoiceBackend("puku-ai-2.8")).toBeUndefined();
-  });
-
-  it("names the model it runs when we know it", () => {
-    expect(cliChoiceNote("claude")).toBe("Runs Fable 5.1");
-    // Goose's choice is whatever the configured provider picks, so there is no model to name.
-    expect(cliChoiceNote("goose")).toBeUndefined();
-    // Codex's only entry is its own "you choose" id, which is no model to name.
-    expect(cliChoiceNote("codex")).toBeUndefined();
+  it("is nothing for a CLI whose model lives in its own config", () => {
+    // Codex's model is its own config, and Goose's is the provider's: neither has a model to name.
+    expect(cliChoiceModel("codex")).toBe("");
+    expect(cliChoiceModel("goose")).toBe("");
   });
 });
 
 describe("the rows of a menu", () => {
-  it("offers the CLI's own choice first, when the menu picks the CLI too", () => {
-    const rows = optionsFor("claude", { withCliChoice: true });
-    expect(rows[0]!.value).toBe(CLI_CHOICE + "claude");
-    expect(rows[0]!.label).toBe("Let Claude Code choose");
-  });
-
-  it("shows a CLI's choice once: its own sentinel row gives way to the CLI-choice row", () => {
-    for (const backend of ["codex", "goose"] as const) {
-      const labels = optionsFor(backend, { withCliChoice: true }).map((r) => r.label);
-      expect(labels.filter((l) => l === cliChoiceLabel(backend))).toHaveLength(1);
+  it("offers no row that lets the CLI choose", () => {
+    for (const backend of ["claude", "puku", "codex", "goose"] as const) {
+      const labels = optionsFor(backend).map((r) => r.label);
+      expect(labels.some((l) => /let .* choose/i.test(l))).toBe(false);
     }
-    expect(optionsFor("codex", { withCliChoice: true }).map((r) => r.value)).toEqual([CLI_CHOICE + "codex"]);
   });
 
-  it("leaves the CLI's own choice out when the menu doesn't pick the CLI", () => {
-    const rows = optionsFor("claude");
-    expect(rows.some((r) => isCliChoice(r.value))).toBe(false);
+  it("gives a CLI whose model lives in its own config one row for it", () => {
+    expect(optionsFor("codex").map((r) => r.label)).toEqual(["Codex’s configured model"]);
+    expect(optionsFor("goose").map((r) => r.label)).toContain("Your BYOK model");
   });
 
   it("puts the models the user named first, under their names", () => {
     const rows = optionsFor("goose", { named: [{ id: "puku-ai-2.8", name: "Puku AI 2.8" }] });
-    expect(rows[0]).toMatchObject({ value: "puku-ai-2.8", label: "Puku AI 2.8" });
+    // A named id that another CLI serves ("puku-ai-2.8" through a Puku key) is prefixed, so it
+    // can't be mistaken for puku-cli's own row.
+    expect(rows[0]).toMatchObject({ value: "goose:puku-ai-2.8", label: "Puku AI 2.8" });
   });
 
   it("shows no id beside a name that is already the id", () => {
@@ -79,7 +46,7 @@ describe("the rows of a menu", () => {
 
   it("shows a named model once, not again under its raw id", () => {
     const rows = optionsFor("goose", { named: [{ id: "puku-ai-2.8", name: "Puku AI 2.8" }] });
-    expect(rows.filter((r) => r.value === "puku-ai-2.8")).toHaveLength(1);
+    expect(rows.filter((r) => r.value === "goose:puku-ai-2.8")).toHaveLength(1);
   });
 
   it("marks a model that has hit its limit", () => {
@@ -106,11 +73,11 @@ describe("the menu's groups", () => {
     expect(groups.find((g) => g.backend === "claude")?.heading).toBe("Claude Code");
   });
 
-  it("never calls a row a default", () => {
-    const groups = modelGroups({ withCliChoice: true });
-    for (const group of groups) {
+  it("never calls a row a default, and never offers a 'choose' row", () => {
+    for (const group of modelGroups()) {
       for (const row of group.rows) {
         expect(row.label.toLowerCase()).not.toContain("default");
+        expect(row.label.toLowerCase()).not.toMatch(/let .* choose/);
       }
     }
   });
@@ -119,17 +86,23 @@ describe("the menu's groups", () => {
 describe("the label a picked value shows", () => {
   it("shows a named model's name", () => {
     const groups = modelGroups({ named: { goose: [{ id: "puku-ai-2.8", name: "Puku AI 2.8" }] } });
-    expect(labelFor("puku-ai-2.8", groups)).toBe("Puku AI 2.8");
+    expect(labelFor("goose:puku-ai-2.8", groups)).toBe("Puku AI 2.8");
   });
 
   it("shows a plain model's label", () => {
     const groups = modelGroups();
     expect(labelFor("claude-opus-5-5", groups)).toBe("Opus 5.5");
   });
+
+  it("shows the model the CLI runs for an empty pick, never a 'let it choose' row", () => {
+    const groups = modelGroups();
+    expect(labelFor("", groups)).toBe("Fable 5.1");
+    expect(labelFor("", groups)).not.toMatch(/choose/i);
+  });
 });
 
 describe("filtering the rows", () => {
-  const groups = modelGroups({ withCliChoice: true });
+  const groups = modelGroups();
 
   it("keeps every row when nothing is typed", () => {
     expect(filterGroups(groups, "")).toHaveLength(groups.length);
@@ -143,8 +116,8 @@ describe("filtering the rows", () => {
   });
 
   it("finds a model by its id", () => {
-    const kept = filterGroups(groups, "gpt-4.1");
-    expect(kept.flatMap((g) => g.rows).some((r) => r.value === "openai/gpt-4.1")).toBe(true);
+    const kept = filterGroups(groups, "opus-4.8");
+    expect(kept.flatMap((g) => g.rows).some((r) => r.value === "opus-4.8")).toBe(true);
   });
 
   it("finds every model of one CLI by the CLI's name", () => {

@@ -1,6 +1,6 @@
-import { backendFor, MODELS } from "./new-thread";
+import { backendFor, bareModel, cardModel, MODELS } from "./new-thread";
 import { fallbackFor } from "./model-fallback";
-import { subagentModel } from "./settings";
+import { subagentModel, gooseNamedModels } from "./settings";
 import { BACKEND_SHORT, type Backend } from "./types";
 import type { SubagentModel } from "./types-settings";
 
@@ -26,10 +26,14 @@ export const subagentBackend = backendFor;
 // The model subagents should run on right now: the user's pick, unless that model has hit its
 // limit, in which case the backup model takes over (lib/model-fallback.ts). "choose" and "inherit"
 // pass through — neither names a model that could be exhausted.
+//
+// The id is the bare one: a pick is a picker value, and a Goose row's carries a "goose:" prefix
+// that tells it from another CLI's same id. The prefix is the picker's business — here the id
+// goes into a command line (`--model`) and a label, so it comes off.
 export function subagentModelFor(now = Date.now()): SubagentModel {
   const picked = subagentModel();
   if (picked === "choose" || picked === "inherit") return picked;
-  return fallbackFor(picked, now)?.model ?? picked;
+  return cardModel(fallbackFor(picked, now)?.model ?? picked) ?? picked;
 }
 
 export function isSubagentModel(value: unknown): value is SubagentModel {
@@ -39,9 +43,14 @@ export function isSubagentModel(value: unknown): value is SubagentModel {
 export function subagentLabel(model: SubagentModel): string {
   if (model === "choose") return "Let the model choose";
   if (model === "inherit") return "Same model as the thread";
-  const backend = subagentBackend(model);
-  const label = backend && MODELS[backend].find((m) => m.id === model)?.label;
-  return label ? `${label} (${BACKEND_SHORT[backend]})` : model;
+  // A pick may still carry the "goose:" prefix (the picker hands it back), so the id is read bare.
+  const id = bareModel(model);
+  const backend = subagentBackend(id);
+  if (!backend) return model;
+  // A model the user named shows its name; one of our own shows its label; a Goose model shows its
+  // id, because each provider serves its own ids and there is no fixed list to name them from.
+  const label = gooseNamedModels().find((m) => m.id === id)?.name ?? MODELS[backend].find((m) => m.id === id)?.label;
+  return `${label ?? id} (${BACKEND_SHORT[backend]})`;
 }
 
 export const DELEGATE = `Use subagents (the Agent tool) more than you'd think: their file reads and long outputs stay out of this thread's context, and several run at once. Delegate when answering means reading across many files (the Explore agent), when the task splits into independent pieces (send them in one message so they run in parallel), for a test, lint or typecheck run where you only need the failures, and for a second-opinion review of a change you made. Do a single known lookup (one file, one grep) yourself. Give each subagent a self-contained prompt that says what to report back, and relay what matters: the user doesn't see its report.`;
@@ -63,15 +72,18 @@ export const GOOSE_DELEGATE = `Use subagents more than you'd think: their file r
 function crossCli(model: string | undefined, backend: Backend, thread: Backend = "claude"): string {
   const fallback = thread === "goose" ? "do the work yourself" : "use the Agent tool";
   const reach = thread === "goose" ? "" : ", which the Agent tool can't reach from this CLI";
+  // The id that goes on the command line is the bare one: a pick may carry the "goose:" prefix,
+  // and "goose run --model goose:<id>" is not a model any CLI serves.
+  const id = model ? bareModel(model) : undefined;
   const why = model ? `Subagents run on ${subagentLabel(model)} (the user's Weft setting)${reach}.` : "Subagents run on the same provider and model as this thread.";
   const tail = `Several Bash calls in one message run in parallel; use run_in_background for long ones. If it fails because ${COMMAND[backend]} isn't installed or logged in, say so and ${fallback}.`;
   if (backend === "goose") {
-    const cmd = `${COMMAND[backend]} run --text "<self-contained task>"${model ? ` --model ${model}` : ""}`;
+    const cmd = `${COMMAND[backend]} run --text "<self-contained task>"${id ? ` --model ${id}` : ""}`;
     return `${why} Run each one with Bash:
 ${cmd}
 Its output is the subagent's report. ${tail}`;
   }
-  const cmd = `${COMMAND[backend]} -p "<self-contained task>" --model ${model} --allowedTools "Read Grep Glob" --permission-mode dontAsk`;
+  const cmd = `${COMMAND[backend]} -p "<self-contained task>" --model ${id} --allowedTools "Read Grep Glob" --permission-mode dontAsk`;
   return `${why} Run each one with Bash instead:
 ${cmd}
 Its output is the subagent's report. Add Edit and Write to --allowedTools for a subagent that changes files. ${tail}`;

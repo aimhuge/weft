@@ -195,6 +195,8 @@ export const settingsMock = (h: Harness) => ({
   gooseModelId: () => "",
   gooseProviderId: () => "",
   gooseBaseUrl: () => "",
+  // The names the user gave their models, which a subagent's label shows.
+  gooseNamedModels: () => [] as { id: string; name: string }[],
 });
 
 export const loginMock = (h: Harness) => ({

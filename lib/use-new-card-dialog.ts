@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api, type NewCardInput } from "@/lib/client";
 import type { Backend, Effort, PermissionMode } from "@/lib/types";
 import {
+  bareModel,
   DRAFT,
   LAST_BACKEND,
   LAST_CWD,
@@ -137,7 +138,8 @@ export function useNewCardDialog(home: string, defaultCwd: string | undefined, r
     setModelState(m);
     const resolved = resolveModel(m);
     if (!resolved) return;
-    setModelFor(resolved.backend, resolved.model);
+    // Remembered as picked, so a Goose row ("goose:<id>") comes back as the same row next time.
+    setModelFor(resolved.backend, m);
     setBackend(resolved.backend);
   }, []);
 
@@ -216,7 +218,9 @@ export function useNewCardDialog(home: string, defaultCwd: string | undefined, r
           cwd,
           backend,
           permissionMode,
-          model,
+          // A Goose row's value carries a "goose:" prefix to tell it from another CLI's same id; the
+          // thread gets the bare id.
+          model: bareModel(model),
           effort: effortFor(backend, effort),
           ...(isolated ? { isolated: true, ...(branch ? { branch } : {}) } : {}),
           // Always named, so Builder picked here wins over the folder's default.

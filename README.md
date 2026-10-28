@@ -66,7 +66,9 @@ port.
   running `/done` sits in Done while it works and is archived when it finishes.
 - **List view**: the board as a sheet. The toggle in the project bar (or Esc, with nothing open) swaps the columns for a table —
   title, status, stage, tags, folder, age — one line per card, with the header stuck to the top and the
-  columns lined up down the sheet, on frosted glass with grid lines and numbered rows. Click a header
+  columns lined up down the sheet, on frosted glass with grid lines and numbered rows. Esc pops a small
+  pane under the toggle naming the view you landed in ("List view. Esc goes back."), so the swap is
+  never silent; it closes itself a moment later. Click a header
   and type: the Title filters cards as you go, any other column narrows its values (↑↓, Enter keeps
   only the match), and Age flips its sort on a click; the sheet remembers it all. Bands fold (the
   Backlog starts folded), and a card folds open to its subagents and the cards it started. Click a
@@ -334,14 +336,16 @@ then follows whatever the last new thread used. To change it later, even mid-tur
 use the mode menu in the open thread's header or the card's right-click menu. Sessions picked up from
 Claude Code keep the mode they last ran in (say `auto`).
 
-**Every model is on offer, and there is no default model.** Wherever Weft asks for a model — the New
+**Every model is on offer, and no row lets the CLI choose.** Wherever Weft asks for a model — the New
 thread dialog, Settings → Models (New threads, Use for subagents, Copilot, Review all, Run /weft:done
 on, Backup model), the thread header's chip — the list is every model any CLI serves, grouped under
 Claude, Puku, Codex and Goose. Nothing is locked to one CLI: picking a model moves the card to the CLI that
-serves it, so the choice is one row, not two. The first entry is **Default model**, which means "let
-the CLI decide" — Weft leaves the model off the command line rather than picking one behind your
-back. A changed default takes effect at once: the open New thread dialog follows it, and an idle
-thread picks it up on its next message.
+serves it, so the choice is one row, not two. Every row is a model: the two CLIs whose model lives in their
+own config (Codex and Goose) each have one row for it — **Codex's configured model** and **Your BYOK
+model** — and a menu with nothing picked shows the model that CLI actually runs, so you always see what will
+answer. The menu is a search box: type a name or a model id and every CLI's rows filter at once. A changed
+default takes effect at once: the open New thread dialog follows it, and an idle thread picks it up on its
+next message.
 
 **A model that hits its limit hands over to the backup.** Plan limits are per model (Opus has its own
 weekly cap, Sonnet another), so Weft remembers which model ran out and until when. A model that is
@@ -356,7 +360,7 @@ there, whichever day that is.
 
 Pick **Codex** in the New thread dialog to run the OpenAI Codex CLI. Install `codex` on your PATH and sign in with `codex login` first; Weft can open Codex's device login in Terminal from Settings → Accounts. Codex uses its own tools and saved sessions. Weft's browser, board, secrets and webhook MCP tools reach Codex over HTTP, and a folder's `CLAUDE.md` and `.claude/skills` are passed along (Codex reads neither); and every tool call goes through Weft's guards first, the same ones Claude Code threads run behind ([thread guards](docs/architecture/thread-guards.md)). Codex's sandbox mode and reasoning effort are fixed when a session starts.
 
-Pick **Goose** to run the Goose CLI agent (the Rust one from Block), and bring your own key: Settings → Models → **Bring your own key** takes a provider's API key — OpenRouter, Anthropic, OpenAI, Google, Groq, Mistral, DeepSeek, xAI, Azure, LiteLLM, Perplexity, Cerebras, a local Ollama, or any OpenAI-compatible endpoint — and Weft keeps it in your Keychain. The key never reaches the board and never crosses Weft's control server: the thread's Goose process is started with the key in its env, and that is the only place it exists. The provider you pick is what new Goose threads run on. A card runs the model you gave it (in the New thread dialog or by switching mid-thread); a card left on **Goose default** runs the model you picked for the provider, and with none, Goose chooses. A provider that needs an endpoint beside its key takes one (Anthropic's host, Azure's resource address, LiteLLM's proxy), and a provider whose model ids aren't known ahead of time lets you type the id. **Puku** is one click: the button beside the Provider picker fills in the Anthropic provider, `https://api-cli.puku.sh` and `puku-ai-2.8`, so all that is left is your Puku key. A Goose thread is a plain CLI process, so like a Codex thread it has no per-tool guards and no session to resume — one fresh `goose run` per turn — and it takes no effort setting. It has no Agent tool either, so its subagents are `goose run --text` calls from Bash on the same provider and model, and its commits are signed `Co-Authored-By: Goose (<model>) on Weft`. Install `goose` on your PATH first.
+Pick **Goose** to run the Goose CLI agent (the Rust one from Block), and bring your own key: Settings → Models → **Bring your own key** takes a provider's API key — OpenRouter, Anthropic, OpenAI, Google, Groq, Mistral, DeepSeek, xAI, Azure, LiteLLM, Perplexity, Cerebras, a local Ollama, or any OpenAI-compatible endpoint — and Weft keeps it in your Keychain. The key never reaches the board and never crosses Weft's control server: the thread's Goose process is started with the key in its env, and that is the only place it exists. The provider you pick is what new Goose threads run on, and its models are the ones the Goose group of every model menu lists — your provider's own ids, not another provider's. A card runs the model you gave it (in the New thread dialog or by switching mid-thread); a card left on **Your BYOK model** runs the model you picked for the provider, and with none, Goose chooses. A provider that needs an endpoint beside its key takes one (Anthropic's host, Azure's resource address, LiteLLM's proxy), and a provider whose model ids aren't known ahead of time lets you type the id. Give your models a name in the same page's **Model names** section, and every menu shows "Big Opus" instead of the raw id, with the id beside it. **Puku** is one click: the button beside the Provider picker fills in the Anthropic provider, `https://api-cli.puku.sh` and `puku-ai-2.8`, so all that is left is your Puku key. A Goose thread is a plain CLI process, so like a Codex thread it has no per-tool guards and no session to resume — one fresh `goose run` per turn — and it takes no effort setting. It has no Agent tool either, so its subagents are `goose run --text` calls from Bash on the same provider and model, and its commits are signed `Co-Authored-By: Goose (<model>) on Weft`. Install `goose` on your PATH first.
 
 ## How cards move
 
@@ -479,7 +483,8 @@ keeps their file dumps out of the thread's context. Settings → Models → Use 
   threads, the thread runs that CLI headless as the subagent (`puku-cli -p … --model opus-4.8`, or
   `claude -p`), read-only unless the task needs edits. That needs the other CLI installed and logged in.
   A Goose thread has no Agent tool, so every subagent is a Bash run: `goose run --text …` on the thread's own
-  provider and model (or `--model` for a picked Goose model), or the other CLI's headless line.
+  provider and model (or `--model` for a picked Goose model), or the other CLI's headless line. A Goose model
+  shows the name you gave it in Settings → Models → Bring your own key, with its id beside it.
 
 **Backup model** (`Settings → Models → Backup model`) is the model a card reruns its first message on
 when that very first turn came back an error (a rate limit, mostly), and the model every thread moves

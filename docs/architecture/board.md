@@ -112,6 +112,11 @@ lives in its own component under `components/`.
   (`lib/board-prefs.ts`), read through `lib/use-view-mode.ts`.
   Escape flips it too, from `lib/use-escape-view.ts`: the bottom Escape layer, on only while no thread,
   new-thread dialog, browser or closable drawer is up, and never for an Escape typed in a field.
+  The flip pops a small pane under the toggle — `components/ViewHint.tsx`, drawn from the state in
+  `lib/use-view-hint.ts` — naming the view you landed in ("List view. Esc goes back.") and closing
+  itself after a moment. It hangs off the toggle rather than taking a row, so it costs no vertical
+  space on a small screen. The Escape layer itself decides the flip and hands the new view to the
+  hint, so the two can never disagree about what happened.
 - `components/BoardBrowserPane.tsx` — the standalone browser pane, drawn while no card is open (an open
   card's pane lives in its workspace's `pane` column, `components/OpenCard.tsx`).
 - `components/OpenCard.tsx` — `CardFrame` (the backdrop and the framed window over the board, a

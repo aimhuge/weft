@@ -3,10 +3,9 @@
 import { useMemo, useState } from "react";
 import { CODEX_DEFAULT_MODEL, GOOSE_DEFAULT_MODEL, MODELS, NO_MODEL } from "@/lib/new-thread";
 import { useLimitedModels } from "@/lib/use-plan-limits";
-import { useGooseProviders } from "@/lib/use-goose";
-import { setUpGooseModels } from "@/lib/goose-provider";
-import { useNamedModels } from "@/lib/use-named-models";
-import { CLI_CHOICE, cliChoiceBackend, isCliChoice, modelGroups, type NamedModel } from "@/lib/model-options";
+import { gooseModelsFor } from "@/lib/goose-provider";
+import { useGooseChoice, useNamedModels, type GooseChoice } from "@/lib/use-named-models";
+import { cliChoiceModel, modelGroups, type NamedModel } from "@/lib/model-options";
 import type { Backend } from "@/lib/types";
 import ModelTypeahead from "./ModelTypeahead";
 
@@ -19,23 +18,28 @@ import ModelTypeahead from "./ModelTypeahead";
 // can't be typed into and draws its own list wherever the OS feels like, which on a short window
 // is off the bottom of the screen and under the browser pane.
 //
-// No row is called "default". A CLI's own choice reads as what it does ("Let Claude Code choose"),
-// and the models below it are the models themselves.
+// No row lets the CLI choose: every row is a model. A thread with no model picked shows the model its
+// CLI runs (Fable 5.1 on Claude Code), and Codex and Goose, whose model lives in their own config,
+// each have one row for it ("Codex’s configured model", "Your BYOK model").
+//
+// The Goose group lists the models of the provider the user set up (Settings → Models → Bring your
+// own key), because each provider serves its own ids: OpenRouter's "anthropic/claude-opus-4.1" is
+// not Anthropic's "claude-opus-4-1", and neither is what a local Ollama runs.
 
 export const SELECT_CLASS =
   "rounded-md border border-line-strong bg-canvas px-2.5 py-[7px] text-[12.5px] text-ink outline-none focus:border-accent";
 
 export type PickerOption = { value: string; label: string };
 
-// The CLIs' own default sentinels: in a menu that also picks the CLI they show once, as that
-// CLI's default row, rather than twice.
-const DEFAULT_IDS = new Set([NO_MODEL, CODEX_DEFAULT_MODEL, GOOSE_DEFAULT_MODEL]);
+// The configured-model rows of the CLIs whose model lives in their own config. Picking one moves the
+// thread to that CLI with no model pinned.
+const CONFIGURED: Record<string, Backend> = { [CODEX_DEFAULT_MODEL]: "codex", [GOOSE_DEFAULT_MODEL]: "goose" };
 
-// Whether a model belongs in the menu. A Goose model shows only when a saved provider key serves
-// it (Settings → Models → Bring your own key); the models the user named always do, and so does
-// the row's current pick, so the menu never shows a value it doesn't list.
-function useOffered(value: string) {
-  const ready = setUpGooseModels(useGooseProviders().providers);
+// Whether a model belongs in the menu. A Goose model shows only when the provider the user set
+// up serves it (Settings → Models → Bring your own key); the models the user named always do, and
+// so does the row's current pick, so the menu never shows a value it doesn't list.
+function useOffered(value: string, goose: GooseChoice) {
+  const ready = new Set(gooseModelsFor(goose.providerId, goose.modelId));
   return (backend: Backend, id: string) => backend !== "goose" || id === GOOSE_DEFAULT_MODEL || id === value || ready.has(id);
 }
 
@@ -54,7 +58,7 @@ export default function ModelSelect({
   label: string;
   leading?: PickerOption[];
   onChange: (value: string) => void;
-  // Given, each CLI's heading starts with a "<CLI> default" row and the menu is the CLI picker.
+  // Given, the menu is the CLI picker too: a configured-model row moves the thread to its CLI.
   cli?: CliPick;
   // The select's own look; a caller that draws the box around it passes a bare one.
   className?: string;
@@ -63,19 +67,31 @@ export default function ModelSelect({
   // memoized from its result, so the groups below don't change on every render.
   const limited = useLimitedModels();
   const atLimit = useMemo(() => new Set(limited.map((l) => l.model)), [limited]);
-  const offered = useOffered(value);
+  const goose = useGooseChoice();
+  const offered = useOffered(value, goose);
   const names = useNamedModels();
 
-  // The models the user named, per CLI. A named model shows under the CLI that serves it.
+  // The models the user named, per CLI. A named model shows under the CLI that serves it: the
+  // Goose provider the user set up, or the CLI whose own list names the id.
+  //
+  // The Goose provider's own models come along, listed by their id: each provider serves its own
+  // ids (OpenRouter's "anthropic/claude-opus-4.1" is not Anthropic's "claude-opus-4-1"), so the
+  // menu lists the ones the provider the user chose actually has.
   const named = useMemo(() => {
     const byBackend: Partial<Record<Backend, NamedModel[]>> = {};
     for (const model of names) {
-      const backend = backendOf(model.id);
+      const backend = backendOf(model.id) ?? (goose.providerId ? "goose" : undefined);
       if (!backend) continue;
       byBackend[backend] = [...(byBackend[backend] ?? []), model];
     }
+    if (goose.providerId) {
+      const served = gooseModelsFor(goose.providerId, goose.modelId);
+      const already = new Set((byBackend.goose ?? []).map((m) => m.id));
+      const rows = served.filter((id) => !already.has(id)).map((id) => ({ id, name: id }));
+      byBackend.goose = [...(byBackend.goose ?? []), ...rows];
+    }
     return byBackend;
-  }, [names]);
+  }, [names, goose.providerId, goose.modelId]);
 
   const groups = useMemo(
     () =>
@@ -83,18 +99,17 @@ export default function ModelSelect({
         named,
         atLimit,
         offer: offered,
-        withCliChoice: Boolean(cli),
       }),
-    [named, atLimit, offered, cli],
+    [named, atLimit, offered],
   );
 
-  // The value the menu holds: a "the CLI chooses" row, or a model id.
-  const shown = cli && (DEFAULT_IDS.has(value) || value === NO_MODEL) ? CLI_CHOICE + cli.backend : value;
+  // The value the menu holds: with no model picked, the model the CLI runs, or its configured-model row.
+  const shown = cli && value === NO_MODEL ? cliChoiceModel(cli.backend) || configuredRow(cli.backend) : value;
 
   function pick(next: string) {
-    if (isCliChoice(next)) {
-      const backend = cliChoiceBackend(next);
-      if (cli && backend) cli.onPick(backend);
+    const backend = CONFIGURED[next];
+    if (cli && backend) {
+      cli.onPick(backend);
       return;
     }
     onChange(next);
@@ -120,6 +135,11 @@ export default function ModelSelect({
       className={className}
     />
   );
+}
+
+// The configured-model row of a CLI with no model of its own to name, or NO_MODEL.
+function configuredRow(backend: Backend): string {
+  return Object.keys(CONFIGURED).find((id) => CONFIGURED[id] === backend) ?? NO_MODEL;
 }
 
 // The CLI a model id belongs to: the one whose list names it, or "goose" for a Goose model the

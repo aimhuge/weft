@@ -51,7 +51,11 @@ describe("subagents", () => {
   // Goose is the fourth CLI, and it takes none of Claude Code's and puku-cli's shapes: no
   // Agent tool, so no subagent-model env var, and its own `run --text` command line.
   it("labels a Goose model with Goose, not Codex", () => {
-    expect(subagentLabel("anthropic/claude-sonnet-4.5")).toBe("Claude Sonnet 4.5 (OpenRouter) (Goose)");
+    // Each provider serves its own ids, so there is no fixed list to name a Goose model from:
+    // the row shows the id unless the user gave it a name.
+    expect(subagentLabel("anthropic/claude-sonnet-4.5")).toBe("anthropic/claude-sonnet-4.5 (Goose)");
+    // The picker's "goose:" prefix is the picker's business: a label reads the bare id.
+    expect(subagentLabel("goose:anthropic/claude-sonnet-4.5")).toBe("anthropic/claude-sonnet-4.5 (Goose)");
   });
 
   it("sets no subagent env for Goose", () => {
@@ -88,6 +92,14 @@ describe("subagentPrompt for a Goose thread", () => {
     const text = subagentPrompt("openai/gpt-4.1", "goose");
     expect(text).toContain('goose run --text "<self-contained task>" --model openai/gpt-4.1');
     expect(text).not.toContain("which the Agent tool can't reach");
+  });
+
+  it("takes the picker's 'goose:' prefix off the id it runs", () => {
+    // A Goose row's value carries a "goose:" prefix so it can't be mistaken for another CLI's same
+    // id; the command line takes the bare id, because that is the id Goose serves.
+    const text = subagentPrompt("goose:openai/gpt-4.1", "goose");
+    expect(text).toContain('goose run --text "<self-contained task>" --model openai/gpt-4.1');
+    expect(text).not.toContain("--model goose:");
   });
 
   it("runs another CLI's model with that CLI's line, falling back to doing the work itself", () => {

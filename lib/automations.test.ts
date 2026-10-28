@@ -178,4 +178,11 @@ describe("doneOverrides", () => {
     model = "opus-4.8";
     expect(doneOverrides(claudeCard())).toEqual({ effort: "max" });
   });
+
+  it("gives a Goose card the id Goose takes, without the picker's prefix", () => {
+    // A Goose row's value carries a "goose:" prefix, so it can't be mistaken for another CLI's
+    // same id. The card's model is the id the CLI takes, so the prefix comes off here.
+    model = "goose:anthropic/claude-opus-4.1";
+    expect(doneOverrides(card({ backend: "goose" }))).toEqual({ model: "anthropic/claude-opus-4.1" });
+  });
 });

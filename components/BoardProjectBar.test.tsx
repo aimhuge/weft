@@ -66,6 +66,12 @@ describe("BoardProjectBar", () => {
     expect(seen.get("bar")).toMatchObject({ view: "list", onView: p.onView });
   });
 
+  it("hands ProjectBar the hint that says where Escape took you", () => {
+    const onDismissViewHint = vi.fn();
+    setup({ viewHint: { mode: "list", id: 1 }, onDismissViewHint });
+    expect(seen.get("bar")).toMatchObject({ viewHint: { mode: "list", id: 1 }, onDismissViewHint });
+  });
+
   it("lists no matches for a blank query", () => {
     setup({ query: "  " });
     expect(seen.get("box")!.matches).toEqual([]);

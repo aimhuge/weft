@@ -143,10 +143,14 @@ describe("NewCardDialog", () => {
   });
 
   // The dialog normalizes the picked effort through effortFor: puku drops xhigh, keeps low/medium/high/max.
-// (effortFor is unit-tested in lib/new-thread.test.ts; this just pins the wiring through the dialog.)
-  it("picking a CLI's default in the model picker passes the effort through effortFor, so puku keeps high", async () => {
+  // (effortFor is unit-tested in lib/new-thread.test.ts; this just pins the wiring through the dialog.)
+  it("picking a puku model in the model picker passes the effort through effortFor, so puku keeps high", async () => {
     const { onCreate, box } = setup();
-    pickModel("Model", "Let puku-cli choose");
+    // The dialog loads Settings' defaults when it opens, and a pick made before that load lands
+    // is replaced by it — so let the load land first, the way a user picking a model does.
+    await waitFor(() => expect(api.settings).toHaveBeenCalled());
+    // A puku model moves the thread to puku-cli, which then takes the effort as it is.
+    pickModel("Model", "Opus 4.8");
     await userEvent.type(box, "Hi");
     await userEvent.click(screen.getByRole("button", { name: "Start now" }));
     // The dialog's default effort is "high" (lastEffort), which puku accepts.
@@ -162,8 +166,9 @@ describe("NewCardDialog", () => {
     const picker = screen.getByRole("combobox", { name: "Model" });
     expect(screen.queryByRole("group", { name: "CLI" })).toBeNull();
     pickModel("Model", "Opus 4.8");
-    pickModel("Model", "Let Codex choose");
-    expect(picker).toHaveValue("Let Codex choose");
+    // Codex's model lives in its own config, so its row is that model, and it picks the CLI.
+    pickModel("Model", "Codex’s configured model");
+    expect(picker).toHaveValue("Codex’s configured model");
     await userEvent.type(box, "Hi");
     await userEvent.click(screen.getByRole("button", { name: "Start now" }));
     expect(onCreate).toHaveBeenLastCalledWith(expect.objectContaining({ backend: "codex" }));

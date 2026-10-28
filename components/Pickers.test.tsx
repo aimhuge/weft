@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { MODELS } from "@/lib/new-thread";
+import { resetNamedModels } from "@/lib/use-named-models";
 import { EffortPicker, ModelPicker } from "./Pickers";
 import { openModels, pickModel, rowName } from "./model-picker-test-utils";
 import "./test-utils";
@@ -14,7 +15,8 @@ describe("ModelPicker", () => {
     expect(within(list).getByRole("group", { name: "Claude Code" })).toBeInTheDocument();
     expect(within(list).getByRole("group", { name: "puku-cli" })).toBeInTheDocument();
     expect(within(list).getByRole("group", { name: /^Codex/ })).toBeInTheDocument();
-    expect(within(list).getByRole("option", { name: rowName("Let Codex choose") })).toBeInTheDocument();
+    // Codex's model lives in its own config, so its one row names it.
+    expect(within(list).getByRole("option", { name: rowName("Codex’s configured model") })).toBeInTheDocument();
   });
 
   it("shows the picked model's name in the field", () => {
@@ -68,32 +70,43 @@ describe("ModelPicker", () => {
 });
 
 describe("ModelPicker as the CLI picker", () => {
-  it("heads each CLI with its own choice, shown once, and picks the CLI with it", () => {
+  it("shows the model the CLI runs, and a configured-model row picks the CLI", () => {
     const onPick = vi.fn();
     const onChange = vi.fn();
     render(<ModelPicker value="" onChange={onChange} label="Model" cli={{ backend: "puku", onPick }} />);
-    expect(screen.getByRole("combobox", { name: "Model" })).toHaveValue("Let puku-cli choose");
-    expect(within(openModels("Model")).getAllByRole("option", { name: rowName("Let Codex choose") })).toHaveLength(1);
-    pickModel("Model", "Let Codex choose");
+    // No model picked: the field shows the model puku-cli runs, not a "let it choose" row.
+    expect(screen.getByRole("combobox", { name: "Model" })).toHaveValue("Opus 4.8");
+    // Codex's model lives in its own config, so its one row is that model, and it picks the CLI.
+    expect(within(openModels("Model")).getAllByRole("option", { name: rowName("Codex’s configured model") })).toHaveLength(1);
+    pickModel("Model", "Codex’s configured model");
     expect(onPick).toHaveBeenCalledWith("codex");
     expect(onChange).not.toHaveBeenCalled();
     pickModel("Model", "Opus 5.5");
     expect(onChange).toHaveBeenCalledWith("claude-opus-5-5");
   });
 
-  it("lists a Goose model only when a saved provider key serves it", async () => {
-    const listProviders = vi.fn().mockResolvedValue({ providers: [{ id: "openrouter", label: "OpenRouter", envKey: "OPENROUTER_API_KEY", hasKey: true }] });
+  it("lists a Goose model only when the provider the user set up serves it", async () => {
+    // No provider set up: no Goose models but the provider's own pick.
     const { unmount } = render(<ModelPicker value="" onChange={() => {}} label="Model" />);
     let list = openModels("Model");
-    expect(within(list).queryByRole("option", { name: rowName("GPT-4.1 (OpenRouter)") })).toBeNull();
-    expect(within(list).getByRole("option", { name: rowName("Let Goose choose") })).toBeInTheDocument();
+    expect(within(list).queryByRole("option", { name: rowName("openai/gpt-4.1") })).toBeNull();
+    expect(within(list).getByRole("option", { name: rowName("Your BYOK model") })).toBeInTheDocument();
     unmount();
-    (window as unknown as { weft: unknown }).weft = { goose: { listProviders } };
+
+    // OpenRouter set up: its own models are listed, and nobody else's.
+    resetNamedModels();
+    const fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ gooseProviderId: "openrouter", gooseModelId: "openai/gpt-4.1" }),
+    });
+    vi.stubGlobal("fetch", fetch);
     render(<ModelPicker value="" onChange={() => {}} label="Model" />);
-    await waitFor(() => expect(listProviders).toHaveBeenCalled());
+    await waitFor(() => expect(fetch).toHaveBeenCalled());
     list = openModels("Model");
-    expect(await within(list).findByRole("option", { name: rowName("GPT-4.1 (OpenRouter)") })).toBeInTheDocument();
-    delete (window as unknown as { weft?: unknown }).weft;
+    expect(await within(list).findByRole("option", { name: rowName("openai/gpt-4.1") })).toBeInTheDocument();
+    // Anthropic's own ids are not OpenRouter's, so they are not offered here.
+    expect(within(list).queryByRole("option", { name: rowName("claude-sonnet-4-5") })).toBeNull();
+    vi.unstubAllGlobals();
   });
 });
 

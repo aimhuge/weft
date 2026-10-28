@@ -18,11 +18,22 @@ export function bareBoard({ thread, newThread, browser, drawer }: BoardLayers) {
 // thread, the new-thread dialog, the browser or a closable drawer is up, so Escape closes those first,
 // and dialogs and menus sit above every panel anyway. Escape typed in a field (the search box, a
 // composer, the terminal's textarea) leaves the view alone.
-export function useEscapeTogglesView(open: BoardLayers, mode: ViewMode, choose: (next: ViewMode) => void) {
+//
+// `onFlip` hears the view it switched to, so the board can pop a little pane saying where Escape
+// just took you (lib/use-view-hint.ts). It never fires without a flip.
+export function useEscapeTogglesView(
+  open: BoardLayers,
+  mode: ViewMode,
+  choose: (next: ViewMode) => void,
+  onFlip?: (next: ViewMode) => void,
+) {
   useEscape(
     bareBoard(open),
     (e) => {
-      if (!isTyping(e.target)) choose(mode === "board" ? "list" : "board");
+      if (isTyping(e.target)) return;
+      const next = mode === "board" ? "list" : "board";
+      choose(next);
+      onFlip?.(next);
     },
     { panel: true },
   );

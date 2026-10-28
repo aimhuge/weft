@@ -1,4 +1,4 @@
-import { backendFor, effortFor } from "./new-thread";
+import { backendFor, cardModel, effortFor } from "./new-thread";
 import { fallbackFor } from "./model-fallback";
 import { automations, doneEffort, doneModel } from "./settings";
 import type { AutomationTrigger, Backend, Card, Column, Effort } from "./types";
@@ -77,10 +77,10 @@ export function doneOverrides(card: Card): { model?: string; effort?: Effort; ba
   const fallback = fallbackFor(wanted);
   if (fallback?.model) {
     // The backup takes over, on its own CLI when it lives on another one.
-    out.model = fallback.model;
+    out.model = cardModel(fallback.model);
     if (fallback.backend && fallback.backend !== card.backend) out.backend = fallback.backend;
   } else if (model) {
-    out.model = model;
+    out.model = cardModel(model);
   }
   const effort = effortFor(card.backend, doneEffort());
   if (effort) out.effort = effort;

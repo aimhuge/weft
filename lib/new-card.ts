@@ -4,7 +4,7 @@ import { firstMessage } from "./automations";
 import { validBranch } from "./branch-name";
 import { resolveFolder } from "./folders";
 import { asText, cleanTitle, titleFromPrompt } from "./format";
-import { effortFor, BACKEND_IDS } from "./new-thread";
+import { effortFor, BACKEND_IDS, GOOSE_PREFIX } from "./new-thread";
 import { fallbackFor } from "./model-fallback";
 import { sendMessage } from "./runner";
 import { scheduleMessage } from "./scheduler";
@@ -23,7 +23,27 @@ import { MODES, type Backend, type Card, type Effort, type PermissionMode } from
 // instead, with nothing to say so.
 const BACKENDS: Backend[] = BACKEND_IDS;
 
-const MODEL_ID = /^[\w.\-\[\]]{1,60}$/;
+// The shape a model id has to have, so a body can't hand a card an arbitrary string to put on
+// a CLI's command line. It is a shape check, not a list: a card's model can be any id a
+// provider serves, and those use "/" ("anthropic/claude-opus-4.1"), ":" ("llama3:8b") and ":"
+// ("host:port"), which a stricter pattern rejected. A rejected id became no model at all, so
+// the card silently ran on the CLI's own default instead of the one that was asked for.
+const MODEL_ID = /^[\w.:\-/[\]]{1,120}$/;
+
+// The model a card runs, from a picker's value. A Goose model arrives as "goose:<id>" and the
+// prefix comes off, because a card's model is the id the CLI takes.
+function modelFromBody(body: Record<string, unknown>): string | undefined {
+  const value = body.model;
+  if (typeof value !== "string") return undefined;
+  // A "goose:" prefix names a Goose model, so the prefix comes off. With no model after it there
+  // is nothing to run, and the card takes its CLI's own choice.
+  if (value.startsWith(GOOSE_PREFIX)) {
+    const id = value.slice(GOOSE_PREFIX.length);
+    return id && MODEL_ID.test(id) ? id : undefined;
+  }
+  if (!MODEL_ID.test(value)) return undefined;
+  return value;
+}
 
 // Throws with a message to show when the body can't make a card (no prompt, a folder that isn't one).
 export function createCardFromBody(body: Record<string, unknown>): Card {
@@ -39,7 +59,7 @@ export function createCardFromBody(body: Record<string, unknown>): Card {
     ? (body.permissionMode as PermissionMode)
     : defaultPermissionMode();
 
-  const model = typeof body.model === "string" && MODEL_ID.test(body.model) ? body.model : undefined;
+  const model = modelFromBody(body);
 
   // A model that has hit its limit is a bad place to start a thread: the first turn would fail on
   // it. The card starts on the backup model instead (lib/model-fallback.ts), and the CLI moves with

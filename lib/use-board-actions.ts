@@ -8,7 +8,7 @@ import { api, type NewCardInput } from "./client";
 import { startPileReview } from "./pile-review";
 import { lastFolder } from "./board-helpers";
 import { onOpenCardRequest } from "./open-card";
-import { backendFor } from "./new-thread";
+import { backendFor, cardModel } from "./new-thread";
 import type { Card } from "./types";
 
 export interface BoardActions {
@@ -75,7 +75,9 @@ export function useBoardActions({
     async (cwd: string, prompt: string, title: string, model?: string): Promise<string | undefined> => {
       // The model picks the CLI: every model is offered, and the card runs on the one that serves it.
       const backend = (model && backendFor(model)) || "claude";
-      const { card } = await api.create({ title, prompt, cwd, backend, model, start: true });
+      // The card's model is the id the CLI takes, so a Goose pick loses its "goose:" prefix; the
+      // card's backend says it runs on Goose.
+      const { card } = await api.create({ title, prompt, cwd, backend, model: cardModel(model), start: true });
       return card.id;
     },
     [],
