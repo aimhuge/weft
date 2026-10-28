@@ -17,6 +17,10 @@ lands; a release moves those lines under its version and tags the commit `vX.Y.Z
 
 - **The Esc view hint is now a loud toast** — it was a grey box in the bar's own grey, 11.5px, gone in 2.6 seconds, and it read as a tooltip rather than an announcement. It is now big type, an accent tile carrying the view's icon, a bright accent border and a wide glow, with a short pop-in so it reads as an announcement. It stays up for 4 seconds, and says what the next Esc does ("List view · hit Esc again to switch to board view") instead of a vague "Esc goes back". It is one row and never wraps. An absolutely-positioned box with no width shrank to its content and then wrapped its text into a narrow column, which left the icon adrift from the words and stranded the ✕ between them, so it now carries `w-max` and `whitespace-nowrap`. **The next Esc puts the toast away** instead of flipping the view again — the toast advertises that Esc does something, so Esc has to do it. The flip itself still works the same: the toast is driven by the board's own Escape layer, so it appears on exactly the Escape that moves the view. The toast is `components/ViewHint.tsx` with its state and timer in `lib/use-view-hint.ts`, the flip's hook `lib/use-escape-view.ts`, and the pop-in and glow in `app/globals.css`.
 
+### Fixed
+
+- **The dictation key answers to Command+Option+' and stops the mic.** The rebindable binding is a set of modifiers rather than an exact combination, so the default `⌥'` now fires on `⌘⌥'` too — the combination people reach for when the bare one is taken. Pressing the key again while the microphone is still opening cancels the recording that is starting, instead of leaving it running with nobody listening or opening a second microphone on top of it (`lib/shortcuts.ts`, `lib/use-dictation.ts`, `lib/use-composer-keys.ts`).
+
 ## [0.6.5] - 2026-10-28
 
 ### Added
