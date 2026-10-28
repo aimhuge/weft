@@ -19,7 +19,7 @@ These were settled before the design was written, and each one narrows what foll
 | --- | --- |
 | The name is **Weft Worker** | Not "runner" — a runner is what it does, a worker is what it is. |
 | The guards are **centralised in Supabase** | The claim, overlap and folder-grant authority moves into the database, so a Mac and a worker can share a repo. See [The guards move](#the-guards-move). |
-| Workers are **priced**, one included on Pro | A plan allowance, not a meter: a worker is a thing you have, not usage you spend. $20/month per extra. See [What it costs](#what-it-costs). |
+| Workers are **priced**, one included on Pro | A plan allowance, not a meter: a worker is a thing you have, not usage you spend. $20 per worker per month, Pro includes one. See [What it costs](#what-it-costs). |
 | The repo is a **persistent checkout per project**, cards work in worktrees of it | Exactly what the Mac does. No clone-per-card, no credentials churn. |
 | The host **authenticates with a service key** | A per-worker key, not a human session. See [Identity](#identity). |
 | **All four backends**, on the worker's own toolchain | Claude Code, puku-cli, Codex and Goose all work on a worker, and each uses the version the project pins. |
@@ -441,15 +441,21 @@ counter drifts from the rows that justify it. A worker is not a counter — it i
 count is a **plan allowance**, sitting next to seats, exactly the way `canHaveMembers` works today
 (`lib/billing/plan-gate.ts:46`).
 
-**The decision: one worker included on Pro; $20/month for each additional one.**
+**The decision: $20 per worker per month. Pro includes one worker; every worker after that is $20/month.**
+
+The price is **per worker, per month** — it does not change with how much the worker runs, how many cards it takes,
+or how long they take. A worker is a seat for a machine, and a seat costs the same whether it is busy or idle.
 
 | Plan | Workers | Price |
 | --- | --- | --- |
 | Free | 0 | $0 |
 | Open Source / Education | 0 | $0 |
-| Pro | 1 included | $20/mo |
-| Team | 1 included, per workspace | $9/seat/mo |
-| Extra workers | each | $20/mo |
+| Pro | **1 included** | $20/mo |
+| Team | **1 included**, per workspace | $9/seat/mo |
+| Every additional worker | each | **$20/mo** |
+
+So a Pro workspace with three workers pays $20 + $20 + $20 = **$60/month**. Team adds the per-seat price on top of
+the same worker allowance.
 
 The shape in code follows the package's own rule — *gate on a capability or a limit, never on a plan id*
 (`node_modules/@aimhuge/billing/dist/catalog.d.ts:16-17`). The plan gains a number, not a new plan id:
