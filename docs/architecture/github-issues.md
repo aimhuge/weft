@@ -33,11 +33,17 @@ A **Run** card can be checked before any work happens, and worked by a chosen ag
   `~/.claude/skills`, and the folder's.
 - **Works as** — the agent that works the card (`lib/agents.ts`), or the project's default.
 
-**Design the agent** makes the validating agent with a short interview (**lib/agent-interview.ts**): what it should
-check, what it must refuse, what it leaves behind, when it stops and asks, and its name. Weft writes a *soul* from
-those answers — standing instructions, not a description ("read the issue, then the code it names") — saves it as an
-agent, and picks it as the card's agent. The agent's soul is the first part of every system prompt its threads get
-(`lib/agents.ts`), so the card's thread validates the issue under it and then carries on.
+**Design the agent** starts a new thread that designs the validating agent (**lib/agent-thread.ts**). It is a special
+kind of new thread: Weft does not ask the questions, the thread does. The drawer starts a thread with the brief —
+"Help me design an agent for weft that triages GitHub issues" — and the thread asks the user what it needs, one
+question at a time, then writes a *soul* from the answers: standing instructions, not a description ("read the issue,
+then the code it names"). It saves the agent with `create_agent`, so it lands in Settings → Agents and is ready to pick
+as the card's agent. The agent's soul is the first part of every system prompt its threads get (`lib/agents.ts`), so
+the card's thread validates the issue under it and then carries on.
+
+The thread opens on its own page: the brief it is running on, and what happens next (**lib/agent-brief-page.ts**). It
+is written before the turn starts, so the pane has something current the moment the thread opens — and it is the
+brief, not the thread's output, that the page shows.
 
 The workflow is per project folder, saved in `settings.json` under `issueLandings` (`lib/settings.ts`:
 `issueWorkflow`, `setIssueWorkflow`; the type is `IssueWorkflow` in `lib/types-settings.ts`, so the drawer can use it
@@ -119,10 +125,10 @@ importer can hold it without pulling the runner into its module graph.
 - `lib/issue-landing.ts`: the landings and their labels, `landingColumn`, `landingRuns`, `workflowOf` — pure, so the
   drawer and the server agree on what a landing means.
 - `lib/issue-run.ts`: `startIssueCard` — the card's first message, plus the validation skill's line.
-- `lib/agent-interview.ts`: the interview's questions, the lookup tables the answers map to, and `saveInterviewedAgent`
-  (the soul it writes).
-- `app/api/agents/interview`: GET the questions, POST the answers → `{ agent }`.
-- `components/IssueWorkflowPicker.tsx`: the "Land in" control, the skill and agent pickers, and the interview.
+- `lib/agent-thread.ts`: the brief — the project, the job — and the prompt the designing thread runs on.
+- `lib/agent-brief-page.ts`: the page that thread opens on: the brief, and what happens next.
+- `app/api/agents/design`: POST `{project, job}` → the card, the start, and the show file. Only Weft's own window.
+- `components/IssueWorkflowPicker.tsx`: the "Land in" control, the skill and agent pickers, and the design button.
 - The poll starts in `prewarm()` (`lib/copilot.ts`), off the request path: a first sync 20s after the server
   starts, then every 5 minutes.
 - `lib/github-status.ts` + `app/api/github` (GET `?folder=…`): the drawer's status, `gh api user` for the account (asked
