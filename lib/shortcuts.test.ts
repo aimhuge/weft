@@ -79,13 +79,26 @@ describe("matches", () => {
     expect(matches({ code: "KeyD", altKey: true, ctrlKey: false, metaKey: false, shiftKey: true }, b)).toBe(true);
   });
 
-  it("fails on a different key or any modifier difference", () => {
+  it("fails on a different key, a missing modifier, or a different shift", () => {
     const base = { code: "KeyD", altKey: true, ctrlKey: false, metaKey: false, shiftKey: true };
     expect(matches({ ...base, code: "KeyE" }, b)).toBe(false);
     expect(matches({ ...base, altKey: false }, b)).toBe(false);
-    expect(matches({ ...base, ctrlKey: true }, b)).toBe(false);
-    expect(matches({ ...base, metaKey: true }, b)).toBe(false);
     expect(matches({ ...base, shiftKey: false }, b)).toBe(false);
+  });
+
+  it("also matches when the press holds a modifier the binding leaves out", () => {
+    // Command+Option+' is what people reach for when the bare combination is taken, so the
+    // Option+' binding has to fire on it too.
+    const optionQuote = bind("Quote", { alt: true });
+    expect(matches({ code: "Quote", altKey: true, ctrlKey: false, metaKey: true, shiftKey: false }, optionQuote)).toBe(true);
+    expect(matches({ code: "Quote", altKey: true, ctrlKey: true, metaKey: false, shiftKey: false }, optionQuote)).toBe(true);
+    // A modifier the binding names still has to be held.
+    expect(matches({ code: "Quote", altKey: false, ctrlKey: false, metaKey: true, shiftKey: false }, optionQuote)).toBe(false);
+  });
+
+  it("does not let a bare key match a binding that names a modifier", () => {
+    const commandD = bind("KeyD", { meta: true });
+    expect(matches({ code: "KeyD", altKey: false, ctrlKey: false, metaKey: false, shiftKey: false }, commandD)).toBe(false);
   });
 });
 

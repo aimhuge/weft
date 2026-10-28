@@ -56,6 +56,25 @@ description's fine print so it stays one page, as plain HTML with no script and 
 - An AirPrint printer on the network that was never added in System Settings isn't listed, and Save as PDF isn't a
   printer, so neither turns the pitch on.
 
+## The rebindable dictation binding
+
+`lib/shortcuts.ts` holds the one binding a user can change: dictation, `⌥'` by default, kept in localStorage under
+`threadboard.shortcuts`. Settings → Shortcuts shows it above the full list, so a rebound key shows there too.
+
+Two rules make it behave the way people expect:
+
+- **The binding is a set of modifiers, not an exact combination.** A binding of `⌥'` fires on `⌘⌥'` as well, because the
+  extra Command is what people reach for when the bare combination is taken (or is used by another app). Every modifier
+  the binding names has to be held; the ones it leaves out are free. Shift is the exception: it changes which character
+  the key produces, so it has to match exactly.
+- **It matches the physical key, not the character.** `matches()` compares `event.code`, so `⌥'` is `Quote` on any layout
+  and Option doesn't change what the key is. The Composer's capture handler claims the key before the editor or textarea
+  can type its macOS character first (Option+`'` is `æ`).
+
+The key is claimed in the capture phase, so the editor never types the character. The hook's own state is one render
+behind while the microphone is still opening, so the toggle reads a ref instead: a second press in that window cancels
+the recording that is starting rather than opening a second microphone (or leaving one running with nobody listening).
+
 ## Gotchas
 
 - Enter opens a card only when the card itself has focus, so it still presses a button inside one.

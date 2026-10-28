@@ -53,6 +53,13 @@ export function useDictation(onText: (text: string) => void) {
   // Mic loudness, 0 to 1, for the button's pulse.
   const [level, setLevel] = useState(0);
   const stopRef = useRef<((send: boolean) => void) | null>(null);
+  // What the hook is doing right now, for the key handlers. The React state is one render behind
+  // while the mic is opening, and a second key press in that window has to stop the recording
+  // that is starting rather than open a second one.
+  const phaseRef = useRef<DictationState>("idle");
+  // Set when the key is pressed again while the mic is still opening. The startup path checks it
+  // and throws the recording away instead of leaving it running with nobody listening.
+  const abortRef = useRef({ stopped: false });
   const onTextRef = useRef(onText);
   useEffect(() => {
     onTextRef.current = onText;
@@ -61,16 +68,35 @@ export function useDictation(onText: (text: string) => void) {
   // Stop recording (and drop it) if the composer goes away mid-recording.
   useEffect(() => () => stopRef.current?.(false), []);
 
+  function setPhase(next: DictationState) {
+    phaseRef.current = next;
+    setState(next);
+  }
+
+  // Whether the key was pressed again while the mic was opening. A function, so TypeScript doesn't
+  // narrow the flag away across the awaits in start().
+  function aborted() {
+    return abortRef.current.stopped;
+  }
+
   async function start() {
-    if (state !== "idle") return;
+    if (phaseRef.current !== "idle") return;
+    // Claim the mic before the first await, so a second press during startup doesn't start again.
+    abortRef.current.stopped = false;
+    setPhase("recording");
     setError(null);
     const status = await whisperStatus();
+    if (aborted()) {
+      setPhase("idle");
+      return;
+    }
     if (!status.available) {
       const Recognizer = browserRecognizer();
       if (Recognizer) {
         startBrowser(Recognizer);
         return;
       }
+      setPhase("idle");
       setError(status.reason ?? "Dictation isn't available here.");
       return;
     }
@@ -80,11 +106,18 @@ export function useDictation(onText: (text: string) => void) {
       stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
     } catch (err) {
       const name = (err as DOMException).name;
+      setPhase("idle");
       setError(
         name === "NotAllowedError"
           ? "Weft can't use the microphone. Allow it in System Settings → Privacy & Security → Microphone."
           : `Couldn't open the microphone: ${(err as Error).message}`,
       );
+      return;
+    }
+    // The key was pressed again while the mic was opening: let go of it and stay idle.
+    if (aborted()) {
+      stream.getTracks().forEach((t) => t.stop());
+      setPhase("idle");
       return;
     }
 
@@ -125,10 +158,10 @@ export function useDictation(onText: (text: string) => void) {
     recorder.onstop = async () => {
       cleanup();
       if (!send || !chunks.length) {
-        setState("idle");
+        setPhase("idle");
         return;
       }
-      setState("transcribing");
+      setPhase("transcribing");
       try {
         const text = await api.transcribe(new Blob(chunks, { type: recorder.mimeType || "audio/webm" }));
         if (text) onTextRef.current(text);
@@ -136,7 +169,7 @@ export function useDictation(onText: (text: string) => void) {
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
       } finally {
-        setState("idle");
+        setPhase("idle");
       }
     };
     stopRef.current = (keep) => {
@@ -145,7 +178,6 @@ export function useDictation(onText: (text: string) => void) {
     };
     recorder.start(1000);
     setSeconds(0);
-    setState("recording");
   }
 
   function startBrowser(Recognizer: new () => SpeechRecognitionLike) {
@@ -169,7 +201,7 @@ export function useDictation(onText: (text: string) => void) {
     recognizer.onend = () => {
       clearInterval(timer);
       stopRef.current = null;
-      setState("idle");
+      setPhase("idle");
     };
     stopRef.current = (keep) => {
       send = keep;
@@ -177,7 +209,7 @@ export function useDictation(onText: (text: string) => void) {
     };
     recognizer.start();
     setSeconds(0);
-    setState("recording");
+    setPhase("recording");
   }
 
   return {
@@ -186,8 +218,31 @@ export function useDictation(onText: (text: string) => void) {
     seconds,
     level,
     clearError: () => setError(null),
-    toggle: () => (state === "recording" ? stopRef.current?.(true) : void start()),
+    // The phase comes from the ref, so a press while the mic is still opening stops the recording
+    // that is starting instead of opening a second one.
+    toggle: () => {
+      if (phaseRef.current === "idle") {
+        void start();
+        return;
+      }
+      // Nothing to stop yet (the mic is still opening): remember to throw the recording away.
+      if (phaseRef.current === "recording" && !stopRef.current) {
+        abortRef.current.stopped = true;
+        setPhase("idle");
+        return;
+      }
+      // Transcribing: there is nothing to stop, and the turn in flight finishes on its own.
+      if (phaseRef.current === "transcribing") return;
+      stopRef.current?.(true);
+    },
     // Stops without transcribing.
-    cancel: () => stopRef.current?.(false),
+    cancel: () => {
+      if (phaseRef.current === "recording" && !stopRef.current) {
+        abortRef.current.stopped = true;
+        setPhase("idle");
+        return;
+      }
+      stopRef.current?.(false);
+    },
   };
 }
