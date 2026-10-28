@@ -142,6 +142,9 @@ export function WebBoard({ orgId, orgSlug, userId, user, orgs, initialCommands, 
               onView={chooseView}
               home=""
               onMenuOpenChange={noop}
+              // The web board has no view-flip toast (the desktop's Escape layer pops one), so there is
+              // nothing to dismiss here.
+              onDismissViewHint={noop}
             />
             <div className="flex min-h-0 flex-1">
               <WebRail

@@ -28,13 +28,15 @@ export function hintOther(mode: ViewMode): string {
   return viewLabel(mode === "board" ? "list" : "board");
 }
 
-export function hintText(mode: ViewMode): string {
-  return `${hintTitle(mode)}. Hit Esc again to switch to ${hintOther(mode).toLowerCase()} view.`;
-}
-
-// The tail of the toast, after the view's name: what the next Escape does.
+// The tail of the toast, after the view's name: what the next Escape does. It is the one place the
+// sentence is written, so `hintText` and the toast cannot drift apart.
 export function hintOtherText(mode: ViewMode): string {
   return `hit Esc again to switch to ${hintOther(mode).toLowerCase()} view`;
+}
+
+// The whole hint as one sentence, for anything that wants it whole rather than in two halves.
+export function hintText(mode: ViewMode): string {
+  return `${hintTitle(mode)}. Hit Esc again to switch to ${hintOther(mode).toLowerCase()} view.`;
 }
 
 // The state behind the hint: the last flip, and a way to clear it. `id` counts the flips, so the

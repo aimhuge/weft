@@ -53,7 +53,7 @@ export default function ProjectBar({
   onView: (view: ViewMode) => void;
   // The little pane under the toggle, shown after Escape flips the view (lib/use-view-hint.ts).
   viewHint?: ViewHint | null;
-  onDismissViewHint?: () => void;
+  onDismissViewHint: () => void;
   home: string; // user's home dir, for shortening paths (~/dev/x) and default parent for new projects
   onMenuOpenChange?: (open: boolean) => void; // called when the dropdown opens/closes (the board hides a native browser overlay while it's open)
   // Right-clicking a project, on its chip or in "More" (components/project-menu-handler.ts); resolves to whether an item was picked.
@@ -124,7 +124,9 @@ export default function ProjectBar({
       <div className="relative shrink-0">
         <ViewToggle mode={view} onChange={onView} />
         {viewHint && (
-          <ViewHintPane mode={viewHint.mode} onDismiss={onDismissViewHint ?? (() => {})} />
+          // Keyed on the flip's id, so a second flip remounts the toast and its pop-in plays again
+          // rather than the toast sitting there already grown.
+          <ViewHintPane key={viewHint.id} mode={viewHint.mode} onDismiss={onDismissViewHint} />
         )}
       </div>
 

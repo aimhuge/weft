@@ -47,6 +47,7 @@ function setup(over: Partial<BoardProjectBarProps> = {}) {
     onView: vi.fn(),
     home: "/h",
     onMenuOpenChange: vi.fn(),
+    onDismissViewHint: vi.fn(),
     ...over,
   };
   render(<BoardProjectBar {...props} />);

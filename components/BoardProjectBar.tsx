@@ -37,7 +37,7 @@ export interface BoardProjectBarProps {
   onView: (view: ViewMode) => void;
   // The little pane under the toggle, shown after Escape flips the view.
   viewHint?: ViewHint | null;
-  onDismissViewHint?: () => void;
+  onDismissViewHint: () => void;
   home: string;
   onMenuOpenChange: (open: boolean) => void;
   // A project's right-click menu (components/project-menu-handler.ts); left out on weft.zip.
