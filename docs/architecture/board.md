@@ -114,8 +114,9 @@ lives in its own component under `components/`.
   new-thread dialog, browser or closable drawer is up, and never for an Escape typed in a field.
   The flip pops a toast under the toggle — `components/ViewHint.tsx`, drawn from the state in
   `lib/use-view-hint.ts` — naming the view you landed in and what the next Escape does ("List view ·
-  hit Esc again to switch to board view"). It closes itself after a moment, on its ✕, or on the next Escape
-  (which puts the toast away rather than flipping again, since the toast says what Escape does).
+  hit Esc again to switch to board view"). It closes itself after a moment (4 s, `HINT_MS`), on its ✕,
+  or on the next Escape (which puts the toast away rather than flipping again, since the toast says
+  what Escape does).
   It hangs off the toggle rather than taking a row, so it costs no vertical space on a small
   screen. The Escape layer itself decides the flip and hands the new view to the hint, so the two
   can never disagree about what happened.
@@ -189,8 +190,23 @@ lives in its own component under `components/`.
 - `lib/use-board-dialogs.ts` — the dialog flags (`useBoardDialogs`, `DialogFlags`) and what they cover:
   `dialogLayers` returns `overlay` (something is over the board, so the native pane hides) and `boardKeys`
   (the shortcuts that act on the board stand down).
+- `lib/use-escape-view.ts` — `useEscapeTogglesView` and `bareBoard`: the bottom Escape layer, the one
+  that flips between the column view and the list view when nothing else is up. Its extra inputs are
+  one `ViewFlipOptions` object (`onFlip`, `hintUp`, `onDismiss`) rather than a long parameter list, so
+  the call site reads as what it means. `onFlip` is told the view it switched to; while the toast is
+  up (`hintUp`), Escape calls `onDismiss` instead of flipping again, because the toast is what tells
+  the user what Escape does.
+- `lib/use-view-hint.ts` — `useViewHint` and the toast's words: the last flip (`mode` and an `id` that
+  counts the flips, so the toast can key itself on it and restart its timer), `show` and `clear`, and
+  the text — `viewLabel`, `hintTitle` ("List view"), `hintOther` (the other view's name) and
+  `hintOtherText` ("hit Esc again to switch to board view"). The name and the trailing clause are
+  separate so the toast can set the name in accent and weight and the eye lands on the answer before
+  the sentence around it. The toast closes itself after `HINT_MS` (4 s).
 - `lib/use-open-card.ts` — `useOpenCard`: which card is open, its thread and streaming text, the last one
-  opened, Rename…, and the unseen moves.
+  opened, Rename…, and the unseen moves. Opening a card always brings the browser pane back: `select`
+  asks the shell to show it and opens the workspace's `pane` column, so a thread never opens beside an
+  empty slot — not even one the user closed earlier. Closing the card hides the pane again; the pane
+  column itself stays open, so the next card comes back with it.
 - `lib/use-new-thread-pane.ts` — `useNewThreadPane`: the New thread splash page in the pane while the
   dialog is up. It returns the pane's visibility from before the dialog while the restore on close lands, which
   `BoardBrowserPane` reads (`held`) so the pane doesn't remount open and slide shut.
@@ -249,6 +265,10 @@ components/Board.tsx  ── state + actions ──▶  components/BoardHeader.t
 - **One owner per piece of state.** The board's flags live in `lib/use-board-dialogs.ts`, the open card's in
   `lib/use-open-card.ts`, the live stream's effects in `lib/board-live.ts`. A component draws; a hook
   decides; `Board.tsx` wires.
+- **A toast that says what the key does has to be what the key does.** The view toast names the view you
+  landed in and what the next Escape will do, so the Escape layer has to honour that: while the toast is
+  up, the next Escape dismisses it instead of flipping the view again. The layer decides the flip and
+  hands the new view to the toast, so the two can never disagree about what happened.
 - **A card's own signal, on the card.** A state that belongs to one card is drawn by that card, not by the
   board: a cron run's violet stub (`components/CronMark.tsx`), a card that broke Weft's red ring
   (`lib/crash-blame.ts`), a card that asked Weft to restart (`components/RestartMark.tsx`). Each mark is a
