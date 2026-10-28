@@ -1,19 +1,28 @@
 # Teams vault
 
-Status: design. Step 4 of [secrets.md](./secrets.md) ("Supabase sync"), with the team shapes it leans on. The
-local vault, device keypair, `.env` import, Touch ID, `mcp__secrets__*` tools, `.env.local` write-back and
-redaction are already built (2026-10-12). Org tables (`orgs`, `org_memberships`, `invitations`, every account
-with a personal workspace) shipped in `supabase/migrations/20261013155754_teams.sql`; billing landed in
-`20261014010429_billing.sql`; the membership RLS helpers landed in `20261013161111_teams_rls.sql`. The team
-pages (`/team`, `/{orgSlug}/team`, `/invite/:token`, the mailer, and the `lib/teams.ts` / `lib/team-actions.ts`
-contracts) are built. This card adds the shared 🔐 vault on top.
+Status: **built** (2026-10-27). Step 4 of [secrets.md](./secrets.md) ("Supabase sync"), with the team shapes it
+leans on. The local vault, device keypair, `.env` import, Touch ID, `mcp__secrets__*` tools, `.env.local`
+write-back and redaction were already built (2026-10-12). Org tables (`orgs`, `org_memberships`, `invitations`,
+every account with a personal workspace) shipped in `supabase/migrations/20261013155754_teams.sql`; billing
+landed in `20261014010429_billing.sql`; the membership RLS helpers landed in `20261013161111_teams_rls.sql`. The
+team pages (`/team`, `/{orgSlug}/team`, `/invite/:token`, the mailer, and the `lib/teams.ts` /
+`lib/team-actions.ts` contracts) are built. The shared 🔐 vault is now built on top of them.
 
-**What exists today.** Only the schema: `supabase/drafts/20261013190000_team_vault.sql` (the five tables, their
-RLS, the `private.share_vault` RPC and the Realtime publication) is written, and it is still a draft. None of
-the desktop half is built — there is no account client in `electron/`, no device registration, no sync engine,
-no grant/rotate/recovery code, and no shared-vault UI in `components/`. Every path named in the build order
-below that is not the migration is a file this card would add, not one that exists; the tables section below
-describes the draft as it stands.
+**What shipped.** The schema is in `supabase/migrations/20261027163113_team_vault.sql` (six tables, their RLS,
+the `private.share_vault` RPC, the Realtime publication), with
+`20261027165308_devices_upsert_unique_index.sql` (the `nulls not distinct` index that makes the device upsert
+work) and `20261027173535_vault_recovery_key.sql` (`private.share_vault_recovery`) after it. All three are
+applied to live Supabase. The desktop half: `electron/account-client.cjs` (main as the signed-in user, never
+the service role), `electron/device-fingerprint.cjs` and `registerDevice` on `electron/device-key.cjs`,
+`electron/vault-sync.cjs` (pull, push, the offline queue, Realtime), `electron/vault-grant.cjs` and
+`electron/vault-share.cjs` (the TOFU wrap and the first-time share), `electron/vault-rotate.cjs` (rotate on
+removal) and `electron/vault-recovery.cjs` (the 24 words). The board half: the shared badge and **Share this
+vault** in `components/VaultShared.tsx`, the event log tab in `components/VaultEventsList.tsx`, the conflict
+banner in `components/SecretRow.tsx`, and the workspace's **Devices** tab at `app/[orgSlug]/team/devices/`.
+
+**What is still open.** The rename path (Q8) is out of v1 — a renamed repo orphans the old vault, and the
+drawer surfaces the orphan rather than moving it. `docs/architecture/cloud-sync.md` still notes that thread
+item bodies go up as plain JSON; sealing them with the workspace key is a separate piece of work.
 
 The point of the shared vault is the same as the local one — a secret's value never enters an agent's context
 — extended to a workspace: a thread on a teammate's machine runs the same `mcp__secrets__list`, the same
@@ -55,8 +64,8 @@ All five tables are RLS-on. Writes from the desktop go through the user's authen
 `~/.weft/account.sealed`); the service role is not in this card's critical path, only the same `service_role`
 the rest of Weft's API routes already use, for the very small things RLS can't express (creating a vault when
 the org's first member asks, the recovery key grant, the realtime publication). The matching migration is
-`supabase/drafts/20261013190000_team_vault.sql`, kept out of `supabase/migrations/` so Migrate and
-`supabase db push` don't apply it before the design is agreed; card 1 moves it in.
+`supabase/migrations/20261027163113_team_vault.sql`, applied to live Supabase, with
+`20261027165308_devices_upsert_unique_index.sql` and `20261027173535_vault_recovery_key.sql` after it.
 
 ### `vaults`
 
@@ -477,6 +486,18 @@ their grants. RLS prevents the removed device from reading any new grant.
 
 ## Recovery key
 
+**Built (card 10, 2026-10-27).** `electron/vault-recovery.cjs` holds the crypto — `makeKey`, `show`,
+`recover`, `recoveryStatus` — and `electron/vault-recovery-words.cjs` the wordlist and the encoding
+(`electron/recovery-wordlist.json` is the 2048-word English list). The page is
+`app/[orgSlug]/team/vaults/[vaultId]/recovery/` (`page.tsx`, `RecoveryKey.tsx`, `queries.ts`), the route
+is `app/api/team/vaults/[vaultId]/recovery/route.ts`, the rows are written by the
+`private.share_vault_recovery` RPC (`supabase/migrations/20261027173535_vault_recovery_key.sql`), and the
+drawer's item is in `components/VaultDrawer.tsx`. Two details the design above left open, settled in the
+build: the words are made in **Electron main** (the vault key only exists there, so the server cannot
+derive them — the page asks the desktop for them behind Touch ID), and the passphrase is applied to the
+seed *before* the keypair is made, so the words carry the passphrase-derived seed and the server's public
+half cannot be used to derive them back.
+
 A vault's recovery key is a separate device row, owned by no one, found by its `fingerprint = 'recovery'`
 (the recovery card looks it up that way, not by a special uuid). The keypair is generated at vault creation:
 
@@ -525,8 +546,10 @@ The shared-vault changes are additive, not a rewrite:
   for people.
 - A **recovery key button** in the vault header's overflow menu: "Show recovery key" → the page above. The
   recovery device row is a small chip in the header.
-- **Conflicts** are a transient banner at the top of the secrets list, per-secret, for the secrets the
-  current user just edited. The banner goes away on re-render after a reload.
+- **Conflicts** are a transient banner, per-secret, for the secrets the current user just edited. The
+  banner sits **on that secret's own row** (`components/SecretRow.tsx`), not in a strip above the
+  list: it names who changed the secret, in which environment, and offers the two ways out. The
+  banner goes away on re-render after a reload.
 
 **Q14: live event log on the drawer.** Recommend: yes, via Supabase Realtime. The drawer's already loading
 on focus; adding a `vault_events` subscription on open is one `supabase.channel(...).on('postgres_changes', ...)`
@@ -577,14 +600,14 @@ The cards below are scoped so each touches a different set of files and can run 
 worktrees. Dependencies are listed; cards with no dependency can run in any order. **Files added** are new;
 **files edited** are existing.
 
-Only card 1 has shipped. Everything else is still to build, so the file lists below name the files each
-card would add or edit — the ones that don't exist in the repo today are the ones to create, not files to
-look up.
+**All twelve shipped on 2026-10-27.** The list is kept as the record of how the build went: what each card
+touched, what it depended on, and where the code landed. The file lists below name the files each card added
+or edited — they are all in the repo now, under the names given.
 
 ### Card 1: schema + RLS — the migration
 
-**Files added**: `supabase/drafts/20261013190000_team_vault.sql` (the migration in this task's second
-deliverable).
+**Files added**: `supabase/migrations/20261027163113_team_vault.sql` (applied to live Supabase), plus
+`20261027165308_devices_upsert_unique_index.sql` and `20261027173535_vault_recovery_key.sql` after it.
 
 **Files edited**: none.
 
@@ -637,11 +660,10 @@ unchanged for the local-vault flow; the new `registerDevice` is integration-test
 
 ### Card 4: the migration's `share_vault` RPC and `pending_device_grants` table — Supabase-only
 
-**Files added**: appended to `supabase/drafts/20261013190000_team_vault.sql` (in card 1; the second
-file is added in this card's PR if card 1 ships first and card 4 ships second, otherwise the migration is
-one file with both).
+**Files added**: folded into card 1's migration — `supabase/migrations/20261027163113_team_vault.sql`, one
+file with both.
 
-**Files edited**: `supabase/drafts/20261013190000_team_vault.sql`.
+**Files edited**: none beyond card 1's migration.
 
 This is the RPC the team page calls when an admin clicks "Add a teammate's device". It writes the
 `pending_device_grants` row, scoped to the org, and RLS refuses to a non-admin. The
@@ -851,8 +873,10 @@ component test for the page's "I've saved it" gating.
 `electron/account-client.test.ts`, `electron/device-fingerprint.test.ts`,
 `electron/vault-sync.test.ts`, `electron/vault-grant.test.ts`,
 `electron/vault-rotate.test.ts`, `electron/vault-recovery.test.ts`,
-`lib/team-devices-view.test.ts`, `components/VaultParts.test.tsx` and
+`lib/team-devices-view.test.ts`, `components/VaultParts.test.tsx`,
 `components/VaultEventsList.test.tsx` (both new — the drawer's parts have no test file of their own
-today). The
+today), `components/SecretRow.test.tsx` and `components/VaultDrawer.conflict.test.tsx` (the
+conflict banner, and the drawer that shows it), and `lib/use-vault-conflicts.test.ts` (the transient
+conflict state). The
 migration is hand-tested against a fresh `supabase db reset`; the route tests in
 `app/api/routes.test.ts` cover the new `app/api/team/devices*` routes.

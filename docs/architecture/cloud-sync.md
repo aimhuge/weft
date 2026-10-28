@@ -259,8 +259,8 @@ opened.
 
 ## Gaps
 
-- Item bodies go up as plain JSON. Sealing them with the workspace key (teams-vault.md) has to land before
-  sync is offered to anyone else.
+- Item bodies go up as plain JSON. The shared vault has landed (teams-vault.md), so the workspace key now exists,
+  but sealing the item bodies with it is a separate piece of work and has not been done.
 - A question or permission a thread asks waits in Needs you; a reply from the web doesn't answer it (it queues for after the turn). The assistant's text doesn't stream to the web either: it arrives as a whole item when written (`delta` events stay on the Mac).
 - A teammate's Mac never acts on your requests and yours never acts on theirs: the Mac only runs commands its own account made. Sending work to a teammate would need an explicit opt-in.
 - Finished commands stay in `cloud_commands`; nothing prunes them yet. A command whose Mac crashed between claiming and reporting stays `claimed` until it's cancelled.

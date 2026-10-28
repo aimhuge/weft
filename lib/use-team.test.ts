@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ACCOUNT_EVENT } from "./auth/hooks";
 import { fetchMock, jsonResponse, stubTeamFetch, team } from "./use-team.harness";
 
@@ -195,7 +195,7 @@ describe("useTeam", () => {
       await act(() => result.current.actions.remove("u2"));
       expect(findPost("remove")).toEqual([
         "/api/account/team",
-        expect.objectContaining({ body: JSON.stringify({ org: "acme", action: "remove", userId: "u2" }) }),
+        expect.objectContaining({ body: JSON.stringify({ org: "acme", action: "remove", userId: "u2", rotate: false }) }),
       ]);
       await act(() => result.current.actions.revoke("i1"));
       expect(findPost("revoke")).toEqual([
@@ -276,6 +276,74 @@ describe("useTeam", () => {
       await act(() => result.current.actions.invite("a@b.co", "member"));
       // One new call (the POST); the refresh fetch would be a second new call.
       expect(fetchMock.mock.calls.length).toBe(before + 1);
+    });
+
+    // ─── the rotate tick ─────────────────────────────────────────────────
+    //
+    // The crypto is in Electron main, so the hook asks the desktop bridge for it (the same
+    // `window.weft.vault` the other vault calls go through) and then posts the removal to the
+    // server. A browser on weft.zip has no bridge: the tick falls through and the server does the
+    // half it can.
+
+    it("asks the desktop to turn the keys, then removes the member", async () => {
+      const rotate = vi.fn().mockResolvedValue({ ok: true, rotated: 1, namesToRotate: ["API_KEY"] });
+      (window as unknown as { weft: { vault: { rotate: unknown } } }).weft = { vault: { rotate } };
+      try {
+        const { result } = renderHook(() => useTeam("acme"));
+        await waitFor(() => expect(result.current.state.kind).toBe("ok"));
+        fetchMock.mockImplementation((_url, init) =>
+          Promise.resolve(init?.method === "POST" ? jsonResponse(200, { ok: true }) : jsonResponse(200, team)),
+        );
+        const out = await act(() => result.current.actions.remove("u2", true));
+        expect(rotate).toHaveBeenCalledWith("acme", "u2");
+        const body = fetchMock.mock.calls.find(([, init]) => init?.method === "POST")?.[1]?.body;
+        expect(body).toBe(JSON.stringify({ org: "acme", action: "remove", userId: "u2", rotate: true }));
+        // The names to change at their providers come back with the removal.
+        expect(out).toEqual({ ok: true, message: "Removed. Turn these at their providers: API_KEY" });
+      } finally {
+        delete (window as unknown as { weft?: unknown }).weft;
+      }
+    });
+
+    it("doesn't remove the member when the keys could not be turned", async () => {
+      const rotate = vi.fn().mockResolvedValue({ ok: false, error: "This device has no key for that vault." });
+      (window as unknown as { weft: { vault: { rotate: unknown } } }).weft = { vault: { rotate } };
+      try {
+        const { result } = renderHook(() => useTeam("acme"));
+        await waitFor(() => expect(result.current.state.kind).toBe("ok"));
+        fetchMock.mockClear();
+        const out = await act(() => result.current.actions.remove("u2", true));
+        expect(out).toEqual({ ok: false, message: "This device has no key for that vault." });
+        // Nothing was posted: a removal that left the old key in place is worse than no removal.
+        expect(fetchMock).not.toHaveBeenCalled();
+      } finally {
+        delete (window as unknown as { weft?: unknown }).weft;
+      }
+    });
+
+    it("removes the member without turning the keys when there is no desktop to turn them", async () => {
+      const { result } = renderHook(() => useTeam("acme"));
+      await waitFor(() => expect(result.current.state.kind).toBe("ok"));
+      fetchMock.mockImplementation((_url, init) =>
+        Promise.resolve(init?.method === "POST" ? jsonResponse(200, { ok: true }) : jsonResponse(200, team)),
+      );
+      const out = await act(() => result.current.actions.remove("u2", true));
+      expect(out).toEqual({ ok: true, message: undefined });
+      const body = fetchMock.mock.calls.find(([, init]) => init?.method === "POST")?.[1]?.body;
+      expect(body).toBe(JSON.stringify({ org: "acme", action: "remove", userId: "u2", rotate: true }));
+    });
+
+    it("doesn't ask the desktop to turn the keys when the tick is off", async () => {
+      const rotate = vi.fn().mockResolvedValue({ ok: true });
+      (window as unknown as { weft: { vault: { rotate: unknown } } }).weft = { vault: { rotate } };
+      try {
+        const { result } = renderHook(() => useTeam("acme"));
+        await waitFor(() => expect(result.current.state.kind).toBe("ok"));
+        await act(() => result.current.actions.remove("u2"));
+        expect(rotate).not.toHaveBeenCalled();
+      } finally {
+        delete (window as unknown as { weft?: unknown }).weft;
+      }
     });
   });
 });

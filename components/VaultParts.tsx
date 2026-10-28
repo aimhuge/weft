@@ -265,3 +265,7 @@ export function ProjectFilter({
     </label>
   );
 }
+
+// The shared vault's pieces live in their own module (components/VaultShared.tsx) to keep this file
+// under the line cap; they're re-exported here so the drawer imports them from one place.
+export { ShareOffer, SharedBadge } from "./VaultShared";

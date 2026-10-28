@@ -964,10 +964,30 @@ four characters showing.
 - **Dev servers get the vault's development values.** Starting a card's dev server from its review tour asks the same
   way the first time; the values reach the server only, its log is redacted, and threads' own shells never get them.
   A card that used secrets has them swapped for `‹NAME›` in every tool result Weft stores or indexes.
+- **A shared vault has a recovery key: 24 words that open it when every machine is gone.** A vault shared with a
+  workspace offers **Show recovery key** in the drawer, which opens the vault's own page; Touch ID asks, the
+  words appear in a grid to write down, and **Copy words** puts them on the clipboard for a minute. Weft keeps no
+  copy — not a file, not the server, not the event log — so they are yours to write down. An optional passphrase
+  rides on the words (it is never sent anywhere), and asking to see the key again makes a *new* one, so the old
+  words stop working.
+- **Removing a teammate can turn the shared vaults' keys.** On the workspace's Team page, **Remove** carries a
+  **Rotate shared vaults** box, on by default. Ticked, the vault's key changes: the removed party's plaintext
+  stops being worth anything, their machine is revoked, and the values are re-encrypted under the new key. Weft
+  then names the values to change at their providers — the *names* only, never a value. The key is made on your
+  own Mac and never leaves it; the server only writes sealed boxes and ciphertext. A browser on weft.zip has no
+  Mac to make the key in, so it can only cut the machines off.
 - Values are encrypted at rest (XChaCha20-Poly1305 under a per-vault key sealed to this device's X25519 key,
   whose private half safeStorage keeps in the Keychain), in `~/.weft/vault/`. Only the board window can open
   the drawer's side of the vault, never the copilot or a browser-pane page; threads get names, and values only
   through a Touch ID'd fill, run or dev server. More in [docs/architecture/secrets.md](docs/architecture/secrets.md).
+- **A vault can be shared with your workspace, and then it follows you across machines.** The drawer's **Share this
+  vault with `<workspace>`** turns a local vault into a shared one; the header then shows the workspace's name, a
+  *shared* badge and the key version. Every Mac you own — and every teammate you invite — reads and writes the same
+  secrets. The server stores ciphertext and nothing else: the vault's key is sealed to each device's public key and
+  never leaves a Mac, so Weft's servers can't read a value, and neither can an agent — a thread still gets names, and
+  values only through a Touch ID'd fill, run or dev server. A teammate's machine is added by **fingerprint**: both
+  sides show the same string, you compare them out of band, and only then is the key sealed to that device. More in
+  [docs/architecture/teams-vault.md](docs/architecture/teams-vault.md).
 
 ## Vercel
 

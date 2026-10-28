@@ -84,14 +84,35 @@ export async function webUser(client?: WebClient): Promise<WebUser | null> {
 // desktop's local board can call the deployed Weft's team API on the user's behalf without that machine
 // ever holding a cookie for weft.zip. Returns null for a missing, malformed or unverifiable token.
 export async function bearerUser(req: Request): Promise<WebUser | null> {
-  const header = req.headers.get("authorization") ?? "";
-  const match = /^Bearer\s+(.+)$/i.exec(header);
-  if (!match) return null;
-  const jwt = match[1]?.trim() ?? "";
+  const jwt = bearerToken(req);
   if (!jwt) return null;
   const { data, error } = await bearerClient().auth.getClaims(jwt);
   if (error || !data?.claims.sub) return null;
   return claimsToUser(data.claims);
+}
+
+// The bearer token out of the Authorization header, or null when there isn't one.
+function bearerToken(req: Request): string | null {
+  const header = req.headers.get("authorization") ?? "";
+  const match = /^Bearer\s+(.+)$/i.exec(header);
+  const jwt = match?.[1]?.trim() ?? "";
+  return jwt || null;
+}
+
+// A Supabase client that acts as the bearer-token caller, not as the service role.
+//
+// This matters for the recovery key (app/api/team/vaults/[vaultId]/recovery): the write goes through
+// private.share_vault_recovery, which reads auth.uid() to know who is asking and checks that they
+// belong to the vault's workspace. The service client has no user, so a service-role call would fail
+// that check — the write has to run as the caller.
+export function bearerSupabase(req: Request): ReturnType<typeof createClient> | null {
+  const jwt = bearerToken(req);
+  if (!jwt) return null;
+  return createClient(SUPABASE_URL, SUPABASE_KEY, {
+    // The token is the caller's, so every request carries it and `auth.uid()` is the caller.
+    accessToken: () => Promise.resolve(jwt),
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
 }
 
 // The service-role client for the deployed Weft's own writes (orgs, memberships, invites). The key is set on

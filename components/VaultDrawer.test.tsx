@@ -6,6 +6,11 @@ import type { VaultBridge, VaultOverview, VaultSummary } from "@/lib/vault-view"
 import "./test-utils";
 import VaultDrawer from "./VaultDrawer";
 
+// The drawer's "Show recovery key" item opens the vault's recovery page with
+// next/navigation's useRouter().push — the app router isn't mounted in a test, so the
+// router is stubbed.
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
+
 const vault = (id: string, label: string, folder: string, over: Partial<VaultSummary> = {}): VaultSummary => ({
   id,
   label,
@@ -318,3 +323,4 @@ describe("VaultDrawer", () => {
     expect(screen.queryByLabelText("Then let Weft write .env.local from the vault")).not.toBeInTheDocument();
   });
 });
+

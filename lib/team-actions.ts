@@ -70,10 +70,22 @@ export async function changeMemberRole(orgSlug: string, userId: string, role: st
   return result;
 }
 
-export async function removeMember(orgSlug: string, userId: string): Promise<TeamActionResult> {
+// Remove a member from the workspace.
+//
+// The rotate (docs/architecture/teams-vault.md, "Removal and rotation") is the heavier half of a
+// removal: the shared vaults' keys change, so the plaintext the removed party held stops being worth
+// anything. The tick asks for it.
+//
+// The key itself is made in Electron main (electron/vault-rotate.cjs) — the server never holds one —
+// so the crypto half happens on the admin's desktop and the plan is written by the rotate route
+// (app/api/team/vaults/<id>/rotate). What the server does is the safe half, before the membership
+// delete: the removed member's devices are cut off, so no new grant can reach them. The browser on
+// weft.zip has no main, so that is all it gets; the team page says the key still has to be turned
+// from a desktop Weft.
+export async function removeMember(orgSlug: string, userId: string, rotate = false): Promise<TeamActionResult> {
   const ctx = await gate(orgSlug);
   const cleanId = asString(userId);
-  const result = await runTeamOp(ctx, { org: orgSlug, action: "remove", userId: cleanId });
+  const result = await runTeamOp(ctx, { org: orgSlug, action: "remove", userId: cleanId, rotate });
   if (result.ok) revalidatePath(`/${orgSlug}/team`);
   return result;
 }

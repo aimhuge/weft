@@ -3,6 +3,10 @@
 // The 🔐 drawer's secret-level actions (components/VaultDrawer.tsx): reveal, copy, change, remove,
 // import, and the right-click menu. Extracted so the drawer can stay focused on its layout and
 // per-vault rendering, and so the action logic is testable on its own.
+//
+// It also holds the conflicts (docs/architecture/teams-vault.md, "Push on change"): a write that lost
+// against a teammate's leaves a banner on that secret's row, with the two ways out. The banner is
+// transient — it goes away on the re-render that follows the next reload.
 
 import { useCallback, useState } from "react";
 import {
@@ -16,9 +20,11 @@ import {
   type ImportScan,
   type SecretAction,
   type VaultBridge,
+  type VaultConflict,
   type VaultSecret,
   type VaultSummary,
 } from "@/lib/vault-view";
+import { useVaultConflicts } from "@/lib/use-vault-conflicts";
 import type { Editing, RowAction } from "@/lib/vault-row-types";
 
 // The drawer state and the actions the layout buttons trigger, returned by useVaultActions.
@@ -50,6 +56,13 @@ export interface VaultActions {
   finishImport: () => Promise<void>;
   // The Add / Change save handler.
   save: (e: Editing) => Promise<void>;
+  // The conflicts of the writes that lost against a teammate's, by secret: key
+  // `${vault.id}\n${environment}\n${name}`. A secret's row shows the banner while it has one.
+  conflicts: Map<string, VaultConflict>;
+  // The two ways out of a conflict: re-apply the user's own edit against the server's current row,
+  // or take the server's row and drop the edit.
+  keepMine: (key: string) => Promise<void>;
+  keepTheirs: (key: string) => Promise<void>;
   // The dialog's remove button: delete from each ticked environment.
   removeFromVault: (vaultId: string, name: string, environments: string[]) => Promise<void>;
   // Lock the vault and clear revealed values.
@@ -64,6 +77,9 @@ export function useVaultActions(bridge: VaultBridge | null, overview: { vaults: 
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState<Editing | null>(null);
   const [removing, setRemoving] = useState<{ v: VaultSummary; s: VaultSecret } | null>(null);
+  // The conflicts of the writes that lost against a teammate's, and the edits behind them: the
+  // value the user typed stays out of the page, so "Keep your edit" can put it back.
+  const { conflicts, record, keepMine: keepMineConflict, keepTheirs: keepTheirsConflict } = useVaultConflicts(bridge, overview);
 
   const lock = useCallback(() => {
     setRevealed(new Map());
@@ -163,12 +179,17 @@ export function useVaultActions(bridge: VaultBridge | null, overview: { vaults: 
     await change(async () => {
       const name = e.name.trim();
       // No value: a blank in each ticked environment, filled in later from 🔐. Unticking its own moves it out.
-      for (const env of e.environments)
-        await (e.value === "" && bridge.addBlank ? bridge.addBlank(e.folder, name, env) : bridge.set(e.folder, name, env, e.value));
+      for (const env of e.environments) {
+        const result =
+          e.value === "" && bridge.addBlank ? await bridge.addBlank(e.folder, name, env) : await bridge.set(e.folder, name, env, e.value);
+        // A write that lost against a teammate's isn't saved: the row shows the banner, and the edit
+        // waits here for the user to pick a way out.
+        if ("saved" in result && !result.saved) record(e.vault, name, env, result.conflict, e);
+      }
       if (e.fixed && e.from && !e.environments.includes(e.from)) await bridge.remove(e.vault, name, e.from);
       setEditing(null);
     });
-  }, [bridge, change]);
+  }, [bridge, change, record]);
 
   const removeFromVault = useCallback(async (vaultId: string, name: string, environments: string[]) => {
     if (!bridge) return;
@@ -177,6 +198,25 @@ export function useVaultActions(bridge: VaultBridge | null, overview: { vaults: 
       setRemoving(null);
     });
   }, [bridge, change]);
+
+  // "Keep your edit": the same value, written again against the row's current version, which the
+  // server's conflict already recorded — so the write goes through instead of losing again.
+  const keepMine = useCallback(
+    async (key: string) => {
+      await change(() => keepMineConflict(key));
+    },
+    [change, keepMineConflict],
+  );
+
+  // "Keep theirs": the server's row is already in the shadow, so there is nothing to write — the
+  // edit is dropped and the list shows what the vault holds.
+  const keepTheirs = useCallback(
+    async (key: string) => {
+      keepTheirsConflict(key);
+      await change(() => Promise.resolve());
+    },
+    [change, keepTheirsConflict],
+  );
 
   return {
     revealed,
@@ -196,5 +236,8 @@ export function useVaultActions(bridge: VaultBridge | null, overview: { vaults: 
     save,
     removeFromVault,
     lock,
+    conflicts,
+    keepMine,
+    keepTheirs,
   };
 }

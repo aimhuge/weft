@@ -96,7 +96,7 @@ describe("changeMemberRole", () => {
 describe("removeMember", () => {
   it("runs the gate, calls runTeamOp with a remove op, and revalidates on success", async () => {
     await removeMember("acme", "u2");
-    expect(teamOpsMock.runTeamOp).toHaveBeenCalledWith(CTX, { org: "acme", action: "remove", userId: "u2" });
+    expect(teamOpsMock.runTeamOp).toHaveBeenCalledWith(CTX, { org: "acme", action: "remove", userId: "u2", rotate: false });
     expect(cacheMock.revalidatePath).toHaveBeenCalledWith("/acme/team");
   });
 
@@ -109,6 +109,13 @@ describe("removeMember", () => {
   it("trims a leading/trailing space in the user id", async () => {
     await removeMember("acme", "  u2  ");
     expect(teamOpsMock.runTeamOp).toHaveBeenCalledWith(CTX, expect.objectContaining({ userId: "u2" }));
+  });
+
+  it("asks for the rotate when the box is ticked, and not when it isn't", async () => {
+    await removeMember("acme", "u2", true);
+    expect(teamOpsMock.runTeamOp).toHaveBeenCalledWith(CTX, expect.objectContaining({ rotate: true }));
+    await removeMember("acme", "u2", false);
+    expect(teamOpsMock.runTeamOp).toHaveBeenLastCalledWith(CTX, expect.objectContaining({ rotate: false }));
   });
 });
 

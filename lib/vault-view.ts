@@ -1,5 +1,23 @@
 import type { KeychainBridge } from "./keychain-audit-types";
 import type { MenuItem } from "./card-menu";
+import type { VaultOrg, VaultShared } from "./vault-shared";
+import type { ImportScan } from "./vault-import";
+
+export type { VaultOrg, VaultShared };
+// The .env import's shape and the preview's rules (lib/vault-import.ts). Re-exported here so the
+// callers keep one import for the vault's types.
+export {
+  defaultPicks,
+  importGroups,
+  importLabel,
+  picksOf,
+  pickKey,
+  STATUS_LABEL,
+  trackedWarning,
+  type ImportFile,
+  type ImportRow,
+  type ImportScan,
+} from "./vault-import";
 
 // What the 🔐 drawer and its rail icon show, from what Electron main's vault (electron/vault.cjs) sends:
 // names, environments and masked tails, never values. Values come back only from reveal, after Touch ID.
@@ -33,46 +51,41 @@ export interface VaultSummary {
   nudge: { count: number; file: string; managed?: boolean } | null;
   // Weft writes the folder's .env.local from the vault (electron/env-writeback.cjs).
   managed?: boolean;
+  // Set when the vault is shared with a workspace (docs/architecture/teams-vault.md); undefined for a local one.
+  shared?: VaultShared;
 }
 
 export interface VaultOverview {
   vaults: VaultSummary[];
   // Within the few minutes one Touch ID covers.
   unlocked: boolean;
-}
-
-export type ImportStatus = "new" | "same" | "differs" | "missing";
-
-export interface ImportRow {
-  file: string;
-  name: string;
-  environment: VaultEnvironment;
-  status: ImportStatus;
-  tail: string;
-  // NEXT_PUBLIC_*: it ends up in the browser bundle anyway.
-  public: boolean;
-  ticked: boolean;
-  // A short-lived value from `vercel env pull`, like VERCEL_OIDC_TOKEN.
-  skipped: boolean;
-}
-
-export interface ImportFile {
-  file: string;
-  environment: VaultEnvironment;
-  namesOnly: boolean;
-  // git tracks it, so its values are in history already.
-  tracked: boolean;
-  vercel: boolean;
-}
-
-export interface ImportScan {
-  id: string;
-  label: string;
-  files: ImportFile[];
-  rows: ImportRow[];
+  // The workspaces the user is in, for the drawer's "Share this vault" offer. Missing when the
+  // desktop is signed out or its shell is too old to know about teams.
+  orgs?: VaultOrg[];
 }
 
 export type RevealResult = { value: string } | { denied: true } | { missing: true };
+
+// A conflict on one secret: someone else wrote the row between your last read and your write
+// (docs/architecture/teams-vault.md, "Push on change"). The drawer shows it on that secret's row
+// and offers the two ways out — keep your edit, or take theirs.
+//
+// Everything here is metadata: who wrote the row, which name and environment, and the server's
+// row_version (what a re-push expects). Never a value, never ciphertext.
+export interface VaultConflict {
+  name: string;
+  environment: VaultEnvironment;
+  // Who wrote it, as a display name ("Sam"). A member the log doesn't name says "A member".
+  actor: string;
+  // The server's current row_version: the expected version for a re-push of the user's own edit.
+  rowVersion: number;
+  // The server's row is a blank (no value yet): a rare conflict the drawer keeps silently.
+  blank: boolean;
+}
+
+// What `bridge.set` answers. A conflict isn't saved: the server's row is kept, and the drawer
+// shows the banner on that secret's row.
+export type SetResult = { saved: true; queued?: boolean } | { saved: false; conflict: VaultConflict };
 
 // window.weft.vault, from electron/preload.cjs.
 // The grant and log calls are in lib/keychain-audit-types.ts.
@@ -82,7 +95,7 @@ export interface VaultBridge extends KeychainBridge {
   import(folder: string, picks: { file: string; name: string }[]): Promise<{ imported: number }>;
   reveal(id: string, name: string, environment: string): Promise<RevealResult>;
   copy(id: string, name: string, environment: string): Promise<{ copied: true } | { denied: true } | { missing: true }>;
-  set(folder: string, name: string, environment: string, value: string): Promise<{ saved: true }>;
+  set(folder: string, name: string, environment: string, value: string): Promise<SetResult>;
   // Adds the name with no value yet. Missing in older shells.
   addBlank?: (folder: string, name: string, environment: string) => Promise<{ label: string; filled: string[] }>;
   copyTo(id: string, name: string, environment: string, folder: string): Promise<{ copied: true; label: string; replaced: boolean } | { missing: true }>;
@@ -90,6 +103,8 @@ export interface VaultBridge extends KeychainBridge {
   lock(): Promise<{ unlocked: false }>;
   // Takes over .env.local: writes it from the vault and keeps it in step. Missing in older shells.
   writeBack?(folder: string): Promise<WriteBackResult>;
+  // Shares a local vault with a workspace for the first time. Missing in older shells.
+  share?(folder: string, orgId: string, repo: string, label?: string): Promise<{ vaultId: string; repo: string; keyVersion: number; orgId: string }>;
   onChange?(callback: (folder: string) => void): () => void;
 }
 
@@ -171,6 +186,13 @@ export function masked(secret: { missing?: boolean; tail: string }) {
   return `••••${secret.tail}`;
 }
 
+// The conflict banner's line: "Sam changed API_KEY in development — keep your edit?"
+// (docs/architecture/teams-vault.md, "Push on change"). The actor's name, the secret's name and
+// the environment; never a value.
+export function conflictLine(conflict: { actor: string; name: string; environment: string }) {
+  return `${conflict.actor} changed ${conflict.name} in ${conflict.environment} — keep your edit?`;
+}
+
 // The rail icon's count (blanks still to fill in) and dot (a .env.local to import).
 export function railBadge(vaults: VaultSummary[]) {
   return {
@@ -191,36 +213,6 @@ export function railTitle(badge: { missing: number; nudge: boolean; vercel?: str
 export function nudgeText(nudge: { count: number; file: string; managed?: boolean }) {
   if (nudge.managed) return `You edited ${nudge.file}: import ${nudge.count === 1 ? "the change" : `${nudge.count} changes`} into the vault?`;
   return `Found ${nudge.count} secret${nudge.count === 1 ? "" : "s"} in ${nudge.file}: move ${nudge.count === 1 ? "it" : "them"} into the vault?`;
-}
-
-export const STATUS_LABEL: Record<ImportStatus, string> = { new: "new", same: "same", differs: "differs", missing: "missing" };
-
-export const pickKey = (row: { file: string; name: string }) => `${row.file}\n${row.name}`;
-
-// The preview's rows by file, in the order main listed the files.
-export function importGroups(scan: ImportScan) {
-  return scan.files
-    .map((file) => ({ ...file, rows: scan.rows.filter((r) => r.file === file.file) }))
-    .filter((g) => g.rows.length > 0);
-}
-
-export function defaultPicks(scan: ImportScan) {
-  return new Set(scan.rows.filter((r) => r.ticked).map(pickKey));
-}
-
-export function picksOf(scan: ImportScan, picked: Set<string>) {
-  return scan.rows.filter((r) => picked.has(pickKey(r))).map((r) => ({ file: r.file, name: r.name }));
-}
-
-export function importLabel(count: number) {
-  return count ? `Import ${count}` : "Nothing picked";
-}
-
-// The tracked-file warning, or null when git tracks none of them.
-export function trackedWarning(scan: ImportScan) {
-  const tracked = scan.files.filter((f) => f.tracked && !f.namesOnly).map((f) => f.file);
-  if (!tracked.length) return null;
-  return `git tracks ${tracked.join(", ")}, so ${tracked.length === 1 ? "its" : "their"} values are in history: rotate them at the provider, not just import.`;
 }
 
 export type SecretAction = "reveal" | "copy" | "edit" | "remove" | `copy-to:${string}`;

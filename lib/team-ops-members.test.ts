@@ -25,6 +25,12 @@ vi.mock("./teams", () => teamsModMock);
 const seatsMock = vi.hoisted(() => ({ syncTeamSeatsQuietly: vi.fn() }));
 vi.mock("./billing/seats", () => seatsMock);
 
+// The rotate half of a remove (lib/team-vault-rotate.ts) is mocked here so the test can see *when* it
+// happens: the removed member's machines are cut off before the membership goes, so no new grant can
+// reach them while they are still a member.
+const rotateMock = vi.hoisted(() => ({ revokeMemberDevices: vi.fn() }));
+vi.mock("./team-vault-rotate", () => rotateMock);
+
 import { runChangeRole, runRemove, runRevokeInvite } from "./team-ops";
 import { ORG, USER, actorAtLeast, makeService } from "./team-ops.harness";
 
@@ -38,6 +44,7 @@ beforeEach(() => {
   teamsMock.roleCan.mockImplementation((role: string, perm: string) => role !== "member" && perm === "members.manage");
   teamsMock.roleAtLeast.mockImplementation((actor: string, target: string) => actorAtLeast(actor, target));
   teamsModMock.revokeInvite.mockResolvedValue(undefined);
+  rotateMock.revokeMemberDevices.mockResolvedValue([]);
 });
 
 // ─── runChangeRole ───────────────────────────────────────────────────────
@@ -166,6 +173,66 @@ describe("runRemove", () => {
     const svc = makeService({ org_memberships: [{ role: "member" }] }, {}, { org_memberships: { error: { message: "boom" } } });
     const ctx = { ...CTX, service: svc.client as never };
     expect(await runRemove(ctx, "u2")).toEqual({ ok: false, message: "Could not remove member: boom" });
+  });
+
+  // ─── the rotate tick ───────────────────────────────────────────────────
+
+  it("cuts the removed member's devices off before the membership goes", async () => {
+    // The order is the point: a machine that is still a member's could be handed a grant in the
+    // window between the removal and the revocation, so the revocation comes first.
+    const order: string[] = [];
+    rotateMock.revokeMemberDevices.mockImplementation(() => {
+      order.push("rotate");
+      return Promise.resolve([]);
+    });
+    const svc = makeService({ org_memberships: [{ role: "member" }] });
+    // The fake's delete is what removes the membership; the read before it doesn't.
+    const original = svc.client.from;
+    const from = vi.fn((table: string) => {
+      const chain = original(table);
+      const inner = chain.delete as () => unknown;
+      chain.delete = vi.fn(() => {
+        order.push("delete");
+        return inner();
+      });
+      return chain;
+    });
+    const ctx = { ...CTX, service: { from } as never };
+    expect(await runRemove(ctx, "u2", true)).toEqual({ ok: true, message: "Removed." });
+    expect(rotateMock.revokeMemberDevices).toHaveBeenCalledWith(ctx.service, ORG.id, "u2");
+    // The devices were cut off before the membership was deleted.
+    expect(order).toEqual(["rotate", "delete"]);
+  });
+
+  it("doesn't touch the devices when the rotate box is unticked", async () => {
+    const svc = makeService({ org_memberships: [{ role: "member" }] }, {}, { org_memberships: { error: null } });
+    const ctx = { ...CTX, service: svc.client as never };
+    expect(await runRemove(ctx, "u2", false)).toEqual({ ok: true, message: "Removed." });
+    expect(rotateMock.revokeMemberDevices).not.toHaveBeenCalled();
+  });
+
+  it("doesn't rotate on a self-leave", async () => {
+    // Leaving is not a removal of somebody else's machines: the tick only rides a removal.
+    const svc = makeService({ org_memberships: [{ role: "admin" }] }, {}, { org_memberships: { error: null } });
+    const ctx = { ...CTX, role: "admin" as const, service: svc.client as never };
+    expect(await runRemove(ctx, USER.id, true)).toEqual({ ok: true, message: "You left the workspace." });
+    expect(rotateMock.revokeMemberDevices).not.toHaveBeenCalled();
+  });
+
+  it("keeps the membership when the devices could not be cut off", async () => {
+    rotateMock.revokeMemberDevices.mockRejectedValueOnce(new Error("Those devices could not be revoked: boom"));
+    const svc = makeService({ org_memberships: [{ role: "member" }] }, {}, { org_memberships: { error: null } });
+    const ctx = { ...CTX, service: svc.client as never };
+    expect(await runRemove(ctx, "u2", true)).toEqual({ ok: false, message: "Those devices could not be revoked: boom" });
+    // The membership is still there: a removal that left a live machine behind is worse than no removal.
+    expect(svc.client.from).toHaveBeenCalledTimes(1);
+  });
+
+  it("says so plainly when the devices could not be cut off and the error isn't an Error", async () => {
+    rotateMock.revokeMemberDevices.mockRejectedValueOnce("nope");
+    const svc = makeService({ org_memberships: [{ role: "member" }] }, {}, { org_memberships: { error: null } });
+    const ctx = { ...CTX, service: svc.client as never };
+    expect(await runRemove(ctx, "u2", true)).toEqual({ ok: false, message: "Those devices could not be cut off." });
   });
 });
 

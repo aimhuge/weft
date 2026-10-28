@@ -26,7 +26,33 @@ export function useVault(folders: string[]) {
     };
   }, [bridge, key]);
 
+  // A shared vault's server version: it moves when a teammate writes, and the next pull is what
+  // brings that write in. When it moves, load once more so the drawer shows the new state — the
+  // pull that filled the shadow may have run before the drawer was listening.
+  const versions = serverVersions(overview);
+  const seen = useRef(versions);
+  const stamp = JSON.stringify(versions);
+  useEffect(() => {
+    const before = seen.current;
+    seen.current = JSON.parse(stamp) as Record<string, number>;
+    if (moved(before, seen.current)) void reload();
+  }, [stamp, reload]);
+
   return { bridge, overview, error, reload };
+}
+
+// Each shared vault's server version, by vault id. A local vault isn't in it.
+function serverVersions(overview: VaultOverview | null): Record<string, number> {
+  const versions: Record<string, number> = {};
+  for (const vault of overview?.vaults ?? []) if (vault.shared) versions[vault.id] = vault.shared.serverVersion;
+  return versions;
+}
+
+// Whether any shared vault's server version moved since the last look.
+function moved(before: Record<string, number>, after: Record<string, number>) {
+  const ids = new Set([...Object.keys(before), ...Object.keys(after)]);
+  for (const id of ids) if (before[id] !== after[id]) return true;
+  return false;
 }
 
 // ⇧S and the palette's Add a secret: open the 🔐 drawer and ask it for its Add form. The drawer may not be

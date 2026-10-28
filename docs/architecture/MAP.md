@@ -411,6 +411,63 @@ When a new doc lands in this folder, add it here on the same change.
   `electron/vault-ipc.cjs` is the board window's IPC, `electron/vault-unlock.cjs` the Touch ID unlock timer.
   `electron/vault-access.cjs` is the one place that decides whether a card may use a vault and how it was allowed
   (the audit log's `via` word): the fill, a command run with secrets, and a grant all ask it.
+- `electron/account-client.cjs` + `electron/vault-sync*.cjs` + `electron/vault-shared-meta.cjs` + `electron/vault-store-shared.cjs`:
+  the shared 🔐 vault (docs/architecture/teams-vault.md). `electron/account-client.cjs` is main talking to Supabase **as the
+  signed-in user** — the sealed session in `~/.weft/account.sealed`, the *published* key (never the service role), and a 401 that
+  refreshes and retries once. `electron/vault-sync.cjs` is the engine: `pull` reads the diff since the last `row_version`, `push`
+  writes a `vault_events` row and a `vault_secrets` row in one transaction with the optimistic-concurrency check, `subscribe` follows
+  the Realtime feed, `drain` empties the offline queue. The server holds ciphertext only — the vault key never leaves the Mac, and a
+  value never reaches a thread. `electron/vault-shared-meta.cjs` reads the `<hash>.shared.json` next to the local file (the `shared`
+  block the drawer shows), `electron/vault-store-shared.cjs` is the shadow path, and `electron/vault-sync-files.cjs` owns the shadow and
+  queue files on disk.
+- `electron/device-fingerprint.cjs` + `electron/device-key.cjs` + `electron/preload.cjs`: device registration and the TOFU fingerprint
+  (docs/architecture/teams-vault.md#device-registration). Each Mac has a keypair whose private half safeStorage keeps in the Keychain;
+  `registerDevice` upserts the public key, the fingerprint and the device's name. The fingerprint is the first 16 bytes of the
+  public key's SHA-256, as 32 hex characters in 8 groups of 4 — the same string both sides compare out of band, so a server that
+  slipped in its own key shows two different ones and the grant stops before any key is produced. The preload's
+  `weft.vault.devices` namespace gives the board the public keys and fingerprints, never a private key.
+- `electron/vault-grant.cjs` + `electron/vault-share.cjs` + `electron/vault-shared-api.cjs` + `electron/vault-local.cjs`:
+  granting a device and sharing a vault for the first time (docs/architecture/teams-vault.md#granting-a-teammates-devices).
+  The granter's main is the only place the vault key and the new device's public key meet: the key is sealed with
+  `crypto_box_seal` and the server stores the sealed box. Sharing a local vault keeps its key as **version 1**, imports the existing
+  ciphertexts, and writes `shared.json` so the local file becomes a shadow.
+- `app/[orgSlug]/team/devices/` + `app/api/team/devices/` + `lib/team-devices-view.ts`: the workspace's **Devices** tab
+  (docs/architecture/teams-vault.md#granting-a-teammates-devices). The list crosses users, so it is read with the service client on the
+  server; the grant, the accept and the delete are gated by the workspace's role. The accept route takes the device id and reads the
+  public key from the `devices` table, never from the request body — a caller can never name a key for the granter to seal to.
+- `components/VaultShared.tsx` + `lib/vault-view.ts` + `lib/use-vault.ts`: the drawer's **shared** badge and **Share this vault**
+  (docs/architecture/teams-vault.md#what-the--drawer-shows). The badge carries the workspace's name and the key version; the Share offer
+  appears on a local vault when the user is in a workspace, and is hidden when they are the only member.
+- `components/VaultEventsList.tsx` + `lib/vault-events.ts` + `electron/vault-events.cjs` + `electron/vault-events-ipc.cjs`: the
+  event log tab beside the secrets (docs/architecture/teams-vault.md#what-the--drawer-shows). The last hundred rows of who did what,
+  newest first, filtered to your own actions or to every member's, with a live feed. The query names its columns one by one and
+  leaves out the writer's metadata, so no value can reach the tab.
+- `electron/vault-conflict.cjs` + `lib/use-vault-conflicts.ts` + `components/SecretRow.tsx`: a write that lost against a teammate's
+  (docs/architecture/teams-vault.md#push-on-change). The store answers `{ conflicts, queued }` with the server's row instead of throwing;
+  `electron/vault-conflict.cjs` projects it into `{ name, environment, actor, rowVersion, blank }` (the actor from the newest `vault_events`
+  row, never a value), and the drawer's row shows a transient banner — "Sam changed API_KEY in development — keep your edit?" — with
+  **Keep your edit** (the same value again, against the row's current version) and **Keep theirs** (the server's row, already in the shadow:
+  no write at all). A conflict on a blank silently keeps the new value.
+- `electron/vault-recovery.cjs` + `electron/vault-recovery-words.cjs` + `app/[orgSlug]/team/vaults/[vaultId]/recovery/` +
+  `app/api/team/vaults/[vaultId]/recovery/route.ts` + `lib/vault-recovery-view.ts`: a shared vault's recovery key
+  (docs/architecture/teams-vault.md#recovery-key). 24 words from the 2048-word English list
+  (`electron/recovery-wordlist.json`, no checksum) that open the vault when every machine is gone. The words are made in
+  **Electron main** — the vault key only exists there, so the page asks the desktop for them behind Touch ID and the server
+  never sees them. The passphrase is applied to the seed *before* the keypair (`scrypt(passphrase, vault_id)`), so the words
+  carry the passphrase-derived seed. The rows (the `devices` row with `fingerprint = 'recovery'`, the grant, the event row)
+  go through the `private.share_vault_recovery` RPC in one transaction — RLS can't write a row nobody owns. The words are
+  never persisted: not a file, not the server, not the event log, not a thread; "Copy words" puts them on the clipboard for
+  60 s. A re-show is a fresh keypair and revokes the old row, so the old words stop working.
+- `electron/vault-rotate.cjs` + `lib/team-vault-rotate.ts` + `app/api/team/vaults/[vaultId]/rotate/route.ts` +
+  `components/team/Roster.tsx` + `lib/use-team.ts`: a shared vault's rotate on removal
+  (docs/architecture/teams-vault.md#removal-and-rotation). Removing a teammate can tick **Rotate shared vaults**: the
+  vault's key version is bumped, a new key is made in **Electron main** and sealed to the machines that stay (and the
+  recovery key), every value is re-encrypted under it, and the removed machine is revoked with no grant for the new
+  version. The old wrapped keys stay in `vault_grants` for one cycle, so an offline teammate can still read what was
+  encrypted before. The crypto is in main (`electron/vault-rotate.cjs` → a plan of sealed boxes, ciphertext and *names*),
+  the bookkeeping on weft.zip (`lib/team-vault-rotate.ts`'s `applyRotate`, which writes with the service client because
+  RLS only lets a device write its own grant) — the key itself never leaves the Mac. The team page names the values to
+  change at their providers, never a value; the rotate lands in `vault_events` as `vault.rotated`.
 - `electron/keychain-audit.cjs` + `lib/keychain-audit-sync.ts` + `components/KeychainAccess.tsx`: the Keychain audit log
   (docs/architecture/secrets.md#audit-log). Every `safeStorage` open or seal (`keychainFor(what)`) and every vault value use is a line,
   kept in the `keychain_events` table, not on the Mac: `~/.weft/vault/audit.jsonl` is only the outbox (numbered, deleted once uploaded,

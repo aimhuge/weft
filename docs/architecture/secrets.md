@@ -376,8 +376,12 @@ One Touch ID lets one card use one project's vault for an hour without being ask
    edits (`electron/env-writeback.cjs`), and the refresh token moved behind `safeStorage`.
 3. **Agent tools, dev-server injection, redaction.** Built 2026-10-12: `list`, `fill_field`, `run`, dev-server injection,
    redaction of stored tool results. Still open: `request`, values for HTTP requests, the approvals list in the drawer.
-4. **Supabase sync**: the tables above with ciphertext only, multi-device grants, recovery key.
+4. **Supabase sync** (built 2026-10-27): the tables above with ciphertext only, multi-device grants, recovery
+   key. The schema is `supabase/migrations/20261027163113_team_vault.sql` (applied to live Supabase), and the
+   desktop half is `electron/vault-sync.cjs` (pull, push, the offline queue, Realtime),
+   `electron/vault-grant.cjs` (the TOFU wrap), `electron/vault-rotate.cjs` (rotate on removal) and
+   `electron/vault-recovery.cjs` (the 24 words). See [teams-vault.md](./teams-vault.md).
 5. **Vercel push** (built 2026-10-12): names diff per environment, push per name with Touch ID, from the drawer or a
    thread. Pull built 2026-10-13: plain Vercel variables the vault has no value for come down, by hand or live through a
    team webhook (docs/architecture/vercel.md). Still open: "changed" (needs Vercel's values).
-6. **Teams**: invites, fingerprint check, roles, rotate-on-remove, the event log in the panel.
+6. **Teams** (built 2026-10-27): invites, fingerprint check, roles, rotate-on-remove, the event log in the panel.

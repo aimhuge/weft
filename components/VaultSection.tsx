@@ -5,10 +5,13 @@
 
 import { keyLabel } from "@/lib/hotkeys";
 import { searchSecrets } from "@/lib/vault-search";
-import { environmentsOf, groupSecrets, nudgeText, secretKey, type VaultSecret, type VaultSummary } from "@/lib/vault-view";
+import { environmentsOf, groupSecrets, nudgeText, secretKey, type VaultBridge, type VaultConflict, type VaultSecret, type VaultSummary } from "@/lib/vault-view";
+import { conflictKey } from "@/lib/use-vault-conflicts";
+import { repoOf, type VaultOrg } from "@/lib/vault-shared";
 import type { RowAction } from "./SecretRow";
 import type { Editing } from "./VaultParts";
 import { Note } from "./VaultParts";
+import { ShareOffer, SharedBadge } from "./VaultShared";
 import { SecretRow } from "./SecretRow";
 import Icon from "./Icon";
 import VaultVercel from "./VaultVercel";
@@ -24,6 +27,12 @@ export function VaultSection({
   onAct,
   onMenu,
   notify,
+  bridge,
+  orgs,
+  onShared,
+  conflicts,
+  onKeepMine,
+  onKeepTheirs,
 }: {
   vault: VaultSummary;
   editing: Editing | null;
@@ -37,6 +46,15 @@ export function VaultSection({
   onMenu: (s: VaultSecret, e: React.MouseEvent) => void;
   // Toasts from the ▲ line's Push to Vercel.
   notify: (err: unknown) => void;
+  // The vault's bridge and the workspaces the user is in, for the "Share this vault" offer.
+  bridge: VaultBridge | null;
+  orgs: VaultOrg[];
+  // Loads the vaults again, once a local vault has been shared.
+  onShared: () => void;
+  // The conflicts of the writes that lost against a teammate's, and the two ways out of one.
+  conflicts: Map<string, VaultConflict>;
+  onKeepMine: (key: string) => void;
+  onKeepTheirs: (key: string) => void;
 }) {
   const changing = (s: VaultSecret) => editing?.fixed && editing.name === s.name && editing.from === s.environment;
   return (
@@ -45,6 +63,7 @@ export function VaultSection({
         <h3 className="min-w-0 flex-1 truncate text-[12px] font-semibold text-ink" title={`${v.folders.join("\n")}${v.managed ? "\nWeft writes .env.local from this vault" : ""}`}>
           {v.label}
         </h3>
+        <SharedBadge vault={v} />
         <button
           onClick={onAdd}
           title={`Add a secret by hand (${keyLabel("shift+s")})`}
@@ -56,6 +75,18 @@ export function VaultSection({
           Import…
         </button>
       </div>
+      {!v.shared && (
+        <ShareOffer
+          folder={v.folder}
+          org={orgs[0] ?? null}
+          orgs={orgs}
+          bridge={bridge}
+          label={v.label}
+          repo={repoOf(v.id)}
+          onShared={onShared}
+          notify={notify}
+        />
+      )}
       <VaultVercel folder={v.folder} changed={v.secrets.map((s) => `${secretKey(s)}${s.missing ? "" : s.updatedAt}`).join("\n")} notify={notify} />
       {editing && !editing.fixed && form}
       {v.nudge && (
@@ -81,6 +112,9 @@ export function VaultSection({
                 spread={environmentsOf(v.secrets, s.name).length > 1}
                 onAct={(action) => onAct(s, action)}
                 onMenu={(e) => onMenu(s, e)}
+                conflict={conflicts.get(conflictKey(v.id, s.name, s.environment))}
+                onKeepMine={() => onKeepMine(conflictKey(v.id, s.name, s.environment))}
+                onKeepTheirs={() => onKeepTheirs(conflictKey(v.id, s.name, s.environment))}
               />
             ),
           )}

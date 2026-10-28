@@ -81,6 +81,11 @@ function RosterRow({
 }) {
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+  // "Rotate shared vaults" (docs/architecture/teams-vault.md, "Removal and rotation"), on by default:
+  // a removal that leaves the old key in place leaves the removed party's plaintext worth
+  // something, so turning the key is the safe default. It is a tick, not a separate flow — the
+  // Remove button carries it.
+  const [rotate, setRotate] = useState(true);
 
   // The role select fires the action on change. The action is idempotent
   // for the same (orgId, userId) pair, so we don't disable the select
@@ -101,9 +106,12 @@ function RosterRow({
   function handleRemove() {
     if (!canManage) return;
     const display = member.displayName?.trim() || member.email || "this member";
-    if (typeof window !== "undefined" && !window.confirm(`Remove ${display} from this workspace?`)) return;
+    const ask = rotate
+      ? `Remove ${display} from this workspace and turn the shared vaults' keys?`
+      : `Remove ${display} from this workspace?`;
+    if (typeof window !== "undefined" && !window.confirm(ask)) return;
     startTransition(async () => {
-      const result = await actions.remove(member.userId);
+      const result = await actions.remove(member.userId, rotate);
       setMessage({
         kind: result.ok ? "ok" : "err",
         text: result.message ?? (result.ok ? "Removed." : "Couldn’t remove."),
@@ -152,16 +160,22 @@ function RosterRow({
         <td className="wz-rosterDate">{formatJoined(member.joinedAt)}</td>
         <td>
           {canManage ? (
-            <button
-              type="button"
-              className="wz-rosterButton wz-rosterButtonDanger"
-              onClick={handleRemove}
-              disabled={pending || member.isYou}
-              aria-label={`Remove ${displayName(member)}`}
-              title={member.isYou ? "You can’t remove yourself; use Leave instead" : `Remove ${displayName(member)}`}
-            >
-              {pending ? "Working…" : "Remove"}
-            </button>
+            <div className="wz-rosterRemove">
+              <label className="wz-rosterRotate">
+                <input type="checkbox" checked={rotate} onChange={(e) => setRotate(e.target.checked)} disabled={pending} />
+                Rotate shared vaults
+              </label>
+              <button
+                type="button"
+                className="wz-rosterButton wz-rosterButtonDanger"
+                onClick={handleRemove}
+                disabled={pending || member.isYou}
+                aria-label={`Remove ${displayName(member)}`}
+                title={member.isYou ? "You can’t remove yourself; use Leave instead" : `Remove ${displayName(member)}`}
+              >
+                {pending ? "Working…" : "Remove"}
+              </button>
+            </div>
           ) : (
             <span className="wz-rosterDash">—</span>
           )}

@@ -4,7 +4,8 @@ import { upgradeOnGate } from "./use-upgrade";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { API_HEADERS, apiFetch } from "./api-client";
 import { ACCOUNT_EVENT } from "./auth/hooks";
-import type { NewTeamOp, NewTeamResult, TeamActionResult, TeamClientActions, TeamOp, TeamSnapshot } from "./team-types";
+import { vaultBridge } from "./vault-view";
+import type { NewTeamOp, NewTeamResult, TeamActionResult, TeamClientActions, TeamOp, TeamSnapshot, VaultRotateResult } from "./team-types";
 
 // The board's view of one workspace on the deployed weft.zip (docs/architecture/teams.md). The desktop's
 // local Next server is the only thing that holds the desktop user's access token, so this hook talks to
@@ -51,6 +52,17 @@ async function fetchTeam(org: string | undefined): Promise<{ state: Exclude<Team
 }
 
 type Loaded = Exclude<TeamHookState, { kind: "loading" }>;
+
+// The desktop's rotate call, when there is a main to make the key in.
+//
+// The bridge's own type (lib/vault-view.ts) predates the rotate, so the call is read off the window
+// directly: an older shell simply has no `rotate`, and the tick then falls through to the server's
+// half (the devices are cut off) with no key turned.
+function rotateVaults(org: string, userId: string): Promise<VaultRotateResult> | null {
+  const bridge = vaultBridge() as { rotate?: (org: string, userId: string) => Promise<VaultRotateResult> } | null;
+  if (!bridge?.rotate) return null;
+  return bridge.rotate(org, userId);
+}
 
 // The last answer per workspace ("" is your default one), so Settings → Team opens on it while a fresh one
 // loads. prefetchTeam fills it before the page is ever opened: the top bar calls it once you're signed in.
@@ -185,7 +197,25 @@ export function useTeam(org?: string): TeamHook {
     // A paywall's refusal (an invite on Free) also opens the upgrade dialog.
     invite: (email, role) => onTeam((org) => ({ org, action: "invite", email, role })).then(upgradeOnGate),
     changeRole: (userId, role) => onTeam((org) => ({ org, action: "role", userId, role })),
-    remove: (userId) => onTeam((org) => ({ org, action: "remove", userId })),
+    // A removal with the rotate ticked (docs/architecture/teams-vault.md, "Removal and rotation").
+    //
+    // The crypto is in Electron main — the new vault key is made there, because that is the only
+    // place a vault key exists — so the desktop asks main to rotate *before* the membership is
+    // deleted. Main writes the plan to weft.zip; the server then cuts the removed member's devices
+    // off and deletes the membership. The names to change at the providers come back to the caller.
+    //
+    // A shell with no main (the browser on weft.zip) has nothing to rotate with, so the tick is
+    // passed on and the server does the half it can: the devices are cut off.
+    remove: async (userId, rotate = false) => {
+      const namesToRotate: string[] = [];
+      if (rotate) {
+        const turned = await rotateVaults(state.kind === "ok" ? state.team.org.slug : "", userId);
+        if (turned && !turned.ok) return { ok: false, message: turned.error ?? "The shared vaults could not be turned." };
+        for (const name of turned?.namesToRotate ?? []) if (!namesToRotate.includes(name)) namesToRotate.push(name);
+      }
+      const result = await onTeam((org) => ({ org, action: "remove", userId, rotate }));
+      return result.ok && namesToRotate.length ? { ok: true, message: `Removed. Turn these at their providers: ${namesToRotate.join(", ")}` } : result;
+    },
     revoke: (inviteId) => onTeam((org) => ({ org, action: "revoke", inviteId })),
     addProject: (repo) => onTeam((org) => ({ org, action: "link-project", repo })),
     removeProject: (repo) => onTeam((org) => ({ org, action: "unlink-project", repo })),

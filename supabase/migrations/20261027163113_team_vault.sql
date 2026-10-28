@@ -9,26 +9,13 @@
 -- (a SECURITY DEFINER helper, since org_memberships has no policies of its own). Realtime carries
 -- vault_secrets, vault_events, and the new grant for a device over the user's JWT.
 
--- ── Membership helper ────────────────────────────────────────────────────────
--- The only RLS predicate every table in this file uses. SECURITY DEFINER so it can read org_memberships
--- without recursing into its RLS (org_memberships has no policies, by design). STABLE so the planner
--- caches one result per row in a single query. Lives in private, matching handle_new_user, touch_updated_at
--- and org_slug_for (20261011165940_profiles.sql, 20261013170000_teams.sql).
-
-create or replace function private.is_org_member(p_org uuid)
-returns boolean
-language sql
-stable
-security definer
-set search_path = ''
-as $$
-  select exists (
-    select 1 from public.org_memberships
-     where org_id = p_org and user_id = (select auth.uid())
-  );
-$$;
-
--- The same shape, with a minimum role. 'member' | 'admin' | 'owner'.
+-- ── Membership helpers ───────────────────────────────────────────────────────
+-- private.is_org_member already ships (20261013161111_teams_rls.sql): SECURITY DEFINER, STABLE,
+-- search_path = '', one uuid parameter. Fifteen existing policies depend on it, so this migration does
+-- NOT redeclare it — CREATE OR REPLACE cannot rename an input parameter, and a DROP would take those
+-- policies with it. The same predicate, already in place, is what every policy below calls.
+--
+-- private.is_org_role is new here: the same shape with a minimum role. 'member' | 'admin' | 'owner'.
 create or replace function private.is_org_role(p_org uuid, p_min text)
 returns boolean
 language sql
@@ -147,6 +134,26 @@ create unique index devices_user_pubkey_idx on public.devices (user_id, public_k
 create index devices_user_idx on public.devices (user_id);
 create index devices_pubkey_idx on public.devices (public_key);
 
+-- ── The vault key, sealed to one device ─────────────────────────────────────
+-- One row per (vault, device, key_version). A device is allowed in for that key version only. The wrapped
+-- key is a libsodium sealed box over the device's public key (electron/vault-crypto.cjs wrapKey); only
+-- the device's own private key can open it. The granter is recorded so the audit log has an actor even
+-- after the row is gone.
+
+create table public.vault_grants (
+  id            uuid primary key default gen_random_uuid(),
+  vault_id      uuid not null references public.vaults (id) on delete cascade,
+  device_id     uuid not null references public.devices (id) on delete cascade,
+  key_version   integer not null check (key_version >= 1),
+  wrapped_key   text not null,
+  granted_by    uuid not null references auth.users (id),
+  granted_at    timestamptz not null default now(),
+  unique (vault_id, device_id, key_version)
+);
+
+create index vault_grants_vault_idx on public.vault_grants (vault_id);
+create index vault_grants_device_idx on public.vault_grants (device_id);
+
 alter table public.devices enable row level security;
 
 -- A user sees their own devices.
@@ -155,26 +162,28 @@ create policy "devices: read own" on public.devices
 
 -- A teammate needs to read a device's public_key, name and fingerprint to grant it access; the
 -- private.device_visible_to helper checks that the calling user belongs to an org that already has
--- a grant for the device.
-create or replace function private.device_visible_to(p_device public.devices)
+-- a grant for the device. It takes the device's id and owner as plain arguments, not the composite
+-- `devices` type, so it can be defined before any table exists — the policy on devices below can
+-- then call it, and the function's own body reads vault_grants (created further down).
+create or replace function private.device_visible_to(p_device_id uuid, p_user_id uuid)
 returns boolean
 language sql
 stable
 security definer
 set search_path = ''
 as $$
-  select (p_device.user_id = (select auth.uid()))
+  select (p_user_id = (select auth.uid()))
       or exists (
            select 1
              from public.vault_grants g
              join public.vaults v on v.id = g.vault_id
-            where g.device_id = p_device.id
+            where g.device_id = p_device_id
               and private.is_org_member(v.org_id)
          );
 $$;
 
 create policy "devices: read shared" on public.devices
-  for select to authenticated using (private.device_visible_to(devices));
+  for select to authenticated using (private.device_visible_to(id, user_id));
 
 -- A user can register their own device (idempotent: ON CONFLICT updates last_seen_at only). The name
 -- is filled in by main on first registration and editable later in Settings.
@@ -206,26 +215,6 @@ revoke all on public.devices from anon, authenticated;
 grant select (id, user_id, name, public_key, fingerprint, platform, last_seen_at, revoked_at, created_at) on public.devices to authenticated;
 grant insert (name, public_key, fingerprint, platform) on public.devices to authenticated;
 grant update (name, last_seen_at) on public.devices to authenticated;
-
--- ── The vault key, sealed to one device ─────────────────────────────────────
--- One row per (vault, device, key_version). A device is allowed in for that key version only. The wrapped
--- key is a libsodium sealed box over the device's public key (electron/vault-crypto.cjs wrapKey); only
--- the device's own private key can open it. The granter is recorded so the audit log has an actor even
--- after the row is gone.
-
-create table public.vault_grants (
-  id            uuid primary key default gen_random_uuid(),
-  vault_id      uuid not null references public.vaults (id) on delete cascade,
-  device_id     uuid not null references public.devices (id) on delete cascade,
-  key_version   integer not null check (key_version >= 1),
-  wrapped_key   text not null,
-  granted_by    uuid not null references auth.users (id),
-  granted_at    timestamptz not null default now(),
-  unique (vault_id, device_id, key_version)
-);
-
-create index vault_grants_vault_idx on public.vault_grants (vault_id);
-create index vault_grants_device_idx on public.vault_grants (device_id);
 
 alter table public.vault_grants enable row level security;
 
@@ -621,8 +610,8 @@ revoke all on function private.is_org_member(uuid) from public, anon, authentica
 grant execute on function private.is_org_member(uuid) to authenticated;
 revoke all on function private.is_org_role(uuid, text) from public, anon, authenticated;
 grant execute on function private.is_org_role(uuid, text) to authenticated;
-revoke all on function private.device_visible_to(public.devices) from public, anon, authenticated;
-grant execute on function private.device_visible_to(public.devices) to authenticated;
+revoke all on function private.device_visible_to(uuid, uuid) from public, anon, authenticated;
+grant execute on function private.device_visible_to(uuid, uuid) to authenticated;
 revoke all on function private.bump_server_version() from public, anon, authenticated;
 revoke all on function private.bump_row_version() from public, anon, authenticated;
 revoke all on function private.bump_vault_version() from public, anon, authenticated;

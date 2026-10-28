@@ -16,6 +16,7 @@ import { runDeleteTeam } from "./team-delete";
 import { runLinkProject, runUnlinkProject } from "./team-projects";
 import { listVisibleProjects, runSetProjectAccess } from "./team-project-access";
 import { workspaceCanHaveMembers } from "./billing/plan-gate";
+import { revokeMemberDevices } from "./team-vault-rotate";
 import { syncTeamSeatsQuietly } from "./billing/seats";
 import { TEAM_GATE_MESSAGE } from "./billing/upgrade";
 import type { TeamActionResult, TeamInvite, TeamMember, TeamOp, TeamOrg, TeamSnapshot, TeamUser } from "./team-types";
@@ -233,15 +234,31 @@ export async function runChangeRole(ctx: TeamContext, userId: string, newRole: T
 
 // ─── remove (or self-leave) ──────────────────────────────────────────────
 
-// Remove a member, or yourself (leave). Self-leave is always allowed unless
-// it would strand the workspace with no owners. Clearing
-// `profiles.current_org_id` keeps the switcher from pointing at an org the
-// user is no longer in.
-export async function runRemove(ctx: TeamContext, userId: string): Promise<TeamActionResult> {
-  if (!userId) return fail("Missing member id.");
+// The rotate tick's server half: the removed member's machines are cut off *before* the membership
+// goes, so no new grant can reach them while they are still a member's. A revoked device can't
+// fetch a grant (the RLS on vault_grants wants a non-revoked device), and it has no grant for the
+// new key version anyway — so the unwrap would fail even if it could.
+//
+// The key itself is turned in Electron main; this is the half the server can do on its own.
+async function cutOffDevices(ctx: TeamContext, userId: string): Promise<string | null> {
+  try {
+    await revokeMemberDevices(ctx.service, ctx.org.id, userId);
+    return null;
+  } catch (err) {
+    return err instanceof Error ? err.message : "Those devices could not be cut off.";
+  }
+}
+
+// The membership a removal touches, and the two rules that decide whether it may go: the actor has
+// to be allowed to remove members, and has to be at least as senior as the target. The last-owner
+// rule applies to self-leave too: a sole owner can't leave without first handing the workspace to
+// someone else.
+//
+// Returns the target's role, or the reason the removal is refused.
+async function checkRemoval(ctx: TeamContext, userId: string): Promise<{ role: string } | { problem: string }> {
   const isSelf = userId === ctx.user.id;
   if (!isSelf && !roleCan(ctx.role, "members.manage")) {
-    return fail("You don't have permission to remove members.");
+    return { problem: "You don't have permission to remove members." };
   }
   const { data: target } = await ctx.service
     .from("org_memberships")
@@ -249,21 +266,41 @@ export async function runRemove(ctx: TeamContext, userId: string): Promise<TeamA
     .eq("org_id", ctx.org.id)
     .eq("user_id", userId)
     .maybeSingle();
-  if (!target) return fail("That person isn't a member of this workspace.");
+  if (!target) return { problem: "That person isn't a member of this workspace." };
   // The actor must be at least as senior as the target — but only when the
   // actor isn't leaving themselves.
   if (!isSelf && !roleAtLeast(ctx.role, target.role as TeamContext["role"])) {
-    return fail("You can't remove someone at or above your own role.");
+    return { problem: "You can't remove someone at or above your own role." };
   }
-  // Last owner check applies to self-leave too: a sole owner can't leave
-  // without first handing the workspace to someone else.
   if (target.role === "owner") {
     const { count } = await ctx.service
       .from("org_memberships")
       .select("user_id", { count: "exact", head: true })
       .eq("org_id", ctx.org.id)
       .eq("role", "owner");
-    if ((count ?? 0) <= 1) return fail("You can't leave the workspace as its only owner. Promote someone else first.");
+    if ((count ?? 0) <= 1) return { problem: "You can't leave the workspace as its only owner. Promote someone else first." };
+  }
+  return { role: target.role as string };
+}
+
+// Remove a member, or yourself (leave). Self-leave is always allowed unless
+// it would strand the workspace with no owners. Clearing
+// `profiles.current_org_id` keeps the switcher from pointing at an org the
+// user is no longer in.
+//
+// `rotate` is the rotate-on-remove tick (docs/architecture/teams-vault.md, "Removal and rotation"):
+// the removed member's devices are cut off before the membership goes, so no new grant can reach
+// them. The key itself is turned in Electron main; this is the half the server can do.
+export async function runRemove(ctx: TeamContext, userId: string, rotate = false): Promise<TeamActionResult> {
+  if (!userId) return fail("Missing member id.");
+  const isSelf = userId === ctx.user.id;
+  const check = await checkRemoval(ctx, userId);
+  if ("problem" in check) return fail(check.problem);
+  // The rotate tick: the devices are cut off before the membership goes. A removal that left a live
+  // machine behind is worse than no removal, so a failure here stops the removal.
+  if (rotate && !isSelf) {
+    const problem = await cutOffDevices(ctx, userId);
+    if (problem) return fail(problem);
   }
   const { error } = await ctx.service
     .from("org_memberships")
@@ -311,7 +348,7 @@ export async function runTeamOp(ctx: TeamContext, op: TeamOp): Promise<TeamActio
     case "role":
       return runChangeRole(ctx, op.userId, op.role);
     case "remove":
-      return runRemove(ctx, op.userId);
+      return runRemove(ctx, op.userId, op.rotate === true);
     case "revoke":
       return runRevokeInvite(ctx, op.inviteId);
     case "link-project":

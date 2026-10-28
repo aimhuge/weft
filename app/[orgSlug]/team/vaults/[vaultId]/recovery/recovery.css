@@ -1,0 +1,80 @@
+/* The recovery key's page (app/[orgSlug]/team/vaults/[vaultId]/recovery): the 24 words in a 4×6
+   grid, the two buttons under it, and the tick.
+
+   It leans on team.css for the page shell (wz-teamPage, wz-teamHeader, wz-teamSection) and on the
+   invite form's own classes for the inputs and the button (wz-inviteInput, wz-inviteSubmit).
+
+   The grid is four columns of six because that is how the words are numbered — 1 to 24 in reading
+   order — and a grid keeps a misread word in its own place. On a narrow screen the columns fold to
+   two, and to one, so the words stay in order down the page. */
+.wz-recoveryBox {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.wz-recoveryGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px 12px;
+  width: 100%;
+  margin: 0;
+  padding: 14px;
+  list-style: none;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--card, rgb(255 255 255 / 0.04));
+}
+
+.wz-recoveryWord {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.wz-recoveryIndex {
+  flex: none;
+  width: 1.6em;
+  text-align: right;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--faint);
+}
+
+.wz-recoveryText {
+  min-width: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 14px;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.wz-recoveryActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+}
+
+.wz-recoverySaved {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+@media (max-width: 720px) {
+  .wz-recoveryGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 420px) {
+  .wz-recoveryGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

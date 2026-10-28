@@ -37,6 +37,7 @@ const { createAccountLink } = require("./account-link.cjs");
 const { argvLink } = require("./argv-link.cjs");
 const { createMenuPopup } = require("./main-menu-popup.cjs");
 const { createNewThreadLink } = require("./new-thread-link.cjs");
+const { createAccountClient } = require("./account-client.cjs");
 
 const APP_NAME = "Weft";
 const TAGLINE = "Engineering the future, one thread at a time";
@@ -66,7 +67,7 @@ const timer = createStartupTimer({
 
 // The secrets vault, set up further down; the pane types its values in for threads (fillSecret).
 // With it, commands and dev servers run with vault values (secret-run.cjs) and the push to Vercel (vercel-env.cjs).
-let vault, secretRun, vercelEnv, vercelApi, supabaseApi, blastcpApi, gooseApi, slackApi;
+let vault, secretRun, vercelEnv, vercelApi, supabaseApi, blastcpApi, gooseApi, slackApi, accountClient;
 // Small native warning dialog; shared by pageLinks (walk-through buttons) and accountLink (OAuth callback).
 const warnUser = (message, detail) => dialog.showMessageBox(win, { type: "warning", message, detail });
 const pane = createBrowserPane({
@@ -375,8 +376,18 @@ createMenuPopup({ ipcMain, Menu, BrowserWindow });
 require("./open-in.cjs").registerOpenIn(ipcMain, { shell });
 require("./print.cjs").setupPrint({ ipcMain, BrowserWindow, isBoard: (sender) => Boolean(sender) && sender === appView?.webContents });
 ipcMain.on("shell:reveal", (_e, folder) => path.isAbsolute(String(folder)) && fs.existsSync(String(folder)) && shell.openPath(String(folder)));
+// The account's Supabase client in main, reading and writing the shared vault's tables as the signed-in
+// user (docs/architecture/teams-vault.md). The session stays in the Keychain; the Keychain is asked for on
+// first use, because safeStorage only works once the app is ready.
+accountClient = createAccountClient({ dataDir: dataDir(), safeStorage: () => require("./keychain-audit.cjs").keychainFor("Weft sign-in") });
 // The secrets vault answers the board window only; threads reach values only through the pane typing them in, behind Touch ID.
-vault = require("./vault.cjs").setupVault({ ipcMain, dataDir: dataDir(), window: () => win, board: () => appView?.webContents });
+// A shared vault syncs through the account client (electron/vault-sync.cjs).
+vault = require("./vault.cjs").setupVault({ ipcMain, dataDir: dataDir(), window: () => win, board: () => appView?.webContents, accountClient });
+// This machine's registration in the shared vault (docs/architecture/teams-vault.md, "Device
+// registration"): the board reads its own devices and its own fingerprint, so it can show the TOFU
+// string the user compares with the other machine. The board window only; the private key never
+// leaves main.
+require("./device-key.cjs").registerDeviceHandlers({ ipcMain, accountClient: () => accountClient, dataDir: dataDir(), isBoard: (sender) => Boolean(sender) && sender === appView?.webContents });
 secretRun = require("./secret-run.cjs").setupSecretRun({ vault, dataDir: dataDir(), window: () => win });
 // So does Vercel: its token is in the Keychain and its links are .vercel/project.json.
 ({ vercel: vercelApi, env: vercelEnv } = require("./vercel.cjs").setupVercel({ ipcMain, dataDir: dataDir(), board: () => appView?.webContents, vault }));

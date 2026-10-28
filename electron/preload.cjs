@@ -82,6 +82,39 @@ contextBridge.exposeInMainWorld("weft", {
     activity: (limit) => ipcRenderer.invoke("vault:activity", limit),
     // A managed .env.local was edited by hand: load the vaults again.
     onChange: (callback) => listen("vault:changed", callback),
+    // This machine's registration in the shared vault (docs/architecture/teams-vault.md, "Device
+    // registration"). The board reads its own devices and its own fingerprint, so it can show the
+    // TOFU string. The private key and every secret value stay in main: the renderer only ever sees
+    // a public key, a fingerprint and a name.
+    devices: {
+      list: () => ipcRenderer.invoke("vault:devices"),
+      register: (options) => ipcRenderer.invoke("vault:devices-register", options ?? {}),
+      fingerprint: () => ipcRenderer.invoke("vault:devices-fingerprint"),
+    },
+    // The shared vault's cross-device flow (docs/architecture/teams-vault.md, "Granting a teammate's
+    // devices"). These are not the thread grants above: `grant` gives a card's thread access to a
+    // local vault for an hour, while `deviceGrant` seals the vault key to a teammate's machine so it
+    // can open the shared vault at all. Nothing here carries a value or a key.
+    deviceGrant: (pendingId) => ipcRenderer.invoke("vault:device-grant", pendingId),
+    share: (folder, orgId, repo, label) => ipcRenderer.invoke("vault:share", folder, orgId, repo, label),
+    // A shared vault's rotate (docs/architecture/teams-vault.md, "Removal and rotation"): the new key
+    // is made in main, because that is the only place a vault key exists. The board asks for it and
+    // gets back the names to change at their providers — names, never a value.
+    rotate: (org, userId) => ipcRenderer.invoke("vault:rotate", org, userId),
+    // The shared vault's event log (docs/architecture/teams-vault.md, "What the 🔐 drawer shows"): who
+    // did what, never a value. The tab reads the last hundred rows and watches for the ones that land.
+    events: (id, query) => ipcRenderer.invoke("vault:events", id, query ?? {}),
+    watchEvents: (id, scope) => ipcRenderer.invoke("vault:events-watch", id, scope),
+    unwatchEvents: (id) => ipcRenderer.invoke("vault:events-unwatch", id),
+    onEvents: (callback) => listen("vault:events-live", callback),
+    // A shared vault's recovery key (docs/architecture/teams-vault.md, "Recovery key"): the 24 words
+    // the user writes down. The vault key is unwrapped in main behind Touch ID, and the words are
+    // shown once — nothing here keeps them. `show` hands the words to the renderer; `status` says
+    // whether the vault has a recovery key yet.
+    recovery: {
+      show: (vaultId, passphrase) => ipcRenderer.invoke("vault:recovery-show", vaultId, passphrase ?? ""),
+      status: (vaultId) => ipcRenderer.invoke("vault:recovery-status", vaultId),
+    },
   },
   // Vercel (electron/vercel.cjs): the token stays in main; links are .vercel/project.json. Board window only.
   vercel: {
