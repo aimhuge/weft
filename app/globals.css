@@ -558,8 +558,26 @@ button:disabled {
 @media (prefers-reduced-motion: reduce) {
   .achievement-pop,
   .level-hero-art,
-  .level-crawl {
+  .level-crawl,
+  .view-hint-pop {
     animation: none;
+  }
+}
+
+/* The pane that says where Escape just took you (components/ViewHint.tsx): it pops in rather than
+   merely appearing, and carries a wide accent glow so it reads as an announcement, not a tooltip. */
+.view-hint-pop {
+  animation: view-hint-pop 0.32s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent),
+    0 0 0 4px color-mix(in srgb, var(--accent) 18%, transparent),
+    0 10px 44px 8px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+@keyframes view-hint-pop {
+  from {
+    transform: translateY(-10px) scale(0.9);
+    opacity: 0;
   }
 }
 

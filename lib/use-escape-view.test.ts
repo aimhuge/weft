@@ -98,4 +98,27 @@ describe("useEscapeTogglesView", () => {
     press(input);
     expect(onFlip).not.toHaveBeenCalled();
   });
+
+  it("puts the hint away instead of flipping back while it is up", () => {
+    const choose = vi.fn();
+    const onDismiss = vi.fn();
+    renderHook(() => useEscapeTogglesView(bare, "board", choose, vi.fn(), true, onDismiss));
+    press();
+    expect(onDismiss).toHaveBeenCalled();
+    expect(choose).not.toHaveBeenCalled();
+  });
+
+  it("flips again once the hint is gone", () => {
+    const choose = vi.fn();
+    const onDismiss = vi.fn();
+    const { rerender } = renderHook(
+      ({ up }: { up: boolean }) => useEscapeTogglesView(bare, "board", choose, vi.fn(), up, onDismiss),
+      { initialProps: { up: true } },
+    );
+    press();
+    expect(choose).not.toHaveBeenCalled();
+    rerender({ up: false });
+    press();
+    expect(choose).toHaveBeenCalledWith("list");
+  });
 });

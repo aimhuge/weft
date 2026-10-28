@@ -21,16 +21,26 @@ export function bareBoard({ thread, newThread, browser, drawer }: BoardLayers) {
 //
 // `onFlip` hears the view it switched to, so the board can pop a little pane saying where Escape
 // just took you (lib/use-view-hint.ts). It never fires without a flip.
+//
+// `hintUp` says the pane is showing. The pane says what the next Escape does, so Escape has to
+// mean that: while it is up, the next Escape puts it away instead of flipping the view again.
+// `onDismiss` is called instead of the flip.
 export function useEscapeTogglesView(
   open: BoardLayers,
   mode: ViewMode,
   choose: (next: ViewMode) => void,
   onFlip?: (next: ViewMode) => void,
+  hintUp?: boolean,
+  onDismiss?: () => void,
 ) {
   useEscape(
     bareBoard(open),
     (e) => {
       if (isTyping(e.target)) return;
+      if (hintUp) {
+        onDismiss?.();
+        return;
+      }
       const next = mode === "board" ? "list" : "board";
       choose(next);
       onFlip?.(next);

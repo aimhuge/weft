@@ -5,7 +5,7 @@ import type { ViewMode } from "./board-prefs";
 
 // How long the hint stays up after Escape flips the view: long enough to read it, short enough that
 // it doesn't sit over the board.
-const HINT_MS = 2600;
+const HINT_MS = 4000;
 
 // The little pane that says where Escape just took you. It is the board's own escape layer
 // (lib/use-escape-view.ts) announcing itself, so the hint and the flip can never disagree.
@@ -16,9 +16,25 @@ export function viewLabel(mode: ViewMode): string {
   return mode === "board" ? "Board" : "List";
 }
 
-// The hint for a flip to `mode`: what you are looking at now, and that Escape goes back.
+// The hint for a flip to `mode`: what you are looking at now, and what the next Escape does. The
+// view's name is separate so the toast can set it in accent and weight, and the eye lands on the
+// answer before the sentence around it.
+export function hintTitle(mode: ViewMode): string {
+  return `${viewLabel(mode)} view`;
+}
+
+// What the next Escape would take you to: the view you're not in now.
+export function hintOther(mode: ViewMode): string {
+  return viewLabel(mode === "board" ? "list" : "board");
+}
+
 export function hintText(mode: ViewMode): string {
-  return `${viewLabel(mode)} view. Esc goes back.`;
+  return `${hintTitle(mode)}. Hit Esc again to switch to ${hintOther(mode).toLowerCase()} view.`;
+}
+
+// The tail of the toast, after the view's name: what the next Escape does.
+export function hintOtherText(mode: ViewMode): string {
+  return `hit Esc again to switch to ${hintOther(mode).toLowerCase()} view`;
 }
 
 // The state behind the hint: the last flip, and a way to clear it. `id` counts the flips, so the

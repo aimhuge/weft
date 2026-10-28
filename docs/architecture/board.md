@@ -112,11 +112,18 @@ lives in its own component under `components/`.
   (`lib/board-prefs.ts`), read through `lib/use-view-mode.ts`.
   Escape flips it too, from `lib/use-escape-view.ts`: the bottom Escape layer, on only while no thread,
   new-thread dialog, browser or closable drawer is up, and never for an Escape typed in a field.
-  The flip pops a small pane under the toggle — `components/ViewHint.tsx`, drawn from the state in
-  `lib/use-view-hint.ts` — naming the view you landed in ("List view. Esc goes back.") and closing
-  itself after a moment. It hangs off the toggle rather than taking a row, so it costs no vertical
-  space on a small screen. The Escape layer itself decides the flip and hands the new view to the
-  hint, so the two can never disagree about what happened.
+  The flip pops a toast under the toggle — `components/ViewHint.tsx`, drawn from the state in
+  `lib/use-view-hint.ts` — naming the view you landed in and what the next Escape does ("List view ·
+  hit Esc again to switch to board view"). It closes itself after a moment, on its ✕, or on the next Escape
+  (which puts the toast away rather than flipping again, since the toast says what Escape does).
+  It hangs off the toggle rather than taking a row, so it costs no vertical space on a small
+  screen. The Escape layer itself decides the flip and hands the new view to the hint, so the two
+  can never disagree about what happened.
+  The toast is deliberately loud — big type, an accent icon tile, a bright accent border and a wide
+  glow, and a short entrance (`.view-hint-pop` in `app/globals.css`) so it pops in rather than
+  merely appearing. It is one row and never wraps: an absolutely-positioned box with no width
+  shrinks to its content and then wraps its text into a narrow column, which left the icon adrift
+  from the words and stranded the ✕ between them, so it carries `w-max` and `whitespace-nowrap`.
 - `components/BoardBrowserPane.tsx` — the standalone browser pane, drawn while no card is open (an open
   card's pane lives in its workspace's `pane` column, `components/OpenCard.tsx`).
 - `components/OpenCard.tsx` — `CardFrame` (the backdrop and the framed window over the board, a

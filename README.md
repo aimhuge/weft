@@ -68,7 +68,7 @@ port.
   title, status, stage, tags, folder, age — one line per card, with the header stuck to the top and the
   columns lined up down the sheet, on frosted glass with grid lines and numbered rows. Esc pops a toast
   under the toggle naming the view you landed in and what the next Esc does ("List view · hit Esc again
-  for board view"), so the swap is never silent; it closes itself a moment later. Click a header
+  to switch to board view"), so the swap is never silent; it closes itself a moment later. Click a header
   and type: the Title filters cards as you go, any other column narrows its values (↑↓, Enter keeps
   only the match), and Age flips its sort on a click; the sheet remembers it all. Bands fold (the
   Backlog starts folded), and a card folds open to its subagents and the cards it started. Click a

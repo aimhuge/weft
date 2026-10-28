@@ -4,7 +4,10 @@
 
 import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { hintText, useViewHint, viewLabel } from "./use-view-hint";
+import { hintOther, hintOtherText, hintText, hintTitle, useViewHint, viewLabel } from "./use-view-hint";
+
+// The pane's own lifetime, so a test doesn't have to guess it.
+const HINT_MS = 4000;
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -39,18 +42,18 @@ describe("useViewHint", () => {
   it("closes itself after a moment", () => {
     const { result } = renderHook(() => useViewHint());
     act(() => result.current.show("list"));
-    void act(() => vi.advanceTimersByTime(3000));
+    void act(() => vi.advanceTimersByTime(HINT_MS + 100));
     expect(result.current.hint).toBeNull();
   });
 
   it("restarts its timer on a second flip", () => {
     const { result } = renderHook(() => useViewHint());
     act(() => result.current.show("list"));
-    void act(() => vi.advanceTimersByTime(2000));
+    void act(() => vi.advanceTimersByTime(HINT_MS - 1000));
     act(() => result.current.show("board"));
-    void act(() => vi.advanceTimersByTime(2000));
+    void act(() => vi.advanceTimersByTime(HINT_MS - 1000));
     expect(result.current.hint).toMatchObject({ mode: "board" });
-    void act(() => vi.advanceTimersByTime(1000));
+    void act(() => vi.advanceTimersByTime(1100));
     expect(result.current.hint).toBeNull();
   });
 
@@ -72,5 +75,20 @@ describe("the hint's words", () => {
   it("labels the two views", () => {
     expect(viewLabel("board")).toBe("Board");
     expect(viewLabel("list")).toBe("List");
+  });
+
+  it("has a title of its own, so the pane can set it in accent", () => {
+    expect(hintTitle("list")).toBe("List view");
+    expect(hintTitle("board")).toBe("Board view");
+  });
+
+  it("names the view the next Escape would take you to", () => {
+    expect(hintOther("list")).toBe("Board");
+    expect(hintOther("board")).toBe("List");
+  });
+
+  it("says what the next Escape does, in one sentence", () => {
+    expect(hintOtherText("list")).toBe("hit Esc again to switch to board view");
+    expect(hintOtherText("board")).toBe("hit Esc again to switch to list view");
   });
 });

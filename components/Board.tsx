@@ -260,7 +260,7 @@ export default function Board() {
   // saying where it took you, so the switch isn't silent.
   const { hint: viewHint, show: showViewHint, clear: clearViewHint } = useViewHint();
   const boardLayers = { thread: Boolean(selectedId), newThread: showNew, browser: browserOpen, drawer: Boolean(libraryOpen) };
-  useEscapeTogglesView(boardLayers, viewMode, chooseView, showViewHint);
+  useEscapeTogglesView(boardLayers, viewMode, chooseView, showViewHint, Boolean(viewHint), clearViewHint);
 
   const tagCatalog = useTagCatalog(cards, notify);
   // Open the editor column automatically when something asks for a file in this card's folder.
