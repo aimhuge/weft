@@ -289,7 +289,7 @@ Tags: `Now` is being built this session; `P1` is next and high value; `P2` is cl
 
 ## Remote and mobile access
 
-- `P2` **Phone view** — a mobile board over a private tunnel (Tailscale or a paired relay) to answer permissions and reply away from the desk.
+- `Now` **Phone app** — React Native (Expo) in `~/dev/weft-mobile`, where the pane is the app: each card is the page its agent last showed, full screen, cards that need you first. Swipe between cards and through a card's pages, answer questions and Allow with Face ID over the page, hold to talk or type a reply, Stop, start a new card, the thread one tap away (docs/architecture/mobile.md#the-app). Next: TestFlight, live dev-server pages over the relay, the phone's side of pairing, sealed reads and signed Allows (Weft's side is built: docs/architecture/mobile-security.md), Live Activity and lock-screen Allow.
 - `P2` **Phone push** — push "needs you" to your phone (ntfy, Pushover, or a native app).
 - `P2` **Device pairing** — pair a phone with a QR code and a device token, since the API only accepts localhost today.
 - `P3` **Chat bridge** — answer permissions and send replies through a messaging app.

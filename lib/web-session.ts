@@ -125,3 +125,13 @@ export function serviceClient(env: Record<string, string | undefined> = process.
   if (service?.key !== key) service = { key, client: makeService(key) };
   return service.client;
 }
+
+// Who's asking, and a client that reads as them, for a route both the weft.zip board (cookie) and the phone app
+// (`Authorization: Bearer <jwt>`, ~/dev/weft-mobile; docs/architecture/mobile.md) call. RLS is the gate either way.
+export async function requestSession(req: Request): Promise<{ supabase: WebClient; user: { id: string } | null }> {
+  const bearer = bearerSupabase(req);
+  if (bearer) return { supabase: bearer as unknown as WebClient, user: await bearerUser(req) };
+  const supabase = await webClient();
+  const { data } = await supabase.auth.getUser();
+  return { supabase, user: data.user };
+}

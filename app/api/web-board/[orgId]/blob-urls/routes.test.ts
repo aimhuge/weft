@@ -3,8 +3,20 @@
 // signed-out visitor, and what reaches the resolver.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { webClient, resolveBlobUrls, queued } = vi.hoisted(() => ({ webClient: vi.fn(), resolveBlobUrls: vi.fn(), queued: vi.fn() }));
-vi.mock("@/lib/web-session", () => ({ webClient }));
+type FakeClient = { auth: { getUser: () => Promise<{ data: { user: { id: string } | null } }> } };
+const { webClient, resolveBlobUrls, queued } = vi.hoisted(() => ({
+  webClient: vi.fn<() => Promise<FakeClient>>(),
+  resolveBlobUrls: vi.fn(),
+  queued: vi.fn(),
+}));
+// requestSession reads the cookie session through webClient when there's no bearer token, as the real one does.
+vi.mock("@/lib/web-session", () => ({
+  requestSession: async () => {
+    const supabase = await webClient();
+    const { data } = await supabase.auth.getUser();
+    return { supabase, user: data.user };
+  },
+}));
 vi.mock("@/lib/blob-urls", () => ({ resolveBlobUrls }));
 vi.mock("@/lib/r2-queue", () => ({ queueMirror: () => queued }));
 

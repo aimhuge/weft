@@ -227,6 +227,28 @@ describe("bearerUser", () => {
   });
 });
 
+describe("requestSession", () => {
+  it("reads as the bearer caller when the request carries a token", async () => {
+    const { requestSession } = await load();
+    const getClaims = vi.fn().mockResolvedValue({ data: { claims: { sub: "u9" } }, error: null });
+    const bearer = { storage: {} };
+    createClient.mockReturnValueOnce(bearer).mockReturnValueOnce({ auth: { getClaims } });
+    const out = await requestSession(new Request("https://w.x/", { headers: { authorization: "Bearer t.o.k" } }));
+    expect(out.supabase).toBe(bearer);
+    expect(out.user).toMatchObject({ id: "u9" });
+    expect(cookies).not.toHaveBeenCalled();
+  });
+
+  it("falls back to the cookie session without a token", async () => {
+    const { requestSession } = await load();
+    const getUser = vi.fn().mockResolvedValue({ data: { user: { id: "u1" } } });
+    createServerClient.mockReturnValueOnce({ auth: { getUser } });
+    cookies.mockResolvedValueOnce({ getAll: () => [], set: vi.fn() });
+    const out = await requestSession(new Request("https://w.x/"));
+    expect(out.user).toEqual({ id: "u1" });
+  });
+});
+
 describe("serviceClient", () => {
   it("is null when SUPABASE_SECRET_KEY is unset", async () => {
     const { serviceClient } = await load();

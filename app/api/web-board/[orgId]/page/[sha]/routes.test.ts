@@ -3,8 +3,16 @@
 // hides, and the sandbox headers on a page that's served.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { webClient } = vi.hoisted(() => ({ webClient: vi.fn() }));
-vi.mock("@/lib/web-session", () => ({ webClient }));
+type FakeClient = { auth: { getUser: () => Promise<{ data: { user: { id: string } | null } }> }; storage: unknown };
+const { webClient } = vi.hoisted(() => ({ webClient: vi.fn<() => Promise<FakeClient>>() }));
+// requestSession reads the cookie session through webClient when there's no bearer token, as the real one does.
+vi.mock("@/lib/web-session", () => ({
+  requestSession: async () => {
+    const supabase = await webClient();
+    const { data } = await supabase.auth.getUser();
+    return { supabase, user: data.user };
+  },
+}));
 
 const ORG = "11111111-2222-3333-4444-555555555555";
 const SHA = "a".repeat(64);
