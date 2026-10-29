@@ -12,13 +12,14 @@
 // workspace's cards even if the URL leaked.
 import type { Metadata } from "next";
 import { Suspense } from "react";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { isWebEnabled } from "@/lib/home";
 import { requireTeam } from "@/lib/teams";
 import { isOpenCommand, type CloudCommandRow } from "@/lib/cloud-commands";
-import { BLOB_BUCKET, BLOB_REF_PREFIX, THREAD_PAGE_SIZE, type CloudCardRow, type CloudThreadItemRow } from "@/lib/cloud-sync-types";
+import { BLOB_REF_PREFIX, THREAD_PAGE_SIZE, type CloudCardRow, type CloudThreadItemRow } from "@/lib/cloud-sync-types";
 import { pageFromRows } from "@/lib/cloud-thread-page";
-import { batchBlobRefs, blobPath, buildBlobUrlMap, collectBlobRefs } from "@/lib/web-board";
+import { resolveBlobUrls } from "@/lib/blob-urls";
+import { queueMirror } from "@/lib/r2-queue";
+import { collectBlobRefs } from "@/lib/web-board";
 import { cardThumbRefs } from "@/lib/web-board-thumbs";
 import { webClient } from "@/lib/web-session";
 import { WebBoard } from "@/components/web-board";
@@ -109,7 +110,7 @@ async function BoardPageBody({ orgSlug, searchParams }: { orgSlug: string; searc
   const initialRefs = new Set<string>();
   if (cardId) collectBlobRefs(pageFromRows(cardId, threadRows).items, initialRefs);
   for (const ref of cardThumbRefs(cardRows)) initialRefs.add(ref);
-  const initialBlobUrls = await resolveBlobUrls(supabase, ctx.org.id, [...initialRefs]);
+  const initialBlobUrls = await resolveBlobUrls(supabase, ctx.org.id, [...initialRefs], { onUnmirrored: queueMirror(ctx.org.id) });
 
   return (
     <WebBoard
@@ -150,33 +151,6 @@ function isReadDenied(err: { code?: string; message?: string }): boolean {
   if (err.code === "42501") return true;
   if (err.message && /row-level security/i.test(err.message)) return true;
   return false;
-}
-
-// Batch-resolve a set of blob refs to signed URLs through createSignedUrls. The map is plain
-// JSON the client can drop into state; the refs themselves become the keys so the renderer's
-// `blobUrls[ref]` lookup stays a single hash hit.
-async function resolveBlobUrls(
-  supabase: SupabaseClient,
-  orgId: string,
-  refs: readonly string[],
-): Promise<Record<string, string>> {
-  const out: Record<string, string> = {};
-  if (!refs.length) return out;
-  for (const batch of batchBlobRefs(refs)) {
-    const paths = batch.map((r) => blobPath(orgId, r));
-    try {
-      const { data, error } = await supabase.storage.from(BLOB_BUCKET).createSignedUrls(paths, 3600);
-      if (error) continue;
-      const map = buildBlobUrlMap(
-        data.map((d: { path: string | null; signedUrl: string | null }) => ({ path: d.path ?? "", signedUrl: d.signedUrl })),
-        batch,
-      );
-      Object.assign(out, map);
-    } catch {
-      // Skip the batch; the client retries on demand.
-    }
-  }
-  return out;
 }
 
 // A tiny re-export so the page file and the components file both see the same import surface

@@ -43,6 +43,7 @@
     "resend": "node scripts/resend-domain.mjs",
     "league:test-mail": "jiti scripts/league-mail-test.ts",
     "infra:probe": "jiti scripts/probe-infra-live.ts",
+    "r2:backfill": "jiti scripts/r2-backfill.ts",
     "changelog:release": "jiti scripts/changelog-release.ts"
   },
   "dependencies": {

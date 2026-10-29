@@ -63,6 +63,16 @@ export interface EgressLive {
   to: string | null;
 }
 
+/** What `public.blob_mirror_stats()` returns: the R2 read copy of weft-blobs (docs/architecture/r2.md). */
+export interface R2Live {
+  mirrored_objects: number;
+  mirrored_bytes: number;
+  /** In Supabase, not copied to R2 yet. */
+  pending_objects: number;
+  pending_bytes: number;
+  last_mirrored: string | null;
+}
+
 /** One provider and what the report says about it. */
 export interface ProviderState {
   name: string;
@@ -96,14 +106,19 @@ export const SUPABASE_PRO = { databaseBytes: 8 * 1024 * 1024 * 1024, storageByte
  * token that this build doesn't hold, and the SQL surface has no plan row. So both ceilings are shown and the
  * reader picks — the report says which one applies rather than guessing.
  */
-export function quotaRows(live: InfraLive | null, egress: EgressLive | null): QuotaRow[] {
-  return [
+export function quotaRows(live: InfraLive | null, egress: EgressLive | null, r2: R2Live | null = null): QuotaRow[] {
+  const rows = [
     byteQuota("Database size", live?.database_bytes ?? null, SUPABASE_FREE.databaseBytes, SUPABASE_PRO.databaseBytes),
     byteQuota("File storage", live?.storage_bytes ?? null, SUPABASE_FREE.storageBytes, SUPABASE_PRO.storageBytes),
     egressQuota(egress),
     authQuota(live),
   ];
+  // R2's free tier is 10 GB stored; past it, $0.015/GB-month (the "pro" column). Egress is free either way.
+  if (r2?.mirrored_objects) rows.push({ ...byteQuota("R2 storage", r2.mirrored_bytes, R2_FREE_BYTES, R2_FREE_BYTES), pro: "$0.015/GB-mo" });
+  return rows;
 }
+
+export const R2_FREE_BYTES = 10 * 1024 * 1024 * 1024;
 
 /** A ceiling measured in bytes, and how full the Free one is. */
 function byteQuota(resource: string, value: number | null, freeBytes: number, proBytes: number): QuotaRow {
@@ -145,9 +160,9 @@ function authQuota(live: InfraLive | null): QuotaRow {
  *
  * A provider's state comes from a file that only exists when it is linked: Vercel's project.json, Cloudflare's
  * links.json, BlastCP's links.json. The Supabase project is the one this code is talking to, so it is live by
- * definition. R2 is never in use: it needs a bucket and a client, and neither exists.
+ * definition. R2 is live once blob_mirror_stats() counts a copied object.
  */
-export function providerStates(folder: string): ProviderState[] {
+export function providerStates(folder: string, r2: R2Live | null = null): ProviderState[] {
   const read = (p: string): Record<string, unknown> | null => {
     try {
       const parsed: unknown = JSON.parse(fs.readFileSync(p, "utf8"));
@@ -164,11 +179,19 @@ export function providerStates(folder: string): ProviderState[] {
     { name: "Supabase", holds: "Postgres DB, Storage, Auth", state: "live", detail: "live" },
     { name: "Vercel", holds: "weft.zip — web board, API, CDN", state: vercel ? "live" : "not linked", detail: vercelId ? `live · ${vercelId.slice(0, 10)}…` : "not linked" },
     { name: "Cloudflare", holds: "Workers for Platforms — mini-app code", state: cloudflare ? "linked" : "not linked", detail: cloudflare ? "linked" : "not linked" },
-    { name: "Cloudflare R2", holds: "— object storage", state: "not used", detail: "not used" },
+    r2State(r2),
     { name: "BlastCP", holds: "social properties", state: blastcp ? "linked" : "not linked", detail: blastcp ? "linked" : "not linked" },
     { name: "Stripe", holds: "billing", state: "live", detail: "live" },
     { name: "Slack", holds: "#user-growth summaries", state: "linked", detail: "linked" },
   ];
+}
+
+/** R2's row: live with what's copied and what's left, or not used until the first copy lands. */
+function r2State(r2: R2Live | null): ProviderState {
+  const holds = "weft-blobs read copy (0 egress)";
+  if (!r2 || r2.mirrored_objects === 0) return { name: "Cloudflare R2", holds, state: "not used", detail: r2 ? `not used · ${r2.pending_objects} to copy` : "not used" };
+  const pending = r2.pending_objects ? ` · ${r2.pending_objects} to copy` : "";
+  return { name: "Cloudflare R2", holds, state: "live", detail: `live · ${r2.mirrored_objects} objects, ${bytesLabel(r2.mirrored_bytes)}${pending}` };
 }
 
 /** The plan tier is not readable from the Mac; the report says so rather than guessing. */
@@ -181,6 +204,8 @@ export interface InfraSnapshot {
   at: string;
   live: InfraLive | null;
   egress: EgressLive | null;
+  /** The R2 read copy; null when blob_mirror_stats() couldn't be read. */
+  r2: R2Live | null;
   providers: ProviderState[];
   quotas: QuotaRow[];
   /** Set when a source could not be read; the report shows it instead of a blank. */
@@ -201,6 +226,19 @@ export async function readInfraLive(url: string, key: string, fetchImpl: typeof 
   if (!res.ok) throw new Error(`Supabase answered ${res.status} for infra_live.`);
   const body = (await res.json()) as InfraLive;
   if (typeof body.database_bytes !== "number") throw new Error("Supabase's infra_live answer wasn't the expected shape.");
+  return body;
+}
+
+/** Calls `public.blob_mirror_stats()` with the service key, like readInfraLive. */
+export async function readR2Live(url: string, key: string, fetchImpl: typeof fetch = fetch): Promise<R2Live> {
+  const res = await fetchImpl(`${url.replace(/\/$/, "")}/rest/v1/rpc/blob_mirror_stats`, {
+    method: "POST",
+    headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    body: "{}",
+  });
+  if (!res.ok) throw new Error(`Supabase answered ${res.status} for blob_mirror_stats.`);
+  const body = (await res.json()) as R2Live;
+  if (typeof body.mirrored_objects !== "number") throw new Error("Supabase's blob_mirror_stats answer wasn't the expected shape.");
   return body;
 }
 

@@ -1090,6 +1090,13 @@ its account, address (custom domain, else `pages.dev` or `workers.dev`; click to
 deploy (Ready, Building, Failed for Pages; Deployed and by what for Workers), where it deploys from, and links to its
 deploys, logs, settings, domains and dashboard. More in [docs/architecture/cloudflare.md](docs/architecture/cloudflare.md).
 
+**R2 for synced blobs.** On weft.zip, screenshots, pasted images and mini app pages are read from a Cloudflare R2 copy of
+the `weft-blobs` bucket, where egress is free, instead of Supabase Storage, whose free plan allows 5 GB a month. Supabase
+stays where the desktop uploads. The server copies each blob to R2 once and signs R2 URLs after the same membership and
+share checks, and anything not copied yet still loads from Supabase. Set `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID` and
+`R2_SECRET_ACCESS_KEY` on the deployment, run `pnpm r2:backfill` once, and `WEFT_BLOBS_R2=off` turns it off again. More in
+[docs/architecture/r2.md](docs/architecture/r2.md).
+
 ## BlastCP
 
 The BlastCP rocket under 🔐 and ▲ on the left rail shows what each board project has queued on [BlastCP](https://blastcp.com), the

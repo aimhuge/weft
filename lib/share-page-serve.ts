@@ -4,6 +4,8 @@
 // scripts run in an opaque origin and can't read weft.zip's cookies.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { NO_STORE } from "./app-share-reply";
+import { readBlob } from "./blob-read";
+import { queueMirror } from "./r2-queue";
 import { isTextType, pageContentType } from "./share-page";
 import { redactPageText } from "./share-redact";
 
@@ -59,10 +61,10 @@ function applyTextRedaction(type: string, bytes: ArrayBuffer): string | ArrayBuf
   return isTextType(type) ? redactPageText(new TextDecoder().decode(bytes)) : bytes;
 }
 
-async function downloadBlob(service: SupabaseClient, orgId: string, sha: string): Promise<{ data: Blob; declared: string } | null> {
-  const { data } = await service.storage.from("weft-blobs").download(`${orgId}/${sha}`);
-  if (!data) return null;
-  return { data, declared: data.type };
+// R2 first, then Supabase (lib/blob-read.ts); a blob read from Supabase is queued for copying to R2.
+async function downloadBlob(service: SupabaseClient, orgId: string, sha: string): Promise<{ bytes: ArrayBuffer; declared: string } | null> {
+  const got = await readBlob(service, orgId, sha, { onUnmirrored: queueMirror(orgId) });
+  return got ? { bytes: got.bytes, declared: got.type } : null;
 }
 
 export async function serveBlobPage(service: SupabaseClient, orgId: string, sha: string): Promise<Response> {
@@ -70,7 +72,7 @@ export async function serveBlobPage(service: SupabaseClient, orgId: string, sha:
   if (!got) return new Response("Not found", { status: 404, headers: NO_STORE });
   // Storage answers HTML as text/plain, so the type comes from the file (lib/share-page.ts), not the header. Anything
   // that isn't text (an image, a PDF) passes through as bytes.
-  const bytes = await got.data.arrayBuffer();
+  const bytes = got.bytes;
   const type = pageContentType(got.declared, new TextDecoder().decode(bytes.slice(0, 512)));
   // The page is the owner's own file, but a key typed into it shouldn't reach a stranger: mask text the way the thread is.
   const body = applyTextRedaction(type, bytes);
@@ -88,7 +90,7 @@ export async function serveBlobFile(
 ): Promise<Response> {
   const got = await downloadBlob(service, orgId, sha);
   if (!got) return new Response("Not found", { status: 404, headers: NO_STORE });
-  const bytes = await got.data.arrayBuffer();
+  const bytes = got.bytes;
   const type = folderFileType(extension);
   const body = applyTextRedaction(type, bytes);
   return new Response(body, { status: 200, headers: { ...HEADERS, "Content-Type": type } });

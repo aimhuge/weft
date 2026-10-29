@@ -3,15 +3,17 @@
 // route (lib/thread-page.ts, lib/cloud-sync.ts): newest first, THREAD_PAGE_SIZE per page, a `before`
 // cursor for "Load earlier", no cursor for "give me the newest". Items are redacted; the pane is
 // computed over the WHOLE thread so the latest open_url wins even if it's outside the current page;
-// every blob ref a session hits (items + pane + card.thumb) gets a one-hour signed URL through the
-// service client.
+// every blob ref a session hits (items + pane + card.thumb) gets a URL through the service client:
+// presigned R2 when the blob is copied there, a one-hour Supabase signed URL otherwise (lib/blob-urls.ts).
 //
 // Everything here is pure except the two Supabase reads (thread items + pane probe), so a test can
 // stub the service client and assert the page shape without the database.
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { BLOB_BUCKET, THREAD_PAGE_SIZE, type CloudThreadItemRow } from "./cloud-sync-types";
-import { batchBlobRefs, blobPath, buildBlobUrlMap, collectBlobRefs } from "./web-board";
+import { THREAD_PAGE_SIZE, type CloudThreadItemRow } from "./cloud-sync-types";
+import { resolveBlobUrls } from "./blob-urls";
+import { collectBlobRefs } from "./web-board";
+import { queueMirror } from "./r2-queue";
 import { paneFor, type ShareLive, type SharePane } from "./share-types";
 import { redactItems } from "./share-redact";
 import { publicPane, toShareCard } from "./share-view";
@@ -120,7 +122,7 @@ export async function buildShareLive(opts: BuildShareLiveOptions): Promise<Share
   collectBlobRefs(stamped.map((s) => s.item), refs);
   collectPaneBlobRef(pane, refs);
   collectThumbBlobRef(opts.card, refs);
-  const blobUrls = await resolveBlobUrls(opts.service, opts.orgId, [...refs]);
+  const blobUrls = await resolveBlobUrls(opts.service, opts.orgId, [...refs], { onUnmirrored: queueMirror(opts.orgId) });
   // The blob URLs map (one hour) covers every ref the page will fetch. The pane's `url` field
   // (for site/local kinds) stays as-is — there's no blob to sign for those.
   return {
@@ -142,34 +144,6 @@ function collectThumbBlobRef(card: unknown, refs: Set<string>): void {
   if (!card || typeof card !== "object") return;
   const thumb = (card as { thumb?: unknown }).thumb;
   if (typeof thumb === "string" && thumb.startsWith("blob:sha256:")) refs.add(thumb);
-}
-
-// Batch-resolve a set of blob refs to signed URLs through createSignedUrls. The map is plain
-// JSON the client can drop into state; the refs themselves become the keys so the renderer's
-// `blobUrls[ref]` lookup stays a single hash hit. Mirrors the web board's resolveBlobUrls
-// (app/[orgSlug]/board/page.tsx) — kept local so the share route doesn't depend on the web board.
-async function resolveBlobUrls(
-  service: SupabaseClient,
-  orgId: string,
-  refs: readonly string[],
-): Promise<Record<string, string>> {
-  const out: Record<string, string> = {};
-  if (!refs.length) return out;
-  for (const batch of batchBlobRefs(refs)) {
-    const paths = batch.map((r) => blobPath(orgId, r));
-    try {
-      const { data, error } = await service.storage.from(BLOB_BUCKET).createSignedUrls(paths, 3600);
-      if (error) continue;
-      const map = buildBlobUrlMap(
-        data.map((d: { path: string | null; signedUrl: string | null }) => ({ path: d.path ?? "", signedUrl: d.signedUrl })),
-        batch,
-      );
-      Object.assign(out, map);
-    } catch {
-      // Skip the batch; the page falls back to the raw blob: ref and the viewer can re-fetch.
-    }
-  }
-  return out;
 }
 
 // Re-exported so the route can import a single function for the `cursor` type.

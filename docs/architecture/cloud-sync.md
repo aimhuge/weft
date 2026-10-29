@@ -233,6 +233,9 @@ policies for clients. A blob is alive for as long as anything still references i
 item, a pane image, a `~/.weft/show` page — and a sync sweep on the owner Mac prunes the unreferenced
 ones.
 
+Readers on weft.zip are served from a Cloudflare R2 copy of this bucket when the blob has been copied there (a row in
+`blob_mirror`), and from here otherwise: docs/architecture/r2.md.
+
 ## Policies
 
 Three rules, written in the migration's comments:

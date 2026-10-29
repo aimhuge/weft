@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { EGRESS_SQL, parseEgress, providerStates, quotaRows, readEgress, readInfraLive, SUPABASE_FREE, type EgressLive, type InfraLive } from "./infra-live";
+import { EGRESS_SQL, parseEgress, providerStates, quotaRows, R2_FREE_BYTES, readEgress, readInfraLive, readR2Live, SUPABASE_FREE, type EgressLive, type InfraLive, type R2Live } from "./infra-live";
 
 function live(over: Partial<InfraLive> = {}): InfraLive {
   return {
@@ -133,6 +133,26 @@ describe("readEgress", () => {
   });
 });
 
+function r2Live(over: Partial<R2Live> = {}): R2Live {
+  return { mirrored_objects: 4500, mirrored_bytes: 264 * 1024 * 1024, pending_objects: 8, pending_bytes: 1024, last_mirrored: "2026-10-29T10:00:00Z", ...over };
+}
+
+describe("readR2Live", () => {
+  it("POSTs blob_mirror_stats over PostgREST with the service key", async () => {
+    const { fetchImpl, calls } = stubFetch(() => ({ ok: true, status: 200, json: () => Promise.resolve(r2Live()) }));
+    expect((await readR2Live("https://abc.supabase.co/", "sk", fetchImpl)).mirrored_objects).toBe(4500);
+    expect(calls[0]?.[0]).toBe("https://abc.supabase.co/rest/v1/rpc/blob_mirror_stats");
+    expect(calls[0]?.[1]?.method).toBe("POST");
+  });
+
+  it("says so on a refusal or an odd answer", async () => {
+    const refused = stubFetch(() => ({ ok: false, status: 404, json: () => Promise.resolve({}) }));
+    await expect(readR2Live("https://abc.supabase.co", "sk", refused.fetchImpl)).rejects.toThrow(/404/);
+    const odd = stubFetch(() => ({ ok: true, status: 200, json: () => Promise.resolve({ nope: 1 }) }));
+    await expect(readR2Live("https://abc.supabase.co", "sk", odd.fetchImpl)).rejects.toThrow(/expected shape/);
+  });
+});
+
 describe("readInfraLive", () => {
   it("calls the function over PostgREST with the service key", async () => {
     const { fetchImpl, calls } = stubFetch(() => ({ ok: true, status: 200, json: () => Promise.resolve(live()) }));
@@ -162,6 +182,15 @@ describe("readInfraLive", () => {
 });
 
 describe("quotaRows", () => {
+  it("adds R2's storage against its 10 GB free tier once something is copied", () => {
+    expect(quotaRows(live(), null).some((r) => r.resource === "R2 storage")).toBe(false);
+    expect(quotaRows(live(), null, r2Live({ mirrored_objects: 0 })).some((r) => r.resource === "R2 storage")).toBe(false);
+    const row = quotaRows(live(), null, r2Live()).find((r) => r.resource === "R2 storage")!;
+    expect(row.now).toBe("264 MB");
+    expect(row.pro).toBe("$0.015/GB-mo");
+    expect(row.fill).toBeCloseTo((264 * 1024 * 1024) / R2_FREE_BYTES, 8);
+  });
+
   it("measures the database against the Free ceiling", () => {
     const rows = quotaRows(live(), null);
     const db = rows.find((r) => r.resource === "Database size")!;
@@ -206,9 +235,18 @@ describe("providerStates", () => {
     expect(stripe.state).toBe("live");
   });
 
-  it("never calls R2 in use — it has no bucket and no client", () => {
-    const states = providerStates(process.cwd());
-    expect(states.find((s) => s.name === "Cloudflare R2")!.state).toBe("not used");
+  it("calls R2 not used until the first blob is copied there", () => {
+    expect(providerStates(process.cwd()).find((s) => s.name === "Cloudflare R2")).toMatchObject({ state: "not used", detail: "not used" });
+    const empty = providerStates(process.cwd(), r2Live({ mirrored_objects: 0, mirrored_bytes: 0, pending_objects: 4508 }));
+    expect(empty.find((s) => s.name === "Cloudflare R2")).toMatchObject({ state: "not used", detail: "not used · 4508 to copy" });
+  });
+
+  it("calls R2 live with what's copied and what's left", () => {
+    const r2 = providerStates(process.cwd(), r2Live()).find((s) => s.name === "Cloudflare R2")!;
+    expect(r2.state).toBe("live");
+    expect(r2.detail).toBe("live · 4500 objects, 264 MB · 8 to copy");
+    const done = providerStates(process.cwd(), r2Live({ pending_objects: 0 })).find((s) => s.name === "Cloudflare R2")!;
+    expect(done.detail).toBe("live · 4500 objects, 264 MB");
   });
 
   it("reads a folder with no provider links and says so", () => {

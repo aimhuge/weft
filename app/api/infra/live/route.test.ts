@@ -42,6 +42,10 @@ vi.mock("@/lib/infra-live", async () => {
       if (!process.env.SUPABASE_ACCESS_TOKEN) return Promise.reject(new Error("SUPABASE_ACCESS_TOKEN isn't set, so the egress can't be read."));
       return Promise.resolve({ uncached_bytes: 49452, cached_bytes: 0, ingress_bytes: 42613299, requests: 12677, window_hours: 24, from: null, to: null });
     }),
+    readR2Live: vi.fn(() => {
+      if (process.env.R2_STATS_FAIL) return Promise.reject(new Error("Supabase answered 404 for blob_mirror_stats."));
+      return Promise.resolve({ mirrored_objects: 4000, mirrored_bytes: 250 * 1024 * 1024, pending_objects: 8, pending_bytes: 1024, last_mirrored: null });
+    }),
   };
 });
 
@@ -58,6 +62,7 @@ async function snapshot(res: Response): Promise<InfraSnapshot> {
 }
 
 beforeEach(() => {
+  delete process.env.R2_STATS_FAIL;
   delete process.env.SUPABASE_SECRET_KEY;
   delete process.env.SUPABASE_ACCESS_TOKEN;
   vi.clearAllMocks();
@@ -85,8 +90,22 @@ describe("GET /api/infra/live", () => {
     expect(json.quotas.find((r) => r.resource === "Database size")?.nowValue).toBe(171 * 1024 * 1024);
     expect(json.quotas.find((r) => r.resource === "Database size")?.now).toBe("171 MB");
     expect(json.providers.length).toBeGreaterThan(0);
+    expect(json.r2?.mirrored_objects).toBe(4000);
+    expect(json.providers.find((p) => p.name === "Cloudflare R2")?.state).toBe("live");
+    expect(json.quotas.find((r) => r.resource === "R2 storage")?.now).toBe("250 MB");
     expect(json.notes).toEqual([]);
     expect(json.at).toBeTruthy();
+  });
+
+  it("notes an unreadable R2 copy and keeps the rest", async () => {
+    process.env.SUPABASE_SECRET_KEY = "sk";
+    process.env.R2_STATS_FAIL = "1";
+    const json = await snapshot(await GET(req()));
+    expect(json.r2).toBeNull();
+    expect(json.live?.database_bytes).toBe(171 * 1024 * 1024);
+    expect(json.notes.join(" ")).toMatch(/R2 copy couldn't be read/);
+    expect(json.providers.find((p) => p.name === "Cloudflare R2")?.state).toBe("not used");
+    delete process.env.R2_STATS_FAIL;
   });
 
   it("says a source is unread instead of failing the whole answer", async () => {

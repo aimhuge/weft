@@ -104,3 +104,9 @@ way to see which half is live.
 - `electron/mini-apps-setup.cjs` — main's call into the mini-app wiring
 - `supabase/migrations/*_infra_live.sql` — the SQL function
 - `scripts/probe-infra-live.ts` — `pnpm infra:probe`
+
+## R2
+
+The route also reads `public.blob_mirror_stats()` (`readR2Live`): the objects and bytes copied to Cloudflare R2 and
+what's still only in Supabase. Cloudflare R2's provider row is live once one object is copied, and the quotas gain an
+**R2 storage** row against R2's 10 GB free tier. A failed read leaves `r2` null with a note. docs/architecture/r2.md.

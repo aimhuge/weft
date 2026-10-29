@@ -24,10 +24,12 @@ export function extensionOf(src: string) {
 // A signed link to a synced blob (the weft.zip board): it has no file extension, and nearly every blob in a
 // thread is a screenshot or a pasted picture, so it shows as an image (MediaView falls back if it isn't one).
 const SIGNED_BLOB = /\/storage\/v1\/object\/sign\/weft-blobs\//;
+// The same blob served from Cloudflare R2 (lib/r2.ts presignGet): `<account>.r2.cloudflarestorage.com/<bucket>/<org>/<sha>?X-Amz-…`.
+const R2_BLOB = /^https:\/\/[0-9a-f]{32}\.r2\.cloudflarestorage\.com\/[^/]+\/[0-9a-f-]{36}\/[0-9a-f]{64}\?/i;
 
 export function mediaKind(src: string): MediaKind {
   const ext = extensionOf(src);
-  if (!ext && SIGNED_BLOB.test(src)) return "image";
+  if (!ext && (SIGNED_BLOB.test(src) || R2_BLOB.test(src))) return "image";
   if (IMAGE_EXTENSIONS.has(ext) || ext === "svg") return "image";
   if (VIDEO_EXTENSIONS.has(ext)) return "video";
   if (AUDIO_EXTENSIONS.has(ext)) return "audio";

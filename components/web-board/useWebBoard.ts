@@ -44,9 +44,12 @@ function changeOf<Row>(payload: { eventType: string; new: unknown; old: unknown 
   return change.new || change.old ? change : null;
 }
 
-// Resolve blob refs to signed URLs, 50 to a call. A batch that fails is skipped; the renderer leaves
-// the ref visible instead of crashing.
+// Resolve blob refs to URLs: the server's route first (presigned R2 for blobs copied there, Supabase for the rest;
+// docs/architecture/r2.md), and the browser's own Supabase signing, 50 to a call, when the route can't answer.
+// A batch that fails is skipped; the renderer leaves the ref visible instead of crashing.
 async function signedUrls(client: SupabaseClient, orgId: string, refs: readonly string[]): Promise<Record<string, string>> {
+  const viaServer = await serverUrls(orgId, refs);
+  if (viaServer) return viaServer;
   const out: Record<string, string> = {};
   for (const batch of batchBlobRefs(refs)) {
     try {
@@ -58,6 +61,18 @@ async function signedUrls(client: SupabaseClient, orgId: string, refs: readonly 
     }
   }
   return out;
+}
+
+// POST /api/web-board/[orgId]/blob-urls with the visitor's cookie; null when it isn't there or fails.
+async function serverUrls(orgId: string, refs: readonly string[]): Promise<Record<string, string> | null> {
+  try {
+    const res = await fetch(`/api/web-board/${orgId}/blob-urls`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ refs }) });
+    if (!res.ok) return null;
+    const body = (await res.json()) as { urls?: Record<string, string> };
+    return body.urls && typeof body.urls === "object" ? body.urls : null;
+  } catch {
+    return null;
+  }
 }
 
 // The open thread's share of the channel: its item changes and reconnects (useCloudTransport's useLive listens).

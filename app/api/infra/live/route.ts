@@ -1,6 +1,6 @@
 import { connection } from "next/server";
 import { guard } from "@/lib/guard";
-import { providerStates, quotaRows, readEgress, readInfraLive, type EgressLive, type InfraLive, type InfraSnapshot } from "@/lib/infra-live";
+import { providerStates, quotaRows, readEgress, readInfraLive, readR2Live, type EgressLive, type InfraLive, type InfraSnapshot, type R2Live } from "@/lib/infra-live";
 import { SUPABASE_URL } from "@/lib/supabase-project";
 
 // The live infrastructure behind the repo-analysis report (lib/infra-live.ts, docs/architecture/repo-analysis.md).
@@ -10,7 +10,8 @@ import { SUPABASE_URL } from "@/lib/supabase-project";
 //
 // Two credentials, and they are different things:
 //   - SUPABASE_SECRET_KEY (the project's secret key) reads `public.infra_live()` over PostgREST: the database
-//     size, the file storage, the table and account counts.
+//     size, the file storage, the table and account counts; and `public.blob_mirror_stats()`, what's been copied
+//     to Cloudflare R2 (docs/architecture/r2.md).
 //   - SUPABASE_ACCESS_TOKEN (a Management API personal access token) reads the log stream, which is the only
 //     record of the EGRESS. Without it the route still answers, with the egress null and a note saying why.
 //
@@ -27,6 +28,7 @@ export async function GET(req: Request) {
   const notes: string[] = [];
   let live: InfraLive | null = null;
   let egress: EgressLive | null = null;
+  let r2: R2Live | null = null;
 
   const serviceKey = process.env.SUPABASE_SECRET_KEY ?? "";
   if (serviceKey) {
@@ -34,6 +36,11 @@ export async function GET(req: Request) {
       live = await readInfraLive(SUPABASE_URL, serviceKey);
     } catch (err) {
       notes.push(`The database numbers couldn't be read: ${(err as Error).message}`);
+    }
+    try {
+      r2 = await readR2Live(SUPABASE_URL, serviceKey);
+    } catch (err) {
+      notes.push(`The R2 copy couldn't be read: ${(err as Error).message}`);
     }
   } else {
     notes.push("SUPABASE_SECRET_KEY isn't set, so the database numbers are unread.");
@@ -54,8 +61,9 @@ export async function GET(req: Request) {
     at: new Date().toISOString(),
     live,
     egress,
-    providers: providerStates(process.cwd()),
-    quotas: quotaRows(live, egress),
+    r2,
+    providers: providerStates(process.cwd(), r2),
+    quotas: quotaRows(live, egress, r2),
     notes,
   };
   return Response.json(snapshot);
