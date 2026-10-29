@@ -5,10 +5,39 @@
 // The merge is by seq: a new item replaces an old one at the same seq (an in-place UPDATE), or
 // prepends (an INSERT). The card and pane are replaced wholesale — the card rarely changes mid-
 // view and the pane is the newest of the whole thread, so a fresh value is always what we want.
-// blobUrls are merged: refs the response adds go in, refs neither side knows about stay.
+// blobUrls are merged: refs the response adds go in, refs neither side knows about stay, and a ref the viewer
+// already has keeps its URL until it's near expiry (mergeBlobUrls).
 import { BLOB_REF_PREFIX } from "./cloud-sync-types";
 import type { ShareCard, SharePane, ShareLive } from "./share-types";
 import type { Card } from "./types";
+
+// How long before a signed URL expires that the viewer swaps it for the poll's fresh one.
+export const BLOB_URL_RENEW_MS = 10 * 60 * 1000;
+
+// When a Supabase signed URL stops working, in ms: the `exp` of the JWT in its `token` query. null when it has none.
+export function signedUrlExpiry(url: string): number | null {
+  try {
+    const payload = new URL(url).searchParams.get("token")?.split(".")[1];
+    if (!payload) return null;
+    const json = JSON.parse(atob(payload.replace(/-/g, "+").replace(/_/g, "/"))) as { exp?: unknown };
+    return typeof json.exp === "number" ? json.exp * 1000 : null;
+  } catch {
+    return null;
+  }
+}
+
+// Every poll signs the card's blobs again, and a new signed URL is a new <img src>, so taking the poll's URL each
+// time re-downloaded every picture every SHARE_POLL_MS: one open share tab pulled a 400 KB thumbnail 800 times an
+// hour (1.6 GB of egress a day). A URL the viewer has keeps its place until it's within BLOB_URL_RENEW_MS of expiry.
+export function mergeBlobUrls(prev: Record<string, string>, next: Record<string, string>, now = Date.now()): Record<string, string> {
+  const out = { ...prev };
+  for (const [ref, url] of Object.entries(next)) {
+    const held = prev[ref];
+    const expiry = held ? signedUrlExpiry(held) : null;
+    if (!held || expiry === null || expiry - now < BLOB_URL_RENEW_MS) out[ref] = url;
+  }
+  return out;
+}
 
 // Merge a poll response into the viewer's current state. `prev` is the ShareLive the page was
 // drawn from (or the result of the previous merge). `next` is what the server just answered. The
@@ -17,7 +46,7 @@ import type { Card } from "./types";
 // "yes, more" or a page that said "yes, this was a full page" both count.
 export function mergeShareLive(prev: ShareLive, next: ShareLive): ShareLive {
   // The sharer hid the chat mid-view: drop what the viewer already has, not just the new items.
-  if (!next.showChat) return { ...next, items: [], hasOlder: false, blobUrls: { ...prev.blobUrls, ...next.blobUrls } };
+  if (!next.showChat) return { ...next, items: [], hasOlder: false, blobUrls: mergeBlobUrls(prev.blobUrls, next.blobUrls) };
   const bySeq = new Map<number, ShareLive["items"][number]>();
   // Pre-fill with prev so unknown seqs from `next` add in the right place.
   for (const entry of prev.items) bySeq.set(entry.seq, entry);
@@ -28,7 +57,7 @@ export function mergeShareLive(prev: ShareLive, next: ShareLive): ShareLive {
     items: merged,
     hasOlder: next.hasOlder || prev.hasOlder,
     pane: next.pane,
-    blobUrls: { ...prev.blobUrls, ...next.blobUrls },
+    blobUrls: mergeBlobUrls(prev.blobUrls, next.blobUrls),
     showChat: next.showChat,
   };
 }

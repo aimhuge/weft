@@ -19,11 +19,23 @@ anywhere in Supabase's API. The only evidence of egress is the log stream, and t
 the response's `content_length` header, split by the cache status:
 
 - `response.headers.cf_cache_status = "HIT"` — served from the CDN. Billed at the cheap rate.
-- `response.headers.cf_cache_status = "DYNAMIC"` — uncached. Billed at the full rate.
+- `response.headers.cf_cache_status = "MISS"` or `"DYNAMIC"`, or none at all — uncached. Billed at the full rate.
 
-The storage service spells the same header `res.headers.content_length` instead. `parseEgress` reads
+The storage service spells the same header `res.headers.content_length` instead. `EGRESS_SQL` reads
 both. If you change this, the split is the whole point: an egress number that doesn't separate cached
 from uncached doesn't tell you whether the CDN is doing its job.
+
+**Sum on Supabase's side.** `readEgress` sends `EGRESS_SQL` (ClickHouse SQL over the single `logs` table)
+to `GET /v1/projects/{ref}/analytics/endpoints/logs` with `iso_timestamp_start`/`iso_timestamp_end`. That
+endpoint answers at most 1,000 rows, and a day is ~86k log lines, so pulling rows and summing them on
+the Mac counts a sliver. The query groups by source and cache status, and `parseEgress` adds those few
+rows up. A bad query still answers 200, with `{ error }`; `readEgress` throws on it. The old
+`logs.all` endpoint is gone (410).
+
+**When the number is big, ask which path.** The first live read (2026-10-29) showed 1.6 GB in a day, 99% of
+it one 400 KB thumbnail fetched 3,980 times: the share page's 4 s poll re-signed it every time, and a new
+signed URL is a new `<img src>`. `mergeBlobUrls` in `lib/share-view.ts` now keeps a held URL until it's
+near expiry. Group `edge_logs` by `request.url` (before the `?`) and cache status to find the next one.
 
 ## The route
 

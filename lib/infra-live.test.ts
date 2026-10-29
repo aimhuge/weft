@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { parseEgress, providerStates, quotaRows, readEgress, readInfraLive, SUPABASE_FREE, type EgressLive, type InfraLive } from "./infra-live";
+import { EGRESS_SQL, parseEgress, providerStates, quotaRows, readEgress, readInfraLive, SUPABASE_FREE, type EgressLive, type InfraLive } from "./infra-live";
 
 function live(over: Partial<InfraLive> = {}): InfraLive {
   return {
@@ -52,43 +52,33 @@ function stubFetch(answer: (url: string, init: RequestInit) => { ok: boolean; st
 describe("parseEgress", () => {
   it("splits the bytes out by the CDN's cache status", () => {
     const out = parseEgress([
-      { source: "edge_logs", log_attributes: { "response.headers.content_length": "1000", "response.headers.cf_cache_status": "HIT" } },
-      { source: "edge_logs", log_attributes: { "response.headers.content_length": "2500", "response.headers.cf_cache_status": "DYNAMIC" } },
+      { source: "edge_logs", cache: "HIT", requests: 2, out_bytes: 1000, in_bytes: 0 },
+      { source: "edge_logs", cache: "DYNAMIC", requests: 3, out_bytes: 2500, in_bytes: 0 },
+      { source: "edge_logs", cache: "MISS", requests: 1, out_bytes: 7000, in_bytes: 0 },
     ]);
     expect(out.cached_bytes).toBe(1000);
-    expect(out.uncached_bytes).toBe(2500);
-    expect(out.requests).toBe(2);
+    expect(out.uncached_bytes).toBe(9500);
+    expect(out.requests).toBe(6);
   });
 
-  it("reads the storage service's own header name", () => {
-    const out = parseEgress([
-      { source: "storage_logs", log_attributes: { "res.headers.content_length": "400" } },
-    ]);
+  it("counts a row with no cache status as uncached", () => {
+    const out = parseEgress([{ source: "storage_logs", cache: "", requests: 1, out_bytes: 400 }]);
     expect(out.uncached_bytes).toBe(400);
     expect(out.cached_bytes).toBe(0);
   });
 
-  it("counts the bytes in as well as out", () => {
-    const out = parseEgress([
-      { log_attributes: { "request.headers.content_length": "900", "response.headers.content_length": "10" } },
-    ]);
+  it("counts the bytes in as well as out, as numbers or strings", () => {
+    const out = parseEgress([{ requests: "4", in_bytes: "900", out_bytes: "10" }]);
     expect(out.ingress_bytes).toBe(900);
     expect(out.uncached_bytes).toBe(10);
+    expect(out.requests).toBe(4);
   });
 
-  it("counts every request, even one with no length at all", () => {
-    const out = parseEgress([
-      { log_attributes: {} },
-      { log_attributes: { "response.headers.content_length": "12" } },
-    ]);
-    expect(out.requests).toBe(2);
-    expect(out.uncached_bytes).toBe(12);
-  });
-
-  it("ignores a length that isn't a number", () => {
-    const out = parseEgress([{ log_attributes: { "response.headers.content_length": "not a number" } }]);
+  it("ignores a value that isn't a number, and a missing one", () => {
+    const out = parseEgress([{ out_bytes: "not a number" }, {}]);
     expect(out.uncached_bytes).toBe(0);
     expect(out.ingress_bytes).toBe(0);
+    expect(out.requests).toBe(0);
   });
 
   it("answers zeroes for no rows", () => {
@@ -97,22 +87,39 @@ describe("parseEgress", () => {
 });
 
 describe("readEgress", () => {
-  it("asks the Analytics API for the window and reads the rows back", async () => {
+  it("asks the logs endpoint to sum the window, and reads the sums back", async () => {
     const { fetchImpl, calls } = stubFetch(() => ({
       ok: true,
       status: 200,
-      json: () => Promise.resolve([{ source: "edge_logs", log_attributes: { "response.headers.content_length": "5" } }]),
+      json: () => Promise.resolve({ result: [{ source: "edge_logs", cache: "MISS", requests: 1, out_bytes: 5, in_bytes: 0 }] }),
     }));
 
     const out = await readEgress("proj-ref", "pat", 24, fetchImpl);
     expect(out.uncached_bytes).toBe(5);
     expect(out.window_hours).toBe(24);
     expect(out.requests).toBe(1);
-    expect(calls[0]?.[0]).toBe("https://api.supabase.com/v1/projects/proj-ref/analytics/endpoints/logs.all");
+    const url = new URL(calls[0]?.[0] as string);
+    expect(url.origin + url.pathname).toBe("https://api.supabase.com/v1/projects/proj-ref/analytics/endpoints/logs");
+    expect(url.searchParams.get("sql")).toBe(EGRESS_SQL);
+    expect(url.searchParams.get("iso_timestamp_start")).toBeTruthy();
+    expect(url.searchParams.get("iso_timestamp_end")).toBeTruthy();
     expect((calls[0]?.[1]?.headers as Record<string, string>).Authorization).toBe("Bearer pat");
-    const body = JSON.parse(calls[0]?.[1]?.body as string) as { start_time: string; end_time: string };
-    expect(body.start_time).toBeTruthy();
-    expect(body.end_time).toBeTruthy();
+  });
+
+  it("reads no result as zeroes", async () => {
+    const { fetchImpl } = stubFetch(() => ({ ok: true, status: 200, json: () => Promise.resolve({}) }));
+    const out = await readEgress("proj-ref", "pat", 24, fetchImpl);
+    expect(out.requests).toBe(0);
+  });
+
+  it("says so when the log stream refuses the query with a 200", async () => {
+    const { fetchImpl } = stubFetch(() => ({ ok: true, status: 200, json: () => Promise.resolve({ error: 'Field "x" does not exist.' }) }));
+    await expect(readEgress("proj-ref", "pat", 24, fetchImpl)).rejects.toThrow(/Field "x" does not exist/);
+  });
+
+  it("names an error that isn't a string", async () => {
+    const { fetchImpl } = stubFetch(() => ({ ok: true, status: 200, json: () => Promise.resolve({ error: { code: 400 } }) }));
+    await expect(readEgress("proj-ref", "pat", 24, fetchImpl)).rejects.toThrow(/"code":400/);
   });
 
   it("says so when the log stream refuses", async () => {

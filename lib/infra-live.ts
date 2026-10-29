@@ -205,41 +205,61 @@ export async function readInfraLive(url: string, key: string, fetchImpl: typeof 
 }
 
 /**
- * Reads the egress out of the log stream.
+ * The egress, summed by Supabase over its log store (ClickHouse SQL, one `logs` table for every source).
  *
  * Every log line for a service that answers a client carries the response's content length, and the CDN's
- * cache status. Their sum is the egress: the cached half (`HIT`) is served from the CDN and billed at the
- * lower rate against its own quota; the rest (`DYNAMIC`, and the storage service, which reports its own
- * header names) is uncached.
+ * cache status. `HIT` is served from the CDN and billed at the lower rate against its own quota; the rest
+ * (`MISS`, `DYNAMIC`, and lines with no status) is uncached.
  *
  * The two services name their headers differently — the edge gateway writes `response.headers.content_length`
  * and the storage service `res.headers.content_length` — so both are read and the first that is there wins.
+ *
+ * It sums on Supabase's side because the endpoint answers at most 1,000 rows, and a day is tens of thousands
+ * of log lines: summing rows on the Mac counted a sliver of the traffic.
  */
-export function parseEgress(rows: Array<{ source?: string; log_attributes?: Record<string, string> }>): Omit<EgressLive, "window_hours" | "from" | "to"> {
+export const EGRESS_SQL = [
+  "select source,",
+  "coalesce(log_attributes['response.headers.cf_cache_status'], log_attributes['res.headers.cf_cache_status'], '') as cache,",
+  "count() as requests,",
+  "sum(toUInt64OrZero(coalesce(log_attributes['response.headers.content_length'], log_attributes['res.headers.content_length'], ''))) as out_bytes,",
+  "sum(toUInt64OrZero(coalesce(log_attributes['request.headers.content_length'], log_attributes['req.headers.content_length'], ''))) as in_bytes",
+  "from logs group by source, cache",
+].join(" ");
+
+/** One row of EGRESS_SQL's answer: a source and cache status, with its requests and bytes each way. */
+export interface EgressRow {
+  source?: string;
+  cache?: string;
+  requests?: number | string;
+  out_bytes?: number | string;
+  in_bytes?: number | string;
+}
+
+/** Adds EGRESS_SQL's rows up into the cached and uncached egress, the ingress and the requests. */
+export function parseEgress(rows: EgressRow[]): Omit<EgressLive, "window_hours" | "from" | "to"> {
   let uncached = 0;
   let cached = 0;
   let ingress = 0;
   let requests = 0;
+  const num = (v: number | string | undefined) => {
+    const n = Number(v ?? 0);
+    return Number.isFinite(n) ? n : 0;
+  };
   for (const row of rows) {
-    const a = row.log_attributes ?? {};
-    const bytes = Number(a["response.headers.content_length"] ?? a["res.headers.content_length"] ?? 0);
-    const inBytes = Number(a["request.headers.content_length"] ?? a["req.headers.content_length"] ?? 0);
-    const status = a["response.headers.cf_cache_status"] ?? a["res.headers.cf_cache_status"] ?? "";
-    requests += 1;
-    ingress += Number.isFinite(inBytes) ? inBytes : 0;
-    if (!Number.isFinite(bytes)) continue;
-    if (status === "HIT") cached += bytes;
-    else uncached += bytes;
+    requests += num(row.requests);
+    ingress += num(row.in_bytes);
+    if (row.cache === "HIT") cached += num(row.out_bytes);
+    else uncached += num(row.out_bytes);
   }
   return { uncached_bytes: uncached, cached_bytes: cached, ingress_bytes: ingress, requests };
 }
 
 /**
- * Reads the egress out of Supabase's log stream, over the Analytics API.
+ * Reads the egress out of Supabase's log stream, over the Management API's logs endpoint.
  *
- * The endpoint is the one the Supabase MCP's `query_logs` uses: the project's logs, as JSON lines. The
- * personal access token is a Management API credential (`SUPABASE_ACCESS_TOKEN`), not the project's key —
- * the logs are not readable with the service key.
+ * The personal access token is a Management API credential (`SUPABASE_ACCESS_TOKEN`), not the project's key —
+ * the logs are not readable with the service key. The endpoint answers 200 with `{ error }` for a bad query,
+ * so that is an error too.
  *
  * The window is what the log store keeps, so the answer is "bytes out in the last N hours" and never a
  * month: the report says which window it read.
@@ -248,15 +268,13 @@ export async function readEgress(projectRef: string, token: string, hours = 24, 
   if (!token) throw new Error("SUPABASE_ACCESS_TOKEN isn't set, so the egress can't be read.");
   const to = new Date();
   const from = new Date(to.getTime() - hours * 60 * 60 * 1000);
-  const url = `https://api.supabase.com/v1/projects/${projectRef}/analytics/endpoints/logs.all`;
-  const res = await fetchImpl(url, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ sql: "select source, log_attributes from logs", start_time: from.toISOString(), end_time: to.toISOString() }),
-  });
+  const query = new URLSearchParams({ sql: EGRESS_SQL, iso_timestamp_start: from.toISOString(), iso_timestamp_end: to.toISOString() });
+  const url = `https://api.supabase.com/v1/projects/${projectRef}/analytics/endpoints/logs?${query}`;
+  const res = await fetchImpl(url, { headers: { Authorization: `Bearer ${token}` } });
   if (!res.ok) throw new Error(`Supabase's log stream answered ${res.status}.`);
-  const rows = (await res.json()) as Array<{ source?: string; log_attributes?: Record<string, string> }>;
-  const parsed = parseEgress(Array.isArray(rows) ? rows : []);
+  const body = (await res.json()) as { result?: EgressRow[]; error?: unknown };
+  if (body.error) throw new Error(`Supabase's log stream refused the query: ${typeof body.error === "string" ? body.error : JSON.stringify(body.error)}`);
+  const parsed = parseEgress(Array.isArray(body.result) ? body.result : []);
   return { ...parsed, window_hours: hours, from: from.toISOString(), to: to.toISOString() };
 }
 
