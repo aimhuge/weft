@@ -1,4 +1,11 @@
 {
+  "0.6.6": {
+    "lines": [
+      "Imported GitHub issues can now work themselves: choose where each project lands them, and your AI runs the issue.",
+      "Design the agent starts a thread that interviews you, then writes a real agent with its own soul.",
+      "Weft now checks its own bundle on launch, so a broken update tells you to reinstall instead of dying."
+    ]
+  },
   "0.6.5": {
     "lines": [
       "Your vault now follows you across machines, so your AI finds the same keys on every Mac.",
