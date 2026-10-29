@@ -4,16 +4,18 @@ import { useState, type ReactNode } from "react";
 import { api } from "@/lib/client";
 import { folderName } from "@/lib/format";
 import { closeIntake, intakeActions, useOpenIntake } from "@/lib/intake-open";
-import { INTAKE_CARD_TITLE, intakeHasWork, intakePrompt } from "@/lib/intake-view";
-import type { RailPanel } from "@/lib/rail-view";
+import { runCardTitle, runPrompt } from "@/lib/intake-run";
 import Modal from "./Modal";
 import { HintText } from "./SecretRow";
 
 // What the project intake took in when a project opened (lib/project-intake.ts): the secrets it moved into 🔐, the
 // blanks left to fill with where to get each, the webhooks to register and any committed .env file to rotate.
-// "Set it up in a thread" starts a card that works through the list; nothing here ever shows a value.
+// The import already happened when this opens. Two buttons: Later, and "Get it running", which starts a card that
+// installs the project, gets the blank keys from you, registers the webhooks and starts the dev server
+// (lib/intake-run.ts). Nothing here shows a value.
 
 const button = "rounded-md border border-line px-3 py-1.5 text-[12.5px] text-ink hover:bg-sunken disabled:opacity-40";
+const primary = "rounded-md bg-accent px-3 py-1.5 text-[12.5px] font-medium text-on-accent";
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -35,15 +37,11 @@ export default function IntakeDialog() {
   const d = result.details ?? { imported: [], blanks: [], hooks: [] };
   const files = [...new Set(d.imported.map((i) => i.file))];
 
-  const drawer = (panel: RailPanel) => {
-    closeIntake();
-    intakeActions()?.openDrawer(panel);
-  };
-  const startThread = async () => {
+  const getRunning = async () => {
     setStarting(true);
     setError(null);
     try {
-      const { card } = await api.create({ title: INTAKE_CARD_TITLE, prompt: intakePrompt(folder, result), cwd: folder, backend: "claude", start: true });
+      const { card } = await api.create({ title: runCardTitle(folder), prompt: runPrompt(folder, result), cwd: folder, backend: "claude", start: true });
       closeIntake();
       intakeActions()?.select(card.id);
     } catch (err) {
@@ -101,21 +99,9 @@ export default function IntakeDialog() {
         <button type="button" onClick={closeIntake} className={button}>
           Later
         </button>
-        {(d.imported.length > 0 || d.blanks.length > 0) && (
-          <button type="button" onClick={() => drawer("vault")} className={button}>
-            Open 🔐
-          </button>
-        )}
-        {d.hooks.length > 0 && (
-          <button type="button" onClick={() => drawer("webhooks")} className={button}>
-            Open 🪝
-          </button>
-        )}
-        {intakeHasWork(result) && (
-          <button type="button" autoFocus disabled={starting} onClick={() => void startThread()} className="rounded-md bg-accent px-3 py-1.5 text-[12.5px] font-medium text-on-accent disabled:opacity-60">
-            {starting ? "Starting…" : "Set it up in a thread"}
-          </button>
-        )}
+        <button type="button" autoFocus disabled={starting} onClick={() => void getRunning()} className={`${primary} disabled:opacity-60`}>
+          {starting ? "Starting…" : "▶ Get it running"}
+        </button>
       </div>
     </Modal>
   );

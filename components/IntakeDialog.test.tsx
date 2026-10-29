@@ -6,7 +6,8 @@ import type { IntakeResult } from "@/lib/project-intake";
 import "./test-utils";
 
 // The intake screen (components/IntakeDialog.tsx): opens from lib/intake-open.ts after a project's intake, lists what
-// moved, the blanks with their provider links, the webhooks and the files to rotate, and hands the rest to a thread.
+// moved, the blanks with their provider links, the webhooks and the files to rotate, and starts a card that
+// gets the project running with all of it.
 
 const create = vi.hoisted(() => vi.fn());
 const openInPane = vi.hoisted(() => vi.fn());
@@ -83,49 +84,40 @@ describe("IntakeDialog", () => {
     expect(screen.queryByText("📥 Weft took in shop")).not.toBeInTheDocument();
   });
 
-  it("opens 🔐 or 🪝 on the board and closes", async () => {
-    show();
-    await userEvent.click(screen.getByRole("button", { name: "Open 🔐" }));
-    expect(openDrawer).toHaveBeenCalledWith("vault");
-    expect(screen.queryByText("📥 Weft took in shop")).not.toBeInTheDocument();
-    act(() => openIntake("/r/shop", FULL));
-    await userEvent.click(screen.getByRole("button", { name: "Open 🪝" }));
-    expect(openDrawer).toHaveBeenCalledWith("webhooks");
-  });
-
-  it("starts a thread with the setup prompt in the project and opens its card", async () => {
+  it("starts a card that gets the project running and opens it", async () => {
     create.mockResolvedValue({ card: { id: "c9" } });
     show();
-    await userEvent.click(screen.getByRole("button", { name: "Set it up in a thread" }));
-    const input = create.mock.calls[0]![0] as { prompt: string; cwd: string; start: boolean };
-    expect(input).toMatchObject({ cwd: "/r/shop", start: true, backend: "claude" });
+    await userEvent.click(screen.getByRole("button", { name: "▶ Get it running" }));
+    const input = create.mock.calls[0]![0] as { title: string; prompt: string; cwd: string; start: boolean };
+    expect(input).toMatchObject({ title: "▶ Get shop running", cwd: "/r/shop", start: true, backend: "claude" });
+    expect(input.prompt).toContain("mcp__devservers__start");
     expect(input.prompt).toContain("STRIPE_SECRET_KEY");
     expect(select).toHaveBeenCalledWith("c9");
     expect(screen.queryByText("📥 Weft took in shop")).not.toBeInTheDocument();
   });
 
-  it("says why when the thread can't start, and stays open", async () => {
+  it("says why when the card can't start, and stays open", async () => {
     create.mockRejectedValueOnce(new Error("No CLI")).mockRejectedValueOnce("offline");
     show();
-    await userEvent.click(screen.getByRole("button", { name: "Set it up in a thread" }));
+    await userEvent.click(screen.getByRole("button", { name: "▶ Get it running" }));
     expect(screen.getByText("No CLI")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Set it up in a thread" }));
+    await userEvent.click(screen.getByRole("button", { name: "▶ Get it running" }));
     expect(screen.getByText("offline")).toBeInTheDocument();
     expect(select).not.toHaveBeenCalled();
   });
 
-  it("offers only Later and 🔐 when values just moved, and Later closes it", async () => {
-    show({ imported: 1, importedFrom: [".env.local"], blanks: 0, hooks: 0, tracked: [], details: { imported: [{ name: "A_KEY", file: ".env.local" }], blanks: [], hooks: [] } });
-    expect(screen.queryByRole("button", { name: "Set it up in a thread" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Open 🪝" })).not.toBeInTheDocument();
+  it("offers only Later and Get it running, and Later closes it", async () => {
+    show();
+    expect(screen.getAllByRole("button", { name: /Later|Get it running/ })).toHaveLength(2);
+    expect(screen.queryByRole("button", { name: /🔐|🪝/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "▶ Get it running" })).toHaveFocus();
     await userEvent.click(screen.getByRole("button", { name: "Later" }));
     expect(screen.queryByText("📥 Weft took in shop")).not.toBeInTheDocument();
   });
 
   it("copes with a result that has no details", () => {
     show({ imported: 0, importedFrom: [], blanks: 0, hooks: 0, tracked: [".env"] });
-    expect(screen.queryByRole("button", { name: "Open 🔐" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Set it up in a thread" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "▶ Get it running" })).toBeInTheDocument();
   });
 });
 

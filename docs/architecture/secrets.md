@@ -139,9 +139,13 @@ what it offered, so a secret or blank you remove never comes back.
 - **Webhook routes** become 🪝 blanks (docs/architecture/webhooks.md#found-by-the-intake).
 - **The intake screen** (`components/IntakeDialog.tsx`, opened through `lib/intake-open.ts`) lists what happened by
   name, never a value: what moved and from which file, each blank with its provider link, each webhook's route, and any
-  committed file to rotate. **Open 🔐** and **Open 🪝** go to the drawers (the board's commands hook registers the
-  opener, so Board passes nothing). **Set it up in a thread** starts a card in the project with the list as its prompt
-  (`lib/intake-view.ts`) and opens it. It only comes up when the intake took something in, and a hint's link closes it
+  committed file to rotate. **Later** and **▶ Get it running** are its only buttons. The second
+  starts a card (`lib/intake-run.ts`) whose prompt carries everything the intake left: install the dependencies, get
+  each blank's value through `mcp__secrets__ask_add` with the provider page in the pane, start the dev server with
+  `mcp__devservers__start`, and walk through rotating any committed file. It asks for Touch ID at most once: one
+  `request_access` grant covers the dev server, runs and fills, and the prompt rules out `set_value`, Vercel pushes and
+  the webhook relay, which each ask again, so webhooks are listed for later. Earlier
+  versions had Open 🔐 / 🪝 and "Set it up in a thread"; one card that ends with the app running replaced them. It only comes up when the intake took something in, and a hint's link closes it
   first, since the native pane hides under any dialog.
 
 ### After import: the file stays, managed by Weft

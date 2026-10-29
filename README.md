@@ -905,7 +905,9 @@ workspace on Supabase while you're signed in: an outbox sends a batch when a tur
 pictures and pages go up once each by content, and the page shows the last sync, how many items went up, how many wait and the
 last error, with **Sync now**. The avatar menu says it in one line under your plan ("Synced 2m ago · 3 projects", "Syncing 12
 items…", "Sync failed" with why), with **Resync now** and **Sync <project>** / **Don't sync <project>** for the board's project,
-and the avatar wears a dot while an upload runs (amber) or after one failed (red). At `weft.zip/<workspace>/board` the same cards show live, drawn by the desktop's **own
+and the avatar wears a dot while an upload runs (amber) or after one failed (red). A project's right-click menu has the same switch
+for that project: **Sync <project>** / **Don't Sync <project>**, with the project's own state on the same line — "Not Synced",
+"Synced 7m ago", "Syncing…", "Sync Failed". At `weft.zip/<workspace>/board` the same cards show live, drawn by the desktop's **own
 components** — the same header (New thread on N, your avatar with workspaces, Team, Billing and Sign out), the same project
 chips, filter and sort, the same 38px rail (★ starred, 🏷 tags, Board, Team, Billing), the same columns and cards (stage,
 tags, model, picture or emoji, what's left) and the same open-card window. One implementation, two hosts: a `variant="web"`
@@ -968,7 +970,8 @@ four characters showing.
   `.env` files into 🔐 with no click (never over a value the vault holds, never from a file git tracks: those get
   "rotate" instead). The keys its code reads, the names `.env.example` lists and the webhook routes it serves come
   in as 🔐 and 🪝 blanks with a link to each provider's page. A screen lists what moved and what's left, by name, with
-  **Set it up in a thread** to start a card that walks you through the blanks and webhooks. Anything you remove stays removed.
+  **▶ Get it running** to start a card that installs the project, asks you for each blank key
+  (with the provider page open in the pane) and starts the dev server, with one Touch ID at most. Anything you remove stays removed.
 - A dot on 🔐 means `.env.local` has values the vault doesn't hold yet; its count is names still missing a value.
 - **Weft can write `.env.local` for you.** Tick "Then let Weft write .env.local from the vault" in the import preview:
   the file gets a `# Managed by Weft` header, stays gitignored and readable only by you, and follows every change to

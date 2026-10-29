@@ -513,8 +513,8 @@ When a new doc lands in this folder, add it here on the same change.
   intake. Opening a project on the board (`lib/use-board-view.ts`) moves its untracked `.env*` files' new values into 🔐 with no click (never a
   tracked file's, never over a vault value) and turns the keys its code reads, its `.env.example` names and its webhook routes into 🔐 and 🪝
   blanks with provider links. It runs in the background, once per folder until HEAD or an `.env` changes, and `~/.weft/intake.json` remembers
-  what it offered (docs/architecture/secrets.md#project-intake). `components/IntakeDialog.tsx` + `lib/intake-open.ts` + `lib/intake-view.ts`: the
-  screen that lists what it took in, with Open 🔐 / 🪝 and "Set it up in a thread" (a card whose prompt is the list).
+  what it offered (docs/architecture/secrets.md#project-intake). `components/IntakeDialog.tsx` + `lib/intake-open.ts` + `lib/intake-run.ts`: the
+  screen that lists what it took in, with Later and ▶ Get it running (a card that installs, asks for the blank keys and starts the dev server, one Touch ID at most).
 - `lib/webhooks.ts` + `lib/webhook-tools.ts` + `app/api/webhooks` + `lib/use-webhooks.ts` + `lib/webhooks-view.ts` + `components/WebhooksDrawer.tsx`: the 🪝
   webhooks drawer under 🔐 (each project's webhook routes in `~/.weft/webhooks.json`, blanks counted until registered; `mcp__webhooks__*`).
   `lib/webhook-relay.ts` + `app/api/hooks/[id]/[[...rest]]` + `lib/webhook-forward.ts`: its public relay URL on the deployed Weft (→ `webhook_deliveries` on
@@ -547,6 +547,15 @@ When a new doc lands in this folder, add it here on the same change.
   saved project (`lib/project-list.ts`, `markProject` in `lib/settings.ts`, `PATCH /api/projects`); `chipProjects`
   in `lib/project-bar.ts` puts pinned chips first and leaves hidden ones out unless selected, and using a hidden
   project (`touchProject`) brings it back.
+- **Sync** in that same project menu (cloud sync to weft.zip, `docs/architecture/cloud-sync.md`):
+  **Sync <project>** / **Don't Sync <project>** turns the switch for that folder (`POST /api/cloud-sync { folder, on }`,
+  the same call as Settings → Sync and the avatar menu). The item carries the project's own sync state as its
+  sublabel (Electron's `sublabel`, `detail` in `lib/card-menu.ts`, drawn by `electron/main-menu-popup.cjs`):
+  "Not Synced", "Synced 7m ago", "Syncing…", "Sync Failed", or "Sign in to sync" — `projectSyncLine` in
+  `lib/sync-menu.ts`. The board owns the cloud-sync hook (`lib/use-cloud-sync.ts`, `components/Board.tsx`) and the
+  menu reads it fresh when it opens (`readSync`, `read()` in the hook), so the line says how it stands now; a failed
+  read keeps the last known state and opens the menu anyway. **Sync** is greyed out when there's no account or no
+  workspace yet (a project that already syncs can still be turned off).
 - `lib/copilot.ts` + `lib/board-tools.ts`: the copilot thread and its `mcp__board__*` tools. `lib/copilot-suggest.ts` + `lib/copilot-context.ts` + `lib/copilot-sources.ts` + `lib/copilot-setup.ts` (what isn't linked yet, for onboarding chips and the copilot's `setup_status`) + `app/api/copilot/suggestions`: the empty chat's chips Haiku writes from the cards and every source Weft can read (pile, scout, blanks, Vercel and Supabase via the control server's `/vercel/status` and `/supabase/status`, `gh`), refreshed in the background after a move; one run labels every chip with its project and `chipsFor` (`lib/copilot-starters.ts`) filters to the board's selected project (docs/architecture/copilot-suggestions.md). `components/CopilotLane.tsx` +
   `lib/copilot-lane.ts` + `lib/use-copilot-thread.ts` + `lib/copilot-float.ts`: it floats in the window's bottom-right
   corner like Intercom's messenger, at `COPILOT_LAYER` (z-[96]) over the board, the card window, every `Modal` layer and
