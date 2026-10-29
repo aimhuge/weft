@@ -38,7 +38,7 @@ vi.mock("./runner", () => ({
   }),
 }));
 
-const { resumeParkedCards } = await import("./limit-resume");
+const { resumeParkedCards, resumeParkedOnModels } = await import("./limit-resume");
 
 function addCard(over: Partial<Card> = {}): Card {
   const id = over.id ?? `card-${store.cards.size + 1}`;
@@ -181,5 +181,67 @@ describe("resumeParkedCards", () => {
     expect(resumed).toBe(2);
     expect(sent.map((s) => s.id).sort()).toEqual([a.id, b.id].sort());
     expect(sent.map((s) => s.text).sort()).toEqual(["a", "b"]);
+  });
+
+  it("records why it resumed: a window reset", () => {
+    const card = addCard();
+    seedThread(card.id, [{ kind: "user", text: "ask", at: 1 }]);
+    resumeParkedCards("claude", "five_hour", 5000);
+    expect(store.cards.get(card.id)?.autoResumedReason).toBe("reset");
+  });
+});
+
+describe("resumeParkedOnModels", () => {
+  // The upgrade path (lib/limit-upgrade.ts): the user raised their plan, the models that were capped
+  // have room again, and the cards parked on those models are free to run.
+
+  it("resumes a parked card on a model that was freed", () => {
+    const card = addCard({ model: "claude-opus-5-5" });
+    seedThread(card.id, [{ kind: "user", text: "keep going", at: 1 }]);
+    const resumed = resumeParkedOnModels(["claude-opus-5-5"], 5000);
+    expect(resumed).toBe(1);
+    expect(sent).toEqual([{ id: card.id, text: "keep going", echo: false }]);
+    expect(store.cards.get(card.id)).toMatchObject({
+      rateLimitHit: false,
+      autoResumedAt: 5000,
+      autoResumedReason: "upgrade",
+      lastLine: "Auto-resumed after a plan upgrade",
+    });
+  });
+
+  it("leaves a card parked on another model alone", () => {
+    // A card on Sonnet was never parked by Opus's cap, so the upgrade says nothing about it.
+    const opus = addCard({ model: "claude-opus-5-5" });
+    const sonnet = addCard({ id: "s1", model: "claude-sonnet-5-5" });
+    seedThread(opus.id, [{ kind: "user", text: "ask", at: 1 }]);
+    seedThread(sonnet.id, [{ kind: "user", text: "ask", at: 1 }]);
+    const resumed = resumeParkedOnModels(["claude-opus-5-5"], 5000);
+    expect(resumed).toBe(1);
+    expect(sent.map((s) => s.id)).toEqual([opus.id]);
+    expect(store.cards.get(sonnet.id)?.rateLimitHit).toBe(true);
+  });
+
+  it("resumes a card whose model matches whatever case the store holds", () => {
+    const card = addCard({ model: "claude-opus-5-5" });
+    seedThread(card.id, [{ kind: "user", text: "ask", at: 1 }]);
+    expect(resumeParkedOnModels(["Claude-Opus-5-5"], 5000)).toBe(1);
+    expect(sent.map((s) => s.id)).toEqual([card.id]);
+  });
+
+  it("does nothing when no model was freed", () => {
+    const card = addCard({ model: "claude-opus-5-5" });
+    seedThread(card.id, [{ kind: "user", text: "ask", at: 1 }]);
+    expect(resumeParkedOnModels([], 5000)).toBe(0);
+    expect(sent).toEqual([]);
+    expect(store.cards.get(card.id)?.rateLimitHit).toBe(true);
+  });
+
+  it("skips busy cards, the same way the reset path does", () => {
+    const card = addCard({ model: "claude-opus-5-5" });
+    seedThread(card.id, [{ kind: "user", text: "ask", at: 1 }]);
+    busyIds.add(card.id);
+    expect(resumeParkedOnModels(["claude-opus-5-5"], 5000)).toBe(0);
+    expect(sent).toEqual([]);
+    expect(store.cards.get(card.id)?.rateLimitHit).toBe(true);
   });
 });

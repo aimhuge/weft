@@ -1,7 +1,8 @@
 import { globalSingleton } from "./global-singleton";
 import { defaultBackend, listProjects } from "./settings";
 import { recordLimits, setOnLimitReset } from "./limit-history";
-import { resumeParkedCards } from "./limit-resume";
+import { releaseUpgradedModels } from "./limit-upgrade";
+import { resumeParkedCards, resumeParkedOnModels } from "./limit-resume";
 import { ensureSpare, open } from "./runner-session";
 import { close, spares, type Session } from "./runner-state";
 import { usageWindow } from "./turn";
@@ -104,10 +105,15 @@ async function pollOnce(now = Date.now()): Promise<void> {
         const usage = await query.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET({ skipBehaviors: true });
         const limits = usage.rate_limits;
         if (!limits) return undefined;
-        return { fiveHour: usageWindow(limits.five_hour), sevenDay: usageWindow(limits.seven_day) };
+        return { limits, fiveHour: usageWindow(limits.five_hour), sevenDay: usageWindow(limits.seven_day) };
       });
       if (!result) return;
       recordLimits(backend, { ...(result.fiveHour && { fiveHour: result.fiveHour }), ...(result.sevenDay && { sevenDay: result.sevenDay }) }, now);
+      // An upgrade gives the account more room, and the per-model caps Weft is holding are stale:
+      // the models behind them can run again. Free them, and wake the cards parked on them.
+      // (The plan's own window reset is handled by the onReset hook above; this is the plan CHANGING.)
+      const released = releaseUpgradedModels(result.limits, now);
+      if (released.length) resumeParkedOnModels(released, now);
     } catch (err) {
       if (!s.warned) {
         s.warned = true;

@@ -222,6 +222,10 @@ When a new doc lands in this folder, add it here on the same change.
   (`five_hour`/`seven_day` are the plan's, `seven_day_opus`/`seven_day_sonnet` are a model's), and a per-model
   cap is kept out of the plan log so it gates that model alone — filed as a plan window it gated every model on
   the plan, and picking another model in the composer changed nothing.
+  `lib/limit-upgrade.ts` is the other half: a plan upgrade leaves the per-model caps stale, so it compares the
+  CLI's per-model weekly windows against the caps Weft holds and frees the ones whose window has room again and
+  is still open — from the 15-minute poll (`lib/limit-poll.ts`, which then wakes the cards parked on them via
+  `lib/limit-resume.ts`) and from a card's own turn (`lib/runner-turn.ts`).
 - `components/SettingsDialog.tsx` + `lib/settings-nav.ts`: Settings, full window over a scene, pages down the left (General, Laptop mode, Models,
   Threads, Security, Automations, Shortcuts, Accounts, Teams, Sync); Laptop mode is `components/LaptopModeCard.tsx` + `LaptopModeRules.tsx` over `electron/keep-working*.cjs`; Models holds every model pick, new threads' through `components/NewThreadDefaults.tsx`;
   the settings themselves live in `lib/settings.ts` (the front every caller imports), with the model picks in
@@ -254,7 +258,10 @@ When a new doc lands in this folder, add it here on the same change.
   message with `echo: false`; `app/api/cards/[id]/rerun-model` is the route, the banner (`components/FirstMessageErrorBanner.tsx`) is the only caller.
 - `lib/model-limit.ts` + `lib/model-fallback.ts`: which model hit which limit, and where a thread goes instead. Plan limits are per model
   (Opus has its own weekly cap, Sonnet another), so `lib/rate-limit.ts` records the hit per model in `~/.weft/model-limits.json` and the pickers mark a
-  used-up model ("— at its limit"). `fallbackFor` moves an exhausted model to the user's backup (across CLIs, if need be), and every thread kind asks it:
+  used-up model ("— at its limit"). A cap is cleared when its own window passes — or when the PLAN changes: `lib/limit-upgrade.ts` compares the CLI's
+  per-model weekly windows (`seven_day_opus`, `seven_day_sonnet`, `model_scoped[]`) with the caps Weft holds and frees the ones whose window has room
+  again and is still open, from the 15-minute poll (`lib/limit-poll.ts`, which then wakes the cards parked on them) and from a card's own turn
+  (`lib/runner-turn.ts`). `fallbackFor` moves an exhausted model to the user's backup (across CLIs, if need be), and every thread kind asks it:
   the New thread dialog (`lib/use-new-card-dialog.ts`), a running thread (`lib/runner-turn.ts`), the copilot (`lib/copilot.ts`), the Review all card
   (`lib/use-board-actions.ts`) and the `/weft:done` wrap-up (`lib/automations.ts`). With no backup set, Weft never guesses a model the user didn't pick.
   The reset a limit message names is read in the zone the message names, on that zone's own calendar day — "resets 1:00am (Asia/Bangkok)" at 2am

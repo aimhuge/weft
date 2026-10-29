@@ -41,9 +41,9 @@ export default function CardMarks({ card, onTag, onDismissBreak }: { card: Card;
         </a>
       )}
       {card.autoResumedAt && (
-        <Tip text={`This thread restarted on its own after the ${card.backend} limit reset.`}>
+        <Tip text={resumedTip(card)}>
           <span className="shrink-0 rounded-md border border-accent/40 px-1.5 py-px text-[11px] font-medium text-accent">
-            Auto-resumed · {formatAt(card.autoResumedAt)}
+            {card.autoResumedReason === "upgrade" ? "Resumed · plan upgraded" : `Auto-resumed · ${formatAt(card.autoResumedAt)}`}
           </span>
         </Tip>
       )}
@@ -72,6 +72,15 @@ export default function CardMarks({ card, onTag, onDismissBreak }: { card: Card;
 }
 
 const HAPPENED: Record<CardBreak["kind"], string> = { server: "stopped Weft's server", build: "broke Weft's build", reload: "made the board reload" };
+
+// Why the thread restarted on its own: the plan's window reset, or the plan itself changed (the
+// user upgraded, so the models that were capped have room again — lib/limit-upgrade.ts).
+function resumedTip(card: Card): string {
+  if (card.autoResumedReason === "upgrade") {
+    return "This thread restarted on its own: your plan was upgraded, so the limits that parked it are gone.";
+  }
+  return `This thread restarted on its own after the ${card.backend} limit reset.`;
+}
 
 // The red chip on a card that broke Weft: what it did on hover, × to dismiss.
 function BrokeChip({ broke, onDismiss }: { broke: CardBreak; onDismiss?: () => void }) {

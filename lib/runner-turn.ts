@@ -11,6 +11,7 @@ import { changedLines, gitBranch } from "./git-stats";
 import { showAfterTurn } from "./show";
 import { recordLimits } from "./limit-history";
 import { modelCapFor, planWindowOf, recordModelCaps } from "./limit-kind";
+import { releaseUpgradedModels } from "./limit-upgrade";
 import { recordModelLimit } from "./model-limit";
 import { isNotLoggedInError, isRateLimitError } from "./login";
 import { isLostSessionError, resumeLostSession } from "./lost-session";
@@ -367,6 +368,11 @@ async function refreshLimits(id: string, session: Session) {
     if (!limits) return;
     updateLimits(id, session.spec.backend, { fiveHour: usageWindow(limits.five_hour), sevenDay: usageWindow(limits.seven_day) });
     recordModelCaps(getCard(id)?.model, limits);
+    // A plan upgrade gives the account more room, and the cap Weft is holding on this model is
+    // stale: the CLI's own answer says the model has room again, so the cap goes (lib/limit-upgrade.ts).
+    // Without this the card stays "at its limit" until the cap's own reset passes, even though the
+    // model can run right now.
+    releaseUpgradedModels(limits);
   } catch {}
 }
 
