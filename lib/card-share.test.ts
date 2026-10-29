@@ -9,9 +9,11 @@ interface Db {
   org: string | null;
   folders: string[];
   cards: Set<string>;
-  share: { id: string; mode: string; has_password: boolean } | null;
+  share: { id: string; mode: string; has_password: boolean; slug?: string | null; show_chat?: boolean } | null;
+  username: string | null;
   error: { message: string } | null;
   configured: boolean;
+  slugTaken: Set<string> | null;
   queries: { table: string; filters: Record<string, unknown> }[];
   writes: { op: "insert" | "update"; row: Record<string, unknown>; filters: Record<string, unknown> }[];
 }
@@ -22,6 +24,8 @@ const db = vi.hoisted((): Db => ({
   folders: ["/w"],
   cards: new Set<string>(["c1"]),
   share: null,
+  username: "fo",
+  slugTaken: null,
   error: null,
   configured: true,
   queries: [],
@@ -33,6 +37,7 @@ function query(table: string) {
   db.queries.push({ table, filters });
   const answer = () => {
     if (db.error) return { data: null, error: db.error };
+    if (table === "profiles") return { data: { username: db.username }, error: null };
     if (table === "cloud_cards") return { data: db.cards.has(filters.card_id as string) ? { card_id: filters.card_id } : null, error: null };
     return { data: db.share, error: null };
   };
@@ -63,8 +68,17 @@ function query(table: string) {
 function write(op: "insert" | "update", row: Record<string, unknown>, filters: Record<string, unknown>) {
   db.writes.push({ op, row, filters });
   if (db.error) return Promise.resolve({ error: db.error });
+  if (db.slugTaken && typeof row.slug === "string" && db.slugTaken.has(row.slug)) return Promise.resolve({ error: { message: "duplicate key value" } });
   const has = "password_hash" in row ? row.password_hash !== null : Boolean(db.share?.has_password);
-  db.share = { id: (row.id as string | undefined) ?? db.share!.id, mode: row.mode as string, has_password: has };
+  const prev = db.share;
+  db.share = {
+    ...prev,
+    id: (row.id as string | undefined) ?? prev!.id,
+    mode: (row.mode as string | undefined) ?? prev!.mode,
+    has_password: has,
+    ...("slug" in row ? { slug: row.slug as string } : {}),
+    ...("show_chat" in row ? { show_chat: row.show_chat as boolean } : {}),
+  };
   return Promise.resolve({ error: null });
 }
 
@@ -87,7 +101,7 @@ vi.mock("./cloud-sync", () => ({
   syncOrgId: () => Promise.resolve(db.org),
 }));
 vi.mock("./settings", () => ({ syncFolders: () => db.folders }));
-const cards = vi.hoisted(() => new Map<string, { id: string; cwd: string; share?: object }>());
+const cards = vi.hoisted(() => new Map<string, { id: string; cwd: string; title?: string; share?: object }>());
 const decorateCard = vi.hoisted(() => vi.fn((id: string, patch: object) => Object.assign(cards.get(id)!, patch)));
 vi.mock("./store", () => ({ getCard: (id: string) => cards.get(id), decorateCard }));
 vi.mock("@aimhuge/share/server", () => ({ hashSharePassword: (p: string) => `hash(${p})` }));
@@ -95,10 +109,10 @@ vi.mock("@aimhuge/share/server", () => ({ hashSharePassword: (p: string) => `has
 const { CardShareError, getCardShare, setCardShare } = await import("./card-share");
 
 beforeEach(() => {
-  Object.assign(db, { user: "u1", org: "o1", folders: ["/w"], cards: new Set(["c1"]), share: null, error: null, configured: true, queries: [], writes: [] });
+  Object.assign(db, { user: "u1", org: "o1", folders: ["/w"], cards: new Set(["c1"]), share: null, username: "fo", slugTaken: null, error: null, configured: true, queries: [], writes: [] });
   syncNow.mockClear();
   cards.clear();
-  for (const id of ["c1", "c2"]) cards.set(id, { id, cwd: "/w" });
+  for (const id of ["c1", "c2"]) cards.set(id, { id, cwd: "/w", title: "Fix the login bug" });
   decorateCard.mockClear();
 });
 
@@ -129,13 +143,21 @@ describe("getCardShare", () => {
   });
 
   it("reads an unshared card as private with no link", async () => {
-    expect(await getCardShare("c1")).toEqual({ kind: "ok", id: null, url: null, mode: "private", hasPassword: false });
-    expect(db.queries.at(-1)).toEqual({ table: "cloud_shares", filters: { org_id: "o1", card_id: "c1" } });
+    expect(await getCardShare("c1")).toEqual({ kind: "ok", id: null, url: null, mode: "private", hasPassword: false, slug: null, showChat: true });
+    expect(db.queries.filter((q) => q.table === "cloud_shares").at(-1)).toEqual({ table: "cloud_shares", filters: { org_id: "o1", card_id: "c1" } });
   });
 
   it("reads a share with its link, and an unknown mode as private", async () => {
-    db.share = { id: "abcdefghijklmnopqrstuv", mode: "password", has_password: true };
-    expect(await getCardShare("c1")).toEqual({ kind: "ok", id: "abcdefghijklmnopqrstuv", url: "https://weft.zip/s/abcdefghijklmnopqrstuv", mode: "password", hasPassword: true });
+    db.share = { id: "abcdefghijklmnopqrstuv", mode: "password", has_password: true, slug: "login", show_chat: false };
+    expect(await getCardShare("c1")).toEqual({
+      kind: "ok",
+      id: "abcdefghijklmnopqrstuv",
+      url: "https://weft.zip/@fo/threads/login",
+      mode: "password",
+      hasPassword: true,
+      slug: "login",
+      showChat: false,
+    });
     db.share = { id: "abcdefghijklmnopqrstuv", mode: "public_edit", has_password: false };
     expect(await getCardShare("c1")).toMatchObject({ mode: "private" });
   });
@@ -147,12 +169,12 @@ describe("getCardShare", () => {
 
   it("remembers the share on the card, writing only when it changed", async () => {
     await getCardShare("c1");
-    expect(decorateCard).toHaveBeenCalledWith("c1", { share: { id: null, mode: "private", hasPassword: false } });
+    expect(decorateCard).toHaveBeenCalledWith("c1", { share: { id: null, mode: "private", hasPassword: false, url: null, slug: null, showChat: true } });
     await getCardShare("c1");
     expect(decorateCard).toHaveBeenCalledTimes(1);
-    db.share = { id: "abcdefghijklmnopqrstuv", mode: "public", has_password: false };
+    db.share = { id: "abcdefghijklmnopqrstuv", mode: "public", has_password: false, slug: "x" };
     await getCardShare("c1");
-    expect(cards.get("c1")?.share).toEqual({ id: "abcdefghijklmnopqrstuv", mode: "public", hasPassword: false });
+    expect(cards.get("c1")?.share).toEqual({ id: "abcdefghijklmnopqrstuv", mode: "public", hasPassword: false, url: "https://weft.zip/@fo/threads/x", slug: "x", showChat: true });
     db.folders = [];
     await getCardShare("c1");
     expect(decorateCard).toHaveBeenCalledTimes(2);
@@ -178,11 +200,13 @@ describe("setCardShare", () => {
     expect(op).toBe("insert");
     expect(row).toMatchObject({ org_id: "o1", card_id: "c1", mode: "email", password_hash: null });
     expect(row.id).toMatch(/^[A-Za-z0-9_-]{22}$/);
-    expect(state).toEqual({ kind: "ok", id: row.id, url: `https://weft.zip/s/${row.id as string}`, mode: "email", hasPassword: false });
+    // The new link gets its address from the card's title.
+    expect(db.writes[1]).toMatchObject({ op: "update", row: { slug: "fix-the-login-bug" } });
+    expect(state).toEqual({ kind: "ok", id: row.id, url: "https://weft.zip/@fo/threads/fix-the-login-bug", mode: "email", hasPassword: false, slug: "fix-the-login-bug", showChat: true });
   });
 
   it("updates an existing share in place, keeping its id", async () => {
-    db.share = { id: "abcdefghijklmnopqrstuv", mode: "private", has_password: false };
+    db.share = { id: "abcdefghijklmnopqrstuv", mode: "private", has_password: false, slug: "x" };
     const state = await setCardShare("c1", { mode: "public" });
     expect(db.writes).toEqual([{ op: "update", row: { mode: "public", password_hash: null }, filters: { org_id: "o1", card_id: "c1" } }]);
     expect(state).toMatchObject({ id: "abcdefghijklmnopqrstuv", mode: "public" });
@@ -223,5 +247,47 @@ describe("setCardShare", () => {
     };
     await expect(setCardShare("c1", { mode: "public" })).rejects.toThrow("rls");
     client.from = real;
+  });
+});
+
+describe("the thread link's address and chat switch", () => {
+  it("tries the next slug when one is taken, and keeps /s/<id> when every one is", async () => {
+    db.share = { id: "abcdefghijklmnopqrstuv", mode: "public", has_password: false };
+    db.slugTaken = new Set(["fix-the-login-bug"]);
+    expect(await getCardShare("c1")).toMatchObject({ slug: "fix-the-login-bug-2", url: "https://weft.zip/@fo/threads/fix-the-login-bug-2" });
+    db.share = { id: "abcdefghijklmnopqrstuv", mode: "public", has_password: false };
+    db.slugTaken = new Set(["fix-the-login-bug", ...Array.from({ length: 8 }, (_, i) => `fix-the-login-bug-${i + 2}`)]);
+    expect(await getCardShare("c1")).toMatchObject({ slug: null, url: "https://weft.zip/s/abcdefghijklmnopqrstuv" });
+  });
+
+  it("gives up on a slug when the write fails for another reason", async () => {
+    db.share = { id: "abcdefghijklmnopqrstuv", mode: "public", has_password: false };
+    const real = query;
+    client.from = (table: string) => {
+      const q = real(table);
+      return { ...q, update: () => ({ eq: () => Promise.resolve({ error: { message: "rls" } }) }) } as unknown as ReturnType<typeof query>;
+    };
+    expect(await getCardShare("c1")).toMatchObject({ slug: null });
+    client.from = real;
+  });
+
+  it("copies /s/<id> while the sharer has no username", async () => {
+    db.username = null;
+    db.share = { id: "abcdefghijklmnopqrstuv", mode: "public", has_password: false, slug: "x" };
+    expect(await getCardShare("c1")).toMatchObject({ url: "https://weft.zip/s/abcdefghijklmnopqrstuv" });
+  });
+
+  it("saves the chat switch and a new slug, keeping the mode", async () => {
+    db.share = { id: "abcdefghijklmnopqrstuv", mode: "public", has_password: false, slug: "x" };
+    const state = await setCardShare("c1", { mode: "public", showChat: false, slug: "login" });
+    expect(db.writes[0]!.row).toEqual({ mode: "public", password_hash: null, show_chat: false, slug: "login" });
+    expect(state).toMatchObject({ showChat: false, slug: "login", url: "https://weft.zip/@fo/threads/login" });
+  });
+
+  it("refuses a malformed slug and a taken one", async () => {
+    db.share = { id: "abcdefghijklmnopqrstuv", mode: "public", has_password: false, slug: "x" };
+    await expect(setCardShare("c1", { mode: "public", slug: "Not OK" })).rejects.toMatchObject({ status: 400 });
+    db.slugTaken = new Set(["taken"]);
+    await expect(setCardShare("c1", { mode: "public", slug: "taken" })).rejects.toMatchObject({ status: 409, message: "That address is taken." });
   });
 });

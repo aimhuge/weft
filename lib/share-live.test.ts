@@ -157,6 +157,60 @@ describe("buildShareLive", () => {
     expect(createSignedUrlsCalls.length).toBeGreaterThan(0);
     expect(live.blobUrls[REF]).toBe(`https://signed/org-1/${SHA}`);
   });
+
+  it("shows the chat by default", async () => {
+    const threadRows = [{ org_id: "org-1", card_id: "c1", seq: 1, kind: "user", item: { kind: "user", text: "hello", at: 1 }, at: "t" }];
+    const baseSvc = { from: () => buildChain(threadRows) };
+    const svc = withStorage(baseSvc, () => ({ data: [], error: null }));
+    serviceClientMock.mockReturnValue(svc);
+    const { buildShareLive } = await load();
+    const live = await buildShareLive({ service: svc as never, orgId: "org-1", cardId: "c1", card: { id: "c1" } });
+    expect(live.showChat).toBe(true);
+    expect(live.items.map((i) => i.seq)).toEqual([1]);
+  });
+
+  it("sends no items at all when the chat is hidden", async () => {
+    const threadRows = [{ org_id: "org-1", card_id: "c1", seq: 1, kind: "user", item: { kind: "user", text: "hello", at: 1 }, at: "t" }];
+    const baseSvc = { from: () => buildChain(threadRows) };
+    const svc = withStorage(baseSvc, () => ({ data: [], error: null }));
+    serviceClientMock.mockReturnValue(svc);
+    const { buildShareLive } = await load();
+    const live = await buildShareLive({ service: svc as never, orgId: "org-1", cardId: "c1", card: { id: "c1" }, showChat: false });
+    expect(live.showChat).toBe(false);
+    expect(live.items).toEqual([]);
+    expect(live.hasOlder).toBe(false);
+  });
+
+  it("never asks for the thread's page when the chat is hidden", async () => {
+    // The pane probe still reads cloud_thread_items; the *page* read (the newest slice) does not.
+    // The page read selects every column and orders by seq descending; the probe selects
+    // "item, at, seq" — so the two are told apart by the select argument.
+    const selects: string[] = [];
+    const baseSvc = {
+      from: (table: string) => {
+        if (table !== "cloud_thread_items") return buildChain([]);
+        const make = (): Record<string, unknown> & { then?: unknown } => {
+          const obj: Record<string, unknown> & { then?: unknown } = {
+            then: (onFulfilled: (v: { data: unknown[]; error: unknown }) => unknown) =>
+              Promise.resolve({ data: [], error: null }).then(onFulfilled),
+          };
+          for (const k of ["eq", "order", "limit", "overrideTypes"]) obj[k] = vi.fn(() => make());
+          obj.select = vi.fn((cols: string) => {
+            selects.push(cols);
+            return make();
+          });
+          return obj;
+        };
+        return make();
+      },
+    };
+    const svc = withStorage(baseSvc, () => ({ data: [], error: null }));
+    serviceClientMock.mockReturnValue(svc);
+    const { buildShareLive } = await load();
+    await buildShareLive({ service: svc as never, orgId: "org-1", cardId: "c1", card: { id: "c1" }, showChat: false });
+    // Only the pane probe read the thread; the page read ("*") never happened.
+    expect(selects).toEqual(["item, at, seq"]);
+  });
 });
 
 describe("loadThreadPage", () => {
@@ -209,5 +263,12 @@ describe("loadPaneAcrossThread", () => {
       url: "https://x.com/path",
       label: "x.com/path",
     });
+  });
+
+  it("is null when the probe's read fails", async () => {
+    const svc = { from: () => buildChain([], new Error("boom")) };
+    serviceClientMock.mockReturnValue(svc);
+    const { loadPaneAcrossThread } = await load();
+    expect(await loadPaneAcrossThread(svc as never, "org-1", "c1")).toBeNull();
   });
 });

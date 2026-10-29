@@ -363,6 +363,15 @@ to Sonnet 5.5". The reset time comes from the limit message itself and is read i
 message names, on that timezone's own day: a window that resets at 1:00am in Bangkok ends at 1:00am
 there, whichever day that is.
 
+**An upgrade is noticed, not waited for.** Raise your plan and the limits stop applying — but only
+if Weft notices, and the per-model caps used to sit there until their own window passed, so an
+upgraded plan still read "— at its limit" in the model menus and a card parked on Opus stayed
+parked. Now Weft compares the CLI's own weekly windows with the caps it holds: a model whose
+window has room again is freed, the menus drop the "at its limit" mark, and every card parked on
+that model restarts on its own. The card says why — its chip reads "Resumed · plan upgraded"
+rather than "Auto-resumed", which is a window resetting on its own. The check rides the same
+15-minute poll that watches the plan's windows, and runs again whenever a thread starts.
+
 Pick **Codex** in the New thread dialog to run the OpenAI Codex CLI. Install `codex` on your PATH and sign in with `codex login` first; Weft can open Codex's device login in Terminal from Settings → Accounts. Codex uses its own tools and saved sessions. Weft's browser, board, secrets and webhook MCP tools reach Codex over HTTP, and a folder's `CLAUDE.md` and `.claude/skills` are passed along (Codex reads neither); and every tool call goes through Weft's guards first, the same ones Claude Code threads run behind ([thread guards](docs/architecture/thread-guards.md)). Codex's sandbox mode and reasoning effort are fixed when a session starts.
 
 Pick **Goose** to run the Goose CLI agent (the Rust one from Block), and bring your own key: Settings → Models → **Bring your own key** takes a provider's API key — OpenRouter, Anthropic, OpenAI, Google, Groq, Mistral, DeepSeek, xAI, Azure, LiteLLM, Perplexity, Cerebras, a local Ollama, or any OpenAI-compatible endpoint — and Weft keeps it in your Keychain. The key never reaches the board and never crosses Weft's control server: the thread's Goose process is started with the key in its env, and that is the only place it exists. The provider you pick is what new Goose threads run on, and its models are the ones the Goose group of every model menu lists — your provider's own ids, not another provider's. A card runs the model you gave it (in the New thread dialog or by switching mid-thread); a card left on **Your BYOK model** runs the model you picked for the provider, and with none, Goose chooses. A provider that needs an endpoint beside its key takes one (Anthropic's host, Azure's resource address, LiteLLM's proxy), and a provider whose model ids aren't known ahead of time lets you type the id. Give your models a name in the same page's **Model names** section, and every menu shows "Big Opus" instead of the raw id, with the id beside it. A name says the model runs on Goose, so it stays in the Goose group even when the id is another CLI's too — name `puku-ai-2.8` and the row reads "Big Opus" under Goose, and the thread starts on Goose. **Puku** is one click: the button beside the Provider picker fills in the Anthropic provider, `https://api-cli.puku.sh` and `puku-ai-2.8`, so all that is left is your Puku key. A Goose thread is a plain CLI process, so like a Codex thread it has no per-tool guards and no session to resume — one fresh `goose run` per turn — and it takes no effort setting. It has no Agent tool either, so its subagents are `goose run --text` calls from Bash on the same provider and model, and its commits are signed `Co-Authored-By: Goose (<model>) on Weft`. Install `goose` on your PATH first.
@@ -915,8 +924,10 @@ and loads older ones as you scroll up. More in [docs/architecture/cloud-sync.md]
 **Share…** on a card's right-click menu (or the share icon in the browser pane's toolbar, beside ☆ and Archive) makes a link, `weft.zip/s/<id>`, that shows the card's thread and the page in its browser
 pane side by side, updating as it works: private to your workspace, public, behind an email or behind a password. A
 `~/.weft/show` page runs in a sandbox; a localhost page shows as its latest capture. Key-shaped text is masked and long tool
-outputs stay on your Mac. It reads what sync uploads, so the dialog turns sync on for the folder first. More in
-[docs/architecture/sharing.md](docs/architecture/sharing.md).
+outputs stay on your Mac. It reads what sync uploads, so the dialog turns sync on for the folder first. Like a mini app, the
+link lives under you, `weft.zip/@you/threads/<slug>` (the card's title by default; edit it in the dialog), and a public one
+unfurls in Slack or iMessage with the card's title, its first ask and its pane capture. **Show the chat** off shares only the
+browser pane; viewers can also hide the chat themselves. More in [docs/architecture/sharing.md](docs/architecture/sharing.md).
 
 **Share the board** (the share icon beside your avatar, its menu, ⌘K, or **Share** in the weft.zip board's header) shares the whole board: its link is your workspace's web board,
 `weft.zip/<workspace>/board`, with Copy and Open, a list of who can open it (members and pending invites), and an email box.

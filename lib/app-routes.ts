@@ -1,5 +1,6 @@
 // The rewrites that turn weft.zip's public app links into the route folders that serve them. Hosted mini
-// apps (docs/architecture/mini-app-hosting.md) live at /@<username>/apps/<slug> and /<org>/apps/<slug>.
+// apps (docs/architecture/mini-app-hosting.md) live at /@<username>/apps/<slug> and /<org>/apps/<slug>,
+// shared threads (docs/architecture/sharing.md) at /@<username>/threads/<slug>.
 // proxy.ts calls appLinkTarget(pathname) for the rewrite; a request to a reserved first segment
 // (every first-level folder under app/, plus the Next internal _next) returns null so the proxy
 // returns NextResponse.next() at once with no session work.
@@ -73,6 +74,11 @@ export function appLinkTarget(pathname: string, reserved: ReadonlySet<string> = 
   // path that includes it, which can't be an app link anyway.
   const trimmed = pathname.length > 1 && pathname.endsWith("/") ? pathname.slice(0, -1) : pathname;
   const parts = trimmed.split("/").slice(1);
+  // A shared thread's address, /@<username>/threads/<slug> (lib/share-types.ts threadPublicUrl): user links only.
+  if (parts[1] === "threads") {
+    const thread = userMatch(parts);
+    return thread ? `/u/${thread.username}/threads/${thread.slug}` : null;
+  }
   if (parts[1] !== "apps") return null;
   const user = userMatch(parts);
   if (user) return `/u/${user.username}/apps/${user.slug}`;
@@ -88,5 +94,5 @@ export function appLinkMatchers(): string[] {
   // /@<username>/apps/<slug>: path-to-regexp accepts @ as a literal in a :name position when the
   // source begins with it, so /@:username/apps/:slug matches /@<x>/apps/<y> only. Proxy's
   // appLinkTarget confirms the username + slug shapes.
-  return ["/@:username/apps/:slug", "/:org/apps/:slug"];
+  return ["/@:username/apps/:slug", "/:org/apps/:slug", "/@:username/threads/:slug"];
 }

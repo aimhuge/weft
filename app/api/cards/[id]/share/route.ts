@@ -28,9 +28,14 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   if (denied) return denied;
   const { id } = await params;
   const body = (await req.json().catch(() => null)) as Partial<CardShareUpdate> | null;
-  if (!body || typeof body !== "object") return fail("Send { mode, password? }.");
+  if (!body || typeof body !== "object") return fail("Send { mode, password?, showChat?, slug? }.");
   try {
-    return Response.json(await setCardShare(id, { mode: body.mode as CardShareUpdate["mode"], password: body.password }));
+    return Response.json(await setCardShare(id, {
+      mode: body.mode as CardShareUpdate["mode"],
+      password: body.password,
+      ...(typeof body.showChat === "boolean" ? { showChat: body.showChat } : {}),
+      ...(typeof body.slug === "string" ? { slug: body.slug.trim() } : {}),
+    }));
   } catch (err) {
     return failed(err);
   }

@@ -119,6 +119,25 @@
   overflow: hidden;
 }
 
+/* The viewer's Hide chat (wide screens only; below 900px the Thread | Page toggle does it). */
+.wz-shareMain[data-chat="closed"] > .wz-shareThread {
+  display: none;
+}
+
+.wz-shareChatToggle {
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  padding: 3px 10px;
+  font-size: 12px;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+}
+
+.wz-shareChatToggle:hover {
+  color: var(--ink);
+}
+
 .wz-shareScroller {
   display: flex;
   flex: 1;
@@ -236,6 +255,12 @@
     flex-direction: column;
   }
   .wz-shareToggle {
+    display: flex;
+  }
+  .wz-shareChatToggle {
+    display: none;
+  }
+  .wz-shareMain[data-chat="closed"] > .wz-shareThread:not([data-hidden="true"]) {
     display: flex;
   }
   .wz-shareThread {

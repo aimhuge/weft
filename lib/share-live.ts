@@ -95,12 +95,17 @@ export interface BuildShareLiveOptions {
   card: unknown;
   after?: number;
   before?: number;
+  // The share's show_chat: false sends no items at all, only the card and its pane.
+  showChat?: boolean;
 }
 
 export async function buildShareLive(opts: BuildShareLiveOptions): Promise<ShareLive> {
   const cursor: ShareCursor = typeof opts.after === "number" ? "newer" : typeof opts.before === "number" ? "older" : "newest";
   const edge = cursor === "newer" ? opts.after : cursor === "older" ? opts.before : undefined;
-  const { rows, hasOlder } = await loadThreadPage(opts.service, opts.orgId, opts.cardId, cursor, edge);
+  const showChat = opts.showChat !== false;
+  const { rows, hasOlder } = showChat
+    ? await loadThreadPage(opts.service, opts.orgId, opts.cardId, cursor, edge)
+    : { rows: [], hasOlder: false };
   // `newer` fetches oldest-first (seq > after), but the API contract is "newest first" so a poll
   // can drop the result on the front of its list. Flip the order here.
   const orderedRows = cursor === "newer" ? rows.slice().reverse() : rows;
@@ -124,6 +129,7 @@ export async function buildShareLive(opts: BuildShareLiveOptions): Promise<Share
     hasOlder,
     pane: publicPane(pane),
     blobUrls,
+    showChat,
   };
 }
 

@@ -10,6 +10,26 @@ was extracted into). Weft brings the resource (a card), its storage and its rout
 Sharing reads what cloud sync (cloud-sync.md) already uploads, so a card is shared only from a synced folder; the dialog
 offers to turn sync on for it.
 
+## The address, the preview and the chat switch
+
+Built 2026-10-29 (`supabase/migrations/20261029031448_card_share_slug.sql`: `cloud_shares.slug`, `show_chat`).
+
+- **Address.** Like a mini app's, a thread link lives under its sharer: `weft.zip/@<username>/threads/<slug>`
+  (`threadPublicUrl`, `cardShareLink` in `lib/share-types.ts`). The slug is the card's title (`lib/card-share-slug.ts`
+  `threadSlugFrom`), unique per sharer (`cloud_shares_slug_by_creator`), trying `-2` … `-9` when taken; a link made before
+  slugs gets one the next time Share… opens. The dialog's address field (`components/ShareCardOptions.tsx`) renames it, and
+  a taken one answers 409 "That address is taken." `proxy.ts` rewrites the @ address to `app/u/[username]/threads/[slug]`
+  (`lib/app-routes.ts`), which looks the share id up (`shareIdBySlug`) and renders the same body as `/s/<id>`
+  (`components/share-view/SharedCardPage.tsx`). `/s/<id>` redirects to the slug address only after the gate lets the
+  visitor in (`shareSlugPath`), so the redirect never tells a stranger whose link it is.
+- **Preview.** Both routes' `generateMetadata` (under `"use cache"`, params only) come from `lib/share-meta.ts`: a public
+  link unfurls with the card's emoji and title, its first ask (redacted, one line) and `/api/s/<id>/og`, the mini app's
+  branded card (`lib/app-card-image.tsx`) with the card's pane capture tilted in. Private, email and password links keep
+  the generic "Shared thread · Weft", and the og route 404s for them.
+- **Show the chat.** Off (`show_chat = false`), the page and the live poll send no items at all (`buildShareLive`'s
+  `showChat`), the preview's description stays generic, and the viewer shows the header and the pane full width. On, the
+  viewer's header has **Hide chat** to give the pane the whole width (below 900 px the Thread | Page toggle does that).
+
 ## Modes
 
 The package's modes, minus one: a card never takes `public_edit`, because editing a thread would mean sending a turn

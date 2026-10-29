@@ -75,5 +75,6 @@ export const config = {
     // makes `config` unparseable and the proxy throws on every request.
     "/@:username/apps/:slug",
     "/:org/apps/:slug",
+    "/@:username/threads/:slug",
   ],
 };

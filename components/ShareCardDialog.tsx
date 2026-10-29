@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useLayoutEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { CopyLinkButton, ShareAccessFields, ShareDialog, useShareAccess, type SaveShareAccess } from "@aimhuge/share/client";
 import { api } from "@/lib/client";
@@ -11,6 +11,7 @@ import { useAccount } from "@/lib/use-account";
 import { useEscape } from "@/lib/use-escape";
 import Icon, { Spinner } from "./Icon";
 import { errorText, NoWorkspace, SHARE_BUTTON, ShareNote, SignedOut } from "./ShareParts";
+import { ShareCardOptions } from "./ShareCardOptions";
 
 // Share… (the card's right-click menu): one weft.zip link that shows this thread and its browser pane, live,
 // behind one of @aimhuge/share's modes (never editing: that would run turns on this Mac). The link reads the
@@ -100,7 +101,13 @@ export default function ShareCardDialog({ card, onClose }: { card: Card; onClose
           {error}
         </p>
       ) : (
-        <ShareBody state={state} access={access} account={account} onSyncOn={turnOnSync} />
+        <ShareBody
+          state={state}
+          access={access}
+          account={account}
+          onSyncOn={turnOnSync}
+          options={state.kind === "ok" ? <ShareCardOptions cardId={card.id} state={state} setState={setState} setError={setError} /> : null}
+        />
       )}
     </ShareDialog>,
     document.body,
@@ -112,19 +119,22 @@ function ShareBody({
   access,
   account,
   onSyncOn,
+  options,
 }: {
   state: CardShareState;
   access: ReturnType<typeof useShareAccess>;
   account: ReturnType<typeof useAccount>;
   onSyncOn: (folder: string) => Promise<void>;
+  options: ReactNode;
 }) {
   switch (state.kind) {
     case "ok":
       return (
         <>
           <ShareAccessFields s={access} noun="thread" allowEdit={false} />
+          {options}
           <p className="mt-3 text-[12px] leading-snug text-muted">
-            The link shows this thread and its browser pane, live. Key-shaped text is masked and long tool outputs stay on your Mac.
+            The link is live. Key-shaped text is masked and long tool outputs stay on your Mac.
           </p>
         </>
       );

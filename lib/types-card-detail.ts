@@ -64,6 +64,9 @@ export interface Card {
   // the limit reset (5-hour or weekly). Drives the "Auto-resumed" chip on the card; cleared the
   // next time the user-driven turn starts.
   autoResumedAt?: number;
+  // Why the thread auto-resumed: the plan's window reset, or the plan itself changed (the user
+  // upgraded, so the models that were capped have room again). The chip says which.
+  autoResumedReason?: "reset" | "upgrade";
   pending?: PendingPermission | null;
   // The copilot is a thread too, but it lives in its own window instead of on the board.
   role?: "copilot";
@@ -169,6 +172,10 @@ export interface CardShareMemo {
   id: string | null;
   mode: CardShareMode;
   hasPassword: boolean;
+  // The address to copy (weft.zip/@<user>/threads/<slug> once it has one), its slug, and whether the chat shows.
+  url?: string | null;
+  slug?: string | null;
+  showChat?: boolean;
 }
 
 export interface CardIssue {

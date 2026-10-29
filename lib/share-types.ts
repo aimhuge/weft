@@ -28,6 +28,10 @@ export interface CloudShareRow {
   // has_password, a generated column, instead.
   password_hash?: string | null;
   has_password?: boolean;
+  // The link's address under its sharer, weft.zip/@<username>/threads/<slug>; null on links made before slugs.
+  slug?: string | null;
+  // false: the viewer shows the card's header and pane only, and the live poll never sends the thread's items.
+  show_chat?: boolean;
   // The database fills it in (auth.uid()); the desktop never sends it.
   created_by?: string;
   created_at: string;
@@ -56,6 +60,16 @@ export function shareUrl(id: string, origin = SITE): string {
   return `${origin}/s/${id}`;
 }
 
+// A thread link's address under its sharer, like a mini app's (lib/app-share-types.ts appPublicUrl).
+export function threadPublicUrl(username: string, slug: string, origin = SITE): string {
+  return `${origin}/@${username}/threads/${slug}`;
+}
+
+// The address to copy: the slug one when the link has both a slug and a sharer with a username, else /s/<id>.
+export function cardShareLink(id: string, slug: string | null | undefined, username: string | null | undefined): string {
+  return slug && username ? threadPublicUrl(username, slug) : shareUrl(id);
+}
+
 // What GET/PUT /api/cards/[id]/share answer on the desktop, for the Share dialog.
 export type CardShareState =
   | { kind: "signed-out" }
@@ -64,21 +78,25 @@ export type CardShareState =
   | { kind: "not-synced"; folder: string }
   // Synced, but the card's row hasn't reached cloud_cards yet (the outbox flushes within ~10 s).
   | { kind: "pending" }
-  | { kind: "ok"; id: string | null; url: string | null; mode: CardShareMode; hasPassword: boolean };
+  | { kind: "ok"; id: string | null; url: string | null; mode: CardShareMode; hasPassword: boolean; slug: string | null; showChat: boolean };
 
 // What the Share dialog draws before the server answers: the share the card remembers (card.share, kept by
 // lib/card-share.ts), or a private one; signed out, the sign-in. The server's answer replaces it a moment later.
 export function seedShareState(card: Pick<Card, "share">, signedOut: boolean): CardShareState {
   if (signedOut) return { kind: "signed-out" };
   const memo = card.share;
-  if (!memo) return { kind: "ok", id: null, url: null, mode: "private", hasPassword: false };
-  return { kind: "ok", id: memo.id, url: memo.id ? shareUrl(memo.id) : null, mode: memo.mode, hasPassword: memo.hasPassword };
+  if (!memo) return { kind: "ok", id: null, url: null, mode: "private", hasPassword: false, slug: null, showChat: true };
+  const url = memo.url ?? (memo.id ? shareUrl(memo.id) : null);
+  return { kind: "ok", id: memo.id, url, mode: memo.mode, hasPassword: memo.hasPassword, slug: memo.slug ?? null, showChat: memo.showChat ?? true };
 }
 
 // PUT /api/cards/[id]/share. A password is hashed on the Mac and only its hash goes up; omitted keeps the old one.
+// showChat and slug are left as they are when omitted; a slug that's taken is refused (409).
 export interface CardShareUpdate {
   mode: CardShareMode;
   password?: string;
+  showChat?: boolean;
+  slug?: string;
 }
 
 // What the viewer's right half shows: the latest page the card's pane showed, as far as the thread tells.
@@ -103,6 +121,8 @@ export interface ShareLive {
   hasOlder: boolean;
   pane: SharePane | null;
   blobUrls: Record<string, string>;
+  // The sharer's choice: false means items is always empty and the viewer shows the pane alone.
+  showChat: boolean;
 }
 
 // How often the viewer polls while its tab is visible.

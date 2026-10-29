@@ -27,6 +27,7 @@ function makeLive(over: Partial<ShareLive> = {}): ShareLive {
     hasOlder: false,
     pane: null,
     blobUrls: {},
+    showChat: true,
     ...over,
   };
 }
@@ -69,6 +70,35 @@ describe("mergeShareLive", () => {
     const prev = makeLive();
     const next = makeLive({ items: [{ seq: 1, item: makeItem(1, "first") }] });
     expect(mergeShareLive(prev, next).items.map((i) => i.seq)).toEqual([1]);
+  });
+
+  it("takes showChat from next", () => {
+    expect(mergeShareLive(makeLive(), makeLive({ showChat: true })).showChat).toBe(true);
+    expect(mergeShareLive(makeLive({ showChat: true }), makeLive({ showChat: false })).showChat).toBe(false);
+    expect(mergeShareLive(makeLive({ showChat: false }), makeLive({ showChat: true })).showChat).toBe(true);
+  });
+
+  it("drops what the viewer already has when the sharer hides the chat mid-view", () => {
+    const prev = makeLive({
+      items: [{ seq: 3, item: makeItem(3, "old-3") }, { seq: 2, item: makeItem(2, "old-2") }],
+      hasOlder: true,
+      blobUrls: { a: "u-a", b: "u-b" },
+    });
+    const next = makeLive({ items: [{ seq: 4, item: makeItem(4, "new-4") }], hasOlder: true, showChat: false, blobUrls: { b: "u-b2", c: "u-c" } });
+    const merged = mergeShareLive(prev, next);
+    expect(merged.showChat).toBe(false);
+    expect(merged.items).toEqual([]);
+    expect(merged.hasOlder).toBe(false);
+    // The blob URLs are still merged, so the card's picture keeps rendering.
+    expect(merged.blobUrls).toEqual({ a: "u-a", b: "u-b2", c: "u-c" });
+  });
+
+  it("takes the card and the pane from next even when the chat is hidden", () => {
+    const prev = makeLive({ card: { ...makeLive().card, title: "old" }, pane: { kind: "site", url: "https://old", label: "old" } });
+    const next = makeLive({ card: { ...makeLive().card, title: "new" }, pane: { kind: "site", url: "https://new", label: "new" }, showChat: false });
+    const merged = mergeShareLive(prev, next);
+    expect(merged.card.title).toBe("new");
+    expect(merged.pane).toEqual({ kind: "site", url: "https://new", label: "new" });
   });
 });
 

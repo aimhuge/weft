@@ -58,11 +58,16 @@ describe("PUT /api/cards/[id]/share", () => {
     expect(lib.setCardShare).toHaveBeenLastCalledWith("c1", { mode: "password", password: "pw" });
   });
 
+  it("passes the chat switch and a trimmed slug through", async () => {
+    await put(JSON.stringify({ mode: "public", showChat: false, slug: " login-fix " }));
+    expect(lib.setCardShare).toHaveBeenLastCalledWith("c1", { mode: "public", showChat: false, slug: "login-fix" });
+  });
+
   it("needs the write header and a JSON body", async () => {
     expect((await put("{}", { host: "localhost:3457" })).status).toBe(403);
     const bad = await put("not json");
     expect(bad.status).toBe(400);
-    expect(await bad.json()).toEqual({ error: "Send { mode, password? }." });
+    expect(await bad.json()).toEqual({ error: "Send { mode, password?, showChat?, slug? }." });
   });
 
   it("passes a refusal's status through", async () => {

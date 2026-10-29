@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { cardShareLink, threadPublicUrl } from "./share-types";
 import { CARD_SHARE_MODES, isCardShareMode, newShareId, paneFor, paneFromUrl, seedShareState, SHARE_ID_RE, shareUrl } from "./share-types";
 import type { ThreadItem } from "./types";
 
@@ -77,11 +78,22 @@ describe("paneFor", () => {
   });
 });
 
+describe("thread addresses", () => {
+  it("copies the slug address once there's a slug and a username, else /s/<id>", () => {
+    expect(threadPublicUrl("fo", "login")).toBe("https://weft.zip/@fo/threads/login");
+    expect(cardShareLink("abc", "login", "fo")).toBe("https://weft.zip/@fo/threads/login");
+    expect(cardShareLink("abc", null, "fo")).toBe("https://weft.zip/s/abc");
+    expect(cardShareLink("abc", "login", null)).toBe("https://weft.zip/s/abc");
+  });
+});
+
 describe("seedShareState", () => {
   it("draws the remembered share, a private one without it, or the sign-in", () => {
-    expect(seedShareState({ share: { id: "abc", mode: "email", hasPassword: false } }, false)).toEqual({ kind: "ok", id: "abc", url: "https://weft.zip/s/abc", mode: "email", hasPassword: false });
+    expect(seedShareState({ share: { id: "abc", mode: "email", hasPassword: false } }, false)).toEqual({ kind: "ok", id: "abc", url: "https://weft.zip/s/abc", mode: "email", hasPassword: false, slug: null, showChat: true });
     expect(seedShareState({ share: { id: null, mode: "private", hasPassword: false } }, false)).toMatchObject({ url: null });
-    expect(seedShareState({}, false)).toEqual({ kind: "ok", id: null, url: null, mode: "private", hasPassword: false });
+    expect(seedShareState({}, false)).toEqual({ kind: "ok", id: null, url: null, mode: "private", hasPassword: false, slug: null, showChat: true });
+    const memo = { id: "abc", mode: "public" as const, hasPassword: false, url: "https://weft.zip/@fo/threads/x", slug: "x", showChat: false };
+    expect(seedShareState({ share: memo }, false)).toMatchObject({ url: "https://weft.zip/@fo/threads/x", slug: "x", showChat: false });
     expect(seedShareState({ share: { id: "abc", mode: "public", hasPassword: false } }, true)).toEqual({ kind: "signed-out" });
   });
 });

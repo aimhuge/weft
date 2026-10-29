@@ -16,6 +16,8 @@ import type { Card } from "./types";
 // place; a `seq` only in `next` prepends in seq order. `hasOlder` is the union: a page that said
 // "yes, more" or a page that said "yes, this was a full page" both count.
 export function mergeShareLive(prev: ShareLive, next: ShareLive): ShareLive {
+  // The sharer hid the chat mid-view: drop what the viewer already has, not just the new items.
+  if (!next.showChat) return { ...next, items: [], hasOlder: false, blobUrls: { ...prev.blobUrls, ...next.blobUrls } };
   const bySeq = new Map<number, ShareLive["items"][number]>();
   // Pre-fill with prev so unknown seqs from `next` add in the right place.
   for (const entry of prev.items) bySeq.set(entry.seq, entry);
@@ -27,6 +29,7 @@ export function mergeShareLive(prev: ShareLive, next: ShareLive): ShareLive {
     hasOlder: next.hasOlder || prev.hasOlder,
     pane: next.pane,
     blobUrls: { ...prev.blobUrls, ...next.blobUrls },
+    showChat: next.showChat,
   };
 }
 

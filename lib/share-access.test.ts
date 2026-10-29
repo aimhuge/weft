@@ -61,15 +61,16 @@ function cardRow(over: Partial<{ card_id: string; card: unknown; deleted: boolea
 
 // A query builder bound to a single table; chains like `.select().eq().maybeSingle()` resolve to
 // whatever the test set on `from` for that table. Each call to `builder()` returns a fresh chain.
-function fromTable(table: string, rows: { share?: unknown; card?: unknown; membership?: unknown }, errors: Record<string, { message: string }> = {}) {
+function fromTable(table: string, rows: { share?: unknown; card?: unknown; membership?: unknown; profile?: unknown; slugShare?: unknown }, errors: Record<string, { message: string }> = {}) {
   const make = (): Record<string, unknown> => {
     const builder: Record<string, unknown> = {};
     const chainMethods = ["select", "eq", "order", "limit", "lt", "gt"];
     for (const m of chainMethods) builder[m] = vi.fn(() => make());
     builder.maybeSingle = vi.fn(() => {
-      if (table === "cloud_shares") return Promise.resolve({ data: rows.share ?? null, error: errors.cloud_shares ?? null });
+      if (table === "cloud_shares") return Promise.resolve({ data: rows.share ?? rows.slugShare ?? null, error: errors.cloud_shares ?? null });
       if (table === "cloud_cards") return Promise.resolve({ data: rows.card ?? null, error: errors.cloud_cards ?? null });
       if (table === "org_memberships") return Promise.resolve({ data: rows.membership ?? null, error: errors.org_memberships ?? null });
+      if (table === "profiles") return Promise.resolve({ data: rows.profile ?? null, error: errors.profiles ?? null });
       return Promise.resolve({ data: null, error: null });
     });
     builder.insert = vi.fn(() => Promise.resolve(({ error: null })));
@@ -134,6 +135,28 @@ describe("loadShare", () => {
     expect(loaded?.share).toEqual(share);
     expect(loaded?.card).toBeNull();
   });
+
+  it("returns null when the share row's read fails", async () => {
+    serviceClientMock.mockReturnValue(
+      serviceWith({
+        cloud_shares: fromTable("cloud_shares", {}, { cloud_shares: { message: "boom" } }),
+        cloud_cards: fromTable("cloud_cards", { card: cardRow() }),
+      }),
+    );
+    const { loadShare } = await load();
+    expect(await loadShare("a-valid-share-id")).toBeNull();
+  });
+
+  it("returns null when the card row's read fails", async () => {
+    serviceClientMock.mockReturnValue(
+      serviceWith({
+        cloud_shares: fromTable("cloud_shares", { share: shareRow() }),
+        cloud_cards: fromTable("cloud_cards", {}, { cloud_cards: { message: "boom" } }),
+      }),
+    );
+    const { loadShare } = await load();
+    expect(await loadShare("a-valid-share-id")).toBeNull();
+  });
 });
 
 describe("shareAccess", () => {
@@ -164,6 +187,14 @@ describe("shareAccess", () => {
     serviceClientMock.mockReturnValue(svcFor(share));
     const { shareAccess } = await load();
     expect(await shareAccess("a-valid-share-id")).toEqual({ kind: "denied" });
+  });
+
+  it("returns unconfigured when the service client is gone by the time the membership is read", async () => {
+    const share = shareRow({ mode: "private" });
+    // The share reads fine, then the service client goes away before the membership check.
+    serviceClientMock.mockReturnValueOnce(svcFor(share)).mockReturnValueOnce(null);
+    const { shareAccess } = await load();
+    expect(await shareAccess("a-valid-share-id")).toEqual({ kind: "unconfigured" });
   });
 
   it("returns ok for a public share", async () => {
@@ -220,6 +251,65 @@ describe("shareAccess", () => {
     cookies.mockResolvedValue({ get: () => undefined });
     const { shareAccess } = await load();
     expect(await shareAccess("a-valid-share-id")).toEqual({ kind: "gate", mode: "password" });
+  });
+});
+
+describe("shareIdBySlug", () => {
+  it("is the share id behind the slug", async () => {
+    const svc = serviceWith({
+      profiles: fromTable("profiles", { profile: { id: "u1" } }),
+      cloud_shares: fromTable("cloud_shares", { slugShare: { id: "sh1" } }),
+    });
+    const { shareIdBySlug } = await load();
+    expect(await shareIdBySlug(svc as unknown as SupabaseClient, "alice", "fix-the-login-bug")).toBe("sh1");
+  });
+
+  it("is null when the sharer has no profile", async () => {
+    const svc = serviceWith({ profiles: fromTable("profiles", {}) });
+    const { shareIdBySlug } = await load();
+    expect(await shareIdBySlug(svc as unknown as SupabaseClient, "alice", "fix-the-login-bug")).toBeNull();
+  });
+
+  it("is null when the sharer has no share under that slug", async () => {
+    const svc = serviceWith({
+      profiles: fromTable("profiles", { profile: { id: "u1" } }),
+      cloud_shares: fromTable("cloud_shares", {}),
+    });
+    const { shareIdBySlug } = await load();
+    expect(await shareIdBySlug(svc as unknown as SupabaseClient, "alice", "fix-the-login-bug")).toBeNull();
+  });
+});
+
+describe("shareSlugPath", () => {
+  it("is the address a slugged share lives at", async () => {
+    const svc = serviceWith({ profiles: fromTable("profiles", { profile: { username: "alice" } }) });
+    const { shareSlugPath } = await load();
+    expect(await shareSlugPath(svc as unknown as SupabaseClient, { slug: "fix-the-login-bug", created_by: "u1" })).toBe("/@alice/threads/fix-the-login-bug");
+  });
+
+  it("is null for a share with no slug", async () => {
+    const svc = serviceWith({ profiles: fromTable("profiles", { profile: { username: "alice" } }) });
+    const { shareSlugPath } = await load();
+    expect(await shareSlugPath(svc as unknown as SupabaseClient, { slug: null, created_by: "u1" })).toBeNull();
+    expect(await shareSlugPath(svc as unknown as SupabaseClient, { slug: "", created_by: "u1" })).toBeNull();
+  });
+
+  it("is null for a share with no sharer", async () => {
+    const svc = serviceWith({ profiles: fromTable("profiles", { profile: { username: "alice" } }) });
+    const { shareSlugPath } = await load();
+    expect(await shareSlugPath(svc as unknown as SupabaseClient, { slug: "fix-the-login-bug", created_by: undefined })).toBeNull();
+  });
+
+  it("is null when the sharer has no username", async () => {
+    const svc = serviceWith({ profiles: fromTable("profiles", { profile: { username: null } }) });
+    const { shareSlugPath } = await load();
+    expect(await shareSlugPath(svc as unknown as SupabaseClient, { slug: "fix-the-login-bug", created_by: "u1" })).toBeNull();
+  });
+
+  it("is null when there's no profile for the sharer at all", async () => {
+    const svc = serviceWith({ profiles: fromTable("profiles", {}) });
+    const { shareSlugPath } = await load();
+    expect(await shareSlugPath(svc as unknown as SupabaseClient, { slug: "fix-the-login-bug", created_by: "u1" })).toBeNull();
   });
 });
 

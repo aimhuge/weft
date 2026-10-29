@@ -57,6 +57,27 @@ export async function loadShare(id: string): Promise<LoadedShare | null> {
   return { share, card };
 }
 
+// The share id behind weft.zip/@<username>/threads/<slug> (lib/share-types.ts threadPublicUrl), or null. The
+// page then runs the same gate as /s/<id>, so a slug only ever names a link, never opens it.
+export async function shareIdBySlug(service: SupabaseClient, username: string, slug: string): Promise<string | null> {
+  const { data: profile } = await service.from("profiles").select("id").eq("username", username).maybeSingle<{ id: string }>();
+  if (!profile) return null;
+  const { data } = await service
+    .from("cloud_shares")
+    .select("id")
+    .eq("created_by", profile.id)
+    .eq("slug", slug)
+    .maybeSingle<{ id: string }>();
+  return data?.id ?? null;
+}
+
+// The address a slugged share lives at, for /s/<id>'s redirect: null when it has no slug or its sharer no username.
+export async function shareSlugPath(service: SupabaseClient, share: Pick<CloudShareRow, "slug" | "created_by">): Promise<string | null> {
+  if (!share.slug || !share.created_by) return null;
+  const { data } = await service.from("profiles").select("username").eq("id", share.created_by).maybeSingle<{ username: string | null }>();
+  return data?.username ? `/@${data.username}/threads/${share.slug}` : null;
+}
+
 // The gate's verdict on any share row, a card's (cloud_shares) or a mini app's (cloud_app_shares, lib/app-share-access.ts):
 // the row's mode, the workspace membership for private, the pass cookie for the gated modes.
 export type GateVerdict = Exclude<ShareAccess, { kind: "ok" } | { kind: "missing" }> | { kind: "ok" };

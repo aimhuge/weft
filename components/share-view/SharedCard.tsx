@@ -2,14 +2,16 @@
 
 // The /s/[id] viewer's two halves: the card's thread on the left (chronological, follows the
 // bottom like WebThreadPanel) and the page its browser pane showed on the right. Below 900px a
-// Thread | Page toggle replaces the split (CSS @ media). The page polls /api/s/[id]/live every
+// Thread | Page toggle replaces the split (CSS @ media). A share with the chat hidden (live.showChat
+// false) gets no items from the server and shows the pane alone; otherwise the header's Hide chat
+// lets a viewer give the pane the whole width. The page polls /api/s/[id]/live every
 // SHARE_POLL_MS while its tab is visible; the merge is in lib/share-view.ts.
 //
 // A tool result trimmed by the outbox (TOOL_RESULT_INLINE_MAX) is fetched through a fake
 // ToolResultSource that just says "Long output isn't shared" — there's no API route to serve a
 // tool output, by design: a share link shouldn't be a way to read the owner's transcripts at
 // length.
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { cardTags } from "@/lib/rail-view";
 import { COLUMNS } from "@/lib/types";
 import { ToolResultSourceContext, type ToolResultSource } from "@/lib/use-tool-result";
@@ -32,6 +34,9 @@ export function SharedCard({ id, initial }: { id: string; initial: ShareLive }) 
   const [live, setLive] = useState<ShareLive>(initial);
   const [status, setStatus] = useState<LiveStatus>("live");
   const [view, setView] = useState<"thread" | "pane">("thread");
+  // The sharer's switch (a hidden chat never reaches this page) and the viewer's own, on wide screens.
+  const chatAllowed = live.showChat;
+  const [chatOpen, setChatOpen] = useState(true);
   const card = live.card;
   const column = COLUMNS.find((c) => c.id === card.column);
   const { shown: tags } = cardTags(card.tags);
@@ -121,17 +126,26 @@ export function SharedCard({ id, initial }: { id: string; initial: ShareLive }) 
     <ToolResultSourceContext.Provider value={UNSHARED_TOOL_OUTPUT}>
       <div className="wz-desk" data-theme="dark">
         <div className="wz-share">
-          <SharedHeader card={card} columnLabel={column?.label ?? "Card"} status={status} tags={tags} />
-          <div className="wz-shareMain">
+          <SharedHeader card={card} columnLabel={column?.label ?? "Card"} status={status} tags={tags}>
+            {chatAllowed && (
+              <button type="button" className="wz-shareChatToggle" aria-pressed={!chatOpen} onClick={() => setChatOpen((open) => !open)}>
+                {chatOpen ? "Hide chat" : "Show chat"}
+              </button>
+            )}
+          </SharedHeader>
+          {chatAllowed && (
+            <div className="wz-shareToggle" role="tablist" aria-label="View">
+              <button type="button" role="tab" aria-selected={view === "thread"} data-active={view === "thread"} onClick={() => setView("thread")}>Thread</button>
+              <button type="button" role="tab" aria-selected={view === "pane"} data-active={view === "pane"} onClick={() => setView("pane")}>Page</button>
+            </div>
+          )}
+          <div className="wz-shareMain" data-chat={chatAllowed && chatOpen ? "open" : "closed"}>
+            {chatAllowed && (
             <section
               className="wz-shareThread"
               data-hidden={view === "pane" ? "true" : "false"}
               aria-label="Thread"
             >
-              <div className="wz-shareToggle" role="tablist" aria-label="View">
-                <button type="button" role="tab" aria-selected={view === "thread"} data-active={view === "thread"} onClick={() => setView("thread")}>Thread</button>
-                <button type="button" role="tab" aria-selected={view === "pane"} data-active={view === "pane"} onClick={() => setView("pane")}>Page</button>
-              </div>
               <div
                 ref={scroller}
                 onScroll={(e) => {
@@ -150,7 +164,8 @@ export function SharedCard({ id, initial }: { id: string; initial: ShareLive }) 
               </div>
               <p className="wz-shareFooter">Read-only: reply to this thread in the Weft desktop app on the owner&apos;s Mac.</p>
             </section>
-            <section className="wz-sharePane" data-hidden={view === "thread" ? "true" : "false"} aria-label="Browser pane">
+            )}
+            <section className="wz-sharePane" data-hidden={chatAllowed && view === "thread" ? "true" : "false"} aria-label="Browser pane">
               <SharedPane id={id} pane={live.pane} thumb={card.thumb} blobUrls={live.blobUrls} />
             </section>
           </div>
@@ -160,7 +175,19 @@ export function SharedCard({ id, initial }: { id: string; initial: ShareLive }) 
   );
 }
 
-function SharedHeader({ card, columnLabel, status, tags }: { card: ShareCard; columnLabel: string; status: LiveStatus; tags: string[] }) {
+function SharedHeader({
+  card,
+  columnLabel,
+  status,
+  tags,
+  children,
+}: {
+  card: ShareCard;
+  columnLabel: string;
+  status: LiveStatus;
+  tags: string[];
+  children?: ReactNode;
+}) {
   return (
     <header className="wz-shareHeader">
       <h1 className="wz-shareTitle">
@@ -172,6 +199,7 @@ function SharedHeader({ card, columnLabel, status, tags }: { card: ShareCard; co
         <span key={tag} className="wz-shareColumn">{tag}</span>
       ))}
       <div className="flex-1" />
+      {children}
       <span className="wz-shareLive" data-live={status} aria-live="polite">
         <span aria-hidden="true" />
         {status === "live" ? "Live" : "Offline"}
