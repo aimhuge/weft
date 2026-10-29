@@ -98,7 +98,11 @@ would refuse it, so Weft, not the OS, decides. The paths come from the tool's fi
 Bash, from every absolute, `~/`, `$HOME` and `../` token in the command (a quoted token runs to its closing quote and
 `\ ` escapes a space, so a project in `~/My Drive` isn't read as `~/My`), and only those under the user's own files
 (home, `/Users`, `/Volumes`), a heuristic that can't see a path a script builds. Paths are resolved first (`~`, `..`,
-symlinks, a file not created yet by its nearest folder).
+symlinks, a file not created yet by its nearest folder). A path with a glob in it (`* ? [ {`: a Bash token, or a Glob
+tool's absolute pattern) is expanded with `fs.globSync` (walk capped at 5,000 entries, 300 matches) and each match is
+checked: the first one outside is the one asked about, granting its real project (`~/dev/*weft*/node_modules` from
+the weft project asks about `~/dev/weft-build`, not a literal `~/dev/*weft*` that granting would never match). A glob
+with no matches stands for its fixed start, the folder before the first glob character.
 
 - **Never asked about**: the project (an isolated card's worktree, for it), `card.readScope`, `settings.allowedFolders`, Weft's data folder (`~/.weft`, but not `~/.weft/worktrees`: another card's worktree asks like any other folder),
   `~/.claude`, temp dirs, `/dev`, `/tmp` and the system's tool and library paths.
