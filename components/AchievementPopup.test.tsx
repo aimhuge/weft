@@ -99,4 +99,23 @@ describe("AchievementPopup", () => {
     await userEvent.click(screen.getByRole("button", { name: "Nice!" }));
     expect(onClose).toHaveBeenCalledOnce();
   });
+
+  // GitHub issue #14: the buttons were below the fold with no scroll container, so a short window
+  // couldn't dismiss the pop-up at all. The panel is capped, the badges scroll, the buttons stay.
+  it("caps the panel's height so it can never outgrow the window", () => {
+    setup({ fresh: [], level });
+    expect(screen.getByRole("dialog")).toHaveClass("max-h-[92vh]");
+  });
+
+  it("keeps the buttons out of the scrolling region, pinned in a footer", () => {
+    const fresh = Array.from({ length: 7 }, (_, i) => badge(`b${i}`, `Badge ${i}`));
+    setup({ fresh, level });
+    const nice = screen.getByRole("button", { name: "Nice!" });
+    const scroller = screen.getByRole("dialog").querySelector(".overflow-y-auto");
+    expect(scroller).not.toBeNull();
+    // The badges scroll above; the buttons sit outside that region, so they stay put.
+    expect(scroller).toHaveTextContent("Badge 4");
+    expect(scroller).not.toContainElement(nice);
+    expect(nice.closest(".shrink-0")).not.toBeNull();
+  });
 });

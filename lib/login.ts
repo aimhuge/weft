@@ -223,6 +223,10 @@ async function onExit(run: LoginRun, child: ChildProcess, code: number | null, s
 
 export function startLogin(backend: Backend, onDone?: () => void): LoginView {
   const existing = runs.get(backend);
+  // A login already under way is joined, never replaced. Starting a second one would retire the
+  // first (retire → killChild), killing the `auth login` process mid-flow: the credential never
+  // lands and the two logins fight each other (GitHub issue #13). Only a run that has actually
+  // finished — or failed — is worth starting over.
   if (existing && (existing.view.state === "running" || existing.view.state === "terminal")) {
     return addCallback(existing, onDone);
   }

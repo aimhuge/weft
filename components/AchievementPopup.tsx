@@ -26,25 +26,35 @@ export default function AchievementPopup({ achievement, onProfile, onClose }: { 
 
   return (
     <>
-      <Modal label={heading} onClose={onClose} layer="front" className={`w-full overflow-hidden ${lore ? "max-w-[min(760px,92vw)]" : "max-w-[360px]"}`}>
+      <Modal
+        label={heading}
+        onClose={onClose}
+        layer="front"
+        className={`w-full overflow-hidden ${lore ? "max-w-[min(760px,92vw)]" : "max-w-[360px]"} max-h-[92vh]`}
+      >
         {lore && <LevelHero lore={lore} />}
-        <div className={`flex flex-col items-center gap-3 px-6 pb-5 text-center ${lore ? "pt-4" : "pt-7"}`}>
-          {(fresh.length > 0 || !lore) && <BadgeIcon fresh={fresh} />}
-          <p className="text-[11px] font-medium uppercase tracking-wide text-accent">{heading}</p>
-          <FreshBadges fresh={fresh} />
-          {level && (
-            <p className={fresh.length ? "text-[12px] text-muted" : "text-[20px] font-semibold text-ink"}>
-              Level {level.level} · {level.title}
-            </p>
-          )}
-          <div className="mt-1 flex gap-2">
-            <button onClick={onProfile} className="rounded-md border border-line-strong px-3 py-1.5 text-[12px] text-ink hover:bg-sunken">
-              See your profile
-            </button>
-            <button autoFocus onClick={onClose} className="rounded-md bg-accent px-3 py-1.5 text-[12px] font-medium text-on-accent">
-              Nice!
-            </button>
+        {/* The picture and the badges scroll; the buttons stay pinned, so a short window can always
+            dismiss the pop-up (GitHub issue #14). The Modal's panel is a flex column, so the
+            scrolling region needs min-h-0 to be allowed to shrink. */}
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className={`flex flex-col items-center gap-3 px-6 pb-4 text-center ${lore ? "pt-4" : "pt-7"}`}>
+            {(fresh.length > 0 || !lore) && <BadgeIcon fresh={fresh} />}
+            <p className="text-[11px] font-medium uppercase tracking-wide text-accent">{heading}</p>
+            <FreshBadges fresh={fresh} />
+            {level && (
+              <p className={fresh.length ? "text-[12px] text-muted" : "text-[20px] font-semibold text-ink"}>
+                Level {level.level} · {level.title}
+              </p>
+            )}
           </div>
+        </div>
+        <div className="flex shrink-0 justify-center gap-2 border-t border-line px-6 py-3">
+          <button onClick={onProfile} className="rounded-md border border-line-strong px-3 py-1.5 text-[12px] text-ink hover:bg-sunken">
+            See your profile
+          </button>
+          <button autoFocus onClick={onClose} className="rounded-md bg-accent px-3 py-1.5 text-[12px] font-medium text-on-accent">
+            Nice!
+          </button>
         </div>
       </Modal>
       {confetti && <Confetti onDone={() => setConfetti(false)} />}
