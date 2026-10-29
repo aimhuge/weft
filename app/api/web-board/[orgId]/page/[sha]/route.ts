@@ -4,6 +4,7 @@
 // Sent with the share viewer's sandbox (app/api/s/[id]/page/[sha]): the page's scripts run in an opaque origin and
 // can't read weft.zip's cookies. The phone app loads it too, with `Authorization: Bearer` (requestSession).
 import { NO_STORE } from "@/lib/app-share-reply";
+import { restoreHtmlType } from "@/lib/blob-read";
 import { requestSession } from "@/lib/web-session";
 
 const SHA_RE = /^[0-9a-f]{64}$/;
@@ -22,6 +23,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ orgId: string; 
   if (!user) return new Response("Sign in to see this page.", { status: 401, headers: NO_STORE });
   const { data, error } = await supabase.storage.from("weft-blobs").download(`${orgId}/${sha}`);
   if (error) return new Response("Not found", { status: 404, headers: NO_STORE });
-  const type = data.type || "application/octet-stream";
-  return new Response(await data.arrayBuffer(), { status: 200, headers: { ...HEADERS, "Content-Type": type } });
+  const bytes = await data.arrayBuffer();
+  const type = restoreHtmlType(data.type, bytes) || "application/octet-stream";
+  return new Response(bytes, { status: 200, headers: { ...HEADERS, "Content-Type": type } });
 }

@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { describe, expect, it, vi } from "vitest";
-import { readBlob } from "./blob-read";
+import { readBlob, restoreHtmlType } from "./blob-read";
 import type { R2Config } from "./r2";
 
 const ORG = "11111111-2222-3333-4444-555555555555";
@@ -46,5 +46,27 @@ describe("readBlob", () => {
     vi.stubEnv("WEFT_BLOBS_R2", "off");
     expect(await readBlob(client(null).client, ORG, SHA)).toBeNull();
     vi.unstubAllEnvs();
+  });
+});
+
+describe("restoreHtmlType", () => {
+  const bytes = (text: string) => new TextEncoder().encode(text).buffer;
+
+  it("turns a page Supabase served as text/plain back into HTML", () => {
+    expect(restoreHtmlType("text/plain", bytes("\uFEFF\n  <!DOCTYPE html><html>"))).toBe("text/html; charset=utf-8");
+    expect(restoreHtmlType("text/plain;charset=UTF-8", bytes("<html lang=en>"))).toBe("text/html; charset=utf-8");
+    expect(restoreHtmlType("", bytes("<!doctype html>"))).toBe("text/html; charset=utf-8");
+  });
+
+  it("leaves plain text and every other stored type alone", () => {
+    expect(restoreHtmlType("text/plain", bytes("hello <html>"))).toBe("text/plain");
+    expect(restoreHtmlType("image/png", bytes("<!doctype html>"))).toBe("image/png");
+    expect(restoreHtmlType("", bytes("PK"))).toBe("");
+  });
+
+  it("applies to what readBlob answers from Supabase", async () => {
+    const { client: c } = client(new Blob(["<!doctype html><p>hi"], { type: "text/plain" }));
+    const got = await readBlob(c, ORG, SHA, { r2: null });
+    expect(got?.type).toBe("text/html; charset=utf-8");
   });
 });
