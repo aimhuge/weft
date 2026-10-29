@@ -14,6 +14,9 @@ Status (2026-10-24): the account-level reads and the in-app reads are both live 
 per day, weekly retention cohorts, the activation funnel (account created → signed in → synced a folder →
 shared a card → used the Puku trial → invited a teammate).
 
+**Which version is everyone on?** Accounts per Weft version, each counted once at the version its Mac reported
+last, split into release builds and dev mode, with how many of them opened Weft in the last 7 days.
+
 **What do they do inside Weft?** Cards pushed per day, in-app engagement per day, and a second retention table
 that counts only real work.
 
@@ -35,6 +38,8 @@ app in October 2026 (the live numbers are the app's, not this doc's):
 | `~/.weft/apps/growth/weft-app.json` | The manifest: the project folder, the vault env, and every read by name |
 | `supabase/migrations/20261018054110_growth_reads.sql` | The account-level reads (`growth_overview`, `growth_signups_by_day`, `growth_active_by_day`, `growth_retention`, `growth_funnel`) |
 | `supabase/migrations/20261024041130_growth_in_app_reads.sql` | The in-app reads (`growth_cards_by_day`, `growth_engagement_by_day`, `growth_engagement_overview`, `growth_retention_in_app`) and the two helpers behind them |
+| `supabase/migrations/20261029075755_app_versions.sql` | `app_versions`, the Mac's `app_version_submit` and the `growth_versions` read |
+| `lib/app-version-sync.ts` | The signed-in Mac's once-a-day version report, on the league sync's timer |
 | `~/.weft/app-grants.json` | The grant: the app's folder and env, the vault names its reads need, and the hash of its manifest that voids it when the manifest changes |
 
 ## The reads
@@ -85,6 +90,23 @@ This is the definition the in-app retention and the engagement counts both use.
   **is** the object; a table function's body is an array of rows, and the page has to tell them apart.
 - **`growth_retention_in_app(weeks)`** → `(cohort, size, week, retained)` — the same weekly cohorts as
   `growth_retention`, but "retained" means the account did real work that week.
+
+### Versions
+
+Nothing recorded an install's version before 0.6.7: the updater reads `update.json` straight from GitHub, so
+Weft never sees a check, and every `auth.sessions.user_agent` is just `node`. Now the signed-in Mac calls
+`app_version_submit(version, channel, platform)` once a UTC day (`lib/app-version-sync.ts`, on the league
+sync's timer), as the caller only: one `app_versions` row per account, version and channel, with `first_at`
+and `last_at`. `channel` is `release` for a packaged build (`NODE_ENV=production`) and `dev` for
+`pnpm desktop` from a checkout, whose `package.json` version can run ahead of the latest release.
+
+- **`growth_versions(days)`** → `(version, channel, accounts, active_7d, first_at, last_at)`: each account
+  counted once, at the version it reported most recently within `days`; newest version first by its numbers
+  (`0.10.0` above `0.9.0`).
+
+It counts only signed-in Macs on a build that reports, so the panel starts empty and fills as people update.
+Downloads per release on GitHub (`.zip` is mostly Squirrel's auto-update, `.dmg` a fresh install) are the
+only signal for older builds.
 
 ## Patterns and gotchas
 

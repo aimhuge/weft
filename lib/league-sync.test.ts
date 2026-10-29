@@ -4,6 +4,7 @@ import type { LeagueEntry } from "./league";
 
 const account = vi.hoisted(() => ({ client: vi.fn() }));
 const profileCardSync = vi.hoisted(() => ({ sync: vi.fn() }));
+const appVersionSync = vi.hoisted(() => ({ sync: vi.fn() }));
 const limitSync = vi.hoisted(() => ({ sync: vi.fn(() => Promise.resolve(true)) }));
 vi.mock("./account", () => ({ accountClient: account.client }));
 vi.mock("./game-server", () => ({
@@ -11,6 +12,7 @@ vi.mock("./game-server", () => ({
 }));
 vi.mock("./profile-card-sync", () => ({ syncProfileCard: profileCardSync.sync }));
 vi.mock("./badge-facts", () => ({ syncBadgeFacts: () => Promise.resolve(false) }));
+vi.mock("./app-version-sync", () => ({ syncAppVersion: appVersionSync.sync }));
 vi.mock("./limit-board-sync", () => ({ syncLimits: limitSync.sync, NOT_DEPLOYED: "limits not deployed" }));
 
 const { FIRST_SYNC_MS, leagueView, NOT_DEPLOYED, startLeagueSync, SYNC_MS, syncWeek, tierView } = await import("./league-sync");
@@ -36,6 +38,7 @@ function fake({ session = true, submitError = null as string | null, submitCode 
 beforeEach(() => {
   vi.clearAllMocks();
   profileCardSync.sync.mockResolvedValue(false);
+  appVersionSync.sync.mockResolvedValue(false);
   delete (globalThis as Record<string, unknown>).__weftLeagueSync;
 });
 afterEach(() => vi.useRealTimers());
@@ -215,6 +218,18 @@ describe("startLeagueSync", () => {
     const stop = startLeagueSync({ client: () => client, entry: () => ENTRY });
     await vi.advanceTimersByTimeAsync(FIRST_SYNC_MS);
     expect(warn).toHaveBeenCalledWith("[weft] profile card sync failed:", expect.any(Error));
+    stop();
+    warn.mockRestore();
+  });
+
+  it("catches and warns on a syncAppVersion rejection", async () => {
+    vi.useFakeTimers();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    appVersionSync.sync.mockRejectedValueOnce(new Error("version down"));
+    const { client } = fake();
+    const stop = startLeagueSync({ client: () => client, entry: () => ENTRY });
+    await vi.advanceTimersByTimeAsync(FIRST_SYNC_MS);
+    expect(warn).toHaveBeenCalledWith("[weft] app version sync failed:", expect.any(Error));
     stop();
     warn.mockRestore();
   });

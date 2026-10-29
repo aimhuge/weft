@@ -6,6 +6,7 @@ import { leagueEntry, toLeagueView, toTierView, type BrowseRow, type LeagueEntry
 import { syncChangelog, watchChangelog } from "./changelog-sync";
 import { syncBadgeFacts } from "./badge-facts";
 import { syncProfileCard } from "./profile-card-sync";
+import { syncAppVersion } from "./app-version-sync";
 import { NOT_DEPLOYED as LIMITS_NOT_DEPLOYED, syncLimits } from "./limit-board-sync";
 import { safeClient, signedIn } from "./signed-in-client";
 
@@ -85,7 +86,7 @@ export async function tierView(tier: number, { client = safeClient, entry = ownE
   }
 }
 
-// Once per server (lib/copilot.ts prewarm), and the limit records, the public builder card and the changelog mirror ride the same timer. A failed post
+// Once per server (lib/copilot.ts prewarm), and the limit records, the public builder card, the changelog mirror and the app version ride the same timer. A failed post
 // just waits for the next one.
 export function startLeagueSync(deps: LeagueDeps = {}): () => void {
   const state = globalSingleton("__weftLeagueSync", () => ({ timers: [] as ReturnType<typeof setTimeout>[] }));
@@ -100,6 +101,7 @@ export function startLeagueSync(deps: LeagueDeps = {}): () => void {
     void syncProfileCard({ client: deps.client }).catch((err: unknown) => console.warn("[weft] profile card sync failed:", err));
     void syncBadgeFacts({ client: deps.client }).catch((err: unknown) => console.warn("[weft] badge facts sync failed:", err));
     void syncChangelog({ client: deps.client }).catch((err: unknown) => console.warn("[weft] changelog sync failed:", err));
+    void syncAppVersion({ client: deps.client }).catch((err: unknown) => console.warn("[weft] app version sync failed:", err));
   };
   const unwatch = watchChangelog({ client: deps.client });
   state.timers.push(setTimeout(tick, FIRST_SYNC_MS), setInterval(tick, SYNC_MS));
