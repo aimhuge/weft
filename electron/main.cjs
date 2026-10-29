@@ -38,6 +38,7 @@ const { argvLink } = require("./argv-link.cjs");
 const { createMenuPopup } = require("./main-menu-popup.cjs");
 const { createNewThreadLink } = require("./new-thread-link.cjs");
 const { createAccountClient } = require("./account-client.cjs");
+const { bootDeps } = require("./boot-deps.cjs");
 
 const APP_NAME = "Weft";
 const TAGLINE = "Engineering the future, one thread at a time";
@@ -144,6 +145,11 @@ async function boot() {
   await fixPath();
   if (app.isPackaged) appendToolchain(path.join(process.resourcesPath, "toolchain", "bin"));
   timer.mark("path");
+  // The app checks its own bundle, and installs the toolchain's trees after an update
+  // (electron/boot-deps.cjs): a bundle missing a package says so here, instead of dying on a
+  // require with a native dialog nothing can act on (docs/bug-fixes/047).
+  const deps = await bootDeps({ dataDir: dataDir(), log: console.log, warn: console.warn });
+  if (!deps.ok) return startup.fail(deps.error);
   await startup.show("Starting the board…");
   controlUrl ??= await pane.startControlServer();
   writeShellToken(dataDir(), TOKEN);

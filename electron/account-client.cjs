@@ -12,8 +12,19 @@
 //
 // CommonJS in electron/ because main can't import a .ts module, so SUPABASE_URL/SUPABASE_KEY are read from
 // the same environment variables lib/supabase-project.ts reads, with the same defaults.
-const { createClient } = require("@supabase/supabase-js");
 const { createAccountStore } = require("./account-store.cjs");
+
+// @supabase/supabase-js is required lazily, not at load: on 2026-10-28 a packaged app whose
+// build.files allow-list had dropped the package died here, before a window opened, with a native
+// "A JavaScript error occurred in the main process" dialog. A lazy require lets the app boot and
+// say what is missing (electron/runtime-deps.cjs checks it at startup). The require itself is
+// cached by Node, so this costs nothing after the first call.
+let makeClient = null;
+// The lazy loader: it returns supabase-js's createClient, and the client is made from it on first use.
+function loadCreateClient() {
+  if (!makeClient) makeClient = require("@supabase/supabase-js").createClient;
+  return makeClient;
+}
 
 const SUPABASE_URL = process.env.WEFT_SUPABASE_URL || "https://lqjyravglujyizyqypxq.supabase.co";
 const SUPABASE_KEY = process.env.WEFT_SUPABASE_KEY ?? "sb_publishable_DHNc-IYsRJSJkbN38qZNLQ_G59w6uVe";
@@ -58,7 +69,7 @@ function decodeClaims(accessToken) {
  * @param {{ dataDir: string, safeStorage: { isEncryptionAvailable: () => boolean, encryptString: (s: string) => Buffer, decryptString: (b: Buffer) => string } | (() => { isEncryptionAvailable: () => boolean, encryptString: (s: string) => Buffer, decryptString: (b: Buffer) => string }),
  *   url?: string, key?: string, createClient?: Function, fetch?: Function }} deps
  */
-function createAccountClient({ dataDir, safeStorage, url = SUPABASE_URL, key = SUPABASE_KEY, createClient: makeClient = createClient, fetch: fetchImpl }) {
+function createAccountClient({ dataDir, safeStorage, url = SUPABASE_URL, key = SUPABASE_KEY, createClient: clientFactory = (...args) => loadCreateClient()(...args), fetch: fetchImpl }) {
   // Electron's safeStorage only works once the app is ready, so main may hand over a getter (the shape
   // electron/account-store.cjs's accountRoutesFor takes) and the Keychain is asked for on first use.
   const keychain = typeof safeStorage === "function" ? safeStorage : () => safeStorage;
@@ -132,7 +143,7 @@ function createAccountClient({ dataDir, safeStorage, url = SUPABASE_URL, key = S
   }
 
   function build() {
-    return makeClient(url, key, {
+    return clientFactory(url, key, {
       auth: {
         flowType: "pkce",
         storage,

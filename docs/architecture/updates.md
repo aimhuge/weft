@@ -112,6 +112,21 @@ reaches the site without a deploy.
   Update window; its **Restart Now** button goes through the same `install()` as the menu, asking when threads run.
 - Squirrel only installs into a signed app. An unsigned build (or any Squirrel error) falls back to **Download Weft
   X…**, which opens the release page.
+- **What an update brings, and what it installs.** Squirrel replaces the whole `.app` bundle, so the new
+  bundle arrives with its code: `app.asar` (Electron main's packages, in the derived allow-list) and
+  `Resources/server` (the Next standalone bundle) are already installed by the update itself. The one
+  tree on disk that is installed *separately* from the bundle is `Resources/toolchain/puku` — puku-cli's
+  tree, which `scripts/bundle-toolchain.mjs` installs at build time from a caret range with no lockfile
+  and then prunes packages out of. So the app runs **`pnpm install`** against that tree after an update
+  (`electron/toolchain-install.cjs`), in the background: the board never waits for it. It knows an update
+  landed by the version changing since the last launch (`electron/updated-since.cjs`), so an ordinary
+  relaunch installs nothing and only checks the tree.
+  It is not run against the app's own packages: those live inside the asar, already installed, and a
+  `pnpm install` beside an asar would write a `node_modules` folder nothing reads.
+- **The app checks its own bundle at boot** (`electron/runtime-deps.cjs`): the packages Electron main
+  requires are resolved from inside the asar, and one that is present but won't load is caught by
+  requiring it. A bundle missing a package shows the splash's error state naming it, instead of the
+  native "A JavaScript error occurred in the main process" dialog of 2026-10-28.
 - The Weft menu always has the item, and the File menu repeats it under New Thread (the only place off a Mac), and in the app it opens the **Software Update** window (`electron/update-window.cjs`,
   `update.html`, `update.js`, `update-preload.cjs`; the About window's pattern): this Mac's version, the newest, the last
   check, the release notes and one button for the next step (Check Now, Download…, Restart to Update). Opening it while

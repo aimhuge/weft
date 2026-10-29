@@ -262,9 +262,32 @@ to move the folder, not Electron's bare EPERM (docs/bug-fixes/019-desktop-checko
 
 - `appId: app.weft.desktop`, `productName: Weft`, `output: dist`,
   `buildResources: build`.
-- `files: ["electron/**/*", "package.json", "!node_modules${/*}"]` — the Electron
+- `files: ["electron/**/*", "package.json", "!node_modules${/*}", …]` — the Electron
   app bundles only the shell + `package.json`. The Next server is shipped under
   `extraResources`.
+- **`!node_modules${/*}` drops the whole top-level `node_modules`**, so every package
+  Electron main requires at runtime has to be named explicitly after it, or the packaged
+  app dies on launch with "Cannot find module" before a window opens (2026-10-28: the shared
+  vault added `electron/account-client.cjs`, which requires `@supabase/supabase-js`; it was in
+  `package.json`'s dependencies and in the Next server's standalone bundle, but not on this
+  list, so every shipped build crashed on launch — docs/bug-fixes/047-packaged-app-could-not-find-the-supabase-client.md).
+- **The package list is derived, not hand-kept.** `scripts/electron-runtime-deps.mjs` computes the
+  closure of packages Electron main needs at runtime — the bare `require()`s out of `electron/*.cjs`,
+  then the runtime requires out of each package it finds, transitively — and `--write` puts the
+  result into `build.files`. `pnpm dist` runs it before electron-builder, so a new `require()`
+  ships with its package. Two details make the closure right: both the CommonJS and the ESM entry
+  are read (a package's `main` can vendor a dependency its `module` build imports — realtime-js's
+  `dist/main` vendors its own phoenix, its `dist/module` imports `@supabase/phoenix`), and only
+  packages Weft has installed count, so optional peers don't drag in React Native.
+  `electron/packaged-deps.test.ts` fails if `build.files` drifts from the closure.
+- **`scripts/verify-packaged-app.cjs` checks the built app.** It reads the archive itself — a
+  package counts as shipped only if `app.asar` holds it, never by resolving from the repo's
+  `node_modules`, which has everything and would hide a broken build — and then loads the
+  packaged `account-client.cjs` out of the archive and builds a Supabase client from it. `pnpm dist`
+  runs it at the end, so a build that would crash on launch fails the build instead.
+- **The toolchain ships pnpm and npm** under `Contents/Resources/toolchain` (see below), so a fresh
+  Mac with no Node can install a project's dependencies. `scripts/verify-packaged-toolchain.cjs`
+  checks the bundled pnpm runs, matches `packageManager` in `package.json`, and can install.
 - `extraResources` copies `.next-dist/standalone` to `server/` and, separately,
   `.next-dist/standalone/node_modules` to `server/node_modules`, because electron-builder
   drops the top-level `node_modules` of a copied folder.
@@ -274,6 +297,48 @@ to move the folder, not Electron's bare EPERM (docs/bug-fixes/019-desktop-checko
   `NSAppleEventsUsageDescription: "Weft opens Terminal to run a command-line
   tool's login when it needs a real terminal."` (used by the AppleScript in
   `lib/login.ts`).
+
+### The app checks its own bundle (`electron/runtime-deps.cjs`)
+
+The derivation and the build-time verification catch a missing package before it ships. They can't
+catch a bundle that arrives broken another way — an interrupted install, a half-copied update — so
+the app checks itself at boot, before anything needs the packages.
+
+`checkRuntimeDeps()` resolves each package Electron main requires, from Electron main's own
+directory: inside `app.asar` that means the package is in the archive. A package that resolves but
+won't load (a pruned native build) is caught too, by requiring it. When something is missing, the
+app shows the splash's error state with the package named and "Reinstall Weft to repair it", instead
+of dying on a require with a native "A JavaScript error occurred in the main process" dialog.
+
+The require itself is **lazy** for the same reason: `electron/account-client.cjs` requires
+`@supabase/supabase-js` when the client is first built, not when the module loads, so a bundle
+missing it still opens a window and can say so.
+
+### The toolchain's trees are installed after an update (`electron/toolchain-install.cjs`)
+
+What an auto-update brings down (Squirrel.Mac replaces the whole `.app` bundle):
+
+| Tree | How it ships | Needs an install? |
+| --- | --- | --- |
+| `app.asar` | Electron main's packages, in the derived allow-list | No — already installed |
+| `Resources/server` | The Next standalone bundle | No — already installed |
+| `Resources/toolchain/pnpm` | A self-contained pnpm | No |
+| `Resources/toolchain/npm` | npm plus its own `node_modules` | No |
+| `Resources/toolchain/puku` | puku-cli's tree, installed at build time | **Yes** |
+
+The puku tree is the one gap: `scripts/bundle-toolchain.mjs` installs it from a caret range with no
+lockfile, then prunes packages out of it (telemetry, other platforms' native builds). A build that
+pruned too much leaves a tree that looks installed and isn't.
+
+So after an update, the app runs `pnpm install` against that tree. **Not** against the app's own
+packages: those are inside the asar, already installed, and a `pnpm install` next to an asar would
+write a `node_modules` folder the app never reads.
+
+The app knows an update landed by the version changing since the last launch
+(`electron/updated-since.cjs`: the version is written to `~/.weft/updated-version`, and a launch
+whose version differs had a new bundle). The install runs in the background — the board never waits
+for it — and the version is recorded when it finishes. On an ordinary relaunch nothing is installed;
+the tree is only checked.
 
 **Folder access.** macOS (TCC) refuses `~/Downloads`, `~/Documents` and `~/Desktop` to a process that was never
 allowed, and every thread's tools run as children of Weft, so Weft's grant covers them. Weft never asks on launch:
