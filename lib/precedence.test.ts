@@ -10,6 +10,7 @@ const canSteer = vi.fn((s: Session | undefined) => Boolean(s));
 const waitPermission = vi.fn();
 const waitingOn = vi.fn(() => undefined as { id: string; title: string; claim: string } | undefined);
 const liveWaitTargets = vi.fn(() => [] as { id: string; holderId: string }[]);
+const wouldGridlock = vi.fn(() => false);
 const updateCard = vi.fn((id: string, patch: Partial<Card>) => cards.set(id, { ...cards.get(id)!, ...patch }));
 
 vi.mock("./store", () => ({ getCard: (id: string) => cards.get(id), updateCard }));
@@ -17,7 +18,7 @@ vi.mock("./runner-pending", () => ({ settle }));
 vi.mock("./runner-state", () => ({ sessions }));
 vi.mock("./runner-steer", () => ({ canSteer, steer }));
 vi.mock("./permission-wait", () => ({ waitPermission, waitingOn, liveWaitTargets }));
-vi.mock("./wait-chain", () => ({ wouldGridlock: vi.fn(() => false) }));
+vi.mock("./wait-chain", () => ({ wouldGridlock }));
 
 const { putFirst, putHolderFirst, yieldMessage } = await import("./precedence");
 
@@ -35,6 +36,9 @@ beforeEach(() => {
   cards.clear();
   sessions.clear();
   vi.clearAllMocks();
+  // The gridlock answer is per-test: clearAllMocks() keeps an implementation set by mockReturnValue.
+  wouldGridlock.mockReturnValue(false);
+  waitingOn.mockReturnValue(undefined);
 });
 
 describe("putFirst", () => {
@@ -105,6 +109,19 @@ describe("putHolderFirst", () => {
     putHolderFirst("a", "p1");
     expect(waitPermission).toHaveBeenCalledWith("a", "p1");
     expect(cards.get("a")?.yields).toEqual([]);
+  });
+
+  it("goes ahead instead of yielding when waiting on the holder would close a loop", () => {
+    cards.set("a", card("a"));
+    cards.set("b", card("b"));
+    sessions.set("a", { pending: [pending()] } as unknown as Session);
+    // The holder is already waiting on this card: waiting back would leave both stuck.
+    wouldGridlock.mockReturnValue(true);
+    putHolderFirst("a", "p1");
+    // The wait is refused, so the card goes ahead — and the file is not yielded to the holder.
+    expect(waitPermission).toHaveBeenCalledWith("a", "p1");
+    expect(cards.get("a")?.yields).toBeUndefined();
+    expect(settle).not.toHaveBeenCalled();
   });
 
   it("refuses a request that's gone or that no card holds", () => {

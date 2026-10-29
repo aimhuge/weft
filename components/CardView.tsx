@@ -253,7 +253,7 @@ function CardActions({ card, readOnly, onResume, onStar, onArchive, onStop }: { 
 // The Allow / Deny pair for a permission prompt. The card opens the thread on click; each button
 // stops the event so the click answers the prompt instead. An edit another card is holding offers
 // the order, not a refusal: the holder's face, Wait (the default, as in the thread's prompt), This first
-// (lib/precedence.ts), which goes ahead and has the holder leave the file to this card, and Other
+// (lib/precedence.ts), which goes ahead and has the holder leave the file to this card, and Others
 // first, which puts the holder ahead — this card leaves the file to it and waits. A card already
 // waiting (lib/permission-wait.ts) drops Wait; its last line already says who it waits for. Buttons
 // never wrap, so a narrow card stays one row.

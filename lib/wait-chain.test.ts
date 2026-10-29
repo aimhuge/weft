@@ -8,7 +8,16 @@ const targets = (pairs: [string, string][]) => waitTargets(pairs.map(([id, holde
 
 describe("waitTargets", () => {
   it("maps each waiting card to the holder it waits on", () => {
-    expect(targets([["a", "b"], ["c", "d"]])).toEqual(new Map([["a", "b"], ["c", "d"]]));
+    expect(targets([["a", "b"], ["c", "d"]])).toEqual(new Map([["a", ["b"]], ["c", ["d"]]]));
+  });
+
+  it("keeps every holder a card waits on, not just the first", () => {
+    // Two held requests, two holders: both edges matter, and a loop through the second is a loop.
+    expect(targets([["a", "b"], ["a", "c"]])).toEqual(new Map([["a", ["b", "c"]]]));
+  });
+
+  it("does not repeat a holder a card waits on twice", () => {
+    expect(targets([["a", "b"], ["a", "b"]])).toEqual(new Map([["a", ["b"]]]));
   });
 
   it("is empty when nothing waits", () => {
@@ -51,6 +60,13 @@ describe("wouldGridlock", () => {
 
   it("is true for a card waiting on itself", () => {
     expect(wouldGridlock(targets([]), "a", "a")).toBe(true);
+  });
+
+  it("sees a loop through a card's second wait, not only its first", () => {
+    // a waits on b and on c; c waits on a. Waiting on c would close the loop — and c is a's second
+    // wait, so a graph that kept only the first edge per card would miss it.
+    const t = targets([["a", "b"], ["a", "c"], ["c", "a"]]);
+    expect(wouldGridlock(t, "a", "c")).toBe(true);
   });
 
   it("is false when the chain leads somewhere else", () => {

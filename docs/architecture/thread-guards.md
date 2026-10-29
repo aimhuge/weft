@@ -233,7 +233,8 @@ into each other. Claims catch that at the moment it happens, instead of a standi
   (`checkWaits`). Once the holder lets go (no longer busy, archived or deleted, or its claim dropped because its change
   was committed), the held edit is denied with a message telling the thread to re-read the file and redo the edit on top
   of that change: the old_string it planned to replace may be gone, and a Write would clobber it. This first and Others
-  first still answer it while it waits. Waits live in memory; a restart ends the turn and them with it.
+  first still answer it while it waits. Waits live in memory; a restart ends the turn and them with it. A wait is
+  checked against the wait graph first (**No wait closes a loop** below), so **Wait** never starts a deadlock.
 - **Waiting by itself** (`askUser` in `lib/runner-ask.ts`, `startWaiting` in `lib/permission-wait.ts`): a clash prompt
   doesn't park the card in Needs you at all. The card is already editing code another card holds, so the answer is
   almost always "wait": the card goes straight to Running with the request marked `waiting`, and the watcher starts
@@ -266,14 +267,19 @@ into each other. Claims catch that at the moment it happens, instead of a standi
   who is in whose way reads at a glance without a new row. weft.zip's transport leaves `putFirst` out, like Wait.
 - **Others first** (`putHolderFirst` in `lib/precedence.ts`): the other way round — the card holding the code goes
   ahead, and this card waits for it. It posts `POST /api/cards/:id/permission { otherFirst, pendingId }`, and:
-  1. puts `{ to: holder.id, file }` on this card's `card.yields`, so the holder's edits there skip this card's claims
+  1. checks `wouldGridlock` against the live wait graph **before** it yields anything (see **No wait closes a loop**
+     below); a wait that would close a loop is refused, and the card goes ahead instead;
+  2. puts `{ to: holder.id, file }` on this card's `card.yields`, so the holder's edits there skip this card's claims
      (`findClash`), and this card's own later edits there clash and wait on the holder;
-  2. waits the held request (`waitPermission`), the same hold **Wait** uses, so it is released when the holder lets go.
+  3. waits the held request (`waitPermission`), the same hold **Wait** uses, so it is released when the holder lets go.
+
+  The wait can still be refused after the yield is written (the holder let go in between), so the yield only stays
+  when `waitingOn(cardId, pendingId)` says the request really is waiting on the holder; otherwise it is taken back
+  with `withoutYield`, so a refused wait leaves the file the other way round.
 
   On a clash the button is the order, not a refusal, so **Others first** replaces **Deny** there; **Deny** stays for
   prompts that aren't a clash (the card's permission mode, an outside folder, a classifier block), where refusing the
-  call is the question. A wait that would close a loop is refused: the card goes ahead instead, and the yield is
-  taken back when the wait didn't happen.
+  call is the question.
 - **No wait closes a loop** (`lib/wait-chain.ts`, `breakGridlock` in `lib/permission-wait.ts`): two cards can wait on
   each other — A holds f.ts, B holds g.ts, B's edit of f.ts waits for A and A's edit of g.ts waits for B. Neither is
   ever released: a wait only ends when its holder stops being busy (`releasedBecause`), and both stay busy forever.
@@ -281,14 +287,28 @@ into each other. Claims catch that at the moment it happens, instead of a standi
   re-point the yields.
 
   So a wait may only be taken on a holder that isn't already waiting on this card, directly or through other cards.
-  The wait graph is read from the live sessions (`liveWaitTargets`: each session's waiting request and the holder it
-  names), so a wait is checked against the chain as it stands at that moment. When the chain from the holder leads
-  back to this card, the loop would close, so the wait is refused and the card **goes ahead** instead: it takes the
-  whole-file claim, the holder leaves the file to it, and the holder is told mid-turn ("…waiting back would leave
-  you both stuck, so ‘X’ goes first…"). The holder was the one waiting on this card, so it is the one that can be
-  released — one of the two always keeps running. This is the same path **Others first** takes, so it applies to the
-  automatic wait too (`askUser` in `lib/runner-ask.ts` starts a wait by itself): the gridlock never needs the user
-  to notice it.
+  The wait graph is read from the live sessions (`liveWaitTargets`: every waiting request a session holds and the
+  holder it names — a card with two waiting requests holds two edges, and a loop through the second is a loop just
+  as much), so a wait is checked against the chain as it stands at that moment. When the chain from the
+  holder leads back to this card, the loop would close, so the wait is refused and the card **goes ahead** instead:
+  it takes the whole-file claim, the holder leaves the file to it, and the holder is told mid-turn ("…waiting back
+  would leave you both stuck, so ‘X’ goes first…"). The holder was the one waiting on this card, so it is the one
+  that can be released — one of the two always keeps running. This is the same path **Others first** takes, so it
+  applies to the automatic wait too (`askUser` in `lib/runner-ask.ts` starts a wait by itself): the gridlock never
+  needs the user to notice it.
+
+  Every wait goes through the check, including a request queued behind the one the card is showing
+  (`startQueuedWaiting` in `lib/permission-wait.ts`): that one leaves the card's own state alone, since the request
+  in front owns it, but it is still a wait and a loop is still a loop.
+
+  The graph itself is pure and lives in `lib/wait-chain.ts` (55 lines), so it can be tested without a board:
+  `waitTargets(waiting)` builds the **waiter → holders** `Map` (a card may wait on more than one); `waitsOn(targets,
+  from, to)` walks the chain from `from` and says whether it reaches `to`, with a `seen` set so a graph that
+  already loops ends the walk instead of hanging; `wouldGridlock(targets, cardId, holderId)` is the question that
+  matters — would this wait close a loop? (a card waiting on itself counts); `gridlockChain(targets, cardId,
+  holderId)` names the cards on the loop that would close — the chain the wait would run in, this card first and
+  the holder last. `lib/wait-chain.test.ts` covers the logic (16 tests); the board's own behaviour is in
+  `lib/permission-wait.test.ts`'s `describe("gridlock")` (5 tests).
 - **The blocking stamp** (`lib/waits-on.ts`, `components/BlockingMark.tsx`): a card that other cards are waiting
   on carries a "blocking N" chip, so the card that went first shows what it is holding up. The count comes from
   the same published card list the **You first** strip reads (`publishWaits`, fed from the board's card list in

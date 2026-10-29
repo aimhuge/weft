@@ -177,4 +177,42 @@ describe("gridlock", () => {
     expect(safeUpdate).toHaveBeenCalledWith("me", { column: "running", pending: { id: "p1", waiting: true }, lastLine: "Waiting for ‘Fix login’" });
     expect(settle).not.toHaveBeenCalled();
   });
+
+  it("sees a loop through a card's second wait, not only its first", () => {
+    cards.set("me", card({ id: "me", title: "Fix login" }));
+    cards.set("h", card({ id: "h", title: "Restyle", claims: [restyle.claim] }));
+    // Restyle waits on two cards: Mid first, and this card second. A graph that kept only the first
+    // wait per card would not see this card waiting on Restyle as a loop.
+    sessions.set("h", {
+      pending: [
+        pending("p2", { waiting: true, why: { category: "same-code", detail: "d", holder: { id: "mid", title: "Mid", claim: "/repo/c.ts#three" } } }),
+        pending("p3", { waiting: true, why: { category: "same-code", detail: "d", holder: { id: "me", title: "Fix login", claim: "/repo/a.ts#one" } } }),
+      ],
+    } as unknown as Session);
+    const mine = pending("p1", { why: { category: "same-code", detail: "d", holder: restyle } });
+    sessions.set("me", { pending: [mine] } as unknown as Session);
+
+    startWaiting("me", mine);
+
+    expect(mine.waiting).toBeUndefined();
+    expect(settle).toHaveBeenCalledWith("me", true, undefined, "p1");
+  });
+
+  it("refuses a loop-closing wait on a request queued behind the one the card is showing", () => {
+    cards.set("me", card({ id: "me", title: "Fix login" }));
+    cards.set("h", card({ id: "h", title: "Restyle", claims: [restyle.claim] }));
+    // The holder already waits on this card, so this card waiting back would close the loop.
+    sessions.set("h", { pending: [pending("p2", { waiting: true, why: { category: "same-code", detail: "d", holder: { id: "me", title: "Fix login", claim: "/repo/a.ts#one" } } })] } as unknown as Session);
+    // The queued request is behind another one on the card, so the card's own state is left alone.
+    const front = pending("p0");
+    const mine = pending("p1", { why: { category: "same-code", detail: "d", holder: restyle } });
+    sessions.set("me", { pending: [front, mine] } as unknown as Session);
+
+    waitPermission("me", "p1");
+
+    // Refused, the same way a request in front would be: the card goes ahead rather than waiting.
+    expect(mine.waiting).toBeUndefined();
+    expect(settle).toHaveBeenCalledWith("me", true, undefined, "p1");
+    expect(cards.get("me")?.claims).toContain("/repo/b.ts#*");
+  });
 });

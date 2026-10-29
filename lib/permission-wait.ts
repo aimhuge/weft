@@ -74,8 +74,21 @@ export function waitPermission(cardId: string, pendingId: string) {
   if (!p.why?.holder) throw new Error("Only an edit another card is holding can wait.");
   // Only the request the card is showing changes the card; one behind it waits in the queue.
   if (session.pending[0] === p) startWaiting(cardId, p);
-  else p.waiting = true;
+  else startQueuedWaiting(cardId, p);
   watchHolds();
+}
+
+// A request behind the one the card is showing: it waits too, but the card's own state belongs to the
+// request in front, so nothing is written to the card. The gridlock check still applies — a queued
+// request can wait on a holder that is waiting on this card, and that is the same deadlock.
+function startQueuedWaiting(cardId: string, p: Pending) {
+  const holder = p.why?.holder;
+  if (!holder) return;
+  if (wouldGridlock(liveWaitTargets(), cardId, holder.id)) {
+    breakGridlock(cardId, p, holder);
+    return;
+  }
+  p.waiting = true;
 }
 
 // Whether this request is waiting on a holder, and the holder it waits on. A request that a gridlock
@@ -88,12 +101,14 @@ export function waitingOn(cardId: string, pendingId: string): Holder | undefined
 
 // The wait graph, read from the live sessions: the card each waiting card waits on. The sessions are
 // the truth about who is waiting right now (lib/runner-ask.ts marks the request waiting as it asks),
-// so a wait is checked against the chain as it stands at that moment.
+// so a wait is checked against the chain as it stands at that moment. Every waiting request counts —
+// a card with two of them holds two edges, and a loop through the second is a loop just as much.
 export function liveWaitTargets() {
   const waiting: { id: string; holderId: string }[] = [];
   for (const [cardId, session] of sessions) {
-    const p = session.pending.find((x) => x.waiting && x.why?.holder);
-    if (p?.why?.holder) waiting.push({ id: cardId, holderId: p.why.holder.id });
+    for (const p of session.pending) {
+      if (p.waiting && p.why?.holder) waiting.push({ id: cardId, holderId: p.why.holder.id });
+    }
   }
   return waitTargets(waiting);
 }
