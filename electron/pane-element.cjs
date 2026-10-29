@@ -4,6 +4,7 @@
 // different ways, so the same selector was a miss in one and an error in the other (docs/architecture/agent-browser.md).
 
 const { parseRef } = require("./pane-ax.cjs");
+const { findExpression, invalidMessage } = require("./pane-selector.cjs");
 
 // Every remote object an operation makes is in this group, let go of when the route answers.
 const GROUP = "weft-agent";
@@ -13,9 +14,11 @@ const q = (value) => JSON.stringify(value);
 /**
  * The element a ref or a selector names, as a remote object the page functions run on.
  *
- * A ref is a number the snapshot gave the node; a selector is a CSS selector. Returns null when a selector
- * matches nothing on the page: the caller decides whether that is a miss to report or an error to throw.
- * A ref that isn't one, a selector that isn't valid CSS, and a ref whose node is gone are errors either way.
+ * A ref is a number the snapshot gave the node; a selector is a CSS selector, or one with Playwright's
+ * text pseudo-classes (:text-is("Settings…"), :has-text("Save")), which the page finds by reading text
+ * (electron/pane-selector.cjs). Returns null when a selector matches nothing on the page: the caller
+ * decides whether that is a miss to report or an error to throw. A ref that isn't one, a selector that
+ * isn't valid CSS, and a ref whose node is gone are errors either way.
  */
 async function resolveElement(cdp, wc, { ref, selector } = {}) {
   if (ref) {
@@ -30,8 +33,8 @@ async function resolveElement(cdp, wc, { ref, selector } = {}) {
   }
   const sel = String(selector ?? "").trim();
   if (!sel) throw new Error("Give a ref from snapshot, or a CSS selector.");
-  const { result, exceptionDetails } = await cdp.send(wc, "Runtime.evaluate", { expression: `document.querySelector(${q(sel)})`, objectGroup: GROUP });
-  if (exceptionDetails) throw new Error(`${sel} isn't a valid CSS selector.`);
+  const { result, exceptionDetails } = await cdp.send(wc, "Runtime.evaluate", { expression: findExpression(sel), objectGroup: GROUP });
+  if (exceptionDetails) throw new Error(invalidMessage(sel));
   if (!result.objectId) return null;
   return { objectId: result.objectId, label: sel };
 }

@@ -1,7 +1,8 @@
 import type { HookCallback, HookCallbackMatcher } from "@anthropic-ai/claude-agent-sdk";
 import fs from "node:fs";
 import path from "node:path";
-import { addClaims, claimKey, dropClaims } from "./claims";
+import { releaseOnWrite } from "./blocking";
+import { addClaims, claimKey, dropClaims, splitClaim } from "./claims";
 import { claimPreAnswer, claimPreHook, claimPostCard, forget, pendingEntry } from "./claim-hooks";
 import { editedPath } from "./overlap";
 import { listCards, updateCard } from "./store";
@@ -88,6 +89,9 @@ export function claimRecorder(cardId: () => string | undefined): HookCallback {
     const card = claimPostCard(cardId() ?? "");
     const next = card && addClaims(card.claims, entry.keys);
     if (card && next) updateCard(card.id, { claims: next });
+    // The write landed: the cards waiting on this one for this file can redo their edit on top of it
+    // now (lib/blocking.ts), instead of staying blocked until this card commits or its turn ends.
+    if (card) for (const key of entry.keys) releaseOnWrite(card.id, splitClaim(key).file);
     return Promise.resolve({});
   };
 }

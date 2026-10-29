@@ -27,7 +27,7 @@ export const secretGuard: HookCallback = (input) => {
 };
 
 export const SECRET_GUARD_MATCHER: HookCallbackMatcher = {
-  matcher: "Read|Edit|MultiEdit|NotebookRead|NotebookEdit|Grep|Bash|mcp__browser__open_url",
+  matcher: "Read|Edit|MultiEdit|Write|NotebookRead|NotebookEdit|Grep|Glob|LS|Bash|mcp__browser__open_url",
   hooks: [secretGuard],
 };
 

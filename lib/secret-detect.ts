@@ -18,13 +18,24 @@ const PATTERNS: [string, RegExp][] = [
   ["a Stripe secret key", /\b[sr]k_(live|test)_[0-9a-zA-Z]{16,}/],
   ["a Stripe webhook secret", /\bwhsec_[0-9a-zA-Z]{24,}/],
   ["a GitHub token", /\b(gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{40,})/],
+  ["a GitLab token", /\bglpat-[A-Za-z0-9_-]{20,}/],
   ["an Anthropic API key", /\bsk-ant-[A-Za-z0-9_-]{20,}/],
   ["an OpenAI API key", /\bsk-(proj-)?[A-Za-z0-9_-]{32,}/],
   ["an AWS access key", /\b(AKIA|ASIA)[0-9A-Z]{16}\b/],
   ["a Google API key", /\bAIza[0-9A-Za-z_-]{35}/],
   ["a Slack token", /\bxox[abposr]-[A-Za-z0-9-]{10,}/],
   ["a Resend API key", /\bre_[A-Za-z0-9]{8,}_[A-Za-z0-9_]{16,}/],
-  ["a token (JWT)", /\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/],
+  ["a SendGrid API key", /\bSG\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}/],
+  ["a Datadog API key", /\bdd_api_[A-Za-z0-9]{32,}/],
+  ["a Firebase token", /\bAAAA[A-Za-z0-9_-]{7,}:[A-Za-z0-9_-]{140,}/],
+  ["a Telegram bot token", /\b\d{6,10}:AA[A-Za-z0-9_-]{32,}/],
+  ["an npm token", /\bnpm_[A-Za-z0-9]{36}\b/],
+  // A 32-hex run on its own: an MD5-shaped API key. Bounded by lookarounds so it doesn't bite a
+  // chunk out of a longer hex hash (a SHA-256 is 64, a git SHA is 40).
+  ["a 32-character hex key", /(?<![0-9a-fA-F])[0-9a-fA-F]{32}(?![0-9a-fA-F])/],
+  // A JWT. The header is always eyJ (base64 of {"alg"), but the payload needn't be: a Supabase
+  // service-role key's claims start with a role, so the old two-eyJ rule missed it.
+  ["a token (JWT)", /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/],
   ["a database URL with a password", /\b(postgres(ql)?|mysql|mongodb(\+srv)?|rediss?|amqps?):\/\/[^:\s/@]+:[^@\s]{4,}@/],
 ];
 

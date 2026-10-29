@@ -202,6 +202,8 @@ describe("the api methods", () => {
     expect(bodyOf()).toEqual({ wait: true, pendingId: "p1" });
     await api.putFirst("c1", "p1");
     expect(bodyOf()).toEqual({ first: true, pendingId: "p1" });
+    await api.putHolderFirst("c1", "p1");
+    expect(bodyOf()).toEqual({ otherFirst: true, pendingId: "p1" });
   });
 
   it("answers a question without answers or a reply", async () => {

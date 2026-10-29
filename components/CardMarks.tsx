@@ -4,6 +4,7 @@ import { cardTags } from "@/lib/rail-view";
 import { runningBadge } from "@/lib/tasks-view";
 import { formatAt } from "@/lib/schedule";
 import type { Card, CardBreak } from "@/lib/types";
+import BlockingMark from "./BlockingMark";
 import TagPill from "./TagPill";
 import Tip from "./Tip";
 
@@ -14,10 +15,13 @@ import Tip from "./Tip";
 export default function CardMarks({ card, onTag, onDismissBreak }: { card: Card; onTag?: (tag: string) => void; onDismissBreak?: () => void }) {
   const { shown, more } = cardTags(card.tags);
   const tasks = runningBadge(card.tasks);
-  if (!hasMarks(card, shown.length > 0 || Boolean(tasks))) return null;
+  // The blocking count is live (lib/waits-on.ts), so the row can't be skipped before it is known:
+  // an empty span costs nothing, and the mark decides for itself.
+  if (!hasMarks(card, shown.length > 0 || Boolean(tasks))) return <BlockingMark cardId={card.id} />;
   return (
     <span className="flex min-w-0 items-center gap-1">
       {card.broke && <BrokeChip broke={card.broke} onDismiss={onDismissBreak} />}
+      <BlockingMark cardId={card.id} />
       <IsolatedMark card={card} />
       {tasks && (
         <Tip text={tasks.title}>

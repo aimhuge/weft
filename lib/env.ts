@@ -23,9 +23,16 @@ const NEXT_SERVER = /^(NODE_ENV|PORT|NEXT_RUNTIME|NEXT_DEPLOYMENT_ID)$|^(__NEXT_
 // that needs one gets it from the vault through mcp__secrets__run.
 const SECRET_NAME = /(^|_)(KEYS?|TOKENS?|SECRETS?|PASSWORD|PASSWD|PASSPHRASE|CREDENTIALS?|PRIVATE|PAT|DSN)(_|$)|(^|_)DATABASE_URL$/i;
 const CLI_SIGN_IN = /^(ANTHROPIC_|PUKU_)|^CODEX_API_KEY$/;
+// Loader hooks: variables that make a process load code before it runs its own. NODE_OPTIONS
+// (--require, --import) reaches every Node a thread starts; LD_PRELOAD and the DYLD_* family reach
+// every process at the native level. A value here is never a secret by shape, but it is a way to run
+// code in a thread's process — so it goes by name, whatever it holds (2026-10-28).
+// NODE_EXTRA_CA_CERTS stays: it names a certificate, it doesn't run anything.
+const LOADER = /^(NODE_OPTIONS|LD_PRELOAD|LD_AUDIT|LD_LIBRARY_PATH|DYLD_INSERT_LIBRARIES|DYLD_LIBRARY_PATH|DYLD_FRAMEWORK_PATH)$/;
 
 function isSecretVar(key: string, value: string | undefined): boolean {
   if (CLI_SIGN_IN.test(key)) return false;
+  if (LOADER.test(key)) return true;
   return SECRET_NAME.test(key) || (value !== undefined && findSecret(value) !== null);
 }
 

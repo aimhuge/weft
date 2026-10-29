@@ -244,6 +244,8 @@ export const api = {
   // Wait on a symbol-claim prompt: Weft answers it once the card holding that code lets go.
   waitPermission: (id: string, pendingId: string) => call("POST", `/api/cards/${id}/permission`, { wait: true, pendingId }),
   putFirst: (id: string, pendingId: string) => call("POST", `/api/cards/${id}/permission`, { first: true, pendingId }),
+  // Others first: the card holding the code goes ahead, and this card waits for it (lib/precedence.ts).
+  putHolderFirst: (id: string, pendingId: string) => call("POST", `/api/cards/${id}/permission`, { otherFirst: true, pendingId }),
   stop: (id: string) => call("POST", `/api/cards/${id}/stop`),
   // The task strip's Stop: ends one subagent or background command (lib/task-stop.ts).
   stopTask: (id: string, taskId: string) => call<{ ok: true }>("POST", `/api/cards/${id}/tasks/${encodeURIComponent(taskId)}/stop`),

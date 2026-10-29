@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { api } from "@/lib/client";
 import { gooseModelsFor } from "@/lib/goose-provider";
-import { useGooseChoice, useNamedModels } from "@/lib/use-named-models";
+import { loadNamedModels, useGooseChoice, useNamedModels } from "@/lib/use-named-models";
 
 // The names the user gave their Goose models, in Settings → Models → "Bring your own key".
 //
@@ -55,7 +55,12 @@ export default function GooseNamedModels() {
           .filter((r) => r.id && r.name),
       })
       .then(
-        () => setBusy(false),
+        () => {
+          setBusy(false);
+          // The model menus read the names from the board's store, so a save has to refresh it —
+          // otherwise the picker keeps the old names until the board reloads.
+          void loadNamedModels();
+        },
         (err: unknown) => {
           setBusy(false);
           setError(`Couldn’t save: ${err instanceof Error ? err.message : String(err)}`);

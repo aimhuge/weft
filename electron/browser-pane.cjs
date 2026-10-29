@@ -11,10 +11,13 @@ const { secretRunRoutes } = require("./secret-run.cjs");
 const { typeText } = require("./pane-actions.cjs");
 const { createPaneCdp } = require("./pane-cdp.cjs");
 const { createPaneInput, agentRoutes } = require("./pane-input.cjs");
+const { highlightExpression } = require("./pane-selector.cjs");
 const { controlHandler } = require("./control-server.cjs");
+const { cardFinder } = require("./card-token.cjs");
 const { failedUrl, watchLoadFailures } = require("./pane-error.cjs");
 const { escapeToReplay } = require("./pane-escape.cjs");
 const { authorizeThreadOpen, originOf, rememberBoardOrigin } = require("./pane-origins.cjs");
+const { BOARD, activeKey, paneVisibleFor, needsRestore, switchKey } = require("./pane-visibility.cjs");
 const { touchIdPrompt } = require("./touch-id.cjs");
 const { appsDir, attachWebContentsView, createAppReload } = require("./app-reload.cjs");
 
@@ -33,7 +36,6 @@ const PANE_PARTITION = "persist:threadboard-browser";
 function createBrowserPane({ getWindow, getAppView, token, onContents, pages, onLink, secrets, secretRun = () => undefined, routes: moreRoutes = {}, askUser }) {
   // One page per card (keyed by card id), so each review keeps its own browser; "board" is the
   // one shown with no card open. Only the active one is on screen.
-  const BOARD = "board";
   const views = new Map();
   // Origins the user has explicitly opened on each key, set by the board's IPC browser:open
   // (electron/main.cjs). A thread's control-server POST /browser/open can only navigate within
@@ -168,22 +170,33 @@ function createBrowserPane({ getWindow, getAppView, token, onContents, pages, on
     if (wc === views.get(active)?.webContents) sendState();
   }
 
-  function setVisible(next) {
+  function setVisible(next, key) {
+    // The key the pane is for, when the board knows it: the card being opened. The board asks for
+    // the pane and then activates the card, and without this the view would be made for the card
+    // that was active a moment ago — so the old card's page (or the board's own) flashed over the
+    // new one for a frame. Activating the key here makes the card and its pane switch together.
+    const nextKey = switchKey(key, active);
+    if (nextKey !== active) {
+      active = nextKey;
+      if (needsRestore(active, Boolean(views.get(active)?.webContents.getURL()))) restore(active);
+    }
     visible = next;
-    if (visible) ensure();
+    if (visible) ensure(active);
     layout();
     sendState();
   }
 
   // Shows a card's browser, or the board's own with no card open. A card and its browser go together:
-  // opening a card shows its page (if it has one), and closing the card hides the pane.
+  // opening a card shows the pane, whether it has a page yet or not, and closing the card hides it.
+  // The pane's own placeholder shows while the page loads, so the slot is never empty (and the user
+  // never has to reopen a pane they closed earlier).
   function setActive(key) {
     if (key === active) return;
-    active = key || BOARD;
-    visible = active !== BOARD && Boolean(views.get(active)?.webContents.getURL());
+    active = activeKey(key);
+    visible = paneVisibleFor(active);
     layout();
     sendState();
-    if (active !== BOARD && !visible) restore(active);
+    if (needsRestore(active, Boolean(views.get(active)?.webContents.getURL()))) restore(active);
   }
 
   // A card opened with a blank browser (after a restart) gets its last page back, or its last update page.
@@ -290,24 +303,14 @@ function createBrowserPane({ getWindow, getAppView, token, onContents, pages, on
   }
 
   // highlight, a CSS selector, scrolls that element into view and draws an orange box around it for the shot
-  // (for step-by-step instructions: "click here"), then takes the box away.
+  // (for step-by-step instructions: "click here"), then takes the box away. The selector may carry
+  // Playwright's text pseudo-classes, the same way the click tools' selector does (electron/pane-selector.cjs).
   async function screenshot(key = active, highlight) {
     const wc = requirePage(key);
     if (key === active && !visible) setVisible(true);
     let found;
     if (highlight) {
-      found = await wc.executeJavaScript(`(() => {
-        const el = document.querySelector(${JSON.stringify(String(highlight))});
-        if (!el) return false;
-        el.scrollIntoView({ block: "center" });
-        const r = el.getBoundingClientRect();
-        const box = document.createElement("div");
-        box.id = "__weft_highlight";
-        box.style.cssText = "position:fixed;z-index:2147483647;pointer-events:none;border:3px solid #e8542f;border-radius:8px;box-shadow:0 0 0 4px rgb(232 84 47/.25);" +
-          "left:" + (r.left - 6) + "px;top:" + (r.top - 6) + "px;width:" + (r.width + 6) + "px;height:" + (r.height + 6) + "px";
-        document.documentElement.appendChild(box);
-        return true;
-      })()`);
+      found = await wc.executeJavaScript(highlightExpression(String(highlight))).catch(() => false);
       // Let the scroll and the box paint before the capture.
       await new Promise((resolve) => setTimeout(resolve, 120));
     }
@@ -334,6 +337,12 @@ function createBrowserPane({ getWindow, getAppView, token, onContents, pages, on
 
   const paneSecrets = createPaneSecrets({ secrets, requirePage, typeText, cdp });
 
+  // Which card a request is for. The server signs the card id with the launch token; main checks
+  // the signature and believes only what it proves (electron/card-token.cjs). A request with no
+  // valid signature has no card, so it acts for nobody: a body that names a card can't borrow
+  // another card's grant, unlocks or audit line.
+  const cardFor = cardFinder(token);
+
   // Resolves to the control server's base URL.
   function startControlServer() {
     const routes = {
@@ -346,13 +355,15 @@ function createBrowserPane({ getWindow, getAppView, token, onContents, pages, on
       // click, type, keys, scroll, snapshot, console, network and the rest (electron/pane-input.cjs).
       ...agentRoutes({ input, cdp, page: (body) => ({ wc: requirePage(body.key), key: body.key ?? active }), redact: paneSecrets.redact }),
       "POST /secrets/list": (body) => paneSecrets.list(body.folder),
-      "POST /secrets/fill": (body) => paneSecrets.fill({ ...body, key: body.key ?? active }),
+      // The card is the signed one, never the body's key: a fill acts for the card the server proved.
+      "POST /secrets/fill": (body, route) => paneSecrets.fill({ ...body, key: cardFor(body, route) }),
       // Commands and dev servers with vault values in their env (electron/secret-run.cjs).
-      ...secretRunRoutes(secretRun, () => active),
+      ...secretRunRoutes(secretRun, cardFor),
       // A card's stored tool results, with every value it typed or ran with swapped for ‹NAME› (lib/secret-run.ts).
-      "POST /secrets/redact": (body) => {
-        const typed = paneSecrets.redact(body.key, body.text);
-        return { text: secretRun()?.redact(body.key, typed) ?? typed };
+      "POST /secrets/redact": (body, route) => {
+        const key = cardFor(body, route);
+        const typed = paneSecrets.redact(key, body.text);
+        return { text: secretRun()?.redact(key, typed) ?? typed };
       },
       // Other parts of main the server talks to, like the account session (electron/account-store.cjs).
       ...moreRoutes,

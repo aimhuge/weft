@@ -34,7 +34,12 @@ async function askAdd(vault, folder, name, environment) {
   return { added: true };
 }
 
-function vaultRoutes(getVault) {
+/**
+ * The control server's routes for the vault (electron/browser-pane.cjs).
+ * @param {() => any} getVault
+ * @param {(body: Record<string, unknown>, route: string) => string} [cardFor] which card a request is for, proven
+ */
+function vaultRoutes(getVault, cardFor = () => "") {
   const vault = () => {
     const v = getVault();
     if (!v) throw new Error("The secrets vault isn't ready yet.");
@@ -51,8 +56,16 @@ function vaultRoutes(getVault) {
     "POST /secrets/ask-add": ({ folder, name, environment }) => askAdd(getVault(), String(folder), String(name), env(environment)),
     // A thread asking for standing access to the vault (mcp__secrets__request_access, electron/vault-grants.cjs):
     // the user's Touch ID names the card and its reason, and the card is asked nothing more for an hour.
-    "POST /secrets/request-access": ({ key, folder, thread, why }) =>
-      vault().grant(String(folder), { card: String(key || ""), thread: thread ? String(thread).slice(0, 120) : undefined, why: why ? String(why).slice(0, 200) : undefined, by: "thread" }),
+    // A site, when the thread names one, is part of the grant's scope: a value may then be typed into
+    // that page without asking again, and nowhere else (2026-10-28).
+    "POST /secrets/request-access": (body, route) =>
+      vault().grant(String(body.folder), {
+        card: String(cardFor(body, route) || ""),
+        thread: body.thread ? String(body.thread).slice(0, 120) : undefined,
+        why: body.why ? String(body.why).slice(0, 200) : undefined,
+        site: body.site ? String(body.site).slice(0, 200) : undefined,
+        by: "thread",
+      }),
     // The audit log's lines not uploaded yet, and the cursor after an upload (lib/keychain-audit-sync.ts). Names and
     // events only: the log never holds a value.
     "POST /secrets/audit-outbox": ({ limit }) => ({ entries: auditOutbox(Number(limit) || undefined) }),

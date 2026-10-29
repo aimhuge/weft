@@ -35,7 +35,9 @@ function controlHandler({ token, routes }) {
     const handler = Object.hasOwn(routes, key) ? routes[key] : undefined;
     if (!handler) return send(404, { error: "Not found" });
     try {
-      send(200, await handler(req.method === "POST" ? await readJson(req) : {}));
+      // The route is part of what a handler sees: a request's card signature covers the route, so
+      // one route's signature can't be replayed on another (electron/card-token.cjs).
+      send(200, await handler(req.method === "POST" ? await readJson(req) : {}, req.url));
     } catch (err) {
       send(500, { error: err?.message || String(err) });
     }

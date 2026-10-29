@@ -20,6 +20,7 @@ const os = require("node:os");
 const path = require("node:path");
 const { registerAboutBridge } = require("./about.cjs");
 const { createBrowserPane } = require("./browser-pane.cjs");
+const { cardFinder } = require("./card-token.cjs");
 const { createMenus } = require("./menus.cjs");
 const { createPageLinks } = require("./page-links.cjs");
 const { createPanePages } = require("./pane-pages.cjs");
@@ -83,6 +84,8 @@ const pane = createBrowserPane({
     dataDir: dataDir(), app, dialog, shell, sendMenu,
     window: () => win, board: () => appView?.webContents, updater: () => menus.updater,
     vault: () => vault, vercelEnv: () => vercelEnv, vercelApi: () => vercelApi, supabaseApi: () => supabaseApi, blastcpApi: () => blastcpApi, gooseApi: () => gooseApi, slackApi: () => slackApi,
+    // Which card a vault request is for, proven by the server's signature (electron/card-token.cjs).
+    cardFor: cardFinder(TOKEN),
   }),
 });
 // A walk-through page's buttons: replies, and commits that run with no turn.
@@ -358,7 +361,7 @@ ipcMain.handle("browser:open", (e, url, key) => e.sender && e.sender === appView
   ? pane.open(url, key || undefined, true, { fromBoard: true }).catch((err) => ({ error: String(err.message || err) }))
   : { error: "Browser pane only answers the board window." });
 ipcMain.handle("browser:state", () => pane.state());
-ipcMain.on("browser:visible", (_e, visible) => pane.setVisible(Boolean(visible)));
+ipcMain.on("browser:visible", (_e, visible, key) => pane.setVisible(Boolean(visible), key));
 ipcMain.on("browser:active", (_e, key) => pane.setActive(key));
 ipcMain.on("browser:prune", (_e, keys) => pane.prune(Array.isArray(keys) ? keys : []));
 // The board measures in its own CSS pixels; once it's zoomed (View > Zoom In/Out) those no longer

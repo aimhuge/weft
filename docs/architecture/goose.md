@@ -329,7 +329,21 @@ field, saved as one setting (`gooseNamedModels`, validated in `app/api/settings/
 in Weft then shows "Big Opus" instead of the raw id, with the id beside the name so the row stays honest about
 what will run. The names are read by the board through `lib/use-named-models.ts`, which reads
 `/api/settings` rather than importing `lib/goose-models.ts` — that module reads the settings file off disk
-with `node:fs`, which a browser chunk can't hold.
+with `node:fs`, which a browser chunk can't hold. `lib/goose-models.ts` owns the setting and its validator;
+`lib/settings.ts` `gooseNamedModels()` is how the rest of the server reads it, and a save re-reads the names
+so the menus don't keep showing the old ones until the board reloads.
+
+**A name says "this runs on Goose."** The names are a *Goose* list — the only place one can be given is the
+Goose section of Settings — so a name outranks a shared list that names the same id. "puku-ai-2.8" is
+puku-cli's own id, but a user who named it in the Goose section is serving it through Goose, and the row has
+to say so: filed under puku-cli it would hand back a bare id, and the thread would start on puku-cli instead
+of Goose. So every named model is a Goose row, and its picker value carries the `goose:` prefix
+(`gooseRowValue()` in `lib/model-options.ts`).
+
+Two rows sit with it. The model the provider is configured to run is always one, named or not
+(`gooseNamed()` in `lib/model-options.ts`), whether or not a provider is set up — it is the model the user
+chose, so it is a row whether the menu can name its provider or not. And the provider's own served ids come
+along, listed by their id, because each provider serves ids of its own.
 
 The model and the endpoint are saved twice, in two places with two jobs. The board setting (`gooseModelId`,
 `gooseBaseUrl`) is what the Settings UI shows and edits. The copy in Electron main's key store is what the

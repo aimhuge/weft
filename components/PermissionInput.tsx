@@ -173,25 +173,29 @@ export default function PermissionInput({
 const PRIMARY = "rounded-md bg-accent px-3 py-1.5 text-[12.5px] font-medium text-on-accent hover:opacity-90 disabled:opacity-50";
 const SECONDARY = "rounded-md border border-line-strong bg-panel px-3 py-1.5 text-[12.5px] text-ink hover:bg-sunken disabled:opacity-50";
 
-// The prompt's buttons. An edit another card is holding offers Wait first (lib/permission-wait.ts): going
-// ahead can undo that card's uncommitted change. Going ahead is Me first (lib/precedence.ts): the edit goes and
-// the holder is told to leave the file to this thread, so the two don't tangle. Where the transport can't put a
-// card first (weft.zip), a plain Go ahead stands in.
+// The prompt's buttons. An edit another card is holding offers the order, not a refusal: Wait first
+// (lib/permission-wait.ts) holds this edit until the holder lets go, This first (lib/precedence.ts) goes
+// ahead and has the holder leave the file to this thread, and Others first puts the holder ahead —
+// this thread leaves the file to it and waits. Deny stays for prompts that aren't a clash, where
+// refusing the call is the question.
 export function PermissionActions({
   pending,
   answered,
   onAnswer,
   onWait,
   onFirst,
+  onOtherFirst,
   onGrant,
 }: {
   pending: PendingPermission;
   answered: boolean;
   onAnswer: (allow: boolean) => void;
-  // Wait on a symbol claim; left out where the thread's transport can't (weft.zip), so only Go ahead and Deny show.
+  // Wait on a symbol claim; left out where the thread's transport can't (weft.zip), so only the order shows.
   onWait?: () => void;
-  // Me first on a symbol claim; left out where the transport can't (weft.zip), like Wait.
+  // This first on a symbol claim; left out where the transport can't (weft.zip), like Wait.
   onFirst?: () => void;
+  // Others first: the holder of the code goes ahead and this thread waits for it.
+  onOtherFirst?: () => void;
   // A folder outside the project (pending.readScope): allow it for this card or for every card, then answer yes.
   onGrant?: (scope: "card" | "always") => void;
 }) {
@@ -201,17 +205,24 @@ export function PermissionActions({
       Deny
     </button>
   );
-  // Me first, or a plain Go ahead where the transport has no Me first.
+  // This first, or a plain Go ahead where the transport has no This first.
   const ahead = (primary: boolean) =>
     onFirst ? (
       <button onClick={onFirst} disabled={answered} className={primary ? PRIMARY : SECONDARY} title={`Go ahead, and ‘${holder?.title}’ leaves this file to this thread until it commits or finishes`}>
-        Me first
+        This first
       </button>
     ) : (
       <button onClick={() => onAnswer(true)} disabled={answered} className={SECONDARY}>
         Go ahead
       </button>
     );
+  // Others first: the holder keeps the file and goes ahead; this thread waits for it. Where the transport
+  // can't say it (weft.zip), Wait is the same order the long way round.
+  const otherFirst = onOtherFirst ? (
+    <button onClick={onOtherFirst} disabled={answered} className={SECONDARY} title={`Let ‘${holder?.title}’ go first: it keeps this file, and this thread waits until it commits or finishes`}>
+      Others first
+    </button>
+  ) : null;
   if (holder && pending.waiting)
     return (
       <div className="mt-2 flex items-center gap-2">
@@ -221,7 +232,7 @@ export function PermissionActions({
         </span>
         <span className="ml-auto flex shrink-0 gap-2">
           {ahead(true)}
-          {deny}
+          {otherFirst ?? deny}
         </span>
       </div>
     );
@@ -254,14 +265,14 @@ export function PermissionActions({
     );
   if (holder)
     return (
-      <div className="mt-2 flex gap-2">
+      <div className="mt-2 flex flex-wrap gap-2">
         {onWait && (
           <button onClick={onWait} disabled={answered} className={PRIMARY} title={`Hold this edit until ‘${holder.title}’ finishes or commits, then redo it on top`}>
             Wait
           </button>
         )}
         {ahead(!onWait)}
-        {deny}
+        {otherFirst ?? deny}
       </div>
     );
   return (

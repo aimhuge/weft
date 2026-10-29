@@ -28,7 +28,7 @@ const ReplyBox = guarded(() => import("./ReplyBox"), { what: "reply box", classN
 // The request under the thread, with its answers unless the thread is read-only here. answer(allow) marks it answered;
 // an MCP server's form (lib/elicitation.ts) answers with its values too.
 export function PermissionRequest({ card, readOnly, answered, answer }: { card: Card; readOnly: boolean; answered: boolean; answer: (allow: boolean, answers?: Record<string, string>) => void }) {
-  const { grantFolder, waitPermission, putFirst } = useThreadTransport();
+  const { grantFolder, waitPermission, putFirst, putHolderFirst } = useThreadTransport();
   const pending = card.pending;
   if (!pending || pending.questions) return null;
 
@@ -60,6 +60,7 @@ export function PermissionRequest({ card, readOnly, answered, answer }: { card: 
             onAnswer={answer}
             onWait={waitPermission && (() => void waitPermission(card.id, pending.id).catch(() => {}))}
             onFirst={putFirst && (() => void putFirst(card.id, pending.id).catch(() => {}))}
+            onOtherFirst={putHolderFirst && (() => void putHolderFirst(card.id, pending.id).catch(() => {}))}
             onGrant={grantFolder && grant}
           />
         )}

@@ -17,8 +17,9 @@ const item = (text: string): ThreadItem => ({ kind: "assistant", text, at: 0 });
 // A hook with its own web-browser fallback, the board's pane setter.
 function makeHook() {
   const setWebBrowserOpen = vi.fn<(open: boolean) => void>();
-  const view = renderHook(() => useOpenCard({ setWebBrowserOpen }));
-  return { ...view, setWebBrowserOpen };
+  const openPane = vi.fn<() => void>();
+  const view = renderHook(() => useOpenCard({ setWebBrowserOpen, openPane }));
+  return { ...view, setWebBrowserOpen, openPane };
 }
 
 beforeEach(() => {
@@ -88,7 +89,7 @@ describe("useOpenCard", () => {
     expect(result.current.selectedRef.current).toBeNull();
   });
 
-  it("select toggles the pane only crossing between no card and a card", () => {
+  it("select shows the pane for every card, and hides it when the card closes", () => {
     const setVisible = vi.fn();
     (window as { weft?: unknown }).weft = { browser: { setVisible } };
     const { result } = makeHook();
@@ -96,15 +97,44 @@ describe("useOpenCard", () => {
 
     act(() => result.current.select("a"));
     expect(setVisible).toHaveBeenCalledTimes(1);
-    expect(setVisible).toHaveBeenCalledWith(true);
+    // The card's id goes with the ask, so the shell makes this card's view and not the one that
+    // happened to be active.
+    expect(setVisible).toHaveBeenCalledWith(true, "a");
 
-    // Another card, no crossing: the pane is already out.
+    // Another card: the pane is asked for again, so a pane closed earlier comes back.
     act(() => result.current.select("b"));
-    expect(setVisible).toHaveBeenCalledTimes(1);
+    expect(setVisible).toHaveBeenCalledTimes(2);
+    expect(setVisible).toHaveBeenLastCalledWith(true, "b");
 
     act(() => result.current.select(null));
-    expect(setVisible).toHaveBeenCalledTimes(2);
-    expect(setVisible).toHaveBeenLastCalledWith(false);
+    expect(setVisible).toHaveBeenCalledTimes(3);
+    expect(setVisible).toHaveBeenLastCalledWith(false, null);
+  });
+
+  it("select opens the pane's column for a card, and leaves it alone when the card closes", () => {
+    const { result, openPane } = makeHook();
+    mocks.thread.mockResolvedValue({ items: [] });
+
+    act(() => result.current.select("a"));
+    expect(openPane).toHaveBeenCalledTimes(1);
+
+    act(() => result.current.select("b"));
+    expect(openPane).toHaveBeenCalledTimes(2);
+
+    // Closing the card doesn't close the column: it is the card that goes, not the pane.
+    act(() => result.current.select(null));
+    expect(openPane).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps select's identity across renders, so the effects that depend on it don't re-run", () => {
+    // The board passes a useState setter and a fresh openPane arrow, so neither may change
+    // select's identity — the effects that depend on it would re-subscribe on every render.
+    const setWebBrowserOpen = vi.fn<(open: boolean) => void>();
+    const openPane = vi.fn<() => void>();
+    const { result, rerender } = renderHook(() => useOpenCard({ setWebBrowserOpen, openPane }));
+    const first = result.current.select;
+    rerender();
+    expect(result.current.select).toBe(first);
   });
 
   it("select falls back to setWebBrowserOpen without the desktop bridge", () => {

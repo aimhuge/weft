@@ -114,7 +114,7 @@ describe("answerNow / waitNow / firstNow", () => {
     expect(overlay(asking())?.pending?.id).toBe("p");
   });
 
-  it("Me first goes ahead now and calls putFirst", async () => {
+  it("This first goes ahead now and calls putFirst", async () => {
     await firstNow("a", "p");
     expect(api.putFirst).toHaveBeenCalledWith("a", "p");
     expect(applyIntents([asking()])[0]).toMatchObject({ pending: null, lastLine: "Allowed: Edit x.ts" });

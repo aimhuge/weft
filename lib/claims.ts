@@ -63,7 +63,7 @@ export interface Clash {
   first?: boolean;
 }
 
-// Whether `from` leaves this file to the card `to` (Me first, lib/precedence.ts).
+// Whether `from` leaves this file to the card `to` (This first, lib/precedence.ts).
 export const yieldsTo = (from: Card, to: string, file: string) => Boolean(from.yields?.some((y) => y.to === to && y.file === file));
 
 // The card's yields without the one to `to` on this file.

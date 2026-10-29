@@ -30,7 +30,9 @@ is over. A minimized or hidden window captures empty, which the tool reports as 
   can't read (`electron/shell-token.cjs`, `lib/secret-guard.ts`).
 - **Allowlist.** `electron/board-view.cjs` has exactly five operations (`OPERATIONS`). Each runs a fixed page script
   (`scripts`) with its selector passed through `JSON.stringify`, so a selector is always a string literal, never code.
-  There is no route that takes JavaScript.
+  There is no route that takes JavaScript. A selector may also carry Playwright's text pseudo-classes
+  (`:text-is("Settings…")`), which the same compiler the browser pane uses (`electron/pane-selector.cjs`) matches by
+  reading text.
 - **Secrets.** The vault's reveal and copy already need Touch ID in main (docs/architecture/secrets.md). On top:
   - Elements marked `data-secret` (a revealed value in `components/SecretRow.tsx`, the value field in
     `components/VaultParts.tsx`) read as `‹secret›`: reading one gives only that, and any text that contains a

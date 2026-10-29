@@ -100,7 +100,7 @@ describe("localTransport's actions", () => {
     expect(api.fresh).toHaveBeenCalledWith("c1", "go on");
   });
 
-  it("putFirst answers the pending prompt with Me first", async () => {
+  it("putFirst answers the pending prompt with This first", async () => {
     api.putFirst.mockResolvedValue({ ok: true });
     await localTransport.putFirst?.("c1", "p1");
     expect(api.putFirst).toHaveBeenCalledWith("c1", "p1");

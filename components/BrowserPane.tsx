@@ -6,7 +6,8 @@ import { clearOfCopilot, useCopilotCover } from "@/lib/copilot-float";
 import { setPaneBox } from "@/lib/float-place";
 import { appFor } from "@/lib/mini-apps";
 import { paneAddress } from "@/lib/app-share-types";
-import { useAnyOverlay } from "@/lib/overlay";
+import { useAnyOverlay, useMenuCover } from "@/lib/overlay";
+import { clearOfMenu } from "@/lib/pane-clear";
 import { useMiniApps } from "@/lib/use-mini-apps";
 import Icon, { Spinner } from "./Icon";
 import AppShareButton from "./AppShareButton";
@@ -43,6 +44,10 @@ export default function BrowserPane({
   const holder = useRef<HTMLDivElement>(null);
   const [resizing, setResizing] = useState(false);
   const overlay = useAnyOverlay();
+  // A full-window overlay (a dialog, an image opened full size) covers the page, so the page goes.
+  // A local menu (this pane's zoom menu, a card's mode picker) covers a small rectangle: the page
+  // stays and steps aside around the menu, which is drawn above the page and would otherwise hide it.
+  const menu = useMenuCover();
   const hide = obscured || overlay || resizing;
   // The copilot floats over everything, but nothing in the page can cover the native view, so the view
   // keeps clear of the launcher and steps aside under the peek or the chat (measured on the placeholder,
@@ -57,7 +62,10 @@ export default function BrowserPane({
     if (!bridge || !el) return;
     const report = () => {
       const r = el.getBoundingClientRect();
-      const clear = hide ? null : clearOfCopilot({ x: r.left, y: r.top, width: r.width, height: r.height }, copilot);
+      const full = { x: r.left, y: r.top, width: r.width, height: r.height };
+      // The page gives way to a full-window overlay and to the copilot's floating panels, and it
+      // steps around an open menu rather than disappearing under it.
+      const clear = hide ? null : clearOfCopilot(clearOfMenu(full, menu) ?? HIDDEN, copilot);
       const box = clear ?? HIDDEN;
       bridge.browser.setBounds(box);
       // Hover bubbles keep clear of the native view; they read this rather than asking the shell.
@@ -73,7 +81,7 @@ export default function BrowserPane({
       bridge.browser.setBounds(HIDDEN);
       setPaneBox(null);
     };
-  }, [hide, expanded, copilot]);
+  }, [hide, expanded, copilot, menu]);
 
   // The native view swallows pointer events, so it's hidden while dragging the divider.
   // The standalone pane sits left of the board (components/StandaloneBrowserPane.tsx), so its divider is its right edge.

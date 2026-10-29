@@ -64,6 +64,9 @@ export function gooseRowValue(id: string): string {
  * The Goose models a menu lists first: the ones the user named (Settings → Models → Bring your own
  * key), then the model Goose is configured to run, when it has no name — it shows by its id, so the
  * user can always pick the model their key serves.
+ *
+ * The configured model is added whether or not a provider is set up: it is the model the user
+ * chose, so it is a row whether the menu can name its provider or not.
  */
 export function gooseNamed(named: NamedModel[], configured = ""): NamedModel[] {
   const id = configured.trim();

@@ -114,10 +114,23 @@ A native `WebContentsView` overlaid on the board. Lazily created on first
 - `state()` returns `{ visible, url, title, loading, canGoBack, canGoForward }`.
 - `setBounds(rect)` clamps to non-negative integers; `layout()` only shows the
   view once a page has loaded.
+- The view is a native sibling of the board's `WebContentsView`, so no DOM `z-index` can put a
+  board menu over a page. The board keeps the page out of the way instead: a full-window overlay
+  (a dialog, an image opened full size) hides it, while a local menu (the zoom menu, a card's mode
+  picker) only makes the page step around the rectangle the menu covers (`lib/overlay.ts`,
+  `lib/pane-clear.ts`).
 - `setWindowOpenHandler` denies pop-ups and reopens them inside the same view. Links the
   board and the copilot window try to open in new windows are sent to this pane too.
 - A focused page swallows keys the board never sees, so `before-input-event` replays a plain Escape
-  into the board (which closes its newest layer via `useEscape`). Fullscreen pages keep it.
+  into the board (which closes its newest layer via `useEscape`). Fullscreen pages keep it, and a
+  modified Escape (Shift/Ctrl/Alt/⌘) is left to the page. The rule itself is
+  `electron/pane-escape.cjs` (`escapeToReplay(input, { fullscreen })`), with a test beside it
+  (`electron/pane-escape.test.ts`). Escape types nothing, so Chromium reports it as a `rawKeyDown`
+  rather than a `keyDown`; the rule takes both, or the board never hears the key at all
+  (docs/bug-fixes/044-escape-from-a-focused-page-in-the-browser-pane-never-reached-the-board.md).
+  With nothing open in the board, the replayed Escape flips between board and list view
+  (`lib/use-escape-view.ts`), and the board pops a toast naming the view it landed in
+  (`components/ViewHint.tsx`).
 - A page load takes keyboard focus, so `open()` gives it back to the board when the board had it, and
   `layout()` hands focus to the board when it hides a view that holds it. Otherwise no key (Escape
   included) reaches the board. `useEscape(..., { panel: true })` marks board panels (thread, browser,

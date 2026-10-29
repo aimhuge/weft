@@ -6,12 +6,12 @@ import { trackOnboarding } from "@/lib/telemetry-client";
 import type { Backend, CliStatus } from "@/lib/types";
 import { useAccount } from "@/lib/use-account";
 import { agentReady, cliMissing, trialState, type CliStatuses, type TrialState } from "@/lib/welcome-trial";
-import Icon, { Spinner } from "./Icon";
+import { Spinner } from "./Icon";
 import { WelcomeLoop } from "./WelcomeLoop";
 
 // The welcome's first screen (components/WelcomeDialog.tsx draws the frame and the buttons): what Weft is, as a live
 // loop of a card crossing the board with your own project names on it (components/WelcomeLoop.tsx), and whether an agent CLI is ready to run a thread, with Log in right there.
-// With no agent logged in, puku-cli's row offers Weft's free Puku trial behind a GitHub sign-in (lib/welcome-trial.ts).
+// The welcome doesn't push the Puku trial on a new user: it surfaces later, where a thread needs it (lib/welcome-trial.ts).
 
 export const CLIS: { id: Backend; label: string; note: string }[] = [
   { id: "claude", label: "Claude Code", note: "Anthropic's coding agent" },
@@ -55,35 +55,13 @@ export function useAgents(poll = true) {
 
 // One CLI's readiness: the dot's color, the line beside the label, and whether a Log in button belongs there.
 // Pulled out of CliRow so the row itself only draws; this is where the three-way branch lives.
-// The note after "Not logged in": what the CLI is, or for puku-cli with the trial on offer, how to try it free.
-const cliNote = (cli: (typeof CLIS)[number], trial: TrialState) => (cli.id === "puku" && trial === "offer" ? "try it free with your Weft account" : cli.note);
-
+// The note after "Not logged in": what the CLI is.
 function cliState(cli: (typeof CLIS)[number], status: CliStatus | undefined, trial: TrialState) {
   if (cli.id === "puku" && trial === "on") return { dot: "bg-ok", line: "Ready · free trial on your Weft account", canLogIn: false };
   const missing = cliMissing(status);
   const dot = !status ? "bg-faint" : status.loggedIn ? "bg-ok" : missing ? "bg-line-strong" : "bg-warn";
   const line = !status ? "Checking…" : status.loggedIn ? (status.email ? `Ready · ${status.email}` : "Ready") : missing ? "Not installed" : "Not logged in";
-  return { dot, line: status?.loggedIn ? line : `${line} · ${cliNote(cli, trial)}`, canLogIn: Boolean(status && !status.loggedIn && !missing) };
-}
-
-// puku-cli's "Try free": signs you in to Weft with GitHub, and the row turns Ready once you're back (the account event).
-function TryFree() {
-  const { busy, waiting, error, signIn } = useAccount();
-  return (
-    <button
-      type="button"
-      onClick={() => {
-        trackOnboarding("onboarding_cli_login", { backend: "puku" });
-        void signIn("github");
-      }}
-      disabled={busy !== null || waiting !== null}
-      title={error ?? "Sign in to Weft with GitHub to run puku-cli on Weft's free Puku trial"}
-      className="flex shrink-0 items-center gap-1 rounded-md bg-accent px-2 py-0.5 text-[12px] font-medium text-on-accent hover:opacity-90 disabled:opacity-50"
-    >
-      {waiting ? <Spinner size={10} /> : <Icon name="github" size={12} />}
-      {waiting ? "Signing in…" : "Try free"}
-    </button>
-  );
+  return { dot, line: status?.loggedIn ? line : `${line} · ${cli.note}`, canLogIn: Boolean(status && !status.loggedIn && !missing) };
 }
 
 type CliRowProps = { cli: (typeof CLIS)[number]; status: CliStatus | undefined; trial: TrialState; onLogin: () => void; starting: boolean };
@@ -95,7 +73,6 @@ function CliRow({ cli, status, trial, onLogin, starting }: CliRowProps) {
       <span className={`size-2 shrink-0 rounded-full ${dot}`} aria-hidden />
       <span className="w-[92px] shrink-0 font-medium text-ink">{cli.label}</span>
       <span className="min-w-0 flex-1 truncate text-muted">{line}</span>
-      {cli.id === "puku" && trial === "offer" && <TryFree />}
       {canLogIn && (
         <button type="button" onClick={onLogin} disabled={starting} className="flex shrink-0 items-center gap-1 rounded-md border border-line-strong px-2 py-0.5 text-[12px] text-ink hover:bg-sunken disabled:opacity-50">
           {starting && <Spinner size={10} />}
@@ -120,7 +97,7 @@ export function ReadyStep({ status, trial = "none", projects = [] }: { status: C
       .finally(() => setStarting(null));
   };
   const ready = agentReady(status, trial);
-  const ask = trial === "offer" ? "Log in to one, or try Puku free" : "Log in to one to start";
+  const ask = "Log in to one to start";
   return (
     <div className="flex flex-col gap-3">
       <div>

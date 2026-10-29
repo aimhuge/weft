@@ -1,5 +1,6 @@
 import { publish } from "./bus";
 import { GOOSE_PROVIDERS } from "./goose-provider";
+import { namedModels } from "./goose-models";
 import { DEFAULT_LANDING, workflowOf } from "./issue-landing";
 import { MODES, type Automation, type Backend, type PermissionMode, type Project, type SettingsView } from "./types";
 import type { IssueWorkflow } from "./types-settings";
@@ -181,25 +182,11 @@ export function setGooseBaseUrl(url: string) {
 }
 
 // The models the user gave a name to, so a model menu shows a name instead of a raw id
-// (lib/goose-models.ts). The board's model picker reads them from the settings view rather than
-// importing lib/goose-models.ts, which reads the settings file off disk and so can't run in the
-// browser.
+// (lib/goose-models.ts owns the setting and its validator). The board's model picker reads them
+// from the settings view rather than importing lib/goose-models.ts, which reads the settings file
+// off disk and so can't run in the browser.
 export function gooseNamedModels(): { id: string; name: string }[] {
-  return readSetting("gooseNamedModels", isNamedModels, []);
-}
-
-// Whether a value is a list of named models: a list of pairs, each with a non-empty id and name.
-function isNamedModels(value: unknown): value is { id: string; name: string }[] {
-  return (
-    Array.isArray(value) &&
-    value.every(
-      (m) =>
-        typeof m === "object" &&
-        m !== null &&
-        typeof (m as { id?: unknown }).id === "string" &&
-        typeof (m as { name?: unknown }).name === "string",
-    )
-  );
+  return namedModels();
 }
 
 export function dismissedSessions(): string[] {

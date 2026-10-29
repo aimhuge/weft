@@ -108,7 +108,7 @@ describe("findClash", () => {
   });
 });
 
-describe("Me first yields", () => {
+describe("This first yields", () => {
   it("skips a card's claims on a file it yields to this card", () => {
     const me = card();
     const other = card({ claims: ["/repo/a.ts#f", "/repo/b.ts#g"], yields: [{ to: me.id, file: "/repo/a.ts" }] });

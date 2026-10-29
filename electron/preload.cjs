@@ -18,7 +18,7 @@ contextBridge.exposeInMainWorld("weft", {
     setActive: (key) => ipcRenderer.send("browser:active", key),
     prune: (keys) => ipcRenderer.send("browser:prune", keys),
     getState: () => ipcRenderer.invoke("browser:state"),
-    setVisible: (visible) => ipcRenderer.send("browser:visible", visible),
+    setVisible: (visible, key) => ipcRenderer.send("browser:visible", visible, key),
     setBounds: (rect) => ipcRenderer.send("browser:bounds", rect),
     back: () => ipcRenderer.send("browser:back"),
     forward: () => ipcRenderer.send("browser:forward"),

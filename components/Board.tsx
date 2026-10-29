@@ -94,11 +94,14 @@ export default function Board() {
   const [railFilter, setRailFilter] = useState<RailFilter>({});
   const [dragOver, setDragOver] = useState<Column | null>(null);
   const [webBrowserOpen, setWebBrowserOpen] = useState(false);
+  // The four-column workspace for an open card: open/close state, widths, and the divider drag.
+  // Declared before the hooks below that need it (lib/workspace-layout.ts has the rest).
+  const workspace = useWorkspaceLayout();
   // Which card is open, its thread and streaming text, the last one opened, Rename…, unseen moves (lib/use-open-card.ts).
   const {
     selectedId, setSelectedId, lastOpenId, thread, setThread, streaming, setStreaming,
     renameId, setRenameId, unseen, setUnseen, selectedRef, loadThread, select,
-  } = useOpenCard({ setWebBrowserOpen });
+  } = useOpenCard({ setWebBrowserOpen, openPane: () => workspace.setOpen("pane", true) });
   const [browserWidth, setBrowserWidth] = useState(560);
   const [terminalOpen, setTerminalOpen] = useState(false);
   const [terminalHeight, setTerminalHeight] = useState(240);
@@ -113,9 +116,6 @@ export default function Board() {
     showNew, setShowNew, setMenuOpen, showSettings, setShowSettings, sharingBoard, setSharingBoard,
     showHelp, setShowHelp, showPalette, setShowPalette, paletteQuery, setPaletteQuery, login, setLogin, overlay, boardKeys,
   } = useBoardDialogs();
-  // The four-column workspace for an open card: open/close state, widths, and the divider drag.
-  // Declared before the shortcuts below read workspace.toggle (lib/workspace-layout.ts has the rest).
-  const workspace = useWorkspaceLayout();
   // Columns showing all their cards, for the project and filter they were expanded under.
   const [expanded, setExpanded] = useState<{ view: string; columns: Column[] }>({ view: "", columns: [] });
   // Each card's last known column, to notice when one moves.

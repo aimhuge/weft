@@ -10,10 +10,14 @@ const settle = vi.fn((cardId: string, _allow: boolean, _a: unknown, pendingId: s
   return true;
 });
 const safeUpdate = vi.fn();
+const updateCard = vi.fn((id: string, patch: Partial<Card>) => cards.set(id, { ...cards.get(id)!, ...patch }));
+const steer = vi.fn();
+const canSteer = vi.fn(() => true);
 
-vi.mock("./store", () => ({ getCard: (id: string) => cards.get(id) }));
+vi.mock("./store", () => ({ getCard: (id: string) => cards.get(id), updateCard }));
 vi.mock("./runner-pending", () => ({ settle, pendingView: (p: Pending) => ({ id: p.id, waiting: p.waiting }) }));
 vi.mock("./runner-state", () => ({ sessions, safeUpdate }));
+vi.mock("./runner-steer", () => ({ steer, canSteer }));
 
 const { checkWaits, releasedBecause, startWaiting, waitOverMessage, waitPermission, WAIT_POLL_MS } = await import("./permission-wait");
 
@@ -37,6 +41,8 @@ beforeEach(() => {
   sessions.clear();
   settle.mockClear();
   safeUpdate.mockClear();
+  updateCard.mockClear();
+  steer.mockClear();
   checkWaits();
 });
 afterEach(() => vi.useRealTimers());
@@ -112,5 +118,63 @@ describe("startWaiting", () => {
     startWaiting("me", p);
     expect(p.waiting).toBeUndefined();
     expect(safeUpdate).not.toHaveBeenCalled();
+  });
+});
+
+// Two cards waiting on each other is gridlock: neither is ever released, and no button on the card
+// can break it. A wait that would close the loop is refused, and the card goes ahead instead, so the
+// holder — which is the one waiting on it — is the one that can be released.
+describe("gridlock", () => {
+  const restyle = { id: "h", title: "Restyle", claim: "/repo/b.ts#two" };
+
+  it("refuses a wait that would close a loop, and lets the card go ahead", () => {
+    cards.set("me", card({ id: "me", title: "Fix login" }));
+    cards.set("h", card({ id: "h", title: "Restyle", claims: [restyle.claim] }));
+    // The holder (Restyle) already waits on this card, so this card waiting back would close the loop.
+    sessions.set("h", { pending: [pending("p2", { waiting: true, why: { category: "same-code", detail: "d", holder: { id: "me", title: "Fix login", claim: "/repo/a.ts#one" } } })] } as unknown as Session);
+    const mine = pending("p1", { why: { category: "same-code", detail: "d", holder: restyle } });
+    sessions.set("me", { pending: [mine] } as unknown as Session);
+
+    startWaiting("me", mine);
+
+    // Not waiting: the card goes ahead, so the holder waiting on it is released.
+    expect(mine.waiting).toBeUndefined();
+    expect(safeUpdate).not.toHaveBeenCalledWith("me", expect.objectContaining({ column: "running" }));
+    expect(settle).toHaveBeenCalledWith("me", true, undefined, "p1");
+    // It takes the whole file, and the holder leaves the file to it.
+    expect(cards.get("me")?.claims).toContain("/repo/b.ts#*");
+    expect(cards.get("h")?.yields).toEqual([{ to: "me", file: "/repo/b.ts" }]);
+    // The holder is told mid-turn that the other card goes first.
+    expect(steer).toHaveBeenCalledWith("h", expect.anything(), expect.stringContaining("goes first"));
+  });
+
+  it("refuses a wait on a card that waits on it through other cards", () => {
+    cards.set("me", card({ id: "me", title: "Fix login" }));
+    cards.set("h", card({ id: "h", title: "Restyle", claims: [restyle.claim] }));
+    // Restyle waits on Mid, Mid waits on this card: this card waiting on Restyle closes the loop.
+    sessions.set("h", { pending: [pending("p2", { waiting: true, why: { category: "same-code", detail: "d", holder: { id: "mid", title: "Mid", claim: "/repo/c.ts#three" } } })] } as unknown as Session);
+    sessions.set("mid", { pending: [pending("p3", { waiting: true, why: { category: "same-code", detail: "d", holder: { id: "me", title: "Fix login", claim: "/repo/a.ts#one" } } })] } as unknown as Session);
+    const mine = pending("p4", { why: { category: "same-code", detail: "d", holder: restyle } });
+    sessions.set("me", { pending: [mine] } as unknown as Session);
+
+    startWaiting("me", mine);
+
+    expect(mine.waiting).toBeUndefined();
+    expect(settle).toHaveBeenCalledWith("me", true, undefined, "p4");
+  });
+
+  it("lets a wait through when the holder isn't waiting on this card", () => {
+    cards.set("me", card({ id: "me", title: "Fix login" }));
+    cards.set("h", card());
+    // The holder waits on a third card, not on this one: no loop, so the wait is normal.
+    sessions.set("h", { pending: [pending("p2", { waiting: true, why: { category: "same-code", detail: "d", holder: { id: "x", title: "Other", claim: "/repo/c.ts#three" } } })] } as unknown as Session);
+    const mine = pending("p1");
+    sessions.set("me", { pending: [mine] } as unknown as Session);
+
+    startWaiting("me", mine);
+
+    expect(mine.waiting).toBe(true);
+    expect(safeUpdate).toHaveBeenCalledWith("me", { column: "running", pending: { id: "p1", waiting: true }, lastLine: "Waiting for ‘Fix login’" });
+    expect(settle).not.toHaveBeenCalled();
   });
 });

@@ -12,9 +12,9 @@ import { vaultRoutes as rawRoutes } from "./vault-routes.cjs";
 const requireCjs = createRequire(import.meta.url);
 const { audit, configureAudit, resetAudit } = requireCjs("./keychain-audit.cjs") as typeof import("./keychain-audit.cjs");
 
-type Route = (body: Record<string, unknown>) => Promise<unknown>;
-const vaultRoutes = (get: () => unknown) =>
-  rawRoutes(get) as unknown as {
+type Route = (body: Record<string, unknown>, route?: string) => Promise<unknown>;
+const vaultRoutes = (get: () => unknown, cardFor: (body: Record<string, unknown>, route: string) => string = () => "c1") =>
+  rawRoutes(get, cardFor) as unknown as {
     "POST /secrets/add-blank": Route;
     "POST /secrets/set": Route;
     "POST /secrets/ask-add": Route;
@@ -147,11 +147,21 @@ describe("vaultRoutes", () => {
 
   it("grants a thread standing access, naming the card and its reason", async () => {
     const { routes, folder, vault, prompt } = make();
-    const result = (await routes["POST /secrets/request-access"]({ key: "c1", folder, thread: "Build card", why: "Need to run migrations" })) as { granted?: boolean; label: string };
+    const result = (await routes["POST /secrets/request-access"]({ folder, thread: "Build card", why: "Need to run migrations" }, "/secrets/request-access")) as { granted?: boolean; label: string };
     expect(result).toMatchObject({ granted: true, label: "Owner/Repo" });
     expect(prompt).toHaveBeenCalledTimes(1);
     expect(prompt.mock.calls.flat().join("\n")).toContain("Build card");
     expect(vault.grantList()).toEqual([expect.objectContaining({ card: "c1", thread: "Build card", label: "Owner/Repo" })]);
+  });
+
+  // The card is the signed one, never the body's key: a body that names another card's id must not
+  // borrow that card's grant (2026-10-28).
+  it("grants the card the request proved, not the card it names", async () => {
+    const { vault, folder, prompt } = make();
+    const routes = vaultRoutes(() => vault, (_body, route) => (route === "/secrets/request-access" ? "proven" : ""));
+    await routes["POST /secrets/request-access"]({ key: "someone-else", folder, thread: "Build card", why: "w" }, "/secrets/request-access");
+    expect(vault.grantList()).toEqual([expect.objectContaining({ card: "proven" })]);
+    expect(prompt).toHaveBeenCalledTimes(1);
   });
 
   it("serves the audit outbox and marks it synced", async () => {

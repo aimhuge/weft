@@ -4,7 +4,7 @@ import { createElement } from "react";
 import { renderToString } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { Card } from "./types";
-import { publishWaits, useWaitersOn, waitersOf } from "./waits-on";
+import { publishWaits, useBlockingCount, useWaitersOn, waitersOf } from "./waits-on";
 
 function card(id: string, over: Partial<Card> = {}): Card {
   return { id, title: id, prompt: "", cwd: "/repo", backend: "claude", permissionMode: "default", column: "running", createdAt: 0, updatedAt: 0, ...over };
@@ -51,6 +51,27 @@ describe("useWaitersOn", () => {
     publishWaits([waiting("a", "h")]);
     const Probe = () => createElement("i", null, useWaitersOn("h").length);
     expect(renderToString(createElement(Probe))).toBe("<i>0</i>");
+    publishWaits([]);
+  });
+});
+
+describe("useBlockingCount", () => {
+  it("counts how many cards each holder is holding up", () => {
+    publishWaits([]);
+    const { result } = renderHook(() => useBlockingCount("h"));
+    expect(result.current).toBe(0);
+    act(() => publishWaits([waiting("a", "h"), waiting("b", "h")]));
+    expect(result.current).toBe(2);
+    act(() => publishWaits([waiting("a", "h")]));
+    expect(result.current).toBe(1);
+    act(() => publishWaits([]));
+    expect(result.current).toBe(0);
+  });
+
+  it("counts nothing for a card nobody waits on", () => {
+    publishWaits([waiting("a", "h")]);
+    const { result } = renderHook(() => useBlockingCount("z"));
+    expect(result.current).toBe(0);
     publishWaits([]);
   });
 });

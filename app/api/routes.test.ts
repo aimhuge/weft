@@ -46,7 +46,7 @@ vi.mock("@/lib/runner", () => ({
   retryAfterLogin: vi.fn(),
 }));
 
-vi.mock("@/lib/precedence", () => ({ putFirst: vi.fn() }));
+vi.mock("@/lib/precedence", () => ({ putFirst: vi.fn(), putHolderFirst: vi.fn() }));
 
 vi.mock("@/lib/settings", () => ({
   DEFAULT_THREAD_PROMPT: "You are a card on a board.",
@@ -603,15 +603,7 @@ describe("POST /cards/:id/permission", () => {
     expect(runner.answerPermission).toHaveBeenLastCalledWith("c1", false, undefined, undefined, undefined);
   });
 
-  it("puts a held edit first with first: true, and needs its pendingId", async () => {
-    const { putFirst } = await import("@/lib/precedence");
-    expect(await body(await answer("c1", { first: true, pendingId: "p1" }))).toEqual({ ok: true });
-    expect(putFirst).toHaveBeenCalledWith("c1", "p1");
-    expect(runner.answerPermission).not.toHaveBeenCalled();
-    const res = await answer("c1", { first: true });
-    expect(res.status).toBe(409);
-    expect((await body(res)).error).toMatch(/Me first needs/);
-  });
+  // The ordering choices ("This first", "Others first") are tested in app/api/permission-route.test.ts.
 
   it("409s when there's nothing to answer, or bad JSON", async () => {
     vi.mocked(runner.answerPermission).mockImplementationOnce(() => {

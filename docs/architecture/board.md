@@ -135,6 +135,23 @@ lives in its own component under `components/`.
   it, the terminal drawer.
 - `components/BoardDialogs.tsx` — every dialog, sheet and overlay the board stacks over its columns, each
   still loaded through `guarded()`.
+- `components/Modal.tsx` — the shell every dialog sits in, and where it draws. The shell portals into a
+  `div[data-weft-modal]` it creates on `document.body` (and removes on unmount), not into wherever it was
+  asked for. A dialog opened from the header — the leagues, from `components/LeagueBadge.tsx` — sits inside
+  `<header class="app-drag">`, and on macOS that header is the window's drag region
+  (`-webkit-app-region: drag`, `app/globals.css`), which is a stacking context: the header's whole subtree
+  is stacked as one unit, so the dialog's `fixed z-50` backdrop could only paint *inside* it, under the
+  board sheet and the rail drawer beside it. No z-index lifts a child out of an ancestor's stacking
+  context; only leaving it does. The portal's host is a div of its own rather than `document.body` itself:
+  React removes a portal's nodes when the tree that made them unmounts, and a body shared by several roots
+  makes that bookkeeping ambiguous — one dialog's unmount could take another's nodes with it.
+  The host is made in a lazy `useState` initializer, and React 19's StrictMode runs such an initializer
+  **twice** on the same mount while its double-mount also runs the effect cleanup between the two mounts.
+  Two hosts meant React portaled into one the cleanup had taken off the body, and a portal into a detached
+  node draws nothing: the dialog rendered but never painted, which is why Settings (a dialog) stayed shut.
+  The second call therefore claims the first call's host instead of making another (a `data-weft-modal-waiting`
+  marker, cleared in a microtask so a host nobody claimed is forgotten rather than adopted later), and the
+  mount effect puts the host back on the body if StrictMode's cleanup took it away.
 - `components/DeleteCardDialog.tsx` — the delete-card confirmation, Weft's own modal because a native
   confirm can't show a checkbox. It names the card, says a running turn stops and that the CLI
   transcript stays on disk, and carries a "Don't ask again" tick. Both delete paths use it: the trash
@@ -164,7 +181,8 @@ lives in its own component under `components/`.
   overlay their loads and redraw on `onOptimistic`), so its Stop, answers, rename and mode draw at once too. The
   web board is not covered.
   A permission prompt's answers are intents too: Allow and Deny (`answerNow`, from the card row and a thread's
-  plain Allow/Deny), Me first and You first (`firstNow`) and Wait (`waitNow`, through `localTransport`) draw
+  plain Allow/Deny), This first and You first (`firstNow`), Others first (`otherFirstNow`) and Wait (`waitNow`,
+  through `localTransport`) draw
   the card as the runner will leave it (prompt gone and Running, or waiting on the holder) until the server's
   card shows another request or none. A question or form with answers still waits, so a refused form stays filled.
   Card fields go through `patchNow`: star, tags (Tags… and a drop on the 🏷 drawer), archive and unarchive

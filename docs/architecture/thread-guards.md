@@ -227,23 +227,24 @@ into each other. Claims catch that at the moment it happens, instead of a standi
   before <tool>" (`modeWhy` in `lib/runner-ask.ts`, labels from `MODE_OPTIONS`). The explanation every clash shares
   (one working tree, going ahead can undo their uncommitted change) is the chip's tooltip, `REASONS` in the component.
 - **Wait** (`lib/permission-wait.ts`, `PermissionActions` in `components/PermissionInput.tsx`): a clash prompt's
-  buttons are **Wait** (first), **Me first** and **Deny** (a plain **Go ahead** stands in for Me first on weft.zip). Wait (`POST /api/cards/:id/permission { wait, pendingId }`)
+  buttons are **Wait** (first), **This first** and **Others first** (a plain **Go ahead** stands in for This first on weft.zip).
+  Wait (`POST /api/cards/:id/permission { wait, pendingId }`)
   keeps the edit held, marks it `waiting`, moves the card back to Running ("Waiting for ‘<holder>’") and polls every 3 s
   (`checkWaits`). Once the holder lets go (no longer busy, archived or deleted, or its claim dropped because its change
   was committed), the held edit is denied with a message telling the thread to re-read the file and redo the edit on top
-  of that change: the old_string it planned to replace may be gone, and a Write would clobber it. Me first and Deny
-  still answer it while it waits. Waits live in memory; a restart ends the turn and them with it.
+  of that change: the old_string it planned to replace may be gone, and a Write would clobber it. This first and Others
+  first still answer it while it waits. Waits live in memory; a restart ends the turn and them with it.
 - **Waiting by itself** (`askUser` in `lib/runner-ask.ts`, `startWaiting` in `lib/permission-wait.ts`): a clash prompt
   doesn't park the card in Needs you at all. The card is already editing code another card holds, so the answer is
   almost always "wait": the card goes straight to Running with the request marked `waiting`, and the watcher starts
-  with it. The buttons stay where they were — **Me first** and **Deny** in the thread's prompt and on the card —
+  with it. The buttons stay where they were — **This first** and **Others first** in the thread's prompt and on the card —
   so the wait can still be cut short. Every other prompt (the card's permission mode, an outside folder, a question)
   still parks in Needs you, because those really need the user; so does a thread whose own
   `BOARD STATUS: column=needs_you` asks for something. A waiting card reads as held, not as working: a lock instead
   of a spinner, and Needs you's amber border.
-- **Me first / You first** (`lib/precedence.ts`, `lib/yields.ts`, `lib/waits-on.ts`, `components/YouFirst.tsx`): the user
-  can put the held card ahead of the holder. **Me first** sits on the held card's prompt and on its card, beside Wait (and
-  alone with Deny while it waits). It replaced Go ahead: going ahead on code another card holds now always tells that
+- **This first / You first** (`lib/precedence.ts`, `lib/yields.ts`, `lib/waits-on.ts`, `components/YouFirst.tsx`): the user
+  can put the held card ahead of the holder. **This first** sits on the held card's prompt and on its card, beside Wait (and
+  alone with Others first while it waits). It replaced Go ahead: going ahead on code another card holds now always tells that
   card to leave the file, since an edit going in under a thread that doesn't know is what tangles two changes.
   **You first** is a one-line strip on the holder's thread, above its prompt, for each card waiting on it (`useWaitersOn`, fed from the board's card list in
   `lib/use-board-card-actions.ts`, so no props run through the thread components). Either posts
@@ -259,10 +260,48 @@ into each other. Claims catch that at the moment it happens, instead of a standi
 
   A yield lasts while the first card is busy and still claims the file (`yieldHolds`): its commit drops the claim and
   so the yield, and its turn ending does too. `pruneYields` runs in both claim guards before `findClash`, so a stale
-  yield never outlives that. Pressing Me first on the holder's own held prompt turns the order around the same way.
+  yield never outlives that. Pressing This first on the holder's own held prompt turns the order around the same way.
   The clash prompt shows both faces before its reason chip (`components/CardFace.tsx`: thumbnail, else emoji, else
   initial; `clashWhy` copies the holder's `emoji` and `thumb` onto `why.holder`), holder first, then this thread, so
   who is in whose way reads at a glance without a new row. weft.zip's transport leaves `putFirst` out, like Wait.
+- **Others first** (`putHolderFirst` in `lib/precedence.ts`): the other way round — the card holding the code goes
+  ahead, and this card waits for it. It posts `POST /api/cards/:id/permission { otherFirst, pendingId }`, and:
+  1. puts `{ to: holder.id, file }` on this card's `card.yields`, so the holder's edits there skip this card's claims
+     (`findClash`), and this card's own later edits there clash and wait on the holder;
+  2. waits the held request (`waitPermission`), the same hold **Wait** uses, so it is released when the holder lets go.
+
+  On a clash the button is the order, not a refusal, so **Others first** replaces **Deny** there; **Deny** stays for
+  prompts that aren't a clash (the card's permission mode, an outside folder, a classifier block), where refusing the
+  call is the question. A wait that would close a loop is refused: the card goes ahead instead, and the yield is
+  taken back when the wait didn't happen.
+- **No wait closes a loop** (`lib/wait-chain.ts`, `breakGridlock` in `lib/permission-wait.ts`): two cards can wait on
+  each other — A holds f.ts, B holds g.ts, B's edit of f.ts waits for A and A's edit of g.ts waits for B. Neither is
+  ever released: a wait only ends when its holder stops being busy (`releasedBecause`), and both stay busy forever.
+  That is gridlock, and no button can break it, because both cards are already waiting and the order buttons only
+  re-point the yields.
+
+  So a wait may only be taken on a holder that isn't already waiting on this card, directly or through other cards.
+  The wait graph is read from the live sessions (`liveWaitTargets`: each session's waiting request and the holder it
+  names), so a wait is checked against the chain as it stands at that moment. When the chain from the holder leads
+  back to this card, the loop would close, so the wait is refused and the card **goes ahead** instead: it takes the
+  whole-file claim, the holder leaves the file to it, and the holder is told mid-turn ("…waiting back would leave
+  you both stuck, so ‘X’ goes first…"). The holder was the one waiting on this card, so it is the one that can be
+  released — one of the two always keeps running. This is the same path **Others first** takes, so it applies to the
+  automatic wait too (`askUser` in `lib/runner-ask.ts` starts a wait by itself): the gridlock never needs the user
+  to notice it.
+- **The blocking stamp** (`lib/waits-on.ts`, `components/BlockingMark.tsx`): a card that other cards are waiting
+  on carries a "blocking N" chip, so the card that went first shows what it is holding up. The count comes from
+  the same published card list the **You first** strip reads (`publishWaits`, fed from the board's card list in
+  `lib/use-board-card-actions.ts`): `waitersOf` groups the waiting cards by the card they wait on, and
+  `useBlockingCount` reads that card's group size. Live, like the strip: when the waiters are released the chip
+  goes with them. The chip sits in the card's mark row (`components/CardMarks.tsx`), so it costs no new row.
+- **Released by the write, not by the commit** (`lib/blocking.ts`, `releaseOnWrite`): a card waiting on another's
+  code used to be held until the holder committed or its turn ended, even though the change it was waiting for
+  had already landed. Now the write itself releases it: the claim hooks call `releaseOnWrite` when the edit runs
+  (`lib/claim-guard.ts`: every file the edit claimed) or when a Bash line writes files (`lib/bash-claims.ts`: every
+  file the card claims), and the waiting card is answered with a message naming the holder and the file and
+  telling the thread to re-read it and redo the edit on top (`writeMessage`). The file is the unit, not the
+  symbol: the waiter waits on the holder's claim key, so the whole file is released.
 - **Recording**: the PreToolUse hook keeps what the edit will claim by tool use id, and the PostToolUse hook puts
   it on `card.claims` (most recent first, last 50) once the edit has run, so a denied edit claims nothing.
 - **Dropping**: `updateCard` (`lib/store.ts`) clears a card's claims when it reaches Done or is archived;

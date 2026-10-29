@@ -108,6 +108,37 @@ describe("ModelPicker as the CLI picker", () => {
     expect(within(list).queryByRole("option", { name: rowName("claude-sonnet-4-5") })).toBeNull();
     vi.unstubAllGlobals();
   });
+
+  it("shows a named model under Goose even when another CLI's list names the same id", async () => {
+    // "puku-ai-2.8" is puku-cli's own id, but the names are a Goose list: a user who named it in
+    // the Goose section is serving it through Goose. Filed under puku-cli, the row would hand back
+    // a bare id and the thread would start on puku-cli instead of Goose.
+    resetNamedModels();
+    const fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          gooseProviderId: "anthropic",
+          gooseModelId: "puku-ai-2.8",
+          gooseNamedModels: [{ id: "puku-ai-2.8", name: "My Puku" }],
+        }),
+    });
+    vi.stubGlobal("fetch", fetch);
+    const onChange = vi.fn();
+    render(<ModelPicker value="" onChange={onChange} label="Model" />);
+    await waitFor(() => expect(fetch).toHaveBeenCalled());
+    const list = openModels("Model");
+    const gooseGroup = await within(list).findByRole("group", { name: "Goose" });
+    const row = within(gooseGroup).getByRole("option", { name: rowName("My Puku") });
+    expect(row).toBeInTheDocument();
+    // The Goose group holds it, so the puku-cli group must not.
+    const pukuGroup = within(list).getByRole("group", { name: "puku-cli" });
+    expect(within(pukuGroup).queryByRole("option", { name: rowName("My Puku") })).toBeNull();
+    // Picking it hands back the prefixed value, so the thread starts on Goose.
+    pickModel("Model", "My Puku");
+    expect(onChange).toHaveBeenCalledWith("goose:puku-ai-2.8");
+    vi.unstubAllGlobals();
+  });
 });
 
 describe("EffortPicker", () => {

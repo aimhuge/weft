@@ -20,6 +20,9 @@ export const PROC_ENV = /^\/proc\/[^/]+\/environ$/;
 // What a glob like `.e*` or `account*` is tried against.
 export const SECRET_NAMES = [".env", ".env.local", ".env.development.local", ".env.production", ".env.production.local", ".envrc", ".dev.vars"];
 export const DATA_NAMES = ["account.json", "device-key.json", "vercel-token.json", "supabase-token.json", "cloudflare-token.json", "slack-token.json", "shell-token", "vault"];
+// The CLI's own transcripts: every secret value a thread ever saw is written there in plaintext,
+// outside Weft's redaction path (which covers only ~/.weft/threads) (2026-10-28).
+export const TRANSCRIPT_DIR = ".claude";
 
 // A glob as a regex. As in the shell, a leading * or ? skips dotfiles unless dotGlob (ripgrep's globs don't).
 function globRegex(glob: string, dotGlob: boolean): RegExp {
@@ -74,12 +77,59 @@ function matchesName(name: string, pattern: RegExp, names: string[], dotGlob: bo
   return names.some((n) => glob.test(n));
 }
 
+// The path as it stands: `~` for home, no trailing slash, so `/Users/me/.weft/` and `/Users/me/.weft`
+// are the same path and the one below another.
+function normalized(file: string): string {
+  const clean = file.replace(/^["']|["']$/g, "").replace(/\/+$/, "");
+  return clean.replace(/^~(?=\/|$)/, "");
+}
+
 export function isSecretFile(file: string, dataDir = DATA_DIR, dotGlob = false): boolean {
-  const clean = file.replace(/^["']|["']$/g, "");
+  const clean = normalized(file);
   if (PROC_ENV.test(clean)) return true;
   const inWeft = /\/\.weft\/(.+)$/i.exec(clean)?.[1];
   const inData = path.relative(dataDir, path.resolve(clean));
   if ([inWeft, inData].some((p) => p && matchesName(p, DATA_SECRET, DATA_NAMES, dotGlob))) return true;
+  // The data dir itself, and anything under it. It holds the control server's token, so reaching
+  // into it is reaching the master key: `find ~/.weft -exec cat {} \;` names no file at all, and a
+  // walk that finds one at run time must not slip past the name check (2026-10-28).
+  if (reachesDataDir(clean, dataDir)) return true;
+  // The CLI's own transcript dir: every secret value a thread ever saw is in there, in plaintext.
+  if (inTranscriptDir(clean)) return true;
   const base = path.basename(clean);
   return matchesName(base, SECRET_FILE, SECRET_NAMES, dotGlob) && !TEMPLATE.test(base);
+}
+
+// The data dir's subfolders a thread may read and write: `show/` holds the pages threads render in
+// the pane (plans, commits, how-tos, answers). It is the one place the BROWSER_PROMPT tells a
+// thread to write, so sealing it made the pane's own pages unreadable and unwritable (2026-10-28).
+// Everything else in the data dir — threads/, vault/, apps/, attachments/ — stays sealed.
+export const DATA_OPEN = /^show(\/.*)?$/i;
+
+// Whether a path is the data dir or inside it, save for the folders threads may use. A path that
+// names the dir, or that reaches it by walking up (`~/.weft/threads`), is the data dir.
+export function reachesDataDir(file: string, dataDir = DATA_DIR): boolean {
+  const clean = normalized(file);
+  if (!clean) return false;
+  const resolved = path.resolve(clean);
+  const root = path.resolve(dataDir);
+  if (resolved === root) return true;
+  const rel = path.relative(root, resolved);
+  if (rel && !rel.startsWith("..") && !path.isAbsolute(rel)) return !DATA_OPEN.test(rel);
+  // A `~`-relative path the guard can't resolve to a real folder: the name still says `.weft`.
+  if (/(?:^|\/)\.weft(?:\/|$)/i.test(clean)) {
+    // `~/.weft/show/...` is a thread's own pane page.
+    const inWeft = /(?:^|\/)\.weft\/(.+)$/i.exec(clean)?.[1] ?? "";
+    return !DATA_OPEN.test(inWeft);
+  }
+  return false;
+}
+
+// Whether a path is the CLI's transcript dir or inside it: `~/.claude`, `~/.claude.json`, or any
+// file under `~/.claude/projects/…`. A path that names the dir by name only (`~/.claude/…`) counts,
+// because that dir is the same folder wherever the home is.
+export function inTranscriptDir(file: string): boolean {
+  const clean = normalized(file);
+  if (/(?:^|\/)\.claude\.json$/i.test(clean)) return true;
+  return /(?:^|\/)\.claude(?:\/|$)/i.test(clean);
 }

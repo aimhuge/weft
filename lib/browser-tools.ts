@@ -85,7 +85,10 @@ export function browserMcpServer(cardId: () => string | undefined) {
         "Take a screenshot of the browser pane. save_to also writes it as a PNG (absolute path), so a page you write can show it; highlight draws an orange box around the element a CSS selector matches, e.g. the button a step says to click.",
         {
           save_to: z.string().optional().describe(`Absolute path to save the PNG at, e.g. ${SHOW_DIR}/setup/step-2.png`),
-          highlight: z.string().optional().describe("CSS selector of the element to box in orange"),
+          highlight: z
+            .string()
+            .optional()
+            .describe('CSS selector of the element to box in orange, or a text selector like :text-is("Continue")'),
         },
         ({ save_to, highlight }) =>
           attempt(async () => {

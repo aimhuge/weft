@@ -32,7 +32,18 @@ describe("createPaneInput", () => {
       });
       await expect(input.click(wc, { selector: "#go" })).resolves.toMatchObject({ clicked: "#go" });
       const evaluate = cdp.send.mock.calls.find((c) => c[1] === "Runtime.evaluate")!;
-      expect(evaluate[2].expression).toBe('document.querySelector("#go")');
+      expect(evaluate[2].expression).toContain('document.querySelectorAll("#go")');
+    });
+
+    it("resolves a selector with a Playwright text pseudo-class", async () => {
+      const { cdp, wc, input } = make({
+        "Runtime.evaluate": () => ({ result: { objectId: "obj-3" } }),
+        "Runtime.callFunctionOn": () => point(),
+      });
+      const selector = '[role="menu"] button[role="menuitem"]:has(span:text-is("Settings…"))';
+      await expect(input.click(wc, { selector })).resolves.toMatchObject({ clicked: selector });
+      const evaluate = cdp.send.mock.calls.find((c) => c[1] === "Runtime.evaluate")!;
+      expect(evaluate[2].expression).toContain("Settings…");
     });
 
     it("wants a ref or a selector", async () => {

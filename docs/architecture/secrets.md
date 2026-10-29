@@ -233,7 +233,10 @@ denied). A file watcher notices hand edits and offers "Import changes", so editi
     (`electron/secret-redact.cjs`), then cut to the last 20,000 characters, and comes back with the exit code.
 - Redaction (`electron/secret-redact.cjs`, built): each value and the forms programs print it in, swapped for
   `‹NAME›`: as written, JSON-escaped, URL-encoded (`%20` or `+`, either hex case), base64 and base64url, including
-  base64 of the value inside a longer string (the three byte alignments). Values under 4 characters are left alone.
+  base64 of the value inside a longer string (the three byte alignments); and, since the vault pentest of
+  2026-10-28, hex (plain, `0x`-prefixed, as a hex dump shows it), gzip+base64, reversed, rot13 and `\uXXXX`
+  escapes. Values under 4 characters are left alone, and a derived form shorter than 8 characters is not
+  matched, so ordinary text doesn't get garbled.
 - Dev servers (built): `lib/devserver.ts` asks main for a one-time grant of the folder's development values
   (`POST /secrets/dev-grant`, approved like a run, *Always allow* as a `dev` rule). It starts `electron/secret-env.cjs`
   with Electron as node and writes the control-server token, the grant and argv to its **stdin**, so neither sits in a
@@ -249,8 +252,9 @@ denied). A file watcher notices hand edits and offers "Import changes", so editi
 - A PreToolUse hook (`lib/secret-guard.ts`, on every thread and the refactor scout) denies reading `.env*`
   (except templates like `.env.example`), `~/.weft/account.json`, the device key and the vault files. It's a
   hook, not `canUseTool`, because reads never ask, and `bypassPermissions` skips `canUseTool` entirely.
-  - Files: `Read`, `Edit`, `NotebookRead`, `Grep` (by path or glob, so `*.local` counts too), and the browser
-    pane opening a `file://` URL to one.
+  - Files: `Read`, `Edit`, `Write`, `MultiEdit`, `NotebookRead`, `NotebookEdit`, `Glob`, `LS`, `Grep` (by path or
+    glob, so `*.local` counts too), and the browser pane opening a `file://` URL to one. A write is turned away
+    like a read: a thread that may not read a `.env` may not overwrite one either.
   - Bash: commands go through a shell parser (`lib/shell-parse.ts`) that follows quotes, escapes, heredocs,
     redirects, `$(…)`, `sh -c`, `eval`, `xargs` and `find -exec`. A command is turned away only when it is the
     one reading the file: `cat .gitignore | grep .env` runs, while `cp .env.local x` and `cat .e*` don't.
@@ -259,6 +263,23 @@ denied). A file watcher notices hand edits and offers "Import changes", so editi
     `subprocess.run(…)`, Ruby/Perl backticks, or a variable set to the path when the code opens something).
   - Dumps: `printenv`, bare `env`/`export`/`set`, `ps e`, `console.log(process.env)`, `print(os.environ)`,
     `echo $SOME_KEY`, and `vercel env pull` to stdout.
+  - **The whole data folder is secret, not the files in it.** `~/.weft` holds the control server's
+    bearer token, so anything that reaches into that folder reaches the master key: `find ~/.weft -exec cat
+    {} \;`, `find ~/.weft | xargs cat` and `rsync -a ~/.weft/ /tmp/b/` are all turned away, even though they
+    name no file at all (`lib/secret-guard-files.ts`: `reachesDataDir`).
+  - **`~/.weft/show/` is the one folder inside it that is open.** It holds the pages a thread renders
+    in the pane (plans, commits, how-tos, answers), and it is the one place the browser prompt tells a
+    thread to write — so sealing it made the pane's own pages unreadable and unwritable
+    (`lib/secret-guard-files.ts`: `DATA_OPEN`). Every other folder in the data dir stays sealed, and a
+    path that climbs out of it (`~/.weft/show/../vault/acme.json`) is sealed too.
+  - **A substituted path is still a path.** `cat $(echo .env)`, ``cat `echo .env` `` and `cat $'\x2eenv'`
+    read the file, so the parser hands the guard the words a substitution stands for
+    (`lib/shell-parse.ts`: `substituted`, `ansiC`).
+  - **A runner's child is a command of its own.** `pnpm exec cat .env` and `npx cat .env` are parsed again
+    as the command they run (`lib/secret-guard-bash.ts`: `execRunnerChild`).
+  - **The CLI's own transcripts are secret.** `~/.claude` and `~/.claude.json` hold every secret value a
+    thread ever saw, in plaintext, outside Weft's redaction path — so the secret guard turns them away
+    (`inTranscriptDir`) and the folder guard no longer lists `~/.claude` as free to enter.
 - Paste guard in the Composer (`components/SecretPaste.tsx`): a paste that looks like a key (`lib/secret-detect.ts`)
   waits in a strip until you paste it anyway or drop it. A key that arrives any other way (typed, dictated,
   dropped in) shows the same strip as the message changes, with Remove it and Keep it.
@@ -267,11 +288,37 @@ denied). A file watcher notices hand edits and offers "Import changes", so editi
 
 Limit: an agent with unrestricted Bash can still print the env of a process it can reach, or write a script
 that opens the file itself (`~/.weft/shell-token` included). This is a strong default, not a sandbox. Known gaps
-(rechecked 2026-10-12):
+(rechecked 2026-10-12, and again after the vault pentest of 2026-10-28):
 - The env strip goes by names and known key shapes; a secret under a plain name (`MY_APP_CONFIG`) with an
-  unusual shape still reaches threads.
+  unusual shape still reaches threads. What it does now also strip by name alone are the loader hooks
+  (`NODE_OPTIONS`, `LD_PRELOAD`, the `DYLD_*` family), because they run code in a thread's process whatever
+  they hold; `NODE_EXTRA_CA_CERTS` stays, since it names a certificate rather than running one.
 - Without gitleaks the commit scan knows only the key shapes in `lib/secret-detect.ts`. CI pins gitleaks but
   hasn't run yet.
+- **The real answer is an OS-level sandbox**, not a longer classifier: a seatbelt belt of shell parsing
+  can always be unbuckled by a shell feature the parser doesn't know (a new quoting form, an interpreter's
+  inline code, a tool that walks a tree). Running each thread's process in a sandbox that cannot read
+  `~/.weft` or `~/.claude` — macOS's `sandbox-exec`, or a container per thread — would make the file rules
+  a second line of defence instead of the only one. The guard is what Weft can do today; the sandbox is
+  what Weft should do next.
+
+## Which card a vault request is for
+
+A thread's grant, its unlocks and its audit line all hang off one card id, so that id has to be the
+card's own — not whatever a request says. Electron main used to take the card id from the request body,
+which meant a body that named another card's id acted as that card: another card's grant, another card's
+Touch ID unlock, another card's line in the audit log. Now the server signs the card id and main checks
+the signature before it believes it (2026-10-28).
+
+- **The signature.** `lib/card-token.ts` signs the card id with the launch token (the same secret both
+  sides already share, `electron/shell-token.cjs`), and the route is part of what is signed, so a signature
+  for a fill can't be replayed on a run. `electron/card-token.cjs` verifies it in constant time.
+- **The routes.** `/secrets/fill`, `/secrets/run`, `/secrets/dev-grant`, `/secrets/redact` and
+  `/secrets/request-access` all take the card from the signature. A request that proves nothing has no
+  card, so it acts for nobody: the pane's active card is no longer a fallback.
+- **The grant is scoped to a site too.** A grant that names a page covers that page and no other, and the
+  Touch ID prompt says which page; a grant with no site covers only the site-less powers (a command run, a
+  dev server) and never a fill (`electron/vault-grants.cjs`).
 
 ## Audit log
 
@@ -336,6 +383,24 @@ One Touch ID lets one card use one project's vault for an hour without being ask
   `account.json` moves in on first read and is deleted. Outside the desktop app (`pnpm dev` in a browser) there's
   no main, so it's still the plain file there.
 - Fixed in step 1: the secret guard turns away a thread's `cat .env.local`.
+- Fixed 2026-10-28, by the vault pentest (`lib/pentest-repro.test.ts` keeps each finding as a
+  regression, with a control beside it that was always denied):
+  - A command substitution erased the path the guard read, so `cat $(echo .env)` and `cat $'\x2eenv'`
+    read the file. The parser now hands the guard the words a substitution stands for.
+  - `find ~/.weft -exec cat {} \;`, `find ~/.weft | xargs cat` and `rsync -a ~/.weft/ /tmp/b/` reached
+    the control server's token without naming a file. The whole data folder is secret now.
+  - `~/.claude` (the CLI's own transcripts, where every secret a thread saw is written in plaintext) was
+    neither guarded nor even asked about. It is turned away now, and no longer free to enter.
+  - A thread could `Write` a `.env` even though it could not read one, and `Glob`/`LS` weren't guarded.
+  - `pnpm exec cat .env` and `npx cat .env` read the file past the guard. The runner's child is parsed now.
+  - A card's one-hour grant was scoped to the card but not to a page, so it could type a secret into any
+    https page it opened, including one it controls. The grant names its site, and the Touch ID prompt
+    says which page.
+  - The control server believed the card id in the request body, so a body that named another card acted
+    as that card. The card id is signed now and checked in main (see "Which card a vault request is for").
+  - Redaction missed hex, gzip+base64, reversed, rot13 and `\uXXXX` forms of a value.
+  - `NODE_OPTIONS`, `LD_PRELOAD` and the `DYLD_*` family reached a thread's process, where they load code
+    before it runs its own. They go by name now.
 
 ## How step 2 is built
 

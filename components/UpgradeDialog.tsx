@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { createPortal } from "react-dom";
 import { track } from "@/lib/analytics";
 import { planCards, type PlanCard } from "@/lib/billing/plan-cards";
 import { UPGRADE_COPY, type CheckoutAnswer, type UpgradeInterval, type UpgradePlan, type UpgradeReason } from "@/lib/billing/upgrade";
@@ -41,13 +40,7 @@ function openCheckout(url: string, sameTab: boolean) {
 export default function UpgradeDialog({ checkout }: { checkout?: Checkout }) {
   const reason = useUpgradeReason();
   if (!reason) return null;
-  // Its own stacking layer, so it opens above a dialog that opened it (Share…, Settings).
-  return createPortal(
-    <div className="relative z-[70]">
-      <UpgradePanel reason={reason} checkout={checkout} />
-    </div>,
-    document.body,
-  );
+  return <UpgradePanel reason={reason} checkout={checkout} />;
 }
 
 function UpgradePanel({ reason, checkout }: { reason: UpgradeReason; checkout?: Checkout }) {
@@ -90,7 +83,13 @@ function UpgradePanel({ reason, checkout }: { reason: UpgradeReason; checkout?: 
   }
 
   return (
-    <Modal title={done ? `You're on ${view?.plan.name ?? "your new plan"}` : copy.title} onClose={closeUpgrade} className="w-full max-w-[760px] max-h-[92vh]">
+    // The top layer, so it opens above a dialog that opened it (Share…, Settings).
+    <Modal
+      title={done ? `You're on ${view?.plan.name ?? "your new plan"}` : copy.title}
+      onClose={closeUpgrade}
+      layer="top"
+      className="w-full max-w-[760px] max-h-[92vh]"
+    >
       <div className="overflow-y-auto px-5 py-4">
         {done ? (
           <Thanks reason={reason} />

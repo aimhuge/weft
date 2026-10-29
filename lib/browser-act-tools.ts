@@ -11,7 +11,12 @@ import { noteSnapshot, recordStep, type StepArgs } from "./site-notes-trail";
 
 const target = {
   ref: z.string().optional().describe("The element's ref from snapshot, like e42 (preferred)"),
-  selector: z.string().optional().describe("A CSS selector, when there's no ref"),
+  selector: z
+    .string()
+    .optional()
+    .describe(
+      'A CSS selector, when there\'s no ref. Also takes Playwright text selectors: :text-is("Settings…"), :text("Save"), :has-text("menu"), and :has(span:text-is("Settings…")).',
+    ),
 };
 
 type Entry = Record<string, unknown>;
@@ -118,7 +123,10 @@ export function actTools(cardId: () => string | undefined) {
       {
         text: z.string().optional(),
         gone: z.string().optional().describe("Text to wait to disappear, like a spinner's Loading…"),
-        selector: z.string().optional(),
+        selector: z
+          .string()
+          .optional()
+          .describe('A CSS selector, or a text selector like :text-is("Done") or button:has-text("Saved")'),
         timeout_ms: z.number().optional(),
       },
       ({ timeout_ms, ...args }) =>

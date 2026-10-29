@@ -3,7 +3,6 @@
 // "What's new in Weft X": the first time Weft opens on a version that has a splash, its few lines (written by the
 // Copywriter at release time) and, now and then, a video. Shown once (lib/release-splash.ts, lib/use-release-splash.ts).
 
-import { createPortal } from "react-dom";
 import type { ReleaseSplash as Splash } from "@/lib/release-splash";
 import { useReleaseSplash } from "@/lib/use-release-splash";
 import Modal from "./Modal";
@@ -45,5 +44,5 @@ export function SplashBody({ version, splash, onClose }: { version: string; spla
 export default function ReleaseSplash() {
   const { open, close } = useReleaseSplash();
   if (!open) return null;
-  return createPortal(<SplashBody version={open.version} splash={open.splash} onClose={close} />, document.body);
+  return <SplashBody version={open.version} splash={open.splash} onClose={close} />;
 }

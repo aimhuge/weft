@@ -33,8 +33,12 @@ export interface OpenCardState {
 
 export function useOpenCard({
   setWebBrowserOpen,
+  openPane,
 }: {
   setWebBrowserOpen: (open: boolean) => void;
+  // Opens the browser pane's column, even one the user closed earlier: a thread never opens
+  // beside an empty slot.
+  openPane: () => void;
 }): OpenCardState {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // The card you opened last: still outlined after you close it, so you can find your place on the board.
@@ -46,6 +50,13 @@ export function useOpenCard({
   // Cards that moved (with a chime) while you weren't looking; highlighted until you open them.
   const [unseen, setUnseen] = useState<ReadonlySet<string>>(new Set());
   const selectedRef = useRef<string | null>(null);
+  // The board's openPane changes identity whenever the workspace layout does, so it is read through
+  // a ref: select keeps one identity across renders, and the effects that depend on it don't re-run.
+  const openPaneRef = useRef(openPane);
+
+  useEffect(() => {
+    openPaneRef.current = openPane;
+  }, [openPane]);
 
   useEffect(() => {
     selectedRef.current = selectedId;
@@ -65,10 +76,13 @@ export function useOpenCard({
   const select = useCallback(
     (id: string | null) => {
       // A card always opens full screen, with its browser beside the thread; closing it hides the browser.
-      if (Boolean(id) !== Boolean(selectedRef.current)) {
-        if (window.weft) window.weft.browser.setVisible(Boolean(id));
-        else setWebBrowserOpen(Boolean(id));
-      }
+      // Opening any card brings the pane back, even one the user closed earlier: the thread never
+      // opens beside an empty slot.
+      if (id) openPaneRef.current();
+      // The card's id goes with the ask, so the shell makes this card's view and not the one that
+      // happened to be active — the board's own, whose page would flash over the new card.
+      if (window.weft) window.weft.browser.setVisible(Boolean(id), id);
+      else setWebBrowserOpen(Boolean(id));
       selectedRef.current = id;
       setSelectedId(id);
       if (id) setLastOpenId(id);

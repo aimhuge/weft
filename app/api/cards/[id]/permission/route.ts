@@ -1,6 +1,6 @@
 import { fail, elevated } from "@/lib/guard";
 import { readQuestionReply } from "@/lib/question-reply";
-import { putFirst } from "@/lib/precedence";
+import { putFirst, putHolderFirst } from "@/lib/precedence";
 import { answerPermission, waitPermission } from "@/lib/runner";
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -12,8 +12,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       allow?: boolean;
       // Wait: hold the edit until the card holding that code lets go (lib/permission-wait.ts).
       wait?: boolean;
-      // Me first: go ahead, and the card holding that code yields the file (lib/precedence.ts).
+      // This first: go ahead, and the card holding that code yields the file (lib/precedence.ts).
       first?: boolean;
+      // Others first: the card holding that code goes ahead, and this card waits for it (lib/precedence.ts).
+      otherFirst?: boolean;
       answers?: Record<string, string>;
       pendingId?: string;
       annotations?: unknown;
@@ -21,8 +23,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     };
     const { allow, answers, pendingId } = body;
     if (body.first === true) {
-      if (typeof pendingId !== "string") throw new Error("Me first needs the request's pendingId.");
+      if (typeof pendingId !== "string") throw new Error("This first needs the request's pendingId.");
       putFirst(id, pendingId);
+      return Response.json({ ok: true });
+    }
+    if (body.otherFirst === true) {
+      if (typeof pendingId !== "string") throw new Error("Others first needs the request's pendingId.");
+      putHolderFirst(id, pendingId);
       return Response.json({ ok: true });
     }
     if (body.wait === true) {

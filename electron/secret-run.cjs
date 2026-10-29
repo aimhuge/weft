@@ -65,6 +65,8 @@ function createSecretRun({ vault, ask, rules, spawn, audit = /** @type {(entry: 
     // Whether this card may run this command with these secrets, and how it was allowed
     // (electron/vault-access.cjs).
     const access = await decideAccess({
+      // A command run has no site, so any of the card's grants for the vault covers it; a grant's
+      // site only limits where a value may be typed (electron/vault-grants.cjs).
       grants: { allows: (card, id) => Boolean(vault.granted?.(card, id)) },
       card: asker.key,
       vaultId: request.id,
@@ -222,20 +224,22 @@ function runApproval({ dialog, systemPreferences, window, askWindow = undefined 
   };
 }
 
-// The control server's routes for it (electron/browser-pane.cjs). key defaults to the pane's active card.
+// The control server's routes for it (electron/browser-pane.cjs). The card is the signed one: the
+// server proves which card a request is for and main believes only that (electron/card-token.cjs).
+// A request that proves nothing has no card, so it runs for nobody.
 /**
  * @param {() => ReturnType<typeof createSecretRun> | undefined} get
- * @param {() => string | undefined} [active]
+ * @param {(body: Record<string, unknown>, route: string) => string} [cardFor]
  */
-function secretRunRoutes(get, active = () => undefined) {
+function secretRunRoutes(get, cardFor = () => "") {
   const runner = () => {
     const r = get();
     if (!r) throw new Error("The secrets vault isn't ready yet.");
     return r;
   };
   return {
-    "POST /secrets/run": (body) => runner().run({ ...body, key: body.key ?? active() }),
-    "POST /secrets/dev-grant": (body) => runner().devGrant(body),
+    "POST /secrets/run": (body, route) => runner().run({ ...body, key: cardFor(body, route) }),
+    "POST /secrets/dev-grant": (body, route) => runner().devGrant({ ...body, key: cardFor(body, route) }),
     "POST /secrets/claim": (body) => runner().claim(body.grant),
   };
 }

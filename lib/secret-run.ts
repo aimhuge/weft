@@ -1,6 +1,7 @@
 import { tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import { attempt, shell, text } from "./browser-tools";
+import { cardProof } from "./card-token";
 import { asText } from "./format";
 import { globalSingleton } from "./global-singleton";
 import { addMissingBlank, missingText } from "./secret-ask";
@@ -37,7 +38,7 @@ export function usesSecrets(cardId: string): boolean {
 export async function redactStored(cardId: string, value: string): Promise<string> {
   if (!value || !inUse.has(cardId)) return value;
   try {
-    return asText((await shell("/secrets/redact", { key: cardId, text: value })).text);
+    return asText((await shell("/secrets/redact", { ...cardProof(cardId, "/secrets/redact"), text: value })).text);
   } catch {
     return "‹output hidden: Weft couldn't check it for vault secrets›";
   }
@@ -96,7 +97,7 @@ export function runTool(cardId: () => string | undefined, folder: () => string, 
         const timeoutMs = Math.min(Math.max(timeout_seconds ?? DEFAULT_TIMEOUT_S, 1), MAX_TIMEOUT_S) * 1000;
         const key = cardId();
         const r = (await shell("/secrets/run", {
-          key,
+          ...cardProof(key, "/secrets/run"),
           thread: title(),
           why: asText(why).trim() || undefined,
           folder: root,
@@ -145,7 +146,7 @@ export async function devSecrets(cardId: string, command: string, cwd: string, t
     return { note: `Started without vault secrets: ${(err as Error).message}` };
   }
   try {
-    const r = await shell("/secrets/dev-grant", { key: cardId, thread, folder: cwd, cwd, command: command.trim(), argv: checked.argv, env: checked.env, script: packageScript(checked.argv, cwd) });
+    const r = await shell("/secrets/dev-grant", { ...cardProof(cardId, "/secrets/dev-grant"), thread, folder: cwd, cwd, command: command.trim(), argv: checked.argv, env: checked.env, script: packageScript(checked.argv, cwd) });
     const names = Array.isArray(r.names) ? (r.names as string[]) : [];
     if (r.denied) return { note: "Started without vault secrets: not approved." };
     if (!names.length || typeof r.grant !== "string") return {};

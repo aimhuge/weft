@@ -56,7 +56,9 @@ export interface ShellBridge {
     // Closes the browsers of cards not in keys.
     prune(keys: string[]): void;
     getState(): Promise<BrowserState>;
-    setVisible(visible: boolean): void;
+    // Shows or hides the pane. key is the card the pane is for, when the board knows it: the
+    // shell uses it to make the right view, instead of the one that happened to be active.
+    setVisible(visible: boolean, key?: string | null): void;
     setBounds(rect: { x: number; y: number; width: number; height: number }): void;
     back(): void;
     forward(): void;

@@ -3,7 +3,7 @@ import { isBusy } from "./overlap";
 import { listCards, updateCard } from "./store";
 import type { Card, CardYield } from "./types";
 
-// The yields Me first leaves on a card (lib/precedence.ts), and when they end. Apart from lib/precedence.ts,
+// The yields This first leaves on a card (lib/precedence.ts), and when they end. Apart from lib/precedence.ts,
 // which reaches into the runner, so the claim guards can prune without importing it.
 
 // A yield lasts while the card it yields to is busy and still claims the file: once it commits (its claims on

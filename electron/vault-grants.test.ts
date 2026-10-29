@@ -73,6 +73,35 @@ describe("createGrants", () => {
     t = 1001;
     expect(grants.list()).toEqual([]);
   });
+
+  // A grant that names a site covers that site and no other: a card with one could otherwise type a
+  // secret into any page it opened, including one it controls (2026-10-28).
+  it("covers only the site it names", () => {
+    const grants = createGrants({ now: () => 0 });
+    grants.add({ card: "c1", thread: "Site", id: "github:o/r", label: "o/r", site: "dashboard.stripe.com" });
+    expect(grants.allows("c1", "github:o/r", "dashboard.stripe.com")).toBe(true);
+    expect(grants.allows("c1", "github:o/r", "evil.example.com")).toBe(false);
+    expect(grants.allows("c1", "github:o/r")).toBe(true);
+  });
+
+  // A grant with no site says nothing about where a value may be typed, so it covers only the
+  // site-less powers: a command run and a dev server (2026-10-28).
+  it("never lets a site-less grant cover a fill", () => {
+    const grants = createGrants({ now: () => 0 });
+    grants.add({ card: "c1", thread: "Site", id: "github:o/r", label: "o/r" });
+    expect(grants.allows("c1", "github:o/r", "dashboard.stripe.com")).toBe(false);
+    expect(grants.allows("c1", "github:o/r")).toBe(true);
+  });
+
+  it("keeps a grant for each site of the same vault", () => {
+    const grants = createGrants({ now: () => 0 });
+    grants.add({ card: "c1", id: "github:o/r", label: "o/r", site: "a.example.com" });
+    grants.add({ card: "c1", id: "github:o/r", label: "o/r", site: "b.example.com" });
+    expect(grants.list()).toHaveLength(2);
+    expect(grants.allows("c1", "github:o/r", "a.example.com")).toBe(true);
+    expect(grants.allows("c1", "github:o/r", "b.example.com")).toBe(true);
+    expect(grants.allows("c1", "github:o/r", "c.example.com")).toBe(false);
+  });
 });
 
 describe("grantMethods", () => {

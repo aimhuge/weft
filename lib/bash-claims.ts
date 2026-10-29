@@ -2,6 +2,7 @@ import type { HookCallback, HookCallbackMatcher } from "@anthropic-ai/claude-age
 import path from "node:path";
 import { bashWrites } from "./bash-writes";
 import { closeWindow, markKnown, markUnknown, openWindow, unknownWriters, writersAt } from "./bash-writers";
+import { releaseOnWrite } from "./blocking";
 import { realFile } from "./claim-guard";
 import { claimPreAnswer, claimPreHook, claimPostCard, forget } from "./claim-hooks";
 import { addClaims, claimFiles, claimKey, dropClaims } from "./claims";
@@ -94,6 +95,9 @@ export function bashClaimRecorder(cardId: () => string | undefined): HookCallbac
     const command = commandOf(input.tool_input);
     if (since !== undefined) claimWritten(card, writtenAt(dirty, since), new Set(bashWrites(command, input.cwd).map(realFile)));
     releaseClean(root, new Set(dirty));
+    // The Bash line wrote files: the cards waiting on this one for those files can redo their edit on
+    // top of the change that just landed (lib/blocking.ts).
+    for (const file of claimFiles(card)) releaseOnWrite(card.id, file);
     const note = failureNote(command, outputOf(input), input.cwd, root, card, listCards(), unknownWriters());
     return Promise.resolve(note ? { hookSpecificOutput: { hookEventName: event, additionalContext: note } } : {});
   };

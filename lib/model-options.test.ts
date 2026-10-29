@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { cliChoiceModel, filterGroups, labelFor, modelGroups, optionsFor } from "./model-options";
+import {
+  cliChoiceModel,
+  filterGroups,
+  gooseNamed,
+  labelFor,
+  modelGroups,
+  optionsFor,
+} from "./model-options";
 
 describe("the model a CLI runs", () => {
   it("is the first model of the CLI's own list", () => {
@@ -58,6 +65,28 @@ describe("the rows of a menu", () => {
   it("hides a model the CLI can't serve", () => {
     const rows = optionsFor("goose", { offer: (b, id) => b !== "goose" || id === "gpt-4.1" });
     expect(rows.some((r) => r.value === "openai/gpt-4.1")).toBe(false);
+  });
+});
+
+describe("the Goose models a menu lists", () => {
+  it("adds the model Goose is configured to run, showing it by its id", () => {
+    const rows = gooseNamed([], "puku-ai-2.8");
+    expect(rows).toEqual([{ id: "puku-ai-2.8", name: "puku-ai-2.8" }]);
+  });
+
+  it("keeps the name the user gave the configured model", () => {
+    const rows = gooseNamed([{ id: "puku-ai-2.8", name: "My Puku" }], "puku-ai-2.8");
+    expect(rows).toEqual([{ id: "puku-ai-2.8", name: "My Puku" }]);
+  });
+
+  it("adds nothing when the configured model is the provider's own pick", () => {
+    // "goose-default" means "whatever the provider chooses", which the menu already has a row for.
+    expect(gooseNamed([], "goose-default")).toEqual([]);
+  });
+
+  it("adds nothing when no model is configured", () => {
+    expect(gooseNamed([], "")).toEqual([]);
+    expect(gooseNamed([], "   ")).toEqual([]);
   });
 });
 

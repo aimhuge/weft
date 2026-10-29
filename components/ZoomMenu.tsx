@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { keyCaps } from "@/lib/hotkeys";
-import { useOverlay } from "@/lib/overlay";
+import { useLocalMenu, useMenuCoverPublisher } from "@/lib/overlay";
 import { useEscape } from "@/lib/use-escape";
 import Icon, { type IconName } from "./Icon";
 
@@ -16,11 +16,16 @@ const STEPS: { action: ZoomAction; label: string; icon: IconName; keys: string }
 const PRESETS = [50, 75, 100, 125, 150, 200];
 
 // The browser pane's zoom: a % button whose menu reads like the command palette (icon, label, key caps).
-// The page is a native view drawn above the board, so it hides while the menu is open.
+// The page is a native view drawn above the board, so the menu can't sit on top of it: the pane keeps
+// the page visible and steps it aside around the menu's rectangle (lib/overlay.ts).
 export default function ZoomMenu({ zoom, disabled }: { zoom: number; disabled: boolean }) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
-  useOverlay(open);
+  const menu = useRef<HTMLDivElement>(null);
+  useLocalMenu(open);
+  // The menu measures itself and publishes the rectangle it covers, so the pane's page steps aside
+  // around it instead of vanishing under it.
+  useMenuCoverPublisher(menu, open);
   useEscape(open, () => setOpen(false));
 
   useEffect(() => {
@@ -53,7 +58,10 @@ export default function ZoomMenu({ zoom, disabled }: { zoom: number; disabled: b
         {zoom}%
       </button>
       {open && (
-        <div className="absolute right-0 top-full z-30 mt-1 w-56 rounded-lg border border-line bg-panel p-1 shadow-lg">
+        <div
+          ref={menu}
+          className="absolute right-0 top-full z-30 mt-1 w-56 rounded-lg border border-line bg-panel p-1 shadow-lg"
+        >
           {STEPS.map((step) => (
             <button key={step.label} className={row} disabled={step.action === "reset" && zoom === 100} onClick={() => pick(step.action)}>
               <Icon name={step.icon} size={14} className="shrink-0 text-muted" />

@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>BYOK models, named — done</title>
+<style>
+  :root {
+    --bg: #0f1115; --card: #171a21; --line: #262b36; --text: #e8eaf0;
+    --muted: #99a1b3; --accent: #7aa2f7; --ok: #7fd6a2; --bad: #f77a8e;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 40px 28px 64px;
+    background: var(--bg); color: var(--text);
+    font: 15px/1.6 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+  }
+  main { max-width: 860px; margin: 0 auto; }
+  h1 { font-size: 26px; margin: 0 0 6px; letter-spacing: -0.01em; }
+  h2 { font-size: 17px; margin: 34px 0 12px; color: var(--accent); letter-spacing: 0.01em; }
+  p { margin: 0 0 12px; color: var(--text); }
+  .lede { color: var(--muted); margin-bottom: 26px; }
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 18px; margin-bottom: 12px;
+  }
+  .card h3 { margin: 0 0 6px; font-size: 15px; }
+  .card p { margin: 0; color: var(--muted); font-size: 14px; }
+  .ok { color: var(--ok); font-weight: 600; }
+  .files { margin: 6px 0 0; padding-left: 18px; color: var(--muted); font-size: 13.5px; }
+  .files li { margin-bottom: 2px; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+  .flow {
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 18px; margin: 14px 0 4px; overflow-x: auto;
+  }
+  table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; }
+  tr:last-child td { border-bottom: none; }
+  .stats { display: flex; flex-wrap: wrap; gap: 10px; margin: 20px 0 6px; }
+  .stat {
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 12px 16px; min-width: 140px;
+  }
+  .stat b { display: block; font-size: 21px; letter-spacing: -0.01em; }
+  .stat span { color: var(--muted); font-size: 12.5px; }
+  .callout {
+    border-left: 3px solid var(--accent); background: #131824; border-radius: 0 10px 10px 0;
+    padding: 14px 18px; margin: 18px 0;
+  }
+  .callout p { margin: 0; }
+  .pill {
+    display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 999px;
+    border: 1px solid var(--line); color: var(--muted); margin-left: 6px;
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>🏷️ BYOK models, named <span class="pill">done</span></h1>
+  <p class="lede">
+    A user gives their Goose models names in Settings → Models → Bring your own key, and picks them
+    by name in every model menu. A name says <b>this runs on Goose</b> — so the row stays in the Goose
+    group even when another CLI's list names the same id, and the thread starts on Goose with the bare id.
+  </p>
+
+  <div class="stats">
+    <div class="stat"><b class="ok">4</b><span>bugs fixed</span></div>
+    <div class="stat"><b>228</b><span>tests pass (16 files)</span></div>
+    <div class="stat"><b>2</b><span>new test files</span></div>
+    <div class="stat"><b class="ok">0</b><span>lint &amp; typecheck errors</span></div>
+  </div>
+
+  <h2>The seam</h2>
+  <div class="flow">
+    <table>
+      <tr><th>Step</th><th>Before</th><th>After</th></tr>
+      <tr>
+        <td><code>backendOf()</code> in ModelSelect</td>
+        <td><span style="color:var(--bad)">looked the id up in the shared MODELS list</span></td>
+        <td>the <b>name</b> decides the CLI; names are a Goose-only list</td>
+      </tr>
+      <tr>
+        <td>Picker value</td>
+        <td><span style="color:var(--bad)">bare id — collided</span></td>
+        <td><code>goose:&lt;id&gt;</code> — the prefix tells them apart</td>
+      </tr>
+      <tr>
+        <td><code>resolveModel()</code></td>
+        <td><span style="color:var(--bad)">"puku-ai-2.8" → puku</span></td>
+        <td>prefix seen → <code>backend: goose</code></td>
+      </tr>
+      <tr>
+        <td><code>bareModel()</code></td>
+        <td>—</td>
+        <td>prefix taken off before the id reaches the CLI</td>
+      </tr>
+    </table>
+  </div>
+
+  <h2 id="fixes">What was fixed</h2>
+
+  <div class="card">
+    <h3><span class="ok">✓</span> A named model was filed under the wrong CLI</h3>
+    <p>
+      <code>backendOf()</code> only found ids in the shared <code>MODELS</code> list, so
+      "puku-ai-2.8" — puku-cli's own id — sent a Goose row to puku-cli. Now every named model is a
+      Goose row, and its value carries the <code>goose:</code> prefix through every hop.
+    </p>
+    <ul class="files">
+      <li><code>components/ModelSelect.tsx</code> — the <code>named</code> memo</li>
+      <li><code>lib/model-options.ts</code> — <code>gooseNamed()</code>, <code>gooseRowValue()</code></li>
+      <li><code>lib/new-thread.ts</code> — <code>resolveModel</code>, <code>bareModel</code></li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h3><span class="ok">✓</span> The configured model only showed with a provider set up</h3>
+    <p>
+      <code>gooseNamed()</code> was dead code and the configured <code>gooseModelId</code> only
+      appeared when a provider was chosen. The model the provider runs is now always a row, named or not.
+    </p>
+    <ul class="files">
+      <li><code>components/ModelSelect.tsx</code></li>
+      <li><code>lib/model-options.ts</code> — <code>gooseNamed()</code></li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h3><span class="ok">✓</span> A save left the menus stale</h3>
+    <p>
+      The pickers read names from the board's store, so a save had to re-read them — otherwise the old
+      names lingered until a board reload.
+    </p>
+    <ul class="files">
+      <li><code>components/GooseNamedModels.tsx</code> — <code>loadNamedModels()</code> after a save</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h3><span class="ok">✓</span> Dead code and a duplicate validator</h3>
+    <p>
+      Four unused functions and a second validator for one setting, both removed — the setting is owned
+      in one place.
+    </p>
+    <ul class="files">
+      <li><code>lib/goose-models.ts</code> — <code>namedModels</code>, <code>setNamedModels</code></li>
+      <li><code>lib/settings.ts</code> — <code>gooseNamedModels()</code></li>
+    </ul>
+  </div>
+
+  <div class="callout">
+    <p>
+      <b>The one thing worth remembering:</b> a name is not a label — it is a claim about where the
+      model runs. <code>"puku-ai-2.8"</code> is puku-cli's own id, but a user who named it in the
+      Goose section is serving it through Goose. So the prefix, not the id, is what carries the truth
+      from the menu to the runner.
+    </p>
+  </div>
+
+  <h2>Tests</h2>
+  <div class="card">
+    <ul class="files">
+      <li><code>lib/use-new-card-dialog-goose.test.ts</code> — <b>new</b>: the dialog end to end with the real <code>resolveModel</code> — Goose wins the collision, the thread gets the bare id, puku-cli's own row still goes to puku-cli.</li>
+      <li><code>lib/goose-models.test.ts</code> — <b>new</b>: the setting store — order, trimming, empty entries dropped, first of a repeated id wins, a malformed list reads as none.</li>
+      <li><code>components/Pickers.test.tsx</code> — a named model shows under Goose, not under puku-cli, and picks as <code>goose:puku-ai-2.8</code>.</li>
+      <li><code>lib/model-options.test.ts</code> — the configured model is a row, named or not.</li>
+      <li><code>components/GooseNamedModels.test.tsx</code> — a save refreshes the names.</li>
+      <li><code>app/api/settings-route.test.ts</code> — the route saves the names, ignores an absent field, refuses a malformed list.</li>
+    </ul>
+  </div>
+
+  <h2>Docs</h2>
+  <div class="card">
+    <ul class="files">
+      <li><code>docs/architecture/goose.md</code> — "Naming the models", and what a name means</li>
+      <li><code>docs/architecture/MAP.md</code> — the Goose entry</li>
+      <li><code>README.md</code> — the BYOK paragraph</li>
+    </ul>
+  </div>
+</main>
+</body>
+</html>

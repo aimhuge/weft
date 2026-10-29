@@ -79,6 +79,10 @@ function createUpdater({
   notify = () => {},
   openExternal = () => {},
   onBeforeInstall = () => {},
+  // Runs when the app comes back up in a bundle an update just replaced: the new bundle's
+  // dependency trees are installed here, so a thread that needs pnpm finds it installed
+  // (electron/toolchain-install.cjs).
+  onUpdated = () => {},
   onChange = () => {},
   // Seconds since the last keyboard or mouse input on this Mac (Electron's powerMonitor).
   idleSeconds = () => 0,

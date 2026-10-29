@@ -76,6 +76,19 @@ describe("cliEnv", () => {
     for (const [k, v] of Object.entries(keep)) expect(env[k], k).toBe(v);
   });
 
+  // Loader hooks run code in a thread's process before it runs its own, so they go by name whatever
+  // they hold (2026-10-28).
+  it("strips the loader hooks, and keeps the certificate one", () => {
+    const strip = { NODE_OPTIONS: "--require /tmp/leak.js", LD_PRELOAD: "/tmp/leak.so", LD_AUDIT: "/tmp/audit.so", LD_LIBRARY_PATH: "/tmp", DYLD_INSERT_LIBRARIES: "/tmp/leak.dylib", DYLD_LIBRARY_PATH: "/tmp", DYLD_FRAMEWORK_PATH: "/tmp" };
+    const keep = { NODE_EXTRA_CA_CERTS: "/ca.pem" };
+    for (const [k, v] of Object.entries({ ...strip, ...keep })) vi.stubEnv(k, v);
+
+    const env = cliEnv();
+
+    for (const k of Object.keys(strip)) expect(env, k).not.toHaveProperty(k);
+    for (const [k, v] of Object.entries(keep)) expect(env[k], k).toBe(v);
+  });
+
   it("keeps unrelated and look-alike variables", () => {
     vi.stubEnv("CLAUDE_CONFIG_DIR", "/tmp/claude");
     vi.stubEnv("CLAUDE_PIDS", "keep");

@@ -5,9 +5,10 @@ import { useAccount } from "@/lib/use-account";
 import Icon, { Spinner } from "./Icon";
 
 // The welcome's sign-in screen (components/WelcomeDialog.tsx), after Get ready's video and before the projects: a new
-// Wefter signs in to Weft with GitHub before going on, since the profile, Project Sync, share links, leagues and the
-// Puku trial all hang off the account. It only shows when sign-in is set up on this Weft and you're signed out; an
-// account that can't be read leaves it out rather than trapping a first launch on a screen that can't be passed.
+// Wefter can sign in to Weft with GitHub before going on, since the profile, Project Sync, share links and leagues hang
+// off the account. It only shows when sign-in is set up on this Weft and you're signed out; an account that can't be read
+// leaves it out rather than trapping a first launch on a screen that can't be passed.
+// The screen never blocks: "Not now" (the footer's Skip) moves on, so a new user isn't turned away by a sign-up wall.
 
 export function useAccountStep() {
   const { state } = useAccount();
@@ -26,8 +27,7 @@ export function AccountStep() {
       <div>
         <h2 className="text-[18px] font-semibold text-ink">Sign in to Weft</h2>
         <p className="text-[12.5px] text-muted">
-          Your Weft account is your GitHub. It keeps your Wefter Profile and turns on Project Sync, share links, leagues and
-          the free Puku trial.
+          Your Weft account is your GitHub. It keeps your Wefter Profile and turns on Project Sync, share links and leagues.
         </p>
       </div>
       {user ? (

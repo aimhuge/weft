@@ -5,7 +5,7 @@
 import path from "node:path";
 import { blankCommand, parseShell, type SimpleCommand } from "./shell-parse";
 import { DATA_DIR } from "./store";
-import { DATA_NAMES, expandBraces, isSecretFile } from "./secret-guard-files";
+import { DATA_NAMES, expandBraces, inTranscriptDir, isSecretFile, reachesDataDir } from "./secret-guard-files";
 
 // Commands that print, copy out or send what they read.
 const READERS = new Set(
@@ -80,6 +80,18 @@ function pathTokens(word: string): string[] {
 
 // Every secret name above has one of these in it, or a glob reaches it; the rest skip path.resolve.
 const MAYBE_SECRET = new RegExp(`env|dev\\.vars|${DATA_NAMES.map((n) => n.split(".")[0]).join("|")}|[*?[]`, "i");
+
+// A path that is the data dir or the CLI's transcript dir, whatever else is in it. These hold
+// the control server's token and every secret a thread ever saw, so they are named by their
+// folder, not by a file inside them (2026-10-28).
+function hardPathIn(words: string[], dataDir: string): string | undefined {
+  for (const word of words) {
+    for (const t of pathTokens(word)) {
+      if (reachesDataDir(t, dataDir) || inTranscriptDir(t)) return t;
+    }
+  }
+  return undefined;
+}
 
 // Each distinct token once: a 1 MB heredoc is ~600k tokens but only a few thousand different ones.
 function secretIn(words: string[], dataDir: string): string | undefined {
@@ -210,6 +222,22 @@ function gitVerdict(call: Call): string | null {
   return shows ? readerVerdict(call) : null;
 }
 
+// Package runners that run a command of their own: `pnpm exec cat .env`, `npx cat .env`. The
+// child is invisible to a guard that only reads the line, so it is re-parsed as a command
+// (2026-10-28).
+const EXEC_RUNNERS = new Set(["npx", "bunx", "pnpx", "dlx"]);
+// The runners whose `exec` (or `dlx`) subcommand runs a command: `pnpm exec`, `npm exec`, `yarn exec`.
+const EXEC_SUBCOMMANDS = new Set(["pnpm", "npm", "yarn", "bun"]);
+
+// The words of the command a package runner runs, or null when it runs none.
+export function execRunnerChild(cmd: string, args: string[]): string[] | null {
+  if (EXEC_RUNNERS.has(cmd)) return args.filter((a) => !a.startsWith("-"));
+  if (!EXEC_SUBCOMMANDS.has(cmd)) return null;
+  const at = args.findIndex((a) => a === "exec" || a === "dlx");
+  if (at < 0) return null;
+  return args.slice(at + 1).filter((a) => !a.startsWith("-"));
+}
+
 function verdictFor(cmd: string): ((call: Call) => string | null) | null {
   if (SHELLS.has(cmd)) return shellVerdict;
   if (cmd === "xargs" || cmd === "find") return runsOnNamesVerdict;
@@ -226,9 +254,28 @@ function commandVerdict({ words: raw, inputs, stdin }: SimpleCommand, dataDir: s
   const words = stripPrefixes(raw);
   if (dumpsEnvironment(words)) return ENV_DUMP;
   if (pullsToStdout(words)) return reason("`vercel env pull` to stdout", true);
+  // A folder that holds secrets, named as a folder: `find ~/.weft -exec cat {} \;` and
+  // `rsync -a ~/.weft/ /tmp/b/` name no secret file, but reach one (2026-10-28).
+  const hard = hardPathIn([...words, ...inputs], dataDir);
+  if (hard) return reason(hard);
   const [first = "", ...args] = unwrapEnv(words);
   const cmd = path.basename(first);
-  return verdictFor(cmd)?.({ cmd, args, stdin, dataDir, depth, namesSecret }) ?? null;
+  const own = verdictFor(cmd)?.({ cmd, args, stdin, dataDir, depth, namesSecret }) ?? null;
+  if (own) return own;
+  return execChildVerdict(cmd, args, dataDir, depth, namesSecret);
+}
+
+// A package runner's child is a command of its own: `pnpm exec cat .env` reads the file
+// even though the line only names the runner (2026-10-28).
+function execChildVerdict(cmd: string, args: string[], dataDir: string, depth: number, namesSecret: () => boolean): string | null {
+  const child = execRunnerChild(cmd, args);
+  if (!child?.length) return null;
+  const [childCmd = "", ...childArgs] = child;
+  const name = path.basename(childCmd);
+  const inner = verdictFor(name)?.({ cmd: name, args: childArgs, stdin: [], dataDir, depth, namesSecret }) ?? null;
+  if (inner) return inner;
+  const hit = hardPathIn(childArgs, dataDir) ?? secretIn(childArgs, dataDir);
+  return hit ? reason(hit) : null;
 }
 
 // Why a shell command is turned away, or null to let it run.

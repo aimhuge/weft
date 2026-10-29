@@ -36,6 +36,8 @@ function createThreadTools({ idOf, storeReady, existing, store, log, grants, pro
       grants,
       card,
       vaultId: id,
+      // The grant's scope is the site: a grant that names another page doesn't cover this one.
+      site,
       unlockFor: () => {
         if (!threadUnlocks.has(key)) threadUnlocks.set(key, createUnlock({ prompt, now }));
         return threadUnlocks.get(key);

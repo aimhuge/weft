@@ -4,7 +4,7 @@ import { useState } from "react";
 import { api } from "@/lib/client";
 import { isLive } from "@/lib/format";
 import { BACKEND_LABELS, type Backend, type Card } from "@/lib/types";
-import { firstNow, patchNow, waitNow } from "@/lib/optimistic-cards";
+import { firstNow, otherFirstNow, patchNow, waitNow } from "@/lib/optimistic-cards";
 import ArchiveButton from "./ArchiveButton";
 import CardFooterMeta from "./CardFooterMeta";
 import CronMark, { cronCardClass } from "./CronMark";
@@ -252,9 +252,11 @@ function CardActions({ card, readOnly, onResume, onStar, onArchive, onStop }: { 
 
 // The Allow / Deny pair for a permission prompt. The card opens the thread on click; each button
 // stops the event so the click answers the prompt instead. An edit another card is holding offers
-// the holder's face, Wait (the default, as in the thread's prompt) and Me first (lib/precedence.ts), which goes
-// ahead and has the holder leave the file to this card. A card already waiting (lib/permission-wait.ts) drops
-// Wait; its last line already says who it waits for. Buttons never wrap, so a narrow card stays one row.
+// the order, not a refusal: the holder's face, Wait (the default, as in the thread's prompt), This first
+// (lib/precedence.ts), which goes ahead and has the holder leave the file to this card, and Other
+// first, which puts the holder ahead — this card leaves the file to it and waits. A card already
+// waiting (lib/permission-wait.ts) drops Wait; its last line already says who it waits for. Buttons
+// never wrap, so a narrow card stays one row.
 function PermissionRow({ card, answered, onAnswer }: { card: Card; answered: boolean; onAnswer: (allow: boolean) => void }) {
   const stop = (allow: boolean) => (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -280,9 +282,11 @@ function PermissionRow({ card, answered, onAnswer }: { card: Card; answered: boo
           </button>
         )}
         <button onClick={send(firstNow)} disabled={answered} className={card.pending?.waiting ? primary : secondary} title={`Go ahead, and ‘${holder.title}’ leaves this file to this card until it commits or finishes`}>
-          Me first
+          This first
         </button>
-        {deny}
+        <button onClick={send(otherFirstNow)} disabled={answered} className={secondary} title={`Let ‘${holder.title}’ go first: it keeps this file, and this card waits until it commits or finishes`}>
+          Others first
+        </button>
       </div>
     );
   return (

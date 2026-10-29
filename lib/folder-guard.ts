@@ -28,7 +28,9 @@ export interface Ground {
 
 const ground = (): Ground => {
   const home = os.homedir();
-  return { home, free: [DATA_DIR, path.join(home, ".claude"), os.tmpdir(), ...SYSTEM], fenced: [worktreesRoot()] };
+  // ~/.claude is not free: the CLI's own transcripts hold every secret value a thread ever saw, in
+  // plaintext, and the secret guard turns them away (2026-10-28).
+  return { home, free: [DATA_DIR, os.tmpdir(), ...SYSTEM], fenced: [worktreesRoot()] };
 };
 
 const READ_TOOLS = new Set(["Read", "Glob", "Grep", "LS"]);

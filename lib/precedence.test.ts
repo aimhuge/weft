@@ -7,14 +7,19 @@ const sessions = new Map<string, Session>();
 const settle = vi.fn();
 const steer = vi.fn();
 const canSteer = vi.fn((s: Session | undefined) => Boolean(s));
+const waitPermission = vi.fn();
+const waitingOn = vi.fn(() => undefined as { id: string; title: string; claim: string } | undefined);
+const liveWaitTargets = vi.fn(() => [] as { id: string; holderId: string }[]);
 const updateCard = vi.fn((id: string, patch: Partial<Card>) => cards.set(id, { ...cards.get(id)!, ...patch }));
 
 vi.mock("./store", () => ({ getCard: (id: string) => cards.get(id), updateCard }));
 vi.mock("./runner-pending", () => ({ settle }));
 vi.mock("./runner-state", () => ({ sessions }));
 vi.mock("./runner-steer", () => ({ canSteer, steer }));
+vi.mock("./permission-wait", () => ({ waitPermission, waitingOn, liveWaitTargets }));
+vi.mock("./wait-chain", () => ({ wouldGridlock: vi.fn(() => false) }));
 
-const { putFirst, yieldMessage } = await import("./precedence");
+const { putFirst, putHolderFirst, yieldMessage } = await import("./precedence");
 
 const holder = { id: "b", title: "Restyle", claim: "/repo/Login.tsx#Form" };
 
@@ -72,6 +77,40 @@ describe("putFirst", () => {
     expect(() => putFirst("a", "p1")).toThrow("isn't waiting anymore");
     sessions.set("a", { pending: [pending({ why: { category: "mode", detail: "d" } })] } as unknown as Session);
     expect(() => putFirst("a", "p1")).toThrow("Only an edit another card is holding");
+  });
+});
+
+describe("putHolderFirst", () => {
+  it("leaves the file to the holder and waits for it, instead of going ahead", () => {
+    cards.set("a", card("a", { yields: [{ to: "c", file: "/repo/z.ts" }] }));
+    cards.set("b", card("b"));
+    sessions.set("a", { pending: [pending()] } as unknown as Session);
+    // The wait really happened, so the yield stays.
+    waitingOn.mockReturnValue(holder);
+    putHolderFirst("a", "p1");
+    // This card leaves the file to the holder: its own later edits there wait on the holder.
+    expect(cards.get("a")?.yields).toEqual([{ to: "c", file: "/repo/z.ts" }, { to: "b", file: "/repo/Login.tsx" }]);
+    // And the held request stays held until the holder lets go.
+    expect(waitPermission).toHaveBeenCalledWith("a", "p1");
+    expect(settle).not.toHaveBeenCalled();
+    expect(steer).not.toHaveBeenCalled();
+  });
+
+  it("takes the yield back when the wait was refused and the request isn't waiting", () => {
+    cards.set("a", card("a"));
+    cards.set("b", card("b"));
+    sessions.set("a", { pending: [pending()] } as unknown as Session);
+    // The holder let go in between, so the wait didn't happen.
+    waitingOn.mockReturnValue(undefined);
+    putHolderFirst("a", "p1");
+    expect(waitPermission).toHaveBeenCalledWith("a", "p1");
+    expect(cards.get("a")?.yields).toEqual([]);
+  });
+
+  it("refuses a request that's gone or that no card holds", () => {
+    expect(() => putHolderFirst("a", "p1")).toThrow("isn't waiting anymore");
+    sessions.set("a", { pending: [pending({ why: { category: "mode", detail: "d" } })] } as unknown as Session);
+    expect(() => putHolderFirst("a", "p1")).toThrow("Only an edit another card is holding");
   });
 });
 

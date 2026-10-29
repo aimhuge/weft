@@ -16,8 +16,8 @@ describe("cliMissing", () => {
 });
 
 describe("trialState", () => {
-  it("offers the trial when no agent is logged in and you're signed out", () => {
-    expect(trialState(nobody, false)).toBe("offer");
+  it("stays quiet when you're signed out, so a new user isn't pushed to sign up", () => {
+    expect(trialState(nobody, false)).toBe("none");
   });
 
   it("runs puku on the trial once you're signed in, whatever else is ready", () => {
@@ -44,7 +44,7 @@ describe("trialState", () => {
 describe("agentReady", () => {
   it("is ready with a logged-in agent or the trial on, and null until the logins are read", () => {
     expect(agentReady(null, "none")).toBeNull();
-    expect(agentReady(nobody, "offer")).toBe(false);
+    expect(agentReady(nobody, "none")).toBe(false);
     expect(agentReady(nobody, "on")).toBe(true);
     expect(agentReady({ ...nobody, claude: IN }, "none")).toBe(true);
   });

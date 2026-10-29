@@ -126,6 +126,14 @@ describe("setOpen", () => {
     const layout = makeLayout({ open: { thread: false, editor: false, pane: false, show: true } });
     expect(setOpen(layout, "show", false).open.show).toBe(true);
   });
+
+  it("hands back the same layout when the column is already in that state", () => {
+    // Opening a card asks for the pane every time; the pane is usually already open, and an
+    // unchanged layout means nothing re-renders or re-writes storage.
+    const layout = makeLayout();
+    expect(setOpen(layout, "pane", true)).toBe(layout);
+    expect(setOpen(layout, "editor", false)).toBe(layout);
+  });
 });
 
 describe("dragDivider", () => {

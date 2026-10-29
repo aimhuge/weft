@@ -43,7 +43,18 @@ describe("resolveElement", () => {
     const cdp = fakeCdp({ "Runtime.evaluate": () => ({ result: { objectId: "obj-2" } }) });
     await expect(resolveElement(cdp, wc, { selector: "#go" })).resolves.toEqual({ objectId: "obj-2", label: "#go" });
     const evaluate = cdp.send.mock.calls.find((c) => c[1] === "Runtime.evaluate")!;
-    expect(evaluate[2].expression).toBe('document.querySelector("#go")');
+    expect(evaluate[2].expression).toContain('document.querySelectorAll("#go")');
+  });
+
+  it("resolves a selector with a Playwright text pseudo-class", async () => {
+    const cdp = fakeCdp({ "Runtime.evaluate": () => ({ result: { objectId: "obj-3" } }) });
+    const selector = '[role="menu"] button[role="menuitem"]:has(span:text-is("Settings…"))';
+    await expect(resolveElement(cdp, wc, { selector })).resolves.toEqual({ objectId: "obj-3", label: selector });
+    const evaluate = cdp.send.mock.calls.find((c) => c[1] === "Runtime.evaluate")!;
+    // The text condition is matched by reading textContent, not by querySelector.
+    expect(evaluate[2].expression).toContain('[role=\\"menu\\"] button[role=\\"menuitem\\"]');
+    expect(evaluate[2].expression).toContain("Settings…");
+    expect(evaluate[2].expression).not.toContain("text-is");
   });
 
   it("is null when no element matches the selector", async () => {
@@ -60,5 +71,10 @@ describe("resolveElement", () => {
   it("says a selector that isn't one is wrong", async () => {
     const cdp = fakeCdp({ "Runtime.evaluate": () => ({ exceptionDetails: { text: "SyntaxError" } }) });
     await expect(resolveElement(cdp, wc, { selector: "!!!" })).rejects.toThrow("!!! isn't a valid CSS selector.");
+  });
+
+  it("says what to do instead when a selector isn't valid", async () => {
+    const cdp = fakeCdp({ "Runtime.evaluate": () => ({ exceptionDetails: { text: "SyntaxError" } }) });
+    await expect(resolveElement(cdp, wc, { selector: "!!!" })).rejects.toThrow("take a snapshot and use the element's ref");
   });
 });

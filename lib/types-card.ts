@@ -105,7 +105,7 @@ export interface ScheduledMessage {
   quiet?: boolean;
 }
 
-// A file this card leaves to another card for now: the user put that card first ("Me first",
+// A file this card leaves to another card for now: the user put that card first ("This first",
 // lib/precedence.ts). The file is a plain path, not a claim key (lib/claims.ts).
 export interface CardYield {
   // The card that goes first on the file.

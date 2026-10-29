@@ -75,4 +75,22 @@ describe("GooseNamedModels", () => {
     expect(await screen.findByText(/Couldn’t save: offline/)).toBeInTheDocument();
     vi.unstubAllGlobals();
   });
+
+  it("refreshes the names the board's pickers read, so a save shows up in the menu", async () => {
+    // The model menus read the names from the board's store, so a save that doesn't re-read them
+    // leaves every picker showing the old names until the board reloads.
+    resetNamedModels();
+    const fetch = respond({ gooseProviderId: "openrouter", gooseNamedModels: [] });
+    vi.stubGlobal("fetch", fetch);
+    mocks.saveSettings.mockResolvedValue({});
+    render(<GooseNamedModels />);
+    await screen.findByText(/No models named yet/);
+    const callsBeforeSave = fetch.mock.calls.length;
+
+    await userEvent.click(screen.getByRole("button", { name: "Name another model" }));
+    await userEvent.click(screen.getByRole("button", { name: "Save the model names" }));
+
+    await waitFor(() => expect(fetch.mock.calls.length).toBeGreaterThan(callsBeforeSave));
+    vi.unstubAllGlobals();
+  });
 });

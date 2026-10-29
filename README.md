@@ -134,8 +134,12 @@ port.
   orange ripple shows where each click lands. It can `wait_for` something to appear, check a phone or tablet layout
   with `set_viewport`, and read the page's `console_logs` and `network_errors` when something breaks, all in the pane
   you're watching, where you're logged in (docs/architecture/agent-browser.md).
+- **Selectors that read like the page**: a thread can act on an element by CSS, or by the text a person would read
+  on it — `:text-is("Settings…")`, `:has-text("menu")`, `:has(span:text-is("Settings…"))` — the way Playwright
+  writes them. Same selector, same element, in every tool.
 - **Browser pane zoom**: the % button in the pane's toolbar zooms the page (Chrome's steps, plus
   50–200% presets); ⌘+ / ⌘− / ⌘0 and ⌘+scroll work on the page too, and a trackpad pinch magnifies.
+  Opening the menu doesn't blank the page — the pane steps the page aside around the menu.
 - **Failed loads say why**: a page that won't load in the browser pane (say a card's dev server stopped) shows Weft's
   error page instead of a blank white one: the URL, the reason, **Try again**, **Back to the last page**, and an
   automatic reload when a local dev server comes back (`electron/pane-error.cjs`).
@@ -167,11 +171,11 @@ port.
   from Alfred, Raycast, or Shortcuts. (Registered by the packaged app.)
 - The window remembers its size and position, and the app reads your login shell's PATH, so it
   finds `claude` and `puku-cli` even when started from Finder.
-- **Puku trial**: a puku thread works with no Puku account. With no agent logged in, the welcome's puku-cli row offers
-  **Try free** (sign in with GitHub) before your first prompt, and the first thread runs on the trial. While you're signed in to your Weft account and
+- **Puku trial**: a puku thread works with no Puku account. While you're signed in to your Weft account and
   puku-cli has no login of its own, Weft runs it on Weft's own Puku key through a proxy on the deployed Weft, with a
-  daily cap per account (150 requests, 1M tokens); Weft's key never ships in the app. Signed out, the login pop-up
-  offers **Sign in to Weft** or Puku's own login. See docs/architecture/puku-trial.md.
+  daily cap per account (150 requests, 1M tokens); Weft's key never ships in the app. The welcome doesn't chase the
+  sign-up: a new user is asked to log in to an agent they already use, and the trial surfaces later, where a thread
+  needs it — the login pop-up offers **Sign in to Weft** or Puku's own login. See docs/architecture/puku-trial.md.
 - **Weft Pro**: every workspace has a plan. **Free** keeps the Puku trial's daily cap. **Pro** ($20/month or
   $200/year) replaces it with a 300M Puku token allowance, refreshed every billing period. **Team** ($9 a seat a month)
   bills the workspace's member count, and adding or removing a person moves the Stripe quantity with it.
@@ -361,7 +365,7 @@ there, whichever day that is.
 
 Pick **Codex** in the New thread dialog to run the OpenAI Codex CLI. Install `codex` on your PATH and sign in with `codex login` first; Weft can open Codex's device login in Terminal from Settings → Accounts. Codex uses its own tools and saved sessions. Weft's browser, board, secrets and webhook MCP tools reach Codex over HTTP, and a folder's `CLAUDE.md` and `.claude/skills` are passed along (Codex reads neither); and every tool call goes through Weft's guards first, the same ones Claude Code threads run behind ([thread guards](docs/architecture/thread-guards.md)). Codex's sandbox mode and reasoning effort are fixed when a session starts.
 
-Pick **Goose** to run the Goose CLI agent (the Rust one from Block), and bring your own key: Settings → Models → **Bring your own key** takes a provider's API key — OpenRouter, Anthropic, OpenAI, Google, Groq, Mistral, DeepSeek, xAI, Azure, LiteLLM, Perplexity, Cerebras, a local Ollama, or any OpenAI-compatible endpoint — and Weft keeps it in your Keychain. The key never reaches the board and never crosses Weft's control server: the thread's Goose process is started with the key in its env, and that is the only place it exists. The provider you pick is what new Goose threads run on, and its models are the ones the Goose group of every model menu lists — your provider's own ids, not another provider's. A card runs the model you gave it (in the New thread dialog or by switching mid-thread); a card left on **Your BYOK model** runs the model you picked for the provider, and with none, Goose chooses. A provider that needs an endpoint beside its key takes one (Anthropic's host, Azure's resource address, LiteLLM's proxy), and a provider whose model ids aren't known ahead of time lets you type the id. Give your models a name in the same page's **Model names** section, and every menu shows "Big Opus" instead of the raw id, with the id beside it. **Puku** is one click: the button beside the Provider picker fills in the Anthropic provider, `https://api-cli.puku.sh` and `puku-ai-2.8`, so all that is left is your Puku key. A Goose thread is a plain CLI process, so like a Codex thread it has no per-tool guards and no session to resume — one fresh `goose run` per turn — and it takes no effort setting. It has no Agent tool either, so its subagents are `goose run --text` calls from Bash on the same provider and model, and its commits are signed `Co-Authored-By: Goose (<model>) on Weft`. Install `goose` on your PATH first.
+Pick **Goose** to run the Goose CLI agent (the Rust one from Block), and bring your own key: Settings → Models → **Bring your own key** takes a provider's API key — OpenRouter, Anthropic, OpenAI, Google, Groq, Mistral, DeepSeek, xAI, Azure, LiteLLM, Perplexity, Cerebras, a local Ollama, or any OpenAI-compatible endpoint — and Weft keeps it in your Keychain. The key never reaches the board and never crosses Weft's control server: the thread's Goose process is started with the key in its env, and that is the only place it exists. The provider you pick is what new Goose threads run on, and its models are the ones the Goose group of every model menu lists — your provider's own ids, not another provider's. A card runs the model you gave it (in the New thread dialog or by switching mid-thread); a card left on **Your BYOK model** runs the model you picked for the provider, and with none, Goose chooses. A provider that needs an endpoint beside its key takes one (Anthropic's host, Azure's resource address, LiteLLM's proxy), and a provider whose model ids aren't known ahead of time lets you type the id. Give your models a name in the same page's **Model names** section, and every menu shows "Big Opus" instead of the raw id, with the id beside it. A name says the model runs on Goose, so it stays in the Goose group even when the id is another CLI's too — name `puku-ai-2.8` and the row reads "Big Opus" under Goose, and the thread starts on Goose. **Puku** is one click: the button beside the Provider picker fills in the Anthropic provider, `https://api-cli.puku.sh` and `puku-ai-2.8`, so all that is left is your Puku key. A Goose thread is a plain CLI process, so like a Codex thread it has no per-tool guards and no session to resume — one fresh `goose run` per turn — and it takes no effort setting. It has no Agent tool either, so its subagents are `goose run --text` calls from Bash on the same provider and model, and its commits are signed `Co-Authored-By: Goose (<model>) on Weft`. Install `goose` on your PATH first.
 
 ## How cards move
 
@@ -448,10 +452,18 @@ claims drop when it reaches Done or is archived, and a file's as soon as `git st
 walk-through, or a thread's own `git commit`). Bash counts too: a line that writes a claimed file (`sed -i`, `> file`,
 `prettier --write`) asks the same way, and whatever a Bash call wrote becomes the card's claim. When a typecheck, test
 or lint run fails, the thread is told which failures sit in files another card is mid-edit on, so it leaves them alone.
-When one card matters more right now, press **Me first** on its prompt: its edit goes ahead with the whole file, and
+When one card matters more right now, press **This first** on its prompt: its edit goes ahead with the whole file, and
 the card holding the code is told mid-turn to leave that file to it until it commits or finishes (its own edits there
 wait). The holder's thread shows **You first** for each card waiting on it, to do the same from that side, and the
-prompt shows both cards' faces (thumbnail or emoji), so who is in whose way reads at a glance.
+prompt shows both cards' faces (thumbnail or emoji), so who is in whose way reads at a glance. The other way round
+is **Others first**: the card holding the code goes ahead and this one waits for it. A clash asks who goes first, not
+whether to go ahead, so **Deny** is gone from that prompt — it stays on the prompts that really are a refusal (the
+card's permission mode, a folder outside the project). The card other cards are waiting on carries a **blocking N**
+chip, so you can see what going first is holding up. And the wait ends when the change lands, not when the holder
+commits: the moment the holder's edit (or the file its Bash wrote) is on disk, the waiting thread is let go with a
+message to re-read the file and redo its edit on top of the new one. Two cards can never wait on each other: a wait
+that would close such a loop is refused and the card goes ahead instead, so one of the two always keeps running
+instead of the board locking up.
 
 A thread works in its card's project folder. When a file tool or a Bash command reaches anywhere else (say `~/Downloads`), Weft asks first, whether or not macOS would have refused it: **Allow once**, **This card** or **Always**, with an **Outside project** chip saying which folder. **Always** used to be a one-way door — nothing listed those folders and nothing took one back. Settings → General now has a **Trusted folders** row: **Add folder** opens the OS folder dialog, **Remove** takes one back out, and a thread already holding the folder keeps it only until that turn ends (`lib/folder-guard.ts`, `components/TrustedFolders.tsx`).
 
@@ -961,8 +973,10 @@ four characters showing.
   each line uploads within seconds and is then deleted from the Mac, the database stamps when it arrived, and lines
   are numbered, so a line held back or removed before upload shows. See it in Settings → Security → **Keychain access**.
 - **Give a thread standing access.** Right-click a card → **Give 🔐 Vault Access for 1 Hour**, or let the thread ask
-  (`mcp__secrets__request_access`): one Touch ID and its fills, commands and dev server stop asking for an hour. It
-  still never sees a value, and writes still ask. Revoke it from the same menu or from Settings → Security.
+  (`mcp__secrets__request_access`): one Touch ID and its fills, commands and dev server stop asking for an hour. A
+  grant that covers typing a value into a page names the page in the Touch ID prompt and covers that page only, so a
+  thread can't use it on a page it controls; a grant with no page covers only the commands and dev servers. It still
+  never sees a value, and writes still ask. Revoke it from the same menu or from Settings → Security.
 - **Threads save a key they need as a blank right away.** When a key isn't in the vault yet, the thread
   calls `mcp__secrets__add_blank` (with a hint for where to get the value) and keeps going with what
   doesn't need it; 🔐's count goes up, the row shows **Fill in** and the hint under the name, and you
@@ -981,7 +995,7 @@ four characters showing.
 - **Threads run commands with secrets without seeing them.** `mcp__secrets__run("pnpm run job", ["DATABASE_URL"])`
   shows you the exact command, the `package.json` script behind it and the names, with **Allow once** or **Always
   allow**, then Touch ID. Electron main runs it with no shell and the values in its env only, and the thread gets the
-  exit code and output with every value (raw, URL-encoded, JSON-escaped or base64) shown as `‹DATABASE_URL›`. Pipes,
+  exit code and output with every value (raw, URL-encoded, JSON-escaped, base64, hex, zipped or reversed) shown as `‹DATABASE_URL›`. Pipes,
   redirects, `$VAR`, `sh -c`, `node -e`, `printenv` and network tools like `curl` are turned away. Always allow is
   remembered per vault, folder and command, and asks again if a thread edits the script.
 - **Dev servers get the vault's development values.** Starting a card's dev server from its review tour asks the same

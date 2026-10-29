@@ -17,13 +17,13 @@ function statusRoute(api) {
   return ({ folders }) => api()?.status((folders ?? []).map(String)) ?? { folders: [] };
 }
 
-function paneRoutes({ dataDir, app, dialog, shell, window, board, sendMenu, updater, vault, vercelEnv, vercelApi, supabaseApi, blastcpApi = () => null, gooseApi = () => null, slackApi = () => null }) {
+function paneRoutes({ dataDir, app, dialog, shell, window, board, sendMenu, updater, vault, vercelEnv, vercelApi, supabaseApi, blastcpApi = () => null, gooseApi = () => null, slackApi = () => null, cardFor = () => "" }) {
   return {
     // The Weft account's session, sealed by safeStorage; the server reads it here instead of a plain file.
     ...accountRoutesFor(dataDir),
     // mcp__secrets__add_blank, ask_add and set_value: blanks into the card's vault (a fill or run that found a key
     // missing goes through ask-add too), and a value a thread generated into one.
-    ...vaultRoutes(vault),
+    ...vaultRoutes(vault, cardFor),
     // A new mini-app link's keys, pushed in the request that makes it (lib/app-share-keys.ts).
     ...appSecretsRoutes(),
     // mcp__board__request_folder_access: a thread that got "Operation not permitted" on Downloads asks;

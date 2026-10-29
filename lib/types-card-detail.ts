@@ -90,7 +90,7 @@ export interface Card {
   // Top-level symbols (or whole files) the thread edited and hasn't committed, most recent first, capped:
   // "/abs/Board.tsx#CommandPalette", "/abs/a.css#*" (lib/claims.ts). Dropped at Done, archive and commit.
   claims?: string[];
-  // Files this card leaves to another card for now: the user put that card first ("Me first", lib/precedence.ts).
+  // Files this card leaves to another card for now: the user put that card first ("This first", lib/precedence.ts).
   // While it holds a claim on the file, its edits there don't ask this card, and this card's edits there wait on it.
   yields?: CardYield[];
   // Weft crashed, failed to build or reloaded right after this thread did something that does that (lib/crash-blame.ts):

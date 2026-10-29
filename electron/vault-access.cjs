@@ -49,11 +49,15 @@ async function byTheUser({ ask, remember }) {
  * Only one of unlockFor and ask is given by a caller: a fill asks for a Touch ID, a command asks the user,
  * a grant asks the user for an hour.
  *
- * @param {{ grants?: any, card: string, vaultId: string, rule?: any, unlockFor?: any, reason?: string, ask?: any, remember?: any }} options
+ * site is the page a value would be typed into, when the caller has one. A grant that names a site
+ * covers that site and nothing else, and a grant with no site covers only the site-less powers: a
+ * grant is never wider than the approval the user read (2026-10-28).
+ *
+ * @param {{ grants?: any, card: string, vaultId: string, site?: string, rule?: any, unlockFor?: any, reason?: string, ask?: any, remember?: any }} options
  */
-async function decideAccess({ grants, card, vaultId, rule = null, unlockFor = null, reason = "", ask = null, remember = null }) {
-  // The card's standing grant for this vault: no question at all.
-  if (grants?.allows?.(card, vaultId)) return { allowed: true, via: VIA.grant };
+async function decideAccess({ grants, card, vaultId, site, rule = null, unlockFor = null, reason = "", ask = null, remember = null }) {
+  // The card's standing grant for this vault, on this site: no question at all.
+  if (grants?.allows?.(card, vaultId, site)) return { allowed: true, via: VIA.grant };
 
   // A command the user said may always run with these secrets.
   if (rule && rule.allows()) return { allowed: true, via: VIA.rule };

@@ -69,7 +69,8 @@ describe("createVault audit and grants", () => {
     const folder = project({ ".env.local": `A=${LONG}\n` });
     const { vault, prompt, audit } = make();
     await vault.importPicks(folder, [{ file: ".env.local", name: "A" }]);
-    expect(await vault.grant(folder, { card: "c1", thread: "Build card", by: "you" })).toMatchObject({ granted: true });
+    // The grant names the site it covers, so it may fill that page without asking again.
+    expect(await vault.grant(folder, { card: "c1", thread: "Build card", by: "you", site: "supabase.com" })).toMatchObject({ granted: true });
     prompt.mockClear();
 
     const got = await vault.useFor(folder, "A", "development", { card: "c1", site: "supabase.com", thread: "Build card" });
@@ -156,7 +157,7 @@ describe("createVault audit and grants", () => {
     const folder = project({ ".env.local": `A=${LONG}\n` });
     const { vault, prompt, audit } = make();
     await vault.importPicks(folder, [{ file: ".env.local", name: "A" }]);
-    expect(await vault.grant(folder, { card: "c1", thread: "Build card", by: "you" })).toMatchObject({ granted: true });
+    expect(await vault.grant(folder, { card: "c1", thread: "Build card", by: "you", site: "supabase.com" })).toMatchObject({ granted: true });
     expect(vault.grantList()).toEqual([expect.objectContaining({ card: "c1", thread: "Build card", label: "Owner/Repo" })]);
 
     vault.lock();
@@ -167,6 +168,35 @@ describe("createVault audit and grants", () => {
     expect(vault.revoke("c1")).toEqual({ revoked: 1 });
     expect(vault.grantList()).toEqual([]);
     expect(lines(audit)).toContainEqual(expect.objectContaining({ action: "revoke", by: "you", card: "c1" }));
+  });
+
+  // A grant is never wider than the approval the user read. A grant that names one site may not
+  // fill another page, and a grant with no site at all says nothing about where a value may be
+  // typed, so it never covers a fill (2026-10-28).
+  it("does not let a grant for one site cover another", async () => {
+    const folder = project({ ".env.local": `A=${LONG}\n` });
+    const { vault, prompt } = make();
+    await vault.importPicks(folder, [{ file: ".env.local", name: "A" }]);
+    expect(await vault.grant(folder, { card: "c1", thread: "Build card", by: "you", site: "supabase.com" })).toMatchObject({ granted: true });
+    prompt.mockClear();
+
+    // Another site: the grant does not cover it, so it asks.
+    const other = await vault.useFor(folder, "A", "development", { card: "c1", site: "evil.example.com" });
+    expect(other).toEqual({ denied: true });
+    expect(prompt).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not let a grant with no site cover a fill", async () => {
+    const folder = project({ ".env.local": `A=${LONG}\n` });
+    const { vault, prompt } = make();
+    await vault.importPicks(folder, [{ file: ".env.local", name: "A" }]);
+    expect(await vault.grant(folder, { card: "c1", thread: "Build card", by: "you" })).toMatchObject({ granted: true });
+    prompt.mockClear();
+
+    // The grant names no page, so it covers only the site-less powers: a fill still asks.
+    const got = await vault.useFor(folder, "A", "development", { card: "c1", site: "supabase.com" });
+    expect(got).toEqual({ denied: true });
+    expect(prompt).toHaveBeenCalledTimes(1);
   });
 });
 

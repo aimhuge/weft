@@ -4,8 +4,8 @@ import type { Card } from "./types";
 // Delete, Stop and a permission prompt's answers land on the board at once, before the server answers. A delete
 // can take a while (the DELETE route ends the card's CLI first) and a stop up to the runner's grace period, so the
 // card used to sit there looking untouched, and a prompt stayed up until the server's event came back, so you
-// clicked Me first again. Every Delete and Stop button calls removeNow / stopNow here, every Allow, Deny, Wait and
-// Me first answerNow / waitNow / firstNow; the board
+// clicked This first again. Every Delete and Stop button calls removeNow / stopNow here, every Allow, Deny, Wait and
+// This first answerNow / waitNow / firstNow; the board
 // (lib/board-live.ts) draws each card through `overlay`, so a server event that arrives mid-flight (the
 // stopped turn's last update, a deleted card's final result) doesn't put the old state back. A failed
 // call drops the intent and asks the board to reload, which brings back what the server really has.
@@ -171,9 +171,14 @@ export function waitNow(id: string, pendingId: string): Promise<void> {
   return sendNow(id, { kind: "answer", pendingId, allow: false, wait: true }, () => api.waitPermission(id, pendingId));
 }
 
-// Me first: the edit goes ahead now (lib/precedence.ts).
+// This first: the edit goes ahead now (lib/precedence.ts).
 export function firstNow(id: string, pendingId: string): Promise<void> {
   return sendNow(id, { kind: "answer", pendingId, allow: true, wait: false }, () => api.putFirst(id, pendingId));
+}
+
+// Others first: the card holding the code goes ahead and this card waits for it (lib/precedence.ts).
+export function otherFirstNow(id: string, pendingId: string): Promise<void> {
+  return sendNow(id, { kind: "answer", pendingId, allow: false, wait: true }, () => api.putHolderFirst(id, pendingId));
 }
 
 // The server deleted the card (its card_deleted event): nothing left to hold.

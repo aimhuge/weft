@@ -1,11 +1,11 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { CODEX_DEFAULT_MODEL, GOOSE_DEFAULT_MODEL, MODELS, NO_MODEL } from "@/lib/new-thread";
+import { CODEX_DEFAULT_MODEL, GOOSE_DEFAULT_MODEL, NO_MODEL } from "@/lib/new-thread";
 import { useLimitedModels } from "@/lib/use-plan-limits";
 import { gooseModelsFor } from "@/lib/goose-provider";
 import { useGooseChoice, useNamedModels, type GooseChoice } from "@/lib/use-named-models";
-import { cliChoiceModel, modelGroups, type NamedModel } from "@/lib/model-options";
+import { cliChoiceModel, gooseNamed, modelGroups, type NamedModel } from "@/lib/model-options";
 import type { Backend } from "@/lib/types";
 import ModelTypeahead from "./ModelTypeahead";
 
@@ -71,22 +71,25 @@ export default function ModelSelect({
   const offered = useOffered(value, goose);
   const names = useNamedModels();
 
-  // The models the user named, per CLI. A named model shows under the CLI that serves it: the
-  // Goose provider the user set up, or the CLI whose own list names the id.
+  // The models the user named, per CLI. A name is a Goose name — the setting is `gooseNamedModels`
+  // and the only place a name can be given is the Goose section of Settings — so a named model
+  // shows under Goose even when another CLI's list names the same id ("puku-ai-2.8" is puku-cli's
+  // own id, and a user who named it there is serving it through Goose).
   //
   // The Goose provider's own models come along, listed by their id: each provider serves its own
   // ids (OpenRouter's "anthropic/claude-opus-4.1" is not Anthropic's "claude-opus-4-1"), so the
-  // menu lists the ones the provider the user chose actually has.
+  // menu lists the ones the provider the user chose actually has. The model the provider is
+  // configured to run is always one of them, named or not.
   const named = useMemo(() => {
     const byBackend: Partial<Record<Backend, NamedModel[]>> = {};
-    for (const model of names) {
-      const backend = backendOf(model.id) ?? (goose.providerId ? "goose" : undefined);
-      if (!backend) continue;
-      byBackend[backend] = [...(byBackend[backend] ?? []), model];
+    // The names are Goose's, so a name that is also another CLI's id still belongs to Goose.
+    const gooseNames = gooseNamed(names, goose.modelId);
+    for (const model of gooseNames) {
+      byBackend.goose = [...(byBackend.goose ?? []), model];
     }
     if (goose.providerId) {
       const served = gooseModelsFor(goose.providerId, goose.modelId);
-      const already = new Set((byBackend.goose ?? []).map((m) => m.id));
+      const already = new Set(gooseNames.map((m) => m.id));
       const rows = served.filter((id) => !already.has(id)).map((id) => ({ id, name: id }));
       byBackend.goose = [...(byBackend.goose ?? []), ...rows];
     }
@@ -140,14 +143,6 @@ export default function ModelSelect({
 // The configured-model row of a CLI with no model of its own to name, or NO_MODEL.
 function configuredRow(backend: Backend): string {
   return Object.keys(CONFIGURED).find((id) => CONFIGURED[id] === backend) ?? NO_MODEL;
-}
-
-// The CLI a model id belongs to: the one whose list names it, or "goose" for a Goose model the
-// user named (a Goose provider serves ids no list can know).
-function backendOf(id: string): Backend | undefined {
-  const known = (Object.keys(MODELS) as Backend[]).find((b) => MODELS[b].some((m) => m.id === id));
-  if (known) return known;
-  return undefined;
 }
 
 // A Settings value that saves as soon as it changes, and goes back with the reason if the save fails.

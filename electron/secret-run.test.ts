@@ -246,15 +246,25 @@ describe("helpers", () => {
     expect(dialog.showMessageBox).toHaveBeenCalledTimes(1);
   });
 
-  it("routes the control server's requests, defaulting to the active card", async () => {
+  // The card is the one the server proved, not the one the body names: a body that says "k" can't
+  // borrow another card's grant, and a request that proves nothing runs for nobody (2026-10-28).
+  it("routes the control server's requests under the proven card", async () => {
     const r = { run: vi.fn((b: unknown) => Promise.resolve(b)), devGrant: vi.fn((b: unknown) => Promise.resolve(b)), claim: vi.fn((g: string) => ({ env: g })) } as unknown as Runner;
-    const routes = secretRunRoutes(() => r, () => "active");
-    expect(await routes["POST /secrets/run"]({ command: "x" })).toEqual({ command: "x", key: "active" });
-    expect(await routes["POST /secrets/run"]({ key: "k" })).toEqual({ key: "k" });
-    expect(await routes["POST /secrets/dev-grant"]({ key: "k" })).toEqual({ key: "k" });
+    const routes = secretRunRoutes(() => r, (_body, route) => (route === "/secrets/run" ? "proven" : "also-proven"));
+    expect(await routes["POST /secrets/run"]({ command: "x" }, "/secrets/run")).toEqual({ command: "x", key: "proven" });
+    expect(await routes["POST /secrets/run"]({ key: "k" }, "/secrets/run")).toEqual({ key: "proven" });
+    expect(await routes["POST /secrets/dev-grant"]({ key: "k" }, "/secrets/dev-grant")).toEqual({ key: "also-proven" });
     expect(routes["POST /secrets/claim"]({ grant: "g" }) as unknown).toEqual({ env: "g" });
     const none = secretRunRoutes(() => undefined);
     expect(() => none["POST /secrets/claim"]({})).toThrow("The secrets vault isn't ready yet.");
     expect(() => none["POST /secrets/run"]({})).toThrow();
+  });
+
+  // A request that proves nothing has no card: it runs for nobody rather than for the pane's
+  // active card, which is someone else's (2026-10-28).
+  it("gives an unproven request no card at all", async () => {
+    const r = { run: vi.fn((b: unknown) => Promise.resolve(b)), devGrant: vi.fn((b: unknown) => Promise.resolve(b)) } as unknown as Runner;
+    const routes = secretRunRoutes(() => r, () => "");
+    expect(await routes["POST /secrets/run"]({ command: "x", key: "k" }, "/secrets/run")).toEqual({ command: "x", key: "" });
   });
 });

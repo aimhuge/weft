@@ -1,32 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { PreToolUseHookInput } from "@anthropic-ai/claude-agent-sdk";
-import { bashVerdict, isSecretFile, SECRET_GUARD_HOOKS, secretGuard, toolVerdict } from "./secret-guard";
+import { bashVerdict, SECRET_GUARD_HOOKS, secretGuard, toolVerdict } from "./secret-guard";
 
 const DATA = "/Users/me/.weft";
 const signal = new AbortController().signal;
-
-describe("isSecretFile", () => {
-  it.each([".env", ".env.local", "apps/web/.env.production.local", "/x/.envrc", ".dev.vars", ".env*", "'.env.local'", "/Users/me/.weft/account.json", "~/.weft/account.json",
-    "/Users/me/.weft/device-key.json", "~/.weft/device-key.json", "~/.weft/vercel-token.json", "~/.weft/supabase-token.json", "~/.weft/cloudflare-token.json", "~/.weft/slack-token.json", "~/.weft/shell-token", "/Users/me/.weft/shell-token", "/Users/me/.weft/vault/acme-web.json", "~/.weft/vault/", "~/.weft/vault"])(
-    "%s holds secrets",
-    (file) => expect(isSecretFile(file, DATA)).toBe(true),
-  );
-
-  it.each([".env.example", ".env.local.sample", ".env.template", "env.ts", ".environment", "lib/env.test.ts", "account.json", "device-key.json", "vault/x.json", "/p/vault.json", "/Users/me/.weft/vaults.json", ""])("%s doesn't", (file) =>
-    expect(isSecretFile(file, DATA)).toBe(false),
-  );
-
-  it("finds the account file in a custom data folder", () => {
-    expect(isSecretFile("/tmp/weft-data/account.json", "/tmp/weft-data")).toBe(true);
-  });
-
-  it("finds the device key and vault files in a custom data folder", () => {
-    expect(isSecretFile("/tmp/weft-data/device-key.json", "/tmp/weft-data")).toBe(true);
-    expect(isSecretFile("/tmp/weft-data/vault/acme.json", "/tmp/weft-data")).toBe(true);
-    expect(isSecretFile("/tmp/weft-data/vault", "/tmp/weft-data")).toBe(true);
-    expect(isSecretFile("/tmp/weft-data/vaults/acme.json", "/tmp/weft-data")).toBe(false);
-  });
-});
 
 describe("bashVerdict", () => {
   it.each([
@@ -236,6 +213,22 @@ describe("bashVerdict", () => {
     expect(bashVerdict(deep, DATA)).toMatch(/can't be read/);
     expect(bashVerdict("cat .env", DATA, 6)).toBeNull();
   });
+
+  // A thread writes its pane page to ~/.weft/show, so the shell must reach it (2026-10-28).
+  it.each([
+    "cat ~/.weft/show/plan.html",
+    "ls ~/.weft/show",
+    "mkdir -p ~/.weft/show/topic && echo '<p>hi</p>' > ~/.weft/show/topic/index.html",
+    "rm -rf ~/.weft/show/old && cp page.html ~/.weft/show/page.html",
+  ])("lets %s run", (cmd) => expect(bashVerdict(cmd, DATA)).toBeNull());
+
+  // The exemption is `show/` alone: a walk over the data dir still reaches the master key.
+  it.each([
+    "cat ~/.weft/threads/abc.json",
+    "find ~/.weft -exec cat {} \\;",
+    "rsync -a ~/.weft/ /tmp/b/",
+    "cat ~/.weft/vault/acme.json",
+  ])("still turns away %s", (cmd) => expect(bashVerdict(cmd, DATA)).toMatch(/can't be read/));
 });
 
 describe("toolVerdict", () => {
@@ -268,12 +261,35 @@ describe("toolVerdict", () => {
     expect(toolVerdict("mcp__browser__open_url", { url: "http://localhost:3000/.env" }, DATA)).toBeNull();
   });
 
-  it("checks Bash commands and ignores other tools", () => {
+  it("checks Bash commands and the file tools", () => {
     expect(toolVerdict("Bash", { command: "cat .env" }, DATA)).toMatch(/can't be read/);
     expect(toolVerdict("Bash", { command: 42 }, DATA)).toBeNull();
-    expect(toolVerdict("Write", { file_path: "/p/.env.local" }, DATA)).toBeNull();
-    expect(toolVerdict("Glob", { pattern: ".env*" }, DATA)).toBeNull();
     expect(toolVerdict("Read", null, DATA)).toBeNull();
+  });
+
+  // A thread that may not read a .env may not overwrite one either: it could clobber a secret
+  // it is not allowed to see (2026-10-28).
+  it("turns away a write to a .env", () => {
+    expect(toolVerdict("Write", { file_path: "/p/.env.local" }, DATA)).toMatch(/can't be read/);
+    expect(toolVerdict("Write", { file_path: "/p/.env" }, DATA)).toMatch(/can't be read/);
+    expect(toolVerdict("Write", { file_path: "/p/notes.md" }, DATA)).toBeNull();
+  });
+
+  // Glob and LS reach a file by listing it (2026-10-28).
+  it("turns away a listing that reaches a .env", () => {
+    expect(toolVerdict("Glob", { pattern: ".env*" }, DATA)).toMatch(/can't be read/);
+    expect(toolVerdict("Glob", { pattern: "*.ts" }, DATA)).toBeNull();
+    expect(toolVerdict("LS", { path: "/Users/me/.weft" }, DATA)).toMatch(/can't be read/);
+    expect(toolVerdict("LS", { path: "/p/src" }, DATA)).toBeNull();
+  });
+
+  // A thread's pane page is its own to write and read (2026-10-28).
+  it("lets a thread write and open its own pane page", () => {
+    expect(toolVerdict("Write", { file_path: "/Users/me/.weft/show/topic/index.html" }, DATA)).toBeNull();
+    expect(toolVerdict("Read", { file_path: "/Users/me/.weft/show/topic/index.html" }, DATA)).toBeNull();
+    expect(toolVerdict("mcp__browser__open_url", { url: "file:///Users/me/.weft/show/topic/index.html" }, DATA)).toBeNull();
+    expect(toolVerdict("LS", { path: "/Users/me/.weft/show" }, DATA)).toBeNull();
+    expect(toolVerdict("Glob", { path: "/Users/me/.weft/show", pattern: "*.html" }, DATA)).toBeNull();
   });
 });
 
@@ -302,7 +318,7 @@ describe("secretGuard", () => {
   });
 
   it("is registered for the tools it checks", () => {
-    expect(SECRET_GUARD_HOOKS.PreToolUse?.[0]?.matcher).toBe("Read|Edit|MultiEdit|NotebookRead|NotebookEdit|Grep|Bash|mcp__browser__open_url");
+    expect(SECRET_GUARD_HOOKS.PreToolUse?.[0]?.matcher).toBe("Read|Edit|MultiEdit|Write|NotebookRead|NotebookEdit|Grep|Glob|LS|Bash|mcp__browser__open_url");
     expect(SECRET_GUARD_HOOKS.PreToolUse?.[0]?.hooks).toEqual([secretGuard]);
   });
 });

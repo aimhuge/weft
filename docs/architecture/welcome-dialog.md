@@ -1,7 +1,8 @@
 # The welcome dialog
 
-The first thing a new board shows: a full-window `Modal` over the whole window, portalled into
-`document.body` (`components/WelcomeDialog.tsx`). Two ways in, and the difference between them is the
+The first thing a new board shows: a full-window `Modal` over the whole window. The portal is
+`Modal`'s own (it draws into a `div[data-weft-modal]` on `document.body`, `components/Modal.tsx`),
+not one the welcome adds (`components/WelcomeDialog.tsx`). Two ways in, and the difference between them is the
 whole design of this dialog:
 
 - **First launch** — `loadWelcome()` returns `welcome: null` plus a `preview`, and the dialog answers
@@ -26,8 +27,10 @@ keeps `lib/welcome.ts` + `lib/welcome-preview.ts` + `lib/welcome-client.ts` + `a
 since there's nothing to import), and signed out it gets `"account"` after `"ready"`.
 
 **Sign-in (`components/WelcomeAccount.tsx`).** After Get ready's video and before the projects, a signed-out
-Wefter signs in to Weft with GitHub: **Next** stays disabled until the account reads signed in (the `weft:account`
-event fires when the browser round trip lands). `useAccountStep()` decides: the step is there only when the account
+Wefter can sign in to Weft with GitHub: **Next** stays disabled until the account reads signed in (the `weft:account`
+event fires when the browser round trip lands), but the screen never blocks — **Not now** moves past it without an
+account (`deferAccount()` in `components/WelcomeDialog.tsx`), so a new user isn't turned away by a sign-up wall.
+`useAccountStep()` decides: the step is there only when the account
 is loaded, sign-in is set up on this Weft (`configured`) and you're signed out. An account that's still loading or
 can't be read leaves it out, so a broken account route never traps a first launch. Once shown, it stays in the list,
 so the step bar doesn't renumber the moment you sign in. Signing in during the tour's profile beat skips it. `WelcomeStepBar` draws the bar above the body — "Step N of M" with a

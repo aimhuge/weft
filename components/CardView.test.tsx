@@ -9,8 +9,6 @@ const api = vi.hoisted(() => ({
   login: vi.fn(() => Promise.resolve()),
   switchBackend: vi.fn(() => Promise.resolve() as Promise<unknown>),
   clearBreak: vi.fn(() => Promise.resolve()),
-  putFirst: vi.fn(() => Promise.resolve()),
-  waitPermission: vi.fn(() => Promise.resolve()),
 }));
 vi.mock("@/lib/client", () => ({ api }));
 
@@ -124,31 +122,7 @@ describe("CardView", () => {
     expect(onAnswer).toHaveBeenCalledOnce();
   });
 
-  it("an edit another card holds offers Wait first, then Me first, and no Allow", async () => {
-    const why = { holder: { id: "c2", title: "Other", claim: "f.ts" } } as never;
-    renderCard({ column: "needs_you", pending: { ...pending, why } });
-    expect(screen.getAllByRole("button").map((b) => b.textContent)).toEqual(expect.arrayContaining(["Wait", "Me first", "Deny"]));
-    expect(screen.queryByRole("button", { name: "Allow" })).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Wait" }));
-    expect(api.waitPermission).toHaveBeenCalledWith(makeCard().id, pending.id);
-  });
-
-  it("a card waiting on another card's code stays in Running, with the holder's face, Me first and Deny", async () => {
-    const why = { holder: { id: "c2", title: "Other", claim: "f.ts", emoji: "🎨" } } as never;
-    const { onAnswer } = renderCard({
-      column: "running",
-      lastLine: "Waiting for ‘Other’",
-      pending: { ...pending, why, waiting: true },
-    });
-    expect(screen.getByRole("img", { name: "Other" })).toHaveTextContent("🎨");
-    expect(screen.queryByRole("button", { name: "Wait" })).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Me first" }));
-    expect(api.putFirst).toHaveBeenCalledWith(makeCard().id, pending.id);
-    await userEvent.click(screen.getByRole("button", { name: "Deny" }));
-    expect(onAnswer).toHaveBeenCalledWith(false);
-    // It reads as held, not as working: the amber border, not a spinner.
-    expect(screen.getByText("Fix the login page").closest("[data-card-id]")).toHaveClass("border-warn/60");
-  });
+  // The ordering choices ("This first", "Others first") are tested in components/CardView.permissions.test.tsx.
 
   it("Deny answers false", async () => {
     const { onAnswer } = renderCard({ column: "needs_you", pending });

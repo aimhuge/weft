@@ -26,11 +26,12 @@ A puku thread uses the trial when puku-cli has no login of its own and you're si
 or an `apiKeyHelper` in `~/.puku-cli/settings.json`. People with their own Puku login keep using it; the trial
 never overrides it.
 
-**Offered before the first prompt.** The welcome's Get ready screen (`components/WelcomeIntro.tsx`) folds the trial into
-puku-cli's row (`trialState()` in `lib/welcome-trial.ts`): with no agent logged in and you signed out of Weft, the row
-says "try it free with your Weft account" with a **Try free** button that signs you in with GitHub; signed in, it reads
-"Ready · free trial on your Weft account", counts as a ready agent, and the first thread runs on `puku` (`readyCli`).
-So the login pop-up below is for later threads, not the first one.
+**Offered where it's needed, not at sign-up.** The welcome's Get ready screen (`components/WelcomeIntro.tsx`) folds the
+trial into puku-cli's row (`trialState()` in `lib/welcome-trial.ts`): signed in to Weft with no agent logged in, the row
+reads "Ready · free trial on your Weft account", counts as a ready agent, and the first thread runs on `puku` (`readyCli`).
+Signed out, the row says nothing about Puku: a new user is asked to log in to an agent they already use, and the trial
+surfaces later, where a thread needs it (the login pop-up below). The welcome's sign-in screen never blocks either —
+"Not now" moves past it without an account.
 
 ## Flow
 

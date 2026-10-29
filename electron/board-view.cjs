@@ -13,6 +13,8 @@ const HUMAN_ONLY = "[data-human-only]";
 const REDACTED = "‹secret›";
 const HIGHLIGHT_ID = "__weft_board_highlight";
 
+const { findExpression } = require("./pane-selector.cjs");
+
 // The routes, and nothing else: the allowlist the tests pin.
 const OPERATIONS = ["screenshot", "click", "hover", "type", "read"];
 
@@ -32,7 +34,9 @@ function selectorArg(selector, required = true) {
 }
 
 const q = (value) => JSON.stringify(value);
-const find = (sel) => `const el = document.querySelector(${q(sel)}); if (!el) return { found: false };`;
+// The element a selector names, with the same text pseudo-classes the browser tools take
+// (:text-is("Settings…"), :has-text("Save")); the page finds it by reading text (electron/pane-selector.cjs).
+const find = (sel) => `const el = (${findExpression(sel)}); if (!el) return { found: false };`;
 
 // The page side of each operation: a selector in, a small JSON-able answer out.
 const scripts = {
@@ -59,7 +63,7 @@ const scripts = {
     `(() => { ${find(sel)} if (el.closest(${q(HUMAN_ONLY)})) return { found: true, humanOnly: true }; if (!el.matches("input, textarea, [contenteditable]:not([contenteditable='false'])")) return { found: true, refused: true }; el.focus(); if (typeof el.select === "function") el.select(); else document.execCommand("selectAll"); return { found: true }; })()`,
   // The element's visible text with every data-secret value inside the page cut out.
   read: (sel) =>
-    `(() => { const el = ${sel ? `document.querySelector(${q(sel)})` : "document.body"}; if (!el) return { found: false };` +
+    `(() => { const el = ${sel ? `(${findExpression(sel)})` : "document.body"}; if (!el) return { found: false };` +
     ` if (el.closest(${q(SECRET)})) return { found: true, text: ${q(REDACTED)} }; let text = el.innerText || "";` +
     ` for (const s of document.querySelectorAll(${q(SECRET)})) { const v = String(s.value || s.innerText || s.textContent || "").trim(); if (v) text = text.split(v).join(${q(REDACTED)}); }` +
     ` return { found: true, text: text.slice(0, 30000) }; })()`,

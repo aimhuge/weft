@@ -13,6 +13,7 @@ vi.mock("@anthropic-ai/claude-agent-sdk", () => ({
 vi.stubEnv("WEFT_SHELL_URL", "http://127.0.0.1:4567");
 vi.mock("./shell-token", () => ({ shellToken: () => "tok" }));
 const sr = await import("./secret-run");
+const { cardProof } = await import("./card-token");
 
 const fetchMock = vi.fn();
 vi.stubGlobal("fetch", fetchMock);
@@ -47,7 +48,7 @@ describe("runTool", () => {
     const r = await run.handler({ command: " npm run job ", names: ["DATABASE_URL", "DATABASE_URL"] });
     expect(sent()).toEqual({
       url: "http://127.0.0.1:4567/secrets/run",
-      body: { key: card, folder: proj, cwd: proj, command: "npm run job", argv: ["npm", "run", "job"], env: {}, names: ["DATABASE_URL"], environment: "development", script: "job: node job.js", timeoutMs: 120_000 },
+      body: { ...cardProof(card, "/secrets/run"), folder: proj, cwd: proj, command: "npm run job", argv: ["npm", "run", "job"], env: {}, names: ["DATABASE_URL"], environment: "development", script: "job: node job.js", timeoutMs: 120_000 },
     });
     expect(r.isError).toBe(false);
     expect(said(r)).toBe("npm run job exited with code 0 after 1.2s (secrets from the o/r vault shown as ‹NAME›):\nconnected to ‹DATABASE_URL›");
@@ -120,7 +121,9 @@ describe("runTool", () => {
     card = undefined;
     reply({ exitCode: 0, output: "ok" });
     await run.handler({ command: "npm run job", names: ["K"] });
-    expect(sent().body.key).toBeUndefined();
+    // A spare with no card has nothing to prove, so it sends no card at all.
+    expect(sent().body.card).toBeUndefined();
+    expect(sent().body.cardSig).toBeUndefined();
   });
 });
 
@@ -132,7 +135,7 @@ describe("redactStored", () => {
     expect(await sr.redactStored(card!, "")).toBe("");
     reply({ text: "pw ‹P›" });
     expect(await sr.redactStored(card!, "pw hunter22")).toBe("pw ‹P›");
-    expect(sent()).toEqual({ url: "http://127.0.0.1:4567/secrets/redact", body: { key: card, text: "pw hunter22" } });
+    expect(sent()).toEqual({ url: "http://127.0.0.1:4567/secrets/redact", body: { ...cardProof(card, "/secrets/redact"), text: "pw hunter22" } });
   });
 
   it("holds the text back when main can't check it", async () => {
@@ -148,7 +151,7 @@ describe("devSecrets", () => {
     const r = await sr.devSecrets(card!, "PORT=3001 npm run job", proj);
     expect(sent()).toEqual({
       url: "http://127.0.0.1:4567/secrets/dev-grant",
-      body: { key: card, folder: proj, cwd: proj, command: "PORT=3001 npm run job", argv: ["npm", "run", "job"], env: { PORT: "3001" }, script: "job: node job.js" },
+      body: { ...cardProof(card, "/secrets/dev-grant"), folder: proj, cwd: proj, command: "PORT=3001 npm run job", argv: ["npm", "run", "job"], env: { PORT: "3001" }, script: "job: node job.js" },
     });
     expect(r).toEqual({
       launch: {

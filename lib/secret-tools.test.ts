@@ -11,6 +11,7 @@ vi.mock("@anthropic-ai/claude-agent-sdk", () => ({
 vi.stubEnv("WEFT_SHELL_URL", "http://127.0.0.1:4567");
 vi.mock("./shell-token", () => ({ shellToken: () => "tok" }));
 const st = await import("./secret-tools");
+const { cardProof } = await import("./card-token");
 
 const fetchMock = vi.fn();
 vi.stubGlobal("fetch", fetchMock);
@@ -60,7 +61,7 @@ describe("secretsMcpServer", () => {
     const r = await run("fill_field", { name: "GITHUB_CLIENT_SECRET", selector: "#secret" });
     expect(sent()).toEqual({
       url: "http://127.0.0.1:4567/secrets/fill",
-      body: { key: "c1", thread: undefined, folder: "/proj", name: "GITHUB_CLIENT_SECRET", environment: "development", selector: "#secret" },
+      body: { ...cardProof("c1", "/secrets/fill"), thread: undefined, folder: "/proj", name: "GITHUB_CLIENT_SECRET", environment: "development", selector: "#secret" },
     });
     expect(r.isError).toBe(false);
     expect(said(r)).toBe("Typed GITHUB_CLIENT_SECRET from the aimhuge/weft vault into #secret.");
@@ -71,7 +72,7 @@ describe("secretsMcpServer", () => {
   it("says which thread the fill is for", async () => {
     reply({ found: true, label: "aimhuge/weft" });
     await runTitled("fill_field", { name: "K", selector: "#k" });
-    expect(sent().body).toMatchObject({ key: "c1", thread: "Fix login", name: "K" });
+    expect(sent().body).toMatchObject({ ...cardProof("c1", "/secrets/fill"), thread: "Fix login", name: "K" });
   });
 
   it("reports a no, a missing value, a missing field and a shell error", async () => {
@@ -224,7 +225,7 @@ describe("secretsMcpServer", () => {
       const r = await run("request_access", { why: "to fill the dashboard" });
       expect(sent()).toEqual({
         url: "http://127.0.0.1:4567/secrets/request-access",
-        body: { key: "c1", thread: undefined, folder: "/proj", why: "to fill the dashboard" },
+        body: { ...cardProof("c1", "/secrets/request-access"), thread: undefined, folder: "/proj", why: "to fill the dashboard" },
       });
       expect([r.isError, said(r)]).toEqual([
         false,
@@ -235,7 +236,7 @@ describe("secretsMcpServer", () => {
     it("says which thread is asking, and which project's vault", async () => {
       reply({ granted: true });
       await runTitled("request_access", { why: "w", project: "/other" });
-      expect(sent().body).toEqual({ key: "c1", thread: "Fix login", folder: "/other", why: "w" });
+      expect(sent().body).toEqual({ ...cardProof("c1", "/secrets/request-access"), thread: "Fix login", folder: "/other", why: "w" });
     });
 
     it("reports a no, and says each use will ask instead", async () => {

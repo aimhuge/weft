@@ -7,7 +7,6 @@
 // is the same switch as Settings → Sync.
 
 import { useState } from "react";
-import { createPortal } from "react-dom";
 import type { CloudSyncStatus } from "@/lib/cloud-sync-view";
 import type { Card } from "@/lib/types";
 import { useAccount } from "@/lib/use-account";
@@ -117,5 +116,5 @@ export default function SyncPromptDialog({ cwd, cards, toast }: { cwd?: string |
   const { folder, status, close, syncIt } = useSyncPrompt(cwd, cards);
   if (!folder) return null;
   const onSync = () => syncIt(folder).then(() => toast(`${folderName(folder)} is syncing to your web dashboard.`));
-  return createPortal(<Prompt folder={folder} status={status} onClose={close} onSync={onSync} />, document.body);
+  return <Prompt folder={folder} status={status} onClose={close} onSync={onSync} />;
 }

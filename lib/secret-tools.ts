@@ -1,6 +1,7 @@
 import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import { attempt, shell, text } from "./browser-tools";
+import { cardProof } from "./card-token";
 import { recordExplore } from "./explore";
 import { asText } from "./format";
 import { addBlankTool, ASK_PROMPT, askAddTool, addMissingBlank, missingText } from "./secret-ask";
@@ -12,7 +13,7 @@ import { recordStep } from "./site-notes-trail";
 export const SECRETS_PROMPT = `When a task needs a secret value the user keeps in Weft's 🔐 vault (an API key, an OAuth client secret, a password): don't ask them to paste it, don't read .env files, and never try to see the value. Call mcp__secrets__list for the names, open the page with the field in the browser pane, and call mcp__secrets__fill_field; the user approves with Touch ID and the value goes straight into the field.
 ${ASK_PROMPT}
 ${RUN_PROMPT}
-When a task will use vault secrets many times (filling several dashboard pages, a run of commands), call mcp__secrets__request_access once with why: one Touch ID lets this thread's fills, runs and dev server go without asking for an hour. You still never see a value.
+When a task will use vault secrets many times (filling several dashboard pages, a run of commands), call mcp__secrets__request_access once with why: one Touch ID lets this thread's fills, runs and dev server go without asking for an hour. You still never see a value. If you will fill secrets into a page, pass its site too, so the approval names it and covers that page only.
 To put a vault value on the project's linked Vercel project (an env var a deploy needs), call mcp__secrets__push_to_vercel with its name and environment; the user approves with Touch ID and Weft sends it to Vercel itself. Don't use the Vercel dashboard or \`vercel env add\` for a vault value.
 When you generate a secret yourself (a random signing secret, a webhook secret you make up), call mcp__secrets__set_value with the name and the value right after you generate it (it adds the name or fills its blank): the user approves with Touch ID and Weft stores it; don't write it to a file or repeat it. A key the user gets from a provider stays a blank for them to fill in. To change a value that's already there to one you generated or got yourself (new price ids after moving Stripe to a sandbox, say), call mcp__secrets__set_value with replace: true; the user approves the overwrite with Touch ID.`;
 
@@ -51,7 +52,7 @@ export function secretsMcpServer(cardId: () => string | undefined, folder: () =>
         },
         ({ name, selector, environment, project: p }) =>
           attempt(async () => {
-            const r = await shell("/secrets/fill", { key: cardId(), thread: title(), folder: p ?? folder(), name, environment: environment ?? "development", selector });
+            const r = await shell("/secrets/fill", { ...cardProof(cardId(), "/secrets/fill"), thread: title(), folder: p ?? folder(), name, environment: environment ?? "development", selector });
             const vault = asText(r.label, "this");
             if (r.denied) return text(`The user didn't approve ${name}. Ask before trying again.`, true);
             if (r.missing) {
@@ -108,14 +109,19 @@ export function secretsMcpServer(cardId: () => string | undefined, folder: () =>
       ),
       tool(
         "request_access",
-        "Ask the user for standing access to a project's 🔐 vault: one Touch ID, then this thread's fill_field, run and dev server use its secrets for an hour without asking each time. You still never see a value; writes and pushes still ask.",
-        { why: z.string().describe("One short sentence the user reads in the approval: what you'll use the secrets for"), project },
-        ({ why, project: p }) =>
+        "Ask the user for standing access to a project's 🔐 vault: one Touch ID, then this thread's fill_field, run and dev server use its secrets for an hour without asking each time. You still never see a value; writes and pushes still ask. Name the site when you will be filling secrets into a page: the approval says which page, and the access covers that page only.",
+        {
+          why: z.string().describe("One short sentence the user reads in the approval: what you'll use the secrets for"),
+          site: z.string().optional().describe("The page's host, e.g. dashboard.stripe.com, if you'll fill secrets into it"),
+          project,
+        },
+        ({ why, site, project: p }) =>
           attempt(async () => {
-            const r = await shell("/secrets/request-access", { key: cardId(), thread: title(), folder: p ?? folder(), why });
+            const r = await shell("/secrets/request-access", { ...cardProof(cardId(), "/secrets/request-access"), thread: title(), folder: p ?? folder(), why, site });
             const vault = asText(r.label, "this");
             if (!r.granted) return text(`The user didn't give standing access to the ${vault} vault. Each use will ask for Touch ID instead.`, true);
-            return text(`For the next hour this thread can use the ${vault} vault's secrets without asking: fill_field, run and the dev server.`);
+            const where = site ? ` into ${site}` : "";
+            return text(`For the next hour this thread can use the ${vault} vault's secrets without asking${where}: fill_field, run and the dev server.`);
           }),
       ),
       addBlankTool(folder),

@@ -8,6 +8,7 @@
 const { formatAxTree } = require("./pane-ax.cjs");
 const { keyEvents } = require("./pane-keys.cjs");
 const { callOn, FOCUS, GROUP, resolveElement } = require("./pane-element.cjs");
+const { visibleExpression } = require("./pane-selector.cjs");
 
 const VIEWPORTS = {
   phone: { width: 390, height: 844, deviceScaleFactor: 3, mobile: true },
@@ -144,7 +145,7 @@ function createPaneInput(/** @type {{ cdp: any, wait?: (ms: number) => Promise<u
     let check;
     if (text) check = `Boolean(document.body && document.body.innerText.includes(${q(String(text))}))`;
     else if (gone) check = `!(document.body && document.body.innerText.includes(${q(String(gone))}))`;
-    else if (selector) check = `(() => { const el = document.querySelector(${q(String(selector))}); if (!el) return false; const r = el.getBoundingClientRect(); return r.width > 0 || r.height > 0; })()`;
+    else if (selector) check = visibleExpression(String(selector));
     else throw new Error("Give text to wait for, gone (text to wait to disappear), or a selector.");
     const limit = Math.max(0, Math.min(WAIT_MAX_MS, Number(timeout) || WAIT_DEFAULT_MS));
     const start = now();

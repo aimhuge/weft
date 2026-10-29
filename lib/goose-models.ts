@@ -59,26 +59,3 @@ export function setNamedModels(models: GooseNamedModel[]) {
   // An empty list is the default (nothing named), so it's stored as unset.
   writeSetting(NAMED, clean, (v) => Array.isArray(v) && v.length === 0);
 }
-
-/** Adds a named model, or renames the one already saved under that id. */
-export function addNamedModel(id: string, name: string): GooseNamedModel[] {
-  const cleanId = id.trim();
-  const cleanName = name.trim();
-  if (!cleanId || !cleanName) return namedModels();
-  const next = namedModels().filter((m) => m.id !== cleanId);
-  next.push({ id: cleanId, name: cleanName });
-  setNamedModels(next);
-  return next;
-}
-
-/** Forgets a named model. The model itself isn't removed from the CLI — only its name. */
-export function removeNamedModel(id: string): GooseNamedModel[] {
-  const next = namedModels().filter((m) => m.id !== id.trim());
-  setNamedModels(next);
-  return next;
-}
-
-/** The name a model is saved under, or undefined when it has none. */
-export function nameFor(id: string): string | undefined {
-  return namedModels().find((m) => m.id === id)?.name;
-}

@@ -14,7 +14,7 @@ export interface Waiter {
   title: string;
   emoji?: string;
   thumb?: string;
-  // The waiting request, for Me first; and the file it waits on, by name.
+  // The waiting request, for This first; and the file it waits on, by name.
   pendingId: string;
   file: string;
 }
@@ -34,6 +34,7 @@ export function waitersOf(cards: readonly Card[]) {
 
 const NONE: Waiter[] = [];
 let waits = new Map<string, Waiter[]>();
+let blocked = new Map<string, number>();
 let signature = "";
 const listeners = new Set<() => void>();
 
@@ -44,6 +45,8 @@ export function publishWaits(cards: readonly Card[]) {
   if (sig === signature) return;
   signature = sig;
   waits = next;
+  // How many cards each holder is holding up, for the "[blocking N cards]" stamp (lib/blocking.ts).
+  blocked = new Map([...next].map(([id, list]) => [id, list.length]));
   for (const l of listeners) l();
 }
 
@@ -54,3 +57,7 @@ function subscribe(listener: () => void) {
 
 export const useWaitersOn = (cardId: string) =>
   useSyncExternalStore(subscribe, () => waits.get(cardId) ?? NONE, () => NONE);
+
+// How many cards this card is holding up: the ones waiting on it for its code.
+export const useBlockingCount = (cardId: string) =>
+  useSyncExternalStore(subscribe, () => blocked.get(cardId) ?? 0, () => 0);

@@ -12,6 +12,16 @@ describe("decideAccess", () => {
     expect(ask).not.toHaveBeenCalled();
   });
 
+  // A grant that names a site covers that site and no other: a card with one could otherwise type a
+  // secret into any page it opened, including one it controls (2026-10-28).
+  it("asks the site the grant doesn't cover", async () => {
+    const grants = { allows: vi.fn((_card: string, _id: string, site?: string) => site === "dashboard.stripe.com") };
+    const ask = vi.fn(() => Promise.resolve("once"));
+    await expect(decideAccess({ grants, card: "c1", vaultId: "github:o/r", site: "evil.example.com", ask })).resolves.toEqual({ allowed: true, via: "once" });
+    expect(ask).toHaveBeenCalledTimes(1);
+    expect(grants.allows).toHaveBeenCalledWith("c1", "github:o/r", "evil.example.com");
+  });
+
   it("lets a remembered rule through when there is no grant", async () => {
     const grants = { allows: vi.fn(() => false) };
     const rule = { allows: vi.fn(() => true) };

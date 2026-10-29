@@ -87,13 +87,16 @@ When a new doc lands in this folder, add it here on the same change.
   `electron/startup-timer.cjs` times every launch into `~/.weft/startup.jsonl` (`node electron/startup-timer.cjs` lists them).
 - `electron/browser-pane.cjs`: native browser pane, one page per card; token-guarded control
   server on 127.0.0.1 for agents, IPC for the board (`electron/preload.cjs`); `electron/pane-pages.cjs`
-  saves each card's page to `~/.weft/pages/` so it comes back after a restart. `electron/pane-origins.cjs` is the
+  saves each card's page to `~/.weft/pages/` so it comes back after a restart. `electron/pane-visibility.cjs`
+  holds the rule for when the pane shows: opening a card brings it back, even with no page loaded yet
+  (the board's placeholder fills the slot meanwhile), and the board alone hides it. `electron/pane-origins.cjs` is the
   per-card allowlist of hosts a thread may open; a host outside it asks the user with Touch ID (`authorizeThreadOpen`).
   `electron/pane-error.cjs` shows a failed load's reason, with Try again and Back, instead of Chromium's blank page.
   `electron/pane-cdp.cjs` is each page's one CDP session (console and failed-request buffers); `electron/pane-input.cjs`
   drives the page through it (trusted click, keys, type, select, scroll, wait, viewport, snapshot routes) with
   `electron/pane-ax.cjs` (the accessibility outline and its refs), `electron/pane-keys.cjs` and `electron/pane-element.cjs`
-  (the one way a page's element is found, by ref or selector; docs/architecture/agent-browser.md).
+  (the one way a page's element is found, by ref or selector) with `electron/pane-selector.cjs` (the selector compiler:
+  CSS plus Playwright's text pseudo-classes like `:text-is("Settings…")`; docs/architecture/agent-browser.md).
   `electron/pane-escape.cjs` decides which key the pane replays into the board: a focused page swallows
   the keys the board never sees, so Escape is replayed there, where it closes the newest layer (and with
   nothing open, flips board and list view). Escape types nothing, so it arrives as a rawKeyDown — the
@@ -147,20 +150,30 @@ When a new doc lands in this folder, add it here on the same change.
   subagents are Bash `goose run --text` calls that inherit `GOOSE_PROVIDER`/`GOOSE_MODEL` from `gooseEnv()` (`lib/subagents.ts`
   `GOOSE_DELEGATE`, no Agent tool), and its commits are signed `Co-Authored-By: Goose (<model>) on Weft` through its system
   text (`lib/attribution.ts` `gooseAttributionPrompt`), since Goose has no attribution setting.
+  The models a user named in Settings → Models → Bring your own key (`gooseNamedModels`, owned by `lib/goose-models.ts`) show
+  by name in every model menu, with their id beside them. **A name says "this runs on Goose"** — the names are a Goose list, so
+  a name outranks a shared list naming the same id ("puku-ai-2.8" is puku-cli's own, but named there it runs on Goose) and the
+  row's picker value carries the `goose:` prefix, which `bareModel()` takes off before the id reaches the CLI.
   A notification carries no structured payload, so the files a Goose turn touched are read out of its progress text
   (`lib/goose-progress-paths.ts`, a pure function of the string): a run of path characters with a separator or an extension, never a flag
   or a URL, and no trailing sentence period. The runner keeps only the paths that resolve inside the card's own folder and folds them
   into `card.touchedFiles`, so the overlap warning sees what the turn actually touched.
-- `lib/env.ts` `guardedCli()`: Claude Code and puku-cli's CLI env and Bash guards: `lib/secret-guard.ts` (no .env reads),
+- `lib/env.ts` `guardedCli()`: Claude Code and puku-cli's CLI env and Bash guards: `lib/secret-guard.ts` (no .env reads; the
+  rules live in `lib/secret-guard-files.ts` — a `.env`, the `~/.weft` data folder (save `~/.weft/show/`, the pages threads
+  render in the pane), the CLI's own `~/.claude` transcripts —
+  `lib/secret-guard-bash.ts` for the shell, and `lib/secret-guard-tool.ts` for the file tools (Read, Edit, Write, Glob,
+  Grep and LS — a thread that may not read a .env may not write, glob or list one either); `lib/shell-parse.ts` is the
+  parser behind them, with `lib/shell-quoting.ts` spelling a word (a `$(…)` substitution's path-like words, ANSI-C
+  quoting), so `cat $(echo .env)` is the same read as `cat .env`),
   `lib/restart-guard.ts` (no restarting Weft mid-turns), `lib/git-guard.ts` (no `git stash`, `reset --hard`, path
   checkout/restore or `clean -f` in the shared tree), `lib/check-guard.ts` (no `tsc` or `eslint` run directly where the
   project's `pnpm typecheck`/`pnpm lint` take turns through `scripts/one-at-a-time.mjs`; plain Claude Code sessions get it from `.claude/settings.json`), `lib/route-import-guard.ts` (refuses an edit that makes `app/**/page.tsx`,
   a layout, a `route.ts` or middleware import a module that isn't there yet, or export a segment config cacheComponents refuses; `lib/prerender-check.ts`), `lib/claim-guard.ts` (symbol claims: asks before an edit to a top-level
-  symbol another busy card is editing, with **Wait** until it lets go, `lib/permission-wait.ts`, or **Me first** / the holder's **You first** to put the held card ahead, `lib/precedence.ts` + `lib/yields.ts` + `lib/waits-on.ts` + `components/YouFirst.tsx`, with both cards' faces on the prompt, `components/CardFace.tsx`; `lib/claims.ts`, parsed by `lib/symbols.ts`; the prompt's readable diff and reason chip are `lib/edit-preview.ts` + `components/PermissionInput.tsx`), and for Bash `lib/bash-claims.ts` (asks before a line that writes a claimed file, claims what Bash wrote while no other card's Bash ran (`lib/bash-writers.ts`; else the writer is unknown and nobody claims it), drops claims on files `git status` sees clean, tells a failed check which failures are another card's: `lib/bash-writes.ts`, `lib/dirty-files.ts`, `lib/failure-owners.ts`) (docs/architecture/thread-guards.md). The two guards share the flow itself — read the card, prune the yields, look for a clash, ask — in `lib/claim-hooks.ts`; they differ only in how the claim keys are worked out.
+  symbol another busy card is editing, with **Wait** until it lets go, `lib/permission-wait.ts`, or **This first** / the holder's **You first** to put the held card ahead, `lib/precedence.ts` + `lib/yields.ts` + `lib/waits-on.ts` + `components/YouFirst.tsx`, with both cards' faces on the prompt, `components/CardFace.tsx`; `lib/claims.ts`, parsed by `lib/symbols.ts`; the prompt's readable diff and reason chip are `lib/edit-preview.ts` + `components/PermissionInput.tsx`; a card other cards are waiting on carries a "blocking N" chip, `components/BlockingMark.tsx` + `lib/waits-on.ts`, and the write that lands releases the waiters, `lib/blocking.ts`; a wait never closes a loop, so two cards can't wait on each other and gridlock: the card goes ahead instead, `lib/wait-chain.ts`), and for Bash `lib/bash-claims.ts` (asks before a line that writes a claimed file, claims what Bash wrote while no other card's Bash ran (`lib/bash-writers.ts`; else the writer is unknown and nobody claims it), drops claims on files `git status` sees clean, tells a failed check which failures are another card's: `lib/bash-writes.ts`, `lib/dirty-files.ts`, `lib/failure-owners.ts`) (docs/architecture/thread-guards.md). The two guards share the flow itself — read the card, prune the yields, look for a clash, ask — in `lib/claim-hooks.ts`; they differ only in how the claim keys are worked out.
   Codex gets the filtered `cliEnv()` but not these per-tool hooks; `lib/codex-runner.ts` asks it not to read `.env` files. It does get
   Weft's MCP tools, over HTTP: `lib/weft-mcp.ts` builds the servers every CLI gets, `lib/mcp-bridge.ts` opens a per-turn token and
   `app/api/mcp/[server]` serves them to `codex exec --config mcp_servers.*`. Puku and Codex don't read `.claude/skills` or Codex `CLAUDE.md`,
-  so `lib/skills.ts` `skillIndex`/`skillInvocation` list a folder's skills and expand `/name`, and `lib/puku-context.ts` sends Codex the project's `CLAUDE.md`. `cliEnv()` also drops secret-named and key-shaped variables from your shell's env (`lib/secret-detect.ts`); the control
+  so `lib/skills.ts` `skillIndex`/`skillInvocation` list a folder's skills and expand `/name`, and `lib/puku-context.ts` sends Codex the project's `CLAUDE.md`. `cliEnv()` also drops secret-named and key-shaped variables from your shell's env (`lib/secret-detect.ts`), and the loader hooks (`NODE_OPTIONS`, `LD_PRELOAD`, the `DYLD_*` family) by name whatever they hold; the control
   server's token is a 0600 file, `~/.weft/shell-token` (`electron/shell-token.cjs`, read by `lib/shell-token.ts`), never an env var.
 - `scripts/check-staged.sh` + `scripts/secret-scan.mjs` + `scripts/staged-imports.mjs`: the pre-commit hook; gitleaks, or without it Weft's own key shapes on each added line,
   then a staged file importing an untracked one (named), then tsc and eslint on a copy of the index (docs/architecture/thread-guards.md). The git guard refuses `--no-verify` and moving `core.hooksPath`.
@@ -419,6 +432,9 @@ When a new doc lands in this folder, add it here on the same change.
   `electron/vault-ipc.cjs` is the board window's IPC, `electron/vault-unlock.cjs` the Touch ID unlock timer.
   `electron/vault-access.cjs` is the one place that decides whether a card may use a vault and how it was allowed
   (the audit log's `via` word): the fill, a command run with secrets, and a grant all ask it.
+  `electron/card-token.cjs` + `lib/card-token.ts` are the card's identity: the server signs the card id with
+  HMAC-SHA256 over `route\ncard` and main verifies it in constant time, so a request that names a card it can't
+  prove acts for nobody (docs/architecture/secrets.md#which-card-a-vault-request-is-for).
 - `electron/account-client.cjs` + `electron/vault-sync*.cjs` + `electron/vault-shared-meta.cjs` + `electron/vault-store-shared.cjs`:
   the shared 🔐 vault (docs/architecture/teams-vault.md). `electron/account-client.cjs` is main talking to Supabase **as the
   signed-in user** — the sealed session in `~/.weft/account.sealed`, the *published* key (never the service role), and a 401 that
@@ -483,6 +499,9 @@ When a new doc lands in this folder, add it here on the same change.
   `app/api/account/keychain-events`, `lib/keychain-audit-view.ts`, `lib/keychain-audit-types.ts` for the shapes, `lib/use-keychain-access.ts`).
 - `electron/vault-grants.cjs`: thread grants (docs/architecture/secrets.md#thread-grants). One Touch ID lets a card fill, run and
   start its dev server with one vault's secrets for an hour; from the card menu or `mcp__secrets__request_access`.
+  A grant that covers typing a value into a page carries the site, and covers that page only — the Touch ID prompt names
+  it — so a card can't use an hour's grant on a page it controls; a grant with no site covers only the commands and
+  dev servers.
 - `lib/project-intake.ts` + `lib/intake-scan.ts` + `lib/provider-hints.ts` + `app/api/projects/intake` + `electron/vault-intake.cjs`: the project
   intake. Opening a project on the board (`lib/use-board-view.ts`) moves its untracked `.env*` files' new values into 🔐 with no click (never a
   tracked file's, never over a vault value) and turns the keys its code reads, its `.env.example` names and its webhook routes into 🔐 and 🪝
@@ -545,7 +564,7 @@ When a new doc lands in this folder, add it here on the same change.
   `components/AgentEditor.tsx` (Settings → Agents), `lib/use-agents.ts` for the board's pickers: the New thread dialog
   (`AgentSelect`, with Manage agents…), the card menu (`PATCH { agent }` ends the CLI; the next turn resumes under the new
   soul) and the emoji in `CardFooterMeta` (docs/architecture/agents.md).
-- `lib/workspace-layout.ts` + `components/CardWorkspace.tsx` + `components/EditorColumn.tsx` + `lib/file-access.ts` + `app/api/cards/[id]/files` + `lib/open-file.ts`: the open card's four columns and the editor column (CodeMirror, TipTap markdown, Changes vs. HEAD); any file path in the thread opens it (docs/architecture/editor.md).
+- `lib/workspace-layout.ts` + `components/CardWorkspace.tsx` + `components/EditorColumn.tsx` + `lib/file-access.ts` + `app/api/cards/[id]/files` + `lib/open-file.ts`: the open card's four columns and the editor column (CodeMirror, TipTap markdown, Changes vs. HEAD); any file path in the thread opens it (docs/architecture/editor.md). The layout is remembered in localStorage, but opening a card reopens the `pane` column: a thread always comes up with the browser pane, never beside an empty slot.
 - `lib/browser-tools.ts`: `mcp__browser__*` tools every thread gets; `lib/browser-act-tools.ts` the ones that act on the page
   (snapshot with refs, click, hover, type_text, press_key, select_option, scroll, wait_for, set_viewport, console_logs,
   network_errors; docs/architecture/agent-browser.md); `lib/browser-shell.ts` the control-server call every Weft tool uses.
@@ -560,7 +579,10 @@ When a new doc lands in this folder, add it here on the same change.
   Link previews: `lib/app-preview.ts` (sources and precedence) + `lib/app-preview-capture.ts` (made on the Mac: meta tags, `weft-app.json`, Haiku, a hidden-window capture from `electron/page-snapshot.cjs`) into `cloud_app_shares.preview`; a preview says when it was made, and `isStale` (a changed page, older than `PREVIEW_MAX_AGE_MS` — 6 h, or a failed capture past `PREVIEW_RETRY_MS` — 30 min, marked by `shotFailedAt`) says when it needs making again, so a data app's picture is taken again once its numbers have moved. `lib/app-preview-refresh.ts` is the timer that walks the shared apps and refreshes the stale ones, one at a time, started with cloud sync (`lib/cloud-sync-start.ts`); a refresh of an unchanged page keeps Haiku's sentence and the last capture. `lib/app-share-meta.ts` is the share routes' `generateMetadata` (public links only) and `lib/app-card-image.tsx` the branded card at `/api/a/[id]/og`, shown in the Share dialog by `components/ShareAppPreview.tsx` (drawn once and cached beside the capture). A save that only changes who may open the link no longer re-uploads the page (`pageForWrite`, `lib/app-share-row.ts`). `lib/app-share-slug.ts` gives every link its default address (a taken one tries `-2` … `-9`), and backfills one that has none when Share… opens, so Copy link is always the `/@<user>/apps/<slug>` URL. Share… on an app without a link makes one open to anyone with it, and a folder-app link takes its keys up whenever Share… opens or saves it and they changed (`lib/app-share-keys.ts` → main's `POST /apps/push-secrets`, `electron/app-secrets-push.cjs`, reading the vault of the manifest's `folder`; `electron/app-secrets-pushed.cjs` fingerprints what last went up, so unchanged keys need no Touch ID).
   Data apps: `electron/pane-preload.cjs` gives a `file:` page `window.weft`; `electron/app-data.cjs` (+ `electron/app-data-reads.cjs`) answers only a saved app's page in `~/.weft/apps/<slug>/` with a `weft-app.json`, asks Touch ID for the one vault env it names (grants in `~/.weft/app-grants.json`), and runs its named reads in main (Supabase functions, GA4); `lib/app-cloud.ts` persists every app on prod (`cloud_mini_apps`) and restores it on another Mac. 📈 Growth (`~/.weft/apps/growth/`) reads the `growth_*` functions — the account-level ones (`supabase/migrations/20261018054110_growth_reads.sql`) and the in-app ones (`20261024041130_growth_in_app_reads.sql`: cards pushed per day, in-app engagement per day, and a retention table that counts an account as retained only if it pushed a card, moved one or ran a turn that week, rather than merely signed in).
 - Browser pane: `components/BrowserPane.tsx` draws the toolbar and the placeholder the native view (`electron/browser-pane.cjs`)
-  lies over; `components/ShowRail.tsx` + `lib/show-rail.ts` + `lib/show-events.ts` + `lib/pane-page.ts` (stamps each sent message with the pane's page) are the 72 px show rail right of the page,
+  lies over; the page is a native view above the board's DOM, so a menu can't be painted over it: a full-window overlay hides the page
+  (`lib/overlay.ts`'s `useOverlay`), while a local menu (the zoom menu, a card's mode picker) publishes the rectangle it covers and the page
+  steps around it (`lib/overlay.ts`'s `useLocalMenu` / `useMenuCoverPublisher`, `lib/pane-clear.ts`'s `clearOfMenu`);
+  `components/ShowRail.tsx` + `lib/show-rail.ts` + `lib/show-events.ts` + `lib/pane-page.ts` (stamps each sent message with the pane's page) are the 72 px show rail right of the page,
   one mini per turn and per page the pane showed (the thread's `open_url` calls plus pages opened by hand, in memory), synced with the chat by two window events (`show:scroll-to`, `show:pulse`) on rows tagged `data-turn`;
   pages are small WebP pictures (`lib/page-shots.ts` + `app/api/cards/[id]/shots` + `lib/use-page-shots.ts`) and the pane follows the chat's scroll (`lib/use-pane-follow.ts`) (docs/architecture/show-rail.md).
 - `lib/board-view-tools.ts` + `electron/board-view.cjs` + `electron/control-server.cjs`: `mcp__board_view__*`, a thread's eyes and hands
@@ -625,7 +647,7 @@ When a new doc lands in this folder, add it here on the same change.
   in every thread via `lib/env.ts` `guardedCli()`, and in other Claude Code sessions via `.claude/settings.json`.
 - Components: `Board.tsx`, `ThreadView.tsx`, `ThreadItems.tsx`, `Markdown.tsx`, `ReviewPanel.tsx`
   (the tour: `ReviewPanelTour.tsx`, its header `ReviewPanelHeader.tsx`, its button row `ReviewPanelTourNav.tsx`, and the card without a tour `ReviewPanelNoTour.tsx`);
-  every dialog sits in `Modal.tsx` (backdrop, header, close, Escape via `lib/use-escape.ts`; its `layer` prop sets the stack: `normal` z-50, `top` z-90 for Settings and the welcome, `palette` z-92 for ⌘K, which also opens over Settings, `front` z-94 for the achievement popup, which can arrive at any moment; confetti z-95 and tooltips z-100 sit above all; `QuickOpen` ⌘P is a `Modal` too);
+  every dialog sits in `Modal.tsx` (backdrop, header, close, Escape via `lib/use-escape.ts`; it draws in a portal, into a `div[data-weft-modal]` it makes on the body, so a dialog opened from the header (the leagues) escapes the header's `-webkit-app-region: drag` stacking context and no z-index can trap it there; the host is made in a lazy initializer, which StrictMode runs twice, so the second call claims the first call's host and the mount effect puts it back if the double-mount's cleanup took it away — a portal into a detached node draws nothing, which is why Settings stayed shut; its `layer` prop sets the stack: `normal` z-50, `top` z-90 for Settings and the welcome, `palette` z-92 for ⌘K, which also opens over Settings, `front` z-94 for the achievement popup, which can arrive at any moment; confetti z-95 and tooltips z-100 sit above all; `QuickOpen` ⌘P is a `Modal` too);
   each card, panel, dialog body, drawer, header badge and thread message sits in `CrashGuard.tsx` (an error boundary;
   `inline` draws a one-line chip for small spots), with `app/error.tsx` behind the whole board (on weft.zip it draws the web error page, and `app/not-found.tsx` the 404: `components/web-states/`, which also holds the public pages' loading skeletons). Board's panels, dialogs,
   cards and badges, the reply box and the review panel load through `guarded()` (`components/guarded.tsx`, an `import()`
@@ -648,7 +670,7 @@ Everything else is under 300 (2026-10-16): big files became re-exporting fronts 
 Pure logic already moved out: `lib/board-view.ts` (columns and their order: Backlog by drag, Review by last update, the rest by the sort menu; project chips, chime/unseen rules, Review's Errors/Restart filter chips drawn by `components/ReviewFilterChips.tsx`) and
 `lib/turn.ts` (how a turn's result reads, where its card goes, cost, limits); Board's hooks into `lib/use-*.ts` (`use-now`,
 `use-toast`, `use-desktop-bridge`, `use-copilot-card`, `use-board-actions`, `use-board-toggles`, `use-board-view`, `use-board-archive`,
-`use-board-card-actions`, plus `lib/board-focus.ts`, `lib/board-helpers.ts`), its live events into `lib/board-live.ts` (Delete, Stop, prompt answers (Allow, Deny, Wait, Me first) and card fields (star, tags, archive, rename, mode, resume, rerun, model switch) drawn at once by `lib/optimistic-cards.ts`, the copilot's card included; a sent reply drawn in the thread at once by `lib/use-pending-sends.ts`; a failed card list is tried again on `LIST_RETRY_MS` until it lands, so the columns never sit on placeholders), the menu/dock/tray
+`use-board-card-actions`, plus `lib/board-focus.ts`, `lib/board-helpers.ts`), its live events into `lib/board-live.ts` (Delete, Stop, prompt answers (Allow, Deny, Wait, This first) and card fields (star, tags, archive, rename, mode, resume, rerun, model switch) drawn at once by `lib/optimistic-cards.ts`, the copilot's card included; a sent reply drawn in the thread at once by `lib/use-pending-sends.ts`; a failed card list is tried again on `LIST_RETRY_MS` until it lands, so the columns never sit on placeholders), the menu/dock/tray
 actions into `lib/board-menu-bridge.ts`, its derived values into `lib/board-derive.ts`, and its JSX into `BoardHeader`, `BoardProjectBar`,
 `BoardColumns` (each column's extras by id), `BoardBrowserPane`, `OpenCard` (the framed window and the open card's four columns),
 `NewThreadWindow` (the New thread form and desktop browser pane), `BoardBottom`
@@ -673,7 +695,7 @@ My Vitest suite (`pnpm test`, over 12,000 tests across ~1,100 test files) covers
 `pnpm coverage`): a test file beside each module, routes with their libs mocked, the runner's SDK loop
 against a fake `query()` (`lib/runner.harness.ts`, shared by `lib/runner*.test.ts`), and browser code and React hooks under happy-dom +
 @testing-library/react (`// @vitest-environment happy-dom`). `lib/client-graph.test.ts` walks every "use client" file's imports and fails on a chain into "use cache", cacheLife/cacheTag or "server-only" (2026-10-17's build error). The same analysis runs as an ESLint rule (`eslint-rules/no-client-server-leak.mjs`, `weft/no-client-server-leak`), so `pnpm lint` — and so the pre-commit hook, which lints the staged files — fails a commit that would take the board down before the next restart (2026-10-24's Turbopack panic on `node:fs`). `lib/prerender-check.test.ts` walks app/**/page|layout|route for what only `next build` refuses under cacheComponents (segment config exports, `await params`/`cookies()` before `<Suspense>`; two failed deploys on 2026-10-17), and `lib/route-import-guard.ts` runs the same check on each edit. Component tests have started under jsdom
-(`components/*.test.tsx`: CardView, ReplyBox, NewCardDialog, TagsDialog, TagsDrawer, ThreadPanel, ColumnHeader, SettingsDialog, LibraryRail; Composer stubbed by `components/composer-mock.tsx`);
+(`components/*.test.tsx`: CardView, ReplyBox, NewCardDialog, TagsDialog, TagsDrawer, ThreadPanel, ColumnHeader, SettingsDialog, Modal, LibraryRail; Composer stubbed by `components/composer-mock.tsx`);
 `electron/main-menu-popup.test.ts` is the first test in `electron/`. The rest of `components/` and `electron/`
 are untested and outside the coverage set; add tests with any risky change, and keep new lib code at 100%.
 
