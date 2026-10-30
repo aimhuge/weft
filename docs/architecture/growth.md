@@ -105,6 +105,9 @@ and `last_at`. `channel` is `release` for a packaged build (`NODE_ENV=production
   (`0.10.0` above `0.9.0`).
 
 It counts only signed-in Macs on a build that reports, so the panel starts empty and fills as people update.
+The **Versions** panel lists each version with its accounts and how many opened Weft this week. Rows come
+newest first and a dev checkout can run ahead of the release, so "latest" marks the first `release` row, not
+the top one; "latest" and "dev" are words in the row, not colours.
 Downloads per release on GitHub (`.zip` is mostly Squirrel's auto-update, `.dmg` a fresh install) are the
 only signal for older builds.
 
@@ -134,8 +137,10 @@ the number in the cell (`33%` over `1/3`), so the share survives a greyscale pri
 
 **The grant voids when the manifest changes.** Adding a read changes the manifest's hash, and the grant that
 carried the old hash is void (`electron/app-data-grants.cjs`). If the change only adds read names and reuses
-an env the grant already holds, the hash can be recomputed and written into `~/.weft/app-grants.json` rather
-than making the user grant again with Touch ID.
+an env the grant already holds, the user can recompute the hash and write it into `~/.weft/app-grants.json`
+rather than grant again with Touch ID. A thread can't: `app-grants.json` stays sealed to threads even though
+`~/.weft/apps/` is open (docs/architecture/secrets.md), so a thread that adds a read says Growth will ask for
+Touch ID once.
 
 **Cloud sync is opt-in per folder, so the counts undercount.** The in-app reads read the **synced** rows
 (`cloud_cards`, `cloud_thread_items`). Work done in a folder that isn't syncing to weft.zip is invisible to

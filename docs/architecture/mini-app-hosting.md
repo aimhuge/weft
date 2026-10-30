@@ -141,7 +141,8 @@ weft.zip (injected inline script). `lib/app-bridge.ts` is the contract: `BRIDGE_
   allows, runs the call and returns `{ status, ok, headers, body, bodyEncoding: "utf8" | "base64" }`.
 - `weft.read(name, args?)` — a named read from the manifest (a Supabase function or a GA4 report), the
   same shape data apps called on the Mac before this shipped.
-- `weft.env()` — the manifest's `public` values, as is.
+- `weft.env()` — the manifest's `public` values, as is. On the Mac it, and any `weft.fetch` that fills a
+  placeholder, runs only under the env grant (main asks Touch ID itself when there's none; docs/architecture/secrets.md).
 - `weft.requestSecret(name) → { set: boolean }` — asks Weft (never the app) to collect this viewer's own
   value for a `from: "viewer"` secret.
 

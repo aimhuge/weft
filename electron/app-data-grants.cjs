@@ -41,7 +41,19 @@ function deriveNeeds(reads) {
   return [...needs].sort();
 }
 
-// A hash over the reads object (and the supabaseUrl, since changing it changes what a supabase read
+// Every vault name a grant covers: the reads' needs, plus the names the manifest's fetch policy may fill
+// (`secrets`) and the names weft.env hands the page as is (`public`). A thread may edit a manifest
+// (~/.weft/apps is open to threads, docs/architecture/secrets.md), so a name added to either must void
+// the grant and ask again, never ride an old one.
+function manifestNeeds(manifest) {
+  const needs = new Set(deriveNeeds(manifest.reads || {}));
+  const secrets = manifest.secrets && typeof manifest.secrets === "object" && !Array.isArray(manifest.secrets) ? manifest.secrets : {};
+  for (const name of Object.keys(secrets)) needs.add(name);
+  for (const name of Array.isArray(manifest.public) ? manifest.public : []) if (typeof name === "string") needs.add(name);
+  return [...needs].sort();
+}
+
+// A hash over the reads object, the fetch policy (secrets) and the public names (and the supabaseUrl, since changing it changes what a supabase read
 // would talk to). Order-independent: a manifest that reorders its reads is the same data app. The
 // replacer sorts object keys at every level so two manifests with the same content but different
 // key order hash to the same value.
@@ -52,7 +64,9 @@ function manifestHash(manifest) {
     }
     return value;
   };
-  const obj = { env: manifest.env, folder: manifest.folder, supabaseUrl: manifest.supabaseUrl, reads: manifest.reads };
+  // secrets and public join the hash only when the manifest has them, so an app with neither keeps the
+  // hash its grant was saved with.
+  const obj = { env: manifest.env, folder: manifest.folder, supabaseUrl: manifest.supabaseUrl, reads: manifest.reads, secrets: manifest.secrets, public: manifest.public };
   return crypto.createHash("sha256").update(JSON.stringify(obj, sorted)).digest("hex").slice(0, 16);
 }
 
@@ -67,10 +81,17 @@ function effectiveGrant(grant, manifest, needs) {
   return grant;
 }
 
+// The grant to save when the user says yes: what it covers, and the hash that voids it on any change.
+function newGrant(manifest, needs, now = Date.now) {
+  return { env: manifest.env, folder: manifest.folder, needs, readsHash: manifestHash(manifest), grantedAt: new Date(now()).toISOString() };
+}
+
 module.exports = {
   loadGrants,
   saveGrants,
   deriveNeeds,
+  manifestNeeds,
+  newGrant,
   manifestHash,
   effectiveGrant,
   GRANTS_FILE,
