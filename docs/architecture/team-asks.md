@@ -60,7 +60,7 @@ GitHub access stays a separate gate: `join` must check it and say so, because We
 
 1. **Foundations.**
    - Built: `public.share_vault` and `public.share_vault_recovery` wrap the private functions, which the desktop could
-     never reach (`supabase/migrations/20261030150000_vault_rpc_wrappers.sql`, not applied yet).
+     never reach (`supabase/migrations/20261030181901_vault_rpc_wrappers.sql`, applied 2026-10-31).
    - Built: `registeredDevice` (`electron/device-key.cjs`) gives the vault this Mac's server id. The vault used the bare
      keypair, so sharing and accepting a grant had no device id.
    - Built: the heartbeat (`electron/device-beat.cjs`) moves `devices.last_seen_at` every 5 minutes.
@@ -76,4 +76,4 @@ GitHub access stays a separate gate: `join` must check it and say so, because We
 - `registerDevice` upserts without `.select()`, so its returned `id` is null against a real database. `registeredDevice`
   reads the id back, so nothing depends on it, but the `vault:devices-register` answer does carry that null.
 - The full share flow has never run against production: it had 0 vaults and 0 devices on 2026-10-30. Run it for real
-  once the migration is applied, since other steps after the RPC may have the same kind of fault.
+  now the migration is applied, since other steps after the RPC may have the same kind of fault.

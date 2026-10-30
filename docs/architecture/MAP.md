@@ -27,6 +27,7 @@ matching doc below. When a feature lands, add or update its entry here and in it
 - `secrets.md` — the 🔐 vault: device key, on-disk encryption, IPC, Touch ID, agent tools, dev-server env, Supabase sync.
 - `webhooks.md` — the 🪝 rail drawer, the `mcp__webhooks__*` tools, the relay URL, `webhook_deliveries` on Supabase.
 - `tunnels.md` — a private address for a local dev server: `/t/<id>`, cloudflared quick tunnels, the local gate and tickets.
+- `dictation.md` — local whisper.cpp dictation: languages, the Advanced warm server, vocabulary, the transcribe route.
 - `vercel.md` — the ▲ rail drawer: token in the Keychain, `.vercel/project.json`, env push from the vault, deploys, `vercel_events` Realtime.
 - `supabase.md` — the Supabase rail drawer: token in the Keychain, `supabase/.temp/project-ref`, state, unapplied migrations, the Migrate card.
 - `cloudflare.md` — the orange-cloud rail drawer: API token in the Keychain, Worker/Pages links in `~/.weft/cloudflare-links.json`, wrangler `account_id` and deploys.

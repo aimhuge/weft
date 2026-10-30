@@ -56,7 +56,7 @@ The split:
 All of the Supabase-side tables, policies and the `private.share_vault` RPC above are in the draft migration;
 `private.is_org_member` itself already ships in `supabase/migrations/20261013161111_teams_rls.sql` (the draft
 re-declares it so the migration stands alone). The desktop reaches `share_vault` and `share_vault_recovery` through
-public wrappers (`supabase/migrations/20261030150000_vault_rpc_wrappers.sql`), because `rpc()` can't call the private
+public wrappers (`supabase/migrations/20261030181901_vault_rpc_wrappers.sql`), because `rpc()` can't call the private
 schema.
 
 ## Tables (Supabase)
