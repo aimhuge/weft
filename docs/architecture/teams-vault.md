@@ -22,7 +22,7 @@ banner in `components/SecretRow.tsx`, and the workspace's **Devices** tab at `ap
 
 **What is still open.** The rename path (Q8) is out of v1 — a renamed repo orphans the old vault, and the
 drawer surfaces the orphan rather than moving it. `docs/architecture/cloud-sync.md` still notes that thread
-item bodies go up as plain JSON; sealing them with the workspace key is a separate piece of work.
+item bodies go up as plain JSON unless sealed; the workspace key that seals them is its own (mobile-security.md), not a vault's.
 
 The point of the shared vault is the same as the local one — a secret's value never enters an agent's context
 — extended to a workspace: a thread on a teammate's machine runs the same `mcp__secrets__list`, the same

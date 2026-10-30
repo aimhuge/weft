@@ -67,6 +67,7 @@ export const config = {
     "/team",
     "/billing",
     "/invite/:token*",
+    "/pair",
     "/:orgSlug/team/:path*",
     "/:orgSlug/billing/:path*",
     "/s/:path*",

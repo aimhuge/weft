@@ -16,6 +16,7 @@ import type { QuestionReply } from "@/lib/types";
 import { applyCardChange, batchBlobRefs, blobPath, buildBlobUrlMap } from "@/lib/web-board";
 import { cardThumbRefs, withThumbUrls } from "@/lib/web-board-thumbs";
 import { applyCommandChange, isCardCommand, type CloudCommandChange, type WebTarget } from "@/lib/web-commands";
+import { loadWebKeyring, openSyncedCard, openSyncedTool } from "@/lib/web-sync-key";
 import { useCloudTransport, type CloudBlobs, type ItemBus } from "./useCloudTransport";
 
 // The status of the Realtime channel; the dot beside the title reflects it.
@@ -97,7 +98,7 @@ function useItemBus() {
 }
 
 export function useWebBoard({ orgId, userId, initialCommands, initialCards, openCardId, initialBlobUrls }: WebBoardInput) {
-  const [cards, setCards] = useState<CloudCardRow[]>(initialCards);
+  const [cards, setCards] = useState<CloudCardRow[]>(() => initialCards.map(openSyncedCard));
   const [activeCardId, setActiveCardId] = useState<string | null>(openCardId);
   const { bus, emit } = useItemBus();
   const [blobUrls, setBlobUrls] = useState<Record<string, string>>(initialBlobUrls);
@@ -111,6 +112,16 @@ export function useWebBoard({ orgId, userId, initialCommands, initialCards, open
   // The card a command made, to open once its row has synced back (the command is "done" a moment before that).
   const openWhenSeen = useRef<string | null>(null);
 
+  // A browser paired from Settings → Sync opens sealed rows (lib/web-sync-key.ts): once its key is in, reopen the
+  // cards already drawn and reload the open thread, which the first render drew as 🔒 like the server did.
+  useEffect(() => {
+    void loadWebKeyring(client, orgId, userId).then((opened) => {
+      if (!opened) return;
+      setCards((prev) => prev.map(openSyncedCard));
+      emit("reconnect");
+    });
+  }, [client, orgId, userId, emit]);
+
   useEffect(() => {
     let cancelled = false;
     let subscribed = false;
@@ -119,7 +130,8 @@ export function useWebBoard({ orgId, userId, initialCommands, initialCards, open
       .on("postgres_changes", { event: "*", schema: "public", table: "cloud_cards", filter: `org_id=eq.${orgId}` }, (payload: { eventType: string; new: unknown; old: unknown }) => {
         const change = changeOf<CloudCardRow>(payload);
         if (cancelled || !change) return;
-        setCards((prev) => applyCardChange(prev, change as Parameters<typeof applyCardChange>[1]));
+        const opened = change.new ? { ...change, new: openSyncedCard(change.new) } : change;
+        setCards((prev) => applyCardChange(prev, opened as Parameters<typeof applyCardChange>[1]));
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "cloud_thread_items", filter: `org_id=eq.${orgId}` }, (payload: { eventType: string; new: unknown; old: unknown }) => {
         const change = changeOf<CloudThreadItemRow>(payload);
@@ -282,7 +294,7 @@ export function useWebBoard({ orgId, userId, initialCommands, initialCards, open
         .eq("tool_id", toolId)
         .maybeSingle<{ result: string }>();
       if (error || !data) throw error ?? new Error("no output");
-      return data.result;
+      return openSyncedTool({ org_id: orgId, card_id: cardId, tool_id: toolId, result: data.result });
     },
     [client, orgId],
   );
