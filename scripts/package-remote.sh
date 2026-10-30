@@ -77,10 +77,12 @@ rm -rf .next-dist .toolchain-dist
 rsync -az "$target:$REMOTE_DIR/.next-dist" "$target:$REMOTE_DIR/.toolchain-dist" ./
 
 echo "== pack here"
+# Known-harmless log lines (scripts/build-log-ignore.json) are hidden; pipefail keeps a failed pack fatal.
+setopt pipefail
 if (( sign )); then
-  CSC_NAME="$IDENTITY" pnpm exec electron-builder --mac --publish never
+  CSC_NAME="$IDENTITY" pnpm exec electron-builder --mac --publish never 2>&1 | node scripts/build-log-filter.mjs
 else
-  CSC_IDENTITY_AUTO_DISCOVERY=false pnpm exec electron-builder --mac --publish never
+  CSC_IDENTITY_AUTO_DISCOVERY=false pnpm exec electron-builder --mac --publish never 2>&1 | node scripts/build-log-filter.mjs
 fi
 
 if (( sign )); then

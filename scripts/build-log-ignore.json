@@ -1,0 +1,14 @@
+{
+  "_": "Known-harmless electron-builder log lines that scripts/build-log-filter.mjs hides from package-remote.sh. Each rule matches a message; with every_dep, it hides the line only when every listed dependency matches that pattern, so a new, real one still shows.",
+  "rules": [
+    {
+      "message": "duplicate dependency references",
+      "why": "Info only: pnpm list --json abbreviates a package it already printed and electron-builder swaps in the full entry. The real problem is 'unresolved duplicate dependency references', which stays visible."
+    },
+    {
+      "message": "dependency not found on disk",
+      "every_dep": "(linux|freebsd|netbsd|openbsd|sunos|aix|android|win32|openharmony|mips64el|wasm32)",
+      "why": "sharp's and esbuild's optional binaries for other platforms; pnpm doesn't install them on a Mac and the arm64 app never loads them."
+    }
+  ]
+}

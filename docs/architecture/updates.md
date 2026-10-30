@@ -71,6 +71,9 @@ another Mac asks before the first open.
 then packs and signs here with the Flexbike Developer ID (`WEFT_SIGN_IDENTITY`, default `Flexbike, Inc. (H78XB55WG8)`),
 because the private key lives only in this Mac's keychain. It notarizes when the `APPLE_API_*` variables are set.
 `--check` only tests the builder and the identity; `--no-sign` packs unsigned.
+electron-builder's output goes through `scripts/build-log-filter.mjs`, which hides the known-harmless lines listed in
+`scripts/build-log-ignore.json` (pnpm's abbreviated duplicate references, other platforms' sharp and esbuild binaries)
+and says how many it hid. A "not found on disk" line naming any Mac package still shows.
 
 ### Secrets
 
@@ -154,6 +157,34 @@ mounted in `components/HeaderBadges.tsx`).
 - Settings → General → Reset tips clears the version seen (`resetOnboarding` in `lib/welcome-client.ts`), so the current
   splash shows again on the next launch: that's how to preview one in dev mode, where the version is `package.json`'s.
 
+## Server patches
+
+Most changes (the board's UI, `lib/`, `app/api/`, Weft's skills) live only in the Next.js server's own code, a small part
+of the app next to Electron, the toolchain and the Claude Code binary. A **server patch** ships just that part, between
+versions: no version bump, notarization or dmg, and it goes live without relaunching the app.
+
+| Piece | What |
+| --- | --- |
+| `scripts/server-patch-deps.mjs` | The fingerprint of the standalone server's `node_modules` (every file's path and size, hashed). `prepare-standalone.mjs` writes it into every full build as `Resources/server/weft-deps.json` |
+| `scripts/server-patch-release.mjs` (`pnpm patch:release`) | Refuses a dirty tree, a version with no `v<version>` tag, and any change since that tag to `electron/`, `pnpm-lock.yaml` or `build/` (they only ship in a full release). Builds the standalone server, tars `server.js`, `package.json`, `public/`, `.next-dist/` and `plugin/` (no packages) into `dist/patch/weft-server-<version>+<sha>.tar.gz`, and writes `patch.json`. `--publish` uploads both to the rolling `patch-latest` prerelease (so GitHub's "latest" stays the app version) and deletes older tarballs |
+| `electron/server-patch-feed.cjs` | `patch.json` is `{ payload, signature }`: the details (`version`, `build`, `seq`, `deps`, `url`, `sha256`, `size`, `notes`, `commit`) as a JSON string, signed with ed25519. `whyNot()` says why a Mac shouldn't take one |
+| `electron/patch-key.cjs` + `scripts/server-patch-keygen.mjs` | The public key the app trusts. The keygen runs once, in your own terminal: it writes the public key here and prints the private key one time for 🔐 Add as `WEFT_PATCH_SIGNING_KEY` (weft vault, production). `null` = no key, the build takes no patches |
+| `electron/patcher.cjs` + `electron/patcher-app.cjs` | Checks `patch-latest/patch.json` 45 s after launch and hourly (`WEFT_PATCH_FEED` overrides). Takes a patch only when its signature checks out, it's for this app version and these packages, it's newer than the one staged or running, and it never failed here. Downloads, checks size and sha256, stages it, notifies (**Switch Now**). Waits while a full update is downloading or ready |
+| `electron/server-patch.cjs` | Stages into `<userData>/patches/<build>/` with `node_modules` a link to the app's own, and `current.json` naming it. `serverPaths()` is where `server.cjs` starts the server from on every launch, so a restart picks up the staged patch. Patches from another app version are cleared at start |
+
+Going live: once no thread runs and nobody has touched the Mac for 10 minutes, the patcher restarts the server (not the
+app) and reloads every page it serves. **Switch Now** asks first when threads run (**Switch When Idle** arms the
+restart-when-idle drain, which relaunches the app). A relaunch also picks the patch up.
+
+Rolling back: a patched server that dies within its first minute, or runs out of the crash budget, goes on
+`patches/bad.json` and `server.cjs` relaunches the app's own server straight away (`patchFailed()`). The Software
+Update and About windows show the running version as `0.6.7+abc1234`.
+
+Shipping one: `mcp__secrets__run("pnpm patch:release --publish", ["WEFT_PATCH_SIGNING_KEY"], environment: "production")`
+on a committed tree whose `electron/` matches the tag. A patch can't carry a change to Electron main, a new or
+moved package, or the toolchain; those still need `/release`. The first app version with the patcher, and a key, has to
+ship as a full release before any Mac can take a patch.
+
 ## Gaps
 
 - v0.4.0 (2026-10-17) was published by hand: built from a clean `git archive` of the tag, signed with the Developer ID
@@ -161,7 +192,7 @@ mounted in `components/HeaderBadges.tsx`).
   blanks in the vault), and `gh release create` with the dmg, zip and update.json. The tag's workflow run was cancelled:
   the repo has no signing secrets. Squirrel's install of a signed update is still unproven until 0.4.1.
 - arm64 only. Intel Macs would need an `x64` (or `universal`) target and their own zip in the feed.
-- No delta updates: each update downloads the full zip.
+- No delta updates: each full update downloads the full zip (server patches cover the server between versions).
 - `countRunning` in `updater.cjs` repeats the one in `keep-working.cjs`.
 - The toolchain's versions are pinned in `scripts/bundle-toolchain.mjs` and move only when someone bumps them.
 - A puku trial for people without a Puku account (Weft's key behind the deployed Weft) is its own card; until it
