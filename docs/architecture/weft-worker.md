@@ -1,10 +1,175 @@
 # Weft Worker
 
-Status: designed, not built (2026-10-28). The design of the **Weft Worker**: a headless agent runner that sits on a
-host — a Linux VPS, a home server, a spare machine — and does the actual compute for a card, while the board stays on
+Status: **phase 1 built** (2026-10-29), the rest designed. The **Weft Worker** is a headless agent runner that sits on a
+host (a Linux VPS, a home server, a spare machine) and does the actual compute for a card, while the board stays on
 your laptop or on the web at `weft.zip/<workspace>/board`. This is the ROADMAP's "Remote workers"
-(docs/ROADMAP.md), now P2. Nothing here is implemented yet; what follows is the design, the parts of the code it
-leans on, and the parts it has to add.
+(docs/ROADMAP.md), now P2. [Phase 1, as built](#phase-1-as-built) says what runs today and where it departs from
+the design. The rest of the page is the design, the parts of the code it leans on, and the parts it has to add.
+
+## Phase 1, as built
+
+One worker per box, no worker picker on the board. The first box is a Mac mini (`m1mini`), enrolled as
+`worker:082722c6…`.
+
+- **The engine is the desktop's, unchanged.** `scripts/weft-worker.ts start` loads `lib/card-starter.ts`,
+  `lib/runner.ts` and `lib/store.ts` in plain Node through jiti, with `WEFT_DATA=~/.weft-worker/data`. A run is a real
+  card in the worker's own store, driven by the same session, turn translator and guards as on a Mac. The browser,
+  secrets and webhook MCP tools throw per call there ("only exists in the desktop app"); that's phase 4.
+  `lib/store.ts` is imported first and on its own, because the engine's modules import each other in a circle.
+- **Identity: key-checked functions, not a Postgres role.** RLS can't read a header, and PostgREST won't log in as a
+  custom role with a bearer that isn't a JWT. So the worker calls `worker_*` security-definer functions
+  (`supabase/migrations/20261029125616_weft_workers.sql`) with the publishable key, and passes its own `wwk_…` key as
+  the first argument. Each function looks up `sha256(key)` in `cloud_workers.key_hash` first. RLS still guards every
+  human path. The worker's identity reaches the `card_id` trigger through the `weft.worker_id` transaction setting.
+- **Each worker acts for the account that enrolled it.** It obeys only commands that account created
+  (`created_by = owner_user`), and its `cloud_cards` rows carry that account as `owner_user` plus itself as
+  `owner_worker`. A worker's device id is `worker:<id>`, and `private.owns_device` now accepts a worker you
+  enrolled. So the web board's reply, answer and stop commands reach a worker's card unchanged.
+- **Enrolment:** `worker_enrol_token(org)` (a signed-in member, valid for an hour, once) → `worker_enrol(token, …)`
+  returns the worker id and its key, written to `~/.weft-worker/worker.json` at mode 600.
+- **Commands:** `run` (`lib/worker-commands.ts`: a prompt, an optional git URL, a mode from default / acceptEdits /
+  plan, never bypass), `clone` and the two sign-ins, `login` and `github_login`, and the web's `new_card`, `reply`,
+  `answer` and `stop` (`lib/worker-daemon.ts`). It polls
+  `worker_pending` every 3 s, because without a session Realtime's row filters show it nothing. It claims with
+  `worker_claim`, which only matches a pending row, and heartbeats every 20 s.
+- **Publishing:** `lib/worker-publish.ts` hears the engine's bus and ships cards and items through `worker_put_card`
+  and `worker_put_items`, built like the Mac's rows (`lib/cloud-sync-rows.ts` scrub and splitToolResult, redaction).
+  It keeps its queue in memory and doesn't upload blobs yet.
+- **Repos:** a command's folder is a project name under the work root, `~/.weft-worker/work/<folder>`
+  (`WEFT_WORKER_ROOT` overrides it), not `~/work`: a Mac often has a `~/work` of its own. A missing folder is cloned
+  from the run's git URL (https or ssh only). An existing one is used as it is, never pulled. Cards run in the
+  checkout itself; worktrees come later.
+- **Install:** `install/worker.sh` (served as `weft.zip/worker.sh`, a redirect to the file on main). It checks the
+  toolchain, clones Weft into `~/.weft-worker/weft`, enrols, writes the `weft-worker` wrapper into `~/.local/bin`, and
+  runs it as the launchd agent `zip.weft.worker` or the systemd user unit `weft-worker`.
+- <a id="signing-claude-in"></a>**Signing Claude in:** a background service can't answer the keychain prompt a desktop Claude
+  login raises, so the worker runs on a long-lived `claude setup-token` token kept in `~/.weft-worker/worker.env`
+  (mode 600), which the wrapper loads. `lib/env.ts` passes `CLAUDE_CODE_OAUTH_TOKEN` to a CLI, except when Weft itself
+  runs inside a Claude session. Two ways in: `weft-worker login` on the box, or **Sign in to Claude** on the worker's
+  row in Settings → Sync → Workers (`components/WorkerSignIn.tsx`). That button is one click: Electron main runs
+  `claude setup-token` on a hidden pty (`electron/claude-sign-in.cjs`) with `$BROWSER` pointed at a two-line script,
+  so the CLI hands its approval URL to Weft instead of your default browser. Main opens it in a small window beside
+  the click, in the browser pane's session (so claude.ai already knows you), types the code back if Claude's page
+  shows one, and reads the token off the CLI's output; the board never shows it. Without the desktop shell you paste
+  a token instead. Either way the token never reaches Supabase in
+  the clear: on first start the worker makes an X25519 keypair (`seal-key.json`, mode 600) and publishes the public
+  half with `worker_set_public_key`. The desktop seals the pasted token to it (`lib/worker-seal.ts`: X25519, then
+  HKDF-SHA256, then AES-256-GCM, bound to both keys and the purpose) and queues a `login` command
+  (`supabase/migrations/20261029141232_worker_login.sql`). Every member of the workspace can read `cloud_commands`,
+  and none of them can open it. The worker opens it, saves it to `worker.env` and restarts itself.
+- **The board side:** Settings → Sync → Workers (`components/WorkerSettings.tsx`, `/api/workers`,
+  `lib/workers-account.ts`) lists the workspace's workers with their status. Add a worker shows the install line
+  with a token, and Send a run queues a prompt. A worker that hasn't heartbeat in 60 s reads as offline.
+
+- **Run on Worker, per project:** a project chip's right-click menu ticks **Run on This Machine** or **Run on Worker**
+  (`lib/project-menu.ts`, `settings.workerFolders`, kept apart from the project list since its entries are rebuilt on
+  each use). In a worker project, `POST /api/cards` with `start` calls `lib/worker-handoff.ts` instead of
+  `startCard`: it picks one of your workers (online, then busy, then offline), sends the card's first message as a
+  `run` under the project's folder name and its GitHub remote as `https://github.com/<slug>.git`, and leaves the local
+  card in Review with the prompt and a note naming the worker. A failed send deletes the card rather than run it
+  locally. Switching on refuses when you have no worker. The run and its replies live on the worker's card, which
+  [the desktop board shows](#worker-projects-on-the-desktop-board) under the worker's project.
+
+### Worker projects on the desktop board
+
+A project that lives only on a worker shows on the desktop board with its cards, and nothing is copied into the local
+store (`lib/worker-project.ts`, `lib/worker-board.ts`, `lib/worker-transport.ts`, `app/api/worker-board`).
+
+- **A project is a path:** `worker://<worker id>/<folder>`. The board's chips, grouping and filter already key on a
+  path, so a worker card only needs its `cwd` set to that (`boardFrom`) to file itself. Nothing on the Mac sits at that
+  path, and `resolveFolder` refuses it, so a stray one can't start a CLI.
+- **The list:** your headless workers' folders (`cloud_workers.folders`) plus the folders of their `cloud_cards`, so a
+  project shows with no cards, and a worker too old to report still shows the ones it has cards in. An offline worker's
+  projects stay listed. A chip carries the worker's name; a row in More reads `on m1mini` or `on m1mini · offline`.
+- **`cards` stays local.** `Board` keeps its own `cards` for everything that acts, and only what's drawn reads
+  `boardCards`. `ownColumns` keeps worker cards out of Archive all, Resume all and Switch all; `localPath` keeps a
+  worker path out of the terminal, header badges, drawers and the copilot. A worker card draws `readOnly` and opens.
+- **Reading:** the account's Supabase session lives on the local server, so the renderer polls `/api/worker-board` every
+  5 s (once a minute with no worker), and an open thread re-reads its newest page every 2.5 s. There's no Realtime here.
+- **The thread:** `components/WorkerOpenCard.tsx` is the web board's `ThreadPanel` with `workerTransport`
+  (`desktop: false`), so it offers what weft.zip offers, beside the browser pane. Reply, answer and stop are the same
+  `cloud_commands` rows the web sends.
+- **A new thread:** `POST /api/cards` with a worker path calls `startWorkerThread`, sends a `run` with that folder, makes
+  no local card and answers with the worker's name. An offline worker refuses with a message and nothing is sent. A
+  reply to an offline worker queues, and the thread says so. There's no Backlog in a worker project.
+- **Folder reports:** `worker_set_folders` and `lib/worker-folders.ts` exist, but the daemon doesn't call them yet, so
+  until it does a project needs a card to show.
+- **Not yet:** attachments on a new thread, Run on Worker's local record cards still sit on the local project, and
+  sealed rows (a worker publishes in the clear today).
+
+### Cloning onto a worker
+
+The project menu's **Clone from GitHub** form gets a compact picker in the same row when you have a headless worker of
+your own: This Mac by default, then each worker, with no new row when you have none. Picking a worker sends a `clone`
+command instead of calling `lib/repos.ts`, so no prompt and no thread are needed.
+
+- **The command:** `cloneCommand` (`lib/worker-commands.ts`) takes owner/name, builds the https URL and names the
+  folder for the repo, the same project name a later run uses. `kind` is widened by
+  `supabase/migrations/20261030061145_worker_github.sql`. The form's input parsing is unchanged, and the worker still
+  applies materialise's https/ssh check.
+- **On the worker:** `cloneProject` (`lib/worker-paths.ts`) reuses `materialise`, and also checks a folder that's
+  already there: it must have the same origin, because two owners' repos can share a name. The daemon runs a clone off
+  the poll loop, so a Stop or a reply isn't held behind a clone that takes minutes. Git runs with
+  `GIT_TERMINAL_PROMPT=0`, so a missing sign-in fails at once rather than hanging.
+- **A folder means a complete clone:** `materialise` clones into a hidden `.cloning-XXXXXX` sibling and renames it into
+  place only once the files are out, removing it on failure, because a folder at that path is what "present" trusts: a
+  failed checkout used to leave a 181 MB tree with HEAD set, and a resend ran a card in it. Hidden names are refused by
+  `repoPath`, so no command can reach a clone in progress. A temp folder over an hour old lost its worker mid-clone,
+  and the next clone in that folder removes it. If a run and a clone race, the loser takes the winner's checkout.
+- **Git LFS:** the clone is `--no-checkout`, then `git grep` looks for `filter=lfs` in the `.gitattributes` at HEAD. A
+  repo that uses LFS gets `git lfs install --local` before its files are written, so a box with the binary but no global
+  filters fetches real files, not pointer files. With no git-lfs, the clone stops with a message saying what to
+  install. `install/worker.sh` installs git-lfs and its filters, and carries on without them if it can't.
+- **The result reaches the desktop:** the form waits on `GET /api/workers?command=` (`lib/worker-command-wait.ts`).
+  `explainClone` (`lib/worker-github.ts`) turns git's stderr into a plain message, such as "this worker isn't signed in
+  to GitHub". It shows in the menu and as a toast, because the menu can close during a long clone. The worker's row in
+  Settings → Sync → Workers keeps your latest failed clone until a newer one works, so a failure outlives the 5 s toast
+  and reaches you even from a worker that was offline when you asked. A command nobody claims for a minute comes back
+  as queued. The web board's strip leaves worker sign-ins and clones out (`boardCommands`): it would show them as new
+  threads.
+
+**Signing GitHub in** follows the Claude sign-in's security model, with its own command (`github_login`) and seal
+purpose (`GITHUB_PURPOSE`), so a token sealed for one can't be opened as the other.
+
+- **The token:** you paste it in `components/WorkerGithubSignIn.tsx`, on the worker's row. The link opens GitHub's
+  fine-grained token page already filled in. **The scope is Contents read and write** on the repos you pick, which brings
+  Metadata read with it, and it expires in 90 days. Read alone would clone but a card couldn't push, and that's the
+  least that lets a card finish its work; a classic token's `repo` covers every repo you can reach. A card that should
+  open pull requests needs Pull requests write added by hand. There's no one-click flow as there is for Claude:
+  GitHub has no `setup-token`, and copying the desktop's own `gh` token would hand the worker far more than it needs.
+- **On the worker:** the token is checked with `GET /user` first, so a bad one fails with a real message and stores
+  nothing. Then `signInGithub` runs `gh auth login --with-token --insecure-storage` (stdin, never an argument) and
+  `gh auth setup-git`. If gh is missing or refuses the token (it wants `read:org` on a classic one), it writes a mode-600
+  `~/.weft-worker/github-credentials` and points git's `store` helper at it. Both are scoped to github.com, so a clone
+  from another host never sees the token, and the empty helper entry clears macOS's keychain helper, which a service
+  can't answer. No restart: git asks its helper afresh each time.
+- **What it touches:** `gh` and `git config --global` are the box's user's, not the worker's own. On a box you also
+  use by hand, this changes that user's GitHub sign-in. Every card on the worker can use the token.
+- **The row:** `worker_set_github` publishes the account and `signed_in`, `expired` or `none`, never the token. The state
+  comes from `git credential fill` and `GET /user`, so it reports what git would really use, including a sign-in made
+  by hand on the box. It's checked at start, hourly, after a sign-in and after a failed clone. A 401 is expired; a
+  rate limit or no network leaves the row as it was. `listWorkers` reads these columns in a second query, so a database
+  without them only loses the line.
+
+### The desktop as a headed worker
+
+A signed-in Weft desktop that syncs a folder already takes the web board's commands (`lib/cloud-inbox.ts`), so it is a
+worker in all but name: a **headed** one, with the browser pane, the vault and webhooks a headless box lacks. It lists
+itself in Settings → Sync → Workers beside the headless ones (`supabase/migrations/20261029141006_desktop_workers.sql`).
+
+- **The row:** `cloud_workers.kind` is `headless` or `desktop`; a desktop row carries its `device` (the Mac's sync
+  device id) and is one per (account, device). It has no key: `desktop_worker_beat` upserts it as `auth.uid()`, and
+  its `key_hash` is never a hex digest, so no key can act as it.
+- **The beat** (`lib/desktop-worker.ts`) rides the inbox's 30 s check: only while the inbox listens (signed in, a
+  folder synced), so a Mac that sleeps, signs out or stops syncing reads as offline a minute later. It says `busy`
+  while any thread runs. It never throws: a database without the function just leaves the Mac off the list.
+- **A run sent to it** (`sendRun` looks the worker's kind up itself) is a plain `new_card` for its device, not a `run`.
+  The inbox finds the folder by path or by a project name exactly one synced folder has (`syncFolderFor`).
+- **The list** marks the Mac you're on (`here`): it's left out of Send a run, a desktop row has no Remove (it would
+  only beat back), and Run on Worker (`pickWorker`) never picks a desktop.
+
+Not yet: leases and reclaim, the worker picker and chip (phase 2), shared claims (phase 3), MCP and the vault on the
+host (phase 4), blob uploads, worktrees per card, and streaming deltas to the web.
 
 The one-sentence version: **Weft already has a remote control plane, but not a remote compute plane.** The web
 board already commands a Mac across the network through `cloud_commands`; the CLI, though, always spawns on the
@@ -311,7 +476,7 @@ curl -fsSL https://weft.zip/worker.sh | sh
 
 It does four things:
 
-1. **Installs the toolchain.** Checks for `git`, `curl` and `node` 20+, and installs what is missing — with
+1. **Installs the toolchain.** Checks for `git`, `curl`, `node` 20+ and `git-lfs`, and installs what is missing — with
    `apt-get` on Linux, with `brew` on macOS. A compiler toolchain is added only if the project needs one.
 2. **Clones the worker.** Pulls Weft's worker into `~/.weft-worker`. A `git pull` updates it later;
    `weft-worker update` does that for you.
