@@ -101,6 +101,9 @@ export function useDictation(onText: (text: string) => void) {
       return;
     }
 
+    // Advanced dictation's server warms on this call, so a press after it went idle is ready by Stop.
+    void api.dictation().catch(() => {});
+
     let stream: MediaStream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
@@ -163,7 +166,7 @@ export function useDictation(onText: (text: string) => void) {
       }
       setPhase("transcribing");
       try {
-        const text = await api.transcribe(new Blob(chunks, { type: recorder.mimeType || "audio/webm" }));
+        const text = await api.transcribe(new Blob(chunks, { type: recorder.mimeType || "audio/webm" }), navigator.language);
         if (text) onTextRef.current(text);
         else setError("Didn't catch anything. Try again a little closer to the mic.");
       } catch (err) {
