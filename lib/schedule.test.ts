@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { RESET_GRACE_MS, dueMessage, formatAt, nextFiveHourReset, nextWeeklyReset, planResets, sendLaterOptions, sendsWhen, toLocalInput } from "./schedule";
+import { RESET_GRACE_MS, canSendNow, dueMessage, formatAt, nextFiveHourReset, nextWeeklyReset, planResets, sendLaterOptions, sendsWhen, toLocalInput } from "./schedule";
 import type { Card } from "./types";
 
 const NOW = new Date(2026, 9, 10, 22, 30).getTime();
@@ -115,6 +115,16 @@ describe("sendsWhen", () => {
     expect(sendsWhen({ id: "a", text: "x", at, afterRestart: true }, NOW)).toBe("after restart");
     expect(sendsWhen({ id: "b", text: "x", at, afterTurn: true }, NOW)).toBe("after this turn");
     expect(sendsWhen({ id: "c", text: "x", at }, NOW)).toBe("11:41pm");
+  });
+});
+
+describe("canSendNow", () => {
+  it("takes only a row the server holds for this turn", () => {
+    expect(canSendNow({ id: "a", text: "x", at: 0, afterTurn: true })).toBe(true);
+    expect(canSendNow({ id: "pending-1", text: "x", at: 0, afterTurn: true })).toBe(false);
+    expect(canSendNow({ id: "b", text: "x", at: 0, afterRestart: true })).toBe(false);
+    expect(canSendNow({ id: "c", text: "x", at: 0, forSlot: true })).toBe(false);
+    expect(canSendNow({ id: "d", text: "x", at: 0 })).toBe(false);
   });
 });
 

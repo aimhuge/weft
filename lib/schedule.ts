@@ -83,6 +83,10 @@ export function sendsWhen(m: ScheduledMessage, now = Date.now()) {
   return m.afterTurn ? "after this turn" : formatAt(m.at, now);
 }
 
+// A held row Send now can take: one only waiting for this turn. A row held for a restart still armed would be held
+// again (after the turn it stopped), one held for a slot would wait for a slot again, and a timed one waits for its time.
+export const canSendNow = (m: ScheduledMessage) => Boolean(m.afterTurn) && !m.id.startsWith("pending-");
+
 // "11:41pm", or "sat 9:00am" when it isn't today.
 export function formatAt(at: number, now = Date.now()) {
   const d = new Date(at);

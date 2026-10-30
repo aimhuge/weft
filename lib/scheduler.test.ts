@@ -86,6 +86,25 @@ describe("sendDueMessages", () => {
     expect(cards.get("empty")!.scheduled).toBeUndefined();
   });
 
+  it("calls a restart's held message 'after this turn' once the restart is behind it and the card is mid-turn", () => {
+    card("a", { scheduled: [{ id: "r", text: "held", at: NOW - 1, afterRestart: true }, { id: "t", text: "timed", at: NOW + 1e6 }] });
+    busy.add("a");
+    sendDueMessages(NOW);
+    expect(sent).toEqual([]);
+    expect(cards.get("a")!.scheduled).toEqual([
+      { id: "r", text: "held", at: NOW - 1, afterTurn: true },
+      { id: "t", text: "timed", at: NOW + 1e6 },
+    ]);
+  });
+
+  it("leaves a restart's held message as it is while the restart is still armed", () => {
+    card("a", { scheduled: [{ id: "r", text: "held", at: NOW - 1, afterRestart: true }] });
+    busy.add("a");
+    restartArmed = true;
+    sendDueMessages(NOW);
+    expect(cards.get("a")!.scheduled![0]!.afterRestart).toBe(true);
+  });
+
   it("waits while the card is mid-turn", () => {
     card("a", { scheduled: [{ id: "1", text: "hi", at: NOW - 1 }] });
     busy.add("a");
