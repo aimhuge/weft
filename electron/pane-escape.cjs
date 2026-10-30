@@ -16,4 +16,21 @@ function escapeToReplay(input, { fullscreen = false } = {}) {
   return { type: "keyDown", keyCode: "Escape" };
 }
 
-module.exports = { escapeToReplay };
+// Wires a pane page to replay its Escape into the board (boardContents() gives the board's webContents, or undefined).
+// It tracks the page's fullscreen itself, so a fullscreen video keeps its Escape.
+function replayEscapeToBoard(wc, boardContents) {
+  let fullscreen = false;
+  wc.on("enter-html-full-screen", () => (fullscreen = true));
+  wc.on("leave-html-full-screen", () => (fullscreen = false));
+  wc.on("before-input-event", (_e, input) => {
+    const escape = escapeToReplay(input, { fullscreen });
+    if (!escape) return;
+    const board = boardContents();
+    if (!board) return;
+    board.focus();
+    board.sendInputEvent(escape);
+    board.sendInputEvent({ type: "keyUp", keyCode: "Escape" });
+  });
+}
+
+module.exports = { escapeToReplay, replayEscapeToBoard };

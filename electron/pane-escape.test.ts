@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { escapeToReplay } from "./pane-escape.cjs";
+import { describe, expect, it, vi } from "vitest";
+import { escapeToReplay, replayEscapeToBoard } from "./pane-escape.cjs";
 
 // Escape in the browser pane, replayed into the board. Escape types nothing, so Chromium reports
 // it as a rawKeyDown: the pane used to drop those, and the board never heard the key.
@@ -35,5 +35,34 @@ describe("escapeToReplay", () => {
     expect(escapeToReplay(key({ control: true }))).toBeNull();
     expect(escapeToReplay(key({ alt: true }))).toBeNull();
     expect(escapeToReplay(key({ meta: true }))).toBeNull();
+  });
+});
+
+describe("replayEscapeToBoard", () => {
+  function wire(board: unknown) {
+    const handlers = new Map<string, (...args: unknown[]) => void>();
+    replayEscapeToBoard({ on: (event: string, fn: (...args: unknown[]) => void) => handlers.set(event, fn) }, () => board);
+    return (event: string, ...args: unknown[]) => handlers.get(event)?.(...args);
+  }
+
+  it("focuses the board and replays Escape there", () => {
+    const board = { focus: vi.fn(), sendInputEvent: vi.fn() };
+    wire(board)("before-input-event", {}, { type: "keyDown", key: "Escape" });
+    expect(board.focus).toHaveBeenCalled();
+    expect(board.sendInputEvent).toHaveBeenCalledWith({ type: "keyDown", keyCode: "Escape" });
+    expect(board.sendInputEvent).toHaveBeenCalledWith({ type: "keyUp", keyCode: "Escape" });
+  });
+
+  it("leaves Escape to a fullscreen video, other keys alone, and does nothing with no board", () => {
+    const board = { focus: vi.fn(), sendInputEvent: vi.fn() };
+    const on = wire(board);
+    on("before-input-event", {}, { type: "keyDown", key: "a" });
+    on("enter-html-full-screen");
+    on("before-input-event", {}, { type: "keyDown", key: "Escape" });
+    expect(board.sendInputEvent).not.toHaveBeenCalled();
+    on("leave-html-full-screen");
+    on("before-input-event", {}, { type: "keyDown", key: "Escape" });
+    expect(board.sendInputEvent).toHaveBeenCalled();
+    expect(() => wire(undefined)("before-input-event", {}, { type: "keyDown", key: "Escape" })).not.toThrow();
   });
 });

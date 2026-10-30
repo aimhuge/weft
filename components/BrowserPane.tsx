@@ -11,6 +11,7 @@ import { clearOfMenu } from "@/lib/pane-clear";
 import { useMiniApps } from "@/lib/use-mini-apps";
 import Icon, { Spinner } from "./Icon";
 import AppShareButton from "./AppShareButton";
+import PaneTabs, { NewTabButton } from "./PaneTabs";
 import SaveAppButton from "./SaveAppButton";
 import ZoomMenu from "./ZoomMenu";
 
@@ -43,6 +44,8 @@ export default function BrowserPane({
 }) {
   const holder = useRef<HTMLDivElement>(null);
   const [resizing, setResizing] = useState(false);
+  // Bumped by + so the address bar empties and takes focus for the new tab's address.
+  const [fresh, setFresh] = useState(0);
   const overlay = useAnyOverlay();
   // A full-window overlay (a dialog, an image opened full size) covers the page, so the page goes.
   // A local menu (this pane's zoom menu, a card's mode picker) covers a small rectangle: the page
@@ -130,7 +133,8 @@ export default function BrowserPane({
         <button className={nav} disabled={!state.url} onClick={() => window.weft?.browser.reload()} aria-label="Reload">
           {state.loading ? <Spinner size={13} /> : <Icon name="reload" size={15} />}
         </button>
-        <AddressInput desktop={desktop} url={state.url} app={app} />
+        <AddressInput desktop={desktop} url={state.url} app={app} fresh={fresh} />
+        <NewTabButton className={nav} onOpen={() => setFresh((n) => n + 1)} />
         {/* Save as app: the page joins the left rail below Services (components/AppsRail.tsx). */}
         {desktop && <SaveAppButton url={state.url} title={state.title} />}
         {/* Share an app: shown for a saved app on the board's own pane (no card actions). */}
@@ -142,6 +146,7 @@ export default function BrowserPane({
           <Icon name="x" size={15} />
         </button>
       </div>
+      <PaneTabs tabs={state.tabs} current={state.tab} />
       <div className="flex min-h-0 flex-1">
       <div ref={holder} className="relative min-w-0 flex-1 bg-canvas">
         {!desktop ? (
@@ -170,12 +175,25 @@ function AddressInput({
   desktop,
   url,
   app,
+  fresh,
 }: {
   desktop: boolean;
   url: string | undefined;
   app: ReturnType<typeof appFor> | undefined;
+  // Changes when + opens a new tab: the bar empties and takes focus for its address.
+  fresh: number;
 }) {
   const [draft, setDraft] = useState<string | null>(null);
+  const input = useRef<HTMLInputElement>(null);
+  // A new tab empties the draft as it renders (React's adjust-state-on-prop-change), then the effect focuses it.
+  const [seenFresh, setSeenFresh] = useState(fresh);
+  if (seenFresh !== fresh) {
+    setSeenFresh(fresh);
+    setDraft("");
+  }
+  useEffect(() => {
+    if (fresh) input.current?.focus();
+  }, [fresh]);
   function go(raw: string) {
     const next = raw.trim();
     if (next) void window.weft?.browser.open(next);
@@ -184,9 +202,11 @@ function AddressInput({
   const isName = draft === null && app !== undefined && url !== undefined && url.startsWith("file:");
   return (
     <input
+      ref={input}
       value={value}
       onFocus={(e) => {
-        setDraft(url ?? null);
+        // A new tab's empty draft stays empty; otherwise editing starts from the real URL.
+        setDraft((d) => d ?? url ?? null);
         e.currentTarget.select();
       }}
       onBlur={() => setDraft(null)}

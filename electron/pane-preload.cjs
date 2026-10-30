@@ -30,5 +30,11 @@ if (typeof location !== "undefined" && location.protocol === "file:") {
     // Live read: a JSON GET on Weft's own server (electron/live-data.cjs). The page names a PATH,
     // never a URL; main holds the launch token and does the fetch, so the page never sees it.
     liveData: (path) => ipcRenderer.invoke("live-data:read", String(path ?? "")),
+    // The simulator's live view (electron/sim-live.cjs): the device's window to capture, and the
+    // clicks on it sent back as taps. Main answers only Weft's own viewer pages.
+    simLive: {
+      source: (deviceName) => ipcRenderer.invoke("sim-live:source", String(deviceName ?? "")),
+      input: (body) => ipcRenderer.invoke("sim-live:input", body ?? null),
+    },
   });
 }

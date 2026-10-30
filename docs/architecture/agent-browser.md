@@ -11,6 +11,8 @@ Playwright drives a browser, in the pane you can see.
 
 ## The tools
 
+Every tool acts on the card's tab on screen; `open_url` with `new_tab` opens a new tab first (`electron/pane-tabs.cjs`).
+
 `lib/browser-act-tools.ts`, spread into `browserMcpServer()` (`lib/browser-tools.ts`) next to `open_url`, `read_page`
 and `screenshot`. Every thread gets them (Claude Code and puku in-process, Codex through the MCP bridge).
 

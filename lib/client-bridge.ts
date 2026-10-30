@@ -21,6 +21,16 @@ export interface BrowserState {
   canGoForward: boolean;
   // The page's zoom, in percent. A shell from before zoom reporting sends none.
   zoom?: number;
+  // The card's tabs and the one on screen. A shell from before tabs sends neither.
+  tabs?: PaneTab[];
+  tab?: number | null;
+}
+
+// One tab of a card's browser.
+export interface PaneTab {
+  id: number;
+  url: string;
+  title: string;
 }
 
 // What the app menu, dock, tray, global shortcuts and weft:// links ask a window to do.
@@ -65,6 +75,10 @@ export interface ShellBridge {
     reload(): void;
     // "in", "out", "reset", or a percentage.
     zoom(action: "in" | "out" | "reset" | number): void;
+    // The open card's tabs; a shell from before tabs has none of these.
+    newTab?(): void;
+    selectTab?(id: number): void;
+    closeTab?(id: number): void;
     onState(callback: (state: BrowserState) => void): () => void;
   };
   dialog: {
@@ -109,6 +123,12 @@ export interface ShellBridge {
   copilot: {
     toggle(): void;
     onState(callback: (state: { open: boolean }) => void): () => void;
+  };
+  // Sign in to Claude for a Weft Worker (electron/claude-sign-in.cjs): runs claude setup-token, opens its approval
+  // page beside the click, and resolves with the token or why there isn't one. Older shells don't have it.
+  claudeSignIn?: {
+    start(click: { x: number; y: number }): Promise<{ token?: string; error?: string }>;
+    cancel(): void;
   };
   // Shells for the terminal drawer, keyed by id. open reattaches to a running one and replays its output.
   terminal: {
