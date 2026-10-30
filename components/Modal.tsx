@@ -4,6 +4,7 @@ import { useEffect, useId, useState, type CSSProperties, type PointerEvent, type
 import { createPortal } from "react-dom";
 import { coverIntros } from "@/lib/intro-cover";
 import { NO_DRAG } from "@/lib/no-drag";
+import { useOverlay } from "@/lib/overlay";
 import { useEscape } from "@/lib/use-escape";
 import CrashGuard from "./CrashGuard";
 import Icon from "./Icon";
@@ -25,7 +26,9 @@ const LAYER = { normal: "z-50", top: "z-[90]", palette: "z-[92]", front: "z-[94]
 // title and a close button, and Escape. Escape always closes the newest dialog; so does a click on the
 // backdrop, unless `keepOnBackdrop`. Without a title there's no header, and `label` names the dialog.
 // The body sits in a CrashGuard, so a dialog that fails to draw still has its header, ✕ and Escape.
-// Opening one pauses a feature intro that is playing under it (lib/intro-cover.ts).
+// Opening one pauses a feature intro that is playing under it (lib/intro-cover.ts), and hides the browser
+// pane's page: that is a native view drawn above all of this, so no z-index can put a dialog over it
+// (lib/overlay.ts). Every dialog gets that here, so a new one can't come up half under the page.
 //
 // It draws in a portal, not where it was asked for. A dialog opened from the header (the leagues, from
 // components/LeagueBadge.tsx) sits inside <header>, and on the Mac that header is the window's drag
@@ -103,6 +106,7 @@ export default function Modal({
   });
   useEscape(true, onClose);
   useEffect(coverIntros, []);
+  useOverlay(true);
   // StrictMode's double-mount runs this cleanup between the two mounts, which takes the host off the
   // body; the second mount puts it back. A portal into a detached node draws nothing, which is why
   // the dialog would not open.

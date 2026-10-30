@@ -1,7 +1,6 @@
 "use client";
 
 import { timeAgo } from "@/lib/format";
-import { useOverlay } from "@/lib/overlay";
 import { openFindings, type Finding, type ScoutState, type Severity } from "@/lib/scout-view";
 import { useFeatureIntro } from "@/lib/use-feature-intro";
 import { useNow } from "@/lib/use-now";
@@ -11,8 +10,7 @@ import Modal from "./Modal";
 const DOT: Record<Severity, string> = { high: "bg-danger", medium: "bg-warn", low: "bg-muted" };
 
 // The quality badge's dialog: fix the checklist, or start one of the scout's findings as its own small card.
-// The chrome (backdrop, header, ✕, Escape) is the shared Modal; the browser pane is a native view drawn
-// above the board, so it hides while the dialog is open.
+// The chrome (backdrop, header, ✕, Escape, hiding the browser pane) is the shared Modal.
 export default function ScoutDialog({
   title,
   scout,
@@ -31,7 +29,6 @@ export default function ScoutDialog({
   onRescout: () => void;
 }) {
   const now = useNow();
-  useOverlay(true);
   const intro = useFeatureIntro("quality");
 
   const report = scout?.report ?? null;

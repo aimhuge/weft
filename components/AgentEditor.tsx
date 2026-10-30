@@ -9,6 +9,7 @@ import { errorText } from "@/lib/new-thread";
 import { refreshAgents } from "@/lib/use-agents";
 import type { SkillSetView } from "@/lib/types";
 import SkillSetList from "./SkillSetList";
+import { BUTTON_PRIMARY } from "./button-styles";
 
 const FIELD = "rounded-md border border-line-strong bg-canvas px-2.5 py-1.5 text-[13px] text-ink outline-none focus:border-accent";
 
@@ -59,7 +60,7 @@ export default function AgentEditor({ agent, seed, onDone }: {
       <div className="flex justify-end gap-2">
         <button type="button" onClick={onDone} className="rounded-md px-3 py-1.5 text-[13px] text-muted hover:text-ink">Cancel</button>
         <button type="button" disabled={busy} onClick={() => void save()}
-          className="rounded-md bg-accent px-3 py-1.5 text-[13px] font-medium text-on-accent hover:opacity-90 disabled:opacity-50">
+          className={BUTTON_PRIMARY}>
           {agent ? "Save agent" : "Add agent"}
         </button>
       </div>

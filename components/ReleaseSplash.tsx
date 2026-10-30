@@ -6,8 +6,8 @@
 import type { ReleaseSplash as Splash } from "@/lib/release-splash";
 import { useReleaseSplash } from "@/lib/use-release-splash";
 import Modal from "./Modal";
+import { BUTTON_PRIMARY } from "./button-styles";
 
-const PRIMARY = "rounded-md bg-accent px-3 py-1.5 text-[13px] font-medium text-on-accent hover:opacity-90";
 const NOTES = "https://github.com/aimhuge/weft/releases/tag/v";
 
 export function SplashBody({ version, splash, onClose }: { version: string; splash: Splash; onClose: () => void }) {
@@ -32,7 +32,7 @@ export function SplashBody({ version, splash, onClose }: { version: string; spla
           <a href={`${NOTES}${version}`} target="_blank" rel="noreferrer" className="text-[12.5px] text-muted underline-offset-2 hover:underline">
             Full release notes
           </a>
-          <button type="button" onClick={onClose} className={PRIMARY} autoFocus>
+          <button type="button" onClick={onClose} className={BUTTON_PRIMARY} autoFocus>
             Nice
           </button>
         </div>

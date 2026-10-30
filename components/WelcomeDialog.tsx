@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { setBoardMode } from "@/lib/board-prefs";
 import { api } from "@/lib/client";
 import { openNewThread, selectCard } from "@/lib/onboarding-events";
 import { trackOnboarding } from "@/lib/telemetry-client";
@@ -60,13 +61,17 @@ export default function WelcomeDialog({ onError }: { onError?: (err: unknown) =>
       setTicked(ticks);
       setCwd(view.projects.find((p) => ticks.has(p.cwd))?.cwd ?? "");
     };
-    const load = () =>
+    const load = (firstLaunch: boolean) =>
       void loadWelcome()
         .then((view) => {
-          if (live && !view.welcome && view.preview) show(view.preview, false);
+          if (!live || view.welcome || !view.preview) return;
+          // A new install starts on the Regular board; Test it, the same screen on a used board, leaves it be.
+          if (firstLaunch) setBoardMode("regular");
+          show(view.preview, false);
         })
         .catch(() => {});
-    load();
+    load(true);
+    const onTest = () => load(false);
     const onReplay = () =>
       void loadWelcome(true)
         .then((view) => {
@@ -74,11 +79,11 @@ export default function WelcomeDialog({ onError }: { onError?: (err: unknown) =>
         })
         .catch((err: unknown) => report.current?.(err));
     window.addEventListener(REPLAY_EVENT, onReplay);
-    window.addEventListener(TEST_EVENT, load);
+    window.addEventListener(TEST_EVENT, onTest);
     return () => {
       live = false;
       window.removeEventListener(REPLAY_EVENT, onReplay);
-      window.removeEventListener(TEST_EVENT, load);
+      window.removeEventListener(TEST_EVENT, onTest);
     };
   }, []);
 

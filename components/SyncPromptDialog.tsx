@@ -15,9 +15,7 @@ import { openTeamPage } from "./board-palette";
 import Icon, { Spinner } from "./Icon";
 import Modal from "./Modal";
 import { folderName } from "./ProjectBar";
-
-const PRIMARY = "inline-flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-[13px] font-medium text-on-accent hover:opacity-90 disabled:opacity-50";
-const SECONDARY = "rounded-md border border-line-strong px-3 py-1.5 text-[13px] text-ink hover:bg-sunken";
+import { BUTTON_PRIMARY as PRIMARY, BUTTON_SECONDARY as SECONDARY } from "./button-styles";
 
 // What a Weft account adds, for the signed-out ask: the features that otherwise each ask on their own.
 const PERKS = [
