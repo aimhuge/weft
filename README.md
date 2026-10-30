@@ -412,6 +412,11 @@ message again in a fresh CLI.
 The Backlog column is hidden by default. Turn it on with Settings → General → Show backlog. It also shows
 whenever cards are waiting in it.
 
+The board comes in two modes. **Regular** is just your threads: columns, cards with their folder and age, the
+browser pane, and ★ and 🔐 on the rail. **Advanced** is everything: the tool rail, the header's badges, list view,
+sorting, each card's stage and model, and the footer's stats. A new install starts on Regular, a board that was
+already in use stays on Advanced, and Settings → General → Advanced mode switches between them.
+
 Any column folds out of the way: click the chevron in its header and it becomes a thin strip with its name and
 count. Click the strip to open it again; you can still drop cards on it. When the board has room, the fullest
 columns spread their cards over two columns: the column with the most cards first, then the next, as long as its
@@ -978,6 +983,8 @@ paste a fine-grained token (the link fills in Contents read and write), and the 
 sign-in. Every card on that worker can use the token. **Clone from GitHub** in the project menu has a target beside the
 repo field once you have a worker, so you can clone onto it with no prompt and see the real result on the board.
 A project on a worker shows in the project chips and **More** beside your local ones, marked with the worker's name, even when the worker is offline. Pick it to see its cards on this board, reply to them, answer them or stop them, and start new threads there; nothing runs on your Mac, and an offline worker's new thread says so.
+An outside-folder prompt on a worker's card offers **This card** and **Always**, and Always means every card on that worker.
+A worker's card shows its pages in the browser pane too, on this board and on weft.zip: it writes a page, opens it, and Weft uploads it with its images. Only web files from the card's project and show folder can leave the box.
 **Send a run** queues a prompt in a project folder on the worker, and it clones the repo the first time. The card runs on the box with the same engine as your Mac and syncs back to the
 web board, where you can reply to it, answer it or stop it. Right-click a project chip and tick **Run on Worker**
 (or back to **Run on This Machine**): every new thread in that project then goes to your worker instead of starting

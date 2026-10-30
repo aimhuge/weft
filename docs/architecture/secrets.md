@@ -179,6 +179,10 @@ denied). A file watcher notices hand edits and offers "Import changes", so editi
   already reading (a drawer would open behind the thread panel). **Add to vault** hands the value to main through the
   board's own `vault.set` IPC, then sends the thread "I added NAME (env) to the 🔐 vault." as the user's message; once
   the vault holds it the input folds to a ✓. The thread is told to end its turn after the call and wait for that message.
+  Several asks in one thread fill in together (`components/SecretAskBatch.tsx`, `lib/secret-ask-batch.ts`): every input
+  stays open, Add (or Enter in any of them) takes every filled one, a repeated ask for the same key and environment folds
+  with it, and the thread gets one message naming every key only once none is left open, so its next turn doesn't wake
+  while the user is still pasting. **Tell Claude now** sends it early, for a key the user means to skip.
   `lib/runner-turn.ts` marks the tool item with `ask` (`secretAskOf` in `lib/vault-view.ts`), `groupThread` keeps it out
   of the folded tool run, and `ThreadEntries` draws it. `fill_field` and `run` put every missing name in as a blank and
   point the thread at `ask_add`. `lib/secret-ask.ts` posts `POST /secrets/ask-add` (`askAdd` in `electron/vault-routes.cjs`), which only adds the blank.
@@ -221,9 +225,9 @@ denied). A file watcher notices hand edits and offers "Import changes", so editi
     with `preX` and `postX`.
   - Electron main (`electron/secret-run.cjs`) gets the values (`vault.valuesFor`, main only, never over IPC) and asks:
     a dialog (`electron/approval-window.cjs`) naming the asking card by its title, the thread's own one-line `why`, the
-    command, the folder, the script and the names (Cancel / Allow once / Always allow), and Touch ID. The window starts
-    Touch ID as it opens (`settle()` in `approval-window.cjs`), so a touch on the sensor alone is Allow once; a click on
-    Always allow or Allow once waits for that same touch, and a cancelled prompt leaves the buttons, which ask again.
+    command, the folder, the script and the names (Cancel / Allow for 1 hour / Always allow), and Touch ID. The window starts
+    Touch ID as it opens (`settle()` in `approval-window.cjs`), so a touch on the sensor alone is Allow for 1 hour; a click on
+    Always allow or Allow for 1 hour waits for that same touch, and a cancelled prompt leaves the buttons, which ask again.
     Nothing is allowed without Touch ID passing where the Mac has it. The title and
     `why` are only shown, never part of a remembered rule; a dev server's approval names its card too.
     *Always allow* is a rule in the data folder's `vault/run-rules.json` (`electron/run-rules.cjs`), sealed with
@@ -274,8 +278,40 @@ denied). A file watcher notices hand edits and offers "Import changes", so editi
   - **`~/.weft/show/` is the one folder inside it that is open.** It holds the pages a thread renders
     in the pane (plans, commits, how-tos, answers), and it is the one place the browser prompt tells a
     thread to write — so sealing it made the pane's own pages unreadable and unwritable
-    (`lib/secret-guard-files.ts`: `DATA_OPEN`). Every other folder in the data dir stays sealed, and a
-    path that climbs out of it (`~/.weft/show/../vault/acme.json`) is sealed too.
+    (`lib/secret-guard-files.ts`: `DATA_OPEN`).
+  - **`~/.weft/apps/` is open too (2026-10-29).** It holds the data mini apps (`apps/<slug>/index.html`
+    and `weft-app.json`), and sealing the data dir had stopped threads building or editing one such as
+    📈 Growth. App folders hold pages and manifests that name vault secrets by name only, never values.
+    Every other folder and file in the data dir stays sealed: `vault/`, `threads/`, `attachments/`,
+    `apps.json` (which pages are saved apps), `app-grants.json`, the tokens, and the control token. So does
+    any path that climbs out of an open folder (`~/.weft/apps/../vault`, `~/.weft/show/../threads/x`: `..`
+    is folded before the check, including on the `~/.weft/…` path the guard can't resolve) and any path
+    whose real place is sealed: a symlink in `apps/` or `show/` is followed (dangling or not, and a path
+    that doesn't exist yet through its nearest existing folder), so `apps/x -> ../vault` or a link to a
+    project's `.env` is checked as the file it lands on (`realPlace` in `lib/secret-guard-files.ts`).
+  - **Why a thread may edit a manifest: the grant covers every name it hands out.** A manifest decides
+    which secrets a page's calls use, so an open `apps/` is safe only if any change there that would
+    reach a new value asks the user again. Named reads always needed the env grant, and the grant's hash
+    (`manifestHash` in `electron/app-data-grants.cjs`) voids it when the env, folder, `supabaseUrl` or a
+    read changes. But `weft.env()` and a secret-filled `weft.fetch` used to run with no grant at all, the
+    manifest's policy being their only gate: a thread could have added `"public": ["SUPABASE_SECRET_KEY"]`
+    to Growth's manifest, opened the page in the pane and read the value off it with `read_page`, or
+    added a `secrets` rule sending a key to a host of its choosing. Now the grant covers every name a
+    manifest may hand out (`manifestNeeds`: the reads' names, the `secrets` keys and the `public` names),
+    the hash covers `secrets` and `public` too (they join the hash only when present, so an app without
+    them keeps its grant), and `weft.env()` and any `weft.fetch` that fills a placeholder run only under a
+    live grant (`ensureGrant` in `electron/app-data-fetch.cjs`). With none, main asks Touch ID itself,
+    naming every name, so a fetch-only page needs no grant bar; calls that arrive while it asks share the
+    one prompt. A fetch that fills no secret still runs without asking: it can only reach the hosts the
+    policy allows, with nothing from the vault. `requestSecret` stays ungated: it only answers whether the
+    viewer's own value is set and adds a blank.
+  - **Why editing a granted app's `index.html` alone needs nothing more.** The grant is over data, not the
+    page's code: `index.html` isn't in the hash, and a page can only call the reads and the fetch policy
+    its manifest declares, through main, which never hands it a value it isn't granted (a filled fetch's
+    echo comes back masked). So an edited page gets no key it couldn't get before. What it can do is what
+    any granted page can: show the granted rows, or send them where it likes. Those rows are the data the
+    user agreed to show that page, and the thread could already see them by opening the page in the pane.
+    The keys never leave main.
   - **A substituted path is still a path.** `cat $(echo .env)`, ``cat `echo .env` `` and `cat $'\x2eenv'`
     read the file, so the parser hands the guard the words a substitution stands for
     (`lib/shell-parse.ts`: `substituted`, `ansiC`).
@@ -371,8 +407,37 @@ One Touch ID lets one card use one project's vault for an hour without being ask
 
 - **Covers** `mcp__secrets__fill_field` on any https site, `mcp__secrets__run` and the card's dev server secrets
   (`vault.useFor` and `secret-run.cjs`'s `approve` check `granted(card, vault id)` first). **Doesn't cover** writes
-  (`set_value`), pushes to Vercel or a relay, or anything that would show the thread a value: the one rule holds.
-- **Two ways in.** The card's right-click menu: **Give 🔐 Vault Access for 1 Hour** / **Revoke 🔐 Vault Access**
+  (`set_value`) or pushes to Vercel unless the grant names them (below), nor a relay or anything that would show the
+  thread a value: the one rule holds.
+- **One approval for a whole setup** (2026-10-29). A thread setting up a service (the R2 move, say) used to ask for
+  Touch ID five or six separate times: a run, a fill, a `set_value`, a `push_to_vercel`, a dev server. `request_access`
+  now takes two more options, and the prompt tells threads to call it once, up front, before a multi-step setup:
+  - `writes: true` also covers `set_value` (adding a name or filling a blank) and `push_to_vercel`. The Touch ID prompt
+    says so in words ("and store secrets it makes in the vault and push them to Vercel"), so the yes is no wider than
+    what it read. An **overwrite** (`replace: true`) still asks every time: it destroys the value that was there.
+    `fillBlank` in `vault-routes.cjs` checks `vault.writeGranted(card, folder)`; `sendValue` in
+    `vault-thread-tools.cjs` checks `grants.allowsWrite(card, id)`. Both take the card main proves from the signed
+    body (`set_value` and `push_to_vercel` now send `cardProof`), never one the body names.
+  - `span: "thread"` lasts until the card is Done, archived or deleted instead of an hour. The server watches the
+    board bus for that (`lib/vault-grant-done.ts`) and calls `POST /secrets/revoke-card`; main caps it at 12 hours
+    (`THREAD_MS`) anyway, so a server restart that drops the watch, or a card left in Review overnight, can't hold a
+    grant open for good. Quitting Weft still ends it.
+  - A later, narrower grant never shrinks a wider one: the hour after an approved command doesn't end a thread-long
+    grant or drop its writes (`add()` keeps the wider `until`, span and writes).
+- **Why not batch prompts, or hold them till the turn ends?** Each tool call waits on its answer: a thread can't go on
+  to its next step until `set_value` says whether it stored the value, so there's nothing to hold until the end of a
+  turn, and calls that really arrive together are rare (a thread runs its secret calls one after another). The data
+  apps' shared prompt (`ensureGrant` in `app-data-fetch.cjs`) works because a page fires its calls in parallel. Asking
+  once up front, naming everything, gets the same one Touch ID without a queue that would hide which call a prompt
+  belonged to.
+- **Why not a thread grant from the card menu or the approval window?** The menu is the user deciding on their own, and
+  an hour is the safe default there; a thread that knows its work runs long asks for `span: "thread"` and says why,
+  and the prompt quotes it.
+- **Approving a run or a dev server is a way in too** (2026-10-29). A card used to ask on every command and every
+  dev server restart (8 approvals in a day for one card). Now a yes there (Allow for 1 hour, or Always allow) also opens a
+  site-less grant for that card and vault (`grantAfterApproval`, called from `approve()` in `secret-run.cjs`), so the card
+  asks once. Site-less, it never covers a fill: typing a value into a page still asks for that page.
+- **Two more ways in.** The card's right-click menu: **Give 🔐 Vault Access for 1 Hour** / **Revoke 🔐 Vault Access**
   (`lib/card-menu.ts`, `components/use-board-menus.ts`, IPC `vault:grant` / `vault:revoke`). Or the thread asks with
   `mcp__secrets__request_access` and a `why` (`POST /secrets/request-access`), which the Touch ID prompt quotes.
 - **Always a fresh Touch ID**, never the drawer's unlock or a fill's per-site unlock. Kept in memory only: quitting Weft

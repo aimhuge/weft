@@ -58,7 +58,7 @@ guard set: each is refused, or asked about, in the same words on all three.
 
 | Hook | File | Turns away |
 | --- | --- | --- |
-| Secret guard | `lib/secret-guard.ts` | reading `.env` files, Weft's data secrets, environment dumps (Bash, Read, Grep…) |
+| Secret guard | `lib/secret-guard.ts` | reading `.env` files, Weft's data secrets, a Weft Worker's home ([what's sealed](weft-worker.md#whats-sealed-on-a-worker)), environment dumps (Bash, Read, Grep…) |
 | Restart guard | `lib/restart-guard.ts` | killing or restarting Weft's own server, app or port while other cards' turns run; points the thread at `mcp__board__restart_weft_when_idle` |
 | Git guard | `lib/git-guard.ts` | git commands that throw away or hide uncommitted work in the shared tree |
 | Route import guard | `lib/route-import-guard.ts` | an edit that makes a route file import a module that isn't there yet |
@@ -80,7 +80,7 @@ only Weft's own window can.
 
 There is no per-route "sensitive" flag any more: it existed when reads were unauthenticated and marked the six routes that leaked
 (account, account/team, account/billing, settings, services, github/collaborators). The desktop app adds the token to the board window's
-requests only (`electron/api-token.cjs`, a `webRequest` hook on the default session; the browser pane is another partition), and it is
+own requests only, never a frame's (`electron/api-token.cjs`, a `webRequest` hook on the default session; the browser pane is another partition), and it is
 the control server's token, which threads can't read. The one thing the pane gets is the plain read value `1` on GET/HEAD of
 `/api/attachments/*` on both `127.0.0.1` and `localhost` at Weft's port (`attachPaneAttachments`; Next names its own origin `localhost`, which the commit walk-through's picture links use), so a page a thread opens can show a card's pictures: an `<img>` can't send a header. With no token on disk the API fails closed (`lib/guard.ts`): a read without `1` and every elevated write get 403, since main writes the token before it starts the server (`electron/main.cjs` `boot`), so a missing file means something is wrong, not a first launch. Only Vitest and a server started with `WEFT_NO_TOKEN=1` (`pnpm dev` / `pnpm dev:web` in a plain browser, which set it) run without one.
 `weft://reply|commit` links act only from a real file under `~/.weft` (`ownPage`, `electron/page-links.cjs`).
@@ -168,6 +168,19 @@ symlinks, a file not created yet by its nearest folder).
   `additionalDirectories` from the next session, and the folder guard reads it live for the current one: no `/add-dir`
   turn, which the SDK CLI refuses); **Always** (`POST /api/folders`
   → `settings.allowedFolders`, which every new session also gets as `additionalDirectories`); Deny.
+- **A card on another machine** (a worker's, or a Mac's card opened on weft.zip): the same three buttons, with a different
+  path. A grant goes **inside the answer command** as a scope (`grant: "card" | "always"`, `ThreadTransport.grantInAnswer`),
+  never as a path and never as a second command. The machine running the card applies it in `lib/cloud-inbox.ts` or
+  `lib/worker-daemon.ts`: `answerGrant` (`lib/cloud-commands.ts`) reads the folder from its own `card.pending`, and
+  refuses a stale `pendingId`, a question, an MCP form or a prompt with no folder, rather than fall back to Allow once.
+  The answer runs first and `applyFolderGrant` (`lib/folder-grant.ts`) writes after it, so a request that has gone leaves no
+  grant. Always means that machine: its own `settings.allowedFolders`, not this Mac's. `answerBody` drops a grant on a
+  Deny. A question's "Read from" stays local: its folder is guessed from the model's words and a question's answers
+  skip the signed-approval rule, so it must not buy a standing grant.
+- **`elevated()` for those answers**: `POST /api/worker-board` takes an `answer` only with the launch token, like the local
+  permission route, so a thread's `curl` with the plain `1` can't approve its own prompt on a worker. A reply or a Stop
+  still needs only `guard()`. On a Mac, a grant passes `approvalProblem` first (`lib/approval-check.ts`), and a phone's
+  signature covers it (`lib/approval-sig.ts`).
 - **After a grant**, a read-only call (Read, Glob, Grep, LS) whose paths are all in granted folders is allowed with no
   prompt at all (`grantedRead`), including the CLI's own working-directory prompt; writes and Bash in a granted folder
   follow the card's permission mode as usual.

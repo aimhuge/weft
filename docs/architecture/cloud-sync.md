@@ -1,8 +1,8 @@
 # Cloud sync
 
 Status: usable, off by default, 2026-10-16. A card can be started from the web board (see Commands); the `cloud_commands` migration is applied. Settings → Sync turns a project on, and the web board at
-`weft.zip/<workspace>/board` reads its cards back live. The migration is applied. Item bodies go up as plain JSON, so
-this isn't offered to anyone else until they're sealed (see Gaps).
+`weft.zip/<workspace>/board` reads its cards back live. The migration is applied. Item bodies go up as plain JSON unless
+sealing is on (mobile-security.md), so this isn't offered to anyone else until sealing is the default (see Gaps).
 
 The goal: a card's thread reads the same on another device as on the Mac that runs it. `lib/cloud-sync-types.ts`
 is the contract between the parts:
@@ -38,6 +38,23 @@ is the contract between the parts:
   That includes the page each `mcp__browser__open_url` call opened (its `summary` becomes `blob:sha256:<hex>#anchor`, the
   anchor kept verbatim) and a message's `page` with its anchor, so a card's pane history reads remotely (sharing.md). The path
   rules live in `lib/blob-paths.ts`.
+- A Weft Worker uses this same store through a stand-in client and a narrower path rule (`lib/worker-blobs.ts`,
+  [Pages from a worker](weft-worker.md#pages-from-a-worker)).
+- `lib/blob-page-assets.ts`: an HTML page goes up with the local files it names, so its images load on weft.zip and the
+  phone. `uploadPage` in the blob store finds each relative (or absolute, or `file://`) reference in `img`/`video`/`audio`/
+  `source`/`track`/`script`/`embed` `src`, `poster`, `srcset`, icon links and CSS `url()` (in `<style>` and `style=""`),
+  uploads each file as its own blob under the same `lib/blob-paths.ts` rules (never the vault, a token or a `.env*`; at most
+  50 MB each), and writes its `blob:sha256:<hex>` ref (plus any `#fragment`) in its place. A local `<link rel=stylesheet>` is
+  inlined as a `<style>` block with its own `url()`s read against the stylesheet's folder, since a stylesheet loaded from a
+  signed URL couldn't have its refs signed. Only the uploaded copy changes, so the page blob's sha is of the rewritten
+  bytes, not the file on disk. Web URLs, `data:`, missing files and `<a href>` links stay as written. Used for a message's
+  `page`, an `open_url` call's page and the card row's `page` (`withUploadedPage`).
+- `lib/blob-page-sign.ts`: the serving half. The web board's pane route (`app/api/web-board/[orgId]/page/[sha]`, as the
+  visitor) and a share link's frame (`app/api/s/[id]/page/[sha]`, as the service client after the share check, via
+  `serveBlobPage(…, { signAssets: true })`) swap each ref in an HTML page for a signed URL from `lib/blob-urls.ts`, R2 first,
+  after redaction so a URL's token isn't masked. Signed URLs rather than a cookie route per asset: the page is sent with a CSP
+  sandbox, so it runs in an opaque origin and its image requests carry no session cookie. A share signs whatever refs the
+  owner's page names; those are blobs of the owner's own workspace, which the owner chose to share.
 - `lib/cloud-sync-cards.ts`: builds the `cloud_cards` rows, uploading each card's pane capture (`thumb`, an
   `/api/attachments/…` file) as a blob and putting the ref in the uploaded copy only; the web board resolves it with
   the thread's refs (`lib/web-board-thumbs.ts`).
@@ -67,6 +84,12 @@ is the contract between the parts:
   <project>** (`POST { folder, on }`) for the board's work folder as its main checkout (`menuProject` in `lib/board-derive.ts`, never a
   scratch folder). These items keep the menu open, so the line shows the answer. `components/AccountButton.tsx` owns the hook, polling every
   30 s (`IDLE_POLL_MS`) for the avatar's dot (amber pulsing while `waiting`, red after an error, none otherwise) and every 5 s while the menu is open.
+- The project's right-click menu (`lib/project-menu.ts`, run by `components/project-menu-handler.ts`): **Sync <project>** /
+  **Don't Sync <project>** for that folder, with the project's own sync state on the same line as its sublabel — "Not Synced",
+  "Synced 7m ago", "Syncing…", "Sync Failed", "Sign in to sync" (`projectSyncLine` in `lib/sync-menu.ts`). The board owns the
+  hook (`components/Board.tsx`) and the menu reads it fresh when it opens (`readSync`, `read()` in the hook), so the line says how
+  it stands now rather than when the board last looked; a failed read keeps the last known state and opens the menu anyway.
+  **Sync** is greyed out when there's no account or no workspace yet, and a project that already syncs can still be turned off.
 - The sync prompt (`components/SyncPromptDialog.tsx`, mounted beside the welcome in `components/HeaderBadges.tsx`; rules in
   `lib/sync-prompt.ts`, state in `lib/use-sync-prompt.ts`): "Turn on Project Sync for <project>?" for the project you're working on — the
   one the board is narrowed to, else the folder of the card that moved last, never the copilot, an archived card or a scratch folder
@@ -206,7 +229,46 @@ policy covers them.
 One row per synced card, upserted on every change. The jsonb body is the card's metadata
 (`lib/types.ts`'s `Card`): column, title, tags, assignee, the latest cli/model, the unread count. Not
 the thread — that's `cloud_thread_items`. `updated_at` is touched by `private.touch_updated_at`, the same
-trigger the teams and profiles tables use, so Realtime subscribers know the card moved.
+trigger the teams and profiles tables use, so Realtime subscribers know the card moved. Three columns
+beside the jsonb name the card's current page, so a feed draws a card from this row alone; see
+[The card's page](#the-cards-page).
+
+### The card's page
+
+`page`, `page_thumb` and `pages` (`supabase/migrations/20261029104011_cloud_cards_page.sql`) are for a reader that shows
+each card as its pane, the way the phone app (`~/dev/weft-mobile`) does: one row, no thread items.
+
+| Column | Type | What it holds |
+|---|---|---|
+| `page` | `text`, null when the pane has shown nothing | The page the card's pane shows now, in one of three forms (below). The same string is in `card.page`. |
+| `page_thumb` | `text`, null | Only when `page` is a local page: the card's pane capture as a `blob:sha256:<hex>` ref, to draw instead. |
+| `pages` | `integer`, default 0 | How many pages the pane has opened on this card (also `card.pages`). It counts up by one for every open, including the same file opened again. |
+
+`page` is one of:
+
+- **`blob:sha256:<hex>#anchor`**: a page Weft uploaded to `weft-blobs/<org>/<hex>` (a `~/.weft/show` page or any file under
+  home). The `#anchor`, when there is one, is kept verbatim: scroll to it after loading the blob. The blob's bytes are the page
+  as it was when the row was written; a later write to the same file is a new hex.
+  An HTML page names its images, videos and fonts as `blob:sha256:<hex>` refs too (`lib/blob-page-assets.ts`). Before showing
+  it, take `pageBlobRefs(html)`, POST them to `/api/web-board/<org>/blob-urls`, and `signPageRefs(html, urls)`
+  (`lib/blob-page-sign.ts`); or load `/api/web-board/<org>/page/<hex>`, which has already done that.
+- **an `https://` URL**: a public site. Load it directly; it may refuse to be framed.
+- **any other URL** (`http://localhost:3000/…`, a dev server, a `file://` page that couldn't upload): only the owner's Mac
+  reaches it. Show `page_thumb` (null if no capture has been taken yet) and the URL as a label.
+
+`paneFromUrl` in `lib/share-types.ts` is the classifier (`blob` / `site` / `local`); a reader can port it as is.
+
+Where it comes from: `lib/card-page.ts` `notePage()` sets `card.page` and bumps `card.pages` every time a card's pane opens
+a page, both from the agent's `mcp__browser__open_url` and from Weft's own `openInPane()` (`lib/browser-tools.ts`). That
+covers the pages `lib/show.ts` writes: the starter page a turn opens on a blank pane, and the update page Haiku writes after
+a turn that showed nothing. Those two are not thread items, so before this column a phone saw a blank card for such a turn.
+`withUploadedPage()` in `lib/cloud-sync-cards.ts` builds the columns at flush time, after the thumbnail upload, so `page_thumb`
+is already a ref. A card change (and `notePage` is one) flushes at once.
+
+The swipe-through history is still the thread: each `mcp__browser__open_url` item's `summary` (and a `user` item's `page`),
+oldest to newest, as `paneFor` reads them. Weft's own starter and update pages aren't in it; when the row's `page` differs from
+the newest item's page, put it last. A page the user navigated to by hand in the pane isn't recorded, and neither is a
+link an agent clicked into; `page` is the last page the pane was *told* to open.
 
 ### `cloud_thread_items`
 
@@ -262,8 +324,8 @@ opened.
 
 ## Gaps
 
-- Item bodies go up as plain JSON. The shared vault has landed (teams-vault.md), so the workspace key now exists,
-  but sealing the item bodies with it is a separate piece of work and has not been done.
+- Item bodies go up as plain JSON unless Settings → Sync's **Seal synced threads** is on; then items, card text and long tool
+  outputs are sealed with the workspace key (mobile-security.md). Page blobs aren't sealed yet, and old rows stay plain until they change.
 - A question or permission a thread asks waits in Needs you; a reply from the web doesn't answer it (it queues for after the turn). The assistant's text doesn't stream to the web either: it arrives as a whole item when written (`delta` events stay on the Mac).
 - A teammate's Mac never acts on your requests and yours never acts on theirs: the Mac only runs commands its own account made. Sending work to a teammate would need an explicit opt-in.
 - Finished commands stay in `cloud_commands`; nothing prunes them yet. A command whose Mac crashed between claiming and reporting stays `claimed` until it's cancelled.
@@ -274,4 +336,3 @@ opened.
 - Blobs are never pruned.
 - `Board.tsx` still fetches a card's whole thread and hands it to ThreadView as a seed, so paging doesn't yet save the
   first load; ThreadView then opens its own event stream (`useBoardEvents`) to keep its window live.
-- An HTML page uploaded as a blob still points at its images by their local relative paths.

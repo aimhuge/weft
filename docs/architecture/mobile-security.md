@@ -141,7 +141,9 @@ weft-approval-v1
 <BLAKE2b-256 (crypto_generichash) of the canonical answers JSON, hex, or "-">
 ```
 
-so a signature can't be replayed onto another Mac, card, request, decision or set of answers. The phone builds it,
+An answer that grants a folder (`grant` on the payload, [the folder gate](thread-guards.md)) adds a ninth line,
+`grant:card` or `grant:always`; a plain answer's message is unchanged. So a signature can't be replayed onto another
+Mac, card, request, decision, set of answers or folder grant. The phone builds it,
 asks Face ID to read the signing key (`expo-local-authentication` + SecureStore `requireAuthentication`), signs, and
 inserts the command.
 
@@ -209,6 +211,8 @@ The Mac (`lib/cloud-inbox.ts` → `lib/approval-check.ts`) decides before `answe
 - Page blobs are designed (bytes `nonce ‖ ciphertext`, AAD `weft-blob-v1\n<org>\n<sha>`) but not wired: the blob store
   and the page route are being reworked by the R2 and pane-images cards. The web would fetch the bytes and frame them
   through a `blob:` URL instead of the page route.
+- A Weft Worker seals nothing: it holds no workspace key, so its rows and pages stay plain even with sealing on
+  ([Pages from a worker](weft-worker.md#pages-from-a-worker)).
 - Each Mac pins its own phones; a second Mac needs its own pairing, and has no way yet to get the workspace key (it
   uploads plain rows meanwhile).
 - A browser key sits in IndexedDB, readable by any script on weft.zip; that's why browsers read but never approve.
