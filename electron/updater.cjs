@@ -225,6 +225,7 @@ function createUpdater({
     start,
     stop,
     state: () => state,
+    countRunning,
     // Everything the update window draws (electron/update-view.cjs turns it into words and buttons).
     info: () => ({ state, currentVersion, packaged, feed }),
     menuItem: () => {
@@ -245,7 +246,7 @@ function createAppUpdater({ getServer, onChange, openWindow }) {
   const { READ_HEADERS } = require("./server-read.cjs");
   const { BaseWindow, Notification, app, autoUpdater, dialog, powerMonitor, shell } = require("electron");
   let shown = null; // the last notification, held so its click handlers outlive garbage collection
-  return createUpdater({
+  const updater = createUpdater({
     currentVersion: app.getVersion(),
     packaged: app.isPackaged,
     autoUpdater,
@@ -279,6 +280,24 @@ function createAppUpdater({ getServer, onChange, openWindow }) {
     onChange,
     openWindow,
   });
+  // Server patches between versions (patcher.cjs): they share the running count and the restart when idle, and wait
+  // while a full update is downloading or ready.
+  const { createAppPatcher } = require("./patcher-app.cjs");
+  const { versionLabel } = require("./server-patch.cjs");
+  const patcher = createAppPatcher({
+    getServer,
+    countRunning: () => updater.countRunning(),
+    restartWhenIdle: async () => armRestart(getServer(), "relaunch"),
+    busy: () => ["downloading", "ready"].includes(updater.state().phase),
+    onChange,
+  });
+  return {
+    ...updater,
+    patcher,
+    start: () => (updater.start(), patcher.start()),
+    stop: () => (updater.stop(), patcher.stop()),
+    info: () => ({ ...updater.info(), running: versionLabel(app), patch: patcher.state() }),
+  };
 }
 
 module.exports = {
