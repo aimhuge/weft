@@ -11,13 +11,14 @@ const { sharedSnapshot, snapshotRoutes } = require("./page-snapshot.cjs");
 const { gooseRoutes } = require("./goose-ipc.cjs");
 const { appSecretsRoutes } = require("./app-secrets-push.cjs");
 const { slackRoutes } = require("./slack.cjs");
+const { touchIdPrompt } = require("./touch-id.cjs");
 
 // The copilot's chips (lib/copilot-sources.ts): a linked service's state per folder, read-only.
 function statusRoute(api) {
   return ({ folders }) => api()?.status((folders ?? []).map(String)) ?? { folders: [] };
 }
 
-function paneRoutes({ dataDir, app, dialog, shell, window, board, sendMenu, updater, vault, vercelEnv, vercelApi, supabaseApi, blastcpApi = () => null, gooseApi = () => null, slackApi = () => null, cardFor = () => "" }) {
+function paneRoutes({ dataDir, app, dialog, systemPreferences = require("electron").systemPreferences, shell, window, board, sendMenu, updater, vault, vercelEnv, vercelApi, supabaseApi, blastcpApi = () => null, gooseApi = () => null, slackApi = () => null, cardFor = () => "" }) {
   return {
     // The Weft account's session, sealed by safeStorage; the server reads it here instead of a plain file.
     ...accountRoutesFor(dataDir),
@@ -55,6 +56,12 @@ function paneRoutes({ dataDir, app, dialog, shell, window, board, sendMenu, upda
         (label) => `seal the ${provider} signing secret ${name} (${label}, ${env}) and store it on the relay`,
         (value) => sealedToHex(sealSecret(value, key)),
       );
+    },
+    // Opening a tunnel puts a local port on the internet, so a person says yes each time, a thread's call included
+    // (lib/tunnels.ts). Cancelled means no tunnel; only the answer goes back.
+    "POST /tunnels/approve": async ({ folder, target, hours }) => {
+      const ask = touchIdPrompt({ systemPreferences, dialog, window });
+      return { approved: await ask(`open a private tunnel to ${target} from ${folder} for ${hours} hours`) };
     },
     // mcp__secrets__push_to_vercel: a vault value onto the card's linked Vercel project, after Touch ID.
     ...envRoutes(vercelEnv),

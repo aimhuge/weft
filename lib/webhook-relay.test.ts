@@ -218,7 +218,7 @@ describe("restStore", () => {
     const fetch = stub([new Response(JSON.stringify([row]))]);
     expect(await restStore("https://db.example", "sb_secret_x").relay(ID)).toEqual(row);
     const [url, init] = fetch.mock.calls[0] ?? [];
-    expect(url).toBe(`https://db.example/rest/v1/webhook_relays?id=eq.${ID}&select=id,user_id,name,provider,secret_ciphertext,secret_nonce,secret_key_id`);
+    expect(url).toBe(`https://db.example/rest/v1/webhook_relays?id=eq.${ID}&select=id,user_id,name,provider,secret_ciphertext,secret_nonce,secret_key_id,tunnel_id,tunnel_path`);
     expect(init?.headers).toEqual({ apikey: "sb_secret_x", "content-type": "application/json" });
   });
 
