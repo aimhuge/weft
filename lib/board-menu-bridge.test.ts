@@ -42,6 +42,12 @@ describe("runMenuAction", () => {
     expect(b.toggleTerminal).toHaveBeenCalledTimes(1);
   });
 
+  it("leaves the board's filter alone while a card is open", () => {
+    const b = bridge({ cardOpen: true });
+    runMenuAction("find", undefined, b);
+    expect(b.focusFilter).not.toHaveBeenCalled();
+  });
+
   it("opens a listed card, selects an unlisted id, and ignores a missing one", () => {
     const b = bridge();
     runMenuAction("open-card", "a", b);

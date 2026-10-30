@@ -277,6 +277,19 @@ export function setSyncFolder(folder: string, on: boolean) {
   save();
 }
 
+// The projects whose new cards go to your Weft Worker (lib/worker-handoff.ts), from the project menu's
+// "Run on Worker". Kept apart from the project list, whose entries are rebuilt each time a folder is used.
+export function workerFolders(): string[] {
+  return [...(settings().workerFolders ?? [])];
+}
+
+export function setWorkerFolder(folder: string, on: boolean) {
+  const s = settings();
+  const rest = (s.workerFolders ?? []).filter((f) => f !== folder);
+  s.workerFolders = on ? [...rest, folder] : rest;
+  save();
+}
+
 export function listProjects(): Project[] {
   return [...settings().projects].sort((a, b) => b.lastUsedAt - a.lastUsedAt);
 }

@@ -1,15 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { client, command, control, db, listening, reports, resetInbox, settle } from "./cloud-inbox.harness";
+import { beats, client, command, control, db, listening, reports, resetInbox, settle } from "./cloud-inbox.harness";
 
 vi.mock("./account", async () => (await import("./cloud-inbox.harness")).accountMock);
 vi.mock("./settings", async () => (await import("./cloud-inbox.harness")).settingsMock);
 vi.mock("./device-id", async () => (await import("./cloud-inbox.harness")).deviceMock);
+vi.mock("./desktop-worker", async () => (await import("./cloud-inbox.harness")).desktopWorkerMock);
 vi.mock("./cloud-sync", async () => (await import("./cloud-inbox.harness")).cloudSyncMock);
 vi.mock("./new-card", async () => (await import("./cloud-inbox.harness")).newCardMock);
 vi.mock("./runner", async () => (await import("./cloud-inbox.harness")).runnerMock);
 vi.mock("./store", async () => (await import("./cloud-inbox.harness")).storeMock);
 
-const { refreshCloudInbox, startCloudInbox } = await import("./cloud-inbox");
+const { refreshCloudInbox, startCloudInbox, syncFolderFor } = await import("./cloud-inbox");
 
 const open = () => listening(refreshCloudInbox);
 const noAccounts = () => {
@@ -115,6 +116,31 @@ describe("the inbox", () => {
     control.account = () => ({ ...client, auth: { ...client.auth, getSession: () => Promise.reject(new Error("offline")) } });
     await refreshCloudInbox();
     expect(warn).toHaveBeenCalledWith("Cloud inbox: offline");
+  });
+});
+
+describe("as a desktop worker", () => {
+  it("beats into the Workers list while it listens, and not when signed out", async () => {
+    await open();
+    expect(beats).toEqual(["u1"]);
+    db.user = null;
+    await refreshCloudInbox();
+    expect(beats).toEqual(["u1"]);
+  });
+
+  it("starts a new card that names its synced folder by project name", async () => {
+    db.pending = [command({ folder: "app" })];
+    await open();
+    expect(control.made).toEqual([expect.objectContaining({ cwd: "/dev/app" })]);
+    expect(reports()).toEqual([{ status: "done", card_id: "card-1" }]);
+  });
+
+  it("finds a folder by path or by a name only one synced folder has", () => {
+    control.folders = ["/dev/app", "/work/app", "/dev/weft"];
+    expect(syncFolderFor("/work/app")).toBe("/work/app");
+    expect(syncFolderFor("weft")).toBe("/dev/weft");
+    expect(syncFolderFor("app")).toBeNull();
+    expect(syncFolderFor("nope")).toBeNull();
   });
 });
 

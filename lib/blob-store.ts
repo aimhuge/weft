@@ -10,6 +10,7 @@ import os from "node:os";
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { rewritePageHtml } from "./blob-page-assets";
 import { contentTypeFor, findMarkdownLocalPaths, resolveLocalPath, resolvePage } from "./blob-paths";
 import {
   BLOB_BUCKET,
@@ -17,7 +18,7 @@ import {
   isBlobRef,
   type BlobRef,
 } from "./cloud-sync-types";
-import { MEDIA_REF } from "./media";
+import { MEDIA_REF, extensionOf } from "./media";
 import { DATA_DIR } from "./store";
 import type { ThreadItem } from "./types";
 
@@ -56,11 +57,14 @@ export interface CreateBlobStoreOptions {
   client: SupabaseClient;
   dataDir?: string;
   cacheDir?: string;
+  // A veto over every file that would go up, page assets included: a Weft Worker's narrower rule (lib/worker-blobs.ts).
+  mayUpload?: (localPath: string) => boolean;
 }
 
 export interface BlobStoreBundle {
   refFor(localPath: string): Promise<BlobRef | null>;
   upload(localPath: string, orgId: string): Promise<BlobRef | null>;
+  uploadPage(localPath: string, orgId: string): Promise<BlobRef | null>;
   rewriteItem(item: ThreadItem, orgId: string): Promise<ThreadItem>;
   fetchBlob(ref: BlobRef, orgId: string): Promise<string | null>;
 }
@@ -75,6 +79,7 @@ export function createBlobStore(opts: CreateBlobStoreOptions): BlobStoreBundle {
   const client = opts.client;
   const cacheDir = cacheDirFor(opts);
   const uploaded = new Set<string>();
+  const allowed = opts.mayUpload ?? (() => true);
   const bucket = () => client.storage.from(BLOB_BUCKET);
 
   async function refFor(localPath: string): Promise<BlobRef | null> {
@@ -82,21 +87,36 @@ export function createBlobStore(opts: CreateBlobStoreOptions): BlobStoreBundle {
     return sha ? blobRefFor(sha) : null;
   }
 
-  async function upload(localPath: string, orgId: string): Promise<BlobRef | null> {
-    const sha = await sha256Of(localPath);
-    if (!sha) return null;
+  // Puts bytes in the bucket under their sha, once: the sha is content-addressed, so a 409 (or a 400 with
+  // "already exists") means the same bytes are there, which counts as success.
+  async function uploadBytes(sha: string, body: Buffer, type: string, orgId: string): Promise<BlobRef> {
     const ref = blobRefFor(sha);
     if (uploaded.has(ref)) return ref;
-    const body = fs.readFileSync(localPath);
-    const { error } = await bucket().upload(objectPath(orgId, sha), body, {
-      contentType: contentTypeFor(localPath),
-      upsert: false,
-    });
-    // 409 (and 400 with "already exists"): the sha is content-addressed, so the same bytes are
-    // there. Treat it as success and remember the sha so we don't re-check.
+    const { error } = await bucket().upload(objectPath(orgId, sha), body, { contentType: type, upsert: false });
     if (error && !isAlreadyExists(error)) throw error;
     uploaded.add(ref);
     return ref;
+  }
+
+  async function upload(localPath: string, orgId: string): Promise<BlobRef | null> {
+    if (!allowed(localPath)) return null;
+    const sha = await sha256Of(localPath);
+    if (!sha) return null;
+    if (uploaded.has(blobRefFor(sha))) return blobRefFor(sha);
+    return uploadBytes(sha, fs.readFileSync(localPath), contentTypeFor(localPath), orgId);
+  }
+
+  // A page the pane showed: an HTML file goes up with each local image, stylesheet or video it names uploaded too
+  // and swapped for its ref (lib/blob-page-assets.ts), so the copy in the bucket is a different blob from the file.
+  // Any other file, or a page that names nothing local, goes up as it is.
+  async function uploadPage(localPath: string, orgId: string, home = os.homedir()): Promise<BlobRef | null> {
+    if (!allowed(localPath)) return null;
+    if (!["html", "htm"].includes(extensionOf(localPath))) return upload(localPath, orgId);
+    const html = fs.readFileSync(localPath, "utf8");
+    const next = await rewritePageHtml(html, localPath, (asset) => upload(asset, orgId), home, allowed);
+    if (next === null) return upload(localPath, orgId);
+    const body = Buffer.from(next, "utf8");
+    return uploadBytes(createHash("sha256").update(body).digest("hex"), body, contentTypeFor(localPath), orgId);
   }
 
   // A tool item's images array: each entry is rewritten to a blob ref (or left as-is).
@@ -122,7 +142,7 @@ export function createBlobStore(opts: CreateBlobStoreOptions): BlobStoreBundle {
   // path under home becomes `<blob ref><#hash>`; http(s) and localhost stay as they are.
   async function rewritePage(page: string, orgId: string, home: string): Promise<string | null> {
     const found = resolvePage(page.trim(), home);
-    const ref = found ? await upload(found.local, orgId) : null;
+    const ref = found ? await uploadPage(found.local, orgId, home) : null;
     return ref && found ? `${ref}${found.hash}` : null;
   }
 
@@ -189,5 +209,5 @@ export function createBlobStore(opts: CreateBlobStoreOptions): BlobStoreBundle {
     return file;
   }
 
-  return { refFor, upload, rewriteItem, fetchBlob };
+  return { refFor, upload, uploadPage: (localPath, orgId) => uploadPage(localPath, orgId), rewriteItem, fetchBlob };
 }

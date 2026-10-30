@@ -6,7 +6,7 @@ const path = require("node:path");
 const { createPairedDevices } = require("./paired-devices.cjs");
 const { createSyncKeys } = require("./sync-keys.cjs");
 const { createPairing } = require("./pairing.cjs");
-const { loadDeviceKey, registerDevice } = require("./device-key.cjs");
+const { registeredDevice } = require("./device-key.cjs");
 
 /**
  * @param {{ ipcMain: any, dataDir: string, accountClient: () => any, isBoard: (sender: unknown) => boolean,
@@ -25,16 +25,7 @@ function setupPairing({ ipcMain, dataDir, accountClient, isBoard, confirm, safeS
   // This Mac's public.devices row and its keypair, registering it the first time.
   let me = null;
   async function myDevice() {
-    if (me) return me;
-    const pair = loadDeviceKey({ dir: dataDir, safeStorage: keychain(), crypto: vaultCrypto() });
-    const found = await db().from("devices").select("id").eq("public_key", pair.publicKey).maybeSingle();
-    let id = found.data?.id;
-    if (!id) {
-      await registerDevice({ accountClient: accountClient(), dir: dataDir, safeStorage: keychain(), crypto: vaultCrypto() });
-      id = (await db().from("devices").select("id").eq("public_key", pair.publicKey).single()).data?.id;
-    }
-    if (!id) throw new Error("This Mac isn't registered as a device yet. Sign in to Weft and try again.");
-    me = { id, ...pair };
+    me ??= await registeredDevice({ accountClient: accountClient(), dir: dataDir, safeStorage: keychain(), crypto: vaultCrypto() });
     return me;
   }
   const macDevice = () => fs.readFileSync(path.join(dataDir, "device-id"), "utf8").trim();

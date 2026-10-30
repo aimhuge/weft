@@ -1,22 +1,27 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
+import { addLabel } from "@/lib/secret-ask-batch";
 import { askAnswered, vaultBridge, type SecretAsk, type VaultEnvironment } from "@/lib/vault-view";
 import Icon from "./Icon";
+import { useAskBatch, useSecretAskBatch } from "./SecretAskBatch";
 import { EnvironmentPicker } from "./VaultParts";
 
 // A thread's mcp__secrets__ask_add, drawn in place of the tool call (docs/architecture/secrets.md): the key's name,
 // its environments and a hidden value field, right where the user is reading. Add to vault hands the value to
 // Electron main (the same vault.set as the 🔐 drawer) and tells the thread it's in; the value never reaches the
-// thread. Once the vault has it, the input folds to a one-line ✓.
+// thread. Once the vault has it, the input folds to a one-line ✓. Several asks in a thread fill in together
+// (components/SecretAskBatch.tsx): all stay open, one Add takes every filled one, and the thread hears once.
 export default function SecretAskInput({ ask, onAdded }: { ask: SecretAsk; onAdded?: (text: string) => Promise<void> | void }) {
   const bridge = vaultBridge();
-  const [state, setState] = useState<"checking" | "open" | "done">("checking");
+  const id = useId();
+  const batch = useAskBatch(useSecretAskBatch(onAdded));
+  const { report } = batch;
+  const [checked, setState] = useState<"checking" | "open" | "done">("checking");
   const [environments, setEnvironments] = useState<VaultEnvironment[]>([ask.environment]);
   const [value, setValue] = useState("");
   const [show, setShow] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const state = batch.saved.has(id) ? "done" : checked;
 
   useEffect(() => {
     if (!bridge) return;
@@ -29,6 +34,11 @@ export default function SecretAskInput({ ask, onAdded }: { ask: SecretAsk; onAdd
       on = false;
     };
   }, [bridge, ask]);
+
+  useEffect(() => {
+    report(id, state === "open" ? { ask, value, environments } : null);
+  }, [report, id, state, ask, value, environments]);
+  useEffect(() => () => report(id, null), [report, id]);
 
   const line = "flex items-center gap-2 rounded-md border border-line bg-sunken px-2.5 py-1.5 text-[12px] text-muted";
   const name = <code className="font-mono font-medium text-ink">{ask.name}</code>;
@@ -49,27 +59,11 @@ export default function SecretAskInput({ ask, onAdded }: { ask: SecretAsk; onAdd
       </div>
     );
 
-  async function add() {
-    if (!bridge || !value || !environments.length || busy) return;
-    setBusy(true);
-    setError(null);
-    try {
-      for (const env of environments) await bridge.set(ask.folder, ask.name, env, value);
-      setValue("");
-      setState("done");
-      await onAdded?.(`I added ${ask.name} (${environments.join(", ")}) to the 🔐 vault.`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-
   return (
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        void add();
+        void batch.submit();
       }}
       aria-label={`Add ${ask.name} to the vault`}
       className="flex w-[22rem] max-w-full flex-col gap-2 rounded-lg border border-accent/50 bg-sunken p-2.5"
@@ -101,15 +95,24 @@ export default function SecretAskInput({ ask, onAdded }: { ask: SecretAsk; onAdd
           <Icon name="eye" size={12} />
         </button>
       </div>
-      {error && <p className="text-[11px] leading-snug text-danger">{error}</p>}
+      {batch.error && <p className="text-[11px] leading-snug text-danger">{batch.error}</p>}
       <button
         type="submit"
-        disabled={!value || !environments.length || busy}
+        disabled={!batch.filled || batch.busy}
         className="rounded-md bg-accent px-2 py-1 text-[12px] font-medium text-on-accent disabled:opacity-50"
       >
-        {environments.length > 1 ? `Add to ${environments.length} environments` : "Add to vault"}
+        {addLabel(batch.filled, environments.length)}
       </button>
-      <p className="text-[10.5px] leading-snug text-faint">Goes straight into the vault; Claude never sees it.</p>
+      {batch.waiting > 0 ? (
+        <p className="text-[10.5px] leading-snug text-faint">
+          {batch.waiting} added; Claude hears once the rest are in.{" "}
+          <button type="button" onClick={() => void batch.tell()} className="text-accent underline-offset-2 hover:underline">
+            Tell Claude now
+          </button>
+        </p>
+      ) : (
+        <p className="text-[10.5px] leading-snug text-faint">Goes straight into the vault; Claude never sees it.</p>
+      )}
     </form>
   );
 }

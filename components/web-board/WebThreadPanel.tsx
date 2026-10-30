@@ -8,7 +8,8 @@
 // grants, Wait), so the box doesn't offer them. What this board sent the card that hasn't reached it yet shows above
 // the box (WebReplyStatus).
 import { useEffect, useMemo, type ReactNode } from "react";
-import { paneFor } from "@/lib/share-types";
+import { paneFor, paneFromUrl } from "@/lib/share-types";
+import type { GrantScope } from "@/lib/cloud-commands";
 import type { Card, QuestionReply, ThreadItem } from "@/lib/types";
 import ThreadPanel from "../ThreadPanel";
 import { CardFrame } from "../OpenCard";
@@ -36,9 +37,10 @@ export function WebThreadPanel({
   footer: ReactNode;
   onClose: () => void;
   onSend: (text: string) => Promise<void>;
-  onAnswer: (allow: boolean, answers?: Record<string, string>, reply?: QuestionReply) => void;
+  onAnswer: (allow: boolean, answers?: Record<string, string>, reply?: QuestionReply, grant?: GrantScope) => void;
 }) {
-  const pane = useMemo(() => paneFor(shown), [shown]);
+  // The card's own page when the thread loaded so far doesn't reach its last open_url (newest 50 first).
+  const pane = useMemo(() => paneFor(shown) ?? paneFromUrl(card.page ?? ""), [shown, card.page]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -60,7 +62,9 @@ export function WebThreadPanel({
         onClose={onClose}
         onSend={onSend}
         onAnswer={onAnswer}
-        className="flex h-full min-h-0 w-full flex-col bg-panel"
+        // The desktop's thread width (ThreadPanel's default) from md up, so the pane beside it gets the rest; a bare
+        // w-full took the whole row and left the pane 0px wide. A phone hides the pane, so the thread fills it there.
+        className="flex h-full min-h-0 w-full flex-col bg-panel md:w-[44%] md:min-w-[380px] md:shrink-0"
       />
       <WebPane orgId={orgId} pane={pane} thumbUrl={card.thumb && /^https?:/.test(card.thumb) ? card.thumb : undefined} />
     </CardFrame>

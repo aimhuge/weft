@@ -16,6 +16,13 @@ const command = (auth?: unknown) => ({ org_id: "o", target_device: "m", payload:
 const deps = (over: Partial<ApprovalDeps> = {}) => ({ verify: vi.fn(() => Promise.resolve({ ok: true })), approvers: vi.fn(() => Promise.resolve(1)), webApprovals: false, now: 10_000, ...over });
 
 describe("signed answers", () => {
+  it("checks a folder grant as part of what was signed", async () => {
+    const verify = vi.fn(() => Promise.resolve({ ok: true }));
+    const signed = command({ device: "phone", issuedAt: 9_000, sig: "sig" });
+    await approvalProblem(signed, { ...answer, grant: "always" }, permission, deps({ verify }));
+    expect(verify).toHaveBeenCalledWith({ device: "phone", sig: "sig", message: approvalMessage(s, { orgId: "o", macDevice: "m", cardId: "c", pendingId: "p", allow: true, issuedAt: 9_000, grant: "always" }) });
+  });
+
   it("go through when main verifies the exact message", async () => {
     const d = deps();
     expect(await approvalProblem(command({ device: "phone", issuedAt: 9_000, sig: "sig" }), { ...answer, answers: { q: "a" } }, permission, d)).toBeNull();

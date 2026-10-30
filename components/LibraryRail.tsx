@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { railPinned, setRailPinned, starredCount, toggleTag, type RailFilter, type RailPanel } from "@/lib/rail-view";
+import AdvancedOnly from "./AdvancedOnly";
 import type { RailContext } from "./rail-context";
 import { useSlideOut } from "@/lib/use-slide-out";
 import { useDrawerWidth } from "@/lib/use-drawer-width";
@@ -199,26 +200,31 @@ export default function SideRail({
     <div className="relative flex shrink-0" data-rail style={{ "--rail-drawer-w": `${drawerWidth.width}px` } as React.CSSProperties}>
       <nav className="flex w-[38px] flex-col items-center gap-1 border-r border-line bg-panel pt-2" aria-label="Rail">
         <StarRailButton on={Boolean(filter.starred)} count={starred} cardDrag={cardDrag} onClick={() => onFilter({ ...filter, starred: !filter.starred })} onDropCard={onDropStar} />
-        <TagsRailButton open={open === "tags"} tag={filter.tag} cardDrag={cardDrag} onOpen={(next) => onOpen(next ? "tags" : null)} />
-        <RailIconButton icon="⏰" label="Crons" open={open === "crons"} title={cronsTitle(crons.crons)} count={activeCount(crons.crons)} tone="ok" onClick={toggle("crons")} />
+        {/* Regular mode keeps ★, 🔐 and the saved apps. A drawer a thread opens (🪝 for a webhook) still draws. */}
+        <AdvancedOnly>
+          <TagsRailButton open={open === "tags"} tag={filter.tag} cardDrag={cardDrag} onOpen={(next) => onOpen(next ? "tags" : null)} />
+          <RailIconButton icon="⏰" label="Crons" open={open === "crons"} title={cronsTitle(crons.crons)} count={activeCount(crons.crons)} tone="ok" onClick={toggle("crons")} />
+        </AdvancedOnly>
         <span className="my-1 h-px w-5 bg-line" aria-hidden />
         <VaultButton open={open === "vault"} badge={vaultBadge} onClick={() => onOpen(open === "vault" ? null : "vault")} />
-        <RailIconButton
-          icon="🪝"
-          label="Webhooks"
-          open={open === "webhooks"}
-          title={webhooksTitle({ blanks: blankCount(shownHooks), failing: failingCount(shownHooks) })}
-          count={blankCount(shownHooks)}
-          onClick={toggle("webhooks")}
-        />
-        <RailIconButton icon="▲" label="Vercel" open={open === "vercel"} title={vercelRailTitle(drift.title, vercel.status, project)} count={drift.count} onClick={toggle("vercel")} />
-        <RailIconButton icon={<SupabaseLogo />} label="Supabase" open={open === "supabase"} title={supabaseTitle(supabase.status, project)} count={pendingCount(supabase.status, project)} tone="bad" onClick={toggle("supabase")} />
-        <RailIconButton icon={<CloudflareLogo />} label="Cloudflare" open={open === "cloudflare"} title={cloudflareTitle(cloudflare.status, project)} onClick={toggle("cloudflare")} />
-        <RailIconButton icon={<BlastcpLogo />} label="BlastCP" open={open === "blastcp"} title={blastcpTitle(blastcp.status, project)} onClick={toggle("blastcp")} />
-        <RailIconButton icon={<GithubLogo />} label="GitHub" open={open === "github"} title={githubTitle(github.status, project)} onClick={toggle("github")} />
-        <RailIconButton icon={<SlackLogo />} label="Slack" open={open === "slack"} title={slackTitle(slack.status, slack.settings)} onClick={toggle("slack")} />
-        <RailIconButton icon="✦" label="Skills" open={open === "skills"} title="Skills: what threads in this project get" onClick={toggle("skills")} />
-        <RailIconButton icon="🖥" label="Services" open={open === "services"} title={servicesTitle(liveServices)} count={liveServices} tone="ok" onClick={toggle("services")} />
+        <AdvancedOnly>
+          <RailIconButton
+            icon="🪝"
+            label="Webhooks"
+            open={open === "webhooks"}
+            title={webhooksTitle({ blanks: blankCount(shownHooks), failing: failingCount(shownHooks) })}
+            count={blankCount(shownHooks)}
+            onClick={toggle("webhooks")}
+          />
+          <RailIconButton icon="▲" label="Vercel" open={open === "vercel"} title={vercelRailTitle(drift.title, vercel.status, project)} count={drift.count} onClick={toggle("vercel")} />
+          <RailIconButton icon={<SupabaseLogo />} label="Supabase" open={open === "supabase"} title={supabaseTitle(supabase.status, project)} count={pendingCount(supabase.status, project)} tone="bad" onClick={toggle("supabase")} />
+          <RailIconButton icon={<CloudflareLogo />} label="Cloudflare" open={open === "cloudflare"} title={cloudflareTitle(cloudflare.status, project)} onClick={toggle("cloudflare")} />
+          <RailIconButton icon={<BlastcpLogo />} label="BlastCP" open={open === "blastcp"} title={blastcpTitle(blastcp.status, project)} onClick={toggle("blastcp")} />
+          <RailIconButton icon={<GithubLogo />} label="GitHub" open={open === "github"} title={githubTitle(github.status, project)} onClick={toggle("github")} />
+          <RailIconButton icon={<SlackLogo />} label="Slack" open={open === "slack"} title={slackTitle(slack.status, slack.settings)} onClick={toggle("slack")} />
+          <RailIconButton icon="✦" label="Skills" open={open === "skills"} title="Skills: what threads in this project get" onClick={toggle("skills")} />
+          <RailIconButton icon="🖥" label="Services" open={open === "services"} title={servicesTitle(liveServices)} count={liveServices} tone="ok" onClick={toggle("services")} />
+        </AdvancedOnly>
         {paneUrl !== undefined && <AppsRail current={paneUrl} onOpen={onOpenUrl} onClose={onClosePane} notify={notify} />}
         {isSuperAdmin ? (
           <>
@@ -237,7 +243,8 @@ export default function SideRail({
       </nav>
       {cardDrag && !open && (
         <span className="pointer-events-none absolute left-full top-2 z-30 ml-1.5 whitespace-nowrap rounded-md bg-ink px-2 py-1 text-[11.5px] text-canvas shadow-lg">
-          Drop on ☆ to star it · 🏷 to tag it
+          Drop on ☆ to star it
+          <AdvancedOnly> · 🏷 to tag it</AdvancedOnly>
         </span>
       )}
       {drawer}

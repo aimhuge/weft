@@ -10,6 +10,9 @@ vi.mock("@anthropic-ai/claude-agent-sdk", () => ({
 
 vi.stubEnv("WEFT_SHELL_URL", "http://127.0.0.1:4567");
 vi.mock("./shell-token", () => ({ shellToken: () => "tok" }));
+// A grant for the thread ends with the card (lib/vault-grant-done.ts): watched here, tested there.
+const endGrantAtDone = vi.hoisted(() => vi.fn());
+vi.mock("./vault-grant-done", () => ({ endGrantAtDone }));
 const st = await import("./secret-tools");
 const { cardProof } = await import("./card-token");
 
@@ -29,7 +32,10 @@ const said = (r: Result) => r.content[0]?.text;
 const titled = st.secretsMcpServer(() => "c1", () => "/proj", () => "Fix login") as unknown as { tools: Array<{ name: string; handler: Handler }> };
 const runTitled = (name: string, args: Record<string, unknown> = {}) => titled.tools.find((t) => t.name === name)!.handler(args);
 
-beforeEach(() => fetchMock.mockReset());
+beforeEach(() => {
+  fetchMock.mockReset();
+  endGrantAtDone.mockReset();
+});
 
 describe("secretsMcpServer", () => {
   it("is the secrets server, loaded up front, and its prompt says never to see a value", () => {
@@ -144,13 +150,16 @@ describe("secretsMcpServer", () => {
   it("pushes a vault value to Vercel without the value, production by default", async () => {
     reply({ pushed: true, project: "weft", label: "aimhuge/weft" });
     const r = await run("push_to_vercel", { name: "SUPABASE_SECRET_KEY" });
-    expect(sent()).toEqual({ url: "http://127.0.0.1:4567/vercel/env-push", body: { folder: "/proj", name: "SUPABASE_SECRET_KEY", environment: "production" } });
+    expect(sent()).toEqual({
+      url: "http://127.0.0.1:4567/vercel/env-push",
+      body: { ...cardProof("c1", "/vercel/env-push"), folder: "/proj", name: "SUPABASE_SECRET_KEY", environment: "production" },
+    });
     expect([r.isError, said(r)]).toEqual([false, "Pushed SUPABASE_SECRET_KEY (production) from the aimhuge/weft vault to Vercel project weft. It takes effect on the next deploy."]);
 
     fetchMock.mockReset();
     reply({ pushed: true });
     expect(said(await run("push_to_vercel", { name: "K", environment: "preview", project: "/other" }))).toBe("Pushed K (preview) from the this vault to Vercel project the linked project. It takes effect on the next deploy.");
-    expect(sent().body).toEqual({ folder: "/other", name: "K", environment: "preview" });
+    expect(sent().body).toEqual({ ...cardProof("c1", "/vercel/env-push"), folder: "/other", name: "K", environment: "preview" });
   });
 
   it("reports a no and a missing value", async () => {
@@ -174,7 +183,7 @@ describe("secretsMcpServer", () => {
       const r = await run("set_value", { name: "PUKU_TRIAL_SIGNING_SECRET", value: VALUE, environment: "production" });
       expect(sent()).toEqual({
         url: "http://127.0.0.1:4567/secrets/set",
-        body: { folder: "/proj", name: "PUKU_TRIAL_SIGNING_SECRET", value: VALUE, environment: "production" },
+        body: { ...cardProof("c1", "/secrets/set"), folder: "/proj", name: "PUKU_TRIAL_SIGNING_SECRET", value: VALUE, environment: "production" },
       });
       expect(r).toEqual({ content: [{ type: "text", text: "Set PUKU_TRIAL_SIGNING_SECRET in the aimhuge/weft vault (production)." }], isError: false });
       clean(r);
@@ -182,13 +191,13 @@ describe("secretsMcpServer", () => {
       fetchMock.mockReset();
       reply({ ok: true });
       expect(said(await run("set_value", { name: "K", value: VALUE, project: "/other" }))).toBe("Set K in the this vault (development).");
-      expect(sent().body).toEqual({ folder: "/other", name: "K", value: VALUE, environment: "development" });
+      expect(sent().body).toEqual({ ...cardProof("c1", "/secrets/set"), folder: "/other", name: "K", value: VALUE, environment: "development" });
     });
 
     it("replaces a filled value with replace: true, saying so by name only", async () => {
       reply({ ok: true, replaced: true, label: "aimhuge/weft" });
       const r = await run("set_value", { name: "STRIPE_PRICE_PRO", value: VALUE, environment: "production", replace: true });
-      expect(sent().body).toEqual({ folder: "/proj", name: "STRIPE_PRICE_PRO", value: VALUE, environment: "production", replace: true });
+      expect(sent().body).toEqual({ ...cardProof("c1", "/secrets/set"), folder: "/proj", name: "STRIPE_PRICE_PRO", value: VALUE, environment: "production", replace: true });
       expect([r.isError, said(r)]).toEqual([false, "Replaced the value of STRIPE_PRICE_PRO in the aimhuge/weft vault (production)."]);
       clean(r);
       reply({ denied: true, label: "aimhuge/weft" });
@@ -225,7 +234,7 @@ describe("secretsMcpServer", () => {
       const r = await run("request_access", { why: "to fill the dashboard" });
       expect(sent()).toEqual({
         url: "http://127.0.0.1:4567/secrets/request-access",
-        body: { ...cardProof("c1", "/secrets/request-access"), thread: undefined, folder: "/proj", why: "to fill the dashboard" },
+        body: { ...cardProof("c1", "/secrets/request-access"), thread: undefined, folder: "/proj", why: "to fill the dashboard", writes: false, span: "hour" },
       });
       expect([r.isError, said(r)]).toEqual([
         false,
@@ -236,7 +245,7 @@ describe("secretsMcpServer", () => {
     it("says which thread is asking, and which project's vault", async () => {
       reply({ granted: true });
       await runTitled("request_access", { why: "w", project: "/other" });
-      expect(sent().body).toEqual({ ...cardProof("c1", "/secrets/request-access"), thread: "Fix login", folder: "/other", why: "w" });
+      expect(sent().body).toEqual({ ...cardProof("c1", "/secrets/request-access"), thread: "Fix login", folder: "/other", why: "w", writes: false, span: "hour" });
     });
 
     it("reports a no, and says each use will ask instead", async () => {
@@ -246,6 +255,29 @@ describe("secretsMcpServer", () => {
         true,
         "The user didn't give standing access to the aimhuge/weft vault. Each use will ask for Touch ID instead.",
       ]);
+    });
+
+    // A grant that names writes covers set_value and push_to_vercel; one that lasts for the
+    // thread says so, and ends with the card (2026-10-29).
+    it("asks for writes and the thread's span, and says what they cover", async () => {
+      reply({ granted: true, label: "aimhuge/weft", writes: true, span: "thread" });
+      const r = await run("request_access", { why: "set the service up", writes: true, span: "thread" });
+      expect(sent().body).toMatchObject({ writes: true, span: "thread", why: "set the service up" });
+      expect(said(r)).toContain("Until this card is Done");
+      expect(said(r)).toContain("set_value");
+      expect(said(r)).toContain("push_to_vercel");
+    });
+
+    it("ends the grant with the card when the span is thread", async () => {
+      reply({ granted: true, label: "aimhuge/weft", writes: true, span: "thread" });
+      await run("request_access", { why: "w", writes: true, span: "thread" });
+      expect(endGrantAtDone).toHaveBeenCalledWith("c1");
+    });
+
+    it("watches nothing when the grant lasts an hour", async () => {
+      reply({ granted: true, label: "aimhuge/weft" });
+      await run("request_access", { why: "w" });
+      expect(endGrantAtDone).not.toHaveBeenCalled();
     });
   });
 });

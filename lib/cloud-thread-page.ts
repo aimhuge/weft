@@ -4,7 +4,9 @@
 // live "thread" event makes on the desktop. A truncate (a rewind, or an edit with ↑) arrives as a DELETE per seq from
 // the cut on; each drops the window from its seq down.
 import type { CloudThreadItemRow } from "./cloud-sync-types";
+import { isSealed } from "./sync-seal";
 import { applyThreadEvent, type ThreadPage } from "./thread-page";
+import { openSyncedItem } from "./web-sync-key";
 import type { ThreadItem } from "./types";
 
 type Row = Pick<CloudThreadItemRow, "card_id" | "seq" | "item">;
@@ -17,7 +19,8 @@ export interface CloudItemChange {
 }
 
 // A row whose item didn't arrive whole (a partial event, an older shape) is left out rather than drawn.
-const isItem = (item: unknown): item is ThreadItem => typeof item === "object" && item !== null && "kind" in item;
+// A sealed one (lib/sync-seal.ts) is opened with this browser's key, or drawn as its 🔒 stand-in.
+const isItem = (item: unknown): item is ThreadItem => typeof item === "object" && item !== null && ("kind" in item || isSealed(item));
 
 // A page of one card's rows, in any order, as a ThreadPage. Rows from another card are left out.
 export function pageFromRows(cardId: string, rows: readonly Row[]): ThreadPage {
@@ -25,7 +28,7 @@ export function pageFromRows(cardId: string, rows: readonly Row[]): ThreadPage {
   const first = mine[0];
   const last = mine.at(-1);
   if (!first || !last) return { items: [], start: 0, total: 0 };
-  return { items: mine.map((r) => r.item), start: first.seq, total: last.seq + 1 };
+  return { items: mine.map((r) => openSyncedItem(r)), start: first.seq, total: last.seq + 1 };
 }
 
 // Drops the window's items from index `seq` on.
@@ -43,6 +46,6 @@ export function pageUpdateFor(cardId: string, change: CloudItemChange): ((prev: 
   }
   const row = change.new;
   if (row?.card_id !== cardId || typeof row.seq !== "number" || !isItem(row.item)) return null;
-  const event = { index: row.seq, item: row.item };
+  const event = { index: row.seq, item: openSyncedItem({ card_id: cardId, seq: row.seq, item: row.item }) };
   return (prev) => applyThreadEvent(prev, event);
 }

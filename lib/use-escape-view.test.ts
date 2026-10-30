@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { cleanup, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { setBoardMode } from "./board-prefs";
 import { useEscape } from "./use-escape";
 import { useEscapeTogglesView, type BoardLayers } from "./use-escape-view";
 
@@ -120,5 +121,16 @@ describe("useEscapeTogglesView", () => {
     rerender({ up: false });
     press();
     expect(choose).toHaveBeenCalledWith("list");
+  });
+});
+
+describe("useEscapeTogglesView in Regular mode", () => {
+  it("has no view to flip to", () => {
+    setBoardMode("regular");
+    const choose = vi.fn();
+    renderHook(() => useEscapeTogglesView(bare, "board", choose));
+    press();
+    expect(choose).not.toHaveBeenCalled();
+    document.cookie = "weft-board-mode=; path=/; max-age=0";
   });
 });

@@ -63,7 +63,7 @@ describe("pairing IPC", () => {
     // The device key is made on first read; put its row in place as registration would.
     const { loadDeviceKey } = await import("./device-key.cjs");
     const pair = loadDeviceKey({ dir: dataDir, safeStorage: plainStorage(), crypto: vaultCrypto });
-    db.tables.devices = [{ id: "mac-row", public_key: pair.publicKey }];
+    db.tables.devices = [{ id: "mac-row", user_id: "u1", public_key: pair.publicKey }];
     expect(await wired.routes["POST /sync/key"]({ orgId: "o" })).toEqual({ none: true });
     expect(await wired.routes["POST /sync/key"]({ orgId: "o", create: true })).toMatchObject({ version: 1 });
     expect(db.tables.workspace_key_grants[0]!).toMatchObject({ device_id: "mac-row", version: 1 });

@@ -116,14 +116,22 @@ describe("useOpenCard", () => {
     mocks.thread.mockResolvedValue({ items: [] });
 
     act(() => result.current.select("a"));
-    expect(openPane).toHaveBeenCalledTimes(1);
+    expect(openPane).toHaveBeenCalled();
 
+    openPane.mockClear();
     act(() => result.current.select("b"));
-    expect(openPane).toHaveBeenCalledTimes(2);
+    expect(openPane).toHaveBeenCalled();
 
     // Closing the card doesn't close the column: it is the card that goes, not the pane.
+    openPane.mockClear();
     act(() => result.current.select(null));
-    expect(openPane).toHaveBeenCalledTimes(2);
+    expect(openPane).not.toHaveBeenCalled();
+  });
+
+  it("opens the pane's column for a card opened without select", () => {
+    const { result, openPane } = makeHook();
+    act(() => result.current.setSelectedId("a"));
+    expect(openPane).toHaveBeenCalledTimes(1);
   });
 
   it("keeps select's identity across renders, so the effects that depend on it don't re-run", () => {

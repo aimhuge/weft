@@ -1,5 +1,6 @@
 "use client";
 
+import { useRegularMode } from "@/lib/use-regular-mode";
 import StatusStrip from "./StatusStrip";
 
 const REPO_URL = "https://github.com/fotoflo/weft";
@@ -12,8 +13,9 @@ function openLink(e: React.MouseEvent, url: string) {
   window.weft.openExternal(url);
 }
 
-// The board's footer: the open card's (or the board's) stats, the shortcuts sheet and the credits.
+// The board's footer: the open card's (or the board's) stats, the shortcuts sheet and the credits. Regular mode has none.
 export default function BoardFooter({ onHelp, ...strip }: React.ComponentProps<typeof StatusStrip> & { onHelp: () => void }) {
+  if (useRegularMode()) return null;
   return (
     <footer className="flex shrink-0 items-center justify-between gap-4 border-t border-line bg-panel px-4 py-1.5">
       <StatusStrip {...strip} />

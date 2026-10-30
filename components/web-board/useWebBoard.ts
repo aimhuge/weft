@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createBrowserClient } from "@supabase/ssr";
 import type { RealtimeChannel, SupabaseClient } from "@supabase/supabase-js";
-import { answerCommand, newCardCommand, replyCommand, stopCommand, type CloudCommandRow, type NewCardForm, type NewCommand } from "@/lib/cloud-commands";
+import { answerCommand, newCardCommand, replyCommand, stopCommand, type CloudCommandRow, type GrantScope, type NewCardForm, type NewCommand } from "@/lib/cloud-commands";
 import { BLOB_BUCKET, type CloudCardRow, type CloudThreadItemRow } from "@/lib/cloud-sync-types";
 import type { CloudItemChange } from "@/lib/cloud-thread-page";
 import { SUPABASE_KEY, SUPABASE_URL } from "@/lib/supabase-project";
@@ -257,9 +257,9 @@ export function useWebBoard({ orgId, userId, initialCommands, initialCards, open
   // Answers the card's waiting permission request or question on the Mac that runs it, as if clicked there. Resolves
   // like startCard; how it went shows under the reply box.
   const answer = useCallback(
-    async (row: CloudCardRow, allow: boolean, answers?: Record<string, string>, reply?: QuestionReply): Promise<string | null> => {
+    async (row: CloudCardRow, allow: boolean, answers?: Record<string, string>, reply?: QuestionReply, grant?: GrantScope): Promise<string | null> => {
       const pendingId = row.card.pending?.id;
-      const command = pendingId && answerCommand({ orgId, device: row.owner_device, folder: row.folder, cardId: row.card_id }, { pendingId, allow, answers, reply });
+      const command = pendingId && answerCommand({ orgId, device: row.owner_device, folder: row.folder, cardId: row.card_id }, { pendingId, allow, answers, reply, grant });
       return command ? send(command) : "Nothing is waiting for an answer.";
     },
     [orgId, send],

@@ -14,6 +14,20 @@ beforeAll(async () => {
 
 const fields: ApprovalFields = { orgId: "o", macDevice: "m", cardId: "c", pendingId: "p", allow: true, issuedAt: 1000 };
 
+describe("a folder grant in the signed message", () => {
+  it("can't be added to a signature over a plain Allow, or widened", () => {
+    const sig = signApproval(s, approvalMessage(s, { ...fields, grant: "card" }), priv);
+    expect(verifyApproval(s, approvalMessage(s, { ...fields, grant: "card" }), sig, pub)).toBe(true);
+    expect(verifyApproval(s, approvalMessage(s, { ...fields, grant: "always" }), sig, pub)).toBe(false);
+    const plain = signApproval(s, approvalMessage(s, fields), priv);
+    expect(verifyApproval(s, approvalMessage(s, { ...fields, grant: "card" }), plain, pub)).toBe(false);
+  });
+
+  it("leaves the message a plain answer signs as it was", () => {
+    expect(approvalMessage(s, fields).split("\n")).toHaveLength(8);
+  });
+});
+
 describe("approvalMessage", () => {
   it("lists every field, in order", () => {
     expect(approvalMessage(s, fields)).toBe("weft-approval-v1\no\nm\nc\np\nallow\n1000\n-");

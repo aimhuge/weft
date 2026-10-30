@@ -20,6 +20,7 @@ function fakeSync(over: { folders?: string[]; status?: Partial<CloudSyncStatus> 
     status: { ...OK, ...over.status },
     error: null,
     reload: vi.fn(() => Promise.resolve()),
+    read: vi.fn(() => Promise.resolve({ folders: over.folders ?? [], status: { ...OK, ...over.status } })),
     setFolder: vi.fn(() => Promise.resolve()),
     syncNow: vi.fn(() => Promise.resolve()),
   };

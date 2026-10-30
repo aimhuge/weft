@@ -1,17 +1,17 @@
 // Standing vault access for one thread (electron/vault-grants.cjs): after one Touch ID a card may use one project's
 // vault for an hour, and the vault's grant methods ask for it, keep it, and end it.
 import { describe, expect, it, vi } from "vitest";
-import { createGrants, grantMethods, GRANT_MS } from "./vault-grants.cjs";
+import { createGrants, grantMethods, GRANT_MS, THREAD_MS } from "./vault-grants.cjs";
 
 // The vault's id and label for a folder, as the module asks for it.
 const idOf = () => Promise.resolve({ id: "github:o/r", label: "o/r" });
 
 // What a grant asks for: the card it's for, the thread's title and why it wants the vault.
-type GrantAsk = { card: string; thread?: string; why?: string; by?: string };
+type GrantAsk = { card: string; thread?: string; why?: string; by?: string; site?: string; writes?: boolean; span?: "hour" | "thread" };
 
 // The grants, the vault's methods on them, and the fakes around them.
-function make({ now = () => 1000, ms = GRANT_MS, allow = true } = {}) {
-  const grants = createGrants({ now, ms });
+function make({ now = () => 1000, ms = GRANT_MS, threadMs = THREAD_MS, allow = true } = {}) {
+  const grants = createGrants({ now, ms, threadMs });
   const log = vi.fn(() => true);
   const asked: string[] = [];
   const prompt = vi.fn((reason: string) => {
@@ -45,7 +45,7 @@ describe("createGrants", () => {
   it("adds a grant that lasts an hour from now", () => {
     const grants = createGrants({ now: () => 5000 });
     const g = grants.add({ card: "c1", thread: "Site", id: "github:o/r", label: "o/r" });
-    expect(g).toEqual({ card: "c1", thread: "Site", id: "github:o/r", label: "o/r", at: 5000, until: 5000 + GRANT_MS });
+    expect(g).toEqual({ card: "c1", thread: "Site", id: "github:o/r", label: "o/r", site: undefined, writes: false, span: "hour", at: 5000, until: 5000 + GRANT_MS });
     expect(GRANT_MS).toBe(60 * 60_000);
   });
 
@@ -102,6 +102,56 @@ describe("createGrants", () => {
     expect(grants.allows("c1", "github:o/r", "b.example.com")).toBe(true);
     expect(grants.allows("c1", "github:o/r", "c.example.com")).toBe(false);
   });
+
+  // Writes are a separate yes: a grant that names them lets the card store a value it made and
+  // push it to Vercel without asking again (2026-10-29).
+  it("allows writes only for a live grant that names them, for that card and vault", () => {
+    let t = 0;
+    const grants = createGrants({ now: () => t, ms: 1000 });
+    // No grant yet.
+    expect(grants.allowsWrite("c1", "github:o/r")).toBe(false);
+    // A grant without writes covers none.
+    grants.add({ card: "c1", thread: "Site", id: "github:o/r", label: "o/r" });
+    expect(grants.allowsWrite("c1", "github:o/r")).toBe(false);
+    // A grant that names writes covers them, for its own card and its own vault only.
+    grants.add({ card: "c2", thread: "Other", id: "github:o/r", label: "o/r", writes: true });
+    expect(grants.allowsWrite("c2", "github:o/r")).toBe(true);
+    expect(grants.allowsWrite("c1", "github:o/r")).toBe(false);
+    expect(grants.allowsWrite("c2", "github:o/other")).toBe(false);
+    // An expired grant's writes go with it.
+    t = 1001;
+    expect(grants.allowsWrite("c2", "github:o/r")).toBe(false);
+  });
+
+  it("allows no writes without a card or an id", () => {
+    const grants = createGrants({ now: () => 0 });
+    grants.add({ card: "c1", thread: "Site", id: "github:o/r", label: "o/r", writes: true });
+    expect(grants.allowsWrite("", "github:o/r")).toBe(false);
+    expect(grants.allowsWrite("c1", "")).toBe(false);
+  });
+
+  // A grant for the thread lasts until the card is Done, but never longer than THREAD_MS (2026-10-29).
+  it("lasts the thread's hours when the span is thread", () => {
+    const grants = createGrants({ now: () => 0, ms: 1000, threadMs: 5000 });
+    const g = grants.add({ card: "c1", thread: "Site", id: "github:o/r", label: "o/r", span: "thread" });
+    expect(g.span).toBe("thread");
+    expect(g.until).toBe(5000);
+    // The default cap: twelve hours, so a card that never reaches Done can't hold a grant for good.
+    expect(createGrants({ now: () => 0 }).threadMs).toBe(THREAD_MS);
+    expect(THREAD_MS).toBe(12 * 60 * 60_000);
+  });
+
+  // A new grant never narrows a live one: the hour after an approved command doesn't end a
+  // thread-long grant, or take its writes away (2026-10-29).
+  it("never narrows a live grant when another one is added", () => {
+    const grants = createGrants({ now: () => 0, ms: 1000, threadMs: 5000 });
+    grants.add({ card: "c1", thread: "Site", id: "github:o/r", label: "o/r", writes: true, span: "thread" });
+    const later = grants.add({ card: "c1", thread: "Site", id: "github:o/r", label: "o/r" });
+    expect(later.writes).toBe(true);
+    expect(later.span).toBe("thread");
+    // The longer of the two lasts: the thread's hours, not the hour.
+    expect(later.until).toBe(5000);
+  });
 });
 
 describe("grantMethods", () => {
@@ -131,6 +181,43 @@ describe("grantMethods", () => {
     expect(asked[0]!).toContain("2 hours");
   });
 
+  // The approval is never wider than its words: a grant that names writes says so, and one that
+  // lasts for the thread says that (2026-10-29).
+  it("names the writes and the thread's span in what it asks for", async () => {
+    const { grant, asked } = make();
+    await grant("/repo", { card: "c1", thread: "Setup", writes: true, span: "thread" });
+    const reason = asked[0]!;
+    expect(reason).toContain("push them to Vercel");
+    expect(reason).toContain("until its card is Done");
+    expect(reason).toContain("12 hours at most");
+    // Without writes, the prompt says nothing about storing or pushing.
+    const plain = make();
+    await plain.grant("/repo", { card: "c1", thread: "Setup" });
+    expect(plain.asked[0]!).not.toContain("push them to Vercel");
+    expect(plain.asked[0]!).not.toContain("until its card is Done");
+  });
+
+  it("says what it asks for in the audit line, with the writes and the span", async () => {
+    const { grant, log } = make();
+    await grant("/repo", { card: "c1", thread: "Setup", why: "set the service up", writes: true, span: "thread" });
+    expect(log).toHaveBeenCalledWith({
+      action: "grant",
+      by: "thread",
+      card: "c1",
+      thread: "Setup",
+      vault: "o/r",
+      site: undefined,
+      detail: "set the service up, with writes, for the thread",
+    });
+  });
+
+  it("grants the writes and the span it was asked for", async () => {
+    const { grant, grants } = make();
+    const result = await grant("/repo", { card: "c1", thread: "Setup", writes: true, span: "thread" });
+    expect(result).toMatchObject({ granted: true, writes: true, span: "thread" });
+    expect(grants.allowsWrite("c1", "github:o/r")).toBe(true);
+  });
+
   it("adds the grant and logs it when the answer is yes", async () => {
     const { grant, grants, log } = make();
     const result = await grant("/repo", { card: "c1", thread: "Email forwarding" });
@@ -157,6 +244,23 @@ describe("grantMethods", () => {
     expect(log).not.toHaveBeenCalled();
   });
 
+  it("opens the hour after a command's approval, site-less and without asking again", () => {
+    const { methods, grants, prompt, log } = make();
+    const g = methods.grantAfterApproval({ card: "c1", thread: "Dev", id: "github:o/r", label: "o/r" });
+    expect(g).toEqual({ card: "c1", thread: "Dev", id: "github:o/r", label: "o/r", site: undefined, writes: false, span: "hour", at: 1000, until: 1000 + GRANT_MS });
+    expect(prompt).not.toHaveBeenCalled();
+    expect(grants.allows("c1", "github:o/r")).toBe(true);
+    expect(grants.allows("c1", "github:o/r", "evil.example")).toBe(false);
+    expect(log).toHaveBeenCalledWith({ action: "grant", by: "you", card: "c1", thread: "Dev", vault: "o/r", detail: "for the hour after you approved a command" });
+  });
+
+  it("opens nothing after an approval with no card or vault", () => {
+    const { methods, log } = make();
+    expect(methods.grantAfterApproval({ card: "", id: "github:o/r", label: "o/r" })).toBeNull();
+    expect(methods.grantAfterApproval({ card: "c1", id: "", label: "o/r" })).toBeNull();
+    expect(log).not.toHaveBeenCalled();
+  });
+
   it("says whether the card may use the vault without asking", () => {
     const { methods, grants } = make();
     expect(methods.granted("c1", "github:o/r")).toBe(false);
@@ -164,10 +268,28 @@ describe("grantMethods", () => {
     expect(methods.granted("c1", "github:o/r")).toBe(true);
   });
 
+  // Whether this card may write to this folder's vault without asking (a set_value, a push to Vercel).
+  it("says whether the card may write to the vault without asking", async () => {
+    const { methods, grants } = make();
+    expect(await methods.writeGranted("c1", "/repo")).toBe(false);
+    grants.add({ card: "c1", thread: "Site", id: "github:o/r", label: "o/r", writes: true });
+    expect(await methods.writeGranted("c1", "/repo")).toBe(true);
+    // Another card's grant is not this card's.
+    expect(await methods.writeGranted("c2", "/repo")).toBe(false);
+  });
+
+  it("allows no writes without a card", async () => {
+    const { methods, grants } = make();
+    grants.add({ card: "c1", thread: "Site", id: "github:o/r", label: "o/r", writes: true });
+    expect(await methods.writeGranted("", "/repo")).toBe(false);
+  });
+
   it("lists the grants the drawer shows", () => {
     const { methods, grants } = make();
     grants.add({ card: "c1", thread: "Site", id: "github:o/r", label: "o/r" });
-    expect(methods.grantList()).toEqual([{ card: "c1", thread: "Site", id: "github:o/r", label: "o/r", at: 1000, until: 1000 + GRANT_MS }]);
+    expect(methods.grantList()).toEqual([
+      { card: "c1", thread: "Site", id: "github:o/r", label: "o/r", site: undefined, writes: false, span: "hour", at: 1000, until: 1000 + GRANT_MS },
+    ]);
   });
 
   it("logs one line for each grant it ends", () => {

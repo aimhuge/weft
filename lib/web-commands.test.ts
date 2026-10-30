@@ -95,6 +95,11 @@ describe("replies", () => {
     expect(cardReplies([answer, stop], "c1").map((c) => c.id)).toEqual(["a1", "s1"]);
   });
 
+  it("leave a worker's sign-ins and clones off the board's strip", () => {
+    const admin = (["login", "github_login", "clone"] as const).map((kind) => commandRow({ id: kind, kind }));
+    expect(boardCommands([commandRow(), ...admin]).map((c) => c.id)).toEqual(["cmd-1"]);
+  });
+
   it("show under their own card while open or failed, not once done", () => {
     const list = [reply(), reply({ id: "r2", status: "failed" }), reply({ id: "r3", status: "done" }), reply({ id: "r4", payload: { cardId: "c2", text: "x" } }), commandRow()];
     expect(cardReplies(list, "c1").map((c) => c.id)).toEqual(["r1", "r2"]);

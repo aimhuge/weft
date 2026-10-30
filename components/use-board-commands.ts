@@ -82,7 +82,7 @@ export function useBoardCommands(c: BoardCommandsInput) {
   const stepProject = (by: number) => c.chooseProject(stepThrough([null, ...c.projectSummaries.map((p) => p.path)], c.project, by));
   const stepSort = () => c.chooseSort(stepThrough(Object.keys(SORTERS) as SortKey[], c.sort, 1));
 
-  useMenuBridge({ cards, openNew: c.openNew, openCard, select: c.select, openSettings: () => c.setShowSettings(true), focusFilter, toggleTerminal: c.toggleTerminal, openDrawer: c.setLibraryOpen });
+  useMenuBridge({ cards, openNew: c.openNew, openCard, select: c.select, openSettings: () => c.setShowSettings(true), focusFilter, cardOpen: Boolean(c.selectedId) || !c.boardKeys, toggleTerminal: c.toggleTerminal, openDrawer: c.setLibraryOpen });
   useOnboardingEvents(c.openNew, c.select);
   useIntakeActions(c.setLibraryOpen, c.select);
 

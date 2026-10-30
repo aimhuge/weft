@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import "./test-utils";
 import type { ReactNode } from "react";
+import { setBoardMode } from "@/lib/board-prefs";
 import BoardHeader from "./BoardHeader";
 
 type Fn = ReturnType<typeof vi.fn<() => void>>;
@@ -101,5 +102,16 @@ describe("BoardHeader", () => {
     expect(button).toHaveAttribute("title", "Share the board");
     await userEvent.click(button);
     expect(onShareBoard).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("BoardHeader in Regular mode", () => {
+  it("drops the terminal and share buttons and keeps the rest", () => {
+    setBoardMode("regular");
+    renderHeader();
+    expect(screen.queryByRole("button", { name: "Terminal" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Share the board" })).toBeNull();
+    for (const name of ["Browser", "Settings", "New thread"]) expect(screen.getByRole("button", { name })).toBeInTheDocument();
+    document.cookie = "weft-board-mode=; path=/; max-age=0";
   });
 });

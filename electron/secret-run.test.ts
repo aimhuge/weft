@@ -21,7 +21,7 @@ type Options = { values?: Record<string, string>; missing?: string[]; allows?: b
 type Runner = ReturnType<typeof createSecretRun>;
 
 function make({ values = { DATABASE_URL: URL }, missing = [], allows = false, choice = "once", granted = false, audit = undefined as ((entry: Record<string, unknown>) => unknown) | undefined }: Options = {}) {
-  const vault = { valuesFor: vi.fn(() => Promise.resolve({ id: "github:o/r", label: "o/r", values, missing })), granted: vi.fn(() => granted) };
+  const vault = { valuesFor: vi.fn(() => Promise.resolve({ id: "github:o/r", label: "o/r", values, missing })), granted: vi.fn(() => granted), grantAfterApproval: vi.fn() };
   const rules = { allows: vi.fn(() => allows), remember: vi.fn() };
   const ask = vi.fn(() => Promise.resolve(choice));
   const auditFn = audit ?? vi.fn();
@@ -58,6 +58,19 @@ describe("createSecretRun.run", () => {
     const covered = make({ allows: true });
     await covered.runner.run({ ...request, argv: PRINT });
     expect(covered.ask).not.toHaveBeenCalled();
+  });
+
+  it("gives the card the hour when the user says yes, and not on a no, a rule or a grant", async () => {
+    for (const choice of ["once", "always"]) {
+      const yes = make({ choice });
+      await yes.runner.run({ ...request, argv: PRINT, thread: "Build card" });
+      expect(yes.vault.grantAfterApproval).toHaveBeenCalledWith({ card: "c1", thread: "Build card", id: "github:o/r", label: "o/r" });
+    }
+    for (const opts of [{ choice: null }, { allows: true }, { granted: true }]) {
+      const no = make(opts);
+      await no.runner.run({ ...request, argv: PRINT });
+      expect(no.vault.grantAfterApproval).not.toHaveBeenCalled();
+    }
   });
 
   it("skips the ask and the rules entirely when the card has a grant", async () => {
@@ -219,7 +232,7 @@ describe("helpers", () => {
     expect(touch.promptTouchID).toHaveBeenCalledWith("r");
     dialog.showMessageBox.mockResolvedValueOnce({ response: 2 });
     expect(await ask(req)).toBe("always");
-    expect(dialog.showMessageBox).toHaveBeenCalledWith(win, expect.objectContaining({ buttons: ["Cancel", "Allow once", "Always allow"], message: "m", detail: "d" }));
+    expect(dialog.showMessageBox).toHaveBeenCalledWith(win, expect.objectContaining({ buttons: ["Cancel", "Allow for 1 hour", "Always allow"], message: "m", detail: "d" }));
     touch.promptTouchID.mockRejectedValueOnce(new Error("cancelled"));
     dialog.showMessageBox.mockResolvedValueOnce({ response: 1 });
     expect(await ask(req)).toBeNull();

@@ -1,67 +1,12 @@
-import { createHash } from "node:crypto";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import type { ThreadItem } from "./types";
-import { BLOB_BUCKET, BLOB_REF_PREFIX, type BlobRef } from "./cloud-sync-types";
+import { BLOB_BUCKET, BLOB_REF_PREFIX } from "./cloud-sync-types";
 import { createBlobStore, isLocalUploadPath, sha256Of } from "./blob-store";
+import { DATA, HOME, file, makeClient, sha, store, withBlobDirs } from "./blob-store.harness";
 
-// A fake Supabase client whose storage.from(bucket).upload/download returns whatever the test
-// queued next, so each test pushes one entry per expected call and inspects the recorded calls.
-// The union shape matches the real storage-js types so the linter's narrowing is honest.
-type UploadResult = { data?: { id: string; path: string; fullPath: string } | null; error: { name?: string; statusCode?: string; message?: string } | null };
-type DownloadResult = { data: Blob | Uint8Array | null; error: { message: string } | null };
-function makeClient() {
-  const uploadCalls: Array<{ path: string; body: Buffer; opts: { contentType?: string; upsert?: boolean } }> = [];
-  const downloadCalls: string[] = [];
-  const uploads: UploadResult[] = [];
-  const downloads: DownloadResult[] = [];
-  const from = vi.fn((bucket: string) => {
-    if (bucket !== BLOB_BUCKET) throw new Error(`unexpected bucket ${bucket}`);
-    return {
-      upload: (p: string, body: Buffer, opts: { contentType?: string; upsert?: boolean }) => {
-        uploadCalls.push({ path: p, body, opts });
-        return Promise.resolve(uploads.shift() ?? { data: { id: "x", path: p, fullPath: p }, error: null });
-      },
-      download: (p: string) => {
-        downloadCalls.push(p);
-        return Promise.resolve(downloads.shift() ?? { data: null, error: { message: "no data" } });
-      },
-    };
-  });
-  return { client: { storage: { from } } as never, uploadCalls, downloadCalls, uploads, downloads, from };
-}
-
-const HOME = fs.mkdtempSync(path.join(os.tmpdir(), "weft-blob-home-"));
-const DATA = fs.mkdtempSync(path.join(os.tmpdir(), "weft-blob-data-"));
-let envHome = "";
-let envData = "";
-
-const file = (name: string, bytes: Buffer | string = "hello") => {
-  const p = path.join(HOME, name);
-  fs.mkdirSync(path.dirname(p), { recursive: true });
-  fs.writeFileSync(p, bytes);
-  return p;
-};
-const sha = (b: Buffer | string) => createHash("sha256").update(b).digest("hex");
-const cacheDir = () => path.join(DATA, "blob-cache");
-const store = (m: ReturnType<typeof makeClient>) => createBlobStore({ client: m.client, cacheDir: cacheDir() });
-
-beforeEach(() => {
-  envHome = process.env.HOME ?? "";
-  envData = process.env.WEFT_DATA ?? "";
-  process.env.HOME = HOME;
-  process.env.WEFT_DATA = DATA;
-  fs.rmSync(DATA, { recursive: true, force: true });
-  fs.rmSync(HOME, { recursive: true, force: true });
-  fs.mkdirSync(HOME, { recursive: true });
-  fs.mkdirSync(DATA, { recursive: true });
-});
-afterEach(() => {
-  process.env.HOME = envHome;
-  process.env.WEFT_DATA = envData;
-});
+withBlobDirs();
 
 // The path rules themselves (isLocalUploadPath, resolvePage) are tested in lib/blob-paths.test.ts.
 describe("isLocalUploadPath re-export", () => {
@@ -191,6 +136,33 @@ describe("createBlobStore", () => {
       else throw new Error("kind changed");
     });
 
+    it("uploads a page's local images and the rewritten copy, leaving the file on disk alone", async () => {
+      const img = file(".weft/show/tour/shot.png", "png-bytes");
+      const css = file(".weft/show/tour/site.css", "a{color:red}");
+      const html = `<link rel="stylesheet" href="site.css"><img src="shot.png"><img src="https://x.dev/a.png">`;
+      const p = file(".weft/show/tour/index.html", html);
+      const m = makeClient();
+      const out = await store(m).rewriteItem({ kind: "user", text: "", at: 1, page: `${p}#step-2` } as const, "orgA");
+      const sent = `<style>\na{color:red}\n</style><img src="${BLOB_REF_PREFIX}${sha("png-bytes")}"><img src="https://x.dev/a.png">`;
+      if (out.kind !== "user") throw new Error("kind changed");
+      expect(out.page).toBe(`${BLOB_REF_PREFIX}${sha(sent)}#step-2`);
+      expect(m.uploadCalls.map((c) => c.path)).toEqual([`orgA/${sha("png-bytes")}`, `orgA/${sha(sent)}`]);
+      expect(m.uploadCalls[1]?.body.toString()).toBe(sent);
+      expect(m.uploadCalls[1]?.opts.contentType).toBe("text/html; charset=utf-8");
+      expect(fs.readFileSync(p, "utf8")).toBe(html);
+      expect([img, css].every((f) => fs.existsSync(f))).toBe(true);
+    });
+
+    it("uploads a non-HTML page, or one that names nothing local, as it is", async () => {
+      const p = file("doc.pdf", "%PDF");
+      const m = makeClient();
+      const out = await store(m).rewriteItem({ kind: "user", text: "", at: 1, page: p } as const, "orgA");
+      if (out.kind === "user") expect(out.page).toBe(`${BLOB_REF_PREFIX}${sha("%PDF")}`);
+      expect(m.uploadCalls[0]?.opts.contentType).toBe("application/pdf");
+      const plain = file("plain.html", "<p>hi</p>");
+      expect(await store(m).uploadPage(plain, "orgA")).toBe(`${BLOB_REF_PREFIX}${sha("<p>hi</p>")}`);
+    });
+
     it("leaves a user.page that is http or a missing file alone", async () => {
       const m = makeClient();
       const s = store(m);
@@ -259,41 +231,6 @@ describe("createBlobStore", () => {
       fs.writeFileSync(token, "x");
       const a = { kind: "assistant", text: `![v](${secret}) ![t](${token})`, at: 1 } as const;
       expect(await s.rewriteItem(a, "orgA")).toBe(a);
-    });
-  });
-
-  describe("fetchBlob", () => {
-    // Each test uses a unique ref so a write to the cache in one test doesn't short-circuit the
-    // next test's download or error case.
-    const refA: BlobRef = `blob:sha256:${"a".repeat(64)}`;
-    const refB: BlobRef = `blob:sha256:${"b".repeat(64)}`;
-    const refC: BlobRef = `blob:sha256:${"c".repeat(64)}`;
-    const refD: BlobRef = `blob:sha256:${"d".repeat(64)}`;
-
-    it("returns null for a malformed ref, returns the cached file when present, downloads a Blob on miss", async () => {
-      const bad = "blob:sha256:nothex";
-      expect(await store(makeClient()).fetchBlob(bad as never, "orgA")).toBeNull();
-      fs.mkdirSync(cacheDir(), { recursive: true });
-      const cached = path.join(cacheDir(), "a".repeat(64));
-      fs.writeFileSync(cached, "cached!");
-      const m1 = makeClient();
-      expect(await store(m1).fetchBlob(refA, "orgA")).toBe(cached);
-      expect(m1.downloadCalls).toHaveLength(0);
-      const m2 = makeClient();
-      m2.downloads.push({ data: new Blob(["hello"]), error: null });
-      const out = await store(m2).fetchBlob(refB, "orgA");
-      expect(m2.downloadCalls).toEqual([`orgA/${"b".repeat(64)}`]);
-      expect(out && fs.readFileSync(out, "utf8")).toBe("hello");
-    });
-
-    it("downloads a non-Blob body and returns null on error or empty body", async () => {
-      const m1 = makeClient();
-      m1.downloads.push({ data: new Uint8Array([104, 105]), error: null });
-      const out = await store(m1).fetchBlob(refC, "orgA");
-      expect(out && fs.readFileSync(out, "utf8")).toBe("hi");
-      const m2 = makeClient();
-      m2.downloads.push({ data: null, error: { message: "nope" } });
-      expect(await store(m2).fetchBlob(refD, "orgA")).toBeNull();
     });
   });
 });

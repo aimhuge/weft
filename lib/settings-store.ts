@@ -61,6 +61,8 @@ export interface Settings {
   issueLandings?: Record<string, IssueWorkflow>;
   // Project folders whose cards sync to the cloud (lib/cloud-sync.ts). Off by default.
   syncFolders?: string[];
+  // Project folders whose new cards run on your Weft Worker instead of this machine (lib/worker-handoff.ts).
+  workerFolders?: string[];
   // Folders outside a card's project that every thread may use without asking (lib/folder-guard.ts), granted with "Always".
   allowedFolders?: string[];
   // Ready-made worktrees kept per repo for isolated cards (lib/worktree-pool.ts); unset means 1, 0 turns the pool off.

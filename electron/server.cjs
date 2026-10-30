@@ -8,6 +8,7 @@ const path = require("node:path");
 const { freePort } = require("./free-port.cjs");
 const { readTail, TAIL_BYTES } = require("./server-log.cjs");
 const { noteExit } = require("./server-exit.cjs");
+const { serverPaths, patchFailed } = require("./server-patch.cjs");
 
 const ROOT = path.join(__dirname, "..");
 const MAX_LOG_BYTES = 5 * 1024 * 1024;
@@ -125,7 +126,8 @@ async function waitForServer(url, timeoutMs = 120_000) {
 
 function command(port, app) {
   if (app.isPackaged) {
-    const serverJs = path.join(process.resourcesPath, "server", "server.js");
+    // The app's own server, or a newer server patch staged beside it (server-patch.cjs).
+    const { serverJs, pluginDir } = serverPaths(app);
     // Run it as "Weft Helper", so macOS doesn't see a second Weft app (and quitting by name works).
     const name = app.getName();
     const helper = path.join(process.resourcesPath, "..", "Frameworks", `${name} Helper.app`, "Contents", "MacOS", `${name} Helper`);
@@ -139,7 +141,7 @@ function command(port, app) {
         PORT: String(port),
         HOSTNAME: "127.0.0.1",
         // Weft's own skills (plugin/ in the repo), shipped next to the server; see lib/skills.ts.
-        WEFT_PLUGIN_DIR: path.join(process.resourcesPath, "plugin"),
+        WEFT_PLUGIN_DIR: pluginDir,
         // The splash's art, inside app.asar; the browser pane (Electron) reads file:// from there. See lib/show.ts.
         WEFT_ASSETS_DIR: path.join(__dirname, "assets"),
       },
@@ -264,6 +266,13 @@ async function startServer({ preferredPort, env, onStatus, onFatal, onMark, onNo
       if (recoverFrom(classifyTail(readTail(logPath)))) return;
       const now = Date.now();
       crashes = [...crashes.filter((t) => now - t < RESTART_WINDOW_MS), now];
+      // A server patch that died young goes back to the app's own server, without counting it against the budget.
+      if (app.isPackaged && patchFailed(app, { livedMs, crashes: crashes.length, maxCrashes: MAX_RESTARTS }, log)) {
+        crashes = [];
+        status("Restarting…");
+        setTimeout(launch, RECOVER_GRACE_MS);
+        return;
+      }
       if (crashes.length > MAX_RESTARTS) {
         const message = `The server stopped ${crashes.length} times in two minutes.`;
         if (ready) {

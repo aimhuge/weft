@@ -12,6 +12,9 @@ import { useAccount } from "@/lib/use-account";
 import { useCloudSync } from "@/lib/use-cloud-sync";
 import { useNow } from "@/lib/use-now";
 import { openTeamPage } from "./board-palette";
+import PairDevices from "./PairDevices";
+import PhoneSettings from "./PhoneSettings";
+import WorkerSettings from "./WorkerSettings";
 import Icon, { Spinner } from "./Icon";
 import { folderName } from "./ProjectBar";
 import SwitchRow from "./SwitchRow";
@@ -23,7 +26,7 @@ const BUTTON = "rounded-md border border-line-strong px-2.5 py-1 text-[12.5px] t
 
 function Section({ title, children }: { title?: string; children: ReactNode }) {
   return (
-    <section className={CARD} onMouseDown={(e) => e.stopPropagation()}>
+    <section data-settings-card className={CARD} onMouseDown={(e) => e.stopPropagation()}>
       {title ? <h4 className={SECTION_TITLE}>{title}</h4> : null}
       {children}
     </section>
@@ -66,7 +69,7 @@ function ProjectsCard({ folders, synced, busy, error, onToggle }: { folders: str
   return (
     <Section title="Projects">
       <p className={`mb-3 ${SUBTLE}`}>
-        Thread text is uploaded unencrypted for now. Turn this on only for projects you&apos;re fine storing on Weft&apos;s servers.
+        Thread text is uploaded unencrypted unless Seal synced threads (below, under Pair a phone) is on.
       </p>
       {folders.length === 0 ? (
         <p className={SUBTLE}>
@@ -173,6 +176,9 @@ export default function SyncSettings({ recentProjects }: { recentProjects: strin
         <StatusCard status={status} busy={busy === "sync"} onSyncNow={() => void onSyncNow()} error={error} syncError={failed.sync ?? null} now={now} />
       )}
       <ProjectsCard folders={listed} synced={folders} busy={busy === "folder"} error={failed.folder ?? null} onToggle={(folder, on) => void onToggle(folder, on)} />
+      {signedIn && <PhoneSettings />}
+      {signedIn && <PairDevices />}
+      {signedIn && <WorkerSettings />}
       <Section>
         <p className={SUBTLE}>
           Cards, thread items and long tool results go to your Weft workspace on weft.zip, and pictures and pages once each by content. Open the

@@ -9,8 +9,9 @@ import { BACKENDS } from "./new-thread";
 
 // checked shows a tick (the card's current permission mode). accelerator is the item's key (an Electron
 // accelerator, e.g. "Shift+A"): drawn beside it, and pressing it while the menu is open picks the item.
+// detail is a dimmer second line on the item (Electron's sublabel), for the status a menu item carries.
 export type MenuItem =
-  | { id: string; label: string; enabled?: boolean; checked?: boolean; accelerator?: string }
+  | { id: string; label: string; enabled?: boolean; checked?: boolean; accelerator?: string; detail?: string }
   | { type: "separator" };
 
 export type CardAction =

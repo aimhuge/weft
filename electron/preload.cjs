@@ -24,6 +24,9 @@ contextBridge.exposeInMainWorld("weft", {
     forward: () => ipcRenderer.send("browser:forward"),
     reload: () => ipcRenderer.send("browser:reload"),
     zoom: (action) => ipcRenderer.send("browser:zoom", action),
+    newTab: () => ipcRenderer.send("browser:newTab"),
+    selectTab: (id) => ipcRenderer.send("browser:selectTab", id),
+    closeTab: (id) => ipcRenderer.send("browser:closeTab", id),
     onState: (callback) => listen("browser:state", callback),
   },
   dialog: {
@@ -42,6 +45,11 @@ contextBridge.exposeInMainWorld("weft", {
   copilot: {
     toggle: () => ipcRenderer.send("copilot:toggle"),
     onState: (callback) => listen("copilot:state", callback),
+  },
+  // Sign in to Claude for a Weft Worker (electron/claude-sign-in.cjs): resolves { token } or { error }.
+  claudeSignIn: {
+    start: (click) => ipcRenderer.invoke("claude-sign-in:start", click),
+    cancel: () => ipcRenderer.send("claude-sign-in:cancel"),
   },
   // The terminal drawer's shells (electron/terminal.cjs).
   terminal: {
@@ -174,6 +182,17 @@ contextBridge.exposeInMainWorld("weft", {
     forgetToken: () => ipcRenderer.invoke("slack:forget-token"),
     channels: () => ipcRenderer.invoke("slack:channels"),
     createChannel: (name) => ipcRenderer.invoke("slack:create-channel", name),
+  },
+  // Pairing a phone or browser (electron/pairing-ipc.cjs, docs/architecture/mobile-security.md): the pairing link
+  // and the paired list come back; the code's secret check, the keys and Touch ID stay in main.
+  pairing: {
+    start: (orgId) => ipcRenderer.invoke("pairing:start", orgId),
+    check: (id) => ipcRenderer.invoke("pairing:check", id),
+    cancel: (id) => ipcRenderer.invoke("pairing:cancel", id),
+    list: () => ipcRenderer.invoke("pairing:list"),
+    revoke: (id) => ipcRenderer.invoke("pairing:revoke", id),
+    settings: () => ipcRenderer.invoke("pairing:settings"),
+    setSettings: (change) => ipcRenderer.invoke("pairing:set-settings", change),
   },
   // Goose (electron/goose-ipc.cjs): a provider key per provider, sealed in the Keychain. The board sends a key
   // once and never reads one back — the runner's Goose subprocess gets it in its env (electron/goose-env.cjs).

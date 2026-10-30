@@ -24,7 +24,7 @@ export function showFile(cardId: string) {
 }
 
 export function showPrompt(ask: string, reply: string) {
-  return `You're a teammate on this build (product manager, engineer or designer: pick whichever lens fits this turn best) writing a one-screen update page for the person driving it. Answer: How's it going? What did we just do, and why does it matter? What should we do next? Have a point of view, be specific, make it visual (a progress bar, a before→after, a mini diagram, a next-step you'd bet on). Not a changelog. Only claim what the reply supports. One self-contained HTML file, inline CSS, no JS, fits ~400px wide. Output only HTML.
+  return `You're a teammate on this build (product manager, engineer or designer: pick whichever lens fits this turn best) writing a one-screen update page for the person driving it. Answer: How's it going? What did we just do, and why does it matter? What should we do next? Have a point of view, be specific, make it visual (a progress bar, a before→after, a mini diagram, a next-step you'd bet on). Not a changelog. Only claim what the reply supports. One self-contained HTML file, inline CSS, no JS, with <meta name="viewport" content="width=device-width,initial-scale=1"> and a fluid layout (nothing fixed wider than 360px) that reads on a 390px phone and the ~400px desktop pane. Output only HTML.
 
 The user asked: ${JSON.stringify(clip(ask, MAX_ASK_CHARS))}
 The agent replied:
@@ -61,7 +61,7 @@ const asset = (name: string) => encodeURI(`file://${path.join(ASSETS, name)}`);
 // a dimmed, slowly drifting scene behind the card's title, your ask (pasted images as thumbnails) and a
 // running clock. The scene is the card's own, picked from the backdrops by its id.
 export function starterPage(title: string, ask: string, now = new Date(), cardId = "") {
-  return `<!doctype html><html><head><meta charset="utf-8"><title>${escape(title)}</title><style>
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escape(title)}</title><style>
 html,body{height:100%;margin:0}
 body{background:#120d10;color:#f6efe6;font:14px/1.5 -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;
 -webkit-font-smoothing:antialiased;overflow:hidden;position:relative}

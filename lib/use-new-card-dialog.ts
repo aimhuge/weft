@@ -26,6 +26,7 @@ import {
   subscribeDefaults,
 } from "@/lib/new-thread";
 import { useIsolate } from "./use-isolate";
+import { isWorkerProject } from "./worker-project";
 import type { ThreadAgent } from "./agents";
 import { useAgentList } from "./use-agents";
 
@@ -231,7 +232,8 @@ export function useNewCardDialog(home: string, defaultCwd: string | undefined, r
         else await opts.onCreate(input);
         clearTimeout(draftTimer.current);
         remember(DRAFT, null);
-        rememberPicks({ cwd, backend, model, effort });
+        // A worker project isn't remembered as the last folder, so the next thread can't land on it by default.
+        rememberPicks({ cwd: isWorkerProject(cwd) ? home : cwd, backend, model, effort });
         if (!opts.stay) {
           opts.onClose();
           return;
@@ -245,7 +247,7 @@ export function useNewCardDialog(home: string, defaultCwd: string | undefined, r
         setBusy(false);
       }
     },
-    [busy, cwd, backend, permissionMode, model, effort, isolated, branch, agent, promptToStart],
+    [busy, cwd, home, backend, permissionMode, model, effort, isolated, branch, agent, promptToStart],
   );
 
   return {

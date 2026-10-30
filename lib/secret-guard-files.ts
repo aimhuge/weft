@@ -3,8 +3,11 @@
 // server's token. Brace and glob expansion are bounded so a 1 MB heredoc doesn't freeze the
 // server's hook (2026-10-12).
 
+import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { DATA_DIR } from "./store";
+import { workerDataDir, workerHome, workRoot } from "./worker-config";
 
 // .env, .env.local, .env.production.local, direnv's .envrc, Wrangler's .dev.vars, and globs like .env*.
 // Any case: macOS opens .ENV.LOCAL as .env.local.
@@ -77,18 +80,42 @@ function matchesName(name: string, pattern: RegExp, names: string[], dotGlob: bo
   return names.some((n) => glob.test(n));
 }
 
-// The path as it stands: `~` for home, no trailing slash, so `/Users/me/.weft/` and `/Users/me/.weft`
+// The path as it stands: home spelled out, no trailing slash, so `/Users/me/.weft/` and `/Users/me/.weft`
 // are the same path and the one below another.
 function normalized(file: string): string {
   const clean = file.replace(/^["']|["']$/g, "").replace(/\/+$/, "");
-  return clean.replace(/^~(?=\/|$)/, "");
+  return clean.replace(/^(~|\$HOME|\$\{HOME\})(?=\/|$)/, os.homedir());
 }
+
+// The folder a relative path starts from: the card's, while a hook checks a call (`fromCwd`). The server's own
+// folder is the wrong one: on a worker the daemon runs in its Weft clone, so `cat ../../worker.json` from a
+// checkout landed on nothing (2026-10-30).
+let cardCwd: string | undefined;
+
+export function fromCwd<T>(cwd: string | undefined, check: () => T): T {
+  const before = cardCwd;
+  cardCwd = cwd;
+  try {
+    return check();
+  } finally {
+    cardCwd = before;
+  }
+}
+
+// A `cd` moves where the rest of the line's relative paths start: `cd ..; cd ..; cat worker.json`.
+export function followCd(words: string[]) {
+  if (!cardCwd || !["cd", "pushd"].includes(words[0] ?? "")) return;
+  const to = words.slice(1).find((w) => !w.startsWith("-"));
+  cardCwd = to ? placed(normalized(to)) : os.homedir();
+}
+
+const placed = (clean: string) => path.resolve(cardCwd ?? process.cwd(), clean);
 
 export function isSecretFile(file: string, dataDir = DATA_DIR, dotGlob = false): boolean {
   const clean = normalized(file);
   if (PROC_ENV.test(clean)) return true;
   const inWeft = /\/\.weft\/(.+)$/i.exec(clean)?.[1];
-  const inData = path.relative(dataDir, path.resolve(clean));
+  const inData = path.relative(dataDir, placed(clean));
   if ([inWeft, inData].some((p) => p && matchesName(p, DATA_SECRET, DATA_NAMES, dotGlob))) return true;
   // The data dir itself, and anything under it. It holds the control server's token, so reaching
   // into it is reaching the master key: `find ~/.weft -exec cat {} \;` names no file at all, and a
@@ -100,29 +127,117 @@ export function isSecretFile(file: string, dataDir = DATA_DIR, dotGlob = false):
   return matchesName(base, SECRET_FILE, SECRET_NAMES, dotGlob) && !TEMPLATE.test(base);
 }
 
-// The data dir's subfolders a thread may read and write: `show/` holds the pages threads render in
-// the pane (plans, commits, how-tos, answers). It is the one place the BROWSER_PROMPT tells a
-// thread to write, so sealing it made the pane's own pages unreadable and unwritable (2026-10-28).
-// Everything else in the data dir — threads/, vault/, apps/, attachments/ — stays sealed.
-export const DATA_OPEN = /^show(\/.*)?$/i;
+// The data dir's subfolders a thread may read and write. `show/` holds the pages threads render in
+// the pane (plans, commits, how-tos, answers): it is the one place the BROWSER_PROMPT tells a thread to
+// write, so sealing it made the pane's own pages unreadable and unwritable (2026-10-28). `apps/` holds
+// the data mini apps (`apps/<slug>/index.html`, `weft-app.json`), which name vault secrets by name only;
+// sealing it stopped threads building or editing one such as Growth (2026-10-29). Everything else in the
+// data dir — threads/, vault/, attachments/, apps.json, app-grants.json, the control token — stays sealed.
+export const DATA_OPEN = /^(show|apps)(\/.*)?$/i;
+
+// Whether a path inside the data dir (relative to it) is in an open folder: `..` is folded first, so
+// `apps/../vault` is `vault`, and a path that climbs out of the data dir is never open.
+function isOpen(rel: string): boolean {
+  const folded = path.posix.normalize(rel);
+  return !folded.startsWith("..") && !path.posix.isAbsolute(folded) && DATA_OPEN.test(folded);
+}
+
+// Where a path really lands: symlinks followed, even a dangling one (a write through `apps/x ->
+// ../vault/new.json` would create a file in the vault), and a path that doesn't exist yet taken from
+// its nearest existing folder. Bounded, so a symlink loop ends.
+function realPlace(file: string, depth = 0): string {
+  if (depth > 32) return loopPlace(file);
+  try {
+    return fs.realpathSync(file);
+  } catch {
+    const parent = path.dirname(file);
+    try {
+      if (fs.lstatSync(file).isSymbolicLink()) return realPlace(path.resolve(parent, fs.readlinkSync(file)), depth + 1);
+    } catch {
+      // Not there at all: fall through to its folder.
+    }
+    return path.join(realPlace(parent, depth + 1), path.basename(file));
+  }
+}
+
+// Where a loop gave up: its link's folder really placed, so `/var` reads `/private/var` on macOS as the root does.
+function loopPlace(file: string): string {
+  try {
+    return path.join(fs.realpathSync(path.dirname(file)), path.basename(file));
+  } catch {
+    return file;
+  }
+}
+
+// An open folder holding a symlink into a sealed one (`apps/x -> ../vault`) must not let a thread
+// through: the path's real place is checked too. A link out of the data dir (`apps/x -> ~/.claude`, or
+// to a project's `.env`) is checked as the file it lands on.
+function realPlaceSealed(resolved: string, root: string): boolean {
+  const real = realPlace(resolved);
+  const rel = path.relative(realPlace(root), real);
+  if (!rel) return true;
+  // A path that went nowhere stays sealed: asking again about the same path never ended (2026-10-30).
+  if (rel.startsWith("..") || path.isAbsolute(rel)) return real === resolved || isSecretFile(real, root);
+  return !isOpen(rel);
+}
 
 // Whether a path is the data dir or inside it, save for the folders threads may use. A path that
 // names the dir, or that reaches it by walking up (`~/.weft/threads`), is the data dir.
 export function reachesDataDir(file: string, dataDir = DATA_DIR): boolean {
   const clean = normalized(file);
   if (!clean) return false;
-  const resolved = path.resolve(clean);
+  if (reachesWorkerHome(clean)) return true;
+  const resolved = placed(clean);
   const root = path.resolve(dataDir);
   if (resolved === root) return true;
   const rel = path.relative(root, resolved);
-  if (rel && !rel.startsWith("..") && !path.isAbsolute(rel)) return !DATA_OPEN.test(rel);
+  if (rel && !rel.startsWith("..") && !path.isAbsolute(rel)) return !isOpen(rel) || realPlaceSealed(resolved, root);
   // A `~`-relative path the guard can't resolve to a real folder: the name still says `.weft`.
   if (/(?:^|\/)\.weft(?:\/|$)/i.test(clean)) {
-    // `~/.weft/show/...` is a thread's own pane page.
+    // `~/.weft/show/...` is a thread's own pane page, `~/.weft/apps/...` a mini app.
     const inWeft = /(?:^|\/)\.weft\/(.+)$/i.exec(clean)?.[1] ?? "";
-    return !DATA_OPEN.test(inWeft);
+    return !isOpen(inWeft);
   }
   return false;
+}
+
+const within = (file: string, dir: string) => {
+  const rel = path.relative(dir, file);
+  return !rel || (!rel.startsWith("..") && !path.isAbsolute(rel));
+};
+
+// What a thread may use in a worker's home. Its checkouts, its pane pages and mini apps, and the clone of Weft
+// itself: that's a public repo, and /weft:done runs its commit.sh from the plugin inside it. The rest is sealed
+// whole, as the data dir is: worker.json (the key), worker.env (the Claude token), seal-key.json,
+// github-credentials, worker.log and whatever a later build puts there.
+function sealedInHome(file: string, home: string, root: string): boolean {
+  if (!within(file, home) || within(file, root) || within(file, path.join(home, "weft"))) return false;
+  const rel = path.relative(workerDataDir(home), file);
+  return rel.startsWith("..") || !isOpen(rel);
+}
+
+// A path that spells the home by name: `$H/.weft-worker/worker.json`, which can't be resolved, or `~/.weft-w*/x`
+// beside the real one. macOS opens a name in any case.
+function namesHome(clean: string, home: string, root: string): boolean {
+  const name = path.basename(home);
+  const parts = clean.split("/");
+  const at = parts.findIndex((part, i) => {
+    if (part.toLowerCase() === name.toLowerCase()) return true;
+    return /[*?[]/.test(part) && globRegex(part, false).test(name) && placed(i ? parts.slice(0, i).join("/") || "/" : ".") === path.dirname(home);
+  });
+  return at >= 0 && sealedInHome(path.join(home, ...parts.slice(at + 1)), home, root);
+}
+
+// Whether a path reaches a Weft Worker's home on this machine (docs/architecture/weft-worker.md#whats-sealed-on-a-worker).
+// The folder gate is no seal: it asks, and Always opens the home to every card, so the refusal has to be here.
+// A machine with no such home skips all of it, which keeps `grep .weft-worker` working on a Mac that only talks to one.
+export function reachesWorkerHome(file: string, home = workerHome(), root = workRoot(home)): boolean {
+  if (!fs.existsSync(home)) return false;
+  const clean = normalized(file);
+  if (!clean) return false;
+  const at = placed(clean);
+  // Its real place too: a checkout is a repo somebody else wrote, and it can hold a link to `../../worker.json`.
+  return sealedInHome(at, home, root) || sealedInHome(realPlace(at), realPlace(home), realPlace(root)) || namesHome(clean, home, root);
 }
 
 // Whether a path is the CLI's transcript dir or inside it: `~/.claude`, `~/.claude.json`, or any

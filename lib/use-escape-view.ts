@@ -1,5 +1,6 @@
 "use client";
 
+import { boardMode } from "./board-prefs";
 import { isTyping } from "./hotkeys";
 import { railPinned } from "./rail-view";
 import { useEscape } from "./use-escape";
@@ -43,7 +44,8 @@ export function useEscapeTogglesView(
   useEscape(
     bareBoard(open),
     (e) => {
-      if (isTyping(e.target)) return;
+      // Regular mode has only the board, so there's nothing to flip to.
+      if (isTyping(e.target) || boardMode() === "regular") return;
       if (hintUp) {
         onDismiss?.();
         return;

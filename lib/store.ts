@@ -282,7 +282,7 @@ function setPictures(cardId: string, patch?: Pick<Card, "pictures" | "thumb">) {
 }
 
 // Sets a card's fields that aren't activity (its pane capture, its emoji), leaving updatedAt alone.
-export function decorateCard(id: string, patch: Partial<Pick<Card, "thumb" | "emoji" | "title" | "titleBy" | "tags" | "tagsBy" | "share">>) {
+export function decorateCard(id: string, patch: Partial<Pick<Card, "thumb" | "emoji" | "title" | "titleBy" | "tags" | "tagsBy" | "share" | "page" | "pages">>) {
   const card = state().cards.get(id);
   if (!card) return;
   Object.assign(card, patch);

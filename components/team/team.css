@@ -1333,6 +1333,8 @@
     gap: 10px 12px;
     padding: 12px 16px;
     overflow: visible;
+    /* The bar isolates its stacking context, so this is what lifts the workspace menu over the page below. */
+    z-index: 5;
     border-right: 0;
     border-bottom: 1px solid var(--line);
   }

@@ -97,6 +97,9 @@ describe("setupApps", () => {
     expect(handlers.has("apps:push-secrets")).toBe(true);
     // From live-data.cjs — a file: page reading a live snapshot off Weft's own server:
     expect(handlers.has("live-data:read")).toBe(true);
+    // From sim-live.cjs — the simulator's live view: its window to capture, and its taps:
+    expect(handlers.has("sim-live:source")).toBe(true);
+    expect(handlers.has("sim-live:input")).toBe(true);
   });
 
   it("binds the push's confirm to vault.confirm", async () => {

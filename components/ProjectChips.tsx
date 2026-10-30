@@ -3,6 +3,7 @@
 // in view. Right-clicking a chip opens its menu (components/project-menu-handler.ts).
 import { type RefObject } from "react";
 import { chipProjects, folderName, shortPath, statusLabel } from "@/lib/project-bar";
+import { workerLabel } from "@/lib/worker-project";
 import Icon from "./Icon";
 import ProjectStatusDot from "./ProjectStatusDot";
 import type { ProjectSummary } from "@/lib/board-view";
@@ -54,12 +55,13 @@ export default function ProjectChips({
             onClick={() => onSelect(project.path)}
             onContextMenu={onProjectMenu && ((e) => onProjectMenu(project.path, e))}
             aria-pressed={on}
-            title={`${shortPath(project.path, home)}${stepHint}`}
-            className={`${CHIP} ${on ? CHIP_ON : CHIP_OFF}`}
+            title={`${project.worker ? workerLabel(project.worker) : shortPath(project.path, home)}${stepHint}`}
+            className={`${CHIP} ${on ? CHIP_ON : CHIP_OFF} ${project.worker?.status === "offline" ? "opacity-60" : ""}`}
           >
             <ProjectStatusDot project={project} />
             {project.pinned && <Icon name="pin" size={11} className="text-faint" />}
             <span className="max-w-[160px] truncate">{folderName(project.path)}</span>
+            {project.worker && <span className={on ? "text-accent/70" : "text-faint"}>{project.worker.name}</span>}
             <span className={`tabular-nums ${on ? "text-accent/70" : "text-faint"}`}>{project.cards}</span>
             <span className="sr-only">{statusLabel(project)}</span>
           </button>

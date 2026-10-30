@@ -1,7 +1,8 @@
 // Signed approvals from a paired phone (docs/architecture/mobile-security.md, "Signed approvals"). The phone signs this
 // message with its Ed25519 key, which it only reads after Face ID; the Mac checks it against the key it pinned at
 // pairing (electron/paired-devices.cjs). Every field that decides what runs is in the message, so a signature can't be
-// moved onto another Mac, card, request, decision or set of answers.
+// moved onto another Mac, card, request, decision, set of answers or folder grant.
+import type { GrantScope } from "./cloud-commands";
 import { b64, unb64, type Sodium } from "./sodium";
 
 // How far issuedAt may be from the Mac's clock. A pending request answers once, so a replay inside it finds nothing.
@@ -16,6 +17,8 @@ export interface ApprovalFields {
   allow: boolean;
   issuedAt: number;
   answers?: Record<string, string>;
+  // This card / Always. A line of its own only when set, so a signature over a plain Allow can't carry a grant.
+  grant?: GrantScope;
 }
 
 // What rides beside the answer payload (cloud_commands.payload.auth).
@@ -35,7 +38,7 @@ function answersHash(s: Sodium, answers?: Record<string, string>): string {
 }
 
 export function approvalMessage(s: Sodium, f: ApprovalFields): string {
-  return ["weft-approval-v1", f.orgId, f.macDevice, f.cardId, f.pendingId, f.allow ? "allow" : "deny", String(f.issuedAt), answersHash(s, f.answers)].join("\n");
+  return ["weft-approval-v1", f.orgId, f.macDevice, f.cardId, f.pendingId, f.allow ? "allow" : "deny", String(f.issuedAt), answersHash(s, f.answers), ...(f.grant ? [`grant:${f.grant}`] : [])].join("\n");
 }
 
 // The phone's half, here for tests and as the reference the phone app copies.

@@ -10,17 +10,21 @@ import { planResets } from "@/lib/schedule";
 import type { Card, RestartStatus, ThreadItem } from "@/lib/types";
 import type { UseWorkspaceLayout } from "@/lib/use-workspace-layout";
 import type { threadHandlers } from "@/lib/thread-handlers";
+import type { WorkerThread } from "@/lib/use-worker-board";
 import OpenCard, { CardFrame } from "./OpenCard";
 import { guarded } from "./guarded";
 
 // Each loads in its own CrashGuard, so a broken piece breaks only its own spot.
 const NewThreadWindow = guarded(() => import("./NewThreadWindow"), { what: "New thread window", inline: true });
+const WorkerOpenCard = guarded(() => import("./WorkerOpenCard"), { what: "worker thread", inline: true });
 
 export interface BoardFrameProps {
   // The New thread form is up; otherwise the open card's thread.
   showNew: boolean;
   // The open card, when there is one.
   selected: Card | null;
+  // The open card when it's a worker's: read from the cloud rows, so it never reaches OpenCard's local handlers.
+  workerThread?: WorkerThread | null;
   cards: Card[];
   home: string;
   // The folder "New Thread in This Folder" asked for; otherwise the dialog picks.
@@ -59,7 +63,7 @@ export default function BoardFrame(props: BoardFrameProps) {
   );
 
   return (
-    <CardFrame framed={Boolean(selected) || showNew} bottom={props.bottom} onBackdrop={props.onBackdrop}>
+    <CardFrame framed={Boolean(selected) || Boolean(props.workerThread) || showNew} bottom={props.bottom} onBackdrop={props.onBackdrop}>
       {showNew ? (
         <NewThreadWindow
           form={{ cards, home, defaultCwd: newCwd ?? project ?? undefined, recentCwd, restart, onCreate, onManageAgents: () => {
@@ -69,6 +73,8 @@ export default function BoardFrame(props: BoardFrameProps) {
           browser={{ desktop: props.desktop, state: props.browser, obscured: props.obscured, width: props.browserWidth, onWidth: props.onBrowserWidth }}
           onClose={onCloseNew}
         />
+      ) : props.workerThread ? (
+        <WorkerOpenCard thread={props.workerThread} />
       ) : selected && props.handlers ? (
         <OpenCard
           card={selected}

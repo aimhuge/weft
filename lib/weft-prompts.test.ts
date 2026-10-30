@@ -60,6 +60,16 @@ describe("weftSystemPrompt", () => {
     for (const part of [DEFAULT_THREAD_PROMPT, SECRETS_PROMPT, REVIEW_PROMPT]) expect(text).not.toContain(part);
   });
 
+  it("a thread on a Weft Worker gets the worker's browser prompt", async () => {
+    vi.resetModules();
+    vi.stubEnv("WEFT_WORKER", "1");
+    const worker = await import("./weft-prompts");
+    const text = worker.weftSystemPrompt({ backend: "claude" });
+    vi.stubEnv("WEFT_WORKER", "");
+    expect(text).toContain("You are running on a Weft Worker");
+    expect(text).not.toContain(worker.WEFT_PINNED_PROMPTS.BROWSER_PROMPT);
+  });
+
   it("a persona's prompt follows the copilot prompt; Wingman adds none", () => {
     const { COPILOT_PROMPT } = prompts.WEFT_PINNED_PROMPTS;
     const founder = prompts.weftSystemPrompt({ backend: "claude", copilot: true, persona: "founder" });

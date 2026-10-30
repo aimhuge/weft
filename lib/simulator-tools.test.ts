@@ -47,6 +47,12 @@ describe("SIMULATOR_PROMPT", () => {
     }
   });
 
+  it("offers a React Native app's web build before booting a device", () => {
+    expect(st.SIMULATOR_PROMPT).toContain("npx expo start --web");
+    expect(st.SIMULATOR_PROMPT).toContain("set_viewport phone");
+    expect(st.SIMULATOR_PROMPT.indexOf("--web")).toBeLessThan(st.SIMULATOR_PROMPT.indexOf("list_devices"));
+  });
+
   it("points at Settings → Connectors → Simulators when a toolchain is missing", () => {
     expect(st.SIMULATOR_PROMPT).toContain("Settings → Connectors → Simulators");
   });

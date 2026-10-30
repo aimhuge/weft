@@ -5,7 +5,7 @@ import { createMenuPopup } from "./main-menu-popup.cjs";
 // picked item's id (or null). Menu and BrowserWindow are injected so we don't need a real
 // Electron, and the click → resolve wiring is the thing we actually want to assert.
 
-type MenuItem = { id?: string; label?: string; type?: "separator"; enabled?: boolean; checked?: boolean; accelerator?: string };
+type MenuItem = { id?: string; label?: string; type?: "separator"; enabled?: boolean; checked?: boolean; accelerator?: string; detail?: string };
 
 const items: MenuItem[] = [
   { id: "rename", label: "Rename" },
@@ -13,6 +13,7 @@ const items: MenuItem[] = [
   { type: "separator" },
   { id: "open", label: "Open", enabled: false },
   { id: "pinned", label: "Pinned", checked: true },
+  { id: "sync", label: "Sync weft", detail: "Synced 7m ago" },
 ];
 
 const popup = vi.fn();
@@ -47,6 +48,8 @@ describe("createMenuPopup", () => {
     expect(template[2]).toEqual({ type: "separator" });
     expect(template[3]).toMatchObject({ label: "Open", enabled: false });
     expect(template[4]).toMatchObject({ label: "Pinned", type: "checkbox", checked: true });
+    // An item's detail becomes Electron's sublabel: the dimmer second line beside the status.
+    expect(template[5]).toMatchObject({ label: "Sync weft", sublabel: "Synced 7m ago" });
     // The native menu popup is anchored to the WebContents that asked for it.
     expect(popup).toHaveBeenCalledWith(expect.objectContaining({ window: "wc" }));
     // Clicking an item resolves the promise with its id after the popup callback's tick.

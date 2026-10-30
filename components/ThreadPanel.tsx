@@ -4,7 +4,9 @@ import { useState, type ReactNode } from "react";
 import { folderName, isLive } from "@/lib/format";
 import type { PlanResets } from "@/lib/schedule";
 import { useThreadTransport } from "@/lib/thread-transport";
+import type { GrantScope } from "@/lib/cloud-commands";
 import type { Card, PermissionMode, QuestionReply, ThreadItem } from "@/lib/types";
+import AwayStackChip from "./AwayStackChip";
 import BackendBadge from "./BackendBadge";
 import { BackendPicker } from "./CardView";
 import CardActions from "./CardActions";
@@ -59,7 +61,7 @@ export default function ThreadPanel({
   items: ThreadItem[];
   streaming: string;
   onSend: (text: string) => Promise<void>;
-  onAnswer: (allow: boolean, answers?: Record<string, string>, reply?: QuestionReply) => unknown;
+  onAnswer: (allow: boolean, answers?: Record<string, string>, reply?: QuestionReply, grant?: GrantScope) => unknown;
   onRelease?: () => void;
   onArchive?: () => void;
   // The ☆: star or unstar the card.
@@ -115,6 +117,7 @@ export default function ThreadPanel({
             </div>
           )}
         </div>
+        <AwayStackChip id={card.id} />
         {pilot ? (
           <NewChatButton onClick={onNewChat} />
         ) : (

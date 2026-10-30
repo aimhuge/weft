@@ -38,6 +38,7 @@ export async function approvalProblem(
       allow: answer.allow,
       issuedAt: auth.issuedAt,
       answers: answer.answers,
+      grant: answer.grant,
     });
     const r = await deps.verify({ device: auth.device, message, sig: auth.sig });
     return r.ok ? null : (r.reason ?? "That approval's signature doesn't check out.");

@@ -3,7 +3,8 @@ import { AGENT_SOULS, agentOf, WEFT_SOUL_PROMPT } from "./agents";
 import { listAgents, savedAgentsHash } from "./agent-store";
 import { COPILOT_PROMPT } from "./board-tools";
 import { PERSONA_PROMPTS, personaOf } from "./copilot-personas";
-import { BROWSER_PROMPT } from "./browser-tools";
+import { BROWSER_PROMPT, WORKER_BROWSER_PROMPT } from "./browser-tools";
+import { onWorker } from "./worker-pane";
 import { ASK_BUTTONS_PROMPT, decisionsPrompt, MIGRATIONS_PROMPT } from "./decisions-prompt";
 import { DEVSERVERS_PROMPT } from "./devserver-tools";
 import { GOG_PROMPT } from "./gog";
@@ -74,7 +75,7 @@ export function weftSystemPrompt(spec: PromptSpec): string {
   if (cached !== undefined) return cached;
   const parts = spec.copilot
     ? [WEFT_SOUL_PROMPT, BROWSER_PROMPT, COPILOT_PROMPT, personaOf(spec.persona).prompt].filter(Boolean)
-    : [agentOf(spec.agent, listAgents()).soul, BROWSER_PROMPT, SECRETS_PROMPT, WEBHOOKS_PROMPT, DEVSERVERS_PROMPT, GOG_PROMPT, SIMULATOR_PROMPT, decisionsPrompt(spec.backend), RESTART_PROMPT, subagentPrompt(subagentModelFor(), spec.backend), threadPrompt(), REVIEW_PROMPT, spec.project ? ISOLATED_PROMPT : ""].filter(Boolean);
+    : [agentOf(spec.agent, listAgents()).soul, onWorker() ? WORKER_BROWSER_PROMPT : BROWSER_PROMPT, SECRETS_PROMPT, WEBHOOKS_PROMPT, DEVSERVERS_PROMPT, GOG_PROMPT, SIMULATOR_PROMPT, decisionsPrompt(spec.backend), RESTART_PROMPT, subagentPrompt(subagentModelFor(), spec.backend), threadPrompt(), REVIEW_PROMPT, spec.project ? ISOLATED_PROMPT : ""].filter(Boolean);
   // A settings change makes a new key; the old prompts are of no further use.
   if (built.size >= 8) built.clear();
   const text = parts.join("\n\n");

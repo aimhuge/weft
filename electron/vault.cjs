@@ -5,7 +5,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { shortLived } = require("./dotenv.cjs");
 const { readFiles, status, nudge } = require("./vault-env-scan.cjs");
-const { loadDeviceKey } = require("./device-key.cjs");
+const { loadDeviceKey, registeredDevice } = require("./device-key.cjs");
 const { createVaultStore, tailOf } = require("./vault-store.cjs");
 const { MANAGED_FILE, createEnvWatcher, ignoreLocalEnv, planWrite, readOrNull } = require("./env-writeback.cjs");
 const { touchIdPrompt } = require("./touch-id.cjs");
@@ -55,7 +55,10 @@ function createVault({ dataDir, safeStorage, sodium, prompt, clipboard, run = gi
   // device, and sharing a local vault for the first time. The key is read from the local file and handed
   // straight to the wrap; it never leaves main.
   async function sharedApi() {
-    const device = loadDeviceKey({ dir: dataDir, safeStorage, crypto: sodium });
+    // Sharing and grants name this device by its server id, which the keypair file doesn't hold.
+    const device = accountClient
+      ? await registeredDevice({ accountClient, dir: dataDir, safeStorage, crypto: sodium })
+      : loadDeviceKey({ dir: dataDir, safeStorage, crypto: sodium });
     // A folder is what the drawer knows; the local id is what the file is named with. A grant's pending
     // row names the server's vault, so a local id that isn't known here means the vault isn't ours.
     const readVault = async (folder) => {

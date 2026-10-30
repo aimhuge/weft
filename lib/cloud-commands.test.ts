@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { answerBody, answerCommand, commandText, isOpenCommand, newCardBody, newCardCommand, replyBody, replyCommand, stopBody, stopCommand, type CloudCommandRow } from "./cloud-commands";
+import { answerBody, answerCommand, answerGrant, commandText, isOpenCommand, newCardBody, newCardCommand, replyBody, replyCommand, stopBody, stopCommand, type CloudCommandRow } from "./cloud-commands";
 import { CODEX_DEFAULT_MODEL } from "./new-thread";
 
 const target = { orgId: "o1", device: "mac-1", folder: "/dev/app" };
@@ -98,6 +98,41 @@ describe("commandText", () => {
     expect(commandText({ kind: "new_card", payload: { prompt: "Add dark mode" } })).toBe("Add dark mode");
     expect(commandText({ kind: "reply", payload: { cardId: "c1", text: "go" } })).toBe("go");
     expect(commandText({ kind: "new_card", payload: {} as never })).toBe("");
+  });
+});
+
+describe("folder grants on an answer", () => {
+  const to = { orgId: "o", device: "d", folder: "f", cardId: "c" };
+  const body = (payload: unknown) => answerBody({ payload } as never);
+  const prompt = { id: "p1", toolName: "Read", title: "t", input: {}, readScope: { directory: "/w/data", token: "~/data" } };
+
+  it("carries the scope on an Allow and never on a Deny", () => {
+    expect(answerCommand(to, { pendingId: "p1", allow: true, grant: "always" })?.payload).toEqual({ cardId: "c", pendingId: "p1", allow: true, grant: "always" });
+    expect(answerCommand(to, { pendingId: "p1", allow: false, grant: "always" })?.payload).toEqual({ cardId: "c", pendingId: "p1", allow: false });
+  });
+
+  it("reads back only a known scope, on an Allow, and never a path", () => {
+    expect(body({ cardId: "c", pendingId: "p1", allow: true, grant: "card", directory: "/" })).toEqual({ cardId: "c", pendingId: "p1", allow: true, grant: "card" });
+    expect(body({ cardId: "c", pendingId: "p1", allow: true, grant: "everything" })?.grant).toBeUndefined();
+    expect(body({ cardId: "c", pendingId: "p1", allow: false, grant: "always" })?.grant).toBeUndefined();
+  });
+
+  const answer = { cardId: "c", pendingId: "p1", allow: true, grant: "card" as const };
+
+  it("takes the folder from the waiting request", () => {
+    expect(answerGrant(answer, prompt)).toEqual({ directory: "/w/data", scope: "card" });
+    expect(answerGrant({ ...answer, grant: undefined }, prompt)).toBeNull();
+  });
+
+  it("refuses a request that isn't the one answered", () => {
+    expect(() => answerGrant(answer, null)).toThrow("isn't waiting");
+    expect(() => answerGrant(answer, { ...prompt, id: "p2" })).toThrow("isn't waiting");
+  });
+
+  it("refuses a question, a form, and a prompt with no folder", () => {
+    expect(() => answerGrant(answer, { ...prompt, questions: [] })).toThrow("no folder");
+    expect(() => answerGrant(answer, { ...prompt, elicitation: { message: "m", fields: [] } } as never)).toThrow("no folder");
+    expect(() => answerGrant(answer, { ...prompt, readScope: undefined })).toThrow("no folder");
   });
 });
 

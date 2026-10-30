@@ -9,6 +9,7 @@ import { startPileReview } from "./pile-review";
 import { lastFolder } from "./board-helpers";
 import { onOpenCardRequest } from "./open-card";
 import { backendFor, cardModel } from "./new-thread";
+import { isWorkerCard, localPath } from "./worker-project";
 import type { Card } from "./types";
 
 export interface BoardActions {
@@ -34,6 +35,8 @@ export interface BoardActionsDeps {
   // The cwd of the most recent card (used when no card is open and no project is set).
   latestCwd: string | null | undefined;
   notify: (err: unknown) => void;
+  // A new thread went to this worker instead of starting here, so there's no card to open yet.
+  onSentToWorker?: (worker: string) => void;
 }
 
 export function useBoardActions({
@@ -44,12 +47,13 @@ export function useBoardActions({
   project,
   latestCwd,
   notify,
+  onSentToWorker,
 }: BoardActionsDeps): BoardActions {
   const openNew = useCallback(
     (folder?: string) => {
       setNewCwd(folder);
       setShowNew(true);
-      const cwd = folder ?? project ?? lastFolder();
+      const cwd = localPath(folder ?? project ?? lastFolder());
       if (cwd) api.warm({ cwd }).catch(() => {}); // best-effort prefetch; a cold start is fine
     },
     [project, setNewCwd, setShowNew],
@@ -59,7 +63,7 @@ export function useBoardActions({
     (card: Card) => {
       select(card.id);
       // Start its CLI now so a reply doesn't wait.
-      if (!card.warm && card.column !== "done") api.warm({ cardId: card.id }).catch(() => {}); // best-effort prefetch
+      if (!card.warm && card.column !== "done" && !isWorkerCard(card)) api.warm({ cardId: card.id }).catch(() => {}); // best-effort prefetch
     },
     [select],
   );
@@ -68,8 +72,9 @@ export function useBoardActions({
   useEffect(() => onOpenCardRequest((id) => select(id)), [select]);
 
   const create = useCallback(async (input: NewCardInput) => {
-    await api.create(input);
-  }, []);
+    const { start } = await api.create(input);
+    if (start?.worker) onSentToWorker?.(start.worker);
+  }, [onSentToWorker]);
 
   const improveQuality = useCallback(
     async (cwd: string, prompt: string, title: string, model?: string): Promise<string | undefined> => {
@@ -84,7 +89,7 @@ export function useBoardActions({
   );
 
   const reviewAll = useCallback(async () => {
-    const cwd = selected?.cwd ?? project ?? latestCwd;
+    const cwd = selected?.cwd ?? localPath(project) ?? latestCwd;
     if (!cwd) return;
     try {
       const { reviewAllModel } = await api.settings();

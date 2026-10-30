@@ -37,6 +37,16 @@ export function useCloudSync(active = false, pollMs = POLL_MS) {
     }
   }, []);
 
+  // Reload and hand the answer back: a caller that shows the status at once (the project's
+  // right-click menu) needs the fresh values, not the state this render already has.
+  const read = useCallback(async () => {
+    const answer = await api.cloudSync();
+    setFolders(answer.folders);
+    setStatus(answer.status);
+    setError(null);
+    return answer;
+  }, []);
+
   useEffect(() => {
     const load = () => void reload();
     load();
@@ -73,5 +83,5 @@ export function useCloudSync(active = false, pollMs = POLL_MS) {
     setStatus(answer.status);
   }, []);
 
-  return { folders, status, error, reload, setFolder, syncNow };
+  return { folders, status, error, reload, read, setFolder, syncNow };
 }

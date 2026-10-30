@@ -58,7 +58,7 @@ describe("settle", () => {
 
 describe("approvalHtml's Touch ID hint", () => {
   it("shows only where the Mac has Touch ID", () => {
-    expect(approvalHtml(base, { touchId: true })).toContain("Touch ID to allow once");
-    expect(approvalHtml(base)).not.toContain("Touch ID to allow once");
+    expect(approvalHtml(base, { touchId: true })).toContain("Touch ID to allow for 1 hour");
+    expect(approvalHtml(base)).not.toContain("Touch ID to allow for 1 hour");
   });
 });

@@ -77,4 +77,47 @@ describe("SecretAskInput", () => {
     render(<ThreadEntries entries={entries} live={false} streaming="" onSend={onSend} cardId="x" />);
     await waitFor(() => expect(screen.getByRole("form", { name: "Add SUPABASE_SECRET_KEY to the vault" })).toBeInTheDocument());
   });
+
+  it("keeps every ask in a thread open and tells the thread once, when the last is in", async () => {
+    const vault = shell();
+    const two = { ...ask, name: "R2_SECRET_ACCESS_KEY" };
+    const items: ThreadItem[] = [
+      { kind: "tool", id: "1", name: "mcp__secrets__ask_add", summary: "", at: 0, ask },
+      { kind: "tool", id: "2", name: "mcp__secrets__ask_add", summary: "", at: 0, ask: two },
+      { kind: "tool", id: "3", name: "mcp__secrets__ask_add", summary: "", at: 0, ask },
+    ];
+    const onSend = vi.fn(() => Promise.resolve());
+    render(<ThreadEntries entries={groupThread(items)} live={false} streaming="" onSend={onSend} cardId="x" />);
+    await waitFor(() => expect(screen.getAllByLabelText("Value")).toHaveLength(3));
+    const [first, second] = screen.getAllByLabelText("Value");
+    await userEvent.type(first!, "a{Enter}");
+    // The repeated ask for the same key folds with it; the other stays open and the thread hasn't heard.
+    await waitFor(() => expect(screen.getAllByText(/is in the 🔐 vault/)).toHaveLength(2));
+    expect(onSend).not.toHaveBeenCalled();
+    expect(screen.getByText(/1 added; Claude hears once the rest are in/)).toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText("Value"), "b");
+    await userEvent.click(screen.getByRole("button", { name: "Add to vault" }));
+    expect(vault.set).toHaveBeenCalledTimes(2);
+    expect(onSend).toHaveBeenCalledOnce();
+    expect(onSend).toHaveBeenCalledWith("I added SUPABASE_SECRET_KEY (preview), R2_SECRET_ACCESS_KEY (preview) to the 🔐 vault.");
+    expect(second).not.toBeInTheDocument();
+  });
+
+  it("adds every filled ask at once, or tells the thread early", async () => {
+    const vault = shell();
+    const asks = ["A", "B", "C"].map((name) => ({ ...ask, name }));
+    const items: ThreadItem[] = asks.map((a, i) => ({ kind: "tool", id: String(i), name: "mcp__secrets__ask_add", summary: "", at: 0, ask: a }));
+    const onSend = vi.fn(() => Promise.resolve());
+    render(<ThreadEntries entries={groupThread(items)} live={false} streaming="" onSend={onSend} cardId="x" />);
+    await waitFor(() => expect(screen.getAllByLabelText("Value")).toHaveLength(3));
+    const [a, b] = screen.getAllByLabelText("Value");
+    await userEvent.type(a!, "1");
+    await userEvent.type(b!, "2");
+    await userEvent.click(screen.getAllByRole("button", { name: "Add 2 keys to vault" })[0]!);
+    expect(vault.set).toHaveBeenCalledTimes(2);
+    expect(onSend).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: "Tell Claude now" }));
+    expect(onSend).toHaveBeenCalledWith("I added A (preview), B (preview) to the 🔐 vault.");
+    expect(screen.getByText("Goes straight into the vault; Claude never sees it.")).toBeInTheDocument();
+  });
 });

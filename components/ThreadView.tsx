@@ -6,6 +6,7 @@ import { isPukuCapError } from "@/lib/billing/upgrade";
 import { openUpgrade } from "@/lib/use-upgrade";
 import { onScrollToTurn, pulse, reportTopTurn, topmostTurn, turnRow, PULSE_MS } from "@/lib/show-events";
 import type { PlanResets } from "@/lib/schedule";
+import type { GrantScope } from "@/lib/cloud-commands";
 import { THREAD_PAGE_SIZE } from "@/lib/cloud-sync-types";
 import { mergeOlderPage, pageThread, type ThreadPage } from "@/lib/thread-page";
 import { useThreadTransport, type ThreadTransport } from "@/lib/thread-transport";
@@ -66,8 +67,9 @@ export default function ThreadView({
   items: ThreadItem[];
   streaming: string;
   onSend: (text: string) => Promise<void>;
-  // reply: a question's notes, or what to talk over instead. A rejected promise lets the user answer again.
-  onAnswer: (allow: boolean, answers?: Record<string, string>, reply?: QuestionReply) => unknown;
+  // reply: a question's notes, or what to talk over instead. grant: This card / Always, where it goes inside the
+  // answer (ThreadTransport.grantInAnswer). A rejected promise lets the user answer again.
+  onAnswer: (allow: boolean, answers?: Record<string, string>, reply?: QuestionReply, grant?: GrantScope) => unknown;
   empty?: ReactNode;
   placeholder?: string;
   // Shown above the reply box, or in its place with replaceReply.
@@ -196,10 +198,10 @@ export default function ThreadView({
     }
   }
 
-  function answer(allow: boolean, answers?: Record<string, string>) {
+  function answer(allow: boolean, answers?: Record<string, string>, grant?: GrantScope) {
     if (!card.pending || answered) return;
     setAnsweredId(card.pending.id);
-    void Promise.resolve(onAnswer(allow, answers)).catch(() => setAnsweredId(null));
+    void Promise.resolve(onAnswer(allow, answers, undefined, grant)).catch(() => setAnsweredId(null));
   }
 
   async function send(text: string) {

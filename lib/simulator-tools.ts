@@ -8,7 +8,7 @@ import { boot, bootedDevice, install, launch, listDevices, logs, openUrl, screen
 import { center, describe, directionSwipe, findElement, KEYS, named, press, swipe, tapAt, typeText, uiTree } from "./simulator-ui";
 import { watch, watching, writeFrame } from "./simulator-watch";
 
-export const SIMULATOR_PROMPT = `To try a mobile app or a site on a phone, drive an iOS simulator or Android emulator with the mcp__simulator__* tools: list_devices, boot, install and launch the app (or open_url for a deep link or a local dev server in mobile Safari or Chrome), then ui_tree to read the screen and tap, type_text or swipe by element. Call watch so the user sees the device live in the browser pane, and screenshot when a step is worth showing. When a tool says Xcode, a runtime, the Android SDK or AXe is missing, tell the user to click Install beside it in Settings → Connectors → Simulators (Weft downloads and sets it up), and ask before installing anything yourself.`;
+export const SIMULATOR_PROMPT = `When the user asks about a React Native or Expo app (react-native or expo in its package.json), offer the web build first: start \`npx expo start --web\` with mcp__devservers__start and show it in the browser pane at phone size (set_viewport phone). It renders through react-native-web, live and clickable with hot reload, and boots no device, which costs gigabytes of memory. Plain React Native needs react-native-web set up before --web works. Boot a simulator when the change needs native code (push, camera, native modules, native gestures) or for a final check on a real device. To try a mobile app or a site on a phone, drive an iOS simulator or Android emulator with the mcp__simulator__* tools: list_devices, boot, install and launch the app (or open_url for a deep link or a local dev server in mobile Safari or Chrome), then ui_tree to read the screen and tap, type_text or swipe by element. Call watch so the user sees the device live in the browser pane, and screenshot when a step is worth showing. When a tool says Xcode, a runtime, the Android SDK or AXe is missing, tell the user to click Install beside it in Settings → Connectors → Simulators (Weft downloads and sets it up), and ask before installing anything yourself.`;
 
 // The picture a thread sees: tall phone screens shrunk to a height that reads well and costs little.
 const SHOT_HEIGHT = 1000;
@@ -161,7 +161,7 @@ export function simulatorMcpServer(cardId: () => string | undefined) {
         ({ app, lines, since, device }) =>
           attempt(async () => text((await logs(await bootedDevice(device), { app, lines, since })) || "No log lines.")),
       ),
-      tool("watch", "Show the device live in the browser pane (a screenshot a second for 10 minutes; call again to extend).", { device: deviceArg }, ({ device }) =>
+      tool("watch", "Show the device live in the browser pane for 10 minutes (call again to extend): its window captured at 30 fps, where the user can tap and swipe, or a screenshot a second without Screen Recording permission.", { device: deviceArg }, ({ device }) =>
         attempt(async () => {
           const d = await bootedDevice(device);
           const url = await watch(d);

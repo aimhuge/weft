@@ -13,13 +13,30 @@ const { appSecretsRoutes } = require("./app-secrets-push.cjs");
 const { slackRoutes } = require("./slack.cjs");
 const { touchIdPrompt } = require("./touch-id.cjs");
 
+// The pairing routes, looked up when called: pairing is set up after the pane (it needs the account client).
+const PAIRING_ROUTES = ["POST /sync/key", "POST /pairing/verify", "POST /pairing/status"];
+function pairingRoutes(pairing) {
+  return Object.fromEntries(
+    PAIRING_ROUTES.map((route) => [
+      route,
+      (body) => {
+        const p = pairing();
+        if (!p) throw new Error("Pairing isn't ready yet.");
+        return p.routes[route](body);
+      },
+    ]),
+  );
+}
+
 // The copilot's chips (lib/copilot-sources.ts): a linked service's state per folder, read-only.
 function statusRoute(api) {
   return ({ folders }) => api()?.status((folders ?? []).map(String)) ?? { folders: [] };
 }
 
-function paneRoutes({ dataDir, app, dialog, systemPreferences = require("electron").systemPreferences, shell, window, board, sendMenu, updater, vault, vercelEnv, vercelApi, supabaseApi, blastcpApi = () => null, gooseApi = () => null, slackApi = () => null, cardFor = () => "" }) {
+function paneRoutes({ dataDir, app, dialog, systemPreferences = require("electron").systemPreferences, shell, window, board, sendMenu, updater, vault, vercelEnv, vercelApi, supabaseApi, blastcpApi = () => null, gooseApi = () => null, slackApi = () => null, pairing = () => null, cardFor = () => "" }) {
   return {
+    // The workspace sync key and paired-phone checks the server asks for (electron/pairing-ipc.cjs).
+    ...pairingRoutes(pairing),
     // The Weft account's session, sealed by safeStorage; the server reads it here instead of a plain file.
     ...accountRoutesFor(dataDir),
     // mcp__secrets__add_blank, ask_add and set_value: blanks into the card's vault (a fill or run that found a key
@@ -64,7 +81,7 @@ function paneRoutes({ dataDir, app, dialog, systemPreferences = require("electro
       return { approved: await ask(`open a private tunnel to ${target} from ${folder} for ${hours} hours`) };
     },
     // mcp__secrets__push_to_vercel: a vault value onto the card's linked Vercel project, after Touch ID.
-    ...envRoutes(vercelEnv),
+    ...envRoutes(vercelEnv, cardFor),
     // The latest deploy and the unapplied migrations, per folder.
     "POST /vercel/status": statusRoute(vercelApi),
     "POST /supabase/status": statusRoute(supabaseApi),

@@ -30,8 +30,9 @@ export function statusLabel(project: ProjectSummary) {
 }
 
 // The More menu's filter: a project matches on its folder name (home's too, which reads as "~") and its ~-shortened path (lib/text-filter.ts).
+// A worker project has no path worth reading, so it matches on the worker's name instead.
 export function filterProjects(projects: ProjectSummary[], query: string, home: string): ProjectSummary[] {
-  return filterByQuery(projects, query, (p) => [folderName(p.path), shortPath(p.path, home)]);
+  return filterByQuery(projects, query, (p) => [folderName(p.path), p.worker?.name ?? shortPath(p.path, home)]);
 }
 
 // The projects that get a chip, in order: every pinned one, then the most recent up to `recent` chips in

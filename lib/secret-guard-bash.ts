@@ -5,7 +5,7 @@
 import path from "node:path";
 import { blankCommand, parseShell, type SimpleCommand } from "./shell-parse";
 import { DATA_DIR } from "./store";
-import { DATA_NAMES, expandBraces, inTranscriptDir, isSecretFile, reachesDataDir } from "./secret-guard-files";
+import { DATA_NAMES, expandBraces, followCd, inTranscriptDir, isSecretFile, reachesDataDir } from "./secret-guard-files";
 
 // Commands that print, copy out or send what they read.
 const READERS = new Set(
@@ -85,8 +85,11 @@ const MAYBE_SECRET = new RegExp(`env|dev\\.vars|${DATA_NAMES.map((n) => n.split(
 // the control server's token and every secret a thread ever saw, so they are named by their
 // folder, not by a file inside them (2026-10-28).
 function hardPathIn(words: string[], dataDir: string): string | undefined {
+  const seen = new Set<string>();
   for (const word of words) {
     for (const t of pathTokens(word)) {
+      if (seen.has(t)) continue;
+      seen.add(t);
       if (reachesDataDir(t, dataDir) || inTranscriptDir(t)) return t;
     }
   }
@@ -256,7 +259,8 @@ function commandVerdict({ words: raw, inputs, stdin }: SimpleCommand, dataDir: s
   if (pullsToStdout(words)) return reason("`vercel env pull` to stdout", true);
   // A folder that holds secrets, named as a folder: `find ~/.weft -exec cat {} \;` and
   // `rsync -a ~/.weft/ /tmp/b/` name no secret file, but reach one (2026-10-28).
-  const hard = hardPathIn([...words, ...inputs], dataDir);
+  // The raw words, so `H=~/.weft-worker; cat $H/worker.json` counts.
+  const hard = hardPathIn([...raw, ...inputs], dataDir);
   if (hard) return reason(hard);
   const [first = "", ...args] = unwrapEnv(words);
   const cmd = path.basename(first);
@@ -291,7 +295,13 @@ export function bashVerdict(command: string, dataDir = DATA_DIR, depth = 0): str
   });
   const namesSecret = () => commands.some((c) => secretIn([...c.words, ...c.inputs], dataDir) !== undefined);
   return (
-    piped.map((c) => commandVerdict(c, dataDir, depth, namesSecret)).find(Boolean) ??
+    piped
+      .map((c) => {
+        const why = commandVerdict(c, dataDir, depth, namesSecret);
+        followCd(stripPrefixes(c.words));
+        return why;
+      })
+      .find(Boolean) ??
     nested.map((n) => bashVerdict(n, dataDir, depth + 1)).find(Boolean) ??
     null
   );

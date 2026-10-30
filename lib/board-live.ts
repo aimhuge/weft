@@ -2,6 +2,7 @@ import { useEffect, useRef, type Dispatch, type RefObject, type SetStateAction }
 import { api } from "./client";
 import { cardChangeEffects } from "./board-view";
 import { announce, without } from "./board-helpers";
+import { leaveAway } from "./away-open";
 import { playChime } from "./chimes";
 import { announceAccountChange } from "./use-account";
 import { applyIntents, forget, onOptimistic, overlay, overlayAll } from "./optimistic-cards";
@@ -39,6 +40,8 @@ export interface BoardLive {
   loadFromPrefs: () => void;
   loadThread: (id: string) => void;
   notify: (err: unknown) => void;
+  // Away open (lib/use-away-open.ts): a card moved; heard is false for the board's own drags.
+  awayMove: (id: string, column: Column, heard: boolean) => void;
 }
 
 // A card changed: chime and highlight it if it moved or newly failed, then put it on the board.
@@ -67,6 +70,7 @@ function onCard(serverCard: Card, live: BoardLive) {
   if (effects.moved) {
     announce(card, () => live.select(id));
     live.ownMoves.current.delete(id);
+    live.awayMove(id, column, Boolean(effects.chime));
   }
   if (effects.chime) playChime(effects.chime);
   if (effects.markUnseen) live.setUnseen((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
@@ -98,6 +102,7 @@ export function onBoardEvent(event: BoardEvent, live: BoardLive) {
       break;
     case "card_deleted":
       forget(event.id);
+      leaveAway(event.id);
       live.setCards((prev) => prev.filter((c) => c.id !== event.id));
       live.setUnseen((prev) => (prev.has(event.id) ? without(prev, event.id) : prev));
       if (live.selectedRef.current === event.id) live.setSelectedId(null);

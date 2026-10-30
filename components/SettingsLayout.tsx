@@ -18,6 +18,7 @@ export function SettingsSectionHeader({ title, hint }: { title: string; hint: st
 export function SettingsCard({ children }: { children: ReactNode }) {
   return (
     <div
+      data-settings-card
       onMouseDown={(e) => e.stopPropagation()}
       className="flex flex-col gap-5 rounded-xl border border-line-strong bg-panel/85 p-5 shadow-lg backdrop-blur-xl"
     >

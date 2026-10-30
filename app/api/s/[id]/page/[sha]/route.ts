@@ -6,7 +6,8 @@
 // Access is gated by the same shareAccess verdict the live route uses; the same id resolves to
 // the same share, so a private visitor gets 403, a gated visitor gets 403, and a deleted card
 // gets 404. The sha is validated as 64 hex chars so an attacker can't probe storage paths, and it must be the blob of
-// THIS card's current pane: a share link is for one card, not for every file the workspace has uploaded.
+// THIS card's current pane: a share link is for one card, not for every file the workspace has uploaded. The page's
+// own images are the exception: the refs the owner's upload wrote into it are signed (lib/blob-page-sign.ts).
 import { shareAccess } from "@/lib/share-access";
 import { loadPaneAcrossThread } from "@/lib/share-live";
 import { NO_STORE, serveBlobPage, SHA_RE } from "@/lib/share-page-serve";
@@ -22,5 +23,5 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string; sh
   const { org_id: orgId, card_id: cardId } = access.share.share;
   const pane = await loadPaneAcrossThread(service, orgId, cardId);
   if (pane?.kind !== "blob" || pane.ref !== `blob:sha256:${sha}`) return new Response("Not found", { status: 404, headers: NO_STORE });
-  return serveBlobPage(service, orgId, sha);
+  return serveBlobPage(service, orgId, sha, { signAssets: true });
 }

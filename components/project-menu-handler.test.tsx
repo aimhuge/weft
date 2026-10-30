@@ -7,6 +7,16 @@ import type { MenuItem } from "@/lib/card-menu";
 const api = vi.hoisted(() => ({
   markProject: vi.fn(() => Promise.resolve({ projects: [] })),
   repos: vi.fn(() => Promise.resolve({ repos: [{ path: "/p", github: "me/p" }] })),
+  workerFolders: vi.fn(() => Promise.resolve({ folders: [] as string[] })),
+  setWorkerFolder: vi.fn((_folder: string, on: boolean) => Promise.resolve({ folders: on ? ["/p"] : [], worker: on ? "m1mini" : undefined })),
+  cloudSyncSetFolder: vi.fn(() =>
+    Promise.resolve({
+      folder: "/p",
+      on: true,
+      folders: ["/p"],
+      status: { waiting: 0, lastSyncAt: null, uploaded: 0, lastError: null, signedOut: false, noWorkspace: false },
+    }),
+  ),
 }));
 vi.mock("@/lib/client", () => ({ api }));
 const stopNow = vi.hoisted(() => vi.fn(() => Promise.resolve()));
@@ -42,8 +52,16 @@ function setup(pick: string | null, over: Partial<ProjectMenuDeps> = {}, shellOv
     archive: vi.fn(),
     toast: vi.fn(),
     notify: vi.fn(),
+    syncFolders: [],
+    syncStatus: { waiting: 0, lastSyncAt: null, uploaded: 0, lastError: null, signedOut: false, noWorkspace: false },
+    // Reads back what the board knows, so a test's `syncFolders` is what the menu sees.
+    readSync: vi.fn(() => Promise.resolve({ folders: [], status: { waiting: 0, lastSyncAt: null, uploaded: 0, lastError: null, signedOut: false, noWorkspace: false } })),
     ...over,
   } satisfies ProjectMenuDeps;
+  if (!over.readSync) {
+    // The default read answers with the folders the deps claim, unless the test says otherwise.
+    deps.readSync = vi.fn(() => Promise.resolve({ folders: deps.syncFolders, status: deps.syncStatus }));
+  }
   const onMenu = projectMenuHandler(deps);
   return { deps, shell, popupMenu, run: async () => { const picked = await onMenu("/p", event()); await flush(); return picked; } };
 }
@@ -139,10 +157,95 @@ describe("projectMenuHandler", () => {
     expect(t.deps.toast).toHaveBeenCalledWith("Stopped 1 card in p.");
   });
 
+  it("turns cloud sync on for the project, and off again when it already syncs", async () => {
+    let t = setup("sync");
+    await t.run();
+    expect(api.cloudSyncSetFolder).toHaveBeenCalledWith("/p", true);
+    expect(t.deps.toast).toHaveBeenCalledWith("p now syncs to weft.zip (unencrypted for now).");
+    t = setup("sync", { syncFolders: ["/p"] });
+    await t.run();
+    expect(api.cloudSyncSetFolder).toHaveBeenLastCalledWith("/p", false);
+    expect(t.deps.toast).toHaveBeenLastCalledWith("p no longer syncs.");
+  });
+
+  it("switches the project's new threads to the worker, and back to this machine", async () => {
+    let t = setup("run-worker");
+    await t.run();
+    expect(api.setWorkerFolder).toHaveBeenCalledWith("/p", true);
+    expect(t.deps.toast).toHaveBeenCalledWith("New threads in p now run on m1mini.");
+    t = setup("run-here");
+    await t.run();
+    expect(api.setWorkerFolder).toHaveBeenLastCalledWith("/p", false);
+    expect(t.deps.toast).toHaveBeenLastCalledWith("New threads in p run on this machine again.");
+  });
+
+  it("ticks Run on Worker for a project that runs there, and this machine when the read fails", async () => {
+    api.workerFolders.mockResolvedValueOnce({ folders: ["/p"] });
+    let t = setup(null);
+    await t.run();
+    expect(t.popupMenu.mock.calls[0]![0]).toEqual(expect.arrayContaining([expect.objectContaining({ id: "run-worker", checked: true })]));
+    api.workerFolders.mockRejectedValueOnce(new Error("offline"));
+    t = setup(null);
+    await t.run();
+    expect(t.popupMenu.mock.calls[0]![0]).toEqual(expect.arrayContaining([expect.objectContaining({ id: "run-here", checked: true })]));
+  });
+
+  it("shows where sync stands beside the Sync item, read fresh", async () => {
+    const status = { waiting: 0, lastSyncAt: Date.now() - 7 * 60_000, uploaded: 3, lastError: null, signedOut: false, noWorkspace: false };
+    const t = setup(null, { readSync: vi.fn(() => Promise.resolve({ folders: ["/p"], status })) });
+    await t.run();
+    expect(t.deps.readSync).toHaveBeenCalled();
+    const items = t.popupMenu.mock.calls[0]![0];
+    const sync = items.find((i) => "id" in i && i.id === "sync");
+    expect(sync).toMatchObject({ label: "Don't Sync p", detail: "Synced 7m ago" });
+  });
+
+  it("says Not Synced for a project that isn't opted in, even when others are", async () => {
+    const status = { waiting: 0, lastSyncAt: Date.now() - 60_000, uploaded: 3, lastError: null, signedOut: false, noWorkspace: false };
+    const t = setup(null, { readSync: vi.fn(() => Promise.resolve({ folders: ["/other"], status })) });
+    await t.run();
+    const items = t.popupMenu.mock.calls[0]![0];
+    const sync = items.find((i) => "id" in i && i.id === "sync");
+    expect(sync).toMatchObject({ label: "Sync p", detail: "Not Synced" });
+  });
+
+  it("still opens the menu when the sync read fails", async () => {
+    const t = setup(null, { readSync: vi.fn(() => Promise.reject(new Error("offline"))) });
+    expect(await t.run()).toBe(false);
+    const items = t.popupMenu.mock.calls[0]![0];
+    expect(items.find((i) => "id" in i && i.id === "sync")).toMatchObject({ label: "Sync p", detail: "Not Synced" });
+  });
+
   it("reports a failed action", async () => {
     api.markProject.mockRejectedValueOnce(new Error("nope"));
     const t = setup("pin");
     await t.run();
     expect(t.deps.notify).toHaveBeenCalledWith(new Error("nope"));
+  });
+
+  it("offers a worker project only a new thread, and never asks this Mac about it", async () => {
+    const path = "worker://w1/ling";
+    const popupMenu = vi.fn<(items: MenuItem[]) => Promise<string | null>>(() => Promise.resolve("new"));
+    (window as unknown as { weft: unknown }).weft = { popupMenu };
+    const openNew = vi.fn();
+    const onMenu = projectMenuHandler({
+      projects: [{ path, lastActivity: 0, cards: 1, running: 0, needsYou: 0, worker: { name: "m1mini", status: "online" } }],
+      cards: [],
+      rootOf: (cwd: string) => cwd,
+      openNew,
+      chooseProject: vi.fn(),
+      openDrawer: vi.fn(),
+      archive: vi.fn(),
+      toast: vi.fn(),
+      notify: vi.fn(),
+      syncFolders: [],
+      syncStatus: { waiting: 0, lastSyncAt: null, uploaded: 0, lastError: null, signedOut: false, noWorkspace: false },
+      readSync: vi.fn(() => Promise.resolve({ folders: [], status: { waiting: 0, lastSyncAt: null, uploaded: 0, lastError: null, signedOut: false, noWorkspace: false } })),
+    });
+    expect(await onMenu(path, event())).toBe(true);
+    expect(popupMenu.mock.calls[0]![0]).toEqual([{ id: "new", label: "New Thread in ling", enabled: true, detail: "on m1mini" }]);
+    expect(openNew).toHaveBeenCalledWith(path);
+    // A worker project has no folder here, so nothing asks this Mac where it runs.
+    expect(api.workerFolders).not.toHaveBeenCalled();
   });
 });

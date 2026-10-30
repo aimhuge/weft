@@ -15,15 +15,23 @@ function signedInId(state: ReturnType<typeof useAccount>["state"]): string | und
   return state.kind === "ready" ? state.view.user?.id : undefined;
 }
 
+// The board owns the cloud-sync hook (components/Board.tsx) so the project's right-click menu can read the
+// same folders and status (components/project-menu-handler.ts); it passes the instance down as `sync`. Without
+// one (this component's own tests, the web board) we make our own, polling only while the menu is open.
+function useSharedSync(given: ReturnType<typeof useCloudSync> | undefined, signedIn: boolean, menuOpen: boolean) {
+  const own = useCloudSync(given === undefined && signedIn, avatarPollMs(menuOpen));
+  return given ?? own;
+}
+
 // The top bar's account control, right of Copilot. Signed out: "Sign in" with GitHub, which finishes in
 // your browser. Signed in: a share icon (Share the board) and your avatar, which opens a tiny menu
 // (components/AccountMenu.tsx), with a dot on it while board sync uploads (amber) or has failed (red). Hidden while
 // loading, on errors, and in builds without a Supabase key, so it never costs header room for nothing.
-export default function AccountButton({ onOpenSettings, onShareBoard, project = null }: { onOpenSettings: () => void; onShareBoard?: () => void; project?: string | null }) {
+export default function AccountButton({ onOpenSettings, onShareBoard, project = null, sync: given }: { onOpenSettings: () => void; onShareBoard?: () => void; project?: string | null; sync?: ReturnType<typeof useCloudSync> }) {
   const { state, busy, waiting, error, signIn } = useAccount();
   const [menuOpen, setMenuOpen] = useState(false);
   const signedIn = !!signedInId(state);
-  const sync = useCloudSync(signedIn, avatarPollMs(menuOpen));
+  const sync = useSharedSync(given, signedIn, menuOpen);
   const menuRef = useRef<HTMLDivElement>(null);
   const menuId = useId();
   useEscape(menuOpen, () => setMenuOpen(false));

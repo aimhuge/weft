@@ -8,6 +8,7 @@ import CrashGuard from "./CrashGuard";
 import Icon from "./Icon";
 import Markdown from "./Markdown";
 import RepeatFromHere from "./RepeatFromHere";
+import { SecretAskBatchProvider } from "./SecretAskBatch";
 import SecretAskInput from "./SecretAskInput";
 import ShellLine from "./ShellLine";
 import ToolLine from "./ToolLine";
@@ -161,7 +162,7 @@ function NotificationLine({ item }: { item: Extract<ThreadItem, { kind: "notific
 // A "!" command you ran from the reply box (lib/shell.ts). The row is in components/ShellLine.tsx.
 // A thread's messages and tool runs, then the reply streaming in. While ↑ edits a message (editFrom is
 // its index), that message is outlined and the turn it will replace, everything after it, fades. onSend lets
-// a key the thread asked for tell it once the key is in the vault.
+// the keys the thread asked for tell it once they're all in the vault (one message for the lot).
 export function ThreadEntries({
   entries,
   live,
@@ -180,7 +181,7 @@ export function ThreadEntries({
   cardId: string;
 }) {
   return (
-    <>
+    <SecretAskBatchProvider onSend={onSend}>
       {entries.map((entry) => {
         // One message that fails to draw is a chip in its place; the rest of the thread and the reply box stay.
         const row = (
@@ -214,6 +215,6 @@ export function ThreadEntries({
           </CrashGuard>
         </div>
       )}
-    </>
+    </SecretAskBatchProvider>
   );
 }

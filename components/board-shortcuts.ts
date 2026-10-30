@@ -75,7 +75,8 @@ export function boardShortcuts(c: BoardShortcutContext): ShortcutDef[] {
       handler: () => c.setLibraryOpen((open) => (open ? null : "tags")),
     },
     { id: "add-secret", keys: ["shift+s"], description: "Add a secret to the vault", group: "General", enabled: c.boardKeys, handler: () => addSecret(c.setLibraryOpen) },
-    { id: "filter", keys: ["/"], description: "Filter cards", group: "General", enabled: c.boardKeys, handler: c.focusFilter },
+    // Stands down with a card open, like the menu's ⌘F (lib/board-menu-bridge.ts): the filter sits behind the thread.
+    { id: "filter", keys: ["/"], description: "Filter cards", group: "General", enabled: c.boardKeys && !c.cardOpen, handler: c.focusFilter },
     {
       id: "settings",
       keys: [","],

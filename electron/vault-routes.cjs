@@ -8,8 +8,10 @@ const { auditOutbox, markAuditSynced } = require("./keychain-audit.cjs");
 // Stores one value a thread made or got itself (a signing secret, new Stripe price ids): adds a name that isn't
 // there, fills a blank, and overwrites a value only with replace (set_value's replace: true), so a thread can't
 // overwrite one by accident. Touch ID every time through vault.confirm, never a thread's fill unlock: this is a
-// write, and the prompt says which of the three it is, naming the environment.
-async function fillBlank(vault, folder, name, environment, value, replace = false) {
+// write, and the prompt says which of the three it is, naming the environment. The one exception is a card whose
+// grant names writes (electron/vault-grants.cjs): the user approved its writes up front. Even then an overwrite asks,
+// since it destroys the value that was there.
+async function fillBlank(vault, folder, name, environment, value, replace = false, card = "") {
   if (!value) throw new Error(`Give a value for ${name}.`);
   const { label, secrets } = await vault.names(folder);
   const entry = secrets.find((s) => s.name === name && s.environment === environment);
@@ -20,8 +22,9 @@ async function fillBlank(vault, folder, name, environment, value, replace = fals
     set: `let a thread set ${name} (${label}, ${environment})`,
     replaced: `let a thread overwrite the ${environment} value of ${name} (${label}) with a new one`,
   }[action];
-  if (!(await vault.confirm(reason))) return { denied: true, label };
-  await vault.setValue(folder, name, environment, value, { source: "a thread" });
+  const granted = action !== "replaced" && (await vault.writeGranted?.(card, folder));
+  if (!granted && !(await vault.confirm(reason))) return { denied: true, label };
+  await vault.setValue(folder, name, environment, value, { source: granted ? "a thread, under its grant" : "a thread", by: "thread" });
   return action === "set" ? { ok: true, label } : { ok: true, [action]: true, label };
 }
 
@@ -50,8 +53,8 @@ function vaultRoutes(getVault, cardFor = () => "") {
     // Names with no value yet, for the user to fill in later (lib/secret-ask.ts). The rail's 🔐 count goes up; nothing opens.
     "POST /secrets/add-blank": ({ folder, names, environment, hint }) =>
       vault().addBlanks(String(folder), Array.isArray(names) ? names.map(String) : [], [env(environment)], { source: "a thread", hint: hint ? String(hint).slice(0, 400) : undefined }),
-    "POST /secrets/set": ({ folder, name, value, environment, replace }) =>
-      fillBlank(vault(), String(folder), String(name), env(environment), String(value ?? ""), replace === true),
+    "POST /secrets/set": (body, route) =>
+      fillBlank(vault(), String(body.folder), String(body.name), env(body.environment), String(body.value ?? ""), body.replace === true, String(cardFor(body, route) || "")),
     // The ask's input shows in the thread itself (components/SecretAskInput.tsx).
     "POST /secrets/ask-add": ({ folder, name, environment }) => askAdd(getVault(), String(folder), String(name), env(environment)),
     // A thread asking for standing access to the vault (mcp__secrets__request_access, electron/vault-grants.cjs):
@@ -64,8 +67,15 @@ function vaultRoutes(getVault, cardFor = () => "") {
         thread: body.thread ? String(body.thread).slice(0, 120) : undefined,
         why: body.why ? String(body.why).slice(0, 200) : undefined,
         site: body.site ? String(body.site).slice(0, 200) : undefined,
+        writes: body.writes === true,
+        span: body.span === "thread" ? "thread" : "hour",
         by: "thread",
       }),
+    // A card reached Done or was archived (lib/vault-grant-done.ts): its grants end with its work.
+    "POST /secrets/revoke-card": (body, route) => {
+      const card = String(cardFor(body, route) || "");
+      return card ? vault().revoke(card, undefined, "weft") : { revoked: 0 };
+    },
     // The audit log's lines not uploaded yet, and the cursor after an upload (lib/keychain-audit-sync.ts). Names and
     // events only: the log never holds a value.
     "POST /secrets/audit-outbox": ({ limit }) => ({ entries: auditOutbox(Number(limit) || undefined) }),

@@ -55,8 +55,8 @@ function approvalHtml(view, { touchId = false, nonce = "n", home } = {}) {
     .join("");
   const chips = view.names.map((n) => `<span class="chip">${ICONS.key}${escape(n)}</span>`).join("");
   const sample = view.names[0] ? `‹${escape(view.names[0])}›` : "‹NAME›";
-  const allow = `${touchId ? ICONS.finger : ""}Allow once`;
-  const hint = touchId ? `<span class="hint" id="hint">${ICONS.finger}Touch ID to allow once</span>` : "";
+  const allow = `${touchId ? ICONS.finger : ""}Allow for 1 hour`;
+  const hint = touchId ? `<span class="hint" id="hint">${ICONS.finger}Touch ID to allow for 1 hour</span>` : "";
   return `<!doctype html>
 <html><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${escape(nonce)}'">
@@ -135,8 +135,8 @@ document.getElementById("cancel").focus();
 </body></html>`;
 }
 
-// Touch ID is asked the moment the window shows, so a touch on the sensor alone is "Allow once". A click while
-// it's up waits for that same touch (Always allow, or Allow once). Cancelling the macOS prompt leaves the buttons,
+// Touch ID is asked the moment the window shows, so a touch on the sensor alone is "Allow for 1 hour". A click while
+// it's up waits for that same touch (Always allow, or Allow for 1 hour). Cancelling the macOS prompt leaves the buttons,
 // and a click after that asks Touch ID again. With touch, nothing is allowed without Touch ID passing.
 /**
  * @param {Promise<string | null>} answer the page's click, Escape or the window closing (null)

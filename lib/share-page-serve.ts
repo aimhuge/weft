@@ -4,6 +4,7 @@
 // scripts run in an opaque origin and can't read weft.zip's cookies.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { NO_STORE } from "./app-share-reply";
+import { signPageAssets } from "./blob-page-sign";
 import { readBlob } from "./blob-read";
 import { queueMirror } from "./r2-queue";
 import { isTextType, pageContentType } from "./share-page";
@@ -67,7 +68,9 @@ async function downloadBlob(service: SupabaseClient, orgId: string, sha: string)
   return got ? { bytes: got.bytes, declared: got.type } : null;
 }
 
-export async function serveBlobPage(service: SupabaseClient, orgId: string, sha: string): Promise<Response> {
+// `signAssets` (a card's pane page): the `blob:sha256:` refs the blob store wrote in for the page's images become
+// signed URLs (lib/blob-page-sign.ts). A mini app's page leaves it off; its files come from its own route.
+export async function serveBlobPage(service: SupabaseClient, orgId: string, sha: string, opts: { signAssets?: boolean } = {}): Promise<Response> {
   const got = await downloadBlob(service, orgId, sha);
   if (!got) return new Response("Not found", { status: 404, headers: NO_STORE });
   // Storage answers HTML as text/plain, so the type comes from the file (lib/share-page.ts), not the header. Anything
@@ -75,7 +78,9 @@ export async function serveBlobPage(service: SupabaseClient, orgId: string, sha:
   const bytes = got.bytes;
   const type = pageContentType(got.declared, new TextDecoder().decode(bytes.slice(0, 512)));
   // The page is the owner's own file, but a key typed into it shouldn't reach a stranger: mask text the way the thread is.
-  const body = applyTextRedaction(type, bytes);
+  const redacted = applyTextRedaction(type, bytes);
+  // Signed after redaction, so a URL's token isn't masked as if it were a key.
+  const body = opts.signAssets && typeof redacted === "string" && type.startsWith("text/html") ? await signPageAssets(service, orgId, redacted) : redacted;
   return new Response(body, { status: 200, headers: { ...HEADERS, "Content-Type": type } });
 }
 
