@@ -56,6 +56,8 @@ port.
   alive. ⌘Q quits. Opening Weft again just brings the existing window forward.
 - **⌃⌥Space** opens the copilot from any app. In the app: ⌘N new thread, ⌘J copilot, ⇧⌘B
   browser pane, ⌘F find cards, ⌘, settings, ⌘1 board, ⌘2 copilot.
+- **Settings search**: the box in Settings' title bar (⌘F or `/` while Settings is open) finds any setting on any page
+  ("dark mode", "gmail", "max threads") and opens its page scrolled to it; each page's own top nav jumps between its sections.
 - **Shortcuts sheet**: `?` (or the "? Shortcuts" link in the footer) lists every shortcut in the app,
   board, thread, composer, terminal and app menu, and searches them by what they do or by key ("archive",
   "cmd k", "esc"). Hold ⌘ on the board for a moment, or Shift, and a card lists what that modifier does.
@@ -137,6 +139,10 @@ port.
 - **Selectors that read like the page**: a thread can act on an element by CSS, or by the text a person would read
   on it — `:text-is("Settings…")`, `:has-text("menu")`, `:has(span:text-is("Settings…"))` — the way Playwright
   writes them. Same selector, same element, in every tool.
+- **Tabs in a thread's browser**: + in the pane's toolbar opens a blank tab for the open card, with the address bar
+  ready to type; links that open a new window land in a new tab, and an agent's `open_url` with `new_tab` keeps
+  the page it was showing. The tab strip only shows up under the toolbar once a card has two tabs; click to switch,
+  × or middle-click to close (a card's last tab stays). The other agent tools act on the tab on screen.
 - **Browser pane zoom**: the % button in the pane's toolbar zooms the page (Chrome's steps, plus
   50–200% presets); ⌘+ / ⌘− / ⌘0 and ⌘+scroll work on the page too, and a trackpad pinch magnifies.
   Opening the menu doesn't blank the page — the pane steps the page aside around the menu.
@@ -163,6 +169,9 @@ port.
   `pmset -a disablesleep 0|1` (`/etc/sudoers.d/weft-keep-working`). Sleep also comes back at the battery floor, when you quit Weft, and,
   through a watchdog, if Weft crashes (`electron/keep-working.cjs`).
 - **Dock**: the Needs you count on the icon, and New Thread and Copilot in its menu.
+- **Away open** (off by default; Settings → General): when no card is open and the board has had no mouse or keys for a few
+  minutes (1–15, 2 by default), a card that moves to Needs you opens by itself. Cards after it stack behind it, with
+  *1 of 3 waiting · Next ›* in the thread's header, and answering the open one opens the next (`lib/away-open.ts`).
 - **Links**: `weft://new?prompt=…&folder=…&start=1` creates a card (in your most recent project
   if no folder is given), `weft://card/<id>` opens one, `weft://copilot` opens the copilot, and `weft://reply?text=…` on a
   thread's own local page in the browser pane sends that text to the thread as your reply (the buttons on
@@ -199,7 +208,7 @@ port.
   background, and a notification (click it for the Software Update window, or **Restart Now**) and the Weft menu offer
   **Restart to Update**. With threads running it asks: **Restart When Idle** (the default) waits for them to finish,
   **Restart Now** cuts them off. Left alone, Weft restarts into the update by itself once no thread is running and
-  nobody has touched the Mac for 10 minutes. Weft → Check for Updates… (or File → Check for Updates…) opens the Software Update window (versions, last check, release notes, the next step). The first time Weft opens on a new version, a short **What's new** splash says what changed in a few lines (sometimes with a video), written by the Copywriter when the release is cut. What changed is in [CHANGELOG.md](CHANGELOG.md); releasing is in docs/architecture/updates.md.
+  nobody has touched the Mac for 10 minutes. Weft → Check for Updates… (or File → Check for Updates…) opens the Software Update window (versions, last check, release notes, the next step). The first time Weft opens on a new version, a short **What's new** splash says what changed in a few lines (sometimes with a video), written by the Copywriter when the release is cut. Between versions, **server patches** bring a newer board and server without a new app: signed, checked against the app's own packages, and switched in by restarting only the server once nobody's using it (a patch that fails to start rolls back by itself). What changed is in [CHANGELOG.md](CHANGELOG.md); releasing is in docs/architecture/updates.md.
 - If the server crashes, it restarts on its own; its output is in `~/Library/Logs/Weft/server.log`
   (Help → Open Logs Folder). If the dev server dies repeatedly (4 times in 2 minutes) while the
   board is up, a small bar at the bottom-left offers **Restart server**, **Open logs**, and
@@ -262,6 +271,10 @@ The new-thread dialog (⌘N) and every card's reply box use the same editor:
   in Settings → Shortcuts. It needs `brew install whisper-cpp ffmpeg` and a
   model; it uses superwhisper's or Homebrew's models, or the one in `WEFT_WHISPER_MODEL`. In a
   normal browser tab without whisper it falls back to the browser's speech recognition.
+  Settings → General → Dictation picks its language (naming it is faster than detecting it), takes a
+  vocabulary of names and terms whisper should expect, and turns on **Advanced dictation**: Weft
+  downloads large-v3-turbo if this Mac has none and keeps it warm in `whisper-server`, so text is back
+  in about half a second (it lets go of the memory after 5 idle minutes).
 - **Drafts are kept** per card and for the new-thread dialog until sent, so closing it loses nothing.
 - **One button that says what Enter does.** The reply box is in one mode at a time, named on a chip inside it
   and on its button: **Send**; while a Claude Code or puku turn runs, **Send** goes in after the agent's next tool
@@ -454,8 +467,9 @@ When two cards actually clash, Weft asks. Each card claims the top-level symbols
 component, class, type or interface around an Edit's `old_string`, found with the TypeScript parser
 (`Board.tsx#CommandPalette`). A symbol over 150 lines is split: the claim is the statement inside it that holds
 the edit, and so on down (`Board.tsx#Board/moveFocus`, `Board/useEffect#3`, `Board/return/main`), since Board() alone is
-85% of its file. Imports are never claimed; a Write, a non-TS/JS file or an edit spanning more than five symbols
-claims the whole file. When another busy card in the same tree goes to edit a claimed symbol, its thread
+85% of its file. Markdown is claimed by block, a paragraph or top-level bullet under its headings, so two cards adding
+lines to MAP.md pass each other, and a commit leaves out the lines another busy card is still writing there. Imports
+are never claimed; a Write, any other file or an edit spanning more than five symbols claims the whole file. When another busy card in the same tree goes to edit a claimed symbol, its thread
 stops on a permission prompt: "Card ‘Fix login’ is editing LoginForm in Login.tsx. Wait, or go ahead?" A card's
 claims drop when it reaches Done or is archived, and a file's as soon as `git status` shows it clean (the commit
 walk-through, or a thread's own `git commit`). Bash counts too: a line that writes a claimed file (`sed -i`, `> file`,
@@ -919,8 +933,12 @@ open them. **New thread** on the web board starts a card on your Mac: pick one o
 owns the folder makes the card and runs it, then the board opens it (the Mac has to be on and running Weft). The open card's reply
 box is the desktop's own and sends to that Mac too: your message goes into the thread as if typed there (held until the running
 turn ends, or **Send now** to stop it first), a permission request or question the thread is waiting on can be answered right there,
-■ stops the turn, and what the thread says comes back within about a second. Thread text isn't encrypted yet, so
-turn it on only for projects you're fine storing on Weft's servers. Separately, a long thread opens on its newest 50 items
+■ stops the turn, and what the thread says comes back within about a second. Thread text goes up unencrypted unless you
+turn on **Seal synced threads** in Settings → Sync → Pair a phone: then thread items, card titles and prompts, and long tool
+output are encrypted with a workspace key that only your Mac and the devices you pair hold. **Pair a phone** shows a QR code
+for the Weft phone app (or a link to open in another browser); your Mac checks the claim and asks for Touch ID, and once a
+phone is paired an **Allow** has to come from it, signed after Face ID, so a stolen sign-in can't run tools on your Mac.
+More in [docs/architecture/mobile-security.md](docs/architecture/mobile-security.md). Separately, a long thread opens on its newest 50 items
 and loads older ones as you scroll up. More in [docs/architecture/cloud-sync.md](docs/architecture/cloud-sync.md).
 
 **Share…** on a card's right-click menu (or the share icon in the browser pane's toolbar, beside ☆ and Archive) makes a link, `weft.zip/s/<id>`, that shows the card's thread and the page in its browser
@@ -943,6 +961,30 @@ used in the last 30 days and your records, plus the mini apps and threads you've
 card every 10 minutes while you're signed in (`lib/profile-card.ts`). It never shows your email, workspace, projects
 or folders. More in
 [docs/architecture/profiles.md](docs/architecture/profiles.md).
+
+**Phone push.** Sign in on the Weft phone app and it pairs itself: when one of your synced cards moves into Needs you or
+Review, the phone buzzes with the card's title and its question ("Wants to run pnpm test", "Ready for review"), whichever Mac
+moved it. A database trigger and a Supabase Edge Function send it through Expo, once per move (a card flapping columns buzzes
+once), and drop phones that uninstalled the app. Settings → Sync → **Phones** lists the paired phones with **Remove**
+(docs/architecture/mobile.md#push).
+
+**Weft Workers.** A worker is a Mac or Linux box that runs cards headless while your laptop sleeps. Settings → Sync →
+**Workers** → **Add a worker** shows one line to run on the box (`curl -fsSL https://weft.zip/worker.sh | sh -s -- <token>`).
+It installs the toolchain and Weft, enrols with a one-time token, and starts a launchd or systemd service.
+**Sign in to Claude** on its row signs its Claude Code in with one click: Weft opens Claude's approval page in a
+window beside the button, and the token it gets back is sealed to the worker's own key, so Supabase never holds it
+in the clear (or run `weft-worker login` on the box). **Sign in to GitHub** beside it does the same for private repos:
+paste a fine-grained token (the link fills in Contents read and write), and the row shows the account or an expired
+sign-in. Every card on that worker can use the token. **Clone from GitHub** in the project menu has a target beside the
+repo field once you have a worker, so you can clone onto it with no prompt and see the real result on the board.
+A project on a worker shows in the project chips and **More** beside your local ones, marked with the worker's name, even when the worker is offline. Pick it to see its cards on this board, reply to them, answer them or stop them, and start new threads there; nothing runs on your Mac, and an offline worker's new thread says so.
+**Send a run** queues a prompt in a project folder on the worker, and it clones the repo the first time. The card runs on the box with the same engine as your Mac and syncs back to the
+web board, where you can reply to it, answer it or stop it. Right-click a project chip and tick **Run on Worker**
+(or back to **Run on This Machine**): every new thread in that project then goes to your worker instead of starting
+here, and its card on this board records the prompt and which worker took it. A Weft desktop that syncs a folder
+lists itself there too, as a **headed** worker (browser pane, vault and all), so a team sees every box that can run
+its cards, and a run sent to another of your Macs starts a card in the synced folder of that name. More in
+[docs/architecture/weft-worker.md](docs/architecture/weft-worker.md).
 
 ## Secrets vault
 
@@ -990,12 +1032,16 @@ four characters showing.
   (`mcp__secrets__request_access`): one Touch ID and its fills, commands and dev server stop asking for an hour. A
   grant that covers typing a value into a page names the page in the Touch ID prompt and covers that page only, so a
   thread can't use it on a page it controls; a grant with no page covers only the commands and dev servers. It still
-  never sees a value, and writes still ask. Revoke it from the same menu or from Settings → Security.
+  never sees a value. A thread setting up a service asks once, up front: with `writes` the grant also covers storing
+  the secrets it makes and pushing them to Vercel (an overwrite still asks), and with `span: "thread"` it lasts until
+  the card is Done (12 hours at most) instead of an hour. The Touch ID prompt names both. Revoke it from the same menu
+  or from Settings → Security.
 - **Threads save a key they need as a blank right away.** When a key isn't in the vault yet, the thread
   calls `mcp__secrets__add_blank` (with a hint for where to get the value) and keeps going with what
   doesn't need it; 🔐's count goes up, the row shows **Fill in** and the hint under the name, and you
   paste the value when you're ready. Blocked on it now, the thread calls `mcp__secrets__ask_add` and shows
   an input for the key right in the thread: paste the value, click **Add to vault**, and the thread carries on.
+  Asked for several keys, every box stays open and one **Add** takes them all; the thread hears once, when the last is in.
   A key that already has a value stays as it is, and the thread is told so.
 - **Threads store values they made or got themselves.** A signing secret it generated, or new price ids from a
   Stripe sandbox: `mcp__secrets__set_value` adds the name or fills its blank, and with `replace: true` overwrites
@@ -1123,7 +1169,9 @@ they send mail, change events or share files. More in [docs/architecture/connect
 
 **Simulators** sits beside it: threads drive iOS simulators and Android emulators with `mcp__simulator__*` (boot,
 install and launch an app, open a deep link or your dev server in mobile Safari or Chrome, read the screen, tap and
-type by element, screenshot, logs), and `watch` puts the device live in the browser pane. The card shows what's on
+type by element, screenshot, logs), and `watch` puts the device live in the browser pane: its window captured at
+30 fps, where a click is a tap and a drag a swipe (a screenshot a second without Screen Recording permission). For a
+React Native or Expo app, your AI offers `npx expo start --web` in the pane first, so no device boots at all. The card shows what's on
 your Mac (Xcode, an iOS runtime, AXe, the Android SDK, adb, a virtual device), and **Install** beside each missing
 piece downloads and sets it up for you, showing its progress in the row (Xcode and Android Studio themselves get a link). More in [docs/architecture/simulators.md](docs/architecture/simulators.md).
 
@@ -1250,7 +1298,10 @@ Nothing runs on your Mac. `pnpm resend -- create|verify|webhook` sets up the Res
   its own: an intro and its voice start only when you click ▶ Watch or ▶ by the dialog's title. A turn that ends without opening
   anything in the pane gets a teammate's update page (how it's going, what we did, what's next),
   written in the background by Haiku with a bare CLI (~12s) and opened in that card's pane. A live app
-  (an http page) and pages the thread opened itself are left alone. Pages live in `~/.weft/glance/`.
+  (an http page) and pages the thread opened itself are left alone. Pages live in `~/.weft/glance/`. Threads are asked to
+  write their pages to read on a 390px phone as well as the pane (a viewport tag, a fluid layout, tap-sized controls), and a
+  synced card's row names the page its pane shows now (`page`, `pages`), Weft's own starter and update pages included, so
+  the phone app draws each card as its page without loading the thread (docs/architecture/cloud-sync.md#the-cards-page).
 - `electron/pane-pages.cjs` remembers each card's page in `~/.weft/pages/index.json` (pages a thread wrote to
   `/tmp` are copied beside it), so a card opened after a restart shows its last page again, or its last
   update page when that page won't load (a dev server that isn't running).

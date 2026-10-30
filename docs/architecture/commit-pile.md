@@ -45,7 +45,8 @@ The walk-through card writes a checklist page with one review bar per change. Th
 them. `lib/pile-commit.ts` is the other half: `commitFromPage` runs `/weft:done`'s commit.sh on the
 exact paths the page gave, pushes if asked, moves the change's card to Done if asked, and returns the
 result to the page as a `weft-commit` window event. A failure becomes a thread message, so a turn only
-runs when something went wrong.
+runs when something went wrong. A shared doc commits only the change's own lines: see "Markdown blocks and
+own-line commits" in `thread-guards.md`.
 
 ## Key files
 

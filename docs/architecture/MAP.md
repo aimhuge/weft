@@ -16,7 +16,7 @@ matching doc below. When a feature lands, add or update its entry here and in it
 - `composer.md` — the reply box's modes: `lib/reply-mode.ts`'s table of chip, primary and ▾ menu per state, and what's still planned (one dock for every ask, one server-side queue).
 - `limits.md` — the three limit stores (the model's own cap, the CLI's weekly and 5-hour windows), the pure gate in `lib/limit-reset.ts`, the server-decides rule, the new-thread path that waits for a spent limit instead of failing, and the upgrade path that frees a model the moment the plan gives it room again.
 - `questions.md` — a thread's AskUserQuestion end to end: the panel above the reply box, keys, previews in the pane, answers and `annotations` back to the CLI.
-- `weft-worker.md` — the Weft Worker: a headless agent runner on a host (a Linux VPS, a Mac mini) that does the compute for a card while the board stays on the laptop or on the web at `<workspace>/board`; the `run` command kind, the `cloud_workers` registry and its heartbeats, the `cloud_worker_leases`, worker addressing, the **centralised guards** (the claim, yield and folder-grant authority in Supabase, keyed by repo-relative paths), the **service-key identity** and its Postgres role, the persistent-checkout-and-worktrees repo model, the bootstrap install on Linux or macOS (`apt-get` or `brew`, `systemd` or `launchd`), the worker pricing ($20 per worker per month, one included on Pro), and the twelve places a worker is not "the Mac, but headless" (the secrets, the pending permissions, the MCP tools).
+- `weft-worker.md` — the Weft Worker (phase 1 built: `scripts/weft-worker.ts`, `lib/worker-*.ts`, `install/worker.sh`, `cloud_workers` and the key-checked `worker_*` functions, Settings → Sync → Workers, the desktop listed as a headed worker through `lib/desktop-worker.ts`, a project menu's Run on This Machine / Run on Worker through `lib/worker-handoff.ts`, and cloning onto a worker plus Sign in to GitHub through the `clone` and `github_login` commands, `lib/worker-github.ts`, `lib/worker-command-wait.ts` and `components/WorkerGithubSignIn.tsx`, and worker projects on the desktop board through `lib/worker-project.ts`, `lib/worker-board.ts`, `lib/worker-transport.ts`, `lib/use-worker-board.ts`, `app/api/worker-board` and `components/WorkerOpenCard.tsx`): a headless agent runner on a host (a Linux VPS, a Mac mini) that does the compute for a card while the board stays on the laptop or on the web at `<workspace>/board`; the `run` command kind, the `cloud_workers` registry and its heartbeats, the `cloud_worker_leases`, worker addressing, the **centralised guards** (the claim, yield and folder-grant authority in Supabase, keyed by repo-relative paths), the **service-key identity** and its Postgres role, the persistent-checkout-and-worktrees repo model, the bootstrap install on Linux or macOS (`apt-get` or `brew`, `systemd` or `launchd`), the worker pricing ($20 per worker per month, one included on Pro), and the twelve places a worker is not "the Mac, but headless" (the secrets, the pending permissions, the MCP tools).
 - `skills.md` — skill sets: the library (Weft's, project, yours, plugins), a project's default set seeded from usage, a card's own, and how each runner gets it at session start; and the repo-analysis skill's four read-only scripts (size, import graph, docs drift, commit history).
 - `subagents.md` — how threads delegate to subagents and how Settings → Models picks their model.
 - `account.md` — the optional Weft account (Supabase Auth, PKCE, `weft://account-callback`, `~/.weft/account.json` in the Keychain).
@@ -62,13 +62,15 @@ matching doc below. When a feature lands, add or update its entry here and in it
 - `gamification.md` — the header's 🔥 chip and "Your loom" dialog: streaks, XP, badges, the builder card, the production-ready tree.
 - `quality.md` — the header's code quality checklist: coverage, file size, lint, types, guardrails; the refactor scout and the score's last 10 points.
 - `commit-pile.md` — the header's "+N/-N" uncommitted counter and the Review card that walks the pile to a clean commit.
-- `updates.md` — the Squirrel.Mac JSON feed, the download fallback, the tag-triggered signed release, `CHANGELOG.md` notes.
+- `updates.md` — the Squirrel.Mac JSON feed, the download fallback, the tag-triggered signed release, `CHANGELOG.md` notes, and server patches between versions.
 - `changelog.md` — every project's changelog in `~/.weft/changelog.jsonl` and `changelog_entries`: the `mcp__board__changelog_*` tools, the commit stamp, the Changelog dialog, releasing into CHANGELOG.md.
 - `keep-working.md` — the menu bar icon's switch to keep the Mac awake with the lid shut so threads keep running in a bag.
 - `analytics.md` — GA4 and PostHog on every weft.zip page after the visitor's consent, never on a local board: the consent banner, the host and `isDeployed()` gates, `track()`, the event table, `data-track` links.
 - `faq-site.md` — `docs/FAQ.md` as the weft.zip FAQ: the home page's six questions, `/faq` rendering the whole file, how GitHub-shaped paths, image rows and heading ids map onto the site.
 - `marketing-site.md` — the weft.zip home page's own sections: the content split across `lib/home.ts` / `lib/home-release.ts` / `components/home/*`, the pricing section reading its prices off the billing catalog, `loadHome()`'s parse-error fallback, and `data-track`.
 - `cloud-sync.md` — server-side cards: the outbox, the content-addressed blob store, thread paging, the `cloud_*` tables and their policies.
+- `mobile-security.md` — pairing a phone or browser (QR, pinned by the Mac, Touch ID), the workspace sync key, sealed rows, signed approvals.
+- `mobile.md` — the phone app's server side: `push_devices`, the `cloud_cards` push trigger, the `push-card` Edge Function and its Expo payload, Settings → Sync → Phones.
 - `profiles.md` — public profiles at `weft.zip/@username`: `profiles.username`, the `/@` → `/u/[username]` rewrite, what the page shows and never shows.
 - `sharing.md` — a card's share link on weft.zip: thread + pane, live; the `@aimhuge/share` modes and gate, `cloud_shares`, the sandboxed pane, redaction.
 - `copilot-suggestions.md` — the copilot's empty-chat chips: what Haiku reads, the one run per board labeled by project, the client filter, setup gaps and `setup_status`.
@@ -86,7 +88,9 @@ When a new doc lands in this folder, add it here on the same change.
 - `electron/main.cjs`: shell; starts Next, windows, tray, dock, `weft://` links, global hotkey;
   `electron/startup-screen.cjs` runs the start screen and shows why the board didn't load (Retry, Logs, Quit);
   `electron/startup-timer.cjs` times every launch into `~/.weft/startup.jsonl` (`node electron/startup-timer.cjs` lists them).
-- `electron/browser-pane.cjs`: native browser pane, one page per card; token-guarded control
+- `electron/browser-pane.cjs`: native browser pane, a set of tabs per card (`electron/pane-tabs.cjs`: which tabs, which is current;
+  `electron/pane-ipc.cjs` the board's IPC, `electron/pane-zoom.cjs`, `electron/pane-capture.cjs` screenshots and thumbnails,
+  `components/PaneTabs.tsx` the strip and the toolbar's +, drawn only with 2+ tabs); token-guarded control
   server on 127.0.0.1 for agents, IPC for the board (`electron/preload.cjs`); `electron/pane-pages.cjs`
   saves each card's page to `~/.weft/pages/` so it comes back after a restart. `electron/pane-visibility.cjs`
   holds the rule for when the pane shows: opening a card brings it back, even with no page loaded yet
@@ -104,7 +108,7 @@ When a new doc lands in this folder, add it here on the same change.
   rule takes that too, or the board never hears the key.
 - `electron/menus.cjs` + `electron/keep-working.cjs`: app menu, menu bar icon, dock; Keep Working (awake with the lid shut, until threads finish).
 - `electron/updater.cjs` (+ `electron/update-window.cjs`, the Software Update window) + `scripts/release-feed.mjs` + `.github/workflows/release.yml`: updates from GitHub Releases (Squirrel.Mac's JSON
-  feed, a download fallback when unsigned, a quiet install once nothing runs and nobody's at the Mac) and the tag-triggered signed release; `CHANGELOG.md` holds each version's notes, which Weft commits itself after a version bump (docs/architecture/updates.md). `lib/release-splash.ts` + `lib/release-splashes.json` + `lib/use-release-splash.ts` + `components/ReleaseSplash.tsx` + `scripts/release-splash.mjs`: the "What's new" splash shown once after an update, written by the Copywriter at release time. `.claude/skills/release/SKILL.md`: the repo-only `/release` run (commit, bump, splash, tag, build on a mini, publish, check weft.zip).
+  feed, a download fallback when unsigned, a quiet install once nothing runs and nobody's at the Mac) and the tag-triggered signed release; `CHANGELOG.md` holds each version's notes, which Weft commits itself after a version bump (docs/architecture/updates.md). `lib/release-splash.ts` + `lib/release-splashes.json` + `lib/use-release-splash.ts` + `components/ReleaseSplash.tsx` + `scripts/release-splash.mjs`: the "What's new" splash shown once after an update, written by the Copywriter at release time. `.claude/skills/release/SKILL.md`: the repo-only `/release` run (commit, bump, splash, tag, build on a mini, publish, check weft.zip). `electron/patcher.cjs` + `electron/patcher-app.cjs` + `electron/server-patch.cjs` + `electron/server-patch-feed.cjs` + `electron/patch-key.cjs` + `scripts/server-patch-release.mjs` (`pnpm patch:release`) + `scripts/server-patch-deps.mjs` + `scripts/server-patch-keygen.mjs`: server patches, the board and server between versions, signed with ed25519, staged in `<userData>/patches`, switched in by a server restart, rolled back on a young crash (docs/architecture/updates.md#server-patches).
   `scripts/bundle-toolchain.mjs` stages what the app ships for a fresh Mac (node, npm, pnpm, puku-cli without telemetry, claude, all on
   my own Electron, plus gog, the checksum-pinned Google Workspace CLI), which `appendToolchain()` in `electron/env.cjs` puts at the end of PATH.
 - `electron/folder-access.cjs` + `lib/folder-access-tool.ts`: `mcp__board__request_folder_access`, called by a thread that got "Operation not permitted" on
@@ -161,7 +165,7 @@ When a new doc lands in this folder, add it here on the same change.
   into `card.touchedFiles`, so the overlap warning sees what the turn actually touched.
 - `lib/env.ts` `guardedCli()`: Claude Code and puku-cli's CLI env and Bash guards: `lib/secret-guard.ts` (no .env reads; the
   rules live in `lib/secret-guard-files.ts` — a `.env`, the `~/.weft` data folder (save `~/.weft/show/`, the pages threads
-  render in the pane), the CLI's own `~/.claude` transcripts —
+  render in the pane, and `~/.weft/apps/`, the mini apps; symlinks followed, `..` folded), the CLI's own `~/.claude` transcripts —
   `lib/secret-guard-bash.ts` for the shell, and `lib/secret-guard-tool.ts` for the file tools (Read, Edit, Write, Glob,
   Grep and LS — a thread that may not read a .env may not write, glob or list one either); `lib/shell-parse.ts` is the
   parser behind them, with `lib/shell-quoting.ts` spelling a word (a `$(…)` substitution's path-like words, ANSI-C
@@ -169,7 +173,7 @@ When a new doc lands in this folder, add it here on the same change.
   `lib/restart-guard.ts` (no restarting Weft mid-turns), `lib/git-guard.ts` (no `git stash`, `reset --hard`, path
   checkout/restore or `clean -f` in the shared tree), `lib/check-guard.ts` (no `tsc` or `eslint` run directly where the
   project's `pnpm typecheck`/`pnpm lint` take turns through `scripts/one-at-a-time.mjs`; plain Claude Code sessions get it from `.claude/settings.json`), `lib/route-import-guard.ts` (refuses an edit that makes `app/**/page.tsx`,
-  a layout, a `route.ts` or middleware import a module that isn't there yet, or export a segment config cacheComponents refuses; `lib/prerender-check.ts`), `lib/claim-guard.ts` (symbol claims: asks before an edit to a top-level
+  a layout, a `route.ts` or middleware import a module that isn't there yet, or export a segment config cacheComponents refuses; `lib/prerender-check.ts`), `lib/symbols-markdown.ts` + `lib/commit-held.ts` + `lib/commit-held-guard.ts` (Markdown claimed by block, and a commit leaving out lines other busy cards hold), `lib/claim-guard.ts` (symbol claims: asks before an edit to a top-level
   symbol another busy card is editing, with **Wait** until it lets go, `lib/permission-wait.ts`, or **This first** / the holder's **You first** to put the held card ahead, `lib/precedence.ts` + `lib/yields.ts` + `lib/waits-on.ts` + `components/YouFirst.tsx`, with both cards' faces on the prompt, `components/CardFace.tsx`; `lib/claims.ts`, parsed by `lib/symbols.ts`; the prompt's readable diff and reason chip are `lib/edit-preview.ts` + `components/PermissionInput.tsx`; a card other cards are waiting on carries a "blocking N" chip, `components/BlockingMark.tsx` + `lib/waits-on.ts`, and the write that lands releases the waiters, `lib/blocking.ts`; a wait never closes a loop, so two cards can't wait on each other and gridlock: the card goes ahead instead, `lib/wait-chain.ts`), and for Bash `lib/bash-claims.ts` (asks before a line that writes a claimed file, claims what Bash wrote while no other card's Bash ran (`lib/bash-writers.ts`; else the writer is unknown and nobody claims it), drops claims on files `git status` sees clean, tells a failed check which failures are another card's: `lib/bash-writes.ts`, `lib/dirty-files.ts`, `lib/failure-owners.ts`) (docs/architecture/thread-guards.md). The two guards share the flow itself — read the card, prune the yields, look for a clash, ask — in `lib/claim-hooks.ts`; they differ only in how the claim keys are worked out.
   Codex gets the filtered `cliEnv()` but not these per-tool hooks; `lib/codex-runner.ts` asks it not to read `.env` files. It does get
   Weft's MCP tools, over HTTP: `lib/weft-mcp.ts` builds the servers every CLI gets, `lib/mcp-bridge.ts` opens a per-turn token and
@@ -189,6 +193,9 @@ When a new doc lands in this folder, add it here on the same change.
   time, by default the next 5-hour reset. A message held on a card waits for a reason — the restart, the card's own turn, a free
   thread slot, or a time the user picked — and `lib/scheduled-hold.ts` is the one place that writes it, so the flag saying when it
   goes lives in one file. The server's polls run on `lib/tick-clock.ts`, the one 15-second clock the scheduler and the crons share.
+  The reply box draws them above it (`components/ReplyQueue.tsx`); a row waiting only for this turn has Send now
+  (`lib/use-reply-schedule.ts` `sendNow`: unschedule, stop the turn, send). Once the restart is behind it, the scheduler relabels a
+  mid-turn card's "after restart" holds as "after this turn", so they get that label and Send now too.
 - `lib/cron-schedule.ts` + `lib/crons.ts` + `lib/cron-run.ts` (+ `lib/cron-store.ts`, `lib/cron-tools.ts`, `lib/cron-form.ts`, `lib/cron-stacks.ts`,
   `lib/cron-fold.ts`, `components/CronButton.tsx`, `CronsDrawer.tsx`, `CronSwitch.tsx`, `CronStack.tsx`): crons, a thread run again on a schedule, each run a new
   card forked from the source (`Card.forkOf` → `forkSession` in `specFor`) or fresh; the rail's ⏰ drawer and the stacked runs
@@ -228,7 +235,12 @@ When a new doc lands in this folder, add it here on the same change.
   is still open — from the 15-minute poll (`lib/limit-poll.ts`, which then wakes the cards parked on them via
   `lib/limit-resume.ts`) and from a card's own turn (`lib/runner-turn.ts`).
 - `components/SettingsDialog.tsx` + `lib/settings-nav.ts`: Settings, full window over a scene, pages down the left (General, Laptop mode, Models,
-  Threads, Security, Automations, Shortcuts, Accounts, Teams, Sync); Laptop mode is `components/LaptopModeCard.tsx` + `LaptopModeRules.tsx` over `electron/keep-working*.cjs`; Models holds every model pick, new threads' through `components/NewThreadDefaults.tsx`;
+  Threads, Security, Automations, Shortcuts, Accounts, Teams, Sync). **Search** in the title bar (`components/SettingsSearch.tsx`, ⌘F, the Edit menu's
+  Find or `/`) ranks every section by `lib/settings-search.ts` `SETTINGS_SECTIONS`, a hand-kept index of each page's section headings
+  plus extra words, whose test fails when a heading it names is no longer in any component; a new section needs a row there. Each page's
+  **top nav** (`components/SettingsSectionNav.tsx`, sticky, hidden under two sections) and the jump to a search pick are
+  `lib/use-settings-sections.ts` over `lib/settings-section-dom.ts`: it finds a section by its h3/h4 text, flashes the `data-settings-card`
+  around it, and waits up to 3 s for one a page draws late; Laptop mode is `components/LaptopModeCard.tsx` + `LaptopModeRules.tsx` over `electron/keep-working*.cjs`; Models holds every model pick, new threads' through `components/NewThreadDefaults.tsx`;
   the settings themselves live in `lib/settings.ts` (the front every caller imports), with the model picks in
   `lib/settings-models.ts` and the file on disk and its read/write pair in `lib/settings-store.ts`;
   the four rows (NewThreadDefaults, SubagentPicker, CopilotPicker, DonePicker) share `components/Pickers.tsx`
@@ -434,7 +446,7 @@ When a new doc lands in this folder, add it here on the same change.
   (docs/architecture/secrets.md); decryption only in main, IPC to the board window only, `lib/vault-view.ts` + `lib/use-vault.ts` on the board side.
   A thread that needs a key it doesn't have puts the name in as a blank right away with `mcp__secrets__add_blank` (with a hint for where
   to get the value) — blanks sort first, the rail's badge counts them, every blank row has a visible **Fill in** button, and the user
-  fills them in when they're ready. `mcp__secrets__ask_add` is the urgent path: an input for the key in the thread itself (`components/SecretAskInput.tsx`);
+  fills them in when they're ready. `mcp__secrets__ask_add` is the urgent path: an input for the key in the thread itself (`components/SecretAskInput.tsx`; several fill in together and the thread hears once, `components/SecretAskBatch.tsx`, `lib/secret-ask-batch.ts`);
   on a name that already has a value it says so and changes nothing. `mcp__secrets__set_value` stores a value the thread made or got
   (adds, fills a blank, or with `replace: true` overwrites), Touch ID each time (`electron/vault-routes.cjs`).
   `electron/vault-ipc.cjs` is the board window's IPC, `electron/vault-unlock.cjs` the Touch ID unlock timer.
@@ -458,6 +470,17 @@ When a new doc lands in this folder, add it here on the same change.
   public key's SHA-256, as 32 hex characters in 8 groups of 4 — the same string both sides compare out of band, so a server that
   slipped in its own key shows two different ones and the grant stops before any key is produced. The preload's
   `weft.vault.devices` namespace gives the board the public keys and fingerprints, never a private key.
+- `electron/pairing.cjs` + `electron/pairing-ipc.cjs` + `electron/paired-devices.cjs` + `electron/sync-keys.cjs` +
+  `electron/pairing-crypto.cjs`: pairing a phone or browser and the workspace sync key (docs/architecture/mobile-security.md). Main
+  makes the code (its secret only in memory and the QR's #), checks the claim's HMAC proof and signature, asks Touch ID, pins the device
+  in `~/.weft/vault/paired-devices.json` (sealed; the pin, not `public.devices`, decides whose approvals count) and seals the key to it in
+  `workspace_key_grants`. Revoke unpins, drops its grants, marks it revoked and rotates. Board IPC `weft.pairing.*` only; the server
+  reads `POST /sync/key`, `/pairing/verify`, `/pairing/status`. The two Settings → Sync switches live in the same sealed file.
+- `lib/sync-seal.ts` + `lib/sodium.ts` + `lib/approval-sig.ts` + `lib/pairing-link.ts`: the isomorphic half (Mac server, web, phone):
+  sealed envelopes with org/card/slot bound in, the signed approval message, the pairing link and claim. `lib/sync-seal-upload.ts`
+  seals rows in `lib/cloud-sync-upload.ts` when the switch is on; `lib/approval-check.ts` is `lib/cloud-inbox.ts`'s rule for answers;
+  `lib/web-sync-key.ts` opens rows on the web board (`components/web-board/useWebBoard.ts`, `lib/cloud-thread-page.ts`) and pairs a
+  browser (`app/pair`, `components/web-board/PairBrowser.tsx`). Settings card: `components/PairDevices.tsx` (`lib/use-pairing.ts`).
 - `electron/vault-grant.cjs` + `electron/vault-share.cjs` + `electron/vault-shared-api.cjs` + `electron/vault-local.cjs`:
   granting a device and sharing a vault for the first time (docs/architecture/teams-vault.md#granting-a-teammates-devices).
   The granter's main is the only place the vault key and the new device's public key meet: the key is sealed with
@@ -510,6 +533,9 @@ When a new doc lands in this folder, add it here on the same change.
   A grant that covers typing a value into a page carries the site, and covers that page only — the Touch ID prompt names
   it — so a card can't use an hour's grant on a page it controls; a grant with no site covers only the commands and
   dev servers.
+  A grant can also name `writes` (`set_value` and `push_to_vercel` go without asking, overwrites still ask) and span
+  `"thread"` (until the card is Done, capped at `THREAD_MS`); `lib/vault-grant-done.ts` watches the board bus and
+  calls `POST /secrets/revoke-card` when the card is Done, archived or deleted.
 - `lib/project-intake.ts` + `lib/intake-scan.ts` + `lib/provider-hints.ts` + `app/api/projects/intake` + `electron/vault-intake.cjs`: the project
   intake. Opening a project on the board (`lib/use-board-view.ts`) moves its untracked `.env*` files' new values into 🔐 with no click (never a
   tracked file's, never over a vault value) and turns the keys its code reads, its `.env.example` names and its webhook routes into 🔐 and 🪝
@@ -586,7 +612,7 @@ When a new doc lands in this folder, add it here on the same change.
   (snapshot with refs, click, hover, type_text, press_key, select_option, scroll, wait_for, set_viewport, console_logs,
   network_errors; docs/architecture/agent-browser.md); `lib/browser-shell.ts` the control-server call every Weft tool uses.
 - `lib/site-notes-*.ts` + `app/api/site-notes` + `app/api/site-notes/cloud` + `components/SiteNotesSwitch.tsx`: site notes. `-url` keys and generalized paths, `-scrub` and `-safety` the safety pipeline, `-format` the note and its untrusted wrapper, `-store` local notes, the public switch and the outbox, `-trail` the per-card trail the pane tools record, `-read` what open_url adds, `-capture` the after-turn pass `lib/show.ts` fires, `-send` the outbox, `-remote` the desktop's client, `-live` the wiring; `-status`, `-cloud` and `-db` are weft.zip's side (docs/architecture/site-notes.md).
-- `lib/simulator-tools.ts` + `lib/simulator-devices.ts` + `lib/simulator-ui.ts` + `lib/simulator-exec.ts` + `lib/simulator-watch.ts` + `lib/simulator-status.ts` + `lib/simulator-install.ts` + `lib/simulator-install-steps.ts` + `components/SimulatorConnector.tsx`: `mcp__simulator__*` for threads (list, boot, install, launch, open_url, ui_tree, tap, swipe, type_text, press, screenshot, logs, watch) over simctl / adb / AXe, the live view page in `~/.weft/show/simulator/`, and the setup checks on Settings → Connectors with an Install button per missing piece (docs/architecture/simulators.md).
+- `lib/simulator-tools.ts` + `lib/simulator-devices.ts` + `lib/simulator-ui.ts` + `lib/simulator-exec.ts` + `lib/simulator-watch.ts` + `lib/simulator-viewer.ts` + `lib/simulator-input.ts` + `app/api/simulator/input/route.ts` + `electron/sim-live.cjs` + `lib/simulator-status.ts` + `lib/simulator-install.ts` + `lib/simulator-install-steps.ts` + `components/SimulatorConnector.tsx`: `mcp__simulator__*` for threads (list, boot, install, launch, open_url, ui_tree, tap, swipe, type_text, press, screenshot, logs, watch) over simctl / adb / AXe, the live view page in `~/.weft/show/simulator/` (a window capture you can tap through `window.weft.simLive`, else a frame a second), and the setup checks on Settings → Connectors with an Install button per missing piece (docs/architecture/simulators.md).
   `lib/cli-exec.ts` is how every CLI connector runs a tool (find it on PATH, exec it with a timeout, hear what it
   said) — gog (`lib/gog.ts`) and the simulator tools (`lib/simulator-exec.ts`) both go through it. `lib/use-connector-status.ts`
   is how a connector panel on Settings → Connectors loads its status and polls it while the tool is working.
@@ -612,6 +638,11 @@ When a new doc lands in this folder, add it here on the same change.
   default) and the mic it starts. The binding is a set of modifiers, so `⌥'` also fires on `⌘⌥'`; the hook reads a ref, so a
   second press while the microphone is opening cancels the recording instead of opening a second one
   (docs/architecture/keyboard-shortcuts.md#the-rebindable-dictation-binding).
+- `lib/transcribe.ts` + `lib/dictation-prefs.ts` + `lib/dictation-languages.ts` + `lib/whisper-model.ts` + `lib/whisper-server.ts` +
+  `app/api/transcribe` + `components/DictationSettings.tsx`: local whisper.cpp dictation. The language is named, not detected; a clip
+  under 20 s gets an audio window its own length (retried over the full 30 s if the output loops); the vocabulary is whisper's
+  prompt; Advanced dictation downloads large-v3-turbo and keeps it warm in `whisper-server` on 127.0.0.1, stopped after 5 idle
+  minutes (docs/architecture/dictation.md).
 - `lib/shortcut-sheet.ts` + `lib/print-sheet.ts` + `electron/print.cjs` + `components/PrintShortcutSheet.tsx`: the printable
   one-page shortcut sheet, the `?` dialog's Print button and the welcome's pitch for it, shown only when macOS has a printer
   (docs/architecture/keyboard-shortcuts.md#the-printed-sheet).
@@ -627,10 +658,17 @@ When a new doc lands in this folder, add it here on the same change.
 - `lib/custom-theme.ts` + `lib/custom-themes.ts` + `app/api/themes` + `lib/use-custom-themes.ts` + `components/ThemeDescriber.tsx`:
   themes you prompted up (or built around a picture you uploaded), painted by a card into `~/.weft/themes/<id>/` and applied from a second cookie (docs/architecture/themes.md#prompted-themes).
 - `lib/store.ts`: storage in `~/.weft` (board.json, threads/, attachments/); board.json is written atomically by `lib/atomic-write.ts` (temp file, fsync, rename). `lib/attachments.ts` saves every PNG, JPEG and GIF as WebP (uploads, tool screenshots, pane thumbnails; transcript reads add one beside the original); `scripts/webp-backfill.mjs` converts the old ones (docs/architecture/threads-and-sessions.md).
-- `lib/cloud-sync.ts` + `lib/cloud-outbox.ts` + `lib/cloud-sync-start.ts` + `lib/cloud-sync-cards.ts` + `lib/cloud-sync-upload.ts` + `lib/blob-store.ts` + `lib/blob-paths.ts` + `lib/device-id.ts` + `lib/cloud-sync-types.ts`:
+- `lib/cloud-sync.ts` + `lib/cloud-outbox.ts` + `lib/cloud-sync-start.ts` + `lib/cloud-sync-cards.ts` + `lib/cloud-sync-upload.ts` + `lib/blob-store.ts` + `lib/blob-paths.ts` + `lib/blob-page-assets.ts` + `lib/blob-page-sign.ts` + `lib/device-id.ts` + `lib/cloud-sync-types.ts`:
   server-side cards, opt-in per folder (settings `syncFolders`): an outbox in `~/.weft/sync-outbox.jsonl` uploads cards, thread items
   and long tool outputs to Supabase (`supabase/migrations/20261015155756_card_sync.sql`), images and pages by content hash.
+  `lib/card-page.ts` keeps each card's current pane page and a count on the card (`notePage`, from `open_url` and Weft's own
+  `openInPane`, so `lib/show.ts`'s starter and update pages count), and `withUploadedPage` in `lib/cloud-sync-cards.ts` puts it on
+  the row as `page` / `page_thumb` / `pages` (`20261029104011_cloud_cards_page.sql`) for the phone feed (cloud-sync.md#the-cards-page).
+  An uploaded HTML page takes its local images, videos, stylesheets and CSS `url()`s with it as blob refs (`lib/blob-page-assets.ts`,
+  `uploadPage`), and the routes that serve it sign those refs (`lib/blob-page-sign.ts`), so its images load on weft.zip and the phone.
   `lib/cloud-sync-repos.ts` keeps the switch per GitHub repo too (`cloud_sync_repos`), so your other Macs turn sync on for their own clone.
+  Phone push (docs/architecture/mobile.md#push): `supabase/migrations/20261029104224_push_devices.sql` (`push_devices`, `register_push_device`, the `cloud_cards` trigger with its debounce),
+  `supabase/functions/push-card/` (the Edge Function; `message.ts` builds the Expo payload), and `lib/push-devices.ts` + `app/api/push-devices` + `lib/use-push-devices.ts` + `components/PhoneSettings.tsx` (Settings → Sync → Phones).
   `lib/sync-prompt.ts` + `lib/use-sync-prompt.ts` + `components/SyncPromptDialog.tsx` (mounted in `components/HeaderBadges.tsx`): once the welcome is
   answered and a thread in the project you're working on has reached Review, "Turn on Project Sync for <project>?" asks once a launch (signed out, "Sign in to Weft?", Weft's one sign-in ask), with a
   "Don't show me again" box (localStorage, cleared by Reset tips); `lib/scratch.ts` is the scratch-folder list it shares with `lib/welcome.ts`.
@@ -703,6 +741,9 @@ board's delete live in `lib/use-delete-dialog.ts`, and Settings → Security's *
 Shortcuts, the command palette and the menu bridge share one input in `components/use-board-commands.ts`. The rail's drawers share one
 `RailContext` (`components/rail-context.ts`); `BoardHeader` and `BoardColumns` take grouped props (counts, panes, slots; drag, review, archive).
 The dialog flags (New thread, Settings, Share board, Help, palette, sign-in, project menu) and what they cover live in `lib/use-board-dialogs.ts`.
+Away open (a card that moves to Needs you opens while you're away, and later ones stack behind it) is the store and cookie pref in
+`lib/away-open.ts`, the board side (input watch, select, ending the stack) in `lib/use-away-open.ts`, fed every move by
+`lib/board-live.ts`; the header's *1 of N waiting · Next ›* is `components/AwayStackChip.tsx`, its setting `components/AwaySettings.tsx`.
 The open card's state (selection, thread, streaming text, Rename…, unseen moves) is `lib/use-open-card.ts`, and the New thread
 dialog's splash page in the pane `lib/use-new-thread-pane.ts`. Next: the board's data (cards, home, roots, projects, folder
 resolution) into a hook; Board is at complexity 26.

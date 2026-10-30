@@ -350,6 +350,28 @@ into each other. Claims catch that at the moment it happens, instead of a standi
 - **Speed**: `typescript` loads on the first edit of a source file (~170 ms, once per server), never on the
   start-a-card path; parsing the 46 KB `Board.tsx` and walking it takes 5–13 ms warm, ~40 ms the first time.
 
+### Markdown blocks and own-line commits
+
+MAP.md, README.md and ROADMAP.md are edited by nearly every card, usually a bullet at a time. Two Edits on
+different lines never collide, since each re-reads the file; the real risk is a commit, which takes the whole
+file, carrying another card's half-written line.
+
+- **Claims** (`lib/symbols-markdown.ts`): an Edit on Markdown claims blocks: a paragraph, table, fence or top-level
+  list item, named by its h2-and-deeper headings and opening words (`File map/lib∕runner.ts`). Heading-only claims
+  wouldn't do: MAP's File map is one section of 635 lines. The claim covers `old_string` and `new_string`, so a bullet
+  inserted beside another is the card's own. Write still claims the whole file.
+- **Commits** (`lib/commit-held.ts`): before a commit, for each Markdown path where another busy card holds blocks,
+  the file is rebuilt as HEAD plus every hunk not in those blocks (a hunk in a block both cards hold stays in). The
+  result is a blob, named in a note at `.git/weft-held/<sha of the path>` with HEAD and the working file's blob.
+  commit.sh commits it through a temp index, then resets those paths in the real index. The held hunks stay in the working
+  tree. A note whose HEAD or working file moved is ignored and the path commits whole, so a stale note can't
+  revert a commit, and a failure only falls back to today's behaviour.
+- **Why a note**: a warm spare's env is set before it has a card, so commit.sh can't know who's committing. The Bash
+  guard does (`lib/commit-held-guard.ts`, on lines naming commit.sh, in the guard set every CLI runs); the page buttons call `holdBack` in `lib/pile-commit.ts`, and `releaseClaims` then drops only the committer's claims on a
+  partly committed file.
+- **Only busy cards hold lines.** A Review card is finished, and holding its lines would leave the commit
+  walk-through nothing to commit. A bare `git commit -- file` isn't covered: it takes the whole file, as ever.
+
 ## Reading a command line
 
 The Bash guards don't match strings: `lib/shell-parse.ts` reads the line the way the shell would, and
