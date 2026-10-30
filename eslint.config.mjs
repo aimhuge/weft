@@ -23,7 +23,7 @@ const OVERSIZE = {
   "lib/board-view.test.ts": 520,
   "components/SettingsDialog.tsx": 471,
   "lib/use-dictation.test.ts": 425,
-  "electron/main.cjs": 369,
+  "electron/main.cjs": 355,
   "lib/import.ts": 391,
   "lib/library.ts": 391,
   "components/ReplyBox.tsx": 357,
@@ -122,6 +122,9 @@ const eslintConfig = defineConfig([
     // Leftover installs (node_modules.npm-old) and scratch: ESLint skips only a folder named exactly node_modules.
     "node_modules.*/**",
     ".scratch/**",
+    // Supabase Edge Function entrypoints run on Deno (Deno.serve, npm: imports), outside tsconfig; their pure
+    // modules (message.ts) stay linted and tested.
+    "supabase/functions/*/index.ts",
     // Vendored, minified third-party bundles (public/welcome/gsap.min.js): not our code to lint.
     "**/*.min.js",
     "**/*.bundle.js",
