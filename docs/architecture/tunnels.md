@@ -13,8 +13,8 @@ browser ─▶ weft.zip/t/<id> ─▶ sign-in, owner check ─▶ tunnels row �
 
 ## Why it's built this way
 
-The webhook relay is store and forward: a provider gets 200 before your route runs, and Vercel functions can't hold a
-socket. A Cloudflare quick tunnel gives the live connection for free, with no account or domain, but its URL changes on
+The webhook relay is store and forward: a provider gets 200 before your route runs. A Cloudflare quick tunnel gives the
+live connection for free, with no account or domain, but its URL changes on
 every start and anyone holding it can reach the server. Weft adds what's missing:
 
 - **The stable address.** A `tunnels` row keeps the current URL, and `/t/<id>` (`lib/tunnel-address.ts`) looks it up.
@@ -66,7 +66,9 @@ route slower than 8 s can see a delivery twice. The relay's 1 MB limit still app
 - **Quick tunnels** are for testing and development, with no uptime guarantee and 200 requests in flight. A restart can
   take a minute or more to answer on its new URL.
 - **Workers** don't open tunnels yet: `lib/tunnels.ts` needs the desktop shell for approval and the account session.
-  The move to one's own edge would keep the stable address and the gate.
+  The move to one's own edge would keep the stable address and the gate. Vercel Functions now hold WebSockets
+  (`experimental_upgradeWebSocket` in `@vercel/functions`), so that edge could live on the existing deployment instead
+  of Cloudflare. Untested, including whether it carries streaming any better.
 - **Not exercised live:** the Next dev server's cross-origin check for hot reload through the gate.
 - **A hard kill:** cloudflared stops when the server exits, but a `kill -9` can orphan it. Its gate is gone by then, so
   it reaches nothing, and the row keeps its URL until it expires.
