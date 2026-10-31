@@ -85,6 +85,9 @@ describe("WebBoard desktop chrome", () => {
     await board({ openCardId: "a", initialThread: opened });
     const pane = within(screen.getByRole("region", { name: "Browser pane" }));
     expect(pane.getByTitle("Card page")).toHaveAttribute("src", `/api/web-board/o1/page/${SHA}#login`);
+    // The thread keeps to its share of the row from md up; a bare w-full squeezed the pane to 0px.
+    const thread = screen.getByRole("region", { name: "Browser pane" }).previousElementSibling;
+    expect(thread?.className).toContain("md:w-[44%]");
   });
 
   it("frames a public site with an Open link, and shows the capture for a page only the Mac can reach", async () => {

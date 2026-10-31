@@ -22,7 +22,7 @@ banner in `components/SecretRow.tsx`, and the workspace's **Devices** tab at `ap
 
 **What is still open.** The rename path (Q8) is out of v1 — a renamed repo orphans the old vault, and the
 drawer surfaces the orphan rather than moving it. `docs/architecture/cloud-sync.md` still notes that thread
-item bodies go up as plain JSON; sealing them with the workspace key is a separate piece of work.
+item bodies go up as plain JSON unless sealed; the workspace key that seals them is its own (mobile-security.md), not a vault's.
 
 The point of the shared vault is the same as the local one — a secret's value never enters an agent's context
 — extended to a workspace: a thread on a teammate's machine runs the same `mcp__secrets__list`, the same
@@ -55,8 +55,9 @@ The split:
 
 All of the Supabase-side tables, policies and the `private.share_vault` RPC above are in the draft migration;
 `private.is_org_member` itself already ships in `supabase/migrations/20261013161111_teams_rls.sql` (the draft
-re-declares it so the migration stands alone). The Electron main half — the shadow file, the per-user JWT
-client and the sync — is not built yet.
+re-declares it so the migration stands alone). The desktop reaches `share_vault` and `share_vault_recovery` through
+public wrappers (`supabase/migrations/20261030181901_vault_rpc_wrappers.sql`), because `rpc()` can't call the private
+schema.
 
 ## Tables (Supabase)
 
@@ -103,7 +104,7 @@ fetch to grant the new one access.
 | `public_key` | `text` not null | base64, X25519, 32 bytes |
 | `fingerprint` | `text` not null | base64 SHA-256 of the public key, first 16 bytes, with colons every 2 bytes — what the TOFU UI shows |
 | `platform` | `text` not null | `darwin` / `linux` / `win32`; the registration reads `process.platform` |
-| `last_seen_at` | `timestamptz` not null default now() | updated on every sync, so a stale device can be flagged |
+| `last_seen_at` | `timestamptz` not null default now() | moved every 5 minutes while Weft runs signed in (`electron/device-beat.cjs`), so a stale device can be flagged |
 | `revoked_at` | `timestamptz` | a rotate-on-remove sets this; new grants never include it |
 | `created_at` | `timestamptz` not null default now() | |
 

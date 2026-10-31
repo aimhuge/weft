@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CloudSyncStatus } from "./cloud-sync-view";
-import { syncDot, syncLine } from "./sync-menu";
+import { projectSyncLine, syncDot, syncLine } from "./sync-menu";
 
 const OK: CloudSyncStatus = { waiting: 0, lastSyncAt: null, uploaded: 0, lastError: null, signedOut: false, noWorkspace: false };
 const NOW = 10 * 60_000;
@@ -53,5 +53,33 @@ describe("syncDot", () => {
     expect(syncDot({ ...OK, lastSyncAt: 5 }, ["/a"])).toBeNull();
     expect(syncDot(OK, ["/a"])).toBeNull();
     expect(syncDot({ ...OK, signedOut: true, waiting: 2 }, ["/a"])).toBeNull();
+  });
+});
+
+describe("projectSyncLine", () => {
+  it("says Not Synced for a project that isn't opted in, however the others are doing", () => {
+    expect(projectSyncLine("/a", { ...OK, lastSyncAt: NOW - 60_000 }, ["/b"], NOW)).toEqual({ text: "Not Synced", sub: null, tone: "off" });
+    expect(projectSyncLine("/a", OK, [], NOW)).toEqual({ text: "Not Synced", sub: null, tone: "off" });
+  });
+
+  it("says how long ago it synced", () => {
+    expect(projectSyncLine("/a", { ...OK, lastSyncAt: NOW - 7 * 60_000 }, ["/a"], NOW)).toEqual({ text: "Synced 7m ago", sub: null, tone: "ok" });
+  });
+
+  it("says it's syncing while items wait", () => {
+    expect(projectSyncLine("/a", { ...OK, waiting: 2, lastSyncAt: NOW }, ["/a"], NOW)).toEqual({ text: "Syncing…", sub: null, tone: "busy" });
+  });
+
+  it("names the failure", () => {
+    expect(projectSyncLine("/a", { ...OK, lastError: "HTTP 500" }, ["/a"], NOW)).toEqual({ text: "Sync Failed", sub: "HTTP 500", tone: "error" });
+  });
+
+  it("asks you to sign in, or to claim a workspace, when it can't sync at all", () => {
+    expect(projectSyncLine("/a", { ...OK, signedOut: true }, ["/a"], NOW)).toEqual({ text: "Sign in to sync", sub: null, tone: "off" });
+    expect(projectSyncLine("/a", { ...OK, noWorkspace: true }, ["/a"], NOW)).toEqual({ text: "No workspace yet", sub: null, tone: "off" });
+  });
+
+  it("says Not Synced when it hasn't synced yet", () => {
+    expect(projectSyncLine("/a", OK, ["/a"], NOW)).toEqual({ text: "Not Synced", sub: null, tone: "off" });
   });
 });

@@ -148,4 +148,4 @@ function registerTerminal(ipcMain, { isBoard }) {
   };
 }
 
-module.exports = { registerTerminal, sessionFor, teardownSessions };
+module.exports = { registerTerminal, sessionFor, teardownSessions, loadPty };

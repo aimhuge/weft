@@ -9,7 +9,7 @@ function make(over: Record<string, unknown> = {}) {
   const addBlanks = vi.fn(() => Promise.resolve());
   const vercel = { status: vi.fn((folders: string[]) => ({ folders, from: "vercel" })) };
   const deps = {
-    dataDir: "/tmp/weft-data", app: {}, dialog: {}, shell: {}, window: () => null, board: () => null,
+    dataDir: "/tmp/weft-data", app: {}, dialog: {}, systemPreferences: {} as never, shell: {}, window: () => null, board: () => null,
     sendMenu, updater: () => ({}), vault: () => ({ addBlanks }), vercelEnv: () => null,
     vercelApi: () => vercel, supabaseApi: () => undefined, ...over,
   };
@@ -22,6 +22,15 @@ describe("paneRoutes", () => {
     const keys = Object.keys(make().routes);
     for (const key of ["POST /secrets/ask-add", "POST /folder-access/ask", "POST /app/restart", "POST /webhooks/ask-add", "POST /webhooks/relay-seal",
       "POST /vercel/status", "POST /supabase/status", "POST /vercel/env-push"]) expect(keys).toContain(key);
+  });
+
+  it("asks a person before a tunnel opens, and passes on their answer", async () => {
+    for (const allowed of [true, false]) {
+      const promptTouchID = vi.fn(() => (allowed ? Promise.resolve() : Promise.reject(new Error("no"))));
+      const { routes } = make({ systemPreferences: { canPromptTouchID: () => true, promptTouchID } });
+      await expect(routes["POST /tunnels/approve"]!({ folder: "/p", target: "http://localhost:4000/", hours: 4 })).resolves.toEqual({ approved: allowed });
+      expect(promptTouchID).toHaveBeenCalledWith("open a private tunnel to http://localhost:4000/ from /p for 4 hours");
+    }
   });
 
   it("puts an asked-for key in as a development blank by default", async () => {

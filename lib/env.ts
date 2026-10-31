@@ -23,6 +23,10 @@ const NEXT_SERVER = /^(NODE_ENV|PORT|NEXT_RUNTIME|NEXT_DEPLOYMENT_ID)$|^(__NEXT_
 // that needs one gets it from the vault through mcp__secrets__run.
 const SECRET_NAME = /(^|_)(KEYS?|TOKENS?|SECRETS?|PASSWORD|PASSWD|PASSPHRASE|CREDENTIALS?|PRIVATE|PAT|DSN)(_|$)|(^|_)DATABASE_URL$/i;
 const CLI_SIGN_IN = /^(ANTHROPIC_|PUKU_)|^CODEX_API_KEY$/;
+// Claude Code's headless sign-in (`claude setup-token`): how a Weft Worker's CLIs log in, where no keychain prompt
+// can be answered (docs/architecture/weft-worker.md). Kept unless Weft runs inside a Claude session, whose own
+// token it would be.
+const CLAUDE_OAUTH = "CLAUDE_CODE_OAUTH_TOKEN";
 // Loader hooks: variables that make a process load code before it runs its own. NODE_OPTIONS
 // (--require, --import) reaches every Node a thread starts; LD_PRELOAD and the DYLD_* family reach
 // every process at the native level. A value here is never a secret by shape, but it is a way to run
@@ -39,7 +43,10 @@ function isSecretVar(key: string, value: string | undefined): boolean {
 export function cliEnv(): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...process.env };
   const insideClaude = Boolean(env.CLAUDECODE || env.CLAUDE_CODE_DESKTOP_APP_VERSION);
-  for (const [key, value] of Object.entries(env)) if (INHERITED.test(key) || INTERNAL.test(key) || NEXT_SERVER.test(key) || isSecretVar(key, value)) Reflect.deleteProperty(env, key);
+  for (const [key, value] of Object.entries(env)) {
+    if (key === CLAUDE_OAUTH && !insideClaude) continue;
+    if (INHERITED.test(key) || INTERNAL.test(key) || NEXT_SERVER.test(key) || isSecretVar(key, value)) Reflect.deleteProperty(env, key);
+  }
   // The Claude app routes its own sessions through a local proxy; that address isn't ours to use.
   if (insideClaude) delete env.ANTHROPIC_BASE_URL;
   env.CLAUDE_CODE_ENTRYPOINT = "sdk-ts";

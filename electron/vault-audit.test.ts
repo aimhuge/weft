@@ -180,9 +180,11 @@ describe("createVault audit and grants", () => {
     expect(await vault.grant(folder, { card: "c1", thread: "Build card", by: "you", site: "supabase.com" })).toMatchObject({ granted: true });
     prompt.mockClear();
 
-    // Another site: the grant does not cover it, so it asks.
+    // Another site: the grant does not cover it, so it asks. The user says no, which is what
+    // proves the grant didn't cover it (a grant would have typed the value with no question).
+    prompt.mockResolvedValue(false);
     const other = await vault.useFor(folder, "A", "development", { card: "c1", site: "evil.example.com" });
-    expect(other).toEqual({ denied: true });
+    expect(other).toEqual({ denied: true, label: "Owner/Repo" });
     expect(prompt).toHaveBeenCalledTimes(1);
   });
 
@@ -194,8 +196,9 @@ describe("createVault audit and grants", () => {
     prompt.mockClear();
 
     // The grant names no page, so it covers only the site-less powers: a fill still asks.
+    prompt.mockResolvedValue(false);
     const got = await vault.useFor(folder, "A", "development", { card: "c1", site: "supabase.com" });
-    expect(got).toEqual({ denied: true });
+    expect(got).toEqual({ denied: true, label: "Owner/Repo" });
     expect(prompt).toHaveBeenCalledTimes(1);
   });
 });

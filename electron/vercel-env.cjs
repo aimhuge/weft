@@ -54,11 +54,12 @@ function createVercelEnv({ vercel, vault, onDrift, linked = (folder) => Boolean(
     },
 
     // Pushes one vault value to the linked project, replacing what Vercel had for that name and environment.
-    async push(folder, name, environment) {
+    // card is the thread that asked (mcp__secrets__push_to_vercel): its grant may cover the push.
+    async push(folder, name, environment, card = "") {
       if (!NAME.test(name)) throw new Error(`${name || "A blank name"} isn't a variable name.`);
       if (!ENVIRONMENTS.includes(environment)) throw new Error(`Unknown environment: ${environment}`);
       const { project } = await vercel.envList(folder);
-      const r = await vault.sendValue(folder, name, environment, (label) => `push ${name} (${label}, ${environment}) to Vercel project ${project}`, (value) => vercel.envSet(folder, name, environment, value));
+      const r = await vault.sendValue(folder, name, environment, (label) => `push ${name} (${label}, ${environment}) to Vercel project ${project}`, (value) => vercel.envSet(folder, name, environment, value), card);
       void cache.listed(folder).catch(() => null);
       return r;
     },
@@ -123,12 +124,14 @@ function createVercelEnv({ vercel, vault, onDrift, linked = (folder) => Boolean(
 }
 
 // The control server's routes for threads (mcp__secrets__push_to_vercel): names in, what happened out, never a value.
-function envRoutes(env) {
+// cardFor proves which card asked (electron/card-token.cjs), so its grant can cover a push.
+/** @param {(body: Record<string, unknown>, route: string) => string} [cardFor] */
+function envRoutes(env, cardFor = () => "") {
   return {
     "POST /vercel/env-status": ({ folder }) => env().status(String(folder)),
     // The copilot's setup gaps (lib/copilot-setup.ts): cached rows only, so it never waits on Vercel.
     "POST /vercel/env-drift": ({ folders }) => env().drift(Array.isArray(folders) ? folders.map(String) : []),
-    "POST /vercel/env-push": ({ folder, name, environment }) => env().push(String(folder), String(name), String(environment ?? "")),
+    "POST /vercel/env-push": (body, route) => env().push(String(body.folder), String(body.name), String(body.environment ?? ""), String(cardFor(body, route) || "")),
     // The server's side of the pull webhook (lib/vercel-hooks.ts): pull a folder, and make or take off the team's hook.
     "POST /vercel/env-pull": ({ folder }) => env().pull(String(folder)),
     "POST /vercel/webhook-create": ({ teamId, url }) => env().createWebhook(String(teamId), String(url)),

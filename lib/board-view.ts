@@ -13,6 +13,14 @@ export interface ProjectSummary {
   needsYou: number; // unarchived cards in the Needs you column
   pinned?: boolean; // always a chip, ahead of the recent ones (lib/project-menu.ts)
   hidden?: boolean; // no chip until it's used again; "More" still lists it
+  worker?: ProjectWorker; // it lives on a Weft Worker, not on this Mac (lib/worker-project.ts)
+}
+
+export type WorkerProjectStatus = "online" | "busy" | "offline";
+
+export interface ProjectWorker {
+  name: string;
+  status: WorkerProjectStatus;
 }
 
 export interface BoardView {

@@ -8,6 +8,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import "./test-utils";
 
+import { setBoardMode } from "@/lib/board-prefs";
 import ProjectBar from "./ProjectBar";
 
 afterEach(cleanup);
@@ -59,5 +60,16 @@ describe("ProjectBar's view toast", () => {
     setup({ viewHint: { mode: "list", id: 1 }, onDismissViewHint });
     screen.getByLabelText("Dismiss").click();
     expect(onDismissViewHint).toHaveBeenCalled();
+  });
+});
+
+describe("ProjectBar in Regular mode", () => {
+  it("drops the view toggle and the sort", () => {
+    setBoardMode("regular");
+    setup();
+    expect(screen.queryByLabelText("Sort cards")).toBeNull();
+    expect(screen.queryByRole("button", { name: /list/i })).toBeNull();
+    expect(screen.getByText("More")).toBeInTheDocument();
+    document.cookie = "weft-board-mode=; path=/; max-age=0";
   });
 });

@@ -58,8 +58,15 @@ describe("vercel-env", () => {
   it("pushes one value after a Touch ID that names it, the vault, the environment and the project", async () => {
     const { env, vault, vercel } = make();
     expect(await env.push("/dev/weft", "KEY", "production")).toEqual({ pushed: true, project: "weft", label: "aimhuge/weft" });
-    expect(vault.sendValue).toHaveBeenCalledWith("/dev/weft", "KEY", "production", expect.any(Function), expect.any(Function));
+    expect(vault.sendValue).toHaveBeenCalledWith("/dev/weft", "KEY", "production", expect.any(Function), expect.any(Function), "");
     expect(vercel.envSet).toHaveBeenCalledWith("/dev/weft", "KEY", "production", "value-for-push KEY (aimhuge/weft, production) to Vercel project weft");
+  });
+
+  // The card that asked is passed on, so its grant can cover the push (2026-10-29).
+  it("passes the card that asked on to the send, so its grant can cover the push", async () => {
+    const { env, vault } = make();
+    await env.push("/dev/weft", "KEY", "production", "c1");
+    expect(vault.sendValue).toHaveBeenCalledWith("/dev/weft", "KEY", "production", expect.any(Function), expect.any(Function), "c1");
   });
 
   describe("push all", () => {
@@ -258,7 +265,16 @@ describe("vercel-env", () => {
     await routes["POST /vercel/env-status"]({ folder: "/dev/weft" });
     await routes["POST /vercel/env-push"]({ folder: "/dev/weft", name: "KEY", environment: undefined });
     expect(env.status).toHaveBeenCalledWith("/dev/weft");
-    expect(env.push).toHaveBeenCalledWith("/dev/weft", "KEY", "");
+    expect(env.push).toHaveBeenCalledWith("/dev/weft", "KEY", "", "");
+  });
+
+  // The push route proves which card asked, so a grant that names writes can cover the push
+  // (electron/card-token.cjs, 2026-10-29).
+  it("pushes with the card the request proved, not the card it names", async () => {
+    const env = { status: vi.fn(() => Promise.resolve({})), push: vi.fn(() => Promise.resolve({})) };
+    const routes = envRoutes(() => env, (_body, route) => (route === "/vercel/env-push" ? "proven" : ""));
+    await routes["POST /vercel/env-push"]({ folder: "/dev/weft", name: "KEY", environment: "production", card: "someone-else" }, "/vercel/env-push");
+    expect(env.push).toHaveBeenCalledWith("/dev/weft", "KEY", "production", "proven");
   });
 
   it("gives the control server a pull route and webhook routes", async () => {

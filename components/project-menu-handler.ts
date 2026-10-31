@@ -4,6 +4,9 @@ import { isLive } from "@/lib/format";
 import { stopNow } from "@/lib/optimistic-cards";
 import { folderName } from "@/lib/project-bar";
 import { projectMenu, type ProjectAction } from "@/lib/project-menu";
+import { projectSyncLine } from "@/lib/sync-menu";
+import { workerProjectMenu } from "@/lib/worker-project";
+import type { CloudSyncStatus } from "@/lib/cloud-sync-view";
 import type { ProjectSummary } from "@/lib/board-view";
 import type { RailPanel } from "@/lib/rail-view";
 import type { Card } from "@/lib/types";
@@ -21,6 +24,11 @@ export interface ProjectMenuDeps {
   archive: (cards: Card[]) => void;
   toast: (message: string) => void;
   notify: (err: unknown) => void;
+  // Cloud sync to weft.zip: the projects opted in, and how the last flush went.
+  syncFolders: string[];
+  syncStatus: CloudSyncStatus;
+  // Reads the live state again (the board's last read may be stale) and tells the board about it.
+  readSync: () => Promise<{ folders: string[]; status: CloudSyncStatus }>;
 }
 
 // Right-clicking a project chip, or a project in "More". The menu is native (lib/project-menu.ts); in a
@@ -33,20 +41,43 @@ export function projectMenuHandler(deps: ProjectMenuDeps) {
     e.preventDefault();
     e.stopPropagation();
     const project = deps.projects.find((p) => p.path === path);
+    // A worker's project has no folder here, so only what a board can do from afar is on its menu.
+    if (project?.worker) {
+      const picked = await shell.popupMenu(workerProjectMenu(folderName(path), project.worker));
+      if (picked === "new") deps.openNew(path);
+      return Boolean(picked);
+    }
     const mine = deps.cards.filter((c) => deps.rootOf(c.cwd) === path && !c.archived);
     const done = mine.filter((c) => c.column === "done");
     const live = mine.filter(isLive);
     const name = folderName(path);
+    // Read sync fresh, so the line beside Sync says how it stands now, not when the board last looked.
+    // A failed read keeps what the board already knows rather than blocking the menu.
+    let folders = deps.syncFolders;
+    let status = deps.syncStatus;
+    try {
+      const fresh = await deps.readSync();
+      folders = fresh.folders;
+      status = fresh.status;
+    } catch {
+      // Keep the last known state.
+    }
+    const synced = folders.includes(path);
+    const onWorker = await api.workerFolders().then((r) => r.folders.includes(path), () => false);
     const menu = projectMenu(name, {
       pinned: Boolean(project?.pinned),
       hidden: Boolean(project?.hidden),
       done: done.length,
       live: live.length,
       openIn: "openIn" in shell,
+      synced,
+      syncable: !status.signedOut && !status.noWorkspace,
+      syncStatus: projectSyncLine(path, status, folders, Date.now()).text,
+      onWorker,
     });
     const picked = (await shell.popupMenu(menu)) as ProjectAction | null;
     if (!picked) return false;
-    const actions = projectActions(path, name, { ...deps, shell, done, live });
+    const actions = projectActions(path, name, { ...deps, shell, done, live, syncFolders: folders, syncStatus: status });
     Promise.resolve(actions[picked]()).catch(deps.notify);
     return true;
   };
@@ -63,6 +94,10 @@ function projectActions(path: string, name: string, c: ActionContext): Record<Pr
   const drawer = (panel: RailPanel) => {
     c.chooseProject(path);
     c.openDrawer(panel);
+  };
+  const runOn = async (worker: boolean) => {
+    const r = await api.setWorkerFolder(path, worker);
+    c.toast(worker ? `New threads in ${name} now run on ${r.worker ?? "your worker"}.` : `New threads in ${name} run on this machine again.`);
   };
   const mark = (marks: { pinned?: boolean; hidden?: boolean }) => api.markProject(path, marks);
   return {
@@ -82,6 +117,14 @@ function projectActions(path: string, name: string, c: ActionContext): Record<Pr
     secrets: () => drawer("vault"),
     services: () => drawer("services"),
     changelog: () => openChangelog(path),
+    sync: async () => {
+      const on = !c.syncFolders.includes(path);
+      await api.cloudSyncSetFolder(path, on);
+      await c.readSync();
+      c.toast(on ? `${name} now syncs to weft.zip (unencrypted for now).` : `${name} no longer syncs.`);
+    },
+    "run-here": () => runOn(false),
+    "run-worker": () => runOn(true),
     pin: () => mark({ pinned: true }),
     unpin: () => mark({ pinned: false }),
     hide: async () => {

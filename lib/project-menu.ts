@@ -13,6 +13,9 @@ export type ProjectAction =
   | "secrets"
   | "services"
   | "changelog"
+  | "sync"
+  | "run-here"
+  | "run-worker"
   | "pin"
   | "unpin"
   | "hide"
@@ -28,6 +31,13 @@ export interface ProjectMenuState {
   live: number; // running cards and cards with a queued turn
   // The shell can open a folder in an editor or terminal app (electron/open-in.cjs); an older shell can't.
   openIn: boolean;
+  // Cloud sync to weft.zip: whether this project uploads its threads, and whether it may (signed in, workspace claimed).
+  synced: boolean;
+  syncable: boolean;
+  // Where this project's sync stands ("Synced 7m ago", "Not Synced"), shown beside the Sync item.
+  syncStatus: string;
+  // "Run on Worker": the project's new cards go to your Weft Worker instead of this machine (lib/worker-handoff.ts).
+  onWorker: boolean;
 }
 
 const SEPARATOR: MenuItem = { type: "separator" };
@@ -43,6 +53,9 @@ const KEYS: Record<string, string> = {
   secrets: "K",
   services: "D",
   changelog: "L",
+  sync: "Y",
+  "run-here": "M",
+  "run-worker": "W",
   pin: "P",
   unpin: "P",
 };
@@ -61,6 +74,10 @@ export function projectMenu(name: string, s: ProjectMenuState): MenuItem[] {
     { id: "secrets", label: "Secrets…" },
     { id: "services", label: "Dev Servers…" },
     { id: "changelog", label: "Changelog…" },
+    SEPARATOR,
+    { id: "sync", label: s.synced ? `Don't Sync ${name}` : `Sync ${name}`, enabled: s.syncable || s.synced, detail: s.syncStatus },
+    { id: "run-here", label: "Run on This Machine", checked: !s.onWorker },
+    { id: "run-worker", label: "Run on Worker", checked: s.onWorker, enabled: s.syncable || s.onWorker },
     SEPARATOR,
     s.pinned ? { id: "unpin", label: "Unpin from Bar" } : { id: "pin", label: "Pin to Bar" },
     s.hidden ? { id: "show", label: "Show in Bar" } : { id: "hide", label: "Hide from Bar" },

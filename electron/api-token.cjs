@@ -5,9 +5,31 @@ const { PANE_PARTITION } = require("./browser-pane.cjs");
 
 const API_TOKEN_HEADER = "x-weft-token";
 
+// A frame inside the board window is somebody's page, and only the board itself is the launch token's owner. So a
+// frame's own load and everything it asks for go without it. A sandboxed frame's origin reads "null", which still
+// holds once its frame object is gone; a frame we can't read any more counts as one.
+function fromFrame({ resourceType, initiatorOrigin, frame }) {
+  if (resourceType === "subFrame" || initiatorOrigin === "null") return true;
+  try {
+    return Boolean(frame?.parent);
+  } catch {
+    return true;
+  }
+}
+
+// The one local route a frame loads: a worker card's page (components/web-board/WebPane.tsx). It gets the plain read
+// value, as the pane gets for a picture; the intros and the welcome loop are static files and need nothing.
+const FRAME_PAGE = /^\/api\/worker-board\/page\/[0-9a-f]{64}$/;
+
+function frameHeaders({ method, url, requestHeaders }) {
+  const { [API_TOKEN_HEADER]: _sent, ...rest } = requestHeaders;
+  return method === "GET" && FRAME_PAGE.test(new URL(url).pathname) ? { ...rest, [API_TOKEN_HEADER]: "1" } : rest;
+}
+
 function attachApiToken(session, serverUrl, token) {
   const origin = new URL(serverUrl).origin;
   session.webRequest.onBeforeSendHeaders({ urls: [`${origin}/*`] }, (details, callback) => {
+    if (fromFrame(details)) return callback({ requestHeaders: frameHeaders(details) });
     callback({ requestHeaders: { ...details.requestHeaders, [API_TOKEN_HEADER]: token } });
   });
 }

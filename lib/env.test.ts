@@ -123,6 +123,16 @@ describe("cliEnv", () => {
     expect(cliEnv().ANTHROPIC_BASE_URL).toBe("https://proxy.example.com");
   });
 
+  // A Weft Worker's CLIs sign in with `claude setup-token`'s token, since no keychain prompt can be answered there.
+  it("keeps Claude Code's OAuth token outside Claude, and drops a Claude session's own", () => {
+    vi.stubEnv("CLAUDECODE", "");
+    vi.stubEnv("CLAUDE_CODE_DESKTOP_APP_VERSION", "");
+    vi.stubEnv("CLAUDE_CODE_OAUTH_TOKEN", "oauth");
+    expect(cliEnv().CLAUDE_CODE_OAUTH_TOKEN).toBe("oauth");
+    vi.stubEnv("CLAUDECODE", "1");
+    expect(cliEnv()).not.toHaveProperty("CLAUDE_CODE_OAUTH_TOKEN");
+  });
+
   it("returns a copy and leaves process.env alone", () => {
     vi.stubEnv("CLAUDECODE", "1");
     vi.stubEnv("CLAUDE_CODE_ENTRYPOINT", "cli");

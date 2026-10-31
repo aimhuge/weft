@@ -209,7 +209,7 @@ export function WebBoard({ orgId, orgSlug, userId, user, orgs, initialCommands, 
               const failed = await board.sendReply(active, text);
               if (failed) throw new Error(failed);
             }}
-            onAnswer={(allow, answers, reply) => void board.answer(active, allow, answers, reply)}
+            onAnswer={(allow, answers, reply, grant) => void board.answer(active, allow, answers, reply, grant)}
           />
         )}
       </div>

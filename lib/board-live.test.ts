@@ -65,6 +65,7 @@ function live(over: Partial<BoardLive> = {}) {
     loadFromPrefs: vi.fn(),
     loadThread: vi.fn(),
     notify: vi.fn(),
+    awayMove: vi.fn(),
     ...over,
   };
   return { l, cards: cards.box, unseen: unseen.box, thread: thread.box, streaming: streaming.box };

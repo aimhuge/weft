@@ -3,12 +3,13 @@
 // What sits under a thread's messages in ThreadView: a pending permission request (when it isn't a question, which
 // the reply box asks) and the reply box, or just the status strip where the review panel stands in for the box or
 // nothing can be sent. Both read what they can offer from the thread's transport (lib/thread-transport.ts): Wait,
-// folder grants and "!" commands only where the Mac itself runs the card.
+// and "!" commands only where the Mac itself runs the card; a folder grant goes inside the answer on any other machine.
 import type { TrackSend } from "@/lib/use-pending-sends";
 import type { ReactNode } from "react";
 import type { PlanResets } from "@/lib/schedule";
 import { turnCutOff } from "@/lib/reply-mode";
 import { modelOn } from "@/lib/new-thread";
+import type { GrantScope } from "@/lib/cloud-commands";
 import { useThreadTransport } from "@/lib/thread-transport";
 import type { Card } from "@/lib/types";
 import type { CacheState } from "@/lib/types-card";
@@ -27,14 +28,19 @@ const ReplyBox = guarded(() => import("./ReplyBox"), { what: "reply box", classN
 
 // The request under the thread, with its answers unless the thread is read-only here. answer(allow) marks it answered;
 // an MCP server's form (lib/elicitation.ts) answers with its values too.
-export function PermissionRequest({ card, readOnly, answered, answer }: { card: Card; readOnly: boolean; answered: boolean; answer: (allow: boolean, answers?: Record<string, string>) => void }) {
-  const { grantFolder, waitPermission, putFirst, putHolderFirst } = useThreadTransport();
+export function PermissionRequest({ card, readOnly, answered, answer }: { card: Card; readOnly: boolean; answered: boolean; answer: (allow: boolean, answers?: Record<string, string>, grant?: GrantScope) => void }) {
+  const { grantFolder, grantInAnswer, waitPermission, putFirst, putHolderFirst } = useThreadTransport();
   const pending = card.pending;
   if (!pending || pending.questions) return null;
 
   // "This card" / "Always" on an outside-folder prompt: grant the folder and allow the call (lib/folder-guard.ts).
-  // Both go at once, the grant first, so the prompt leaves without waiting on the grant's round trip.
-  const grant = (scope: "card" | "always") => {
+  // Both go at once, the grant first, so the prompt leaves without waiting on the grant's round trip. On another
+  // machine they are one command, and the folder is that machine's to read.
+  const grant = (scope: GrantScope) => {
+    if (grantInAnswer) {
+      answer(true, undefined, scope);
+      return;
+    }
     const dir = pending.readScope?.directory;
     if (!dir || !grantFolder) return;
     void grantFolder(card.id, dir, scope).catch(() => {});
@@ -61,7 +67,8 @@ export function PermissionRequest({ card, readOnly, answered, answer }: { card: 
             onWait={waitPermission && (() => void waitPermission(card.id, pending.id).catch(() => {}))}
             onFirst={putFirst && (() => void putFirst(card.id, pending.id).catch(() => {}))}
             onOtherFirst={putHolderFirst && (() => void putHolderFirst(card.id, pending.id).catch(() => {}))}
-            onGrant={grantFolder && grant}
+            onGrant={grantFolder || grantInAnswer ? grant : undefined}
+            elsewhere={grantInAnswer}
           />
         )}
       </div>

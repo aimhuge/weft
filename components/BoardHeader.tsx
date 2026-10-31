@@ -4,6 +4,7 @@
 // browser / terminal / settings / new-thread buttons, and the account button. Each button gets
 // the keyboard hint that lives in the hotkeys registry.
 import type { ReactNode } from "react";
+import { useRegularMode } from "@/lib/use-regular-mode";
 import Icon from "./Icon";
 
 export interface BoardHeaderProps {
@@ -40,6 +41,8 @@ export default function BoardHeader({
   // On weft.zip the browser and terminal panes and the Mac's Settings are on the Mac, so the web
   // header leaves those three out and shares the board with the host's own share control.
   const web = variant === "web";
+  // Regular mode leaves out the terminal and share buttons.
+  const regular = useRegularMode();
   return (
     <header
       className={`flex shrink-0 items-center gap-3 border-b border-line bg-panel ${mac ? "app-drag mac-title-bar pr-4" : "px-4 py-2.5"}`}
@@ -67,19 +70,20 @@ export default function BoardHeader({
           >
             <Icon name="globe" size={15} />
           </button>
-          <button
-            onClick={onToggleTerminal}
-            title={hint("terminal", "Terminal")}
-            aria-label="Terminal"
-            className={`rounded-md border p-1.5 ${terminalOpen ? "border-accent bg-accent-soft text-accent" : "border-line-strong text-muted hover:bg-sunken hover:text-ink"}`}
-          >
-            <Icon name="terminal" size={15} />
-          </button>
+          {!regular && (
+            <button
+              onClick={onToggleTerminal}
+              title={hint("terminal", "Terminal")}
+              aria-label="Terminal"
+              className={`rounded-md border p-1.5 ${terminalOpen ? "border-accent bg-accent-soft text-accent" : "border-line-strong text-muted hover:bg-sunken hover:text-ink"}`}
+            >
+              <Icon name="terminal" size={15} />
+            </button>
+          )}
         </>
       )}
-      {web ? (
-        slots.share
-      ) : (
+      {web && slots.share}
+      {!web && !regular && (
         <button
           onClick={onShareBoard}
           title={hint("share-board", "Share the board")}

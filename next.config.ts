@@ -89,6 +89,12 @@ const nextConfig: NextConfig = {
         as: "*.css",
       },
     },
+    // libsodium-wrappers 0.7.16's ESM build imports a ./libsodium.mjs it doesn't ship; its CommonJS build works
+    // (lib/sodium.ts, docs/architecture/mobile-security.md). In the browser, its `fs`/`path` requires sit behind a
+    // Node check and never run.
+    resolveAlias: {
+      "libsodium-wrappers": "./node_modules/libsodium-wrappers/dist/modules/libsodium-wrappers.js",
+    },
   },
 };
 

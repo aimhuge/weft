@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { cardShareLink, threadPublicUrl } from "./share-types";
-import { CARD_SHARE_MODES, isCardShareMode, newShareId, paneFor, paneFromUrl, seedShareState, SHARE_ID_RE, shareUrl } from "./share-types";
+import { CARD_SHARE_MODES, isCardShareMode, newShareId, paneFor, paneFromUrl, screenPage, screenTopic, seedShareState, SHARE_ID_RE, shareUrl } from "./share-types";
 import type { ThreadItem } from "./types";
 
 const SHA = "a".repeat(64);
@@ -95,5 +95,25 @@ describe("seedShareState", () => {
     const memo = { id: "abc", mode: "public" as const, hasPassword: false, url: "https://weft.zip/@fo/threads/x", slug: "x", showChat: false };
     expect(seedShareState({ share: memo }, false)).toMatchObject({ url: "https://weft.zip/@fo/threads/x", slug: "x", showChat: false });
     expect(seedShareState({ share: { id: "abc", mode: "public", hasPassword: false } }, true)).toEqual({ kind: "signed-out" });
+  });
+});
+
+describe("a worker's live screen", () => {
+  const token = "0123456789abcdef0123456789abcdef";
+
+  it("round-trips through card.page", () => {
+    const url = screenPage(token, { id: "udid-1", name: "iPhone 17 & co" }, 500);
+    expect(paneFromUrl(url)).toMatchObject({ kind: "screen", token, device: "udid-1", label: "iPhone 17 & co", until: 500 });
+    expect(screenTopic(token)).toBe(`worker-screen:${token}`);
+  });
+
+  it("refuses a malformed one", () => {
+    expect(paneFromUrl("weft-screen:short?device=d&until=1")).toBeNull();
+    expect(paneFromUrl(`weft-screen:${token}?until=1`)).toBeNull();
+    expect(paneFromUrl(`weft-screen:${token}?device=d&until=soon`)).toBeNull();
+  });
+
+  it("names the device when the name is missing", () => {
+    expect(paneFromUrl(`weft-screen:${token}?device=d&until=1`)).toMatchObject({ label: "d" });
   });
 });

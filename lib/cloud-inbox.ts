@@ -9,16 +9,22 @@
 // It only obeys a command that is (1) for this device, (2) created by the account signed in here, (3) for a
 // folder switched on in Settings → Sync and (4) for the workspace this Mac syncs to. A Realtime event is just
 // a nudge: what runs is always read back from the table, never taken from the event.
+import path from "node:path";
 import type { RealtimeChannel, SupabaseClient } from "@supabase/supabase-js";
 import { accountClient } from "./account";
-import { answerBody, newCardBody, replyBody, stopBody, type CloudCommandRow } from "./cloud-commands";
+import { approvalProblem } from "./approval-check";
+import { shell } from "./browser-shell";
+import { answerBody, answerGrant, newCardBody, replyBody, stopBody, type CloudCommandRow } from "./cloud-commands";
 import { syncNow, syncOrgId } from "./cloud-sync";
+import { beatDesktopWorker } from "./desktop-worker";
 import { deviceId } from "./device-id";
+import { applyFolderGrant } from "./folder-grant";
 import { globalSingleton } from "./global-singleton";
 import { startFeatureCard } from "./card-starter";
 import { answerPermission, sendUserMessage, stop } from "./runner";
 import { syncFolders } from "./settings";
 import { getCard } from "./store";
+import { pairingStatus } from "./sync-security";
 
 const CHECK_MS = 30_000;
 const BATCH = 20;
@@ -67,6 +73,8 @@ export async function refreshCloudInbox() {
       await stopListening(client);
       return;
     }
+    // Listening means this Mac takes the web board's commands: say so in the workspace's Workers list.
+    void beatDesktopWorker(client, uid);
     if (g.channel && g.uid === uid) {
       await drain();
       return;
@@ -163,16 +171,26 @@ async function startFromCommand(client: SupabaseClient, uid: string, command: Cl
   const kind: string = command.kind;
   if (kind !== "new_card" && kind !== "reply" && kind !== "answer" && kind !== "stop") throw new Error("This version of Weft doesn't know that kind of request. Update the desktop app.");
   if (command.created_by !== uid) throw new Error("That request wasn't made by the account signed in on this Mac.");
-  if (!syncFolders().includes(command.folder)) throw new Error(`${command.folder} isn't switched on in Settings → Sync on this Mac.`);
+  // A new card may name its folder by project name (a run sent to this Mac as a worker); the rest name the path.
+  const folder = kind === "new_card" ? syncFolderFor(command.folder) : syncFolders().includes(command.folder) ? command.folder : null;
+  if (!folder) throw new Error(`${command.folder} isn't switched on in Settings → Sync on this Mac.`);
   const org = await syncOrgId(client, uid);
   if (org !== command.org_id) throw new Error("That workspace isn't the one this Mac syncs its cards to.");
   if (kind === "reply") return replyFromCommand(command);
-  if (kind === "answer") return answerFromCommand(command);
+  if (kind === "answer") return await answerFromCommand(command);
   if (kind === "stop") return stopFromCommand(command);
-  const card = await startFeatureCard(newCardBody(command));
+  const card = await startFeatureCard(newCardBody({ ...command, folder }));
   // The card and its first items are already in the outbox; send them now so the board sees it start.
   syncNow();
   return card.id;
+}
+
+// The synced folder a new card names: its path, or a project name that matches exactly one synced folder's name.
+export function syncFolderFor(name: string): string | null {
+  const folders = syncFolders();
+  if (folders.includes(name)) return name;
+  const named = folders.filter((f) => path.basename(f) === name);
+  return named.length === 1 ? (named[0] ?? null) : null;
 }
 
 // A reply goes to the card the way the reply box sends one: now, or after the turn that's running (the card shows it
@@ -192,13 +210,26 @@ function replyFromCommand(command: CloudCommandRow): string {
 // An answer goes to the card's pending permission request or question: it has to be in the command's folder
 // (so a reply can't reach a thread outside a synced folder), and not the copilot. answerPermission throws when
 // the request isn't waiting any more, which the run() above turns into a failed report.
-function answerFromCommand(command: CloudCommandRow): string {
+// It also has to pass the approval rule (lib/approval-check.ts): a signed answer must be a paired phone's, and an unsigned
+// Allow on a permission request waits for the phone once one is paired.
+async function answerFromCommand(command: CloudCommandRow): Promise<string> {
   const answer = answerBody(command);
   if (!answer) throw new Error("That answer is empty.");
   const card = getCard(answer.cardId);
   if (!card || card.cwd !== command.folder) throw new Error("That thread isn't on this Mac anymore.");
   if (card.role === "copilot") throw new Error("The copilot can't be answered from the web.");
+  const pairing = await pairingStatus();
+  const problem = await approvalProblem(command, answer, card.pending, {
+    verify: async (body) => (await shell("/pairing/verify", body)) as { ok: boolean; reason?: string },
+    approvers: () => Promise.resolve(pairing.approvers),
+    webApprovals: pairing.webApprovals,
+    now: Date.now(),
+  });
+  if (problem) throw new Error(problem);
+  // Read before the answer clears the request; written after it, so one that has gone leaves no grant behind.
+  const grant = answerGrant(answer, card.pending);
   answerPermission(card.id, answer.allow, answer.answers, answer.pendingId, answer.reply);
+  if (grant) applyFolderGrant(card.id, grant.directory, grant.scope);
   // Settling an answer already updates the card; sync so the web board sees the new state.
   syncNow();
   return card.id;

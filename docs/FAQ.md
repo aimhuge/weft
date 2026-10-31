@@ -649,6 +649,13 @@ The 🪝 drawer lists each project's webhook routes. A thread that writes a rout
 Resend) records it there, and Weft can give it a public relay URL on weft.zip that forwards deliveries to your local
 route while Weft runs. No ngrok needed. The relay needs a Weft account.
 
+### Can I open my dev server from outside this Mac?
+
+Yes. **Open a tunnel** in 🪝 gives a dev server a private address on weft.zip that works from anywhere, with hot reload.
+You approve it with Touch ID, only your Weft account gets in, and it closes by itself after 4 hours unless you choose
+otherwise. It runs on a Cloudflare quick tunnel, so Cloudflare can see the traffic, and a streaming AI reply appears all
+at once instead of typing out.
+
 ### Is there a terminal?
 
 Yes: ⌃\` (or `t` on the board) opens a real login shell in a drawer along the bottom. Each folder gets its own shell,

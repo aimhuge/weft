@@ -43,8 +43,8 @@ describe("webhooksMcpServer", () => {
   it("is the webhooks server, loaded up front, and its prompt names every tool and warns off tunnels", () => {
     expect(server.name).toBe("webhooks");
     expect(server.alwaysLoad).toBe(true);
-    expect(server.tools.map((t) => t.name)).toEqual(["list", "add_blank", "ask_add", "relay", "mark_registered"]);
-    for (const name of ["add_blank", "ask_add", "relay", "mark_registered"]) expect(wt.WEBHOOKS_PROMPT).toContain(`mcp__webhooks__${name}`);
+    expect(server.tools.map((t) => t.name)).toEqual(["list", "add_blank", "ask_add", "relay", "tunnel", "close_tunnel", "mark_registered"]);
+    for (const name of ["add_blank", "ask_add", "relay", "tunnel", "close_tunnel", "mark_registered"]) expect(wt.WEBHOOKS_PROMPT).toContain(`mcp__webhooks__${name}`);
     expect(wt.WEBHOOKS_PROMPT).toContain("ngrok");
   });
 

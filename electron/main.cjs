@@ -20,6 +20,7 @@ const os = require("node:os");
 const path = require("node:path");
 const { registerAboutBridge } = require("./about.cjs");
 const { createBrowserPane } = require("./browser-pane.cjs");
+const { registerPaneIpc } = require("./pane-ipc.cjs");
 const { cardFinder } = require("./card-token.cjs");
 const { createMenus } = require("./menus.cjs");
 const { createPageLinks } = require("./page-links.cjs");
@@ -69,7 +70,7 @@ const timer = createStartupTimer({
 
 // The secrets vault, set up further down; the pane types its values in for threads (fillSecret).
 // With it, commands and dev servers run with vault values (secret-run.cjs) and the push to Vercel (vercel-env.cjs).
-let vault, secretRun, vercelEnv, vercelApi, supabaseApi, blastcpApi, gooseApi, slackApi, accountClient;
+let vault, secretRun, vercelEnv, vercelApi, supabaseApi, blastcpApi, gooseApi, slackApi, accountClient, pairing;
 // Small native warning dialog; shared by pageLinks (walk-through buttons) and accountLink (OAuth callback).
 const warnUser = (message, detail) => dialog.showMessageBox(win, { type: "warning", message, detail });
 const pane = createBrowserPane({
@@ -83,7 +84,7 @@ const pane = createBrowserPane({
   routes: paneRoutes({
     dataDir: dataDir(), app, dialog, shell, sendMenu,
     window: () => win, board: () => appView?.webContents, updater: () => menus.updater,
-    vault: () => vault, vercelEnv: () => vercelEnv, vercelApi: () => vercelApi, supabaseApi: () => supabaseApi, blastcpApi: () => blastcpApi, gooseApi: () => gooseApi, slackApi: () => slackApi,
+    vault: () => vault, vercelEnv: () => vercelEnv, vercelApi: () => vercelApi, supabaseApi: () => supabaseApi, blastcpApi: () => blastcpApi, gooseApi: () => gooseApi, slackApi: () => slackApi, pairing: () => pairing,
     // Which card a vault request is for, proven by the server's signature (electron/card-token.cjs).
     cardFor: cardFinder(TOKEN),
   }),
@@ -355,31 +356,12 @@ const menus = createMenus({
 
 // ---- IPC from the board and copilot ----
 
-// A page that won't load (a dev server that isn't running) is shown in the pane; it isn't an error for the board.
-// (L-5) Only the board may open URLs in the pane; a compromised renderer can't pivot it to a fresh host.
-ipcMain.handle("browser:open", (e, url, key) => e.sender && e.sender === appView?.webContents
-  ? pane.open(url, key || undefined, true, { fromBoard: true }).catch((err) => ({ error: String(err.message || err) }))
-  : { error: "Browser pane only answers the board window." });
-ipcMain.handle("browser:state", () => pane.state());
-ipcMain.on("browser:visible", (_e, visible, key) => pane.setVisible(Boolean(visible), key));
-ipcMain.on("browser:active", (_e, key) => pane.setActive(key));
-ipcMain.on("browser:prune", (_e, keys) => pane.prune(Array.isArray(keys) ? keys : []));
-// The board measures in its own CSS pixels; once it's zoomed (View > Zoom In/Out) those no longer
-// match window pixels, so scale by its zoom factor or the native view lands off its placeholder.
-ipcMain.on("browser:bounds", (e, rect) => {
-  const z = e.sender.getZoomFactor();
-  pane.setBounds({ x: rect.x * z, y: rect.y * z, width: rect.width * z, height: rect.height * z });
-});
-ipcMain.on("browser:back", () => pane.back());
-ipcMain.on("browser:forward", () => pane.forward());
-ipcMain.on("browser:reload", () => pane.reload());
-ipcMain.on("browser:zoom", (_e, action) => pane.zoom(action));
+// The browser pane's IPC from the board (electron/pane-ipc.cjs).
+registerPaneIpc(ipcMain, { pane, isBoard: (sender) => Boolean(sender) && sender === appView?.webContents });
 ipcMain.on("copilot:toggle", () => toggleCopilot());
 const killTerminals = registerTerminal(ipcMain, { isBoard: (sender) => Boolean(sender) && sender === appView?.webContents });
-ipcMain.handle("dialog:openFolder", async () => {
-  const result = await dialog.showOpenDialog(win, { properties: ["openDirectory", "createDirectory"] });
-  return result.canceled ? null : result.filePaths[0];
-});
+require("./claude-sign-in.cjs").setupClaudeSignIn(ipcMain, { isBoard: (sender) => Boolean(sender) && sender === appView?.webContents });
+require("./folder-dialog.cjs").registerFolderDialog(ipcMain, { dialog, window: () => win });
 ipcMain.on("shell:openExternal", (_e, url) => /^https?:\/\//i.test(String(url)) && shell.openExternal(String(url)));
 createMenuPopup({ ipcMain, Menu, BrowserWindow });
 require("./open-in.cjs").registerOpenIn(ipcMain, { shell });
@@ -397,6 +379,8 @@ vault = require("./vault.cjs").setupVault({ ipcMain, dataDir: dataDir(), window:
 // string the user compares with the other machine. The board window only; the private key never
 // leaves main.
 require("./device-key.cjs").registerDeviceHandlers({ ipcMain, accountClient: () => accountClient, dataDir: dataDir(), isBoard: (sender) => Boolean(sender) && sender === appView?.webContents });
+// Phones and browsers paired from Settings → Sync, and the workspace key synced rows are sealed with (docs/architecture/mobile-security.md).
+pairing = require("./pairing-ipc.cjs").setupPairing({ ipcMain, dataDir: dataDir(), accountClient: () => accountClient, isBoard: (sender) => Boolean(sender) && sender === appView?.webContents, confirm: (reason) => vault.confirm(reason) });
 secretRun = require("./secret-run.cjs").setupSecretRun({ vault, dataDir: dataDir(), window: () => win });
 // So does Vercel: its token is in the Keychain and its links are .vercel/project.json.
 ({ vercel: vercelApi, env: vercelEnv } = require("./vercel.cjs").setupVercel({ ipcMain, dataDir: dataDir(), board: () => appView?.webContents, vault }));

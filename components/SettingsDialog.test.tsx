@@ -11,6 +11,7 @@ const api = vi.hoisted(() => ({ settings: vi.fn(), saveSettings: vi.fn() }));
 vi.mock("@/lib/client", () => ({ api }));
 // The pages' own pickers have their own tests; here they only need to show up on the right page.
 vi.mock("./AppearancePicker", () => ({ default: () => <p>appearance picker</p> }));
+vi.mock("./DictationSettings", () => ({ default: () => <p>dictation settings</p> }));
 vi.mock("./AccountSettings", () => ({ default: () => <p>account settings</p> }));
 vi.mock("./CliLogins", () => ({ default: () => <p>cli logins</p> }));
 vi.mock("./SubagentPicker", () => ({ default: () => <p>subagent picker</p> }));
@@ -82,6 +83,18 @@ describe("SettingsDialog", () => {
     await go("General");
   });
 
+  it("searches every page from the title bar and opens the pick at its section", async () => {
+    render(<SettingsDialog onClose={() => {}} />);
+    await userEvent.type(screen.getByRole("combobox", { name: "Search settings" }), "permission");
+    fireEvent.mouseDown(screen.getByRole("option", { name: /Default permission mode/ }));
+    expect(screen.getByRole("heading", { name: "Security", level: 2 })).toBeInTheDocument();
+    const sections = await screen.findByRole("navigation", { name: "Sections on this page" });
+    expect(await within(sections).findByRole("button", { name: "Default permission mode" })).toHaveAttribute("aria-current", "location");
+    await userEvent.click(within(sections).getByRole("button", { name: "Site notes" }));
+    expect(within(sections).getByRole("button", { name: "Site notes" })).toHaveAttribute("aria-current", "location");
+    await go("General");
+  });
+
   it("puts a scene behind it and shows one page at a time", async () => {
     render(<SettingsDialog onClose={() => {}} />);
     expect(screen.getByRole("dialog").style.background).toContain("/api/scenes/salt-flats");
@@ -98,7 +111,7 @@ describe("SettingsDialog", () => {
     await go("Security");
     expect(await screen.findByText("trusted folders")).toBeInTheDocument();
     expect(screen.getByText("token expiry")).toBeInTheDocument();
-    expect(screen.getByText("Default permission mode")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Default permission mode" })).toBeInTheDocument();
 
     await go("Shortcuts");
     expect(screen.getByRole("heading", { name: "Shortcuts", level: 2 })).toBeInTheDocument();

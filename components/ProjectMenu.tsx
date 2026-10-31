@@ -5,6 +5,7 @@ import { useState } from "react";
 import { api } from "@/lib/client";
 import { openChangelog } from "@/lib/changelog-open";
 import { filterProjects, folderName, plural, shortPath } from "@/lib/project-bar";
+import { workerLabel } from "@/lib/worker-project";
 import type { ProjectSummary } from "@/lib/board-view";
 import Icon from "./Icon";
 import ProjectCloneForm from "./ProjectCloneForm";
@@ -28,6 +29,7 @@ export default function ProjectMenu({
   home,
   menuId,
   onProjectMenu,
+  onNotice,
   variant = "desktop",
 }: {
   projects: ProjectSummary[];
@@ -37,6 +39,8 @@ export default function ProjectMenu({
   menuId: string;
   // Right-clicking a project in the list opens its menu, as on its chip.
   onProjectMenu?: (path: string, e: React.MouseEvent) => void;
+  // The board's toast, for a clone on a worker that finishes after this menu has closed.
+  onNotice?: (message: string) => void;
   // "desktop" adds the Mac-only actions under the list (open a folder, clone a repo, make a
   // project, read a changelog). "web" is the picker on its own: weft.zip can't reach the Mac's
   // filesystem, so the list and its filter are all there is.
@@ -158,7 +162,7 @@ export default function ProjectMenu({
             >
               <span className="min-w-0 flex-1">
                 <span className={`block truncate text-[12.5px] ${on ? "text-accent" : "text-ink"}`}>{folderName(project.path)}</span>
-                <span className="block truncate font-mono text-[11px] text-muted">{shortPath(project.path, home)}</span>
+                <span className="block truncate font-mono text-[11px] text-muted">{project.worker ? workerLabel(project.worker) : shortPath(project.path, home)}</span>
               </span>
               <span className="flex shrink-0 items-center gap-2 text-[11px] tabular-nums">
                 {project.needsYou > 0 && (
@@ -216,6 +220,7 @@ export default function ProjectMenu({
             }}
             busy={busy}
             onError={setError}
+            onNotice={onNotice}
             run={run}
           />
         )}

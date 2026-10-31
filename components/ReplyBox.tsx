@@ -254,7 +254,8 @@ export default function ReplyBox({
     }
   }
 
-  const { scheduleAt, unschedule, takeBackScheduled, scheduled } = useReplySchedule(cardId, composer, saveDraft, setErrorWrap, sendLater?.scheduled);
+  const held = useReplySchedule(cardId, composer, saveDraft, setErrorWrap, sendLater?.scheduled, { live, onStop, onSend, onSent: captureReply });
+  const { scheduleAt, unschedule, takeBackScheduled, scheduled } = held;
   const { onKeyDownCapture, onKeyDown } = useReplyKeys({
     composer,
     form,
@@ -345,9 +346,10 @@ export default function ReplyBox({
         queue={queue}
         paused={paused}
         live={live}
-        sending={busy}
+        sending={busy || held.sending}
         now={now}
         onTakeBack={takeBackScheduled}
+        onSendScheduled={(m) => void held.sendNow(m)}
         onUnschedule={unschedule}
         onSendNow={(i) => void queued.sendNow(i)}
         onRemove={queued.remove}

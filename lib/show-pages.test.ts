@@ -33,6 +33,13 @@ describe("showPrompt", () => {
     expect(prompt).toContain("Cut startup to 2s.");
   });
 
+  it("asks for a page that reads on a 390px phone and the desktop pane", () => {
+    const prompt = showPrompt("x", "y");
+    expect(prompt).toContain('<meta name="viewport" content="width=device-width,initial-scale=1">');
+    expect(prompt).toContain("nothing fixed wider than 360px");
+    expect(prompt).toContain("390px phone");
+  });
+
   it("clips a huge reply", () => {
     expect(showPrompt("x", "y".repeat(50_000)).length).toBeLessThan(15_000);
   });
@@ -45,6 +52,10 @@ describe("starterPage", () => {
     expect(html).toContain("say &quot;hi&quot; &amp; &lt;script&gt;");
     expect(html).not.toContain('say "hi" & <script>');
     expect(html).toContain("Working · since 12:05");
+  });
+
+  it("scales to a phone's width", () => {
+    expect(starterPage("Fix", "ask")).toContain('<meta name="viewport" content="width=device-width,initial-scale=1">');
   });
 
   it("draws the card's scene, dimmed, behind a running clock", () => {

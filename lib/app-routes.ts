@@ -24,12 +24,15 @@ const RESERVED: ReadonlySet<string> = new Set<string>([
   "home",
   "invite",
   "login",
+  "pair",
   "privacy",
   "s",
+  "t",
   "team",
   "terms",
   "u",
   "w",
+  "worker.sh",
 ]);
 
 // Every reserved first segment as a sorted array (longest first) — used by the rule and by tests

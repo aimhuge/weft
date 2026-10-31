@@ -185,8 +185,10 @@ one vault environment it asks for, and its reads by name:
   `fetch` half is the same one a hosted app uses; see `mini-app-hosting.md`). `requestAccess()` is a Touch ID
   naming the app, the project and the env and the vault names its reads need (`SUPABASE_SECRET_KEY` for a
   `supabase` read; `GA4_PROPERTY_ID` and `GA4_SERVICE_ACCOUNT_JSON` for a `ga4` one). The grant is kept in
-  `~/.weft/app-grants.json`, keyed by the app's folder, with a hash of its manifest: change the env, the folder
-  or a read and the app asks again. Call it `window.weft` or give it another name (`const bridge = window.weft`),
+  `~/.weft/app-grants.json`, keyed by the app's folder, with a hash of its manifest: change the env, the folder,
+  a read, the `secrets` policy or the `public` names and the app asks again. The grant covers every name the
+  manifest may hand out (`manifestNeeds`), and `weft.env()` and a secret-filled `weft.fetch` need it too, since
+  threads may edit `~/.weft/apps` (docs/architecture/secrets.md). Call it `window.weft` or give it another name (`const bridge = window.weft`),
   never a top-level `const weft`: the contextBridge makes `window.weft` a non-configurable global, so that
   binding is a redeclaration and the browser refuses the whole script, leaving a page with no grant bar and no
   data (jsdom doesn't, so a test there won't catch it).

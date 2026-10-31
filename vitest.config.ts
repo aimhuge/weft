@@ -17,11 +17,13 @@ export default defineConfig({
     alias: {
       "@": path.resolve(__dirname),
       "server-only": serverOnlyStub,
+      // libsodium-wrappers 0.7.16's ESM build imports a ./libsodium.mjs it doesn't ship; its CommonJS build works.
+      "libsodium-wrappers": path.resolve(__dirname, "node_modules/libsodium-wrappers/dist/modules/libsodium-wrappers.js"),
     },
   },
   test: {
     // Component tests opt into jsdom per file (`// @vitest-environment jsdom`); everything else stays on node.
-    include: ["lib/**/*.test.ts", "app/**/*.test.ts", "components/**/*.test.tsx", "app/**/*.test.tsx", "electron/**/*.test.ts", "scripts/**/*.test.ts", "scripts/**/*.test.mjs", "plugin/**/*.test.ts"],
+    include: ["lib/**/*.test.ts", "app/**/*.test.ts", "components/**/*.test.tsx", "app/**/*.test.tsx", "electron/**/*.test.ts", "scripts/**/*.test.ts", "scripts/**/*.test.mjs", "plugin/**/*.test.ts", "supabase/functions/**/*.test.ts"],
     environment: "node",
     // Vitest 4's default threads pool times out spawning workers in CI under load (a few
     // files "fail to start forks worker" with no error in the worker). Forks is stable.

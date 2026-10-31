@@ -12,6 +12,7 @@
 // This file wires the SDK hook on top of those.
 
 import type { HookCallback, HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
+import { fromCwd } from "./secret-guard-files";
 import { toolVerdict } from "./secret-guard-tool";
 
 export { bashVerdict, stripPrefixes, unwrapEnv } from "./secret-guard-bash";
@@ -20,7 +21,7 @@ export { toolVerdict };
 
 export const secretGuard: HookCallback = (input) => {
   if (input.hook_event_name !== "PreToolUse") return Promise.resolve({});
-  const why = toolVerdict(input.tool_name, input.tool_input);
+  const why = fromCwd(input.cwd, () => toolVerdict(input.tool_name, input.tool_input));
   return Promise.resolve(
     why ? { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: why } } : {},
   );

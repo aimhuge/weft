@@ -10,6 +10,7 @@
 import { useState } from "react";
 import { api } from "@/lib/client";
 import { errorText } from "@/lib/new-thread";
+import { BUTTON_PRIMARY } from "./button-styles";
 
 const FIELD = "rounded-md border border-line-strong bg-canvas px-2.5 py-1.5 text-[13px] text-ink outline-none focus:border-accent";
 
@@ -72,7 +73,7 @@ export default function AgentBuilder({ onSpawned }: { onSpawned?: (cardId: strin
           type="button"
           disabled={busy || !what.trim()}
           onClick={() => void spawn()}
-          className="rounded-md bg-accent px-3 py-1.5 text-[13px] font-medium text-on-accent hover:opacity-90 disabled:opacity-50"
+          className={BUTTON_PRIMARY}
         >
           {busy ? "Starting…" : "Start the thread"}
         </button>

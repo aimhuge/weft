@@ -103,17 +103,19 @@ export const control = {
   startCard: vi.fn<(card: unknown) => void>(),
   syncNow: vi.fn<() => void>(),
   // The cards on this Mac, for a reply to find its thread.
-  cards: new Map<string, { id: string; cwd: string; role?: string }>(),
+  cards: new Map<string, { id: string; cwd: string; role?: string; readScope?: string[]; pending?: unknown }>(),
   sendUserMessage: vi.fn<(cardId: string, text: string) => void>(),
   // Calls a reply routes through sendUserMessage; answer/stop go through their own.
   answered: [] as { cardId: string; allow: boolean; answers?: Record<string, string>; pendingId?: string; reply?: unknown }[],
   answerPermission: vi.fn<(cardId: string, allow: boolean, answers?: Record<string, string>, pendingId?: string, reply?: unknown) => void>(),
+  // Folders an Always added to this Mac's settings.
+  allowed: [] as string[],
   stopped: [] as string[],
   stop: vi.fn<(cardId: string) => Promise<void>>(),
 };
 
 export const accountMock = { accountClient: () => control.account() };
-export const settingsMock = { syncFolders: () => [...control.folders] };
+export const settingsMock = { syncFolders: () => [...control.folders], allowFolder: (folder: string) => control.allowed.push(folder) };
 export const deviceMock = { deviceId: () => "mac-1" };
 export const cloudSyncMock = { syncNow: () => control.syncNow(), syncOrgId: () => Promise.resolve(control.org) };
 export const newCardMock = {
@@ -132,7 +134,13 @@ export const runnerMock = {
     return control.stop(cardId);
   },
 };
-export const storeMock = { getCard: (id: string) => control.cards.get(id) };
+export const storeMock = {
+  getCard: (id: string) => control.cards.get(id),
+  updateCard: (id: string, patch: { readScope?: string[] }) => {
+    const card = control.cards.get(id);
+    if (card) control.cards.set(id, { ...card, ...patch });
+  },
+};
 
 export const command = (over: Partial<CloudCommandRow> = {}): CloudCommandRow => ({
   id: "cmd-1",
@@ -163,11 +171,13 @@ export function resetInbox() {
   db.selects.length = 0;
   db.channels.length = 0;
   control.made.length = 0;
+  beats.length = 0;
   control.cards.clear();
   control.folders = ["/dev/app"];
   control.org = "org1";
   control.account = () => client;
   control.answered.length = 0;
+  control.allowed.length = 0;
   control.stopped.length = 0;
   vi.clearAllMocks();
 }
@@ -178,3 +188,12 @@ export async function listening(refresh: () => Promise<void>) {
   db.channels[0]?.status("SUBSCRIBED");
   await settle();
 }
+
+// The desktop worker's heartbeat (lib/desktop-worker.ts): recorded, never sent.
+export const beats: string[] = [];
+export const desktopWorkerMock = {
+  beatDesktopWorker: (_client: unknown, uid: string) => {
+    beats.push(uid);
+    return Promise.resolve();
+  },
+};

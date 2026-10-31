@@ -17,6 +17,7 @@ export function startAccountCloudSync(): () => void {
   const lazy: BlobStore = {
     refFor: (localPath) => blobs().refFor(localPath),
     upload: (localPath, orgId) => blobs().upload(localPath, orgId),
+    uploadPage: (localPath, orgId) => blobs().uploadPage(localPath, orgId),
     rewriteItem: (item, orgId) => blobs().rewriteItem(item, orgId),
   };
   const stopSync = startCloudSync({ blobs: lazy });

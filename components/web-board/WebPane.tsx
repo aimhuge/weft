@@ -4,12 +4,17 @@
 // the same toolbar (back, forward, reload, the URL, close) over the page the card's pane last showed, as the thread
 // tells it (lib/share-types.ts paneFor). A synced ~/.weft/show page is framed sandboxed through
 // app/api/web-board/[orgId]/page/[sha]; a public site is framed as it is; a localhost or file page only exists on the
-// Mac, so the card's latest pane capture stands in for it.
+// Mac, so the card's latest pane capture stands in for it. The desktop board draws this too, for a worker's card
+// (components/WorkerOpenCard.tsx), with orgId null: it frames through its own server, more tightly, because a frame there
+// shares the board window's session (app/api/worker-board/page/[sha]), and that's why it never frames a public site.
 import type { SharePane } from "@/lib/share-types";
+import type { ScreenInput } from "@/lib/worker-commands";
 import Icon from "../Icon";
+import { WorkerScreen } from "./WorkerScreen";
 
 const NAV = "rounded-md p-1.5 text-muted disabled:opacity-30";
 const SANDBOX = "allow-scripts allow-popups allow-forms";
+const BOARD_SANDBOX = "allow-scripts";
 
 // What the toolbar's address field reads for each kind of page. A saved page shows its label and a
 // public site its host: the address bar is for a visitor, not a file path.
@@ -36,19 +41,23 @@ function Snapshot({ src, note }: { src?: string; note: string }) {
   );
 }
 
-function PaneBody({ orgId, pane, thumbUrl }: { orgId: string; pane: SharePane | null; thumbUrl?: string }) {
+function PaneBody({ orgId, pane, thumbUrl, onScreenInput }: { orgId: string | null; pane: SharePane | null; thumbUrl?: string; onScreenInput?: (input: ScreenInput) => Promise<void> }) {
+  if (pane?.kind === "screen") return <WorkerScreen pane={pane} onInput={onScreenInput} />;
   if (pane?.kind === "blob") {
-    const src = `/api/web-board/${orgId}/page/${pane.ref.replace(/^blob:sha256:/, "")}${pane.hash}`;
-    return <iframe title="Card page" src={src} sandbox={SANDBOX} className="size-full border-0 bg-white" />;
+    const sha = pane.ref.replace(/^blob:sha256:/, "");
+    const src = orgId ? `/api/web-board/${orgId}/page/${sha}${pane.hash}` : `/api/worker-board/page/${sha}${pane.hash}`;
+    return <iframe title="Card page" src={src} sandbox={orgId ? SANDBOX : BOARD_SANDBOX} className="size-full border-0 bg-white" />;
   }
+  if (pane?.kind === "site" && !orgId) return <Snapshot note="This card opened a public site. Open ↗ shows it." />;
   if (pane?.kind === "site") return <iframe title="Card page" src={pane.url} sandbox={SANDBOX} className="size-full border-0 bg-white" />;
-  if (pane?.kind === "local") return <Snapshot src={thumbUrl} note="This page runs on the Mac; here's its last capture." />;
+  if (pane?.kind === "local") return <Snapshot src={thumbUrl} note="This page only exists on the machine running this card." />;
   return <Snapshot src={thumbUrl} note="No page open in this card's browser pane." />;
 }
 
 // onClose: the toolbar's X, left out where the thread beside it carries the close (WebThreadPanel, so a phone, where
 // the pane is hidden, still has one).
-export function WebPane({ orgId, pane, thumbUrl, onClose }: { orgId: string; pane: SharePane | null; thumbUrl?: string; onClose?: () => void }) {
+// onScreenInput: taps on a worker's live screen, where this board can send them (the desktop's).
+export function WebPane({ orgId, pane, thumbUrl, onClose, onScreenInput }: { orgId: string | null; pane: SharePane | null; thumbUrl?: string; onClose?: () => void; onScreenInput?: (input: ScreenInput) => Promise<void> }) {
   return (
     <section aria-label="Browser pane" className="relative hidden min-w-0 flex-1 flex-col border-l border-line bg-panel md:flex">
       <div className="flex items-center gap-1 border-b border-line px-2 py-1.5">
@@ -80,7 +89,7 @@ export function WebPane({ orgId, pane, thumbUrl, onClose }: { orgId: string; pan
         )}
       </div>
       <div className="relative min-h-0 flex-1 bg-canvas">
-        <PaneBody orgId={orgId} pane={pane} thumbUrl={thumbUrl} />
+        <PaneBody orgId={orgId} pane={pane} thumbUrl={thumbUrl} onScreenInput={onScreenInput} />
       </div>
     </section>
   );

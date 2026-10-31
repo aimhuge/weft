@@ -69,6 +69,24 @@ describe("useDictation with whisper", () => {
     expect(result.current.state).toBe("idle");
   });
 
+  it("tells the server which language the browser is in", async () => {
+    const { result } = await startRecording();
+    recorder().emit("audio");
+    act(() => result.current.toggle());
+    await flush();
+    expect(api.transcribe.mock.calls[0]![1]).toBe(navigator.language);
+  });
+
+  it("names the browser's language even when it has none", async () => {
+    const language = vi.spyOn(navigator, "language", "get").mockReturnValue("");
+    const { result } = await startRecording();
+    recorder().emit("audio");
+    act(() => result.current.toggle());
+    await flush();
+    expect(api.transcribe.mock.calls[0]![1]).toBe("");
+    language.mockRestore();
+  });
+
   it("labels the upload audio/webm when the recorder reports no type", async () => {
     setSupportedTypes([]);
     const { result } = await startRecording();
@@ -255,8 +273,16 @@ describe("useDictation with whisper", () => {
     await flush();
     act(() => result.current.toggle());
     await flush();
-    expect(api.dictation).toHaveBeenCalledOnce();
+    // Once for the cached status, and once more per start to warm Advanced dictation's server.
+    expect(api.dictation).toHaveBeenCalledTimes(3);
     expect(FakeRecorder.instances).toHaveLength(2);
+  });
+
+  it("asks the server again on each start, so a warm server is ready by Stop", async () => {
+    await startRecording();
+    expect(api.dictation).toHaveBeenCalledTimes(2);
+    await startRecording();
+    expect(api.dictation).toHaveBeenCalledTimes(4);
   });
 
   it("does nothing on cancel when nothing is recording", async () => {

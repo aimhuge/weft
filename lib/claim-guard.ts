@@ -6,6 +6,7 @@ import { addClaims, claimKey, dropClaims, splitClaim } from "./claims";
 import { claimPreAnswer, claimPreHook, claimPostCard, forget, pendingEntry } from "./claim-hooks";
 import { editedPath } from "./overlap";
 import { listCards, updateCard } from "./store";
+import { isMarkdownFile, markdownSymbolsFor } from "./symbols-markdown";
 
 // Symbol claims in every board thread (lib/claims.ts). Before an Edit, MultiEdit, Write or NotebookEdit, the
 // PreToolUse hook works out what it claims from the file as it is, and when another busy card in the same
@@ -18,6 +19,7 @@ export const MAX_SYMBOLS = 5;
 
 interface EditInput {
   old_string?: unknown;
+  new_string?: unknown;
   replace_all?: unknown;
 }
 
@@ -41,7 +43,7 @@ export function realFile(file: string) {
 }
 
 // What a file-editing tool call claims: each top-level symbol it touches, or the whole file for Write,
-// NotebookEdit, a file the parser can't read, an old_string that isn't there, or an edit spanning more
+// NotebookEdit, a file with no parser (Markdown goes by blocks, lib/symbols-markdown.ts), an old_string that isn't there, or an edit spanning more
 // than MAX_SYMBOLS symbols. [] for an edit to imports alone, and for tools that don't edit files.
 export async function claimsFor(toolName: string, input: Record<string, unknown>, cwd: string): Promise<string[]> {
   const given = editedPath(toolName, input);
@@ -50,8 +52,9 @@ export async function claimsFor(toolName: string, input: Record<string, unknown>
   const whole = [claimKey(file)];
   const edits = editsOf(toolName, input);
   if (!edits.length) return whole;
-  const { isSourceFile, symbolsFor } = await import("./symbols");
-  if (!isSourceFile(file)) return whole;
+  const markdown = isMarkdownFile(file);
+  const parser = markdown ? null : await import("./symbols");
+  if (parser && !parser.isSourceFile(file)) return whole;
   let text: string;
   try {
     text = fs.readFileSync(file, "utf8");
@@ -61,7 +64,9 @@ export async function claimsFor(toolName: string, input: Record<string, unknown>
   const names = new Set<string>();
   // MultiEdit's later edits may match only after earlier ones: those miss and claim the whole file.
   for (const e of edits) {
-    const found = typeof e.old_string === "string" ? symbolsFor(file, text, e.old_string, e.replace_all === true) : null;
+    const found = typeof e.old_string !== "string" ? null
+      : parser ? parser.symbolsFor(file, text, e.old_string, e.replace_all === true)
+      : markdownSymbolsFor(text, e.old_string, typeof e.new_string === "string" ? e.new_string : "", e.replace_all === true);
     if (!found) return whole;
     for (const n of found) names.add(n);
   }
@@ -104,10 +109,12 @@ export function claimHooks(cardId: () => string | undefined): { pre: HookCallbac
 }
 
 // After a commit of these files (absolute paths), every card's claims on them drop: their changes are in.
-export function releaseClaims(files: string[]) {
-  const set = new Set(files);
+// On a file the commit held lines back from (lib/commit-held.ts), only the committing card's do.
+export function releaseClaims(files: string[], partial: string[] = [], committer?: string) {
+  const whole = new Set(files.filter((f) => !partial.includes(f)));
+  const all = new Set(files);
   for (const card of listCards()) {
-    const kept = dropClaims(card.claims, set);
+    const kept = dropClaims(card.claims, card.id === committer ? all : whole);
     if (kept) updateCard(card.id, { claims: kept });
   }
 }

@@ -51,6 +51,20 @@ describe("useCloudSync", () => {
     await waitFor(() => expect(api.cloudSync).toHaveBeenCalledTimes(2));
   });
 
+  it("hands the fresh answer back to a caller that shows it at once", async () => {
+    const { result } = renderHook(() => useCloudSync());
+    await waitFor(() => expect(result.current.folders).toEqual(["/a"]));
+    const fresh = { folders: ["/b"], status: { ...STATUS, waiting: 7 } };
+    api.cloudSync.mockResolvedValueOnce(fresh);
+    let answer: { folders: string[]; status: CloudSyncStatus } | undefined;
+    await act(async () => {
+      answer = await result.current.read();
+    });
+    expect(answer).toEqual(fresh);
+    expect(result.current.folders).toEqual(["/b"]);
+    expect(result.current.status.waiting).toBe(7);
+  });
+
   it("reports errors from the initial load and clears them on the next answer", async () => {
     api.cloudSync.mockRejectedValueOnce(new Error("Server down"));
     const { result } = renderHook(() => useCloudSync());

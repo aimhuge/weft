@@ -42,6 +42,8 @@ export interface BoardProjectBarProps {
   onMenuOpenChange: (open: boolean) => void;
   // A project's right-click menu (components/project-menu-handler.ts); left out on weft.zip.
   onProjectMenu?: (path: string, e: React.MouseEvent) => Promise<boolean>;
+  // The board's toast, for a clone on a worker that outlasts the project menu.
+  onNotice?: (message: string) => void;
   // "web" is the same bar on weft.zip, where the project menu can only pick a project.
   variant?: "desktop" | "web";
 }
@@ -75,6 +77,7 @@ export default function BoardProjectBar(p: BoardProjectBarProps) {
         home={p.home}
         onMenuOpenChange={p.onMenuOpenChange}
         onProjectMenu={p.onProjectMenu}
+        onNotice={p.onNotice}
         variant={p.variant}
       />
     </CrashGuard>

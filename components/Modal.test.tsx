@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, renderHook, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { onIntroCovered } from "@/lib/intro-cover";
+import { useAnyOverlay } from "@/lib/overlay";
 import Modal from "./Modal";
 import "./test-utils";
 
@@ -38,6 +39,17 @@ describe("Modal over a feature intro", () => {
     rerender(<Modal label="Achievement" layer="front" onClose={() => {}}>two</Modal>);
     expect(covered).toHaveBeenCalledTimes(1);
     off();
+  });
+});
+
+describe("Modal over the browser pane", () => {
+  it("hides the pane's native page for as long as it is open", () => {
+    const pane = renderHook(() => useAnyOverlay());
+    expect(pane.result.current).toBe(false);
+    const dialog = render(<Modal label="x" onClose={() => {}}>body</Modal>);
+    expect(pane.result.current).toBe(true);
+    dialog.unmount();
+    expect(pane.result.current).toBe(false);
   });
 });
 

@@ -50,8 +50,7 @@ export function useOpenCard({
   // Cards that moved (with a chime) while you weren't looking; highlighted until you open them.
   const [unseen, setUnseen] = useState<ReadonlySet<string>>(new Set());
   const selectedRef = useRef<string | null>(null);
-  // The board's openPane changes identity whenever the workspace layout does, so it is read through
-  // a ref: select keeps one identity across renders, and the effects that depend on it don't re-run.
+  // The board's openPane is a new arrow every render, so it is read through a ref: select keeps one identity across renders, and the effects that depend on it don't re-run.
   const openPaneRef = useRef(openPane);
 
   useEffect(() => {
@@ -60,6 +59,13 @@ export function useOpenCard({
 
   useEffect(() => {
     selectedRef.current = selectedId;
+  }, [selectedId]);
+
+  // Whichever way a card came to be open, and whatever wrote the layout on the way, it opens with
+  // its pane: this runs after the workspace's own mount effects. Keyed on the card, so closing the
+  // pane by hand stays closed until the next card.
+  useEffect(() => {
+    if (selectedId) openPaneRef.current();
   }, [selectedId]);
 
   // merge keeps live items that arrived during the fetch; without it (after a reconnect, when what's

@@ -13,6 +13,8 @@ export interface MenuBridge {
   select: (id: string) => void;
   openSettings: () => void;
   focusFilter: () => void;
+  // A card or a dialog is open: ⌘F belongs to it then (the thread, Settings' search), not the board's filter box behind it.
+  cardOpen?: boolean;
   toggleTerminal: () => void;
   openDrawer: (panel: "webhooks") => void;
 }
@@ -32,7 +34,7 @@ export function runMenuAction(action: MenuAction, payload: string | undefined, b
       break;
     }
     case "find":
-      b.focusFilter();
+      if (!b.cardOpen) b.focusFilter();
       break;
     case "terminal":
       b.toggleTerminal();

@@ -6,6 +6,7 @@ import { onWebhookAsk, type useWebhooks } from "@/lib/use-webhooks";
 import { vaultFilter, type VaultFilterPick } from "@/lib/vault-view";
 import { emptyForm, filterWebhooks, formInput, groupByFolder, type WebhookForm } from "@/lib/webhooks-view";
 import Icon from "./Icon";
+import TunnelSection from "./TunnelSection";
 import { Note } from "./VaultParts";
 import { AddWebhookForm, WebhookProjectFilter, WebhookRow } from "./WebhookParts";
 
@@ -127,6 +128,7 @@ export default function WebhooksDrawer({
                 <Icon name="plus" size={11} /> Add
               </button>
             </div>
+            <TunnelSection folder={s.folder} notify={notify} />
             {adding?.folder === s.folder && (
               <AddWebhookForm form={adding.form} busy={busy === "add"} onChange={(form) => setAdding({ folder: s.folder, form })} onSave={() => void save(s.folder, adding.form)} onCancel={() => setAdding(null)} />
             )}

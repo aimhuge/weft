@@ -116,9 +116,13 @@ export async function swipe(d: Device, from: Point, to: Point, ms = 300) {
   }
 }
 
+// The tree's biggest frame: the window, so the screen's size in tap units. All zeros for an empty tree.
+export const largestFrame = (els: Element[]): Frame =>
+  els.reduce((a, b) => (b.frame.width * b.frame.height > a.width * a.height ? b.frame : a), { x: 0, y: 0, width: 0, height: 0 });
+
 // A swipe across the middle of the screen, sized from the tree's biggest frame (the window).
 export function directionSwipe(els: Element[], direction: "up" | "down" | "left" | "right"): { from: Point; to: Point } {
-  const screen = els.reduce((a, b) => (b.frame.width * b.frame.height > a.width * a.height ? b.frame : a), { x: 0, y: 0, width: 0, height: 0 });
+  const screen = largestFrame(els);
   if (!screen.width || !screen.height) throw new Error("Couldn't tell the screen's size from its UI tree; swipe by coordinates instead.");
   const cx = screen.x + screen.width / 2;
   const cy = screen.y + screen.height / 2;

@@ -6,6 +6,7 @@ import { sprintActions } from "@/lib/use-sprints";
 import Icon from "./Icon";
 import Modal from "./Modal";
 import Tip from "./Tip";
+import { BUTTON_SECONDARY } from "./button-styles";
 
 // What the Backlog column's header needs from the board.
 export interface BacklogLane {
@@ -92,7 +93,7 @@ function ConfirmArchive({ lane, onClose }: { lane: BacklogLane; onClose: () => v
       </div>
       <div className="flex justify-end gap-2 border-t border-line px-5 py-3">
         <button onClick={onClose} className="rounded-md px-3 py-1.5 text-[13px] text-muted hover:bg-sunken hover:text-ink">Cancel</button>
-        <button onClick={() => void saveThenArchive()} disabled={busy} className="rounded-md border border-line-strong px-3 py-1.5 text-[13px] text-ink hover:bg-sunken disabled:opacity-50">
+        <button onClick={() => void saveThenArchive()} disabled={busy} className={BUTTON_SECONDARY}>
           Save as sprint, then archive
         </button>
         <button autoFocus onClick={archive} disabled={busy} className="rounded-md bg-danger px-3 py-1.5 text-[13px] font-medium text-white hover:opacity-90 disabled:opacity-50">

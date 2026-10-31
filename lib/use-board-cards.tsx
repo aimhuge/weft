@@ -8,6 +8,7 @@ import { busyHere } from "./overlap";
 import { api } from "./client";
 import { knownFolders } from "./list-actions";
 import { patchNow } from "./optimistic-cards";
+import { isWorkerCard } from "./worker-project";
 import type { CardViewProps } from "@/components/CardView";
 import CardRow, { type RowNest } from "@/components/CardRow";
 
@@ -37,28 +38,29 @@ export interface BoardCardsDeps {
 export function useBoardCards(deps: BoardCardsDeps): BoardCardRenderers {
   const { cards, now, selectedId, lastOpenId, unseen, restartRequestedBy, ctx, CardView } = deps;
 
+  // A worker's card opens and that's all: its moves, stars and the rest would reach for a card this Mac doesn't have.
+  const shared = useCallback(
+    (card: Card) => ({ card, now, selected: card.id === selectedId, lastOpen: card.id === lastOpenId, unseen: unseen.has(card.id), alsoHere: busyHere(cards, card) }),
+    [cards, now, selectedId, lastOpenId, unseen],
+  );
+
   const renderCard = useCallback(
-    (card: Card) => (
-      <CardView
-        guardName={card.title}
-        card={card}
-        now={now}
-        selected={card.id === selectedId}
-        lastOpen={card.id === lastOpenId}
-        unseen={unseen.has(card.id)}
-        alsoHere={busyHere(cards, card)}
-        restartRequested={restartRequestedBy === card.id}
-        {...cardHandlers(card, ctx)}
-      />
-    ),
-    [CardView, cards, now, selectedId, lastOpenId, unseen, restartRequestedBy, ctx],
+    (card: Card) =>
+      isWorkerCard(card) ? (
+        <CardView guardName={card.title} readOnly {...shared(card)} onOpen={() => ctx.openCard(card)} />
+      ) : (
+        <CardView guardName={card.title} {...shared(card)} restartRequested={restartRequestedBy === card.id} {...cardHandlers(card, ctx)} />
+      ),
+    [CardView, shared, restartRequestedBy, ctx],
   );
 
   // Every folder a card can move to from the list view's folder picker.
-  const folders = useMemo(() => knownFolders(cards), [cards]);
+  const folders = useMemo(() => knownFolders(cards.filter((c) => !isWorkerCard(c))), [cards]);
 
   const renderRow = useCallback(
-    (card: Card, column: Column, nest?: RowNest) => (
+    (card: Card, column: Column, nest?: RowNest) => isWorkerCard(card) ? (
+      <CardRow column={column} nest={nest} {...shared(card)} onOpen={() => ctx.openCard(card)} />
+    ) : (
       <CardRow
         card={card}
         column={column}
@@ -74,7 +76,7 @@ export function useBoardCards(deps: BoardCardsDeps): BoardCardRenderers {
         {...cardHandlers(card, ctx)}
       />
     ),
-    [cards, folders, now, selectedId, lastOpenId, unseen, ctx],
+    [cards, folders, now, selectedId, lastOpenId, unseen, ctx, shared],
   );
 
   return { renderCard, renderRow };

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { render, screen, waitFor } from "@testing-library/react";
+import { boardMode } from "@/lib/board-prefs";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import "./test-utils";
@@ -323,5 +324,21 @@ describe("WelcomeDialog", () => {
     await next();
     await bringIn();
     expect(telemetry.trackOnboarding).toHaveBeenCalledWith("onboarding_projects_answered", { brought: 1, count_history: true, start_empty: false });
+  });
+});
+
+describe("WelcomeDialog and the board mode", () => {
+  it("starts a new install on Regular", async () => {
+    api.loadWelcome.mockResolvedValue({ welcome: null, preview: preview([project("/repo/a")]) });
+    render(<WelcomeDialog />);
+    await waitFor(() => expect(boardMode()).toBe("regular"));
+    document.cookie = "weft-board-mode=; path=/; max-age=0";
+  });
+
+  it("leaves a board that already had its welcome alone", async () => {
+    api.loadWelcome.mockResolvedValue({ welcome: { at: 1, countHistory: true, fresh: false, skip: [] } });
+    render(<WelcomeDialog />);
+    await waitFor(() => expect(api.loadWelcome).toHaveBeenCalled());
+    expect(boardMode()).toBe("advanced");
   });
 });

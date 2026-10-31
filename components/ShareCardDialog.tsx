@@ -1,25 +1,21 @@
 "use client";
 
 import { type ReactNode, useCallback, useEffect, useLayoutEffect, useState } from "react";
-import { createPortal } from "react-dom";
-import { CopyLinkButton, ShareAccessFields, ShareDialog, useShareAccess, type SaveShareAccess } from "@aimhuge/share/client";
+import { ShareAccessFields, useShareAccess, type SaveShareAccess } from "@aimhuge/share/client";
 import { api } from "@/lib/client";
-import { useOverlay } from "@/lib/overlay";
 import { isCardShareMode, seedShareState, type CardShareState } from "@/lib/share-types";
 import type { Card } from "@/lib/types";
 import { useAccount } from "@/lib/use-account";
-import { useEscape } from "@/lib/use-escape";
 import Icon, { Spinner } from "./Icon";
 import { errorText, NoWorkspace, SHARE_BUTTON, ShareNote, SignedOut } from "./ShareParts";
 import { ShareCardOptions } from "./ShareCardOptions";
+import WeftShareDialog from "./WeftShareDialog";
 
 // Share… (the card's right-click menu): one weft.zip link that shows this thread and its browser pane, live,
 // behind one of @aimhuge/share's modes (never editing: that would run turns on this Mac). The link reads the
 // card from cloud sync, so until the card is on Supabase the dialog says why and offers the next step
 // (lib/card-share.ts answers the state). It never waits on that answer (~2 s): it draws at once from the share the
 // card remembers (card.share, else private) and the answer replaces it. The package's dialog draws the frame and closes on Escape itself.
-// It goes to document.body, centered over the whole window, and counts as an overlay so the browser pane (a native
-// view drawn above the page) steps aside while it's open.
 const POLL_MS = 2000;
 
 function hydrateFrom(state: CardShareState, hydrate: ReturnType<typeof useShareAccess>["hydrate"]) {
@@ -33,10 +29,6 @@ export default function ShareCardDialog({ card, onClose }: { card: Card; onClose
   const [state, setState] = useState<CardShareState>(() => seedShareState(card, signedOut));
   const [error, setError] = useState<string | null>(null);
 
-  // The package's ShareDialog listens for Escape on its own. This layer only keeps Weft's own (the open thread,
-  // the browser, a drawer under it) from also closing, so one Escape closes just the dialog.
-  useEscape(true, () => {});
-  useOverlay(true);
 
   const save: SaveShareAccess = async (next, password) => {
     if (!isCardShareMode(next.mode)) return { ok: false, error: "Threads can't be edited from a link." };
@@ -89,13 +81,8 @@ export default function ShareCardDialog({ card, onClose }: { card: Card; onClose
   }
 
   const url = state.kind === "ok" ? state.url : null;
-  return createPortal(
-    <ShareDialog
-      title={`Share “${card.title}”`}
-      onClose={onClose}
-      headerAction={url ? <CopyLinkButton size="sm" url={url} /> : undefined}
-      footerStart={url ? <CopyLinkButton url={url} /> : undefined}
-    >
+  return (
+    <WeftShareDialog title={`Share “${card.title}”`} url={url} onClose={onClose}>
       {error ? (
         <p role="alert" className="text-[13px] text-danger">
           {error}
@@ -109,8 +96,7 @@ export default function ShareCardDialog({ card, onClose }: { card: Card; onClose
           options={state.kind === "ok" ? <ShareCardOptions cardId={card.id} state={state} setState={setState} setError={setError} /> : null}
         />
       )}
-    </ShareDialog>,
-    document.body,
+    </WeftShareDialog>
   );
 }
 

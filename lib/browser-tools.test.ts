@@ -18,6 +18,9 @@ vi.mock("./shell-token", () => ({ shellToken: () => "tok" }));
 // Site notes for the opened page (lib/site-notes-read.ts); none unless a test says so.
 const siteNotes = vi.hoisted(() => vi.fn(() => Promise.resolve("")));
 vi.mock("./site-notes-live", () => ({ siteNotesForUrl: siteNotes }));
+// The card's current page on its synced row (lib/card-page.ts).
+const notePage = vi.hoisted(() => vi.fn());
+vi.mock("./card-page", () => ({ notePage }));
 const bt = await import("./browser-tools");
 
 const fetchMock = vi.fn();
@@ -49,6 +52,11 @@ describe("BROWSER_PROMPT", () => {
   it("tells the thread to carry the plan out in the same turn, not stop at it", () => {
     expect(bt.BROWSER_PROMPT).toContain("carry the plan out in the same turn");
     expect(bt.BROWSER_PROMPT).toContain("not a stopping point");
+  });
+
+  it("asks for pages that read on a 390px phone as well as the pane", () => {
+    expect(bt.BROWSER_PROMPT).toContain("read on a phone too");
+    expect(bt.BROWSER_PROMPT).toMatch(/viewport meta tag[^.]*nothing fixed wider than 360px[^.]*tap-sized controls/);
   });
 
   it("puts pages in ~/.weft/show, which survives a reboot, not /tmp", () => {
@@ -121,6 +129,12 @@ describe("openInPane", () => {
     await bt.openInPane("https://a.test", "c9");
     expect(sent()).toMatchObject({ url: "http://127.0.0.1:4567/browser/open", body: { url: "https://a.test", key: "c9" } });
   });
+
+  it("keeps Weft's own page as the card's current one, so it syncs like an open_url page", async () => {
+    reply({ url: "file:///show/c9.html" });
+    await bt.openInPane("file:///show/c9.html", "c9");
+    expect(notePage).toHaveBeenLastCalledWith("c9", "file:///show/c9.html");
+  });
 });
 
 describe("browserMcpServer", () => {
@@ -157,6 +171,16 @@ describe("browserMcpServer", () => {
     reply({ url: "https://a.test/", title: "A page" });
     expect(await run("open_url", { url: "https://a.test" })).toEqual({ content: [{ type: "text", text: "Opened https://a.test/ — A page" }], isError: false });
     expect(sent().body).toEqual({ url: "https://a.test", key: "c1" });
+    expect(notePage).toHaveBeenLastCalledWith("c1", "https://a.test/");
+  });
+
+  it("open_url new_tab asks for a new tab, and only then", async () => {
+    reply({ url: "https://b.test/", title: "B" });
+    await run("open_url", { url: "https://b.test", new_tab: true });
+    expect(sent().body).toEqual({ url: "https://b.test", key: "c1", newTab: true });
+    reply({ url: "https://b.test/", title: "B" });
+    await run("open_url", { url: "https://b.test", new_tab: false });
+    expect(sent(1).body).toEqual({ url: "https://b.test", key: "c1" });
   });
 
   it("reads the card id when the tool runs, so a spare that becomes a card drives that card's pane", async () => {
@@ -252,5 +276,32 @@ describe("outside the desktop app", () => {
     expect(await bare.paneThumb("k")).toBeUndefined();
     await expect(bare.openInPane("u", "k")).rejects.toThrow(/desktop app/);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("on a Weft Worker", () => {
+  const server = () => bt.browserMcpServer(() => "c1") as unknown as { tools: Array<{ name: string; handler: Handler }> };
+  const openUrl = () => server().tools.find((t) => t.name === "open_url");
+
+  it("opens through the worker's upload, not the shell", async () => {
+    vi.stubEnv("WEFT_WORKER", "1");
+    fetchMock.mockClear();
+    const res = await openUrl()?.handler({ url: "https://example.com" });
+    expect(res?.content[0]?.text).toBe("Opened https://example.com");
+    expect(fetchMock).not.toHaveBeenCalled();
+    vi.stubEnv("WEFT_WORKER", "");
+  });
+
+  it("gives an error the agent can read", async () => {
+    vi.stubEnv("WEFT_WORKER", "1");
+    const res = await openUrl()?.handler({ url: "http://localhost:3000" });
+    expect(res?.isError).toBe(true);
+    expect(res?.content[0]?.text).toMatch(/dev server/);
+    vi.stubEnv("WEFT_WORKER", "");
+  });
+
+  it("tells a thread the pane works, and never to open a file", () => {
+    expect(bt.WORKER_BROWSER_PROMPT).toContain("mcp__browser__open_url");
+    expect(bt.WORKER_BROWSER_PROMPT).toContain("Never tell the user to open a file on this machine");
   });
 });

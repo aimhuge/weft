@@ -124,6 +124,30 @@ async function registerDevice({ accountClient, dir, safeStorage, crypto, name, p
 }
 
 /**
+ * This device's keypair with its public.devices id, registering it the first time. The keypair file
+ * doesn't know the id, and a share or a grant needs it. The lookup is by user as well as key, because
+ * two accounts signed in on one Mac each have a row for the same key.
+ *
+ * @param {{ accountClient: { supabase: { from: (t: string) => any }, getClaims: () => Record<string, unknown>|null },
+ *   dir: string, safeStorage: object, crypto: object }} deps
+ */
+async function registeredDevice({ accountClient, dir, safeStorage, crypto }) {
+  const pair = loadDeviceKey({ dir, safeStorage, crypto });
+  const lookup = async () => {
+    const userId = String(accountClient.getClaims()?.sub ?? "");
+    const { data } = await accountClient.supabase.from("devices").select("id").eq("user_id", userId).eq("public_key", pair.publicKey).maybeSingle();
+    return data?.id;
+  };
+  let id = await lookup();
+  if (!id) {
+    await registerDevice({ accountClient, dir, safeStorage, crypto });
+    id = await lookup();
+  }
+  if (!id) throw new Error("This Mac isn't registered as a device yet. Sign in to Weft and try again.");
+  return { id, ...pair };
+}
+
+/**
  * This device's own devices, as the signed-in user sees them.
  * @param {{ accountClient: { supabase: { from: (t: string) => any } } }} deps
  */
@@ -183,6 +207,7 @@ function registerDeviceHandlers({ ipcMain, accountClient, dataDir, isBoard, safe
   handle("vault:devices-fingerprint", () =>
     deviceFingerprint({ dir: dataDir, safeStorage: safeStorage ?? keychain(), crypto: crypto ?? sodium() }),
   );
+  require("./device-beat.cjs").startDeviceBeat({ accountClient, dir: dataDir });
 }
 
-module.exports = { loadDeviceKey, registerDevice, listDevices, deviceFingerprint, registerDeviceHandlers, defaultDeviceName, DEVICE_KEY_FILE: FILE };
+module.exports = { loadDeviceKey, registerDevice, registeredDevice, listDevices, deviceFingerprint, registerDeviceHandlers, defaultDeviceName, DEVICE_KEY_FILE: FILE };

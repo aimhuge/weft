@@ -113,7 +113,7 @@ name, the latest deliveries, **Mark registered** and Remove. `+ Add` takes the s
 ## Gaps
 
 - The relay answers the provider before your route runs, so a provider that reads the reply (a URL verification
-  challenge) doesn't see your route's answer.
+  challenge) doesn't see your route's answer, unless a tunnel to that server is open (docs/architecture/tunnels.md).
 - One Weft per account forwards: two Macs signed in to the same account race for each delivery.
 - Only the four providers above can be relayed. A provider with its own signature scheme needs a verifier added
   to `lib/webhook-signatures.ts` before it gets a relay URL.

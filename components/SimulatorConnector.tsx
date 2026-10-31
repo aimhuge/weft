@@ -123,7 +123,7 @@ export default function SimulatorConnector({ titleClass, hintClass }: { titleCla
     <div className="flex flex-col gap-3">
       <div className="flex items-start gap-3">
         <div className="flex-1">
-          <div className={titleClass}>📱 Simulators</div>
+          <h3 className={titleClass}>📱 Simulators</h3>
           <p className={hintClass}>
             Threads drive iOS simulators and Android emulators: boot, install, tap, type, screenshot, and watch them live in the browser pane.
             {load.kind === "ready" && ` ${load.status.devices} device${load.status.devices === 1 ? "" : "s"} found.`}

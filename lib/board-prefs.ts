@@ -68,6 +68,23 @@ export function setViewMode(mode: ViewMode) {
   window.dispatchEvent(new Event(EVENT));
 }
 
+// How much of the board shows: everything (advanced), or the columns and cards with the rest stripped off
+// (regular). No cookie is advanced, so an update never changes a board in use; first launch's welcome picks
+// regular for a new install (components/WelcomeDialog.tsx).
+export type BoardMode = "regular" | "advanced";
+
+const MODE_COOKIE = "weft-board-mode";
+
+export function boardMode(): BoardMode {
+  if (typeof document === "undefined") return "advanced";
+  return new RegExp(`(?:^|; )${MODE_COOKIE}=regular`).test(document.cookie) ? "regular" : "advanced";
+}
+
+export function setBoardMode(mode: BoardMode) {
+  document.cookie = `${MODE_COOKIE}=${mode}; path=/; max-age=${10 * 365 * 24 * 60 * 60}; SameSite=Lax`;
+  window.dispatchEvent(new Event(EVENT));
+}
+
 const LANE_COOKIE = "weft-copilot-lane";
 const PEEK_COOKIE = "weft-copilot-peek";
 

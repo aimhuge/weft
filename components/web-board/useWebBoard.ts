@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createBrowserClient } from "@supabase/ssr";
 import type { RealtimeChannel, SupabaseClient } from "@supabase/supabase-js";
-import { answerCommand, newCardCommand, replyCommand, stopCommand, type CloudCommandRow, type NewCardForm, type NewCommand } from "@/lib/cloud-commands";
+import { answerCommand, newCardCommand, replyCommand, stopCommand, type CloudCommandRow, type GrantScope, type NewCardForm, type NewCommand } from "@/lib/cloud-commands";
 import { BLOB_BUCKET, type CloudCardRow, type CloudThreadItemRow } from "@/lib/cloud-sync-types";
 import type { CloudItemChange } from "@/lib/cloud-thread-page";
 import { SUPABASE_KEY, SUPABASE_URL } from "@/lib/supabase-project";
@@ -16,6 +16,7 @@ import type { QuestionReply } from "@/lib/types";
 import { applyCardChange, batchBlobRefs, blobPath, buildBlobUrlMap } from "@/lib/web-board";
 import { cardThumbRefs, withThumbUrls } from "@/lib/web-board-thumbs";
 import { applyCommandChange, isCardCommand, type CloudCommandChange, type WebTarget } from "@/lib/web-commands";
+import { loadWebKeyring, openSyncedCard, openSyncedTool } from "@/lib/web-sync-key";
 import { useCloudTransport, type CloudBlobs, type ItemBus } from "./useCloudTransport";
 
 // The status of the Realtime channel; the dot beside the title reflects it.
@@ -97,7 +98,7 @@ function useItemBus() {
 }
 
 export function useWebBoard({ orgId, userId, initialCommands, initialCards, openCardId, initialBlobUrls }: WebBoardInput) {
-  const [cards, setCards] = useState<CloudCardRow[]>(initialCards);
+  const [cards, setCards] = useState<CloudCardRow[]>(() => initialCards.map(openSyncedCard));
   const [activeCardId, setActiveCardId] = useState<string | null>(openCardId);
   const { bus, emit } = useItemBus();
   const [blobUrls, setBlobUrls] = useState<Record<string, string>>(initialBlobUrls);
@@ -111,6 +112,16 @@ export function useWebBoard({ orgId, userId, initialCommands, initialCards, open
   // The card a command made, to open once its row has synced back (the command is "done" a moment before that).
   const openWhenSeen = useRef<string | null>(null);
 
+  // A browser paired from Settings → Sync opens sealed rows (lib/web-sync-key.ts): once its key is in, reopen the
+  // cards already drawn and reload the open thread, which the first render drew as 🔒 like the server did.
+  useEffect(() => {
+    void loadWebKeyring(client, orgId, userId).then((opened) => {
+      if (!opened) return;
+      setCards((prev) => prev.map(openSyncedCard));
+      emit("reconnect");
+    });
+  }, [client, orgId, userId, emit]);
+
   useEffect(() => {
     let cancelled = false;
     let subscribed = false;
@@ -119,7 +130,8 @@ export function useWebBoard({ orgId, userId, initialCommands, initialCards, open
       .on("postgres_changes", { event: "*", schema: "public", table: "cloud_cards", filter: `org_id=eq.${orgId}` }, (payload: { eventType: string; new: unknown; old: unknown }) => {
         const change = changeOf<CloudCardRow>(payload);
         if (cancelled || !change) return;
-        setCards((prev) => applyCardChange(prev, change as Parameters<typeof applyCardChange>[1]));
+        const opened = change.new ? { ...change, new: openSyncedCard(change.new) } : change;
+        setCards((prev) => applyCardChange(prev, opened as Parameters<typeof applyCardChange>[1]));
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "cloud_thread_items", filter: `org_id=eq.${orgId}` }, (payload: { eventType: string; new: unknown; old: unknown }) => {
         const change = changeOf<CloudThreadItemRow>(payload);
@@ -245,9 +257,9 @@ export function useWebBoard({ orgId, userId, initialCommands, initialCards, open
   // Answers the card's waiting permission request or question on the Mac that runs it, as if clicked there. Resolves
   // like startCard; how it went shows under the reply box.
   const answer = useCallback(
-    async (row: CloudCardRow, allow: boolean, answers?: Record<string, string>, reply?: QuestionReply): Promise<string | null> => {
+    async (row: CloudCardRow, allow: boolean, answers?: Record<string, string>, reply?: QuestionReply, grant?: GrantScope): Promise<string | null> => {
       const pendingId = row.card.pending?.id;
-      const command = pendingId && answerCommand({ orgId, device: row.owner_device, folder: row.folder, cardId: row.card_id }, { pendingId, allow, answers, reply });
+      const command = pendingId && answerCommand({ orgId, device: row.owner_device, folder: row.folder, cardId: row.card_id }, { pendingId, allow, answers, reply, grant });
       return command ? send(command) : "Nothing is waiting for an answer.";
     },
     [orgId, send],
@@ -282,7 +294,7 @@ export function useWebBoard({ orgId, userId, initialCommands, initialCards, open
         .eq("tool_id", toolId)
         .maybeSingle<{ result: string }>();
       if (error || !data) throw error ?? new Error("no output");
-      return data.result;
+      return openSyncedTool({ org_id: orgId, card_id: cardId, tool_id: toolId, result: data.result });
     },
     [client, orgId],
   );

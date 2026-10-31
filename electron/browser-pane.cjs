@@ -11,32 +11,26 @@ const { secretRunRoutes } = require("./secret-run.cjs");
 const { typeText } = require("./pane-actions.cjs");
 const { createPaneCdp } = require("./pane-cdp.cjs");
 const { createPaneInput, agentRoutes } = require("./pane-input.cjs");
-const { highlightExpression } = require("./pane-selector.cjs");
+const { captureShot, captureThumb } = require("./pane-capture.cjs");
+const { zoomContents } = require("./pane-zoom.cjs");
 const { controlHandler } = require("./control-server.cjs");
 const { cardFinder } = require("./card-token.cjs");
 const { failedUrl, watchLoadFailures } = require("./pane-error.cjs");
-const { escapeToReplay } = require("./pane-escape.cjs");
+const { replayEscapeToBoard } = require("./pane-escape.cjs");
 const { authorizeThreadOpen, originOf, rememberBoardOrigin } = require("./pane-origins.cjs");
 const { BOARD, activeKey, paneVisibleFor, needsRestore, switchKey } = require("./pane-visibility.cjs");
 const { touchIdPrompt } = require("./touch-id.cjs");
 const { appsDir, attachWebContentsView, createAppReload } = require("./app-reload.cjs");
-
-// Chrome's zoom steps, as percentages; Zoom In/Out walk them.
-const ZOOM_STEPS = [25, 33, 50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200, 250, 300, 400, 500];
-
-// The next step up (dir 1) or down (dir -1) from a zoom that may sit between steps.
-function stepZoom(percent, dir) {
-  if (dir > 0) return ZOOM_STEPS.find((z) => z > percent + 0.5) ?? ZOOM_STEPS[ZOOM_STEPS.length - 1];
-  return [...ZOOM_STEPS].reverse().find((z) => z < percent - 0.5) ?? ZOOM_STEPS[0];
-}
+const { createPaneTabs } = require("./pane-tabs.cjs");
 
 // Its own session, apart from the board window's, so pages never carry the launch token (electron/api-token.cjs).
 const PANE_PARTITION = "persist:threadboard-browser";
 
 function createBrowserPane({ getWindow, getAppView, token, onContents, pages, onLink, secrets, secretRun = () => undefined, routes: moreRoutes = {}, askUser }) {
-  // One page per card (keyed by card id), so each review keeps its own browser; "board" is the
-  // one shown with no card open. Only the active one is on screen.
-  const views = new Map();
+  // Each card (keyed by card id) has its own tabs, so each review keeps its own browser; "board" is the
+  // one shown with no card open. Only the active card's current tab is on screen (electron/pane-tabs.cjs).
+  const tabs = createPaneTabs();
+  const viewOf = (key) => tabs.current(key)?.view;
   // Origins the user has explicitly opened on each key, set by the board's IPC browser:open
   // (electron/main.cjs). A thread's control-server POST /browser/open can only navigate within
   // an origin already in the set (L-5 fix: a compromised renderer can't pivot the pane to a
@@ -56,9 +50,12 @@ function createBrowserPane({ getWindow, getAppView, token, onContents, pages, on
   const input = createPaneInput({ cdp });
 
   function state() {
-    const wc = views.get(active)?.webContents;
+    const wc = viewOf(active)?.webContents;
     const url = wc ? wc.getURL() : "";
     return {
+      // The card's tabs for the tab strip (components/PaneTabs.tsx), and which one is on screen.
+      tabs: tabs.list(active).map(tabState),
+      tab: tabs.current(active)?.id ?? null,
       visible,
       // On the error page the toolbar keeps the address that failed, so it can be fixed and reloaded.
       url: failedUrl(url) ?? url,
@@ -70,17 +67,23 @@ function createBrowserPane({ getWindow, getAppView, token, onContents, pages, on
     };
   }
 
+  function tabState({ id, view }) {
+    const url = view.webContents.getURL();
+    return { id, url: failedUrl(url) ?? url, title: view.webContents.getTitle() };
+  }
+
   function sendState() {
     const appView = getAppView();
     if (appView && !appView.webContents.isDestroyed()) appView.webContents.send("browser:state", state());
   }
 
   function layout() {
-    for (const [key, view] of views) {
+    for (const { key, view } of tabs.all()) {
       view.setBounds(bounds);
       // Until a page loads, the board shows its own placeholder instead of a blank view.
       const hasPage = Boolean(view.webContents.getURL());
-      const onScreen = key === active && visible && hasPage && bounds.width > 0 && bounds.height > 0;
+      const current = key === active && view === viewOf(key);
+      const onScreen = current && visible && hasPage && bounds.width > 0 && bounds.height > 0;
       // A hidden page keeps keyboard focus, and then no key reaches anything (Escape least of all).
       const losesFocus = !onScreen && view.webContents.isFocused();
       view.setVisible(onScreen);
@@ -95,42 +98,45 @@ function createBrowserPane({ getWindow, getAppView, token, onContents, pages, on
     return board && !board.isDestroyed() ? board : undefined;
   }
 
+  // A card's current tab, made (as its first tab) when it has none.
   function ensure(key = active) {
-    const existing = views.get(key);
-    if (existing) return existing;
+    return viewOf(key) ?? addTab(key);
+  }
+
+  // A new tab for a card, after its current one, and on screen if the card is.
+  function addTab(key) {
+    const view = createView(key);
+    tabs.add(key, view);
+    layout();
+    return view;
+  }
+
+  function createView(key) {
     const view = new WebContentsView({
       webPreferences: { partition: PANE_PARTITION, sandbox: true, contextIsolation: true, preload: path.join(__dirname, "pane-preload.cjs") },
     });
     view.setBackgroundColor("#ffffff");
     getWindow().contentView.addChildView(view);
-    views.set(key, view);
     const wc = view.webContents;
     onContents?.(wc);
     // Before the first load, so the console and network buffers catch it from the start.
     cdp.tryAttach(wc);
     // A focused page swallows keys the board never sees, so Escape is replayed into the board too,
     // where it closes the newest layer as usual. A fullscreen video keeps it to leave fullscreen.
-    let fullscreen = false;
-    wc.on("enter-html-full-screen", () => (fullscreen = true));
-    wc.on("leave-html-full-screen", () => (fullscreen = false));
-    wc.on("before-input-event", (_e, input) => {
-      const escape = escapeToReplay(input, { fullscreen });
-      if (!escape) return;
-      const board = boardContents();
-      if (!board) return;
-      board.focus();
-      board.sendInputEvent(escape);
-      board.sendInputEvent({ type: "keyUp", keyCode: "Escape" });
-    });
+    replayEscapeToBoard(wc, boardContents);
     // Trackpad pinch magnifies like Safari; Cmd+scroll changes the page zoom.
     wc.setVisualZoomLevelLimits(1, 4).catch(() => {});
-    wc.on("zoom-changed", (_e, direction) => zoomContents(wc, direction));
-    // Pop-ups open in the same card's view instead of new windows.
+    wc.on("zoom-changed", (_e, direction) => zoom(wc, direction));
+    // Pop-ups and target=_blank links open in a new tab of the same card instead of new windows.
     // Links get where they came from: the card whose pane holds the page, and the page's own URL.
     const from = () => ({ card: key === BOARD ? null : key, page: wc.getURL() });
     wc.setWindowOpenHandler(({ url }) => {
       if (/^weft:/i.test(url)) onLink?.(url, from());
-      else wc.loadURL(url).catch(() => {});
+      else {
+        const tab = addTab(key);
+        if (key === active) sendState();
+        loadInView(tab, url).catch(() => {});
+      }
       return { action: "deny" };
     });
     // weft:// links in a page (a walk-through's buttons, a commit page's Commit) are the app's, not the page's.
@@ -150,24 +156,51 @@ function createBrowserPane({ getWindow, getAppView, token, onContents, pages, on
     // A failed load shows why (electron/pane-error.cjs) instead of a blank page, with the card's last page to go back to.
     watchLoadFailures(wc, { back: (url) => (key === BOARD ? undefined : lastGoodPage(key, url)) });
     // Remembered so the card's page comes back after a restart (electron/pane-pages.cjs); never the error page.
+    // Only the current tab's: the page on screen is the one the thread and the show rail mean.
     if (key !== BOARD) {
       wc.on("did-navigate", () => {
-        if (failedUrl(wc.getURL()) === undefined) pages?.record(key, wc.getURL(), wc.getTitle());
+        if (viewOf(key) === view && failedUrl(wc.getURL()) === undefined) pages?.record(key, wc.getURL(), wc.getTitle());
       });
     }
-    layout();
     return view;
   }
 
-  // action is "in", "out", "reset", or a percentage. Chromium shares zoom across a host's pages.
-  function zoomContents(wc, action) {
-    if (!wc || wc.isDestroyed()) return;
-    const now = wc.getZoomFactor() * 100;
-    const next =
-      action === "in" ? stepZoom(now, 1) : action === "out" ? stepZoom(now, -1) : action === "reset" ? 100 : Number(action);
-    if (!Number.isFinite(next)) return;
-    wc.setZoomFactor(Math.min(500, Math.max(25, next)) / 100);
-    if (wc === views.get(active)?.webContents) sendState();
+  function destroy(view) {
+    try {
+      getWindow().contentView.removeChildView(view);
+      view.webContents.close();
+    } catch {}
+  }
+
+  // Tabs act on the open card's browser, the one on screen.
+  function selectTab(id) {
+    if (!tabs.select(active, Number(id))) return;
+    const wc = viewOf(active).webContents;
+    if (active !== BOARD && wc.getURL() && failedUrl(wc.getURL()) === undefined) pages?.record(active, wc.getURL(), wc.getTitle());
+    layout();
+    sendState();
+  }
+
+  function closeTab(id) {
+    const tab = tabs.close(active, Number(id));
+    if (!tab) return;
+    destroy(tab.view);
+    selectTab(tabs.current(active).id);
+  }
+
+  // A blank tab for the open card; the board's placeholder shows until the user types an address.
+  // A card whose current tab is still blank reuses it.
+  function newTab() {
+    visible = true;
+    const view = viewOf(active);
+    if (!view || view.webContents.getURL()) addTab(active);
+    layout();
+    sendState();
+  }
+
+  // The page's zoom; the toolbar shows it for the page on screen.
+  function zoom(wc, action) {
+    if (zoomContents(wc, action) && wc === viewOf(active)?.webContents) sendState();
   }
 
   function setVisible(next, key) {
@@ -178,7 +211,7 @@ function createBrowserPane({ getWindow, getAppView, token, onContents, pages, on
     const nextKey = switchKey(key, active);
     if (nextKey !== active) {
       active = nextKey;
-      if (needsRestore(active, Boolean(views.get(active)?.webContents.getURL()))) restore(active);
+      if (needsRestore(active, Boolean(viewOf(active)?.webContents.getURL()))) restore(active);
     }
     visible = next;
     if (visible) ensure(active);
@@ -196,7 +229,7 @@ function createBrowserPane({ getWindow, getAppView, token, onContents, pages, on
     visible = paneVisibleFor(active);
     layout();
     sendState();
-    if (needsRestore(active, Boolean(views.get(active)?.webContents.getURL()))) restore(active);
+    if (needsRestore(active, Boolean(viewOf(active)?.webContents.getURL()))) restore(active);
   }
 
   // A card opened with a blank browser (after a restart) gets its last page back, or its last update page.
@@ -219,13 +252,9 @@ function createBrowserPane({ getWindow, getAppView, token, onContents, pages, on
   // Closes the browsers of cards that are gone.
   function prune(keep) {
     const keepKeys = new Set([BOARD, active, ...keep]);
-    for (const [key, view] of views) {
+    for (const key of tabs.keys()) {
       if (keepKeys.has(key)) continue;
-      views.delete(key);
-      try {
-        getWindow().contentView.removeChildView(view);
-        view.webContents.close();
-      } catch {}
+      for (const tab of tabs.remove(key)) destroy(tab.view);
     }
   }
 
@@ -263,14 +292,15 @@ function createBrowserPane({ getWindow, getAppView, token, onContents, pages, on
     const origin = originOf(url);
     // Weft inside its own pane is a confusing hall of mirrors; a card working on Weft should run its own dev server on another port.
     if (isSelf(url)) throw new Error(`${url} is Weft itself; open the card's own dev server instead`);
-    const prior = views.get(targetKey)?.webContents.getURL();
+    const prior = viewOf(targetKey)?.webContents.getURL();
     const priorOrigin = prior ? originOf(prior) : null;
     if (!opts.fromBoard && !(await authorizeThreadOpen({ authorized: authorizedOrigins, pending: pendingOrigins, targetKey, origin, priorOrigin, ask }))) {
       throw new Error(`You didn't allow this thread to open ${origin} in the browser pane. Ask the user to open it there, or to approve it next time.`);
     }
     if (activate) active = targetKey;
     if (opts.fromBoard) rememberBoardOrigin(authorizedOrigins, targetKey, origin);
-    const v = ensure(targetKey);
+    // opts.newTab (an agent's open_url new_tab) keeps the card's current page in its own tab.
+    const v = opts.newTab && prior ? addTab(targetKey) : ensure(targetKey);
     if (targetKey === active) setVisible(true);
     return loadInView(v, url);
   }
@@ -290,7 +320,7 @@ function createBrowserPane({ getWindow, getAppView, token, onContents, pages, on
   }
 
   function requirePage(key = active) {
-    const view = views.get(key);
+    const view = viewOf(key);
     if (!view || !view.webContents.getURL()) throw new Error("The browser pane has no page open yet. Use open_url first.");
     return view.webContents;
   }
@@ -302,37 +332,11 @@ function createBrowserPane({ getWindow, getAppView, token, onContents, pages, on
     return { url: wc.getURL(), title: paneSecrets.redact(key, wc.getTitle()), text: paneSecrets.redact(key, text).slice(0, 30_000) };
   }
 
-  // highlight, a CSS selector, scrolls that element into view and draws an orange box around it for the shot
-  // (for step-by-step instructions: "click here"), then takes the box away. The selector may carry
-  // Playwright's text pseudo-classes, the same way the click tools' selector does (electron/pane-selector.cjs).
+  // An agent's screenshot of a card's page (electron/pane-capture.cjs); it shows the pane first.
   async function screenshot(key = active, highlight) {
     const wc = requirePage(key);
     if (key === active && !visible) setVisible(true);
-    let found;
-    if (highlight) {
-      found = await wc.executeJavaScript(highlightExpression(String(highlight))).catch(() => false);
-      // Let the scroll and the box paint before the capture.
-      await new Promise((resolve) => setTimeout(resolve, 120));
-    }
-    let image;
-    try {
-      image = await wc.capturePage();
-    } finally {
-      if (found) await wc.executeJavaScript(`document.getElementById("__weft_highlight")?.remove()`).catch(() => {});
-    }
-    if (image.getSize().width > 1280) image = image.resize({ width: 1280 });
-    return { png: image.toPNG().toString("base64"), ...(highlight ? { found: Boolean(found) } : {}) };
-  }
-
-  // A card's thumbnail (lib/card-pictures.ts): a small capture that never shows the pane. A page that
-  // isn't on screen may capture empty; that's no thumbnail, not an error.
-  async function thumbnail(key) {
-    const view = views.get(key);
-    if (!view || !view.webContents.getURL()) return { jpg: null };
-    let image = await view.webContents.capturePage();
-    if (image.isEmpty()) return { jpg: null };
-    if (image.getSize().width > 480) image = image.resize({ width: 480, quality: "good" });
-    return { jpg: image.toJPEG(78).toString("base64") };
+    return captureShot(wc, highlight);
   }
 
   const paneSecrets = createPaneSecrets({ secrets, requirePage, typeText, cdp });
@@ -346,12 +350,12 @@ function createBrowserPane({ getWindow, getAppView, token, onContents, pages, on
   // Resolves to the control server's base URL.
   function startControlServer() {
     const routes = {
-      "POST /browser/open": (body) => open(body.url, body.key),
+      "POST /browser/open": (body) => open(body.url, body.key, false, { newTab: Boolean(body.newTab) }),
       "POST /browser/text": (body) => pageText(body.key),
       // What a card's browser shows, "" when it has no page yet (see lib/show.ts).
-      "POST /browser/url": (body) => ({ url: views.get(body.key)?.webContents.getURL() || "" }),
+      "POST /browser/url": (body) => ({ url: viewOf(body.key)?.webContents.getURL() || "" }),
       "POST /browser/screenshot": (body) => screenshot(body.key, body.highlight),
-      "POST /browser/thumb": (body) => thumbnail(body.key),
+      "POST /browser/thumb": (body) => captureThumb(viewOf(body.key)?.webContents),
       // click, type, keys, scroll, snapshot, console, network and the rest (electron/pane-input.cjs).
       ...agentRoutes({ input, cdp, page: (body) => ({ wc: requirePage(body.key), key: body.key ?? active }), redact: paneSecrets.redact }),
       "POST /secrets/list": (body) => paneSecrets.list(body.folder),
@@ -382,14 +386,17 @@ function createBrowserPane({ getWindow, getAppView, token, onContents, pages, on
     isVisible: () => visible,
     setActive,
     prune,
-    contentsFor: (key) => views.get(key)?.webContents,
-    webContents: () => views.get(active)?.webContents,
-    back: () => views.get(active)?.webContents.navigationHistory.goBack(),
-    forward: () => views.get(active)?.webContents.navigationHistory.goForward(),
-    reload: () => views.get(active)?.webContents.reload(),
-    zoom: (action) => zoomContents(views.get(active)?.webContents, action),
+    contentsFor: (key) => viewOf(key)?.webContents,
+    webContents: () => viewOf(active)?.webContents,
+    back: () => viewOf(active)?.webContents.navigationHistory.goBack(),
+    forward: () => viewOf(active)?.webContents.navigationHistory.goForward(),
+    reload: () => viewOf(active)?.webContents.reload(),
+    zoom: (action) => zoom(viewOf(active)?.webContents, action),
     // True for any card's page, so the app menu's zoom keys reach the pane's toolbar too.
-    owns: (wc) => [...views.values()].some((v) => v.webContents === wc),
+    owns: (wc) => [...tabs.all()].some((t) => t.view.webContents === wc),
+    newTab,
+    selectTab,
+    closeTab,
     startControlServer,
   };
 }

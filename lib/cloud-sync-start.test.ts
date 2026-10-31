@@ -6,6 +6,7 @@ const accountClient = vi.fn(() => ({ fake: "client" }));
 const bundle = {
   refFor: vi.fn(() => Promise.resolve(null)),
   upload: vi.fn(() => Promise.resolve(null)),
+  uploadPage: vi.fn(() => Promise.resolve(null)),
   rewriteItem: vi.fn((item: ThreadItem) => Promise.resolve(item)),
   fetchBlob: vi.fn(),
 };
@@ -59,11 +60,13 @@ describe("startAccountCloudSync", () => {
     const item: ThreadItem = { kind: "user", text: "hi", at: 1 };
     await passed!.refFor("/a.png");
     await passed!.upload("/a.png", "org");
+    await passed!.uploadPage?.("/p.html", "org");
     expect(await passed!.rewriteItem(item, "org")).toBe(item);
     expect(createBlobStore).toHaveBeenCalledTimes(1);
     expect(createBlobStore).toHaveBeenCalledWith({ client: { fake: "client" } });
     expect(bundle.refFor).toHaveBeenCalledWith("/a.png");
     expect(bundle.upload).toHaveBeenCalledWith("/a.png", "org");
+    expect(bundle.uploadPage).toHaveBeenCalledWith("/p.html", "org");
     expect(bundle.rewriteItem).toHaveBeenCalledWith(item, "org");
   });
 });

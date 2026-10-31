@@ -8,15 +8,26 @@ const api = vi.hoisted(() => ({ schedule: vi.fn(), unschedule: vi.fn() }));
 vi.mock("@/lib/client", () => ({ api }));
 
 import { STOP_SETTLE_MS } from "./optimistic-cards";
-import { useReplySchedule } from "./use-reply-schedule";
+import { useReplySchedule, type ScheduledSendNow } from "./use-reply-schedule";
 
-function setup(handle: Partial<ComposerHandle> | null, server?: ScheduledMessage[]) {
+function setup(handle: Partial<ComposerHandle> | null, server?: ScheduledMessage[], thread?: ScheduledSendNow) {
   const composer = { current: handle as ComposerHandle | null };
   const saveDraft = vi.fn();
   const setError = vi.fn();
-  const hook = renderHook(({ list }) => useReplySchedule("c1", composer, saveDraft, setError, list), { initialProps: { list: server } });
+  const hook = renderHook(({ list }) => useReplySchedule("c1", composer, saveDraft, setError, list, thread), { initialProps: { list: server } });
   return { ...hook, saveDraft, setError };
 }
+
+function thread(live: boolean, order: string[] = []): ScheduledSendNow {
+  return {
+    live,
+    onStop: vi.fn(() => (order.push("stop"), Promise.resolve())),
+    onSend: vi.fn((text: string) => (order.push(`send ${text}`), Promise.resolve())),
+    onSent: vi.fn(),
+  };
+}
+
+const held = { id: "h1", text: "after the turn", at: 0, afterTurn: true } as ScheduledMessage;
 
 const msg = { id: "m1", text: "later" } as ScheduledMessage;
 
@@ -157,5 +168,59 @@ describe("useReplySchedule", () => {
     expect(setError).toHaveBeenCalledWith("Clear the box first to edit a scheduled message.");
     expect(handle.write).not.toHaveBeenCalled();
     expect(api.unschedule).not.toHaveBeenCalled();
+  });
+
+  describe("sendNow", () => {
+    it("unschedules the held row, stops the running turn, then sends it", async () => {
+      const order: string[] = [];
+      api.unschedule.mockImplementation(() => (order.push("unschedule"), Promise.resolve()));
+      const t = thread(true, order);
+      const { result } = setup({}, [held], t);
+      await act(() => result.current.sendNow(held));
+      expect(order).toEqual(["unschedule", "stop", "send after the turn"]);
+      expect(t.onSent).toHaveBeenCalled();
+      expect(result.current.scheduled).toEqual([]);
+      expect(result.current.sending).toBe(false);
+    });
+
+    it("sends without a stop when no turn is running", async () => {
+      const t = thread(false);
+      const { result } = setup({}, [held], t);
+      await act(() => result.current.sendNow(held));
+      expect(t.onStop).not.toHaveBeenCalled();
+      expect(t.onSend).toHaveBeenCalledWith("after the turn");
+    });
+
+    it("leaves rows it can't take, and does nothing without a thread", async () => {
+      const t = thread(true);
+      const restart = { ...held, afterTurn: undefined, afterRestart: true };
+      const a = setup({}, [restart], t);
+      await act(() => a.result.current.sendNow(restart));
+      const b = setup({}, [held]);
+      await act(() => b.result.current.sendNow(held));
+      expect(api.unschedule).not.toHaveBeenCalled();
+      expect(t.onSend).not.toHaveBeenCalled();
+    });
+
+    it("keeps the row when the unschedule fails", async () => {
+      api.unschedule.mockRejectedValue(new Error("gone"));
+      const t = thread(true);
+      const { result, setError } = setup({}, [held], t);
+      await act(() => result.current.sendNow(held));
+      expect(setError).toHaveBeenCalledWith(expect.any(Error));
+      expect(t.onStop).not.toHaveBeenCalled();
+      expect(result.current.scheduled).toEqual([held]);
+    });
+
+    it("puts the text in an empty box when the send fails", async () => {
+      const t = thread(true);
+      t.onSend = vi.fn(() => Promise.reject(new Error("refused")));
+      const handle = { isEmpty: () => true, write: vi.fn() };
+      const { result, setError } = setup(handle, [held], t);
+      await act(() => result.current.sendNow(held));
+      expect(handle.write).toHaveBeenCalledWith("after the turn");
+      expect(setError).toHaveBeenCalledWith(expect.any(Error));
+      expect(t.onSent).not.toHaveBeenCalled();
+    });
   });
 });

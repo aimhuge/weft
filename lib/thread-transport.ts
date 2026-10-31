@@ -42,6 +42,9 @@ export interface ThreadTransport {
   stopTask?: (cardId: string, taskId: string) => Promise<void>;
   // The card folder's files, so file names in the thread link to the editor column (lib/use-file-index.ts).
   listFiles?: (cardId: string) => Promise<string[]>;
+  // A card on another machine: This card and Always go inside the answer, as one command, and that machine works out
+  // the folder from its own pending request. "Read from" on a question has no such command, so it isn't offered.
+  grantInAnswer?: boolean;
   // Send later, the review panel and the copilot's starters: the desktop board's own.
   desktop: boolean;
 }

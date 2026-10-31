@@ -82,6 +82,10 @@ function setupApps({ ipcMain, vault, ownsPane, isBoard, dataDir, supabaseReadLin
     fetch: fetchImpl,
   });
 
+  // And the simulator's live view (electron/sim-live.cjs): a viewer page under show/simulator/ gets its
+  // device's window to capture, and its clicks go to the server as taps with the launch token.
+  require("./sim-live.cjs").setupSimLive({ ipcMain, owns: ownsPane, dataDir, server, fetch: fetchImpl });
+
   return { account };
 }
 

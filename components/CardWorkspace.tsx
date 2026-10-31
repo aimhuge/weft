@@ -164,7 +164,8 @@ export default function CardWorkspace({
   // Observe the container's actual width and refit fixed columns when it shrinks past what they
   // would naturally take. The drag handler already fits each move, so this is the passive fallback
   // for window resizes, developer-tools docking, etc. fitToWidth is a no-op when the layout
-  // already fits, so calling it with a wrong/0 width is safe.
+  // already fits, so calling it with a wrong/0 width is safe. The layout is a dep so opening a column
+  // refits too.
   useEffect(() => {
     const el = wrap.current;
     if (!el) return;
@@ -181,7 +182,7 @@ export default function CardWorkspace({
     }
     window.addEventListener("resize", report);
     return () => window.removeEventListener("resize", report);
-  }, [fitToContainer]);
+  }, [fitToContainer, layout]);
 
   // Walk the columns in render order. Each column is either open (its content) or a sliver button
   // you can click to reopen. A divider sits between each pair of consecutive open columns, even

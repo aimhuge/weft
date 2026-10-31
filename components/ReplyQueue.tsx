@@ -1,6 +1,6 @@
 "use client";
 
-import { sendsWhen } from "@/lib/schedule";
+import { canSendNow, sendsWhen } from "@/lib/schedule";
 import type { ScheduledMessage } from "@/lib/types";
 import Icon from "./Icon";
 
@@ -16,6 +16,7 @@ export function ReplyQueue({
   sending,
   now,
   onTakeBack,
+  onSendScheduled,
   onUnschedule,
   onSendNow,
   onRemove,
@@ -28,6 +29,8 @@ export function ReplyQueue({
   sending: boolean;
   now: number;
   onTakeBack: (m: ScheduledMessage) => void;
+  // Send now on a row held for this turn: stops the turn and sends it next.
+  onSendScheduled: (m: ScheduledMessage) => void;
   onUnschedule: (messageId: string) => void;
   onSendNow: (index: number) => void;
   onRemove: (index: number) => void;
@@ -59,6 +62,9 @@ export function ReplyQueue({
           >
             {m.text}
           </button>
+          {canSendNow(m) && (
+            <SendNowButton live={live} sending={sending} onClick={() => onSendScheduled(m)} />
+          )}
           <button type="button" onClick={() => onUnschedule(m.id)} aria-label="Cancel scheduled message" className="shrink-0 hover:text-ink">
             <Icon name="x" size={12} />
           </button>
@@ -68,20 +74,26 @@ export function ReplyQueue({
         <li key={i} className={ROW}>
           <span className="shrink-0 text-[11px] uppercase tracking-wide">{paused ? "Paused" : "Queued"}</span>
           <span className="min-w-0 flex-1 truncate">{text}</span>
-          <button
-            type="button"
-            onClick={() => onSendNow(i)}
-            disabled={sending}
-            title={live ? "Stop the current turn and send this now" : "Send this now"}
-            className="shrink-0 rounded px-1.5 py-0.5 text-[11.5px] text-ink hover:bg-line disabled:opacity-40"
-          >
-            Send now
-          </button>
+          <SendNowButton live={live} sending={sending} onClick={() => onSendNow(i)} />
           <button type="button" onClick={() => onRemove(i)} aria-label="Remove queued message" className="shrink-0 hover:text-ink">
             <Icon name="x" size={12} />
           </button>
         </li>
       ))}
     </ul>
+  );
+}
+
+function SendNowButton({ live, sending, onClick }: { live: boolean; sending: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={sending}
+      title={live ? "Stop the current turn and send this now" : "Send this now"}
+      className="shrink-0 rounded px-1.5 py-0.5 text-[11.5px] text-ink hover:bg-line disabled:opacity-40"
+    >
+      Send now
+    </button>
   );
 }

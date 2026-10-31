@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  boardMode,
   copilotLaneOpen,
   foldedColumns,
   isFolded,
@@ -10,6 +11,7 @@ import {
   setCopilotLaneOpen,
   setColumnFolded,
   setCopilotLanePeek,
+  setBoardMode,
   setShowBacklog,
   setShowProgress,
   setViewMode,
@@ -28,6 +30,7 @@ afterEach(() => {
   document.cookie = "weft-copilot-lane=; path=/; max-age=0";
   document.cookie = "weft-copilot-peek=; path=/; max-age=0";
   document.cookie = "weft-view-mode=; path=/; max-age=0";
+  document.cookie = "weft-board-mode=; path=/; max-age=0";
 });
 
 describe("foldedColumns", () => {
@@ -173,5 +176,27 @@ describe("subscribeBoardPrefs", () => {
     unsubscribe();
     setShowBacklog(true);
     expect(onChange).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("board mode", () => {
+  it("is advanced with no cookie, so an update leaves a board in use alone", () => {
+    expect(boardMode()).toBe("advanced");
+  });
+
+  it("stores the mode and tells the board", () => {
+    const heard = vi.fn();
+    const stop = subscribeBoardPrefs(heard);
+    setBoardMode("regular");
+    expect(boardMode()).toBe("regular");
+    setBoardMode("advanced");
+    expect(boardMode()).toBe("advanced");
+    expect(heard).toHaveBeenCalledTimes(2);
+    stop();
+  });
+
+  it("is advanced on the server", () => {
+    vi.stubGlobal("document", undefined);
+    expect(boardMode()).toBe("advanced");
   });
 });

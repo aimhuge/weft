@@ -12,6 +12,8 @@
 
 import { PROVIDERS, type Headers as ProviderHeaders } from "./webhook-signatures";
 import { openSecret, relayKeyFromEnv, sealedFromHex, type RelayKey } from "./relay-secret";
+import { isOpen, restTunnel, type TunnelRow } from "./tunnel-address";
+import { FORWARD_HEADER, forwardTicket } from "./tunnel-ticket";
 
 export interface Relay {
   id: string;
@@ -21,6 +23,8 @@ export interface Relay {
   secret_ciphertext?: string | null;
   secret_nonce?: string | null;
   secret_key_id?: string | null;
+  tunnel_id?: string | null;
+  tunnel_path?: string | null;
 }
 
 export interface DeliveryRow {
@@ -37,9 +41,13 @@ export interface DeliveryRow {
 export interface RelayStore {
   relay: (id: string) => Promise<Relay | null>;
   save: (delivery: DeliveryRow) => Promise<void>;
+  tunnel?: (id: string) => Promise<TunnelRow | null>;
 }
 
 export const MAX_BODY = 1024 * 1024;
+export const TUNNEL_TIMEOUT_MS = 8_000;
+// The gate refused it, or Cloudflare couldn't reach the Mac: these came from the way there, not from the route.
+const NOT_THE_ROUTE = new Set([401, 502, 503, 504, 530]);
 export const METHODS = new Set(["GET", "POST", "PUT", "PATCH", "DELETE"]);
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -67,6 +75,23 @@ function providerHeaders(headers: Record<string, string>): ProviderHeaders {
   return out;
 }
 
+// F-12: the relay used to save every request. It refuses unless the row declares a provider we know how to verify, the
+// deployment can open its ciphertext and the signature checks out. Without a provider row the local Weft must create a
+// fresh relay through createRelay() before deliveries flow again. null means the delivery is authentic.
+function refusal(relay: Relay, body: Uint8Array, headers: ProviderHeaders, key: RelayKey | null, now: number): Response | null {
+  const provider = relay.provider?.trim();
+  if (!provider) return text("Relay has no provider; create a fresh relay through Weft.", 403);
+  const verifier = PROVIDERS.get(provider);
+  if (!verifier) return text("Unknown provider", 403);
+  if (!key) return text("Relay signing key is not configured on this deployment", 503);
+  // sealedFromHex reads the snake_case Supabase columns off the row; Relay carries the same fields, typed.
+  const sealed = sealedFromHex(relay as unknown as Record<string, unknown>);
+  const secret = openSecret(sealed, key);
+  if (!secret) return text("Relay signing key mismatch", 403);
+  const bodyText = new TextDecoder("utf-8", { fatal: false }).decode(body);
+  return verifier.verify(secret, bodyText, headers, now) ? null : text("Bad signature", 401);
+}
+
 // The handler used by the route. The relay key is taken from the environment by default; pass a
 // key directly so the tests can drive it without setting process.env.
 export async function handle(
@@ -86,26 +111,37 @@ export async function handle(
   const body = new Uint8Array(await req.arrayBuffer());
   if (body.length > MAX_BODY) return text("Body too large", 413);
 
-  // F-12: the relay used to save every request here. We refuse unless the row declares a provider
-  // we know how to verify, and the deployment can open its ciphertext. Without a provider row the
-  // local Weft must create a fresh relay through createRelay() before deliveries flow again.
-  const provider = relay.provider?.trim();
-  if (!provider) return text("Relay has no provider; create a fresh relay through Weft.", 403);
-  const verifier = PROVIDERS.get(provider);
-  if (!verifier) return text("Unknown provider", 403);
-  const key = opts.key ?? relayKeyFromEnv();
-  if (!key) return text("Relay signing key is not configured on this deployment", 503);
-  // sealedFromHex reads the snake_case Supabase columns off the row; Relay carries the same fields, typed.
-  const sealed = sealedFromHex(relay as unknown as Record<string, unknown>);
-  const secret = openSecret(sealed, key);
-  if (!secret) return text("Relay signing key mismatch", 403);
-
   const headers = providerHeaders(keptHeaders(req.headers));
-  const bodyText = new TextDecoder("utf-8", { fatal: false }).decode(body);
-  if (!verifier.verify(secret, bodyText, headers, (opts.now ?? Date.now)())) return text("Bad signature", 401);
+  const refused = refusal(relay, body, headers, opts.key ?? relayKeyFromEnv(), (opts.now ?? Date.now)());
+  if (refused) return refused;
 
+  const live = await sendThroughTunnel(relay, req.method, extra, headers, body, store, opts.now ?? Date.now);
+  if (live) return live;
   await store.save({ relay_id: relay.id, user_id: relay.user_id, method: req.method, path: extra, headers, body: base64(body) });
   return text("Relayed", 200);
+}
+
+// While a tunnel is open, a verified delivery goes straight to the route, and the provider gets its real answer. No
+// tunnel, or one that didn't reach the route, gives null, and the delivery is stored for Weft as before. A route too
+// slow for TUNNEL_TIMEOUT_MS may then see it twice, which is why providers ask routes to be idempotent.
+async function sendThroughTunnel(relay: Relay, method: string, extra: string, headers: Record<string, string>, body: Uint8Array, store: RelayStore, now: () => number) {
+  if (!relay.tunnel_id || !store.tunnel) return null;
+  try {
+    const tunnel = await store.tunnel(relay.tunnel_id);
+    if (!tunnel || tunnel.user_id !== relay.user_id || !isOpen(tunnel, now())) return null;
+    const path = `${relay.tunnel_path ?? "/"}${extra}`;
+    const res = await fetch(`${tunnel.public_url}${path}`, {
+      method,
+      headers: { ...headers, [FORWARD_HEADER]: forwardTicket(tunnel.ticket_secret, tunnel.id, method, path, now()) },
+      body: method === "GET" ? undefined : new Uint8Array(body),
+      redirect: "manual",
+      signal: AbortSignal.timeout(TUNNEL_TIMEOUT_MS),
+    });
+    if (NOT_THE_ROUTE.has(res.status)) return null;
+    return new Response(res.body, { status: res.status, headers: { "content-type": res.headers.get("content-type") ?? "text/plain" } });
+  } catch {
+    return null;
+  }
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -126,11 +162,12 @@ export function restStore(url: string, key: string, now = () => Date.now()): Rel
     relay: async (id) => {
       const rows = (await (
         await rest(
-          `webhook_relays?id=eq.${id}&select=id,user_id,name,provider,secret_ciphertext,secret_nonce,secret_key_id`,
+          `webhook_relays?id=eq.${id}&select=id,user_id,name,provider,secret_ciphertext,secret_nonce,secret_key_id,tunnel_id,tunnel_path`,
         )
       ).json()) as Relay[];
       return rows[0] ?? null;
     },
+    tunnel: restTunnel(url, key),
     save: async (delivery) => {
       await rest("webhook_deliveries", { method: "POST", body: JSON.stringify(delivery), headers: { prefer: "return=minimal" } });
       // A relay's deliveries older than a day are no use to anyone: Weft forwards them within seconds, or on its next start.

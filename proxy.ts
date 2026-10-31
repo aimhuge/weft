@@ -67,9 +67,12 @@ export const config = {
     "/team",
     "/billing",
     "/invite/:token*",
+    "/pair",
     "/:orgSlug/team/:path*",
     "/:orgSlug/billing/:path*",
     "/s/:path*",
+    // A tunnel's address reads the visitor's session the same way (lib/tunnel-address.ts).
+    "/t/:path*",
     // /@<username>/apps/<slug> and /<org>/apps/<slug> rewrites (lib/app-routes.ts). The strings
     // are inlined here so Next's static parser can see them; a spread into appLinkMatchers()
     // makes `config` unparseable and the proxy throws on every request.

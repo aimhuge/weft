@@ -5,7 +5,7 @@
 // the board's one Realtime channel (useWebBoard hands them on through `bus`), blob refs signed as the items draw (the
 // URLs come through CloudBlobContext, so a URL landing redraws the items without making a new transport), and
 // Stop sent as a command for the Mac that runs the card (lib/cloud-inbox.ts). What only the Mac itself can do (a "!"
-// command, ↑ edit, folder grants, Wait, a subagent's Stop) is left out, so its views don't offer it.
+// command, ↑ edit, Wait, a subagent's Stop) is left out, so its views don't offer it. Folder grants go inside the answer.
 import { createContext, useContext, useEffect, useMemo, useRef } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { NewCommand } from "@/lib/cloud-commands";
@@ -90,6 +90,7 @@ export function useCloudTransport({ client, orgId, bus, stopCommand, sendCommand
         const failed = typeof row === "string" ? row : await sendCommand(row);
         if (failed) throw new Error(failed);
       },
+      grantInAnswer: true,
       desktop: false,
     }),
     [client, orgId, bus, stopCommand, sendCommand],

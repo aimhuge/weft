@@ -1,6 +1,6 @@
 // What a thread may read of a vault, and the Touch ID gates around it (docs/architecture/secrets.md).
 // A value reaches a thread's context only through one of these, and only after the user said yes:
-// useFor (a card's standing grant, or a Touch ID), sendValue (a write somewhere else, every time),
+// useFor (a card's standing grant, or a Touch ID), sendValue (a write somewhere else, every time unless a grant names writes),
 // confirm (a write a thread asks for), and valuesFor (a command main runs, never over IPC).
 //
 // Kept beside the vault so electron/vault.cjs stays about the vault itself.
@@ -51,12 +51,14 @@ function createThreadTools({ idOf, storeReady, existing, store, log, grants, pro
 
   // Hands one value to send() in main after a Touch ID every time, even while unlocked: a push to a service
   // (electron/vercel-env.cjs) is a write somewhere else. What send returns comes back; the value doesn't.
-  async function sendValue(folder, name, environment, reason, send) {
-    const { label, values } = await valuesFor(folder, [name], environment, false);
+  // card, when a thread asked, lets a grant that names writes (electron/vault-grants.cjs) stand in for the Touch ID.
+  async function sendValue(folder, name, environment, reason, send, card = "") {
+    const { id, label, values } = await valuesFor(folder, [name], environment, false);
     const line = { action: "send", by: "weft", vault: label, names: [name], environment, detail: reason(label) };
     if (!(name in values)) return log({ ...line, outcome: "missing" }) && { missing: true, label };
-    if (!(await prompt(reason(label)))) return log({ ...line, outcome: "denied" }) && { denied: true, label };
-    log(line);
+    const granted = Boolean(card) && grants.allowsWrite(card, id);
+    if (!granted && !(await prompt(reason(label)))) return log({ ...line, outcome: "denied" }) && { denied: true, label };
+    log(granted ? { ...line, card, via: "grant" } : line);
     return { ...(await send(values[name])), label };
   }
 

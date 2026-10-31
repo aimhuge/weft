@@ -52,6 +52,7 @@ vi.mock("./SlackDrawer", () => ({ default: () => null }));
 vi.mock("./ServicesDrawer", () => ({ default: () => null }));
 vi.mock("./TagsDrawer", () => ({ default: () => null }));
 
+import { setBoardMode } from "@/lib/board-prefs";
 import SideRail from "./LibraryRail";
 import type { TagCatalog } from "./use-tag-catalog";
 
@@ -101,5 +102,18 @@ describe("LibraryRail admin group", () => {
     render(<SideRail {...baseProps} />);
     screen.getByRole("button", { name: "Admin" }).click();
     expect(push).toHaveBeenCalledWith("/admin/users");
+  });
+});
+
+describe("LibraryRail in Regular mode", () => {
+  it("keeps the star and the vault and drops the tools", () => {
+    useSuperAdminGate.mockReturnValue(false);
+    setBoardMode("regular");
+    render(<SideRail {...baseProps} />);
+    for (const name of ["Tags", "Crons", "Webhooks", "Vercel", "Supabase", "GitHub", "Skills", "Services"]) {
+      expect(screen.queryByRole("button", { name })).toBeNull();
+    }
+    expect(screen.getByRole("navigation", { name: "Rail" }).querySelectorAll("button").length).toBe(2);
+    document.cookie = "weft-board-mode=; path=/; max-age=0";
   });
 });

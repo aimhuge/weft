@@ -4,9 +4,11 @@
 // and stop a card's running turn (`stopCommand` → `stopBody`). The web builds the row, the Mac (lib/cloud-inbox.ts)
 // reads the payload back; all four live here so the two sides can't drift.
 import { backendFor, CODEX_DEFAULT_MODEL } from "./new-thread";
+import type { Sealed } from "./worker-seal";
+import type { ApprovalAuth } from "./approval-sig";
 import { readQuestionReply } from "./question-reply";
 import type { QuestionReply } from "./types-thread";
-import type { Backend, Effort } from "./types";
+import type { Backend, Effort, PendingPermission } from "./types";
 
 export type CloudCommandStatus = "pending" | "claimed" | "done" | "failed";
 
@@ -27,6 +29,10 @@ export interface ReplyPayload {
   text: string;
 }
 
+// How far an Allow on an outside-folder prompt reaches: this card, or every card on the machine running it.
+export const GRANT_SCOPES = ["card", "always"] as const;
+export type GrantScope = (typeof GRANT_SCOPES)[number];
+
 // An answer to a card's pending permission request or question: the pendingId ties the answer to the
 // request the user saw (otherwise the oldest is answered), allow vs. deny, the question's answers, and
 // the same reply (notes per question / "Chat about this") the permission route carries.
@@ -36,6 +42,12 @@ export interface AnswerPayload {
   allow: boolean;
   answers?: Record<string, string>;
   reply?: QuestionReply;
+  // This card / Always on an outside-folder prompt. A scope and never a path: the machine running the card takes the
+  // folder from its own pending request (answerGrant), so a command can only grant what the prompt on screen asked for.
+  grant?: GrantScope;
+  // A paired phone's signature over this answer (lib/approval-sig.ts, docs/architecture/mobile-security.md); the Mac
+  // checks it in lib/approval-check.ts and reads it off the raw payload, never from answerBody.
+  auth?: ApprovalAuth;
 }
 
 // A request to stop a card's running turn.
@@ -43,7 +55,39 @@ export interface StopPayload {
   cardId: string;
 }
 
-export type CloudCommandKind = "new_card" | "reply" | "answer" | "stop";
+// A Claude Code token sealed to one Weft Worker (lib/worker-seal.ts); only that worker can open it.
+export interface LoginPayload {
+  token: Sealed;
+}
+
+// A GitHub repo to put on a Weft Worker, with no thread.
+export interface ClonePayload {
+  repo: string;
+}
+
+// "run", "login", "github_login" and "clone" go to a Weft Worker, never a Mac: their payloads and readers are
+// lib/worker-commands.ts.
+// A worker's card: the thread's mode picker, and a tap or swipe on its live screen (lib/worker-commands.ts).
+export interface ModePayload {
+  cardId: string;
+  mode: string;
+}
+
+export interface InputPayload {
+  cardId: string;
+  kind: "tap" | "swipe";
+  device: string;
+  x: number;
+  y: number;
+  x2?: number;
+  y2?: number;
+  ms?: number;
+}
+
+// Update now: nothing to carry, only the ask.
+export type UpdatePayload = Record<string, never>;
+
+export type CloudCommandKind = "new_card" | "reply" | "answer" | "stop" | "run" | "login" | "github_login" | "clone" | "mode" | "input" | "update";
 
 // public.cloud_commands.
 export interface CloudCommandRow {
@@ -54,7 +98,7 @@ export interface CloudCommandRow {
   // The Mac that runs it (cloud_cards.owner_device) and the folder it runs in (cloud_cards.folder).
   target_device: string;
   folder: string;
-  payload: NewCardPayload | ReplyPayload | AnswerPayload | StopPayload;
+  payload: NewCardPayload | ReplyPayload | AnswerPayload | StopPayload | LoginPayload | ClonePayload | ModePayload | InputPayload | UpdatePayload;
   status: CloudCommandStatus;
   card_id: string | null;
   error: string | null;
@@ -105,12 +149,13 @@ export function replyCommand(target: { orgId: string; device: string; folder: st
 // folder the card runs in; null when the request is missing the pendingId it has to carry.
 export function answerCommand(
   target: { orgId: string; device: string; folder: string; cardId: string },
-  body: { pendingId: string; allow: boolean; answers?: Record<string, string>; reply?: QuestionReply },
+  body: { pendingId: string; allow: boolean; answers?: Record<string, string>; reply?: QuestionReply; grant?: GrantScope },
 ): NewCommand | null {
   if (!body.pendingId) return null;
   const payload: AnswerPayload = { cardId: target.cardId, pendingId: body.pendingId, allow: body.allow };
   if (body.answers) payload.answers = body.answers;
   if (body.reply) payload.reply = body.reply;
+  if (body.allow && body.grant) payload.grant = body.grant;
   return { org_id: target.orgId, kind: "answer", target_device: target.device, folder: target.folder, payload };
 }
 
@@ -165,7 +210,21 @@ export function answerBody(command: Pick<CloudCommandRow, "payload">): AnswerPay
   const out: AnswerPayload = { cardId, pendingId, allow };
   if (answers && Object.keys(answers).length) out.answers = answers;
   if (reply) out.reply = reply;
+  const grant = allow ? GRANT_SCOPES.find((s) => s === p.grant) : undefined;
+  if (grant) out.grant = grant;
   return out;
+}
+
+// The folder an answer grants, read from the request waiting on this machine, or null when it grants none. Throws
+// rather than fall back to Allow once: the human asked for a grant, and one that can't be given leaves the prompt up.
+// Only a tool's outside-folder prompt qualifies: a question's folder is guessed from the model's words, and a
+// question's answers skip the signed-approval rule (lib/approval-check.ts), so it must not buy a standing grant.
+export function answerGrant(answer: AnswerPayload, pending: PendingPermission | null | undefined): { directory: string; scope: GrantScope } | null {
+  if (!answer.grant) return null;
+  if (pending?.id !== answer.pendingId) throw new Error("That request isn't waiting anymore.");
+  const directory = pending.questions || pending.elicitation ? undefined : pending.readScope?.directory;
+  if (!directory) throw new Error("That request has no folder to allow.");
+  return { directory, scope: answer.grant };
 }
 
 // A stop as a Mac reads it off the network: the card the turn runs on, or null when missing.

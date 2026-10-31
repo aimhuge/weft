@@ -9,9 +9,16 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 // The show folder follows WEFT_DATA, so the data dir is pointed at a temp dir before the module loads.
 const h = vi.hoisted(() => ({
   screenshot: vi.fn<(d: { id: string }) => Promise<Buffer>>(),
+  uiTree: vi.fn<() => Promise<Array<{ frame: { x: number; y: number; width: number; height: number } }>>>(),
 }));
 
 vi.mock("./simulator-devices", () => ({ screenshot: h.screenshot }));
+// The screen's size comes from its UI tree; AXe never runs here.
+vi.mock("./simulator-ui", () => ({
+  uiTree: h.uiTree,
+  largestFrame: (els: Array<{ frame: { x: number; y: number; width: number; height: number } }>) =>
+    els.reduce((a, b) => (b.frame.width * b.frame.height > a.width * a.height ? b.frame : a), { x: 0, y: 0, width: 0, height: 0 }),
+}));
 
 let dataDir: string;
 let w: typeof import("./simulator-watch");
@@ -36,6 +43,7 @@ afterAll(() => {
 beforeEach(async () => {
   vi.clearAllMocks();
   h.screenshot.mockResolvedValue(await sharp({ create: { width: 4, height: 4, channels: 3, background: "#336699" } }).png().toBuffer());
+  h.uiTree.mockResolvedValue([{ frame: { x: 0, y: 0, width: 402, height: 874 } }]);
   w.stopWatching();
 });
 
@@ -78,7 +86,7 @@ describe("viewerHtml", () => {
 
   it("puts the end time in the page's script so the view can stop itself", () => {
     const until = 1_800_000_000_000;
-    expect(w.viewerHtml(DEV, until)).toContain(`const until=${until}`);
+    expect(w.viewerHtml(DEV, until)).toContain(`UNTIL=${until}`);
   });
 });
 
@@ -136,7 +144,7 @@ describe("watch", () => {
     await w.watch(DEV, () => now);
     // The page carries the later end time.
     const html = fs.readFileSync(path.join(showDir(), "simulator", "SIM-1", "index.html"), "utf8");
-    expect(html).toContain(`const until=${5000 + w.WATCH_MS}`);
+    expect(html).toContain(`UNTIL=${5000 + w.WATCH_MS}`);
   });
 
   it("watches each device on its own", async () => {
@@ -240,5 +248,44 @@ describe("stopWatching", () => {
 describe("watching", () => {
   it("is false for a device nobody watches", () => {
     expect(w.watching("SIM-1")).toBe(false);
+  });
+});
+
+describe("the live view", () => {
+  it("measures the screen when the watch starts and gives the page its shape", async () => {
+    await w.watch(DEV);
+    expect(w.watchedSize("SIM-1")).toEqual({ width: 402, height: 874 });
+    const html = fs.readFileSync(path.join(showDir(), "simulator", "SIM-1", "index.html"), "utf8");
+    expect(html).toContain(`ASPECT=${874 / 402}`);
+  });
+
+  it("has no size when the UI tree can't be read, and the page doesn't crop", async () => {
+    h.uiTree.mockRejectedValueOnce(new Error("axe isn't installed"));
+    await w.watch(DEV);
+    expect(w.watchedSize("SIM-1")).toBeUndefined();
+    expect(fs.readFileSync(path.join(showDir(), "simulator", "SIM-1", "index.html"), "utf8")).toContain("ASPECT=0,");
+  });
+
+  it("has no size for an empty tree", async () => {
+    h.uiTree.mockResolvedValueOnce([]);
+    await w.watch(DEV);
+    expect(w.watchedSize("SIM-1")).toBeUndefined();
+  });
+
+  it("stops writing frames once the page plays the capture, and starts again on a new watch", async () => {
+    vi.useFakeTimers();
+    await w.watch(DEV);
+    w.markLive("SIM-1");
+    h.screenshot.mockClear();
+    await vi.advanceTimersByTimeAsync(w.FRAME_MS * 3 + 10);
+    expect(h.screenshot).not.toHaveBeenCalled();
+    await w.watch(DEV);
+    await vi.advanceTimersByTimeAsync(w.FRAME_MS + 10);
+    expect(h.screenshot.mock.calls.length).toBeGreaterThan(1);
+  });
+
+  it("ignores a live mark for a device nobody watches", () => {
+    expect(() => w.markLive("nope")).not.toThrow();
+    expect(w.watchedSize("nope")).toBeUndefined();
   });
 });

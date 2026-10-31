@@ -74,6 +74,9 @@ function createSecretRun({ vault, ask, rules, spawn, audit = /** @type {(entry: 
       ask: () => ask(describe({ ...request, thread: asker.thread, why: asker.why, names, label })),
       remember: () => rules.remember(request, names),
     });
+    // A yes from the user covers this card for the hour (electron/vault-grants.cjs), so a thread that runs
+    // a few commands or restarts its dev server asks once, not every time.
+    if (access.via === "once" || access.via === "always") vault.grantAfterApproval?.({ card: asker.key, thread: asker.thread, id: request.id, label });
     return access.allowed ? access.via : null;
   }
 
@@ -194,7 +197,7 @@ function createSecretRun({ vault, ask, rules, spawn, audit = /** @type {(entry: 
 
 // The approval: Weft's own window with the command and names (electron/approval-window.cjs), or macOS's
 // alert if that can't open, then Touch ID where the Mac has it. The window starts Touch ID as it opens, so a
-// touch on the sensor is Allow once with no click; it answers only after Touch ID passed. askWindow is optional in tests.
+// touch on the sensor is Allow for 1 hour with no click; it answers only after Touch ID passed. askWindow is optional in tests.
 /**
  * @param {{
  *   dialog: { showMessageBox: (win: unknown, options: { type: string, buttons: string[], defaultId?: number, cancelId?: number, message: string, detail: string }) => Promise<{ response: number }> },
@@ -205,7 +208,7 @@ function createSecretRun({ vault, ask, rules, spawn, audit = /** @type {(entry: 
  */
 function runApproval({ dialog, systemPreferences, window, askWindow = undefined }) {
   const nativeAsk = async ({ message, detail }) => {
-    const { response } = await dialog.showMessageBox(window(), { type: "warning", buttons: ["Cancel", "Allow once", "Always allow"], defaultId: 0, cancelId: 0, message, detail });
+    const { response } = await dialog.showMessageBox(window(), { type: "warning", buttons: ["Cancel", "Allow for 1 hour", "Always allow"], defaultId: 0, cancelId: 0, message, detail });
     return [null, "once", "always"][response] ?? null;
   };
   return async (request) => {

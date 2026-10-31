@@ -1,13 +1,14 @@
 import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import { attempt, shell, text } from "./browser-tools";
+import { closeTunnel, DEFAULT_HOURS, listTunnels, MAX_HOURS, openTunnel } from "./tunnels";
 import { createRelay } from "./webhook-forward";
 import { addWebhook, listWebhooks, updateWebhook, type Webhook } from "./webhooks";
 
 // The 🪝 webhooks for threads (docs/architecture/webhooks.md): a thread records the routes providers post to as
 // blanks, the rail counts them, and the user (or the thread) registers them when ready. These run in the Next
 // server, so they use lib/webhooks.ts directly; only ask_add reaches the board, through the desktop shell.
-export const WEBHOOKS_PROMPT = `When the code you write receives webhooks (a route a provider such as Stripe, GitHub or Resend posts to), record each one as soon as you know its route with mcp__webhooks__add_blank: a name, the route (a path like /api/stripe/webhook), the provider's events, a hint where to register it, and the vault name of its signing secret. The user sees the blanks counted on 🪝 on the left rail. A dev server on localhost can't be reached from outside, so call mcp__webhooks__relay for a public URL on Weft that forwards deliveries to it while Weft runs, and register that URL with the provider yourself when you can (its CLI or API, or its dashboard in the browser pane), then call mcp__webhooks__mark_registered. Only when you're blocked on a webhook being registered right now, call mcp__webhooks__ask_add: it adds the blank too and opens the 🪝 drawer on it. Never invent a tunnel (ngrok and the like) when relay will do.`;
+export const WEBHOOKS_PROMPT = `When the code you write receives webhooks (a route a provider such as Stripe, GitHub or Resend posts to), record each one as soon as you know its route with mcp__webhooks__add_blank: a name, the route (a path like /api/stripe/webhook), the provider's events, a hint where to register it, and the vault name of its signing secret. The user sees the blanks counted on 🪝 on the left rail. A dev server on localhost can't be reached from outside, so call mcp__webhooks__relay for a public URL on Weft that forwards deliveries to it while Weft runs, and register that URL with the provider yourself when you can (its CLI or API, or its dashboard in the browser pane), then call mcp__webhooks__mark_registered. Only when you're blocked on a webhook being registered right now, call mcp__webhooks__ask_add: it adds the blank too and opens the 🪝 drawer on it. Never invent a tunnel (ngrok and the like): relay covers a provider's deliveries, and when something else needs a dev server from outside this Mac (a page on a phone, an OAuth callback), mcp__webhooks__tunnel gives it a private address, after the user's Touch ID. Close it with mcp__webhooks__close_tunnel when you're done.`;
 
 const PROJECT = z.string().optional().describe("Absolute path of the project the webhook belongs to; defaults to this thread's folder");
 const NAME = z.string().min(1).max(60).describe("What it's for, e.g. stripe; one per name in a project");
@@ -100,6 +101,25 @@ export function webhooksMcpServer(folder: () => string) {
               `${hook.name} has a public URL: ${hook.url}\nRegister it with the provider${hook.hint ? ` (${hook.hint})` : ""}. Deliveries forward to ${hook.target} while Weft runs. Once it's registered, call mcp__webhooks__mark_registered.`,
             );
           }),
+      ),
+      tool(
+        "tunnel",
+        "Open a private address for a local dev server, reachable from outside this Mac: live pages, hot reload and webhook replies. Only the signed-in owner gets in. The user approves with Touch ID. It closes by itself after hours. Tiny streamed chunks arrive late and all at once, so a streaming AI reply won't type out.",
+        { target: z.string().describe("The dev server, e.g. http://localhost:3000"), hours: z.number().min(0.25).max(MAX_HOURS).optional().describe(`Hours until it closes; defaults to ${DEFAULT_HOURS}`), project: PROJECT },
+        ({ target, hours, project }) =>
+          attempt(async () => {
+            const t = await openTunnel({ folder: where(project), target, hours });
+            return text(`${t.target} is open at ${t.address}, for you only, until ${new Date(t.expiresAt).toLocaleTimeString()}. Relays to this server now answer through it.`);
+          }),
+      ),
+      tool("close_tunnel", "Close this project's tunnel to a local dev server right away.", { target: z.string().describe("The dev server, e.g. http://localhost:3000"), project: PROJECT }, ({ target, project }) =>
+        attempt(async () => {
+          const wanted = new URL(target).origin;
+          const open = listTunnels([where(project)]).find((t) => new URL(t.target).origin === wanted);
+          if (!open) return text(`No tunnel is open to ${target} in this project.`);
+          await closeTunnel(open.id);
+          return text(`Closed the tunnel to ${open.target}.`);
+        }),
       ),
       tool("mark_registered", "Mark a webhook registered, after you registered it with the provider yourself.", { name: NAME, project: PROJECT }, ({ name, project }) =>
         attempt(() => {

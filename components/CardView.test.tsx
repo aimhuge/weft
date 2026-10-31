@@ -3,6 +3,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { makeCard } from "./test-utils";
+import { setBoardMode } from "@/lib/board-prefs";
 import CardView, { BackendBadge } from "./CardView";
 
 const api = vi.hoisted(() => ({
@@ -317,5 +318,17 @@ describe("BackendBadge", () => {
     cleanup();
     render(<BackendBadge backend="puku" card={makeCard({ backend: "puku", stats: { runsOn: { model: "puku-ai-2.8" } } })} />);
     expect(screen.getByText("Puku AI 2.8")).toBeInTheDocument();
+  });
+});
+
+describe("CardView in Regular mode", () => {
+  it("keeps the folder and age and drops the stage and the model", () => {
+    setBoardMode("regular");
+    renderCard({ cwd: "/dev/app", model: "claude-fable-5-1", stage: "First shot", turns: 4 });
+    expect(screen.getByText("app")).toBeInTheDocument();
+    expect(screen.queryByText("First shot")).toBeNull();
+    expect(screen.queryByText(/4t/)).toBeNull();
+    expect(screen.queryByText(/Fable/)).toBeNull();
+    document.cookie = "weft-board-mode=; path=/; max-age=0";
   });
 });

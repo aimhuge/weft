@@ -33,6 +33,11 @@ export interface CloudCardRow {
   card: Card;
   deleted: boolean;
   updated_at: string;
+  // The card's current pane page, so a feed draws it without its thread (docs/architecture/cloud-sync.md#the-cards-page):
+  // a blob ref with its #anchor, an https URL, or a URL only the owner's Mac reaches, with page_thumb (the pane capture) for that.
+  page?: string | null;
+  page_thumb?: string | null;
+  pages?: number;
 }
 
 // public.cloud_thread_items: one row per thread item, keyed by its index in the thread.
@@ -69,6 +74,9 @@ export interface BlobStore {
   refFor(localPath: string): Promise<BlobRef | null>;
   // Uploads the file to weft-blobs/<orgId>/<sha> unless it's already there; returns its ref.
   upload(localPath: string, orgId: string): Promise<BlobRef | null>;
+  // Uploads a page the pane showed: an HTML file with the local images it names uploaded too and swapped for refs
+  // (lib/blob-page-assets.ts). A store without it (a test fake) uploads the page as it is.
+  uploadPage?(localPath: string, orgId: string): Promise<BlobRef | null>;
   // The item with each local path it names (attachments, images, ~/.weft/show pages) swapped for a blob ref,
   // uploading as it goes. Returns the item unchanged when nothing in it points at a local file.
   rewriteItem(item: ThreadItem, orgId: string): Promise<ThreadItem>;

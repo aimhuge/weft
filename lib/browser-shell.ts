@@ -15,7 +15,7 @@ export function text(value: string, isError = false): ToolResult {
 }
 
 export async function shell(route: string, body?: Record<string, unknown>) {
-  if (!SHELL_URL) throw new Error("The browser pane only exists in the desktop app (npm run desktop).");
+  if (!SHELL_URL) throw new Error(process.env.WEFT_WORKER === "1" ? "This needs the desktop app, and this card runs on a Weft Worker. mcp__browser__open_url still works here, for pages you write." : "The browser pane only exists in the desktop app (npm run desktop).");
   const res = await fetch(`${SHELL_URL}${route}`, {
     method: "POST",
     headers: { authorization: `Bearer ${shellToken()}`, "content-type": "application/json" },

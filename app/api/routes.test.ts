@@ -78,6 +78,7 @@ vi.mock("@/lib/settings", () => ({
   issueFolders: vi.fn(() => []), setIssueSync: vi.fn(),
   allowedFolders: vi.fn(() => []), allowFolder: vi.fn(), unallowFolder: vi.fn(),
   syncFolders: vi.fn(() => []), setSyncFolder: vi.fn(),
+  workerFolders: vi.fn(() => []), setWorkerFolder: vi.fn(),
   settingsView: vi.fn(() => ({ threadPrompt: "tp", keepAliveMinutes: 5, automations: [] })),
 }));
 

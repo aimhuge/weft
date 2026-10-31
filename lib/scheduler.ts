@@ -33,7 +33,11 @@ export function sendDueMessages(now = Date.now()) {
     // The list is read once, so a card with nothing scheduled takes the same path as one with a due message.
     const scheduled = card.scheduled ?? [];
     const due = dueMessage(card, now);
-    if (!due || isBusy(card.id)) continue;
+    if (!due) continue;
+    if (isBusy(card.id)) {
+      afterRestartIsAfterTurn(card);
+      continue;
+    }
     const rest = scheduled.filter((m) => m.id !== due.id);
     updateCard(card.id, { scheduled: rest.length ? rest : undefined });
     try {
@@ -42,6 +46,16 @@ export function sendDueMessages(now = Date.now()) {
       updateCard(card.id, { error: `A scheduled message couldn't go: ${err instanceof Error ? err.message : String(err)}` });
     }
   }
+}
+
+// A message held for a restart, on a card that is mid-turn once no restart is armed (it happened, or was cancelled), is
+// only waiting for that turn now: it says "after this turn", the reply box offers Send now, and it goes out with what
+// else waited for the turn (lib/runner.ts sendHeld).
+function afterRestartIsAfterTurn(card: Card) {
+  const scheduled = card.scheduled ?? [];
+  if (!scheduled.some((m) => m.afterRestart)) return;
+  const relabelled = scheduled.map(({ afterRestart, ...m }) => (afterRestart ? { ...m, afterTurn: true } : m));
+  updateCard(card.id, { scheduled: relabelled });
 }
 
 // Once per server process. How often the server looks for scheduled messages whose time has come.

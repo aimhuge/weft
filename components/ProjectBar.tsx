@@ -4,6 +4,7 @@ import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { keyLabel, useShortcutHint, useShortcutList } from "@/lib/hotkeys";
 import { useEscape } from "@/lib/use-escape";
 import { useMenuOpen } from "@/lib/use-menu-open";
+import { useRegularMode } from "@/lib/use-regular-mode";
 import type { ProjectSummary, SortKey } from "@/lib/board-view";
 import type { ViewMode } from "@/lib/board-prefs";
 import type { ViewHint } from "@/lib/use-view-hint";
@@ -39,6 +40,7 @@ export default function ProjectBar({
   home,
   onMenuOpenChange,
   onProjectMenu,
+  onNotice,
   variant = "desktop",
 }: {
   projects: ProjectSummary[]; // already sorted, most recent first
@@ -58,6 +60,7 @@ export default function ProjectBar({
   onMenuOpenChange?: (open: boolean) => void; // called when the dropdown opens/closes (the board hides a native browser overlay while it's open)
   // Right-clicking a project, on its chip or in "More" (components/project-menu-handler.ts); resolves to whether an item was picked.
   onProjectMenu?: (path: string, e: React.MouseEvent) => Promise<boolean>;
+  onNotice?: (message: string) => void; // the board's toast, for a clone on a worker that outlasts the menu
   // "web" is the same bar on weft.zip, where the project menu can only pick a project (the Mac's
   // filesystem is out of reach) and the sort's dropdown is styled dark so it isn't light-on-dark.
   variant?: "desktop" | "web";
@@ -83,6 +86,9 @@ export default function ProjectBar({
       ?.querySelector<HTMLElement>('[aria-pressed="true"]')
       ?.scrollIntoView({ block: "nearest", inline: "nearest" });
   }, [selected]);
+
+  // Regular mode has one view and one order, so neither control shows.
+  const regular = useRegularMode();
 
   function toggleMenu() {
     if (!open) setOpen(true);
@@ -112,6 +118,7 @@ export default function ProjectBar({
             onProjectMenu={onProjectMenu && ((path, e) => void onProjectMenu(path, e).then((picked) => picked && setOpen(false)))}
             home={home}
             menuId={menuId}
+            onNotice={onNotice}
             variant={variant}
           />
         )}
@@ -121,31 +128,35 @@ export default function ProjectBar({
 
       {filter}
 
-      <div className="relative shrink-0">
-        <ViewToggle mode={view} onChange={onView} />
-        {viewHint && (
-          // Keyed on the flip's id, so a second flip remounts the toast and its pop-in plays again
-          // rather than the toast sitting there already grown.
-          <ViewHintPane key={viewHint.id} mode={viewHint.mode} onDismiss={onDismissViewHint} />
-        )}
-      </div>
+      {!regular && (
+        <>
+          <div className="relative shrink-0">
+            <ViewToggle mode={view} onChange={onView} />
+            {viewHint && (
+              // Keyed on the flip's id, so a second flip remounts the toast and its pop-in plays again
+              // rather than the toast sitting there already grown.
+              <ViewHintPane key={viewHint.id} mode={viewHint.mode} onDismiss={onDismissViewHint} />
+            )}
+          </div>
 
-      <select
-        value={sort}
-        onChange={(e) => onSort(e.target.value as SortKey)}
-        aria-label="Sort cards"
-        title={hint("sort", "Sort cards")}
-        // On weft.zip the page is dark but the browser's dropdown is not, so the opened list would
-        // be light-on-dark. The desktop app is always dark, so it doesn't need the hint.
-        style={variant === "web" ? { colorScheme: "dark" } : undefined}
-        className="shrink-0 rounded-md border border-line-strong bg-canvas px-2 py-1 text-[12px] text-ink outline-none focus:border-accent"
-      >
-        {SORTS.map((s) => (
-          <option key={s.id} value={s.id}>
-            {s.label}
-          </option>
-        ))}
-      </select>
+          <select
+            value={sort}
+            onChange={(e) => onSort(e.target.value as SortKey)}
+            aria-label="Sort cards"
+            title={hint("sort", "Sort cards")}
+            // On weft.zip the page is dark but the browser's dropdown is not, so the opened list would
+            // be light-on-dark. The desktop app is always dark, so it doesn't need the hint.
+            style={variant === "web" ? { colorScheme: "dark" } : undefined}
+            className="shrink-0 rounded-md border border-line-strong bg-canvas px-2 py-1 text-[12px] text-ink outline-none focus:border-accent"
+          >
+            {SORTS.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.label}
+              </option>
+            ))}
+          </select>
+        </>
+      )}
     </div>
   );
 }

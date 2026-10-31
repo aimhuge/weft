@@ -8,6 +8,7 @@ import CardFace, { type Face } from "./CardFace";
 import { EditDiff } from "./EditDiff";
 import { useFileLink } from "./file-link-context";
 import { Spinner } from "./Icon";
+import { BUTTON_PRIMARY_SMALL as PRIMARY, BUTTON_SECONDARY_SMALL as SECONDARY } from "./button-styles";
 
 // The body of a permission prompt: first why it came up (a symbol-claim clash, or the card's permission
 // mode), then the change. A held Edit or Write reads as a change: who asks, the file, the
@@ -170,9 +171,6 @@ export default function PermissionInput({
   );
 }
 
-const PRIMARY = "rounded-md bg-accent px-3 py-1.5 text-[12.5px] font-medium text-on-accent hover:opacity-90 disabled:opacity-50";
-const SECONDARY = "rounded-md border border-line-strong bg-panel px-3 py-1.5 text-[12.5px] text-ink hover:bg-sunken disabled:opacity-50";
-
 // The prompt's buttons. An edit another card is holding offers the order, not a refusal: Wait first
 // (lib/permission-wait.ts) holds this edit until the holder lets go, This first (lib/precedence.ts) goes
 // ahead and has the holder leave the file to this thread, and Others first puts the holder ahead —
@@ -186,6 +184,7 @@ export function PermissionActions({
   onFirst,
   onOtherFirst,
   onGrant,
+  elsewhere,
 }: {
   pending: PendingPermission;
   answered: boolean;
@@ -198,6 +197,8 @@ export function PermissionActions({
   onOtherFirst?: () => void;
   // A folder outside the project (pending.readScope): allow it for this card or for every card, then answer yes.
   onGrant?: (scope: "card" | "always") => void;
+  // The card runs on another machine, so Always means every card there, not on this Mac.
+  elsewhere?: boolean;
 }) {
   const holder = pending.why?.holder;
   const deny = (
@@ -257,7 +258,7 @@ export function PermissionActions({
         <button onClick={() => onGrant("card")} disabled={answered} className={SECONDARY} title={`Let this card use ${pending.readScope.token} from now on`}>
           This card
         </button>
-        <button onClick={() => onGrant("always")} disabled={answered} className={SECONDARY} title={`Let every card use ${pending.readScope.token} from now on`}>
+        <button onClick={() => onGrant("always")} disabled={answered} className={SECONDARY} title={`Let every card${elsewhere ? " on the machine running this one" : ""} use ${pending.readScope.token} from now on`}>
           Always
         </button>
         {deny}

@@ -32,6 +32,14 @@ arguments go through `shellQuote()`.
 | Wiring | `lib/weft-mcp.ts`: `simulator` for threads, not the copilot; Codex gets it through the bridge |
 | Settings | `lib/simulator-status.ts` (types in `lib/simulator-view.ts`) → `app/api/connectors/simulators/route.ts` → `components/SimulatorConnector.tsx` on Settings → Connectors |
 
+## React Native: the web build first
+
+A booted simulator costs gigabytes (an iOS 26 simulator is ~150 processes and ~2 GB resident), so
+`SIMULATOR_PROMPT` tells a thread working on a React Native or Expo app to offer the web build first:
+`npx expo start --web` through `mcp__devservers__start`, shown in the pane at `set_viewport phone`. It renders
+through react-native-web, live and clickable with hot reload, with no device booted. A simulator is for what
+needs native code (push, camera, native modules, native gestures) and for a final check.
+
 ## The tools
 
 | Tool | iOS | Android |
@@ -67,8 +75,36 @@ piles them up. The page reloads `frame.jpg?<time>` after each load and says "pau
 `watch` again extends it. Tool calls that change the screen (tap, type, swipe, open_url, launch) write a frame at
 once while a watch runs, so the pane doesn't lag a second behind.
 
+### Live view
+
+The page (`lib/simulator-viewer.ts`) plays the device's window live when it can, and keeps the frames as the
+fallback:
+
+1. **Which window.** The page calls `window.weft.simLive.source(name)`. The pane preload exposes it on `file:` pages;
+   `electron/sim-live.cjs` answers only the pane's main frame on a page under `~/.weft/show/simulator/`. Main asks
+   `desktopCapturer` for windows and `pickWindow()` takes the one titled with the device's name (the Simulator's
+   "iPhone 17 Pro", the emulator's "Android Emulator - Weft_Pixel_9:5554"; "iPhone 17" never takes "iPhone 17 Pro").
+   Screen Recording denied → `permission`; the window minimized or closed → `no-window`. Either way the page says
+   why and stays on the 1 fps frames.
+2. **The video.** `getUserMedia` with `chromeMediaSource: "desktop"` and that window's id, capped at 30 fps. The
+   page crops it to the screen: `watch` measured the screen when it started (the biggest frame in the UI tree,
+   `largestFrame()`), so the screen is the window's full width at the device's aspect, and the rest is the title
+   bar on top. A window that doesn't fit that shape (Simulator's device bezels on) is shown whole and takes no taps;
+   the page says to turn off Window → Show Device Bezels.
+3. **Taps.** A click is a tap and a drag a swipe (100–1500 ms, as long as the drag took), sent as fractions of the
+   screen through `simLive.input`. Main posts them to `/api/simulator/input` with the launch token (`elevated`), so
+   the page never holds it and a thread's plain `1` can't drive a device through there. `lib/simulator-input.ts`
+   scales the point to tap units and refuses a device that isn't being watched.
+4. **Frames stop.** Once the video plays, the page sends `live`; `markLive()` stops the loop writing frames, since
+   nothing reads them. A new `watch` writes a fresh page and starts the frames again until that page goes live.
+
+Capture costs little: the GPU does the work, ~3–8% of a core and 50–150 MB, against a booted simulator's ~2 GB.
+
 The page is a plain show page: `watch` opens it in the card's pane (`openInPane`), the show rail records it as a
 page the pane showed, and `lib/page-shots.ts` takes its picture for the rail like any other.
+
+On a Weft Worker there's no window to capture, so `watch` streams screenshots over Realtime instead:
+[The live screen](weft-worker.md#the-live-screen).
 
 ## Setup
 
@@ -99,4 +135,3 @@ threads to point the user at Install and ask before installing any of it themsel
 - Build an app for the simulator (`xcodebuild -sdk iphonesimulator`, `./gradlew assembleDebug`) as a tool, not Bash.
 - A video recording of a run for the review tour (`simctl io recordVideo`, `adb screenrecord`).
 - Real devices over USB (`devicectl`, adb already works with one plugged in and authorized).
-- Clicking in the live view to tap the device.

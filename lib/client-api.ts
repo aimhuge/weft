@@ -19,6 +19,7 @@ import type { CopilotPersona } from "./copilot-personas";
 import type { WeftConnect } from "./blastcp-view";
 import type { GogStatus } from "./gog-view";
 import type { CustomTheme } from "./custom-theme";
+import type { DictationSettingsView } from "./dictation-types";
 import type {
   AccountProvider,
   AccountView,
@@ -158,8 +159,8 @@ async function themeFromPicture(prompt: string, picture: File) {
   return reply<{ id: string; card: Card }>(res);
 }
 
-async function transcribe(audio: Blob) {
-  const res = await send("/api/transcribe", {
+async function transcribe(audio: Blob, lang?: string) {
+  const res = await send(`/api/transcribe${lang ? `?lang=${encodeURIComponent(lang)}` : ""}`, {
     method: "POST",
     headers: { "x-weft-token": "1", "content-type": audio.type || "audio/webm" },
     body: audio,
@@ -179,7 +180,8 @@ export async function call<T>(method: string, url: string, body?: unknown, signa
 
 export const api = {
   list: () => call<{ cards: Card[]; home: string; roots: Record<string, string> }>("GET", "/api/cards"),
-  create: (input: NewCardInput) => call<{ card: Card; start?: { started: boolean; at?: number } }>("POST", "/api/cards", input),
+  // A thread in a worker project has no card here: the answer names the worker it went to (start.worker).
+  create: (input: NewCardInput) => call<{ card: Card; start?: { started: boolean; at?: number; worker?: string } }>("POST", "/api/cards", input),
   move: (id: string, column: Column) => call<{ card: Card }>("PATCH", `/api/cards/${id}`, { column }),
   // Re-points a card at another folder (the list view's folder picker); the server refuses a busy card.
   setCwd: (id: string, cwd: string) => call<{ card: Card }>("PATCH", `/api/cards/${id}`, { cwd }),
@@ -336,6 +338,9 @@ export const api = {
   uploadAttachment: upload,
   dictation: () => call<{ available: boolean; reason?: string; model?: string }>("GET", "/api/transcribe"),
   transcribe,
+  dictationSettings: () => call<DictationSettingsView>("GET", "/api/transcribe/settings"),
+  setDictationSettings: (patch: { language?: string; advanced?: boolean; vocabulary?: string }) =>
+    call<DictationSettingsView>("PATCH", "/api/transcribe/settings", patch),
   repos: (fresh = false) => call<{ repos: LocalRepo[] }>("GET", `/api/repos${fresh ? "?fresh=1" : ""}`),
   githubRepos: (fresh = false) => call<{ repos: GithubRepo[] }>("GET", `/api/repos/github${fresh ? "?fresh=1" : ""}`),
   // Your Weft account (lib/account.ts). signIn returns the provider's page to open in the system browser.
@@ -374,6 +379,9 @@ export const api = {
   // The Settings → Sync page (lib/use-cloud-sync.ts): opt-in folders and the live flush status.
   cloudSync: () => call<{ folders: string[]; status: CloudSyncStatus }>("GET", "/api/cloud-sync"),
   cloudSyncSetFolder: (folder: string, on: boolean) => call<{ folder: string; on: boolean; folders: string[]; status: CloudSyncStatus }>("POST", "/api/cloud-sync", { folder, on }),
+  // A project's "Run on This Mac / Run on Worker" in its right-click menu (lib/worker-handoff.ts).
+  workerFolders: () => call<{ folders: string[] }>("GET", "/api/workers?folders=1"),
+  setWorkerFolder: (folder: string, on: boolean) => call<{ folders: string[]; worker?: string }>("POST", "/api/workers", { action: "folder", folder, on }),
   cloudSyncNow: () => call<{ status: CloudSyncStatus }>("POST", "/api/cloud-sync", { sync: true }),
   // The 🪝 drawer: each folder's webhooks, and a public relay URL for one (lib/webhooks.ts; signedIn: the relay needs a Weft account).
   webhooks: (folders: string[]) => call<{ hooks: Webhook[]; signedIn: boolean }>("GET", `/api/webhooks?${new URLSearchParams(folders.map((f) => ["folder", f]))}`),

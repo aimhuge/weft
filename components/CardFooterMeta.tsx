@@ -8,6 +8,7 @@ import { modelLabel, runningOn } from "@/lib/new-thread";
 import { isBusy } from "@/lib/overlap";
 import { sendsWhen } from "@/lib/schedule";
 import { BACKEND_LABELS, type Backend, type Card } from "@/lib/types";
+import { useRegularMode } from "@/lib/use-regular-mode";
 import Icon from "./Icon";
 
 // Each CLI's own colour in the footer: puku has its own, the two plain CLIs (Codex, Goose)
@@ -19,12 +20,23 @@ function cliColours(backend: Backend): { tone: string; dot: string } {
 }
 
 // The card footer's left side: CLI dot, folder (or "whole board" for the copilot), overlap, age, turns,
-// scheduled sends, open elsewhere, and the card's issue and tags when it has no progress line.
+// scheduled sends, open elsewhere, and the card's issue and tags when it has no progress line. Regular mode keeps
+// only the folder, the age and a scheduled send.
 export default function CardFooterMeta({ card, now, alsoHere, marks }: { card: Card; now: number; alsoHere: Card[]; marks: React.ReactNode }) {
+  const regular = useRegularMode();
   const { model, effort } = runningOn(card);
   const cli = BACKEND_LABELS[card.backend];
   const { tone, dot } = cliColours(card.backend);
   const cliTip = `${cli}${model ? ` on ${model}${effort ? ` · ${effort} effort` : ""}` : ""}${card.source === "claude-code" ? " · picked up from Claude Code" : ""}`;
+  if (regular) {
+    return (
+      <span className="flex min-w-0 items-center gap-1.5 overflow-hidden">
+        <FolderOrBoard card={card} />
+        <Age card={card} now={now} turns={false} />
+        {card.scheduled?.[0] && <NextSend scheduled={card.scheduled} now={now} />}
+      </span>
+    );
+  }
   return (
     <span className="flex min-w-0 items-center gap-1.5 overflow-hidden">
       <span className={`size-1.5 shrink-0 rounded-full ${dot}`} title={cliTip} />
@@ -66,11 +78,11 @@ function OverlapHint({ others }: { others: Card[] }) {
   );
 }
 
-function Age({ card, now }: { card: Card; now: number }) {
+function Age({ card, now, turns = true }: { card: Card; now: number; turns?: boolean }) {
   return (
     <span className="shrink-0 whitespace-nowrap">
       {timeAgo(activeAt(card), now).replace(" ago", "")}
-      {card.turns ? ` · ${card.turns}t` : ""}
+      {turns && card.turns ? ` · ${card.turns}t` : ""}
     </span>
   );
 }

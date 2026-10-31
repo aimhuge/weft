@@ -4,6 +4,7 @@ import { useState } from "react";
 import { api } from "@/lib/client";
 import { isLive } from "@/lib/format";
 import { BACKEND_LABELS, type Backend, type Card } from "@/lib/types";
+import { useRegularMode } from "@/lib/use-regular-mode";
 import { firstNow, otherFirstNow, patchNow, waitNow } from "@/lib/optimistic-cards";
 import ArchiveButton from "./ArchiveButton";
 import CardFooterMeta from "./CardFooterMeta";
@@ -143,7 +144,8 @@ export default function CardView({
   const fixed = card.column === "running" || card.role === "copilot" || readOnly;
   // The issue and tags sit on the progress line, or in the footer when the card has none.
   const marks = <CardMarks card={card} onTag={onTag} onDismissBreak={readOnly ? undefined : () => void patchNow(card.id, { broke: undefined }, () => api.clearBreak(card.id)).catch(() => {})} />;
-  const progress = showsCardProgress(card);
+  const regular = useRegularMode();
+  const progress = !regular && showsCardProgress(card);
   const answered = answeredId !== null && answeredId === card.pending?.id;
   // A card that broke Weft (lib/crash-blame.ts) is ringed red until you dismiss its chip; selection still shows.
   const border = card.broke && !selected ? BROKE_BORDER : cardBorder(card, selected, unseen, lastOpen);

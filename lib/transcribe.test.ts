@@ -2,24 +2,11 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { defaultExecFile, modelState, prefs, server, sys } from "./transcribe.harness";
 
 // whisper.cpp, ffmpeg and `which` are all mocked: execFileSync answers `which`, execFile plays
-// ffmpeg and whisper-cli. Nothing is ever transcribed for real.
-const sys = vi.hoisted(() => {
-  const bins: Record<string, string> = {};
-  return { bins, stdout: "", fail: null as string | null };
-});
-vi.mock("node:child_process", () => ({
-  execFileSync: vi.fn((_which: string, [bin = ""]: string[]) => {
-    if (!(bin in sys.bins)) throw new Error("not found");
-    return `${sys.bins[bin]}\n`;
-  }),
-  execFile: vi.fn((bin: string, _args: string[], _opts: unknown, cb: (err: Error | null, out?: unknown) => void) => {
-    if (sys.fail === bin) cb(new Error(`${bin} crashed`));
-    else cb(null, { stdout: bin.endsWith("whisper-cli") ? sys.stdout : "", stderr: "" });
-  }),
-}));
-
+// ffmpeg and whisper-cli. Nothing is ever transcribed for real. The dictation settings, the
+// advanced model's state and the warm server are mocked too, so no file is read and no port opened.
 let dir: string;
 let model: string;
 let child: typeof import("node:child_process");
@@ -27,11 +14,11 @@ let child: typeof import("node:child_process");
 async function load() {
   vi.resetModules();
   child = await import("node:child_process");
+  vi.mocked(child.execFile).mockImplementation(defaultExecFile as never);
   return import("./transcribe");
 }
 
 const allTools = () => (sys.bins = { "whisper-cli": "/bin/whisper-cli", ffmpeg: "/bin/ffmpeg" });
-const call = (bin: string) => vi.mocked(child.execFile).mock.calls.find(([b]) => b === bin)!;
 
 beforeEach(() => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), "weft-dictation-test-"));
@@ -41,6 +28,13 @@ beforeEach(() => {
   sys.bins = {};
   sys.stdout = "";
   sys.fail = null;
+  prefs.value = { language: "system", advanced: false, vocabulary: "" };
+  modelState.file = undefined;
+  modelState.download = { downloading: false, received: 0, total: 0 };
+  server.transcribe.mockReset();
+  server.warm.mockReset();
+  server.transcribe.mockResolvedValue("from the server");
+  server.warm.mockResolvedValue({});
   vi.clearAllMocks();
 });
 afterEach(() => {
@@ -112,80 +106,119 @@ describe("dictationStatus", () => {
   });
 });
 
-describe("transcribe", () => {
-  it("refuses with the setup reason when dictation can't run", async () => {
-    const { transcribe } = await load();
-    await expect(transcribe(Buffer.from("a"))).rejects.toThrow("Dictation needs whisper.cpp");
-    expect(child.execFile).not.toHaveBeenCalled();
+describe("advancedStatus", () => {
+  it("reports no server and no model when whisper-server isn't installed", async () => {
+    const { advancedStatus } = await load();
+    expect(advancedStatus()).toEqual({ server: false, model: undefined, download: { downloading: false, received: 0, total: 0 } });
   });
 
-  it("converts to 16 kHz mono WAV, runs whisper on the model, and cleans its output", async () => {
-    allTools();
-    vi.spyOn(os, "availableParallelism").mockReturnValue(4);
-    sys.stdout = "[BLANK_AUDIO]\n  Hello there,  \n(wind blowing) world.\n[MUSIC PLAYING]\n";
-    const { transcribe } = await load();
-    let input = "";
-    vi.mocked(child.execFile).mockImplementationOnce(((_bin: string, args: string[], _o: unknown, cb: (e: null, o: unknown) => void) => {
-      input = args[args.indexOf("-i") + 1]!;
-      expect(fs.readFileSync(input, "utf8")).toBe("audio bytes");
-      cb(null, { stdout: "" });
-    }) as never);
-
-    expect(await transcribe(Buffer.from("audio bytes"), "m4a")).toBe("Hello there, world.");
-
-    expect(path.basename(input)).toBe("input.m4a");
-    const wav = path.join(path.dirname(input), "audio.wav");
-    expect(call("/bin/ffmpeg").slice(1, 3)).toEqual([
-      ["-y", "-loglevel", "error", "-i", input, "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", wav],
-      { timeout: 60_000 },
-    ]);
-    expect(call("/bin/whisper-cli").slice(1, 3)).toEqual([
-      ["-m", model, "-f", wav, "-l", "auto", "-nt", "-np", "-t", "3"],
-      { timeout: 180_000, maxBuffer: 8 * 1024 * 1024 },
-    ]);
-    expect(fs.existsSync(path.dirname(input))).toBe(false); // temp folder removed
+  it("reports the server and the model it would keep loaded", async () => {
+    sys.bins = { "whisper-server": "/bin/whisper-server" };
+    modelState.file = path.join(dir, "ggml-large-v3-turbo.bin");
+    const { advancedStatus } = await load();
+    expect(advancedStatus()).toMatchObject({ server: true, model: "ggml-large-v3-turbo.bin" });
   });
 
-  it("uses between 2 and 8 threads", async () => {
-    allTools();
-    const { transcribe } = await load();
-    const threads = () => {
-      const args = call("/bin/whisper-cli")[1] as string[];
-      return args[args.indexOf("-t") + 1];
-    };
-    vi.spyOn(os, "availableParallelism").mockReturnValue(1);
-    await transcribe(Buffer.from("a"));
-    expect(threads()).toBe("2");
-    vi.clearAllMocks();
-    vi.spyOn(os, "availableParallelism").mockReturnValue(32);
-    await transcribe(Buffer.from("a"));
-    expect(threads()).toBe("8");
+  it("passes the download's state through", async () => {
+    modelState.download = { downloading: true, received: 1024, total: 2048 };
+    const { advancedStatus } = await load();
+    expect(advancedStatus().download).toEqual({ downloading: true, received: 1024, total: 2048 });
+  });
+});
+
+describe("warmIfAdvanced", () => {
+  it("does nothing when Advanced dictation is off", async () => {
+    sys.bins = { "whisper-server": "/bin/whisper-server" };
+    modelState.file = path.join(dir, "ggml-large-v3-turbo.bin");
+    const { warmIfAdvanced } = await load();
+    warmIfAdvanced();
+    expect(server.warm).not.toHaveBeenCalled();
   });
 
-  it("strips odd characters from the extension, defaulting to webm", async () => {
-    allTools();
-    const { transcribe } = await load();
-    const input = () => {
-      const args = call("/bin/ffmpeg")[1] as string[];
-      return path.basename(args[args.indexOf("-i") + 1]!);
-    };
-    await transcribe(Buffer.from("a"));
-    expect(input()).toBe("input.webm");
-    vi.clearAllMocks();
-    await transcribe(Buffer.from("a"), "../o.gg");
-    expect(input()).toBe("input.ogg");
-    vi.clearAllMocks();
-    await transcribe(Buffer.from("a"), "/./");
-    expect(input()).toBe("input.webm");
+  it("does nothing when whisper-server isn't installed", async () => {
+    prefs.value.advanced = true;
+    modelState.file = path.join(dir, "ggml-large-v3-turbo.bin");
+    const { warmIfAdvanced } = await load();
+    warmIfAdvanced();
+    expect(server.warm).not.toHaveBeenCalled();
   });
 
-  it("removes the temp folder when ffmpeg fails", async () => {
-    allTools();
-    sys.fail = "/bin/ffmpeg";
-    const { transcribe } = await load();
-    await expect(transcribe(Buffer.from("a"))).rejects.toThrow("/bin/ffmpeg crashed");
-    const args = call("/bin/ffmpeg")[1] as string[];
-    expect(fs.existsSync(path.dirname(args[args.indexOf("-i") + 1]!))).toBe(false);
-    expect(call("/bin/whisper-cli")).toBeUndefined();
+  it("does nothing when there is no model to load", async () => {
+    prefs.value.advanced = true;
+    sys.bins = { "whisper-server": "/bin/whisper-server" };
+    const { warmIfAdvanced } = await load();
+    warmIfAdvanced();
+    expect(server.warm).not.toHaveBeenCalled();
+  });
+
+  it("warms the server when Advanced dictation has one", async () => {
+    prefs.value.advanced = true;
+    sys.bins = { "whisper-server": "/bin/whisper-server" };
+    modelState.file = path.join(dir, "ggml-large-v3-turbo.bin");
+    const { warmIfAdvanced } = await load();
+    warmIfAdvanced();
+    expect(server.warm).toHaveBeenCalledWith("/bin/whisper-server", modelState.file);
+  });
+
+  it("swallows a server that won't start", async () => {
+    prefs.value.advanced = true;
+    sys.bins = { "whisper-server": "/bin/whisper-server" };
+    modelState.file = path.join(dir, "ggml-large-v3-turbo.bin");
+    server.warm.mockRejectedValue(new Error("no port"));
+    const { warmIfAdvanced } = await load();
+    expect(() => warmIfAdvanced()).not.toThrow();
+  });
+});
+
+describe("wavSeconds and audioCtx", () => {
+  it("counts the seconds of speech in a 16 kHz WAV", async () => {
+    const { wavSeconds } = await load();
+    const wav = path.join(dir, "a.wav");
+    fs.writeFileSync(wav, Buffer.alloc(44 + 32_000)); // one second
+    expect(wavSeconds(wav)).toBe(1);
+  });
+
+  it("never goes below zero for a WAV with no audio in it", async () => {
+    const { wavSeconds } = await load();
+    const wav = path.join(dir, "empty.wav");
+    fs.writeFileSync(wav, Buffer.alloc(10));
+    expect(wavSeconds(wav)).toBe(0);
+  });
+
+  it("gives a long recording the full window and a short one a narrow one", async () => {
+    const { audioCtx } = await load();
+    expect(audioCtx(0)).toBe(384);
+    expect(audioCtx(5)).toBe(448);
+    expect(audioCtx(20)).toBe(1152);
+    expect(audioCtx(21)).toBe(0);
+  });
+});
+
+describe("looksBroken", () => {
+  it("calls empty text broken", async () => {
+    const { looksBroken } = await load();
+    expect(looksBroken("")).toBe(true);
+    expect(looksBroken("   ")).toBe(true);
+    expect(looksBroken("!!! ???")).toBe(true);
+  });
+
+  it("calls ordinary speech fine", async () => {
+    const { looksBroken } = await load();
+    expect(looksBroken("hello there, this is a normal sentence")).toBe(false);
+  });
+
+  it("calls the same six words twice broken", async () => {
+    const { looksBroken } = await load();
+    expect(looksBroken("one two three four five six one two three four five six")).toBe(true);
+  });
+
+  it("calls a repeated run of six words broken however long the text is", async () => {
+    const { looksBroken } = await load();
+    expect(looksBroken("a b c d e f g a b c d e f g")).toBe(true);
+  });
+
+  it("calls text whose six-word runs differ fine", async () => {
+    const { looksBroken } = await load();
+    expect(looksBroken("a b c d e f g h i j k l m n o p")).toBe(false);
   });
 });

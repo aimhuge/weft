@@ -1,10 +1,451 @@
 # Weft Worker
 
-Status: designed, not built (2026-10-28). The design of the **Weft Worker**: a headless agent runner that sits on a
-host — a Linux VPS, a home server, a spare machine — and does the actual compute for a card, while the board stays on
+Status: **phase 1 built** (2026-10-29), the rest designed. The **Weft Worker** is a headless agent runner that sits on a
+host (a Linux VPS, a home server, a spare machine) and does the actual compute for a card, while the board stays on
 your laptop or on the web at `weft.zip/<workspace>/board`. This is the ROADMAP's "Remote workers"
-(docs/ROADMAP.md), now P2. Nothing here is implemented yet; what follows is the design, the parts of the code it
-leans on, and the parts it has to add.
+(docs/ROADMAP.md), now P2. [Phase 1, as built](#phase-1-as-built) says what runs today and where it departs from
+the design. The rest of the page is the design, the parts of the code it leans on, and the parts it has to add.
+
+## Phase 1, as built
+
+One worker per box, no worker picker on the board. The first box is a Mac mini (`m1mini`), enrolled as
+`worker:082722c6…`.
+
+- **The engine is the desktop's, unchanged.** `scripts/weft-worker.ts start` loads `lib/card-starter.ts`,
+  `lib/runner.ts` and `lib/store.ts` in plain Node through jiti, with `WEFT_DATA=~/.weft-worker/data`. A run is a real
+  card in the worker's own store, driven by the same session, turn translator and guards as on a Mac. The secrets and
+  webhook MCP tools throw per call there ("only exists in the desktop app"); that's phase 4. Of the browser tools,
+  `open_url` works: see [Pages from a worker](#pages-from-a-worker).
+  `lib/store.ts` is imported first and on its own, because the engine's modules import each other in a circle.
+- **Identity: key-checked functions, not a Postgres role.** RLS can't read a header, and PostgREST won't log in as a
+  custom role with a bearer that isn't a JWT. So the worker calls `worker_*` security-definer functions
+  (`supabase/migrations/20261029125616_weft_workers.sql`) with the publishable key, and passes its own `wwk_…` key as
+  the first argument. Each function looks up `sha256(key)` in `cloud_workers.key_hash` first. RLS still guards every
+  human path. The worker's identity reaches the `card_id` trigger through the `weft.worker_id` transaction setting.
+- **Each worker acts for the account that enrolled it.** It obeys only commands that account created
+  (`created_by = owner_user`), and its `cloud_cards` rows carry that account as `owner_user` plus itself as
+  `owner_worker`. A worker's device id is `worker:<id>`, and `private.owns_device` now accepts a worker you
+  enrolled. So the web board's reply, answer and stop commands reach a worker's card unchanged.
+- **Enrolment:** `worker_enrol_token(org)` (a signed-in member, valid for an hour, once) → `worker_enrol(token, …)`
+  returns the worker id and its key, written to `~/.weft-worker/worker.json` at mode 600.
+- **Commands:** `run` (`lib/worker-commands.ts`: a prompt, an optional git URL, a mode from default / acceptEdits /
+  auto / plan, never bypass), `mode` and `input` ([The live screen](#the-live-screen)), `clone` and the two sign-ins, `login` and `github_login`, and the web's `new_card`, `reply`,
+  `answer` and `stop` (`lib/worker-daemon.ts`). It hears a
+  [wake-up](#wake-ups) and reads `worker_pending` at once, with a poll as the backstop, because without a session
+  Realtime's row filters show it nothing. It claims with `worker_claim`, which only matches a pending row, and
+  heartbeats every 20 s.
+- **Publishing:** `lib/worker-publish.ts` hears the engine's bus and ships cards and items through `worker_put_card`
+  and `worker_put_items`, built like the Mac's rows (`lib/cloud-sync-rows.ts` scrub and splitToolResult, redaction).
+  It keeps its queue in memory ([after a restart](#after-a-restart) re-sends what a dead daemon lost), and sends pages and images up as blobs first.
+- **Repos:** a command's folder is a project name under the work root, `~/.weft-worker/work/<folder>`
+  (`WEFT_WORKER_ROOT` overrides it), not `~/work`: a Mac often has a `~/work` of its own. A missing folder is cloned
+  from the run's git URL (https or ssh only). An existing one is used as it is, never pulled. Cards run in the
+  checkout itself; worktrees come later.
+- **Install:** `install/worker.sh` (served as `weft.zip/worker.sh`, a redirect to the file on main). It checks the
+  toolchain, clones Weft into `~/.weft-worker/weft`, enrols, writes the `weft-worker` wrapper into `~/.local/bin`, and
+  runs it as the launchd agent `zip.weft.worker` or the systemd user unit `weft-worker`.
+- <a id="signing-claude-in"></a>**Signing Claude in:** a background service can't answer the keychain prompt a desktop Claude
+  login raises, so the worker runs on a long-lived `claude setup-token` token kept in `~/.weft-worker/worker.env`
+  (mode 600), which the wrapper loads. `lib/env.ts` passes `CLAUDE_CODE_OAUTH_TOKEN` to a CLI, except when Weft itself
+  runs inside a Claude session. Two ways in: `weft-worker login` on the box, or **Sign in to Claude** on the worker's
+  row in Settings → Sync → Workers (`components/WorkerSignIn.tsx`). That button is one click: Electron main runs
+  `claude setup-token` on a hidden pty (`electron/claude-sign-in.cjs`) with `$BROWSER` pointed at a two-line script,
+  so the CLI hands its approval URL to Weft instead of your default browser. Main opens it in a small window beside
+  the click, in the browser pane's session (so claude.ai already knows you), types the code back if Claude's page
+  shows one, and reads the token off the CLI's output; the board never shows it. Without the desktop shell you paste
+  a token instead. Either way the token never reaches Supabase in
+  the clear: on first start the worker makes an X25519 keypair (`seal-key.json`, mode 600) and publishes the public
+  half with `worker_set_public_key`. The desktop seals the pasted token to it (`lib/worker-seal.ts`: X25519, then
+  HKDF-SHA256, then AES-256-GCM, bound to both keys and the purpose) and queues a `login` command
+  (`supabase/migrations/20261029141232_worker_login.sql`). Every member of the workspace can read `cloud_commands`,
+  and none of them can open it. The worker opens it, saves it to `worker.env` and restarts itself.
+- **The board side:** Settings → Sync → Workers (`components/WorkerSettings.tsx`, `/api/workers`,
+  `lib/workers-account.ts`) lists the workspace's workers with their status. Add a worker shows the install line
+  with a token, and Send a run queues a prompt. A worker that hasn't heartbeat in 60 s reads as offline.
+
+- **Run on Worker, per project:** a project chip's right-click menu ticks **Run on This Machine** or **Run on Worker**
+  (`lib/project-menu.ts`, `settings.workerFolders`, kept apart from the project list since its entries are rebuilt on
+  each use). In a worker project, `POST /api/cards` with `start` calls `lib/worker-handoff.ts` instead of
+  `startCard`: it picks one of your workers (online, then busy, then offline), sends the card's first message as a
+  `run` under the project's folder name and its GitHub remote as `https://github.com/<slug>.git`, and leaves the local
+  card in Review with the prompt and a note naming the worker. A failed send deletes the card rather than run it
+  locally. Switching on refuses when you have no worker. The run and its replies live on the worker's card, which
+  [the desktop board shows](#worker-projects-on-the-desktop-board) under the worker's project.
+
+### Auto-updates
+
+A worker keeps itself on the newest commit of `main`, with no one at the box (`lib/worker-update.ts`,
+`lib/worker-update-loop.ts`, `install/worker-rollback.sh`). `main`, not release tags: it's what the installer clones, and a worker fix shouldn't wait
+for a dmg. The cost is that **every push to main reaches every worker within seconds, unsigned, and all at once**: there's no
+spread across boxes, so a bad commit meets them together and the trial below is what catches it. Push access to the
+repo is code execution on every box. That's the same trust `curl | sh` and `weft-worker update` already ask for.
+
+```
+push to main, Update now, or the slow check
+               git fetch origin main
+                 │ newer, not skipped, clean clone on main
+no live turn, no clone, no pass in flight ──▶ otherwise the row names the cards, and it tries again when they end
+                 │ commands stay queued from here on
+update-trial written, then merge --ff-only, pnpm install
+                 │ a failed install: reset, no restart, the same commit is tried next time
+weft-worker check loads the whole engine in a child
+                 │ a commit that won't load: reset, added to update-bad, never tried again
+exit 0 ──▶ launchd or systemd starts the new code
+                 │ dies 3 times before it's healthy: the wrapper resets and adds it to update-bad
+up 60 s and a heartbeat landed ──▶ update-trial deleted
+```
+
+- **What counts as busy:** `engine.live`, the runner's real sessions (`busyCards`), for both the update and the row's
+  `busy` status. A card waiting on a permission is mid-turn, so it holds the update too, and a forgotten question holds
+  it until someone answers. An idle card's CLI does get cut, and resumes from its saved session on the next message, as after a sign-in.
+- **How a push arrives:** GitHub posts to `/api/github/push` on weft.zip (`lib/worker-push.ts`), signed with
+  `WORKER_PUSH_WEBHOOK_SECRET`. A delivery for `refs/heads/main` of `aimhuge/weft` calls `worker_update_ping` (service role
+  only), which sends one empty Broadcast on the public topic `worker-updates`. Every worker joins it on the socket it
+  already has (`listenForPushes`, `lib/worker-wake.ts`). The ping names no commit: the worker fetches origin itself.
+- **A ping is forgeable, so it's limited.** Anyone with the publishable key can send on a public topic, not just listen.
+  A forged ping can cause a fetch of the real origin and nothing else, and a worker fetches at most once a minute. A
+  ping inside that minute isn't dropped, or a stranger's ping could swallow a real push: it checks when the minute ends.
+  A ping during a check does the same. Update now skips the limit, since only the account that enrolled a worker can send it.
+- **First check after a start:** two minutes in, not at once. A new commit is on trial for its first 60 s, and an update
+  in that window would overwrite the commit it rolls back to.
+- **The slow check:** hourly while the socket is joined, every 15 minutes when it isn't. On joining, it looks once, for
+  anything pushed while it was away.
+- **Held updates:** the row names the cards, those asking first, up to three: `Update to abc1234 is waiting for 2 cards:
+  “Fix login” (needs your answer), “Docs”.` Card events keep that line current without touching the network, and the moment
+  the worker is idle it checks. Every card event wakes that, and so do the end of a pass or clone and the 20 s heartbeat as a backstop. Titles are
+  no new exposure: `cloud_cards` is already readable by the workspace.
+- **Update now:** a button on the worker's row, sent as an `update` command that carries nothing. It asks for the same check,
+  so it can't cut off a turn. It runs after the pass that claimed it, since a pass counts as busy. A worker that doesn't
+  update itself reports that as a failure. The button is off while the worker is offline.
+- **Getting this:** a worker needs one update through the old path to learn all of this: it reaches the new code on its
+  15-minute check, or `weft-worker update`. Until then a push does nothing for it and the button fails with "doesn't know
+  that kind of request".
+- **Setting it up:** the `worker-push` blank on 🪝 and `WORKER_PUSH_WEBHOOK_SECRET` in the production vault, pushed to Vercel. Without the secret the route answers 503, and workers carry on with the slow check.
+- **Rollback lives outside the clone.** Code that dies at import can't undo itself, so the wrapper runs `rollback.sh`
+  before each start. That's a copy in the worker's home, sealed from threads, refreshed only after a commit proves it
+  loads. It counts starts in `update-trial.starts`, and past three it resets to the commit in `update-trial`.
+- **What it won't touch:** a clone with local changes, off `main` or ahead of it. It says so on the row and waits, since
+  a clone is open to threads and someone may be working in it. It only runs in `<worker home>/weft`, so a daemon started
+  from a developer's checkout leaves that checkout alone.
+- **The row:** `worker_set_build` (`supabase/migrations/20261030204119_worker_build.sql`) puts the build, as
+  `0.6.7+abc1234`, and the reason it's behind on Settings → Sync → Workers. A database without the function logs a line
+  and carries on.
+- **Off:** `WEFT_WORKER_AUTO_UPDATE=0` in `~/.weft-worker/worker.env`.
+- **Not updated by this:** the wrapper and the service definition. `weft-worker update` (which re-runs the installer) rewrites
+  those, and it's also how a box installed before this gets the updater. A daemon started by hand exits after an update
+  and nothing brings it back.
+
+### After a restart
+
+A restart ends every turn on the box, whether it's an update, a sign-in or a crash. On start, before it reads a single
+command, the daemon does what a Mac does and tells the cloud (`lib/worker-recover.ts`, `recover` in `lib/worker-daemon.ts`).
+
+```
+lib/store.ts loads     Running or pending ──▶ Review, pending cleared, CLOSED_LINE, interrupted (up to MAX_RESUMES)
+                         │ no bus event, so without the rest the cloud row stays Running, "Thinking…", for good
+recoverCards           undecided permission rows closed; a card that stays stopped gets a note in its thread
+                         │ interrupted: whole thread queued. CLOSED_LINE only: the card row
+publisher.flush        the web and desktop boards see Review, and Allow goes away
+                         │
+resumeInterrupted      lib/resume.ts, as on a Mac: RESUME_TEXT into the saved session, resumes + 1
+                         │
+commands               a reply queued while the worker was down lands after the resume, not beside it
+```
+
+- **The store already recovers; the gap was the cloud.** `loadState` runs here as on a Mac, so `column: running` in memory
+  means a live turn after a load. On a Mac the board reads that same memory, so no event is needed. A worker's board reads
+  `cloud_cards`, which only hears the bus, and `resumeInterrupted` is called from `lib/copilot.ts`, which a worker doesn't boot.
+- **Who resumes:** what lib/resume.ts decides. A card with a session that isn't archived goes on, up to `MAX_RESUMES` in a
+  row; your own message resets the count. No age limit, as on a Mac: a card cut off days ago carries on too.
+- **Stale permissions:** the request lived in the dead process, so an undecided row is closed as `deny`, which reads
+  "Denied" in the thread. A turn that still needs it asks again, as a request that can be answered. An `answer` already in
+  the queue fails with "That request isn't waiting anymore."
+- **Repeats by design:** a card keeps `CLOSED_LINE` until its next turn, so its row goes up on every restart. That's what
+  repairs a row a failed publish left wrong. `interrupted` cards aren't retried that way, but a resumed turn publishes itself.
+- **Not covered:** a card whose row is stale but whose card this worker's store no longer has.
+
+### Wake-ups
+
+A command reaches a worker in about 200 ms, and an idle worker asks for commands twice a minute, not twenty times
+(`lib/worker-wake.ts`, `supabase/migrations/20261030072445_worker_wake.sql`).
+
+- **The ping:** an after-insert trigger on `cloud_commands` calls `realtime.send` with an empty payload on a public
+  Broadcast channel. It fires only for a row `worker_pending` would return: a pending command addressed to a headless
+  worker, made by that worker's account. A row for a Mac sends nothing. `realtime.send` swallows its own errors, so a
+  ping can't fail an insert, and it runs after commit, so a ping can't beat its row.
+- **The topic is the secret.** The worker has no session, so the channel has to be public: anyone with the publishable
+  key can join any topic they can name. So the topic is `worker-wake:` + sha256(`weft-worker-wake:` + `key_hash`). The
+  database computes it from `key_hash`, and the worker from sha256 of its key. No client can read `key_hash`: the
+  column grant leaves it out, Realtime drops it from row payloads and refuses it in a filter (so `key_hash=gt.…` is no
+  binary-search oracle against the 20 s heartbeat updates), and `realtime.messages` has RLS with no policies.
+- **What a leaked topic costs:** when commands arrive, and the power to cause polls. Never a command: they're still
+  read only through the key-checked `worker_pending`, and a ping carries nothing but a random id.
+- **The daemon's pace:** one socket, joined with the publishable key. `up` asks once, for anything sent while it was
+  away, then polls every 30 s. `down` goes back to every 3 s until it rejoins, and so does a worker with no socket:
+  Node before 22 has no WebSocket, so the join fails, it logs that, and it stays on the fast poll. realtime-js rejoins
+  by itself. A half-open socket can take up to a Realtime heartbeat to notice, and the 30 s poll covers that gap.
+- **A ping during a pass isn't lost:** `poll` is single-flight and a pass can take minutes, so a ping that lands during
+  one asks for another pass straight after it.
+- **Checking a box:** `~/.weft-worker/worker.log` says `wake socket joined` when push is on. No such line, on a build with
+  this code, means it's on the fast poll, and the log says why.
+- **Not on this path:** the heartbeat stays at 20 s. The desktop's inbox still uses `postgres_changes`, since it has a
+  session.
+
+**Proved on production on 2026-10-30**, before the daemon was built, with a throwaway worker, deleted afterwards: a
+keyless client joined and got the ping, a wrong topic heard nothing, and `run`, `login` and `github_login` inserted
+through RLS each reached `worker_pending` in 147 to 201 ms. A Mac-addressed row and another account's row sent no ping.
+A real socket cut read `CHANNEL_ERROR`, rejoined in 1.3 s, and the next ping arrived.
+
+### What's sealed on a worker
+
+The secret guard seals the worker's home as it seals the data dir (`reachesWorkerHome`, `lib/secret-guard-files.ts`), in
+every permission mode. The folder gate can't do this job: it asks, and **Always** would grant all of `~/.weft-worker` to
+every card on the box. Before this, all four secret files passed the guard, and `~/.weft-worker/data/...` by its `~` path
+passed with no question at all, since the data dir is free to the gate and the guard's name check only knew `.weft`.
+A deny beats an ask, so the prompt never shows and a grant buys nothing here.
+
+| Under `~/.weft-worker` | A thread |
+| --- | --- |
+| `worker.json`, `worker.env`, `seal-key.json`, `github-credentials`, `worker.log`, `rollback.sh`, `update-trial`, `update-bad`, anything new | refused |
+| `data/`, as on a Mac | refused, save `data/show` and `data/apps` |
+| `work/` (or `WEFT_WORKER_ROOT`) | open: it's where cards run |
+| `weft/`, the clone of Weft | open: a public repo, and `/weft:done` runs `commit.sh` from the plugin inside it |
+
+- **A path is judged by where it lands.** Relative paths start from the card's cwd (`fromCwd`, from the hook's own input),
+  not the daemon's, and a `cd` on the line moves them. Symlinks are followed, since a checkout is a repo somebody else
+  wrote and may hold a link to `../../worker.json`. So a checkout's own `worker.json` is fine and a link to the real one
+  isn't. A symlink loop ends and fails closed. `$HOME`, a variable set on the line, a glob like `~/.weft-w*` and any case
+  all count.
+- **It runs wherever a worker home exists,** so a Mac that is also a worker is covered, and a Mac that isn't still greps for
+  `.weft-worker` in this repo.
+- **The same limits as the data dir:** it's a strong default, not a sandbox. It sees names on the command line, so a script
+  that builds the path at run time, or a recursive search of a folder above the home (`rg --hidden wwk_ ~`), isn't caught,
+  and neither is a shell redirect writing into the home.
+- **Not sealed by this:** the same tokens by another way in. The daemon's CLIs carry `CLAUDE_CODE_OAUTH_TOKEN` in their
+  environment, so `node -e` can name it (only a whole-environment dump is refused), and a GitHub sign-in made through `gh` sits
+  in `~/.config/gh/hosts.yml` and answers `gh auth token` and `git credential fill`. The real fix for both is a process
+  boundary between the daemon and its cards.
+
+### Worker projects on the desktop board
+
+A project that lives only on a worker shows on the desktop board with its cards, and nothing is copied into the local
+store (`lib/worker-project.ts`, `lib/worker-board.ts`, `lib/worker-transport.ts`, `app/api/worker-board`).
+
+- **A project is a path:** `worker://<worker id>/<folder>`. The board's chips, grouping and filter already key on a
+  path, so a worker card only needs its `cwd` set to that (`boardFrom`) to file itself. Nothing on the Mac sits at that
+  path, and `resolveFolder` refuses it, so a stray one can't start a CLI.
+- **The list:** your headless workers' folders (`cloud_workers.folders`) plus the folders of their `cloud_cards`, so a
+  project shows with no cards, and a worker too old to report still shows the ones it has cards in. An offline worker's
+  projects stay listed. A chip carries the worker's name; a row in More reads `on m1mini` or `on m1mini · offline`.
+- **`cards` stays local.** `Board` keeps its own `cards` for everything that acts, and only what's drawn reads
+  `boardCards`. `ownColumns` keeps worker cards out of Archive all, Resume all and Switch all; `localPath` keeps a
+  worker path out of the terminal, header badges, drawers and the copilot. A worker card draws `readOnly` and opens.
+- **Reading:** the account's Supabase session lives on the local server, so the renderer polls `/api/worker-board` every
+  5 s (once a minute with no worker), and an open thread re-reads its newest page every 2.5 s. There's no Realtime here.
+- **The thread:** `components/WorkerOpenCard.tsx` is the web board's `ThreadPanel` with `workerTransport`
+  (`desktop: false`), so it offers what weft.zip offers, beside the browser pane. Reply, answer and stop are the same
+  `cloud_commands` rows the web sends.
+- **A new thread:** `POST /api/cards` with a worker path calls `startWorkerThread`, sends a `run` with that folder, makes
+  no local card and answers with the worker's name. An offline worker refuses with a message and nothing is sent. A
+  reply to an offline worker queues, and the thread says so. There's no Backlog in a worker project.
+- **Folder reports:** `worker_set_folders` and `lib/worker-folders.ts` exist, but the daemon doesn't call them yet, so
+  until it does a project needs a card to show.
+- **Not yet:** attachments on a new thread, Run on Worker's local record cards still sit on the local project, and
+  sealed rows (a worker publishes in the clear today).
+
+### Pages from a worker
+
+A card on a worker shows its pages in the pane on both boards, the same way a card on a Mac does on weft.zip. There's no
+pane on the box, so a page is a file the card wrote, uploaded as a blob with what it names. The one live thing is a
+device's screen ([The live screen](#the-live-screen)).
+
+```
+card writes ~/.weft-worker/data/show/plan.html
+  │ mcp__browser__open_url(path)                   lib/worker-pane.ts: uploads now, so a failure reaches the agent
+  ▼
+blob store (lib/blob-store.ts, mayUpload = workerMayUpload)
+  │ POST weft.zip/api/worker-blob  Bearer wwk_…    sha256(key) → cloud_workers row → its org, service client
+  │ ◀── signed upload URL for <org>/<sha>
+  │ PUT to Supabase Storage directly               a Vercel function can't take a 50 MB body
+  ▼
+card.page and the open_url item carry blob:sha256:<hex>#anchor (lib/worker-publish.ts, the Mac's withUploadedPage)
+  ├─▶ web board: WebThreadPanel → WebPane → /api/web-board/<org>/page/<sha>
+  └─▶ desktop board: WorkerOpenCard → WebPane → /api/worker-board/page/<sha>  (5 s poll of the worker's cards)
+```
+
+- **The tools:** `scripts/weft-worker.ts` sets `WEFT_WORKER=1`. `open_url` then calls `openOnWorker`: a local page uploads
+  before the tool answers, a public https address is noted as it is, and localhost is refused with the reason. The other
+  browser tools say they need the desktop app. `WORKER_BROWSER_PROMPT` replaces `BROWSER_PROMPT` in the thread's prompt,
+  so a thread knows the pane works and never tells you to open a file on the box. An image in a reply (`![…](/abs/x.png)`)
+  goes up the same way.
+- **Writing a page asks nobody.** `acceptEdits` only writes without asking inside the CLI's working directories: its cwd
+  and `additionalDirectories`. The show folder is neither, because a card's cwd is its checkout. Nothing on the desktop
+  exempts it: an Accept edits card there asks about `~/.weft/show` too. A desktop card goes through because it runs in
+  Auto or YOLO, or waits for you. A worker defaults to Accept edits, never runs YOLO, and has nobody at the box, so
+  `sessionDirs` (`lib/worker-pane.ts`) adds `SHOW_DIR` to `additionalDirectories` on a worker only. It makes the folder
+  first, because the CLI drops a directory that doesn't exist and asks again. Reads and edits of a page stop asking too.
+  Spares get it as well, since it's set where a session's options are built (`lib/runner-session.ts`).
+  - **Nothing else opens.** Only `data/show` is added, not its parent, and every path past it stays with the secret guard,
+    which runs first in every mode and follows links ([What's sealed on a worker](#whats-sealed-on-a-worker)). So
+    `show/../../worker.json`, a link in `show` to a sealed file, `data/board.json` and `data/showcase` are all refused.
+    `lib/secret-guard-worker.test.ts` holds that line.
+  - **Ask me still asks.** A card in `default` mode prompts for a page, because working directories don't change that
+    mode. It's the mode you picked, so it stays that way; a card run in it on a worker waits for an answer on the board.
+- **Only Claude Code and puku-cli for now.** Their MCP servers run in the daemon's process. Codex and Goose reach Weft's
+  tools over the local server (`lib/mcp-bridge.ts`), which a worker doesn't run, so they have no `open_url` yet.
+- **What may go up** (`workerMayUpload`, `lib/worker-blobs.ts`). A Mac's rule is "under home and not a known secret". That
+  isn't enough here: `worker.json`, `worker.env`, `seal-key.json` and `github-credentials` all pass it, and a page can name
+  any path. So a worker's rule is an allowlist: a web file type (not JSON), inside `data/show` or the work root, with no
+  dot folder or dot file on the way, after following symlinks. The blob store asks it for every upload, and for a
+  stylesheet, which is inlined rather than uploaded. A work root outside home is refused too.
+- **The route** (`app/api/worker-blob`) takes the key as a bearer and only a sha. The org comes from the worker's row, so a
+  key can only reach its own workspace. A signed upload doesn't overwrite. It can't check that the bytes match the sha,
+  and neither can the bucket's member insert policy, so a key can do what a member can and no more.
+- **Sandboxing.** The web board is unchanged. The desktop board is stricter, because its frame sits in the board window's
+  session. A worker's page is untrusted, so `app/api/worker-board/page/[sha]` sends a CSP with no `http:` source (the page
+  can't fetch, load or post anything to 127.0.0.1), and the iframe is `sandbox="allow-scripts"` with no popups or forms. A
+  public site is never framed there: its CSP isn't ours, so the pane says so and offers Open ↗.
+- **The launch token stays out of frames** (`electron/api-token.cjs`). `attachApiToken` used to put it on every request
+  from the board window's session, so a page could navigate its own frame to a local GET with it attached. It now skips
+  a frame's navigation (`resourceType` `subFrame`) and anything a frame asks for (`details.frame.parent`, or the
+  `initiatorOrigin` of `"null"` a sandboxed frame has, which holds once its frame object is gone), and drops a value the
+  frame set itself. A skip alone would have broken this page, since the frame's own load has to pass `guard()`, so a GET of
+  exactly `/api/worker-board/page/<sha>` gets the plain read value `1`, as the pane does for pictures. The board's other
+  frames need nothing: the intros and the welcome loop are static files in `public/`, the print sheet is a `srcdoc` used
+  only on the web, and the share views' frames aren't in the board window. Checked in real Electron 44: the board's fetch
+  carried the token, the page loaded on `1`, and a sandboxed frame's self-navigation to `/api/settings` arrived with none.
+- **`worker_put_card`** fills `cloud_cards.page` and `pages` from the card
+  (`supabase/migrations/20261030143806_worker_card_page.sql`), so a phone feed reads a worker's card from its row.
+  `page_thumb` stays null: a worker has no pane to capture.
+- **The panes follow `card.page` too:** the desktop reads only that. The web reads the thread and falls back to it, since
+  its thread loads newest 50 first and a long turn can push the last `open_url` past them.
+- **An upload that fails** never holds back the thread: the row keeps the path, and the pane says the page is on the machine
+  running the card. From `open_url` itself the agent gets the error.
+- **What's sealed: nothing a worker sends.** A worker has no workspace key: `workspace_key_grants` wraps keys to paired
+  devices, and pairing is a Mac's. So its cards, items and tool outputs go up plain even with **Seal synced threads** on,
+  redacted as a Mac's are, and any member of the workspace can read them. Its page blobs are plain too, but so are a Mac's:
+  blob sealing is designed and not wired (mobile-security.md, Gaps). Sealing a worker needs a grant wrapped to its X25519 key
+  (`seal-key.json`) and a Mac that pins it. Until then, don't put a secret in a page: redaction doesn't touch page blobs.
+
+### The live screen
+
+`mcp__simulator__watch` on a worker streams the device to the card's pane, and the desktop board can tap it. There's no
+window to capture on a headless box and no Electron to capture it with, so this is screenshots, not video.
+
+```
+watch ─ simctl/adb screenshot ─ JPEG 420 px ─▶ Realtime Broadcast, topic worker-screen:<random>  ─▶ WorkerScreen in WebPane
+          lib/worker-screen.ts                 card.page = weft-screen:<token>?device&name&until      (either board)
+daemon ◀─ claim ◀─ cloud_commands kind=input ◀─ POST /api/worker-board (elevated) ◀─ click or drag, desktop only
+```
+
+- **Pace:** up to 4 frames a second, sent only when the bytes changed, plus one every 3 s for a board that just opened. A
+  still screen costs almost nothing. It ends with the watch (10 minutes, extended by another `watch`).
+- **Who can watch:** the channel is public, because a worker has no session, so the topic is the secret, as with
+  [wake-ups](#wake-ups). It's 128 random bits per stream and lives only in `card.page`, so a workspace member who can read
+  the card's row can watch, and frames go out plain like everything else a worker sends. A share link can't carry it: shares
+  read thread items, and a screen is never one.
+- **Who can touch:** only commands, never the channel. `input` goes through `worker_pending` (the worker's own account),
+  the local route takes it only from Weft's window (`elevated`), the daemon checks the card is its own, and
+  `lib/simulator-input.ts` refuses a device that isn't being watched. It skips the queue behind a starting card, as a clone
+  does, and a tap asks for a frame at once (`nudgeScreen`). weft.zip watches but doesn't tap yet.
+- **Latency:** the slow part is the box, not the network. On m1mini `axe` took 1.1 s for a tap, and the command path adds
+  its own trips, so a tap's answer takes over a second. This path is the one that works from anywhere. The fast one is H.264
+  and taps from `idb_companion`, which a spike got out of the simulator with no window (about 0.7 Mbps). Video doesn't belong
+  on Supabase, so that needs a direct route or a tunnel.
+
+**Modes.** A worker's card has the mode picker in its thread header, sent as a `mode` command (`CARD_MODES`): Ask me, Accept
+edits or Auto, applied mid-turn. It's elevated, and the daemon holds it to the same list, so a row can't buy YOLO. Auto's
+blocks come back as a prompt on the board. The simulator tools are trusted (`lib/board-tools-trust.ts`) in every mode, like
+the browser's, since they only reach a sandboxed device.
+
+**What a worker tunnel would need** (docs/architecture/tunnels.md runs on the desktop only):
+
+1. **Approval.** Touch ID lives in Electron main. A worker needs a `tunnel` command only the owner's account can send, and
+   a thread must not be able to send it itself, so it goes through an elevated board action like an `answer`, and refuses
+   a call from a thread's curl.
+2. **Writes.** `tunnels` is written as the owner and `ticket_secret` is read only by the service role, so a worker needs key-checked
+   `worker_tunnel_open` and `worker_tunnel_close` functions that keep both true.
+3. **cloudflared on the box.** `lib/tunnel-cloudflared.ts` pins one release into `~/.weft/bin`. A worker needs that under
+   its home, with digests for each platform and arch, including linux, and the install script's say-so.
+4. **The gate's lifetime.** The daemon has to own `lib/tunnel-gate.ts` and cloudflared, close them on a restart, and
+   refuse the same way when a target isn't http localhost.
+5. **A dev server to point at.** `mcp__devservers` needs the desktop too, so a worker needs its own start, stop and status.
+6. **The pane.** `/t/<id>` needs a weft.zip session. A sandboxed frame has no cookie and the board window must not frame it,
+   so the first version is Open ↗ in the toolbar. `openOnWorker` would then trade a localhost URL for the card's `/t/<id>`.
+
+### Cloning onto a worker
+
+The project menu's **Clone from GitHub** form gets a compact picker in the same row when you have a headless worker of
+your own: This Mac by default, then each worker, with no new row when you have none. Picking a worker sends a `clone`
+command instead of calling `lib/repos.ts`, so no prompt and no thread are needed.
+
+- **The command:** `cloneCommand` (`lib/worker-commands.ts`) takes owner/name, builds the https URL and names the
+  folder for the repo, the same project name a later run uses. `kind` is widened by
+  `supabase/migrations/20261030061145_worker_github.sql`. The form's input parsing is unchanged, and the worker still
+  applies materialise's https/ssh check.
+- **On the worker:** `cloneProject` (`lib/worker-paths.ts`) reuses `materialise`, and also checks a folder that's
+  already there: it must have the same origin, because two owners' repos can share a name. The daemon runs a clone off
+  the poll loop, so a Stop or a reply isn't held behind a clone that takes minutes. Git runs with
+  `GIT_TERMINAL_PROMPT=0`, so a missing sign-in fails at once rather than hanging.
+- **A folder means a complete clone:** `materialise` clones into a hidden `.cloning-XXXXXX` sibling and renames it into
+  place only once the files are out, removing it on failure, because a folder at that path is what "present" trusts: a
+  failed checkout used to leave a 181 MB tree with HEAD set, and a resend ran a card in it. Hidden names are refused by
+  `repoPath`, so no command can reach a clone in progress. A temp folder over an hour old lost its worker mid-clone,
+  and the next clone in that folder removes it. If a run and a clone race, the loser takes the winner's checkout.
+- **Git LFS:** the clone is `--no-checkout`, then `git grep` looks for `filter=lfs` in the `.gitattributes` at HEAD. A
+  repo that uses LFS gets `git lfs install --local` before its files are written, so a box with the binary but no global
+  filters fetches real files, not pointer files. With no git-lfs, the clone stops with a message saying what to
+  install. `install/worker.sh` installs git-lfs and its filters, and carries on without them if it can't.
+- **The result reaches the desktop:** the form waits on `GET /api/workers?command=` (`lib/worker-command-wait.ts`).
+  `explainClone` (`lib/worker-github.ts`) turns git's stderr into a plain message, such as "this worker isn't signed in
+  to GitHub". It shows in the menu and as a toast, because the menu can close during a long clone. The worker's row in
+  Settings → Sync → Workers keeps your latest failed clone until a newer one works, so a failure outlives the 5 s toast
+  and reaches you even from a worker that was offline when you asked. A command nobody claims for a minute comes back
+  as queued. The web board's strip leaves worker sign-ins and clones out (`boardCommands`): it would show them as new
+  threads.
+
+**Signing GitHub in** follows the Claude sign-in's security model, with its own command (`github_login`) and seal
+purpose (`GITHUB_PURPOSE`), so a token sealed for one can't be opened as the other.
+
+- **The token:** you paste it in `components/WorkerGithubSignIn.tsx`, on the worker's row. The link opens GitHub's
+  fine-grained token page already filled in. **The scope is Contents read and write** on the repos you pick, which brings
+  Metadata read with it, and it expires in 90 days. Read alone would clone but a card couldn't push, and that's the
+  least that lets a card finish its work; a classic token's `repo` covers every repo you can reach. A card that should
+  open pull requests needs Pull requests write added by hand. There's no one-click flow as there is for Claude:
+  GitHub has no `setup-token`, and copying the desktop's own `gh` token would hand the worker far more than it needs.
+- **On the worker:** the token is checked with `GET /user` first, so a bad one fails with a real message and stores
+  nothing. Then `signInGithub` runs `gh auth login --with-token --insecure-storage` (stdin, never an argument) and
+  `gh auth setup-git`. If gh is missing or refuses the token (it wants `read:org` on a classic one), it writes a mode-600
+  `~/.weft-worker/github-credentials` and points git's `store` helper at it. Both are scoped to github.com, so a clone
+  from another host never sees the token, and the empty helper entry clears macOS's keychain helper, which a service
+  can't answer. No restart: git asks its helper afresh each time.
+- **What it touches:** `gh` and `git config --global` are the box's user's, not the worker's own. On a box you also
+  use by hand, this changes that user's GitHub sign-in. Every card on the worker can use the token.
+- **The row:** `worker_set_github` publishes the account and `signed_in`, `expired` or `none`, never the token. The state
+  comes from `git credential fill` and `GET /user`, so it reports what git would really use, including a sign-in made
+  by hand on the box. It's checked at start, hourly, after a sign-in and after a failed clone. A 401 is expired; a
+  rate limit or no network leaves the row as it was. `listWorkers` reads these columns in a second query, so a database
+  without them only loses the line.
+
+### The desktop as a headed worker
+
+A signed-in Weft desktop that syncs a folder already takes the web board's commands (`lib/cloud-inbox.ts`), so it is a
+worker in all but name: a **headed** one, with the browser pane, the vault and webhooks a headless box lacks. It lists
+itself in Settings → Sync → Workers beside the headless ones (`supabase/migrations/20261029141006_desktop_workers.sql`).
+
+- **The row:** `cloud_workers.kind` is `headless` or `desktop`; a desktop row carries its `device` (the Mac's sync
+  device id) and is one per (account, device). It has no key: `desktop_worker_beat` upserts it as `auth.uid()`, and
+  its `key_hash` is never a hex digest, so no key can act as it.
+- **The beat** (`lib/desktop-worker.ts`) rides the inbox's 30 s check: only while the inbox listens (signed in, a
+  folder synced), so a Mac that sleeps, signs out or stops syncing reads as offline a minute later. It says `busy`
+  while any thread runs. It never throws: a database without the function just leaves the Mac off the list.
+- **A run sent to it** (`sendRun` looks the worker's kind up itself) is a plain `new_card` for its device, not a `run`.
+  The inbox finds the folder by path or by a project name exactly one synced folder has (`syncFolderFor`).
+- **The list** marks the Mac you're on (`here`): it's left out of Send a run, a desktop row has no Remove (it would
+  only beat back), and Run on Worker (`pickWorker`) never picks a desktop.
+
+Not yet: leases and reclaim, the worker picker and chip (phase 2), shared claims (phase 3), MCP and the vault on the
+host (phase 4), worktrees per card, and streaming deltas to the web.
 
 The one-sentence version: **Weft already has a remote control plane, but not a remote compute plane.** The web
 board already commands a Mac across the network through `cloud_commands`; the CLI, though, always spawns on the
@@ -227,6 +668,18 @@ PreToolUse hook
   ask  → a row the board can answer; the card moves to Needs you
 ```
 
+<a id="folder-grants-today"></a>**Folder grants today** are local to the machine running the card. A worker's card offers
+**This card** and **Always** on the desktop board and on weft.zip, and the choice travels as a scope on the `answer`
+command (`AnswerPayload.grant`). The worker reads the folder from its own pending request, then writes `Card.readScope`
+or its own `settings.allowedFolders`, so Always means that worker and every card on it. The command carries no path,
+so it can buy only what the prompt on screen asked for, the way `RUN_MODES` leaves out `bypassPermissions`. The details
+are in [the folder gate](thread-guards.md). A worker on an older build ignores the scope and treats the answer as Allow
+once. **Taking one back:** Settings → Security lists this Mac's folders only, so a worker's Always stays until
+`allowedFolders` is edited in that worker's own settings file. Workers obey only their owner's commands
+(`worker_pending`) and have no paired phone, so an answer on a worker isn't signed. If grants move to Supabase as below,
+keep both rules: the folder comes from the machine's own pending request, never from a client, and Always stays per
+worker.
+
 The **folder guard** splits too. Its logic (`lib/folder-guard.ts:117-131`) is entirely local — it compares a path
 against the card's scope on the machine that holds the file. But the *grant list* (`Card.readScope`, and
 `settings.allowedFolders`) is shared state, because a grant given on the Mac must hold on the worker. So the
@@ -311,10 +764,10 @@ curl -fsSL https://weft.zip/worker.sh | sh
 
 It does four things:
 
-1. **Installs the toolchain.** Checks for `git`, `curl` and `node` 20+, and installs what is missing — with
+1. **Installs the toolchain.** Checks for `git`, `curl`, `node` 20+ and `git-lfs`, and installs what is missing — with
    `apt-get` on Linux, with `brew` on macOS. A compiler toolchain is added only if the project needs one.
-2. **Clones the worker.** Pulls Weft's worker into `~/.weft-worker`. A `git pull` updates it later;
-   `weft-worker update` does that for you.
+2. **Clones the worker.** Pulls Weft's worker into `~/.weft-worker`. It [updates itself](#auto-updates) from then on;
+   `weft-worker update` does it by hand.
 3. **Enrols itself.** Calls the API with the workspace's service key, gets back a worker id and its own key, and
    writes both to `~/.weft-worker/worker.json` with mode `600`.
 4. **Runs as a service.** A `systemd` unit on Linux, a `launchd` agent on macOS. It starts on boot, restarts on
