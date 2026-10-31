@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { editedPath } from "./overlap";
 import { allowedFolders } from "./settings";
+import { SHOW_DIR } from "./show-dir";
 import { DATA_DIR, getCard } from "./store";
 import { worktreesRoot } from "./worktrees";
 import type { PromptReason } from "./types";
@@ -142,6 +143,15 @@ export function grantedRead(toolName: string, input: Record<string, unknown>, cw
   const home = os.homedir();
   const paths = pathsOf(toolName, input).map((t) => realish(expand(t, cwd, home)));
   return paths.length > 0 && paths.every((p) => granted.some((g) => inside(p, g)) || inside(p, realish(cwd)));
+}
+
+// A file tool call (not Bash) whose every path lies in SHOW_DIR: a thread's own pane page, which the system prompt
+// tells it to write, so neither the CLI's working-directory gate nor the permission mode asks about it (2026-10-31).
+export function showPageCall(toolName: string, input: Record<string, unknown>, cwd: string, showDir = SHOW_DIR): boolean {
+  if (toolName === "Bash") return false;
+  const show = realish(showDir);
+  const paths = pathsOf(toolName, input).map((t) => realish(expand(t, cwd, os.homedir())));
+  return paths.length > 0 && paths.every((p) => inside(p, show));
 }
 
 // What each pending call asked, by tool use id, from PreToolUse to canUseTool, which words the prompt with it.

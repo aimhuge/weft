@@ -20,6 +20,7 @@ import { TURN_CODE, handle } from "./runner-turn";
 import { defaultPermissionMode } from "./settings";
 import { pukuContext } from "./puku-context";
 import { trialOptions } from "./puku-trial";
+import { sessionDirs } from "./show-dir";
 import { PLUGIN_DIR } from "./skills";
 import { ensureSeeded, offFor, sameOff, withSkillSettings } from "./skill-sets";
 import { switchSpare } from "./spare-switch";
@@ -189,8 +190,8 @@ function queryOptions(session: Session, executable: string | undefined): Options
     cwd: spec.cwd,
     // Directories the user approved reading from beyond cwd (Card.readScope, Spec.readScope).
     // Forwarded to the SDK as additionalDirectories so the CLI's working-directory gate lets the
-    // thread read there without an extra prompt.
-    additionalDirectories: spec.readScope,
+    // thread read there without an extra prompt. SHOW_DIR rides along for every thread (lib/show-dir.ts).
+    additionalDirectories: sessionDirs(spec.readScope),
     resume: spec.sessionId,
     sessionId: spec.sessionId ? undefined : session.sessionId,
     forkSession: spec.sessionId ? spec.forkSession : undefined,

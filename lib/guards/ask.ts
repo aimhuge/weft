@@ -1,7 +1,7 @@
 import type { PermissionResult } from "@anthropic-ai/claude-agent-sdk";
 import { takeGrant } from "../classifier-denial";
 import { claimQuestion, claimSymbols, claimWhy } from "../claim-guard";
-import { folderAsk, grantedRead } from "../folder-guard";
+import { folderAsk, grantedRead, showPageCall } from "../folder-guard";
 import { askUser } from "../runner-ask";
 import type { Session } from "../runner-state";
 
@@ -22,6 +22,8 @@ export function askAboutCall(
   if (takeGrant(session, toolName, input)) return Promise.resolve({ behavior: "allow", updatedInput: input });
   // A folder the user granted (lib/folder-guard.ts) is read without the CLI's own working-directory prompt.
   if (grantedRead(toolName, input, session.spec.cwd, session.cardId)) return Promise.resolve({ behavior: "allow", updatedInput: input });
+  // A thread's own pane page in SHOW_DIR (lib/show-dir.ts) is read and written with no prompt, whatever the permission mode.
+  if (showPageCall(toolName, input, session.spec.cwd)) return Promise.resolve({ behavior: "allow", updatedInput: input });
   // A folder outside the project (lib/folder-guard.ts) or a symbol-claim clash (lib/claim-guard.ts) asks in its own words.
   const folder = folderAsk(toolUseID);
   return askUser(session.cardId, session, toolName, input, signal, folder?.question ?? claimQuestion(toolUseID) ?? title, {

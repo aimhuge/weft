@@ -131,9 +131,11 @@ export function isSecretFile(file: string, dataDir = DATA_DIR, dotGlob = false):
 // the pane (plans, commits, how-tos, answers): it is the one place the BROWSER_PROMPT tells a thread to
 // write, so sealing it made the pane's own pages unreadable and unwritable (2026-10-28). `apps/` holds
 // the data mini apps (`apps/<slug>/index.html`, `weft-app.json`), which name vault secrets by name only;
-// sealing it stopped threads building or editing one such as Growth (2026-10-29). Everything else in the
-// data dir — threads/, vault/, attachments/, apps.json, app-grants.json, the control token — stays sealed.
-export const DATA_OPEN = /^(show|apps)(\/.*)?$/i;
+// sealing it stopped threads building or editing one such as Growth (2026-10-29). `scout/` is the refactor
+// scout's cache (lib/scout.ts): findings about code, which /weft:done reads and writes (2026-10-31).
+// Everything else in the data dir — threads/, vault/, apps.json, app-grants.json, the control token — stays
+// sealed; attachments/ opens one file at a time, to the card whose user pasted it (lib/secret-guard-pasted.ts).
+export const DATA_OPEN = /^(show|apps|scout)(\/.*)?$/i;
 
 // Whether a path inside the data dir (relative to it) is in an open folder: `..` is folded first, so
 // `apps/../vault` is `vault`, and a path that climbs out of the data dir is never open.
