@@ -54,6 +54,7 @@ export function useWorkers() {
   const login = useCallback((workerId: string, token: string) => post<{ commandId: string }>({ action: "login", workerId, token }), []);
   const github = useCallback((workerId: string, token: string) => sendAndWait({ action: "github", workerId, token }).finally(() => void reload()), [reload]);
   const clone = useCallback((workerId: string, repo: string) => sendAndWait({ action: "clone", workerId, repo }), []);
+  const update = useCallback((workerId: string) => sendAndWait({ action: "update", workerId }).finally(() => void reload()), [reload]);
   const remove = useCallback(
     async (id: string) => {
       await readJson(await apiFetch(`/api/workers?id=${encodeURIComponent(id)}`, { method: "DELETE" }));
@@ -62,5 +63,5 @@ export function useWorkers() {
     [reload],
   );
 
-  return { view, error, token, run, login, github, clone, remove };
+  return { view, error, token, run, login, github, clone, update, remove };
 }

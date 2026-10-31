@@ -19,7 +19,7 @@ import { workerBlobClient, workerMayUpload } from "../lib/worker-blobs";
 import { enrol, registry, type Rpc } from "../lib/worker-registry";
 import { CLAUDE_TOKEN, GITHUB_PURPOSE, LOGIN_PURPOSE, newSealKeys, open } from "../lib/worker-seal";
 import { createUpdater, updatesOn } from "../lib/worker-update";
-import { listenForWakes } from "../lib/worker-wake";
+import { listenForPushes, listenForWakes } from "../lib/worker-wake";
 
 const home = workerHome();
 // Before the engine is imported: lib/store.ts reads WEFT_DATA once, at import.
@@ -96,6 +96,8 @@ async function startCommand() {
     reg,
     publisher,
     listen: (hooks) => listenForWakes(client, config.key, hooks, console.log),
+    listenForPushes: (hooks) => listenForPushes(client, hooks, console.log),
+    onCardChange: subscribe,
     engine: {
       start: (body) => startFeatureCard(body),
       reply: (id, text) => runner.sendUserMessage(id, text),
@@ -106,6 +108,10 @@ async function startCommand() {
       input: (input) => sendInput(input).finally(() => nudgeScreen(input.device)),
       getCard: store.getCard,
       live: () => busyCards().length > 0,
+      holding: () => busyCards().flatMap((id) => {
+        const card = store.getCard(id);
+        return card ? [{ title: card.title, asking: Boolean(card.pending) }] : [];
+      }),
       recover: () => recoverCards(store),
       resume: resumeInterrupted,
     },

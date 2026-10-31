@@ -986,7 +986,7 @@ A project on a worker shows in the project chips and **More** beside your local 
 An outside-folder prompt on a worker's card offers **This card** and **Always**, and Always means every card on that worker.
 A worker's card has the mode picker in its thread (Ask me, Accept edits or Auto; YOLO stays local), and when a thread watches a simulator or emulator on the worker, its screen streams to the pane, where you can tap and swipe it from the desktop.
 A worker's card shows its pages in the browser pane too, on this board and on weft.zip: it writes a page, opens it, and Weft uploads it with its images. Only web files from the card's project and show folder can leave the box.
-A worker updates itself: when Weft has a new commit and no card is running there, it installs it, tests that it loads and restarts, and goes back on its own if the new code is bad. Its row in Settings shows what it runs and why it's behind.
+A worker updates itself: when Weft has a new commit and no card is running there, it installs it, tests that it loads and restarts, and goes back on its own if the new code is bad. A push to main reaches it in seconds. Its row in Settings shows what it runs, which cards are holding an update, and **Update now** to ask by hand.
 **Send a run** queues a prompt in a project folder on the worker, and it clones the repo the first time. The card runs on the box with the same engine as your Mac and syncs back to the
 web board, where you can reply to it, answer it or stop it. Right-click a project chip and tick **Run on Worker**
 (or back to **Run on This Machine**): every new thread in that project then goes to your worker instead of starting

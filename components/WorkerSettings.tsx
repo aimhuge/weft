@@ -12,6 +12,7 @@ import type { WorkerView } from "@/lib/workers-account";
 import { Spinner } from "./Icon";
 import WorkerGithubSignIn, { githubLine } from "./WorkerGithubSignIn";
 import WorkerSignIn from "./WorkerSignIn";
+import WorkerUpdateButton from "./WorkerUpdateButton";
 
 const CARD = "rounded-xl border border-line-strong bg-panel/85 p-5 shadow-lg backdrop-blur-xl";
 const SECTION_TITLE = "mb-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-faint";
@@ -78,7 +79,7 @@ function GithubStatusLine({ worker }: { worker: WorkerView }) {
 }
 
 export default function WorkerSettings() {
-  const { view, error, token, run, login, github, remove } = useWorkers();
+  const { view, error, token, run, login, github, update, remove } = useWorkers();
   const now = useNow();
   const [install, setInstall] = useState<string | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
@@ -128,6 +129,7 @@ export default function WorkerSettings() {
               </div>
               {w.mine && w.kind !== "desktop" && (
                 <div className="flex max-w-full flex-wrap justify-end gap-2">
+                  <WorkerUpdateButton offline={w.status === "offline"} send={() => update(w.id)} />
                   <WorkerSignIn name={w.name} send={(t) => login(w.id, t)} />
                   <WorkerGithubSignIn name={w.name} state={w.githubState} send={(t) => github(w.id, t)} />
                   <button type="button" onClick={() => void onRemove(w.id)} className={BUTTON}>

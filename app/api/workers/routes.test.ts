@@ -30,6 +30,7 @@ const account = vi.hoisted(() => ({
   sendRun: vi.fn(),
   sendLogin: vi.fn(),
   sendClone: vi.fn(() => Promise.resolve({ commandId: "cmd-1" })),
+  sendUpdate: vi.fn(() => Promise.resolve({ commandId: "cmd-2" })),
   sendGithubLogin: vi.fn(() => Promise.resolve({ commandId: "cmd-2" })),
   commandResult: vi.fn(() => Promise.resolve({ status: "failed", error: "no sign-in" })),
 }));
@@ -63,6 +64,8 @@ beforeEach(() => {
 
 describe("/workers clones and GitHub sign-ins", () => {
   it("queues a clone, and reads how a command went", async () => {
+    await workersRoute.POST(post("/workers", { action: "update", workerId: "w-1" }));
+    expect(account.sendUpdate).toHaveBeenCalledWith({ workerId: "w-1" });
     const res = await workersRoute.POST(post("/workers", { action: "clone", workerId: "w-1", repo: "a/b" }));
     expect(await res.json()).toEqual({ commandId: "cmd-1" });
     expect(account.sendClone).toHaveBeenCalledWith({ workerId: "w-1", repo: "a/b" });
@@ -79,7 +82,7 @@ describe("/workers clones and GitHub sign-ins", () => {
 
   it("names every action it takes", async () => {
     const res = await workersRoute.POST(post("/workers", { action: "nope" }));
-    expect(await res.json()).toEqual({ error: "Say token, run, login, github, clone or folder." });
+    expect(await res.json()).toEqual({ error: "Say token, run, login, github, clone, update or folder." });
   });
 });
 

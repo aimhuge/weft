@@ -96,7 +96,7 @@ describe("the updater", () => {
     const target = commit("a.txt", "new");
     const { up, calls } = updater();
     const before = git(dir, "rev-parse", "HEAD");
-    expect(await up.tick(() => false)).toEqual({ restart: false, note: `Update to ${target.slice(0, 7)} is waiting for a card to finish.` });
+    expect(await up.tick(() => false)).toEqual({ restart: false, note: null, held: target.slice(0, 7) });
     expect(git(dir, "rev-parse", "HEAD")).toBe(before);
     expect(calls).toEqual([]);
   });

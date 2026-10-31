@@ -1,5 +1,5 @@
-// A Weft Worker keeps itself current (docs/architecture/weft-worker.md#auto-updates). Every 15 minutes it fetches main
-// into its clone. When there's a newer commit and no card is live, it fast-forwards, installs, and loads the whole
+// A Weft Worker keeps itself current (docs/architecture/weft-worker.md#auto-updates). When main is pushed, or on the
+// slow check, it fetches main into its clone (lib/worker-update-loop.ts decides when). When there's a newer commit and no card is live, it fast-forwards, installs, and loads the whole
 // engine in a child process. Only then does it exit, and the service brings it back on the new code. A commit that
 // won't load is put back and skipped from then on. A commit that loads and then dies at start can't undo itself, so
 // the service wrapper does that from outside the clone (install/worker-rollback.sh), counting the starts in
@@ -25,6 +25,8 @@ export interface Tick {
   restart: boolean;
   // Why this worker isn't on the newest commit, for its row. Null when it is, or when it has just moved.
   note: string | null;
+  // The commit a live card is holding back, short: the loop names the cards and tries again when they finish.
+  held?: string;
 }
 
 export type Updater = ReturnType<typeof createUpdater>;
@@ -136,7 +138,7 @@ export function createUpdater({ home, dir, run = runCommand, log = console.log }
       const plan = await survey();
       if (plan.kind === "current") return { restart: false, note: null };
       if (plan.kind === "blocked") return { restart: false, note: plan.note };
-      if (!hold()) return { restart: false, note: `Update to ${short(plan.target)} is waiting for a card to finish.` };
+      if (!hold()) return { restart: false, note: null, held: short(plan.target) };
       return apply(plan.from, plan.target);
     },
     // What this box runs, as the Software Update window writes it: 0.6.7+abc1234.

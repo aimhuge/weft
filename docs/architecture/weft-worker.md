@@ -75,14 +75,16 @@ One worker per box, no worker picker on the board. The first box is a Mac mini (
 ### Auto-updates
 
 A worker keeps itself on the newest commit of `main`, with no one at the box (`lib/worker-update.ts`,
-`install/worker-rollback.sh`). `main`, not release tags: it's what the installer clones, and a worker fix shouldn't wait
-for a dmg. The cost is that **every push to main reaches every worker within 15 minutes, unsigned**, so push access
-to the repo is code execution on every box. That's the same trust `curl | sh` and `weft-worker update` already ask for.
+`lib/worker-update-loop.ts`, `install/worker-rollback.sh`). `main`, not release tags: it's what the installer clones, and a worker fix shouldn't wait
+for a dmg. The cost is that **every push to main reaches every worker within seconds, unsigned, and all at once**: there's no
+spread across boxes, so a bad commit meets them together and the trial below is what catches it. Push access to the
+repo is code execution on every box. That's the same trust `curl | sh` and `weft-worker update` already ask for.
 
 ```
-every 15 min   git fetch origin main
+push to main, Update now, or the slow check
+               git fetch origin main
                  │ newer, not skipped, clean clone on main
-no live turn, no clone, no pass in flight ──▶ otherwise the row says it's waiting, and the next check asks again
+no live turn, no clone, no pass in flight ──▶ otherwise the row names the cards, and it tries again when they end
                  │ commands stay queued from here on
 update-trial written, then merge --ff-only, pnpm install
                  │ a failed install: reset, no restart, the same commit is tried next time
@@ -95,7 +97,30 @@ up 60 s and a heartbeat landed ──▶ update-trial deleted
 
 - **What counts as busy:** `engine.live`, the runner's real sessions (`busyCards`), for both the update and the row's
   `busy` status. A card waiting on a permission is mid-turn, so it holds the update too, and a forgotten question holds
-  it until someone answers. Its row says so. An idle card's CLI does get cut, and resumes from its saved session on the next message, as after a sign-in.
+  it until someone answers. An idle card's CLI does get cut, and resumes from its saved session on the next message, as after a sign-in.
+- **How a push arrives:** GitHub posts to `/api/github/push` on weft.zip (`lib/worker-push.ts`), signed with
+  `WORKER_PUSH_WEBHOOK_SECRET`. A delivery for `refs/heads/main` of `aimhuge/weft` calls `worker_update_ping` (service role
+  only), which sends one empty Broadcast on the public topic `worker-updates`. Every worker joins it on the socket it
+  already has (`listenForPushes`, `lib/worker-wake.ts`). The ping names no commit: the worker fetches origin itself.
+- **A ping is forgeable, so it's limited.** Anyone with the publishable key can send on a public topic, not just listen.
+  A forged ping can cause a fetch of the real origin and nothing else, and a worker fetches at most once a minute. A
+  ping inside that minute isn't dropped, or a stranger's ping could swallow a real push: it checks when the minute ends.
+  A ping during a check does the same. Update now skips the limit, since only the account that enrolled a worker can send it.
+- **First check after a start:** two minutes in, not at once. A new commit is on trial for its first 60 s, and an update
+  in that window would overwrite the commit it rolls back to.
+- **The slow check:** hourly while the socket is joined, every 15 minutes when it isn't. On joining, it looks once, for
+  anything pushed while it was away.
+- **Held updates:** the row names the cards, those asking first, up to three: `Update to abc1234 is waiting for 2 cards:
+  “Fix login” (needs your answer), “Docs”.` Card events keep that line current without touching the network, and the moment
+  the worker is idle it checks. Every card event wakes that, and so do the end of a pass or clone and the 20 s heartbeat as a backstop. Titles are
+  no new exposure: `cloud_cards` is already readable by the workspace.
+- **Update now:** a button on the worker's row, sent as an `update` command that carries nothing. It asks for the same check,
+  so it can't cut off a turn. It runs after the pass that claimed it, since a pass counts as busy. A worker that doesn't
+  update itself reports that as a failure. The button is off while the worker is offline.
+- **Getting this:** a worker needs one update through the old path to learn all of this: it reaches the new code on its
+  15-minute check, or `weft-worker update`. Until then a push does nothing for it and the button fails with "doesn't know
+  that kind of request".
+- **Setting it up:** the `worker-push` blank on 🪝 and `WORKER_PUSH_WEBHOOK_SECRET` in the production vault, pushed to Vercel. Without the secret the route answers 503, and workers carry on with the slow check.
 - **Rollback lives outside the clone.** Code that dies at import can't undo itself, so the wrapper runs `rollback.sh`
   before each start. That's a copy in the worker's home, sealed from threads, refreshed only after a commit proves it
   loads. It counts starts in `update-trial.starts`, and past three it resets to the commit in `update-trial`.

@@ -5,13 +5,15 @@
 //
 // It has no session, so Realtime's row filters would show it nothing. A trigger pings it instead (lib/worker-wake.ts)
 // and it asks at once. It still polls: every 30 s to catch a missed ping, and every 3 s while the socket is down.
-import { answerBody, answerGrant, newCardBody, replyBody, stopBody, type CloudCommandRow, type GrantScope } from "./cloud-commands";
+import { newCardBody, type CloudCommandRow, type GrantScope } from "./cloud-commands";
 import type { Card } from "./types";
-import { cloneBody, inputBody, modeBody, runBody, type CardMode, type ScreenInput } from "./worker-commands";
+import { createCardCommands } from "./worker-card-commands";
+import { cloneBody, runBody, type CardMode, type ScreenInput } from "./worker-commands";
 import { explainClone, type GithubStatus } from "./worker-github";
 import type { Publisher } from "./worker-publish";
 import { sealedOf, type Sealed } from "./worker-seal";
-import { HEALTHY_AFTER_MS, UPDATE_EVERY_MS } from "./worker-update";
+import { HEALTHY_AFTER_MS } from "./worker-update";
+import { createUpdateLoop, type Holder } from "./worker-update-loop";
 import type { Registry, WorkerStatus } from "./worker-registry";
 import type { Tick } from "./worker-update";
 import type { WakeHooks } from "./worker-wake";
@@ -32,6 +34,8 @@ export interface Engine {
   getCard(cardId: string): Card | undefined;
   // A turn is really running now, in a session this process holds (a card waiting on a permission counts).
   live(): boolean;
+  // Those same cards, for the row while they hold an update.
+  holding(): Holder[];
   // The cards the last daemon died on, their threads tidied (lib/worker-recover.ts).
   recover(): Recovered;
   // Carries on the turns it can (lib/resume.ts).
@@ -52,6 +56,10 @@ export interface DaemonDeps {
   github: { login: (sealed: Sealed) => Promise<GithubStatus>; status: () => Promise<GithubStatus | null> };
   // Joins the worker's wake-up socket (lib/worker-wake.ts); the returned function leaves it.
   listen?: (hooks: WakeHooks) => () => void;
+  // Joins the topic a push to main pings (lib/worker-wake.ts listenForPushes).
+  listenForPushes?: (hooks: WakeHooks) => () => void;
+  // Calls back when a card changes, so a held update can go the moment the last one ends.
+  onCardChange?: (listener: () => void) => () => void;
   // Keeps this box on the newest Weft (lib/worker-update.ts). Absent when it's switched off, or not the worker's clone.
   update?: { tick(hold: () => boolean): Promise<Tick>; build(): Promise<string>; healthy(): void; restart(): void };
   log?: (msg: string) => void;
@@ -60,6 +68,9 @@ export interface DaemonDeps {
   beatMs?: number;
   githubMs?: number;
   updateMs?: number;
+  pushedUpdateMs?: number;
+  minFetchMs?: number;
+  firstFetchMs?: number;
   healthyMs?: number;
 }
 
@@ -75,12 +86,8 @@ const DEFAULT_MODE = "acceptEdits";
 export function createDaemon(deps: DaemonDeps) {
   const log = deps.log ?? ((msg: string) => console.log(msg));
   const { reg, engine, publisher } = deps;
-
-  function ownCard(cardId: string | undefined): Card {
-    const card = cardId ? engine.getCard(cardId) : undefined;
-    if (!card || card.role === "copilot") throw new Error("That thread isn't on this worker.");
-    return card;
-  }
+  const cardCommands = createCardCommands(engine);
+  let updates: ReturnType<typeof createUpdateLoop> | null = null;
 
   // Puts the sign-in on the worker's row. Null when GitHub couldn't say: the row keeps what it last showed.
   async function publishGithub(read: () => Promise<GithubStatus | null>): Promise<GithubStatus | null> {
@@ -125,21 +132,11 @@ export function createDaemon(deps: DaemonDeps) {
     return card.id;
   }
 
-  function setMode(command: CloudCommandRow): string {
-    const body = modeBody(command);
-    if (!body) throw new Error("That mode can't be set on a worker.");
-    const card = ownCard(body.cardId);
-    if (card.backend === "codex" && card.sessionId) throw new Error("Codex keeps its sandbox mode for this session.");
-    engine.setMode(card.id, body.mode);
-    return card.id;
-  }
-
-  async function sendInput(command: CloudCommandRow): Promise<string> {
-    const body = inputBody(command);
-    if (!body) throw new Error("That tap is empty.");
-    const card = ownCard(body.cardId);
-    await engine.input(body.input);
-    return card.id;
+  // Not awaited: this pass counts as busy, so the check holds until the pass has reported this command.
+  function askForUpdate(): null {
+    if (!updates) throw new Error("This worker doesn't update itself: auto-update is off, or it isn't running from its own clone.");
+    void updates.check();
+    return null;
   }
 
   async function act(command: CloudCommandRow): Promise<string | null> {
@@ -158,29 +155,8 @@ export function createDaemon(deps: DaemonDeps) {
       return null;
     }
     if (kind === "run" || kind === "new_card") return startCard(command);
-    if (kind === "reply") {
-      const reply = replyBody(command);
-      if (!reply) throw new Error("That reply is empty.");
-      engine.reply(ownCard(reply.cardId).id, reply.text);
-      return reply.cardId;
-    }
-    if (kind === "answer") {
-      const answer = answerBody(command);
-      if (!answer) throw new Error("That answer is empty.");
-      const card = ownCard(answer.cardId);
-      // Read before the answer clears the request; written after it, so one that has gone leaves no grant behind.
-      const grant = answerGrant(answer, card.pending);
-      engine.answer(card.id, answer.allow, answer.answers, answer.pendingId);
-      if (grant) engine.grant(card.id, grant.directory, grant.scope);
-      return answer.cardId;
-    }
-    if (kind === "stop") {
-      const card = ownCard(stopBody(command)?.cardId);
-      await engine.stop(card.id);
-      return card.id;
-    }
-    if (kind === "mode") return setMode(command);
-    if (kind === "input") return sendInput(command);
+    if (kind === "update") return askForUpdate();
+    if (Object.hasOwn(cardCommands, kind)) return cardCommands[kind as keyof typeof cardCommands](command);
     throw new Error("This worker doesn't know that kind of request. Update it with weft-worker update.");
   }
 
@@ -204,6 +180,7 @@ export function createDaemon(deps: DaemonDeps) {
     cloning += 1;
     await runOne(command).catch((err: unknown) => log(`Weft Worker: ${(err as Error).message}`));
     cloning -= 1;
+    updates?.changed();
   }
 
   // Tells the cloud what became of the cards the last daemon died on, then carries on the ones it can. Publishing comes
@@ -240,10 +217,9 @@ export function createDaemon(deps: DaemonDeps) {
 
   let polling = false;
   let askAgain = false;
-  // The clone is changing under the daemon: commands wait in the queue for the code that will run them.
-  let updating = false;
   async function poll() {
-    if (updating) return;
+    // The clone is changing under the daemon: commands wait in the queue for the code that will run them.
+    if (updates?.updating()) return;
     // A ping during a pass may name a command that pass already missed, and starting a card can take minutes.
     if (polling) {
       askAgain = true;
@@ -256,6 +232,7 @@ export function createDaemon(deps: DaemonDeps) {
       askAgain = false;
       await poll();
     }
+    updates?.changed();
   }
 
   const status = (): WorkerStatus => (engine.live() ? "busy" : "online");
@@ -264,6 +241,7 @@ export function createDaemon(deps: DaemonDeps) {
     try {
       await reg.heartbeat(s);
       if (Date.now() - startedAt >= (deps.healthyMs ?? HEALTHY_AFTER_MS)) deps.update?.healthy();
+      updates?.changed();
     } catch (err) {
       log(`Weft Worker: heartbeat: ${(err as Error).message}`);
     }
@@ -284,32 +262,20 @@ export function createDaemon(deps: DaemonDeps) {
 
   const idle = () => !polling && cloning === 0 && !engine.live();
 
-  let checking = false;
-  async function checkForUpdate() {
-    if (!deps.update || checking) return;
-    checking = true;
-    try {
-      const { restart, note } = await deps.update.tick(() => {
-        updating = idle();
-        return updating;
-      });
-      await showBuild(note);
-      // Still updating: nothing may start between here and the exit.
-      if (restart) {
-        deps.update.restart();
-        return;
-      }
-    } catch (err) {
-      // Usually no network. The row keeps what it last said, and the next check tries again.
-      log(`Weft Worker: update check: ${(err as Error).message}`);
-    } finally {
-      checking = false;
-    }
-    if (updating) {
-      updating = false;
-      void poll();
-    }
-  }
+  updates = deps.update
+    ? createUpdateLoop({
+        update: deps.update,
+        idle,
+        holders: () => engine.holding(),
+        show: showBuild,
+        release: () => void poll(),
+        log,
+        everyMs: deps.updateMs,
+        pushedEveryMs: deps.pushedUpdateMs,
+        minFetchMs: deps.minFetchMs,
+        firstFetchMs: deps.firstFetchMs,
+      })
+    : null;
 
   // Starts the loops; the returned stop says the worker is offline on the way out.
   function start(): () => Promise<void> {
@@ -339,19 +305,23 @@ export function createDaemon(deps: DaemonDeps) {
     });
     const beatTimer = setInterval(() => void beat(), deps.beatMs ?? 20_000);
     const githubTimer = setInterval(() => void publishGithub(deps.github.status), deps.githubMs ?? GITHUB_CHECK_MS);
-    const updateTimer = setInterval(() => void checkForUpdate(), deps.updateMs ?? UPDATE_EVERY_MS);
+    updates?.start();
+    const leavePushes = updates && deps.listenForPushes?.(updates);
+    const leaveCards = updates && deps.onCardChange?.(updates.changed);
     const flushTimer = setInterval(() => void publisher.flush(), 1_000);
     return async () => {
       leave?.();
+      leavePushes?.();
+      leaveCards?.();
+      updates?.stop();
       clearInterval(pollTimer);
       clearInterval(beatTimer);
       clearInterval(githubTimer);
-      clearInterval(updateTimer);
       clearInterval(flushTimer);
       await publisher.flush();
       await beat("offline");
     };
   }
 
-  return { start, poll, runOne, checkForUpdate };
+  return { start, poll, runOne, checkForUpdate: () => updates?.check() };
 }

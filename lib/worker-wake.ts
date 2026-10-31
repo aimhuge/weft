@@ -5,6 +5,10 @@
 import { createHash } from "node:crypto";
 
 export const WAKE_EVENT = "wake";
+// A push to main (lib/worker-push.ts). One topic for every worker: main is public, so there's nothing to hide, and a
+// ping only makes a worker fetch origin, limited by lib/worker-update-loop.ts.
+export const PUSH_TOPIC = "worker-updates";
+export const PUSH_EVENT = "push";
 
 const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
 
@@ -31,21 +35,20 @@ export interface WakeClient {
   removeChannel(channel: WakeChannel): Promise<unknown>;
 }
 
-// Joins the worker's topic; the returned function leaves it. Node before 22 has no WebSocket, so the join can throw:
-// the worker then just stays on its fast poll.
-export function listenForWakes(client: WakeClient, key: string, hooks: WakeHooks, log: (msg: string) => void): () => void {
+// Node before 22 has no WebSocket, so the join can throw: the worker then just stays on its faster pace.
+function join(client: WakeClient, topic: string, event: string, label: string, hooks: WakeHooks, log: (msg: string) => void): () => void {
   let left = false;
   try {
     const channel = client
-      .channel(wakeTopic(key))
-      .on("broadcast", { event: WAKE_EVENT }, () => hooks.ping())
+      .channel(topic)
+      .on("broadcast", { event }, () => hooks.ping())
       .subscribe((status, err) => {
         if (left) return;
         if (status === "SUBSCRIBED") {
-          log("Weft Worker: wake socket joined");
+          log(`Weft Worker: ${label} socket joined`);
           hooks.up();
         } else {
-          log(`Weft Worker: wake socket: ${status}${err ? ` (${err.message})` : ""}`);
+          log(`Weft Worker: ${label} socket: ${status}${err ? ` (${err.message})` : ""}`);
           hooks.down();
         }
       });
@@ -54,7 +57,13 @@ export function listenForWakes(client: WakeClient, key: string, hooks: WakeHooks
       void client.removeChannel(channel).catch(() => {});
     };
   } catch (err) {
-    log(`Weft Worker: no wake socket, polling instead: ${(err as Error).message}`);
+    log(`Weft Worker: no ${label} socket, polling instead: ${(err as Error).message}`);
     return () => {};
   }
 }
+
+// Joins the worker's own topic; the returned function leaves it.
+export const listenForWakes = (client: WakeClient, key: string, hooks: WakeHooks, log: (msg: string) => void) => join(client, wakeTopic(key), WAKE_EVENT, "wake", hooks, log);
+
+// Joins the shared topic for pushes to main, on the same socket.
+export const listenForPushes = (client: WakeClient, hooks: WakeHooks, log: (msg: string) => void) => join(client, PUSH_TOPIC, PUSH_EVENT, "update", hooks, log);

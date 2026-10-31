@@ -2,14 +2,14 @@ import { connection } from "next/server";
 import { fail, guard } from "@/lib/guard";
 import { setWorkerFolder, workerFolders } from "@/lib/settings";
 import { requireWorker } from "@/lib/worker-handoff";
-import { commandResult, enrolToken, listWorkers, removeWorker, sendClone, sendGithubLogin, sendLogin, sendRun } from "@/lib/workers-account";
+import { commandResult, enrolToken, listWorkers, removeWorker, sendClone, sendGithubLogin, sendLogin, sendRun, sendUpdate } from "@/lib/workers-account";
 
 // Settings → Sync → Workers (components/WorkerSettings.tsx, lib/use-workers.ts): GET lists the workspace's Weft
 // Workers, POST { action: "token" } makes a one-time enrolment token, POST { action: "run", workerId, folder,
 // prompt, repo? } queues a run on one, POST { action: "folder", folder, on } switches a project's new cards to
 // your worker or back to this machine (lib/worker-handoff.ts), POST { action: "login", workerId, token } sends a
 // Claude token sealed to that worker (lib/worker-seal.ts), POST { action: "github", workerId, token } does the same
-// for GitHub, POST { action: "clone", workerId, repo } queues a clone of owner/name, GET ?command= says how a command
+// for GitHub, POST { action: "clone", workerId, repo } queues a clone of owner/name, POST { action: "update", workerId } asks it to look for a new build, GET ?command= says how a command
 // went, GET ?folders=1 lists the switched ones without asking Supabase, and DELETE ?id= removes one.
 
 export async function GET(req: Request) {
@@ -48,7 +48,8 @@ export async function POST(req: Request) {
     if (body.action === "login") return Response.json(await sendLogin({ workerId: str("workerId"), token: str("token") }));
     if (body.action === "github") return Response.json(await sendGithubLogin({ workerId: str("workerId"), token: str("token") }));
     if (body.action === "clone") return Response.json(await sendClone({ workerId: str("workerId"), repo: str("repo") }));
-    return Response.json({ error: "Say token, run, login, github, clone or folder." }, { status: 400 });
+    if (body.action === "update") return Response.json(await sendUpdate({ workerId: str("workerId") }));
+    return Response.json({ error: "Say token, run, login, github, clone, update or folder." }, { status: 400 });
   } catch (err) {
     return fail(err, 502);
   }

@@ -84,7 +84,10 @@ export interface InputPayload {
   ms?: number;
 }
 
-export type CloudCommandKind = "new_card" | "reply" | "answer" | "stop" | "run" | "login" | "github_login" | "clone" | "mode" | "input";
+// Update now: nothing to carry, only the ask.
+export type UpdatePayload = Record<string, never>;
+
+export type CloudCommandKind = "new_card" | "reply" | "answer" | "stop" | "run" | "login" | "github_login" | "clone" | "mode" | "input" | "update";
 
 // public.cloud_commands.
 export interface CloudCommandRow {
@@ -95,7 +98,7 @@ export interface CloudCommandRow {
   // The Mac that runs it (cloud_cards.owner_device) and the folder it runs in (cloud_cards.folder).
   target_device: string;
   folder: string;
-  payload: NewCardPayload | ReplyPayload | AnswerPayload | StopPayload | LoginPayload | ClonePayload | ModePayload | InputPayload;
+  payload: NewCardPayload | ReplyPayload | AnswerPayload | StopPayload | LoginPayload | ClonePayload | ModePayload | InputPayload | UpdatePayload;
   status: CloudCommandStatus;
   card_id: string | null;
   error: string | null;

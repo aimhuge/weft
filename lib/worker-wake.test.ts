@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { listenForWakes, wakeTopic, WAKE_EVENT, type WakeChannel, type WakeClient } from "./worker-wake";
+import { listenForPushes, listenForWakes, PUSH_EVENT, PUSH_TOPIC, wakeTopic, WAKE_EVENT, type WakeChannel, type WakeClient } from "./worker-wake";
 
 const KEY = "wwk_test";
 
@@ -114,5 +114,17 @@ describe("listenForWakes", () => {
     expect(log).toHaveBeenCalledWith("Weft Worker: no wake socket, polling instead: Node.js detected but native WebSocket not found.");
     expect(h.up).not.toHaveBeenCalled();
     expect(leave).not.toThrow();
+  });
+});
+
+describe("listenForPushes", () => {
+  it("joins the shared topic and passes a ping on", () => {
+    const f = fakeClient();
+    const h = hooks();
+    listenForPushes(f.client, h, vi.fn());
+    expect(f.channel).toHaveBeenCalledWith(PUSH_TOPIC);
+    expect(f.held.event).toBe(PUSH_EVENT);
+    f.held.ping?.();
+    expect(h.ping).toHaveBeenCalledOnce();
   });
 });

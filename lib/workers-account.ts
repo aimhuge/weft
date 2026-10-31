@@ -8,7 +8,7 @@ import { newCardCommand, type NewCommand } from "./cloud-commands";
 import { syncOrgId } from "./cloud-sync";
 import { deviceId } from "./device-id";
 import type { CommandResult } from "./worker-command-wait";
-import { cloneCommand, githubLoginCommand, loginCommand, runCommand, workerDevice } from "./worker-commands";
+import { cloneCommand, githubLoginCommand, loginCommand, runCommand, updateCommand, workerDevice } from "./worker-commands";
 import type { GithubState } from "./worker-github";
 
 export interface WorkerView {
@@ -223,6 +223,15 @@ export async function sendClone(body: { workerId: string; repo: string }, client
   if (!row) throw new Error("Use owner/name, like aimhuge/weft.");
   const { data, error } = await client.from("cloud_commands").insert(row).select("id").single<{ id: string }>();
   if (error) throw new Error(`Couldn't send the clone: ${error.message}`);
+  return { commandId: data.id };
+}
+
+// Asks one of your workers to look for a new build now. A live card still holds it, and its row says which.
+export async function sendUpdate(body: { workerId: string }, client: SupabaseClient = accountClient()): Promise<{ commandId: string }> {
+  const who = await session(client);
+  if (!who) throw new Error("Sign in to Weft to update a worker.");
+  const { data, error } = await client.from("cloud_commands").insert(updateCommand({ orgId: who.org, workerId: body.workerId })).select("id").single<{ id: string }>();
+  if (error) throw new Error(`Couldn't ask it to update: ${error.message}`);
   return { commandId: data.id };
 }
 

@@ -72,6 +72,10 @@ export function loginCommand(target: { orgId: string; workerId: string; publicKe
   return { org_id: target.orgId, kind: "login", target_device: workerDevice(target.workerId), folder: "-", payload: { token: seal(target.publicKey, clean, LOGIN_PURPOSE) } };
 }
 
+// The `update` command: Settings → Sync → Workers' Update now. It carries nothing, so it can only ask for the check the
+// worker runs by itself. folder is unused; the column wants a value.
+export const updateCommand = (target: { orgId: string; workerId: string }): NewCommand => ({ org_id: target.orgId, kind: "update", target_device: workerDevice(target.workerId), folder: "-", payload: {} });
+
 // The `github_login` command: a GitHub token sealed the same way, with its own purpose.
 export function githubLoginCommand(target: { orgId: string; workerId: string; publicKey: string }, token: string): NewCommand | null {
   const clean = token.trim();
