@@ -43,6 +43,18 @@ function fakeReg() {
   return { putCard, putItems, reg: { putCard, putItems } };
 }
 
+describe("touch", () => {
+  it("sends the card row and none of its items", async () => {
+    const putCard = vi.fn(() => Promise.resolve());
+    const putItems = vi.fn(() => Promise.resolve());
+    const publisher = createPublisher({ putCard, putItems }, fakeSource({ "card-1": card() }, { "card-1": [toolItem()] }), vi.fn());
+    publisher.touch("card-1");
+    await publisher.flush();
+    expect(putCard).toHaveBeenCalledTimes(1);
+    expect(putItems).not.toHaveBeenCalled();
+  });
+});
+
 describe("the publisher", () => {
   it("sends the card when it hears one", async () => {
     const { putCard, putItems, reg } = fakeReg();

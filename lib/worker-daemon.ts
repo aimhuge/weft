@@ -15,6 +15,7 @@ import { HEALTHY_AFTER_MS, UPDATE_EVERY_MS } from "./worker-update";
 import type { Registry, WorkerStatus } from "./worker-registry";
 import type { Tick } from "./worker-update";
 import type { WakeHooks } from "./worker-wake";
+import type { Recovered } from "./worker-recover";
 
 // The engine, as the daemon uses it (lib/card-starter.ts, lib/runner.ts, lib/store.ts): injected so tests don't run a CLI.
 export interface Engine {
@@ -25,9 +26,12 @@ export interface Engine {
   grant(cardId: string, directory: string, scope: GrantScope): void;
   stop(cardId: string): Promise<void>;
   getCard(cardId: string): Card | undefined;
-  busy(): boolean;
-  // A turn is really running now. `busy` reads the store, where a card a dead daemon left in Running stays there.
+  // A turn is really running now, in a session this process holds (a card waiting on a permission counts).
   live(): boolean;
+  // The cards the last daemon died on, their threads tidied (lib/worker-recover.ts).
+  recover(): Recovered;
+  // Carries on the turns it can (lib/resume.ts).
+  resume(): void;
 }
 
 export interface DaemonDeps {
@@ -179,8 +183,27 @@ export function createDaemon(deps: DaemonDeps) {
     cloning -= 1;
   }
 
+  // Tells the cloud what became of the cards the last daemon died on, then carries on the ones it can. Publishing comes
+  // first so a turn that can't start still shows as stopped. Commands wait for this: a reply queued while the worker was
+  // down must not land on a card that's about to be resumed.
+  async function recover() {
+    try {
+      const { cut, stopped } = engine.recover();
+      cut.forEach((id) => publisher.track(id));
+      stopped.forEach((id) => publisher.touch(id));
+      if (cut.length) log(`Weft Worker: ${cut.length} turn(s) cut off by the last restart`);
+      await publisher.flush();
+      engine.resume();
+    } catch (err) {
+      log(`Weft Worker: recovering cards: ${(err as Error).message}`);
+    }
+  }
+
+  let recovering: Promise<void> | null = null;
+
   // One read of the queue. A clone can take minutes, and a reply or a Stop for a running card shouldn't wait behind it.
   async function pass() {
+    if (recovering) await recovering;
     try {
       for (const command of await reg.pending()) {
         if (command.kind === "clone") void cloneOne(command);
@@ -211,7 +234,7 @@ export function createDaemon(deps: DaemonDeps) {
     }
   }
 
-  const status = (): WorkerStatus => (engine.busy() ? "busy" : "online");
+  const status = (): WorkerStatus => (engine.live() ? "busy" : "online");
   const startedAt = Date.now();
   const beat = async (s: WorkerStatus = status()) => {
     try {
@@ -266,6 +289,7 @@ export function createDaemon(deps: DaemonDeps) {
 
   // Starts the loops; the returned stop says the worker is offline on the way out.
   function start(): () => Promise<void> {
+    recovering = recover().finally(() => (recovering = null));
     void beat();
     void poll();
     void publishGithub(deps.github.status);

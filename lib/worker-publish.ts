@@ -126,6 +126,8 @@ export function createPublisher(reg: Pick<Registry, "putCard" | "putItems">, sou
     hear,
     flush,
     nameFolder: (cardId: string, folder: string) => void folders.set(cardId, folder),
+    // Marks a card so the next flush sends its row, for a card whose row may be out of date but whose items aren't.
+    touch: (cardId: string) => void (mark(cardId).card = true),
     // Marks a card so the next flush sends it whole (the card row, then every item it has).
     track(cardId: string) {
       const d = mark(cardId);

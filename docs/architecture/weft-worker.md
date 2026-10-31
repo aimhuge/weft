@@ -36,7 +36,7 @@ One worker per box, no worker picker on the board. The first box is a Mac mini (
   heartbeats every 20 s.
 - **Publishing:** `lib/worker-publish.ts` hears the engine's bus and ships cards and items through `worker_put_card`
   and `worker_put_items`, built like the Mac's rows (`lib/cloud-sync-rows.ts` scrub and splitToolResult, redaction).
-  It keeps its queue in memory, and sends pages and images up as blobs first.
+  It keeps its queue in memory ([after a restart](#after-a-restart) re-sends what a dead daemon lost), and sends pages and images up as blobs first.
 - **Repos:** a command's folder is a project name under the work root, `~/.weft-worker/work/<folder>`
   (`WEFT_WORKER_ROOT` overrides it), not `~/work`: a Mac often has a `~/work` of its own. A missing folder is cloned
   from the run's git URL (https or ssh only). An existing one is used as it is, never pulled. Cards run in the
@@ -93,10 +93,9 @@ exit 0 ──▶ launchd or systemd starts the new code
 up 60 s and a heartbeat landed ──▶ update-trial deleted
 ```
 
-- **What counts as busy:** `engine.live`, the runner's real sessions (`busyCards`), not the store's `running` column: a
-  daemon that died mid-turn leaves its card there for good, and that would hold updates back forever. A card waiting on
-  a permission is mid-turn, so it holds the update too, and a forgotten question holds it until someone answers. Its row
-  says so. An idle card's CLI does get cut, and resumes from its saved session on the next message, as after a sign-in.
+- **What counts as busy:** `engine.live`, the runner's real sessions (`busyCards`), for both the update and the row's
+  `busy` status. A card waiting on a permission is mid-turn, so it holds the update too, and a forgotten question holds
+  it until someone answers. Its row says so. An idle card's CLI does get cut, and resumes from its saved session on the next message, as after a sign-in.
 - **Rollback lives outside the clone.** Code that dies at import can't undo itself, so the wrapper runs `rollback.sh`
   before each start. That's a copy in the worker's home, sealed from threads, refreshed only after a commit proves it
   loads. It counts starts in `update-trial.starts`, and past three it resets to the commit in `update-trial`.
@@ -110,6 +109,35 @@ up 60 s and a heartbeat landed ──▶ update-trial deleted
 - **Not updated by this:** the wrapper and the service definition. `weft-worker update` (which re-runs the installer) rewrites
   those, and it's also how a box installed before this gets the updater. A daemon started by hand exits after an update
   and nothing brings it back.
+
+### After a restart
+
+A restart ends every turn on the box, whether it's an update, a sign-in or a crash. On start, before it reads a single
+command, the daemon does what a Mac does and tells the cloud (`lib/worker-recover.ts`, `recover` in `lib/worker-daemon.ts`).
+
+```
+lib/store.ts loads     Running or pending ──▶ Review, pending cleared, CLOSED_LINE, interrupted (up to MAX_RESUMES)
+                         │ no bus event, so without the rest the cloud row stays Running, "Thinking…", for good
+recoverCards           undecided permission rows closed; a card that stays stopped gets a note in its thread
+                         │ interrupted: whole thread queued. CLOSED_LINE only: the card row
+publisher.flush        the web and desktop boards see Review, and Allow goes away
+                         │
+resumeInterrupted      lib/resume.ts, as on a Mac: RESUME_TEXT into the saved session, resumes + 1
+                         │
+commands               a reply queued while the worker was down lands after the resume, not beside it
+```
+
+- **The store already recovers; the gap was the cloud.** `loadState` runs here as on a Mac, so `column: running` in memory
+  means a live turn after a load. On a Mac the board reads that same memory, so no event is needed. A worker's board reads
+  `cloud_cards`, which only hears the bus, and `resumeInterrupted` is called from `lib/copilot.ts`, which a worker doesn't boot.
+- **Who resumes:** what lib/resume.ts decides. A card with a session that isn't archived goes on, up to `MAX_RESUMES` in a
+  row; your own message resets the count. No age limit, as on a Mac: a card cut off days ago carries on too.
+- **Stale permissions:** the request lived in the dead process, so an undecided row is closed as `deny`, which reads
+  "Denied" in the thread. A turn that still needs it asks again, as a request that can be answered. An `answer` already in
+  the queue fails with "That request isn't waiting anymore."
+- **Repeats by design:** a card keeps `CLOSED_LINE` until its next turn, so its row goes up on every restart. That's what
+  repairs a row a failed publish left wrong. `interrupted` cards aren't retried that way, but a resumed turn publishes itself.
+- **Not covered:** a card whose row is stale but whose card this worker's store no longer has.
 
 ### Wake-ups
 
@@ -224,6 +252,19 @@ card.page and the open_url item carry blob:sha256:<hex>#anchor (lib/worker-publi
   browser tools say they need the desktop app. `WORKER_BROWSER_PROMPT` replaces `BROWSER_PROMPT` in the thread's prompt,
   so a thread knows the pane works and never tells you to open a file on the box. An image in a reply (`![…](/abs/x.png)`)
   goes up the same way.
+- **Writing a page asks nobody.** `acceptEdits` only writes without asking inside the CLI's working directories: its cwd
+  and `additionalDirectories`. The show folder is neither, because a card's cwd is its checkout. Nothing on the desktop
+  exempts it: an Accept edits card there asks about `~/.weft/show` too. A desktop card goes through because it runs in
+  Auto or YOLO, or waits for you. A worker defaults to Accept edits, never runs YOLO, and has nobody at the box, so
+  `sessionDirs` (`lib/worker-pane.ts`) adds `SHOW_DIR` to `additionalDirectories` on a worker only. It makes the folder
+  first, because the CLI drops a directory that doesn't exist and asks again. Reads and edits of a page stop asking too.
+  Spares get it as well, since it's set where a session's options are built (`lib/runner-session.ts`).
+  - **Nothing else opens.** Only `data/show` is added, not its parent, and every path past it stays with the secret guard,
+    which runs first in every mode and follows links ([What's sealed on a worker](#whats-sealed-on-a-worker)). So
+    `show/../../worker.json`, a link in `show` to a sealed file, `data/board.json` and `data/showcase` are all refused.
+    `lib/secret-guard-worker.test.ts` holds that line.
+  - **Ask me still asks.** A card in `default` mode prompts for a page, because working directories don't change that
+    mode. It's the mode you picked, so it stays that way; a card run in it on a worker waits for an answer on the board.
 - **Only Claude Code and puku-cli for now.** Their MCP servers run in the daemon's process. Codex and Goose reach Weft's
   tools over the local server (`lib/mcp-bridge.ts`), which a worker doesn't run, so they have no `open_url` yet.
 - **What may go up** (`workerMayUpload`, `lib/worker-blobs.ts`). A Mac's rule is "under home and not a known secret". That

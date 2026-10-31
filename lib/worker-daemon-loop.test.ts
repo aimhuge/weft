@@ -22,6 +22,36 @@ describe("polling", () => {
   });
 });
 
+describe("recovering after a restart", () => {
+  it("publishes what it found before it resumes, and reads commands last", async () => {
+    const d = makeDeps();
+    const order: string[] = [];
+    d.recover.mockReturnValue({ cut: ["a"], stopped: ["b"] });
+    d.flush.mockImplementationOnce(() => (order.push("flush"), Promise.resolve()));
+    d.resume.mockImplementation(() => void order.push("resume"));
+    d.pending.mockImplementation(() => (order.push("poll"), Promise.resolve([])));
+    const stop = d.daemon.start();
+    await vi.waitFor(() => expect(order).toContain("poll"));
+    await stop();
+    expect(d.track).toHaveBeenCalledWith("a");
+    expect(d.touch).toHaveBeenCalledWith("b");
+    expect(order.slice(0, 3)).toEqual(["flush", "resume", "poll"]);
+    expect(d.log).toHaveBeenCalledWith("Weft Worker: 1 turn(s) cut off by the last restart");
+  });
+
+  it("still reads commands when recovering fails", async () => {
+    const d = makeDeps();
+    d.recover.mockImplementation(() => {
+      throw new Error("bad board");
+    });
+    const stop = d.daemon.start();
+    await vi.waitFor(() => expect(d.pending).toHaveBeenCalled());
+    await stop();
+    expect(d.log).toHaveBeenCalledWith("Weft Worker: recovering cards: bad board");
+    expect(d.resume).not.toHaveBeenCalled();
+  });
+});
+
 describe("start", () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
@@ -44,9 +74,9 @@ describe("start", () => {
     await stop();
   });
 
-  it("heartbeats busy while the engine is busy", async () => {
+  it("heartbeats busy only while a session is really running", async () => {
     const d = makeDeps();
-    d.busy.mockReturnValue(true);
+    d.live.mockReturnValue(true);
     const stop = d.daemon.start();
     await vi.advanceTimersByTimeAsync(0);
     expect(d.heartbeat).toHaveBeenCalledWith("busy");

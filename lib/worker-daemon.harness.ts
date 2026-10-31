@@ -4,6 +4,7 @@ import { vi } from "vitest";
 import { createDaemon, type Engine } from "./worker-daemon";
 import type { GithubStatus } from "./worker-github";
 import type { Publisher } from "./worker-publish";
+import type { Recovered } from "./worker-recover";
 import type { Registry } from "./worker-registry";
 import type { Sealed } from "./worker-seal";
 import type { Card } from "./types";
@@ -44,10 +45,11 @@ export function fakeEngine(cards: Record<string, Card> = { "card-1": card() }) {
   const grant = vi.fn<Engine["grant"]>();
   const stop = vi.fn<(cardId: string) => Promise<void>>(() => Promise.resolve());
   const getCard = vi.fn<(cardId: string) => Card | undefined>((id: string) => cards[id]);
-  const busy = vi.fn<() => boolean>(() => false);
   const live = vi.fn<() => boolean>(() => false);
-  const engine: Engine = { start, reply, answer, grant, stop, getCard, busy, live };
-  return { engine, start, reply, answer, grant, stop, getCard, busy, live };
+  const recover = vi.fn<() => Recovered>(() => ({ cut: [], stopped: [] }));
+  const resume = vi.fn<() => void>();
+  const engine: Engine = { start, reply, answer, grant, stop, getCard, live, recover, resume };
+  return { engine, start, reply, answer, grant, stop, getCard, live, recover, resume };
 }
 
 export function fakeReg() {
@@ -66,9 +68,10 @@ export function fakeReg() {
 export function fakePublisher() {
   const nameFolder = vi.fn();
   const track = vi.fn();
+  const touch = vi.fn();
   const flush = vi.fn(() => Promise.resolve());
-  const publisher = { nameFolder, track, flush, hear: vi.fn() } as unknown as Publisher;
-  return { publisher, nameFolder, track, flush };
+  const publisher = { nameFolder, track, touch, flush, hear: vi.fn() } as unknown as Publisher;
+  return { publisher, nameFolder, track, touch, flush };
 }
 
 export const fakeGithub = () => ({

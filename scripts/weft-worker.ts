@@ -61,6 +61,8 @@ async function loadEngine() {
     import("../lib/show-dir"),
     import("../lib/worker-pane"),
     import("../lib/runner-state"),
+    import("../lib/worker-recover"),
+    import("../lib/resume"),
   ]);
   return { store, parts };
 }
@@ -75,7 +77,7 @@ async function startCommand() {
   const config = readWorkerConfig(home);
   if (!config) throw new Error("This box isn't enrolled yet. Run: weft-worker enrol <token>");
   const { store, parts } = await loadEngine();
-  const [{ startFeatureCard }, runner, pending, { subscribe }, { createDaemon }, { createPublisher }, paths, github, folderGrant, { createBlobStore }, { SHOW_DIR }, { setPageUpload }, { busyCards }] = parts;
+  const [{ startFeatureCard }, runner, pending, { subscribe }, { createDaemon }, { createPublisher }, paths, github, folderGrant, { createBlobStore }, { SHOW_DIR }, { setPageUpload }, { busyCards }, { recoverCards }, { resumeInterrupted }] = parts;
   const reg = registry(rpc, config.key);
   // The public half goes on the worker's row, so Settings → Sync → Workers can seal a Claude token to this box.
   const keys = workerSealKeys(home, newSealKeys);
@@ -98,8 +100,9 @@ async function startCommand() {
       grant: folderGrant.applyFolderGrant,
       stop: (id) => runner.stop(id),
       getCard: store.getCard,
-      busy: () => store.listCards().some((c) => c.column === "running"),
       live: () => busyCards().length > 0,
+      recover: () => recoverCards(store),
+      resume: resumeInterrupted,
     },
     update: updatesOn(home, process.cwd()) ? { ...createUpdater({ home, dir: process.cwd() }), restart: () => restart() } : undefined,
     async checkout(folder, repo) {
