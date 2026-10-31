@@ -103,8 +103,10 @@ export function isSecretFile(file: string, dataDir = DATA_DIR, dotGlob = false):
 // The data dir's subfolders a thread may read and write: `show/` holds the pages threads render in
 // the pane (plans, commits, how-tos, answers). It is the one place the BROWSER_PROMPT tells a
 // thread to write, so sealing it made the pane's own pages unreadable and unwritable (2026-10-28).
-// Everything else in the data dir — threads/, vault/, apps/, attachments/ — stays sealed.
-export const DATA_OPEN = /^show(\/.*)?$/i;
+// `scout/` is the refactor scout's cache (lib/scout.ts): findings about code, which /weft:done reads
+// and writes (2026-10-31). Everything else in the data dir — threads/, vault/, apps/ — stays sealed;
+// attachments/ opens one file at a time, to the card whose user pasted it (lib/secret-guard-pasted.ts).
+export const DATA_OPEN = /^(show|scout)(\/.*)?$/i;
 
 // Whether a path is the data dir or inside it, save for the folders threads may use. A path that
 // names the dir, or that reaches it by walking up (`~/.weft/threads`), is the data dir.
