@@ -8,7 +8,9 @@
 // (components/WorkerOpenCard.tsx), with orgId null: it frames through its own server, more tightly, because a frame there
 // shares the board window's session (app/api/worker-board/page/[sha]), and that's why it never frames a public site.
 import type { SharePane } from "@/lib/share-types";
+import type { ScreenInput } from "@/lib/worker-commands";
 import Icon from "../Icon";
+import { WorkerScreen } from "./WorkerScreen";
 
 const NAV = "rounded-md p-1.5 text-muted disabled:opacity-30";
 const SANDBOX = "allow-scripts allow-popups allow-forms";
@@ -39,7 +41,8 @@ function Snapshot({ src, note }: { src?: string; note: string }) {
   );
 }
 
-function PaneBody({ orgId, pane, thumbUrl }: { orgId: string | null; pane: SharePane | null; thumbUrl?: string }) {
+function PaneBody({ orgId, pane, thumbUrl, onScreenInput }: { orgId: string | null; pane: SharePane | null; thumbUrl?: string; onScreenInput?: (input: ScreenInput) => Promise<void> }) {
+  if (pane?.kind === "screen") return <WorkerScreen pane={pane} onInput={onScreenInput} />;
   if (pane?.kind === "blob") {
     const sha = pane.ref.replace(/^blob:sha256:/, "");
     const src = orgId ? `/api/web-board/${orgId}/page/${sha}${pane.hash}` : `/api/worker-board/page/${sha}${pane.hash}`;
@@ -53,7 +56,8 @@ function PaneBody({ orgId, pane, thumbUrl }: { orgId: string | null; pane: Share
 
 // onClose: the toolbar's X, left out where the thread beside it carries the close (WebThreadPanel, so a phone, where
 // the pane is hidden, still has one).
-export function WebPane({ orgId, pane, thumbUrl, onClose }: { orgId: string | null; pane: SharePane | null; thumbUrl?: string; onClose?: () => void }) {
+// onScreenInput: taps on a worker's live screen, where this board can send them (the desktop's).
+export function WebPane({ orgId, pane, thumbUrl, onClose, onScreenInput }: { orgId: string | null; pane: SharePane | null; thumbUrl?: string; onClose?: () => void; onScreenInput?: (input: ScreenInput) => Promise<void> }) {
   return (
     <section aria-label="Browser pane" className="relative hidden min-w-0 flex-1 flex-col border-l border-line bg-panel md:flex">
       <div className="flex items-center gap-1 border-b border-line px-2 py-1.5">
@@ -85,7 +89,7 @@ export function WebPane({ orgId, pane, thumbUrl, onClose }: { orgId: string | nu
         )}
       </div>
       <div className="relative min-h-0 flex-1 bg-canvas">
-        <PaneBody orgId={orgId} pane={pane} thumbUrl={thumbUrl} />
+        <PaneBody orgId={orgId} pane={pane} thumbUrl={thumbUrl} onScreenInput={onScreenInput} />
       </div>
     </section>
   );

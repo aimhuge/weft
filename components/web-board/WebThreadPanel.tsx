@@ -40,7 +40,11 @@ export function WebThreadPanel({
   onAnswer: (allow: boolean, answers?: Record<string, string>, reply?: QuestionReply, grant?: GrantScope) => void;
 }) {
   // The card's own page when the thread loaded so far doesn't reach its last open_url (newest 50 first).
-  const pane = useMemo(() => paneFor(shown) ?? paneFromUrl(card.page ?? ""), [shown, card.page]);
+  // A worker's live screen is only ever on the card, so it wins while it's the card's page.
+  const pane = useMemo(() => {
+    const page = paneFromUrl(card.page ?? "");
+    return page?.kind === "screen" ? page : (paneFor(shown) ?? page);
+  }, [shown, card.page]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

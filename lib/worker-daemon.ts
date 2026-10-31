@@ -7,7 +7,7 @@
 // and it asks at once. It still polls: every 30 s to catch a missed ping, and every 3 s while the socket is down.
 import { answerBody, answerGrant, newCardBody, replyBody, stopBody, type CloudCommandRow, type GrantScope } from "./cloud-commands";
 import type { Card } from "./types";
-import { cloneBody, runBody } from "./worker-commands";
+import { cloneBody, inputBody, modeBody, runBody, type CardMode, type ScreenInput } from "./worker-commands";
 import { explainClone, type GithubStatus } from "./worker-github";
 import type { Publisher } from "./worker-publish";
 import { sealedOf, type Sealed } from "./worker-seal";
@@ -25,6 +25,10 @@ export interface Engine {
   // This card / Always on this worker (lib/folder-grant.ts).
   grant(cardId: string, directory: string, scope: GrantScope): void;
   stop(cardId: string): Promise<void>;
+  // The thread's mode picker (lib/runner.ts setPermissionMode), mid-turn included.
+  setMode(cardId: string, mode: CardMode): void;
+  // A tap or swipe on the device a card is watching (lib/simulator-input.ts).
+  input(input: ScreenInput): Promise<unknown>;
   getCard(cardId: string): Card | undefined;
   // A turn is really running now, in a session this process holds (a card waiting on a permission counts).
   live(): boolean;
@@ -121,6 +125,23 @@ export function createDaemon(deps: DaemonDeps) {
     return card.id;
   }
 
+  function setMode(command: CloudCommandRow): string {
+    const body = modeBody(command);
+    if (!body) throw new Error("That mode can't be set on a worker.");
+    const card = ownCard(body.cardId);
+    if (card.backend === "codex" && card.sessionId) throw new Error("Codex keeps its sandbox mode for this session.");
+    engine.setMode(card.id, body.mode);
+    return card.id;
+  }
+
+  async function sendInput(command: CloudCommandRow): Promise<string> {
+    const body = inputBody(command);
+    if (!body) throw new Error("That tap is empty.");
+    const card = ownCard(body.cardId);
+    await engine.input(body.input);
+    return card.id;
+  }
+
   async function act(command: CloudCommandRow): Promise<string | null> {
     const kind: string = command.kind;
     if (kind === "login") {
@@ -158,6 +179,8 @@ export function createDaemon(deps: DaemonDeps) {
       await engine.stop(card.id);
       return card.id;
     }
+    if (kind === "mode") return setMode(command);
+    if (kind === "input") return sendInput(command);
     throw new Error("This worker doesn't know that kind of request. Update it with weft-worker update.");
   }
 
@@ -206,7 +229,8 @@ export function createDaemon(deps: DaemonDeps) {
     if (recovering) await recovering;
     try {
       for (const command of await reg.pending()) {
-        if (command.kind === "clone") void cloneOne(command);
+        // A tap shouldn't wait behind a card that's starting, and the person who made it is watching the screen.
+        if (command.kind === "clone" || command.kind === "input") void cloneOne(command);
         else await runOne(command);
       }
     } catch (err) {

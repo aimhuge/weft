@@ -106,7 +106,10 @@ export type SharePane =
   // A public site: framed directly (it may refuse to be framed; the viewer offers a link).
   | { kind: "site"; url: string; label: string }
   // Only reachable on the owner's Mac (localhost, a file that didn't upload): the viewer shows the card's pane capture.
-  | { kind: "local"; url: string; label: string };
+  | { kind: "local"; url: string; label: string }
+  // A worker's device, live: frames arrive on a Realtime Broadcast topic (lib/worker-screen.ts). Never in a thread item,
+  // only in card.page, so a share link can't carry it.
+  | { kind: "screen"; url: string; label: string; token: string; device: string; until: number };
 
 // GET /api/s/[id]/live?after=<seq> (new items) or ?before=<seq> (older page), as the viewer polls it.
 // Items are newest first like the thread route, already redacted (lib/share-redact.ts) and with blob refs left in;
@@ -128,6 +131,27 @@ export interface ShareLive {
 // How often the viewer polls while its tab is visible.
 export const SHARE_POLL_MS = 4000;
 
+// A worker's live screen as card.page names it. The token is the channel's secret: the channel is public, because a
+// worker has no session, so whoever can read the card's row can watch, and nobody else (weft-worker.md#the-live-screen).
+const SCREEN_PAGE = /^weft-screen:([0-9a-f]{32})\?(.*)$/;
+export const SCREEN_EVENT = "frame";
+export const screenTopic = (token: string) => `worker-screen:${token}`;
+
+export function screenPage(token: string, d: { id: string; name: string }, until: number) {
+  return `weft-screen:${token}?${new URLSearchParams({ device: d.id, name: d.name, until: String(until) }).toString()}`;
+}
+
+function screenPane(url: string): SharePane | null {
+  const found = SCREEN_PAGE.exec(url);
+  if (!found) return null;
+  const [, token = "", query] = found;
+  const params = new URLSearchParams(query);
+  const device = params.get("device");
+  const until = Number(params.get("until"));
+  if (!device || !Number.isFinite(until)) return null;
+  return { kind: "screen", url, label: params.get("name") || device, token, device, until };
+}
+
 const BLOB_PAGE = /^(blob:sha256:[0-9a-f]{64})(#.*)?$/;
 const LOCAL = /^(file:|\/)|^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(:\d+)?(\/|$)/i;
 
@@ -145,6 +169,7 @@ function pageLabel(url: string): string {
 export function paneFromUrl(raw: string): SharePane | null {
   const url = raw.trim();
   if (!url) return null;
+  if (url.startsWith("weft-screen:")) return screenPane(url);
   const blob = BLOB_PAGE.exec(url);
   if (blob) return { kind: "blob", ref: blob[1] as BlobRef, hash: blob[2] ?? "", label: "Page" };
   if (url.startsWith(BLOB_REF_PREFIX)) return null;

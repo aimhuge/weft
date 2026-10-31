@@ -25,13 +25,18 @@ const watches = globalSingleton("__weftSimulatorWatches", () => new Map<string, 
 
 export const watchDir = (d: Device) => path.join(SHOW_DIR, "simulator", d.id.replace(/[^\w.-]/g, "_"));
 
-// One frame, written beside the page; written to a temp file first so the page never loads half a JPEG.
-export async function writeFrame(d: Device, png?: Buffer) {
-  const dir = watchDir(d);
-  const jpg = await sharp(png ?? (await screenshot(d)))
+// The device's screen now, small enough to send.
+export async function frameJpeg(d: Device, png?: Buffer) {
+  return sharp(png ?? (await screenshot(d)))
     .resize({ width: FRAME_WIDTH, withoutEnlargement: true })
     .jpeg({ quality: 70 })
     .toBuffer();
+}
+
+// One frame, written beside the page; written to a temp file first so the page never loads half a JPEG.
+export async function writeFrame(d: Device, png?: Buffer) {
+  const dir = watchDir(d);
+  const jpg = await frameJpeg(d, png);
   fs.mkdirSync(dir, { recursive: true });
   const tmp = path.join(dir, "frame.tmp.jpg");
   fs.writeFileSync(tmp, jpg);

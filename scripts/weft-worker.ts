@@ -63,6 +63,8 @@ async function loadEngine() {
     import("../lib/runner-state"),
     import("../lib/worker-recover"),
     import("../lib/resume"),
+    import("../lib/worker-screen"),
+    import("../lib/simulator-input"),
   ]);
   return { store, parts };
 }
@@ -77,7 +79,7 @@ async function startCommand() {
   const config = readWorkerConfig(home);
   if (!config) throw new Error("This box isn't enrolled yet. Run: weft-worker enrol <token>");
   const { store, parts } = await loadEngine();
-  const [{ startFeatureCard }, runner, pending, { subscribe }, { createDaemon }, { createPublisher }, paths, github, folderGrant, { createBlobStore }, { SHOW_DIR }, { setPageUpload }, { busyCards }, { recoverCards }, { resumeInterrupted }] = parts;
+  const [{ startFeatureCard }, runner, pending, { subscribe }, { createDaemon }, { createPublisher }, paths, github, folderGrant, { createBlobStore }, { SHOW_DIR }, { setPageUpload }, { busyCards }, { recoverCards }, { resumeInterrupted }, { nudgeScreen, openScreenChannel, setScreenChannel }, { sendInput }] = parts;
   const reg = registry(rpc, config.key);
   // The public half goes on the worker's row, so Settings → Sync → Workers can seal a Claude token to this box.
   const keys = workerSealKeys(home, newSealKeys);
@@ -87,6 +89,7 @@ async function startCommand() {
   // Pages go up through the key-checked route, and only from the show folder and the checkouts (lib/worker-blobs.ts).
   const blobs = createBlobStore({ client: workerBlobClient(config.key, client.storage), mayUpload: (file) => workerMayUpload(file, [SHOW_DIR, root]) });
   setPageUpload((file) => blobs.uploadPage(file, config.orgId));
+  setScreenChannel((topic) => openScreenChannel(client, topic));
   const publisher = createPublisher(reg, store, console.warn, { blobs, orgId: config.orgId });
   subscribe(publisher.hear);
   const daemon = createDaemon({
@@ -99,6 +102,8 @@ async function startCommand() {
       answer: (id, allow, answers, pendingId) => pending.answerPermission(id, allow, answers, pendingId),
       grant: folderGrant.applyFolderGrant,
       stop: (id) => runner.stop(id),
+      setMode: (id, mode) => runner.setPermissionMode(id, mode),
+      input: (input) => sendInput(input).finally(() => nudgeScreen(input.device)),
       getCard: store.getCard,
       live: () => busyCards().length > 0,
       recover: () => recoverCards(store),

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { apiFetch } from "./api-client";
 import type { ProjectWorker } from "./board-view";
-import type { Card, QuestionReply } from "./types";
+import type { Card, PermissionMode, QuestionReply } from "./types";
 import { EMPTY_WORKER_BOARD, type WorkerBoard } from "./worker-project";
 import type { GrantScope } from "./cloud-commands";
 import { sendWorkerAction } from "./worker-transport";
@@ -80,6 +80,7 @@ export function workerThreadHandlers(card: Card, ctx: ThreadCtx) {
         throw err;
       });
     },
+    onMode: (mode: PermissionMode) => void sendWorkerAction({ action: "mode", cardId: card.id, mode }).catch(ctx.notify),
     onClose: () => ctx.select(null),
   };
 }

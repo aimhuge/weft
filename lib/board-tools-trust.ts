@@ -35,6 +35,7 @@ export function isTrustedTool(toolName: string, source?: string) {
   // The secrets tools ask for Touch ID themselves, so a permission prompt first would be a second yes.
   // The webhooks tools only record names and URLs (lib/webhooks.ts); a relay needs the user's own signed-in Weft account.
   // The board view runs a fixed set of operations and never hands back a secret (electron/board-view.cjs).
-  if (["mcp__browser__", "mcp__secrets__", "mcp__webhooks__", "mcp__devservers__", "mcp__board_view__"].some((p) => toolName.startsWith(p))) return true;
+  // The simulator tools only reach a sandboxed device, the way the browser tools only reach the pane (lib/simulator-tools.ts).
+  if (["mcp__browser__", "mcp__secrets__", "mcp__webhooks__", "mcp__devservers__", "mcp__board_view__", "mcp__simulator__"].some((p) => toolName.startsWith(p))) return true;
   return toolName.startsWith("mcp__board__") && SAFE_BOARD_TOOLS.has(toolName.slice("mcp__board__".length));
 }

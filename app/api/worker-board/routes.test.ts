@@ -111,6 +111,13 @@ describe("POST /worker-board", () => {
     expect(board.sendWorkerAction).toHaveBeenCalledWith({ action: "reply", cardId: "c1", text: "hello" });
   });
 
+  it.each([{ action: "mode", cardId: "c1", mode: "auto" }, { action: "input", cardId: "c1", input: { kind: "tap", device: "d", x: 0, y: 0 } }])("takes $action only from Weft's own window", async (body) => {
+    guard.elevated = Response.json({ error: "Needs the launch token" }, { status: 403 });
+    const res = await route.POST(post(body));
+    expect(res.status).toBe(403);
+    expect(board.sendWorkerAction).not.toHaveBeenCalled();
+  });
+
   it("says what went wrong when the action fails", async () => {
     board.sendWorkerAction.mockRejectedValueOnce(new Error("That thread isn't on one of your workers."));
     const res = await route.POST(post({ action: "stop", cardId: "c1" }));

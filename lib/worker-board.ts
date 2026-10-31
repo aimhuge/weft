@@ -11,8 +11,8 @@ import { syncOrgId } from "./cloud-sync";
 import { THREAD_PAGE_SIZE } from "./cloud-sync-types";
 import { pageFromRows } from "./cloud-thread-page";
 import type { ThreadPage } from "./thread-page";
-import type { Card, QuestionReply } from "./types";
-import { runCommand } from "./worker-commands";
+import type { Card, PermissionMode, QuestionReply } from "./types";
+import { inputCommand, modeCommand, runCommand, type ScreenInput } from "./worker-commands";
 import { EMPTY_WORKER_BOARD, offlineMessage, parseWorkerProject, workerProjectPath, type WorkerBoard, type WorkerProject, type WorkerProjectStatus } from "./worker-project";
 import { OFFLINE_AFTER_MS } from "./workers-account";
 
@@ -142,13 +142,20 @@ async function insert(client: SupabaseClient, row: NewCommand): Promise<{ comman
 export type WorkerAction =
   | { action: "reply"; cardId: string; text: string }
   | { action: "answer"; cardId: string; pendingId: string; allow: boolean; answers?: Record<string, string>; reply?: QuestionReply; grant?: GrantScope }
-  | { action: "stop"; cardId: string };
+  | { action: "stop"; cardId: string }
+  | { action: "mode"; cardId: string; mode: PermissionMode }
+  | { action: "input"; cardId: string; input: ScreenInput };
 
 // A reply, an answer or a Stop from the desktop: the same rows the web board sends. A command for an offline worker
 // waits in the queue until it's back, and the thread says so.
 export async function sendWorkerAction(body: WorkerAction, client: SupabaseClient = accountClient()): Promise<{ commandId: string }> {
   const target = await commandTarget(client, body.cardId);
   if (body.action === "stop") return insert(client, stopCommand(target));
+  if (body.action === "mode" || body.action === "input") {
+    const row = body.action === "mode" ? modeCommand(target, body.mode) : inputCommand(target, body.input);
+    if (!row) throw new Error(body.action === "mode" ? "A worker doesn't run in that mode." : "That tap can't be sent.");
+    return insert(client, row);
+  }
   const row = body.action === "reply" ? replyCommand(target, body.text) : answerCommand(target, body);
   if (!row) throw new Error(body.action === "reply" ? "Write a message first." : "Nothing is waiting for an answer.");
   return insert(client, row);

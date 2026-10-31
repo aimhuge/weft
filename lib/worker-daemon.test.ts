@@ -26,6 +26,32 @@ describe("the daemon", () => {
     expect(d.start).toHaveBeenCalledWith(expect.objectContaining({ permissionMode: "plan" }));
   });
 
+  it("switches a card's mode, and refuses what a worker won't run", async () => {
+    const d = makeDeps();
+    await d.daemon.runOne(command({ kind: "mode", payload: { cardId: "card-1", mode: "auto" } as never }));
+    expect(d.setMode).toHaveBeenCalledWith("card-1", "auto");
+    await d.daemon.runOne(command({ kind: "mode", payload: { cardId: "card-1", mode: "bypassPermissions" } as never }));
+    expect(d.report).toHaveBeenLastCalledWith("cmd-1", "failed", null, "That mode can't be set on a worker.");
+    expect(d.setMode).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves a Codex session in its sandbox mode", async () => {
+    const eng = fakeEngine({ "card-1": card({ backend: "codex", sessionId: "s" }) });
+    const d = makeDeps({ engine: eng.engine });
+    await d.daemon.runOne(command({ kind: "mode", payload: { cardId: "card-1", mode: "auto" } as never }));
+    expect(eng.setMode).not.toHaveBeenCalled();
+  });
+
+  it("drives the device for a card it runs, and not for one it doesn't", async () => {
+    const d = makeDeps();
+    const input = { kind: "tap", device: "d", x: 0.5, y: 0.5 };
+    await d.daemon.runOne(command({ kind: "input", payload: { cardId: "card-1", ...input } as never }));
+    expect(d.input).toHaveBeenCalledWith(input);
+    await d.daemon.runOne(command({ kind: "input", payload: { cardId: "other", ...input } as never }));
+    await d.daemon.runOne(command({ kind: "input", payload: { cardId: "card-1" } as never }));
+    expect(d.input).toHaveBeenCalledTimes(1);
+  });
+
   it("names the folder and tracks the card, then flushes before it reports", async () => {
     const d = makeDeps();
     const order: string[] = [];

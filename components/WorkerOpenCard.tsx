@@ -8,7 +8,7 @@ import { paneFromUrl } from "@/lib/share-types";
 import { ThreadTransportContext } from "@/lib/thread-transport";
 import { ToolResultSourceContext } from "@/lib/use-tool-result";
 import type { WorkerThread } from "@/lib/use-worker-board";
-import { workerToolSource, workerTransport } from "@/lib/worker-transport";
+import { sendWorkerAction, workerToolSource, workerTransport } from "@/lib/worker-transport";
 import { guarded } from "./guarded";
 import { WebPane } from "./web-board/WebPane";
 
@@ -29,7 +29,12 @@ export default function WorkerOpenCard({ thread }: { thread: WorkerThread }) {
           {...handlers}
           className="flex h-full min-h-0 w-[44%] min-w-[380px] shrink-0 flex-col bg-panel"
         />
-        <WebPane orgId={null} pane={paneFromUrl(card.page ?? "")} onClose={handlers.onClose} />
+        <WebPane
+          orgId={null}
+          pane={paneFromUrl(card.page ?? "")}
+          onClose={handlers.onClose}
+          onScreenInput={(input) => sendWorkerAction({ action: "input", cardId: card.id, input })}
+        />
       </ThreadTransportContext.Provider>
     </ToolResultSourceContext.Provider>
   );

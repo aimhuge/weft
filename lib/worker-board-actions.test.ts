@@ -65,6 +65,20 @@ describe("sendWorkerAction", () => {
     });
   });
 
+  it("sends a mode, and refuses YOLO", async () => {
+    const { client, inserted } = fakeClient({ cardRow: target });
+    await sendWorkerAction({ action: "mode", cardId: "c1", mode: "auto" }, client);
+    expect(inserted()).toMatchObject({ kind: "mode", payload: { cardId: "c1", mode: "auto" } });
+    await expect(sendWorkerAction({ action: "mode", cardId: "c1", mode: "bypassPermissions" }, client)).rejects.toThrow("A worker doesn't run in that mode.");
+  });
+
+  it("sends a tap, and refuses a broken one", async () => {
+    const { client, inserted } = fakeClient({ cardRow: target });
+    await sendWorkerAction({ action: "input", cardId: "c1", input: { kind: "tap", device: "d", x: 0.5, y: 0.5 } }, client);
+    expect(inserted()).toMatchObject({ kind: "input", payload: { cardId: "c1", device: "d" } });
+    await expect(sendWorkerAction({ action: "input", cardId: "c1", input: { kind: "tap", device: "", x: 0, y: 0 } }, client)).rejects.toThrow("That tap can't be sent.");
+  });
+
   it("says to write a message when the reply is empty", async () => {
     const { client } = fakeClient({ cardRow: target });
     await expect(sendWorkerAction({ action: "reply", cardId: "c1", text: "   " }, client)).rejects.toThrow("Write a message first.");

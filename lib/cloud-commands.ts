@@ -67,7 +67,24 @@ export interface ClonePayload {
 
 // "run", "login", "github_login" and "clone" go to a Weft Worker, never a Mac: their payloads and readers are
 // lib/worker-commands.ts.
-export type CloudCommandKind = "new_card" | "reply" | "answer" | "stop" | "run" | "login" | "github_login" | "clone";
+// A worker's card: the thread's mode picker, and a tap or swipe on its live screen (lib/worker-commands.ts).
+export interface ModePayload {
+  cardId: string;
+  mode: string;
+}
+
+export interface InputPayload {
+  cardId: string;
+  kind: "tap" | "swipe";
+  device: string;
+  x: number;
+  y: number;
+  x2?: number;
+  y2?: number;
+  ms?: number;
+}
+
+export type CloudCommandKind = "new_card" | "reply" | "answer" | "stop" | "run" | "login" | "github_login" | "clone" | "mode" | "input";
 
 // public.cloud_commands.
 export interface CloudCommandRow {
@@ -78,7 +95,7 @@ export interface CloudCommandRow {
   // The Mac that runs it (cloud_cards.owner_device) and the folder it runs in (cloud_cards.folder).
   target_device: string;
   folder: string;
-  payload: NewCardPayload | ReplyPayload | AnswerPayload | StopPayload | LoginPayload | ClonePayload;
+  payload: NewCardPayload | ReplyPayload | AnswerPayload | StopPayload | LoginPayload | ClonePayload | ModePayload | InputPayload;
   status: CloudCommandStatus;
   card_id: string | null;
   error: string | null;

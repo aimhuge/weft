@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cloneBody, cloneCommand, githubLoginCommand, isWorkerDevice, loginCommand, runBody, runCommand, RUN_MODES, workerDevice } from "./worker-commands";
+import { cloneBody, cloneCommand, githubLoginCommand, inputBody, inputCommand, isWorkerDevice, loginCommand, modeBody, modeCommand, runBody, runCommand, RUN_MODES, workerDevice } from "./worker-commands";
 import { GITHUB_PURPOSE, LOGIN_PURPOSE, newSealKeys, open, sealedOf } from "./worker-seal";
 
 // A payload as it comes off the wire: the shape the row claims, not the shape it must be.
@@ -71,7 +71,7 @@ describe("runCommand", () => {
   });
 
   it("knows exactly three modes", () => {
-    expect([...RUN_MODES]).toEqual(["default", "acceptEdits", "plan"]);
+    expect([...RUN_MODES]).toEqual(["default", "acceptEdits", "auto", "plan"]);
   });
 });
 
@@ -188,5 +188,32 @@ describe("cloneCommand / cloneBody", () => {
     expect(cloneBody({ payload: {} as never })).toBeNull();
     expect(cloneBody({ payload: null as never })).toBeNull();
     expect(cloneBody({ payload: { repo: 7 } as never })).toBeNull();
+  });
+});
+
+describe("a worker card's mode and screen commands", () => {
+  const target = { orgId: "o", device: "worker:w", folder: "f", cardId: "c" };
+
+  it("never sends or obeys YOLO", () => {
+    expect(modeCommand(target, "bypassPermissions")).toBeNull();
+    expect(modeBody(wire({ cardId: "c", mode: "bypassPermissions" }))).toBeNull();
+    expect(modeBody(wire(null))).toBeNull();
+  });
+
+  it("carries Auto both ways", () => {
+    const row = modeCommand(target, "auto");
+    expect(row).toMatchObject({ kind: "mode", target_device: "worker:w" });
+    expect(modeBody(wire(row?.payload))).toEqual({ cardId: "c", mode: "auto" });
+  });
+
+  it("round-trips a tap and a swipe, and drops anything else", () => {
+    const tap = inputCommand(target, { kind: "tap", device: "d", x: 0.1, y: 0.2 });
+    expect(inputBody(wire(tap?.payload))).toEqual({ cardId: "c", input: { kind: "tap", device: "d", x: 0.1, y: 0.2 } });
+    const swipe = inputCommand(target, { kind: "swipe", device: "d", x: 0, y: 0, x2: 1, y2: 1, ms: 200 });
+    expect(inputBody(wire(swipe?.payload))?.input).toMatchObject({ kind: "swipe", x2: 1, ms: 200 });
+    expect(inputCommand(target, { kind: "live", device: "d", x: 0, y: 0 })).toBeNull();
+    expect(inputCommand(target, { kind: "swipe", device: "d", x: 0, y: 0 })).toBeNull();
+    expect(inputCommand(target, null)).toBeNull();
+    expect(inputBody(wire({ kind: "tap", device: "d", x: 0, y: 0 }))).toBeNull();
   });
 });

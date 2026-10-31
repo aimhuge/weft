@@ -29,7 +29,7 @@ One worker per box, no worker picker on the board. The first box is a Mac mini (
 - **Enrolment:** `worker_enrol_token(org)` (a signed-in member, valid for an hour, once) → `worker_enrol(token, …)`
   returns the worker id and its key, written to `~/.weft-worker/worker.json` at mode 600.
 - **Commands:** `run` (`lib/worker-commands.ts`: a prompt, an optional git URL, a mode from default / acceptEdits /
-  plan, never bypass), `clone` and the two sign-ins, `login` and `github_login`, and the web's `new_card`, `reply`,
+  auto / plan, never bypass), `mode` and `input` ([The live screen](#the-live-screen)), `clone` and the two sign-ins, `login` and `github_login`, and the web's `new_card`, `reply`,
   `answer` and `stop` (`lib/worker-daemon.ts`). It hears a
   [wake-up](#wake-ups) and reads `worker_pending` at once, with a poll as the backstop, because without a session
   Realtime's row filters show it nothing. It claims with `worker_claim`, which only matches a pending row, and
@@ -231,7 +231,8 @@ store (`lib/worker-project.ts`, `lib/worker-board.ts`, `lib/worker-transport.ts`
 ### Pages from a worker
 
 A card on a worker shows its pages in the pane on both boards, the same way a card on a Mac does on weft.zip. There's no
-pane on the box, so nothing is streamed live: a page is a file the card wrote, uploaded as a blob with what it names.
+pane on the box, so a page is a file the card wrote, uploaded as a blob with what it names. The one live thing is a
+device's screen ([The live screen](#the-live-screen)).
 
 ```
 card writes ~/.weft-worker/data/show/plan.html
@@ -300,6 +301,37 @@ card.page and the open_url item carry blob:sha256:<hex>#anchor (lib/worker-publi
   redacted as a Mac's are, and any member of the workspace can read them. Its page blobs are plain too, but so are a Mac's:
   blob sealing is designed and not wired (mobile-security.md, Gaps). Sealing a worker needs a grant wrapped to its X25519 key
   (`seal-key.json`) and a Mac that pins it. Until then, don't put a secret in a page: redaction doesn't touch page blobs.
+
+### The live screen
+
+`mcp__simulator__watch` on a worker streams the device to the card's pane, and the desktop board can tap it. There's no
+window to capture on a headless box and no Electron to capture it with, so this is screenshots, not video.
+
+```
+watch ─ simctl/adb screenshot ─ JPEG 420 px ─▶ Realtime Broadcast, topic worker-screen:<random>  ─▶ WorkerScreen in WebPane
+          lib/worker-screen.ts                 card.page = weft-screen:<token>?device&name&until      (either board)
+daemon ◀─ claim ◀─ cloud_commands kind=input ◀─ POST /api/worker-board (elevated) ◀─ click or drag, desktop only
+```
+
+- **Pace:** up to 4 frames a second, sent only when the bytes changed, plus one every 3 s for a board that just opened. A
+  still screen costs almost nothing. It ends with the watch (10 minutes, extended by another `watch`).
+- **Who can watch:** the channel is public, because a worker has no session, so the topic is the secret, as with
+  [wake-ups](#wake-ups). It's 128 random bits per stream and lives only in `card.page`, so a workspace member who can read
+  the card's row can watch, and frames go out plain like everything else a worker sends. A share link can't carry it: shares
+  read thread items, and a screen is never one.
+- **Who can touch:** only commands, never the channel. `input` goes through `worker_pending` (the worker's own account),
+  the local route takes it only from Weft's window (`elevated`), the daemon checks the card is its own, and
+  `lib/simulator-input.ts` refuses a device that isn't being watched. It skips the queue behind a starting card, as a clone
+  does, and a tap asks for a frame at once (`nudgeScreen`). weft.zip watches but doesn't tap yet.
+- **Latency:** the slow part is the box, not the network. On m1mini `axe` took 1.1 s for a tap, and the command path adds
+  its own trips, so a tap's answer takes over a second. This path is the one that works from anywhere. The fast one is H.264
+  and taps from `idb_companion`, which a spike got out of the simulator with no window (about 0.7 Mbps). Video doesn't belong
+  on Supabase, so that needs a direct route or a tunnel.
+
+**Modes.** A worker's card has the mode picker in its thread header, sent as a `mode` command (`CARD_MODES`): Ask me, Accept
+edits or Auto, applied mid-turn. It's elevated, and the daemon holds it to the same list, so a row can't buy YOLO. Auto's
+blocks come back as a prompt on the board. The simulator tools are trusted (`lib/board-tools-trust.ts`) in every mode, like
+the browser's, since they only reach a sandboxed device.
 
 **What a worker tunnel would need** (docs/architecture/tunnels.md runs on the desktop only):
 

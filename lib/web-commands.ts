@@ -69,8 +69,9 @@ export function commandLine(command: CloudCommandRow): { title: string; note: st
 // A reply, an answer to a waiting request or a Stop: a command for one card's thread rather than a new card.
 export const isCardCommand = (c: Pick<CloudCommandRow, "kind">) => c.kind === "reply" || c.kind === "answer" || c.kind === "stop";
 
-// A worker's sign-ins and clones come from Settings and the project menu on the desktop, and report back there.
-const isWorkerAdmin = (c: Pick<CloudCommandRow, "kind">) => c.kind === "login" || c.kind === "github_login" || c.kind === "clone";
+// A worker's sign-ins and clones come from Settings and the project menu on the desktop, and report back there. Its
+// mode changes and screen taps come from an open thread, which shows the result.
+const isWorkerAdmin = (c: Pick<CloudCommandRow, "kind">) => c.kind === "login" || c.kind === "github_login" || c.kind === "clone" || c.kind === "mode" || c.kind === "input";
 
 // The strip under the header follows new threads; a card's own commands show under its reply box instead.
 export const boardCommands = (commands: CloudCommandRow[]) => commands.filter((c) => !isCardCommand(c) && !isWorkerAdmin(c));

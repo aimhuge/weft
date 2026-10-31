@@ -984,6 +984,7 @@ sign-in. Every card on that worker can use the token. **Clone from GitHub** in t
 repo field once you have a worker, so you can clone onto it with no prompt and see the real result on the board.
 A project on a worker shows in the project chips and **More** beside your local ones, marked with the worker's name, even when the worker is offline. Pick it to see its cards on this board, reply to them, answer them or stop them, and start new threads there; nothing runs on your Mac, and an offline worker's new thread says so.
 An outside-folder prompt on a worker's card offers **This card** and **Always**, and Always means every card on that worker.
+A worker's card has the mode picker in its thread (Ask me, Accept edits or Auto; YOLO stays local), and when a thread watches a simulator or emulator on the worker, its screen streams to the pane, where you can tap and swipe it from the desktop.
 A worker's card shows its pages in the browser pane too, on this board and on weft.zip: it writes a page, opens it, and Weft uploads it with its images. Only web files from the card's project and show folder can leave the box.
 A worker updates itself: when Weft has a new commit and no card is running there, it installs it, tests that it loads and restarts, and goes back on its own if the new code is bad. Its row in Settings shows what it runs and why it's behind.
 **Send a run** queues a prompt in a project folder on the worker, and it clones the repo the first time. The card runs on the box with the same engine as your Mac and syncs back to the

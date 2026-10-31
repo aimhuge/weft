@@ -7,8 +7,15 @@ import { CLAUDE_TOKEN, GITHUB_PURPOSE, GITHUB_TOKEN, LOGIN_PURPOSE, seal } from 
 
 // The modes a run may ask for. bypassPermissions is left out on purpose: a command off the network can't buy a
 // thread that runs without asking.
-export const RUN_MODES = ["default", "acceptEdits", "plan"] as const;
+export const RUN_MODES = ["default", "acceptEdits", "auto", "plan"] as const;
 export type RunMode = (typeof RUN_MODES)[number];
+
+// The modes a running card may switch to, from its thread's picker. Never bypassPermissions, for the same reason.
+export const CARD_MODES = ["default", "acceptEdits", "auto"] as const;
+export type CardMode = (typeof CARD_MODES)[number];
+
+// A click or drag on a worker's live screen, as fractions of the screen (components/web-board/WorkerScreen.tsx).
+export type ScreenInput = { kind: "tap" | "swipe"; device: string; x: number; y: number; x2?: number; y2?: number; ms?: number };
 
 export interface RunPayload extends NewCardPayload {
   // A git URL to clone into the worker's work folder when the folder isn't there yet.
@@ -85,4 +92,48 @@ export function cloneCommand(target: { orgId: string; workerId: string }, slug: 
 export function cloneBody(command: Pick<CloudCommandRow, "payload">): string | null {
   const raw: unknown = command.payload;
   return raw && typeof raw === "object" ? (text((raw as { repo?: unknown }).repo) ?? null) : null;
+}
+
+type CardTarget = { orgId: string; device: string; folder: string; cardId: string };
+
+const cardIdOf = (payload: unknown) => text(payload && typeof payload === "object" ? (payload as { cardId?: unknown }).cardId : undefined);
+
+// The `mode` command: the thread's mode picker on a worker's card. Null for a mode a card can't be sent to.
+export function modeCommand(target: CardTarget, mode: unknown): NewCommand | null {
+  const allowed = CARD_MODES.find((m) => m === mode);
+  if (!allowed) return null;
+  return { org_id: target.orgId, kind: "mode", target_device: target.device, folder: target.folder, payload: { cardId: target.cardId, mode: allowed } };
+}
+
+// A mode as the worker reads it off the network, held to the same list: a row can't buy a mode the picker doesn't offer.
+export function modeBody(command: Pick<CloudCommandRow, "payload">): { cardId: string; mode: CardMode } | null {
+  const cardId = cardIdOf(command.payload);
+  const mode = CARD_MODES.find((m) => m === (command.payload as { mode?: unknown } | null)?.mode);
+  return cardId && mode ? { cardId, mode } : null;
+}
+
+const fraction = (v: unknown) => typeof v === "number" && Number.isFinite(v);
+
+function screenInput(raw: unknown): ScreenInput | null {
+  const p = (raw && typeof raw === "object" ? raw : {}) as Partial<Record<keyof ScreenInput, unknown>>;
+  const device = text(p.device);
+  if ((p.kind !== "tap" && p.kind !== "swipe") || !device || !fraction(p.x) || !fraction(p.y)) return null;
+  const point = { device, x: p.x as number, y: p.y as number };
+  if (p.kind === "tap") return { kind: "tap", ...point };
+  if (!fraction(p.x2) || !fraction(p.y2)) return null;
+  return { kind: "swipe", ...point, x2: p.x2 as number, y2: p.y2 as number, ...(fraction(p.ms) ? { ms: p.ms as number } : {}) };
+}
+
+// The `input` command: a tap or swipe on a worker's device. A command, not a message on the frames' public channel,
+// so only the account the worker obeys can touch the device.
+export function inputCommand(target: CardTarget, input: unknown): NewCommand | null {
+  const clean = screenInput(input);
+  if (!clean) return null;
+  return { org_id: target.orgId, kind: "input", target_device: target.device, folder: target.folder, payload: { cardId: target.cardId, ...clean } };
+}
+
+export function inputBody(command: Pick<CloudCommandRow, "payload">): { cardId: string; input: ScreenInput } | null {
+  const cardId = cardIdOf(command.payload);
+  const input = screenInput(command.payload);
+  return cardId && input ? { cardId, input } : null;
 }

@@ -7,6 +7,8 @@ import { SHOW_DIR } from "./show-dir";
 import { boot, bootedDevice, install, launch, listDevices, logs, openUrl, screenshot, type Device } from "./simulator-devices";
 import { center, describe, directionSwipe, findElement, KEYS, named, press, swipe, tapAt, typeText, uiTree } from "./simulator-ui";
 import { watch, watching, writeFrame } from "./simulator-watch";
+import { onWorker } from "./worker-pane";
+import { screenOnWorker } from "./worker-screen";
 
 export const SIMULATOR_PROMPT = `When the user asks about a React Native or Expo app (react-native or expo in its package.json), offer the web build first: start \`npx expo start --web\` with mcp__devservers__start and show it in the browser pane at phone size (set_viewport phone). It renders through react-native-web, live and clickable with hot reload, and boots no device, which costs gigabytes of memory. Plain React Native needs react-native-web set up before --web works. Boot a simulator when the change needs native code (push, camera, native modules, native gestures) or for a final check on a real device. To try a mobile app or a site on a phone, drive an iOS simulator or Android emulator with the mcp__simulator__* tools: list_devices, boot, install and launch the app (or open_url for a deep link or a local dev server in mobile Safari or Chrome), then ui_tree to read the screen and tap, type_text or swipe by element. Call watch so the user sees the device live in the browser pane, and screenshot when a step is worth showing. When a tool says Xcode, a runtime, the Android SDK or AXe is missing, tell the user to click Install beside it in Settings → Connectors → Simulators (Weft downloads and sets it up), and ask before installing anything yourself.`;
 
@@ -164,6 +166,7 @@ export function simulatorMcpServer(cardId: () => string | undefined) {
       tool("watch", "Show the device live in the browser pane for 10 minutes (call again to extend): its window captured at 30 fps, where the user can tap and swipe, or a screenshot a second without Screen Recording permission.", { device: deviceArg }, ({ device }) =>
         attempt(async () => {
           const d = await bootedDevice(device);
+          if (onWorker()) return text(await screenOnWorker(cardId(), d));
           const url = await watch(d);
           const card = cardId();
           if (!card) return text(`Live view at ${url}; open it with mcp__browser__open_url.`);

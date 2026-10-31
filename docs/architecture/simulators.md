@@ -103,6 +103,9 @@ Capture costs little: the GPU does the work, ~3–8% of a core and 50–150 MB, 
 The page is a plain show page: `watch` opens it in the card's pane (`openInPane`), the show rail records it as a
 page the pane showed, and `lib/page-shots.ts` takes its picture for the rail like any other.
 
+On a Weft Worker there's no window to capture, so `watch` streams screenshots over Realtime instead:
+[The live screen](weft-worker.md#the-live-screen).
+
 ## Setup
 
 Settings → Connectors → **Simulators** checks what's there, and its **Install** buttons set up what isn't:
@@ -132,4 +135,3 @@ threads to point the user at Install and ask before installing any of it themsel
 - Build an app for the simulator (`xcodebuild -sdk iphonesimulator`, `./gradlew assembleDebug`) as a tool, not Bash.
 - A video recording of a run for the review tour (`simctl io recordVideo`, `adb screenrecord`).
 - Real devices over USB (`devicectl`, adb already works with one plugged in and authorized).
-- Clicking in the live view to tap the device.

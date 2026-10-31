@@ -48,8 +48,10 @@ export function fakeEngine(cards: Record<string, Card> = { "card-1": card() }) {
   const live = vi.fn<() => boolean>(() => false);
   const recover = vi.fn<() => Recovered>(() => ({ cut: [], stopped: [] }));
   const resume = vi.fn<() => void>();
-  const engine: Engine = { start, reply, answer, grant, stop, getCard, live, recover, resume };
-  return { engine, start, reply, answer, grant, stop, getCard, live, recover, resume };
+  const setMode = vi.fn<Engine["setMode"]>();
+  const input = vi.fn<Engine["input"]>(() => Promise.resolve());
+  const engine: Engine = { start, reply, answer, grant, stop, setMode, input, getCard, live, recover, resume };
+  return { engine, start, reply, answer, grant, stop, setMode, input, getCard, live, recover, resume };
 }
 
 export function fakeReg() {

@@ -223,7 +223,7 @@ function PanelTitle({ card, editable, editTitle, onRename }: {
 }
 
 // Under the title: the CLI, its mode, the folder (the copilot covers the whole board), the session and its tags.
-// Off the desktop, the CLI is a badge and the mode stays the Mac's.
+// Off the desktop the CLI is a badge. The mode stays the Mac's unless the transport can send it (a worker's card), and YOLO stays off the network.
 function HeaderMeta({ card, pilot, desktop, onMode, onTags }: {
   card: Card;
   pilot: boolean;
@@ -234,8 +234,8 @@ function HeaderMeta({ card, pilot, desktop, onMode, onTags }: {
   return (
     <div className="mt-1 flex min-w-0 items-center gap-1.5 text-[11px] text-muted">
       {desktop ? <BackendPicker card={card} /> : <BackendBadge backend={card.backend} card={card} />}
-      {desktop && onMode && (
-        <CrashGuard inline what="mode picker"><ModePicker small backend={card.backend} value={card.permissionMode} onChange={onMode} yolo={card.backend !== "puku" && !pilot} disabled={card.backend === "codex" && Boolean(card.sessionId)} /></CrashGuard>
+      {onMode && (
+        <CrashGuard inline what="mode picker"><ModePicker small backend={card.backend} value={card.permissionMode} onChange={onMode} yolo={desktop && card.backend !== "puku" && !pilot} disabled={card.backend === "codex" && Boolean(card.sessionId)} /></CrashGuard>
       )}
       {desktop && !pilot && <CrashGuard inline what="skills"><SkillsChip card={card} /></CrashGuard>}
       <span className="min-w-[3rem] truncate" title={card.cwd}>{pilot ? "✨ whole board" : folderName(card.cwd)}</span>

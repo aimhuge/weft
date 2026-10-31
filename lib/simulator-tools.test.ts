@@ -15,6 +15,8 @@ vi.mock("@anthropic-ai/claude-agent-sdk", async () => (await import("./simulator
 vi.mock("./simulator-devices", async () => (await import("./simulator-tools.harness")).devicesMock(devices));
 vi.mock("./simulator-ui", async () => (await import("./simulator-tools.harness")).uiMock(ui));
 vi.mock("./simulator-watch", async () => (await import("./simulator-tools.harness")).watchMock(watch));
+const screenOnWorker = vi.hoisted(() => vi.fn());
+vi.mock("./worker-screen", () => ({ screenOnWorker }));
 vi.mock("./browser-tools", async () => (await import("./simulator-tools.harness")).browserToolsMock(openInPane));
 
 const st = await import("./simulator-tools");
@@ -77,6 +79,16 @@ describe("simulatorMcpServer", () => {
       "logs",
       "watch",
     ]);
+  });
+});
+
+describe("watch on a worker", () => {
+  it("streams to the card's pane and never opens the Mac's", async () => {
+    vi.stubEnv("WEFT_WORKER", "1");
+    screenOnWorker.mockResolvedValue("Streaming");
+    expect(said(await run("watch"))).toBe("Streaming");
+    expect(openInPane).not.toHaveBeenCalled();
+    vi.unstubAllEnvs();
   });
 });
 
