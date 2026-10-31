@@ -17,7 +17,7 @@ vi.mock("./store", () => ({ appendThread: (id: string, item: unknown) => appendT
 
 const { handOffToWorker, pickWorker, requireWorker, runsOnWorker } = await import("./worker-handoff");
 
-const worker = (over: Partial<WorkerView>): WorkerView => ({ id: "w", name: "box", platform: "linux", arch: "x64", status: "online", lastSeenAt: null, mine: true, kind: "headless", device: null, here: false, githubAccount: null, githubState: null, cloneError: null, ...over });
+const worker = (over: Partial<WorkerView>): WorkerView => ({ id: "w", name: "box", platform: "linux", arch: "x64", status: "online", lastSeenAt: null, mine: true, kind: "headless", device: null, here: false, githubAccount: null, githubState: null, cloneError: null, build: null, updateNote: null, ...over });
 const client = {} as SupabaseClient;
 const card = { id: "c1", cwd: "/dev/app/.wt/one", prompt: "fix it" } as Parameters<typeof handOffToWorker>[0];
 

@@ -45,8 +45,9 @@ export function fakeEngine(cards: Record<string, Card> = { "card-1": card() }) {
   const stop = vi.fn<(cardId: string) => Promise<void>>(() => Promise.resolve());
   const getCard = vi.fn<(cardId: string) => Card | undefined>((id: string) => cards[id]);
   const busy = vi.fn<() => boolean>(() => false);
-  const engine: Engine = { start, reply, answer, grant, stop, getCard, busy };
-  return { engine, start, reply, answer, grant, stop, getCard, busy };
+  const live = vi.fn<() => boolean>(() => false);
+  const engine: Engine = { start, reply, answer, grant, stop, getCard, busy, live };
+  return { engine, start, reply, answer, grant, stop, getCard, busy, live };
 }
 
 export function fakeReg() {
@@ -57,8 +58,9 @@ export function fakeReg() {
   const heartbeat = vi.fn<(status: "online" | "busy" | "offline") => Promise<void>>(() => Promise.resolve());
   const pending = vi.fn<() => Promise<CloudCommandRow[]>>(() => Promise.resolve([]));
   const setGithub = vi.fn<(state: string, account: string | null) => Promise<void>>(() => Promise.resolve());
-  const reg = { claim, report, heartbeat, pending, setGithub } as unknown as Registry;
-  return { reg, claim, report, heartbeat, pending, setGithub };
+  const setBuild = vi.fn<(build: string, note: string | null) => Promise<void>>(() => Promise.resolve());
+  const reg = { claim, report, heartbeat, pending, setGithub, setBuild } as unknown as Registry;
+  return { reg, claim, report, heartbeat, pending, setGithub, setBuild };
 }
 
 export function fakePublisher() {

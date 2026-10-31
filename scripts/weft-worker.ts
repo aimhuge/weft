@@ -5,6 +5,7 @@
 //   weft-worker login                           sign Claude Code in for the daemon (claude setup-token)
 //   weft-worker start                           run the daemon (what the service runs)
 //   weft-worker status                          say whether this box is enrolled
+//   weft-worker check                           load the whole engine and exit (lib/worker-update.ts trusts a commit by this)
 //
 // The worker keeps its own store (WEFT_DATA under ~/.weft-worker), so a desktop Weft on the same Mac is untouched.
 import { spawnSync } from "node:child_process";
@@ -17,6 +18,7 @@ import { readWorkerConfig, workerDataDir, workerHome, workerSealKeys, workRoot, 
 import { workerBlobClient, workerMayUpload } from "../lib/worker-blobs";
 import { enrol, registry, type Rpc } from "../lib/worker-registry";
 import { CLAUDE_TOKEN, GITHUB_PURPOSE, LOGIN_PURPOSE, newSealKeys, open } from "../lib/worker-seal";
+import { createUpdater, updatesOn } from "../lib/worker-update";
 import { listenForWakes } from "../lib/worker-wake";
 
 const home = workerHome();
@@ -41,13 +43,11 @@ async function enrolCommand(token: string | undefined) {
   console.log(`Enrolled ${config.name} as ${config.device}. Start it with: weft-worker start`);
 }
 
-async function startCommand() {
-  const config = readWorkerConfig(home);
-  if (!config) throw new Error("This box isn't enrolled yet. Run: weft-worker enrol <token>");
-  // The store first, on its own: the engine's modules import each other in a circle, and one that loads before
-  // lib/store.ts has set DATA_DIR reads it as undefined.
+// The store first, on its own: the engine's modules import each other in a circle, and one that loads before
+// lib/store.ts has set DATA_DIR reads it as undefined.
+async function loadEngine() {
   const store = await import("../lib/store");
-  const [{ startFeatureCard }, runner, pending, { subscribe }, { createDaemon }, { createPublisher }, paths, github, folderGrant, { createBlobStore }, { SHOW_DIR }, { setPageUpload }] = await Promise.all([
+  const parts = await Promise.all([
     import("../lib/card-starter"),
     import("../lib/runner"),
     import("../lib/runner-pending"),
@@ -60,7 +60,22 @@ async function startCommand() {
     import("../lib/blob-store"),
     import("../lib/show-dir"),
     import("../lib/worker-pane"),
+    import("../lib/runner-state"),
   ]);
+  return { store, parts };
+}
+
+async function checkCommand() {
+  await loadEngine();
+  console.log("This build loads.");
+  process.exit(0);
+}
+
+async function startCommand() {
+  const config = readWorkerConfig(home);
+  if (!config) throw new Error("This box isn't enrolled yet. Run: weft-worker enrol <token>");
+  const { store, parts } = await loadEngine();
+  const [{ startFeatureCard }, runner, pending, { subscribe }, { createDaemon }, { createPublisher }, paths, github, folderGrant, { createBlobStore }, { SHOW_DIR }, { setPageUpload }, { busyCards }] = parts;
   const reg = registry(rpc, config.key);
   // The public half goes on the worker's row, so Settings → Sync → Workers can seal a Claude token to this box.
   const keys = workerSealKeys(home, newSealKeys);
@@ -84,7 +99,9 @@ async function startCommand() {
       stop: (id) => runner.stop(id),
       getCard: store.getCard,
       busy: () => store.listCards().some((c) => c.column === "running"),
+      live: () => busyCards().length > 0,
     },
+    update: updatesOn(home, process.cwd()) ? { ...createUpdater({ home, dir: process.cwd() }), restart: () => restart() } : undefined,
     async checkout(folder, repo) {
       const dir = paths.repoPath(root, folder);
       if ((await paths.materialise(dir, repo)) === "cloned") console.log(`Weft Worker: cloned ${repo} into ${dir}`);
@@ -160,7 +177,7 @@ function statusCommand() {
 }
 
 const [command, arg] = process.argv.slice(2);
-const commands: Record<string, () => unknown> = { enrol: () => enrolCommand(arg), login: loginCommand, start: startCommand, status: statusCommand };
+const commands: Record<string, () => unknown> = { enrol: () => enrolCommand(arg), login: loginCommand, start: startCommand, status: statusCommand, check: checkCommand };
 Promise.resolve((commands[command ?? ""] ?? (() => console.log("Usage: weft-worker enrol <token> | login | start | status | restart | update")))()).catch((err: unknown) => {
   const e = err as Error;
   console.error(process.env.WEFT_WORKER_DEBUG ? e.stack : e.message);

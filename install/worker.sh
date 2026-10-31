@@ -9,7 +9,9 @@
 # 3. enrolment: the one-time token from Weft → Settings → Sync → Workers becomes this box's own key
 # 4. a service that starts on boot and restarts on a crash: a launchd agent on macOS, a systemd user unit on Linux
 #
-# Re-running it updates the clone and restarts the service; a box that's already enrolled needs no token.
+# Re-running it updates the clone and restarts the service; a box that's already enrolled needs no token. After this
+# the worker keeps itself current (docs/architecture/weft-worker.md#auto-updates); WEFT_WORKER_AUTO_UPDATE=0 in
+# ~/.weft-worker/worker.env turns that off.
 set -eu
 
 TOKEN="${1:-}"
@@ -65,6 +67,10 @@ fi
 say "Installing dependencies"
 (cd "$APP_DIR" && pnpm install --frozen-lockfile --config.confirmModulesPurge=false)
 
+# In the worker's home, not the clone: it's what undoes a bad commit, so a bad commit mustn't be able to change it.
+cp "$APP_DIR/install/worker-rollback.sh" "$HOME_DIR/rollback.sh"
+rm -f "$HOME_DIR/update-trial" "$HOME_DIR/update-trial.starts"
+
 mkdir -p "$BIN_DIR"
 cat > "$BIN_DIR/weft-worker" <<EOF
 #!/bin/sh
@@ -76,6 +82,7 @@ if [ "\${1:-}" = restart ]; then
 fi
 # What weft-worker login saved (the Claude Code token), for the daemon's CLIs.
 if [ -f "$HOME_DIR/worker.env" ]; then set -a; . "$HOME_DIR/worker.env"; set +a; fi
+if [ "\${1:-}" = start ]; then sh "$HOME_DIR/rollback.sh" "$HOME_DIR" "$APP_DIR"; fi
 cd "$APP_DIR" && exec node node_modules/jiti/lib/jiti-cli.mjs scripts/weft-worker.ts "\$@"
 EOF
 chmod 755 "$BIN_DIR/weft-worker"

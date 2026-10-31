@@ -11,7 +11,9 @@ import { cloneBody, runBody } from "./worker-commands";
 import { explainClone, type GithubStatus } from "./worker-github";
 import type { Publisher } from "./worker-publish";
 import { sealedOf, type Sealed } from "./worker-seal";
+import { HEALTHY_AFTER_MS, UPDATE_EVERY_MS } from "./worker-update";
 import type { Registry, WorkerStatus } from "./worker-registry";
+import type { Tick } from "./worker-update";
 import type { WakeHooks } from "./worker-wake";
 
 // The engine, as the daemon uses it (lib/card-starter.ts, lib/runner.ts, lib/store.ts): injected so tests don't run a CLI.
@@ -24,6 +26,8 @@ export interface Engine {
   stop(cardId: string): Promise<void>;
   getCard(cardId: string): Card | undefined;
   busy(): boolean;
+  // A turn is really running now. `busy` reads the store, where a card a dead daemon left in Running stays there.
+  live(): boolean;
 }
 
 export interface DaemonDeps {
@@ -40,11 +44,15 @@ export interface DaemonDeps {
   github: { login: (sealed: Sealed) => Promise<GithubStatus>; status: () => Promise<GithubStatus | null> };
   // Joins the worker's wake-up socket (lib/worker-wake.ts); the returned function leaves it.
   listen?: (hooks: WakeHooks) => () => void;
+  // Keeps this box on the newest Weft (lib/worker-update.ts). Absent when it's switched off, or not the worker's clone.
+  update?: { tick(hold: () => boolean): Promise<Tick>; build(): Promise<string>; healthy(): void; restart(): void };
   log?: (msg: string) => void;
   pollMs?: number;
   slowPollMs?: number;
   beatMs?: number;
   githubMs?: number;
+  updateMs?: number;
+  healthyMs?: number;
 }
 
 const ERROR_MAX = 300;
@@ -164,11 +172,18 @@ export function createDaemon(deps: DaemonDeps) {
     }
   }
 
+  let cloning = 0;
+  async function cloneOne(command: CloudCommandRow) {
+    cloning += 1;
+    await runOne(command).catch((err: unknown) => log(`Weft Worker: ${(err as Error).message}`));
+    cloning -= 1;
+  }
+
   // One read of the queue. A clone can take minutes, and a reply or a Stop for a running card shouldn't wait behind it.
   async function pass() {
     try {
       for (const command of await reg.pending()) {
-        if (command.kind === "clone") void runOne(command).catch((err: unknown) => log(`Weft Worker: ${(err as Error).message}`));
+        if (command.kind === "clone") void cloneOne(command);
         else await runOne(command);
       }
     } catch (err) {
@@ -178,7 +193,10 @@ export function createDaemon(deps: DaemonDeps) {
 
   let polling = false;
   let askAgain = false;
+  // The clone is changing under the daemon: commands wait in the queue for the code that will run them.
+  let updating = false;
   async function poll() {
+    if (updating) return;
     // A ping during a pass may name a command that pass already missed, and starting a card can take minutes.
     if (polling) {
       askAgain = true;
@@ -194,13 +212,64 @@ export function createDaemon(deps: DaemonDeps) {
   }
 
   const status = (): WorkerStatus => (engine.busy() ? "busy" : "online");
-  const beat = (s: WorkerStatus = status()) => reg.heartbeat(s).catch((err: unknown) => log(`Weft Worker: heartbeat: ${(err as Error).message}`));
+  const startedAt = Date.now();
+  const beat = async (s: WorkerStatus = status()) => {
+    try {
+      await reg.heartbeat(s);
+      if (Date.now() - startedAt >= (deps.healthyMs ?? HEALTHY_AFTER_MS)) deps.update?.healthy();
+    } catch (err) {
+      log(`Weft Worker: heartbeat: ${(err as Error).message}`);
+    }
+  };
+
+  // Puts what this box runs on its row. A database without the function yet only leaves the line off.
+  let shown: string | null | undefined;
+  async function showBuild(note: string | null) {
+    try {
+      const build = (await deps.update?.build()) ?? "";
+      if (`${build} ${note}` === shown) return;
+      await reg.setBuild(build, note);
+      shown = `${build} ${note}`;
+    } catch (err) {
+      log(`Weft Worker: reporting its build: ${(err as Error).message}`);
+    }
+  }
+
+  const idle = () => !polling && cloning === 0 && !engine.live();
+
+  let checking = false;
+  async function checkForUpdate() {
+    if (!deps.update || checking) return;
+    checking = true;
+    try {
+      const { restart, note } = await deps.update.tick(() => {
+        updating = idle();
+        return updating;
+      });
+      await showBuild(note);
+      // Still updating: nothing may start between here and the exit.
+      if (restart) {
+        deps.update.restart();
+        return;
+      }
+    } catch (err) {
+      // Usually no network. The row keeps what it last said, and the next check tries again.
+      log(`Weft Worker: update check: ${(err as Error).message}`);
+    } finally {
+      checking = false;
+    }
+    if (updating) {
+      updating = false;
+      void poll();
+    }
+  }
 
   // Starts the loops; the returned stop says the worker is offline on the way out.
   function start(): () => Promise<void> {
     void beat();
     void poll();
     void publishGithub(deps.github.status);
+    if (deps.update) void showBuild(null);
     // Fast until the socket joins, and whenever it's down. A worker with no socket keeps the fast poll for good.
     const fast = deps.pollMs ?? FAST_POLL_MS;
     let every = fast;
@@ -222,17 +291,19 @@ export function createDaemon(deps: DaemonDeps) {
     });
     const beatTimer = setInterval(() => void beat(), deps.beatMs ?? 20_000);
     const githubTimer = setInterval(() => void publishGithub(deps.github.status), deps.githubMs ?? GITHUB_CHECK_MS);
+    const updateTimer = setInterval(() => void checkForUpdate(), deps.updateMs ?? UPDATE_EVERY_MS);
     const flushTimer = setInterval(() => void publisher.flush(), 1_000);
     return async () => {
       leave?.();
       clearInterval(pollTimer);
       clearInterval(beatTimer);
       clearInterval(githubTimer);
+      clearInterval(updateTimer);
       clearInterval(flushTimer);
       await publisher.flush();
       await beat("offline");
     };
   }
 
-  return { start, poll, runOne };
+  return { start, poll, runOne, checkForUpdate };
 }

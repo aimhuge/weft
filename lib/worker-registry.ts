@@ -48,6 +48,7 @@ export function registry(rpc: Rpc, key: string) {
     heartbeat: (status: WorkerStatus) => call<unknown>(rpc, "worker_heartbeat", { p_key: key, p_status: status }),
     setPublicKey: (publicKey: string) => call<unknown>(rpc, "worker_set_public_key", { p_key: key, p_public_key: publicKey }),
     setGithub: (state: GithubState, account: string | null) => call<unknown>(rpc, "worker_set_github", { p_key: key, p_state: state, p_account: account }),
+    setBuild: (build: string, note: string | null) => call<unknown>(rpc, "worker_set_build", { p_key: key, p_build: build, p_note: note }),
     pending: async () => (await call<CloudCommandRow[] | null>(rpc, "worker_pending", { p_key: key })) ?? [],
     claim: (id: string) => call<boolean>(rpc, "worker_claim", { p_key: key, p_command: id }),
     report: (id: string, status: "done" | "failed", cardId: string | null, error: string | null) =>

@@ -93,7 +93,7 @@ describe("listWorkers", () => {
     expect(await listWorkers(client, now)).toEqual({
       signedIn: true,
       workers: [
-        { id: "w-1", name: "mini", platform: "darwin", arch: "arm64", status: "offline", lastSeenAt: null, mine: true, kind: "headless", device: null, here: false, githubAccount: null, githubState: null, cloneError: null },
+        { id: "w-1", name: "mini", platform: "darwin", arch: "arm64", status: "offline", lastSeenAt: null, mine: true, kind: "headless", device: null, here: false, githubAccount: null, githubState: null, cloneError: null, build: null, updateNote: null },
       ],
     });
     expect(calls[0]).toEqual({ op: "from", args: ["cloud_workers"] });

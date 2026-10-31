@@ -30,6 +30,9 @@ export interface WorkerView {
   githubState: GithubState | null;
   // Why your latest clone onto it failed, so a failure outlives the menu it started from.
   cloneError: string | null;
+  // What a headless worker runs (0.6.7+abc1234), and why it isn't on the newest commit. Null: a worker too old to say.
+  build: string | null;
+  updateNote: string | null;
 }
 
 export interface WorkersView {
@@ -59,6 +62,12 @@ interface GithubRow {
   id: string;
   github_account: string | null;
   github_state: GithubState | null;
+}
+
+interface BuildRow {
+  id: string;
+  build: string | null;
+  update_note: string | null;
 }
 
 // A worker that hasn't heartbeat in this long is offline, whatever its row last said (it heartbeats every 20 s).
@@ -100,6 +109,14 @@ async function githubSignIns(client: SupabaseClient, org: string): Promise<Map<s
   return new Map((data ?? []).map((row) => [row.id, row]));
 }
 
+// Each worker's build, read apart from the list for the same reason as its sign-in.
+async function workerBuilds(client: SupabaseClient, org: string): Promise<Map<string, BuildRow>> {
+  const { data } = (await client.from("cloud_workers").select("id, build, update_note").eq("org_id", org)) as { data: BuildRow[] | null };
+  return new Map((data ?? []).map((row) => [row.id, row]));
+}
+
+const buildView = (row?: BuildRow) => ({ build: row?.build ?? null, updateNote: row?.update_note ?? null });
+
 export async function listWorkers(client: SupabaseClient = accountClient(), now = Date.now()): Promise<WorkersView> {
   const who = await session(client);
   if (!who) return { signedIn: false, workers: [] };
@@ -110,7 +127,7 @@ export async function listWorkers(client: SupabaseClient = accountClient(), now 
     .order("created_at", { ascending: true });
   if (error) throw new Error(`Couldn't read your workers: ${error.message}`);
   const here = deviceId();
-  const [clones, signIns] = await Promise.all([failedClones(client, who.org, who.uid), githubSignIns(client, who.org)]);
+  const [clones, signIns, builds] = await Promise.all([failedClones(client, who.org, who.uid), githubSignIns(client, who.org), workerBuilds(client, who.org)]);
   const workers = ((data as Row[] | null) ?? []).map((r) => {
     const stale = !r.last_seen_at || now - Date.parse(r.last_seen_at) > OFFLINE_AFTER_MS;
     const device = r.device ?? null;
@@ -128,6 +145,7 @@ export async function listWorkers(client: SupabaseClient = accountClient(), now 
       githubAccount: signIns.get(r.id)?.github_account ?? null,
       githubState: signIns.get(r.id)?.github_state ?? null,
       cloneError: clones.get(workerDevice(r.id)) ?? null,
+      ...buildView(builds.get(r.id)),
     } satisfies WorkerView;
   });
   return { signedIn: true, workers };

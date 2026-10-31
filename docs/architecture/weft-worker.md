@@ -72,6 +72,45 @@ One worker per box, no worker picker on the board. The first box is a Mac mini (
   locally. Switching on refuses when you have no worker. The run and its replies live on the worker's card, which
   [the desktop board shows](#worker-projects-on-the-desktop-board) under the worker's project.
 
+### Auto-updates
+
+A worker keeps itself on the newest commit of `main`, with no one at the box (`lib/worker-update.ts`,
+`install/worker-rollback.sh`). `main`, not release tags: it's what the installer clones, and a worker fix shouldn't wait
+for a dmg. The cost is that **every push to main reaches every worker within 15 minutes, unsigned**, so push access
+to the repo is code execution on every box. That's the same trust `curl | sh` and `weft-worker update` already ask for.
+
+```
+every 15 min   git fetch origin main
+                 │ newer, not skipped, clean clone on main
+no live turn, no clone, no pass in flight ──▶ otherwise the row says it's waiting, and the next check asks again
+                 │ commands stay queued from here on
+update-trial written, then merge --ff-only, pnpm install
+                 │ a failed install: reset, no restart, the same commit is tried next time
+weft-worker check loads the whole engine in a child
+                 │ a commit that won't load: reset, added to update-bad, never tried again
+exit 0 ──▶ launchd or systemd starts the new code
+                 │ dies 3 times before it's healthy: the wrapper resets and adds it to update-bad
+up 60 s and a heartbeat landed ──▶ update-trial deleted
+```
+
+- **What counts as busy:** `engine.live`, the runner's real sessions (`busyCards`), not the store's `running` column: a
+  daemon that died mid-turn leaves its card there for good, and that would hold updates back forever. A card waiting on
+  a permission is mid-turn, so it holds the update too, and a forgotten question holds it until someone answers. Its row
+  says so. An idle card's CLI does get cut, and resumes from its saved session on the next message, as after a sign-in.
+- **Rollback lives outside the clone.** Code that dies at import can't undo itself, so the wrapper runs `rollback.sh`
+  before each start. That's a copy in the worker's home, sealed from threads, refreshed only after a commit proves it
+  loads. It counts starts in `update-trial.starts`, and past three it resets to the commit in `update-trial`.
+- **What it won't touch:** a clone with local changes, off `main` or ahead of it. It says so on the row and waits, since
+  a clone is open to threads and someone may be working in it. It only runs in `<worker home>/weft`, so a daemon started
+  from a developer's checkout leaves that checkout alone.
+- **The row:** `worker_set_build` (`supabase/migrations/20261030204119_worker_build.sql`) puts the build, as
+  `0.6.7+abc1234`, and the reason it's behind on Settings → Sync → Workers. A database without the function logs a line
+  and carries on.
+- **Off:** `WEFT_WORKER_AUTO_UPDATE=0` in `~/.weft-worker/worker.env`.
+- **Not updated by this:** the wrapper and the service definition. `weft-worker update` (which re-runs the installer) rewrites
+  those, and it's also how a box installed before this gets the updater. A daemon started by hand exits after an update
+  and nothing brings it back.
+
 ### Wake-ups
 
 A command reaches a worker in about 200 ms, and an idle worker asks for commands twice a minute, not twenty times
@@ -114,7 +153,7 @@ A deny beats an ask, so the prompt never shows and a grant buys nothing here.
 
 | Under `~/.weft-worker` | A thread |
 | --- | --- |
-| `worker.json`, `worker.env`, `seal-key.json`, `github-credentials`, `worker.log`, anything new | refused |
+| `worker.json`, `worker.env`, `seal-key.json`, `github-credentials`, `worker.log`, `rollback.sh`, `update-trial`, `update-bad`, anything new | refused |
 | `data/`, as on a Mac | refused, save `data/show` and `data/apps` |
 | `work/` (or `WEFT_WORKER_ROOT`) | open: it's where cards run |
 | `weft/`, the clone of Weft | open: a public repo, and `/weft:done` runs `commit.sh` from the plugin inside it |
@@ -629,8 +668,8 @@ It does four things:
 
 1. **Installs the toolchain.** Checks for `git`, `curl`, `node` 20+ and `git-lfs`, and installs what is missing — with
    `apt-get` on Linux, with `brew` on macOS. A compiler toolchain is added only if the project needs one.
-2. **Clones the worker.** Pulls Weft's worker into `~/.weft-worker`. A `git pull` updates it later;
-   `weft-worker update` does that for you.
+2. **Clones the worker.** Pulls Weft's worker into `~/.weft-worker`. It [updates itself](#auto-updates) from then on;
+   `weft-worker update` does it by hand.
 3. **Enrols itself.** Calls the API with the workspace's service key, gets back a worker id and its own key, and
    writes both to `~/.weft-worker/worker.json` with mode `600`.
 4. **Runs as a service.** A `systemd` unit on Linux, a `launchd` agent on macOS. It starts on boot, restarts on

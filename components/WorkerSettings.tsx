@@ -119,8 +119,10 @@ export default function WorkerSettings() {
                   <div className="truncate text-[13px] text-ink">{w.name}</div>
                   <div className={SUBTLE}>
                     {w.status} · {w.kind === "desktop" ? (w.here ? "headed, this Mac" : "headed") : "headless"} · {w.platform}/{w.arch}
+                    {w.build && ` · ${w.build}`}
                     {w.lastSeenAt && ` · seen ${timeAgo(Date.parse(w.lastSeenAt), now)}`}
                   </div>
+                  {w.updateNote && <div className="text-[12.5px] text-warn">{w.updateNote}</div>}
                   {w.mine && w.kind !== "desktop" && <GithubStatusLine worker={w} />}
                 </div>
               </div>
