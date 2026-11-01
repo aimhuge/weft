@@ -10,7 +10,12 @@ const folderAsk = vi.fn<(...a: unknown[]) => unknown>();
 const claimQuestion = vi.fn<(...a: unknown[]) => unknown>();
 const askUser = vi.fn<(...a: unknown[]) => unknown>();
 vi.mock("../classifier-denial", () => ({ takeGrant: (...a: unknown[]) => takeGrant(...a) }));
-vi.mock("../folder-guard", () => ({ grantedRead: (...a: unknown[]) => grantedRead(...a), folderAsk: (...a: unknown[]) => folderAsk(...a) }));
+const showPageCall = vi.fn<(...a: unknown[]) => unknown>();
+vi.mock("../folder-guard", () => ({
+  grantedRead: (...a: unknown[]) => grantedRead(...a),
+  folderAsk: (...a: unknown[]) => folderAsk(...a),
+  showPageCall: (...a: unknown[]) => showPageCall(...a),
+}));
 vi.mock("../claim-guard", () => ({ claimQuestion: (...a: unknown[]) => claimQuestion(...a), claimSymbols: () => ["Login"], claimWhy: () => "claim why" }));
 vi.mock("../runner-ask", () => ({ askUser: (...a: unknown[]) => askUser(...a) }));
 const ownPageCall = vi.fn<(...a: unknown[]) => unknown>();
@@ -23,7 +28,7 @@ const signal = new AbortController().signal;
 const input = { file_path: "/elsewhere/a" };
 
 beforeEach(() => {
-  for (const f of [takeGrant, grantedRead, folderAsk, claimQuestion, askUser, ownPageCall]) f.mockReset();
+  for (const f of [takeGrant, grantedRead, folderAsk, claimQuestion, askUser, ownPageCall, showPageCall]) f.mockReset();
   askUser.mockResolvedValue({ behavior: "allow", updatedInput: input });
 });
 

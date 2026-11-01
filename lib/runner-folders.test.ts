@@ -59,9 +59,10 @@ describe("the CLI's working directories", () => {
     expect(q.options.additionalDirectories).toEqual(["/Users/zzz-outside", SHOW_DIR]);
   });
 
-  it("leaves a desktop session with its grants alone", async () => {
+  it("gives a desktop session the show folder too", async () => {
+    const { SHOW_DIR } = await import("./show-dir");
     addCard({ id: "c1", readScope: ["/Users/zzz-outside"] });
-    expect((await send("c1")).options.additionalDirectories).toEqual(["/Users/zzz-outside"]);
+    expect((await send("c1")).options.additionalDirectories).toEqual(["/Users/zzz-outside", SHOW_DIR]);
   });
 });
 

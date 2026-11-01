@@ -22,13 +22,12 @@ export function setPageUpload(fn: PageUpload | null) {
 
 export const onWorker = (env: NodeJS.ProcessEnv = process.env) => env.WEFT_WORKER === "1";
 
-// The folders a session's CLI works in beyond its cwd. A worker adds the show folder, which is all of it and not its
-// parent: acceptEdits only writes without asking inside the CLI's working directories, and a page can't wait for
-// someone to press Allow on a headless box. A desktop card doesn't need this: it runs in Auto or YOLO, or you're there
-// to answer. The CLI drops a directory that isn't there, so it's made first. docs/architecture/weft-worker.md#pages-from-a-worker
+// The folders a session's CLI works in beyond its cwd: what the card was granted, and the show folder for every thread,
+// which is all of it and not its parent. The system prompt tells each thread to write its pages there, and without it
+// the CLI's working-directory gate asked first, which on a headless box nobody answers. The CLI drops a directory that
+// isn't there, so a worker makes it first. docs/architecture/weft-worker.md#pages-from-a-worker
 export function sessionDirs(readScope: string[] | undefined, env: NodeJS.ProcessEnv = process.env) {
-  if (!onWorker(env)) return readScope;
-  fs.mkdirSync(SHOW_DIR, { recursive: true });
+  if (onWorker(env)) fs.mkdirSync(SHOW_DIR, { recursive: true });
   return [...new Set([...(readScope ?? []), SHOW_DIR])];
 }
 

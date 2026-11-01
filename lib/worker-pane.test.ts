@@ -32,9 +32,9 @@ describe("onWorker", () => {
 describe("sessionDirs", () => {
   const worker = { WEFT_WORKER: "1" } as unknown as NodeJS.ProcessEnv;
 
-  it("leaves a desktop card's folders as they are", () => {
-    expect(sessionDirs(undefined, {} as NodeJS.ProcessEnv)).toBeUndefined();
-    expect(sessionDirs(["/a"], {} as NodeJS.ProcessEnv)).toEqual(["/a"]);
+  it("adds the show folder on a desktop card too", () => {
+    expect(sessionDirs(undefined, {} as NodeJS.ProcessEnv)).toEqual([SHOW_DIR]);
+    expect(sessionDirs(["/a"], {} as NodeJS.ProcessEnv)).toEqual(["/a", SHOW_DIR]);
   });
 
   it("adds the show folder on a worker, and nothing above it", () => {

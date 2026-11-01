@@ -20,7 +20,6 @@ import { TURN_CODE, handle } from "./runner-turn";
 import { defaultPermissionMode } from "./settings";
 import { pukuContext } from "./puku-context";
 import { trialOptions } from "./puku-trial";
-import { sessionDirs } from "./show-dir";
 import { PLUGIN_DIR } from "./skills";
 import { ensureSeeded, offFor, sameOff, withSkillSettings } from "./skill-sets";
 import { switchSpare } from "./spare-switch";
