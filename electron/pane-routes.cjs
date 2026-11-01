@@ -80,7 +80,7 @@ function paneRoutes({ dataDir, app, dialog, systemPreferences = require("electro
       const ask = touchIdPrompt({ systemPreferences, dialog, window });
       return { approved: await ask(`open a private tunnel to ${target} from ${folder} for ${hours} hours`) };
     },
-    // Manual QA mode: a worker's build runs on this Mac as a process with your permissions, so a person says yes, and only
+    // Local Simulator mode: a worker's build runs on this Mac as a process with your permissions, so a person says yes, and only
     // the answer goes back. The server keeps the grant for 8 hours (lib/qa-grants.ts).
     "POST /qa/approve": async ({ worker, folder, device }) => {
       const clean = (v) => String(v ?? "").replace(/[^\p{L}\p{N} ._:()-]/gu, "").slice(0, 60);

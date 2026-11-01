@@ -1,4 +1,4 @@
-// A worker's side of manual QA mode (lib/worker-device.ts): where a device tool call goes, and what happens when
+// A worker's side of Local Simulator mode (lib/worker-device.ts): where a device tool call goes, and what happens when
 // the Mac doesn't answer. The Mac's refusal is not an outage: it comes back as the refusal, and the local device
 // never runs behind it.
 import fs from "node:fs";
@@ -122,11 +122,11 @@ describe("deviceRoute", () => {
 
   it("returns the Mac's refusal as an error, and never runs locally behind it", async () => {
     getCard.mockReturnValue({ id: "card-1", qaDevice: "udid-1" });
-    link({ result: vi.fn(() => Promise.resolve({ status: "failed", result: null, error: "Manual QA isn't switched on." })) });
+    link({ result: vi.fn(() => Promise.resolve({ status: "failed", result: null, error: "Local Simulator isn't switched on." })) });
     const run = local();
     const out = await deviceRoute("card-1", "tap", {}, run);
     expect(out.isError).toBe(true);
-    expect((out.content[0] as { text: string }).text).toBe("Manual QA isn't switched on.");
+    expect((out.content[0] as { text: string }).text).toBe("Local Simulator isn't switched on.");
     expect(run).not.toHaveBeenCalled();
   });
 

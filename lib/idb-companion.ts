@@ -9,21 +9,28 @@ import { fileURLToPath } from "node:url";
 import * as grpc from "@grpc/grpc-js";
 import * as loader from "@grpc/proto-loader";
 import { dropIdb, setIdb, type IdbSession } from "./idb-session";
+import { DEFAULT_QUALITY, type ScreenQuality } from "./rtc-signal";
 import { findBin, TOOLS_DIR } from "./simulator-exec";
 
 const READY_MS = 15_000;
 const POLL_MS = 50;
-// Thirty frames a second near half size: a phone screen in a narrow pane, and a key frame often enough to join quickly.
-const VIDEO = { fps: 30, format: "H264", compression_quality: 0.6, avg_bitrate: 8_000_000, key_frame_rate: 2 };
-const TARGET_SCALE = 0.5;
+// The pane's quality menu. Medium is thirty frames a second near half size: a phone screen in a narrow pane. Low is for a
+// slow line, high for reading small text. Each keeps a key frame every 2 s, often enough to join quickly.
+const H264 = { format: "H264", key_frame_rate: 2 };
+export const VIDEO: Record<ScreenQuality, { scale: number; fps: number; compression_quality: number; avg_bitrate: number }> = {
+  low: { scale: 1 / 3, fps: 15, compression_quality: 0.4, avg_bitrate: 2_000_000 },
+  medium: { scale: 0.5, fps: 30, compression_quality: 0.6, avg_bitrate: 8_000_000 },
+  high: { scale: 1, fps: 60, compression_quality: 0.85, avg_bitrate: 20_000_000 },
+};
 
 const gcd = (a: number, b: number): number => (b ? gcd(b, a % b) : a);
 
 // The encoder silently sends nothing unless both sides come out even: 0.5 gets no video on an iPhone 16 (1179 wide) or a
-// 16 Pro (1206, so 603). This finds the scale nearest half that lands on exact even numbers, measured on m1mini.
-export function evenScale(width: number, height: number) {
+// 16 Pro (1206, so 603). This finds the scale nearest the target that lands on exact even numbers, measured on m1mini.
+// Never above full size, which an odd side (1179) can't be.
+export function evenScale(width: number, height: number, target = VIDEO[DEFAULT_QUALITY].scale) {
   const step = 2 / gcd(width, height);
-  const steps = Math.max(1, Math.round(TARGET_SCALE / step));
+  const steps = Math.max(1, Math.min(Math.floor(1 / step), Math.round(target / step)));
   // The nudge keeps idb's rounding on the even side.
   return Math.min(1, step * steps + 1e-6);
 }
@@ -65,7 +72,7 @@ function hid(client: IdbClient, events: unknown[]) {
   });
 }
 
-function video(client: IdbClient, scale: number, onFrame: (frame: Buffer) => void, onEnd: () => void) {
+function video(client: IdbClient, px: Pixels, quality: ScreenQuality, onFrame: (frame: Buffer) => void, onEnd: () => void) {
   const stream = client.video_stream();
   let done = false;
   const end = () => {
@@ -78,14 +85,18 @@ function video(client: IdbClient, scale: number, onFrame: (frame: Buffer) => voi
   });
   stream.on("error", end);
   stream.on("end", end);
-  stream.write({ start: { ...VIDEO, scale_factor: scale } });
+  const { scale, ...settings } = VIDEO[quality];
+  stream.write({ start: { ...H264, ...settings, scale_factor: evenScale(px.width, px.height, scale) } });
   return () => {
     done = true;
     stream.cancel();
   };
 }
 
-export function sessionOver(client: IdbClient, size: IdbSession["size"], close: () => void, scale = TARGET_SCALE): IdbSession {
+// The screen in pixels, which the scale has to divide evenly.
+type Pixels = { width: number; height: number };
+
+export function sessionOver(client: IdbClient, size: IdbSession["size"], close: () => void, px: Pixels = { width: 2, height: 2 }): IdbSession {
   // A gesture holds one hid stream from its press to its release, so each move lands as it's written.
   let gesture: Sent | null = null;
   const live = () => client.hid(() => {});
@@ -103,7 +114,7 @@ export function sessionOver(client: IdbClient, size: IdbSession["size"], close: 
     key: (keycode, down) => keys.write({ press: { action: { key: { keycode } }, direction: down ? "DOWN" : "UP" } }),
     tap: (x, y) => hid(client, [touch({ x, y }, "DOWN"), touch({ x, y }, "UP")]),
     swipe: (start, end, ms) => hid(client, [{ swipe: { start, end, duration: ms / 1000, delta: 0 } }]),
-    video: (onFrame, onEnd) => video(client, scale, onFrame, onEnd),
+    video: (onFrame, onEnd, quality = DEFAULT_QUALITY) => video(client, px, quality, onFrame, onEnd),
     close: () => {
       keys.end();
       close();
@@ -151,7 +162,7 @@ export async function openIdb(udid: string, connect = connectIdb, sleep = pause)
         dropIdb(udid, session);
         cleanup();
       },
-      evenScale(px?.width ?? 0, px?.height ?? 0),
+      { width: px?.width ?? 0, height: px?.height ?? 0 },
     );
     setIdb(udid, session);
     // A companion that dies takes the fast taps with it; tapAt falls back to AXe.

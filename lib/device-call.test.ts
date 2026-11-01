@@ -1,4 +1,4 @@
-// Manual QA's wire format (lib/device-call.ts): the Mac reads a worker's call as untrusted input, so these tests
+// Local Simulator's wire format (lib/device-call.ts): the Mac reads a worker's call as untrusted input, so these tests
 // pin what survives the read — the tool list, the fields each tool may have, and the build a call names.
 import { describe, expect, it } from "vitest";
 import { buildRef, callArgs, DEVICE_TOOLS, isDeviceTool, toolResultOf } from "./device-call";

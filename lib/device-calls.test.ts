@@ -1,4 +1,4 @@
-// The Mac's side of manual QA mode (lib/device-calls.ts): a worker's call is untrusted, so it needs a live grant,
+// The Mac's side of Local Simulator mode (lib/device-calls.ts): a worker's call is untrusted, so it needs a live grant,
 // its arguments are re-read, and the device comes from the grant, never from the row.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -55,7 +55,7 @@ beforeEach(() => {
 describe("runDeviceCall", () => {
   it("throws when there's no grant for the call", async () => {
     requireGrant.mockImplementation(() => {
-      throw new Error("Manual QA isn't switched on for this thread on this Mac.");
+      throw new Error("Local Simulator isn't switched on for this thread on this Mac.");
     });
     await expect(runDeviceCall({} as never, row())).rejects.toThrow("isn't switched on");
   });
@@ -293,11 +293,11 @@ describe("drainDeviceCalls", () => {
 
   it("reports a failed call with the error", async () => {
     requireGrant.mockImplementation(() => {
-      throw new Error("Manual QA isn't switched on.");
+      throw new Error("Local Simulator isn't switched on.");
     });
     const { client, calls } = fakeClient({ pending: [row()] });
     await drainDeviceCalls(client, "user-1");
-    expect(calls.updates.at(-1)?.patch).toMatchObject({ status: "failed", error: "Manual QA isn't switched on." });
+    expect(calls.updates.at(-1)?.patch).toMatchObject({ status: "failed", error: "Local Simulator isn't switched on." });
   });
 
   it("says nothing when the database has no device_calls table yet", async () => {
@@ -311,7 +311,7 @@ describe("drainDeviceCalls", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const { client, calls } = fakeClient({ pending: [row()], answerError: { message: "row is gone" } });
     await expect(drainDeviceCalls(client, "user-1")).resolves.toBeUndefined();
-    expect(warn).toHaveBeenCalledWith("Manual QA: couldn't answer call-1: row is gone");
+    expect(warn).toHaveBeenCalledWith("Local Simulator: couldn't answer call-1: row is gone");
     expect(calls.updates[0]?.patch).toEqual({ status: "claimed" });
     warn.mockRestore();
   });

@@ -47,3 +47,11 @@ export function liveEvent(raw: string): LiveEvent | null {
   if ((p.t === "down" || p.t === "move" || p.t === "up") && fraction(p.x) && fraction(p.y)) return { t: p.t, x: p.x as number, y: p.y as number };
   return null;
 }
+
+// How sharp and smooth the video is, picked in the pane (components/web-board/WorkerScreen.tsx) and carried in the
+// sealed offer; lib/idb-companion.ts turns it into the encoder's fps, scale and bitrate. A new pick is a new offer.
+export const SCREEN_QUALITIES = ["low", "medium", "high"] as const;
+export type ScreenQuality = (typeof SCREEN_QUALITIES)[number];
+export const DEFAULT_QUALITY: ScreenQuality = "medium";
+
+export const screenQuality = (v: unknown): ScreenQuality => SCREEN_QUALITIES.find((q) => q === v) ?? DEFAULT_QUALITY;

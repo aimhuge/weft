@@ -117,8 +117,10 @@ export interface Card {
   // how many pages the pane has opened on it (lib/card-page.ts). The synced row carries both (docs/architecture/cloud-sync.md).
   page?: string;
   pages?: number;
-  // Manual QA mode on a worker's card: the Mac (its sync device id) this card's simulator tools go to (lib/worker-device.ts).
+  // Local Simulator mode on a worker's card: the Mac (its sync device id) this card's simulator tools go to (lib/worker-device.ts).
   qaDevice?: string | null;
+  // A worker's card on a React Native or Expo app (lib/mobile-app.ts): its pane offers Start simulator.
+  mobileApp?: boolean;
   // Haiku's emoji for the card, shown in place of a thumbnail until it has one.
   emoji?: string;
   // Who last named the card: you (typed or renamed it) or Weft's retitle after its first turn (lib/retitle.ts).

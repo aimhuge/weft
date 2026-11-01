@@ -69,6 +69,7 @@ async function loadEngine() {
     import("../lib/worker-fast-screen"),
     import("../lib/worker-device"),
     import("../lib/worker-device-link"),
+    import("../lib/mobile-app"),
   ]);
   return { store, parts };
 }
@@ -83,7 +84,7 @@ async function startCommand() {
   const config = readWorkerConfig(home);
   if (!config) throw new Error("This box isn't enrolled yet. Run: weft-worker enrol <token>");
   const { store, parts } = await loadEngine();
-  const [{ startFeatureCard }, runner, pending, { subscribe }, { createDaemon }, { createPublisher }, paths, github, folderGrant, { createBlobStore }, { SHOW_DIR }, { setPageUpload }, { busyCards }, { recoverCards }, { resumeInterrupted }, { openScreenChannel, screenInput, setFastScreen, setScreenChannel }, { sendInput }, { openFastScreen }, { setDeviceLink }, { deviceLink }] = parts;
+  const [{ startFeatureCard }, runner, pending, { subscribe }, { createDaemon }, { createPublisher }, paths, github, folderGrant, { createBlobStore }, { SHOW_DIR }, { setPageUpload }, { busyCards }, { recoverCards }, { resumeInterrupted }, { openScreenChannel, screenInput, setFastScreen, setScreenChannel }, { sendInput }, { openFastScreen }, { setDeviceLink }, { deviceLink }, { isMobileApp }] = parts;
   const reg = registry(rpc, config.key);
   // The public half goes on the worker's row, so Settings → Sync → Workers can seal a Claude token to this box.
   const keys = workerSealKeys(home, newSealKeys);
@@ -105,13 +106,16 @@ async function startCommand() {
     listenForPushes: (hooks) => listenForPushes(client, hooks, console.log),
     onCardChange: subscribe,
     engine: {
-      start: (body) => startFeatureCard(body),
+      start: async (body) => {
+        const card = await startFeatureCard(body);
+        return isMobileApp(card.cwd) ? store.updateCard(card.id, { mobileApp: true }) : card;
+      },
       reply: (id, text) => runner.sendUserMessage(id, text),
       answer: (id, allow, answers, pendingId) => pending.answerPermission(id, allow, answers, pendingId),
       grant: folderGrant.applyFolderGrant,
       stop: (id) => runner.stop(id),
       setMode: (id, mode) => runner.setPermissionMode(id, mode),
-      input: (input) => screenInput(input, sendInput),
+      input: (input, cardId) => screenInput(input, sendInput, cardId),
       setQa: (id, qaDevice) => void store.updateCard(id, { qaDevice }),
       getCard: store.getCard,
       live: () => busyCards().length > 0,

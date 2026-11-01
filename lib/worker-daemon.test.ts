@@ -46,7 +46,7 @@ describe("the daemon", () => {
     const d = makeDeps();
     const input = { kind: "tap", device: "d", x: 0.5, y: 0.5 };
     await d.daemon.runOne(command({ kind: "input", payload: { cardId: "card-1", ...input } as never }));
-    expect(d.input).toHaveBeenCalledWith(input);
+    expect(d.input).toHaveBeenCalledWith(input, "card-1");
     await d.daemon.runOne(command({ kind: "input", payload: { cardId: "other", ...input } as never }));
     await d.daemon.runOne(command({ kind: "input", payload: { cardId: "card-1" } as never }));
     expect(d.input).toHaveBeenCalledTimes(1);

@@ -215,6 +215,12 @@ describe("a worker card's mode and screen commands", () => {
     expect(inputCommand(target, { kind: "swipe", device: "d", x: 0, y: 0 })).toBeNull();
     expect(inputCommand(target, null)).toBeNull();
     expect(inputBody(wire({ kind: "tap", device: "d", x: 0, y: 0 }))).toBeNull();
+    expect(inputCommand(target, { kind: "tap", x: 0, y: 0 })).toBeNull();
+  });
+
+  it("round-trips the pane's watch, with or without a device", () => {
+    expect(inputBody(wire(inputCommand(target, { kind: "watch", device: "udid-2" })?.payload))?.input).toEqual({ kind: "watch", device: "udid-2" });
+    expect(inputBody(wire(inputCommand(target, { kind: "watch" })?.payload))?.input).toEqual({ kind: "watch" });
   });
 });
 
@@ -229,7 +235,7 @@ describe("an offer for the WebRTC line", () => {
   });
 });
 
-describe("a worker's manual QA switch", () => {
+describe("a worker's Local Simulator switch", () => {
   const target = { orgId: "o", device: "worker:w", folder: "f", cardId: "c" };
 
   it("names the Mac the card's device tools go to", () => {

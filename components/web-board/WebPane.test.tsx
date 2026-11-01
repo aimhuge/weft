@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { WebPane } from "./WebPane";
 import type { SharePane } from "@/lib/share-types";
 
@@ -41,5 +41,29 @@ describe("WebPane", () => {
   it("says when nothing's open", () => {
     render(<WebPane orgId="org" pane={null} />);
     expect(screen.getByText("No page open in this card's browser pane.")).toBeTruthy();
+  });
+
+  it("starts a mobile app's simulator from the empty pane, and from the toolbar over another page", async () => {
+    const onScreenInput = vi.fn(() => Promise.resolve());
+    const { rerender } = render(<WebPane orgId={null} pane={null} onScreenInput={onScreenInput} mobileApp />);
+    fireEvent.click(screen.getByRole("button", { name: /Start simulator/ }));
+    expect(onScreenInput).toHaveBeenCalledWith({ kind: "watch" });
+    expect(screen.getByRole("button", { name: /Starting simulator/ })).toBeTruthy();
+    rerender(<WebPane orgId={null} pane={blob} onScreenInput={vi.fn(() => Promise.reject(new Error("no simulators")))} mobileApp />);
+    fireEvent.click(screen.getByRole("button", { name: /Start simulator/ }));
+    await waitFor(() => expect(screen.getByRole("button", { name: /Start simulator ⚠/ }).getAttribute("title")).toBe("no simulators"));
+  });
+
+  it("says why the empty pane couldn't start one", async () => {
+    render(<WebPane orgId={null} pane={null} onScreenInput={vi.fn(() => Promise.reject(new Error("worker offline")))} mobileApp />);
+    fireEvent.click(screen.getByRole("button", { name: /Start simulator/ }));
+    await waitFor(() => expect(screen.getByText("worker offline")).toBeTruthy());
+  });
+
+  it("offers no Start simulator outside a mobile app, or where the board can't drive the worker", () => {
+    const { rerender } = render(<WebPane orgId={null} pane={null} onScreenInput={vi.fn(() => Promise.resolve())} />);
+    expect(screen.queryByRole("button", { name: /Start simulator/ })).toBeNull();
+    rerender(<WebPane orgId="org" pane={blob} mobileApp />);
+    expect(screen.queryByRole("button", { name: /Start simulator/ })).toBeNull();
   });
 });

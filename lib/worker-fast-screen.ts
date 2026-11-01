@@ -2,7 +2,7 @@
 // idb, so an emulator stays on the JPEG path. Channels: "video" carries H.264, "input" the live gesture and keyboard.
 import { openIdb } from "./idb-companion";
 import type { IdbSession } from "./idb-session";
-import { liveEvent } from "./rtc-signal";
+import { liveEvent, type ScreenQuality } from "./rtc-signal";
 import type { Device } from "./simulator-devices";
 import { answerOffer, type Channel } from "./worker-rtc";
 import type { FastScreen } from "./worker-screen";
@@ -27,8 +27,8 @@ export function sendFrame(channel: Pick<Channel, "send">, frame: Buffer) {
   for (let at = 0; at < whole.length; at += CHUNK) channel.send(whole.subarray(at, at + CHUNK));
 }
 
-// Video runs only while a board is on the channel, and each one starts at a key frame.
-export function videoChannel(idb: Pick<IdbSession, "video">, channel: Channel) {
+// Video runs only while a board is on the channel, and each one starts at a key frame, at the quality its offer asked for.
+export function videoChannel(idb: Pick<IdbSession, "video">, channel: Channel, quality?: ScreenQuality) {
   let waiting = true;
   let stop: (() => void) | null = idb.video(
     (frame) => {
@@ -39,6 +39,7 @@ export function videoChannel(idb: Pick<IdbSession, "video">, channel: Channel) {
       sendFrame(channel, frame);
     },
     () => (stop = null),
+    quality,
   );
   channel.stateChanged.subscribe((state) => {
     if (state !== "closed") return;
@@ -64,9 +65,9 @@ export async function openFastScreen(d: Device): Promise<FastScreen | null> {
   let line: { close: () => void } | null = null;
   return {
     size: idb.size,
-    connect: async (sdp) => {
+    connect: async (sdp, quality) => {
       line?.close();
-      const opened = await answerOffer(sdp, { video: (c) => videoChannel(idb, c), input: (c) => inputChannel(idb, c) });
+      const opened = await answerOffer(sdp, { video: (c) => videoChannel(idb, c, quality), input: (c) => inputChannel(idb, c) });
       line = opened;
       return opened.answer;
     },

@@ -25,7 +25,7 @@ interface PaneProps {
   onWidth: (width: number) => void;
 }
 
-// Manual QA mode runs the device on this Mac, so its live view is a page in the native pane (docs/architecture/manual-qa.md).
+// Local Simulator mode runs the device on this Mac, so its live view is a page in the native pane (docs/architecture/manual-qa.md).
 export default function WorkerOpenCard({ thread, browser }: { thread: WorkerThread; browser: PaneProps }) {
   const { card, worker, handlers } = thread;
   const qa = useQa(card);
@@ -52,6 +52,8 @@ export default function WorkerOpenCard({ thread, browser }: { thread: WorkerThre
             onClose={handlers.onClose}
             onScreenInput={(input) => sendWorkerAction({ action: "input", cardId: card.id, input })}
             actions={toggle}
+            source={worker.name}
+            mobileApp={card.mobileApp}
           />
         )}
       </ThreadTransportContext.Provider>

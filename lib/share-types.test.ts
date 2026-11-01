@@ -113,6 +113,15 @@ describe("a worker's live screen", () => {
     expect(paneFromUrl(`weft-screen:${token}?device=d&until=soon`)).toBeNull();
   });
 
+  it("carries the worker's devices for the pane's menu, and drops a garbled list", () => {
+    const url = screenPage(token, { id: "a", name: "A" }, 1, false, [{ id: "a", name: "A" }, { id: "b", name: "B" }]);
+    expect(paneFromUrl(url)).toMatchObject({ devices: [{ id: "a", name: "A" }, { id: "b", name: "B" }] });
+    expect(paneFromUrl(screenPage(token, { id: "a", name: "A" }, 1))).toMatchObject({ devices: [] });
+    expect(paneFromUrl(`weft-screen:${token}?device=d&until=1&devices=%7B`)).toMatchObject({ devices: [] });
+    expect(paneFromUrl(`weft-screen:${token}?device=d&until=1&devices=%7B%7D`)).toMatchObject({ devices: [] });
+    expect(paneFromUrl(`weft-screen:${token}?device=d&until=1&devices=${encodeURIComponent('[["a","A"],[1,2]]')}`)).toMatchObject({ devices: [{ id: "a", name: "A" }] });
+  });
+
   it("names the device when the name is missing", () => {
     expect(paneFromUrl(`weft-screen:${token}?device=d&until=1`)).toMatchObject({ label: "d" });
   });

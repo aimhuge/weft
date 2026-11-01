@@ -1,4 +1,4 @@
-// The manual QA switch on a worker's card (docs/architecture/manual-qa.md). Reached only from Weft's own window (the route
+// The Local Simulator switch on a worker's card (docs/architecture/manual-qa.md). Reached only from Weft's own window (the route
 // is `elevated`). Switching on asks for Touch ID in Electron main, keeps the grant on this Mac and tells the worker where
 // to send the card's device tools. Nothing here runs without the yes.
 import { shell } from "./browser-shell";
@@ -31,7 +31,7 @@ export async function switchQa(cardId: string, device: string | null, target: Ta
   const picked = (await listDevices()).find((d) => stableId(d) === device);
   if (!picked) throw new Error(`${device} isn't on this Mac.`);
   const { approved } = (await shell("/qa/approve", { worker: target.workerName, folder: target.folder, device: picked.name })) as { approved?: boolean };
-  if (approved !== true) throw new Error("Manual QA stays off: you didn't approve it.");
+  if (approved !== true) throw new Error("Local Simulator stays off: you didn't approve it.");
   grantQa({ cardId, workerId: target.workerId, device, name: picked.name });
   // With no folder synced, the inbox isn't listening, and the worker wouldn't see this Mac as there.
   await (await import("./cloud-inbox")).refreshCloudInbox();

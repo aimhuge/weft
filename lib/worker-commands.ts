@@ -3,6 +3,7 @@
 // A run is a new card with two things a Mac's new_card doesn't carry: the repo to clone when the worker has no
 // checkout yet, and the mode the thread starts in (never one that skips asking).
 import type { NewCardPayload, NewCommand, CloudCommandRow } from "./cloud-commands";
+import type { ScreenQuality } from "./rtc-signal";
 import { CLAUDE_TOKEN, GITHUB_PURPOSE, GITHUB_TOKEN, LOGIN_PURPOSE, seal, sealedOf, type Sealed } from "./worker-seal";
 
 // The modes a run may ask for. bypassPermissions is left out on purpose: a command off the network can't buy a
@@ -15,9 +16,13 @@ export const CARD_MODES = ["default", "acceptEdits", "auto"] as const;
 export type CardMode = (typeof CARD_MODES)[number];
 
 // A click or drag on a worker's live screen, as fractions of the screen (components/web-board/WorkerScreen.tsx).
-export type ScreenInput = { kind: "tap" | "swipe"; device: string; x: number; y: number; x2?: number; y2?: number; ms?: number } | { kind: "offer"; device: string; sealed: Sealed };
+// `watch` is the pane's own Start, Resume and device menu: it streams that device (or the booted one) to the card.
+export type ScreenInput =
+  | { kind: "tap" | "swipe"; device: string; x: number; y: number; x2?: number; y2?: number; ms?: number }
+  | { kind: "offer"; device: string; sealed: Sealed }
+  | { kind: "watch"; device?: string };
 // What the board hands its local server, which seals it to the worker before it leaves this Mac (lib/worker-board.ts).
-export type BoardOffer = { kind: "offer"; device: string; sdp: string; key: string };
+export type BoardOffer = { kind: "offer"; device: string; sdp: string; key: string; quality?: ScreenQuality };
 export type BoardInput = ScreenInput | BoardOffer;
 
 export interface RunPayload extends NewCardPayload {
@@ -121,14 +126,21 @@ export function modeBody(command: Pick<CloudCommandRow, "payload">): { cardId: s
 
 const fraction = (v: unknown) => typeof v === "number" && Number.isFinite(v);
 
+type RawInput = Partial<Record<"kind" | "device" | "x" | "y" | "x2" | "y2" | "ms" | "sealed", unknown>>;
+
 function screenInput(raw: unknown): ScreenInput | null {
-  const p = (raw && typeof raw === "object" ? raw : {}) as Partial<Record<"kind" | "device" | "x" | "y" | "x2" | "y2" | "ms" | "sealed", unknown>>;
+  const p = (raw && typeof raw === "object" ? raw : {}) as RawInput;
   const device = text(p.device);
   if (p.kind === "offer") {
     const sealed = sealedOf(p.sealed);
     return device && sealed ? { kind: "offer", device, sealed } : null;
   }
-  if ((p.kind !== "tap" && p.kind !== "swipe") || !device || !fraction(p.x) || !fraction(p.y)) return null;
+  if (p.kind === "watch") return device ? { kind: "watch", device } : { kind: "watch" };
+  return device ? touchInput(p, device) : null;
+}
+
+function touchInput(p: RawInput, device: string): ScreenInput | null {
+  if ((p.kind !== "tap" && p.kind !== "swipe") || !fraction(p.x) || !fraction(p.y)) return null;
   const point = { device, x: p.x as number, y: p.y as number };
   if (p.kind === "tap") return { kind: "tap", ...point };
   if (!fraction(p.x2) || !fraction(p.y2)) return null;

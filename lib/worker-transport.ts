@@ -30,7 +30,7 @@ export interface QaState {
   approved: string | null;
 }
 
-// What the manual QA switch shows for a card (lib/qa-switch.ts).
+// What the Local Simulator switch shows for a card (lib/qa-switch.ts).
 export async function readQa(cardId: string): Promise<QaState> {
   const res = await apiFetch(`/api/worker-board?${new URLSearchParams({ devices: "1", card: cardId }).toString()}`);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);

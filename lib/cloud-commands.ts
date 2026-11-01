@@ -84,7 +84,7 @@ export interface InputPayload {
   ms?: number;
 }
 
-// Manual QA mode: which Mac a card's device tools go to, null to stop. Routing only: the Mac holds the approval.
+// Local Simulator mode: which Mac a card's device tools go to, null to stop. Routing only: the Mac holds the approval.
 // Update now: nothing to carry, only the ask.
 export type UpdatePayload = Record<string, never>;
 

@@ -70,7 +70,7 @@ export async function refreshCloudInbox() {
   const client = safeClient();
   if (!client) return;
   try {
-    // Manual QA needs the Mac listening, and showing as present, even with no folder synced.
+    // Local Simulator needs the Mac listening, and showing as present, even with no folder synced.
     const uid = syncFolders().length || hasQaGrant() ? await signedInUser(client) : null;
     if (!uid) {
       await stopListening(client);

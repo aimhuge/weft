@@ -1,4 +1,4 @@
-// The worker's end of manual QA mode's wire (lib/worker-device-link.ts): a build's trip to R2 goes through the
+// The worker's end of Local Simulator mode's wire (lib/worker-device-link.ts): a build's trip to R2 goes through the
 // key-checked route, then straight to R2 as a stream.
 import fs from "node:fs";
 import os from "node:os";

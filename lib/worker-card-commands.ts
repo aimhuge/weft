@@ -46,10 +46,10 @@ export function createCardCommands(engine: Engine) {
       const body = inputBody(command);
       if (!body) throw new Error("That tap is empty.");
       const card = ownCard(body.cardId);
-      await engine.input(body.input);
+      await engine.input(body.input, card.id);
       return card.id;
     },
-    // Manual QA mode (docs/architecture/manual-qa.md): the card's device tools go to this Mac, or stop.
+    // Local Simulator mode (docs/architecture/manual-qa.md): the card's device tools go to this Mac, or stop.
     qa(command: CloudCommandRow): string {
       const body = qaBody(command);
       if (!body) throw new Error("That QA switch is empty.");

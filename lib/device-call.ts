@@ -1,4 +1,4 @@
-// Manual QA mode's wire format (docs/architecture/manual-qa.md): the call a worker's simulator tool makes to its owner's
+// Local Simulator mode's wire format (docs/architecture/manual-qa.md): the call a worker's simulator tool makes to its owner's
 // Mac, and what the Mac reads back off the network. Both sides read this, so they can't drift. The Mac treats a call as
 // untrusted input: only these tools, only these fields, each the type it must be. `device` is never one of them, because
 // the Mac only touches the device its owner picked, and neither is a path, because a path on a worker means nothing here.

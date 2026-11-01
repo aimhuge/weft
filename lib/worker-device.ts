@@ -1,4 +1,4 @@
-// A worker's side of manual QA mode (docs/architecture/manual-qa.md). A card with qaDevice set sends each simulator tool call
+// A worker's side of Local Simulator mode (docs/architecture/manual-qa.md). A card with qaDevice set sends each simulator tool call
 // to its owner's Mac and waits for the answer, so the agent sees an ordinary tool result. `install` packs the path into a
 // build first, since a path here means nothing there. When the Mac isn't there the call runs on this box's own device and
 // says so. When the Mac refuses (no approval, 8 hours up) the agent reads that: it isn't an outage to route around.
