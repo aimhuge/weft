@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { FindRevealContext } from "@/lib/find-reveal";
 import { isLive } from "@/lib/format";
 import { isPukuCapError } from "@/lib/billing/upgrade";
 import { openUpgrade } from "@/lib/use-upgrade";
@@ -13,10 +14,12 @@ import { useThreadTransport, type ThreadTransport } from "@/lib/thread-transport
 import type { Card, QuestionReply, ThreadItem } from "@/lib/types";
 import { usePendingSends } from "@/lib/use-pending-sends";
 import { useEditLast } from "@/lib/use-edit-last";
+import { useThreadFind, type ThreadFind } from "@/lib/use-thread-find";
 import { guarded } from "./guarded";
 import { useFileIndex } from "@/lib/use-file-index";
 import { FileIndexContext, FileLinkContext } from "./file-link-context";
 import { Spinner } from "./Icon";
+import FindField from "./FindField";
 import { PermissionRequest, ThreadReply } from "./ThreadFooter";
 import { ThreadEntries, groupThread } from "./ThreadItems";
 import FirstMessageErrorBanner from "./FirstMessageErrorBanner";
@@ -44,6 +47,23 @@ function questionFor(card: Card, onAnswer: (allow: boolean, answers?: Record<str
   };
 }
 
+// ⌘F's bar, floated over the messages' top corner: it takes no row from a small window.
+function ThreadFindBar({ find }: { find: ThreadFind }) {
+  if (!find.open) return null;
+  return (
+    <FindField
+      query={find.query}
+      count={find.count}
+      focus={find.focus}
+      placeholder="Find in thread"
+      onQuery={find.setQuery}
+      onStep={find.step}
+      onClose={find.close}
+      className="absolute right-4 top-2 z-10 w-64 max-w-[calc(100%-2rem)] shadow-md"
+    />
+  );
+}
+
 // A thread's messages, its pending permission request, and the reply box.
 // The parent supplies a flex column for it to fill.
 export default function ThreadView({
@@ -60,6 +80,7 @@ export default function ThreadView({
   scheduling,
   onOpenSettings,
   onDeleted,
+  findable,
 }: {
   card: Card;
   // The full thread snapshot from the parent; used as the seed on first connect and on reconnect,
@@ -86,6 +107,8 @@ export default function ThreadView({
   // After Delete, the parent (Board) closes the thread. Optional; without it, the banner still deletes
   // the card but the open thread stays mounted with the now-deleted id.
   onDeleted?: () => void;
+  // A card's own thread panel, which answers ⌘F (lib/use-thread-find.ts); the copilot's chat doesn't.
+  findable?: boolean;
 }) {
   // The request already answered here, so a second click can't answer it (or the next one) again.
   const [answeredId, setAnsweredId] = useState<string | null>(null);
@@ -204,15 +227,32 @@ export default function ThreadView({
     void Promise.resolve(onAnswer(allow, answers, undefined, grant)).catch(() => setAnsweredId(null));
   }
 
+  const stopFollowing = useCallback(() => {
+    stick.current = false;
+  }, []);
+
   async function send(text: string) {
     stick.current = true;
     await sends.track(text, () => onSend(text));
   }
 
   const entries = groupThread(transport.useView(sends.items));
+  const find = useThreadFind({
+    enabled: Boolean(findable),
+    cardId: card.id,
+    page,
+    items: sends.items,
+    rowKeys: entries.map((entry) => entry.key),
+    scroller,
+    search: transport.searchThread,
+    loadOlder: loadPage,
+    onJump: stopFollowing,
+  });
 
   return (
     <>
+      <div className="relative flex min-h-0 flex-1 flex-col">
+      <ThreadFindBar find={find} />
       <div
         ref={scroller}
         onScroll={(e) => {
@@ -234,7 +274,9 @@ export default function ThreadView({
         {entries.length === 0 && !live && empty}
         <FileLinkContext.Provider value={card.id}>
           <FileIndexContext.Provider value={fileIndex}>
-            <ThreadEntries entries={entries} live={live} streaming={streaming} editFrom={editFrom} onSend={send} cardId={card.id} />
+            <FindRevealContext.Provider value={find.reveal}>
+              <ThreadEntries entries={entries} live={live} streaming={streaming} editFrom={editFrom} onSend={send} cardId={card.id} />
+            </FindRevealContext.Provider>
           </FileIndexContext.Provider>
         </FileLinkContext.Provider>
         {card.column === "running" && !streaming && (
@@ -259,6 +301,7 @@ export default function ThreadView({
           openSettings={onOpenSettings}
           onDeleted={onDeleted}
         />
+      </div>
       </div>
 
       {!readOnly && <YouFirst cardId={card.id} />}

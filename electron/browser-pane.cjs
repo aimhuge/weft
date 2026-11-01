@@ -22,6 +22,8 @@ const { BOARD, activeKey, paneVisibleFor, needsRestore, switchKey } = require(".
 const { touchIdPrompt } = require("./touch-id.cjs");
 const { appsDir, attachWebContentsView, createAppReload } = require("./app-reload.cjs");
 const { createPaneTabs } = require("./pane-tabs.cjs");
+const { createPaneFind } = require("./pane-find.cjs");
+const { addressBarUrl, normalizeUrl, tabState } = require("./pane-url.cjs");
 
 // Its own session, apart from the board window's, so pages never carry the launch token (electron/api-token.cjs).
 const PANE_PARTITION = "persist:threadboard-browser";
@@ -48,6 +50,11 @@ function createBrowserPane({ getWindow, getAppView, token, onContents, pages, on
   // The agent tools' CDP session per page and what they do with it (electron/pane-cdp.cjs, pane-input.cjs).
   const cdp = createPaneCdp();
   const input = createPaneInput({ cdp });
+  // ⌘F in the page on screen (electron/pane-find.cjs).
+  const find = createPaneFind({
+    current: () => viewOf(active)?.webContents,
+    send: (found) => boardContents()?.send("browser:found", found),
+  });
 
   function state() {
     const wc = viewOf(active)?.webContents;
@@ -65,11 +72,6 @@ function createBrowserPane({ getWindow, getAppView, token, onContents, pages, on
       canGoForward: wc ? wc.navigationHistory.canGoForward() : false,
       zoom: wc ? Math.round(wc.getZoomFactor() * 100) : 100,
     };
-  }
-
-  function tabState({ id, view }) {
-    const url = view.webContents.getURL();
-    return { id, url: failedUrl(url) ?? url, title: view.webContents.getTitle() };
   }
 
   function sendState() {
@@ -124,6 +126,7 @@ function createBrowserPane({ getWindow, getAppView, token, onContents, pages, on
     // A focused page swallows keys the board never sees, so Escape is replayed into the board too,
     // where it closes the newest layer as usual. A fullscreen video keeps it to leave fullscreen.
     replayEscapeToBoard(wc, boardContents);
+    find.watch(wc);
     // Trackpad pinch magnifies like Safari; Cmd+scroll changes the page zoom.
     wc.setVisualZoomLevelLimits(1, 4).catch(() => {});
     wc.on("zoom-changed", (_e, direction) => zoom(wc, direction));
@@ -268,14 +271,6 @@ function createBrowserPane({ getWindow, getAppView, token, onContents, pages, on
     layout();
   }
 
-  function normalizeUrl(raw) {
-    const url = String(raw || "").trim();
-    if (/^(https?|file|about):/i.test(url)) return url;
-    if (/^(localhost|127\.0\.0\.1|\[::1\])([:/]|$)/i.test(url)) return `http://${url}`;
-    if (/^[a-z][a-z0-9+.-]*:/i.test(url)) throw new Error(`Can't open ${url} in the browser pane`);
-    return `https://${url}`;
-  }
-
   // Weft's own server (see self-url.cjs for what counts).
   function isSelf(url) {
     return isSelfUrl(url, getAppView()?.webContents.getURL());
@@ -288,7 +283,7 @@ function createBrowserPane({ getWindow, getAppView, token, onContents, pages, on
   // navigate within it later.
   async function open(raw, key, activate, opts = {}) {
     const targetKey = key ?? active;
-    const url = normalizeUrl(raw);
+    const url = opts.fromBoard ? addressBarUrl(raw) : normalizeUrl(raw);
     const origin = originOf(url);
     // Weft inside its own pane is a confusing hall of mirrors; a card working on Weft should run its own dev server on another port.
     if (isSelf(url)) throw new Error(`${url} is Weft itself; open the card's own dev server instead`);
@@ -394,6 +389,8 @@ function createBrowserPane({ getWindow, getAppView, token, onContents, pages, on
     zoom: (action) => zoom(viewOf(active)?.webContents, action),
     // True for any card's page, so the app menu's zoom keys reach the pane's toolbar too.
     owns: (wc) => [...tabs.all()].some((t) => t.view.webContents === wc),
+    find: find.find,
+    stopFind: find.stop,
     newTab,
     selectTab,
     closeTab,

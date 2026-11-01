@@ -10,6 +10,7 @@ import { useAnyOverlay, useMenuCover } from "@/lib/overlay";
 import { clearOfMenu } from "@/lib/pane-clear";
 import { useMiniApps } from "@/lib/use-mini-apps";
 import Icon, { Spinner } from "./Icon";
+import { PaneFindField, usePaneFind } from "./PaneFind";
 import AppShareButton from "./AppShareButton";
 import PaneTabs, { NewTabButton } from "./PaneTabs";
 import SaveAppButton from "./SaveAppButton";
@@ -110,6 +111,9 @@ export default function BrowserPane({
   // A saved app's address is a name (use sans), a real page's stays a URL (use mono).
   const apps = useMiniApps();
   const app = appFor(apps, state.url);
+  // ⌘F with the page focused. The field takes the address bar's place: no row is added and the page keeps its size,
+  // so it doesn't reflow under the search, and nothing needs drawing over the native view.
+  const find = usePaneFind({ url: state.url, tab: state.tab });
 
   return (
     <section
@@ -133,7 +137,7 @@ export default function BrowserPane({
         <button className={nav} disabled={!state.url} onClick={() => window.weft?.browser.reload()} aria-label="Reload">
           {state.loading ? <Spinner size={13} /> : <Icon name="reload" size={15} />}
         </button>
-        <AddressInput desktop={desktop} url={state.url} app={app} fresh={fresh} />
+        {find.open ? <PaneFindField find={find} /> : <AddressInput desktop={desktop} url={state.url} app={app} fresh={fresh} />}
         <NewTabButton className={nav} onOpen={() => setFresh((n) => n + 1)} />
         {/* Save as app: the page joins the left rail below Services (components/AppsRail.tsx). */}
         {desktop && <SaveAppButton url={state.url} title={state.title} />}
