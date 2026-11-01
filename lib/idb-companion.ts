@@ -13,17 +13,19 @@ import { findBin, TOOLS_DIR } from "./simulator-exec";
 
 const READY_MS = 15_000;
 const POLL_MS = 50;
-// Thirty frames a second near half size: a phone screen in a narrow pane, and a key frame often enough to join quickly.
-const VIDEO = { fps: 30, format: "H264", compression_quality: 0.6, avg_bitrate: 8_000_000, key_frame_rate: 2 };
-const TARGET_SCALE = 0.5;
+// Thirty frames a second at full size: a pane on a retina screen draws a phone at about its own pixels, so anything
+// smaller came out soft, and text is what QA reads. A key frame often enough to join quickly.
+const VIDEO = { fps: 30, format: "H264", compression_quality: 0.85, avg_bitrate: 8_000_000, key_frame_rate: 2 };
+const TARGET_SCALE = 1;
 
 const gcd = (a: number, b: number): number => (b ? gcd(b, a % b) : a);
 
 // The encoder silently sends nothing unless both sides come out even: 0.5 gets no video on an iPhone 16 (1179 wide) or a
-// 16 Pro (1206, so 603). This finds the scale nearest half that lands on exact even numbers, measured on m1mini.
-export function evenScale(width: number, height: number) {
+// 16 Pro (1206, so 603), and full size gets none on the iPhone 16 either. This finds the scale nearest the target, never
+// above 1, that lands on exact even numbers, measured on m1mini.
+export function evenScale(width: number, height: number, target = TARGET_SCALE) {
   const step = 2 / gcd(width, height);
-  const steps = Math.max(1, Math.round(TARGET_SCALE / step));
+  const steps = Math.max(1, Math.min(Math.round(target / step), Math.floor(1 / step + 1e-9)));
   // The nudge keeps idb's rounding on the even side.
   return Math.min(1, step * steps + 1e-6);
 }

@@ -374,7 +374,9 @@ board ─ sealed offer, elevated input command ─▶ daemon ─ encrypted answe
   the watch and ends with it, and `tapAt` and `swipe` use it while it's open, which also speeds the command path. It reports
   the screen's size, so taps work with no AXe on the box.
 - **Even sides.** The encoder sends nothing, with no error, unless both sides of the video are even. 0.5 fails on a 1179-wide
-  iPhone 16 and a 1206-wide 16 Pro, so `evenScale` picks the scale nearest half that lands on exact even numbers.
+  iPhone 16 and a 1206-wide 16 Pro, and full size fails on the iPhone 16, so `evenScale` picks the scale nearest full
+  size, never above it, that lands on exact even numbers (8/9 on the iPhone 16). The video goes out at full size and
+  quality 0.85: at half size and 0.6 a retina pane drew it soft.
 - **One line, named channels.** `answerOffer` takes a map of channel names to handlers. `video` carries H.264 and `input` the
   live gesture and keyboard. Other live streams can add a channel. A line only exists while someone is watching, so commands,
   card state and wake-ups stay on Supabase, which also carries the signalling.
