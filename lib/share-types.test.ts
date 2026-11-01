@@ -117,3 +117,12 @@ describe("a worker's live screen", () => {
     expect(paneFromUrl(`weft-screen:${token}?device=d&until=1`)).toMatchObject({ label: "d" });
   });
 });
+
+describe("a watch's fast flag in card.page", () => {
+  const pane = (fast?: boolean) => paneFromUrl(screenPage("a".repeat(32), { id: "d", name: "n" }, 1, fast));
+
+  it("says when the watch takes a WebRTC offer", () => {
+    expect(pane(true)).toMatchObject({ fast: true });
+    expect(pane()).toMatchObject({ fast: false });
+  });
+});

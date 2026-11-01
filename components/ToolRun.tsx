@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useFindReveal } from "@/lib/find-reveal";
 import { describeToolRun, shortToolName, toolAction } from "@/lib/format";
 import type { ThreadItem } from "@/lib/types";
 import Icon, { Spinner } from "./Icon";
@@ -13,7 +14,9 @@ type Permission = Extract<ThreadItem, { kind: "permission" }>;
 // A run of tool calls as one line, "Ran 3 commands, read 2 files, edited a file +1", that opens to
 // show each call. Screenshots the run took stay visible while it's folded.
 export default function ToolRun({ calls, live, cardId }: { calls: (ToolCall | Permission)[]; live: boolean; cardId: string }) {
-  const [open, setOpen] = useState(false);
+  const [opened, setOpen] = useState(false);
+  // Find in the thread opens the run while its match is the current one (lib/find-reveal.ts).
+  const open = useFindReveal(calls) || opened;
   const tools = calls.filter((c): c is ToolCall => c.kind === "tool");
   if (!tools.length) return calls.map((c, i) => <PermissionRow key={i} item={c as Permission} />);
 

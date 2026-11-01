@@ -9,13 +9,27 @@ import { ThreadTransportContext } from "@/lib/thread-transport";
 import { ToolResultSourceContext } from "@/lib/use-tool-result";
 import type { WorkerThread } from "@/lib/use-worker-board";
 import { sendWorkerAction, workerToolSource, workerTransport } from "@/lib/worker-transport";
+import type { BrowserState } from "@/lib/client";
 import { guarded } from "./guarded";
+import { QaSwitch, useQa } from "./QaSwitch";
 import { WebPane } from "./web-board/WebPane";
 
 const ThreadPanel = guarded(() => import("./ThreadPanel"), { what: "thread", className: "m-3 w-[360px] self-start" });
+const BrowserPane = guarded(() => import("./BrowserPane"), { what: "browser pane", className: "m-3 w-[360px] self-start" });
 
-export default function WorkerOpenCard({ thread }: { thread: WorkerThread }) {
+interface PaneProps {
+  desktop: boolean;
+  state: BrowserState;
+  obscured: boolean;
+  width: number;
+  onWidth: (width: number) => void;
+}
+
+// Manual QA mode runs the device on this Mac, so its live view is a page in the native pane (docs/architecture/manual-qa.md).
+export default function WorkerOpenCard({ thread, browser }: { thread: WorkerThread; browser: PaneProps }) {
   const { card, worker, handlers } = thread;
+  const qa = useQa(card);
+  const toggle = <QaSwitch card={card} qa={qa} />;
   return (
     <ToolResultSourceContext.Provider value={workerToolSource}>
       <ThreadTransportContext.Provider value={workerTransport}>
@@ -29,12 +43,17 @@ export default function WorkerOpenCard({ thread }: { thread: WorkerThread }) {
           {...handlers}
           className="flex h-full min-h-0 w-[44%] min-w-[380px] shrink-0 flex-col bg-panel"
         />
-        <WebPane
-          orgId={null}
-          pane={paneFromUrl(card.page ?? "")}
-          onClose={handlers.onClose}
-          onScreenInput={(input) => sendWorkerAction({ action: "input", cardId: card.id, input })}
-        />
+        {qa.on ? (
+          <BrowserPane {...browser} expanded onClose={handlers.onClose} actions={toggle} />
+        ) : (
+          <WebPane
+            orgId={null}
+            pane={paneFromUrl(card.page ?? "")}
+            onClose={handlers.onClose}
+            onScreenInput={(input) => sendWorkerAction({ action: "input", cardId: card.id, input })}
+            actions={toggle}
+          />
+        )}
       </ThreadTransportContext.Provider>
     </ToolResultSourceContext.Provider>
   );

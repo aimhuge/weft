@@ -109,7 +109,7 @@ export type SharePane =
   | { kind: "local"; url: string; label: string }
   // A worker's device, live: frames arrive on a Realtime Broadcast topic (lib/worker-screen.ts). Never in a thread item,
   // only in card.page, so a share link can't carry it.
-  | { kind: "screen"; url: string; label: string; token: string; device: string; until: number };
+  | { kind: "screen"; url: string; label: string; token: string; device: string; until: number; fast: boolean };
 
 // GET /api/s/[id]/live?after=<seq> (new items) or ?before=<seq> (older page), as the viewer polls it.
 // Items are newest first like the thread route, already redacted (lib/share-redact.ts) and with blob refs left in;
@@ -137,8 +137,11 @@ const SCREEN_PAGE = /^weft-screen:([0-9a-f]{32})\?(.*)$/;
 export const SCREEN_EVENT = "frame";
 export const screenTopic = (token: string) => `worker-screen:${token}`;
 
-export function screenPage(token: string, d: { id: string; name: string }, until: number) {
-  return `weft-screen:${token}?${new URLSearchParams({ device: d.id, name: d.name, until: String(until) }).toString()}`;
+// fast: this watch also takes a WebRTC offer (lib/use-rtc-screen.ts).
+export function screenPage(token: string, d: { id: string; name: string }, until: number, fast = false) {
+  const params = new URLSearchParams({ device: d.id, name: d.name, until: String(until) });
+  if (fast) params.set("fast", "1");
+  return `weft-screen:${token}?${params.toString()}`;
 }
 
 function screenPane(url: string): SharePane | null {
@@ -149,7 +152,7 @@ function screenPane(url: string): SharePane | null {
   const device = params.get("device");
   const until = Number(params.get("until"));
   if (!device || !Number.isFinite(until)) return null;
-  return { kind: "screen", url, label: params.get("name") || device, token, device, until };
+  return { kind: "screen", url, label: params.get("name") || device, token, device, until, fast: params.get("fast") === "1" };
 }
 
 const BLOB_PAGE = /^(blob:sha256:[0-9a-f]{64})(#.*)?$/;

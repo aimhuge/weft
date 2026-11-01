@@ -71,7 +71,7 @@ export const isCardCommand = (c: Pick<CloudCommandRow, "kind">) => c.kind === "r
 
 // A worker's sign-ins and clones come from Settings and the project menu on the desktop, and report back there. Its
 // mode changes and screen taps come from an open thread, which shows the result.
-const isWorkerAdmin = (c: Pick<CloudCommandRow, "kind">) => c.kind === "login" || c.kind === "github_login" || c.kind === "clone" || c.kind === "mode" || c.kind === "input";
+const isWorkerAdmin = (c: Pick<CloudCommandRow, "kind">) => c.kind === "login" || c.kind === "github_login" || c.kind === "clone" || c.kind === "mode" || c.kind === "input" || c.kind === "qa";
 
 // The strip under the header follows new threads; a card's own commands show under its reply box instead.
 export const boardCommands = (commands: CloudCommandRow[]) => commands.filter((c) => !isCardCommand(c) && !isWorkerAdmin(c));

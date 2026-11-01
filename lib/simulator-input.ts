@@ -5,7 +5,9 @@ import { bootedDevice } from "./simulator-devices";
 import { swipe, tapAt } from "./simulator-ui";
 import { markLive, watchedSize, watching } from "./simulator-watch";
 
-export type LiveInput = { kind: "tap" | "swipe" | "live"; device: string; x?: number; y?: number; x2?: number; y2?: number; ms?: number };
+import type { ScreenInput } from "./worker-commands";
+
+export type LiveInput = Exclude<ScreenInput, { kind: "offer" }> | { kind: "tap" | "swipe" | "live"; device: string; x?: number; y?: number; x2?: number; y2?: number; ms?: number };
 
 const unit = (n: unknown) => (typeof n === "number" && Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : 0.5);
 

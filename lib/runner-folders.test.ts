@@ -9,6 +9,8 @@ const h = await vi.hoisted(async () => (await import("./runner.harness")).harnes
 
 vi.mock("@anthropic-ai/claude-agent-sdk", async () => (await import("./runner.harness")).sdkMock(h));
 vi.mock("./store", async () => (await import("./runner.harness")).storeMock(h));
+// The harness's data dir can't be made, and a worker's session makes its show folder.
+vi.mock("./show-dir", async () => ({ SHOW_DIR: (await import("node:os")).tmpdir() }));
 vi.mock("./bus", async () => (await import("./runner.harness")).busMock(h));
 vi.mock("./env", async () => (await import("./runner.harness")).envMock());
 vi.mock("./import", async () => (await import("./runner.harness")).importMock(h));
@@ -43,8 +45,24 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  vi.unstubAllEnvs();
   for (const q of h.queries) q.options.abortController.abort();
   await flush(2);
+});
+
+describe("the CLI's working directories", () => {
+  it("gives a worker's session the show folder, beside the card's own grants", async () => {
+    vi.stubEnv("WEFT_WORKER", "1");
+    const { SHOW_DIR } = await import("./show-dir");
+    addCard({ id: "c1", readScope: ["/Users/zzz-outside"] });
+    const q = await send("c1");
+    expect(q.options.additionalDirectories).toEqual(["/Users/zzz-outside", SHOW_DIR]);
+  });
+
+  it("leaves a desktop session with its grants alone", async () => {
+    addCard({ id: "c1", readScope: ["/Users/zzz-outside"] });
+    expect((await send("c1")).options.additionalDirectories).toEqual(["/Users/zzz-outside"]);
+  });
 });
 
 describe("folder gate", () => {

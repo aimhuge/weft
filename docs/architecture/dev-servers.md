@@ -26,6 +26,7 @@ CLI closes (a Weft restart), and sits in the thread's task strip as "1 task runn
   (the whole list) and `stop`. `DEVSERVERS_PROMPT` in every thread's system prompt (`lib/weft-prompts.ts`) and
   `/weft:preview` step 3 point threads at it. Trusted, so no permission prompt (`lib/board-tools-trust.ts`).
 - The review tour's `dev` command goes through the same runs (`app/api/cards/[id]/dev`), with the tour's url.
+  Its panel (`components/ReviewPanelDevServer.tsx`) polls every 3s and never navigates on a flap: it opens the current step once, only if the server was down when the tour opened, and only over a blank pane or that step's own failed page. One missed check doesn't count as down unless the run crashed; `reachable` waits 5s, since a compiling `next dev` answers late.
 - `lib/devserver-list.ts` `listDev()`: every Weft run (probed in parallel), plus running background shell tasks a
   thread still started the old way (`lib/tasks.ts` `isDevServerTask`, a pattern on the task's description; its url
   parsed from "port 4001" or "localhost:4001"). Those are stop-only: stopping goes through `lib/task-stop.ts`.

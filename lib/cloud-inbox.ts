@@ -17,6 +17,7 @@ import { shell } from "./browser-shell";
 import { answerBody, answerGrant, newCardBody, replyBody, stopBody, type CloudCommandRow } from "./cloud-commands";
 import { syncNow, syncOrgId } from "./cloud-sync";
 import { beatDesktopWorker } from "./desktop-worker";
+import { drainDeviceCalls } from "./device-calls";
 import { deviceId } from "./device-id";
 import { applyFolderGrant } from "./folder-grant";
 import { globalSingleton } from "./global-singleton";
@@ -24,6 +25,7 @@ import { startFeatureCard } from "./card-starter";
 import { answerPermission, sendUserMessage, stop } from "./runner";
 import { syncFolders } from "./settings";
 import { getCard } from "./store";
+import { hasQaGrant } from "./qa-grants";
 import { pairingStatus } from "./sync-security";
 
 const CHECK_MS = 30_000;
@@ -68,7 +70,8 @@ export async function refreshCloudInbox() {
   const client = safeClient();
   if (!client) return;
   try {
-    const uid = syncFolders().length ? await signedInUser(client) : null;
+    // Manual QA needs the Mac listening, and showing as present, even with no folder synced.
+    const uid = syncFolders().length || hasQaGrant() ? await signedInUser(client) : null;
     if (!uid) {
       await stopListening(client);
       return;
@@ -76,7 +79,7 @@ export async function refreshCloudInbox() {
     // Listening means this Mac takes the web board's commands: say so in the workspace's Workers list.
     void beatDesktopWorker(client, uid);
     if (g.channel && g.uid === uid) {
-      await drain();
+      await Promise.all([drain(), drainDeviceCalls(client, uid)]);
       return;
     }
     await stopListening(client);
@@ -85,8 +88,11 @@ export async function refreshCloudInbox() {
     g.channel = client
       .channel(`cloud-commands-${device}`)
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "cloud_commands", filter: `target_device=eq.${device}` }, () => void drain())
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "device_calls", filter: `target_device=eq.${device}` }, () => void drainDeviceCalls(client, uid))
       .subscribe((status: string) => {
-        if (status === "SUBSCRIBED") void drain();
+        if (status !== "SUBSCRIBED") return;
+        void drain();
+        void drainDeviceCalls(client, uid);
       });
   } catch (err) {
     console.warn(`Cloud inbox: ${(err as Error).message}`);

@@ -7,6 +7,7 @@
 import { useEffect, useRef } from "react";
 import { apiFetch } from "./api-client";
 import { applyThreadEvent, type ThreadPage } from "./thread-page";
+import type { Device } from "./simulator-devices";
 import type { PageUpdate, ThreadTransport } from "./thread-transport";
 import type { ThreadItem } from "./types";
 import type { ToolResultSource } from "./use-tool-result";
@@ -22,6 +23,19 @@ async function action(body: WorkerAction): Promise<void> {
 }
 
 export const sendWorkerAction = action;
+
+export interface QaState {
+  devices: Device[];
+  mac: string;
+  approved: string | null;
+}
+
+// What the manual QA switch shows for a card (lib/qa-switch.ts).
+export async function readQa(cardId: string): Promise<QaState> {
+  const res = await apiFetch(`/api/worker-board?${new URLSearchParams({ devices: "1", card: cardId }).toString()}`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return (await res.json()) as QaState;
+}
 
 async function loadPage(cardId: string, before?: number): Promise<ThreadPage | null> {
   const params = new URLSearchParams({ card: cardId });

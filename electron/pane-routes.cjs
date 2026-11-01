@@ -80,6 +80,13 @@ function paneRoutes({ dataDir, app, dialog, systemPreferences = require("electro
       const ask = touchIdPrompt({ systemPreferences, dialog, window });
       return { approved: await ask(`open a private tunnel to ${target} from ${folder} for ${hours} hours`) };
     },
+    // Manual QA mode: a worker's build runs on this Mac as a process with your permissions, so a person says yes, and only
+    // the answer goes back. The server keeps the grant for 8 hours (lib/qa-grants.ts).
+    "POST /qa/approve": async ({ worker, folder, device }) => {
+      const clean = (v) => String(v ?? "").replace(/[^\p{L}\p{N} ._:()-]/gu, "").slice(0, 60);
+      const ask = touchIdPrompt({ systemPreferences, dialog, window });
+      return { approved: await ask(`run builds from ${clean(worker)} (${clean(folder)}) on ${clean(device)} as you for 8 hours`) };
+    },
     // mcp__secrets__push_to_vercel: a vault value onto the card's linked Vercel project, after Touch ID.
     ...envRoutes(vercelEnv, cardFor),
     // The latest deploy and the unapplied migrations, per folder.

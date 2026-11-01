@@ -3,7 +3,7 @@
 // A run is a new card with two things a Mac's new_card doesn't carry: the repo to clone when the worker has no
 // checkout yet, and the mode the thread starts in (never one that skips asking).
 import type { NewCardPayload, NewCommand, CloudCommandRow } from "./cloud-commands";
-import { CLAUDE_TOKEN, GITHUB_PURPOSE, GITHUB_TOKEN, LOGIN_PURPOSE, seal } from "./worker-seal";
+import { CLAUDE_TOKEN, GITHUB_PURPOSE, GITHUB_TOKEN, LOGIN_PURPOSE, seal, sealedOf, type Sealed } from "./worker-seal";
 
 // The modes a run may ask for. bypassPermissions is left out on purpose: a command off the network can't buy a
 // thread that runs without asking.
@@ -15,7 +15,10 @@ export const CARD_MODES = ["default", "acceptEdits", "auto"] as const;
 export type CardMode = (typeof CARD_MODES)[number];
 
 // A click or drag on a worker's live screen, as fractions of the screen (components/web-board/WorkerScreen.tsx).
-export type ScreenInput = { kind: "tap" | "swipe"; device: string; x: number; y: number; x2?: number; y2?: number; ms?: number };
+export type ScreenInput = { kind: "tap" | "swipe"; device: string; x: number; y: number; x2?: number; y2?: number; ms?: number } | { kind: "offer"; device: string; sealed: Sealed };
+// What the board hands its local server, which seals it to the worker before it leaves this Mac (lib/worker-board.ts).
+export type BoardOffer = { kind: "offer"; device: string; sdp: string; key: string };
+export type BoardInput = ScreenInput | BoardOffer;
 
 export interface RunPayload extends NewCardPayload {
   // A git URL to clone into the worker's work folder when the folder isn't there yet.
@@ -119,8 +122,12 @@ export function modeBody(command: Pick<CloudCommandRow, "payload">): { cardId: s
 const fraction = (v: unknown) => typeof v === "number" && Number.isFinite(v);
 
 function screenInput(raw: unknown): ScreenInput | null {
-  const p = (raw && typeof raw === "object" ? raw : {}) as Partial<Record<keyof ScreenInput, unknown>>;
+  const p = (raw && typeof raw === "object" ? raw : {}) as Partial<Record<"kind" | "device" | "x" | "y" | "x2" | "y2" | "ms" | "sealed", unknown>>;
   const device = text(p.device);
+  if (p.kind === "offer") {
+    const sealed = sealedOf(p.sealed);
+    return device && sealed ? { kind: "offer", device, sealed } : null;
+  }
   if ((p.kind !== "tap" && p.kind !== "swipe") || !device || !fraction(p.x) || !fraction(p.y)) return null;
   const point = { device, x: p.x as number, y: p.y as number };
   if (p.kind === "tap") return { kind: "tap", ...point };
@@ -140,4 +147,16 @@ export function inputBody(command: Pick<CloudCommandRow, "payload">): { cardId: 
   const cardId = cardIdOf(command.payload);
   const input = screenInput(command.payload);
   return cardId && input ? { cardId, input } : null;
+}
+
+// The `qa` command: a worker's card sends its device tools to this Mac, or stops. It buys nothing by itself: the Mac refuses
+// any call its owner hasn't approved here (lib/qa-grants.ts).
+export function qaCommand(target: CardTarget, device: string | null): NewCommand {
+  return { org_id: target.orgId, kind: "qa", target_device: target.device, folder: target.folder, payload: { cardId: target.cardId, device } };
+}
+
+export function qaBody(command: Pick<CloudCommandRow, "payload">): { cardId: string; device: string | null } | null {
+  const cardId = cardIdOf(command.payload);
+  const device = (command.payload as { device?: unknown } | null)?.device;
+  return cardId && (device === null || typeof device === "string") ? { cardId, device: device || null } : null;
 }

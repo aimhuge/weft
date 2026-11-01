@@ -5,6 +5,7 @@
 // has no Supabase session to use anyway.
 import { createClient } from "@supabase/supabase-js";
 import { useEffect, useRef } from "react";
+import { ANSWER_EVENT, type SealedAnswer } from "./rtc-signal";
 import { SCREEN_EVENT, screenTopic } from "./share-types";
 import { SUPABASE_KEY, SUPABASE_URL } from "./supabase-project";
 import type { ScreenInput } from "./worker-commands";
@@ -24,10 +25,12 @@ export function gesture(device: string, down: Point, up: Point, ms: number): Scr
   return { kind: "swipe", device, x: down.x, y: down.y, x2: up.x, y2: up.y, ms: Math.min(1500, Math.max(100, ms)) };
 }
 
-export function useScreenStream(token: string, onFrame: (src: string) => void) {
+export function useScreenStream(token: string, onFrame: (src: string) => void, onAnswer?: (sealed: SealedAnswer) => void) {
   const latest = useRef(onFrame);
+  const answer = useRef(onAnswer);
   useEffect(() => {
     latest.current = onFrame;
+    answer.current = onAnswer;
   });
   useEffect(() => {
     const client = createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
@@ -37,6 +40,7 @@ export function useScreenStream(token: string, onFrame: (src: string) => void) {
         const src = frameSrc(payload);
         if (src) latest.current(src);
       })
+      .on("broadcast", { event: ANSWER_EVENT }, ({ payload }) => answer.current?.(payload as SealedAnswer))
       .subscribe();
     return () => void client.removeChannel(channel).catch(() => {});
   }, [token]);

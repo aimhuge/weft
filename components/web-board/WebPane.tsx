@@ -7,8 +7,9 @@
 // Mac, so the card's latest pane capture stands in for it. The desktop board draws this too, for a worker's card
 // (components/WorkerOpenCard.tsx), with orgId null: it frames through its own server, more tightly, because a frame there
 // shares the board window's session (app/api/worker-board/page/[sha]), and that's why it never frames a public site.
+import type { ReactNode } from "react";
 import type { SharePane } from "@/lib/share-types";
-import type { ScreenInput } from "@/lib/worker-commands";
+import type { BoardInput } from "@/lib/worker-commands";
 import Icon from "../Icon";
 import { WorkerScreen } from "./WorkerScreen";
 
@@ -41,7 +42,7 @@ function Snapshot({ src, note }: { src?: string; note: string }) {
   );
 }
 
-function PaneBody({ orgId, pane, thumbUrl, onScreenInput }: { orgId: string | null; pane: SharePane | null; thumbUrl?: string; onScreenInput?: (input: ScreenInput) => Promise<void> }) {
+function PaneBody({ orgId, pane, thumbUrl, onScreenInput }: { orgId: string | null; pane: SharePane | null; thumbUrl?: string; onScreenInput?: (input: BoardInput) => Promise<void> }) {
   if (pane?.kind === "screen") return <WorkerScreen pane={pane} onInput={onScreenInput} />;
   if (pane?.kind === "blob") {
     const sha = pane.ref.replace(/^blob:sha256:/, "");
@@ -57,7 +58,8 @@ function PaneBody({ orgId, pane, thumbUrl, onScreenInput }: { orgId: string | nu
 // onClose: the toolbar's X, left out where the thread beside it carries the close (WebThreadPanel, so a phone, where
 // the pane is hidden, still has one).
 // onScreenInput: taps on a worker's live screen, where this board can send them (the desktop's).
-export function WebPane({ orgId, pane, thumbUrl, onClose, onScreenInput }: { orgId: string | null; pane: SharePane | null; thumbUrl?: string; onClose?: () => void; onScreenInput?: (input: ScreenInput) => Promise<void> }) {
+// actions: extra toolbar controls (the desktop's manual QA switch).
+export function WebPane({ orgId, pane, thumbUrl, onClose, onScreenInput, actions }: { orgId: string | null; pane: SharePane | null; thumbUrl?: string; onClose?: () => void; onScreenInput?: (input: BoardInput) => Promise<void>; actions?: ReactNode }) {
   return (
     <section aria-label="Browser pane" className="relative hidden min-w-0 flex-1 flex-col border-l border-line bg-panel md:flex">
       <div className="flex items-center gap-1 border-b border-line px-2 py-1.5">
@@ -82,6 +84,7 @@ export function WebPane({ orgId, pane, thumbUrl, onClose, onScreenInput }: { org
             Open ↗
           </a>
         )}
+        {actions}
         {onClose && (
           <button onClick={onClose} aria-label="Close thread" title="Close (Esc)" className="rounded-md p-1.5 text-muted hover:bg-sunken hover:text-ink">
             <Icon name="x" size={15} />

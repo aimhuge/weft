@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cloneBody, cloneCommand, githubLoginCommand, inputBody, inputCommand, isWorkerDevice, loginCommand, modeBody, modeCommand, runBody, runCommand, RUN_MODES, workerDevice } from "./worker-commands";
+import { cloneBody, cloneCommand, githubLoginCommand, inputBody, inputCommand, isWorkerDevice, loginCommand, modeBody, modeCommand, qaBody, qaCommand, runBody, runCommand, RUN_MODES, workerDevice } from "./worker-commands";
 import { GITHUB_PURPOSE, LOGIN_PURPOSE, newSealKeys, open, sealedOf } from "./worker-seal";
 
 // A payload as it comes off the wire: the shape the row claims, not the shape it must be.
@@ -185,7 +185,7 @@ describe("cloneCommand / cloneBody", () => {
   });
 
   it("reads no repo from a payload without one", () => {
-    expect(cloneBody({ payload: {} as never })).toBeNull();
+    expect(cloneBody({ payload: {} })).toBeNull();
     expect(cloneBody({ payload: null as never })).toBeNull();
     expect(cloneBody({ payload: { repo: 7 } as never })).toBeNull();
   });
@@ -215,5 +215,47 @@ describe("a worker card's mode and screen commands", () => {
     expect(inputCommand(target, { kind: "swipe", device: "d", x: 0, y: 0 })).toBeNull();
     expect(inputCommand(target, null)).toBeNull();
     expect(inputBody(wire({ kind: "tap", device: "d", x: 0, y: 0 }))).toBeNull();
+  });
+});
+
+describe("an offer for the WebRTC line", () => {
+  const target = { orgId: "o", device: "w", folder: "f", cardId: "c" };
+  const sealed = { v: 1, epk: "YQ==", iv: "YQ==", ct: "YQ==", tag: "YQ==" };
+
+  it("travels sealed, and never as a bare offer", () => {
+    expect(inputCommand(target, { kind: "offer", device: "d", sealed })?.payload).toMatchObject({ kind: "offer", device: "d", sealed });
+    expect(inputCommand(target, { kind: "offer", device: "d", sdp: "v=0", key: "k" })).toBeNull();
+    expect(inputCommand(target, { kind: "offer", device: "", sealed })).toBeNull();
+  });
+});
+
+describe("a worker's manual QA switch", () => {
+  const target = { orgId: "o", device: "worker:w", folder: "f", cardId: "c" };
+
+  it("names the Mac the card's device tools go to", () => {
+    expect(qaCommand(target, "mac-1")).toEqual({
+      org_id: "o",
+      kind: "qa",
+      target_device: "worker:w",
+      folder: "f",
+      payload: { cardId: "c", device: "mac-1" },
+    });
+  });
+
+  it("carries null when the switch is off", () => {
+    expect(qaCommand(target, null).payload).toEqual({ cardId: "c", device: null });
+  });
+
+  it("reads the card and the device back off the wire", () => {
+    expect(qaBody(wire({ cardId: "c", device: "mac-1" }))).toEqual({ cardId: "c", device: "mac-1" });
+    expect(qaBody(wire({ cardId: "c", device: null }))).toEqual({ cardId: "c", device: null });
+  });
+
+  it("is null without a card, and for a device that isn't a string", () => {
+    expect(qaBody(wire({ device: "mac-1" }))).toBeNull();
+    expect(qaBody(wire({ cardId: "c", device: 7 }))).toBeNull();
+    // A row with no device at all isn't the switch being off: off is an explicit null.
+    expect(qaBody(wire({ cardId: "c" }))).toBeNull();
+    expect(qaBody(wire(null))).toBeNull();
   });
 });

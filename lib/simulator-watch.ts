@@ -92,6 +92,12 @@ export function markLive(id: string) {
 
 export const watchedSize = (id: string) => watches.get(id)?.size;
 
+// idb knows the screen's size even with no AXe on the box.
+export function noteWatchedSize(id: string, size: ScreenSize) {
+  const w = watches.get(id);
+  if (w && !w.size) w.size = size;
+}
+
 // The screen in tap units (iOS points, Android pixels): the biggest frame in its UI tree. Undefined when the tree
 // can't be read (AXe missing); the page then shows the whole window and doesn't take taps.
 async function screenSize(d: Device): Promise<ScreenSize | undefined> {
