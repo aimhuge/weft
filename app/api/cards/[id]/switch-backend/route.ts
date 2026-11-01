@@ -1,42 +1,20 @@
 import { connection } from "next/server";
-import { fail, guard } from "@/lib/guard";
-import { switchBackend } from "@/lib/runner";
-import { getCard } from "@/lib/store";
-import { BACKEND_IDS, MODELS, NO_MODEL } from "@/lib/new-thread";
-import type { Backend } from "@/lib/types";
+import { guard } from "@/lib/guard";
+import { hostFail, requireCard, runVerb } from "@/lib/host-api";
 
-// Every CLI a card may be switched to. Shared (lib/new-thread.ts), so a CLI added there can be
-// switched to here too — a switch to a CLI this list didn't know was refused.
-const BACKENDS: Backend[] = BACKEND_IDS;
-
-// One-click "switch this card's CLI" — used by the right-click menu and the rate-limit banner.
-// replay=true re-sends the last user message, which is what the rate-limit escape hatch wants.
-// model (the thread header's picker) is one of that CLI's MODELS; on the card's own CLI it only
-// changes the model. The list of models is the shared one (lib/new-thread.ts), so a CLI added
-// there brings its models with it.
+// One-click "switch this card's CLI" (the right-click menu, the rate-limit banner, the thread header's
+// model picker): the card.switchBackend verb (lib/host-api/card-cli.ts).
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const denied = guard(req);
   if (denied) return denied;
   const { id } = await params;
   await connection();
   try {
-    const card = getCard(id);
-    if (!card) return fail("No such card.", 404);
+    // A missing card is a 404 before the body is read.
+    requireCard(id);
     const body = (await req.json()) as Record<string, unknown>;
-    const backend = body.backend;
-    if (typeof backend !== "string" || !BACKENDS.includes(backend as Backend)) {
-      throw new Error(`backend must be one of ${BACKENDS.join(", ")}.`);
-    }
-    const model = body.model;
-    // "" is the no-model choice: "let the CLI decide", which is what the Default model row picks.
-    // Any other model has to be one this CLI serves — the picker sends a model's own CLI with it,
-    // so a model from another CLI is a mismatch worth refusing.
-    if (model !== undefined && (typeof model !== "string" || (model !== NO_MODEL && !MODELS[backend as Backend].some((m) => m.id === model)))) {
-      throw new Error(`${typeof model === "string" ? model : "That"} isn't a ${backend} model.`);
-    }
-    await switchBackend(id, backend as Backend, { replay: body.replay === true, model });
-    return Response.json({ card: getCard(id) });
+    return Response.json(await runVerb("card.switchBackend", { id, backend: body.backend, model: body.model, replay: body.replay }));
   } catch (err) {
-    return fail(err);
+    return hostFail(err);
   }
 }
