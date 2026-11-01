@@ -31,6 +31,35 @@ async function setup() {
   return { dir, db, sync, store, seal, key, device, onRemote };
 }
 
+describe("a Mac joining a shared vault", () => {
+  it("swaps its own key for the team's, keeps its values, and takes the team's rows", async () => {
+    const dir = tmp();
+    const device = sodium.newKeypair();
+    const db = fakeDb();
+    const sync = createVaultSync({ accountClient: { supabase: db.client, getClaims: () => ({ sub: "u2" }) }, dir, now: () => 0 });
+    const store = createVaultStore({ dir, device, sodium, now: () => 0, sync, onRemote: vi.fn() });
+    // This Mac's own local vault, under a key of its own.
+    await store.set(ID, "a/b", [
+      { name: "MINE", environment: "development", value: "kept-on-this-mac" },
+      { name: "FILLED_HERE", environment: "development", value: "team-is-missing-this" },
+    ]);
+    // The team's vault: a different key, one value, and a blank this Mac can fill.
+    const team = sodium.newVaultKey();
+    const box = sodium.encrypt("from-the-team", team, sodium.aad(ID, "SHARED", "development", 1));
+    db.tables.vaults.push({ id: "v1", org_id: "o1", server_version: 2, current_key_version: 1 });
+    db.tables.vault_secrets.push({ id: "r1", vault_id: "v1", name: "SHARED", environment: "development", ciphertext: box.ciphertext, nonce: box.nonce, key_version: 1, row_version: 0, is_blank: false });
+    db.tables.vault_secrets.push({ id: "r2", vault_id: "v1", name: "FILLED_HERE", environment: "development", ciphertext: null, nonce: null, key_version: 1, row_version: 0, is_blank: true });
+
+    await store.adopt(ID, "a/b", { key: team, keyVersion: 1, wrappedKey: sodium.wrapKey(team, device.publicKey) }, { orgId: "o1", vaultId: "v1", repo: "a/b", keyVersion: 1 });
+
+    expect(store.isShared(ID)).toBe(true);
+    expect(store.get(ID, "SHARED", "development")).toBe("from-the-team");
+    expect(store.get(ID, "MINE", "development")).toBe("kept-on-this-mac");
+    // A blank on the server doesn't wipe the value this Mac holds.
+    expect(store.get(ID, "FILLED_HERE", "development")).toBe("team-is-missing-this");
+  });
+});
+
 describe("a shared vault's store", () => {
   it("pushes a value to the server and keeps the server's row as the shadow", async () => {
     const { db, store } = await setup();

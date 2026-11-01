@@ -9,7 +9,8 @@
 // The columns a row is read with. Ciphertext and nonce are what the local shadow keeps.
 const COLUMNS = "id, name, environment, ciphertext, nonce, key_version, row_version, is_blank, hint, updated_at, updated_by";
 // What the event log calls each op.
-const ACTIONS = { set: "set", blank: "add blank", remove: "remove" };
+// The words vault_events' check constraint takes: any other is refused, and the line is lost.
+const ACTIONS = { set: "secret.changed", blank: "secret.blank_added", remove: "secret.removed" };
 
 // No network, or no session: the caller queues the write and the reads come from the shadow.
 class OfflineError extends Error {
