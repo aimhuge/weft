@@ -126,6 +126,12 @@ describe("HOST_API", () => {
     expect(runner.stop).not.toHaveBeenCalled();
   });
 
+  it("is keyed by exactly @weft/client's verb names, so a phone's verb is one every host runs", async () => {
+    const { HOST_VERBS } = await import("@weft/client");
+    expect(Object.keys(HOST_API).sort()).toEqual([...HOST_VERBS].sort());
+    for (const verb of HOST_VERBS) expect(isHostVerb(verb)).toBe(true);
+  });
+
   it("needs elevation for a power verb, and for a card update only when it widens", () => {
     expect(needsElevation("card.shell", { id: "c1" })).toBe(true);
     expect(needsElevation("card.stop", { id: "c1" })).toBe(false);

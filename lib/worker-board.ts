@@ -14,7 +14,7 @@ import { answerCommand, replyCommand, stopCommand, type GrantScope, type NewComm
 import { syncOrgId } from "./cloud-sync";
 import { BLOB_REF_PREFIX, THREAD_PAGE_SIZE } from "./cloud-sync-types";
 import { pageFromRows } from "./cloud-thread-page";
-import { hostCommand, textArgOf, type HostPayload } from "./host-command";
+import { hostCommand, textArgOf } from "./host-command";
 import { DATA_DIR } from "./store";
 import type { ThreadPage } from "./thread-page";
 import type { Card, PermissionMode, QuestionReply } from "./types";
@@ -223,7 +223,7 @@ async function qaCommand(client: SupabaseClient, target: Awaited<ReturnType<type
 async function hostRow(client: SupabaseClient, target: Awaited<ReturnType<typeof commandTarget>>, body: Extract<WorkerAction, { action: "host" }>, dir: string) {
   const row = hostCommand(target, body.verb, body.args);
   if (!row) throw new Error(`A worker doesn't run ${body.verb}.`);
-  const { verb, args } = row.payload as HostPayload;
+  const { verb, args } = row.payload;
   const field = textArgOf(verb);
   const typed = field ? args[field] : undefined;
   return typeof typed === "string" ? withAttachments(client, row, typed, dir) : row;

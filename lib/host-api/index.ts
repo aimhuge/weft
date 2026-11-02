@@ -6,6 +6,7 @@
 // lib/guard.ts, read from one place by every host. See docs/architecture/project-hosts.md.
 //
 // Each handler's module loads on its first call, so a route pulls in only the code its own verbs run.
+import { isHostVerb } from "@weft/client";
 import { widens, type CardUpdateArgs } from "./calls";
 import type { Handler, HostVerb } from "./types";
 
@@ -51,9 +52,8 @@ type Table = typeof HOST_API;
 export type ArgsOf<V extends HostVerb> = Parameters<Table[V]["run"]>[0];
 export type ResultOf<V extends HostVerb> = Awaited<ReturnType<Table[V]["run"]>>;
 
-export function isHostVerb(verb: string): verb is HostVerb {
-  return Object.hasOwn(HOST_API, verb);
-}
+// Whether a name is a verb HOST_API runs: @weft/client's check against HOST_VERBS, the names this table is keyed by.
+export { isHostVerb };
 
 /** Whether a call needs elevated() on the local host: the verb grants power, or grants it for these args. */
 export function needsElevation<V extends HostVerb>(verb: V, args: ArgsOf<V>): boolean {

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { SKILLS_BUDGET, SKILLS_FRESH_MS, fitSkills, jsonbBytes, readSkills, skillCache } from "./skills-wire";
-import type { SkillInfo } from "./types";
+import type { SkillInfo } from "./card";
 
 const skill = (i: number, description = "d".repeat(200)): SkillInfo => ({ name: `skill-${i}`, description, source: "user" });
 const size = (v: unknown) => jsonbBytes(v);

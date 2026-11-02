@@ -13,8 +13,9 @@ export const THREAD_PAGE_SIZE = 50;
 
 // Images, attachments and ~/.weft/show pages, stored once each by content.
 export const BLOB_BUCKET = "weft-blobs";
-export const BLOB_REF_PREFIX = "blob:sha256:";
-export type BlobRef = `blob:sha256:${string}`;
+// The ref's shape is @weft/client's, so a pane or thread item on the phone reads it the same.
+import { BLOB_REF_PREFIX, type BlobRef } from "@weft/client";
+export { BLOB_REF_PREFIX, type BlobRef };
 
 export function isBlobRef(value: string): value is BlobRef {
   return /^blob:sha256:[0-9a-f]{64}$/.test(value);

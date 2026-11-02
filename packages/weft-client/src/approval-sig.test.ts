@@ -1,12 +1,14 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { approvalMessage, canonicalAnswers, freshEnough, readApprovalAuth, signApproval, verifyApproval, APPROVAL_MAX_SKEW_MS, type ApprovalFields } from "./approval-sig";
-import { b64, sodium, type Sodium } from "./sodium";
+import sodiumModule from "libsodium-wrappers";
+import { b64 } from "./sodium-like";
 
-let s: Sodium;
+let s: typeof sodiumModule;
 let pub: string;
 let priv: string;
 beforeAll(async () => {
-  s = await sodium();
+  await sodiumModule.ready;
+  s = sodiumModule;
   const pair = s.crypto_sign_keypair();
   pub = b64(s, pair.publicKey);
   priv = b64(s, pair.privateKey);

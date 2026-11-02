@@ -1,0 +1,40 @@
+# @weft/client
+
+Weft's client core in plain TypeScript: the shapes and pure view models that the desktop board, weft.zip and the
+phone app (`~/dev/weft-mobile`) all read, so the three can only disagree on looks
+(docs/architecture/project-hosts.md#views, phase H9).
+
+## What belongs here
+
+Code that runs the same in React Native (Hermes), a browser and Node, with no I/O of its own:
+
+- **Shapes that cross the wire**: `ThreadItem` and its parts, `EditPreview`, `SecretAsk`, `BlobRef`, `Column`,
+  `Backend`, `PermissionMode`.
+- **Host verbs**: `HOST_VERBS` / `HostVerb` / `isHostVerb` (lib/host-api's `HOST_API` is keyed by exactly these),
+  the arg shapes and body pickers (`CardPatch`, `messageCall`, `permissionCall`, `widens`), and the `host` command's
+  row builder and readers (`hostCommand`, `readHostCommand`, `remoteRefusal`, `hostResult`).
+- **View models**: `extractStatus` (the BOARD STATUS line), `paneFromUrl` / `paneFor` / `screenPage` (the pane as
+  the thread tells it), `showMinis` / `followUrl` (the show rail), `clip` / `timeAgo` / `shortToolName`.
+- **Approval messages**: `approvalMessage`, `signApproval`, `verifyApproval`, `readApprovalAuth`, given the caller's
+  libsodium as a `Sodium` (libsodium-wrappers on the Mac and the web, react-native-libsodium on the phone).
+
+## What doesn't
+
+- No DOM, React, React DOM, Next or Node built-ins (`node:*`, `fs`, `path`, `crypto`). The package's own
+  `tsconfig.json` has no `dom` lib and no Node types, and ESLint refuses those imports here. The web globals it
+  reads, `URL`, `URLSearchParams` and `TextEncoder`, are declared in `src/globals.d.ts`; React Native older than 0.74 needs
+  `react-native-url-polyfill` for them.
+- No `console` and no timers (`setTimeout`, `setInterval`): the tsconfig's `types: []` leaves them undeclared on
+  purpose, since logging and scheduling belong to the platform edge. Take a callback or a clock argument instead.
+- No imports from the app (`@/`, `lib/`): move the piece in, and leave a re-export at its old `lib/` path.
+- No handlers, stores, network clients or timers: a host's handlers stay in `lib/host-api`, the transports in
+  `lib/*-transport.ts` until they are split into a pure core and a platform edge.
+
+## Working on it
+
+- The app imports it as `@weft/client` (a pnpm workspace link; Next compiles it through `transpilePackages`, and
+  jiti, which runs the worker daemon, loads it from `node_modules/@weft/client`).
+- Tests sit beside the code (`src/*.test.ts`) and run with the app's: `pnpm test packages/weft-client`. Keep every
+  line covered.
+- `pnpm typecheck` checks it twice: with the app, and alone against `tsconfig.json` here.
+- The 300-line cap applies here like everywhere else.
