@@ -28,6 +28,7 @@ import type { Tick } from "./worker-update";
 import type { WakeHooks } from "./worker-wake";
 import type { Presence, PresenceHooks } from "./worker-presence";
 import type { Recovered } from "./worker-recover";
+import type { WorkerWiden } from "./worker-widen";
 
 // The engine, as the daemon uses it (lib/card-starter.ts, lib/runner.ts, lib/store.ts): injected so tests don't run a CLI.
 export interface Engine {
@@ -81,6 +82,8 @@ export interface DaemonDeps {
   // Opens a session line from a sealed offer (lib/host-line.ts). `run` is the host command's own path (lib/host/dispatch.ts
   // via lib/worker-kinds.ts), so a verb over the line passes exactly the checks it would over the relay.
   line?: (sealed: Sealed, run: (payload: unknown) => Promise<HostDone>) => Promise<void>;
+  // Signed widening (lib/worker-widen.ts): its pins, nonces and project folders. Absent, every widening stays refused.
+  widen?: WorkerWiden;
   // Calls back when a card changes, so a held update can go the moment the last one ends.
   onCardChange?: (listener: () => void) => () => void;
   // Keeps this box on the newest Weft (lib/worker-update.ts). Absent when it's switched off, or not the worker's clone.

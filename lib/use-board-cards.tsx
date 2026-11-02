@@ -8,7 +8,8 @@ import { busyHere } from "./overlap";
 import { api } from "./client";
 import { knownFolders } from "./list-actions";
 import { patchNow } from "./optimistic-cards";
-import { hostOf } from "./project-host";
+import { hostOf, sameHostCards } from "./project-host";
+import { isWorkerCard } from "./worker-project";
 import type { CardViewProps } from "@/components/CardView";
 import CardRow, { type RowNest } from "@/components/CardRow";
 
@@ -49,23 +50,28 @@ export function useBoardCards(deps: BoardCardsDeps): BoardCardRenderers {
     [CardView, shared, restartRequestedBy, ctx],
   );
 
-  // Every folder a card can move to from the list view's folder picker: this Mac's, for a card that runs here.
-  const folders = useMemo(() => knownFolders(cards.filter((c) => hostOf(c).can("folder"))), [cards]);
+  // Every folder a card can move to from the list view's folder picker: its own host's (this Mac's, or one worker's).
+  const folders = useMemo(() => knownFolders(cards.filter((c) => !isWorkerCard(c))), [cards]);
+  const foldersFor = useCallback((card: Card) => (hostOf(card).can("folder") ? knownFolders(sameHostCards(cards, card)) : undefined), [cards]);
 
-  // A card moves to another folder only on this Mac: a remote host refuses a new folder from the network.
+  // A worker card moves only with a signed approval, which its host asks Touch ID for (lib/widen-signer.ts).
   const renderRow = useCallback(
     (card: Card, column: Column, nest?: RowNest) => (
       <CardRow
         column={column}
         nest={nest}
         {...shared(card)}
-        folders={hostOf(card).can("folder") ? folders : undefined}
+        folders={isWorkerCard(card) ? foldersFor(card) : hostOf(card).can("folder") ? folders : undefined}
         onMove={(to) => ctx.move(card.id, to)}
-        onFolder={hostOf(card).can("folder") ? (cwd) => void patchNow(card.id, { cwd }, () => api.setCwd(card.id, cwd)).catch(ctx.notify) : undefined}
+        onFolder={
+          hostOf(card).can("folder")
+            ? (cwd) => void patchNow(card.id, { cwd }, () => hostOf(card).act("card.update", { id: card.id, body: { cwd } }, () => api.setCwd(card.id, cwd))).catch(ctx.notify)
+            : undefined
+        }
         {...handlersFor(card, ctx)}
       />
     ),
-    [folders, ctx, shared],
+    [folders, foldersFor, ctx, shared],
   );
 
   return { renderCard, renderRow };

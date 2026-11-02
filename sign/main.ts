@@ -7,6 +7,8 @@ import { parsePairingLink } from "../lib/pairing-link";
 import { passkeyCode } from "../lib/passkey-code";
 import { askIds, loadAsk, sendApproval } from "../lib/sign-approve";
 import { showNote, showSheet } from "../lib/sign-sheet";
+import { sendWiden, widenAskOf, widenToSign } from "../lib/sign-widen";
+import { showWidenSheet } from "../lib/sign-widen-sheet";
 import { SUPABASE_KEY, SUPABASE_URL } from "../lib/supabase-project";
 import { createPasskey, signWithPasskey } from "../lib/web-passkey";
 import { browserPasskey, pairThisBrowser } from "../lib/web-sync-key";
@@ -70,7 +72,36 @@ function pairPage(user: { id: string; name: string }) {
   root.append(row);
 }
 
+// A widening the board asked for (lib/sign-widen.ts): shown whole, signed, and sent as the host command.
+function widenPage(user: { id: string }, search: string): boolean {
+  const ask = widenAskOf(search);
+  if (!ask) return false;
+  const w = widenToSign(ask, browserPasskey(user.id), Date.now());
+  if (typeof w === "string") {
+    showNote(root, "Can't approve here", w, true);
+    return true;
+  }
+  showWidenSheet(root, w, {
+    sign: async () => {
+      try {
+        const problem = await sendWiden(client, w, await signWithPasskey(w.credId, w.message, window.location.hostname));
+        if (!problem) showNote(root, "Sent", "The host checks the signature and makes the change. You can close this tab.");
+        return problem;
+      } catch (err) {
+        return message(err);
+      }
+    },
+    cancel: () => window.close(),
+  });
+  return true;
+}
+
 async function approvePage(user: { id: string }) {
+  const search = window.location.search || (sessionStorage.getItem(ASK_KEY) ?? "");
+  if (widenPage(user, search)) {
+    sessionStorage.removeItem(ASK_KEY);
+    return;
+  }
   const ids = askIds(window.location.search) ?? askIds(sessionStorage.getItem(ASK_KEY) ?? "");
   sessionStorage.removeItem(ASK_KEY);
   if (!ids) {

@@ -26,6 +26,7 @@ import { webUploads, type WebUploads } from "@/lib/web-upload";
 import type { ThreadItem } from "@/lib/types";
 import type { CommandResult } from "@/lib/worker-command-wait";
 import { collectBlobRefs, rewriteBlobRefs } from "@/lib/web-board";
+import { openWidenWindow, useHasPasskey } from "./useSignWindow";
 
 // Where useWebBoard's channel sends thread item changes, and its reconnects, to the open thread.
 export interface ItemBus {
@@ -134,8 +135,10 @@ function holds(acts: CloudHostActs): Pick<ThreadTransport, "waitPermission" | "p
 
 // The open thread's transport, and the host every card on the board has (lib/web-host.ts), over the same acts.
 export function useCloudTransport({ client, orgId, bus, target, sendCommand, uploads, tools }: CloudTransportInput): { transport: ThreadTransport; host: ProjectHost } {
+  // A widening goes to sign.weft.zip to be signed with the passkey, when there is one (lib/sign-widen.ts).
+  const hasPasskey = useHasPasskey(client);
   return useMemo(() => {
-    const acts = cloudHostActs({ target, insert: sendCommand, read: (id) => readCommand(client, id) });
+    const acts = cloudHostActs({ target, insert: sendCommand, read: (id) => readCommand(client, id), widen: hasPasskey ? openWidenWindow : undefined });
     const transport: ThreadTransport = {
       async loadPage(cardId, before) {
         let query = client.from("cloud_thread_items").select("card_id, seq, item").eq("org_id", orgId).eq("card_id", cardId);
@@ -162,10 +165,12 @@ export function useCloudTransport({ client, orgId, bus, target, sendCommand, upl
       listSkills: acts.listSkills,
       ...holds(acts),
       upload: uploads.upload,
+      // A "!" line, signed with the passkey on sign.weft.zip (lib/sign-widen.ts).
+      ...(hasPasskey ? { shell: (cardId: string, command: string) => acts.act("card.shell", cardId, { command }).then(() => {}) } : {}),
       grantInAnswer: true,
       cardEdits: true,
       desktop: false,
     };
-    return { transport, host: webHost(acts, transport, tools) };
-  }, [client, orgId, bus, target, sendCommand, uploads, tools]);
+    return { transport, host: webHost(acts, transport, tools, hasPasskey) };
+  }, [client, orgId, bus, target, sendCommand, uploads, tools, hasPasskey]);
 }

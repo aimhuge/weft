@@ -131,10 +131,13 @@ async function startCommand() {
   const results = workerResults(config.key, client.storage);
   const publisher = createPublisher(reg, store, console.warn, { blobs, orgId: config.orgId });
   subscribe(publisher.hear);
+  // Signed widening: the pairing Mac's approvals and its endorsed passkeys lift the network's refusals (lib/worker-signing.ts).
+  const { widen, terminal } = (await import("../lib/worker-signing")).workerSigning({ home, workerId: config.workerId, root, listFolders: listProjectFolders, repoPath: paths.repoPath, nameFolder: publisher.nameFolder });
   // Session lines (lib/host-line.ts): the answer goes back on the board's own topic, events are what the
   // publisher ships (one projection, one upload), screens need a card of this box's own watching them, and verbs run
   // through the host kind's path (the daemon hands `run` in).
   const lines = createHostLines({
+    terminal,
     unseal: (sealed, purpose) => open(keys, sealed, purpose),
     answerOn: async (topic, sealed) => {
       const channel = await openScreenChannel(client, topic);
@@ -159,6 +162,7 @@ async function startCommand() {
     // while the daemon was down goes on the first check, after recovery, so it can't race a turn being resumed.
     onRecovered: () => startScheduler({ briefs: false }),
     line: (sealed, run) => lines.open(sealed, run),
+    widen,
     engine: {
       start: async (body) => {
         const card = await startFeatureCard(body);

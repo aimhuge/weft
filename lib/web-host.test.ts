@@ -15,6 +15,9 @@ describe("webHost", () => {
     const ids = (host.menu([{ id: "star", label: "Star" }, { id: "share", label: "Share…" }, { id: "delete", label: "Delete…" }, { id: "reveal", label: "Reveal" }]) as { id: string }[]).map((i) => i.id);
     expect(ids).toEqual(["star"]);
     expect(host.menu([{ id: "star", label: "Star" }])).toEqual(remoteMenu([{ id: "star", label: "Star" }]));
+    const items = [{ id: "agent:builder", label: "A" }, { id: "star", label: "S" }] as never;
+    expect(host.menu(items)).toEqual(remoteMenu(items));
+    expect(webHost({ act }, { desktop: false } as ThreadTransport, () => Promise.resolve(""), true).menu(items)).toEqual(items);
   });
 
   it("offers Send later and none of a Mac's own features", () => {

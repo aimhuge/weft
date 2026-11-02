@@ -13,6 +13,7 @@ import { applyThreadEvent, type ThreadPage } from "./thread-page";
 import type { Device } from "./simulator-devices";
 import type { PageUpdate, ThreadTransport } from "./thread-transport";
 import { skillCache } from "./skills-wire";
+import { canSignWiden } from "./widen-signer";
 import type { ToolResultSource } from "./use-tool-result";
 import { actOnWorker, askWorker, postWorkerAction } from "./worker-acts";
 import { workerFiles } from "./worker-files";
@@ -76,11 +77,17 @@ export const workerSkills = (cardId: string | undefined, now?: number) => skillL
 // For tests: forget the lists.
 export const forgetWorkerSkills = () => skillLists.forget();
 
-// What a worker runs from a board, as host verbs (lib/host-api). Left out on purpose: `shell` and `grantFolder`, which
-// remoteRefusal (lib/host-command.ts) refuses from the network because they widen what the card can touch (a folder
-// grant still rides inside an answer: grantInAnswer). `listFiles` is the files.list verb (H4), so file names in the
+// What a worker runs from a board, as host verbs (lib/host-api). `shell` and `grantFolder` widen what the card can
+// touch, so a worker runs them only with a signed approval: offered where this Mac can sign one (the desktop app,
+// lib/widen-signer.ts), and the act asks Touch ID first. A grant reaches only this card (Always is this Mac's own list);
+// one still rides inside an answer (grantInAnswer). `listFiles` is the files.list verb (H4), so file names in the
 // thread link to the editor.
 const pending = (cardId: string, pendingId: string): HostArgs => ({ id: cardId, pendingId });
+
+const signedVerbs = (act: typeof actOnWorker): Pick<ThreadTransport, "shell" | "grantFolder"> => ({
+  shell: (cardId, command) => act("card.shell", { id: cardId, command }).then(() => {}),
+  grantFolder: (cardId, directory) => act("card.update", { id: cardId, body: { readScope: directory } }).then(() => {}),
+});
 
 // A worker's transport over a route: the relay's commands and poll (workerTransport), or a session line that falls
 // back to them (lib/line-host.ts).
@@ -107,6 +114,7 @@ export function workerTransportVia(act: typeof actOnWorker, useLive: ThreadTrans
     upload: (file, name, onProgress) => api.uploadAttachment(file, name, onProgress),
     // files.list (H4), so file names in the thread link to the editor.
     listFiles: (cardId) => files.list(cardId),
+    ...(canSignWiden() ? signedVerbs(act) : {}),
     grantInAnswer: true,
     cardEdits: true,
     desktop: false,

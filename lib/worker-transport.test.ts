@@ -8,7 +8,7 @@ import type { ThreadPage } from "./thread-page";
 const fetchMock = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>();
 vi.mock("./api-client", () => ({ apiFetch: (url: string, init?: RequestInit) => fetchMock(url, init), API_HEADERS: {} }));
 
-const { mergePage, sendWorkerAction, THREAD_POLL_MS, useWorkerLive, workerToolSource, workerTransport } = await import("./worker-transport");
+const { mergePage, sendWorkerAction, THREAD_POLL_MS, useWorkerLive, workerToolSource, workerTransport, workerTransportVia } = await import("./worker-transport");
 const { workerFiles } = await import("./worker-files");
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -256,6 +256,20 @@ describe("the worker card's verbs", () => {
     expect(workerTransport.shell).toBeUndefined();
     expect(workerTransport.grantFolder).toBeUndefined();
     expect(workerTransport.cardEdits).toBe(true);
+  });
+
+  it("offers a shell line and Read from where this Mac can sign them, as the verbs a worker takes signed", async () => {
+    (window as unknown as { weft?: unknown }).weft = { approval: { widen: vi.fn() } };
+    try {
+      const act = vi.fn(() => Promise.resolve(undefined));
+      const t = workerTransportVia(act, () => {});
+      await t.shell!("c1", "ls");
+      await t.grantFolder!("c1", "/w/app/docs", "card");
+      expect(act).toHaveBeenNthCalledWith(1, "card.shell", { id: "c1", command: "ls" });
+      expect(act).toHaveBeenNthCalledWith(2, "card.update", { id: "c1", body: { readScope: "/w/app/docs" } });
+    } finally {
+      delete (window as unknown as { weft?: unknown }).weft;
+    }
   });
 
   it("lists the card's files through the worker's files.list, so the thread's file names link (H4)", async () => {

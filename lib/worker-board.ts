@@ -66,7 +66,7 @@ export async function requireSession(client: SupabaseClient) {
 }
 
 // Your headless workers. A teammate's won't obey you, and a desktop worker's cards are that Mac's own.
-async function myWorkers(client: SupabaseClient, who: { uid: string; org: string }): Promise<WorkerRow[]> {
+export async function myWorkers(client: SupabaseClient, who: { uid: string; org: string }): Promise<WorkerRow[]> {
   const { data, error } = await client
     .from("cloud_workers")
     .select("id, name, status, last_seen_at")
@@ -270,6 +270,9 @@ export interface WorkerThreadInput {
   model?: string;
   effort?: string;
   permissionMode?: string;
+  // An agent goes only with its signed approval (lib/create-widen.ts); the worker checks both.
+  agent?: string;
+  widen?: unknown;
 }
 
 // A new thread in a worker project: a run with that folder, or an error that says why not. It never starts anywhere
@@ -291,7 +294,7 @@ export async function startWorkerThread(
   const row = runCommand({ orgId: who.org, workerId: worker.id, folder: project.folder }, body);
   if (!row) throw new Error("Write a prompt for this thread.");
   // runBody reads these as well; runCommand has no use for them on a Send a run from Settings.
-  const payload = { ...row.payload, ...(body.title ? { title: body.title } : {}), ...(body.backend ? { backend: body.backend } : {}), ...(body.effort ? { effort: body.effort } : {}) };
+  const payload = { ...row.payload, ...(body.title ? { title: body.title } : {}), ...(body.backend ? { backend: body.backend } : {}), ...(body.effort ? { effort: body.effort } : {}), ...(body.agent ? { agent: body.agent, widen: body.widen } : {}) };
   const { commandId } = await insert(client, await withAttachments(client, sendable({ ...row, payload }), body.prompt, dir));
   return { commandId, worker: worker.name };
 }

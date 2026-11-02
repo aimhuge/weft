@@ -1,6 +1,7 @@
 // The fetch client: a single `api` object with one method per server route, plus
 // the XHR upload and audio transcribe helpers.
 
+import { withCreateWiden } from "./widen-signer";
 import type { AgentInfo, ThreadAgent } from "./agents";
 import type { TagInfo, TagRow } from "./tags";
 // The webhook, intake and clone shapes come from their own type-only modules, not from the server modules
@@ -182,7 +183,8 @@ export async function call<T>(method: string, url: string, body?: unknown, signa
 export const api = {
   list: () => call<{ cards: Card[]; home: string; roots: Record<string, string> }>("GET", "/api/cards"),
   // A thread in a worker project has no card here: the answer names the worker it went to (start.worker).
-  create: (input: NewCardInput) => call<{ card: Card; start?: { started: boolean; at?: number; worker?: string } }>("POST", "/api/cards", input),
+  // A new thread with an agent on a worker carries a Touch ID approval for it (lib/widen-signer.ts withCreateWiden).
+  create: async (input: NewCardInput) => call<{ card: Card; start?: { started: boolean; at?: number; worker?: string } }>("POST", "/api/cards", await withCreateWiden(input)),
   move: (id: string, column: Column) => call<{ card: Card }>("PATCH", `/api/cards/${id}`, { column }),
   // Re-points a card at another folder (the list view's folder picker); the server refuses a busy card.
   setCwd: (id: string, cwd: string) => call<{ card: Card }>("PATCH", `/api/cards/${id}`, { cwd }),

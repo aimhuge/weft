@@ -414,7 +414,7 @@ pending request and its name from the registry, so a worker card's Allow from th
   on sign.weft.zip approves. weft.zip itself still runs inline script (a nonce CSP isn't possible with PPR).
 - The desktop board still approves with `promptTouchID` in Electron main, which signs nothing; signing there with a
   passkey (or a Secure Enclave key) would give the host one verify path for every view.
-- A passkey can't sign a host verb that grants power (`ELEVATED_REFUSED`), and a browser paired before H7 has no
+- A passkey can't sign an answer's elevated host verbs (`ELEVATED_REFUSED`); it signs a card's new folder, agent and a plain "!" line as a signed widening (project-hosts.md#signed-widening-as-built), never skipping prompts or a grant, and a browser paired before H7 has no
   passkey: it re-pairs to get one. The pairing doesn't check an attestation, so the Mac trusts that the key came from an
   authenticator on the strength of the QR secret and its own Touch ID.
 - Old rows stay plain until their card changes; there's no backfill that reseals a workspace.

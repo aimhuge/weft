@@ -3,6 +3,7 @@
 // Settings → Devices (components/DevicesSettings.tsx, docs/architecture/device-registry.md): every device of yours from
 // the one registry through /api/devices, Revoke for any kind, and Add a worker, which pairs a box over
 // window.weft.hostPairing the way a phone pairs (the code's secret, the claim check and Touch ID stay in main).
+import { canSignWiden, endorsePasskeys } from "./widen-signer";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch } from "./api-client";
 import type { DeviceView, DevicesView } from "./device-registry";
@@ -61,6 +62,15 @@ interface Bridges {
 }
 
 export const bridgesHere = (): Bridges => (typeof window === "undefined" ? {} : { pairing: pairingBridge(), hosts: hostPairingBridge() });
+
+// Main signs an endorsement per paired passkey after Touch ID; they go to the worker as a `pin` command.
+export async function sendPasskeys(workerId: string, name: string): Promise<string> {
+  const endorsements = await endorsePasskeys(workerId);
+  if (!endorsements) return `Not approved, so ${name} trusts no new passkey.`;
+  if (!endorsements.length) return "No passkey is paired with this Mac yet: pair one in Settings → Sync first.";
+  await readJson(await apiFetch("/api/worker-board", { method: "POST", body: JSON.stringify({ action: "pin", workerId, endorsements }) }));
+  return `Sent: ${name} will let ${endorsements.length === 1 ? "your passkey" : `your ${endorsements.length} passkeys`} approve changes there once it takes it.`;
+}
 
 export function useDevices({ pairing, hosts }: Bridges = bridgesHere()) {
   const [view, setView] = useState<DevicesView | null>(null);
@@ -129,11 +139,20 @@ export function useDevices({ pairing, hosts }: Bridges = bridgesHere()) {
       if (r && live.current) setNote(repinOutcome(device.name, r));
     });
 
+  // Lets this Mac's paired passkeys approve folder, agent, shell and terminal changes on a worker (lib/worker-pin.ts).
+  const trustPasskeys = (device: DeviceView) =>
+    act(async () => {
+      const note = await sendPasskeys(device.id, device.name);
+      if (live.current) setNote(note);
+    });
+
   return {
     view,
     error,
     code,
     note,
+    canTrustPasskeys: canSignWiden(),
+    trustPasskeys,
     canAddWorker: Boolean(hosts),
     canRepin: Boolean(hosts?.forgetPin),
     revoke,

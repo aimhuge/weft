@@ -184,6 +184,18 @@ describe("cloudHost", () => {
       { id: "delete", label: "Delete…" },
     ]);
   });
+
+  it("offers the folder, the agent, the shell and the terminal where this Mac can sign a widening, and the menu keeps them", () => {
+    vi.stubGlobal("window", { weft: { approval: { widen: vi.fn() } } });
+    try {
+      for (const feature of ["folder", "agent", "shell", "terminal"] as const) expect(cloudHost.can(feature)).toBe(true);
+      expect(cloudHost.can("vault")).toBe(false);
+      const items = [{ id: "agent:builder", label: "A" }, { id: "mode:bypassPermissions", label: "Y" }];
+      expect(cloudHost.menu(items)).toEqual(items);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });
 
 describe("sameHostCards", () => {

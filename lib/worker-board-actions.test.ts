@@ -164,6 +164,12 @@ describe("startWorkerThread", () => {
     });
   });
 
+  it("carries an agent with its signed approval, for the worker to check", async () => {
+    const { client, inserted } = fakeClient({ workers: [online] });
+    await startWorkerThread({ cwd: "worker://w1/ling", prompt: "go", agent: "builder", widen: { kind: "ed25519" } }, client, NOW);
+    expect(inserted()).toMatchObject({ payload: { prompt: "go", agent: "builder", widen: { kind: "ed25519" } } });
+  });
+
   it("never asks for a thread that runs without asking", async () => {
     const { client, inserted } = fakeClient({ workers: [online] });
     await startWorkerThread({ cwd: "worker://w1/ling", prompt: "go", permissionMode: "bypassPermissions" }, client, NOW);

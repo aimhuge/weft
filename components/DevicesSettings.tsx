@@ -88,6 +88,11 @@ export default function DevicesSettings() {
                       Re-pin
                     </button>
                   )}
+                  {d.kind === "worker" && devices.canTrustPasskeys && (
+                    <button type="button" className={BUTTON} onClick={() => void devices.trustPasskeys(d)} aria-label={`Passkeys on ${d.name}`} title="Let your paired passkeys approve folder, agent, shell and terminal changes on this worker from the web, after Touch ID">
+                      Passkeys
+                    </button>
+                  )}
                   <button type="button" className={BUTTON} onClick={() => void devices.revoke(d)} aria-label={`Revoke ${d.name}`}>
                     Revoke
                   </button>

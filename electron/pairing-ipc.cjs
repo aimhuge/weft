@@ -90,6 +90,8 @@ function setupPairing({ ipcMain, dataDir, accountClient, isBoard, confirm, safeS
     return signer.publicKey();
   };
   require("./host-pairing-ipc.cjs").registerHostPairing(handle, { db, userId, macDevice, myDevice, confirm, macSignKey }, workerPins);
+  // Signed widening for a remote host's card and passkey endorsements (electron/widen-sign.cjs).
+  require("./widen-sign.cjs").registerWidenSign(handle, { signer, macDevice, confirm, passkeys: () => paired.list() });
 
   const routes = {
     // The key the uploader seals with (lib/sync-seal-upload.ts); { none: true } when this Mac has no grant yet.

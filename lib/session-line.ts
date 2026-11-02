@@ -215,6 +215,9 @@ export function createSessionLine(workerId: string, deps: LineDeps) {
       return calls.call(h && ((text: string) => h.send(text)), verb, args);
     },
     renegotiate: (add: (pc: RTCPeerConnection) => void, screen?: LineScreen) => renegotiate(add, screen),
+    // One more channel on the live connection (the terminal's): no renegotiation, since SCTP is already up. Null while
+    // the line isn't up; it closes when the line drops.
+    channel: (label: string) => (pc && host?.readyState === "open" ? pc.createDataChannel(label, { ordered: true }) : null),
     onEvent(fn: (event: LineEvent) => void) {
       events.add(fn);
       return () => void events.delete(fn);

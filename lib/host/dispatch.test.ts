@@ -108,3 +108,27 @@ describe("a read verb through the core", () => {
     expect(after).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("signed widening on the host kind", () => {
+  const host = (args: Record<string, unknown>, verb = "card.update") => cmd("host", { verb, args: { id: "k1", ...args } });
+
+  it("runs a widening only once its approval checks out, without the approval, and skips the elevated rule", async () => {
+    const elevated = vi.fn(() => Promise.resolve("phone paired"));
+    const widen = vi.fn<NonNullable<CardRules["widen"]>>(() => Promise.resolve(null));
+    const r = rules({ widen, elevated });
+    await cardKinds(r).host(host({ body: { cwd: "site" }, widen: { kind: "ed25519" } }));
+    expect(widen).toHaveBeenCalledWith({ card: "k1", verb: "card.update", change: { cwd: "site" } }, { kind: "ed25519" }, expect.stringMatching(/folder/));
+    expect(r.verb).toHaveBeenCalledWith("card.update", { id: "k1", body: { cwd: "site" } });
+    expect(elevated).not.toHaveBeenCalled();
+    await cardKinds(r).host(host({ command: "ls", widen: {} }, "card.shell"));
+    expect(r.verb).toHaveBeenLastCalledWith("card.shell", { id: "k1", command: "ls" });
+  });
+
+  it("refuses one whose approval doesn't check out, and keeps today's refusal without one or without a check", async () => {
+    await expect(cardKinds(rules({ widen: () => Promise.resolve("stale") })).host(host({ body: { agent: "b" }, widen: {} }))).rejects.toThrow("stale");
+    await expect(cardKinds(rules({ widen: () => Promise.resolve(null) })).host(host({ body: { agent: "b" } }))).rejects.toThrow(/agent/);
+    await expect(cardKinds(rules()).host(host({ body: { agent: "b" }, widen: {} }))).rejects.toThrow(/agent/);
+    // The editor's refusals aren't widenings, so no approval lifts them.
+    await expect(cardKinds(rules({ widen: () => Promise.resolve(null) })).host(host({ path: ".git/config", widen: {} }, "files.read"))).rejects.toThrow();
+  });
+});

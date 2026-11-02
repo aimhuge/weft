@@ -1,6 +1,6 @@
 // The session line's wire (lib/host-line-protocol.ts): each side drops a message it can't read whole.
 import { describe, expect, it } from "vitest";
-import { deviceOfChannel, iceServers, lineTopic, readControl, readHostCall, readHostReply, readLineEvent, readLineOffer, screenChannel } from "./host-line-protocol";
+import { deviceOfChannel, iceServers, lineTopic, readControl, readHostCall, readHostReply, readLineEvent, readLineOffer, readTerminalIn, readTerminalOut, screenChannel } from "./host-line-protocol";
 
 const j = (v: unknown) => JSON.stringify(v);
 
@@ -77,5 +77,24 @@ describe("control", () => {
     expect(deviceOfChannel("input:s/m:0123abcd")).toBeNull();
     expect(deviceOfChannel("input:")).toBeNull();
     expect(deviceOfChannel("host")).toBeNull();
+  });
+});
+
+describe("the terminal's messages", () => {
+  it("reads what the board sends, and only that", () => {
+    expect(readTerminalIn(JSON.stringify({ t: "open", folder: "app", cols: 80, rows: 24, widen: { a: 1 } }))).toEqual({ t: "open", folder: "app", cols: 80, rows: 24, widen: { a: 1 } });
+    expect(readTerminalIn(JSON.stringify({ t: "input", data: "" }))).toEqual({ t: "input", data: "" });
+    expect(readTerminalIn(JSON.stringify({ t: "resize", cols: 10, rows: 5 }))).toEqual({ t: "resize", cols: 10, rows: 5 });
+    for (const bad of ["x", "[]", JSON.stringify({ t: "open", folder: "", cols: 80, rows: 24 }), JSON.stringify({ t: "open", folder: "a", cols: 0, rows: 24 }), JSON.stringify({ t: "resize", cols: 10.5, rows: 5 }), JSON.stringify({ t: "resize", cols: 10, rows: 501 }), JSON.stringify({ t: "input", data: 1 }), JSON.stringify({ t: "kill" })]) {
+      expect(readTerminalIn(bad)).toBeNull();
+    }
+  });
+
+  it("reads what the worker sends, and only that", () => {
+    expect(readTerminalOut(JSON.stringify({ t: "opened" }))).toEqual({ t: "opened" });
+    expect(readTerminalOut(JSON.stringify({ t: "data", data: "x" }))).toEqual({ t: "data", data: "x" });
+    expect(readTerminalOut(JSON.stringify({ t: "exit", code: 2 }))).toEqual({ t: "exit", code: 2 });
+    expect(readTerminalOut(JSON.stringify({ t: "refused", message: "no" }))).toEqual({ t: "refused", message: "no" });
+    for (const bad of ["x", JSON.stringify({ t: "data" }), JSON.stringify({ t: "exit", code: "0" }), JSON.stringify({ t: "refused", message: "" })]) expect(readTerminalOut(bad)).toBeNull();
   });
 });

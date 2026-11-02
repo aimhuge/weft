@@ -41,3 +41,18 @@ export {
   type ApprovalFields,
   type GrantScope,
 } from "./approval-sig";
+export {
+  canonical,
+  freshWiden,
+  readWidenAuth,
+  widenChangeOf,
+  widenLabel,
+  widenMessage,
+  withoutWiden,
+  WIDEN_MESSAGE_V,
+  WIDEN_TTL_MS,
+  type WidenAuth,
+  type WidenChange,
+  type WidenFields,
+  type WidenVerb,
+} from "./widen";

@@ -24,6 +24,8 @@ const reads = vi.hoisted(() => ({
   workerResultBlob: vi.fn(() => Promise.resolve({ value: { files: ["a.ts"] } })),
 }));
 vi.mock("@/lib/worker-board-reads", () => reads);
+const pin = vi.hoisted(() => ({ pinWorkerPasskeys: vi.fn(() => Promise.resolve({ commandId: "cmd-pin" })) }));
+vi.mock("@/lib/worker-pin", () => pin);
 
 const route = await import("./route");
 
@@ -171,6 +173,14 @@ describe("POST /worker-board", () => {
     expect(await (await route.POST(post(body))).json()).toEqual({ commandId: "cmd-line" });
     expect(board.openWorkerLine).toHaveBeenCalledWith(body);
     expect(board.sendWorkerAction).not.toHaveBeenCalled();
+    guard.elevated = Response.json({ error: "Needs the launch token" }, { status: 403 });
+    expect((await route.POST(post(body))).status).toBe(403);
+  });
+
+  it("sends a Mac's passkey endorsements to a worker, only from Weft's own window", async () => {
+    const body = { action: "pin", workerId: "w1", endorsements: [{ e: 1 }] };
+    expect(await (await route.POST(post(body))).json()).toEqual({ commandId: "cmd-pin" });
+    expect(pin.pinWorkerPasskeys).toHaveBeenCalledWith(body);
     guard.elevated = Response.json({ error: "Needs the launch token" }, { status: 403 });
     expect((await route.POST(post(body))).status).toBe(403);
   });

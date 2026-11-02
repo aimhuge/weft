@@ -4,6 +4,7 @@
 // (lib/worker-card-commands.ts) act on a card it runs; `line` opens a session line (lib/host-line.ts); `secret_use`
 // hands a sealed answer to a card's waiting secret run. Each returns the card it made or touched, or null.
 import { newCardBody, type CloudCommandRow } from "./cloud-commands";
+import { signedAgent } from "./create-widen";
 import { dispatcher, type KindTable } from "./host/dispatch";
 import type { HostDone } from "./host-command";
 import { createCardCommands } from "./worker-card-commands";
@@ -11,6 +12,7 @@ import { cloneBody, runBody } from "./worker-commands";
 import type { DaemonDeps } from "./worker-daemon";
 import { explainClone, type GithubStatus } from "./worker-github";
 import { sealedOf, type Sealed } from "./worker-seal";
+import { workerWidenCheck } from "./worker-widen";
 
 const UNKNOWN_KIND = "This worker doesn't know that kind of request. Update it with weft-worker update.";
 // A run that names no mode edits files without asking, and still asks before a command it hasn't been allowed.
@@ -82,9 +84,11 @@ export function workerKinds(deps: DaemonDeps, ctx: KindContext): KindTable {
     const { repo, start, ...fields }: Record<string, unknown> = run ? { ...run } : newCardBody(command);
     if (typeof fields.prompt !== "string" || !fields.prompt) throw new Error("That card has no prompt.");
     if (start === false) throw new Error("A worker has no Backlog yet. Start the thread instead.");
+    // Checked before the files come over: the approval names the prompt as it was sent.
+    const agent = await signedAgent(command, command.folder, deps.widen && workerWidenCheck(deps.widen));
     fields.prompt = await engine.receive(fields.prompt, command.payload);
     const cwd = await deps.checkout(command.folder, typeof repo === "string" ? repo : undefined);
-    const card = await engine.start({ ...fields, cwd, permissionMode: run?.permissionMode ?? fields.permissionMode ?? DEFAULT_MODE });
+    const card = await engine.start({ ...fields, ...(agent ? { agent } : {}), cwd, permissionMode: run?.permissionMode ?? fields.permissionMode ?? DEFAULT_MODE });
     publisher.nameFolder(card.id, command.folder);
     publisher.track(card.id);
     // The report names the card, and the database only takes a card this worker has published.
@@ -92,7 +96,7 @@ export function workerKinds(deps: DaemonDeps, ctx: KindContext): KindTable {
     return card.id;
   }
 
-  const cards = createCardCommands(engine);
+  const cards = createCardCommands(engine, deps.widen);
   return {
     async login(command) {
       await deps.login(sealedToken(command));
@@ -107,6 +111,14 @@ export function workerKinds(deps: DaemonDeps, ctx: KindContext): KindTable {
     run: startCard,
     new_card: startCard,
     update: () => ctx.askForUpdate(),
+    // A pinned Mac's endorsements of passkeys, so a browser can widen here too (lib/host-signers.ts endorse).
+    async pin(command) {
+      if (!deps.widen) throw new Error("This worker doesn't take passkeys yet. Update it with weft-worker update.");
+      const list: unknown = (command.payload as { endorsements?: unknown } | null)?.endorsements;
+      if (!Array.isArray(list) || !list.length || list.length > 20) throw new Error("That pin carries no endorsements.");
+      for (const e of list) await deps.widen.signers.endorse(e, deps.widen.host, (deps.widen.now ?? Date.now)());
+      return null;
+    },
     ...cards,
     // A session line's sealed offer (lib/host-line.ts): its verbs run through this table's own `host`, so they pass
     // exactly the checks a `host` command does (CardRules, remoteRefusal).

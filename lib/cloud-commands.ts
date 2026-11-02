@@ -29,6 +29,9 @@ export interface NewCardPayload {
   permissionMode?: NewCardMode;
   // false: made in Backlog and left there; left out, it starts.
   start?: false;
+  // Who the thread is (lib/agents.ts). Only with `widen`, a signed approval for it (lib/create-widen.ts).
+  agent?: string;
+  widen?: unknown;
 }
 
 // The modes a new card may start in from the web: plan too, never bypassPermissions (lib/worker-commands.ts RUN_MODES).
@@ -75,6 +78,11 @@ export interface LoginPayload {
 }
 
 // A session line's offer, sealed to the worker (lib/worker-board.ts openWorkerLine, lib/host-line.ts).
+// A Mac's endorsements of its passkeys for one worker (lib/host-signers.ts readEndorsement), each signed after Touch ID.
+export interface PinPayload {
+  endorsements: unknown[];
+}
+
 export interface LinePayload {
   sealed: Sealed;
 }
@@ -113,8 +121,9 @@ export interface QaPayload {
 }
 
 // "host" carries any verb in lib/host-api (lib/host-command.ts); reply, answer, stop and mode run as its verbs too.
-// "line" is a sealed WebRTC offer that opens a worker's session line (lib/host-line.ts).
-export type CloudCommandKind = "new_card" | "reply" | "answer" | "stop" | "run" | "login" | "github_login" | "clone" | "mode" | "input" | "qa" | "update" | "host" | "line" | "secret_use";
+// "line" is a sealed WebRTC offer that opens a worker's session line (lib/host-line.ts). "pin" carries a Mac's signed
+// endorsements of its passkeys for a worker (lib/host-signers.ts).
+export type CloudCommandKind = "new_card" | "reply" | "answer" | "stop" | "run" | "login" | "github_login" | "clone" | "mode" | "input" | "qa" | "update" | "host" | "line" | "secret_use" | "pin";
 
 // public.cloud_commands.
 export interface CloudCommandRow {
@@ -125,7 +134,7 @@ export interface CloudCommandRow {
   // The Mac that runs it (cloud_cards.owner_device) and the folder it runs in (cloud_cards.folder).
   target_device: string;
   folder: string;
-  payload: NewCardPayload | ReplyPayload | AnswerPayload | StopPayload | LoginPayload | ClonePayload | ModePayload | InputPayload | QaPayload | UpdatePayload | HostPayload | LinePayload;
+  payload: NewCardPayload | ReplyPayload | AnswerPayload | StopPayload | LoginPayload | ClonePayload | ModePayload | InputPayload | QaPayload | UpdatePayload | HostPayload | LinePayload | PinPayload;
   status: CloudCommandStatus;
   card_id: string | null;
   error: string | null;

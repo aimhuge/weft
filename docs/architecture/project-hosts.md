@@ -26,11 +26,11 @@ engine: the daemon runs the same `lib/runner.ts`.
 | --- | --- | --- |
 | Permission mode | PATCH `permissionMode` | default/acceptEdits/auto through the `mode` command; no `plan` mid-card |
 | Model, CLI, effort on an open card | `switch-backend`, `rerun-model` | the model picker and the first-message banner's rerun, as `card.switchBackend` / `card.rerunModel` (H3) |
-| Agent | PATCH `agent` | none |
+| Agent | PATCH `agent` | `card.update` with a signed approval ([Signed widening](#signed-widening-as-built)) |
 | Rename, tags, star, archive, move, delete | PATCH, DELETE, `CardActions` | as `card.update` (H3), and `card.delete` (2026-11-02) |
 | Share… | `card-share`, `ShareCardDialog` | the same dialog over the rows the worker published (`lib/card-share-worker.ts`, 2026-11-02; sharing.md) |
 | ↑ edit, Restart, Fresh | `messages`, `fresh` | as host verbs (H3) |
-| "!" shell | `shell` | none |
+| "!" shell | `shell` | `card.shell` with a signed approval ([Signed widening](#signed-widening-as-built)) |
 | Wait, Me first, Others first | `permission` | as host verbs, on the tile and in the thread (H3) |
 | Stop a subagent task | `tasks/[taskId]/stop` | `card.stopTask` (H3) |
 | Attachments in a reply | `/api/attachments` | images and PDFs travel as blobs on `reply`, `run` and `new_card` (`lib/attachment-transfer.ts`, 2026-11-02) |
@@ -148,7 +148,8 @@ Mac inbox:     claim ─▶ readHostCommand ─▶ macCard ─▶ approval rule 
   `worker_claim`), but anyone holding that account's session can insert one, so the database doesn't make a row trusted.
   Both hosts therefore refuse, from the network, whatever widens what a card can touch (`remoteRefusal`): `card.shell`, and
   a `card.update` that moves the card's folder (`cwd`), changes its agent or read scope, or skips permission prompts. Those
-  stay with Weft's own window, behind `elevated()`. The Mac also keeps its phone rule: a host `card.permission.answer` is
+  stay with Weft's own window, behind `elevated()`, unless the command carries a signed approval for exactly that change
+  ([Signed widening](#signed-widening-as-built)). The Mac also keeps its phone rule: a host `card.permission.answer` is
   checked as an `answer` (a signature in `args.auth`), and any other verb `needsElevation` names is refused while a phone
   is paired and the web may not approve, since the phone can't sign one yet. `result` is capped at 4 KB by a check
   constraint. Found by a security review before H2 shipped.
@@ -589,7 +590,7 @@ lib/line-answer.ts  ◀── sealed answer (one-time key) on Broadcast worker-l
   host     {id, verb, args} ─▶ the `host` kind's own handler (lib/host/dispatch.ts: CardRules, remoteRefusal) ─▶ {id, ok, result|error}
   events   ◀─ card, card_deleted, thread: what the publisher ships, as it ships it (lib/worker-publish.ts mirror)
   line     ping/pong every 5 s (→ setWorkerRoute(worker, "direct", ms)); offer/answer renegotiation
-  terminal refused on open
+  terminal a pty in one project folder, opened only by a signed approval (Signed widening, below); refused without one
 ```
 
 - **Who holds it.** The selected chip of a worker project that isn't offline (`components/ProjectChips.tsx`) and an open
@@ -622,10 +623,11 @@ lib/line-answer.ts  ◀── sealed answer (one-time key) on Broadcast worker-l
   `input:<device>:<nonce>` channel to the line, renegotiated over `line` with `screen: {device, quality, channel}`. The
   worker attaches the watched device's `FastScreen` (`fastScreenOf`, `attach`, `input`) to the new m-line and stops it
   when that input channel closes. With no line, or a refused attach, the screen opens its own line as in H6a.
-- **The terminal is refused**, on every line, with `TERMINAL_REFUSAL`. A pty is a shell, and H2 refuses a shell from the
-  network because whoever holds the account's session can insert a row. A line is no better: the sealed offer proves
-  that only the worker answers, not that Weft's own window offered (the worker's key is public, so anyone with the
-  session can seal one). A terminal over the line needs the offer signed by a device key the worker pins (H7/H10).
+- **The terminal opens only signed.** A pty is a shell, and H2 refuses a shell from the network because whoever holds the
+  account's session can insert a row. A line is no better: the sealed offer proves that only the worker answers, not that
+  Weft's own window offered (the worker's key is public, so anyone with the session can seal one). So the `terminal`
+  channel's first message must carry a Touch ID approval for that project folder, checked against the Mac key the worker
+  pinned ([Signed widening](#signed-widening-as-built)); without one it's refused with `TERMINAL_REFUSAL`.
 - **TURN.** `GET /api/rtc-ice` (elevated: a TURN allocation is billed relay traffic) mints Cloudflare credentials for 4 h
   with `CLOUDFLARE_TURN_KEY_ID` and `CLOUDFLARE_TURN_KEY_API_TOKEN`, reused for half that, port-53 URLs dropped; without
   them, or on any failure, STUN alone. The servers ride inside the sealed offer, so the worker relays through the same
@@ -640,6 +642,86 @@ lib/line-answer.ts  ◀── sealed answer (one-time key) on Broadcast worker-l
   or off the LAN.
 - **Not yet.** Streaming deltas on `events`; reconnecting a dropped line over a second path (the mDNS hint); weft.zip and the
   phone sealing their own offers; Supabase leaving the card-list poll.
+
+### Signed widening (as built)
+
+```
+desktop board ── hostOf(card).act(verb, args) ── actOnLine ── signedArgs: widenChangeOf(verb, args) ≠ null?
+                    └─ window.weft.approval.widen({host, card, verb, change}) ─ main: Touch ID in its own words ─ Ed25519
+weft.zip board ── cloudHostActs.act ── widen(ask) ─ sign.weft.zip/approve?widen=… ─ passkey ─ inserts the host row itself
+                                   args.widen = { kind, device, issuedAt, nonce, sig | assertion }
+host (Mac inbox, worker daemon, line): cardKinds.host ─ remoteRefusal ─ widenChangeOf ─ rules.widen ─ widenProblem:
+   fresh (±2 min) · nonce unused (kept on disk) · no bidi · the host's limits · message rebuilt from its own names ·
+   signature against its pins (Mac: main's /pairing/verify, /pairing/passkey-verify; worker: lib/host-signers.ts) · nonce spent
+```
+
+H2 refused, from the network, anything that widens what a card can touch, because a `cloud_commands` row or a line message
+is backed only by a Supabase session. Since H7 and the desktop signer there are per-action signatures from keys a host
+pins, so each refusal lifts when, and only when, the command carries a fresh approval bound to exactly that action.
+
+- **The message** (`packages/weft-client/src/widen.ts`, re-exported by `lib/widen.ts`): canonical JSON (keys sorted at every
+  depth) of `{ v: "weft-widen-v1", host, card, verb, change, nonce, issuedAt }`. `host` is a Mac's `lib/device-id.ts` id or
+  a worker's id; `change` is exactly the widening, read off the command by `widenChangeOf` with remoteRefusal's own rules:
+  `cwd` (a worker's project name, a Mac's synced path), `agent`, `permissionMode: "bypassPermissions"`, `readScope`,
+  `shell` (`card.shell`), `schedule` (a `card.schedule` "!" line), `terminal` (a project folder; verb `terminal.open`, no
+  card) and `create` (`{ agent, folder, prompt }` for a new thread with an agent; verb `card.create`, no card). The `v`
+  keeps it from ever reading as an answer's message. Other fields of the same `card.update` (a title, tags) aren't signed;
+  they widen nothing.
+- **The auth** rides as `args.widen` on a host verb (stripped before the handler runs, `withoutWiden`), `payload.widen` on a
+  `run`/`new_card`, and `widen` in the terminal's open: `{ kind: "ed25519", device, issuedAt, nonce, sig }` (the desktop's
+  Touch ID key or a phone's) or `{ kind: "webauthn", device, credId, issuedAt, nonce, authenticatorData, clientDataJSON,
+  signature }` (a passkey on sign.weft.zip). `readWidenAuth` takes only those shapes.
+- **The check** (`lib/widen-check.ts` `widenProblem`, called from `lib/host/dispatch.ts` `cardKinds.host` through
+  `CardRules.widen`, from `lib/create-widen.ts` for a new thread and from the terminal): within `WIDEN_TTL_MS` (2 minutes)
+  of the host's clock; a nonce not seen (`lib/widen-nonces.ts`, a file in the host's own data folder, `widen-nonces.json`,
+  so a restart can't replay one, taken after the signature checks out so of two racing commands only one runs); no bidi
+  override in any string of the change; the host's limits; then the signature over the message **rebuilt from the host's
+  own id**. A signed widening also stands in for the Mac's `ELEVATED_REFUSED` rule. Without an approval the host says
+  exactly what it said before.
+- **Passkeys sign less**, as for answers (mobile-security.md): skipping permission prompts and a read grant stay on the
+  Mac or a phone (`PASSKEY_TOO_WIDE`), and a shell line `phoneOnly` flags (a vault tool, an agent's config, a skip flag) is
+  refused (`PHONE_ONLY`). A passkey can move a card, change its agent, and run or schedule a plain "!" line.
+- **On a Mac** (`lib/cloud-inbox-cards.ts`): main verifies (`POST /pairing/verify` for a phone's or this Mac's own key,
+  `/pairing/passkey-verify` for a paired browser, its counter kept); a new folder must be one switched on in Settings →
+  Sync (`macConfine`); a `new_card` with an agent needs its approval over the synced path the inbox resolved.
+- **On a worker** (`lib/worker-widen.ts`, `lib/worker-signing.ts`, wired in `scripts/weft-worker.ts`): Ed25519 against the
+  **pairing Mac's key**, the one H8 pins from the pairing code the person carried to the box (`lib/worker-mac-keys.ts`,
+  `mac-keys.json`), so secret asks and widenings trust the same Mac and no other; passkeys only once that Mac endorsed them
+  (below). A new folder (`cwd`) and a terminal must name one of its project folders (`listProjectFolders`), and the card
+  then runs in that checkout and is filed under it (`placeUpdate`, `publisher.nameFolder`); a read grant stays under its
+  work root. A token-enrolled worker has no Mac key, so it refuses every widening (`NO_MAC`) until it's paired.
+- **Passkeys on a worker** (`lib/host-signers.ts`): Settings → Devices → a worker's **Passkeys** asks Touch ID once, main
+  signs `weft-endorse-v1` over each passkey it pinned, for that worker (`electron/widen-sign.cjs` `approval:endorse`), and
+  this Mac's server inserts them as a `pin` command (`lib/worker-pin.ts`, `POST /api/worker-board {action:"pin"}`,
+  elevated). The worker checks each endorsement against the pairing Mac's key (fresh within 10 minutes, for itself) and
+  keeps the passkey and its counter in `passkeys.json` (mode 600, sealed from threads like the rest of its home); a
+  `revoke: true` endorsement unpins it.
+- **The desktop's prompt** is main's own words over exactly the fields it signs (`readWidenRequest`, `widenPrompt`): "run
+  the shell command make test, for card 1a2b3c4d on the host 7f3e…". Main's copy of the message is proven byte for byte
+  equal to @weft/client's (`electron/widen-sign.test.ts`). Board window only, never the control server a thread can call.
+- **Where the board signs** (`lib/widen-signer.ts`): `actOnLine` signs before it routes, so every caller gets it: the
+  menu's `agent:*` and Skip permissions (`remoteMenu(items, { agent, skip })`), the list view's folder picker (a worker
+  card's folders are that worker's projects), the thread's "!" line and Read from (`workerTransportVia` gains `shell` and
+  `grantFolder` where `canSignWiden()`), a new thread with an agent (`api.create` → `withCreateWiden`), and the terminal.
+  `cloudHost.can` turns on `folder`, `agent`, `shell` and `terminal` where the desktop app can sign. With no signer the
+  command goes unsigned and the host refuses it in its own words. On weft.zip with a paired passkey, `cloudHostActs`
+  hands a widening to `openWidenWindow`: sign.weft.zip/approve?widen=… shows the change whole (`lib/sign-widen-sheet.ts`),
+  signs it and inserts the host row itself (`lib/sign-widen.ts`); the web host's menu offers the agent and its transport
+  the "!" line.
+- **The terminal** (`lib/host-line-terminal.ts`, `lib/line-terminal.ts`): only on the H6 line, never the relay. The drawer
+  on a worker project (`lib/board-folders.ts` gives it the worker path where the host `can("terminal")`) uses
+  `terminalBridgeFor`, the same bridge shape as `window.weft.terminal`: Touch ID for the folder, then a `terminal` channel
+  on the live connection (`SessionLine.channel`, no renegotiation) whose first message is `{ t: "open", folder, cols, rows,
+  widen }`. The worker checks it, spawns a login shell in that checkout (`lib/worker-pty.ts`, node-pty), and carries
+  `input`/`resize` in and `data` (16 KB chunks)/`exit` out. One terminal per line at a time; it's killed when its channel
+  closes, and every one is killed when the line closes. With no direct line the drawer says so.
+- **Migration** `supabase/migrations/20261102200000_signed_widening.sql` adds the `pin` kind (not applied). The widenings
+  themselves ride inside `host`, `run`, `new_card` and the line.
+- **Left refused.** A passkey can't skip permission prompts or grant a folder (H7's rule); a Mac card's terminal from
+  weft.zip (the web has no line, and a Mac has no terminal service off the desktop); a new thread with an agent from
+  weft.zip (the sign page signs host verbs only); "Always" on a worker's Read from (a grant is per card there); the phone
+  app, which doesn't build the message yet. A thread on a Mac could edit `~/.weft/widen-nonces.json` to replay an
+  approval inside its 2 minutes; the worker's copy is sealed in its home.
 
 ## Approvals and secrets
 
@@ -722,7 +804,7 @@ Each ships on its own.
    [weft-worker.md](weft-worker.md#the-fast-path)); the line
    opens while a board shows the worker's project, not only during a watch; `host` (verbs and results) and `events`
    (thread and project changes, streaming text) channels replace the 2.5 s poll (**built 2026-11-02**, [as
-   built](#the-session-line-h6-as-built), with the simulator as a track on the line, TURN, and the terminal refused); Supabase leaves the hot path (the
+   built](#the-session-line-h6-as-built), with the simulator as a track on the line, TURN, and the terminal refused until it's signed: [Signed widening](#signed-widening-as-built)); Supabase leaves the hot path (the
    first sealed offer, then a history and offline mirror written beside the line, with reconnects over the line itself);
    a signed Bonjour/mDNS hint lets a board on the same LAN offer straight to the host; the browser and the phone seal
    their own offers (libsodium), so weft.zip and the phone open lines too; and a TURN relay beside the STUN server
@@ -749,7 +831,10 @@ Each ships on its own.
 10. **H10 one device registry** and one pairing flow (built 2026-11-02, migration not applied:
     [device-registry.md](device-registry.md)): `public.device_registry`, `device_revoke` for every kind, Settings → Devices,
     and Add a worker as a pairing (`worker_pair_*`); `worker_enrol` stays for tokens.
-11. **Later: the process split.** Daemon and cards as separate processes on both hosts, behind the same interface.
+11. **Signed widening** (built 2026-11-02, migration not applied, [as built](#signed-widening-as-built)): a new folder,
+    agent or read scope, skipping prompts, a "!" line, the terminal over the line and a new thread with an agent run on a
+    remote host with a fresh approval for exactly that change, from the desktop's Touch ID key or a passkey.
+12. **Later: the process split.** Daemon and cards as separate processes on both hosts, behind the same interface.
 
 
 ## Risks

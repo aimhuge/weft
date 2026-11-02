@@ -106,7 +106,8 @@ export function useBoardMenus(deps: BoardMenuDeps) {
     if (!action.startsWith("agent:")) return false;
     const agent = findAgent(action.slice(6), agents);
     if (!agent) return true;
-    await api.setAgent(card.id, agent.id);
+    // A worker's card takes it only with a signed approval, which its host asks Touch ID for (lib/widen-signer.ts).
+    await hostOf(card).act("card.update", { id: card.id, body: { agent: agent.id } }, () => api.setAgent(card.id, agent.id));
     deps.toast(`“${card.title}” is now the ${agent.name}: its next message starts under the new soul.`);
     return true;
   }

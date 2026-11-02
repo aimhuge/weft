@@ -37,3 +37,15 @@ describe("remoteMenu", () => {
     expect(remoteMenu([{ id: "reveal", label: "Reveal" }, { type: "separator" }])).toEqual([]);
   });
 });
+
+describe("remoteMenu where the board can sign a widening", () => {
+  it("keeps the agents and skipping prompts for Touch ID, and only the agents for a passkey", () => {
+    const menu = cardMenu(card());
+    const desktop = ids(remoteMenu(menu, { agent: true, skip: true }));
+    expect(desktop).toContain("mode:bypassPermissions");
+    expect(desktop.some((id) => id.startsWith("agent:"))).toBe(true);
+    const web = ids(remoteMenu(menu, { agent: true }));
+    expect(web).not.toContain("mode:bypassPermissions");
+    expect(web.some((id) => id.startsWith("agent:"))).toBe(true);
+  });
+});

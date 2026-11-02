@@ -24,15 +24,18 @@ import { workerFiles } from "./worker-files";
 import { actOnWorker, workerToolSource, workerTransport } from "./worker-transport";
 import { parseWorkerProject } from "./worker-project";
 import { actOnLine, lineFiles, lineTransport } from "./line-host";
+import { canSignWiden } from "./widen-signer";
 
 // This Mac's own features, which another host offers only once it has a verb or a stream for them. `files` is the
 // editor and the thread's file links (H4), `shots` the show rail's page pictures (lib/page-shots.ts), `pane` the native
-// browser pane; `folder`, `agent` and `shell` widen what a card can touch, so a remote host refuses them from the network.
+// browser pane; `folder`, `agent`, `shell` and `terminal` widen what a card can touch, so a remote host takes them only
+// with a signed approval.
 // `skills` is the skill set chip (which skills a card gets); the "/" list is the transport's listSkills on every host.
 // `schedule` is Send later, which both hosts hold the timer for (card.schedule). `reads` is the header badges (H4);
 // `projectActs` what they start from this Mac's store and server: a re-scout, the commit walk-through and the sprint
 // plan, whose prompts point at the Mac's own routes. `share` a weft.zip link to the card's cloud rows; `delete` card.delete.
-export type HostFeature = "files" | "reads" | "projectActs" | "shots" | "pane" | "folder" | "agent" | "shell" | "skills" | "share" | "delete" | "login" | "vault" | "dev" | "schedule";
+// `terminal` is the terminal drawer, a pty on the host (on a worker, over its session line).
+export type HostFeature = "files" | "reads" | "projectActs" | "shots" | "pane" | "folder" | "agent" | "shell" | "terminal" | "skills" | "share" | "delete" | "login" | "vault" | "dev" | "schedule";
 
 export interface ProjectHost {
   kind: "local" | "cloud";
@@ -103,16 +106,19 @@ export const localHost: ProjectHost = {
 // and the header's reads through its snapshots (H4). Share… reads the card's cloud rows, which a worker publishes like a
 // Mac's outbox (lib/card-share-worker.ts), and Delete is card.delete. Not this Mac's pane, vault or CLIs.
 const CLOUD_FEATURES = new Set<HostFeature>(["schedule", "files", "reads", "share", "delete"]);
+// What widens a card, which a worker runs only with a signed approval (lib/widen-signer.ts): offered where this Mac can
+// sign one (the desktop app), and the act asks Touch ID first.
+const SIGNED_FEATURES = new Set<HostFeature>(["folder", "agent", "shell", "terminal"]);
 
 export const cloudHost: ProjectHost = {
   kind: "cloud",
   thread: workerTransport,
   tools: workerToolSource,
-  can: (feature) => CLOUD_FEATURES.has(feature),
+  can: (feature) => CLOUD_FEATURES.has(feature) || (SIGNED_FEATURES.has(feature) && canSignWiden()),
   read: cloudRead,
   files: workerFiles,
   act: (verb, args) => actOnWorker(verb, args),
-  menu: remoteMenu,
+  menu: (items) => remoteMenu(items, canSignWiden() ? { agent: true, skip: true } : {}),
 };
 
 // A worker's host takes its session line when it's up and the relay when it isn't (lib/line-host.ts).

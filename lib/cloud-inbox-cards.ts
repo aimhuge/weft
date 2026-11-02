@@ -10,6 +10,7 @@ import { shell } from "./browser-shell";
 import { startFeatureCard } from "./card-starter";
 import { createCardFromBody } from "./new-card";
 import { newCardBody, type CloudCommandRow, type NewCardMode } from "./cloud-commands";
+import { signedAgent, type WidenCheck } from "./create-widen";
 import { networkStartMode } from "./cloud-new-card-mode";
 import { macReceive } from "./cloud-inbox-receive";
 import { syncNow, syncOrgId } from "./cloud-sync";
@@ -18,12 +19,34 @@ import { applyFolderGrant } from "./folder-grant";
 import { cardKinds, dispatcher, type CardRules } from "./host/dispatch";
 import { needsElevation, runVerb, type HostVerb } from "./host-api";
 import { defaultPermissionMode, syncFolders } from "./settings";
-import { getCard } from "./store";
+import { DATA_DIR, getCard } from "./store";
 import { pairingStatus } from "./sync-security";
+import type { WidenChange } from "./widen";
+import { widenProblem, type Verified } from "./widen-check";
+import { fileNonceStore, nonceBook, type NonceBook } from "./widen-nonces";
 
 // Why a verb that grants power can't run from the web: a phone is paired, and only it approves. The phone can't sign
 // a host verb yet, so until it can, these stay on the Mac (or Settings → Sync lets the web approve).
 export const ELEVATED_REFUSED = "That needs this Mac while a phone is paired: run it here. (Settings → Sync can let the web approve.)";
+
+// The widening approvals this Mac has run, kept on disk so a restart can't replay one (lib/widen-nonces.ts).
+let nonces: NonceBook | null = null;
+const macNonces = () => (nonces ??= nonceBook(fileNonceStore(path.join(DATA_DIR, "widen-nonces.json"))));
+
+// A card the web moves goes only to a folder switched on in Settings → Sync: one the web sees, never "/" or ~.
+export function macConfine(change: WidenChange): string | null {
+  return change.cwd === undefined || syncFolders().includes(change.cwd) ? null : `${change.cwd} isn't switched on in Settings → Sync on this Mac.`;
+}
+
+const macWiden: WidenCheck = (target, auth, refusal) =>
+  widenProblem(target, auth, refusal, {
+    host: deviceId(),
+    now: Date.now(),
+    nonces: macNonces(),
+    verify: async (body) => (await shell("/pairing/verify", body)) as Verified,
+    passkey: async (body) => (await shell("/pairing/passkey-verify", body)) as Verified,
+    confine: macConfine,
+  });
 
 const UNKNOWN_KIND = "This version of Weft doesn't know that kind of request. Update the desktop app.";
 
@@ -62,6 +85,9 @@ const macRules: CardRules = {
     const pairing = await pairingStatus();
     return pairing.approvers > 0 && !pairing.webApprovals ? ELEVATED_REFUSED : null;
   },
+  // A signed widening: a paired phone's or this Mac's own key, or a paired browser's passkey, checked by main against
+  // its pins over the message rebuilt from this Mac's own id (lib/widen-check.ts).
+  widen: (target, auth, refusal) => macWiden(target, auth, refusal),
   // The change is in the outbox already; this sends it now rather than on the next tick.
   after: () => syncNow(),
   answerAsKind: true,
@@ -81,6 +107,9 @@ export function syncFolderFor(name: string): string | null {
 // rule as a mode change (lib/cloud-new-card-mode.ts), and one asked for in Backlog made and left there.
 async function newCard(command: CloudCommandRow, receive: (text: string, payload: unknown) => Promise<string>): Promise<string> {
   const body = newCardBody(command);
+  // An agent only with a signed approval for it, over the synced folder the check resolved (lib/create-widen.ts).
+  const agent = await signedAgent(command, command.folder, macWiden);
+  if (agent) body.agent = agent;
   body.permissionMode = await networkStartMode(body.permissionMode as NewCardMode | undefined, {
     defaultMode: defaultPermissionMode,
     refusal: async (permissionMode) => (await macRules.elevated?.("card.update", { id: "", body: { permissionMode } })) ?? null,

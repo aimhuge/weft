@@ -11,6 +11,7 @@ import { cardKinds, type CardRules } from "./host/dispatch";
 import type { Card } from "./types";
 import type { Engine } from "./worker-daemon";
 import { inputBody, modeBody, qaBody } from "./worker-commands";
+import { placeUpdate, workerWidenCheck, type WorkerWiden } from "./worker-widen";
 
 // A card this worker runs, and never its copilot.
 function ownCard(engine: Engine, cardId: string | undefined): Card {
@@ -19,10 +20,18 @@ function ownCard(engine: Engine, cardId: string | undefined): Card {
   return card;
 }
 
-export function workerRules(engine: Engine): CardRules {
+// `widen` is the worker's signed-widening side (lib/worker-widen.ts): without it, every widening stays refused.
+export function workerRules(engine: Engine, widen?: WorkerWiden): CardRules {
   return {
     card: (cardId) => ownCard(engine, cardId),
-    verb: (verb, args) => engine.host(verb, args),
+    async verb(verb, args) {
+      if (!widen) return engine.host(verb, args);
+      const placed = placeUpdate(widen, verb, args, { id: String(args.id) });
+      const reply = await engine.host(verb, placed.args);
+      placed.after();
+      return reply;
+    },
+    widen: widen && workerWidenCheck(widen),
     grant: (cardId, directory, scope) => engine.grant(cardId, directory, scope),
     receive: (text, payload) => engine.receive(text, payload),
     // The editor's files.* results over the row's 4 KB go up as blobs (lib/host-result.ts).
@@ -30,9 +39,9 @@ export function workerRules(engine: Engine): CardRules {
   };
 }
 
-export function createCardCommands(engine: Engine) {
+export function createCardCommands(engine: Engine, widen?: WorkerWiden) {
   return {
-    ...cardKinds(workerRules(engine)),
+    ...cardKinds(workerRules(engine, widen)),
     async mode(command: CloudCommandRow): Promise<string> {
       const body = modeBody(command);
       if (!body) throw new Error("That mode can't be set on a worker.");

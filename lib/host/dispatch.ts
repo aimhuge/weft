@@ -8,6 +8,8 @@ import type { HostVerb } from "../host-api";
 import { hostResult, readHostCommand, remoteRefusal, textArgOf, verbResult, type HostDone, type HostPayload } from "../host-command";
 import { carriesValue, valueResult, type Carry } from "../host-result";
 import type { Card } from "../types";
+import { widenChangeOf, withoutWiden } from "../widen";
+import type { WidenTarget } from "../widen-check";
 import type { Done } from "./identity";
 
 export type KindHandler = (command: CloudCommandRow) => Done | Promise<Done>;
@@ -29,6 +31,9 @@ export interface CardRules {
   approve?(command: CloudCommandRow, answer: AnswerPayload, card: Card): Promise<string | null>;
   // Why a verb that grants power can't run from the web here, if it can't (a Mac with a phone paired).
   elevated?(verb: HostVerb, args: Record<string, unknown>): Promise<string | null>;
+  // Why a signed widening can't run here (lib/widen-check.ts), or null when its approval checks out. `refusal` is what
+  // remoteRefusal said, for a command with no approval. Absent, every widening stays refused.
+  widen?(target: WidenTarget, auth: unknown, refusal: string): Promise<string | null>;
   // After a verb that changed a card ran: a Mac sends the change now rather than on the next tick.
   after?(): void;
   // A host card.permission.answer goes through the answer kind, so it takes the same approval rule (a Mac).
@@ -99,6 +104,20 @@ export function cardKinds(rules: CardRules) {
     return card.id;
   }
 
+  // What remoteRefusal turns away runs only with a signed approval for exactly that change (args.widen), which also
+  // stands in for the Mac's elevated rule; anything else passes that rule as before.
+  async function allowed(body: HostPayload, card: Card) {
+    const refused = remoteRefusal(body);
+    const change = refused ? widenChangeOf(body) : null;
+    if (refused && change && rules.widen && body.args.widen !== undefined) {
+      const problem = await rules.widen({ card: card.id, verb: body.verb, change }, body.args.widen, refused);
+      if (problem) throw new Error(problem);
+      return;
+    }
+    const why = refused ?? (await rules.elevated?.(body.verb, body.args));
+    if (why) throw new Error(why);
+  }
+
   // Any verb in lib/host-api, on a card this host runs. Only a command its owner made gets this far, but anyone holding
   // that account's session can insert one, so remoteRefusal turns away what would widen the card.
   async function host(command: CloudCommandRow): Promise<HostDone> {
@@ -108,9 +127,8 @@ export function cardKinds(rules: CardRules) {
       return { cardId, result: hostResult(cardId) };
     }
     const card = rules.card(body.args.id, command, "reached");
-    const refused = remoteRefusal(body) ?? (await rules.elevated?.(body.verb, body.args));
-    if (refused) throw new Error(refused);
-    const reply = await verb(body.verb, await received(command, { ...body.args, id: card.id }, textArgOf(body.verb)));
+    await allowed(body, card);
+    const reply = await verb(body.verb, await received(command, { ...withoutWiden(body.args), id: card.id }, textArgOf(body.verb)));
     // The card it touched, and for a read verb (skills.list) its answer; the editor's verbs answer with their value,
     // inline or as a blob when it's over the row's cap (lib/host-result.ts).
     const result = carriesValue(body.verb) ? await valueResult(card.id, reply, rules.carry) : verbResult(body.verb, card.id, reply);
