@@ -7,6 +7,8 @@ import type { DeviceKind, DeviceView } from "@/lib/device-registry";
 import { timeAgo } from "@/lib/format";
 import { useDevices } from "@/lib/use-devices";
 import { useNow } from "@/lib/use-now";
+import { useWorkerConnectors } from "@/lib/use-worker-connectors";
+import WorkerConnectors from "./WorkerConnectors";
 import { Spinner } from "./Icon";
 import { SettingsCard, SettingsSectionHeader } from "./SettingsLayout";
 
@@ -60,6 +62,7 @@ function AddWorker({ devices }: { devices: ReturnType<typeof useDevices> }) {
 
 export default function DevicesSettings() {
   const devices = useDevices();
+  const connectors = useWorkerConnectors();
   const now = useNow();
   const list = devices.view?.devices ?? [];
   return (
@@ -82,7 +85,8 @@ export default function DevicesSettings() {
                 </div>
               </div>
               {!d.revokedAt && (
-                <div className="flex shrink-0 gap-2">
+                <div className="flex shrink-0 items-center gap-2">
+                  {d.kind === "worker" && d.hasSignKey && <WorkerConnectors c={connectors} workerId={d.id} name={d.name} now={now} />}
                   {d.kind === "worker" && devices.canRepin && (
                     <button type="button" className={BUTTON} onClick={() => void devices.repin(d)} aria-label={`Re-pin ${d.name}`} title="Forget the keys this Mac pinned for this worker's secrets, after Touch ID; its next ask pins new ones">
                       Re-pin

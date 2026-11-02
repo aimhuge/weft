@@ -119,7 +119,11 @@ export function useDevices({ pairing, hosts }: Bridges = bridgesHere()) {
     act(async () => {
       const pinned = new Set((await pairing?.list())?.map((d) => d.id) ?? []);
       if (revokeRoute(device, pinned) === "pairing") await pairing?.revoke(device.id);
-      else await readJson(await apiFetch(`/api/devices?id=${encodeURIComponent(device.id)}`, { method: "DELETE" }));
+      else {
+        // A worker's answer can carry what GitHub confirmed about the tokens it held (lib/device-registry.ts).
+        const r = await readJson<{ note?: string }>(await apiFetch(`/api/devices?id=${encodeURIComponent(device.id)}`, { method: "DELETE" }));
+        if (r.note && live.current) setNote(`${device.name}: ${r.note}`);
+      }
       await reload();
     });
 

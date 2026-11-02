@@ -1207,6 +1207,12 @@ Contacts and Tasks from any thread's Bash. Choose a Google Cloud OAuth client JS
 with Google** for each account; tick **Read-only** to keep threads from changing anything. Threads ask before
 they send mail, change events or share files. More in [docs/architecture/connectors.md](docs/architecture/connectors.md).
 
+**GitHub on a Weft Worker.** A worker's cards can push and open pull requests as you, with Weft, without your GitHub
+sign-in ever reaching the box: connect GitHub once on weft.zip, then turn it on for a worker from its **Connectors**
+badge in Settings → Devices (one Touch ID). weft.zip mints short tokens for cards you started there and rotates them
+hourly; Scope, Approval, Lifetime and Ask before tighten it, and Turn off ends the tokens at GitHub. More in
+[docs/architecture/connectors.md](docs/architecture/connectors.md#connectors-on-a-worker-github-p1-as-built).
+
 **Simulators** sits beside it: threads drive iOS simulators and Android emulators with `mcp__simulator__*` (boot,
 install and launch an app, open a deep link or your dev server in mobile Safari or Chrome, read the screen, tap and
 type by element, screenshot, logs), and `watch` puts the device live in the browser pane: its window captured at

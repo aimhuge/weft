@@ -90,6 +90,8 @@ function setupPairing({ ipcMain, dataDir, accountClient, isBoard, confirm, safeS
     return signer.publicKey();
   };
   require("./host-pairing-ipc.cjs").registerHostPairing(handle, { db, userId, macDevice, myDevice, confirm, macSignKey }, workerPins);
+  // A worker's connectors (Settings → Devices → Connectors): turning one on or loosening it takes Touch ID; main's session writes.
+  require("./connector-grants.cjs").registerConnectorGrants(handle, { db, userId, confirm });
 
   const routes = {
     // The key the uploader seals with (lib/sync-seal-upload.ts); { none: true } when this Mac has no grant yet.

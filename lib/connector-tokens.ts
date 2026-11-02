@@ -1,0 +1,116 @@
+// The GitHub tokens weft.zip hands to workers (docs/architecture/connectors.md#connectors-on-a-worker-github-p1-as-built).
+// One chain per user: your refresh token, sealed in connector_github_tokens, and the current user access token beside
+// it. A token is handed out until ROTATE_MS after it was issued, less HOLD_MARGIN_MS; the next ask after that
+// refreshes, which per GitHub's docs ends the old access token and the old refresh token at once. So rotating is also
+// how a token a worker held is revoked (lib/connector-revoke.ts), with nothing but GitHub's documented refresh.
+// A narrowed scope gets a scoped user token per project or card (still you), kept in connector_live_tokens so a revoke
+// can delete it at GitHub.
+import "server-only";
+import { reusable, ROTATE_MS } from "./connector-grant";
+import { openToken, sealToken, type ConnectorKey } from "./connector-crypto";
+import type { ConnectorDb } from "./connector-db";
+import { deleteAppToken, refreshTokens, scopedToken, type AppConfig, type Fetch } from "./github-app";
+
+export interface TokenDeps {
+  db: ConnectorDb;
+  cfg: AppConfig;
+  key: ConnectorKey;
+  fetch: Fetch;
+  now: () => number;
+  sleep?: (ms: number) => Promise<void>;
+}
+
+export interface Handed {
+  token: string;
+  issuedAt: number;
+  login: string;
+}
+
+// A refusal the routes turn into a status and a plain message.
+export class MintError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+    readonly outcome: "refused" | "needs_allow" = "refused",
+  ) {
+    super(message);
+  }
+}
+
+const CLAIM_MS = 30_000;
+const WAIT_STEPS = 10;
+
+export const bound = { refresh: (user: string) => `refresh:${user}`, access: (user: string) => `access:${user}`, live: (worker: string, subject: string) => `live:${worker}:${subject}` };
+
+// The user's current access token, refreshed first when it's too old to hand out.
+export async function userToken(deps: TokenDeps, userId: string): Promise<Handed> {
+  const sleep = deps.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)));
+  for (let step = 0; step <= WAIT_STEPS; step++) {
+    const row = await deps.db.tokens(userId);
+    if (!row) throw new MintError(403, "GitHub isn't connected. Connect it in Weft → Settings → Devices.");
+    const issued = row.access_issued_at ? Date.parse(row.access_issued_at) : 0;
+    const access = openToken(row.access_sealed, bound.access(userId), deps.key);
+    if (access && reusable(issued, deps.now())) return { token: access, issuedAt: issued, login: row.github_login };
+    const now = deps.now();
+    if (await deps.db.claimRefresh(userId, new Date(now).toISOString(), new Date(now + CLAIM_MS).toISOString())) return refreshNow(deps, userId, row.refresh_sealed, row.github_login);
+    // Another mint is refreshing: its new token is what this one hands out too.
+    await sleep(500);
+  }
+  throw new MintError(503, "GitHub's token is being refreshed. Try again in a moment.");
+}
+
+// Spends the refresh token (GitHub ends the old access token as it answers) and stores the new pair.
+export async function refreshNow(deps: TokenDeps, userId: string, refreshSealed: string, login: string): Promise<Handed> {
+  const refresh = openToken(refreshSealed, bound.refresh(userId), deps.key);
+  const release = () => deps.db.saveTokens({ user_id: userId, refreshing_until: null });
+  if (!refresh) {
+    await release();
+    throw new MintError(403, "Your GitHub sign-in on weft.zip can't be opened. Connect GitHub again in Weft → Settings → Devices.");
+  }
+  let set;
+  try {
+    set = await refreshTokens(deps.cfg, refresh, deps.fetch, deps.now());
+  } catch (err) {
+    await release();
+    throw new MintError(502, `${(err as Error).message}. Connect GitHub again in Weft → Settings → Devices.`);
+  }
+  const issuedAt = deps.now();
+  await deps.db.saveTokens({
+    user_id: userId,
+    refresh_sealed: sealToken(set.refresh, bound.refresh(userId), deps.key),
+    refresh_expires_at: set.refreshExpiresAt,
+    access_sealed: sealToken(set.access, bound.access(userId), deps.key),
+    access_issued_at: new Date(issuedAt).toISOString(),
+    access_expires_at: set.accessExpiresAt,
+    refreshing_until: null,
+  });
+  return { token: set.access, issuedAt, login };
+}
+
+// A token narrowed to one repo for a project or a card (subject), reused while it may be handed out and while the user
+// token it was made from is still the current one: whether refreshing a parent ends its scoped tokens isn't in GitHub's
+// docs, so one made before the last refresh is never handed out again. Its predecessor is deleted at GitHub when it's
+// replaced.
+export async function narrowToken(deps: TokenDeps, o: { userId: string; workerId: string; subject: string; repo: string }): Promise<Handed> {
+  const [live, chain] = await Promise.all([deps.db.liveToken(o.workerId, o.subject), deps.db.tokens(o.userId)]);
+  if (!chain) throw new MintError(403, "GitHub isn't connected. Connect it in Weft → Settings → Devices.");
+  const seal = bound.live(o.workerId, o.subject);
+  const kept = live ? openToken(live.token_sealed, seal, deps.key) : null;
+  const parentIssued = chain.access_issued_at ? Date.parse(chain.access_issued_at) : Number.POSITIVE_INFINITY;
+  if (live && kept && live.repo === o.repo && Date.parse(live.issued_at) >= parentIssued && reusable(Date.parse(live.issued_at), deps.now())) {
+    return { token: kept, issuedAt: Date.parse(live.issued_at), login: chain.github_login };
+  }
+  const parent = await userToken(deps, o.userId);
+  let narrowed;
+  try {
+    narrowed = await scopedToken(deps.cfg, parent.token, o.repo, deps.fetch);
+  } catch (err) {
+    throw new MintError(502, (err as Error).message);
+  }
+  const issuedAt = deps.now();
+  await deps.db.saveLiveToken({ user_id: o.userId, worker_id: o.workerId, subject: o.subject, repo: o.repo, token_sealed: sealToken(narrowed.token, seal, deps.key), issued_at: new Date(issuedAt).toISOString(), expires_at: narrowed.expiresAt });
+  if (kept) await deleteAppToken(deps.cfg, kept, "token", deps.fetch);
+  return { token: narrowed.token, issuedAt, login: parent.login };
+}
+
+export const handedExpiry = (issuedAt: number) => new Date(issuedAt + ROTATE_MS).toISOString();

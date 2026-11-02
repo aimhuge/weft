@@ -502,6 +502,35 @@ worker:      claim secret_use ─ deliverSecretUse: the ask for that nonce, same
   blanks from the worker (it says to add them on the Mac), and the vault on the host itself, its key sealed to the worker
   and opened behind a signed approval (after H7).
 
+### Connectors on a worker: GitHub (P1, as built)
+
+Built 2026-11-02, migration `20261102280000_worker_github_mint.sql` not applied; the full account is in
+[connectors.md](connectors.md#connectors-on-a-worker-github-p1-as-built). T2 (PR #56) built lending the Mac's gh and gog
+sign-ins to a worker and took it out after a red team: any card could read a token that never expired. P1 is the design
+note's layer 1, **off-box minting**: nothing long-lived reaches the box.
+
+- **Who holds what.** weft.zip holds the Weft GitHub App's client secret and your GitHub refresh token, sealed in a table
+  only the service role reads. The worker holds its `wwk_` key and its pairing sign key, as before. A card gets a user
+  access token (8 hours by GitHub's clock, handed out for 1 hour and rotated after), never a refresh token or the Mac's
+  `gh` token.
+- **The grant** is a `connector_grants` row per (you, worker, connector), made in main with your own session after one
+  Touch ID per worker ("let the worker m1mini use GitHub as you, with Weft"), with Scope, Approval, Lifetime and which
+  actions ask. No prompt per card or per interval by default.
+- **The mint** (`app/api/connectors/github/mint`, `lib/connector-mint.ts`) reuses H8/H10's signing: the request is signed
+  by the sign key `worker_pair_confirm` set under your Touch ID, so the `wwk_` key alone mints nothing. It reuses T2's
+  card-origin rule: only a card whose `new_card`, `run` or `card.create` command you created for that worker, pinned on
+  first use, never a reply or an H6-line verb. Then the repo (the one the card's start named), the card not Done or
+  deleted, the approval's Allow, a nonce once, and a rate limit; every answer goes in a ledger you can read.
+- **On the box**, a card's git credential helper and gh wrapper ask the daemon over `~/.weft-worker/connector.sock` by a
+  per-session capability; the daemon holds tokens in memory only and finds the repo from the card's checkout. gh runs
+  with an env built from scratch (no `NODE_OPTIONS`, `GIT_*`, `PAGER`, `BROWSER`, `EDITOR`).
+- **Revocation** works with the box offline: Turn off or Revoke deletes the grant (a trigger does it on `device_revoke`
+  too), then weft.zip deletes narrowed tokens at GitHub and refreshes the shared user token, which ends the old one, and
+  the row shows what GitHub confirmed.
+- **What it doesn't close:** a card can still copy the token it's handed, and can take the worker's key to ask for more
+  while the grant lives; that's the accepted layer-1 trade-off, and the on-box helper (P4 on a Mac, P5 on Linux) is what
+  closes it. A red-team pass against T2's route list is due before it ships.
+
 ### Project reads and the editor (H4, as built)
 
 ```

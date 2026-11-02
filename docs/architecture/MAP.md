@@ -33,7 +33,7 @@ matching doc below. When a feature lands, add or update its entry here and in it
 - `supabase.md` — the Supabase rail drawer: token in the Keychain, `supabase/.temp/project-ref`, state, unapplied migrations, the Migrate card.
 - `cloudflare.md` — the orange-cloud rail drawer: API token in the Keychain, Worker/Pages links in `~/.weft/cloudflare-links.json`, wrangler `account_id` and deploys.
 - `blastcp.md` — the BlastCP rail drawer: OAuth+PKCE, MCP-tool reads, `~/.weft/blastcp-links.json`.
-- `connectors.md` — Settings → Connectors: CLIs your threads use for your own accounts; gog (Google Workspace) shipped in the toolchain, its OAuth client and browser sign-in.
+- `connectors.md` — Settings → Connectors: CLIs your threads use for your own accounts; gog (Google Workspace) shipped in the toolchain, its OAuth client and browser sign-in; and GitHub on a Weft Worker (P1): user tokens minted on weft.zip under a per-worker grant, the git credential helper and gh wrapper on the box.
 - `manual-qa.md` — Local Simulator mode (was Manual QA): a worker's build on a simulator on your Mac, with the worker's agent driving it (`lib/device-call.ts`, `lib/device-calls.ts`, `lib/device-build.ts`, `lib/qa-grants.ts`, `lib/qa-switch.ts`, `lib/worker-device.ts`, `lib/worker-device-link.ts`, `lib/simulator-crashes.ts`, `app/api/worker-build`, `components/QaSwitch.tsx`, `public.device_calls`, `POST /qa/approve`).
 - `simulators.md` — `mcp__simulator__*`: iOS simulators and Android emulators through simctl, adb and AXe, the live view in the pane, Settings → Connectors → Simulators.
 - `site-notes.md` — shared notes about the sites the browser pane drives: the per-card trail, the after-turn Haiku capture, what `open_url` hands a card (wrapped as untrusted reference data), the local / team / public tiers on weft.zip (`site_notes`, `site_note_versions`, `site_note_reports`, service-role only), confirmation by 3 other users, staleness, and the scrub and safety pipeline.
@@ -500,6 +500,17 @@ When a new doc lands in this folder, add it here on the same change.
   `electron/desktop-signer.cjs` + `electron/approval-sign.cjs`: this Mac's own Ed25519 approval key (sealed in `~/.weft/vault/desktop-sign-key.json`); board IPC
   `weft.approval.sign` finds the request on main's own server, asks Touch ID in main's words, then signs the phone's message, and `/pairing/verify` checks it like a phone's (not yet
   called by the board: mobile-security.md, "The desktop signs too"). `electron/pairing-open.cjs` marks an open code for the clipboard guard.
+- GitHub on a worker (P1, docs/architecture/connectors.md#connectors-on-a-worker-github-p1-as-built): on weft.zip,
+  `app/api/connectors/github/{start,callback,mint,revoke}` and `app/api/connectors/github` (status, disconnect) over
+  `lib/connector-connect.ts` (the app's web flow with PKCE), `lib/connector-mint.ts` (the checks) + `lib/connector-auth.ts`
+  (key and signature), `lib/connector-tokens.ts` (refresh, rotation, scoped tokens), `lib/connector-revoke.ts`,
+  `lib/connector-db.ts` (the service-role queries), `lib/connector-crypto.ts`, `lib/connector-deps.ts` and
+  `lib/github-app.ts` (GitHub's endpoints); shared `lib/connector-grant.ts` (settings, `mintMessage`, rotation timing).
+  On the Mac, `components/WorkerConnectors.tsx` + `lib/use-worker-connectors.ts` + `app/api/devices/connectors/route.ts` +
+  `lib/connector-view.ts` + `lib/connector-remote.ts`, and `electron/connector-grants.cjs` (IPC `weft.connectors.*`, Touch
+  ID). On the worker, `lib/connector-worker.ts` + `lib/connector-client.ts` + `lib/connector-socket.ts` + `lib/connector-env.ts`
+  (added to every session's env by `lib/runner-session.ts` and `lib/codex-runner.ts`), and `scripts/weft-connector-helper.cjs`
+  + `scripts/worker-bin/gh`. Tables in `supabase/migrations/20261102280000_worker_github_mint.sql`.
 - `lib/device-registry.ts` + `lib/use-devices.ts` + `components/DevicesSettings.tsx` + `app/api/devices/route.ts`: Settings → Devices
   over `public.device_registry`, Revoke by kind (`revokeRoute`: a phone or browser this Mac pinned through `weft.pairing.revoke`,
   the rest through `device_revoke`). `lib/host-pairing.ts` + `lib/worker-pair.ts` (the box: `weft-worker enrol wph.…`) and
