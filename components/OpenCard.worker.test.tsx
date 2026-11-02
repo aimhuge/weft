@@ -78,15 +78,15 @@ function setup(over: Partial<OpenCardProps> = {}) {
 
 describe("a worker card in the board's own workspace", () => {
   it("draws its thread over its worker's transport (the session line, or the relay) and tool outputs", () => {
-    setup();
+    const props = setup();
     const thread = seen.get("thread")!;
     expect(thread.transport).toBe(lineTransport("m1"));
     expect(thread.tools).toBe(workerToolSource);
     expect(thread.card).toBe(card);
-    // The editor opens the worker's files (H4); no Share… for a card this Mac doesn't sync.
+    // The editor opens the worker's files (H4); Share… links the rows the worker published (lib/card-share-worker.ts).
     expect(typeof thread.onEditor).toBe("function");
     expect(thread.editorOpen).toBe(true);
-    expect(thread.onShare).toBeUndefined();
+    expect(thread.onShare).toBe(props.onShare);
   });
 
   it("opens with the show rail, which projects what the worker's thread drew, on the card's page", () => {

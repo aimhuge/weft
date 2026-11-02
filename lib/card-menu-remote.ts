@@ -1,12 +1,13 @@
 // A card's right-click menu on a host other than this Mac (a Weft Worker, docs/architecture/project-hosts.md): the same
 // menu (lib/card-menu.ts), keeping only what a remote host's verbs back. Rename, Tags, Star, Archive and the column
 // moves are card.update; Stop is card.stop; the modes and Run on are card.update and card.switchBackend; New Thread in
-// This Folder starts one on that worker. What's left out reads or widens this Mac (its folder, a shell skill, the dev
-// server, the vault, Share), changes the card's agent (refused from the network, lib/host-command.ts remoteRefusal), or
-// has no verb yet (Delete). Skipping permission prompts is refused from the network too.
+// This Folder starts one on that worker; Share… links its cloud rows (lib/card-share-worker.ts) and Delete… is
+// card.delete. What's left out reads or widens this Mac (its folder, a shell skill, the dev server, the vault) or
+// changes the card's agent (refused from the network, lib/host-command.ts remoteRefusal). Skipping permission prompts
+// is refused from the network too.
 import type { MenuItem } from "./card-menu";
 
-const REMOTE = /^(open|rename|start|move:.*|stop|mode:(default|acceptEdits|auto)|switch:.*|new-here|star|tags|archive)$/;
+const REMOTE = /^(open|rename|start|move:.*|stop|mode:(default|acceptEdits|auto)|switch:.*|new-here|star|tags|share|archive|delete)$/;
 
 const isSeparator = (item: MenuItem) => !("id" in item);
 

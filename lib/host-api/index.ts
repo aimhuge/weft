@@ -29,6 +29,8 @@ export const HOST_API = {
     run: lazy(() => import("./card-update"), "updateCardVerb"),
   },
   "card.stop": { elevated: false, run: lazy(() => import("./card-stop"), "stopCard") },
+  // Deleting your own card narrows what it can touch, so a plain guard() is enough, as the DELETE route always had.
+  "card.delete": { elevated: false, run: lazy(() => import("./card-delete"), "deleteCardVerb") },
   "card.shell": { elevated: true, run: lazy(() => import("./card-shell"), "shellCommand") },
   "card.fresh": { elevated: false, run: lazy(() => import("./card-fresh"), "sendFreshVerb") },
   "card.message": { elevated: false, run: lazy(() => import("./card-messages"), "sendMessageVerb") },
@@ -50,6 +52,9 @@ export const HOST_API = {
   "files.list": { elevated: false, run: lazy(() => import("./files"), "listFilesVerb") },
   "files.read": { elevated: false, run: lazy(() => import("./files"), "readFileVerb") },
   "files.write": { elevated: true, run: lazy(() => import("./files"), "writeFileVerb") },
+  // A card's dev server: a private address for it (a tunnel, after the owner's Touch ID on their Mac), or its end.
+  "dev.open": { elevated: false, run: lazy(() => import("./dev-servers"), "devOpenVerb") },
+  "dev.stop": { elevated: false, run: lazy(() => import("./dev-servers"), "devStopVerb") },
 } satisfies Record<HostVerb, Handler>;
 
 type Table = typeof HOST_API;

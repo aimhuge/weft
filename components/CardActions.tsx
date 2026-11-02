@@ -56,11 +56,13 @@ export function hasFinishedTurn(card: Card, live: boolean): boolean {
   return Boolean(card.turns) || (Boolean(card.sessionId) && !live);
 }
 
-export default function CardActions({ onSend, onDelete, marksInPane = false, ...marks }: CardMarkProps & {
+export default function CardActions({ onSend, onDelete, marksInPane = false, skills = true, ...marks }: CardMarkProps & {
   onSend: (text: string) => Promise<void>;
   onDelete: () => void;
   // The browser pane shows the marks in its toolbar, so the header leaves them out.
   marksInPane?: boolean;
+  // The skill menu runs this Mac's skills; a card on another host (a worker's) leaves it out.
+  skills?: boolean;
 }) {
   const { card, live } = marks;
   // The card waiting to be deleted: the confirmation dialog is open for it.
@@ -77,7 +79,7 @@ export default function CardActions({ onSend, onDelete, marksInPane = false, ...
 
   return (
     <>
-      <CrashGuard inline what="skill menu"><SkillMenu cwd={card.cwd} disabled={live} onRun={(skill) => onSend(`/${skill}`)} /></CrashGuard>
+      {skills && <CrashGuard inline what="skill menu"><SkillMenu cwd={card.cwd} disabled={live} onRun={(skill) => onSend(`/${skill}`)} /></CrashGuard>}
       {!marksInPane && <CardMarks {...marks} />}
       {!hasFinishedTurn(card, live) && <button
         onClick={askToDelete}

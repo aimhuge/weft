@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { sealAnswer } from "./rtc-signal";
 import { ANSWER_MS, BEAT_MS, GATHER_MS, RETRY_MS } from "./session-line";
 import { LineDown } from "./session-line-calls";
-import { answer, flush, FakePc, fresh, last, seen, setup, up } from "./session-line.harness";
+import { answer, flush, flushUntil, FakePc, fresh, last, seen, setup, up } from "./session-line.harness";
 
 beforeEach(fresh);
 afterEach(() => vi.useRealTimers());
@@ -14,7 +14,7 @@ describe("opening", () => {
   it("offers with the minted ICE servers on its own topic, takes the sealed answer and goes direct", async () => {
     const { line, deps } = setup();
     expect(line.route()).toEqual({ kind: "connecting" });
-    await flush();
+    await flushUntil(() => vi.mocked(deps.offer).mock.calls.length > 0);
     expect(deps.offer).toHaveBeenCalledWith("w1", { sdp: "offer 1", key: expect.any(String) as string, topic: "worker-line:tok1", ice: [{ urls: "turn:t", username: "u", credential: "c" }] });
     // A forged answer doesn't open; the real one does.
     seen.topics.get("worker-line:tok1")?.({ iv: "AAAAAAAAAAAAAAAA", ct: "AAAA" });

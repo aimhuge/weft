@@ -25,6 +25,8 @@ export interface Relay {
   secret_key_id?: string | null;
   tunnel_id?: string | null;
   tunnel_path?: string | null;
+  // A worker's relay (docs/architecture/webhooks.md#on-a-worker): it only ever forwards through that worker's tunnel.
+  worker_id?: string | null;
 }
 
 export interface DeliveryRow {
@@ -117,6 +119,9 @@ export async function handle(
 
   const live = await sendThroughTunnel(relay, req.method, extra, headers, body, store, opts.now ?? Date.now);
   if (live) return live;
+  // Nothing but the worker reads a worker's deliveries, and it has no session to read them with: no tunnel means the
+  // provider keeps it and retries, rather than a row a Mac would drop.
+  if (relay.worker_id) return text("The worker's tunnel to this server is closed. Retry later.", 503);
   await store.save({ relay_id: relay.id, user_id: relay.user_id, method: req.method, path: extra, headers, body: base64(body) });
   return text("Relayed", 200);
 }
@@ -160,11 +165,10 @@ export function restStore(url: string, key: string, now = () => Date.now()): Rel
   }
   return {
     relay: async (id) => {
-      const rows = (await (
-        await rest(
-          `webhook_relays?id=eq.${id}&select=id,user_id,name,provider,secret_ciphertext,secret_nonce,secret_key_id,tunnel_id,tunnel_path`,
-        )
-      ).json()) as Relay[];
+      const select = `webhook_relays?id=eq.${id}&select=id,user_id,name,provider,secret_ciphertext,secret_nonce,secret_key_id,tunnel_id,tunnel_path`;
+      // worker_id comes with supabase/migrations/*_worker_tunnels.sql: a database without it still relays a Mac's webhooks.
+      const res = await rest(`${select},worker_id`).catch((err: unknown) => ((err as Error).message.startsWith("Supabase 400") ? rest(select) : Promise.reject(err as Error)));
+      const rows = (await res.json()) as Relay[];
       return rows[0] ?? null;
     },
     tunnel: restTunnel(url, key),

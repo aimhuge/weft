@@ -52,7 +52,8 @@ gated links answer "Sharing isn't set up on this server" rather than trusting a 
 - `lib/share-types.ts`: the contract. Row shapes, `newShareId` (16 random bytes, base64url), `shareUrl`, the desktop's
   `CardShareState`, the viewer's `ShareLive`, and `paneFor` / `paneFromUrl`, which pick the pane from the thread.
 - Desktop: `lib/card-share.ts` + `app/api/cards/[id]/share` (GET/PUT) read and write the card's `cloud_shares` row through
-  the signed-in account, in the workspace cloud sync uploads to. The states: `signed-out`, `no-workspace`, `not-synced`
+  the signed-in account, in the workspace cloud sync uploads to (a worker card's: the workspace its worker publishes to,
+  below). The states: `signed-out`, `no-workspace`, `not-synced`
   (with the folder), `pending` (the card's `cloud_cards` row isn't up yet, so a flush is asked for), `ok`.
   `components/ShareCardDialog.tsx` is the package's `ShareDialog` + `ShareAccessFields` + `CopyLinkButton` over
   `useShareAccess`, opened from **Share…** in `lib/card-menu.ts`. It never shows a loading state: the state read takes
@@ -80,6 +81,31 @@ the whole thread, as one of three kinds:
   `components/share-view/PaneFrame.tsx`, which shows loading and "This page didn't load" states ([web-states.md](web-states.md)).
 - `local`: only reachable on the owner's Mac (localhost, a file that didn't upload). The viewer shows the card's pane
   capture instead: the thumbnail `lib/show.ts` takes after each turn, which the outbox now uploads as a blob too.
+
+## A worker card
+
+Built 2026-11-02. A Weft Worker's card (project-hosts.md) isn't in this Mac's store, but its rows already are in
+`cloud_cards` and `cloud_thread_items`: the worker's publisher (`lib/worker-publish.ts`) sends the same redacted, scrubbed
+projection a Mac's outbox does (`lib/card-rows.ts`), under `owner_user` = the worker's owner (`worker_put_card`). A share
+only needs that row, so **Share…** on a worker card works from the board with no host verb and no migration:
+
+```
+Share… ─ GET/PUT /api/cards/<id>/share ─ lib/card-share.ts target(id)
+           ├─ in this Mac's store: signed in → syncOrgId → synced folder → its cloud_cards row (as before)
+           └─ not: workerShareCard (lib/card-share-worker.ts) ─ cloud_cards where card_id, owner_user = me,
+                   deleted = false, owner_worker not null ─▶ { org_id, title } ─▶ the same cloud_shares read/write
+```
+
+- **Owner check.** Only a live row of one of the signed-in account's own workers is found; any other id is the same 404
+  as before, and signed out it's a 404 too (a worker card is only on the board when signed in). `cloud_shares`' RLS,
+  `private.is_card_owner`, asks the same thing of every write, and a worker card's `owner_user` passes it.
+- **Same rules.** The viewer (`app/s`, `lib/share-access.ts`, `lib/share-live.ts`) reads rows by `(org_id, card_id)` and
+  never asks which host wrote them, so redaction, the long-output cut, sealed rows, the modes and the gate are unchanged.
+- **Differences.** The slug starts from the row's title; nothing is remembered on the card (`card.share` lives in the
+  worker's store), so the dialog draws private and the answer replaces it; there's no folder or outbox step, so no
+  `not-synced` or `pending`.
+- **Where.** `remoteMenu` keeps `share`, `cloudHost.can("share")` is true, so `OpenCard` passes `onShare` to the pane's
+  toolbar and the thread header like a local card's.
 
 ## Live
 

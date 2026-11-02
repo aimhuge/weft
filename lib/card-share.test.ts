@@ -105,6 +105,9 @@ const cards = vi.hoisted(() => new Map<string, { id: string; cwd: string; title?
 const decorateCard = vi.hoisted(() => vi.fn((id: string, patch: object) => Object.assign(cards.get(id)!, patch)));
 vi.mock("./store", () => ({ getCard: (id: string) => cards.get(id), decorateCard }));
 vi.mock("@aimhuge/share/server", () => ({ hashSharePassword: (p: string) => `hash(${p})` }));
+// A worker's card: found by its cloud row (lib/card-share-worker.ts, tested on its own).
+const workerShareCard = vi.hoisted(() => vi.fn<(...args: unknown[]) => Promise<{ orgId: string; title: string } | null>>(() => Promise.resolve(null)));
+vi.mock("./card-share-worker", () => ({ workerShareCard }));
 
 const { CardShareError, getCardShare, setCardShare } = await import("./card-share");
 
@@ -114,6 +117,7 @@ beforeEach(() => {
   cards.clear();
   for (const id of ["c1", "c2"]) cards.set(id, { id, cwd: "/w", title: "Fix the login bug" });
   decorateCard.mockClear();
+  workerShareCard.mockReset().mockResolvedValue(null);
 });
 
 describe("getCardShare", () => {
@@ -289,5 +293,39 @@ describe("the thread link's address and chat switch", () => {
     await expect(setCardShare("c1", { mode: "public", slug: "Not OK" })).rejects.toMatchObject({ status: 400 });
     db.slugTaken = new Set(["taken"]);
     await expect(setCardShare("c1", { mode: "public", slug: "taken" })).rejects.toMatchObject({ status: 409, message: "That address is taken." });
+  });
+});
+
+describe("a Weft Worker's card", () => {
+  beforeEach(() => {
+    workerShareCard.mockResolvedValue({ orgId: "o-w", title: "Ship the worker" });
+  });
+
+  it("reads and writes the share in the worker's workspace, from its row, with no folder or outbox check", async () => {
+    db.folders = [];
+    expect(await getCardShare("w-card")).toMatchObject({ kind: "ok", id: null, mode: "private" });
+    expect(workerShareCard).toHaveBeenCalledWith(client, "u1", "w-card");
+    expect(db.queries.filter((q) => q.table === "cloud_shares").at(-1)?.filters).toEqual({ org_id: "o-w", card_id: "w-card" });
+    await setCardShare("w-card", { mode: "public" });
+    expect(db.writes[0]).toMatchObject({ op: "insert", row: { mode: "public", org_id: "o-w", card_id: "w-card" } });
+    expect(syncNow).not.toHaveBeenCalled();
+    // The card lives in the worker's store, so nothing is remembered in this Mac's.
+    expect(decorateCard).not.toHaveBeenCalled();
+  });
+
+  it("gives a link made before slugs one from the row's title", async () => {
+    db.share = { id: "abcdefghijklmnopqrstuv", mode: "public", has_password: false, slug: null };
+    expect(await getCardShare("w-card")).toMatchObject({ slug: "ship-the-worker" });
+  });
+
+  it("is a 404 when no worker of the account has the card, or no one is signed in", async () => {
+    workerShareCard.mockResolvedValue(null);
+    await expect(getCardShare("w-card")).rejects.toMatchObject({ status: 404 });
+    workerShareCard.mockClear();
+    db.user = null;
+    await expect(getCardShare("w-card")).rejects.toMatchObject({ status: 404 });
+    db.configured = false;
+    await expect(getCardShare("w-card")).rejects.toMatchObject({ status: 404 });
+    expect(workerShareCard).not.toHaveBeenCalled();
   });
 });

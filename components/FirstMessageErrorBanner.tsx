@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/client";
-import { patchNow, removeNow } from "@/lib/optimistic-cards";
+import { removeOnHost } from "@/lib/card-handlers-host";
+import { patchNow } from "@/lib/optimistic-cards";
 import { hostOf } from "@/lib/project-host";
 import { modelLabel } from "@/lib/new-thread";
 import { rememberPage } from "@/lib/settings-nav";
@@ -95,7 +96,7 @@ export default function FirstMessageErrorBanner({
     setBusy("delete");
     setError(null);
     try {
-      await removeNow(card.id);
+      await removeOnHost(card);
       onDeleted?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -115,7 +116,7 @@ export default function FirstMessageErrorBanner({
             {label}
           </button>
         )}
-        {/* No delete verb reaches another host yet (a worker's card). */}
+        {/* card.delete on any host; a host without it (none today) leaves the button out. */}
         {hostOf(card).can("delete") && (
           <button onClick={() => void del()} disabled={busy !== null} aria-label="Delete this card" className={STYLE_DESTRUCTIVE}>
             <Icon name="trash" size={12} />

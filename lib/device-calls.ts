@@ -6,6 +6,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { shell, text, type ToolResult } from "./browser-shell";
 import { downloadBuild, sweepBuilds, unpackBuild } from "./device-build";
 import { callArgs, type BuildRef, type DeviceTool } from "./device-call";
+import { APPROVAL_TOOLS, runApproval } from "./device-call-approvals";
 import { deviceId } from "./device-id";
 import { globalSingleton } from "./global-singleton";
 import { requireGrant, type QaGrant } from "./qa-grants";
@@ -85,8 +86,9 @@ async function take(client: SupabaseClient, row: DeviceCallRow) {
   if (claim.error || !claim.data.length) return;
   try {
     // A worker card's secret ask goes to Electron main, which re-reads the row itself and asks the user with Touch ID
-    // (electron/worker-secret.cjs); it answers queued, denied or missing, never a value.
-    const answer = row.tool === SECRET_ASK_TOOL ? shell("/secrets/worker-ask", { call: row.id }) : runDeviceCall(client, row);
+    // (electron/worker-secret.cjs); it answers queued, denied or missing, never a value. A tunnel or relay asks the user
+    // with Touch ID too (lib/device-call-approvals.ts); no QA grant is involved in either.
+    const answer = row.tool === SECRET_ASK_TOOL ? shell("/secrets/worker-ask", { call: row.id }) : APPROVAL_TOOLS.has(row.tool) ? runApproval(client, row) : runDeviceCall(client, row);
     await finish(client, row.id, { status: "done", result: await answer });
   } catch (err) {
     await finish(client, row.id, { status: "failed", error: (err as Error).message.slice(0, ERROR_MAX) });
@@ -119,9 +121,9 @@ export async function drainDeviceCalls(client: SupabaseClient, uid: string) {
         .overrideTypes<DeviceCallRow[]>();
       // A database without the table yet: nothing to run, and nothing worth saying every 30 s.
       if (error) return;
-      // A secret ask waits on a person at the Mac, so it doesn't hold up the device calls behind it.
+      // A secret ask or an approval waits on a person at this Mac, so it doesn't hold up the device calls behind it.
       for (const row of data) {
-        if (row.tool === SECRET_ASK_TOOL) void take(client, row);
+        if (row.tool === SECRET_ASK_TOOL || APPROVAL_TOOLS.has(row.tool)) void take(client, row);
         else await take(client, row);
       }
     } while (nudged());

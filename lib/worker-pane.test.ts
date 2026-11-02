@@ -8,7 +8,9 @@ vi.mock("./card-page", () => ({ notePage }));
 // The worker's browser open_url reaches when no test hands in its own.
 const workerShell = vi.hoisted(() => vi.fn(() => Promise.resolve({ url: "https://example.com/", title: "Example" })));
 vi.mock("./worker-browser-routes", () => ({ workerShell }));
-const { onWorker, openOnWorker, ownPageCall, sessionDirs, setPageUpload } = await import("./worker-pane");
+const tunnelFor = vi.hoisted(() => vi.fn<(url: string) => { address: string } | undefined>(() => undefined));
+vi.mock("./tunnels", () => ({ tunnelFor }));
+const { onWorker, openOnWorker, ownPageCall, setPageUpload } = await import("./worker-pane");
 const { SHOW_DIR } = await import("./show-dir");
 
 fs.mkdirSync(os.homedir(), { recursive: true });
@@ -30,26 +32,6 @@ describe("onWorker", () => {
   it("reads the flag scripts/weft-worker.ts sets", () => {
     expect(onWorker({ WEFT_WORKER: "1" } as unknown as NodeJS.ProcessEnv)).toBe(true);
     expect(onWorker({} as NodeJS.ProcessEnv)).toBe(false);
-  });
-});
-
-describe("sessionDirs", () => {
-  const worker = { WEFT_WORKER: "1" } as unknown as NodeJS.ProcessEnv;
-
-  it("adds the show folder on a desktop card too", () => {
-    expect(sessionDirs(undefined, {} as NodeJS.ProcessEnv)).toEqual([SHOW_DIR]);
-    expect(sessionDirs(["/a"], {} as NodeJS.ProcessEnv)).toEqual(["/a", SHOW_DIR]);
-  });
-
-  it("adds the show folder on a worker, and nothing above it", () => {
-    expect(sessionDirs(undefined, worker)).toEqual([SHOW_DIR]);
-    expect(sessionDirs(["/a", SHOW_DIR], worker)).toEqual(["/a", SHOW_DIR]);
-  });
-
-  it("makes the folder first, because the CLI drops one that isn't there", () => {
-    fs.rmSync(SHOW_DIR, { recursive: true, force: true });
-    sessionDirs(undefined, worker);
-    expect(fs.statSync(SHOW_DIR).isDirectory()).toBe(true);
   });
 });
 
@@ -124,8 +106,20 @@ describe("openOnWorker", () => {
     const browse = vi.fn(() => Promise.resolve({ url: "http://localhost:3000/", title: "" }));
     expect(await openOnWorker(undefined, "http://localhost:3000", browse)).toContain("Opened http://localhost:3000/ — page. It's live");
     expect(browse).toHaveBeenCalledWith("", "http://localhost:3000");
-    await expect(openOnWorker("c1", "http://localhost:3000", () => Promise.reject(new Error("no Chromium")))).rejects.toThrow("no Chromium");
+    await expect(openOnWorker("c1", "http://localhost:3000", () => Promise.reject(new Error("no Chromium")))).rejects.toThrow(/mcp__webhooks__tunnel.*no Chromium/);
     expect(notePage).not.toHaveBeenCalled();
+  });
+
+  it("trades a dev server's URL for its tunnel's private address", async () => {
+    const browse = vi.fn();
+    tunnelFor.mockReturnValue({ address: "https://weft.zip/t/t1" });
+    expect(await openOnWorker("c1", "http://localhost:3000", browse)).toContain("private address https://weft.zip/t/t1.");
+    expect(notePage).toHaveBeenLastCalledWith("c1", "https://weft.zip/t/t1");
+    await openOnWorker("c1", "http://localhost:3000/a/b?x=1#h", browse);
+    expect(notePage).toHaveBeenLastCalledWith("c1", "https://weft.zip/t/t1/a/b?x=1#h");
+    expect(tunnelFor).toHaveBeenCalledWith("http://localhost:3000/a/b?x=1#h");
+    expect(browse).not.toHaveBeenCalled();
+    tunnelFor.mockReturnValue(undefined);
   });
 
   it("opens an uploaded page in the worker's browser too, and doesn't mind when it can't", async () => {

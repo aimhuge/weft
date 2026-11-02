@@ -160,8 +160,8 @@ export default function ThreadPanel({
 
 const ownsCard = (t: ReturnType<typeof useThreadTransport>) => t.desktop || Boolean(t.cardEdits);
 
-// The card's buttons in the header: on this Mac its skills, marks and delete (CardActions); on another host just the
-// marks its verbs back, star and archive (a worker's card has no skills of this Mac's, no Share… and no delete verb).
+// The card's buttons in the header: its marks (Share… when its host can, star, archive) and delete (CardActions), and
+// on this Mac its skills too; a worker's card has no skills of this Mac's, and deletes through card.delete.
 function CardButtons({ desktop, own, onSend, onDelete, marksInPane, ...marks }: Omit<CardMarkProps, "onArchive"> & {
   desktop: boolean;
   own: boolean;
@@ -171,10 +171,9 @@ function CardButtons({ desktop, own, onSend, onDelete, marksInPane, ...marks }: 
   onArchive?: () => void;
 }) {
   const { onArchive } = marks;
-  if (!onArchive) return null;
-  if (desktop) return onDelete ? <CardActions {...marks} onArchive={onArchive} onSend={onSend} onDelete={onDelete} marksInPane={marksInPane} /> : null;
-  if (!own || marksInPane) return null;
-  return <CardMarks {...marks} onShare={undefined} onArchive={onArchive} />;
+  if (!onArchive || !own) return null;
+  if (onDelete) return <CardActions {...marks} skills={desktop} onArchive={onArchive} onSend={onSend} onDelete={onDelete} marksInPane={marksInPane} />;
+  return desktop || marksInPane ? null : <CardMarks {...marks} onArchive={onArchive} />;
 }
 
 // A thread picked up from Claude Code: it continues the same session, unless a CLI elsewhere has it open right now
