@@ -15,6 +15,7 @@ import { SUPABASE_KEY, SUPABASE_URL } from "@/lib/supabase-project";
 import type { QuestionReply } from "@/lib/types";
 import { applyCardChange, batchBlobRefs, blobPath, buildBlobUrlMap } from "@/lib/web-board";
 import { cardThumbRefs, withThumbUrls } from "@/lib/web-board-thumbs";
+import { dropAnswer, withAnswers, type WebAnswer } from "@/lib/web-answers";
 import { applyCommandChange, isCardCommand, type CloudCommandChange, type WebTarget } from "@/lib/web-commands";
 import { loadWebKeyring, openSyncedCard, openSyncedTool } from "@/lib/web-sync-key";
 import { useCloudTransport, type CloudBlobs, type ItemBus } from "./useCloudTransport";
@@ -103,6 +104,8 @@ export function useWebBoard({ orgId, userId, initialCommands, initialCards, open
   const { bus, emit } = useItemBus();
   const [blobUrls, setBlobUrls] = useState<Record<string, string>>(initialBlobUrls);
   const [commands, setCommands] = useState<CloudCommandRow[]>(initialCommands);
+  // Plain Allows and Denies sent from this page, drawn answered before the Mac runs them (lib/web-answers.ts).
+  const [answers, setAnswers] = useState<WebAnswer[]>([]);
   const [live, setLive] = useState<LiveStatus>("connecting");
   const [client] = useState<SupabaseClient>(() => createBrowserClient(SUPABASE_URL, SUPABASE_KEY));
   // Refs already asked for, so one that never resolves isn't asked for again on every change.
@@ -259,8 +262,14 @@ export function useWebBoard({ orgId, userId, initialCommands, initialCards, open
   const answer = useCallback(
     async (row: CloudCardRow, allow: boolean, answers?: Record<string, string>, reply?: QuestionReply, grant?: GrantScope): Promise<string | null> => {
       const pendingId = row.card.pending?.id;
-      const command = pendingId && answerCommand({ orgId, device: row.owner_device, folder: row.folder, cardId: row.card_id }, { pendingId, allow, answers, reply, grant });
-      return command ? send(command) : "Nothing is waiting for an answer.";
+      const command = pendingId ? answerCommand({ orgId, device: row.owner_device, folder: row.folder, cardId: row.card_id }, { pendingId, allow, answers, reply, grant }) : null;
+      if (!pendingId || !command) return "Nothing is waiting for an answer.";
+      // A plain Allow or Deny leaves at once; a form with answers waits, so one that doesn't fit stays filled in.
+      const shown = !answers && !reply && { cardId: row.card_id, pendingId, allow };
+      if (shown) setAnswers((prev) => [...prev, shown]);
+      const failed = await send(command);
+      if (failed && shown) setAnswers((prev) => prev.filter((a) => a !== shown));
+      return failed;
     },
     [orgId, send],
   );
@@ -270,9 +279,11 @@ export function useWebBoard({ orgId, userId, initialCommands, initialCards, open
   const dropCommand = useCallback(
     async (id: string) => {
       const { error } = await client.from("cloud_commands").delete().eq("id", id);
-      if (!error) setCommands((prev) => prev.filter((c) => c.id !== id));
+      if (error) return;
+      setAnswers((prev) => dropAnswer(prev, commands.find((c) => c.id === id)));
+      setCommands((prev) => prev.filter((c) => c.id !== id));
     },
-    [client],
+    [client, commands],
   );
 
   // A started card opens as soon as it is on the board: when its command says done, or its row lands.
@@ -300,7 +311,7 @@ export function useWebBoard({ orgId, userId, initialCommands, initialCards, open
   );
 
   // The cards as CardView draws them: a thumb ref becomes its signed URL once it has one.
-  const shown = useMemo(() => withThumbUrls(cards, blobUrls), [cards, blobUrls]);
+  const shown = useMemo(() => withThumbUrls(withAnswers(cards, answers, commands), blobUrls), [cards, answers, commands, blobUrls]);
 
   return { cards: shown, commands, activeCardId, blobs, transport, live, openCard, closeCard, toolOutput, startCard, sendReply, answer, dropCommand };
 }

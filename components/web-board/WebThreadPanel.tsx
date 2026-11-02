@@ -37,7 +37,8 @@ export function WebThreadPanel({
   footer: ReactNode;
   onClose: () => void;
   onSend: (text: string) => Promise<void>;
-  onAnswer: (allow: boolean, answers?: Record<string, string>, reply?: QuestionReply, grant?: GrantScope) => void;
+  // A refused answer rejects, so the prompt's buttons come back.
+  onAnswer: (allow: boolean, answers?: Record<string, string>, reply?: QuestionReply, grant?: GrantScope) => void | Promise<void>;
 }) {
   // The card's own page when the thread loaded so far doesn't reach its last open_url (newest 50 first).
   // A worker's live screen is only ever on the card, so it wins while it's the card's page.
