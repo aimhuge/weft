@@ -6,8 +6,13 @@ import { inputChannel, sendFrame, videoChannel } from "./worker-fast-screen";
 import { answerOffer, peerIce, type Channel } from "./worker-rtc";
 
 describe("peerIce", () => {
-  it("takes the board's servers, else Cloudflare's STUN", () => {
-    expect(peerIce([{ urls: "turn:t" }])).toEqual([{ urls: "turn:t" }]);
+  it("takes the board's Cloudflare servers only, else Cloudflare's STUN", () => {
+    const cf = { urls: ["turn:turn.cloudflare.com:3478?transport=udp", "turns:turn.cloudflare.com:443?transport=tcp", "turn:evil.example:3478"], username: "u", credential: "c" };
+    expect(peerIce([cf, { urls: "stun:stun.cloudflare.com:3478" }, { urls: "turn:cloudflare.com.evil.example" }, { urls: "turn:t" }])).toEqual([
+      { ...cf, urls: cf.urls.slice(0, 2) },
+      { urls: ["stun:stun.cloudflare.com:3478"] },
+    ]);
+    expect(peerIce([{ urls: "turn:t" }])).toEqual([{ urls: "stun:stun.cloudflare.com:3478" }]);
     expect(peerIce([])).toEqual([{ urls: "stun:stun.cloudflare.com:3478" }]);
     expect(peerIce()).toEqual([{ urls: "stun:stun.cloudflare.com:3478" }]);
   });

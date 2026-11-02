@@ -11,6 +11,7 @@
 import path from "node:path";
 import type { BlobStoreBundle } from "./blob-store";
 import { lastPerKey, projectCard, projectItem, publishes, type RowHost } from "./card-rows";
+import type { LineEvent } from "./host-line-protocol";
 import type { Card, ThreadItem } from "./types";
 import type { BoardEvent } from "./types-card";
 import type { ItemRow, OutputRow, Registry } from "./worker-registry";
@@ -67,13 +68,25 @@ export function createPublisher(reg: Pick<Registry, "putCard" | "putItems">, sou
 
   const folderOf = (card: Card) => folders.get(card.id) ?? path.basename(card.cwd);
 
+  // Session lines hear what the rows get, projected and uploaded once (lib/host-line.ts): never a card that was never
+  // published, so the copilot's delete stays off them as its card does.
+  const mirrors = new Set<(event: LineEvent) => void>();
+  const shipped = new Set<string>();
+  const mirror = (event: LineEvent) => mirrors.forEach((fn) => fn(event));
+
   async function ship(id: string, d: Dirty) {
     const card = source.getCard(id);
-    if (d.deleted) return reg.putCard(id, folders.get(id) ?? "", {}, true);
+    if (d.deleted) {
+      if (shipped.delete(id)) mirror({ t: "card_deleted", id });
+      return reg.putCard(id, folders.get(id) ?? "", {}, true);
+    }
     // The copilot's thread events used to ship its card and items even though its card events didn't.
     if (!card || !publishes(card, host)) return;
     // Every flush sends the card first: an item can only land on a card row that exists.
-    await reg.putCard(id, folderOf(card), (await projectCard(card, host)).card, false);
+    const projected = (await projectCard(card, host)).card;
+    shipped.add(id);
+    mirror({ t: "card", card: projected });
+    await reg.putCard(id, folderOf(card), projected, false);
     const thread = source.getThread(id);
     const items: ItemRow[] = [];
     const outputs: OutputRow[] = [];
@@ -81,6 +94,8 @@ export function createPublisher(reg: Pick<Registry, "putCard" | "putItems">, sou
       const live = thread[seq];
       if (!live) continue;
       const { item, output } = await projectItem(seq, live, host);
+      // The lowest item a rewind replaced drops what followed it, on the board as in the rows.
+      mirror({ t: "thread", cardId: id, index: seq, item: item.item, ...(d.fromSeq !== null && seq === d.fromSeq - 1 ? { truncate: true } : {}) });
       items.push(item);
       if (output) outputs.push(output);
     }
@@ -114,6 +129,11 @@ export function createPublisher(reg: Pick<Registry, "putCard" | "putItems">, sou
   return {
     hear,
     flush,
+    // Every card and item as it ships, for the session lines' `events`; the returned function stops hearing.
+    mirror(fn: (event: LineEvent) => void) {
+      mirrors.add(fn);
+      return () => void mirrors.delete(fn);
+    },
     nameFolder: (cardId: string, folder: string) => void folders.set(cardId, folder),
     // Marks a card so the next flush sends its row, for a card whose row may be out of date but whose items aren't.
     touch: (cardId: string) => void (mark(cardId).card = true),

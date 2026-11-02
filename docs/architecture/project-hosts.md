@@ -344,7 +344,7 @@ lib/session-line.ts   offer + key + topic + ICE ─ POST /api/worker-board {acti
 lib/line-answer.ts  ◀── sealed answer (one-time key) on Broadcast worker-line:<128 random bits> ────────┘
             ═════ DTLS (fingerprints were inside the sealed offer and answer) ═════
   host     {id, verb, args} ─▶ the `host` kind's own handler (lib/host/dispatch.ts: CardRules, remoteRefusal) ─▶ {id, ok, result|error}
-  events   ◀─ card, card_deleted, thread, thread_cleared, projected as the rows are (lib/host-line-events.ts, card-rows)
+  events   ◀─ card, card_deleted, thread: what the publisher ships, as it ships it (lib/worker-publish.ts mirror)
   line     ping/pong every 5 s (→ setWorkerRoute(worker, "direct", ms)); offer/answer renegotiation
   terminal refused on open
 ```
@@ -360,6 +360,14 @@ lib/line-answer.ts  ◀── sealed answer (one-time key) on Broadcast worker-l
   `createCardCommands` → `cardKinds(...).host`), so a verb over the line passes `readHostCommand`, the card check,
   `remoteRefusal` and the CardRules exactly as a row does (`lib/session-line.real.test.ts` checks shell, folder and
   foreign-card refusals over a real line).
+- **Hardening (security review).** One channel per fixed label per line, any other label closed; `host` strictly one
+  verb at a time; offers over `line` one at a time and at most 5 per 10 s; a verb over the line refused while the worker
+  updates itself and logged with its card and outcome (`lib/worker-kinds.ts`); `events` reuse the publisher's projection
+  and uploads, and never carry a card it didn't publish (so not the copilot's delete); a screen needs
+  `channel === input:<device>:<8–32 hex>`, a card of this worker's own watching the device (the relay `input` kind's
+  ownCard), and gets one track per device per line (`lib/host-line-screen.ts`); the worker takes only Cloudflare's
+  STUN/TURN addresses from an offer (`peerIce`, `lib/worker-rtc.ts`). The migration lists every kind plus `line` and
+  `secret_use`, so it and H8's land in either order.
 - **Live.** The open thread's `useLive` (`useLineLive`) stops the poll while the route is direct and applies `events`; it
   re-reads the newest page whenever the route changes. The card list applies `card` and `card_deleted` events
   (`withLineEvent`, `lib/use-worker-board.ts`) and keeps its poll for projects and cards it hasn't seen.

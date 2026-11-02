@@ -2,39 +2,41 @@
 // per board that shows this worker's project, opened by a sealed `line` command and answered on the board's topic under
 // its one-time key, as the screen's line is (lib/worker-rtc.ts, lib/rtc-signal.ts). On it:
 //
-//   host      a verb runs through deps.run, the `host` command's own path (ownCard, remoteRefusal, runVerb), one at a
-//             time in the order sent, so a verb over the line passes exactly the checks it would over the relay
-//   events    the bus's card and thread events, projected as the relay mirrors them (lib/host-line-events.ts)
-//   line      ping → pong; an offer renegotiates the same peer (a watched simulator's track, an ICE restart)
+//   host      a verb runs through `run`, the `host` kind's own path (lib/worker-kinds.ts: CardRules, remoteRefusal, the
+//             update hold and the log), one at a time in the order sent, so it passes exactly the checks a row does
+//   events    what the publisher ships, as it ships it (lib/worker-publish.ts mirror): one projection and one upload
+//   line      ping → pong; an offer renegotiates the same peer, one at a time and rate-limited (a watched
+//             simulator's track, lib/host-line-screen.ts, or an ICE restart)
 //   terminal  refused, always (TERMINAL_REFUSAL): a pty is a shell, and H2 refuses a shell from the network
 //
-// A line no board has pinged for QUIET_MS is closed: the board went away without saying so.
-import type { FastScreen } from "./worker-screen";
+// Each fixed label gets one channel per line, and any other label is closed. A line no board has pinged for QUIET_MS is
+// closed: the board went away without saying so.
 import type { HostDone } from "./host-command";
-import { deviceOfChannel, LINE_CHANNELS, LINE_PURPOSE, TERMINAL_REFUSAL, readControl, readHostCall, readLineOffer, type Control, type HostReply, type LineEvent } from "./host-line-protocol";
+import { lineScreens, type ScreenDeps } from "./host-line-screen";
+import { LINE_CHANNELS, LINE_PURPOSE, TERMINAL_REFUSAL, readControl, readHostCall, readLineOffer, type HostReply, type LineEvent } from "./host-line-protocol";
 import { sealAnswer, type SealedAnswer } from "./rtc-signal";
-import type { VideoTransceiver } from "./rtp-video";
-import type { BoardEvent } from "./types";
 import { answerOffer, type Channel, type Channels } from "./worker-rtc";
 import type { Sealed } from "./worker-seal";
 
 export const QUIET_MS = 30_000;
 // A board per Mac or two; past this the oldest line closes rather than let them pile up.
 export const MAX_LINES = 4;
+// Offers over a line: a screen or an ICE restart now and then, never a stream of them.
+export const OFFERS_PER_WINDOW = 5;
+export const OFFER_WINDOW_MS = 10_000;
 const ERROR_MAX = 300;
 
 export type LineChannel = Channel & { close?: () => void };
 
-// A host command's payload, run as the relay runs it (lib/worker-card-commands.ts host); the daemon hands it in.
+// A host command's payload, run as the relay runs it (lib/worker-kinds.ts line); the daemon hands it in.
 export type RunHost = (payload: { verb: string; args: Record<string, unknown> }) => Promise<HostDone>;
 
-export interface HostLineDeps {
+export interface HostLineDeps extends ScreenDeps {
   unseal(sealed: Sealed, purpose: string): string;
   // Sends the sealed answer on the board's Broadcast topic (the worker's own Realtime client).
   answerOn(topic: string, sealed: SealedAnswer): Promise<unknown>;
-  hear(listener: (event: BoardEvent) => void): () => void;
-  project(event: BoardEvent): Promise<LineEvent | null>;
-  screen?: (device: string) => FastScreen | null;
+  // What the publisher ships, as it ships it (lib/worker-publish.ts mirror): projected and uploaded once, for the rows.
+  hear(listener: (event: LineEvent) => void): () => void;
   answer?: typeof answerOffer;
   log?: (msg: string) => void;
   quietMs?: number;
@@ -48,24 +50,34 @@ const closed = (channel: LineChannel, fn: () => void) =>
   channel.stateChanged.subscribe((state) => {
     if (state === "closed") fn();
   });
+const errorOf = (err: unknown) => (err as Error).message.slice(0, ERROR_MAX);
+
+// Runs one task at a time, in the order they came.
+function serial() {
+  let queue: Promise<unknown> = Promise.resolve();
+  return (task: () => Promise<unknown>) => {
+    queue = queue.then(task).catch(() => {});
+  };
+}
 
 export function createHostLines(deps: HostLineDeps) {
   const log = deps.log ?? (() => {});
   const now = deps.now ?? Date.now;
   const lines = new Set<{ close: () => void }>();
 
+  // Strictly one verb at a time, as the inbox runs rows.
   function hostChannel(channel: LineChannel, run: RunHost) {
-    let queue = Promise.resolve();
+    const next = serial();
     channel.onMessage.subscribe((raw) => {
       const call = readHostCall(raw.toString());
       if (!call) return;
-      queue = queue.then(async () => {
+      next(async () => {
         let reply: HostReply;
         try {
           const done = await run({ verb: call.verb, args: call.args });
           reply = { id: call.id, ok: true, result: done.result };
         } catch (err) {
-          reply = { id: call.id, ok: false, error: (err as Error).message.slice(0, ERROR_MAX) };
+          reply = { id: call.id, ok: false, error: errorOf(err) };
         }
         send(channel, reply);
       });
@@ -73,46 +85,14 @@ export function createHostLines(deps: HostLineDeps) {
   }
 
   function eventsChannel(channel: LineChannel) {
-    let queue = Promise.resolve();
-    const off = deps.hear((event) => {
-      queue = queue.then(() => deps.project(event)).then(
-        (out) => {
-          if (out) send(channel, out);
-        },
-        () => {},
-      );
-    });
-    closed(channel, off);
+    closed(channel, deps.hear((event) => send(channel, event)));
   }
 
-  // The screen's track on this line, for the device the board's offer names, when it's being watched fast; kept under its
-  // input channel's label, whose closing stops it. A new one under the same key replaces the last.
-  function screenMedia(control: Extract<Control, { t: "offer" }>, seen: Set<VideoTransceiver>, stops: Map<string, () => void>) {
-    const screen = control.screen;
-    const fast = screen ? deps.screen?.(screen.device) : null;
-    return (transceivers: VideoTransceiver[]) => {
-      const fresh = transceivers.filter((t) => !seen.has(t));
-      fresh.forEach((t) => seen.add(t));
-      const stop = screen && fast?.attach?.(fresh, screen.quality);
-      if (!screen || !stop) return;
-      const key = screen.channel ?? screen.device;
-      stops.get(key)?.();
-      stops.set(key, stop);
-    };
-  }
+  type Line = { opened: () => Opened | null; screens: ReturnType<typeof lineScreens>; heard: () => void };
 
-  // The screen's input:<device>: the gesture and keys, and its closing is how the board says it left.
-  function screenInput(channel: LineChannel, stops: Map<string, () => void>) {
-    const device = deviceOfChannel(channel.label);
-    if (!device) return;
-    deps.screen?.(device)?.input?.(channel);
-    closed(channel, () => {
-      stops.get(channel.label)?.();
-      stops.delete(channel.label);
-    });
-  }
-
-  function controlChannel(channel: LineChannel, line: { opened: () => Opened | null; seen: Set<VideoTransceiver>; stops: Map<string, () => void>; heard: () => void }) {
+  function controlChannel(channel: LineChannel, line: Line) {
+    const offer = serial();
+    const offers: number[] = [];
     channel.onMessage.subscribe((raw) => {
       const control = readControl(raw.toString());
       if (!control) return;
@@ -120,10 +100,19 @@ export function createHostLines(deps: HostLineDeps) {
       if (control.t === "ping") send(channel, { t: "pong", at: control.at });
       const opened = line.opened();
       if (control.t !== "offer" || !opened) return;
-      opened
-        .renegotiate(control.sdp, screenMedia(control, line.seen, line.stops))
-        .then((sdp) => send(channel, { t: "answer", sdp }))
-        .catch((err: unknown) => send(channel, { t: "error", message: (err as Error).message.slice(0, ERROR_MAX) }));
+      const at = now();
+      while (offers.length && at - (offers[0] as number) >= OFFER_WINDOW_MS) offers.shift();
+      if (offers.length >= OFFERS_PER_WINDOW) {
+        send(channel, { t: "error", message: "Too many offers on this line. Wait a moment." });
+        return;
+      }
+      offers.push(at);
+      offer(() =>
+        opened
+          .renegotiate(control.sdp, line.screens.media(control.screen))
+          .then((sdp) => send(channel, { t: "answer", sdp }))
+          .catch((err: unknown) => send(channel, { t: "error", message: errorOf(err) })),
+      );
     });
   }
 
@@ -135,14 +124,26 @@ export function createHostLines(deps: HostLineDeps) {
     });
   }
 
-  // Opens a line from a sealed offer. Only this worker can open it, and the answer goes back under the board's key.
+  // One channel per fixed label per line: a second one with the same label is closed.
+  function once(taken: Set<string>, handle: (c: LineChannel) => void) {
+    return (c: LineChannel) => {
+      if (taken.has(c.label)) {
+        c.close?.();
+        return;
+      }
+      taken.add(c.label);
+      handle(c);
+    };
+  }
+
+// Opens a line from a sealed offer. Only this worker can open it, and the answer goes back under the board's key.
   async function open(sealed: Sealed, run: RunHost): Promise<void> {
     const offer = readLineOffer(deps.unseal(sealed, LINE_PURPOSE));
     if (!offer) throw new Error("That line's offer is incomplete.");
     let opened: Opened | null = null;
     let lastHeard = now();
-    const seen = new Set<VideoTransceiver>();
-    const stops = new Map<string, () => void>();
+    const screens = lineScreens(deps);
+    const taken = new Set<string>();
     const quietMs = deps.quietMs ?? QUIET_MS;
     const quiet = setInterval(() => {
       if (now() - lastHeard > quietMs) line.close();
@@ -151,22 +152,22 @@ export function createHostLines(deps: HostLineDeps) {
       close() {
         if (!lines.delete(line)) return;
         clearInterval(quiet);
-        stops.forEach((stop) => stop());
-        stops.clear();
+        screens.closeAll();
         opened?.close();
       },
     };
     const channels: Channels = {
-      [LINE_CHANNELS.host]: (c) => hostChannel(c, run),
-      [LINE_CHANNELS.events]: eventsChannel,
-      [LINE_CHANNELS.control]: (c) => controlChannel(c, { opened: () => opened, seen, stops, heard: () => (lastHeard = now()) }),
+      [LINE_CHANNELS.host]: once(taken, (c) => hostChannel(c, run)),
+      [LINE_CHANNELS.events]: once(taken, eventsChannel),
+      [LINE_CHANNELS.control]: once(taken, (c) => controlChannel(c, { opened: () => opened, screens, heard: () => (lastHeard = now()) })),
       [LINE_CHANNELS.terminal]: refuseTerminal,
-      "*": (c) => screenInput(c, stops),
+      // A screen's input:<device>:<nonce>, or a label nobody handles, which is closed.
+      "*": (c) => screens.input(c),
     };
     lines.add(line);
     if (lines.size > (deps.maxLines ?? MAX_LINES)) [...lines][0]?.close();
     try {
-      opened = await (deps.answer ?? answerOffer)(offer.sdp, channels, { ice: offer.ice, media: (t) => t.forEach((x) => seen.add(x)) });
+      opened = await (deps.answer ?? answerOffer)(offer.sdp, channels, { ice: offer.ice, media: screens.note });
       // Pushed out by a newer line while it was answering.
       if (!lines.has(line)) {
         opened.close();

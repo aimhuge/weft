@@ -70,8 +70,11 @@ describe("control", () => {
   });
 
   it("names a screen's input channel and reads the device back", () => {
-    expect(screenChannel("sim", "n1")).toBe("input:sim:n1");
-    expect(deviceOfChannel("input:sim:n1")).toBe("sim");
+    expect(screenChannel("sim", "0123abcd")).toBe("input:sim:0123abcd");
+    expect(deviceOfChannel("input:AB-12:0123abcd")).toBe("AB-12");
+    expect(deviceOfChannel("input:sim:n1")).toBeNull();
+    expect(deviceOfChannel("input:sim:0123abcd:x")).toBeNull();
+    expect(deviceOfChannel("input:s/m:0123abcd")).toBeNull();
     expect(deviceOfChannel("input:")).toBeNull();
     expect(deviceOfChannel("host")).toBeNull();
   });

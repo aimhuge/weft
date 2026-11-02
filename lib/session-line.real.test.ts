@@ -8,7 +8,7 @@ import { createHostLines } from "./host-line";
 import { LINE_PURPOSE, type LineEvent } from "./host-line-protocol";
 import type { SealedAnswer } from "./rtc-signal";
 import { createSessionLine } from "./session-line";
-import type { BoardEvent, Card } from "./types";
+import type { Card } from "./types";
 import type { Engine } from "./worker-daemon";
 import { newSealKeys, open, seal } from "./worker-seal";
 
@@ -23,7 +23,7 @@ function topics() {
 describe("a real session line", () => {
   it("opens through a sealed offer, runs verbs under the relay's checks, pushes events, pings and restarts ICE over itself", async () => {
     const keys = newSealKeys();
-    const bus = new Set<(e: BoardEvent) => void>();
+    const bus = new Set<(e: LineEvent) => void>();
     const card = { id: "c1", title: "T", cwd: "/w/app", column: "running" } as Card;
     const host = vi.fn((verb: string, args: Record<string, unknown>) => Promise.resolve({ verb, args }));
     const commands = createCardCommands({ getCard: (id: string) => (id === "c1" ? card : undefined), host, receive: (t: string) => Promise.resolve(t) } as unknown as Engine);
@@ -32,7 +32,6 @@ describe("a real session line", () => {
       unseal: (sealed, purpose) => open(keys, sealed, purpose),
       answerOn: wire.answerOn,
       hear: (fn) => (bus.add(fn), () => void bus.delete(fn)),
-      project: (e) => Promise.resolve(e.type === "card" ? ({ t: "card", card: e.card }) : null),
     });
     let skew = 0;
     let restarts = 0;
@@ -60,7 +59,7 @@ describe("a real session line", () => {
 
     const heard: LineEvent[] = [];
     line.onEvent((e) => heard.push(e));
-    bus.forEach((fn) => fn({ type: "card", card: { ...card, title: "Pushed" } }));
+    bus.forEach((fn) => fn({ t: "card", card: { ...card, title: "Pushed" } }));
     await vi.waitFor(() => expect(heard).toEqual([{ t: "card", card: { ...card, title: "Pushed" } }]), { timeout: 5_000 });
 
     // A renegotiation over the line itself, then the heartbeat's pong.
@@ -87,8 +86,8 @@ describe("a real session line", () => {
       unseal: (sealed, purpose) => open(keys, sealed, purpose),
       answerOn: wire.answerOn,
       hear: () => () => {},
-      project: () => Promise.resolve(null),
-      screen: (device) => (device === "sim1" ? (screen) : null),
+      screen: (device) => (device === "sim1" ? screen : null),
+      watcher: () => ({ id: "c1" }) as Card,
     });
     const line = createSessionLine("w1", {
       peer: () => new RTCPeerConnection({}) as unknown as globalThis.RTCPeerConnection,
@@ -102,9 +101,9 @@ describe("a real session line", () => {
     await line.renegotiate(
       (pc) => {
         pc.addTransceiver("video", { direction: "recvonly" });
-        input = pc.createDataChannel("input:sim1:abc", { ordered: true });
+        input = pc.createDataChannel("input:sim1:abcdef12", { ordered: true });
       },
-      { device: "sim1", quality: "low", channel: "input:sim1:abc" },
+      { device: "sim1", quality: "low", channel: "input:sim1:abcdef12" },
     );
     expect(attach).toHaveBeenCalledWith([expect.objectContaining({ kind: "video" })], "low");
     await vi.waitFor(() => expect(input?.readyState).toBe("open"), { timeout: 5_000 });

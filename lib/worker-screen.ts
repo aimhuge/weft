@@ -142,6 +142,9 @@ const streams = new Map<string, string>();
 const cardDevices = new Map<string, string>();
 const nudges = new Map<string, () => void>();
 
+// The card streaming a device, so a session line holds a screen to the relay's own-card check (lib/host-line-screen.ts).
+export const watcherOf = (device: string): string | undefined => [...cardDevices].find(([, d]) => d === device)?.[0];
+
 // A tap just landed: capture now rather than at the next tick, so the answer on screen comes back as soon as it can.
 export const nudgeScreen = (device: string) => nudges.get(device)?.();
 

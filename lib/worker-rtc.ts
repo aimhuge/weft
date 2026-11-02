@@ -29,7 +29,17 @@ interface Peer {
 export type MakePeer = (ice?: IceServer[]) => Peer;
 // H.264 only for video; abs-send-time lets the board's receiver estimate the line and send REMB. The ICE servers are the
 // board's when its offer names them (TURN credentials minted for it, lib/rtc-ice.ts), else Cloudflare's STUN.
-export const peerIce = (ice?: IceServer[]): IceServer[] => (ice?.length ? ice : [{ urls: STUN }]);
+// The board's servers come out of a sealed offer, but a worker still only relays through Cloudflare's: an address
+// elsewhere would let whoever made the offer route the worker's traffic through a server of their choosing.
+const CLOUDFLARE_ICE = /^(stun|turns?):([a-z0-9-]+\.)*cloudflare\.com(:\d{1,5})?(\?transport=(udp|tcp))?$/i;
+
+export function peerIce(ice?: IceServer[]): IceServer[] {
+  const kept = (ice ?? []).flatMap((server) => {
+    const urls = [server.urls].flat().filter((url) => CLOUDFLARE_ICE.test(url));
+    return urls.length ? [{ ...server, urls }] : [];
+  });
+  return kept.length ? kept : [{ urls: STUN }];
+}
 const realPeer: MakePeer = (ice) =>
   new RTCPeerConnection({ iceServers: peerIce(ice), codecs: { video: H264_CODECS() }, headerExtensions: { video: [absSendTime()] } });
 

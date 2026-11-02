@@ -58,10 +58,11 @@ export interface LineScreen {
 }
 
 export const screenChannel = (device: string, nonce: string) => `input:${device}:${nonce}`;
-// The device an input channel's label names, or null for any other label.
+// `input:<device>:<nonce>`: a device id (a simulator's UDID) and 8 to 32 hex digits, nothing else.
+const SCREEN_CHANNEL = /^input:([A-Za-z0-9-]{1,64}):[0-9a-f]{8,32}$/;
+// The device a well-formed input channel's label names, or null for any other label.
 export function deviceOfChannel(label: string): string | null {
-  const [kind, device] = label.split(":");
-  return kind === "input" && device ? device : null;
+  return SCREEN_CHANNEL.exec(label)?.[1] ?? null;
 }
 export type Control =
   | { t: "ping"; at: number }

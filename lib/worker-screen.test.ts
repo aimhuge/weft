@@ -11,7 +11,7 @@ vi.mock("./screen-frame", () => ({ frameType: () => box.type, screenFrame: async
 vi.mock("./card-page", () => ({ notePage }));
 vi.mock("./simulator-devices", () => devices);
 
-const { fastScreenOf, nudgeScreen, openScreenChannel, pump, screenInput, screenOnWorker, setFastScreen, setScreenChannel, watchFromBoard } = await import("./worker-screen");
+const { fastScreenOf, watcherOf, nudgeScreen, openScreenChannel, pump, screenInput, screenOnWorker, setFastScreen, setScreenChannel, watchFromBoard } = await import("./worker-screen");
 const { paneFromUrl, screenTopic } = await import("./share-types");
 const { newAnswerKey, openAnswer } = await import("./rtc-signal");
 
@@ -198,6 +198,8 @@ describe("the fast path", () => {
     await screenOnWorker("c", { ...d, id: "fast-3" });
     // Lent to a session line while it's watched (lib/host-line.ts).
     expect(fastScreenOf("fast-3")).toBe(f);
+    expect(watcherOf("fast-3")).toBe("c");
+    expect(watcherOf("nobody")).toBeUndefined();
     await screenInput({ kind: "offer", device: "fast-3", sealed: {} as never }, vi.fn());
     expect(f.connect).toHaveBeenCalledWith("offer-sdp", "medium");
     await expect(openAnswer(key, ch.answer.mock.calls[0]?.[0 as never] as never)).resolves.toBe("answer-sdp");

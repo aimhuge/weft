@@ -2,9 +2,8 @@
 // refusal, the screen on the line, and when a line closes. lib/session-line.real.test.ts runs two real peers.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createHostLines, type HostLineDeps, type LineChannel } from "./host-line";
-import { TERMINAL_REFUSAL } from "./host-line-protocol";
+import { TERMINAL_REFUSAL, type LineEvent } from "./host-line-protocol";
 import { newAnswerKey, openAnswer, type SealedAnswer } from "./rtc-signal";
-import type { BoardEvent } from "./types";
 import type { Channels } from "./worker-rtc";
 
 function emitter<T>() {
@@ -45,7 +44,7 @@ function fakePeer() {
   return { peer, answer: answer as unknown as HostLineDeps["answer"] };
 }
 
-let bus: Set<(e: BoardEvent) => void>;
+let bus: Set<(e: LineEvent) => void>;
 let answers: { topic: string; sealed: SealedAnswer }[];
 
 function setup(over: Partial<HostLineDeps> = {}) {
@@ -55,7 +54,6 @@ function setup(over: Partial<HostLineDeps> = {}) {
     unseal,
     answerOn: vi.fn((topic: string, sealed: SealedAnswer) => Promise.resolve(answers.push({ topic, sealed }))),
     hear: (fn) => (bus.add(fn), () => void bus.delete(fn)),
-    project: (e) => Promise.resolve(e.type === "card" ? { t: "card", card: e.card } : null),
     answer,
     ...over,
   };
@@ -160,20 +158,57 @@ describe("host", () => {
   });
 });
 
+describe("host on a closing channel", () => {
+  it("keeps running verbs after a reply couldn't be sent", async () => {
+    const { lines, peer } = setup();
+    await lines.open(sealed, run);
+    const host = channel("host");
+    let fail = true;
+    const sent: unknown[] = [];
+    (host.c as { send: (t: string) => void }).send = (t) => {
+      if (fail) {
+        fail = false;
+        throw new Error("closed");
+      }
+      sent.push(JSON.parse(t));
+    };
+    peer.channels.host?.(host.c);
+    host.msg({ id: 1, verb: "card.stop", args: { id: "c1" } });
+    host.msg({ id: 2, verb: "card.stop", args: { id: "c1" } });
+    await vi.waitFor(() => expect(sent).toEqual([{ id: 2, ok: true, result: { ok: true, cardId: "c1" } }]));
+  });
+});
+
 describe("events", () => {
-  it("pushes what the relay would mirror, in order, until the channel closes", async () => {
-    const project = vi.fn((e: BoardEvent) => (e.type === "card_deleted" ? Promise.reject(new Error("x")) : Promise.resolve(e.type === "card" ? ({ t: "card", card: e.card } as never) : null)));
-    const { lines, peer } = setup({ project });
+  it("sends what the publisher ships until the channel closes", async () => {
+    const { lines, peer } = setup();
     await lines.open(sealed, run);
     const events = channel("events");
     peer.channels.events?.(events.c);
-    bus.forEach((fn) => fn({ type: "card_deleted", id: "x" }));
-    bus.forEach((fn) => fn({ type: "account" }));
-    bus.forEach((fn) => fn({ type: "card", card: { id: "c1" } as never }));
-    await vi.waitFor(() => expect(events.sent).toEqual([{ t: "card", card: { id: "c1" } }]));
+    bus.forEach((fn) => fn({ t: "card", card: { id: "c1" } as never }));
+    expect(events.sent).toEqual([{ t: "card", card: { id: "c1" } }]);
     events.state("open");
     events.state("closed");
     expect(bus.size).toBe(0);
+  });
+});
+
+describe("channels", () => {
+  it("takes one channel per fixed label, and closes a second one or a label nobody handles", async () => {
+    const { lines, peer } = setup();
+    await lines.open(sealed, run);
+    for (const label of ["host", "events", "line"]) {
+      const first = channel(label);
+      const second = channel(label);
+      peer.channels[label]?.(first.c);
+      peer.channels[label]?.(second.c);
+      expect(first.c.close).not.toHaveBeenCalled();
+      expect(second.c.close).toHaveBeenCalled();
+    }
+    const odd = channel("shell");
+    peer.channels["*"]?.(odd.c);
+    expect(odd.c.close).toHaveBeenCalled();
+    expect(() => peer.channels.host?.(channel("host", false).c)).not.toThrow();
   });
 });
 
@@ -191,6 +226,38 @@ describe("line", () => {
     peer.renegotiate.mockRejectedValueOnce(new Error("bad sdp"));
     ctl.msg({ t: "offer", sdp: "o3" });
     await vi.waitFor(() => expect(ctl.sent.at(-1)).toEqual({ t: "error", message: "bad sdp" }));
+  });
+
+  it("renegotiates one offer at a time, and refuses offers past the rate", async () => {
+    let t = 0;
+    const { lines, peer } = setup({ now: () => t });
+    await lines.open(sealed, run);
+    const releases: (() => void)[] = [];
+    let running = 0;
+    let most = 0;
+    peer.renegotiate.mockImplementation(() => {
+      running += 1;
+      most = Math.max(most, running);
+      return new Promise<string>((done) => {
+        releases.push(() => {
+          running -= 1;
+          done("a");
+        });
+      });
+    });
+    const ctl = channel("line");
+    peer.channels.line?.(ctl.c);
+    for (let i = 0; i < 6; i++) ctl.msg({ t: "offer", sdp: `o${i}` });
+    expect(ctl.sent).toEqual([{ t: "error", message: "Too many offers on this line. Wait a moment." }]);
+    for (let i = 0; i < 5; i++) {
+      await vi.waitFor(() => expect(releases.length).toBe(i + 1));
+      releases[i]?.();
+    }
+    await vi.waitFor(() => expect(ctl.sent.filter((m) => (m as { t: string }).t === "answer")).toHaveLength(5));
+    expect(most).toBe(1);
+    t = 10_000;
+    ctl.msg({ t: "offer", sdp: "later" });
+    await vi.waitFor(() => expect(releases.length).toBe(6));
   });
 
   it("ignores an offer that arrives before the line has answered", async () => {
@@ -212,63 +279,18 @@ describe("line", () => {
 });
 
 describe("the screen on the line", () => {
-  const screen = (stop: (() => void) | null) => ({ attach: vi.fn(() => stop), input: vi.fn() });
-
-  it("sends a watched device on the new m-line, stops it when its input channel closes, and replaces it", async () => {
-    const stops = [vi.fn(), vi.fn()];
-    let n = 0;
-    const fast = { attach: vi.fn(() => stops[n++]!), input: vi.fn() };
-    const { lines, peer } = setup({ screen: (d) => (d === "sim" ? (fast as never) : null) });
-    await lines.open(sealed, run);
-    const initial = (peer.options as { media: (t: unknown[]) => void }).media;
-    const old = { kind: "video" };
-    initial([old]);
-    const fresh = { kind: "video" };
-    peer.renegotiate.mockImplementation((_, media) => (media?.([old, fresh] as never), Promise.resolve("a")));
-    const ctl = channel("line");
-    peer.channels.line?.(ctl.c);
-    ctl.msg({ t: "offer", sdp: "o", screen: { device: "sim", quality: "low", channel: "input:sim:1" } });
-    await vi.waitFor(() => expect(fast.attach).toHaveBeenCalledWith([fresh], "low"));
-    ctl.msg({ t: "offer", sdp: "o", screen: { device: "sim", channel: "input:sim:1" } });
-    await vi.waitFor(() => expect(stops[0]).toHaveBeenCalled());
-
-    const input = channel("input:sim:1");
-    peer.channels["*"]?.(input.c);
-    expect(fast.input).toHaveBeenCalledWith(input.c);
-    input.state("closed");
-    expect(stops[1]).toHaveBeenCalled();
-    input.state("closed");
-    expect(stops[1]).toHaveBeenCalledTimes(1);
-  });
-
-  it("keys a screen with no channel by its device, and stops every screen when the line closes", async () => {
+  it("attaches a watched device's screen named by a well-formed channel, for a card of its own", async () => {
     const stop = vi.fn();
-    const { lines, peer } = setup({ screen: () => screen(stop) as never });
+    const fast = { attach: vi.fn(() => stop), input: vi.fn() };
+    const { lines, peer } = setup({ screen: () => fast as never, watcher: () => ({ id: "c1" }) as never });
     await lines.open(sealed, run);
     peer.renegotiate.mockImplementation((_, media) => (media?.([{ kind: "video" }] as never), Promise.resolve("a")));
     const ctl = channel("line");
     peer.channels.line?.(ctl.c);
-    ctl.msg({ t: "offer", sdp: "o", screen: { device: "sim" } });
-    await vi.waitFor(() => expect(ctl.sent).toHaveLength(1));
+    ctl.msg({ t: "offer", sdp: "o", screen: { device: "sim", channel: "input:sim:0123abcd" } });
+    await vi.waitFor(() => expect(fast.attach).toHaveBeenCalled());
     lines.closeAll();
     expect(stop).toHaveBeenCalled();
-  });
-
-  it("carries nothing for a device it isn't watching, a box with no screens, or a screen that can't attach", async () => {
-    for (const deps of [{}, { screen: () => null }, { screen: () => ({}) as never }, { screen: () => screen(null) as never }]) {
-      const { lines, peer } = setup(deps);
-      await lines.open(sealed, run);
-      const ctl = channel("line");
-      peer.channels.line?.(ctl.c);
-      ctl.msg({ t: "offer", sdp: "o", screen: { device: "sim" } });
-      ctl.msg({ t: "offer", sdp: "o" });
-      await vi.waitFor(() => expect(ctl.sent).toHaveLength(2));
-      const input = channel("input:sim:1");
-      peer.channels["*"]?.(input.c);
-      input.state("closed");
-      peer.channels["*"]?.(channel("other").c);
-      lines.closeAll();
-    }
   });
 });
 

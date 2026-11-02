@@ -116,7 +116,7 @@ export function createDaemon(deps: DaemonDeps) {
     return null;
   }
 
-  const conn: Connection = { line: keyLine(reg), dispatch: workerDispatch(deps, { log, askForUpdate }) };
+  const conn: Connection = { line: keyLine(reg), dispatch: workerDispatch(deps, { log, askForUpdate, updating: () => updates?.updating() ?? false }) };
   let recovering: Promise<void> | null = null;
   const inbox = createInbox({
     // Commands wait for recovery: a reply queued while the worker was down must not land on a card about to resume.

@@ -81,7 +81,6 @@ async function loadEngine() {
     import("../lib/host-api"),
     import("../lib/scheduler"),
     import("../lib/host-line"),
-    import("../lib/host-line-events"),
   ]);
   return { store, parts };
 }
@@ -96,7 +95,7 @@ async function startCommand() {
   const config = readWorkerConfig(home);
   if (!config) throw new Error("This box isn't enrolled yet. Run: weft-worker enrol <token>");
   const { store, parts } = await loadEngine();
-  const [{ startFeatureCard }, , , { subscribe }, { createDaemon }, { createPublisher }, paths, github, folderGrant, { createBlobStore }, { SHOW_DIR }, { setPageUpload }, { busyCards }, { recoverCards }, { resumeInterrupted }, { openScreenChannel, screenInput, setFastScreen, setScreenChannel, fastScreenOf }, { sendInput }, { openFastScreen }, { setDeviceLink }, { deviceLink }, { isMobileApp }, { runVerb }, { startScheduler }, { createHostLines }, { lineProjector }] = parts;
+  const [{ startFeatureCard }, , , { subscribe }, { createDaemon }, { createPublisher }, paths, github, folderGrant, { createBlobStore }, { SHOW_DIR }, { setPageUpload }, { busyCards }, { recoverCards }, { resumeInterrupted }, { openScreenChannel, screenInput, setFastScreen, setScreenChannel, fastScreenOf, watcherOf }, { sendInput }, { openFastScreen }, { setDeviceLink }, { deviceLink }, { isMobileApp }, { runVerb }, { startScheduler }, { createHostLines }] = parts;
   const reg = registry(rpc, config.key);
   // The public half goes on the worker's row, so Settings → Sync → Workers can seal a Claude token to this box.
   const keys = workerSealKeys(home, newSealKeys);
@@ -114,17 +113,21 @@ async function startCommand() {
   setFastScreen(openFastScreen, (sealed) => open(keys, sealed, RTC_PURPOSE));
   const publisher = createPublisher(reg, store, console.warn, { blobs, orgId: config.orgId });
   subscribe(publisher.hear);
-  // Session lines (lib/host-line.ts): the answer goes back on the board's own topic, events are projected as the
-  // publisher's rows are, and verbs run through the host command's path (the daemon hands `run` in).
+  // Session lines (lib/host-line.ts): the answer goes back on the board's own topic, events are what the
+  // publisher ships (one projection, one upload), screens need a card of this box's own watching them, and verbs run
+  // through the host kind's path (the daemon hands `run` in).
   const lines = createHostLines({
     unseal: (sealed, purpose) => open(keys, sealed, purpose),
     answerOn: async (topic, sealed) => {
       const channel = await openScreenChannel(client, topic);
       await channel.answer(sealed).finally(() => setTimeout(() => channel.close(), 5_000));
     },
-    hear: subscribe,
-    project: lineProjector({ orgId: config.orgId, blobs, thumbs: false, copilot: false, onBlobError: () => {} }, store.getCard),
+    hear: (listener) => publisher.mirror(listener),
     screen: fastScreenOf,
+    watcher: (device) => {
+      const id = watcherOf(device);
+      return id ? store.getCard(id) : undefined;
+    },
     log: console.log,
   });
   const daemon = createDaemon({
