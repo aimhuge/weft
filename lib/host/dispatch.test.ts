@@ -80,6 +80,15 @@ describe("cardKinds", () => {
     expect(create).toHaveBeenCalledOnce();
   });
 
+  it("holds a new card to the host's elevated rule too, as an update is", async () => {
+    const create = vi.fn<NonNullable<CardRules["create"]>>(() => Promise.resolve("n1"));
+    const elevated = vi.fn<NonNullable<CardRules["elevated"]>>(() => Promise.resolve("Approve it on the phone."));
+    const args = { id: "n1", prompt: "go", permissionMode: "acceptEdits" };
+    await expect(cardKinds(rules({ create, elevated })).host(cmd("host", { verb: "card.create", args }))).rejects.toThrow("Approve it on the phone.");
+    expect(elevated).toHaveBeenCalledWith("card.create", args);
+    expect(create).not.toHaveBeenCalled();
+  });
+
   it("sends a host answer through the answer kind where the host asks for that, and straight to the verb otherwise", async () => {
     const payload = { verb: "card.permission.answer", args: { id: "k1", pendingId: "p1", allow: false } };
     const approve = vi.fn(() => Promise.resolve(null));

@@ -126,7 +126,7 @@ export function cardKinds(rules: CardRules) {
   // A new card: no card to check yet, so the host's own create rule, behind the same refusals as an update.
   async function create(command: CloudCommandRow, body: HostPayload): Promise<HostDone> {
     if (!rules.create) throw new Error(NO_CREATE);
-    const refused = remoteRefusal(body);
+    const refused = remoteRefusal(body) ?? (await rules.elevated?.(body.verb, body.args));
     if (refused) throw new Error(refused);
     const cardId = await rules.create(command, await received(command, body.args, textArgOf(body.verb)));
     return { cardId, result: hostResult(cardId) };

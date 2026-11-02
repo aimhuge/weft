@@ -185,11 +185,22 @@ describe("card.create on a worker", () => {
     expect(d.report).toHaveBeenLastCalledWith("cmd-1", "done", "new-card-1", null, { ok: true, cardId: "new-card-1" });
   });
 
-  it("keeps a plan mode, and refuses a folder, an agent or skipped prompts", async () => {
+  it("starts plan as default and auto as auto, never a mode the card maker would read as this box's own default", async () => {
     const d = makeDeps();
     await d.daemon.runOne(create({ permissionMode: "plan" }));
-    expect(d.start).toHaveBeenLastCalledWith(expect.objectContaining({ permissionMode: "plan" }));
+    expect(d.start).toHaveBeenLastCalledWith(expect.objectContaining({ permissionMode: "default" }));
+    await d.daemon.runOne(create({ permissionMode: "auto" }));
+    expect(d.start).toHaveBeenLastCalledWith(expect.objectContaining({ permissionMode: "auto" }));
     d.start.mockClear();
+    d.checkout.mockClear();
+    for (const bad of ["dontAsk", "", null, "BypassPermissions"]) await d.daemon.runOne(create({ permissionMode: bad }));
+    expect(d.start).not.toHaveBeenCalled();
+    expect(d.checkout).not.toHaveBeenCalled();
+    expect(d.report).toHaveBeenLastCalledWith("cmd-1", "failed", null, "That mode can't be set on a worker.", expect.anything());
+  });
+
+  it("refuses a folder, an agent or skipped prompts", async () => {
+    const d = makeDeps();
     for (const bad of [{ cwd: "/etc" }, { agent: "x" }, { permissionMode: "bypassPermissions" }]) await d.daemon.runOne(create(bad));
     expect(d.start).not.toHaveBeenCalled();
     expect(d.report).toHaveBeenLastCalledWith("cmd-1", "failed", null, expect.stringMatching(/skip permission/), expect.anything());

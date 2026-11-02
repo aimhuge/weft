@@ -34,5 +34,7 @@ export function webHost(acts: Pick<CloudHostActs, "act">, thread: ThreadTranspor
       return acts.act(verb, id, rest);
     },
     menu: remoteMenu,
+    // A browser tab holds no session line, so nothing is warmed ahead of a reply (a worker's warm is line-only).
+    warm: () => {},
   };
 }
