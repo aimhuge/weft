@@ -661,7 +661,8 @@ Built 2026-11-02 (migration `supabase/migrations/20261102270000_mac_crons_for_wo
   with no cron or webhook: `useCrons` and `useWebhooks` keep the drawn change and read again after
   `WORKER_LIST_SETTLE_MS` (`lib/worker-item-id.ts`), once the worker has republished; the Mac's 15 s cache is forgotten
   then too (`forgetWorkerListsSoon`). A worker's webhook deleted from the Mac also loses its relay row (the owner's),
-  taken down with the Mac's session after the worker confirms (`deleteWorkerWebhook`).
+  taken down with the Mac's session after the worker confirms (`deleteWorkerWebhook`), held to rows whose `worker_id` is
+  that worker, since the relay id comes from the worker's own published list.
 - **On the worker.** `cardKinds.host` sends a list verb past the card check to `CardRules.lists`; a host without that
   rule refuses them (`NO_LISTS`), so a Mac's inbox never changes its own crons or webhooks from the network.
   `remoteRefusal` runs `listRefusal` (`packages/weft-client/src/list-policy.ts`): a cron patch may only name `name`,
@@ -670,7 +671,9 @@ Built 2026-11-02 (migration `supabase/migrations/20261102270000_mac_crons_for_wo
   nothing but its id. A cron prompt starting with "!" is a shell line, so it's refused outright: a signed approval for it
   waits on C (PR #49). `listVerb` (`lib/worker-kinds.ts`) runs a cron now in `workerStartMode(cron.permissionMode)`, the
   mode a new card from the network gets (plan as default, bypassPermissions refused), through `runCron`'s new `mode`;
-  the row's `card_id` stays empty (it may name only a card the worker published) and `result.cardId` names the run.
+  the row's `card_id` stays empty (it may name only a card the worker published) and `result.cardId` names the run. A
+  `cron.update` that re-words the prompt is new work on every later fire, so the worker narrows the cron's own mode by
+  the same rule (a bypassPermissions cron drops to `default`) before the scheduler fires the new words.
 - **Worker to Mac: read-only.** Each Mac publishes a summary of its own crons (`lib/mac-crons.ts`, started from the
   prewarm in `lib/copilot.ts`): id, name, schedule, fork or fresh, on or off, next run and the project's name, plus the
   prompt only when it's 120 characters or fewer; never the path, the source card, the fork's session or the runs. It

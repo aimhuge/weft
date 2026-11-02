@@ -13,7 +13,10 @@ import { OK, settle, type Ok } from "./types";
 
 export const NO_HOOK = "No such webhook.";
 
-export const cronUpdateVerb = ({ id, patch }: { id: string; patch: CronPatch }): Promise<{ cron: Cron }> => settle(() => ({ cron: updateCron(id, patch) }));
+// permissionMode, when given, is the mode the host narrows the cron to for a prompt changed from the network
+// (lib/worker-kinds.ts listVerb); remoteRefusal keeps a row from naming it.
+export const cronUpdateVerb = ({ id, patch, permissionMode }: { id: string; patch: CronPatch; permissionMode?: PermissionMode }): Promise<{ cron: Cron }> =>
+  settle(() => ({ cron: updateCron(id, permissionMode ? { ...patch, permissionMode } : patch) }));
 
 export const cronDeleteVerb = ({ id }: { id: string }): Promise<Ok> =>
   settle(() => {

@@ -46,7 +46,9 @@ begin
            coalesce((
              select jsonb_agg(jsonb_strip_nulls(jsonb_build_object(
                       'id', e->'id', 'name', e->'name', 'expr', e->'expr', 'mode', e->'mode', 'enabled', e->'enabled',
-                      'folder', e->'folder', 'nextAt', e->'nextAt',
+                      -- The project's name only: a path a Mac wrote anyway is cut to its last part.
+                      'folder', case when jsonb_typeof(e->'folder') = 'string' then to_jsonb(left(regexp_replace(e->>'folder', '^.*/', ''), 100)) end,
+                      'nextAt', e->'nextAt',
                       'prompt', case when jsonb_typeof(e->'prompt') = 'string' and char_length(e->>'prompt') <= 120 then e->'prompt' end)))
              from jsonb_array_elements(m.crons) e
              where jsonb_typeof(e) = 'object'

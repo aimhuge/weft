@@ -51,12 +51,15 @@ export async function actOnWorkerItem(
 
 // A worker's webhook gone: the worker drops it, then its relay row (the owner's, made by this Mac for the worker)
 // goes too, so the public URL stops taking deliveries for a route nobody keeps. A queued delete leaves the relay
-// until it has run.
+// until it has run. The relay id is the worker's word (its published list), so the delete is held to that worker's own
+// relay rows: a worker naming another relay of the owner's (the Mac's own, another worker's) takes nothing down.
 export async function deleteWorkerWebhook(itemId: string, client: SupabaseClient = accountClient(), wait: WaitOptions = LIST_ACT_WAIT): Promise<ListActResult> {
+  const item = parseWorkerItem(itemId);
+  if (!item) throw new Error(NOT_WORKER_ITEM);
   const relayId = (await workerLists()).webhooks.find((h) => h.id === itemId)?.relayId;
   const done = await actOnWorkerItem(itemId, "webhook.delete", {}, client, wait);
   if (!done.queued && relayId) {
-    const { error } = await client.from("webhook_relays").delete().eq("id", relayId);
+    const { error } = await client.from("webhook_relays").delete().eq("id", relayId).eq("worker_id", item.workerId);
     if (error) throw new Error(`The webhook is gone from your worker, but its public URL couldn't be taken down: ${error.message}`);
   }
   return done;

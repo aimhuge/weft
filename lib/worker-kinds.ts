@@ -82,14 +82,21 @@ function sealedToken(command: CloudCommandRow): Sealed {
 // cron.* and webhook.* from the Mac's ⏰ and 🪝 drawers, on this worker's own crons and webhooks (lib/host-api/lists.ts),
 // past remoteRefusal. A run asked for from the network starts in the mode a new card from it would (workerStartMode:
 // never bypassPermissions, plan as default), whatever mode the thread that made the cron had; it answers the run's card.
+// A new prompt is new work on every fire after it, so the cron keeps only the mode a card from the network may start in:
+// one made in bypassPermissions (or a mode the web can't name) drops to `default` rather than run the new words unasked.
 export async function listVerb(engine: Pick<DaemonDeps["engine"], "host">, verb: ListVerb, args: HostArgs): Promise<string | null> {
-  if (verb !== "cron.run") {
+  if (verb !== "cron.run" && !(verb === "cron.update" && typeof (args.patch as { prompt?: unknown }).prompt === "string")) {
     await engine.host(verb, args);
     return null;
   }
   const { getCron } = await import("./cron-store");
   const cron = getCron(args.id);
   if (!cron) throw new Error("No such cron.");
+  if (verb === "cron.update") {
+    const permissionMode = await workerStartMode(cron.permissionMode).catch((): PermissionMode => "default");
+    await engine.host("cron.update", { ...args, permissionMode });
+    return null;
+  }
   const permissionMode = await workerStartMode(cron.permissionMode);
   const { card } = (await engine.host("cron.run", { id: cron.id, permissionMode })) as { card: Card };
   return card.id;

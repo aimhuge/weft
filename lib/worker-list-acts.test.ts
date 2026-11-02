@@ -20,7 +20,11 @@ const { actOnWorkerItem, deleteWorkerWebhook, NOT_WORKER_ITEM } = await import("
 const NOW = { every: 1, unclaimed: -1, claimed: -1, sleep: () => Promise.resolve() };
 const deleted: string[] = [];
 const relays = (error: { message: string } | null = null) =>
-  ({ from: (table: string) => ({ delete: () => ({ eq: (_c: string, id: string) => (deleted.push(`${table}:${id}`), Promise.resolve({ error })) }) }) }) as never;
+  ({
+    from: (table: string) => ({
+      delete: () => ({ eq: (_c: string, id: string) => ({ eq: (col: string, worker: string) => (deleted.push(`${table}:${id}:${col}=${worker}`), Promise.resolve({ error })) }) }),
+    }),
+  }) as never;
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -70,10 +74,10 @@ describe("actOnWorkerItem", () => {
 });
 
 describe("deleteWorkerWebhook", () => {
-  it("drops the webhook on the worker, then its relay row", async () => {
+  it("drops the webhook on the worker, then its relay row, held to that worker's own", async () => {
     expect(await deleteWorkerWebhook("worker:w1:h1", relays(), NOW)).toEqual({});
     expect(board.insert).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ payload: { verb: "webhook.delete", args: { id: "h1" } } }));
-    expect(deleted).toEqual(["webhook_relays:r1"]);
+    expect(deleted).toEqual(["webhook_relays:r1:worker_id=w1"]);
   });
 
   it("leaves the relay while the delete is queued, and when there's none", async () => {
@@ -81,6 +85,11 @@ describe("deleteWorkerWebhook", () => {
     expect(await deleteWorkerWebhook("worker:w1:h1", relays(), NOW)).toEqual({ queued: true });
     expect(await deleteWorkerWebhook("worker:w1:h2", relays(), NOW)).toEqual({});
     expect(deleted).toEqual([]);
+  });
+
+  it("refuses an id that isn't a worker's webhook", async () => {
+    await expect(deleteWorkerWebhook("h1", relays(), NOW)).rejects.toThrow(NOT_WORKER_ITEM);
+    expect(board.insert).not.toHaveBeenCalled();
   });
 
   it("says when the relay couldn't be taken down", async () => {

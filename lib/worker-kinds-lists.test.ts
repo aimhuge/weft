@@ -51,6 +51,16 @@ describe("a worker's crons and webhooks from the Mac", () => {
     expect(t.host).not.toHaveBeenCalled();
   });
 
+  it("narrows a cron re-worded from the network to the mode a new card from it may start in", async () => {
+    const t = kinds();
+    await t.kinds.host!(host("cron.update", { id: "k2", patch: { prompt: "rm the repo" } }));
+    expect(t.host).toHaveBeenLastCalledWith("cron.update", { id: "k2", patch: { prompt: "rm the repo" }, permissionMode: "default" });
+    await t.kinds.host!(host("cron.update", { id: "k1", patch: { prompt: "tidy up", enabled: true } }));
+    expect(t.host).toHaveBeenLastCalledWith("cron.update", { id: "k1", patch: { prompt: "tidy up", enabled: true }, permissionMode: "auto" });
+    await expect(t.kinds.host!(host("cron.update", { id: "nope", patch: { prompt: "x" } }))).rejects.toThrow("No such cron.");
+    await expect(t.kinds.host!(host("cron.update", { id: "k2", patch: { prompt: "x" }, permissionMode: "bypassPermissions" }))).rejects.toThrow(/carries more than the cron/);
+  });
+
   it("is a plain function of the engine", async () => {
     const t = kinds();
     expect(await listVerb({ host: t.host }, "webhook.update", { id: "h1", patch: { registered: true } })).toBeNull();
