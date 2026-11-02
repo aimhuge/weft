@@ -38,10 +38,24 @@ describe("useProjectHost", () => {
 
   it("puts the pane on the page the rail picked, until the card opens another", () => {
     const { result, rerender } = renderHook(({ c }) => useProjectHost(c, { items: [], pageUrl: "" }), { initialProps: { c: card({ page: "blob:sha256:aa" }) } });
-    act(() => result.current.page.open?.("blob:sha256:bb"));
-    expect(result.current.page.url).toBe("blob:sha256:bb");
+    const bb = `blob:sha256:${"b".repeat(64)}`;
+    act(() => result.current.page.open?.(bb));
+    expect(result.current.page.url).toBe(bb);
     rerender({ c: card({ page: "blob:sha256:cc" }) });
     expect(result.current.page.url).toBe("blob:sha256:cc");
+  });
+
+  it("puts a tour step's worker path on the blob the card opened it as, and leaves a page only the worker has", () => {
+    const ref = `blob:sha256:${"b".repeat(64)}`;
+    const opened: ThreadItem = { kind: "tool", id: "t1", name: "mcp__browser__open_url", summary: ref, result: "Opened /home/me/show/todos.html — Todos.", at: 1 };
+    renderHook(() => useShownItems([opened]));
+    const { result } = renderHook(() => useProjectHost(card({ page: "blob:sha256:aa" }), { items: [], pageUrl: "" }));
+    act(() => result.current.page.open?.("/home/me/show/other.html"));
+    expect(result.current.page.url).toBe("blob:sha256:aa");
+    act(() => result.current.page.open?.("http://localhost:3000/"));
+    expect(result.current.page.url).toBe("blob:sha256:aa");
+    act(() => result.current.page.open?.("/home/me/show/todos.html"));
+    expect(result.current.page.url).toBe(ref);
   });
 
   it("has no page for a worker card that never opened one", () => {

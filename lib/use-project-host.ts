@@ -9,6 +9,7 @@ import { hostFor, type ProjectHost } from "./project-host";
 import { useSessionLine } from "./session-lines";
 import { parseWorkerProject } from "./worker-project";
 import type { Card, ThreadItem } from "./types";
+import { workerPagePick } from "./worker-page-pick";
 import { clearShown, useWorkerShown } from "./worker-shown";
 
 export interface OpenHost {
@@ -43,5 +44,11 @@ export function useProjectHost(card: Card, local: { items: ThreadItem[]; pageUrl
   useEffect(() => clearShown, [card.id]);
   if (host.can("pane")) return { host, items: local.items, page: { url: local.pageUrl } };
   const url = picked && picked.card === card.id && picked.page === card.page ? picked.url : (card.page ?? "");
-  return { host, items: shown, page: { url, open: (next) => setPicked({ card: card.id, page: card.page, url: next }), shots } };
+  // A path or localhost URL only the worker has goes to the blob the card opened it as, or opens nothing
+  // (lib/worker-page-pick.ts), rather than a pane that says the page isn't here.
+  const open = (next: string) => {
+    const page = workerPagePick(next, shown);
+    if (page) setPicked({ card: card.id, page: card.page, url: page });
+  };
+  return { host, items: shown, page: { url, open, shots } };
 }
