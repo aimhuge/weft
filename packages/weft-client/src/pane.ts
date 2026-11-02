@@ -56,7 +56,8 @@ function screenPane(url: string): SharePane | null {
   return { kind: "screen", url, label: params.get("name") || device, token, device, until, fast: params.get("fast") === "1", devices: devicesOf(params.get("devices")) };
 }
 
-const BLOB_PAGE = /^(blob:sha256:[0-9a-f]{64})(#.*)?$/;
+// A page sent up as a blob, with what followed its file: an #anchor, or a ?query (a review step, lib/review-blobs.ts).
+const BLOB_PAGE = /^(blob:sha256:[0-9a-f]{64})([?#].*)?$/;
 const LOCAL = /^(file:|\/)|^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(:\d+)?(\/|$)/i;
 
 function pageLabel(url: string): string {
