@@ -71,6 +71,14 @@ guard set: each is refused, or asked about, in the same words on all three.
 | Bash claims | `lib/bash-claims.ts` | asks before a Bash line that writes a claimed file; claims what Bash wrote, drops claims on clean files, tells a failed check whose failures are another card's |
 | Folder gate | `lib/folder-guard.ts` | asks (doesn't deny) before a file tool or Bash command reaches a folder outside the card's project |
 
+**Worker CLI guard, what it can't see.** It reads the command line, so it refuses a runner given the script, a shell given
+`-c` (or `-lc`, `-ec`, `--`), `curl`/`cat` of the installer piped to a shell, and a shell or interpreter fed it by `<`.
+A `pnpm lint|test|typecheck|format` may name `scripts/weft-worker.ts` as a bare path, but not with `-c`, `--config`, `--plugin`,
+`--setupFiles`, `--import`, `-r`, a `wph.` code or a command word after it (a lint config is loaded as code). **Known gap:**
+`enrolRefusal`'s `--re-pair` check in `lib/worker-mac-keys.ts` asks only for a TTY, and a pty wrapper (`script`, `expect`,
+`tmux`) fakes one; the guard lists those wrappers, but a program a thread writes and runs can still open a pty. Closing it
+needs something a thread can't produce, such as the owner approving the re-pair from the Mac (Settings, Devices); not built yet.
+
 ## The local API's own gate
 
 `lib/guard.ts` guards `app/api/*`: Host must be local, and once the desktop app has written a launch token, **every** route needs it —
