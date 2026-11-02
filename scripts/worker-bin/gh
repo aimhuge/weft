@@ -1,0 +1,4 @@
+#!/bin/sh
+# A Weft Worker card's gh (docs/architecture/connectors.md#connectors-on-a-worker-github-p1-as-built): the token comes from
+# the worker daemon for this card, into one gh process with a scrubbed env (scripts/weft-connector-helper.cjs).
+exec /usr/bin/env -u NODE_OPTIONS -u NODE_PATH "${WEFT_CONNECTOR_NODE:-node}" "$WEFT_CONNECTOR_HELPER" gh "$@"

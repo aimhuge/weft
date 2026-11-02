@@ -19,6 +19,7 @@ import Composer, { type ComposerHandle } from "./Composer";
 import { IntroButton, IntroFrame, PlayIntroButton } from "./FeatureIntro";
 import NewThreadHeaderActions from "./NewThreadHeaderActions";
 import { NewCardDialogControls } from "./NewCardDialogControls";
+import { isWorkerProject } from "@/lib/worker-project";
 import { NewCardDialogFooter } from "./NewCardDialogFooter";
 import { RestartRequested } from "./RestartChip";
 import StatusStrip from "./StatusStrip";
@@ -91,6 +92,9 @@ export default function NewCardDialog({
 
   return (
     <aside
+      // A thread on a worker gets its start signed for the GitHub connector (lib/worker-folder-repo.ts), so the whole
+      // dialog is the user's alone there: board_view can't type its prompt or press Create (electron/board-view.cjs).
+      data-human-only={isWorkerProject(dialog.cwd) || undefined}
       // Capture, so ⌘B adds to the Backlog before the composer reads it as bold.
       onKeyDownCapture={(e) => {
         if (!isBacklogKey(e, isMac())) return;

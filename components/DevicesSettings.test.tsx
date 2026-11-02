@@ -10,6 +10,9 @@ import type { DeviceView } from "@/lib/device-registry";
 vi.mock("@/lib/use-now", () => ({ useNow: () => Date.parse("2026-11-02T12:00:00Z") }));
 const apiFetch = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/api-client", () => ({ apiFetch }));
+// A worker's Connectors badge has its own hook and tests (lib/use-worker-connectors.test.ts, WorkerConnectors.test.tsx).
+const connectors = vi.hoisted(() => ({ view: { signedIn: true, github: { connected: false }, connectUrl: "", workers: {} }, error: null, note: null, canChange: true }));
+vi.mock("@/lib/use-worker-connectors", () => ({ useWorkerConnectors: () => connectors }));
 
 const { default: DevicesSettings } = await import("./DevicesSettings");
 const { POLL_MS, revokeRoute, repinOutcome, workerOutcome, useDevices, hostPairingBridge } = await import("@/lib/use-devices");
@@ -77,6 +80,26 @@ describe("DevicesSettings", () => {
     await userEvent.click(screen.getByRole("button", { name: "Revoke m1mini" }));
     await waitFor(() => expect(apiFetch).toHaveBeenCalledWith("/api/devices?id=w1", { method: "DELETE" }));
     expect(pairing.revoke).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows a paired worker's Connectors badge, and what GitHub confirmed when it's revoked", async () => {
+    apiFetch.mockImplementation((url: string) => (url.includes("?id=") ? ok({ ok: true, kind: "worker", note: "GitHub off · 1 token revoked ✓" }) : ok({ signedIn: true, devices: DEVICES })));
+    render(<DevicesSettings />);
+    expect(await screen.findByRole("button", { name: "Connectors on m1mini" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Connectors on iPhone" })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Revoke m1mini" }));
+    expect(await screen.findByText("m1mini: GitHub off · 1 token revoked ✓")).toBeInTheDocument();
+  });
+
+  it("drops a revoke's note that lands after it closed", async () => {
+    let answer: (r: Response) => void = () => {};
+    apiFetch.mockImplementation((url: string) => (url.includes("?id=") ? new Promise<Response>((resolve) => (answer = resolve)) : ok({ signedIn: true, devices: DEVICES })));
+    const { unmount } = render(<DevicesSettings />);
+    await userEvent.click(await screen.findByRole("button", { name: "Revoke m1mini" }));
+    unmount();
+    answer(new Response(JSON.stringify({ ok: true, kind: "worker", note: "late note" })));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(screen.queryByText("m1mini: late note")).toBeNull();
   });
 
   it("re-pins a worker through main, and offers it only for workers", async () => {

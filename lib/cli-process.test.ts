@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { KILL_GRACE_MS, endGroup, groups, killAllGroups, killGroup, spawnCli, withStderr } from "./cli-process";
+import { cardForCap, pidForCap, setConnectorSetup, withConnectorEnv } from "./connector-env";
 
 // Real processes: a shell (the wrapper) that starts `sleep` (its child) and prints the child's pid.
 
@@ -100,6 +101,16 @@ describe("spawnCli", () => {
     expect(proc.stderrTail()).toBe("not logged in");
     expect(onStderr).toHaveBeenCalledWith("not logged in\n");
     expect(off).not.toHaveBeenCalled();
+  });
+
+  it("binds a worker session's connector capability to the CLI's pid, and drops it when the CLI exits", async () => {
+    setConnectorSetup({ socket: "/s", node: "/n", helper: "/h", binDir: "/b", boxHelpers: [] });
+    const env = withConnectorEnv({ PATH: "/usr/bin:/bin" }, () => "c1");
+    const proc = spawnCli({ command: "/bin/sh", args: ["-c", "sleep 0.2"], env, signal: new AbortController().signal });
+    expect(pidForCap(env.WEFT_CONNECTOR_CAP)).toBe(proc.pid);
+    await new Promise((r) => proc.once("exit", r));
+    expect(cardForCap(env.WEFT_CONNECTOR_CAP)).toBeUndefined();
+    setConnectorSetup(null);
   });
 
   it("reports a command that can't start through 'error', and kill falls back to the child", async () => {

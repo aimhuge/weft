@@ -133,6 +133,11 @@ Migration `20261102290000_device_versions.sql`.
   still holds the account's session, which no device revocation can take away: with it, it can register a new key row,
   mint a new device id and beat as a new Mac, and act as the account (sync, commands) as any signed-in client can.
   Signing that account out everywhere (rotating its sessions) is what ends that.
+- **A Mac's approval key isn't a `devices` column.** `devices` holds each Mac's X25519 vault key, which any signed-in
+  session can add, so nothing that needs a Touch ID-backed yes may trust a row there. The Ed25519 desktop approval key
+  (`electron/desktop-signer.cjs`) reaches a worker only in its pairing code, and weft.zip's connectors keep their own list
+  of it, `connector_signers`, trusted once the link emailed to the account is opened or a trusted Mac vouches for it
+  ([connectors.md](connectors.md#who-may-say-yes-the-chain-of-trust)).
 - **Worker keys aren't pinned on the Mac**: `sealTarget` (`lib/workers-account.ts`) still reads the worker's box key
   from its row. The pairing checked that key; pinning it locally is H8's to use.
 

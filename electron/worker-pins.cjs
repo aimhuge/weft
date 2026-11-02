@@ -62,6 +62,20 @@ function createWorkerPins({ dir, safeStorage, now = () => new Date() }) {
     },
 
     /**
+     * The keys this Mac pinned for a worker, exactly as pinned (electron/connector-grants.cjs vouches for a worker with
+     * them), or null when it hasn't pinned one or the file won't open.
+     * @param {string} id @returns {{ publicKey?: string, signKey?: string } | null}
+     */
+    pinned(id) {
+      try {
+        const pin = read()[id];
+        return pin ? { ...(pin.publicKey ? { publicKey: pin.publicKey } : {}), ...(pin.signKey ? { signKey: pin.signKey } : {}) } : null;
+      } catch {
+        return null;
+      }
+    },
+
+    /**
      * The name this Mac pinned a worker under, for main's own prompts; null when it hasn't pinned one (or the file won't
      * open). @param {string} id
      */

@@ -65,14 +65,16 @@ function checkHostClaim(code, row) {
  * @param {{ db: () => any, userId: () => string, macDevice: () => string, myDevice: () => Promise<{ publicKey: string }>,
  *   confirm: (reason: string) => Promise<boolean>, now?: () => number,
  *   pinWorker?: (id: string, keys: { name: string, publicKey: string, signKey: string }) => void,
- *   macSignKey?: () => Promise<string> }} deps
+ *   macSignKey?: () => Promise<string>, vouchWorker?: (id: string) => Promise<unknown> }} deps
  * macSignKey is this Mac's Ed25519 approval key (electron/desktop-signer.cjs, base64): it rides in the code, which the
  * user carries to the box by hand, so the box trusts the secret_use rows this Mac signs and no one else's
  * (lib/worker-mac-keys.ts). Never through the database, where any session of yours could swap it.
  * pinWorker pins the keys main just checked (electron/worker-pins.cjs), under the same Touch ID, so the worker's secret
  * asks must carry its sign key's signature (electron/worker-secret.cjs) and its box key can't be swapped later.
+ * vouchWorker signs those pinned keys for weft.zip (electron/connector-grants.cjs), so its connector mint serves the
+ * worker only with the sign key this Mac checked.
  */
-function createHostPairing({ db, userId, macDevice, myDevice, confirm, now = Date.now, pinWorker = () => {}, macSignKey = undefined }) {
+function createHostPairing({ db, userId, macDevice, myDevice, confirm, now = Date.now, pinWorker = () => {}, macSignKey = undefined, vouchWorker = async () => {} }) {
   /** @type {Map<string, { secret: string, orgId: string, expiresAt: number }>} */
   const open = new Map();
 
@@ -142,6 +144,10 @@ function createHostPairing({ db, userId, macDevice, myDevice, confirm, now = Dat
       await Promise.resolve(db().rpc("device_revoke", { p_id: workerId })).catch(() => {});
       return { status: "failed", error: `The worker's keys couldn't be pinned on this Mac, so it wasn't added: ${err.message}` };
     }
+    // Vouch for it on weft.zip, so its connectors can work: best effort, since turning a connector on vouches again.
+    await Promise.resolve()
+      .then(() => vouchWorker(String(workerId)))
+      .catch((err) => console.warn(`Couldn't vouch for the worker on weft.zip: ${err?.message ?? err}`));
     return { status: "paired", worker: { id: workerId, name: row.name, platform: row.platform, code: shown } };
   }
 

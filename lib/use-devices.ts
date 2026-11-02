@@ -146,8 +146,11 @@ export function useDevices({ pairing, hosts }: Bridges = bridgesHere()) {
         await pairing?.revoke(device.id);
         // Every worker that trusted it gets the set without it, until each confirms (lib/passkey-sync.ts).
         await runPasskeySync();
+      } else {
+        // A worker's answer can carry what GitHub confirmed about the tokens it held (lib/device-registry.ts).
+        const r = await readJson<{ note?: string }>(await apiFetch(`/api/devices?id=${encodeURIComponent(device.id)}`, { method: "DELETE" }));
+        if (r.note && live.current) setNote(`${device.name}: ${r.note}`);
       }
-      else await readJson(await apiFetch(`/api/devices?id=${encodeURIComponent(device.id)}`, { method: "DELETE" }));
       await reload();
     });
 
