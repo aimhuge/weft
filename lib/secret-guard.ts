@@ -19,17 +19,25 @@ export { bashVerdict, stripPrefixes, unwrapEnv } from "./secret-guard-bash";
 export { isSecretFile } from "./secret-guard-files";
 export { toolVerdict };
 
-export const secretGuard: HookCallback = (input) => {
-  if (input.hook_event_name !== "PreToolUse") return Promise.resolve({});
-  const why = fromCwd(input.cwd, () => toolVerdict(input.tool_name, input.tool_input));
-  return Promise.resolve(
-    why ? { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: why } } : {},
-  );
-};
+// cardId names the thread's card, once it has one: a board thread may Read what its user pasted into it.
+export function secretGuardFor(cardId: () => string | undefined = () => undefined): HookCallback {
+  return (input) => {
+    if (input.hook_event_name !== "PreToolUse") return Promise.resolve({});
+    const why = fromCwd(input.cwd, () => toolVerdict(input.tool_name, input.tool_input, undefined, cardId()));
+    return Promise.resolve(
+      why ? { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: why } } : {},
+    );
+  };
+}
 
-export const SECRET_GUARD_MATCHER: HookCallbackMatcher = {
-  matcher: "Read|Edit|MultiEdit|Write|NotebookRead|NotebookEdit|Grep|Glob|LS|Bash|mcp__browser__open_url",
-  hooks: [secretGuard],
-};
+// The cardless guard, for the refactor scout and the skill reviewer.
+export const secretGuard: HookCallback = secretGuardFor();
+
+const SECRET_TOOLS = "Read|Edit|MultiEdit|Write|NotebookRead|NotebookEdit|Grep|Glob|LS|Bash|mcp__browser__open_url";
+
+export const SECRET_GUARD_MATCHER: HookCallbackMatcher = { matcher: SECRET_TOOLS, hooks: [secretGuard] };
+
+// A board thread's guard, which knows its card (lib/guards/hooks.ts).
+export const secretGuardMatcher = (cardId: () => string | undefined): HookCallbackMatcher => ({ matcher: SECRET_TOOLS, hooks: [secretGuardFor(cardId)] });
 
 export const SECRET_GUARD_HOOKS: Partial<Record<HookEvent, HookCallbackMatcher[]>> = { PreToolUse: [SECRET_GUARD_MATCHER] };

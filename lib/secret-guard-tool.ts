@@ -6,6 +6,7 @@ import path from "node:path";
 import { DATA_DIR } from "./store";
 import { bashVerdict } from "./secret-guard-bash";
 import { expandBraces, isSecretFile } from "./secret-guard-files";
+import { pastedElsewhere, pastedInto } from "./secret-guard-pasted";
 
 // A file:// URL's path, or "" for any other URL.
 function filePath(url: string): string {
@@ -22,12 +23,14 @@ function filePath(url: string): string {
 // overwrite one either: it could clobber a secret it is not allowed to see (2026-10-28).
 const FILE_TOOLS = new Set(["Read", "Edit", "MultiEdit", "Write", "NotebookRead", "NotebookEdit"]);
 
-// Why a tool call is turned away, or null to let it run.
-export function toolVerdict(toolName: string, input: unknown, dataDir = DATA_DIR): string | null {
+// Why a tool call is turned away, or null to let it run. cardId names the thread's card, so a Read of an
+// attachment its user pasted gets through (lib/secret-guard-pasted.ts).
+export function toolVerdict(toolName: string, input: unknown, dataDir = DATA_DIR, cardId?: string): string | null {
   const fields = (input ?? {}) as Record<string, unknown>;
   const str = (key: string) => (typeof fields[key] === "string" ? fields[key] : "");
   if (FILE_TOOLS.has(toolName)) {
     const file = str("file_path") || str("notebook_path") || str("path");
+    if (toolName === "Read") return readVerdict(file, dataDir, cardId);
     return isSecretFile(file, dataDir) ? reason(file) : null;
   }
   switch (toolName) {
@@ -47,6 +50,12 @@ export function toolVerdict(toolName: string, input: unknown, dataDir = DATA_DIR
     default:
       return null;
   }
+}
+
+// A Read opens an attachment its user pasted, and one pasted on another machine is named as that, not as a secret.
+function readVerdict(file: string, dataDir: string, cardId: string | undefined): string | null {
+  if (pastedInto(cardId, file, dataDir)) return null;
+  return pastedElsewhere(file) ?? (isSecretFile(file, dataDir) ? reason(file) : null);
 }
 
 // One path, read as a path.

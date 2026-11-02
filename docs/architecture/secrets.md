@@ -282,6 +282,13 @@ denied). A file watcher notices hand edits and offers "Import changes", so editi
   - **`~/.weft/apps/` is open too (2026-10-29).** It holds the data mini apps (`apps/<slug>/index.html`
     and `weft-app.json`), and sealing the data dir had stopped threads building or editing one such as
     📈 Growth. App folders hold pages and manifests that name vault secrets by name only, never values.
+    `~/.weft/scout/`, the refactor scout's cache (findings about code), is open as well (2026-10-31).
+  - **An attachment opens to the card its user pasted it into (2026-10-31).** A thread couldn't Read the
+    screenshot its user had just pasted. A board thread's guard knows its card (`secretGuardMatcher(cardId)`
+    in `lib/guards/hooks.ts`), and `pastedInto` (`lib/secret-guard-pasted.ts`) lets a Read through when the
+    file sits straight in an attachments folder and a user message on that card names it. Only Read, one file
+    at a time: the folder can't be listed (it holds every card's uploads), another card's attachment stays
+    sealed, and a link in the folder is never followed. The scout and the skill reviewer have no card and get none.
     Every other folder and file in the data dir stays sealed: `vault/`, `threads/`, `attachments/`,
     `apps.json` (which pages are saved apps), `app-grants.json`, the tokens, and the control token. So does
     any path that climbs out of an open folder (`~/.weft/apps/../vault`, `~/.weft/show/../threads/x`: `..`
