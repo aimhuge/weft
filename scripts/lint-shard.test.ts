@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-// @ts-expect-error plain .mjs script
 import { lintableFiles, partitionProblems, shardFiles } from "./lint-shard.mjs";
 
 const tracked = ["a.ts", "b.tsx", "c.mjs", "d.cjs", "e.md", "f.png", "g.jsx", "lib/h.test.ts"];
