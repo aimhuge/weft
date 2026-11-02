@@ -24,14 +24,28 @@ Your own taps go through the normal live view (`lib/simulator-input.ts`) and nev
 
 ## The switch
 
-**Local Simulator** sits in a worker card's pane toolbar on the desktop board (`components/QaSwitch.tsx`), and needs no extra row. It lists
+**The host chip** sits in a worker card's pane header, beside Share (`components/web-board/HostChip.tsx`, its label from
+`lib/host-chip.ts`), and needs no extra row: it replaced the bare Local Simulator toggle and the toolbar's Start simulator. It reads
+
+| State | Label |
+|---|---|
+| A worker card | the worker's name, `m1mini` (`Worker` on weft.zip, which doesn't know it) |
+| The worker streams a simulator | `m1mini + simulator` |
+| Local Simulator mode on | `this Mac + simulator` |
+| Waiting for Touch ID / starting / refused | `Waiting for Touch ID…` / `Starting simulator…` / `m1mini ⚠`, the reason in its title |
+| A local card | no chip: its pane is this Mac's own |
+
+Its menu has **Simulator on m1mini** (Start simulator for a mobile app, or the streamed device to switch to, each a `watch` input),
+**Simulator on this Mac** (the devices below, or Stop simulator while on) and **Run this card**, whose "on this Mac" is shown off with
+"Not yet: moving a card between machines": a running card has no hand-over verb, and `lib/worker-handoff.ts` only sends a project's new
+cards. The state is `components/use-local-simulator.ts` (`useQa` plus the send). The menu lists
 this Mac's devices, and picking one goes `POST /api/worker-board` `{ action: "qa" }`, which is `elevated`, so a thread's curl can't reach
 it. `lib/qa-switch.ts` asks Electron main (`POST /qa/approve`, Touch ID, naming the worker, project and device), keeps the grant, then
 sends a `qa` command. The worker writes `card.qaDevice`, the Mac's sync device id, and that comes back on the card's row. With it set and
 a grant here, `WorkerPane` (the worker card's pane column in `OpenCard`) draws the native `BrowserPane` in place of `WebPane`, because that's the pane with the window capture.
 The board's existing `setActive(selectedId)` already points it at the card.
 
-weft.zip and the phone have no switch: the yes has to be given on the machine the build runs on.
+weft.zip and the phone draw the chip without the Simulator on this Mac section: the yes has to be given on the machine the build runs on.
 
 ## Security
 

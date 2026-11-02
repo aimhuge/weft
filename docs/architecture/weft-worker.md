@@ -456,7 +456,8 @@ daemon ◀─ claim ◀─ cloud_commands kind=input ◀─ POST /api/worker-boa
 - **The pane's own controls** (`components/web-board/ScreenBar.tsx`), on the desktop board, which can send commands: a
   "☁︎ streaming from <worker>" badge beside the device's name, so it reads as remote and not this Mac; a **device menu** from
   `card.page`'s `devices` (the worker's list, at most 40, written at each watch); **Resume** once the 10 minutes are up; and
-  **📱 Start simulator** in the toolbar (or the empty pane) of a card on a React Native or Expo app (`card.mobileApp`, set by the
+  **📱 Start simulator** in the host chip's menu (`components/web-board/HostChip.tsx`, the pane header's "m1mini" chip, which also
+  lists the worker's devices while one streams) or the empty pane of a card on a React Native or Expo app (`card.mobileApp`, set by the
   worker when it starts the card, `lib/mobile-app.ts`). Each is an `input` command of kind `watch` with a device or none:
   `watchFromBoard` in `lib/worker-screen.ts` takes the named device, else the booted one, else the first simulator, boots it,
   and streams it. Switching device stops the card's last one. The thread isn't asked, and the agent still has `watch` itself.

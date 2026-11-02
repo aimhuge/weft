@@ -2,6 +2,9 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { WebPane } from "./WebPane";
+
+// The live screen draws over Realtime and WebRTC; these tests are about the pane around it.
+vi.mock("./WorkerScreen", () => ({ WorkerScreen: () => null }));
 import type { SharePane } from "@/lib/share-types";
 
 const SHA = "a".repeat(64);
@@ -55,15 +58,24 @@ describe("WebPane", () => {
     expect(screen.getByText("No page open in this card's browser pane.")).toBeTruthy();
   });
 
-  it("starts a mobile app's simulator from the empty pane, and from the toolbar over another page", async () => {
+  it("starts a mobile app's simulator from the empty pane, and from the host chip over another page", async () => {
     const onScreenInput = vi.fn(() => Promise.resolve());
-    const { rerender } = render(<WebPane orgId={null} pane={null} onScreenInput={onScreenInput} mobileApp />);
+    const { rerender } = render(<WebPane orgId={null} pane={null} onScreenInput={onScreenInput} mobileApp source="m1mini" />);
     fireEvent.click(screen.getByRole("button", { name: /Start simulator/ }));
     expect(onScreenInput).toHaveBeenCalledWith({ kind: "watch" });
     expect(screen.getByRole("button", { name: /Starting simulator/ })).toBeTruthy();
-    rerender(<WebPane orgId={null} pane={blob} onScreenInput={vi.fn(() => Promise.reject(new Error("no simulators")))} mobileApp />);
-    fireEvent.click(screen.getByRole("button", { name: /Start simulator/ }));
-    await waitFor(() => expect(screen.getByRole("button", { name: /Start simulator ⚠/ }).getAttribute("title")).toBe("no simulators"));
+    const failing = vi.fn(() => Promise.reject(new Error("no simulators")));
+    rerender(<WebPane orgId={null} pane={blob} onScreenInput={failing} mobileApp source="m1mini" />);
+    fireEvent.click(screen.getByRole("button", { name: "m1mini" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /Start simulator/ }));
+    expect(failing).toHaveBeenCalledWith({ kind: "watch" });
+    await waitFor(() => expect(screen.getByRole("button", { name: "m1mini ⚠" }).getAttribute("title")).toBe("no simulators"));
+  });
+
+  it("names the worker and its simulator over the live screen", () => {
+    const live: SharePane = { kind: "screen", url: "weft-screen://x", token: "t", device: "udid-w", label: "iPhone 16", devices: [], until: Date.now() + 60_000, fast: false };
+    render(<WebPane orgId="org" pane={live} source="m1mini" />);
+    expect(screen.getByRole("button", { name: "m1mini + simulator" })).toBeTruthy();
   });
 
   it("says why the empty pane couldn't start one", async () => {
@@ -77,5 +89,7 @@ describe("WebPane", () => {
     expect(screen.queryByRole("button", { name: /Start simulator/ })).toBeNull();
     rerender(<WebPane orgId="org" pane={blob} mobileApp />);
     expect(screen.queryByRole("button", { name: /Start simulator/ })).toBeNull();
+    // Nothing host-specific to say there, so no host chip either.
+    expect(screen.queryByRole("button", { expanded: false })).toBeNull();
   });
 });
