@@ -8,6 +8,7 @@ import { approvalProblem } from "./approval-check";
 import { shell } from "./browser-shell";
 import { answerBody, answerGrant, replyBody, stopBody, type AnswerPayload, type CloudCommandRow } from "./cloud-commands";
 import { syncNow } from "./cloud-sync";
+import { deviceId } from "./device-id";
 import { applyFolderGrant } from "./folder-grant";
 import { needsElevation, runVerb, type HostVerb } from "./host-api";
 import { hostResult, readHostCommand, remoteRefusal, type HostDone, type HostPayload } from "./host-command";
@@ -42,7 +43,7 @@ export async function replyFromCommand(command: CloudCommandRow): Promise<string
 
 // An answer goes to the card's pending permission request or question. The answer verb throws when the request isn't
 // waiting any more, which the inbox turns into a failed report. It also has to pass the approval rule: a signed answer
-// must be a paired phone's, and an unsigned Allow on a permission request waits for the phone once one is paired.
+// must be a paired phone's (or a paired browser's passkey), and an unsigned Allow on a permission request waits for the phone once one is paired.
 export async function answerFromCommand(command: CloudCommandRow): Promise<string> {
   const answer = answerBody(command);
   if (!answer) throw new Error("That answer is empty.");
@@ -53,6 +54,12 @@ export async function answerFromCommand(command: CloudCommandRow): Promise<strin
     approvers: () => Promise.resolve(pairing.approvers),
     webApprovals: pairing.webApprovals,
     now: Date.now(),
+    // A browser's passkey: the message is rebuilt from this Mac's own device id and workspace (the inbox has already
+    // refused a command whose org isn't the one this Mac syncs to), and main checks it against the pin.
+    passkey: {
+      self: { orgId: command.org_id, macDevice: deviceId(), folder: card.cwd },
+      verify: async (body) => (await shell("/pairing/passkey-verify", body)) as { ok: boolean; reason?: string },
+    },
   });
   if (problem) throw new Error(problem);
   // Read before the answer clears the request; written after it, so one that has gone leaves no grant behind.

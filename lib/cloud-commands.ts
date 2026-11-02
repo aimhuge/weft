@@ -7,6 +7,7 @@ import { backendFor, CODEX_DEFAULT_MODEL } from "./new-thread";
 import type { HostPayload, HostResult } from "./host-command";
 import type { Sealed } from "./worker-seal";
 import type { ApprovalAuth } from "./approval-sig";
+import type { PasskeyAuth } from "./approval-passkey";
 import { readQuestionReply } from "./question-reply";
 import type { QuestionReply } from "./types-thread";
 import type { Backend, Effort, PendingPermission } from "./types";
@@ -47,8 +48,9 @@ export interface AnswerPayload {
   // folder from its own pending request (answerGrant), so a command can only grant what the prompt on screen asked for.
   grant?: GrantScope;
   // A paired phone's signature over this answer (lib/approval-sig.ts, docs/architecture/mobile-security.md); the Mac
-  // checks it in lib/approval-check.ts and reads it off the raw payload, never from answerBody.
-  auth?: ApprovalAuth;
+  // checks it in lib/approval-check.ts and reads it off the raw payload, never from answerBody. A paired browser's
+  // passkey signature is the PasskeyAuth kind (lib/approval-passkey.ts).
+  auth?: ApprovalAuth | PasskeyAuth;
 }
 
 // A request to stop a card's running turn.
@@ -160,10 +162,11 @@ export function replyCommand(target: { orgId: string; device: string; folder: st
 // folder the card runs in; null when the request is missing the pendingId it has to carry.
 export function answerCommand(
   target: { orgId: string; device: string; folder: string; cardId: string },
-  body: { pendingId: string; allow: boolean; answers?: Record<string, string>; reply?: QuestionReply; grant?: GrantScope },
+  body: { pendingId: string; allow: boolean; answers?: Record<string, string>; reply?: QuestionReply; grant?: GrantScope; auth?: PasskeyAuth },
 ): NewCommand | null {
   if (!body.pendingId) return null;
   const payload: AnswerPayload = { cardId: target.cardId, pendingId: body.pendingId, allow: body.allow };
+  if (body.auth) payload.auth = body.auth;
   if (body.answers) payload.answers = body.answers;
   if (body.reply) payload.reply = body.reply;
   if (body.allow && body.grant) payload.grant = body.grant;

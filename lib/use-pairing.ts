@@ -24,12 +24,14 @@ export interface PairingCode {
   id: string;
   link: string;
   expiresAt: number;
+  // A passkey code: its link opens on sign.weft.zip, in the browser that will approve.
+  passkey?: boolean;
 }
 
 type CheckResult = { status: "open" | "paired" | "cancelled" | "expired" | "failed"; error?: string; device?: PairedDeviceView };
 
 export interface PairingBridge {
-  start(orgId?: string): Promise<PairingCode>;
+  start(orgId?: string, opts?: { passkey?: boolean }): Promise<PairingCode>;
   check(id: string): Promise<CheckResult>;
   cancel(id: string): Promise<void>;
   list(): Promise<PairedDeviceView[]>;
@@ -107,10 +109,10 @@ export function usePairing(bridge: PairingBridge | undefined = typeof window ===
     code,
     note,
     error,
-    start: () =>
+    start: (passkey = false) =>
       run(async () => {
         setNote(null);
-        if (bridge) setCode(await bridge.start());
+        if (bridge) setCode(await bridge.start(undefined, passkey ? { passkey: true } : undefined));
       }),
     cancel: () =>
       run(async () => {

@@ -74,7 +74,7 @@ matching doc below. When a feature lands, add or update its entry here and in it
 - `faq-site.md` — `docs/FAQ.md` as the weft.zip FAQ: the home page's six questions, `/faq` rendering the whole file, how GitHub-shaped paths, image rows and heading ids map onto the site.
 - `marketing-site.md` — the weft.zip home page's own sections: the content split across `lib/home.ts` / `lib/home-release.ts` / `components/home/*`, the pricing section reading its prices off the billing catalog, the Weft Cloud Workers request card under it (`components/home/CloudWorkers.tsx`, `lib/cloud-worker-request.ts`, `app/api/cloud-workers/request`), `loadHome()`'s parse-error fallback, and `data-track`.
 - `cloud-sync.md` — server-side cards: the outbox, the content-addressed blob store, thread paging, the `cloud_*` tables and their policies.
-- `mobile-security.md` — pairing a phone or browser (QR, pinned by the Mac, Touch ID), the workspace sync key, sealed rows, signed approvals.
+- `mobile-security.md` — pairing a phone or browser (QR, pinned by the Mac, Touch ID), the workspace sync key, sealed rows, signed approvals, passkey approvals from weft.zip (H7).
 - `mobile.md` — the phone app's server side: `push_devices`, the `cloud_cards` push trigger, the `push-card` Edge Function and its Expo payload, Settings → Sync → Phones.
 - `profiles.md` — public profiles at `weft.zip/@username`: `profiles.username`, the `/@` → `/u/[username]` rewrite, what the page shows and never shows.
 - `sharing.md` — a card's share link on weft.zip: thread + pane, live; the `@aimhuge/share` modes and gate, `cloud_shares`, the sandboxed pane, redaction.
@@ -489,6 +489,15 @@ When a new doc lands in this folder, add it here on the same change.
   seals rows in `lib/cloud-sync-upload.ts` when the switch is on; `lib/approval-check.ts` is `lib/cloud-inbox.ts`'s rule for answers;
   `lib/web-sync-key.ts` opens rows on the web board (`components/web-board/useWebBoard.ts`, `lib/cloud-thread-page.ts`) and pairs a
   browser (`app/pair`, `components/web-board/PairBrowser.tsx`). Settings card: `components/PairDevices.tsx` (`lib/use-pairing.ts`).
+- `lib/passkey-verify.ts` (+ main's copy `electron/passkey-verify.cjs`) + `lib/approval-passkey.ts` + `lib/passkey-phone-only.ts` +
+  `lib/approval-passkey-check.ts` + `lib/web-passkey.ts` + `lib/web-passkey-approval.ts` + `lib/sign-origin.ts` + `lib/sign-approve.ts` +
+  `lib/sign-sheet.ts` + `lib/passkey-display.ts`: passkey approvals (H7, docs/architecture/mobile-security.md#4-passkey-approvals-h7), on
+  their own origin, sign.weft.zip: `proxy.ts` serves it only `public/sign/` (two static pages and `sign/main.ts`'s bundle, built by
+  `scripts/build-sign.mjs` in `pnpm build`) under a strict CSP. A passkey pairs there through its own pairing session (main pins it);
+  the weft.zip board opens `sign.weft.zip/approve` in a new tab (`components/web-board/useSignWindow.ts`), which reads the ask itself,
+  shows all of it, signs a canonical JSON message and inserts the answer. `approvalProblem` rebuilds the message from this Mac's own
+  names and has main check it (`POST /pairing/passkey-verify`: origin and rp id sign.weft.zip, challenge, UP/UV, counter, ES256).
+  Grants, vault, skip-permission and agent-config asks, bidi text and redacted inputs stay phone- or Mac-only.
 - `electron/vault-grant.cjs` + `electron/vault-share.cjs` + `electron/vault-shared-api.cjs` + `electron/vault-local.cjs`:
   granting a device and sharing a vault for the first time (docs/architecture/teams-vault.md#granting-a-teammates-devices).
   The granter's main is the only place the vault key and the new device's public key meet: the key is sealed with

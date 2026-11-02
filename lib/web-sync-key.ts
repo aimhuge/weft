@@ -6,6 +6,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { CloudCardRow, CloudThreadItemRow, CloudToolOutputRow } from "./cloud-sync-types";
 import { makeClaim, parsePairingLink } from "./pairing-link";
 import { b64, sodium, unb64, type Sodium } from "./sodium";
+import type { BrowserPasskey } from "./web-passkey";
 import { isSealed, openCard, openItem, openToolResult, SEALED_TEXT, type SyncKeyring } from "./sync-seal";
 import type { ThreadItem } from "./types";
 
@@ -18,6 +19,8 @@ interface BrowserDevice {
   boxPriv: string;
   signPub: string;
   signPriv: string;
+  // The passkey this browser paired with (lib/web-passkey.ts): it signs Allows, so the browser may approve.
+  passkeyId?: string;
 }
 
 const state = { s: null as Sodium | null, ring: new Map<number, string>(), orgId: "" };
@@ -53,6 +56,12 @@ export async function loadWebKeyring(client: SupabaseClient, orgId: string, user
 
 export const webKeyring = (): SyncKeyring => state.ring;
 
+// This browser's paired device and passkey, when it paired with one: what signs an Allow on weft.zip.
+export function browserPasskey(userId: string): { device: string; credId: string } | null {
+  const device = readDevice(userId);
+  return device?.deviceId && device.passkeyId ? { device: device.deviceId, credId: device.passkeyId } : null;
+}
+
 // The item a row holds, opened when sealed: a stand-in until this browser has the key.
 export function openSyncedItem(row: Pick<CloudThreadItemRow, "card_id" | "seq" | "item"> & Partial<Pick<CloudThreadItemRow, "org_id" | "at">>): ThreadItem {
   if (!isSealed(row.item)) return row.item;
@@ -70,21 +79,30 @@ export function openSyncedCard<R extends Pick<CloudCardRow, "org_id" | "card_id"
 export const openSyncedTool = (row: Pick<CloudToolOutputRow, "org_id" | "card_id" | "tool_id" | "result">) =>
   state.s ? openToolResult(state.s, row, state.ring) : row.result;
 
+// This browser's new keypairs, and its passkey's id when it made one.
+function newDevice(s: Sodium, user: { id: string; passkey?: BrowserPasskey | null }): BrowserDevice {
+  const box = s.crypto_box_keypair();
+  const sign = s.crypto_sign_keypair();
+  const keys = { boxPub: b64(s, box.publicKey), boxPriv: b64(s, box.privateKey), signPub: b64(s, sign.publicKey), signPriv: b64(s, sign.privateKey) };
+  return { userId: user.id, ...keys, ...(user.passkey ? { passkeyId: user.passkey.credId } : {}) };
+}
+
 // Pairs this browser with the Mac whose link it was given: makes its keys, writes the claim and waits for the Mac to
-// confirm (Touch ID there), then keeps the device id. A browser reads sealed threads but never approves.
+// confirm (Touch ID there), then keeps the device id. A browser reads sealed threads; one that pairs with a passkey
+// (made by the page first, lib/web-passkey.ts) can also sign Allows with it, once the Mac has pinned it.
 export async function pairThisBrowser(
   client: SupabaseClient,
   link: string,
-  user: { id: string; name: string },
+  user: { id: string; name: string; passkey?: BrowserPasskey | null },
   wait: { tries?: number; everyMs?: number; sleep?: (ms: number) => Promise<void> } = {},
 ): Promise<"paired" | "refused" | "expired"> {
   const parsed = parsePairingLink(link);
   if (!parsed) throw new Error("That pairing link isn't complete. Copy it again from Settings → Sync on your Mac.");
   const s = (state.s ??= await sodium());
-  const box = s.crypto_box_keypair();
-  const sign = s.crypto_sign_keypair();
-  const device: BrowserDevice = { userId: user.id, boxPub: b64(s, box.publicKey), boxPriv: b64(s, box.privateKey), signPub: b64(s, sign.publicKey), signPriv: b64(s, sign.privateKey) };
-  const claim = makeClaim(s, parsed, { name: user.name.slice(0, 80), platform: "web", kind: "browser", box_key: device.boxPub, sign_key: device.signPub }, device.signPriv);
+  const device = newDevice(s, user);
+  const { passkey } = user;
+  const body = { name: user.name.slice(0, 80), platform: "web" as const, kind: "browser" as const, box_key: device.boxPub, sign_key: device.signPub, ...(passkey ? { passkey_id: passkey.credId, passkey_key: passkey.publicKey } : {}) };
+  const claim = makeClaim(s, parsed, body, device.signPriv);
   const { error } = await client.from("phone_pairings").update({ ...claim, status: "claimed" }).eq("id", parsed.id).eq("status", "open");
   if (error) throw new Error(`The claim couldn't be sent: ${error.message}`);
   const { tries = 120, everyMs = 1000, sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms)) } = wait;

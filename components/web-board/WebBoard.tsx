@@ -37,6 +37,7 @@ import { WebRail } from "./WebRail";
 import { WebReplyStatus } from "./WebReplyStatus";
 import { CloudBlobContext } from "./useCloudTransport";
 import { WebThreadPanel } from "./WebThreadPanel";
+import { useSignWindow } from "./useSignWindow";
 
 export interface WebBoardProps {
   orgId: string;
@@ -57,6 +58,7 @@ const identity = (cwd: string) => cwd;
 
 export function WebBoard({ orgId, orgSlug, userId, user, orgs, initialCommands, initialCards, openCardId, initialThread, initialBlobUrls }: WebBoardProps) {
   const board = useWebBoard({ orgId, userId, initialCommands, initialCards, openCardId, initialBlobUrls });
+  const signer = useSignWindow(board.client);
   // What the open thread draws, for its pane; the ?card= card starts from the thread the server read.
   const [seed] = useState(() => (openCardId ? pageFromRows(openCardId, initialThread).items : []));
   const [shown, setShown] = useState<ThreadItem[]>(seed);
@@ -210,6 +212,12 @@ export function WebBoard({ orgId, orgSlug, userId, user, orgs, initialCommands, 
               if (failed) throw new Error(failed);
             }}
             onAnswer={async (allow, answers, reply, grant) => {
+              // With a passkey paired, an Allow is signed on sign.weft.zip, in its own tab: it reads the ask, shows it,
+              // signs and sends the answer itself; this board sees the card move on when the Mac has run it.
+              if (signer.needs(active, allow, grant)) {
+                signer.open(active);
+                return;
+              }
               const failed = await board.answer(active, allow, answers, reply, grant);
               if (failed) throw new Error(failed);
             }}

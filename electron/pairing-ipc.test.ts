@@ -45,6 +45,7 @@ describe("pairing IPC", () => {
     const { wired } = setup();
     expect(wired.routes["POST /pairing/status"]()).toEqual({ approvers: 0, devices: 0, seal: false, webApprovals: false });
     expect(await wired.routes["POST /pairing/verify"]({ device: "d", message: "m", sig: "s" })).toMatchObject({ ok: false });
+    expect(wired.routes["POST /pairing/passkey-verify"]({ device: "d", credId: "c", message: "m" })).toEqual({ ok: false, reason: "That device isn't paired with this Mac." });
   });
 
   it("registers this Mac before making a key, and says so when it can't", async () => {

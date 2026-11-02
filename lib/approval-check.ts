@@ -1,7 +1,10 @@
 // The Mac's rule for an answer that came from the web or a phone (docs/architecture/mobile-security.md, "Signed
 // approvals"), run by lib/cloud-inbox.ts before answerPermission. A signed answer must be a paired phone's, fresh, and
 // over exactly this request; an unsigned Allow on a permission request goes through only while no phone is paired or
-// Settings → Sync lets the web approve. A Deny, or a question's answers, never needs a signature.
+// Settings → Sync lets the web approve. A Deny, or a question's answers, never needs a signature. A browser's passkey
+// signature (auth.kind "webauthn") takes lib/approval-passkey-check.ts instead, under the same rules.
+import { readPasskeyAuth } from "./approval-passkey";
+import { passkeyProblem, type PasskeyDeps } from "./approval-passkey-check";
 import { approvalMessage, freshEnough, readApprovalAuth } from "./approval-sig";
 import type { AnswerPayload, CloudCommandRow } from "./cloud-commands";
 import { sodium } from "./sodium";
@@ -14,9 +17,13 @@ export interface ApprovalDeps {
   approvers: () => Promise<number>;
   webApprovals: boolean;
   now: number;
+  // The passkey half: this Mac's own names and main's check. Absent, a passkey answer is refused.
+  passkey?: PasskeyDeps;
 }
 
 export const UNSIGNED_REFUSED = "Approve this on your paired phone: an Allow from the web needs Face ID there. (Settings → Sync can let the web approve.)";
+
+const authOf = (payload: unknown): unknown => (payload && typeof payload === "object" ? (payload as Record<string, unknown>).auth : undefined);
 
 // Why this answer can't run, or null when it can.
 export async function approvalProblem(
@@ -25,8 +32,10 @@ export async function approvalProblem(
   pending: PendingPermission | null | undefined,
   deps: ApprovalDeps,
 ): Promise<string | null> {
-  const raw: unknown = command.payload;
-  const auth = readApprovalAuth(raw && typeof raw === "object" ? (raw as Record<string, unknown>).auth : undefined);
+  const given = authOf(command.payload);
+  const passkey = readPasskeyAuth(given);
+  if (passkey) return passkeyProblem(answer, pending, passkey, deps.now, deps.passkey);
+  const auth = readApprovalAuth(given);
   if (auth) {
     if (!freshEnough(auth.issuedAt, deps.now)) return "That approval is too old, or the phone's clock is off. Try again from the phone.";
     const s = await sodium();

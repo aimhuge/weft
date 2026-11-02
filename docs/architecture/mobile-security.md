@@ -13,7 +13,8 @@ JSON for the database, Weft's operators and every backup to read. Three pieces c
 2. **Sealing**: item bodies, the readable parts of a card, and long tool outputs go up encrypted with a workspace
    key; only paired devices hold it. Ids, columns, kinds and timestamps stay plain, so feeds, Realtime and push work.
 3. **Signed approvals**: an Allow from a phone carries an Ed25519 signature the phone only makes after Face ID; the
-   Mac checks it against the key it pinned at pairing.
+   Mac checks it against the key it pinned at pairing. A browser that paired a **passkey** on sign.weft.zip signs an
+   Allow there after Touch ID (WebAuthn, ES256), checked the same way (section 4).
 
 The threat model in one line: **the server and the session are not trusted; the Mac and the paired device are.**
 A compromised Supabase project, or someone with the account's session, can read ciphertext, delete rows and refuse
@@ -70,8 +71,9 @@ vault's (`workspace_keys`, `workspace_key_grants`) so the 🔐 drawer and the De
   over the control server: a thread can call control routes, and a thread that could pair would approve itself.
   Confirming also takes Touch ID, so a board-side script can't pair silently either.
 - **Pair a browser** is the same flow with the link opened on the computer instead of scanned (Copy link): the
-  web's `/pair` page claims with a key it keeps in IndexedDB. A browser key is weaker than a phone's (any script on
-  weft.zip can use it), so a browser can read sealed threads but **can't sign approvals** (`kind = 'browser'`).
+  web's `/pair` page claims with keys it keeps in localStorage. Those keys are weaker than a phone's (any script on
+  weft.zip can use them), so they read sealed threads but sign nothing (`kind = 'browser'`). Approving takes a
+  **passkey**, paired separately on sign.weft.zip (section 4).
 - **Revoke** (Settings → Sync → the device's Revoke): unpin first (that alone stops its approvals), delete its
   `workspace_key_grants`, set `devices.revoked_at`, then **rotate** the workspace key: a new version, wrapped to the
   Mac and every device still pinned. Rows already sealed stay under the old version (the revoked device may have read
@@ -157,7 +159,146 @@ The Mac (`lib/cloud-inbox.ts` → `lib/approval-check.ts`) decides before `answe
   through only while no phone is paired, or when **Approve from the web without a phone** is on in Settings → Sync.
   Once a phone is paired, an unsigned Allow fails with "Approve this on your paired phone".
 
-## Tables (`supabase/migrations/*_mobile_security.sql`)
+## 4. Passkey approvals (H7)
+
+Status: **built on the Weft side, not live** (2026-11-02). It ships once sign.weft.zip is set up (a Vercel domain, a
+DNS record, a Supabase redirect URL) and migration `supabase/migrations/20261102130000_passkey_approvals.sql` is
+applied. Until then nothing on weft.zip offers it.
+
+A browser's localStorage key can't approve because any script on weft.zip could use it. A **passkey** can: WebAuthn
+keeps the private key in the Secure Enclave (or the OS's passkey store), the page only gets a signature after Touch ID,
+and the OS binds it to one site. That site is **not weft.zip**: an XSS anywhere on weft.zip could call
+`navigator.credentials.get` itself, or show one thing and sign another. So passkeys live on their own origin.
+
+### sign.weft.zip
+
+`https://sign.weft.zip` is the same Next app, picked by host in `proxy.ts` (`lib/sign-origin.ts` `signRoute`): it serves
+`/pair`, `/approve` and their two files (`/app.js`, `/app.css`), from `public/sign/`, and a 404 for every other path,
+Next's own `/_next` files included. On every other host, weft.zip included, `/sign/*` is a 404. The pages are static
+HTML with no inline script or style; `app.js` is `sign/main.ts` bundled by `scripts/build-sign.mjs` (run by
+`pnpm build`; gitignored). Why not Next pages: `cacheComponents` (PPR) prerenders a shell whose inline scripts carry no
+nonce, and Next's CSP guide (`node_modules/next/dist/docs/01-app/02-guides/content-security-policy.md`) says nonces and
+PPR don't mix and there's no per-route opt-out. Every response on the host carries (`signCsp`):
+
+```
+default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data:;
+connect-src https://<project>.supabase.co wss://<project>.supabase.co; object-src 'none'; base-uri 'none';
+frame-ancestors 'none'; form-action 'none'
+```
+
+plus `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy: no-referrer` and `Cross-Origin-Opener-Policy: same-origin`.
+`'self'` is only these files, since the host serves nothing else; `'wasm-unsafe-eval'` is libsodium's WebAssembly (the
+pairing claim). The pages sign in on their own origin (Supabase PKCE, GitHub); no token comes from weft.zip by URL or
+`postMessage`.
+
+### Pairing a passkey
+
+Settings → Sync → **Pair a passkey** starts its own pairing session (`pairing.start(org, { passkey: true })`, its own
+secret S) whose link is `https://sign.weft.zip/pair#…`, opened with **Open in browser** (no clipboard), or Copy link,
+which clears the clipboard after a minute (`lib/clipboard-briefly.ts`). So S never reaches a weft.zip page. That page takes the link off the address bar, signs in, runs `navigator.credentials.create` (`lib/web-passkey.ts`:
+rp id `sign.weft.zip`, ES256 only, `userVerification: "required"`, `residentKey: "preferred"`, attestation none), and
+claims with `lib/web-sync-key.ts` `pairThisBrowser`. While it waits it shows a **code**, the first 4 bytes of
+SHA-256 of the passkey's public key as `XXXX-XXXX` (`lib/passkey-code.ts`; main's copy in `electron/pairing-crypto.cjs`),
+and the Mac's Touch ID prompt names the same code ("…only if sign.weft.zip shows the code XXXX-XXXX"). Anyone who got
+the link first (a thread running `pbpaste`, a script reading the clipboard) and claimed with their own key makes the
+Mac show a code the page doesn't. The claim gains `passkey_id` and `passkey_key` (SPKI, base64url)
+as two more lines of the claim message, so the HMAC proof with S covers them. The Mac (`electron/pairing.cjs`) takes a
+passkey **only** in a passkey session, and a passkey session only with one (`sessionProblem`): a phone or read-only
+code, whose link opens on weft.zip, can't pin a passkey. Then Touch ID on the Mac ("pair the browser … with a passkey"),
+and main pins `{ credId, publicKey, counter: 0 }` with the device in the sealed `paired-devices.json`. Main's `pin()`
+refuses a device id already pinned with a different box key (the id comes from the server).
+
+**Infrastructure rule.** sign.weft.zip is a domain on the weft.zip Vercel project's **Production** deployment only, never
+a preview or branch alias, and Supabase's redirect URLs list exactly `https://sign.weft.zip/pair` and
+`https://sign.weft.zip/approve`. `scripts/check-sign-host.mjs` checks the live host after a deploy.
+
+**The trust shift.** The pages' code now decides what the user sees before Touch ID, so the weft.zip Vercel project and
+its deploy pipeline (the repo, its CI, whoever can deploy) are trusted: a tampered `app.js` could show one real pending
+request and have the passkey sign another real one for the same account. The Mac still refuses anything outside its own
+rules (phone-only asks, grants, the origin, a stale or replayed answer), and still checks the signed request is the one
+waiting.
+
+**The pairing-time risk, plainly.** There's no attestation: the Mac can't tell a Secure Enclave key from a software
+key a script made. A script running on sign.weft.zip/pair while the link is open could swap in its own key, and the Mac
+would pin a key with no Touch ID behind it. That needs an XSS on sign.weft.zip itself, whose only code is these two
+pages and their bundle, with no third-party script, no inline script and no other path; a weft.zip XSS never sees S.
+The Mac's Touch ID still has to be given for the pairing.
+
+### Approving
+
+On the weft.zip board, an Allow on a permission request, when the account has a paired browser with a passkey
+(`components/web-board/useSignWindow.ts`, from `public.devices`), opens `https://sign.weft.zip/approve?card=…&pending=…`
+in a new top-level tab (`noopener,noreferrer`; never a frame) instead of sending. The board sends nothing; it sees the
+card move on once the Mac has run the answer. That page (`lib/sign-approve.ts`) reads the card row itself, with its
+own session, finds the waiting ask, builds the message, and draws the sheet (`lib/sign-sheet.ts`): the decision, the
+tool, the folder (from the Mac's card), the card id, the input's size and line count, and the **whole input**, every
+key, scrollable. Format characters (`\p{Cf}`: bidi overrides, zero-width, BOM) show as a visible ⟦U+XXXX⟧ mark and a
+run of 8 or more spaces or tabs as ⟦N spaces⟧ (`lib/passkey-display.ts`). Allow stays off until a long input has been
+scrolled to its end. Allow runs `navigator.credentials.get` with `challenge = SHA-256(message)`, `allowCredentials` =
+this browser's credential and `userVerification: "required"`, and the page inserts the `answer` command with
+
+```ts
+auth: { kind: "webauthn", device, credId, issuedAt, authenticatorData, clientDataJSON, signature }  // base64url
+```
+
+**The message** (`lib/approval-passkey.ts` `passkeyMessage`) is its own encoding, separate from the phone's
+newline-joined Ed25519 message (unchanged byte for byte): canonical JSON, keys sorted at every depth, of a fixed set of
+keys, always all present: `v` (`weft-passkey-approval-v1`), `org`, `mac`, `card`, `pending`, `decision`, `issuedAt`,
+`answers`, `folder`, `grant` (always null from a passkey, see below), `tool` and `input` (the whole tool input). No
+value can forge another field, and the id fields refuse control characters, U+2028/9 and anything over 200
+characters; the folder refuses control and bidi characters. Both refuse invisible and blank-looking characters (`\p{Cf}`,
+line and paragraph separators, U+115F, U+1160, U+2800, U+3164, U+FFA0), and the sheet marks the same set in the input. `readPasskeyMessage` takes back only that shape, re-encoded
+byte for byte; the sheet draws from it.
+
+**The host's check** (`lib/approval-passkey-check.ts`, from `approvalProblem` when `auth.kind === "webauthn"`):
+
+1. `issuedAt` within 5 minutes of the Mac's clock, and the pending request still waiting with that id.
+2. **No folder grant**: a grant through a passkey (This card or Always on an outside-folder prompt) is refused. An
+   Always would become a permanent read grant on a folder the sheet would have to explain well; grants stay on the
+   phone or the Mac. Allow once still works.
+3. Not a phone-only ask (`lib/passkey-phone-only.ts`): any `mcp__secrets__*` tool; turning permissions, approvals or the
+   sandbox off (`bypassPermissions`, `--dangerously-skip-permissions`, `--allow-dangerously-skip-permissions`, Codex's
+   `--yolo`, `--dangerously-bypass-approvals-and-sandbox`, `danger-full-access`, `-a`/`--ask-for-approval never`,
+   `approval_policy=never`, `--full-auto`, Claude's `--allowedTools` with a wildcard, `GOOSE_MODE=auto`); writing an
+   agent's config (`.claude`, `.codex` or `.goose` as a path segment or cd target, with or without a slash,
+   `.claude.json`, `settings.local.json`, `.mcp.json`, git hooks, `hooksPath` anywhere, a `settings*.json` with
+   `permissions` or `defaultMode`); or a path built from a variable or command (`$X`, `${X}`, `$(…)`) within 40
+   characters of `claude`, `codex` or `goose`. The input is normalized first: escaped `\n` `\t` `\r` read as spaces,
+   shell quotes, backslashes and `$'` stripped, whitespace collapsed, lowercased. **This rule is best-effort**: a shell
+   can spell anything many ways (`${D}aude`, base64, a script it writes first). The main defence is the sheet showing
+   the whole input the passkey signs.
+4. No bidi override or isolate (U+202A–202E, U+2066–2069) anywhere in the input.
+5. The input is exactly what the web showed: if the sync's redaction would change it (it looks like it holds a
+   secret) or its canonical JSON is over 64 KB, the passkey is refused.
+6. The message is rebuilt from **this Mac's own names**: its `lib/device-id.ts` id, the workspace the inbox has already
+   checked the command against, the card's folder on this Mac, and its own pending request.
+7. Main checks the assertion and keeps the counter in the same step (`POST /pairing/passkey-verify`,
+   `electron/paired-devices.cjs` `verifyPasskey`, `electron/passkey-verify.cjs`, main's copy of `lib/passkey-verify.ts`;
+   `electron/passkey-verify.test.ts` runs both over the same vectors): the device and credential pinned,
+   `clientData.type === "webauthn.get"`, the origin exactly **`https://sign.weft.zip`** and not cross-origin,
+   `rpIdHash === SHA-256("sign.weft.zip")` (no weft.zip fallback; a dev origin only as in Limits below), `challenge === base64url(SHA-256(message))`, the UP and UV flags, a sign counter that moves
+   on (strictly greater than the pinned one whenever either is non-zero), and the ES256 signature (DER converted to raw
+   r‖s) over `authenticatorData ‖ SHA-256(clientDataJSON)`. Both decoders take only canonical base64url.
+
+**A behaviour change.** A paired browser with a passkey counts as an approver (`approvers()`), like a phone: once one
+is paired, an unsigned Allow from the web is refused, and the host verbs that grant power are blocked from the web
+(`ELEVATED_REFUSED`), unless **Approve from the web without a phone** is on.
+
+**Limits.**
+- **Synced passkeys.** iCloud Keychain, Google Password Manager and 1Password sync a passkey to every device in the
+  account; each of them can then approve, and such passkeys report a sign counter of 0, so clone detection is off for
+  them. The pin can't tell a synced passkey from a device-bound one (no attestation).
+- **Labels.** The sheet shows ids, the tool, the input and the card's folder, all signed. A card's title and the
+  synced card's other text aren't signed, and the server could relabel a card in the board's list; what the passkey
+  signs is still exactly the request on the Mac.
+- **Follow-up:** the thread guards (`lib/guards`) don't yet refuse `pbpaste` while a passkey code is open; the code
+  match on the page and in Touch ID is the defence meanwhile.
+- **Dev origin.** Main takes one more origin only when Weft isn't packaged and both `WEFT_PASSKEY_DEV=1` and
+  `WEFT_PASSKEY_DEV_ORIGIN` are set, and logs a warning at startup when it does (`passkeyDevOrigin`).
+- **The weft.zip board** can be made to open the sign page for any card; the sheet still shows what that card's
+  request is, and the user decides there.
+
+## Tables (`supabase/migrations/*_mobile_security.sql`)## Tables (`supabase/migrations/*_mobile_security.sql`)
 
 - `devices`: `kind text` (`desktop` default, `phone`, `browser`), `sign_key text` (Ed25519 public, phones only),
   platform also `ios`, `android`, `web`; a trigger refuses clearing `revoked_at`; `update (revoked_at)` granted on own rows.
@@ -168,6 +309,9 @@ The Mac (`lib/cloud-inbox.ts` → `lib/approval-check.ts`) decides before `answe
 - `workspace_key_grants` (`org_id`, `version`, `device_id`, `wrapped_key`, `granted_by`): a device's owner reads its
   own; a member inserts for the org; the granter or owner deletes.
 - `cloud_commands` gains nothing: `auth` rides in `payload`.
+- `*_passkey_approvals.sql`: `phone_pairings.passkey_id` / `passkey_key` (claimable, a check that both or neither are
+  set and only by a browser) and the same two on `devices` (insert and select granted). They carry and record the
+  passkey; the Mac's pin decides.
 
 ## Where it lives
 
@@ -175,6 +319,15 @@ The Mac (`lib/cloud-inbox.ts` → `lib/approval-check.ts`) decides before `answe
 - `lib/approval-sig.ts` — the signed message, sign (for tests and the phone's copy) and verify.
 - `lib/pairing-link.ts` — the QR link, its parsing, the claim string and its proof.
 - `lib/approval-check.ts` — the inbox's rule above.
+- `lib/passkey-verify.ts` — the WebAuthn assertion check (isomorphic Web Crypto); `lib/passkey.harness.ts` builds real
+  test vectors.
+- `lib/approval-passkey.ts` — the passkey message, its strict reader, `readPasskeyAuth`; `lib/passkey-phone-only.ts` —
+  the phone-only rule; `lib/approval-passkey-check.ts` — the host's check; `electron/passkey-verify.cjs` — main's verifier.
+- `lib/web-passkey.ts` — `createPasskey` / `signWithPasskey` in the browser; `lib/web-passkey-approval.ts` — what an
+  Allow signs.
+- `lib/sign-origin.ts` — sign.weft.zip's routes, CSP and approve link; `proxy.ts` applies them; `public/sign/` the pages,
+  `sign/main.ts` their script (`scripts/build-sign.mjs`); `lib/sign-approve.ts` + `lib/sign-sheet.ts` +
+  `lib/passkey-display.ts` the approve page; `components/web-board/useSignWindow.ts` the board's side.
 - `lib/sync-seal-upload.ts` — the uploader's hook: seals rows when the switch is on and main hands over the key.
 - `lib/sync-security.ts` — reads main's `POST /pairing/status` (approvers and the two switches); unreachable reads as "paired".
 - `lib/web-sync-key.ts` — the browser's keys (localStorage), its keyring, opening rows, and pairing a browser.
@@ -215,7 +368,13 @@ The Mac (`lib/cloud-inbox.ts` → `lib/approval-check.ts`) decides before `answe
   ([Pages from a worker](weft-worker.md#pages-from-a-worker)).
 - Each Mac pins its own phones; a second Mac needs its own pairing, and has no way yet to get the workspace key (it
   uploads plain rows meanwhile).
-- A browser key sits in IndexedDB, readable by any script on weft.zip; that's why browsers read but never approve.
+- A browser's box and signing keys sit in localStorage, readable by any script on weft.zip; that's why only a passkey
+  on sign.weft.zip approves. weft.zip itself still runs inline script (a nonce CSP isn't possible with PPR).
+- The desktop board still approves with `promptTouchID` in Electron main, which signs nothing; signing there with a
+  passkey (or a Secure Enclave key) would give the host one verify path for every view.
+- A passkey can't sign a host verb that grants power (`ELEVATED_REFUSED`), and a browser paired before H7 has no
+  passkey: it re-pairs to get one. The pairing doesn't check an attestation, so the Mac trusts that the key came from an
+  authenticator on the strength of the QR secret and its own Touch ID.
 - Old rows stay plain until their card changes; there's no backfill that reseals a workspace.
 - The workspace key isn't in the shared vault's recovery words: lose every paired device and the Mac, and sealed
   history is gone (new rows still sync under a fresh key).

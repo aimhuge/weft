@@ -7,7 +7,15 @@ const URLSAFE_NO_PADDING = 7; // sodium.base64_variants.URLSAFE_NO_PADDING
 const KINDS = ["phone", "browser"];
 const PLATFORMS = ["ios", "android", "web", "darwin"];
 
-const claimMessage = (pairingId, orgId, c) => ["weft-pair-v1", pairingId, orgId, c.box_key, c.sign_key, c.name, c.platform, c.kind].join("\n");
+// A browser's passkey adds two lines (its credential id and SPKI public key); a claim without one reads as before.
+const claimMessage = (pairingId, orgId, c) =>
+  ["weft-pair-v1", pairingId, orgId, c.box_key, c.sign_key, c.name, c.platform, c.kind, ...(c.passkey_id ? [`passkey:${c.passkey_id}`, c.passkey_key] : [])].join("\n");
+
+// The claim's passkey lines: both halves or neither, and only a browser's. A string says why not.
+function claimPasskey({ kind, passkey_id, passkey_key }) {
+  if (!passkey_id !== !passkey_key || (passkey_id && kind !== "browser")) return "The claim's passkey is incomplete.";
+  return passkey_id ? { passkey_id, passkey_key } : {};
+}
 
 /**
  * Why the claim in a pairing row can't be trusted, or null when it can.
@@ -19,7 +27,9 @@ function checkClaim(sodium, link, claim) {
   const { name, platform, kind, box_key, sign_key, proof, sig } = claim;
   if (!name || !platform || !kind || !box_key || !sign_key || !proof || !sig) return "The claim is missing a field.";
   if (!KINDS.includes(String(kind)) || !PLATFORMS.includes(String(platform))) return "The claim names an unknown kind of device.";
-  const message = sodium.from_string(claimMessage(link.id, link.orgId, { name, platform, kind, box_key, sign_key }));
+  const passkey = claimPasskey(claim);
+  if (typeof passkey === "string") return passkey;
+  const message = sodium.from_string(claimMessage(link.id, link.orgId, { name, platform, kind, box_key, sign_key, ...passkey }));
   try {
     if (!sodium.crypto_auth_verify(sodium.from_base64(String(proof), ORIGINAL), message, sodium.from_base64(link.secret, URLSAFE_NO_PADDING)))
       return "The claim wasn't made with this code.";
@@ -43,8 +53,16 @@ function verifySignature(sodium, message, sig, signKey) {
 const newSecret = (sodium) => sodium.to_base64(sodium.randombytes_buf(32), URLSAFE_NO_PADDING);
 
 const PAIR_URL = "https://weft.zip/pair";
-function pairingLink({ id, secret, orgId, mac }) {
-  return `${PAIR_URL}#${new URLSearchParams({ v: "1", p: id, s: secret, o: orgId, m: mac }).toString()}`;
+// A passkey pairing opens on sign.weft.zip (lib/sign-origin.ts), so its secret never reaches a weft.zip page.
+const SIGN_PAIR_URL = "https://sign.weft.zip/pair";
+function pairingLink({ id, secret, orgId, mac }, base = PAIR_URL) {
+  return `${base}#${new URLSearchParams({ v: "1", p: id, s: secret, o: orgId, m: mac }).toString()}`;
 }
 
-module.exports = { checkClaim, verifySignature, newSecret, pairingLink, claimMessage };
+// The code the sign.weft.zip page shows for a passkey (lib/passkey-code.ts): SHA-256 of its SPKI key, 4 bytes, XXXX-XXXX.
+function passkeyCode(publicKey) {
+  const hex = require("node:crypto").createHash("sha256").update(Buffer.from(String(publicKey), "base64url")).digest("hex").slice(0, 8).toUpperCase();
+  return `${hex.slice(0, 4)}-${hex.slice(4)}`;
+}
+
+module.exports = { checkClaim, verifySignature, newSecret, pairingLink, claimMessage, passkeyCode, SIGN_PAIR_URL };

@@ -3,7 +3,7 @@
 // adds its public.devices row and seals the workspace key to it. Revoking unpins first (that alone stops its
 // approvals), then drops its grants, marks it revoked and rotates the key. Started over IPC from the board only
 // (electron/pairing-ipc.cjs): a thread that could pair would approve itself.
-const { checkClaim, newSecret, pairingLink } = require("./pairing-crypto.cjs");
+const { checkClaim, newSecret, pairingLink, passkeyCode, SIGN_PAIR_URL } = require("./pairing-crypto.cjs");
 const { fingerprint } = require("./device-fingerprint.cjs");
 
 const TTL_MS = 5 * 60_000;
@@ -28,15 +28,25 @@ function createPairing({ db, userId = () => "", sodium, macDevice, myDevice, pai
     return fail(r, "Your workspace couldn't be read")?.org_id ?? "";
   }
 
-  async function start(given) {
+  // A passkey code is its own session, with its own secret, and its link opens on sign.weft.zip: only a claim made
+  // there may carry a passkey, so a script on a weft.zip page that saw a phone or read-only code can't pin one.
+  async function start(given, { passkey = false } = {}) {
     const orgId = given || (await workspace());
     if (!orgId) throw new Error("Open the web board once to make your workspace, then pair a phone.");
     const me = await myDevice();
     const row = fail(await db().from("phone_pairings").insert({ org_id: orgId, mac_device: macDevice(), mac_key: me.publicKey }).select("id").single(), "The pairing code couldn't be made");
     const secret = newSecret(sodium());
     const expiresAt = now() + TTL_MS;
-    open.set(row.id, { secret, orgId, expiresAt });
-    return { id: row.id, link: pairingLink({ id: row.id, secret, orgId, mac: fingerprint(me.publicKey) }), expiresAt };
+    open.set(row.id, { secret, orgId, expiresAt, passkey });
+    const link = pairingLink({ id: row.id, secret, orgId, mac: fingerprint(me.publicKey) }, passkey ? SIGN_PAIR_URL : undefined);
+    return { id: row.id, link, expiresAt, ...(passkey ? { passkey: true } : {}) };
+  }
+
+  // A passkey session takes only a browser's claim with a passkey; any other session takes none.
+  function sessionProblem(code, row) {
+    if (code.passkey && (!row.passkey_id || row.kind !== "browser")) return "A passkey code needs a passkey made on sign.weft.zip.";
+    if (!code.passkey && row.passkey_id) return "This code can't pair a passkey. Use Pair a passkey on your Mac.";
+    return null;
   }
 
   async function setStatus(id, patch) {
@@ -45,6 +55,7 @@ function createPairing({ db, userId = () => "", sodium, macDevice, myDevice, pai
 
   async function addDevice(claim) {
     const row = { name: claim.name, public_key: claim.box_key, fingerprint: fingerprint(claim.box_key), platform: claim.platform, kind: claim.kind, sign_key: claim.sign_key };
+    if (claim.passkey_id) Object.assign(row, { passkey_id: claim.passkey_id, passkey_key: claim.passkey_key });
     const added = await db().from("devices").insert(row).select("id").single();
     if (!added.error) return added.data.id;
     if (added.error.code !== "23505") fail(added, "The device couldn't be added");
@@ -70,18 +81,23 @@ function createPairing({ db, userId = () => "", sodium, macDevice, myDevice, pai
       return { status: "cancelled" };
     }
     open.delete(id);
-    const why = checkClaim(sodium(), { id, orgId: code.orgId, secret: code.secret }, row);
+    const why = checkClaim(sodium(), { id, orgId: code.orgId, secret: code.secret }, row) ?? sessionProblem(code, row);
     if (why) {
       await setStatus(id, { status: "cancelled" });
       return { status: "failed", error: why };
     }
-    const label = row.kind === "phone" ? "phone" : "browser";
-    if (!(await confirm(`pair the ${label} "${row.name}" (${fingerprint(row.box_key).slice(0, 8)}) with this Mac`))) {
+    // A passkey's prompt carries the code its page shows: the user confirms only when they match, so a claim raced in
+    // from a link someone else got (the clipboard, a script) shows a different code.
+    const label = row.kind === "phone" ? "phone" : row.passkey_id ? "browser and its passkey" : "browser";
+    const match = row.passkey_id ? `, only if sign.weft.zip shows the code ${passkeyCode(row.passkey_key)}` : "";
+    if (!(await confirm(`pair the ${label} "${row.name}" (${fingerprint(row.box_key).slice(0, 8)}) with this Mac${match}`))) {
       await setStatus(id, { status: "cancelled" });
       return { status: "cancelled" };
     }
     const deviceId = await addDevice(row);
     const device = { id: deviceId, name: row.name, kind: row.kind, platform: row.platform, signKey: row.sign_key, boxKey: row.box_key, fingerprint: fingerprint(row.box_key), orgId: code.orgId, pairedAt: new Date(now()).toISOString() };
+    // A browser's passkey is pinned with it, exactly as a phone's sign_key: after the proof and this Mac's Touch ID.
+    if (row.passkey_id) device.passkey = { credId: row.passkey_id, publicKey: row.passkey_key, counter: 0 };
     paired.pin(device);
     await syncKeys.current(code.orgId, { create: true });
     await syncKeys.grantAll(code.orgId, deviceId, row.box_key);
@@ -104,7 +120,7 @@ function createPairing({ db, userId = () => "", sodium, macDevice, myDevice, pai
     return { ok: true, version };
   }
 
-  const publicView = (d) => ({ id: d.id, name: d.name, kind: d.kind, platform: d.platform, fingerprint: d.fingerprint, pairedAt: d.pairedAt });
+  const publicView = (d) => ({ id: d.id, name: d.name, kind: d.kind, platform: d.platform, fingerprint: d.fingerprint, pairedAt: d.pairedAt, ...(d.passkey ? { passkey: true } : {}) });
   const list = () => paired.list().map(publicView);
 
   return { start, check, cancel, revoke, list };

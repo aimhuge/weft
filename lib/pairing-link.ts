@@ -28,15 +28,21 @@ export interface Claim {
   box_key: string;
   // Ed25519 public key (base64): approvals are signed with it. A browser has one too but can't approve.
   sign_key: string;
+  // A browser's passkey (docs/architecture/mobile-security.md, "Passkey approvals"): its credential id and P-256 public
+  // key as SPKI, both base64url. Inside the claim message, so the HMAC proof covers them; a phone sends neither.
+  passkey_id?: string;
+  passkey_key?: string;
   proof: string;
   sig: string;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export function pairingLink(link: PairingLink): string {
+// A passkey pairing opens on sign.weft.zip (lib/sign-origin.ts SIGN_PAIR_URL) instead, so its secret never reaches a
+// weft.zip page.
+export function pairingLink(link: PairingLink, base = PAIR_URL): string {
   const hash = new URLSearchParams({ v: "1", p: link.id, s: link.secret, o: link.orgId, m: link.mac });
-  return `${PAIR_URL}#${hash.toString()}`;
+  return `${base}#${hash.toString()}`;
 }
 
 export function parsePairingLink(url: string): PairingLink | null {
@@ -54,8 +60,9 @@ export const newPairingSecret = (s: Sodium) => s.to_base64(s.randombytes_buf(32)
 
 type ClaimBody = Omit<Claim, "proof" | "sig">;
 
+// A passkey adds two lines; a claim without one reads exactly as before.
 export const claimMessage = (pairingId: string, orgId: string, c: ClaimBody) =>
-  ["weft-pair-v1", pairingId, orgId, c.box_key, c.sign_key, c.name, c.platform, c.kind].join("\n");
+  ["weft-pair-v1", pairingId, orgId, c.box_key, c.sign_key, c.name, c.platform, c.kind, ...(c.passkey_id ? [`passkey:${c.passkey_id}`, c.passkey_key] : [])].join("\n");
 
 const secretKey = (s: Sodium, secret: string) => s.from_base64(secret, s.base64_variants.URLSAFE_NO_PADDING);
 
@@ -68,12 +75,20 @@ export function makeClaim(s: Sodium, link: PairingLink, body: ClaimBody, signPri
 const KINDS: readonly string[] = ["phone", "browser"];
 const PLATFORMS: readonly string[] = ["ios", "android", "web", "darwin"];
 
+// The claim's passkey lines: both halves or neither, and only a browser's. A string says why not.
+function claimPasskey({ kind, passkey_id, passkey_key }: Partial<Claim>): Pick<Claim, "passkey_id" | "passkey_key"> | string {
+  if (!passkey_id !== !passkey_key || (passkey_id && kind !== "browser")) return "The claim's passkey is incomplete.";
+  return passkey_id ? { passkey_id, passkey_key } : {};
+}
+
 // The Mac's half: why the claim in the row can't be trusted, or null when it can.
 export function checkClaim(s: Sodium, link: Pick<PairingLink, "id" | "orgId" | "secret">, claim: Partial<Claim>): string | null {
   const { name, platform, kind, box_key, sign_key, proof, sig } = claim;
   if (!name || !platform || !kind || !box_key || !sign_key || !proof || !sig) return "The claim is missing a field.";
   if (!KINDS.includes(kind) || !PLATFORMS.includes(platform)) return "The claim names an unknown kind of device.";
-  const message = s.from_string(claimMessage(link.id, link.orgId, { name, platform, kind, box_key, sign_key }));
+  const passkey = claimPasskey(claim);
+  if (typeof passkey === "string") return passkey;
+  const message = s.from_string(claimMessage(link.id, link.orgId, { name, platform, kind, box_key, sign_key, ...passkey }));
   try {
     if (!s.crypto_auth_verify(unb64(s, proof), message, secretKey(s, link.secret))) return "The claim wasn't made with this code.";
     if (!s.crypto_sign_verify_detached(unb64(s, sig), message, unb64(s, sign_key))) return "The claim's signature doesn't match its key.";
