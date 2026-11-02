@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const api = vi.hoisted(() => ({
   stop: vi.fn(),
+  remove: vi.fn(),
   shell: vi.fn(),
   fresh: vi.fn(),
   send: vi.fn(),
@@ -113,6 +114,7 @@ describe("localHost", () => {
 
   it.each([
     ["card.stop", { id: "c1" }, api.stop, ["c1"]],
+    ["card.delete", { id: "c1" }, api.remove, ["c1"]],
     ["card.shell", { id: "c1", command: "ls" }, api.shell, ["c1", "ls"]],
     ["card.shell", { id: "c1" }, api.shell, ["c1", ""]],
     ["card.fresh", { id: "c1", message: "go" }, api.fresh, ["c1", "go"]],
@@ -160,10 +162,10 @@ describe("cloudHost", () => {
     expect(cloudHost.files).toBe("worker files");
   });
 
-  it("has Send later, the files and the header reads (H4), and none of this Mac's other features", () => {
-    for (const feature of ["projectActs", "shots", "pane", "folder", "agent", "shell", "skills", "share", "delete", "login", "vault", "dev"] as const)
+  it("has Send later, the files and the header reads (H4), shares its cloud rows and deletes, and none of this Mac's other features", () => {
+    for (const feature of ["projectActs", "shots", "pane", "folder", "agent", "shell", "skills", "login", "vault", "dev"] as const)
       expect(cloudHost.can(feature)).toBe(false);
-    expect(cloudHost.can("schedule")).toBe(true);
+    for (const feature of ["schedule", "share", "delete"] as const) expect(cloudHost.can(feature)).toBe(true);
     expect(localHost.can("schedule")).toBe(true);
     expect(cloudHost.can("files")).toBe(true);
     expect(cloudHost.can("reads")).toBe(true);
@@ -177,7 +179,10 @@ describe("cloudHost", () => {
   });
 
   it("trims the menu to what a worker backs", () => {
-    expect(cloudHost.menu([{ id: "rename", label: "Rename…" }, { id: "delete", label: "Delete…" }])).toEqual([{ id: "rename", label: "Rename…" }]);
+    expect(cloudHost.menu([{ id: "rename", label: "Rename…" }, { id: "reveal", label: "Reveal" }, { id: "delete", label: "Delete…" }])).toEqual([
+      { id: "rename", label: "Rename…" },
+      { id: "delete", label: "Delete…" },
+    ]);
   });
 });
 

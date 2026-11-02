@@ -63,6 +63,8 @@ describe("remoteRefusal", () => {
     expect(remoteRefusal({ verb: "card.update", args: { id: "c", body: { title: "T", tags: ["a"] } } })).toBeNull();
     expect(remoteRefusal({ verb: "card.update", args: { id: "c" } })).toBeNull();
     expect(remoteRefusal({ verb: "card.stop", args: { id: "c" } })).toBeNull();
+    // Deleting your own card narrows what the network can reach: nothing to refuse.
+    expect(remoteRefusal({ verb: "card.delete", args: { id: "c" } })).toBeNull();
   });
 
   it("lets Send later and the skills list through, but never a scheduled \"!\" command", () => {

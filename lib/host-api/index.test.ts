@@ -11,7 +11,10 @@ vi.mock("@/lib/store", () => ({
   getCard: vi.fn((id: string) => db.cards.get(id)),
   updateCard: vi.fn((id: string, patch: Partial<Card>) => Object.assign(db.cards.get(id)!, patch)),
   reorderCard: vi.fn(),
+  deleteCard: vi.fn((id: string) => db.cards.delete(id)),
 }));
+vi.mock("@/lib/settings", () => ({ dismissSession: vi.fn() }));
+vi.mock("@/lib/worktree-pool", () => ({ dropWorktree: vi.fn(() => Promise.resolve()) }));
 vi.mock("@/lib/runner", () => ({
   stop: vi.fn(() => Promise.resolve()),
   sendMessage: vi.fn(),
@@ -70,6 +73,7 @@ const card = () => ({ card: db.cards.get("c1") });
 const SAMPLES: Record<HostVerb, { args: unknown; reply: () => unknown }> = {
   "card.update": { args: { id: "c1", body: { title: "New" } }, reply: card },
   "card.stop": { args: { id: "c1" }, reply: () => ({ ok: true }) },
+  "card.delete": { args: { id: "c1" }, reply: () => ({ ok: true }) },
   "card.shell": { args: { id: "c1", command: "ls" }, reply: () => ({ ok: true }) },
   "card.fresh": { args: { id: "c1", message: "hi" }, reply: () => ({ ok: true }) },
   "card.message": { args: { id: "c1", text: "hi" }, reply: card },
@@ -96,6 +100,7 @@ const SAMPLES: Record<HostVerb, { args: unknown; reply: () => unknown }> = {
 const ROUTES: Record<HostVerb, string> = {
   "card.update": "route.ts",
   "card.stop": "stop/route.ts",
+  "card.delete": "route.ts",
   "card.shell": "shell/route.ts",
   "card.fresh": "fresh/route.ts",
   "card.message": "messages/route.ts",
@@ -141,10 +146,10 @@ describe("HOST_API", () => {
   });
 
   it("refuses a verb that isn't in the table", async () => {
-    expect(isHostVerb("card.delete")).toBe(false);
+    expect(isHostVerb("card.explode")).toBe(false);
     expect(isHostVerb("toString")).toBe(false);
     expect(isHostVerb("card.stop")).toBe(true);
-    await expect(runVerb("card.delete" as HostVerb, { id: "c1" })).rejects.toThrow("Unknown host verb: card.delete");
+    await expect(runVerb("card.explode" as HostVerb, { id: "c1" })).rejects.toThrow("Unknown host verb: card.explode");
     expect(runner.stop).not.toHaveBeenCalled();
   });
 

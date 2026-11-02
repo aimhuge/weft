@@ -15,13 +15,18 @@ vi.mock("./optimistic-cards", () => {
     drawn(name, ...args.slice(0, -1));
     return (args.at(-1) as () => Promise<unknown>)().then(() => {});
   };
-  return { answerNow: run("answer"), stopNow: run("stop"), patchNow: run("patch"), waitNow: run("wait"), firstNow: run("first"), otherFirstNow: run("otherFirst") };
+  // A delete's call is only given for another host's card; this Mac's goes through the DELETE route.
+  const removeNow = (id: string, remote?: () => Promise<unknown>) => {
+    drawn("remove", id, Boolean(remote));
+    return remote ? remote().then(() => {}) : Promise.resolve();
+  };
+  return { answerNow: run("answer"), stopNow: run("stop"), patchNow: run("patch"), waitNow: run("wait"), firstNow: run("first"), otherFirstNow: run("otherFirst"), removeNow };
 });
 
 const local = vi.hoisted(() => vi.fn(() => ({ local: true })));
 vi.mock("./card-handlers", () => ({ cardHandlers: local }));
 
-const { handlersFor, holdNow, remoteCardHandlers } = await import("./card-handlers-host");
+const { handlersFor, holdNow, remoteCardHandlers, removeOnHost } = await import("./card-handlers-host");
 
 const card = (over: Partial<Card> = {}) => ({ id: "c1", title: "Fix it", cwd: "worker://w1/ling", column: "review", ...over }) as Card;
 
@@ -115,5 +120,20 @@ describe("holdNow", () => {
     await holdNow(card(), hold, "p1");
     expect(drawn).toHaveBeenCalledWith(hold, "c1", "p1");
     expect(act).toHaveBeenCalledWith(verb, { id: "c1", pendingId: "p1" });
+  });
+});
+
+describe("removeOnHost", () => {
+  it("deletes a worker's card with card.delete", async () => {
+    await removeOnHost(card());
+    expect(drawn).toHaveBeenCalledWith("remove", "c1", true);
+    expect(act).toHaveBeenCalledWith("card.delete", { id: "c1" });
+  });
+
+  it("deletes this Mac's card through its own route, not a host verb", async () => {
+    kind.value = "local";
+    await removeOnHost(card({ cwd: "/r" }));
+    expect(drawn).toHaveBeenCalledWith("remove", "c1", false);
+    expect(act).not.toHaveBeenCalled();
   });
 });

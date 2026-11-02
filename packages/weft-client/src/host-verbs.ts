@@ -5,6 +5,7 @@
 export const HOST_VERBS = [
   "card.update",
   "card.stop",
+  "card.delete",
   "card.shell",
   "card.fresh",
   "card.message",

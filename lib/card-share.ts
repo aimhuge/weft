@@ -3,6 +3,7 @@
 // It writes as the signed-in account, into the workspace cloud sync uploads to, so RLS decides who may share:
 // only the card's owner. A share points at the card's cloud_cards row, so a card is shared only once cloud
 // sync has uploaded it; until then the dialog is told why (signed out, no workspace, not synced, pending).
+// A Weft Worker's card is shared the same way, from the row its worker published (lib/card-share-worker.ts).
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { hashSharePassword } from "@aimhuge/share/server";
 import { accountClient } from "./account";
@@ -10,6 +11,7 @@ import { syncNow, syncOrgId } from "./cloud-sync";
 import { recordExplore } from "./explore";
 import { syncFolders } from "./settings";
 import { decorateCard, getCard } from "./store";
+import { workerShareCard } from "./card-share-worker";
 import { cardShareLink, isCardShareMode, newShareId, type CardShareMode, type CardShareState, type CardShareUpdate } from "./share-types";
 import { isDuplicateSlug } from "./app-share-slug";
 import { claimThreadSlug, isThreadSlug, sharerUsername } from "./card-share-slug";
@@ -27,8 +29,10 @@ export class CardShareError extends Error {
 // The columns a client may read: password_hash is left out of the column grant on purpose.
 type ShareRead = { id: string; mode: string; has_password: boolean | null; slug: string | null; show_chat: boolean | null };
 
-// Where the card's share would live, or why it can't be shared yet.
-type Target = { kind: "ready"; client: SupabaseClient; orgId: string; userId: string } | { kind: "blocked"; state: CardShareState };
+// Where the card's share would live, or why it can't be shared yet. `title` starts the slug; `local` is a card in this
+// Mac's store, whose last answer is kept on it (a worker's card lives in its own store).
+type Ready = { kind: "ready"; client: SupabaseClient; orgId: string; userId: string; title: string; local: boolean };
+type Target = Ready | { kind: "blocked"; state: CardShareState };
 
 function safeClient(): SupabaseClient | null {
   try {
@@ -42,12 +46,19 @@ function check(error: { message: string } | null) {
   if (error) throw new Error(error.message);
 }
 
+// A card this Mac doesn't have may be one of the account's workers' (lib/card-share-worker.ts): its row is already up.
+async function workerTarget(client: SupabaseClient | null, userId: string | undefined, cardId: string): Promise<Target> {
+  const found = client && userId ? await workerShareCard(client, userId, cardId) : null;
+  if (!client || !userId || !found) throw new CardShareError("No such card.", 404);
+  return { kind: "ready", client, orgId: found.orgId, userId, title: found.title, local: false };
+}
+
 async function target(cardId: string): Promise<Target> {
   const card = getCard(cardId);
-  if (!card) throw new CardShareError("No such card.", 404);
   const client = safeClient();
   const { data } = client ? await client.auth.getSession() : { data: { session: null } };
   const userId = data.session?.user.id;
+  if (!card) return workerTarget(client, userId, cardId);
   if (!client || !userId) return { kind: "blocked", state: { kind: "signed-out" } };
   const orgId = await syncOrgId(client, userId);
   if (!orgId) return { kind: "blocked", state: { kind: "no-workspace" } };
@@ -59,7 +70,7 @@ async function target(cardId: string): Promise<Target> {
     syncNow();
     return { kind: "blocked", state: { kind: "pending" } };
   }
-  return { kind: "ready", client, orgId, userId };
+  return { kind: "ready", client, orgId, userId, title: card.title, local: true };
 }
 
 async function readShare(client: SupabaseClient, orgId: string, cardId: string): Promise<ShareRead | null> {
@@ -98,16 +109,17 @@ function remember(cardId: string, state: CardShareState): CardShareState {
 }
 
 // The row as it stands, with a slug from the card's title when it has none yet (links made before slugs).
-async function readWithSlug(t: Extract<Target, { kind: "ready" }>, cardId: string): Promise<ShareRead | null> {
+async function readWithSlug(t: Ready, cardId: string): Promise<ShareRead | null> {
   const row = await readShare(t.client, t.orgId, cardId);
   if (!row || row.slug) return row;
-  const slug = await claimThreadSlug(t.client, row.id, getCard(cardId)?.title ?? "");
+  const slug = await claimThreadSlug(t.client, row.id, t.title);
   return slug ? { ...row, slug } : row;
 }
 
-async function answer(t: Extract<Target, { kind: "ready" }>, cardId: string): Promise<CardShareState> {
+async function answer(t: Ready, cardId: string): Promise<CardShareState> {
   const [row, username] = await Promise.all([readWithSlug(t, cardId), sharerUsername(t.client, t.userId)]);
-  return remember(cardId, stateOf(row, username));
+  const state = stateOf(row, username);
+  return t.local ? remember(cardId, state) : state;
 }
 
 export async function getCardShare(cardId: string): Promise<CardShareState> {

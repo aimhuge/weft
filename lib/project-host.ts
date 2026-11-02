@@ -31,7 +31,7 @@ import { actOnLine, lineFiles, lineTransport } from "./line-host";
 // `skills` is the skill set chip (which skills a card gets); the "/" list is the transport's listSkills on every host.
 // `schedule` is Send later, which both hosts hold the timer for (card.schedule). `reads` is the header badges (H4);
 // `projectActs` what they start from this Mac's store and server: a re-scout, the commit walk-through and the sprint
-// plan, whose prompts point at the Mac's own routes.
+// plan, whose prompts point at the Mac's own routes. `share` a weft.zip link to the card's cloud rows; `delete` card.delete.
 export type HostFeature = "files" | "reads" | "projectActs" | "shots" | "pane" | "folder" | "agent" | "shell" | "skills" | "share" | "delete" | "login" | "vault" | "dev" | "schedule";
 
 export interface ProjectHost {
@@ -61,6 +61,7 @@ const given = <T extends unknown[]>(...args: T) => {
 const LOCAL: Record<HostVerb, LocalCall> = {
   "card.update": (a) => call("PATCH", `/api/cards/${a.id}`, a.body),
   "card.stop": (a) => api.stop(a.id),
+  "card.delete": (a) => api.remove(a.id),
   "card.shell": (a) => api.shell(a.id, text(a.command)),
   "card.fresh": (a) => api.fresh(a.id, text(a.message)),
   "card.message": (a) => api.send(a.id, text(a.text)),
@@ -99,8 +100,9 @@ export const localHost: ProjectHost = {
 };
 
 // What a Worker has today: its cards' own verbs, the thread and its pages, Send later, its files through the file verbs
-// and the header's reads through its snapshots (H4). Not this Mac's pane, vault or CLIs.
-const CLOUD_FEATURES = new Set<HostFeature>(["schedule", "files", "reads"]);
+// and the header's reads through its snapshots (H4). Share… reads the card's cloud rows, which a worker publishes like a
+// Mac's outbox (lib/card-share-worker.ts), and Delete is card.delete. Not this Mac's pane, vault or CLIs.
+const CLOUD_FEATURES = new Set<HostFeature>(["schedule", "files", "reads", "share", "delete"]);
 
 export const cloudHost: ProjectHost = {
   kind: "cloud",
