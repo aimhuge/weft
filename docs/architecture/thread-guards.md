@@ -58,7 +58,7 @@ guard set: each is refused, or asked about, in the same words on all three.
 
 | Hook | File | Turns away |
 | --- | --- | --- |
-| Secret guard | `lib/secret-guard.ts` | reading `.env` files, Weft's data secrets, a Weft Worker's home ([what's sealed](weft-worker.md#whats-sealed-on-a-worker)), environment dumps (Bash, Read, Grep…); a board thread's copy knows its card, so it may Read an attachment its user pasted in (`lib/secret-guard-pasted.ts`) |
+| Secret guard | `lib/secret-guard.ts` | reading `.env` files, Weft's data secrets, a Weft Worker's home ([what's sealed](weft-worker.md#whats-sealed-on-a-worker)), environment dumps, CLIs that print a sign-in token and the files they keep it in ([below](#credential-clis)) (Bash, Read, Grep…); a board thread's copy knows its card, so it may Read an attachment its user pasted in (`lib/secret-guard-pasted.ts`) |
 | Restart guard | `lib/restart-guard.ts` | killing or restarting Weft's own server, app or port while other cards' turns run; points the thread at `mcp__board__restart_weft_when_idle` |
 | Clipboard guard | `lib/clipboard-guard.ts` | reading the clipboard (`pbpaste`, `osascript` `the clipboard`, NSPasteboard, `wl-paste`, `xclip`, `xsel`) while a pairing code is open, since its link carries the pairing secret; main marks the code open in `vault/pairing-open.json` ([mobile-security.md](mobile-security.md#pairing-a-passkey)) |
 | Git guard | `lib/git-guard.ts` | git commands that throw away or hide uncommitted work in the shared tree |
@@ -407,6 +407,32 @@ That covers `a && b; c | d`, `$( )` and backticks, `sh -c '…'`, a heredoc fed 
 `lib/shell-text.ts` says which words a command takes as text rather than as a path (`textWords`: `--message`, `--body`,
 `--title`, `--notes`… for any command that doesn't run its words, `-m`/`-t`/`-b` for git, gh and glab, and echo's
 quoted sentences), so neither the secret guard nor the folder gate reads a PR body as a list of files.
+
+## Credential CLIs
+
+A thread can run the user's own CLIs, and some of them print the sign-in they hold. Their output lands in the
+thread's context, and so in the model request and its transcript for good, so `lib/secret-guard-credentials.ts`
+refuses the command itself (a red-team review, 2026-11-02). `credentialVerdict` reads the command's words past its
+flags and their values, so `gh auth token -h github.com`, `gog -a me auth tokens export me` and
+`git -C . credential fill` are caught, and it runs on every command the line holds: `$(gh auth token)`, `sh -c '…'`,
+a heredoc fed to `bash`, `npx`/`pnpm exec` children. Refused:
+
+- gh: `auth token`, `auth status -t/--show-token`, `auth git-credential`, `config get oauth_token`
+- gog: `auth tokens export` (`gog auth tokens list` names keys only and stays open)
+- git: `credential fill|get`, `credential-<helper> get`, and the `git-credential-*` helpers run directly
+- macOS `security`: `find-generic-password`/`find-internet-password` with `-w` or `-g`, `dump-keychain -d`, `export`
+- supabase: `projects api-keys`, `branches get`; gcloud: `auth [application-default] print-access-token|print-identity-token`;
+  aws: `configure export-credentials`, `configure get` of a key or token. `vercel env pull` to stdout was already refused.
+
+The refusal names the command and says to keep the value in the 🔐 vault and use `mcp__secrets__run`. Everything else
+the CLIs do runs as ever: `gh pr`, `gh api`, `gh auth status`, `gog gmail search`, `supabase db push`.
+Because the check reads parsed words, a commit message, PR body or heredoc that only mentions `gh auth token` is one
+word of text, not a command, and isn't refused.
+
+The files those CLIs keep their sign-in in are sealed like a `.env` (`isCliCredential`, called from `isSecretFile`, so
+Bash, Read and Grep alike): `~/.config/gh/hosts.yml` (and the `~/.config/gh` folder, for `grep -r`), `~/.git-credentials`,
+`~/.config/git/credentials`, `.netrc`, `~/.supabase/access-token`, the Vercel CLI's `com.vercel.cli/auth.json`, and gog's
+`gogcli/credentials.json` and file keyring. Globs are tried against the known paths; `~/.config/gh/config.yml` stays open.
 
 ## Git guard
 
