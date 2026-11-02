@@ -105,9 +105,10 @@ describe("a worker card in the board's own workspace", () => {
 
   it("puts the worker's pane on a page the rail reopens", () => {
     setup();
-    act(() => (seen.get("show rail")!.onReopen as (url: string) => void)("blob:sha256:bb"));
-    expect(seen.get("worker pane")!.url).toBe("blob:sha256:bb");
-    expect(seen.get("show rail")!.pageUrl).toBe("blob:sha256:bb");
+    const bb = `blob:sha256:${"b".repeat(64)}`;
+    act(() => (seen.get("show rail")!.onReopen as (url: string) => void)(bb));
+    expect(seen.get("worker pane")!.url).toBe(bb);
+    expect(seen.get("show rail")!.pageUrl).toBe(bb);
   });
 
   it("shows the worker's page in its pane, not this Mac's native one", () => {
