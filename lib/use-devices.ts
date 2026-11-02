@@ -24,6 +24,13 @@ export interface HostPairingBridge {
   start(orgId?: string): Promise<WorkerCode>;
   check(id: string): Promise<WorkerCheck>;
   cancel(id: string): Promise<void>;
+  // Re-pin: forget the keys main pinned for a worker's secrets, after Touch ID (electron/worker-pins.cjs).
+  forgetPin?: (id: string, name: string) => Promise<{ forgotten?: boolean; denied?: boolean }>;
+}
+
+export function repinOutcome(name: string, r: { forgotten?: boolean; denied?: boolean }): string {
+  if (r.denied) return "Not re-pinned.";
+  return r.forgotten ? `Forgot ${name}'s pinned keys: its next secret ask pins the keys it has now.` : `${name} had no pinned keys on this Mac.`;
 }
 
 export const hostPairingBridge = (): HostPairingBridge | undefined =>
@@ -116,13 +123,21 @@ export function useDevices({ pairing, hosts }: Bridges = bridgesHere()) {
       await reload();
     });
 
+  const repin = (device: DeviceView) =>
+    act(async () => {
+      const r = await hosts?.forgetPin?.(device.id, device.name);
+      if (r && live.current) setNote(repinOutcome(device.name, r));
+    });
+
   return {
     view,
     error,
     code,
     note,
     canAddWorker: Boolean(hosts),
+    canRepin: Boolean(hosts?.forgetPin),
     revoke,
+    repin,
     addWorker: () =>
       act(async () => {
         setNote(null);

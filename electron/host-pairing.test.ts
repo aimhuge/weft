@@ -57,10 +57,12 @@ function fakeDb({ openError = null, confirmError = null, owned = ORG, updateErro
   return { db, rows, rpcs, updates };
 }
 
+const pinWorker = vi.fn();
 function setup({ confirm = true, db = fakeDb() } = {}) {
+  pinWorker.mockClear();
   const clock = { t: 1_000 };
   const ask = vi.fn(() => Promise.resolve(confirm));
-  const hosts = createHostPairing({ db: () => db.db, userId: () => "u1", macDevice: () => "mac-id", myDevice: () => Promise.resolve({ publicKey: "mac-key" }), confirm: ask, now: () => clock.t });
+  const hosts = createHostPairing({ db: () => db.db, userId: () => "u1", macDevice: () => "mac-id", myDevice: () => Promise.resolve({ publicKey: "mac-key" }), confirm: ask, now: () => clock.t, pinWorker });
   return { hosts, ask, clock, ...db };
 }
 
@@ -93,6 +95,8 @@ describe("adding a worker by pairing", () => {
     expect(done).toMatchObject({ status: "paired", worker: { id: "worker-1", name: "m1mini", platform: "linux" } });
     expect(ask).toHaveBeenCalledWith(expect.stringMatching(/^check the box shows the code [0-9A-F]{4}-[0-9A-F]{4}, then add the worker m1mini to your workspace$/));
     expect(rpcs[1]).toEqual({ fn: "worker_pair_confirm", args: { p_pairing: id, p_key_hash: body.key_hash, p_box_key: "Ym94", p_sign_key: body.sign_key } });
+    // The keys main checked are pinned for secret runs under the same Touch ID (electron/worker-pins.cjs).
+    expect(pinWorker).toHaveBeenLastCalledWith("worker-1", { name: "m1mini", publicKey: "Ym94", signKey: body.sign_key });
     expect(await hosts.check(id)).toEqual({ status: "expired" });
   });
 
@@ -104,6 +108,7 @@ describe("adding a worker by pairing", () => {
     expect(ask).not.toHaveBeenCalled();
     expect(rpcs.map((r) => r.fn)).toEqual(["worker_pair_open"]);
     expect(updates).toContainEqual({ id, status: "cancelled" });
+    expect(pinWorker).not.toHaveBeenCalled();
   });
 
   it("cancels when you say no at Touch ID", async () => {

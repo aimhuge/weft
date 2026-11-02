@@ -3,12 +3,13 @@
 // writes the answer back for the tool that's waiting. A call is untrusted: it needs a live grant for that card and worker
 // (lib/qa-grants.ts), its arguments are re-read (lib/device-call.ts), and the device comes from the grant, never the row.
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { text, type ToolResult } from "./browser-shell";
+import { shell, text, type ToolResult } from "./browser-shell";
 import { downloadBuild, sweepBuilds, unpackBuild } from "./device-build";
 import { callArgs, type BuildRef, type DeviceTool } from "./device-call";
 import { deviceId } from "./device-id";
 import { globalSingleton } from "./global-singleton";
 import { requireGrant, type QaGrant } from "./qa-grants";
+import { SECRET_ASK_TOOL } from "./secret-use";
 import { recentCrashes } from "./simulator-crashes";
 import { bootedDevice, listDevices } from "./simulator-devices";
 import { simulatorTools } from "./simulator-tools";
@@ -71,7 +72,7 @@ export async function runDeviceCall(client: SupabaseClient, row: DeviceCallRow, 
   return crashes ? { ...result, content: [...result.content, { type: "text", text: `Crash reports:\n${crashes}` }] } : result;
 }
 
-async function finish(client: SupabaseClient, id: string, patch: { status: "done" | "failed"; result?: ToolResult; error?: string }) {
+async function finish(client: SupabaseClient, id: string, patch: { status: "done" | "failed"; result?: unknown; error?: string }) {
   const { error } = await client
     .from("device_calls")
     .update({ ...patch, updated_at: new Date().toISOString() })
@@ -83,7 +84,10 @@ async function take(client: SupabaseClient, row: DeviceCallRow) {
   const claim = await client.from("device_calls").update({ status: "claimed" }).eq("id", row.id).eq("status", "pending").select("id");
   if (claim.error || !claim.data.length) return;
   try {
-    await finish(client, row.id, { status: "done", result: await runDeviceCall(client, row) });
+    // A worker card's secret ask goes to Electron main, which re-reads the row itself and asks the user with Touch ID
+    // (electron/worker-secret.cjs); it answers queued, denied or missing, never a value.
+    const answer = row.tool === SECRET_ASK_TOOL ? shell("/secrets/worker-ask", { call: row.id }) : runDeviceCall(client, row);
+    await finish(client, row.id, { status: "done", result: await answer });
   } catch (err) {
     await finish(client, row.id, { status: "failed", error: (err as Error).message.slice(0, ERROR_MAX) });
   }
@@ -115,7 +119,11 @@ export async function drainDeviceCalls(client: SupabaseClient, uid: string) {
         .overrideTypes<DeviceCallRow[]>();
       // A database without the table yet: nothing to run, and nothing worth saying every 30 s.
       if (error) return;
-      for (const row of data) await take(client, row);
+      // A secret ask waits on a person at the Mac, so it doesn't hold up the device calls behind it.
+      for (const row of data) {
+        if (row.tool === SECRET_ASK_TOOL) void take(client, row);
+        else await take(client, row);
+      }
     } while (nudged());
   } finally {
     g.draining = false;

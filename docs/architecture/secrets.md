@@ -342,6 +342,16 @@ that opens the file itself (`~/.weft/shell-token` included). This is a strong de
   a second line of defence instead of the only one. The guard is what Weft can do today; the sandbox is
   what Weft should do next.
 
+## On a Weft Worker
+
+A worker card's `mcp__secrets__run` asks the owner's Mac instead of a main of its own: a `secret_run` device call with
+names only, which Electron main re-reads with its own session, holds to the worker key it pinned on first use
+(`electron/worker-pins.cjs`), approves with Touch ID in a window that shows the command first and names the worker
+(Allow once, no Always), and answers with a `secret_use` command sealed to that worker for that card, ask nonce and exact
+command. The worker runs it with `electron/secret-exec.cjs`, the same spawn and redaction as here, and keeps the values
+in memory only. A dev server's env and `fill_field` on a worker aren't built yet. The design, guarantees and limits are
+in [project-hosts.md](project-hosts.md#secrets-on-a-worker-h8-the-per-use-seal-as-built).
+
 ## Which card a vault request is for
 
 A thread's grant, its unlocks and its audit line all hang off one card id, so that id has to be the

@@ -82,7 +82,9 @@ function setupPairing({ ipcMain, dataDir, accountClient, isBoard, confirm, safeS
   });
 
   // Workers added by pairing from Settings → Devices: the same claim, proof and Touch ID (electron/host-pairing.cjs).
-  require("./host-pairing-ipc.cjs").registerHostPairing(handle, { db, userId, macDevice, myDevice, confirm });
+  // The worker keys secret runs are sealed to (electron/worker-pins.cjs): pinned here at pairing, forgotten by Re-pin.
+  const workerPins = require("./worker-pins.cjs").createWorkerPins({ dir: dataDir, safeStorage: keychain });
+  require("./host-pairing-ipc.cjs").registerHostPairing(handle, { db, userId, macDevice, myDevice, confirm }, workerPins);
 
   const routes = {
     // The key the uploader seals with (lib/sync-seal-upload.ts); { none: true } when this Mac has no grant yet.

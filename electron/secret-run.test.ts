@@ -218,6 +218,33 @@ describe("helpers", () => {
     );
   });
 
+  it("describes a worker's run command first, with where it runs, its key, and that the worker's code gets the values", () => {
+    const run = describeRun({ kind: "run", command: "npm run job", cwd: "app", script: "job: node j.js", names: ["K"], environment: "production", label: "o/r", thread: "Deploy", why: "Ship", worker: "m1mini", remote: "git@github.com:o/r.git", fingerprint: "ab12 cd34", firstUse: true });
+    expect(run.message).toBe("A card on the worker m1mini wants to run a command with secrets from o/r.");
+    expect(run.detail.startsWith("Command: npm run job\n\nRuns:\njob: node j.js\n\nIn: app on the Weft Worker m1mini, not this Mac\n\nRepo: git@github.com:o/r.git")).toBe(true);
+    expect(run.detail).toContain("m1mini's key: ab12 cd34 (first seen now: this Mac pins it)");
+    expect(run.detail).toContain("The command and any code it runs on m1mini get these values.");
+    expect(run.detail.endsWith("Card: Deploy\n\nThe thread says why: Ship")).toBe(true);
+    expect(run.detail).not.toContain("Always lasts");
+    expect(run.reason).toBe('run "npm run job" with K (o/r) for "Deploy" on the worker m1mini');
+    expect(run.view).toMatchObject({ worker: "m1mini", remote: "git@github.com:o/r.git", fingerprint: "ab12 cd34", firstUse: true });
+    const bare = describeRun({ kind: "run", command: "x", cwd: "/", names: ["K"], environment: "development", label: "o/r", worker: "m1mini", fingerprint: "ab12" });
+    expect(bare.detail).toContain("m1mini's key: ab12 (pinned)");
+    expect(bare.detail).not.toContain("Repo:");
+    expect(bare.reason).toBe('run "x" with K (o/r) on the worker m1mini');
+    expect(describeRun({ kind: "run", command: "x", cwd: "/", names: ["K"], environment: "development", label: "o/r", worker: "m1mini" }).detail).not.toContain("key:");
+  });
+
+  it("routes a worker's ask to main by its id, and says when main can't answer one", async () => {
+    const workerAsk = vi.fn(() => Promise.resolve({ queued: true }));
+    const routes = secretRunRoutes(() => ({ workerAsk }) as never);
+    expect(await routes["POST /secrets/worker-ask"]({ call: "call-1" })).toEqual({ queued: true });
+    expect(await routes["POST /secrets/worker-ask"]({})).toEqual({ queued: true });
+    expect(workerAsk).toHaveBeenLastCalledWith("");
+    const old = secretRunRoutes(() => ({}) as never);
+    expect(() => old["POST /secrets/worker-ask"]({ call: "call-1" })).toThrow("This Mac can't answer a worker's secrets yet.");
+  });
+
   it("asks with a dialog, then Touch ID where there is one", async () => {
     const dialog = { showMessageBox: vi.fn() };
     const win = {};

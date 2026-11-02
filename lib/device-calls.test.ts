@@ -12,6 +12,7 @@ const unpackBuild = vi.hoisted(() => vi.fn());
 const sweepBuilds = vi.hoisted(() => vi.fn());
 const deviceId = vi.hoisted(() => vi.fn());
 const requireGrant = vi.hoisted(() => vi.fn());
+const shell = vi.hoisted(() => vi.fn());
 
 vi.mock("./simulator-tools", () => ({ simulatorTools }));
 vi.mock("./simulator-devices", () => ({ listDevices, bootedDevice }));
@@ -19,6 +20,7 @@ vi.mock("./simulator-crashes", () => ({ recentCrashes }));
 vi.mock("./device-build", () => ({ downloadBuild, unpackBuild, sweepBuilds }));
 vi.mock("./device-id", () => ({ deviceId }));
 vi.mock("./qa-grants", () => ({ requireGrant }));
+vi.mock("./browser-shell", async (importOriginal) => ({ ...(await importOriginal<typeof import("./browser-shell")>()), shell }));
 
 const { drainDeviceCalls, runDeviceCall } = await import("./device-calls");
 type DeviceCallRow = import("./device-calls").DeviceCallRow;
@@ -330,5 +332,22 @@ describe("drainDeviceCalls", () => {
     const second = drainDeviceCalls(client, "user-1");
     await Promise.all([first, second]);
     expect(passes).toBeGreaterThanOrEqual(1);
+  });
+
+  it("hands a worker's secret ask to main by id, without holding up the drain, and writes back what main said", async () => {
+    shell.mockResolvedValue({ queued: true, label: "aimhuge/weft" });
+    const { client, calls } = fakeClient({ pending: [row({ tool: "secret_run", args: { command: "npm run job" } })] });
+    await drainDeviceCalls(client, "user-1");
+    await vi.waitFor(() => expect(calls.updates.map((u) => u.patch.status)).toEqual(["claimed", "done"]));
+    expect(shell).toHaveBeenCalledWith("/secrets/worker-ask", { call: "call-1" });
+    expect(requireGrant).not.toHaveBeenCalled();
+    expect(calls.updates.at(-1)?.patch).toMatchObject({ status: "done", result: { queued: true, label: "aimhuge/weft" } });
+  });
+
+  it("fails a secret ask main refused", async () => {
+    shell.mockRejectedValue(new Error("Sign in to Weft on this Mac to approve a worker's secrets."));
+    const { client, calls } = fakeClient({ pending: [row({ tool: "secret_run" })] });
+    await drainDeviceCalls(client, "user-1");
+    await vi.waitFor(() => expect(calls.updates.at(-1)?.patch).toMatchObject({ status: "failed", error: "Sign in to Weft on this Mac to approve a worker's secrets." }));
   });
 });
