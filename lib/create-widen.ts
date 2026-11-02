@@ -3,6 +3,7 @@
 // approval, here bound to the agent, the folder the host starts it in and its first message. Without `agent` the run
 // is what it always was; with one and no approval, it's refused.
 import type { CloudCommandRow } from "./cloud-commands";
+import { createTerms } from "./widen";
 import type { WidenTarget } from "./widen-check";
 
 export const AGENT_REFUSED = "A new thread with an agent needs your approval: start it from Weft on your Mac, or approve it with your passkey.";
@@ -19,7 +20,9 @@ export async function signedAgent(command: Pick<CloudCommandRow, "payload">, fol
   if (typeof agent !== "string") throw new Error("That agent isn't a name.");
   const prompt = field(command.payload, "prompt");
   const change = { create: { agent, folder, prompt: typeof prompt === "string" ? prompt : "" } };
-  const problem = check ? await check({ card: "", verb: "card.create", change }, field(command.payload, "widen"), AGENT_REFUSED) : AGENT_REFUSED;
+  // The rest of the run (its mode, CLI, model, repo, title) is bound too, read as the host starts it.
+  const target = { card: "", verb: "card.create" as const, change, args: createTerms(command.payload) };
+  const problem = check ? await check(target, field(command.payload, "widen"), AGENT_REFUSED) : AGENT_REFUSED;
   if (problem) throw new Error(problem);
   return agent;
 }

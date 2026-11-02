@@ -43,8 +43,10 @@ export {
 } from "./approval-sig";
 export {
   canonical,
+  createTerms,
   freshWiden,
   readWidenAuth,
+  widenArgsOf,
   widenChangeOf,
   widenLabel,
   widenMessage,

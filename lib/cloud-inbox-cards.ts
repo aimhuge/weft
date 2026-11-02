@@ -42,14 +42,20 @@ export function macConfine(change: WidenChange): string | null {
   return change.cwd === undefined || syncFolders().includes(change.cwd) ? null : `${change.cwd} isn't switched on in Settings → Sync on this Mac.`;
 }
 
-const macWiden: WidenCheck = (target, auth, refusal) =>
+// This Mac's own desktop key signs for remote hosts; a command from the network that names it here would be the board
+// acting on itself, which it does through its own routes, never the relay.
+export const OWN_KEY = "This Mac's own approval key widens its cards from its own window, not from the network.";
+
+const macWiden: WidenCheck = async (target, auth, refusal) =>
   widenProblem(target, auth, refusal, {
     host: deviceId(),
     now: Date.now(),
     nonces: macNonces,
-    verify: async (body) => (await shell("/pairing/verify", body)) as Verified,
+    verify: async (body) => (body.device === deviceId() ? { ok: false, reason: OWN_KEY } : ((await shell("/pairing/verify", body)) as Verified)),
     passkey: async (body) => (await shell("/pairing/passkey-verify", body)) as Verified,
     confine: macConfine,
+    // A passkey signs a "!" line only where Settings → Sync lets the web approve: there, a passkey is a shell.
+    passkeyShell: (await pairingStatus()).webApprovals,
   });
 
 const UNKNOWN_KIND = "This version of Weft doesn't know that kind of request. Update the desktop app.";

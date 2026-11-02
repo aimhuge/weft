@@ -4,7 +4,7 @@
 import path from "node:path";
 import { createHostSigners } from "./host-signers";
 import { passkeyOrigins } from "./passkey-verify";
-import { fileNonceStore, nonceBook } from "./widen-nonces";
+import { sharedNonceBook } from "./widen-nonces";
 import type { TerminalDeps } from "./host-line-terminal";
 import { spawnPty } from "./worker-pty";
 import { terminalAllow, type WorkerWiden } from "./worker-widen";
@@ -23,7 +23,7 @@ export function workerWidenFor(o: WorkerWidenOptions): WorkerWiden {
   return {
     host: o.workerId,
     signers: createHostSigners(o.home, passkeyOrigins(o.env ?? process.env)),
-    nonces: nonceBook(fileNonceStore(path.join(o.home, "widen-nonces.json"))),
+    nonces: sharedNonceBook(path.join(o.home, "widen-nonces.json")),
     projects: () => o.listFolders(o.root),
     root: o.root,
     projectPath: (folder) => o.repoPath(o.root, folder),

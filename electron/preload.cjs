@@ -206,6 +206,7 @@ contextBridge.exposeInMainWorld("weft", {
     // Signed widening on a remote host (electron/widen-sign.cjs): Touch ID in main's words, then main signs.
     widen: (request) => ipcRenderer.invoke("approval:widen", request),
     endorse: (request) => ipcRenderer.invoke("approval:endorse", request),
+    endorseRefresh: () => ipcRenderer.invoke("approval:endorse-refresh"),
   },
   // Adding a worker by pairing it (electron/host-pairing-ipc.cjs, docs/architecture/device-registry.md): the install
   // line comes back; the code's secret check and Touch ID stay in main.

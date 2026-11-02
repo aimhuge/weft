@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { loginShell, spawnPty } from "./worker-pty";
+import { loginShell, shellEnv, spawnPty } from "./worker-pty";
 
 describe("spawnPty", () => {
   it("starts a login shell in the folder and passes its pty through", () => {
@@ -33,5 +33,12 @@ describe("spawnPty", () => {
 
   it("loads node-pty by default", () => {
     expect(() => spawnPty("/nonexistent-weft-dir", 80, 24)).toThrow();
+  });
+});
+
+describe("shellEnv", () => {
+  it("keeps the daemon's own settings and credentials out of the shell", () => {
+    const env = { PATH: "/bin", HOME: "/h", LANG: "en", WEFT_WORKER: "1", SUPABASE_URL: "u", GITHUB_TOKEN: "t", AWS_SECRET: "s", API_KEY: "k", CLAUDE_CODE_OAUTH_TOKEN: "o", ANTHROPIC_API_KEY: "a" };
+    expect(shellEnv(env)).toEqual({ PATH: "/bin", HOME: "/h", LANG: "en", TERM: "xterm-256color" });
   });
 });

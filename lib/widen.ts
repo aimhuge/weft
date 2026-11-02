@@ -2,8 +2,10 @@
 // sign page, the phone and every host build the same bytes. The host's check is lib/widen-check.ts.
 export {
   canonical,
+  createTerms,
   freshWiden,
   readWidenAuth,
+  widenArgsOf,
   widenChangeOf,
   widenLabel,
   widenMessage,

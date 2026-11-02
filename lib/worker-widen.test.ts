@@ -46,16 +46,27 @@ describe("workerConfine", () => {
     expect(workerConfine(w, { readScope: path.join(root, "app", "up") })).toMatch(/own projects/);
     fs.rmSync(root, { recursive: true, force: true });
   });
+
+  it("refuses a folder or terminal in a project folder that's a link out of the root", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "weft-confine-"));
+    fs.mkdirSync(path.join(root, "app"));
+    fs.symlinkSync("/", path.join(root, "site"));
+    const w = widen({ root, projectPath: (f) => path.join(root, f) });
+    expect(workerConfine(w, { cwd: "app", terminal: "app" })).toBeNull();
+    expect(workerConfine(w, { terminal: "site" })).toMatch(/leads out/);
+    expect(workerConfine(w, { cwd: "site" })).toMatch(/leads out/);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
 });
 
 describe("workerWidenCheck", () => {
   it("checks against the worker's own id, pins and nonces", async () => {
     const w = widen();
     const auth = { kind: "ed25519", device: "mac", issuedAt: NOW, nonce, sig: "c2ln" };
-    expect(await workerWidenCheck(w)({ card: "c", verb: "card.update", change: { cwd: "app" } }, auth, "no")).toBeNull();
-    expect(w.signers.verify).toHaveBeenCalledWith(expect.objectContaining({ message: widenMessage({ host: "w1", card: "c", verb: "card.update", change: { cwd: "app" }, nonce, issuedAt: NOW }) }));
+    expect(await workerWidenCheck(w)({ card: "c", verb: "card.update", change: { cwd: "app" }, args: { body: { cwd: "app" } } }, auth, "no")).toBeNull();
+    expect(w.signers.verify).toHaveBeenCalledWith(expect.objectContaining({ message: widenMessage({ host: "w1", card: "c", verb: "card.update", change: { cwd: "app" }, args: { body: { cwd: "app" } }, nonce, issuedAt: NOW }) }));
     const pk = { kind: "webauthn", device: "b", credId: "cred", issuedAt: NOW, nonce: "qrstuvwxyzabcdef", authenticatorData: "YQ", clientDataJSON: "Yg", signature: "Yw" };
-    expect(await workerWidenCheck(w)({ card: "c", verb: "card.update", change: { agent: "b" } }, pk, "no")).toBeNull();
+    expect(await workerWidenCheck(w)({ card: "c", verb: "card.update", change: { agent: "b" }, args: { body: { agent: "b" } } }, pk, "no")).toBeNull();
     expect(w.signers.verifyPasskey).toHaveBeenCalled();
     expect(workerWidenDeps(widen({ now: undefined })).now).toBeGreaterThan(0);
   });

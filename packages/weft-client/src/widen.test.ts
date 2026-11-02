@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canonical, freshWiden, readWidenAuth, widenChangeOf, widenLabel, widenMessage, withoutWiden, WIDEN_MESSAGE_V, WIDEN_TTL_MS } from "./widen";
+import { canonical, createTerms, freshWiden, readWidenAuth, widenArgsOf, widenChangeOf, widenLabel, widenMessage, withoutWiden, WIDEN_MESSAGE_V, WIDEN_TTL_MS } from "./widen";
 
 describe("widenChangeOf", () => {
   it("names exactly what a command widens, as remoteRefusal refuses it", () => {
@@ -21,15 +21,30 @@ describe("widenChangeOf", () => {
   });
 });
 
+describe("widenArgsOf and createTerms", () => {
+  it("binds a host verb's args without the approval or the card", () => {
+    expect(widenArgsOf({ id: "c", widen: { kind: "x" }, body: { cwd: "a" } })).toEqual({ body: { cwd: "a" } });
+  });
+
+  it("reads a new thread's terms as the host starts it", () => {
+    const payload = { prompt: " go ", title: "", model: " m ", repo: "r", effort: "high", backend: "codex", permissionMode: "auto", agent: "b", widen: {}, tags: ["x"] };
+    expect(createTerms(payload)).toEqual({ prompt: "go", model: "m", repo: "r", effort: "high", backend: "codex", permissionMode: "auto" });
+    expect(createTerms({ backend: "rm", permissionMode: "bypassPermissions", prompt: 3 })).toEqual({});
+    expect(createTerms(null)).toEqual({});
+  });
+});
+
 describe("widenMessage", () => {
-  const fields = { host: "h", card: "c", verb: "card.update" as const, change: { cwd: "app", agent: "b" }, nonce: "n".repeat(16), issuedAt: 5 };
+  const fields = { host: "h", card: "c", verb: "card.update" as const, change: { cwd: "app", agent: "b" }, args: { body: { cwd: "app", agent: "b" } }, nonce: "n".repeat(16), issuedAt: 5 };
 
   it("is canonical JSON of the fixed fields under its own version", () => {
     const m = widenMessage(fields);
     expect(JSON.parse(m)).toEqual({ v: WIDEN_MESSAGE_V, ...fields });
     expect(m).toBe(widenMessage({ ...fields, change: { agent: "b", cwd: "app" } }));
-    expect(m.startsWith('{"card":"c","change":{"agent":"b","cwd":"app"}')).toBe(true);
+    expect(m.startsWith('{"args":{"body":{"agent":"b","cwd":"app"}},"card":"c","change":{"agent":"b","cwd":"app"}')).toBe(true);
     expect(widenMessage({ ...fields, host: "other" })).not.toBe(m);
+    // The same change with another title, mode or column beside it is another message.
+    expect(widenMessage({ ...fields, args: { body: { cwd: "app", agent: "b", permissionMode: "auto" } } })).not.toBe(m);
   });
 
   it("canonical sorts at every depth and keeps arrays in order", () => {

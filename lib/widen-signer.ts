@@ -4,7 +4,7 @@
 // exactly that change with this Mac's approval key (electron/widen-sign.cjs). The approval rides in the command as
 // `widen`; the worker checks it against the key it pinned from the pairing code. Without the desktop app there's no
 // signer, so those actions stay off (`canSignWiden`).
-import { widenChangeOf, type WidenAuth, type WidenChange, type WidenVerb } from "./widen";
+import { createTerms, widenArgsOf, widenChangeOf, type WidenAuth, type WidenChange, type WidenVerb } from "./widen";
 import { parseWorkerProject } from "./worker-project";
 
 export interface WidenRequest {
@@ -12,9 +12,16 @@ export interface WidenRequest {
   card: string;
   verb: WidenVerb;
   change: WidenChange;
+  // The rest of the command, bound whole (lib/widen.ts WidenFields.args).
+  args: Record<string, unknown>;
 }
 
-type Bridge = { widen?: (req: WidenRequest) => Promise<WidenAuth | null>; endorse?: (req: { worker: string; revoke?: boolean }) => Promise<unknown[] | null> };
+type Refreshed = { worker: string; endorsements: unknown[] };
+type Bridge = {
+  widen?: (req: WidenRequest) => Promise<WidenAuth | null>;
+  endorse?: (req: { worker: string; revoke?: boolean }) => Promise<unknown[] | null>;
+  endorseRefresh?: () => Promise<Refreshed[]>;
+};
 
 const bridge = (): Bridge | undefined =>
   typeof window === "undefined" ? undefined : (window as unknown as { weft?: { approval?: Bridge } }).weft?.approval;
@@ -50,7 +57,7 @@ export async function signedArgs<A extends Record<string, unknown> & { id: strin
   const change = widenChangeOf({ verb, args: placed });
   // With no signer (not the desktop app) it goes unsigned, and the worker refuses it in its own words.
   if (!change || !canSignWiden()) return placed;
-  const widen = await signWiden({ host: workerId, card: args.id, verb: verb as WidenVerb, change });
+  const widen = await signWiden({ host: workerId, card: args.id, verb: verb as WidenVerb, change, args: widenArgsOf(placed) });
   return { ...placed, widen };
 }
 
@@ -62,11 +69,18 @@ export async function endorsePasskeys(worker: string, revoke = false): Promise<u
   return endorse({ worker, revoke });
 }
 
+// After a passkey is unpaired here: each worker's endorsed set without it, signed by main with no Touch ID (a
+// narrowing), for the caller to send as `pin` commands. [] without the desktop app.
+export async function refreshEndorsements(): Promise<Refreshed[]> {
+  return (await bridge()?.endorseRefresh?.()) ?? [];
+}
+
 // A new thread on a worker that names an agent: the approval for that agent, that project and that first message (as
 // the run will carry it, trimmed: lib/worker-commands.ts runCommand). Any other new thread goes as it came.
 export async function withCreateWiden<T extends { cwd?: string; agent?: string; prompt?: string; start?: boolean }>(input: T): Promise<T & { widen?: WidenAuth }> {
   const project = input.cwd ? parseWorkerProject(input.cwd) : null;
   if (!project || !input.agent || !input.start) return input;
   const change = { create: { agent: input.agent, folder: project.folder, prompt: (input.prompt ?? "").trim() } };
-  return { ...input, widen: await signWiden({ host: project.workerId, card: "", verb: "card.create", change }) };
+  // The run's other terms as the worker will read them off the row lib/worker-board.ts builds from this input.
+  return { ...input, widen: await signWiden({ host: project.workerId, card: "", verb: "card.create", change, args: createTerms(input) }) };
 }

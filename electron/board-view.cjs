@@ -10,6 +10,8 @@ const SECRET_ACTION = "[data-secret-action]";
 // Controls that grant a thread more power (permission answers, folder grants, the mode picker, Settings): a thread
 // clicking or typing there would approve itself, so only the user can (pentest 2026-10-20, P-1).
 const HUMAN_ONLY = "[data-human-only]";
+// What the gate refuses: the markers, and any terminal (xterm's own helper textarea is a field), marked or not.
+const GUARDED = `${HUMAN_ONLY}, .xterm, .xterm-helper-textarea`;
 const REDACTED = "‹secret›";
 const HIGHLIGHT_ID = "__weft_board_highlight";
 
@@ -49,7 +51,7 @@ const scripts = {
   // receive a trusted click the selector never named (pentest 2026-10-20, P-1). No click happens here;
   // main sends real mouse events so the event is trusted.
   click: (sel) =>
-    `(() => { ${find(sel)} if (el.closest(${q(SECRET_ACTION)})) return { found: true, refused: true }; if (el.closest(${q(HUMAN_ONLY)})) return { found: true, humanOnly: true }; el.scrollIntoView({ block: "nearest" });` +
+    `(() => { ${find(sel)} if (el.closest(${q(SECRET_ACTION)})) return { found: true, refused: true }; if (el.closest(${q(GUARDED)})) return { found: true, humanOnly: true }; el.scrollIntoView({ block: "nearest" });` +
     ` const r = el.getBoundingClientRect(); const x = r.left + r.width / 2, y = r.top + r.height / 2;` +
     ` const top = document.elementFromPoint(x, y);` +
     ` if (!top || !(top === el || el.contains(top))) return { found: true, covered: true };` +
@@ -57,10 +59,10 @@ const scripts = {
   // Locates a field without focusing it (the trusted-focus path runs in main, so a phantom focus event
   // can't out-think the HUMAN_ONLY gate above). Returns whether the element is an editable field.
   isField: (sel) =>
-    `(() => { ${find(sel)} if (el.closest(${q(HUMAN_ONLY)})) return { found: true, humanOnly: true }; if (!el.matches("input, textarea, [contenteditable]:not([contenteditable='false'])")) return { found: true, refused: true }; return { found: true }; })()`,
+    `(() => { ${find(sel)} if (el.closest(${q(GUARDED)})) return { found: true, humanOnly: true }; if (!el.matches("input, textarea, [contenteditable]:not([contenteditable='false'])")) return { found: true, refused: true }; return { found: true }; })()`,
   // Focuses a field and selects what's in it, so the typing that follows replaces it.
   focusField: (sel) =>
-    `(() => { ${find(sel)} if (el.closest(${q(HUMAN_ONLY)})) return { found: true, humanOnly: true }; if (!el.matches("input, textarea, [contenteditable]:not([contenteditable='false'])")) return { found: true, refused: true }; el.focus(); if (typeof el.select === "function") el.select(); else document.execCommand("selectAll"); return { found: true }; })()`,
+    `(() => { ${find(sel)} if (el.closest(${q(GUARDED)})) return { found: true, humanOnly: true }; if (!el.matches("input, textarea, [contenteditable]:not([contenteditable='false'])")) return { found: true, refused: true }; el.focus(); if (typeof el.select === "function") el.select(); else document.execCommand("selectAll"); return { found: true }; })()`,
   // The element's visible text with every data-secret value inside the page cut out.
   read: (sel) =>
     `(() => { const el = ${sel ? `(${findExpression(sel)})` : "document.body"}; if (!el) return { found: false };` +

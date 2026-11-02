@@ -90,8 +90,11 @@ function setupPairing({ ipcMain, dataDir, accountClient, isBoard, confirm, safeS
     return signer.publicKey();
   };
   require("./host-pairing-ipc.cjs").registerHostPairing(handle, { db, userId, macDevice, myDevice, confirm, macSignKey }, workerPins);
-  // Signed widening for a remote host's card and passkey endorsements (electron/widen-sign.cjs).
-  require("./widen-sign.cjs").registerWidenSign(handle, { signer, macDevice, confirm, passkeys: () => paired.list() });
+  // Signed widening for a remote host's card (electron/widen-sign.cjs), naming a worker by the name it was pinned under,
+  // and the passkey endorsements for workers (electron/widen-endorse.cjs).
+  require("./widen-sign.cjs").registerWidenSign(handle, { signer, macDevice, confirm, hostName: (id) => workerPins.nameOf(id) });
+  const { registerWidenEndorse, createEndorsed } = require("./widen-endorse.cjs");
+  registerWidenEndorse(handle, { signer, macDevice, confirm, passkeys: () => paired.list(), endorsed: createEndorsed({ dir: dataDir, safeStorage: keychain }) });
 
   const widenNonces = require("./widen-nonces.cjs").createWidenNonces({ dir: dataDir, safeStorage: keychain });
   const routes = {

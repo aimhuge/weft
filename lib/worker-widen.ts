@@ -40,9 +40,12 @@ const real = (p: string) => {
 
 // A worker's limits on a new value: a folder (a card's, a terminal's) is one of its projects by name, a read grant is under its work root. A new
 // thread's folder is the run's own, which lib/worker-paths.ts repoPath already keeps under the root.
-export function workerConfine(w: Pick<WorkerWiden, "projects" | "root">, change: WidenChange): string | null {
+export function workerConfine(w: Pick<WorkerWiden, "projects" | "root" | "projectPath">, change: WidenChange): string | null {
   for (const folder of [change.cwd, change.terminal]) {
-    if (folder !== undefined && !w.projects().includes(folder)) return `${folder} isn't a project on this worker. Pick one of its folders.`;
+    if (folder === undefined) continue;
+    if (!w.projects().includes(folder)) return `${folder} isn't a project on this worker. Pick one of its folders.`;
+    // A project folder that's a link out of the work root (`app -> /`) isn't one of its checkouts.
+    if (!inside(real(w.projectPath(folder)), real(w.root))) return `${folder} leads out of this worker's projects.`;
   }
   const read = change.readScope;
   const outside = read !== undefined && (typeof read !== "string" || !path.isAbsolute(read) || !inside(path.resolve(read), w.root) || !inside(real(read), real(w.root)));
@@ -74,7 +77,7 @@ export function placeUpdate(w: Pick<WorkerWiden, "projectPath" | "nameFolder">, 
 export function terminalAllow(w: WorkerWiden) {
   const check = workerWidenCheck(w);
   return async (folder: string, auth: unknown): Promise<string> => {
-    const problem = await check({ card: "", verb: "terminal.open", change: { terminal: folder } }, auth, TERMINAL_REFUSAL);
+    const problem = await check({ card: "", verb: "terminal.open", change: { terminal: folder }, args: {} }, auth, TERMINAL_REFUSAL);
     if (problem) throw new Error(problem);
     return w.projectPath(folder);
   };

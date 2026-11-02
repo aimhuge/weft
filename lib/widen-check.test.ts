@@ -2,14 +2,14 @@ import { describe, expect, it, vi } from "vitest";
 import { BIDI_REFUSED } from "./approval-passkey";
 import { PHONE_ONLY } from "./passkey-phone-only";
 import { widenMessage, WIDEN_TTL_MS } from "./widen";
-import { NO_PASSKEY_HERE, PASSKEY_TOO_WIDE, STALE, USED, widenProblem, type WidenDeps } from "./widen-check";
+import { NO_PASSKEY_HERE, PASSKEY_NO_SHELL, PASSKEY_TOO_WIDE, STALE, USED, widenProblem, type WidenDeps } from "./widen-check";
 import { nonceBook } from "./widen-nonces";
 
 const NOW = 1_000_000;
 const nonce = "abcdefghijklmnop";
 const ed = { kind: "ed25519", device: "mac", issuedAt: NOW, nonce, sig: "c2ln" };
 const wa = { kind: "webauthn", device: "b", credId: "cred", issuedAt: NOW, nonce, authenticatorData: "YQ", clientDataJSON: "Yg", signature: "Yw" };
-const target = { card: "c1", verb: "card.update" as const, change: { cwd: "app" } };
+const target = { card: "c1", verb: "card.update" as const, change: { cwd: "app" }, args: { body: { cwd: "app" } } };
 
 function deps(over: Partial<WidenDeps> = {}) {
   const saved: Record<string, number> = {};
@@ -37,6 +37,13 @@ describe("widenProblem", () => {
     expect(await widenProblem(target, ed, "no", d)).toBe(USED);
   });
 
+  it("binds the rest of the command: the same approval over other args is another message", async () => {
+    const d = deps();
+    expect(await widenProblem({ ...target, args: { body: { cwd: "app", permissionMode: "auto" } } }, ed, "no", d)).toBeNull();
+    const signed = widenMessage({ host: "h1", ...target, nonce, issuedAt: NOW });
+    expect(d.verify).not.toHaveBeenCalledWith(expect.objectContaining({ message: signed }));
+  });
+
   it("refuses a stale one, a failed signature, and one that loses a race for its nonce", async () => {
     expect(await widenProblem(target, { ...ed, issuedAt: NOW - WIDEN_TTL_MS - 1 }, "no", deps())).toBe(STALE);
     expect(await widenProblem(target, ed, "no", deps({ verify: () => Promise.resolve({ ok: false, reason: "bad" }) }))).toBe("bad");
@@ -59,8 +66,11 @@ describe("widenProblem", () => {
     expect(d.passkey).toHaveBeenCalledWith(expect.objectContaining({ device: "b", credId: "cred", authenticatorData: "YQ" }));
     expect(await widenProblem({ ...target, change: { permissionMode: "bypassPermissions" } }, wa, "no", deps())).toBe(PASSKEY_TOO_WIDE);
     expect(await widenProblem({ ...target, change: { readScope: "/x" } }, wa, "no", deps())).toBe(PASSKEY_TOO_WIDE);
-    expect(await widenProblem({ ...target, verb: "card.shell", change: { shell: "cat ~/.claude/settings.json" } }, wa, "no", deps())).toBe(PHONE_ONLY);
-    expect(await widenProblem({ ...target, verb: "card.schedule", change: { schedule: "!ls" } }, wa, "no", deps())).toBeNull();
+    // A "!" line from a passkey is a shell for whoever holds it: only where the host lets the web approve.
+    expect(await widenProblem({ ...target, verb: "card.shell", change: { shell: "ls" } }, wa, "no", deps())).toBe(PASSKEY_NO_SHELL);
+    expect(await widenProblem({ ...target, verb: "card.schedule", change: { schedule: "!ls" } }, wa, "no", deps())).toBe(PASSKEY_NO_SHELL);
+    expect(await widenProblem({ ...target, verb: "card.shell", change: { shell: "cat ~/.claude/settings.json" } }, wa, "no", deps({ passkeyShell: true }))).toBe(PHONE_ONLY);
+    expect(await widenProblem({ ...target, verb: "card.schedule", change: { schedule: "!ls" } }, wa, "no", deps({ passkeyShell: true }))).toBeNull();
     expect(await widenProblem(target, wa, "no", deps({ passkey: undefined }))).toBe(NO_PASSKEY_HERE);
     expect(await widenProblem(target, wa, "no", deps({ passkey: () => Promise.resolve({ ok: false, reason: "counter" }) }))).toBe("counter");
   });

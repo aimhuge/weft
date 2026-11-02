@@ -56,3 +56,16 @@ export function fileNonceStore(file: string): NonceStore {
     },
   };
 }
+
+// One book per file in a process: two books over one file would each keep their own map in memory and save over each
+// other, so a nonce one spent the other wouldn't see. The daemon and the line's terminal share this one.
+const BOOKS = Symbol.for("weft.widenNonceBooks");
+
+export function sharedNonceBook(file: string): NonceBook {
+  const g = globalThis as unknown as Record<symbol, Map<string, NonceBook> | undefined>;
+  const books = (g[BOOKS] ??= new Map<string, NonceBook>());
+  const key = path.resolve(file);
+  let book = books.get(key);
+  if (!book) books.set(key, (book = nonceBook(fileNonceStore(key))));
+  return book;
+}

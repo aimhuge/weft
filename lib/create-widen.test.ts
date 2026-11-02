@@ -13,7 +13,8 @@ describe("signedAgent", () => {
   it("checks an agent's approval over the agent, the folder and the prompt", async () => {
     const check = vi.fn(() => Promise.resolve(null));
     expect(await signedAgent(command({ prompt: "go", agent: "builder", widen: { k: 1 } }), "app", check)).toBe("builder");
-    expect(check).toHaveBeenCalledWith({ card: "", verb: "card.create", change: { create: { agent: "builder", folder: "app", prompt: "go" } } }, { k: 1 }, AGENT_REFUSED);
+    // The run's other terms are bound too, read as the host starts it.
+    expect(check).toHaveBeenCalledWith({ card: "", verb: "card.create", change: { create: { agent: "builder", folder: "app", prompt: "go" } }, args: { prompt: "go" } }, { k: 1 }, AGENT_REFUSED);
     await signedAgent(command({ agent: "b" }), "app", check);
     expect(check).toHaveBeenLastCalledWith(expect.objectContaining({ change: { create: { agent: "b", folder: "app", prompt: "" } } }), undefined, AGENT_REFUSED);
   });

@@ -120,7 +120,7 @@ describe("signed widening on the host kind", () => {
     const widen = vi.fn<NonNullable<CardRules["widen"]>>(() => Promise.resolve(null));
     const r = rules({ widen, elevated });
     await cardKinds(r).host(host({ body: { cwd: "site" }, widen: { kind: "ed25519" } }));
-    expect(widen).toHaveBeenCalledWith({ card: "k1", verb: "card.update", change: { cwd: "site" } }, { kind: "ed25519" }, expect.stringMatching(/folder/));
+    expect(widen).toHaveBeenCalledWith({ card: "k1", verb: "card.update", change: { cwd: "site" }, args: { body: { cwd: "site" } } }, { kind: "ed25519" }, expect.stringMatching(/folder/));
     expect(r.verb).toHaveBeenCalledWith("card.update", { id: "k1", body: { cwd: "site" } });
     await cardKinds(r).host(host({ command: "ls", widen: {} }, "card.shell"));
     expect(r.verb).toHaveBeenLastCalledWith("card.shell", { id: "k1", command: "ls" });

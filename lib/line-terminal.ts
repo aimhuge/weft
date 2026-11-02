@@ -38,7 +38,7 @@ export function lineTerminalBridge(workerId: string): TerminalBridge {
     if (!lineFor(workerId)?.up()) return { error: NO_LINE };
     let widen: unknown;
     try {
-      widen = await signWiden({ host: workerId, card: "", verb: "terminal.open", change: { terminal: folder } });
+      widen = await signWiden({ host: workerId, card: "", verb: "terminal.open", change: { terminal: folder }, args: {} });
     } catch (err) {
       return { error: (err as Error).message };
     }

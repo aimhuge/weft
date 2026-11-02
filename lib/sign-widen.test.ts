@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { PHONE_ONLY } from "./passkey-phone-only";
-import { hostOfDevice, sendWiden, signWidenUrl, widenAskOf, widenAuth, widenToSign, type WidenAsk } from "./sign-widen";
+import { argsFromChange, hostOfDevice, loadWidenCard, sendWiden, signWidenUrl, widenAskOf, widenAuth, widenToSign, type WidenAsk } from "./sign-widen";
 import { widenMessage } from "./widen";
 import { PASSKEY_TOO_WIDE } from "./widen-check";
 
@@ -30,7 +30,9 @@ describe("widenToSign", () => {
     if (typeof w === "string") throw new Error(w);
     expect(w.host).toBe("w1");
     expect(w.change).toEqual({ cwd: "site" });
-    expect(w.message).toBe(widenMessage({ host: "w1", card: "c1", verb: "card.update", change: { cwd: "site" }, nonce: "abcdefghijklmnop", issuedAt: 9 }));
+    // The args are rebuilt from the change: the link's `note` beside it is neither signed nor sent.
+    expect(w.args).toEqual({ body: { cwd: "site" }, id: "c1" });
+    expect(w.message).toBe(widenMessage({ host: "w1", card: "c1", verb: "card.update", change: { cwd: "site" }, args: { body: { cwd: "site" } }, nonce: "abcdefghijklmnop", issuedAt: 9 }));
     expect(widenAuth(w, sig)).toEqual({ kind: "webauthn", device: "b1", credId: "cred", issuedAt: 9, nonce: "abcdefghijklmnop", ...sig });
     expect(hostOfDevice("mac-dev")).toBe("mac-dev");
     const random = widenToSign(ask, passkey, 9);
@@ -44,6 +46,14 @@ describe("widenToSign", () => {
     expect(widenToSign({ ...ask, args: { body: { readScope: "/x" } } }, passkey, 1)).toBe(PASSKEY_TOO_WIDE);
     expect(widenToSign({ ...ask, verb: "card.shell", args: { command: "rm -rf ~/.claude" } }, passkey, 1)).toBe(PHONE_ONLY);
     expect(typeof widenToSign({ ...ask, verb: "card.shell", args: { command: "ls" } }, passkey, 1)).toBe("object");
+    expect(widenToSign({ ...ask, verb: "card.schedule", args: { text: "!ls", at: "soon" } }, passkey, 1)).toMatch(/can't be approved here/);
+  });
+
+  it("keeps a \"!\" line's send-at time, and nothing else the link carried", () => {
+    const w = widenToSign({ ...ask, verb: "card.schedule", args: { text: "!ls", at: 50, extra: 1 } }, passkey, 1, "abcdefghijklmnop");
+    expect(typeof w === "string" ? w : w.args).toEqual({ text: "!ls", at: 50, id: "c1" });
+    expect(argsFromChange("card.shell", { shell: "ls" }, { command: "rm" })).toEqual({ command: "ls" });
+    expect(argsFromChange("terminal.open", { terminal: "a" }, {})).toBeNull();
   });
 });
 
@@ -54,8 +64,26 @@ describe("sendWiden", () => {
     const insert = vi.fn(() => Promise.resolve({ error: null }));
     const client = { from: () => ({ insert }) } as never;
     expect(await sendWiden(client, w, sig)).toBeNull();
-    expect(insert).toHaveBeenCalledWith({ org_id: "o1", kind: "host", target_device: "worker:w1", folder: "app", payload: { verb: "card.update", args: { body: { cwd: "site", note: "é ✓" }, id: "c1", widen: widenAuth(w, sig) } } });
+    expect(insert).toHaveBeenCalledWith({ org_id: "o1", kind: "host", target_device: "worker:w1", folder: "app", payload: { verb: "card.update", args: { body: { cwd: "site" }, id: "c1", widen: widenAuth(w, sig) } } });
     const failing = { from: () => ({ insert: () => Promise.resolve({ error: { message: "denied" } }) }) } as never;
     expect(await sendWiden(failing, w, sig)).toMatch(/denied/);
+  });
+});
+
+describe("loadWidenCard", () => {
+  const rows = (data: unknown[] | null, error: { message: string } | null = null) => ({ from: () => ({ select: () => ({ eq: () => ({ overrideTypes: () => Promise.resolve({ data, error }) }) }) }) }) as never;
+  const row = { org_id: "o1", card_id: "c1", owner_device: "worker:w1", owner_user: "u1", folder: "app", card: { title: "Fix login" }, deleted: false };
+
+  it("names the card by its title and folder as this page reads it", async () => {
+    expect(await loadWidenCard(rows([row]), ask, "u1")).toEqual({ title: "Fix login", folder: "app" });
+    expect(await loadWidenCard(rows([{ ...row, card: {}, owner_user: undefined }]), ask, "u1")).toEqual({ title: "(untitled)", folder: "app" });
+  });
+
+  it("refuses a card that isn't this account's on the host and folder the link names", async () => {
+    expect(await loadWidenCard(rows([row]), ask, "u2")).toMatch(/another account's/);
+    expect(await loadWidenCard(rows([{ ...row, owner_device: "worker:w2" }]), ask, "u1")).toMatch(/isn't one of yours/);
+    expect(await loadWidenCard(rows([{ ...row, folder: "other" }]), ask, "u1")).toMatch(/isn't one of yours/);
+    expect(await loadWidenCard(rows([{ ...row, deleted: true }]), ask, "u1")).toMatch(/isn't one of yours/);
+    expect(await loadWidenCard(rows(null, { message: "denied" }), ask, "u1")).toMatch(/denied/);
   });
 });

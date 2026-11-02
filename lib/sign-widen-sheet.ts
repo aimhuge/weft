@@ -18,11 +18,15 @@ const seenEnd = (pre: HTMLElement) => pre.scrollHeight <= pre.clientHeight + 2 |
 export function showWidenSheet(root: HTMLElement, w: WidenToSign, actions: { sign: () => Promise<string | null>; cancel: () => void }) {
   const what = el("div", "what");
   const where = w.target.device.startsWith("worker:") ? `worker ${w.host}` : `Mac ${w.host.slice(0, 12)}`;
-  what.append(el("div", "head", widenLabel(w.change)), el("div", "meta", `${w.verb} · card ${w.target.cardId} · on ${where}`));
+  const card = w.card ? `“${w.card.title}” in ${w.card.folder}` : `card ${w.target.cardId}`;
+  const at = typeof w.args.at === "number" ? ` · sent ${new Date(w.args.at).toLocaleString()}` : "";
+  what.append(el("div", "head", widenLabel(w.change)), el("div", "meta", `${card} · on ${where}${at}`), el("div", "meta", `${w.verb} · ${w.target.cardId}`));
   const pre = el("pre", "input");
   pre.setAttribute("aria-label", "Everything it signs");
   pre.tabIndex = 0;
-  for (const piece of displayPieces(displayInput(w.change as Record<string, unknown>))) pre.append("mark" in piece ? el("span", "mark", piece.mark) : document.createTextNode(piece.text));
+  // The args it sends, whole: rebuilt from the change (lib/sign-widen.ts argsFromChange), so nothing else rides along.
+  const shown = Object.fromEntries(Object.entries(w.args).filter(([key]) => key !== "id"));
+  for (const piece of displayPieces(displayInput(shown))) pre.append("mark" in piece ? el("span", "mark", piece.mark) : document.createTextNode(piece.text));
   what.append(pre);
   const error = el("p", "warn");
   error.setAttribute("role", "alert");

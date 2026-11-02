@@ -31,6 +31,11 @@ const controls = (backend: Backend) => (
 describe("NewCardDialogControls", () => {
   afterEach(cleanup);
 
+  it("keeps the folder, agent and mode from a thread driving the board", () => {
+    const { container } = render(controls("claude"));
+    expect(container.firstElementChild?.hasAttribute("data-human-only")).toBe(true);
+  });
+
   it("says nothing about guards: every CLI runs behind them", () => {
     const { rerender } = render(controls("codex"));
     expect(screen.queryByRole("note")).toBeNull();

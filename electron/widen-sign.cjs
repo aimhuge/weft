@@ -4,12 +4,10 @@
 // The Touch ID prompt is main's own words over exactly the fields it signs, so a board-side script can't show one
 // change and have main sign another; the key is this Mac's desktop approval key (electron/desktop-signer.cjs).
 //
-// Also here: the endorsements that let this Mac's paired passkeys widen on a worker (a `pin` command; lib/host-signers.ts
-// checks them on the box against this Mac's key, which the box pinned from the pairing code, H8).
+// The endorsements that let this Mac's paired passkeys widen on a worker are electron/widen-endorse.cjs.
 const crypto = require("node:crypto");
 
 const WIDEN_V = "weft-widen-v1";
-const ENDORSE_V = "weft-endorse-v1";
 const VERBS = new Set(["card.update", "card.shell", "card.schedule", "terminal.open", "card.create"]);
 const CHANGE_KEYS = new Set(["cwd", "agent", "permissionMode", "readScope", "shell", "schedule", "terminal", "create"]);
 const ID = /^[A-Za-z0-9_:.-]{1,200}$/;
@@ -23,21 +21,26 @@ function sorted(value) {
   return value;
 }
 const canonical = (value) => JSON.stringify(sorted(JSON.parse(JSON.stringify(value ?? null))));
-const widenMessage = (f) => canonical({ v: WIDEN_V, host: f.host, card: f.card, verb: f.verb, change: f.change, nonce: f.nonce, issuedAt: f.issuedAt });
-const endorseMessage = (e) =>
-  canonical({ v: ENDORSE_V, worker: e.worker, device: e.device, credId: e.credId, publicKey: e.publicKey, revoke: e.revoke, issuedAt: e.issuedAt });
+const widenMessage = (f) => canonical({ v: WIDEN_V, host: f.host, card: f.card, verb: f.verb, change: f.change, args: f.args, nonce: f.nonce, issuedAt: f.issuedAt });
 
 const strings = (v) => (typeof v === "string" ? [v] : v && typeof v === "object" ? Object.values(v).flatMap(strings) : []);
 
-/** What the board asks main to sign, or a string saying why not. @returns {{ host: string, card: string, verb: string, change: Record<string, unknown> } | string} */
+const plain = (v) => Boolean(v) && typeof v === "object" && !Array.isArray(v);
+
+/** What the board asks main to sign, or a string saying why not. @returns {{ host: string, card: string, verb: string, change: Record<string, unknown>, args: Record<string, unknown> } | string} */
 function readWidenRequest(raw) {
   if (!raw || typeof raw !== "object") return "Nothing to sign.";
-  const { host, card, verb, change } = raw;
+  const { host, card, verb, change, args } = raw;
   if (typeof host !== "string" || !ID.test(host) || typeof card !== "string" || (card !== "" && !ID.test(card))) return "That approval names no host or card.";
   if (!VERBS.has(verb)) return "That isn't a change main signs.";
-  if (!change || typeof change !== "object" || Array.isArray(change) || !Object.keys(change).length) return "That approval changes nothing.";
+  if (!plain(change) || !Object.keys(change).length) return "That approval changes nothing.";
   if (Object.keys(change).some((k) => !CHANGE_KEYS.has(k))) return "That approval names a change main doesn't know.";
-  return changeProblem(change) ?? { host, card, verb, change };
+  return argsProblem(args) ?? changeProblem(change) ?? { host, card, verb, change, args };
+}
+
+// The rest of the command, bound whole (lib/widen.ts widenArgsOf, createTerms): the prompt names what's in it.
+function argsProblem(args) {
+  return !plain(args) || canonical(args).length > 20_000 || strings(args).some((s) => BIDI.test(s)) ? "That approval's command isn't one main signs." : null;
 }
 
 // What the prompt shows of each field, at most: main signs nothing it would have to cut or bend to show, so the words
@@ -86,49 +89,56 @@ function changeWords(change) {
   if (change.readScope !== undefined) parts.push(`let it read from ${oneLine(change.readScope, 120)}`);
   if (change.shell !== undefined) parts.push(`run the shell command ${oneLine(change.shell, 160)}`);
   if (change.schedule !== undefined) parts.push(`schedule the shell line ${oneLine(change.schedule, 160)}`);
-  if (change.terminal !== undefined) parts.push(`open a terminal in ${oneLine(change.terminal, 60)}`);
+  if (change.terminal !== undefined) parts.push(`open a full shell (a terminal) in ${oneLine(change.terminal, 60)}`);
   if (change.create) parts.push(`start a thread with the agent ${oneLine(change.create.agent, 60)} in ${oneLine(change.create.folder, 60)}`);
   return parts.join(", ");
 }
 
-/** The Touch ID prompt for a widening. */
-function widenPrompt(req, self) {
-  const where = req.host === self ? "this Mac" : `the host ${req.host.slice(0, 8)}`;
+const TERM_WORDS = { permissionMode: "mode", backend: "CLI", model: "model", repo: "repo", effort: "effort", title: "title" };
+
+// What else the signed command carries, in words: a card.update's other fields, a "!" line's send-at time, a new
+// thread's first message (cut, with its length) and its mode, CLI, model and repo.
+function argsWords(verb, change, args) {
+  if (verb === "card.update") {
+    const others = Object.keys(plain(args.body) ? args.body : {}).filter((k) => !(k in change));
+    return others.length ? ` (and its ${others.map((k) => oneLine(k, 30)).join(", ")} with it)` : "";
+  }
+  if (verb === "card.schedule") return Number.isFinite(args.at) ? ` to send at ${new Date(args.at).toLocaleString()}` : "";
+  if (verb !== "card.create") return "";
+  const terms = Object.entries(TERM_WORDS).filter(([k]) => typeof args[k] === "string").map(([k, word]) => `${word} ${oneLine(args[k], 40)}`);
+  const prompt = String(change.create.prompt);
+  const first = ` with the first message "${oneLine(prompt, 200)}"${prompt.length > 200 ? ` (${prompt.length} characters)` : ""}`;
+  return `${first}${terms.length ? `, ${terms.join(", ")}` : ""}`;
+}
+
+/**
+ * The Touch ID prompt for a widening. `hostName` names a worker this Mac pinned.
+ * @param {{ host: string, card: string, verb: string, change: Record<string, any>, args?: Record<string, any> }} req
+ * @param {string} self @param {(id: string) => string | null} [hostName]
+ */
+function widenPrompt(req, self, hostName = () => null) {
+  const name = req.host === self ? null : hostName(req.host);
+  const where = req.host === self ? "this Mac" : name ? `the worker ${oneLine(name, 60)} (${req.host.slice(0, 8)})` : `the host ${req.host}`;
   const which = req.card ? `card ${req.card.slice(0, 8)}` : "a new card";
-  return `${changeWords(req.change)}, for ${which} on ${where}`;
+  return `${changeWords(req.change)}${argsWords(req.verb, req.change, req.args ?? {})}, for ${which} on ${where}`;
 }
 
 /**
  * @param {(channel: string, fn: (...args: any[]) => unknown) => void} handle the board-only IPC handler
  * @param {{ signer: { sign: (m: string) => string }, macDevice: () => string, confirm: (reason: string) => Promise<boolean>,
- *   passkeys: () => Array<{ id: string, passkey?: { credId: string, publicKey: string } }>, now?: () => number }} deps
+ *   hostName?: (id: string) => string | null, now?: () => number }} deps
  */
-function registerWidenSign(handle, { signer, macDevice, confirm, passkeys, now = Date.now }) {
+function registerWidenSign(handle, { signer, macDevice, confirm, hostName, now = Date.now }) {
   // A widening, after Touch ID in main's words. Null when Touch ID is refused.
   handle("approval:widen", async (raw) => {
     const req = readWidenRequest(raw);
     if (typeof req === "string") throw new Error(req);
     const device = macDevice();
-    if (!(await confirm(widenPrompt(req, device)))) return null;
+    if (!(await confirm(widenPrompt(req, device, hostName)))) return null;
     const issuedAt = now();
     const nonce = crypto.randomBytes(18).toString("base64url");
     return { kind: "ed25519", device, issuedAt, nonce, sig: signer.sign(widenMessage({ ...req, nonce, issuedAt })) };
   });
-
-  // Every passkey this Mac pinned, endorsed for one worker after one Touch ID; [] when there are none, null when refused.
-  handle("approval:endorse", async (raw) => {
-    const worker = raw && typeof raw === "object" ? raw.worker : undefined;
-    const revoke = raw?.revoke === true;
-    if (typeof worker !== "string" || !ID.test(worker)) throw new Error("That names no worker.");
-    const keys = passkeys().filter((d) => d.passkey);
-    if (!keys.length) return [];
-    if (!(await confirm(`${revoke ? "stop letting" : "let"} your paired passkeys approve folder, agent, shell and terminal changes on the worker ${worker.slice(0, 8)}`))) return null;
-    const mac = macDevice();
-    return keys.map((d) => {
-      const e = { worker, device: d.id, credId: d.passkey.credId, publicKey: d.passkey.publicKey, revoke, issuedAt: now() };
-      return { ...e, mac, sig: signer.sign(endorseMessage(e)) };
-    });
-  });
 }
 
-module.exports = { registerWidenSign, readWidenRequest, widenPrompt, widenMessage, endorseMessage, canonical };
+module.exports = { registerWidenSign, readWidenRequest, widenPrompt, widenMessage, canonical };

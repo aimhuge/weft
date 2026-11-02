@@ -8,7 +8,7 @@ import type { HostVerb } from "../host-api";
 import { hostResult, readHostCommand, remoteRefusal, textArgOf, verbResult, type HostDone, type HostPayload } from "../host-command";
 import { carriesValue, valueResult, type Carry } from "../host-result";
 import type { Card } from "../types";
-import { widenChangeOf, withoutWiden, type WidenChange } from "../widen";
+import { widenArgsOf, widenChangeOf, withoutWiden, type WidenChange } from "../widen";
 import type { WidenTarget } from "../widen-check";
 import type { Done } from "./identity";
 
@@ -119,7 +119,7 @@ export function cardKinds(rules: CardRules) {
     const refused = remoteRefusal(body);
     const change = refused ? widenChangeOf(body) : null;
     if (refused && change && rules.widen && body.args.widen !== undefined) {
-      const problem = await rules.widen({ card: card.id, verb: body.verb, change }, body.args.widen, refused);
+      const problem = await rules.widen({ card: card.id, verb: body.verb, change, args: widenArgsOf(body.args) }, body.args.widen, refused);
       if (problem) throw new Error(problem);
       const rest = unsignedRest(body, change);
       const why = rest && (await rules.elevated?.(body.verb, rest));

@@ -77,6 +77,11 @@ function createWorkerPins({ dir, safeStorage, now = () => new Date() }) {
      * now. Its sign key stays: a paired worker's asks still need its signature, so a stolen `wwk_` key can't re-pin.
      * @param {string} id
      */
+    /** The name a worker was pinned under, for main's own prompts; null when it isn't pinned. @param {string} id */
+    nameOf(id) {
+      const pinned = read()[id];
+      return typeof pinned?.name === "string" ? pinned.name : null;
+    },
     forget(id) {
       const pins = read();
       const pinned = pins[id];

@@ -81,8 +81,9 @@ export default function TerminalDrawer({
 
   const canSplit = panes.length < MAX_PANES;
 
+  // A shell: a thread driving the board (board_view) can't click or type here, xterm's own textarea included.
   return (
-    <section style={{ height }} className="relative flex shrink-0 flex-col border-t border-line-strong bg-[#16161a]">
+    <section data-human-only style={{ height }} className="relative flex shrink-0 flex-col border-t border-line-strong bg-[#16161a]">
       <div onPointerDown={startDrag} className="absolute -top-1 left-0 right-0 z-10 h-2 cursor-row-resize" aria-hidden="true" />
       <div className="flex shrink-0 items-center gap-2 border-b border-white/10 px-3 py-1 text-[11.5px] text-zinc-400">
         <Icon name="terminal" size={13} />

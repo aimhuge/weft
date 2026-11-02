@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { fileNonceStore, nonceBook, type NonceStore } from "./widen-nonces";
+import { fileNonceStore, nonceBook, sharedNonceBook, type NonceStore } from "./widen-nonces";
 
 const memory = (start: Record<string, number> = {}) => {
   const saved: Record<string, number>[] = [];
@@ -53,5 +53,15 @@ describe("fileNonceStore", () => {
     expect(store.load()).toEqual({});
     fs.writeFileSync(file, "{");
     expect(store.load()).toEqual({});
+  });
+});
+
+describe("sharedNonceBook", () => {
+  it("gives one book per file in a process, so a nonce one caller spent the other sees", () => {
+    const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "weft-shared-nonces-")), "n.json");
+    const a = sharedNonceBook(file);
+    expect(sharedNonceBook(`${path.dirname(file)}/./n.json`)).toBe(a);
+    expect(a.take("nonce-000000000001", Date.now() + 60_000)).toBe(true);
+    expect(sharedNonceBook(file).take("nonce-000000000001", Date.now() + 60_000)).toBe(false);
   });
 });

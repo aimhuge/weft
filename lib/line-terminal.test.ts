@@ -47,7 +47,7 @@ describe("lineTerminalBridge", () => {
     const offExit = b.onExit((id, code) => exits.push(code));
     const opening = b.open("t1", "worker://w1/app", 80, 24);
     await flush();
-    expect(sign).toHaveBeenCalledWith({ host: "w1", card: "", verb: "terminal.open", change: { terminal: "app" } });
+    expect(sign).toHaveBeenCalledWith({ host: "w1", card: "", verb: "terminal.open", change: { terminal: "app" }, args: {} });
     const ch = state.channel as FakeChannel;
     ch.open();
     expect(ch.sent).toEqual([{ t: "open", folder: "app", cols: 80, rows: 24, widen: { kind: "ed25519" } }]);

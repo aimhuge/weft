@@ -3,7 +3,7 @@
 // Settings → Devices (components/DevicesSettings.tsx, docs/architecture/device-registry.md): every device of yours from
 // the one registry through /api/devices, Revoke for any kind, and Add a worker, which pairs a box over
 // window.weft.hostPairing the way a phone pairs (the code's secret, the claim check and Touch ID stay in main).
-import { canSignWiden, endorsePasskeys } from "./widen-signer";
+import { canSignWiden, endorsePasskeys, refreshEndorsements } from "./widen-signer";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch } from "./api-client";
 import type { DeviceView, DevicesView } from "./device-registry";
@@ -69,7 +69,22 @@ export async function sendPasskeys(workerId: string, name: string): Promise<stri
   if (!endorsements) return `Not approved, so ${name} trusts no new passkey.`;
   if (!endorsements.length) return "No passkey is paired with this Mac yet: pair one in Settings → Sync first.";
   await readJson(await apiFetch("/api/worker-board", { method: "POST", body: JSON.stringify({ action: "pin", workerId, endorsements }) }));
-  return `Sent: ${name} will let ${endorsements.length === 1 ? "your passkey" : `your ${endorsements.length} passkeys`} approve changes there once it takes it.`;
+  // One endorsement naming the whole set (electron/widen-endorse.cjs): the worker replaces its list with it.
+  const count = (endorsements[0] as { passkeys?: unknown[] } | undefined)?.passkeys?.length ?? 0;
+  return `Sent: ${name} will let ${count === 1 ? "your passkey" : `your ${count} passkeys`} approve changes there once it takes it.`;
+}
+
+// After a passkey is unpaired: every worker it was endorsed for gets the set without it, so it stops trusting it too.
+export async function resendPasskeys(): Promise<void> {
+  const missed: string[] = [];
+  for (const { worker, endorsements } of await refreshEndorsements()) {
+    try {
+      await readJson(await apiFetch("/api/worker-board", { method: "POST", body: JSON.stringify({ action: "pin", workerId: worker, endorsements }) }));
+    } catch {
+      missed.push(worker.slice(0, 8));
+    }
+  }
+  if (missed.length) throw new Error(`Unpaired here, but ${missed.join(", ")} couldn't be told yet: press Passkeys on it in Settings → Devices.`);
 }
 
 export function useDevices({ pairing, hosts }: Bridges = bridgesHere()) {
@@ -128,7 +143,10 @@ export function useDevices({ pairing, hosts }: Bridges = bridgesHere()) {
   const revoke = (device: DeviceView) =>
     act(async () => {
       const pinned = new Set((await pairing?.list())?.map((d) => d.id) ?? []);
-      if (revokeRoute(device, pinned) === "pairing") await pairing?.revoke(device.id);
+      if (revokeRoute(device, pinned) === "pairing") {
+        await pairing?.revoke(device.id);
+        await resendPasskeys();
+      }
       else await readJson(await apiFetch(`/api/devices?id=${encodeURIComponent(device.id)}`, { method: "DELETE" }));
       await reload();
     });

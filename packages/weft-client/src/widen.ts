@@ -58,6 +58,32 @@ export function widenChangeOf({ verb, args }: { verb: string; args: Record<strin
   return Object.keys(change).length ? change : null;
 }
 
+// The rest of a host command an approval binds: its args without the approval and the card (which the message names on
+// its own), so a row re-sent with the same approval and another title, mode, column or send-at time is refused.
+export function widenArgsOf(args: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(args).filter(([key]) => key !== "widen" && key !== "id"));
+}
+
+const RUN_MODES = ["default", "acceptEdits", "auto", "plan"];
+const BACKENDS = ["claude", "codex", "puku", "goose"];
+const trimmed = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : undefined);
+
+// What a new thread is made of, as a host reads its run or new_card (lib/worker-commands.ts runBody): the terms its
+// approval binds besides the agent and folder. The board signs these over its own input, the host over the row; both
+// read them through this, so a relay row can't keep the approval and change the mode, CLI, model or repo.
+export function createTerms(payload: unknown): Record<string, string> {
+  const p = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
+  const terms: Record<string, string> = {};
+  for (const key of ["prompt", "title", "model", "repo", "effort"]) {
+    const value = trimmed(p[key]);
+    if (value) terms[key] = value;
+  }
+  const backend = trimmed(p.backend);
+  if (backend && BACKENDS.includes(backend)) terms.backend = backend;
+  if (typeof p.permissionMode === "string" && RUN_MODES.includes(p.permissionMode)) terms.permissionMode = p.permissionMode;
+  return terms;
+}
+
 // What a host signs over and checks: every field always present, so one approval has one encoding.
 export interface WidenFields {
   // The host that runs it: a Mac's lib/device-id.ts id, or a worker's id.
@@ -66,6 +92,8 @@ export interface WidenFields {
   card: string;
   verb: WidenVerb;
   change: WidenChange;
+  // The rest of the command, bound whole: widenArgsOf for a host verb, createTerms for a new thread, {} for a terminal.
+  args: Record<string, unknown>;
   nonce: string;
   issuedAt: number;
 }
@@ -85,7 +113,7 @@ export const canonical = (value: unknown) => JSON.stringify(sorted(JSON.parse(JS
 // The message a widening's signer signs (Ed25519 over it, or a passkey over its SHA-256). Its `v` keeps it from ever
 // reading as an answer's message, the phone's lines or a passkey answer's JSON.
 export const widenMessage = (f: WidenFields) =>
-  canonical({ v: WIDEN_MESSAGE_V, host: f.host, card: f.card, verb: f.verb, change: f.change, nonce: f.nonce, issuedAt: f.issuedAt });
+  canonical({ v: WIDEN_MESSAGE_V, host: f.host, card: f.card, verb: f.verb, change: f.change, args: f.args, nonce: f.nonce, issuedAt: f.issuedAt });
 
 // What rides in the command as `widen` (args.widen on a host verb, payload.widen on a run, the terminal's open).
 export type WidenAuth =

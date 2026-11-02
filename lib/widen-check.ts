@@ -23,12 +23,17 @@ export interface WidenDeps {
   passkey?(body: { device: string; credId: string; message: string; authenticatorData: string; clientDataJSON: string; signature: string }): Promise<Verified>;
   // A host's own limit on the new value (a worker's project folders), or null.
   confine?(change: WidenChange): string | null;
+  // Whether a passkey may sign a "!" line here: a Mac whose Settings → Sync lets the web approve. A passkey on a "!"
+  // line is a shell for whoever holds it, and no list of risky commands (H7's phoneOnly) holds against obfuscation.
+  passkeyShell?: boolean;
 }
 
 export interface WidenTarget {
   card: string;
   verb: WidenVerb;
   change: WidenChange;
+  // The rest of the command as this host read it (lib/widen.ts widenArgsOf, createTerms), bound whole.
+  args: Record<string, unknown>;
 }
 
 export const STALE = "That approval is too old, or its clock is off. Approve it again.";
@@ -37,15 +42,18 @@ export const NO_PASSKEY_HERE = "This host can't check a passkey yet. Approve it 
 // What a passkey may not widen, as for an answer (lib/passkey-phone-only.ts): skipping permission prompts and a folder
 // grant stay on the phone or the Mac, where the prompt is native.
 export const PASSKEY_TOO_WIDE = "Skipping permission prompts or granting a folder needs your phone or Weft on your Mac, not a browser.";
+export const PASSKEY_NO_SHELL = "A \"!\" line needs your phone or Weft on your Mac, not a browser (unless Settings → Sync on your Mac lets the web approve).";
 
 const strings = (value: unknown): string[] =>
   typeof value === "string" ? [value] : value && typeof value === "object" ? Object.values(value).flatMap(strings) : [];
 
 // What a passkey can't sign: the H7 rule for answers, read over the change as a Bash command would be.
-function passkeyRefusal(change: WidenChange): string | null {
+function passkeyRefusal(change: WidenChange, shell: boolean): string | null {
   if (change.permissionMode || change.readScope !== undefined) return PASSKEY_TOO_WIDE;
   const command = change.shell ?? change.schedule;
-  return command !== undefined && phoneOnly({ toolName: "Bash", input: { command } }) ? PHONE_ONLY : null;
+  if (command === undefined) return null;
+  if (!shell) return PASSKEY_NO_SHELL;
+  return phoneOnly({ toolName: "Bash", input: { command } }) ? PHONE_ONLY : null;
 }
 
 // Why this widening can't run, or null when it can. `refusal` is what the host says without an approval.
@@ -57,11 +65,11 @@ export async function widenProblem(target: WidenTarget, raw: unknown, refusal: s
   if (strings(target.change).some((s) => BIDI.test(s))) return BIDI_REFUSED;
   const kept = deps.confine?.(target.change);
   if (kept) return kept;
-  const message = widenMessage({ host: deps.host, card: target.card, verb: target.verb, change: target.change, nonce: auth.nonce, issuedAt: auth.issuedAt });
+  const message = widenMessage({ host: deps.host, card: target.card, verb: target.verb, change: target.change, args: target.args, nonce: auth.nonce, issuedAt: auth.issuedAt });
   let verified: Verified;
   if (auth.kind === "ed25519") verified = await deps.verify({ device: auth.device, message, sig: auth.sig });
   else {
-    const why = passkeyRefusal(target.change) ?? (deps.passkey ? null : NO_PASSKEY_HERE);
+    const why = passkeyRefusal(target.change, deps.passkeyShell === true) ?? (deps.passkey ? null : NO_PASSKEY_HERE);
     if (why) return why;
     const { device, credId, authenticatorData, clientDataJSON, signature } = auth;
     verified = await (deps.passkey as NonNullable<WidenDeps["passkey"]>)({ device, credId, message, authenticatorData, clientDataJSON, signature });

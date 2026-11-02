@@ -18,9 +18,10 @@ vi.mock("./host-api", async (real) => (await import("./cloud-inbox.harness")).ho
 vi.mock("./store", async () => (await import("./cloud-inbox.harness")).storeMock);
 // Main's nonce book (electron/widen-nonces.cjs): a nonce is spent once.
 const spent = vi.hoisted(() => new Set<string>());
+const sync = vi.hoisted(() => ({ webApprovals: false }));
 const shellMock = vi.hoisted(() =>
   vi.fn((route: string, body?: Record<string, unknown>) => {
-    if (route === "/pairing/status") return Promise.resolve({ approvers: 1, webApprovals: false });
+    if (route === "/pairing/status") return Promise.resolve({ approvers: 1, webApprovals: sync.webApprovals });
     if (route !== "/pairing/widen-nonce") return Promise.resolve({ ok: true });
     const fresh = !spent.has(String(body?.nonce));
     spent.add(String(body?.nonce));
@@ -30,7 +31,8 @@ const shellMock = vi.hoisted(() =>
 vi.mock("./browser-shell", () => ({ shell: shellMock }));
 
 const { refreshCloudInbox } = await import("./cloud-inbox");
-const { macConfine } = await import("./cloud-inbox-cards");
+const { macConfine, OWN_KEY } = await import("./cloud-inbox-cards");
+const { PASSKEY_NO_SHELL } = await import("./widen-check");
 
 const run = (row: CloudCommandRow) => {
   db.updates.length = 0;
@@ -41,7 +43,7 @@ let n = 0;
 const auth = (kind = "ed25519") => {
   const nonce = `nonce-${String(++n).padStart(12, "0")}`;
   return kind === "ed25519"
-    ? { kind, device: "mac-1", issuedAt: Date.now(), nonce, sig: "c2ln" }
+    ? { kind, device: "phone-1", issuedAt: Date.now(), nonce, sig: "c2ln" }
     : { kind, device: "b1", credId: "cred", issuedAt: Date.now(), nonce, authenticatorData: "YQ", clientDataJSON: "Yg", signature: "Yw" };
 };
 const host = (args: Record<string, unknown>, verb = "card.update") => command({ id: `cmd-${++n}`, kind: "host", payload: { verb, args: { id: "card-7", ...args } } as never });
@@ -60,8 +62,8 @@ describe("a signed widening from the web", () => {
     const a = auth();
     await run(host({ body: { cwd: "/dev/site" }, widen: a }));
     expect(control.verbs).toEqual([{ verb: "card.update", args: { id: "card-7", body: { cwd: "/dev/site" } } }]);
-    const message = widenMessage({ host: "mac-1", card: "card-7", verb: "card.update", change: { cwd: "/dev/site" }, nonce: a.nonce, issuedAt: a.issuedAt });
-    expect(shellMock).toHaveBeenCalledWith("/pairing/verify", { device: "mac-1", message, sig: "c2ln" });
+    const message = widenMessage({ host: "mac-1", card: "card-7", verb: "card.update", change: { cwd: "/dev/site" }, args: { body: { cwd: "/dev/site" } }, nonce: a.nonce, issuedAt: a.issuedAt });
+    expect(shellMock).toHaveBeenCalledWith("/pairing/verify", { device: "phone-1", message, sig: "c2ln" });
     expect(shellMock).toHaveBeenCalledWith("/pairing/widen-nonce", { nonce: a.nonce, issuedAt: a.issuedAt });
     // The same approval again is spent: main says so, not a file in ~/.weft a thread could edit.
     await run(host({ body: { cwd: "/dev/site" }, widen: a }));
@@ -72,6 +74,24 @@ describe("a signed widening from the web", () => {
     await run(host({ body: { agent: "builder" }, widen: auth("webauthn") }));
     expect(shellMock).toHaveBeenCalledWith("/pairing/passkey-verify", expect.objectContaining({ device: "b1", credId: "cred" }));
     expect(control.verbs).toHaveLength(1);
+  });
+
+  it("never takes this Mac's own desktop key from the network", async () => {
+    await run(host({ body: { cwd: "/dev/site" }, widen: { ...auth(), device: "mac-1" } }));
+    expect(reports()[0]?.error).toBe(OWN_KEY);
+    expect(control.verbs).toEqual([]);
+  });
+
+  it("takes a passkey's \"!\" line only where Settings → Sync lets the web approve", async () => {
+    await run(host({ command: "ls", widen: auth("webauthn") }, "card.shell"));
+    expect(reports()[0]?.error).toBe(PASSKEY_NO_SHELL);
+    sync.webApprovals = true;
+    vi.stubEnv("WEFT_SHELL_URL", "http://127.0.0.1:1");
+    await run(host({ command: "ls", widen: auth("webauthn") }, "card.shell"));
+    sync.webApprovals = false;
+    vi.unstubAllEnvs();
+    expect(reports()[0]?.error).toBeUndefined();
+    expect(control.verbs).toEqual([{ verb: "card.shell", args: { id: "card-7", command: "ls" } }]);
   });
 
   it("refuses a folder that isn't synced, and without an approval keeps today's refusal", async () => {
@@ -85,6 +105,7 @@ describe("a signed widening from the web", () => {
   it("starts a new card with an agent only with its approval", async () => {
     const card = (payload: Record<string, unknown>) => command({ id: `cmd-${++n}`, kind: "new_card", folder: "/dev/app", payload: { prompt: "go", start: false, ...payload } as never });
     await run(card({ agent: "builder", widen: auth() }));
+    expect(reports()[0]?.error).toBeUndefined();
     expect(control.made.at(-1)).toMatchObject({ agent: "builder", prompt: "go" });
     await run(card({ agent: "builder" }));
     expect(reports()[0]?.error).toMatch(/needs your approval/);

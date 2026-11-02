@@ -48,8 +48,9 @@ export function NewCardDialogControls({
   // The agent picker; left out where the thread's agent isn't picked here.
   agent?: AgentPick;
 }) {
+  // The folder, agent and mode decide what the thread may touch: a thread driving the board (board_view) can't set them.
   return (
-    <div className="flex shrink-0 flex-wrap items-center gap-2 px-5 pt-3">
+    <div data-human-only className="flex shrink-0 flex-wrap items-center gap-2 px-5 pt-3">
       <RepoPicker value={cwd} home={home} onChange={onChooseFolder} />
       {isolate && <IsolateMenu cwd={cwd} {...isolate} />}
       {agent && <AgentSelect {...agent} />}

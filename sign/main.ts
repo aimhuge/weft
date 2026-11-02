@@ -7,7 +7,7 @@ import { parsePairingLink } from "../lib/pairing-link";
 import { passkeyCode } from "../lib/passkey-code";
 import { askIds, loadAsk, sendApproval } from "../lib/sign-approve";
 import { showNote, showSheet } from "../lib/sign-sheet";
-import { sendWiden, widenAskOf, widenToSign } from "../lib/sign-widen";
+import { loadWidenCard, sendWiden, widenAskOf, widenToSign } from "../lib/sign-widen";
 import { showWidenSheet } from "../lib/sign-widen-sheet";
 import { SUPABASE_KEY, SUPABASE_URL } from "../lib/supabase-project";
 import { createPasskey, signWithPasskey } from "../lib/web-passkey";
@@ -73,10 +73,12 @@ function pairPage(user: { id: string; name: string }) {
 }
 
 // A widening the board asked for (lib/sign-widen.ts): shown whole, signed, and sent as the host command.
-function widenPage(user: { id: string }, search: string): boolean {
+async function widenPage(user: { id: string }, search: string): Promise<boolean> {
   const ask = widenAskOf(search);
   if (!ask) return false;
-  const w = widenToSign(ask, browserPasskey(user.id), Date.now());
+  // The card as this page reads it itself: refused when it isn't this account's on that host.
+  const card = await loadWidenCard(client, ask, user.id);
+  const w = typeof card === "string" ? card : widenToSign(ask, browserPasskey(user.id), Date.now(), undefined, card);
   if (typeof w === "string") {
     showNote(root, "Can't approve here", w, true);
     return true;
@@ -98,7 +100,7 @@ function widenPage(user: { id: string }, search: string): boolean {
 
 async function approvePage(user: { id: string }) {
   const search = window.location.search || (sessionStorage.getItem(ASK_KEY) ?? "");
-  if (widenPage(user, search)) {
+  if (await widenPage(user, search)) {
     sessionStorage.removeItem(ASK_KEY);
     return;
   }
