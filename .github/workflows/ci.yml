@@ -5,10 +5,14 @@ on:
     branches: [main]
   pull_request:
 
+# A new push to a pull request cancels its older run; main and tags always run to the end.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
-  check:
+  lint:
     runs-on: ubuntu-latest
-    # A hung test file (a render loop) once ran the job for 20+ minutes toward the 6-hour default; the suite takes ~8.
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
@@ -19,8 +23,59 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm run lint
+
+  typecheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # tsc's incremental info and Next's type cache: a warm restore makes the check a delta.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            tsconfig.tsbuildinfo
+            .next/cache
+          key: tsc-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
+          restore-keys: |
+            tsc-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
       - run: pnpm run typecheck
-      - run: pnpm test
+
+  # The suite split four ways with vitest --shard through the same runner (so its memory gate and RSS
+  # watchdog still apply to each shard). Every test file lands in exactly one shard.
+  test:
+    runs-on: ubuntu-latest
+    # A hung test file (a render loop) once ran the job for 20+ minutes toward the 6-hour default.
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    name: test (${{ matrix.shard }}/4)
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test --shard=${{ matrix.shard }}/4
+
+  # The one required status: green only when lint, typecheck and every test shard passed.
+  check:
+    if: always()
+    needs: [lint, typecheck, test]
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "lint=${{ needs.lint.result }} typecheck=${{ needs.typecheck.result }} test=${{ needs.test.result }}"
+          [ "${{ needs.lint.result }}" = success ] && [ "${{ needs.typecheck.result }}" = success ] && [ "${{ needs.test.result }}" = success ]
 
   secrets:
     runs-on: ubuntu-latest
