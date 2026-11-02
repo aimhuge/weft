@@ -16,25 +16,22 @@ function makeToggles(over: Partial<{
   selectedRef: React.RefObject<string | null>;
   browserVisible: boolean;
   setWebBrowserOpen: ReturnType<typeof vi.fn>;
-  setTerminalOpen: ReturnType<typeof vi.fn>;
   laneState: "hidden" | "peek" | "open";
   select: ReturnType<typeof vi.fn>;
 }> = {}) {
   const selectedRef: React.RefObject<string | null> = over.selectedRef ?? { current: null };
   const setWebBrowserOpen = over.setWebBrowserOpen ?? vi.fn();
-  const setTerminalOpen = over.setTerminalOpen ?? vi.fn();
   const select = over.select ?? vi.fn();
   const { result } = renderHook(() =>
     useBoardToggles({
       selectedRef,
       browserVisible: over.browserVisible ?? false,
       setWebBrowserOpen: setWebBrowserOpen as unknown as (open: boolean) => void,
-      setTerminalOpen: setTerminalOpen as unknown as (open: boolean | ((prev: boolean) => boolean)) => void,
       laneState: over.laneState ?? "hidden",
       select: select as unknown as (id: string | null) => void,
     }),
   );
-  return { result, setWebBrowserOpen, setTerminalOpen, select, selectedRef };
+  return { result, setWebBrowserOpen, select, selectedRef };
 }
 
 beforeEach(() => {
@@ -65,17 +62,6 @@ describe("useBoardToggles", () => {
     const { result } = makeToggles({ browserVisible: false, selectedRef: { current: "c1" } });
     act(() => result.current.toggleBrowser());
     expect(setVisible).not.toHaveBeenCalled();
-  });
-
-  it("toggleTerminal flips the open state", () => {
-    const { result, setTerminalOpen } = makeToggles();
-    act(() => result.current.toggleTerminal());
-    expect(setTerminalOpen).toHaveBeenCalledTimes(1);
-    const call = setTerminalOpen.mock.calls[0];
-    expect(call).toBeDefined();
-    const updater = call![0] as (prev: boolean) => boolean;
-    expect(updater(true)).toBe(false);
-    expect(updater(false)).toBe(true);
   });
 
   it("toggleCopilot cycles hidden -> peek", () => {

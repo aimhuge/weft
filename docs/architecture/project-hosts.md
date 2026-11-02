@@ -1260,7 +1260,13 @@ pins, so each refusal lifts when, and only when, the command carries a fresh app
   own settings and credentials left out of its env: `WEFT_*`, `SUPABASE_*`, `DATABASE_URL`, tokens, secrets, keys, PATs,
   credentials, and any URL with a user and password in it), and carries
   `input`/`resize` in and `data` (16 KB chunks)/`exit` out. One terminal per line at a time; it's killed when its channel
-  closes, and every one is killed when the line closes. With no direct line the drawer says so.
+  closes, and every one is killed when the line closes. With no direct line the drawer says so ("The direct line to
+  m1mini is down…"). A worker from before signed widening answers every terminal channel with its old refusal
+  (`LEGACY_REFUSAL` in `lib/line-terminal.ts`), which the drawer reads as "m1mini needs to update before its terminal works
+  here". A shell refused or cut off before it opened reports no exit, so the pane shows that one reason
+  (`components/TerminalPaneStatus.tsx`). The drawer opens a worker's terminal only on your toggle for that target
+  (`lib/use-terminal-drawer.ts`): picking a worker card with the drawer open for another folder hides it rather than ask
+  Touch ID, and plain `t` counts only on the board itself (`onBoardItself` in `lib/hotkeys.ts`).
 - **Migration** `supabase/migrations/20261102200000_signed_widening.sql` adds the `pin` kind (not applied). The widenings
   themselves ride inside `host`, `run`, `new_card` and the line.
 - **Left refused.** A passkey can't skip permission prompts or grant a folder (H7's rule); a Mac card's terminal from

@@ -14,7 +14,7 @@ export interface BoardBottomProps {
   onHelp: () => void;
   // `away` names the worker the open card or project is on where this Mac can't sign for its terminal: the drawer is
   // this Mac's shell, so it says so instead (lib/board-derive.ts terminalAway).
-  terminal: { open: boolean; cwd: string; height: number; onHeight: (height: number) => void; onClose: () => void; away?: string | null };
+  terminal: { open: boolean; cwd: string; height: number; onHeight: (height: number) => void; onClose: () => void; away?: string | null; host?: string | null };
 }
 
 export default function BoardBottom({ footer, onHelp, terminal }: BoardBottomProps) {
@@ -33,7 +33,7 @@ export default function BoardBottom({ footer, onHelp, terminal }: BoardBottomPro
       {terminal.open && !terminal.away && (
         <div style={NO_DRAG} className="relative z-40">
           {/* Each folder has its own shell: a new folder starts a new drawer. */}
-          <TerminalDrawer key={terminal.cwd} cwd={terminal.cwd} height={terminal.height} onHeight={terminal.onHeight} onClose={terminal.onClose} />
+          <TerminalDrawer key={terminal.cwd} cwd={terminal.cwd} height={terminal.height} onHeight={terminal.onHeight} onClose={terminal.onClose} host={terminal.host} />
         </div>
       )}
     </>

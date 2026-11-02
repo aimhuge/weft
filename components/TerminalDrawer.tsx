@@ -3,7 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import "@xterm/xterm/css/xterm.css";
 import Icon from "./Icon";
+import PaneStatus from "./TerminalPaneStatus";
 import { terminalBridgeFor, type TerminalBridge } from "@/lib/line-terminal";
+import { isWorkerProject } from "@/lib/worker-project";
 
 // The board's terminal: real shells (electron/terminal.cjs) in a drawer along the bottom of the window,
 // for the commands a thread can't or shouldn't run. Each folder has its own shells, keyed by its path, so
@@ -23,9 +25,12 @@ export default function TerminalDrawer({
   height,
   onHeight,
   onClose,
+  host,
 }: {
   // The folder whose shells to show: the open card's, else the selected project's.
   cwd: string;
+  // The worker a worker project's shells run on, by name, for what the drawer says when one can't open.
+  host?: string | null;
   height: number;
   onHeight: (height: number) => void;
   onClose: () => void;
@@ -34,7 +39,7 @@ export default function TerminalDrawer({
   const [focused, setFocused] = useState(panes[0] ?? cwd);
   const bridge = typeof window === "undefined" ? undefined : window.weft;
   // A worker project's shells run on the worker, over its session line (lib/line-terminal.ts).
-  const terminal = terminalBridgeFor(cwd, bridge?.terminal);
+  const terminal = terminalBridgeFor(cwd, bridge?.terminal, host);
 
   function setPanes(next: string[]) {
     panesByFolder.set(cwd, next);
@@ -110,6 +115,7 @@ export default function TerminalDrawer({
               key={id}
               id={id}
               cwd={cwd}
+              remote={isWorkerProject(cwd)}
               terminal={terminal}
               divided={i > 0}
               closable={panes.length > 1}
@@ -133,6 +139,7 @@ export default function TerminalDrawer({
 function TerminalPane({
   id,
   cwd,
+  remote,
   terminal,
   divided,
   closable,
@@ -142,6 +149,7 @@ function TerminalPane({
 }: {
   id: string;
   cwd: string;
+  remote: boolean;
   terminal: TerminalBridge;
   divided: boolean;
   closable: boolean;
@@ -244,12 +252,7 @@ function TerminalPane({
           </button>
         )}
       </div>
-      {exited !== null && (
-        <button onClick={restart} className="absolute bottom-2 left-3 text-[12px] text-amber-400 hover:underline">
-          Shell exited ({exited}). Restart
-        </button>
-      )}
-      {error && <p className="absolute bottom-2 left-3 text-[12px] text-red-400">Couldn&apos;t start a shell: {error}</p>}
+      <PaneStatus error={error} exited={exited} remote={remote} onRestart={restart} />
     </div>
   );
 }
