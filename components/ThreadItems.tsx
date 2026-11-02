@@ -1,6 +1,7 @@
 "use client";
 
 import { memo, useState } from "react";
+import { FindRevealContext, REVEAL_ALL, useFindReveal } from "@/lib/find-reveal";
 import { formatTokens } from "@/lib/format";
 import { turnId } from "@/lib/show-rail";
 import type { ThreadItem } from "@/lib/types";
@@ -54,8 +55,10 @@ function PermissionLine({ item }: { item: Permission }) {
 }
 
 // A message you edited with ↑ and the turn it started, folded to one line you can open.
-function EditedFold({ items, cardId }: { items: ThreadItem[]; cardId: string }) {
-  const [open, setOpen] = useState(false);
+function EditedFold({ item, cardId }: { item: Extract<ThreadItem, { kind: "edited" }>; cardId: string }) {
+  const [opened, setOpen] = useState(false);
+  const found = useFindReveal([item]);
+  const open = found || opened;
   return (
     <div className="text-[11.5px] text-faint">
       <button
@@ -69,13 +72,15 @@ function EditedFold({ items, cardId }: { items: ThreadItem[]; cardId: string }) 
       </button>
       {open && (
         <div className="mt-2 flex flex-col gap-3 border-l border-line pl-3 opacity-60">
-          {groupThread(items).map((entry) =>
-            entry.kind === "tools" ? (
-              <ToolRun key={entry.key} calls={entry.calls} live={false} cardId={cardId} />
-            ) : (
-              <ThreadMessage key={entry.key} item={entry.item} cardId={cardId} />
-            ),
-          )}
+          <FindRevealContext.Provider value={found ? REVEAL_ALL : null}>
+            {groupThread(item.items).map((entry) =>
+              entry.kind === "tools" ? (
+                <ToolRun key={entry.key} calls={entry.calls} live={false} cardId={cardId} />
+              ) : (
+                <ThreadMessage key={entry.key} item={entry.item} cardId={cardId} />
+              ),
+            )}
+          </FindRevealContext.Provider>
         </div>
       )}
     </div>
@@ -113,7 +118,7 @@ export const ThreadMessage = memo(function ThreadMessage({ item, cardId }: { ite
         </div>
       );
     case "edited":
-      return <EditedFold items={item.items} cardId={cardId} />;
+      return <EditedFold item={item} cardId={cardId} />;
     case "shell":
       return <ShellLine item={item} />;
     case "notification":
@@ -125,7 +130,8 @@ export const ThreadMessage = memo(function ThreadMessage({ item, cardId }: { ite
 
 // Where a cold card's fresh session begins (lib/splice.ts): a divider you can open to read the brief it started from.
 function SplicedLine({ item }: { item: Extract<ThreadItem, { kind: "spliced" }> }) {
-  const [open, setOpen] = useState(false);
+  const [opened, setOpen] = useState(false);
+  const open = useFindReveal([item]) || opened;
   const saved = item.tokens ? ` · ${formatTokens(item.tokens)} not re-sent` : "";
   return (
     <div className="text-[11px] text-faint">

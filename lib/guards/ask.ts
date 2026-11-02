@@ -4,6 +4,7 @@ import { claimQuestion, claimSymbols, claimWhy } from "../claim-guard";
 import { folderAsk, grantedRead, showPageCall } from "../folder-guard";
 import { askUser } from "../runner-ask";
 import type { Session } from "../runner-state";
+import { ownPageCall } from "../worker-pane";
 
 // What happens when a guard (or the card's permission mode) asks about a call: the card asks you, in the guard's own
 // words, and the call waits for your answer. Claude Code and puku-cli reach this from the SDK's canUseTool
@@ -24,6 +25,8 @@ export function askAboutCall(
   if (grantedRead(toolName, input, session.spec.cwd, session.cardId)) return Promise.resolve({ behavior: "allow", updatedInput: input });
   // A thread's own pane page in SHOW_DIR (lib/show-dir.ts) is read and written with no prompt, whatever the permission mode.
   if (showPageCall(toolName, input, session.spec.cwd)) return Promise.resolve({ behavior: "allow", updatedInput: input });
+  // A worker's own pane page, which nobody is there to allow (lib/worker-pane.ts).
+  if (ownPageCall(toolName, input, session.spec)) return Promise.resolve({ behavior: "allow", updatedInput: input });
   // A folder outside the project (lib/folder-guard.ts) or a symbol-claim clash (lib/claim-guard.ts) asks in its own words.
   const folder = folderAsk(toolUseID);
   return askUser(session.cardId, session, toolName, input, signal, folder?.question ?? claimQuestion(toolUseID) ?? title, {

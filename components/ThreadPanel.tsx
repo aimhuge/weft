@@ -150,6 +150,7 @@ export default function ThreadPanel({
         readOnly={readOnly}
         onOpenSettings={onOpenSettings}
         onDeleted={onDeleted}
+        findable
         {...threadExtras(card, pilot, items, onSend, desktop ? resets : undefined, footer)}
       />
     </aside>

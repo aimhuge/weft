@@ -22,6 +22,12 @@ function registerPaneIpc(ipcMain, { pane, isBoard }) {
   ipcMain.on("browser:reload", () => pane.reload());
   ipcMain.on("browser:zoom", (_e, action) => pane.zoom(action));
   // Tabs of the open card's browser (electron/pane-tabs.cjs).
+  ipcMain.on("browser:find", (e, text, options) => {
+    if (isBoard(e.sender)) pane.find(String(text ?? ""), options);
+  });
+  ipcMain.on("browser:stopFind", (e, refocus) => {
+    if (isBoard(e.sender)) pane.stopFind(Boolean(refocus));
+  });
   ipcMain.on("browser:newTab", () => pane.newTab());
   ipcMain.on("browser:selectTab", (_e, id) => pane.selectTab(id));
   ipcMain.on("browser:closeTab", (_e, id) => pane.closeTab(id));

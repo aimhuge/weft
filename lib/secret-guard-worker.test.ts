@@ -24,6 +24,9 @@ beforeAll(() => {
   fs.symlinkSync("../../worker.json", path.join(cwd, "innocent.txt"));
   fs.symlinkSync("../..", path.join(cwd, "up"));
   fs.symlinkSync("../../worker.env", path.join(data, "apps", "growth", "link"));
+  fs.symlinkSync("../../worker.json", path.join(data, "show", "link.html"));
+  fs.symlinkSync("../../new-secret.json", path.join(data, "show", "dangling.html"));
+  fs.symlinkSync("../vault", path.join(data, "show", "vault"));
   vi.stubEnv("WEFT_WORKER_HOME", wh);
   vi.stubEnv("WEFT_WORKER_ROOT", "");
   vi.spyOn(os, "homedir").mockReturnValue(base);
@@ -82,6 +85,20 @@ describe("a worker's home", () => {
     expect(bash("cat innocent.txt")).toContain("can't be read");
     expect(bash("cat up/worker.json")).toContain("can't be read");
     expect(verdict("Read", { file_path: path.join(data, "apps", "growth", "link") })).toContain("can't be read");
+  });
+
+  // The show folder is one of a worker's CLI working directories, so acceptEdits writes there with no prompt and this
+  // guard is all that stands behind it (lib/worker-pane.ts sessionDirs).
+  it("opens the show folder to writes and nothing beside or above it", () => {
+    for (const tool of ["Write", "Edit"]) {
+      expect(verdict(tool, { file_path: path.join(data, "show", "plan.html") })).toBeNull();
+      expect(verdict(tool, { file_path: path.join(data, "show", "a", "b.html") })).toBeNull();
+    }
+    for (const rest of ["showcase/x.html", "show.html", "board.json", "vault/x.json"]) expect(verdict("Write", { file_path: path.join(data, rest) })).toContain("can't be read");
+  });
+
+  it.each(["show/../../worker.json", "show/../board.json", "show/link.html", "show/dangling.html", "show/vault/x.json"])("won't let a write leave the show folder through %s", (rest) => {
+    for (const tool of ["Write", "Edit"]) expect(verdict(tool, { file_path: `${data}/${rest}` })).toContain("can't be read");
   });
 
   it("ends on a link loop, quickly", () => {

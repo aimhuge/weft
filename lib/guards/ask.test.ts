@@ -10,9 +10,16 @@ const folderAsk = vi.fn<(...a: unknown[]) => unknown>();
 const claimQuestion = vi.fn<(...a: unknown[]) => unknown>();
 const askUser = vi.fn<(...a: unknown[]) => unknown>();
 vi.mock("../classifier-denial", () => ({ takeGrant: (...a: unknown[]) => takeGrant(...a) }));
-vi.mock("../folder-guard", () => ({ grantedRead: (...a: unknown[]) => grantedRead(...a), folderAsk: (...a: unknown[]) => folderAsk(...a) }));
+const showPageCall = vi.fn<(...a: unknown[]) => unknown>();
+vi.mock("../folder-guard", () => ({
+  grantedRead: (...a: unknown[]) => grantedRead(...a),
+  folderAsk: (...a: unknown[]) => folderAsk(...a),
+  showPageCall: (...a: unknown[]) => showPageCall(...a),
+}));
 vi.mock("../claim-guard", () => ({ claimQuestion: (...a: unknown[]) => claimQuestion(...a), claimSymbols: () => ["Login"], claimWhy: () => "claim why" }));
 vi.mock("../runner-ask", () => ({ askUser: (...a: unknown[]) => askUser(...a) }));
+const ownPageCall = vi.fn<(...a: unknown[]) => unknown>();
+vi.mock("../worker-pane", () => ({ ownPageCall: (...a: unknown[]) => ownPageCall(...a) }));
 
 const { askAboutCall } = await import("./ask");
 
@@ -21,7 +28,7 @@ const signal = new AbortController().signal;
 const input = { file_path: "/elsewhere/a" };
 
 beforeEach(() => {
-  for (const f of [takeGrant, grantedRead, folderAsk, claimQuestion, askUser]) f.mockReset();
+  for (const f of [takeGrant, grantedRead, folderAsk, claimQuestion, askUser, ownPageCall, showPageCall]) f.mockReset();
   askUser.mockResolvedValue({ behavior: "allow", updatedInput: input });
 });
 
@@ -40,6 +47,13 @@ describe("askAboutCall", () => {
     grantedRead.mockReturnValue(true);
     expect(await askAboutCall(session, "Read", input, "t", signal)).toEqual({ behavior: "allow", updatedInput: input });
     expect(grantedRead).toHaveBeenCalledWith("Read", input, "/w", "c");
+  });
+
+  it("lets a worker's own pane page through with nobody asked", async () => {
+    ownPageCall.mockReturnValue(true);
+    expect(await askAboutCall(session, "Edit", input, "t", signal)).toEqual({ behavior: "allow", updatedInput: input });
+    expect(ownPageCall).toHaveBeenCalledWith("Edit", input, session.spec);
+    expect(askUser).not.toHaveBeenCalled();
   });
 
   it("asks in the folder gate's words when the call leaves the folder", async () => {

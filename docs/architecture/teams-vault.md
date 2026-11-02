@@ -405,6 +405,29 @@ shadow is rolled back and the row is re-rendered with the server's current state
 optimistically show "saved" before the server confirms — Touch ID is the gate, and after Touch ID the
 round-trip is sub-200ms, so the optimism isn't worth the rollback code.
 
+## Joining a shared vault
+
+**This is the path that runs.** Built 2026-10-31, in the 🔐 drawer, with the functions in
+`supabase/migrations/20261031094535_vault_device_requests.sql`. The older fingerprint-paste flow described
+in the next section stops at a pending row: its Add form works, but nothing on either Mac finishes it.
+
+1. **An admin shares** a local vault from the drawer. The offer lists only workspaces with someone else in
+   them where the user is an admin. A repo the workspace already shares refuses a second share: that Mac's
+   key is its own, and importing under it would leave rows nobody else can open.
+2. **A teammate on the same repo sees "Ask to join"** (`teamVaults` in `electron/vault-shared-meta.cjs`).
+   `request_vault_device` writes a pending row for their own Mac, already `accepted`. The drawer then shows
+   their fingerprint to read to the admin.
+3. **The admin sees the Mac on the vault, with its fingerprint**, and what approving gives: every key,
+   production included. Approve takes Touch ID. Main works the fingerprint out from the row's public key,
+   seals the vault key to it, and `grant_vault_device` stores the box and logs `device.added`.
+   `vault_grants`' own insert policy only takes the caller's device, so this function is the only way in.
+4. **The teammate sees "Open shared vault"**, also Touch ID. `adopt` in `electron/vault-store-shared.cjs`
+   makes the team's key this Mac's key for the vault. A value already on the Mac is re-encrypted under it and
+   stays, on this Mac only, until someone writes that name. A blank on the server never replaces it.
+
+Names with lower-case letters stay on the sharer's Mac, because `vault_secrets` takes upper case only, and the
+drawer says which.
+
 ## Granting a teammate's devices
 
 The owner (or any `admin`) opens the team's **Devices** page on the deployed weft.zip (a

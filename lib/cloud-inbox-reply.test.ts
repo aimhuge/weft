@@ -6,6 +6,7 @@ vi.mock("./account", async () => (await import("./cloud-inbox.harness")).account
 vi.mock("./settings", async () => (await import("./cloud-inbox.harness")).settingsMock);
 vi.mock("./device-id", async () => (await import("./cloud-inbox.harness")).deviceMock);
 vi.mock("./desktop-worker", async () => (await import("./cloud-inbox.harness")).desktopWorkerMock);
+vi.mock("./device-calls", async () => (await import("./cloud-inbox.harness")).deviceCallsMock);
 vi.mock("./cloud-sync", async () => (await import("./cloud-inbox.harness")).cloudSyncMock);
 vi.mock("./new-card", async () => (await import("./cloud-inbox.harness")).newCardMock);
 vi.mock("./runner", async () => (await import("./cloud-inbox.harness")).runnerMock);

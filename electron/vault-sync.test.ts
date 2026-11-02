@@ -40,7 +40,7 @@ describe("push", () => {
     expect(second).toMatchObject({ row: { ciphertext: "ct-2", row_version: 1 } });
     expect(secret()).not.toHaveProperty("source");
     expect(db.tables.vault_events).toEqual([
-      expect.objectContaining({ vault_id: "v1", action: "set", target_name: "API_KEY", target_environment: "development", actor_user_id: "u1", actor_email: "me@x.dev", device_id: "d1", metadata: { row_version: 0 } }),
+      expect.objectContaining({ vault_id: "v1", action: "secret.changed", target_name: "API_KEY", target_environment: "development", actor_user_id: "u1", actor_email: "me@x.dev", device_id: "d1", metadata: { row_version: 0 } }),
       expect.objectContaining({ metadata: { row_version: 1 } }),
     ]);
     expect(JSON.stringify(db.tables.vault_events)).not.toMatch(/ct-/);
@@ -52,7 +52,7 @@ describe("push", () => {
     expect(secret()).toMatchObject({ is_blank: true, ciphertext: null, nonce: null, hint: "Stripe", key_version: 1 });
     await sync.push(ID, { op: "blank", name: "OTHER", environment: "development", keyVersion: 1 });
     expect(secret("OTHER")).toMatchObject({ hint: null });
-    expect(db.tables.vault_events[0]).toMatchObject({ action: "add blank", device_id: null });
+    expect(db.tables.vault_events[0]).toMatchObject({ action: "secret.blank_added", device_id: null });
   });
 
   it("answers a conflict with the server's row instead of throwing, then writes against it", async () => {
@@ -83,7 +83,7 @@ describe("push", () => {
     await sync.push(ID, { op: "set", name: "C", environment: "development", ...box("1") });
     db.teammate.update("C", "development", { ciphertext: "ct-sam" });
     expect(await sync.push(ID, { op: "remove", name: "C", environment: "development" })).toMatchObject({ conflict: true, current: { ciphertext: "ct-sam" } });
-    expect(db.tables.vault_events.map((e) => e.action)).toContain("remove");
+    expect(db.tables.vault_events.map((e) => e.action)).toContain("secret.removed");
   });
 
   it("throws a refusal that isn't about the network, and keeps a write whose event line failed", async () => {

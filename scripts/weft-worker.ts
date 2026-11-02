@@ -18,6 +18,7 @@ import { readWorkerConfig, workerDataDir, workerHome, workerSealKeys, workRoot, 
 import { MAX_TRAVEL_BYTES, attachmentsOf, receiveAttachments } from "../lib/attachment-transfer";
 import { workerBlobClient, workerBlobReader, workerMayUpload } from "../lib/worker-blobs";
 import { enrol, registry, type Rpc } from "../lib/worker-registry";
+import { RTC_PURPOSE } from "../lib/rtc-signal";
 import { CLAUDE_TOKEN, GITHUB_PURPOSE, LOGIN_PURPOSE, newSealKeys, open } from "../lib/worker-seal";
 import { createUpdater, updatesOn } from "../lib/worker-update";
 import { listenForPushes, listenForWakes } from "../lib/worker-wake";
@@ -66,6 +67,9 @@ async function loadEngine() {
     import("../lib/resume"),
     import("../lib/worker-screen"),
     import("../lib/simulator-input"),
+    import("../lib/worker-fast-screen"),
+    import("../lib/worker-device"),
+    import("../lib/worker-device-link"),
   ]);
   return { store, parts };
 }
@@ -80,7 +84,7 @@ async function startCommand() {
   const config = readWorkerConfig(home);
   if (!config) throw new Error("This box isn't enrolled yet. Run: weft-worker enrol <token>");
   const { store, parts } = await loadEngine();
-  const [{ startFeatureCard }, runner, pending, { subscribe }, { createDaemon }, { createPublisher }, paths, github, folderGrant, { createBlobStore }, { SHOW_DIR }, { setPageUpload }, { busyCards }, { recoverCards }, { resumeInterrupted }, { nudgeScreen, openScreenChannel, setScreenChannel }, { sendInput }] = parts;
+  const [{ startFeatureCard }, runner, pending, { subscribe }, { createDaemon }, { createPublisher }, paths, github, folderGrant, { createBlobStore }, { SHOW_DIR }, { setPageUpload }, { busyCards }, { recoverCards }, { resumeInterrupted }, { openScreenChannel, screenInput, setFastScreen, setScreenChannel }, { sendInput }, { openFastScreen }, { setDeviceLink }, { deviceLink }] = parts;
   const reg = registry(rpc, config.key);
   // The public half goes on the worker's row, so Settings → Sync → Workers can seal a Claude token to this box.
   const keys = workerSealKeys(home, newSealKeys);
@@ -94,6 +98,8 @@ async function startCommand() {
   const readBlob = workerBlobReader(config.key, MAX_TRAVEL_BYTES);
   setPageUpload((file) => blobs.uploadPage(file, config.orgId));
   setScreenChannel((topic) => openScreenChannel(client, topic));
+  setDeviceLink(deviceLink(reg, config.key));
+  setFastScreen(openFastScreen, (sealed) => open(keys, sealed, RTC_PURPOSE));
   const publisher = createPublisher(reg, store, console.warn, { blobs, orgId: config.orgId });
   subscribe(publisher.hear);
   const daemon = createDaemon({
@@ -110,7 +116,8 @@ async function startCommand() {
       grant: folderGrant.applyFolderGrant,
       stop: (id) => runner.stop(id),
       setMode: (id, mode) => runner.setPermissionMode(id, mode),
-      input: (input) => sendInput(input).finally(() => nudgeScreen(input.device)),
+      input: (input) => screenInput(input, sendInput),
+      setQa: (id, qaDevice) => void store.updateCard(id, { qaDevice }),
       getCard: store.getCard,
       live: () => busyCards().length > 0,
       holding: () => busyCards().flatMap((id) => {

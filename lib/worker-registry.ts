@@ -23,6 +23,12 @@ export interface OutputRow {
   bytes: number;
 }
 
+export interface DeviceAnswer {
+  status: "pending" | "claimed" | "done" | "failed";
+  result: unknown;
+  error: string | null;
+}
+
 async function call<T>(rpc: Rpc, fn: string, args: Record<string, unknown>): Promise<T> {
   const { data, error } = await rpc(fn, args);
   if (error) throw new Error(`${fn}: ${error.message}`);
@@ -49,6 +55,9 @@ export function registry(rpc: Rpc, key: string) {
     setPublicKey: (publicKey: string) => call<unknown>(rpc, "worker_set_public_key", { p_key: key, p_public_key: publicKey }),
     setGithub: (state: GithubState, account: string | null) => call<unknown>(rpc, "worker_set_github", { p_key: key, p_state: state, p_account: account }),
     setBuild: (build: string, note: string | null) => call<unknown>(rpc, "worker_set_build", { p_key: key, p_build: build, p_note: note }),
+    deviceCall: (device: string, cardId: string, tool: string, args: unknown) => call<string | null>(rpc, "worker_device_call", { p_key: key, p_device: device, p_card: cardId, p_tool: tool, p_args: args }),
+    deviceResult: (id: string) => call<DeviceAnswer | null>(rpc, "worker_device_result", { p_key: key, p_call: id }),
+    deviceCancel: (id: string) => call<boolean>(rpc, "worker_device_cancel", { p_key: key, p_call: id }),
     pending: async () => (await call<CloudCommandRow[] | null>(rpc, "worker_pending", { p_key: key })) ?? [],
     claim: (id: string) => call<boolean>(rpc, "worker_claim", { p_key: key, p_command: id }),
     report: (id: string, status: "done" | "failed", cardId: string | null, error: string | null) =>

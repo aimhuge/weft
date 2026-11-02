@@ -18,10 +18,11 @@ const { registerVault } = require("./vault-ipc.cjs");
 const { createVaultSync } = require("./vault-sync.cjs");
 const { writeValue } = require("./vault-conflict.cjs");
 const { createManagedEnv } = require("./vault-managed-env.cjs");
-const { createSharedApi } = require("./vault-shared-api.cjs");
+const { createSharedApi, sharedHandlers } = require("./vault-shared-api.cjs");
 const { readLocalVault } = require("./vault-local.cjs");
 const { show: showRecovery, recoveryStatus } = require("./vault-recovery.cjs");
 const { listOrgs, sharedBlock } = require("./vault-shared-meta.cjs");
+const { teamVaults } = require("./vault-team.cjs");
 const { accessToken } = require("./vault-rotate.cjs");
 
 // A copied value leaves the clipboard after this, if it's still what's there.
@@ -65,7 +66,17 @@ function createVault({ dataDir, safeStorage, sodium, prompt, clipboard, run = gi
       const { id, label } = await idOf(folder);
       return readLocalVault({ dir: vaultDir, id, label, device, sodium });
     };
-    return createSharedApi({ readVault, device, sodium, sync });
+    // The local vault behind a server vault id (a pending grant names only the server's).
+    const readServerVault = async (vaultId) => {
+      const found = sync?.byVaultId?.(vaultId);
+      if (!found) throw new Error("That vault isn't on this Mac.");
+      return readLocalVault({ dir: vaultDir, id: found.id, device, sodium });
+    };
+    const adopt = async (folder, grant, shared) => {
+      const { id, label } = await idOf(folder);
+      return (await storeReady()).adopt(id, label, grant, shared);
+    };
+    return createSharedApi({ readVault, readServerVault, adopt, device, sodium, sync, prompt });
   }
 
   // A shared vault's recovery key (electron/vault-recovery.cjs). The vault's key is read from this
@@ -169,6 +180,8 @@ function createVault({ dataDir, safeStorage, sodium, prompt, clipboard, run = gi
       // The workspaces the user is in, for the drawer's "Share this vault" offer and for a shared
       // vault's header. Signed out, or a shell that doesn't know teams: an empty list.
       const orgs = await listOrgs({ accountClient });
+      await sodium.ready();
+      const team = orgs.length ? await teamVaults({ accountClient, publicKey: loadDeviceKey({ dir: dataDir, safeStorage, crypto: sodium }).publicKey }) : null;
       for (const folder of folders) {
         const { id, label } = await idOf(folder);
         const found = seen.get(id);
@@ -182,7 +195,10 @@ function createVault({ dataDir, safeStorage, sodium, prompt, clipboard, run = gi
         // shared: the vault is shared with a workspace (the drawer's badge and the Share offer).
         const shared = sharedBlock({ dir: vaultDir, id, orgs });
         // queued: writes to a shared vault made offline, waiting in <hash>.queue.jsonl (the drawer's chip).
-        seen.set(id, { id, label, folder, folders: [folder], secrets, nudge: nudge(folder, id, s), managed: watchManaged(folder), ...(shared && { shared }), ...(s?.isShared(id) && { queued: s.queued(id) }) });
+        // join: the workspace already shares this repo and this Mac isn't in it. requests: Macs waiting to be.
+        const join = !shared && team?.joins.get(id.replace(/^github:/, ""));
+        const requests = shared && team?.requests.get(shared.vaultId);
+        seen.set(id, { id, label, folder, folders: [folder], secrets, nudge: nudge(folder, id, s), managed: watchManaged(folder), ...(shared && { shared }), ...(join && { join }), ...(requests && { requests }), ...(s?.isShared(id) && { queued: s.queued(id) }) });
       }
       return { vaults: [...seen.values()], unlocked: unlock.unlocked(), orgs };
     },
@@ -401,13 +417,7 @@ function setupVault({ ipcMain, dataDir, window, board, accountClient = null }) {
     board,
     dataDir,
     accountClient: accountClient ? () => accountClient : null,
-    shared: accountClient
-      ? {
-          grantPending: (opts) => vault.shared().grantPending(opts),
-          shareLocal: (opts) => vault.shared().shareLocal(opts),
-          rotate: (opts) => vault.shared().rotate({ ...opts, token: token() }),
-        }
-      : null,
+    shared: accountClient ? sharedHandlers(vault.shared, token) : null,
   });
   return vault;
 }

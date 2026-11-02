@@ -64,6 +64,8 @@ GitHub access stays a separate gate: `join` must check it and say so, because We
    - Built: `registeredDevice` (`electron/device-key.cjs`) gives the vault this Mac's server id. The vault used the bare
      keypair, so sharing and accepting a grant had no device id.
    - Built: the heartbeat (`electron/device-beat.cjs`) moves `devices.last_seen_at` every 5 minutes.
+   - Built: joining a shared vault from the 🔐 drawer (teams-vault.md, "Joining a shared vault"), with
+     `supabase/migrations/20261031094535_vault_device_requests.sql`, applied 2026-10-31.
    - To do: team sync, and scoping cards and the vault by project access.
 2. **Roster and grid.** A record of member × device × repo, reported by each Mac.
 3. **Asks for keys**, including the agent tool `mcp__secrets__request` from the roadmap: a card that needs a key parks in
@@ -75,5 +77,5 @@ GitHub access stays a separate gate: `join` must check it and say so, because We
 
 - `registerDevice` upserts without `.select()`, so its returned `id` is null against a real database. `registeredDevice`
   reads the id back, so nothing depends on it, but the `vault:devices-register` answer does carry that null.
-- The full share flow has never run against production: it had 0 vaults and 0 devices on 2026-10-30. Run it for real
-  now the migration is applied, since other steps after the RPC may have the same kind of fault.
+- The full share flow has never run against production: it had 0 vaults and 0 devices on 2026-10-31. Reading it against
+  the live database found the faults fixed on 2026-10-31; a real run with two Macs is still the test.

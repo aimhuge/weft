@@ -1,9 +1,9 @@
 // The commands that act on a card a Weft Worker already runs, from the board's composer and picker: reply, answer,
-// stop, mode and input. lib/worker-daemon.ts claims and reports them; each returns the card it touched.
+// stop, mode, input and qa. lib/worker-daemon.ts claims and reports them; each returns the card it touched.
 import { answerBody, answerGrant, replyBody, stopBody, type CloudCommandRow } from "./cloud-commands";
 import type { Card } from "./types";
 import type { Engine } from "./worker-daemon";
-import { inputBody, modeBody } from "./worker-commands";
+import { inputBody, modeBody, qaBody } from "./worker-commands";
 
 export function createCardCommands(engine: Engine) {
   function ownCard(cardId: string | undefined): Card {
@@ -49,6 +49,14 @@ export function createCardCommands(engine: Engine) {
       if (!body) throw new Error("That tap is empty.");
       const card = ownCard(body.cardId);
       await engine.input(body.input);
+      return card.id;
+    },
+    // Manual QA mode (docs/architecture/manual-qa.md): the card's device tools go to this Mac, or stop.
+    qa(command: CloudCommandRow): string {
+      const body = qaBody(command);
+      if (!body) throw new Error("That QA switch is empty.");
+      const card = ownCard(body.cardId);
+      engine.setQa(card.id, body.device);
       return card.id;
     },
   };

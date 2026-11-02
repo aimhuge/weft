@@ -55,7 +55,7 @@ port.
 - **Closing the window keeps Weft running**, with your threads' CLIs open, so conversations stay
   alive. ⌘Q quits. Opening Weft again just brings the existing window forward.
 - **⌃⌥Space** opens the copilot from any app. In the app: ⌘N new thread, ⌘J copilot, ⇧⌘B
-  browser pane, ⌘F find cards, ⌘, settings, ⌘1 board, ⌘2 copilot.
+  browser pane, ⌘F find (the page with focus in the browser, else the open thread, else the board's filter), ⌘G next match, ⌘, settings, ⌘1 board, ⌘2 copilot.
 - **Settings search**: the box in Settings' title bar (⌘F or `/` while Settings is open) finds any setting on any page
   ("dark mode", "gmail", "max threads") and opens its page scrolled to it; each page's own top nav jumps between its sections.
 - **Shortcuts sheet**: `?` (or the "? Shortcuts" link in the footer) lists every shortcut in the app,
@@ -139,6 +139,7 @@ port.
 - **Selectors that read like the page**: a thread can act on an element by CSS, or by the text a person would read
   on it — `:text-is("Settings…")`, `:has-text("menu")`, `:has(span:text-is("Settings…"))` — the way Playwright
   writes them. Same selector, same element, in every tool.
+- **The pane's address bar searches too**: type an address and it opens; type anything else and it's a Google search.
 - **Tabs in a thread's browser**: + in the pane's toolbar opens a blank tab for the open card, with the address bar
   ready to type; links that open a new window land in a new tab, and an agent's `open_url` with `new_tab` keeps
   the page it was showing. The tab strip only shows up under the toolbar once a card has two tabs; click to switch,
@@ -973,6 +974,12 @@ Review, the phone buzzes with the card's title and its question ("Wants to run p
 moved it. A database trigger and a Supabase Edge Function send it through Expo, once per move (a card flapping columns buzzes
 once), and drop phones that uninstalled the app. Settings → Sync → **Phones** lists the paired phones with **Remove**
 (docs/architecture/mobile.md#push).
+
+**Manual QA.** Testing a worker's app by hand? **Manual QA** in the card's pane toolbar sends its build to a simulator on your Mac, shown live with
+no tap latency, while the worker's agent keeps driving it. A build runs as you, so it asks for Touch ID, once per card for 8 hours. If the Mac
+sleeps, the agent falls back to the worker's own device.
+
+**Live worker simulators.** Watching an iOS simulator on a worker streams live video to the pane over an encrypted WebRTC connection, and your clicks, drags and keys reach it as you make them. If the connection can't be made, the pane stays on the slower picture stream.
 
 **Weft Workers.** A worker is a Mac or Linux box that runs cards headless while your laptop sleeps. Settings → Sync →
 **Workers** → **Add a worker** shows one line to run on the box (`curl -fsSL https://weft.zip/worker.sh | sh -s -- <token>`).

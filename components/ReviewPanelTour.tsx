@@ -177,7 +177,7 @@ export function ReviewPanelTour({
               <Icon name="globe" size={11} /> Open browser
             </button>
           </div>
-          {plan.dev && plan.url && <ReviewPanelDevServer cardId={cardId} plan={plan} />}
+          {plan.dev && plan.url && <ReviewPanelDevServer key={cardId} cardId={cardId} plan={plan} stepUrl={url} />}
           {step.look && <ReviewPanelLookFor key={index} text={step.look} />}
           <div className="mt-2">
             <Composer

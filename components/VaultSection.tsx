@@ -7,11 +7,11 @@ import { keyLabel } from "@/lib/hotkeys";
 import { searchSecrets } from "@/lib/vault-search";
 import { environmentsOf, groupSecrets, nudgeText, secretKey, type VaultBridge, type VaultConflict, type VaultSecret, type VaultSummary } from "@/lib/vault-view";
 import { conflictKey } from "@/lib/use-vault-conflicts";
-import { repoOf, type VaultOrg } from "@/lib/vault-shared";
+import { repoOf, shareTargets, type VaultOrg } from "@/lib/vault-shared";
 import type { RowAction } from "./SecretRow";
 import type { Editing } from "./VaultParts";
 import { Note } from "./VaultParts";
-import { ShareOffer, SharedBadge } from "./VaultShared";
+import { DeviceRequests, JoinOffer, ShareOffer, SharedBadge } from "./VaultShared";
 import { SecretRow } from "./SecretRow";
 import Icon from "./Icon";
 import VaultVercel from "./VaultVercel";
@@ -75,10 +75,12 @@ export function VaultSection({
           Import…
         </button>
       </div>
-      {!v.shared && (
+      {v.join && <JoinOffer folder={v.folder} join={v.join} bridge={bridge} onDone={onShared} notify={notify} />}
+      {v.requests && <DeviceRequests requests={v.requests} bridge={bridge} onDone={onShared} notify={notify} />}
+      {!v.shared && !v.join && (
         <ShareOffer
           folder={v.folder}
-          org={orgs[0] ?? null}
+          org={shareTargets(orgs)[0] ?? null}
           orgs={orgs}
           bridge={bridge}
           label={v.label}

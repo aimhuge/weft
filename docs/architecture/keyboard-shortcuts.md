@@ -4,7 +4,7 @@
 
 One registry holds the board's keyboard shortcuts. Components register theirs, a single window listener dispatches key presses, and the `?` dialog lists whatever is registered, so a new shortcut shows up in the list with no extra work. Settings → Shortcuts renders the same list inline (with the rebindable dictation row above it), so users who land on the settings page for shortcut help see every shortcut without first learning the `?` key — the two views share `useShortcutList`/`shortcutSections`/`KeyCaps` from one source.
 
-Other pieces share the name and are separate: `lib/shortcuts.ts` holds user-rebindable bindings (dictation) kept in localStorage, and the native menu accelerators in `electron/main.cjs` (⌘N, ⌘F, ⌘, and so on) are handled by Electron. Keys handled where they apply (the composer, reply box, terminal, palette, app menu) are written down in `lib/shortcut-catalog.ts` so the dialog can list them too.
+Other pieces share the name and are separate: `lib/shortcuts.ts` holds user-rebindable bindings (dictation) kept in localStorage, and the native menu accelerators in `electron/menus.cjs` (⌘N, ⌘F, ⌘, and so on) are handled by Electron. Keys handled where they apply (the composer, reply box, terminal, palette, app menu) are written down in `lib/shortcut-catalog.ts` so the dialog can list them too.
 
 Discoverability is built on the same registry: tooltips, key badges, native right-click menus and the hold-a-modifier card all read keys from it instead of hardcoding them.
 
@@ -38,6 +38,23 @@ Thread: `r` reply in the open thread, Shift+`A` archive or unarchive it (plain `
 Writing, terminal and app shortcuts (⌘↵, ⌘B, ⌘\\, ⌘J, ⌃⌥Space and more) are listed from `FIXED_SHORTCUTS`.
 
 Buttons and menus that have a shortcut show it: header tooltips, the `N` cap on New thread, the `/` badge in the filter box, "? Shortcuts" in the footer, and the right-click menus. Hold a modifier outside a text field for the cheat card (`ModifierHint`); it renders nothing until first used, since macOS key names differ between server and client.
+
+## ⌘F: find, by where the keyboard is
+
+⌘F, ⌘G and ⇧⌘G are Edit menu accelerators, so no page ever sees them as keys. `sendFind` in `electron/menus.cjs` reads the focused webContents (only main can tell a page in the pane from the board) and sends the menu action with payload `"pane"` when a pane page holds the focus.
+
+- **Page in the browser pane focused:** `components/PaneFind.tsx` opens. Its field replaces the address bar for as long as find is open: the page is a native view nothing can sit over (`lib/overlay.ts`), and taking the address bar's slot adds no row and leaves the page's size alone, so it never reflows under a search. `electron/pane-find.cjs` drives `findInPage`/`stopFindInPage` on the active tab and sends `browser:found`. A new page or tab re-runs the search. Esc closes it from the field, or from the page through the Escape replay (`electron/pane-escape.cjs`), and gives the keyboard back to the page.
+- **A thread open, no dialog:** `lib/board-menu-bridge.ts` raises `requestThreadFind` (`lib/find-events.ts`) and `lib/use-thread-find.ts` opens `components/FindField.tsx`, floated over the top of the messages. Only `ThreadPanel` passes `findable`, so the copilot's chat stays out of it.
+- **Settings open:** `components/SettingsSearch.tsx` takes `find`, as before. The bridge's `threadOpen` is false under a dialog.
+- **Nothing open:** the board's filter.
+
+The pane's find field holds the board's focus while you type, so main reports "the board"; `paneFindFocused()` (`data-pane-find`) stops those keys reaching the thread behind it.
+
+**Finding in a thread works on data, then the DOM.** A thread draws only its newest 50 items (`lib/thread-page.ts`) and folds tool runs, edited turns, briefs and long results, so the DOM can't answer. `GET /api/cards/[id]/thread/search?q=` runs `matchThread` (`lib/thread-find.ts`) over the whole stored thread, long tool results included, and returns which items hold the query and how many times. That makes the count. A transport without `searchThread` (a Worker, the web) searches its loaded window; off the desktop ⌘F is the browser's own anyway.
+
+The current match counts from the newest, since a thread is read from its bottom: Enter walks up it, Shift+Enter back down, and both wrap. Landing on one: a match above the window walks `loadPage` back to it; `FindRevealContext` (`lib/find-reveal.ts`) opens whatever folds it while it's current, and it folds back when find moves on; `lib/find-highlight.ts` paints the drawn matches with the CSS Custom Highlight API, so React's DOM is untouched (`::highlight()` in `app/globals.css`); a MutationObserver repaints as rows change. Matches in folded rows that aren't current count but don't paint, since they aren't drawn.
+
+The count comes from source text and the paint from drawn text, and they can differ slightly: Markdown is flattened to compare (`plainMarkdown`), and a row drawing fewer matches than its source lands on its last one.
 
 ## The printed sheet
 

@@ -55,6 +55,17 @@ function sharedBlock({ dir, id, orgs = [] }) {
   };
 }
 
+// Headcounts by workspace, and the workspaces this user runs.
+function roster(rows, me) {
+  const counts = new Map();
+  const admin = new Set();
+  for (const row of rows) {
+    counts.set(row.org_id, (counts.get(row.org_id) ?? 0) + 1);
+    if (row.user_id === me && (row.role === "admin" || row.role === "owner")) admin.add(row.org_id);
+  }
+  return { counts, admin };
+}
+
 /**
  * The workspaces the signed-in user is in, with how many people are in each.
  *
@@ -71,15 +82,14 @@ async function listOrgs({ accountClient } = {}) {
   try {
     const [orgsRes, membersRes] = await Promise.all([
       db.from("orgs").select("id, slug, name"),
-      db.from("org_memberships").select("org_id"),
+      db.from("org_memberships").select("org_id, user_id, role"),
     ]);
     if (orgsRes.error || membersRes.error) return [];
     /** @type {{ id: string, slug: string, name: string }[]} */
     const orgs = orgsRes.data ?? [];
     // One membership row per person per workspace, so the rows for a workspace are its headcount.
-    const counts = new Map();
-    for (const row of membersRes.data ?? []) counts.set(row.org_id, (counts.get(row.org_id) ?? 0) + 1);
-    return orgs.map((o) => ({ id: o.id, slug: o.slug, name: o.name, members: counts.get(o.id) ?? 0 }));
+    const { counts, admin } = roster(membersRes.data ?? [], accountClient?.getClaims?.()?.sub);
+    return orgs.map((o) => ({ id: o.id, slug: o.slug, name: o.name, members: counts.get(o.id) ?? 0, admin: admin.has(o.id) }));
   } catch {
     // A signed-out desktop, an offline one, or a server that doesn't know teams yet: no offer.
     return [];

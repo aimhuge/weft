@@ -1,11 +1,14 @@
 "use client";
 
-// A worker's device, live in the pane (lib/worker-screen.ts): frames off a Realtime topic, drawn on one <img>. A click is
-// a tap and a drag a swipe, sent as commands where the board can send them (onInput); elsewhere it only watches.
-import { useEffect, useRef, useState, type PointerEvent } from "react";
+// A worker's device, live in the pane (lib/worker-screen.ts): frames off a Realtime topic, drawn on one <img>, or H.264 on
+// a canvas over WebRTC where the board can connect (lib/use-rtc-screen.ts). There, touches and keys stream live as they
+// happen; otherwise a click is a tap and a drag a swipe, sent as commands (onInput). A board with neither only watches.
+import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import type { SharePane } from "@/lib/share-types";
+import { hidUsage } from "@/lib/hid-keys";
+import { useRtcScreen } from "@/lib/use-rtc-screen";
 import { gesture, useScreenStream, type Point } from "@/lib/use-screen-stream";
-import type { ScreenInput } from "@/lib/worker-commands";
+import type { BoardInput } from "@/lib/worker-commands";
 
 // How often the status line looks at the clock, to say the watch ran out.
 const CLOCK_MS = 5_000;
@@ -20,56 +23,84 @@ function pointIn(el: HTMLElement, e: PointerEvent): Point {
   return { x: px / r.width, y: py / r.height, px, py };
 }
 
-function statusLine(ended: boolean, src: string | null, canTap: boolean, until: number) {
+function statusLine(ended: boolean, src: string | null, canTap: boolean, until: number, direct: boolean) {
   if (ended) return "Paused: ask the thread to watch again";
-  if (!src) return "Waiting for the first frame…";
+  if (!src && !direct) return "Waiting for the first frame…";
   const time = new Date(until).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  return `${canTap ? "Live · tap and drag on the screen" : "Live"} · until ${time}`;
+  return `${canTap ? "Live · tap and drag on the screen" : "Live"}${direct ? " · direct video" : ""} · until ${time}`;
 }
 
-export function WorkerScreen({ pane, onInput }: { pane: ScreenPane; onInput?: (input: ScreenInput) => Promise<unknown> }) {
+export function WorkerScreen({ pane, onInput }: { pane: ScreenPane; onInput?: (input: BoardInput) => Promise<unknown> }) {
   const [src, setSrc] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const [now, setNow] = useState(() => Date.now());
   // Where the last press landed: the answer takes a moment to come back, so the press shows at once.
   const [ripple, setRipple] = useState<{ x: number; y: number } | null>(null);
   const down = useRef<(Point & { at: number }) | null>(null);
-  useScreenStream(pane.token, setSrc);
+  const canvas = useRef<HTMLCanvasElement>(null);
+  const { live, send, answer } = useRtcScreen(pane.device, pane.fast, canvas, onInput);
+  useScreenStream(pane.token, setSrc, answer);
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), CLOCK_MS);
     return () => clearInterval(timer);
   }, []);
 
-  const press = (e: PointerEvent<HTMLImageElement>) => {
+  const press = (e: PointerEvent<HTMLElement>) => {
     if (!onInput) return;
     e.currentTarget.setPointerCapture(e.pointerId);
-    down.current = { ...pointIn(e.currentTarget, e), at: Date.now() };
+    const at = pointIn(e.currentTarget, e);
+    down.current = { ...at, at: Date.now() };
+    send({ t: "down", x: at.x, y: at.y });
+    e.currentTarget.focus();
   };
-  const release = (e: PointerEvent<HTMLImageElement>) => {
+  const move = (e: PointerEvent<HTMLElement>) => {
+    if (!down.current) return;
+    const at = pointIn(e.currentTarget, e);
+    send({ t: "move", x: at.x, y: at.y });
+  };
+  const release = (e: PointerEvent<HTMLElement>) => {
     const from = down.current;
     if (!from || !onInput) return;
     down.current = null;
     setNote("");
     setRipple({ x: e.clientX, y: e.clientY });
     setTimeout(() => setRipple(null), RIPPLE_MS);
-    onInput(gesture(pane.device, from, pointIn(e.currentTarget, e), Date.now() - from.at)).catch((err: unknown) => setNote((err as Error).message));
+    const at = pointIn(e.currentTarget, e);
+    if (send({ t: "up", x: at.x, y: at.y })) return;
+    onInput(gesture(pane.device, from, at, Date.now() - from.at)).catch((err: unknown) => setNote((err as Error).message));
   };
+  const key = (e: KeyboardEvent<HTMLElement>, isDown: boolean) => {
+    const code = hidUsage(e.code);
+    if (code === null || e.metaKey || e.ctrlKey || e.repeat) return;
+    if (send({ t: "key", code, down: isDown })) e.preventDefault();
+  };
+  const surface = `max-h-full max-w-full touch-none rounded-2xl border-4 border-line ${onInput ? "cursor-pointer" : ""}`;
 
   return (
     <div className="flex h-full flex-col items-center gap-2 overflow-hidden p-3">
       <p className="shrink-0 text-[12px] text-muted">
-        <b className="text-ink">{pane.label}</b> · {statusLine(now > pane.until, src, Boolean(onInput), pane.until)}
+        <b className="text-ink">{pane.label}</b> · {statusLine(now > pane.until, src, Boolean(onInput), pane.until, live)}
       </p>
       {/* Sized to the picture, never letterboxed: a press is read as a fraction of this box. */}
       <div className="flex min-h-0 w-full flex-1 items-center justify-center">
-        {src && (
+        <canvas
+          ref={canvas}
+          tabIndex={0}
+          onPointerDown={press}
+          onPointerMove={move}
+          onPointerUp={release}
+          onKeyDown={(e) => key(e, true)}
+          onKeyUp={(e) => key(e, false)}
+          className={live ? `${surface} outline-none` : "hidden"}
+        />
+        {src && !live && (
           <img
             src={src}
             alt={`${pane.label}'s screen`}
             draggable={false}
             onPointerDown={press}
             onPointerUp={release}
-            className={`max-h-full max-w-full touch-none rounded-2xl border-4 border-line ${onInput ? "cursor-pointer" : ""}`}
+            className={surface}
           />
         )}
       </div>

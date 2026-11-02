@@ -72,7 +72,9 @@ export const client = {
     const entry = { name, filter: "", nudge: () => {}, status: (() => {}) as (status: string) => void };
     db.channels.push(entry);
     const channel = {
-      on: (_type: string, cfg: { filter: string }, cb: () => void) => {
+      on: (_type: string, cfg: { filter: string; table?: string }, cb: () => void) => {
+        // The manual QA calls' listener (lib/device-calls.ts) is on the same channel; these tests are about the commands'.
+        if (cfg.table === "device_calls") return channel;
         entry.filter = cfg.filter;
         entry.nudge = cb;
         return channel;
@@ -190,6 +192,9 @@ export async function listening(refresh: () => Promise<void>) {
 }
 
 // The desktop worker's heartbeat (lib/desktop-worker.ts): recorded, never sent.
+// The Mac's manual QA calls (lib/device-calls.ts) have their own tests; the inbox only asks it to look.
+export const deviceCallsMock = { drainDeviceCalls: () => Promise.resolve() };
+
 export const beats: string[] = [];
 export const desktopWorkerMock = {
   beatDesktopWorker: (_client: unknown, uid: string) => {

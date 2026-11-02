@@ -55,6 +55,26 @@ have pnpm || install_pkgs pnpm
 have git-lfs || ( install_pkgs git-lfs ) || say "Skipping git-lfs: repos that use Git LFS won't clone until you install it"
 if have git-lfs; then git lfs install --skip-repo >/dev/null || true; fi
 
+# Worth having on a Mac with Xcode, not worth stopping for: a watched simulator's live video and instant taps come from
+# idb_companion (docs/architecture/weft-worker.md#the-fast-path). Without it the JPEG stream still works. Pinned by
+# hash, and nothing in it runs here.
+IDB_VERSION=1.1.8
+IDB_SHA=3b72cc6a9a5b1a22a188205a84090d3a294347a846180efd755cf1a3c848e3e7
+IDB_DIR="$HOME/.weft/tools/idb-companion"
+install_idb() {
+  tmp="$(mktemp -d)"
+  curl -fsSL -o "$tmp/idb.tgz" "https://github.com/facebook/idb/releases/download/v$IDB_VERSION/idb-companion.universal.tar.gz" &&
+    [ "$(shasum -a 256 "$tmp/idb.tgz" | cut -d' ' -f1)" = "$IDB_SHA" ] &&
+    rm -rf "$IDB_DIR" && mkdir -p "$IDB_DIR" &&
+    tar -xzf "$tmp/idb.tgz" -C "$IDB_DIR" --strip-components 1
+  ok=$?
+  rm -rf "$tmp"
+  return $ok
+}
+if [ "$OS" = Darwin ] && [ -x /usr/bin/xcrun ] && [ ! -x "$IDB_DIR/bin/idb_companion" ]; then
+  install_idb || say "Skipping idb_companion: a watched simulator stays on the slower JPEG stream"
+fi
+
 # ── 2. Weft ─────────────────────────────────────────────────────────────────
 mkdir -p "$HOME_DIR" && chmod 700 "$HOME_DIR"
 if [ -d "$APP_DIR/.git" ]; then

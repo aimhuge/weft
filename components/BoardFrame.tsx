@@ -74,7 +74,10 @@ export default function BoardFrame(props: BoardFrameProps) {
           onClose={onCloseNew}
         />
       ) : props.workerThread ? (
-        <WorkerOpenCard thread={props.workerThread} />
+        <WorkerOpenCard
+          thread={props.workerThread}
+          browser={{ desktop: props.desktop, state: props.browser, obscured: props.obscured, width: props.browserWidth, onWidth: props.onBrowserWidth }}
+        />
       ) : selected && props.handlers ? (
         <OpenCard
           card={selected}

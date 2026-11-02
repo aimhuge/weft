@@ -11,6 +11,7 @@ import { api } from "./client";
 import { firstNow, otherFirstNow, stopNow, waitNow } from "./optimistic-cards";
 import { filesApi } from "./client-files";
 import { THREAD_PAGE_SIZE } from "./cloud-sync-types";
+import type { FindMatch } from "./thread-find";
 import { applyThreadEvent, type ThreadPage } from "./thread-page";
 import type { BoardEvent, ThreadItem } from "./types";
 import { useBoardEvents } from "./use-events";
@@ -21,6 +22,8 @@ export type PageUpdate = (prev: ThreadPage) => ThreadPage;
 export interface ThreadTransport {
   // One page of the thread: the newest (before omitted) or the one ending at index `before`. Null when it can't be read.
   loadPage(cardId: string, before?: number): Promise<ThreadPage | null>;
+  // Find over the whole thread, loaded or not (lib/thread-find.ts). Left out, find covers the loaded window.
+  searchThread?: (cardId: string, query: string) => Promise<FindMatch[] | null>;
   // A hook: live changes to this card's thread, and a reconnect (when the caller re-reads the newest page).
   useLive(cardId: string, onUpdate: (update: PageUpdate) => void, onReconnect: () => void): void;
   // A hook: the items as they are drawn (the web's blob refs become signed URLs).
@@ -64,6 +67,15 @@ async function localPage(cardId: string, before?: number): Promise<ThreadPage | 
   }
 }
 
+async function localSearch(cardId: string, query: string): Promise<FindMatch[] | null> {
+  try {
+    const res = await apiFetch(`/api/cards/${cardId}/thread/search?q=${encodeURIComponent(query)}`);
+    return res.ok ? ((await res.json()) as { matches: FindMatch[] }).matches : null;
+  } catch {
+    return null;
+  }
+}
+
 function useLocalLive(cardId: string, onUpdate: (update: PageUpdate) => void, onReconnect: () => void) {
   useBoardEvents((event: BoardEvent) => {
     if (event.type === "thread_cleared" && event.cardId === cardId) onUpdate(() => ({ items: [], start: 0, total: 0 }));
@@ -75,6 +87,7 @@ const same = (items: ThreadItem[]) => items;
 
 export const localTransport: ThreadTransport = {
   loadPage: localPage,
+  searchThread: localSearch,
   useLive: useLocalLive,
   useView: same,
   stop: (cardId) => stopNow(cardId),
