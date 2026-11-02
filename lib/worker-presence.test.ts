@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
-import { FRESH_AFTER_MS, joinPresence, liveStatus, PRESENCE_KEY, presenceTopic, SLOW_OFFLINE_AFTER_MS, type PresenceChannel, type PresenceRead } from "./worker-presence";
+import { FRESH_AFTER_MS, ABSENT_OFFLINE_AFTER_MS, joinPresence, liveStatus, PRESENCE_KEY, presenceTopic, SLOW_OFFLINE_AFTER_MS, type PresenceChannel, type PresenceRead } from "./worker-presence";
 
 const sha = (v: string) => createHash("sha256").update(v).digest("hex");
 
@@ -34,17 +34,17 @@ describe("joinPresence", () => {
     const h = hooks();
     const log = vi.fn();
     const p = joinPresence(c.client, "k-1", h, log);
-    expect(c.open).toHaveBeenCalledWith(presenceTopic("k-1"), { config: { presence: { key: PRESENCE_KEY } } });
-    p.track("online");
+    expect(c.open).toHaveBeenCalledWith(presenceTopic("k-1"), { config: { presence: { key: PRESENCE_KEY, enabled: true } } });
+    void p.track("online");
     expect(c.track).not.toHaveBeenCalled();
     c.fire("SUBSCRIBED");
     expect(h.up).toHaveBeenCalled();
     expect(log).toHaveBeenCalledWith("Weft Worker: presence socket joined");
-    p.track("busy");
+    void p.track("busy");
     expect(c.track).toHaveBeenCalledWith({ status: "busy" });
     p.leave();
     expect(c.removeChannel).toHaveBeenCalled();
-    p.track("online");
+    void p.track("online");
     c.fire("CLOSED");
     expect(c.track).toHaveBeenCalledTimes(1);
     expect(h.down).not.toHaveBeenCalled();
@@ -62,7 +62,7 @@ describe("joinPresence", () => {
     c.fire("TIMED_OUT");
     expect(log).toHaveBeenCalledWith("Weft Worker: presence socket: TIMED_OUT");
     expect(h.down).toHaveBeenCalledTimes(2);
-    p.track("online");
+    void p.track("online");
     expect(c.track).not.toHaveBeenCalled();
   });
 
@@ -71,8 +71,20 @@ describe("joinPresence", () => {
     const log = vi.fn();
     const p = joinPresence(c.client, "k-1", hooks(), log);
     c.fire("SUBSCRIBED");
-    p.track("online");
+    void p.track("online");
     await vi.waitFor(() => expect(log).toHaveBeenCalledWith("Weft Worker: presence: closed"));
+  });
+
+  it("joins with presence enabled and reports a track the server refused", async () => {
+    const c = fakeClient();
+    const log = vi.fn();
+    const p = joinPresence(c.client, "k-1", hooks(), log);
+    expect(c.open).toHaveBeenCalledWith(expect.any(String), { config: { presence: { key: "worker", enabled: true } } });
+    c.fire("SUBSCRIBED");
+    c.track.mockResolvedValueOnce("timed out");
+    expect(await p.track("online")).toBe(false);
+    expect(log).toHaveBeenCalledWith("Weft Worker: presence track: timed out");
+    expect(await p.track("online")).toBe(true);
   });
 
   it("falls back to nothing when the socket can't open", () => {
@@ -85,7 +97,7 @@ describe("joinPresence", () => {
     };
     const p = joinPresence(client, "k-1", hooks(), log);
     expect(log).toHaveBeenCalledWith("Weft Worker: no presence socket, beating the row instead: no WebSocket");
-    p.track("online");
+    void p.track("online");
     p.leave();
     expect(client.removeChannel).not.toHaveBeenCalled();
   });
@@ -105,8 +117,13 @@ describe("liveStatus", () => {
     expect(liveStatus(row(1000, "offline"), null, NOW)).toBe("offline");
   });
 
-  it("reads a synced topic without the worker as offline", () => {
-    expect(liveStatus(row(FRESH_AFTER_MS + 1), read([], ["w1"]), NOW)).toBe("offline");
+  it("reads a synced topic without the worker as offline once its row is past the slow beat", () => {
+    expect(liveStatus(row(ABSENT_OFFLINE_AFTER_MS + 1), read([], ["w1"]), NOW)).toBe("offline");
+  });
+
+  it("keeps a worker with a row inside the slow beat online when its track is missing", () => {
+    expect(liveStatus(row(4 * 60_000), read([], ["w1"]), NOW)).toBe("online");
+    expect(liveStatus(row(ABSENT_OFFLINE_AFTER_MS), read([], ["w1"]), NOW)).toBe("online");
   });
 
   it("reads the row against the slow beat when presence doesn't know", () => {
