@@ -21,6 +21,7 @@ const row = (over: Record<string, unknown> = {}) => ({
   status: "online" as const,
   last_seen_at: "2026-11-02T00:00:00Z",
   revoked_at: null,
+  build: null,
   ...over,
 });
 
@@ -44,6 +45,12 @@ describe("deviceView", () => {
     const v = deviceView(row(), "here-id");
     expect(v).toMatchObject({ kind: "mac", hasBoxKey: true, hasSignKey: false, hasPasskey: false, approves: false, here: true });
     expect(JSON.stringify(v)).not.toContain('"box"');
+  });
+
+  it("carries the build a device reports", () => {
+    expect(deviceView(row({ build: "0.7.0+abc1234" }), "x").build).toBe("0.7.0+abc1234");
+    expect(deviceView(row(), "x").build).toBeNull();
+    expect(deviceView({ ...row(), build: undefined } as never, "x").build).toBeNull();
   });
 
   it("a phone with a sign key approves until it's revoked", () => {

@@ -27,7 +27,7 @@ const ADMIN = { email: "ada@b.co", user: { id: "u1", email: "ada@b.co", name: "A
 
 // A service client whose auth admin API answers one page of users, whose profiles lookup answers
 // the given rows (or null), and whose admin_users_last_seen answers the given rows.
-function service(list: unknown[], profiles: unknown[] | null = [], lastSeen: unknown[] = []) {
+function service(list: unknown[], profiles: unknown[] | null = [], lastSeen: unknown[] = [], devices: unknown = null) {
   const listUsers = vi.fn(() => Promise.resolve({ data: { users: list }, error: null }));
   return {
     listUsers,
@@ -37,7 +37,11 @@ function service(list: unknown[], profiles: unknown[] | null = [], lastSeen: unk
         if (table !== "profiles") throw new Error(`unexpected table ${table}`);
         return { select: vi.fn(() => ({ in: vi.fn(() => Promise.resolve({ data: profiles, error: null })) })) };
       },
-      rpc: vi.fn((fn: string) => Promise.resolve(fn === "admin_users_last_seen" ? { data: lastSeen, error: null } : { data: null, error: { message: fn } })),
+      rpc: vi.fn((fn: string) =>
+        Promise.resolve(
+          fn === "admin_users_last_seen" ? { data: lastSeen, error: null } : fn === "admin_device_versions" && devices ? { data: devices, error: null } : { data: null, error: { message: fn } },
+        ),
+      ),
     },
   };
 }
@@ -161,7 +165,39 @@ describe("/api/admin/users: the profile join", () => {
   });
 });
 
-describe("/api/admin/users: the last-seen ledger", () => {  it("reads a ledger row that isn't a user or a time as no row", async () => {
+describe("/api/admin/users: device versions", () => {
+  it("gives each account the build of every Mac and worker it runs", async () => {
+    adminMock.requireSuperAdminWeft.mockResolvedValueOnce(ADMIN);
+    const { service: s } = service([{ id: "u1", email: "a@b.co" }, { id: "u2", email: "c@d.co" }], [], [], [
+      { user_id: "u1", kind: "mac", name: "Air", build: "0.7.0+abc1234", channel: "release" },
+      { user_id: "u1", kind: "worker", name: "box", build: "0.6.6+fff0000", channel: null },
+      { user_id: "u1", build: "0.6.0" },
+      { user_id: "u1", kind: "mac", build: null },
+      { user_id: 5, build: "0.1.0" },
+    ]);
+    adminMock.adminServiceClient.mockResolvedValueOnce(s);
+    const rows = (await body(await get("/api/admin/users"))).rows as Array<{ id: string; devices: unknown[] }>;
+    expect(rows.find((r) => r.id === "u1")?.devices).toEqual([
+      { kind: "mac", name: "Air", build: "0.7.0+abc1234", channel: "release" },
+      { kind: "worker", name: "box", build: "0.6.6+fff0000", channel: null },
+      { kind: "mac", name: "", build: "0.6.0", channel: null },
+    ]);
+    expect(rows.find((r) => r.id === "u2")?.devices).toEqual([]);
+  });
+
+  it("answers no devices before the migration is applied or on a non-list", async () => {
+    adminMock.requireSuperAdminWeft.mockResolvedValueOnce(ADMIN);
+    const { service: s } = service([{ id: "u1", email: "a@b.co" }]);
+    adminMock.adminServiceClient.mockResolvedValueOnce(s);
+    expect(((await body(await get("/api/admin/users"))).rows as Array<{ devices: unknown[] }>)[0]?.devices).toEqual([]);
+    adminMock.requireSuperAdminWeft.mockResolvedValueOnce(ADMIN);
+    adminMock.adminServiceClient.mockResolvedValueOnce(service([{ id: "u1", email: "a@b.co" }], [], [], { rows: [] }).service);
+    expect(((await body(await get("/api/admin/users"))).rows as Array<{ devices: unknown[] }>)[0]?.devices).toEqual([]);
+  });
+});
+
+describe("/api/admin/users: the last-seen ledger", () => {
+  it("reads a ledger row that isn't a user or a time as no row", async () => {
     adminMock.requireSuperAdminWeft.mockResolvedValueOnce(ADMIN);
     const { service: s } = service([{ id: "u1", email: "a@b.co", last_sign_in_at: "2026-10-01T00:00:00Z" }], [], [
       { user_id: 7, last_seen_at: "junk" },

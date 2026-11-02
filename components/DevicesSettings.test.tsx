@@ -16,7 +16,7 @@ const { POLL_MS, revokeRoute, repinOutcome, workerOutcome, useDevices, hostPairi
 
 const base: DeviceView = {
   id: "m1", kind: "mac", name: "MacBook", platform: "darwin", orgId: "o", host: "h", hasBoxKey: true, hasSignKey: false, hasPasskey: false,
-  approves: false, fingerprint: "fp", status: "online", lastSeenAt: "2026-11-02T11:55:00Z", revokedAt: null, note: null, here: true,
+  approves: false, fingerprint: "fp", status: "online", lastSeenAt: "2026-11-02T11:55:00Z", revokedAt: null, note: null, build: null, here: true,
 };
 const dev = (over: Partial<DeviceView>): DeviceView => ({ ...base, ...over });
 const DEVICES = [
@@ -59,6 +59,15 @@ describe("DevicesSettings", () => {
     expect(screen.queryByRole("button", { name: "Revoke Chrome" })).toBeNull();
     expect(screen.getByText("Browser runs without sandbox: it runs as root.")).toBeInTheDocument();
     expect(screen.queryByText("a revoked device's note stays off")).toBeNull();
+  });
+
+  it("shows the version and commit each device runs, and flags one behind the newest", async () => {
+    apiFetch.mockImplementation(() =>
+      ok({ signedIn: true, devices: [dev({ build: "0.7.0+15388b1ffff" }), dev({ id: "w1", kind: "worker", name: "m1mini", hasSignKey: true, here: false, build: "0.6.6+abc1234" })] }),
+    );
+    render(<DevicesSettings />);
+    expect(await screen.findByText("Mac · reads sealed threads · this Mac · Online · 0.7.0 (15388b1)")).toBeInTheDocument();
+    expect(screen.getByText("Worker · paired · Online · 0.6.6 (abc1234, older)")).toBeInTheDocument();
   });
 
   it("revokes a phone this Mac pinned through main, and anything else through the registry", async () => {
