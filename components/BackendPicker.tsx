@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { api } from "@/lib/client";
 import { backendPick } from "@/lib/backend-pick";
 import { patchNow } from "@/lib/optimistic-cards";
 import { isLive } from "@/lib/format";
+import { hostOf } from "@/lib/project-host";
 import { BACKENDS, CODEX_DEFAULT_MODEL, MODELS, NO_MODEL, runningOn } from "@/lib/new-thread";
 import { BACKEND_LABELS, type Backend, type Card } from "@/lib/types";
 import { useEscape } from "@/lib/use-escape";
@@ -51,7 +51,8 @@ export default function BackendPicker({ card, up = false }: { card: Card; up?: b
       setError(pickNow.refused);
       return;
     }
-    void patchNow(card.id, pickNow.patch, () => api.switchBackend(card.id, next, false, id)).catch((err: unknown) => {
+    // The card's host switches it (lib/project-host.ts): this Mac's route, or a worker's card.switchBackend.
+    void patchNow(card.id, pickNow.patch, () => hostOf(card).act("card.switchBackend", { id: card.id, backend: next, replay: false, model: id })).catch((err: unknown) => {
       const message = err instanceof Error ? err.message : String(err);
       setError(message.replace(/^Error:\s*/, "") || "Couldn't switch.");
     });

@@ -9,7 +9,7 @@ import type { Card, PermissionMode, QuestionReply, ThreadItem } from "@/lib/type
 import AwayStackChip from "./AwayStackChip";
 import BackendBadge from "./BackendBadge";
 import { BackendPicker } from "./CardView";
-import CardActions from "./CardActions";
+import CardActions, { CardMarks, type CardMarkProps } from "./CardActions";
 import CrashGuard from "./CrashGuard";
 import SkillsChip from "./SkillsChip";
 import { guarded } from "./guarded";
@@ -102,14 +102,17 @@ export default function ThreadPanel({
   const live = isLive(card);
   // The copilot opens here like any card, but it has no project and isn't filed, starred or renamed.
   const pilot = card.role === "copilot";
-  const { desktop } = useThreadTransport();
+  const transport = useThreadTransport();
+  const { desktop } = transport;
+  // The card's own controls reach its host: this Mac's always, a worker's too (lib/project-host.ts), weft.zip's not.
+  const own = ownsCard(transport);
 
   return (
     <aside data-drop-target={card.id} className={className || "flex w-[44%] min-w-[380px] shrink-0 flex-col bg-panel last:flex-1"}>
       <header className="flex items-start gap-3 border-b border-line px-4 py-3">
         <div className="min-w-0 flex-1">
-          <PanelTitle card={card} editable={!pilot && desktop} editTitle={editTitle} onRename={onRename} />
-          <HeaderMeta card={card} pilot={pilot} desktop={desktop} onMode={onMode} onTags={onTags} />
+          <PanelTitle card={card} editable={!pilot && own} editTitle={editTitle} onRename={onRename} />
+          <HeaderMeta card={card} pilot={pilot} desktop={desktop} own={own} onMode={onMode} onTags={onTags} />
           {(card.stage || card.remaining) && (
             <div className="mt-1.5 flex min-w-0 items-center gap-1.5 text-[11.5px]">
               {card.stage && <span className="shrink-0 rounded bg-sunken px-1.5 py-px text-muted">{card.stage}</span>}
@@ -121,9 +124,7 @@ export default function ThreadPanel({
         {pilot ? (
           <NewChatButton onClick={onNewChat} />
         ) : (
-          desktop && onArchive && onDelete && (
-            <CardActions card={card} live={live} onSend={onSend} onShare={onShare} onStar={onStar} onArchive={onArchive} onDelete={onDelete} marksInPane={marksInPane} />
-          )
+          <CardButtons card={card} live={live} desktop={desktop} own={own} onSend={onSend} onShare={onShare} onStar={onStar} onArchive={onArchive} onDelete={onDelete} marksInPane={marksInPane} />
         )}
         <ThreadCronButton card={card} items={items} />
         <EditorToggle open={editorOpen} onClick={onEditor} />
@@ -155,6 +156,25 @@ export default function ThreadPanel({
       />
     </aside>
   );
+}
+
+const ownsCard = (t: ReturnType<typeof useThreadTransport>) => t.desktop || Boolean(t.cardEdits);
+
+// The card's buttons in the header: on this Mac its skills, marks and delete (CardActions); on another host just the
+// marks its verbs back, star and archive (a worker's card has no skills of this Mac's, no Share… and no delete verb).
+function CardButtons({ desktop, own, onSend, onDelete, marksInPane, ...marks }: Omit<CardMarkProps, "onArchive"> & {
+  desktop: boolean;
+  own: boolean;
+  onSend: (text: string) => Promise<void>;
+  onDelete?: () => void;
+  marksInPane?: boolean;
+  onArchive?: () => void;
+}) {
+  const { onArchive } = marks;
+  if (!onArchive) return null;
+  if (desktop) return onDelete ? <CardActions {...marks} onArchive={onArchive} onSend={onSend} onDelete={onDelete} marksInPane={marksInPane} /> : null;
+  if (!own || marksInPane) return null;
+  return <CardMarks {...marks} onShare={undefined} onArchive={onArchive} />;
 }
 
 // A thread picked up from Claude Code: it continues the same session, unless a CLI elsewhere has it open right now
@@ -225,16 +245,17 @@ function PanelTitle({ card, editable, editTitle, onRename }: {
 
 // Under the title: the CLI, its mode, the folder (the copilot covers the whole board), the session and its tags.
 // Off the desktop the CLI is a badge. The mode stays the Mac's unless the transport can send it (a worker's card), and YOLO stays off the network.
-function HeaderMeta({ card, pilot, desktop, onMode, onTags }: {
+function HeaderMeta({ card, pilot, desktop, own, onMode, onTags }: {
   card: Card;
   pilot: boolean;
   desktop: boolean;
+  own: boolean;
   onMode?: (mode: PermissionMode) => void;
   onTags?: () => void;
 }) {
   return (
     <div className="mt-1 flex min-w-0 items-center gap-1.5 text-[11px] text-muted">
-      {desktop ? <BackendPicker card={card} /> : <BackendBadge backend={card.backend} card={card} />}
+      {own ? <BackendPicker card={card} /> : <BackendBadge backend={card.backend} card={card} />}
       {onMode && (
         <CrashGuard inline what="mode picker"><ModePicker small backend={card.backend} value={card.permissionMode} onChange={onMode} yolo={desktop && card.backend !== "puku" && !pilot} disabled={card.backend === "codex" && Boolean(card.sessionId)} /></CrashGuard>
       )}
@@ -246,7 +267,7 @@ function HeaderMeta({ card, pilot, desktop, onMode, onTags }: {
       {card.warm && (
         <span className="shrink-0 whitespace-nowrap text-ok" title="The CLI is open, so a reply starts right away">· live</span>
       )}
-      <HeaderMarks card={card} readOnly={!desktop} onTags={pilot ? undefined : onTags} />
+      <HeaderMarks card={card} readOnly={!own} onTags={pilot ? undefined : onTags} />
     </div>
   );
 }

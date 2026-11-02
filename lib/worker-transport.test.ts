@@ -94,10 +94,10 @@ describe("sendWorkerAction", () => {
 });
 
 describe("stop", () => {
-  it("posts a stop for the card", async () => {
-    fetchMock.mockResolvedValueOnce(json({ commandId: "cmd-2" }));
+  it("stops the card with the same host verb as its tile and menu", async () => {
+    fetchMock.mockResolvedValueOnce(json({ commandId: "cmd-2" })).mockResolvedValueOnce(json({ status: "done", error: null }));
     await workerTransport.stop("c1");
-    expect(sentBody(fetchMock.mock.calls[0]![1])).toEqual({ action: "stop", cardId: "c1" });
+    expect(sentBody(fetchMock.mock.calls[0]![1])).toEqual({ action: "host", cardId: "c1", verb: "card.stop", args: { id: "c1" } });
   });
 });
 
@@ -187,7 +187,7 @@ describe("workerToolSource", () => {
 describe("useView", () => {
   it("shows the items as they are", () => {
     const items = [item("one")];
-    expect(workerTransport.useView(items)).toBe(items);
+    expect(renderHook(() => workerTransport.useView(items)).result.current).toBe(items);
   });
 });
 
@@ -196,3 +196,29 @@ describe("workerTransport", () => {
     expect(workerTransport.desktop).toBe(false);
   });
 });
+
+describe("the worker card's verbs", () => {
+  const done = () => fetchMock.mockResolvedValueOnce(json({ commandId: "cmd-1" })).mockResolvedValueOnce(json({ status: "done", error: null }));
+  const hostBody = () => sentBody(fetchMock.mock.calls[0]![1]);
+
+  it.each([
+    ["editLast", () => workerTransport.editLast!("c1", "again"), "card.message.edit", { id: "c1", text: "again" }],
+    ["fresh", () => workerTransport.fresh!("c1", "start over"), "card.fresh", { id: "c1", message: "start over" }],
+    ["waitPermission", () => workerTransport.waitPermission!("c1", "p1"), "card.permission.wait", { id: "c1", pendingId: "p1" }],
+    ["putFirst", () => workerTransport.putFirst!("c1", "p1"), "card.permission.first", { id: "c1", pendingId: "p1" }],
+    ["putHolderFirst", () => workerTransport.putHolderFirst!("c1", "p1"), "card.permission.otherFirst", { id: "c1", pendingId: "p1" }],
+    ["stopTask", () => workerTransport.stopTask!("c1", "t1"), "card.stopTask", { id: "c1", taskId: "t1" }],
+  ] as const)("%s goes out as %s", async (_name, run, verb, args) => {
+    done();
+    await run();
+    expect(hostBody()).toEqual({ action: "host", cardId: "c1", verb, args });
+  });
+
+  it("leaves out what a worker refuses from the network, and the file list it can't give yet", () => {
+    expect(workerTransport.shell).toBeUndefined();
+    expect(workerTransport.grantFolder).toBeUndefined();
+    expect(workerTransport.listFiles).toBeUndefined();
+    expect(workerTransport.cardEdits).toBe(true);
+  });
+});
+

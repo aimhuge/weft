@@ -21,7 +21,7 @@ import { useBoardDialogs } from "@/lib/use-board-dialogs";
 import { useOpenCard } from "@/lib/use-open-card";
 import { useAwayOpen } from "@/lib/use-away-open";
 import { useNewThreadPane } from "@/lib/use-new-thread-pane";
-import { filterState, footerFor, headerCounts, menuProject, openCardOf, workFolder } from "@/lib/board-derive";
+import { filterState, footerFor, framedCard, headerCounts, menuProject, openCardMarks, openCardOf, workFolder } from "@/lib/board-derive";
 import { useRestart } from "@/lib/use-restart";
 import { useDesktopBridge } from "@/lib/use-desktop-bridge";
 import { useStartupCheck } from "@/lib/use-startup-check";
@@ -50,7 +50,7 @@ import { projectMenuHandler } from "./project-menu-handler";
 import { useSwitchAll } from "./switch-all-button";
 import { folderName } from "./ProjectBar";
 import { CLOSED_BROWSER, showPage } from "@/lib/board-helpers";
-import { openWorkerThread, useWorkerBoard } from "@/lib/use-worker-board";
+import { openWorkerThread, useBoardWorkers } from "@/lib/use-worker-board";
 import { localColumns, localPath, withWorkerProjects } from "@/lib/worker-project";
 import { useThreadHandlers } from "@/lib/thread-handlers";
 import { useBoardCards } from "@/lib/use-board-cards";
@@ -77,8 +77,7 @@ export default function Board() {
   const [cards, setCards] = useState<Card[]>([]);
   // Your workers' projects and cards, from the cloud rows. `cards` stays this Mac's own, so nothing that acts on a
   // local card can reach one; only what's drawn reads boardCards (docs/architecture/weft-worker.md).
-  const workers = useWorkerBoard();
-  const boardCards = useMemo(() => [...cards, ...workers.cards], [cards, workers.cards]);
+  const { workers, boardCards } = useBoardWorkers(cards);
   const [home, setHome] = useState("");
   const [loaded, setLoaded] = useState(false);
   const { toast, setToast, notify } = useToast();
@@ -159,14 +158,14 @@ export default function Board() {
   const latestCwd = latest?.cwd;
 
   // Drag/drop, tag, and the "skip my own move's chime" ref (used by useBoardEvents below).
-  const { ownMoves, move, drop, reorder, tagCard } = useBoardCardActions({ cards, setCards, setDragOver, notify });
+  const { ownMoves, move, drop, reorder, tagCard } = useBoardCardActions({ cards, remote: workers.cards, setCards, setDragOver, notify });
   // Project filter and sort, persisted to a cookie; the card filter clears when the project changes.
   const { project, sort, query, setQuery, chooseProject, chooseSort, loadFromPrefs, reviewFilter, toggleReviewFilter } = useBoardView({ select, setWebBrowserOpen });
   // The board's layout: cards in columns or in one list (lib/use-view-mode.ts).
   const { mode: viewMode, choose: chooseView } = useViewMode();
   // Archive, unarchive, focus the next card, and the last batch (for Z / Undo).
   const { archiveTarget, archiveCards, toggleArchive, unarchive, lastArchived } = useBoardArchive({
-    cards,
+    cards: boardCards,
     selected,
     selectedIdRef: selectedRef,
     select,
@@ -236,7 +235,8 @@ export default function Board() {
 
   // An open card, or the New thread form, fills a framed window with the browser pane beside it.
   const workerThread = openWorkerThread(workers, selectedId, { select, notify });
-  const framed = Boolean(selected) || Boolean(workerThread) || showNew;
+  const shown = framedCard(selected, workerThread);
+  const framed = Boolean(shown) || showNew;
   const footer = footerFor(selected);
   // Each folder has its own shell; with All projects showing, the latest card's folder.
   const folder = localPath(workFolder(selected, project, latest));
@@ -440,12 +440,11 @@ export default function Board() {
 
       <BoardOverlays
         frame={{
-          showNew, selected, workerThread, cards, home, newCwd, project, restart: restartView.restart, onCreate: create,
+          showNew, framed, selected, workerThread, cards, home, newCwd, project, restart: restartView.restart, onCreate: create,
           onCloseNew: () => setShowNew(false), items: thread, handlers: threadProps, streaming, renameId,
           workspace, desktop, browser, obscured: overlay, browserWidth, onBrowserWidth: setBrowserWidth,
-          onStar: () => selected && toggleStar(selected), onTags: () => selected && editTags(selected),
-          onShare: () => selected && shareCard(selected),
-          onArchive: () => selected && toggleArchive(selected), onOpenSettings: () => setShowSettings(true),
+          ...openCardMarks(shown, { star: toggleStar, tags: editTags, share: shareCard, archive: toggleArchive }),
+          onOpenSettings: () => setShowSettings(true),
           bottom: terminalOpen ? terminalHeight + 16 : undefined,
           onBackdrop: () => (showNew ? setShowNew(false) : select(null)),
         }}

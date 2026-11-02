@@ -62,6 +62,21 @@ function caughtUp(card: Card, intent: Intent): boolean {
   return card.pending?.id !== intent.pendingId || (intent.wait && Boolean(card.pending.waiting));
 }
 
+// A call a worker hasn't taken yet answers `{ queued }` (lib/worker-acts.ts): a promise that settles once it runs it.
+export interface Queued {
+  queued: Promise<unknown>;
+}
+
+const isQueued = (v: unknown): v is Queued => typeof v === "object" && v !== null && "queued" in v;
+
+// After a call the host said yes to: the server's card takes over, or a reload after STOP_SETTLE_MS. A queued one
+// stays drawn, with no timeout, until the worker runs it (then the same) or refuses it (then it's taken back now).
+function afterYes(result: unknown, settleIt: (failed: boolean) => void) {
+  const later = () => setTimeout(() => settleIt(true), STOP_SETTLE_MS);
+  if (!isQueued(result)) later();
+  else result.queued.then(later, () => settleIt(true));
+}
+
 // Field changes (star, archive, tags, rename, permission mode) drawn on a card until the server's card shows
 // them. A second change to the same card merges in and bumps seq, so an older call's timeout leaves it alone.
 const patches = new Map<string, { fields: Partial<Card>; seq: number }>();
@@ -92,9 +107,7 @@ export function patchNow(id: string, fields: Partial<Card>, call: () => Promise<
   patches.set(id, { fields: { ...patches.get(id)?.fields, ...fields }, seq });
   emit({ kind: "apply" });
   return call().then(
-    () => {
-      setTimeout(() => settlePatch(id, seq, true), STOP_SETTLE_MS);
-    },
+    (result) => afterYes(result, (failed) => settlePatch(id, seq, failed)),
     (err: unknown) => {
       settlePatch(id, seq, true);
       throw err;
@@ -146,9 +159,7 @@ function sendNow(id: string, intent: Intent, call: () => Promise<unknown>): Prom
   intents.set(id, intent);
   emit({ kind: "apply" });
   return call().then(
-    () => {
-      setTimeout(() => settle(id, intent, true), STOP_SETTLE_MS);
-    },
+    (result) => afterYes(result, (failed) => settle(id, intent, failed)),
     (err: unknown) => {
       settle(id, intent, true);
       throw err;
@@ -156,9 +167,10 @@ function sendNow(id: string, intent: Intent, call: () => Promise<unknown>): Prom
   );
 }
 
-// Stop a card's turn: out of Running now; the server's own update takes over when the turn ends.
-export function stopNow(id: string): Promise<void> {
-  return sendNow(id, { kind: "stop" }, () => api.stop(id));
+// Stop a card's turn: out of Running now; the server's own update takes over when the turn ends. `call` is how the
+// card's host is asked (lib/project-host.ts); this Mac's stop route by default.
+export function stopNow(id: string, call: () => Promise<unknown> = () => api.stop(id)): Promise<void> {
+  return sendNow(id, { kind: "stop" }, call);
 }
 
 // Answer a prompt (Allow or Deny, or a folder grant's allow): it leaves the card now. `call` sends the answer.
@@ -167,18 +179,18 @@ export function answerNow(id: string, pendingId: string, allow: boolean, call: (
 }
 
 // Wait on an edit another card holds: the card shows it waiting now (lib/permission-wait.ts).
-export function waitNow(id: string, pendingId: string): Promise<void> {
-  return sendNow(id, { kind: "answer", pendingId, allow: false, wait: true }, () => api.waitPermission(id, pendingId));
+export function waitNow(id: string, pendingId: string, call: () => Promise<unknown> = () => api.waitPermission(id, pendingId)): Promise<void> {
+  return sendNow(id, { kind: "answer", pendingId, allow: false, wait: true }, call);
 }
 
 // This first: the edit goes ahead now (lib/precedence.ts).
-export function firstNow(id: string, pendingId: string): Promise<void> {
-  return sendNow(id, { kind: "answer", pendingId, allow: true, wait: false }, () => api.putFirst(id, pendingId));
+export function firstNow(id: string, pendingId: string, call: () => Promise<unknown> = () => api.putFirst(id, pendingId)): Promise<void> {
+  return sendNow(id, { kind: "answer", pendingId, allow: true, wait: false }, call);
 }
 
 // Others first: the card holding the code goes ahead and this card waits for it (lib/precedence.ts).
-export function otherFirstNow(id: string, pendingId: string): Promise<void> {
-  return sendNow(id, { kind: "answer", pendingId, allow: false, wait: true }, () => api.putHolderFirst(id, pendingId));
+export function otherFirstNow(id: string, pendingId: string, call: () => Promise<unknown> = () => api.putHolderFirst(id, pendingId)): Promise<void> {
+  return sendNow(id, { kind: "answer", pendingId, allow: false, wait: true }, call);
 }
 
 // The server deleted the card (its card_deleted event): nothing left to hold.

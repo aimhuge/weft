@@ -22,6 +22,7 @@ const BoardDialogs = guarded(() => import("./BoardDialogs"), { what: "dialogs", 
 // The framed window's state.
 export interface BoardFrameState {
   showNew: boolean;
+  framed: boolean;
   selected: Card | null;
   workerThread?: WorkerThread | null;
   cards: Card[];

@@ -48,6 +48,9 @@ export interface ThreadTransport {
   // A card on another machine: This card and Always go inside the answer, as one command, and that machine works out
   // the folder from its own pending request. "Read from" on a question has no such command, so it isn't offered.
   grantInAnswer?: boolean;
+  // The card's own controls in the thread's header reach its host: rename, tags, star, archive and the model picker
+  // (lib/project-host.ts). The desktop's always do; a worker card's do too (lib/worker-transport.ts); weft.zip's don't.
+  cardEdits?: boolean;
   // Send later, the review panel and the copilot's starters: the desktop board's own.
   desktop: boolean;
 }
@@ -100,6 +103,7 @@ export const localTransport: ThreadTransport = {
   putHolderFirst: otherFirstNow,
   stopTask: (cardId, taskId) => api.stopTask(cardId, taskId).then(() => {}),
   listFiles: (cardId) => filesApi.list(cardId),
+  cardEdits: true,
   desktop: true,
 };
 

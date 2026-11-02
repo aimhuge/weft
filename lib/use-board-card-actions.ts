@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef } from "react";
 import { api } from "./client";
 import { patchNow } from "./optimistic-cards";
+import { hostOf } from "./project-host";
 import { addTag } from "./rail-view";
 import type { Card, Column } from "./types";
 import { compareCardOrder, ordersForSlot } from "./card-order";
@@ -14,6 +15,9 @@ import { publishWaits } from "./waits-on";
 export interface BoardCardActions {
   // The latest cards (Board.tsx) — read fresh on each call so the actions see what the user just did.
   cards: readonly Card[];
+  // The cards on the board that run on another host (a worker's, lib/use-worker-board.ts): not in `cards`, so a move is
+  // drawn through lib/optimistic-cards.ts and sent to their host (lib/project-host.ts).
+  remote?: readonly Card[];
   // Apply an optimistic update to the cards state. Used by reorder so the new order lands
   // before the server's PATCH round-trips.
   setCards: (updater: (cards: Card[]) => Card[]) => void;
@@ -21,7 +25,9 @@ export interface BoardCardActions {
   notify: (err: unknown) => void;
 }
 
-export function useBoardCardActions({ cards, setCards, setDragOver, notify }: BoardCardActions) {
+const NONE: readonly Card[] = [];
+
+export function useBoardCardActions({ cards, remote = NONE, setCards, setDragOver, notify }: BoardCardActions) {
   // Moves you made, by card: where to and when, so the next event for that card skips its chime.
   const ownMoves = useRef(new Map<string, { column: Column; at: number }>());
   // Who waits on whom, for the holder's You first (lib/waits-on.ts).
@@ -33,6 +39,11 @@ export function useBoardCardActions({ cards, setCards, setDragOver, notify }: Bo
   const move = useCallback(
     (id: string, column: Column) => {
       ownMoves.current.set(id, { column, at: Date.now() });
+      const away = remote.find((c) => c.id === id);
+      if (away) {
+        void patchNow(id, { column }, () => hostOf(away).act("card.update", { id, body: { column } })).catch(notify);
+        return;
+      }
       const from = cards.find((c) => c.id === id)?.column;
       const setColumn = (to: Column, unless?: Column) =>
         setCards((cur) => cur.map((c) => (c.id === id && (!unless || c.column === unless) ? { ...c, column: to } : c)));
@@ -42,7 +53,7 @@ export function useBoardCardActions({ cards, setCards, setDragOver, notify }: Bo
         notify(err);
       });
     },
-    [cards, setCards, notify],
+    [cards, remote, setCards, notify],
   );
 
   // A card dropped on a column moves there if it's not already; clears the drag highlight.
@@ -51,10 +62,10 @@ export function useBoardCardActions({ cards, setCards, setDragOver, notify }: Bo
       e.preventDefault();
       setDragOver(null);
       const id = e.dataTransfer.getData("text/plain");
-      const card = cards.find((c) => c.id === id);
+      const card = cards.find((c) => c.id === id) ?? remote.find((c) => c.id === id);
       if (card && card.column !== column) move(id, column);
     },
-    [cards, setDragOver, move],
+    [cards, remote, setDragOver, move],
   );
 
   // A card dropped on a tag in the 🏷 drawer gets that tag.

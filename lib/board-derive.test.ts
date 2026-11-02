@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { Card } from "./types";
-import { filterState, footerFor, headerCounts, menuProject, openCardOf, workFolder } from "./board-derive";
+import { filterState, footerFor, framedCard, headerCounts, menuProject, openCardMarks, openCardOf, workFolder } from "./board-derive";
 
 const card = (over: Partial<Card>): Card => ({ id: "a", cwd: "/card", backend: "claude", column: "running", ...over }) as Card;
 const latest = { cwd: "/latest", backend: "codex" as const, model: "m" };
@@ -81,3 +81,31 @@ describe("headerCounts", () => {
     expect(headerCounts(cards)).toEqual({ running: 1, waiting: 2 });
   });
 });
+
+describe("framedCard", () => {
+  const mine = { id: "m1" } as Card;
+  const theirs = { id: "w1" } as Card;
+
+  it("is this Mac's open card, else the worker's, else none", () => {
+    expect(framedCard(mine, { card: theirs })).toBe(mine);
+    expect(framedCard(null, { card: theirs })).toBe(theirs);
+    expect(framedCard(null, null)).toBeNull();
+  });
+});
+
+describe("openCardMarks", () => {
+  it("acts on the framed card, and does nothing with none", () => {
+    const act = { star: vi.fn(), tags: vi.fn(), share: vi.fn(), archive: vi.fn() };
+    const c = { id: "c1" } as Card;
+    const marks = openCardMarks(c, act);
+    marks.onStar();
+    marks.onTags();
+    marks.onShare();
+    marks.onArchive();
+    for (const fn of Object.values(act)) expect(fn).toHaveBeenCalledWith(c);
+    const none = openCardMarks(null, act);
+    none.onStar();
+    expect(act.star).toHaveBeenCalledTimes(1);
+  });
+});
+

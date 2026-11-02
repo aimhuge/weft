@@ -28,7 +28,7 @@ Your own taps go through the normal live view (`lib/simulator-input.ts`) and nev
 this Mac's devices, and picking one goes `POST /api/worker-board` `{ action: "qa" }`, which is `elevated`, so a thread's curl can't reach
 it. `lib/qa-switch.ts` asks Electron main (`POST /qa/approve`, Touch ID, naming the worker, project and device), keeps the grant, then
 sends a `qa` command. The worker writes `card.qaDevice`, the Mac's sync device id, and that comes back on the card's row. With it set and
-a grant here, `WorkerOpenCard` draws the native `BrowserPane` in place of `WebPane`, because that's the pane with the window capture.
+a grant here, `WorkerPane` (the worker card's pane column in `OpenCard`) draws the native `BrowserPane` in place of `WebPane`, because that's the pane with the window capture.
 The board's existing `setActive(selectedId)` already points it at the card.
 
 weft.zip and the phone have no switch: the yes has to be given on the machine the build runs on.

@@ -7,12 +7,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, renderHook } from "@testing-library/react";
 
 const fetchMock = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>();
-vi.mock("./api-client", () => ({ apiFetch: (url: string, init?: RequestInit) => fetchMock(url, init) }));
+vi.mock("./api-client", () => ({ API_HEADERS: {}, apiFetch: (url: string, init?: RequestInit) => fetchMock(url, init) }));
 
 const sendWorkerAction = vi.fn<(body: unknown) => Promise<{ commandId: string }>>();
 vi.mock("./worker-transport", () => ({ sendWorkerAction: (body: unknown) => sendWorkerAction(body) }));
+// A worker card's host (lib/project-host.ts): its verbs, as the handlers send them.
+const hostAct = vi.fn<(verb: string, args: unknown) => Promise<void>>(() => Promise.resolve());
+vi.mock("./project-host", () => ({ hostOf: () => ({ act: (verb: string, args: unknown) => hostAct(verb, args) }) }));
 
-const { BOARD_POLL_MS, IDLE_POLL_MS, openWorkerThread, useWorkerBoard, workerThreadHandlers } = await import("./use-worker-board");
+const { BOARD_POLL_MS, IDLE_POLL_MS, openWorkerThread, useBoardWorkers, useWorkerBoard, workerThreadHandlers } = await import("./use-worker-board");
+const { forget, patchNow } = await import("./optimistic-cards");
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
@@ -28,6 +32,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  forget("c1");
   cleanup();
   vi.useRealTimers();
 });
@@ -123,6 +128,94 @@ describe("useWorkerBoard", () => {
   });
 });
 
+describe("a worker card's change, drawn at once", () => {
+  it("shows the change before the worker has it, and takes it back with a fresh read when the worker refuses", async () => {
+    vi.useFakeTimers();
+    fetchMock.mockImplementation(() => Promise.resolve(json(board({ projects: [project()], cards: [card()] }))));
+    const { result } = renderHook(() => useWorkerBoard());
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    let refuse: ((err: Error) => void) | undefined;
+    let sent: Promise<void> | undefined;
+    act(() => {
+      sent = patchNow("c1", { starred: true }, () => new Promise((_resolve, reject) => (refuse = reject)));
+    });
+    expect(result.current.cards[0]!.starred).toBe(true);
+    await act(async () => {
+      refuse?.(new Error("no"));
+      await sent?.catch(() => {});
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(result.current.cards[0]!.starred).toBeUndefined();
+  });
+
+  it("keeps drawing it over a read that doesn't show it yet, and lets go once one does", async () => {
+    vi.useFakeTimers();
+    fetchMock.mockImplementation(() => Promise.resolve(json(board({ projects: [project()], cards: [card()] }))));
+    const { result } = renderHook(() => useWorkerBoard());
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    act(() => void patchNow("c1", { title: "Renamed" }, () => Promise.resolve()));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(BOARD_POLL_MS);
+    });
+    expect(result.current.cards[0]!.title).toBe("Renamed");
+    fetchMock.mockImplementation(() => Promise.resolve(json(board({ projects: [project()], cards: [card({ title: "Renamed" })] }))));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(BOARD_POLL_MS);
+    });
+    fetchMock.mockImplementation(() => Promise.resolve(json(board({ projects: [project()], cards: [card({ title: "Changed on the worker" })] }))));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(BOARD_POLL_MS);
+    });
+    expect(result.current.cards[0]!.title).toBe("Changed on the worker");
+  });
+});
+
+describe("a reload while a read is out", () => {
+  it("draws the newer read, never the older one landing after it, and keeps one polling loop", async () => {
+    vi.useFakeTimers();
+    const pending: ((title: string) => void)[] = [];
+    fetchMock.mockImplementation(() => new Promise<Response>((resolve) => pending.push((title) => resolve(json(board({ projects: [project()], cards: [card({ title })] }))))));
+    const { result } = renderHook(() => useWorkerBoard());
+    // The first read is out; a refused change asks for a reload, which starts a second one.
+    await act(async () => {
+      await patchNow("c1", { starred: true }, () => Promise.reject(new Error("no"))).catch(() => {});
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    fetchMock.mockImplementation(() => Promise.resolve(json(board({ projects: [project()], cards: [card({ title: "New" })] }))));
+    await act(async () => {
+      pending[1]!("New");
+      await vi.advanceTimersByTimeAsync(0);
+      pending[0]!("Old");
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(result.current.cards[0]!.title).toBe("New");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(BOARD_POLL_MS * 3);
+    });
+    // One read per poll after the two: three, not six.
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+  });
+});
+
+describe("useBoardWorkers", () => {
+  it("draws this Mac's cards with the workers' after them", async () => {
+    vi.useFakeTimers();
+    fetchMock.mockResolvedValue(json(board({ projects: [project()], cards: [card()] })));
+    const mine = [card({ id: "m1", cwd: "/r" })];
+    const { result } = renderHook(() => useBoardWorkers(mine));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(result.current.boardCards.map((c) => c.id)).toEqual(["m1", "c1"]);
+    expect(result.current.workers.projects).toHaveLength(1);
+  });
+});
+
 describe("openWorkerThread", () => {
   const ctx = { select: vi.fn(), notify: vi.fn() };
 
@@ -185,5 +278,26 @@ describe("workerThreadHandlers", () => {
     const handlers = workerThreadHandlers(card(), ctx);
     handlers.onClose();
     expect(ctx.select).toHaveBeenCalledWith(null);
+  });
+
+  it("changes the mode on its worker with the menu's own verb, drawn at once", async () => {
+    workerThreadHandlers(card(), ctx).onMode("acceptEdits");
+    await Promise.resolve();
+    expect(hostAct).toHaveBeenCalledWith("card.update", { id: "c1", body: { permissionMode: "acceptEdits" } });
+    expect(sendWorkerAction).not.toHaveBeenCalled();
+  });
+
+  it("renames the card on its worker", async () => {
+    workerThreadHandlers(card(), ctx).onRename("A better name");
+    await Promise.resolve();
+    expect(hostAct).toHaveBeenCalledWith("card.update", { id: "c1", body: { title: "A better name" } });
+  });
+
+  it("says so when the worker refuses a rename", async () => {
+    const boom = new Error("no");
+    hostAct.mockRejectedValueOnce(boom);
+    workerThreadHandlers(card(), ctx).onRename("A better name");
+    await new Promise((r) => setTimeout(r, 0));
+    expect(ctx.notify).toHaveBeenCalledWith(boom);
   });
 });

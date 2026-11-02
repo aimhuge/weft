@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { api } from "@/lib/client";
 import { patchNow, stopNow } from "@/lib/optimistic-cards";
+import { hostOf } from "@/lib/project-host";
 import { cardMenu, columnMenu, resumeCommand, withAccelerators, type CardAction, type ColumnAction } from "@/lib/card-menu";
 import { toAccelerator, useShortcutList } from "@/lib/hotkeys";
 import { BACKEND_LABELS, type Backend, type Card, type Column, type DevServerStatus, type PermissionMode } from "@/lib/types";
@@ -55,21 +56,24 @@ export function useBoardMenus(deps: BoardMenuDeps) {
     if (!shell?.popupMenu) return;
     e.preventDefault();
     e.stopPropagation();
-    const dev = card.review?.dev ? await api.devStatus(card.id).then((r) => r.status, () => null) : null;
-    const access = await hasVaultAccess(card);
-    const picked = (await shell.popupMenu(withAccelerators(cardMenu(card, dev, access, agents), keys({ open: "card-open", archive: "archive" })))) as CardAction | null;
+    // A card on another host gets what its verbs back (lib/project-host.ts): no dev server or vault of this Mac's.
+    const host = hostOf(card);
+    const dev = card.review?.dev && host.can("dev") ? await api.devStatus(card.id).then((r) => r.status, () => null) : null;
+    const access = host.can("vault") ? await hasVaultAccess(card) : undefined;
+    const menu = host.menu(cardMenu(card, dev, access, agents));
+    const picked = (await shell.popupMenu(withAccelerators(menu, keys({ open: "card-open", archive: "archive" })))) as CardAction | null;
     if (picked) runCardAction(card, picked).catch(deps.notify);
   }
 
   // ★ on or off, from the menu or the ☆ on a card or thread. A starred card is never auto-archived.
   function toggleStar(card: Card) {
     const starred = !card.starred;
-    patchNow(card.id, { starred }, () => api.mark(card.id, { starred })).catch(deps.notify);
+    patchNow(card.id, { starred }, () => hostOf(card).act("card.update", { id: card.id, body: { starred } }, () => api.mark(card.id, { starred }))).catch(deps.notify);
   }
 
   // Every change in the Tags… dialog saves right away.
   function saveTags(tags: string[]) {
-    if (tagging) patchNow(tagging.id, { tags }, () => api.mark(tagging.id, { tags })).catch(deps.notify);
+    if (tagging) patchNow(tagging.id, { tags }, () => hostOf(tagging).act("card.update", { id: tagging.id, body: { tags } }, () => api.mark(tagging.id, { tags }))).catch(deps.notify);
   }
 
   // Star, Tags… and Share…: true when the action was one of these.
@@ -87,7 +91,7 @@ export function useBoardMenus(deps: BoardMenuDeps) {
     if (!action.startsWith("switch:")) return false;
     const backend = action.slice(7) as Backend;
     const replay = Boolean(card.rateLimitHit);
-    await api.switchBackend(card.id, backend, replay);
+    await hostOf(card).act("card.switchBackend", { id: card.id, backend, replay });
     deps.toast(`Switched to ${BACKEND_LABELS[backend]}${replay ? " · replaying last message" : ""}.`);
     return true;
   }
@@ -142,7 +146,8 @@ export function useBoardMenus(deps: BoardMenuDeps) {
   // "Permissions: …" — flip the card's mode. Extracted to keep runCardAction's complexity in check.
   async function runModeAction(card: Card, action: CardAction) {
     if (!action.startsWith("mode:")) return false;
-    await api.setMode(card.id, action.slice(5) as PermissionMode);
+    const permissionMode = action.slice(5) as PermissionMode;
+    await hostOf(card).act("card.update", { id: card.id, body: { permissionMode } }, () => api.setMode(card.id, permissionMode));
     return true;
   }
 
@@ -180,7 +185,7 @@ export function useBoardMenus(deps: BoardMenuDeps) {
         deps.move(card.id, "running");
         return;
       case "stop":
-        await stopNow(card.id);
+        await stopNow(card.id, () => hostOf(card).act("card.stop", { id: card.id }));
         return;
       case "new-here":
         deps.openNew(card.cwd);
