@@ -1001,6 +1001,8 @@ It installs the toolchain and Weft, enrols with a one-time token, and starts a l
 Or pair it instead: Settings → **Devices** → **Add a worker** gives a line with a pairing code; the box makes its own key,
 claims the code, prints a check code, and joins once you confirm the same code with Touch ID on the Mac. Settings → Devices
 also lists every Mac, worker, phone and browser of yours, the keys each holds, and **Revoke** for any of them.
+**Re-pair** on a paired worker moves it to another Mac: paste that Mac's code, approve with Touch ID, and run the line it
+shows on the box. A worker never switches Macs without the one it trusts signing off.
 **Sign in to Claude** on its row signs its Claude Code in with one click: Weft opens Claude's approval page in a
 window beside the button, and the token it gets back is sealed to the worker's own key, so Supabase never holds it
 in the clear (or run `weft-worker login` on the box). **Sign in to GitHub** beside it does the same for private repos:

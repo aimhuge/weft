@@ -7,6 +7,7 @@
 // The claim check is lib/host-pairing.ts's, here because main can't load TypeScript; lib/host-pairing.test.ts proves
 // a claim the box makes passes this check and a changed one doesn't.
 const crypto = require("node:crypto");
+const { macFingerprint } = require("./worker-repair.cjs");
 
 // An hour, like an enrolment token and the row's own expires_at (worker_pair_open): the box clones and installs first.
 const TTL_MS = 60 * 60_000;
@@ -86,7 +87,7 @@ function createHostPairing({ db, userId, macDevice, myDevice, confirm, now = Dat
     return fail(r, "Your workspace couldn't be read")?.org_id ?? "";
   }
 
-  /** @returns {Promise<{ id: string, code: string, command: string, expiresAt: number }>} */
+  /** @returns {Promise<{ id: string, code: string, command: string, expiresAt: number, fingerprint?: string }>} */
   async function start(given) {
     const orgId = given || (await workspace());
     if (!orgId) throw new Error("Open the web board once to make your workspace, then add a worker.");
@@ -97,7 +98,9 @@ function createHostPairing({ db, userId, macDevice, myDevice, confirm, now = Dat
     open.set(id, { secret, orgId, expiresAt });
     const mac = macSignKey ? `.${Buffer.from(await macSignKey(), "base64").toString("base64url")}` : "";
     const code = `${PREFIX}${id}.${orgId}.${secret}${mac}`;
-    return { id, code, command: `curl -fsSL https://weft.zip/worker.sh | sh -s -- ${code}`, expiresAt };
+    // This Mac's key's fingerprint, the one a re-pair's Touch ID prompt on the box's old Mac shows (electron/worker-repair.cjs).
+    const fingerprint = macSignKey ? macFingerprint(await macSignKey()) : undefined;
+    return { id, code, command: `curl -fsSL https://weft.zip/worker.sh | sh -s -- ${code}`, expiresAt, ...(fingerprint ? { fingerprint } : {}) };
   }
 
   async function setStatus(id, status) {
@@ -148,7 +151,13 @@ function createHostPairing({ db, userId, macDevice, myDevice, confirm, now = Dat
     await setStatus(id, "cancelled").catch(() => {});
   }
 
-  return { start, check, cancel };
+  // Whether this Mac opened that code and it's still open (electron/worker-repair.cjs: a re-pair to this Mac).
+  const opened = (id) => {
+    const code = open.get(String(id));
+    return Boolean(code && now() <= code.expiresAt);
+  };
+
+  return { start, check, cancel, opened };
 }
 
 module.exports = { createHostPairing, checkHostClaim, checkCode, claimMessage, TTL_MS };
