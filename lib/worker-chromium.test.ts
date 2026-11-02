@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { PassThrough } from "node:stream";
 import { afterAll, describe, expect, it, vi } from "vitest";
-import { cdpOver, chromiumArgs, chromiumCandidates, findChromium, launchChromium, NO_CHROMIUM, pipeReader, quietly, sandboxUnavailable } from "./worker-chromium";
+import { cdpOver, chromiumArgs, chromiumCandidates, findChromium, browserSandboxNote, launchChromium, NO_CHROMIUM, pipeReader, quietly } from "./worker-chromium";
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "weft-chromium-"));
 afterAll(() => fs.rmSync(tmp, { recursive: true, force: true }));
@@ -109,8 +109,9 @@ describe("chromiumCandidates and findChromium", () => {
     for (const d of ["chromium_headless_shell-1200/chrome-headless-shell-linux64", "chromium_headless_shell-1228/chrome-headless-shell-linux64", "chromium_headless_shell-next/chrome-headless-shell-linux64", "chromium-1228"]) fs.mkdirSync(path.join(caches, d), { recursive: true });
     fs.writeFileSync(path.join(caches, "chromium_headless_shell-9"), "");
     const linux = chromiumCandidates({ WEFT_CHROMIUM: "/x/chrome" } as unknown as NodeJS.ProcessEnv, home, "linux");
-    expect(linux.slice(0, 4)).toEqual([
+    expect(linux.slice(0, 5)).toEqual([
       "/x/chrome",
+      "/opt/weft/chromium/chrome-headless-shell",
       path.join(home, ".weft", "tools", "chromium", "chrome-headless-shell"),
       path.join(caches, "chromium_headless_shell-1228", "chrome-headless-shell-linux64", "chrome-headless-shell"),
       path.join(caches, "chromium_headless_shell-1200", "chrome-headless-shell-linux64", "chrome-headless-shell"),
@@ -133,16 +134,13 @@ describe("chromiumCandidates and findChromium", () => {
   });
 });
 
-describe("sandboxUnavailable", () => {
-  const none = () => null;
-  it("is true for root or a Linux that blocks user namespaces, false elsewhere", () => {
-    expect(sandboxUnavailable("linux", true, none)).toBe(true);
-    expect(sandboxUnavailable("linux", false, none)).toBe(false);
-    expect(sandboxUnavailable("linux", false, (f) => (f.endsWith("apparmor_restrict_unprivileged_userns") ? "1" : null))).toBe(true);
-    expect(sandboxUnavailable("linux", false, (f) => (f.endsWith("unprivileged_userns_clone") ? "0" : null))).toBe(true);
-    expect(sandboxUnavailable("linux", false, (f) => (f.endsWith("max_user_namespaces") ? "0" : null))).toBe(true);
-    expect(sandboxUnavailable("darwin", true, none)).toBe(false);
-    expect(typeof sandboxUnavailable()).toBe("boolean");
+describe("browserSandboxNote", () => {
+  it("says why the browser has no sandbox, and nothing when it has one or there's no browser", () => {
+    expect(browserSandboxNote("/bin/chrome", () => "it runs as root")).toBe("Browser runs without sandbox: it runs as root.");
+    expect(browserSandboxNote("/bin/chrome", () => null)).toBeNull();
+    expect(browserSandboxNote(null, () => "x")).toBeNull();
+    expect(browserSandboxNote(undefined, () => null)).toBeNull();
+    expect(browserSandboxNote("/bin/chrome")).not.toBeUndefined();
   });
 });
 
@@ -153,7 +151,6 @@ describe("chromiumArgs", () => {
     expect(args).not.toContain("--no-sandbox");
     expect(args.some((a) => a.startsWith("--remote-debugging-port"))).toBe(false);
     expect(chromiumArgs("/tmp/p", true)).toContain("--no-sandbox");
-    expect(Array.isArray(chromiumArgs("/tmp/p"))).toBe(true);
   });
 });
 
@@ -167,6 +164,19 @@ describe("launchChromium", () => {
     await vi.waitFor(() => expect(cdp.closed).toBe(true));
   });
 
+  it("keeps the sandbox where it can start, and warns when it can't", () => {
+    for (const why of [null, "it runs as root"]) {
+      const warn = vi.fn();
+      let args: string[] = [];
+      const child = Object.assign(new EventEmitter(), { stdio: [null, null, null, new PassThrough(), new PassThrough()], kill: vi.fn() });
+      launchChromium("/bin/chrome", (_bin, a) => ((args = a), child as never), () => why, warn);
+      expect(args.includes("--no-sandbox")).toBe(why !== null);
+      expect(warn).toHaveBeenCalledTimes(why ? 1 : 0);
+      if (why) expect(warn.mock.calls[0]?.[0]).toContain("without its sandbox, so a page that exploits it runs as this worker: it runs as root.");
+      child.emit("exit");
+    }
+  });
+
   it("spawns it on pipes 3 and 4, and removes its profile when it exits or fails to start", () => {
     for (const end of ["exit", "error"]) {
       const child = Object.assign(new EventEmitter(), { stdio: [null, null, null, new PassThrough(), new PassThrough()], kill: vi.fn() });
@@ -175,7 +185,7 @@ describe("launchChromium", () => {
         expect(bin).toBe("/bin/chrome");
         dir = (args.find((a) => a.startsWith("--user-data-dir=")) ?? "").slice("--user-data-dir=".length);
         return child as never;
-      });
+      }, () => null);
       expect(fs.existsSync(dir)).toBe(true);
       child.emit(end, new Error("x"));
       expect(cdp.closed).toBe(true);

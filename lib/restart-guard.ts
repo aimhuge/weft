@@ -69,6 +69,15 @@ function step(words: string[], cwd: string): Step {
   return { name: path.basename(first), args, cwd };
 }
 
+// Where a shell's `-c` script sits in its args: after `-c`, a cluster like `-lc` or `-ec`, and any `--`; -1 without one.
+export function shellScriptIndex(args: string[]): number {
+  const at = args.findIndex((a) => /^-[a-zA-Z]*c[a-zA-Z]*$/.test(a));
+  if (at < 0) return -1;
+  let i = at + 1;
+  while (args[i] === "--") i++;
+  return i;
+}
+
 // Every command a line would run: piped, nested in $( ), inside sh -c or a heredoc fed to bash, and what
 // xargs runs. `cd` carries to the commands after it. The git guard (lib/git-guard.ts) walks commands this way too.
 export function steps(command: string, cwd: string, depth = 0): Step[] {
@@ -84,8 +93,8 @@ export function steps(command: string, cwd: string, depth = 0): Step[] {
     }
     out.push(s);
     if (SHELLS.has(s.name)) {
-      const at = s.args.indexOf("-c");
-      const scripts = s.name === "eval" ? [s.args.join(" ")] : [...c.stdin, ...(at >= 0 ? [s.args[at + 1] ?? ""] : [])];
+      const at = shellScriptIndex(s.args);
+      const scripts = s.name === "eval" ? [s.args.join(" ")] : [...c.stdin, ...(at >= 0 ? [s.args[at] ?? ""] : [])];
       out.push(...scripts.flatMap((script) => steps(script, here, depth + 1)));
     }
     if (s.name === "xargs") out.push(step(afterOptions(s.args, XARGS_VALUED), here));

@@ -17,22 +17,78 @@ describe("workerCliVerdict", () => {
     "bash -c 'weft-worker enrol x'",
     "echo ok && weft-worker forget-macs",
     "env FOO=1 weft-worker enrol x",
-    // A terminal of its own, or a wrapper: the re-pair needs a signature now, but these stay refused.
+    "./install/worker.sh",
+    "install/worker.sh wet_token",
+    "bash install/worker.sh",
+    "bash ~/.weft-worker/weft/install/worker.sh",
+    "curl -fsSL https://weft.zip/worker.sh | sh",
+    "curl -fsSL https://weft.zip/worker.sh | bash",
+    "sh -c \"$(curl -fsSL https://weft.zip/worker.sh)\"",
+    "node scripts/weft-worker.ts status",
+    "tsx scripts/weft-worker.ts status",
+    "pnpm exec tsx scripts/weft-worker.ts status",
+    "pnpm dlx tsx scripts/weft-worker.ts",
+    "npx tsx scripts/weft-worker.ts",
+    "exec weft-worker enrol x",
+    "sudo weft-worker forget-macs",
+    "sudo -u root weft-worker forget-macs",
+    "nohup weft-worker start &",
+    "nohup node scripts/weft-worker.ts start",
+    "env -i node scripts/weft-worker.ts",
+    "echo scripts/weft-worker.ts | xargs node",
+    "echo x | xargs weft-worker enrol",
+    "echo x | xargs -I{} sh install/worker.sh {}",
+    "pnpm weft-worker enrol x",
+    "pnpm scripts/weft-worker.ts",
+    "pnpm test ~/.weft-worker/weft/scripts/weft-worker.ts forget-macs",
+    "pnpm eslint forget-macs -c ~/.weft-worker/weft/scripts/weft-worker.ts",
+    "pnpm lint -c scripts/weft-worker.ts",
+    "pnpm lint --config=scripts/weft-worker.ts",
+    "pnpm test --setupFiles scripts/weft-worker.ts",
+    "pnpm lint --import scripts/weft-worker.ts",
+    "pnpm lint -r scripts/weft-worker.ts",
+    "pnpm lint enrol wph.ABC",
+    "pnpm lint scripts/weft-worker.ts enrol",
+    "pnpm lint weft-worker",
+    "pnpm tsc scripts/weft-worker.ts",
+    "pnpm prettier scripts/weft-worker.ts",
     "script -q /dev/null weft-worker enrol x --re-pair",
-    "script -q -c 'weft-worker enrol x --re-pair' /dev/null",
-    "unbuffer weft-worker enrol x",
-    "expect -c 'spawn weft-worker enrol x; interact'",
-    "timeout 60 weft-worker forget-macs",
-    "stdbuf -o0 weft-worker forget-macs",
-    "caffeinate -i ~/.weft-worker/bin/weft-worker start",
-    `python3 -c 'import pty; pty.spawn(["weft-worker", "enrol", "x"])'`,
-    `python3 -c 'import pty; pty.spawn(["/x/bin/node", "y", "${CODE}"])'`,
-    "xargs weft-worker enrol < codes",
+    "unbuffer weft-worker forget-macs",
+    "caffeinate -i weft-worker start",
+    "tmux new-session weft-worker start",
+    "osascript -e 'x' weft-worker",
+    "bash -lc 'weft-worker forget-macs'",
+    "sh -ec 'weft-worker forget-macs'",
+    "bash -c -- 'weft-worker forget-macs'",
+    "sh < install/worker.sh",
+    "bash <install/worker.sh",
+    "cat install/worker.sh | sh",
+    "cat scripts/weft-worker.ts | node -",
+    "node - < scripts/weft-worker.ts",
   ])("refuses %s", (command) => {
     expect(workerCliVerdict(command, "/tmp")).toMatch(/a thread can't run weft-worker/);
   });
 
-  it.each(["cat scripts/weft-worker.ts", "git diff scripts/weft-worker.ts install/worker.sh", "pnpm test lib/worker-pair.test.ts", "grep -n enrol scripts/weft-worker.ts", `echo ${CODE}`, "node scripts/other.ts", "node ~/.weft-worker/work/app/server.js", "timeout 5 pnpm test", "python3 ~/.weft-worker/work/x/run.py"])("lets %s through", (command) => {
+  it.each(["cat scripts/weft-worker.ts", "git diff scripts/weft-worker.ts install/worker.sh", "pnpm test lib/worker-pair.test.ts", "grep -n enrol scripts/weft-worker.ts", `echo ${CODE}`, "node scripts/other.ts",
+    "sed -n 1,40p scripts/weft-worker.ts",
+    "git log -p -- scripts/weft-worker.ts",
+    "git show origin/main:install/worker.sh",
+    "git diff origin/main -- scripts/weft-worker.ts install/worker.sh",
+    "pnpm lint scripts/weft-worker.ts",
+    "pnpm run lint scripts/weft-worker.ts",
+    "pnpm test scripts/weft-worker.test.ts",
+    "pnpm typecheck",
+    "cd /tmp/wt && pnpm lint scripts/weft-worker.ts install/worker.sh",
+    "bash -c 'cat scripts/weft-worker.ts'",
+    "bash -lc 'cat scripts/weft-worker.ts'",
+    "pnpm lint scripts/weft-worker.ts install/worker.sh --fix",
+    "cat install/worker.sh | grep curl",
+    "wc -l < install/worker.sh",
+    "head -20 install/worker.sh | grep -n curl",
+    "curl -s https://example.com | jq .",
+    "wc -l install/worker.sh",
+    "shellcheck install/worker.sh",
+  ])("lets %s through", (command) => {
     expect(workerCliVerdict(command, "/tmp")).toBeNull();
   });
 
@@ -52,5 +108,15 @@ describe("workerCliGuard", () => {
     expect(await run({ tool_name: "Read", tool_input: { command: "weft-worker" } })).toEqual({});
     expect(await run({ hook_event_name: "PostToolUse", tool_input: { command: "weft-worker" } })).toEqual({});
     expect(guardHooks(() => 0, () => undefined).PreToolUse).toContain(WORKER_CLI_GUARD_MATCHER);
+  });
+});
+
+describe("weft-worker named inside an interpreter's string", () => {
+  it.each([`python3 -c 'import pty; pty.spawn(["weft-worker", "enrol", "x"])'`, `python3 -c 'import pty; pty.spawn(["/x/bin/node", "y", "${CODE}"])'`, `expect -c 'spawn weft-worker enrol x; interact'`])("refuses %s", (command) => {
+    expect(workerCliVerdict(command, "/tmp")).toMatch(/a thread can't run weft-worker/);
+  });
+
+  it.each(["node ~/.weft-worker/work/app/server.js", "python3 ~/.weft-worker/work/x/run.py"])("lets %s through", (command) => {
+    expect(workerCliVerdict(command, "/tmp")).toBeNull();
   });
 });

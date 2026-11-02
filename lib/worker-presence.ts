@@ -20,7 +20,9 @@ export interface PresenceHooks {
 }
 
 export interface Presence {
-  track(status: WorkerStatus): void;
+  // Resolves false when the server didn't take the track (supabase-js resolves "error" or "timed out", it doesn't reject),
+  // so the beat can try again on its next tick.
+  track(status: WorkerStatus): Promise<boolean>;
   leave(): void;
 }
 
@@ -31,11 +33,11 @@ export interface PresenceChannel {
 }
 
 export interface PresenceClient {
-  channel(topic: string, opts: { config: { presence: { key: string } } }): PresenceChannel;
+  channel(topic: string, opts: { config: { presence: { key: string; enabled?: boolean } } }): PresenceChannel;
   removeChannel(channel: PresenceChannel): Promise<unknown>;
 }
 
-const NO_PRESENCE: Presence = { track: () => {}, leave: () => {} };
+const NO_PRESENCE: Presence = { track: () => Promise.resolve(true), leave: () => {} };
 
 // Joins the worker's presence topic on the client's one socket. Node before 22 has no WebSocket, so the join can throw:
 // the worker then stays on its 20 s row beat.
@@ -43,7 +45,7 @@ export function joinPresence(client: PresenceClient, key: string, hooks: Presenc
   let left = false;
   let joined = false;
   try {
-    const channel = client.channel(presenceTopic(key), { config: { presence: { key: PRESENCE_KEY } } }).subscribe((status, err) => {
+    const channel = client.channel(presenceTopic(key), { config: { presence: { key: PRESENCE_KEY, enabled: true } } }).subscribe((status, err) => {
       if (left) return;
       joined = status === "SUBSCRIBED";
       if (joined) {
@@ -56,8 +58,18 @@ export function joinPresence(client: PresenceClient, key: string, hooks: Presenc
     });
     return {
       track(status) {
-        if (!joined || left) return;
-        channel.track({ status }).catch((e: unknown) => log(`Weft Worker: presence: ${(e as Error).message}`));
+        if (!joined || left) return Promise.resolve(false);
+        return channel.track({ status }).then(
+          (result) => {
+            const ok = result === undefined || result === "ok";
+            if (!ok) log(`Weft Worker: presence track: ${typeof result === "string" ? result : "error"}`);
+            return ok;
+          },
+          (e: unknown) => {
+            log(`Weft Worker: presence: ${(e as Error).message}`);
+            return false;
+          },
+        );
       },
       leave() {
         left = true;
@@ -78,6 +90,9 @@ export interface PresenceRead {
 
 // A worker whose socket is down writes its row every 20 s (lib/host/beat.ts), so this is the old threshold.
 export const FRESH_AFTER_MS = 60_000;
+// A synced topic without the worker only calls it offline once its row is older than this: a worker whose socket is up
+// writes the row every 5 minutes (lib/host/beat.ts), so a fresh row outranks a presence track that went missing.
+export const ABSENT_OFFLINE_AFTER_MS = 6 * 60_000;
 // One whose socket is up writes it every 5 minutes: two missed beats and some slack, for a board without presence.
 export const SLOW_OFFLINE_AFTER_MS = 11 * 60_000;
 
@@ -94,6 +109,6 @@ export function liveStatus(row: LiveRow, seen: PresenceRead | null, now: number)
   if (tracked) return tracked;
   const age = row.last_seen_at ? now - Date.parse(row.last_seen_at) : Infinity;
   if (age <= FRESH_AFTER_MS) return row.status;
-  if (seen?.known.has(row.id)) return "offline";
+  if (seen?.known.has(row.id)) return age <= ABSENT_OFFLINE_AFTER_MS ? row.status : "offline";
   return age <= SLOW_OFFLINE_AFTER_MS ? row.status : "offline";
 }

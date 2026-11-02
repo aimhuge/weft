@@ -86,6 +86,7 @@ export default function DevicesSettings() {
                 <div className={SUBTLE}>
                   {holdsLine(d)} · {seenLine(d, now)}
                 </div>
+                {d.note && !d.revokedAt && <div className="text-[12.5px] text-warn">{d.note}</div>}
               </div>
               {!d.revokedAt && (
                 <div className="flex shrink-0 gap-2">

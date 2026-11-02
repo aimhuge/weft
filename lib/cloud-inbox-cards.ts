@@ -115,5 +115,5 @@ function macCheck(client: SupabaseClient, uid: string) {
 // The Mac's dispatch for one signed-in account. A file pasted on weft.zip comes down through the account's session.
 export function macDispatch(client: SupabaseClient, uid: string) {
   const receive = macReceive(client, uid);
-  return dispatcher({ new_card: (command) => newCard(command, receive), ...cardKinds({ ...macRules, receive }) }, UNKNOWN_KIND, macCheck(client, uid));
+  return dispatcher({ new_card: (command) => newCard(command, receive), ...cardKinds({ ...macRules, receive, fromOwner: (command) => command.created_by === uid }) }, UNKNOWN_KIND, macCheck(client, uid));
 }

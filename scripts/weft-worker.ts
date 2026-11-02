@@ -28,6 +28,7 @@ import { CLAUDE_TOKEN, GITHUB_PURPOSE, LOGIN_PURPOSE, newSealKeys, open } from "
 import { createUpdater, updatesOn } from "../lib/worker-update";
 import { listenForPushes, listenForWakes } from "../lib/worker-wake";
 import { joinPresence } from "../lib/worker-presence";
+import { browserSandboxNote } from "../lib/worker-chromium";
 
 const home = workerHome();
 // Before the engine is imported: lib/store.ts reads WEFT_DATA once, at import.
@@ -182,6 +183,7 @@ async function startCommand() {
   });
   const daemon = createDaemon({
     reg,
+    owner: config.ownerUser,
     publisher,
     listen: (hooks) => listenForWakes(client, config.key, hooks, console.log),
     listenForPushes: (hooks) => listenForPushes(client, hooks, console.log),
@@ -223,6 +225,8 @@ async function startCommand() {
       resume: resumeInterrupted,
     },
     update: updatesOn(home, process.cwd()) ? { ...createUpdater({ home, dir: process.cwd() }), restart: () => restart() } : undefined,
+    // "Browser runs without sandbox", on the worker's row, where Linux won't let its Chromium sandbox itself.
+    browserNote: browserSandboxNote(),
     async checkout(folder, repo) {
       const dir = paths.repoPath(root, folder);
       if ((await paths.materialise(dir, repo)) === "cloned") console.log(`Weft Worker: cloned ${repo} into ${dir}`);

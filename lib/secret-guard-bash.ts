@@ -6,6 +6,7 @@ import path from "node:path";
 import { blankCommand, parseShell, type SimpleCommand } from "./shell-parse";
 import { DATA_DIR } from "./store";
 import { refusal } from "./secret-guard-why";
+import { credentialVerdict } from "./secret-guard-credentials";
 import { gitSubcommand, textWords } from "./shell-text";
 import { DATA_NAMES, expandBraces, followCd, inTranscriptDir, isSecretFile, isWorkerHome, reachesDataDir } from "./secret-guard-files";
 
@@ -81,7 +82,7 @@ function pathTokens(word: string): string[] {
 }
 
 // Every secret name above has one of these in it, or a glob reaches it; the rest skip path.resolve.
-const MAYBE_SECRET = new RegExp(`env|dev\\.vars|${DATA_NAMES.map((n) => n.split(".")[0]).join("|")}|[*?[]`, "i");
+const MAYBE_SECRET = new RegExp(`env|dev\\.vars|gh|credentials|netrc|supabase|vercel|gogcli|${DATA_NAMES.map((n) => n.split(".")[0]).join("|")}|[*?[]`, "i");
 
 // A path that is the data dir or the CLI's transcript dir, whatever else is in it. These hold
 // the control server's token and every secret a thread ever saw, so they are named by their
@@ -269,6 +270,8 @@ function commandVerdict({ words: raw, inputs, stdin }: SimpleCommand, dataDir: s
   // The raw words, so `H=~/.weft-worker; cat $H/worker.json` counts, but not the ones the command takes as text:
   // `gh pr create --body "…~/.weft/vault/…"` opens nothing (lib/shell-text.ts).
   const run = unwrapEnv(words);
+  const prints = credentialVerdict(run);
+  if (prints) return prints;
   const text = textWords(run);
   const opened = [...raw.slice(0, raw.length - run.length), ...run.filter((w, i) => !text.has(i) && !listsHome(run, w))];
   const hard = hardPathIn([...opened, ...inputs], dataDir);
@@ -285,6 +288,8 @@ function commandVerdict({ words: raw, inputs, stdin }: SimpleCommand, dataDir: s
 function execChildVerdict(cmd: string, args: string[], dataDir: string, depth: number, namesSecret: () => boolean): string | null {
   const child = execRunnerChild(cmd, args);
   if (!child?.length) return null;
+  const prints = credentialVerdict(child);
+  if (prints) return prints;
   const [childCmd = "", ...childArgs] = child;
   const name = path.basename(childCmd);
   const inner = verdictFor(name)?.({ cmd: name, args: childArgs, stdin: [], dataDir, depth, namesSecret }) ?? null;
