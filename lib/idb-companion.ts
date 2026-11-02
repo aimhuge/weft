@@ -73,7 +73,7 @@ function hid(client: IdbClient, events: unknown[]) {
   });
 }
 
-function video(client: IdbClient, px: Pixels, quality: ScreenQuality, onFrame: (frame: Buffer) => void, onEnd: () => void) {
+function video(client: IdbClient, px: Pixels, quality: ScreenQuality, onFrame: (frame: Buffer) => void, onEnd: () => void, bitrate?: number) {
   const stream = client.video_stream();
   let done = false;
   const end = () => {
@@ -87,7 +87,8 @@ function video(client: IdbClient, px: Pixels, quality: ScreenQuality, onFrame: (
   stream.on("error", end);
   stream.on("end", end);
   const { scale, ...settings } = VIDEO[quality];
-  stream.write({ start: { ...H264, ...settings, scale_factor: evenScale(px.width, px.height, scale) } });
+  const avg_bitrate = bitrate ?? settings.avg_bitrate;
+  stream.write({ start: { ...H264, ...settings, avg_bitrate, scale_factor: evenScale(px.width, px.height, scale) } });
   return () => {
     done = true;
     stream.cancel();
@@ -115,7 +116,7 @@ export function sessionOver(client: IdbClient, size: IdbSession["size"], close: 
     key: (keycode, down) => keys.write({ press: { action: { key: { keycode } }, direction: down ? "DOWN" : "UP" } }),
     tap: (x, y) => hid(client, [touch({ x, y }, "DOWN"), touch({ x, y }, "UP")]),
     swipe: (start, end, ms) => hid(client, [{ swipe: { start, end, duration: ms / 1000, delta: 0 } }]),
-    video: (onFrame, onEnd, quality = DEFAULT_QUALITY) => video(client, px, quality, onFrame, onEnd),
+    video: (onFrame, onEnd, quality = DEFAULT_QUALITY, bitrate) => video(client, px, quality, onFrame, onEnd, bitrate),
     close: () => {
       keys.end();
       close();

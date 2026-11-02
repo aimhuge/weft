@@ -16,17 +16,45 @@ describe("answerOffer", () => {
       createAnswer: () => Promise.resolve({}),
       setLocalDescription: () => Promise.resolve(),
       localDescription: { sdp: "answer" },
+      getTransceivers: () => [],
       close,
     };
-    const out = await answerOffer("offer", {}, () => peer, 1);
+    const out = await answerOffer("offer", {}, { make: () => peer, wait: 1 });
     expect(out.answer).toBe("answer");
     out.close();
     expect(close).toHaveBeenCalled();
   });
 
+  it("hands the offered m-lines to media before answering, and answers once gathering completes", async () => {
+    const subs: ((state: string) => void)[] = [];
+    const transceivers = [{ kind: "video" }];
+    const media = vi.fn();
+    const peer = {
+      onDataChannel: { subscribe: vi.fn() },
+      iceGatheringStateChange: { subscribe: (fn: (state: string) => void) => subs.push(fn) },
+      iceGatheringState: "gathering",
+      setRemoteDescription: () => Promise.resolve(),
+      getTransceivers: () => transceivers,
+      createAnswer: () => {
+        expect(media).toHaveBeenCalledWith(transceivers);
+        return Promise.resolve({});
+      },
+      setLocalDescription: () => Promise.resolve(),
+      localDescription: { sdp: "answer" },
+      close: () => Promise.reject(new Error("gone")),
+    };
+    const answering = answerOffer("offer", {}, { media, make: () => peer as never, wait: 60_000 });
+    await vi.waitFor(() => expect(subs).toHaveLength(1));
+    subs[0]?.("gathering");
+    subs[0]?.("complete");
+    const out = await answering;
+    expect(out.answer).toBe("answer");
+    out.close();
+  });
+
   it("refuses to answer with nothing", async () => {
-    const peer = { onDataChannel: { subscribe: vi.fn() }, iceGatheringStateChange: { subscribe: vi.fn() }, iceGatheringState: "complete", setRemoteDescription: () => Promise.resolve(), createAnswer: () => Promise.resolve({}), setLocalDescription: () => Promise.resolve(), localDescription: null, close: vi.fn() };
-    await expect(answerOffer("offer", {}, () => peer)).rejects.toThrow("no answer");
+    const peer = { onDataChannel: { subscribe: vi.fn() }, iceGatheringStateChange: { subscribe: vi.fn() }, iceGatheringState: "complete", setRemoteDescription: () => Promise.resolve(), createAnswer: () => Promise.resolve({}), setLocalDescription: () => Promise.resolve(), localDescription: null, getTransceivers: () => [], close: vi.fn() };
+    await expect(answerOffer("offer", {}, { make: () => peer })).rejects.toThrow("no answer");
   });
 });
 

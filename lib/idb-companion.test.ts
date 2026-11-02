@@ -101,6 +101,9 @@ describe("sessionOver", () => {
     expect(video.write).toHaveBeenLastCalledWith({ start: expect.objectContaining({ fps: 15, avg_bitrate: 2_000_000 }) as unknown });
     session.video(vi.fn(), vi.fn());
     expect(video.write).toHaveBeenLastCalledWith({ start: expect.objectContaining({ fps: 30 }) as unknown });
+    // The track's rate control restarts the stream under the quality's rate.
+    session.video(vi.fn(), vi.fn(), "high", 4_800_000);
+    expect(video.write).toHaveBeenLastCalledWith({ start: expect.objectContaining({ fps: 60, avg_bitrate: 4_800_000 }) as unknown });
   });
 
   it("doesn't report an end the caller asked for", () => {

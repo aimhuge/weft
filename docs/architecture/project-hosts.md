@@ -243,7 +243,8 @@ Live traffic is what grows with use, so it leaves Supabase; the sealed history s
 - **The route shows.** A worker's chip reads "direct · 4 ms" or "relay · 600 ms", so a fallback is visible.
 - **On the line (H6):** one line per host shared by every card, opened when a worker project is selected; long tool
   outputs fetched on demand, mirrored only compressed and under a cap; items gzipped before sealing; the mirror batched
-  while the line carries the live view; video on an RTP track with adaptive bitrate instead of a fixed 8 Mbps.
+  while the line carries the live view; video on an RTP track with adaptive bitrate instead of a fixed 8 Mbps (built,
+  H6a: loss-driven, 0.5 Mbps up to the quality's rate).
 - **Small, later:** heartbeats as Realtime Presence rather than a row write every 20 s; finished `cloud_commands` rows
   expire after a day; WebP for the fallback screen frames.
 
@@ -267,7 +268,10 @@ Each ships on its own.
    `(host, repo)` address. **H5a one publish path** is built ([Devices and records](#devices-and-records)); the inbox,
    the heartbeat and the address are still two.
 6. **H6 the WebRTC line for everything live.** In order: video moves from 16 KB chunks on a reliable, ordered
-   DataChannel (`lib/use-rtc-screen.ts`) to an RTP track that drops late frames, so it can't delay a click; the line
+   DataChannel (`lib/use-rtc-screen.ts`) to an RTP track that drops late frames, so it can't delay a click (**H6a, built
+   2026-11-02:** an H.264 track negotiated in the sealed offer, the channel kept as the fallback, the rate moved on receiver
+   reports by restarting idb's encoder, a PLI answered with a restart for a key frame;
+   [weft-worker.md](weft-worker.md#the-fast-path)); the line
    opens while a board shows the worker's project, not only during a watch; `host` (verbs and results) and `events`
    (thread and project changes, streaming text) channels replace the 2.5 s poll; Supabase leaves the hot path (the
    first sealed offer, then a history and offline mirror written beside the line, with reconnects over the line itself);

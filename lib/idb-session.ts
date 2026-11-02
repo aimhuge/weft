@@ -11,8 +11,9 @@ export interface IdbSession {
   // One event of a live gesture or key press, in order, the moment it happens.
   touch: (phase: "down" | "move" | "up", x: number, y: number) => void;
   key: (code: number, down: boolean) => void;
-  // Each payload is H.264, at the quality the board picked; the call returned stops the stream.
-  video: (onFrame: (frame: Buffer) => void, onEnd: () => void, quality?: ScreenQuality) => () => void;
+  // Each payload is H.264, at the quality the board picked (and a bitrate under it, when given); the call returned stops
+  // the stream. The first frame of a stream is a key frame.
+  video: (onFrame: (frame: Buffer) => void, onEnd: () => void, quality?: ScreenQuality, bitrate?: number) => () => void;
   close: () => void;
 }
 

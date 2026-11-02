@@ -1,7 +1,7 @@
 "use client";
 
-// A worker's device, live in the pane (lib/worker-screen.ts): frames off a Realtime topic, drawn on one <img>, or H.264 on
-// a canvas over WebRTC where the board can connect (lib/use-rtc-screen.ts). There, touches and keys stream live as they
+// A worker's device, live in the pane (lib/worker-screen.ts): frames off a Realtime topic, drawn on one <img>, or H.264
+// over WebRTC where the board can connect (lib/use-rtc-screen.ts): a video track in a <video>, or a canvas from an older worker. There, touches and keys stream live as they
 // happen; otherwise a click is a tap and a drag a swipe, sent as commands (onInput). A board with neither only watches.
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import type { SharePane } from "@/lib/share-types";
@@ -40,11 +40,12 @@ export function WorkerScreen({ pane, onInput, source }: { pane: ScreenPane; onIn
   const [ripple, setRipple] = useState<{ x: number; y: number } | null>(null);
   const down = useRef<(Point & { at: number }) | null>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
+  const video = useRef<HTMLVideoElement>(null);
   const [quality, pickQuality] = useScreenQuality();
   // The page a watch started from here is waiting to replace: the new page ends the wait.
   const [startedOn, setStartedOn] = useState<string | null>(null);
   const starting = startedOn === pane.url;
-  const { live, send, answer } = useRtcScreen(pane.device, pane.fast, canvas, onInput, quality);
+  const { live, track, send, answer } = useRtcScreen(pane.device, pane.fast, canvas, onInput, quality, video);
   useScreenStream(pane.token, setSrc, answer);
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), CLOCK_MS);
@@ -90,6 +91,7 @@ export function WorkerScreen({ pane, onInput, source }: { pane: ScreenPane; onIn
       setNote((err as Error).message);
     });
   };
+  const handlers = { onPointerDown: press, onPointerMove: move, onPointerUp: release, onKeyDown: (e: KeyboardEvent<HTMLElement>) => key(e, true), onKeyUp: (e: KeyboardEvent<HTMLElement>) => key(e, false) };
   const surface = `max-h-full max-w-full touch-none rounded-2xl border-4 border-line ${onInput ? "cursor-pointer" : ""}`;
 
   return (
@@ -107,16 +109,8 @@ export function WorkerScreen({ pane, onInput, source }: { pane: ScreenPane; onIn
       />
       {/* Sized to the picture, never letterboxed: a press is read as a fraction of this box. */}
       <div className="flex min-h-0 w-full flex-1 items-center justify-center">
-        <canvas
-          ref={canvas}
-          tabIndex={0}
-          onPointerDown={press}
-          onPointerMove={move}
-          onPointerUp={release}
-          onKeyDown={(e) => key(e, true)}
-          onKeyUp={(e) => key(e, false)}
-          className={live ? `${surface} outline-none` : "hidden"}
-        />
+        <canvas ref={canvas} tabIndex={0} {...handlers} className={live && !track ? `${surface} outline-none` : "hidden"} />
+        <video ref={video} tabIndex={0} muted playsInline {...handlers} className={track ? `${surface} outline-none` : "hidden"} />
         {src && !live && (
           <img
             src={src}

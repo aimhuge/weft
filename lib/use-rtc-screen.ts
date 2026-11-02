@@ -2,10 +2,12 @@
 
 // The board's end of the WebRTC line to a worker's device (docs/architecture/weft-worker.md#the-fast-path). It makes an
 // offer, sends it through the elevated input command (onOffer), and takes the answer off the watch's Broadcast topic.
-// H.264 arrives on "video" and is decoded onto a canvas; "input" carries the live gesture and keyboard. Any failure just
+// H.264 arrives on an RTP video track played in a <video> (lib/rtc-video-track.ts), or, from a worker without it, on the
+// "video" channel, decoded onto a canvas; "input" carries the live gesture and keyboard. Any failure just
 // leaves the view on the JPEGs (lib/use-screen-stream.ts), which never stop, and a later try may still connect.
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { codecOf, frameReader, isKey } from "./h264-frames";
+import { offerVideoTrack, playTrack } from "./rtc-video-track";
 import { DEFAULT_QUALITY, newAnswerKey, openAnswer, STUN, type LiveEvent, type ScreenQuality, type SealedAnswer } from "./rtc-signal";
 import type { BoardInput } from "./worker-commands";
 
@@ -63,6 +65,8 @@ function gathered(pc: RTCPeerConnection) {
 export interface RtcScreen {
   // True while video is drawing.
   live: boolean;
+  // True when it's drawing in the <video>, off the track, rather than on the canvas.
+  track: boolean;
   // Sends a live event; false means the line isn't open, and the caller uses the command path.
   send: (event: LiveEvent) => boolean;
   answer: (sealed: SealedAnswer) => void;
@@ -71,14 +75,25 @@ export interface RtcScreen {
 type Attempt = { pc: RTCPeerConnection; key: string };
 
 // A new quality closes the line and offers again at once: the worker's encoder takes its settings when the video starts.
-export function useRtcScreen(device: string, fast: boolean, canvasEl: RefObject<HTMLCanvasElement | null>, onOffer?: (input: BoardInput) => Promise<unknown>, quality: ScreenQuality = DEFAULT_QUALITY): RtcScreen {
+// A track that negotiated but never showed a frame (a decoder that won't take it) isn't offered again, so the next try
+// falls back to the channel.
+export function useRtcScreen(
+  device: string,
+  fast: boolean,
+  canvasEl: RefObject<HTMLCanvasElement | null>,
+  onOffer?: (input: BoardInput) => Promise<unknown>,
+  quality: ScreenQuality = DEFAULT_QUALITY,
+  videoEl?: RefObject<HTMLVideoElement | null>,
+): RtcScreen {
   const attempt = useRef<Attempt | null>(null);
+  const noTrack = useRef(false);
   const input = useRef<RTCDataChannel | null>(null);
   const offering = useRef(onOffer);
   useEffect(() => {
     offering.current = onOffer;
   });
   const [live, setLive] = useState(false);
+  const [track, setTrack] = useState(false);
   const canOffer = Boolean(onOffer);
 
   useEffect(() => {
@@ -98,10 +113,27 @@ export function useRtcScreen(device: string, fast: boolean, canvasEl: RefObject<
         decoder.close();
         input.current = null;
         setLive(false);
+        setTrack(false);
+        if (videoEl?.current) videoEl.current.srcObject = null;
         if (!ended) retry = setTimeout(() => void connect(), RETRY_MS);
       };
       cleanup = again;
-      const giveUp = setTimeout(again, ANSWER_MS);
+      let tracked = false;
+      const giveUp = setTimeout(() => {
+        if (tracked) noTrack.current = true;
+        again();
+      }, ANSWER_MS);
+      const el = videoEl?.current;
+      if (el && !noTrack.current && offerVideoTrack(pc)) {
+        pc.addEventListener("track", (e: RTCTrackEvent) => {
+          tracked = true;
+          playTrack(el, e.track, () => {
+            clearTimeout(giveUp);
+            setTrack(true);
+            setLive(true);
+          });
+        });
+      }
       const video = pc.createDataChannel("video", { ordered: true });
       video.binaryType = "arraybuffer";
       const read = frameReader((frame) => {
@@ -130,7 +162,7 @@ export function useRtcScreen(device: string, fast: boolean, canvasEl: RefObject<
       clearTimeout(retry);
       cleanup();
     };
-  }, [fast, canOffer, device, canvasEl, quality]);
+  }, [fast, canOffer, device, canvasEl, quality, videoEl]);
 
   const answer = useCallback((sealed: SealedAnswer) => {
     const now = attempt.current;
@@ -146,5 +178,5 @@ export function useRtcScreen(device: string, fast: boolean, canvasEl: RefObject<
     channel.send(JSON.stringify(event));
     return true;
   }, []);
-  return { live, send, answer };
+  return { live, track, send, answer };
 }

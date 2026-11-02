@@ -377,8 +377,9 @@ route on a LAN or through NAT with no open port, so home and away are one path. 
 the JPEGs.
 
 ```
-idb_companion ─ private unix socket, gRPC ─ daemon ═ WebRTC, encrypted ═▶ canvas in WorkerScreen
-  lib/idb-companion.ts                       lib/worker-rtc.ts              lib/use-rtc-screen.ts
+idb_companion ─ private unix socket, gRPC ─ daemon ═ WebRTC, encrypted ═▶ <video> in WorkerScreen (RTP track)
+  lib/idb-companion.ts                       lib/rtp-video.ts               lib/rtc-video-track.ts
+                                             lib/worker-rtc.ts           ═▶ canvas (the "video" channel, older peers)
 board ─ sealed offer, elevated input command ─▶ daemon ─ encrypted answer, Broadcast ─▶ board
   lib/worker-board.ts                                     lib/rtc-signal.ts
 ```
@@ -393,8 +394,9 @@ board ─ sealed offer, elevated input command ─▶ daemon ─ encrypted answe
   full size, 0.85, 8 Mbps, the default: at half size and 0.6 a retina pane drew it soft) or high (60 fps, full size, 0.9,
   20 Mbps). It rides in the sealed offer (`quality`), and `VIDEO` in `lib/idb-companion.ts` turns it into the encoder's
   settings when the video starts, so a new pick closes the line and offers again at once.
-- **One line, named channels.** `answerOffer` takes a map of channel names to handlers. `video` carries H.264 and `input` the
-  live gesture and keyboard. Other live streams can add a channel. A line only exists while someone is watching, so commands,
+- **One line, named channels, one video track.** `answerOffer` takes a map of channel names to handlers, and a `media` hook
+  that takes the offer's m-lines before the answer is made. `input` carries the live gesture and keyboard; other live streams
+  can add a channel. A line only exists while someone is watching, so commands,
   card state and wake-ups stay on Supabase, which also carries the signalling.
 - **Proving who answered.** The board makes an offer and a one-time key. Its local server seals both to the worker's published
   key (`sealedOffer`, purpose `RTC_PURPOSE`) and sends them as an `input` command. Only that worker can open it, and it answers
@@ -405,9 +407,32 @@ board ─ sealed offer, elevated input command ─▶ daemon ─ encrypted answe
 - **Gesture and keyboard.** `down`, `move` and `up` are sent as they happen, as fractions of the screen, and a gesture holds one
   hid stream from press to release. Keys go as HID usages (`lib/hid-keys.ts`), down and up. With no line open, a finished tap or
   swipe takes the command path. Paste isn't built.
-- **Wire format:** a 4-byte length, then one payload, chunked to 16 KB messages on a reliable, ordered channel and put back
-  together by `frameReader`. A viewer more than 2 MB behind skips to the next key frame.
-- **Measured on m1mini, LAN:** 198 ms median from a live gesture to the first frame arriving that shows movement (88 to 375 ms,
+- **Video on an RTP track (H6a).** The board's offer carries a receive-only video m-line limited to H.264 in packetization-mode 1,
+  High first, then Constrained Baseline (`offerVideoTrack`, `setCodecPreferences`, jitter buffer target 0). The worker is
+  configured for those two codecs only, and `takeVideo` turns the m-line to `sendonly` before answering, so it's all inside
+  the existing sealed offer and answer. idb's access units (Annex B; idb encodes High, `640033` at full size) are cut by
+  werift's `H264Packetizer` (single NAL, STAP-A, FU-A, 1,100-byte payloads), stamped on the 90 kHz clock as they arrive and
+  sent with `sender.sendRtp` (`lib/rtp-video.ts`). The board plays the track in a `<video>`: no decoding code. A lost packet
+  costs only its frame: werift answers NACKs from its cache, and nothing queues behind a gap.
+- **Fallback.** Both paths ship. The board always opens the `video` channel too. An older worker answers the m-line
+  inactive and sends on the channel; a board that offers none (older, or a browser with no H.264 for RTP) gets the
+  channel; a track that negotiates but shows no frame before the answer timeout isn't offered again on that board. On the
+  channel: a 4-byte length, then one payload, chunked to 16 KB messages on a reliable, ordered channel and put back
+  together by `frameReader`; a viewer more than 2 MB behind skips to the next key frame. When the track is in use the
+  channel stays silent, and its closing is how the worker hears the board left.
+- **Key frames and bitrate.** idb's `video_stream` takes fps, bitrate and key frame interval only in its `Start`
+  message and has no key frame request, so both are a restart of the stream: its first frame is always an IDR, 52 to 76
+  ms after the restart on m1mini. A new viewer gets a new stream, so it starts on a key frame; a PLI or FIR restarts it, at
+  most once a second. The rate starts at the quality's (2, 8 or 20 Mbps) and `bitrateControl` (`lib/rtp-bitrate.ts`) moves
+  it on the board's receiver reports: loss after NACK repair, from the running totals over 100-packet windows, above 10%
+  cuts it to 0.6× (no more than every 4 s, never under 0.5 Mbps); under 2% for 12 s raises it 1.5× back toward the
+  ceiling. REMB is read but not used: the board's estimate follows what arrives, and an idle iPhone sends about 90 kbps.
+- **Measured on the track, m1mini to headless Chrome on the same box** (iPhone 16 Pro, medium): High profile negotiated, 1206×2622
+  at 22 to 25 fps, 5 ms jitter buffer, 4 to 7 ms decode, 0.06 to 0.1 Mbps with the screen idle. With packets dropped at
+  random after the NACK cache, 5% and 30% loss were fully repaired (0 lost, 0 PLIs, rate held at 8 Mbps); 60% made
+  PLIs and stepped the rate 8 → 4.8 → 2.9 → 1.7 → 1.0 → 0.6 Mbps over 30 s. Not yet measured: gesture to frame on the
+  track, Electron's own board, and any real network.
+- **Measured on m1mini, LAN, on the channel:** 198 ms median from a live gesture to the first frame arriving that shows movement (88 to 375 ms,
   13 of 16 detected, before decoding and drawing), 29 fps, about 0.66 Mbps at quality 0.2 and a 2 Mbps cap. Fast scrolling
   showed artifacts at those settings, so it's now 0.6 and 8 Mbps, not yet measured under motion. Nothing's been measured off
   the LAN, and a slow link may need a lower bitrate.

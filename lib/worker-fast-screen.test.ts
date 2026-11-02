@@ -3,8 +3,10 @@ import type { Device } from "./simulator-devices";
 
 const idb = vi.hoisted(() => ({ openIdb: vi.fn() }));
 const rtc = vi.hoisted(() => ({ answerOffer: vi.fn() }));
+const rtp = vi.hoisted(() => ({ takeVideo: vi.fn(), rtpVideo: vi.fn() }));
 vi.mock("./idb-companion", () => idb);
 vi.mock("./worker-rtc", () => rtc);
+vi.mock("./rtp-video", () => rtp);
 
 const { isKeyFrame, openFastScreen } = await import("./worker-fast-screen");
 
@@ -53,5 +55,57 @@ describe("openFastScreen", () => {
     fast?.close();
     expect(line.close).toHaveBeenCalled();
     expect(s.close).toHaveBeenCalled();
+  });
+});
+
+describe("the video track", () => {
+  type Opts = { media: (t: unknown[]) => void };
+  type Handlers = Record<string, (c: unknown) => void>;
+  const channel = () => {
+    const subs: ((state: string) => void)[] = [];
+    return { stateChanged: { subscribe: (fn: (state: string) => void) => subs.push(fn) }, emit: (state: string) => subs.forEach((fn) => fn(state)) };
+  };
+  const connect = async (sender: unknown) => {
+    const s = session();
+    idb.openIdb.mockResolvedValue(s);
+    const line = { answer: "a", close: vi.fn() };
+    let handlers: Handlers = {};
+    rtc.answerOffer.mockImplementation((_: string, h: Handlers, opts: Opts) => {
+      handlers = h;
+      opts.media([{ kind: "video" }]);
+      return Promise.resolve(line);
+    });
+    rtp.takeVideo.mockReturnValue(sender);
+    const stop = vi.fn();
+    rtp.rtpVideo.mockReturnValue(stop);
+    const fast = await openFastScreen(ios);
+    await fast?.connect("o", "high");
+    return { s, line, handlers, stop, fast };
+  };
+
+  it("sends on the track the board offered, and hears it leave on the unused channel", async () => {
+    const sender = { ssrc: 1 };
+    const { s, handlers, stop, line, fast } = await connect(sender);
+    expect(rtp.takeVideo).toHaveBeenCalledWith([{ kind: "video" }]);
+    expect(rtp.rtpVideo).toHaveBeenCalledWith(s, sender, "high");
+    const c = channel();
+    handlers.video?.(c);
+    expect(s.video).not.toHaveBeenCalled();
+    c.emit("open");
+    expect(stop).not.toHaveBeenCalled();
+    c.emit("closed");
+    expect(stop).toHaveBeenCalledTimes(1);
+    fast?.close();
+    expect(stop).toHaveBeenCalledTimes(2);
+    expect(line.close).toHaveBeenCalled();
+  });
+
+  it("falls back to the channel when the board offered no track", async () => {
+    const { s, handlers, stop, fast } = await connect(null);
+    expect(rtp.rtpVideo).not.toHaveBeenCalled();
+    handlers.video?.(channel());
+    expect(s.video).toHaveBeenCalled();
+    fast?.close();
+    expect(stop).not.toHaveBeenCalled();
   });
 });
