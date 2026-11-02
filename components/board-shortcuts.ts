@@ -1,5 +1,5 @@
 import type { Dispatch, SetStateAction } from "react";
-import type { ShortcutDef } from "@/lib/hotkeys";
+import { onBoardItself, type ShortcutDef } from "@/lib/hotkeys";
 import type { RailPanel } from "@/lib/rail-view";
 import { addSecret } from "@/lib/use-vault";
 import type { Card, LoginView } from "@/lib/types";
@@ -45,6 +45,19 @@ export interface BoardShortcutContext {
   unarchive: (ids: string[]) => void;
 }
 
+// Plain "t" only from the board itself with no card open (lib/hotkeys.ts onBoardItself): a stray "t" from a panel, a
+// review box or a button must never open a shell. Anywhere else it's Ctrl+` (the app menu, MENU_ALIASES).
+function terminalShortcut(c: BoardShortcutContext): ShortcutDef {
+  return {
+    id: "terminal",
+    keys: ["t"],
+    description: "Toggle the terminal (from the board)",
+    group: "General",
+    enabled: c.boardKeys && !c.cardOpen,
+    handler: (e) => (onBoardItself(e.target) ? c.toggleTerminal() : false),
+  };
+}
+
 export function boardShortcuts(c: BoardShortcutContext): ShortcutDef[] {
   return [
     {
@@ -87,7 +100,7 @@ export function boardShortcuts(c: BoardShortcutContext): ShortcutDef[] {
     },
     { id: "copilot", keys: ["c"], description: "Open or close the copilot", group: "General", enabled: c.boardKeys, handler: c.toggleCopilot },
     { id: "browser", keys: ["b"], description: "Toggle the browser", group: "General", enabled: c.boardKeys, handler: c.toggleBrowser },
-    { id: "terminal", keys: ["t"], description: "Toggle the terminal", group: "General", enabled: c.boardKeys, handler: c.toggleTerminal },
+    terminalShortcut(c),
     // The four-column workspace for an open card (lib/workspace-layout.ts). ⌥⌘1..4 sit on free
     // keys (the App group owns ⌘1/⌘2, ⌥⌘ are not used elsewhere in lib/shortcut-catalog.ts) and
     // stand down without a card.

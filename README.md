@@ -1310,10 +1310,10 @@ window, which works with the board hidden.
 
 ## Terminal
 
-Press Control-backtick (⌃\`, as in VS Code) anywhere, `t` on the board, View > Terminal, or the terminal button in the header to
+Press Control-backtick (⌃\`, as in VS Code) anywhere, `t` on the board itself (with no card open and nothing focused), View > Terminal, or the terminal button in the header to
 open a real shell in a drawer along the bottom of the window, for the commands a thread wasn't
 allowed to run. Each folder gets its own shell: the drawer shows the open card's folder, else the
-selected project's, else the latest card's, and switching project or card switches shell. Hidden or
+selected project's, else the latest card's, and switching project or card switches shell. A worker's terminal (Touch ID, then a shell over its line) opens only when you toggle the drawer on that worker's card or project: switching to one with the drawer open hides it instead. A worker too old for it says it needs to update. Hidden or
 switched-away shells keep running with their output. Split (or ⌘\\ in a terminal) adds a shell side
 by side, up to three per folder; hover a terminal for its restart and close buttons. It's your login shell on a pty (`node-pty`, `electron/terminal.cjs`), drawn
 with xterm.js (`components/TerminalDrawer.tsx`). Desktop app only.

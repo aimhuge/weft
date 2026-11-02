@@ -18,6 +18,8 @@ vi.mock("./guarded", () => ({
 }));
 
 import BoardBottom, { type BoardBottomProps } from "./BoardBottom";
+import { act } from "react";
+import { useTerminalDrawer } from "@/lib/use-terminal-drawer";
 
 afterEach(() => {
   cleanup();
@@ -57,5 +59,24 @@ describe("BoardBottom", () => {
     const { container } = render(<BoardBottom footer={footer} onHelp={vi.fn()} terminal={terminal({ open: false })} />);
     expect(container.textContent).toBe("");
     expect([...container.children].map((el) => el.getAttribute("data-what"))).toEqual(["footer"]);
+  });
+
+  it("doesn't open a worker card's terminal when you switch to it with the drawer open, only when you toggle it there", () => {
+    const projects = [{ path: "worker://w1/ling", worker: "m1mini" }] as unknown as Parameters<typeof useTerminalDrawer>[0]["projects"];
+    let toggle = () => {};
+    function Harness({ cwd }: { cwd: string }) {
+      const t = useTerminalDrawer({ cwd, openWorker: null, project: null, projects, cardOpen: true });
+      toggle = t.toggle;
+      return <BoardBottom footer={footer} onHelp={vi.fn()} terminal={{ open: t.open, cwd, height: t.height, onHeight: t.setHeight, onClose: t.toggle, away: t.away, host: t.host }} />;
+    }
+    const { rerender } = render(<Harness cwd="/r" />);
+    act(() => toggle());
+    expect(mounts).toEqual(["/r"]);
+    rerender(<Harness cwd="worker://w1/ling" />);
+    expect(mounts).toEqual(["/r"]);
+    expect(document.querySelector("[data-what=terminal]")).toBeNull();
+    act(() => toggle());
+    expect(mounts).toEqual(["/r", "worker://w1/ling"]);
+    expect(seen.get("terminal")).toMatchObject({ cwd: "worker://w1/ling", host: "m1mini" });
   });
 });

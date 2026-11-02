@@ -20,7 +20,7 @@ import { useBoardDialogs } from "@/lib/use-board-dialogs";
 import { useOpenCard } from "@/lib/use-open-card";
 import { useAwayOpen } from "@/lib/use-away-open";
 import { useNewThreadPane } from "@/lib/use-new-thread-pane";
-import { filterState, footerFor, framedCard, headerCounts, menuProject, openCardMarks, openCardOf, terminalAway, workFolder } from "@/lib/board-derive";
+import { filterState, footerFor, framedCard, headerCounts, menuProject, openCardMarks, openCardOf, workFolder } from "@/lib/board-derive";
 import { useRestart } from "@/lib/use-restart";
 import { useDesktopBridge } from "@/lib/use-desktop-bridge";
 import { useStartupCheck } from "@/lib/use-startup-check";
@@ -50,8 +50,9 @@ import { useSwitchAll } from "./switch-all-button";
 import { folderName } from "./ProjectBar";
 import { CLOSED_BROWSER, showPage } from "@/lib/board-helpers";
 import { openWorkerThread, useBoardWorkers } from "@/lib/use-worker-board";
-import { isWorkerProject, localPath, withWorkerProjects } from "@/lib/worker-project";
+import { localPath, withWorkerProjects } from "@/lib/worker-project";
 import { projectFolders } from "@/lib/board-folders";
+import { useTerminalDrawer } from "@/lib/use-terminal-drawer";
 import { useWorkerNotices } from "@/lib/card-notice";
 import { useThreadHandlers } from "@/lib/thread-handlers";
 import { useBoardCards } from "@/lib/use-board-cards";
@@ -101,8 +102,6 @@ export default function Board() {
     renameId, setRenameId, unseen, setUnseen, selectedRef, loadThread, select,
   } = useOpenCard({ setWebBrowserOpen, openPane: () => workspace.setOpen("pane", true) });
   const [browserWidth, setBrowserWidth] = useState(560);
-  const [terminalOpen, setTerminalOpen] = useState(false);
-  const [terminalHeight, setTerminalHeight] = useState(240);
   const { copilot, update: updateCopilot, load: loadCopilot } = useCopilotCard();
   const copilotNeedsYou = copilot?.column === "needs_you";
   const [projects, setProjects] = useState<Project[]>([]);
@@ -170,12 +169,11 @@ export default function Board() {
     notify,
     onSentToWorker: (worker) => setToast(`Sent to ${worker}. Its card shows here in a moment.`),
   });
-  // Browser, terminal, and copilot-lane state.
-  const { toggleBrowser, toggleTerminal, toggleCopilot, setCopilotState } = useBoardToggles({
+  // Browser and copilot-lane state; the terminal drawer's is useTerminalDrawer, below.
+  const { toggleBrowser, toggleCopilot, setCopilotState } = useBoardToggles({
     selectedRef,
     browserVisible: browser.visible,
     setWebBrowserOpen,
-    setTerminalOpen,
     laneState,
     select,
   });
@@ -227,6 +225,7 @@ export default function Board() {
   const footer = footerFor(selected);
   // Each folder has its own shell; with All projects showing, the latest card's folder. The badges read a worker's too.
   const { folder, reads, terminalCwd } = projectFolders(workFolder(selected, project, latest), home);
+  const terminal = useTerminalDrawer({ cwd: terminalCwd, openWorker: workerThread?.worker, project, projects: workers.projects, cardOpen: Boolean(selectedId) });
   const counts = headerCounts(boardCards);
   // "Switch all" only shows once a thread hit its plan limit.
   const limitHit = hitPlanLimit(boardCards);
@@ -238,7 +237,7 @@ export default function Board() {
     cards: boardCards, selected, selectedId, lastOpenId, projectSummaries, project, sort, home, columns: visibleColumns, query, boardKeys,
     dialogs: { showNew, showSettings, showHelp, showPalette, login },
     doneToArchive, lastArchived, archivedCount, showArchived, rootOf, restart: restartView.restart,
-    openNew: () => openNew(), openCard, select, toggleCopilot, toggleBrowser, toggleTerminal, toggleColumn: workspace.toggle,
+    openNew: () => openNew(), openCard, select, toggleCopilot, toggleBrowser, toggleTerminal: terminal.toggle, toggleColumn: workspace.toggle,
     setShowPalette, setPaletteQuery, setShowHelp, setShowSettings, setSharingBoard, setLibraryOpen, setShowArchived,
     archiveTarget, archiveCards, unarchive, toggleArchive, chooseSort, chooseProject, move, notify, toast: setToast,
   });
@@ -323,7 +322,7 @@ export default function Board() {
         mac={mac}
         counts={counts}
         hint={hint}
-        panes={{ browserOpen, terminalOpen, onToggleBrowser: toggleBrowser, onToggleTerminal: toggleTerminal }}
+        panes={{ browserOpen, terminalOpen: terminal.open, onToggleBrowser: toggleBrowser, onToggleTerminal: terminal.toggle }}
         onShareBoard={() => setSharingBoard(true)}
         onOpenSettings={() => setShowSettings(true)}
         onOpenNew={() => openNew()}
@@ -421,7 +420,7 @@ export default function Board() {
       <BoardBottom
         footer={footer}
         onHelp={() => setShowHelp(true)}
-        terminal={{ open: terminalOpen, cwd: terminalCwd, height: terminalHeight, onHeight: setTerminalHeight, onClose: toggleTerminal, away: terminalAway(workerThread?.worker, project, workers.projects, Boolean(selectedId), isWorkerProject(terminalCwd)) }}
+        terminal={{ open: terminal.open, cwd: terminalCwd, height: terminal.height, onHeight: terminal.setHeight, onClose: terminal.toggle, away: terminal.away, host: terminal.host }}
       />
 
       <BoardOverlays
@@ -431,7 +430,7 @@ export default function Board() {
           workspace, desktop, browser, obscured: overlay, browserWidth, onBrowserWidth: setBrowserWidth,
           ...openCardMarks(shown, { star: toggleStar, tags: editTags, share: shareCard, archive: toggleArchive }),
           onOpenSettings: () => setShowSettings(true),
-          bottom: terminalOpen ? terminalHeight + 16 : undefined,
+          bottom: terminal.open ? terminal.height + 16 : undefined,
           onBackdrop: () => (showNew ? setShowNew(false) : select(null)),
         }}
         dialogs={{

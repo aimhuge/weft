@@ -88,6 +88,7 @@ export default function BoardColumns(given: BoardColumnsProps) {
   return (
     <main
       ref={board}
+      data-board-surface
       className="board-sheet flex min-w-0 flex-1 gap-3 overflow-x-auto p-3"
       onDoubleClick={(e) => {
         // Empty board space (between or inside columns, not on a card or control) opens New thread.

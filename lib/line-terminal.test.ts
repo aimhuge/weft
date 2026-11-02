@@ -28,7 +28,7 @@ function fake() {
   return c;
 }
 
-const { lineTerminalBridge, terminalBridgeFor, NO_LINE, ONE_AT_A_TIME } = await import("./line-terminal");
+const { lineTerminalBridge, terminalBridgeFor, noLine, tooOld, LEGACY_REFUSAL, ONE_AT_A_TIME } = await import("./line-terminal");
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
 beforeEach(() => {
@@ -71,14 +71,16 @@ describe("lineTerminalBridge", () => {
 
   it("says why it can't open: not a worker path, no direct line, no approval, refused, or the line went", async () => {
     const b = lineTerminalBridge("w1");
+    const exits: number[] = [];
+    b.onExit((_, code) => exits.push(code));
     expect(await b.open("t", "/local", 80, 24)).toEqual({ error: "That isn't a worker's project." });
     state.up = false;
-    expect(await b.open("t", "worker://w1/app", 80, 24)).toEqual({ error: NO_LINE });
+    expect(await b.open("t", "worker://w1/app", 80, 24)).toEqual({ error: noLine("this worker") });
     state.up = true;
     sign.mockRejectedValueOnce(new Error("Not approved"));
     expect(await b.open("t", "worker://w1/app", 80, 24)).toEqual({ error: "Not approved" });
     state.make = false;
-    expect(await b.open("t", "worker://w1/app", 80, 24)).toEqual({ error: NO_LINE });
+    expect(await b.open("t", "worker://w1/app", 80, 24)).toEqual({ error: noLine("this worker") });
     state.make = true;
     const refused = b.open("t", "worker://w1/app", 80, 24);
     await flush();
@@ -87,7 +89,44 @@ describe("lineTerminalBridge", () => {
     const dropped = b.open("t", "worker://w1/app", 80, 24);
     await flush();
     state.channel?.onclose?.();
-    expect(await dropped).toEqual({ error: "The line closed before the terminal opened." });
+    expect(await dropped).toEqual({ error: "The line to this worker closed before the terminal opened." });
+    // A shell that never opened has no exit to report: the drawer shows the reason alone.
+    expect(exits).toEqual([]);
+  });
+
+  it("tells you a worker from before signed widening needs to update, by name, and closes that channel", async () => {
+    const b = lineTerminalBridge("w1", () => "m1mini");
+    const exits: number[] = [];
+    b.onExit((_, code) => exits.push(code));
+    const old = b.open("t", "worker://w1/app", 80, 24);
+    await flush();
+    const ch = state.channel as FakeChannel;
+    ch.say({ t: "refused", message: LEGACY_REFUSAL });
+    expect(await old).toEqual({ error: tooOld("m1mini") });
+    expect(tooOld("m1mini")).toBe("m1mini needs to update before its terminal works here.");
+    expect(ch.close).toHaveBeenCalled();
+    expect(exits).toEqual([]);
+    state.up = false;
+    expect(await b.open("t", "worker://w1/app", 80, 24)).toEqual({ error: noLine("m1mini") });
+  });
+
+  it("reports an exit when an open shell's line goes, or it's refused after opening", async () => {
+    const b = lineTerminalBridge("w1");
+    const exits: number[] = [];
+    b.onExit((_, code) => exits.push(code));
+    const first = b.open("t1", "worker://w1/app", 80, 24);
+    await flush();
+    const ch1 = state.channel as FakeChannel;
+    ch1.say({ t: "opened" });
+    await first;
+    ch1.onclose?.();
+    const second = b.open("t2", "worker://w1/app", 80, 24);
+    await flush();
+    const ch2 = state.channel as FakeChannel;
+    ch2.say({ t: "opened" });
+    await second;
+    ch2.say({ t: "refused", message: "gone" });
+    expect(exits).toEqual([-1, -1]);
   });
 
   it("kills a shell by closing its channel, and sends nothing on a channel that isn't open", async () => {
@@ -112,6 +151,14 @@ describe("terminalBridgeFor", () => {
     expect(terminalBridgeFor("/Users/me/app", local)).toBe(local);
     const a = terminalBridgeFor("worker://w1/app", local);
     expect(a).not.toBe(local);
-    expect(terminalBridgeFor("worker://w1/site", undefined)).toBe(a);
+    expect(terminalBridgeFor("worker://w1/site", undefined, "m1mini")).toBe(a);
+  });
+
+  it("names the worker in what it says, from the name the drawer last passed", async () => {
+    const b = terminalBridgeFor("worker://w7/app", undefined, "m1mini") as ReturnType<typeof lineTerminalBridge>;
+    state.up = false;
+    expect(await b.open("t", "worker://w7/app", 80, 24)).toEqual({ error: noLine("m1mini") });
+    const c = terminalBridgeFor("worker://w8/app", undefined) as ReturnType<typeof lineTerminalBridge>;
+    expect(await c.open("t", "worker://w8/app", 80, 24)).toEqual({ error: noLine("this worker") });
   });
 });
