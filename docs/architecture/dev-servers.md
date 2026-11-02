@@ -123,8 +123,10 @@ Built 2026-11-02 (migration `20261102190000_worker_tunnels.sql`, not applied). `
   (tunnels.md#on-a-worker). There is no `dev.restart` verb; the Mac's `restart` action on `POST /api/cards/:id/dev`
   is behind the local token guard.
 - **Locally** the same verbs mount on `POST /api/cards/:id/dev` as `open` and `stop`.
-- **The vault's env** (H8): `devSecrets` (`lib/secret-run.ts`) gives a worker's run `{}` until the sealed `secret_use`
-  lands; the hook is that call in `startDev`.
+- **The vault's env** (T2): `devSecrets` (`lib/secret-run.ts`) asks the owner's Mac through `lib/worker-dev-env.ts`;
+  after a Touch ID on the Mac at every start and restart the development values arrive sealed and go to
+  `electron/secret-env.cjs` on its stdin, which redacts them from the log
+  ([project-hosts.md](project-hosts.md#the-vault-on-a-worker-t2-as-built)).
 
 ## Stopping one task
 

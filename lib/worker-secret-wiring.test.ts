@@ -9,6 +9,7 @@ import { secretUsePurpose } from "./secret-use";
 import { openAsk } from "./worker-secret-asks";
 import { forgetMacs, keyStatus, secretWiring } from "./worker-secret-wiring";
 import { newSealKeys, sealFingerprint } from "./worker-seal";
+import { listOnWorker, setOnWorker, setVaultLink } from "./worker-vault";
 
 const home = () => fs.mkdtempSync(path.join(os.tmpdir(), "weft-wiring-"));
 const reg = { secretAsk: vi.fn(), deviceResult: vi.fn(), deviceCancel: vi.fn() };
@@ -70,5 +71,23 @@ describe("keyStatus", () => {
     expect(keyStatus(h)).toEqual(["No box key yet: it's made when the worker first starts.", "Secret asks aren't signed (enrolled by token, not paired).", "Takes no secrets: enrolled by token. Pair it from Settings → Devices → Add a worker to use secrets."]);
     fs.writeFileSync(path.join(h, "seal-key.json"), JSON.stringify({ publicKey: 5 }));
     expect(keyStatus(h)[0]).toBe("Secret asks aren't signed (enrolled by token, not paired).");
+  });
+});
+
+describe("the vault link", () => {
+  it("is set with the pairing signer and the paired Mac", async () => {
+    const { h } = pairedHome();
+    const mac = macSigner();
+    fs.writeFileSync(path.join(h, "mac-keys.json"), JSON.stringify([mac.key]));
+    secretWiring(h, reg, newSealKeys());
+    const ask = vi.fn(() => Promise.resolve({ label: "o/r", secrets: [] }));
+    await listOnWorker("c1", h, { ask, remote: () => Promise.resolve("r") });
+    const args = (ask.mock.calls[0] as unknown[])[2] as Record<string, unknown>;
+    expect(typeof args.sig).toBe("string");
+    // set_value seals to the Mac this box was paired with.
+    const seal = vi.fn((key: string) => Promise.resolve(`to ${key}`));
+    await setOnWorker("c1", h, { name: "S", value: "v", environment: "development" }, { ask, remote: () => Promise.resolve("r"), seal });
+    expect(seal).toHaveBeenCalledWith(mac.key, expect.any(String));
+    setVaultLink(null);
   });
 });

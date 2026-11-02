@@ -65,7 +65,18 @@ function createDesktopSigner({ dir, safeStorage, sodium }) {
     }
   }
 
-  return { publicKey, sign, verify, file };
+  // Opens what a paired Weft Worker sealed to this Mac's key (lib/mac-box.ts, a thread's set_value): libsodium's sealed
+  // box to the X25519 twin of this Ed25519 key. Throws when it wasn't sealed to this Mac. The key never leaves main.
+  /** @param {string} sealed base64 @returns {string} */
+  function openBox(sealed) {
+    const s = sodium();
+    const { publicKey: pk, privateKey: sk } = load();
+    const curvePk = s.crypto_sign_ed25519_pk_to_curve25519(s.from_base64(pk, ORIGINAL));
+    const curveSk = s.crypto_sign_ed25519_sk_to_curve25519(s.from_base64(sk, ORIGINAL));
+    return s.to_string(s.crypto_box_seal_open(s.from_base64(String(sealed), ORIGINAL), curvePk, curveSk));
+  }
+
+  return { publicKey, sign, verify, openBox, file };
 }
 
 module.exports = { createDesktopSigner, approvalMessage };

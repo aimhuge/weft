@@ -8,6 +8,8 @@ import { asText } from "./format";
 import { addBlankTool, ASK_PROMPT, askAddTool, addMissingBlank, missingText } from "./secret-ask";
 import { markInUse, RUN_PROMPT, runTool } from "./secret-run";
 import { recordStep } from "./site-notes-trail";
+import { listOnWorker, pushOnWorker, setOnWorker } from "./worker-vault";
+import { onWorker } from "./worker-secret-run";
 
 // The vault for threads (docs/architecture/secrets.md): names only, and values typed into a pane field by
 // Electron main after the user's Touch ID. A value never comes back through these tools.
@@ -19,6 +21,11 @@ To put a vault value on the project's linked Vercel project (an env var a deploy
 When you generate a secret yourself (a random signing secret, a webhook secret you make up), call mcp__secrets__set_value with the name and the value right after you generate it (it adds the name or fills its blank): the user approves with Touch ID and Weft stores it; don't write it to a file or repeat it. A key the user gets from a provider stays a blank for them to fill in. To change a value that's already there to one you generated or got yourself (new price ids after moving Stripe to a sandbox, say), call mcp__secrets__set_value with replace: true; the user approves the overwrite with Touch ID.`;
 
 const ENVIRONMENTS = ["development", "preview", "production"] as const;
+
+// On a Weft Worker (docs/architecture/project-hosts.md#the-vault-on-a-worker-t2-as-built) the vault is on the
+// owner's Mac: list, set_value and push_to_vercel ask it (lib/worker-vault.ts). These two stay the Mac's own.
+export const FILL_ON_WORKER = "fill_field types a value into the browser pane on the user's Mac, and this card runs on a Weft Worker, whose pages aren't that pane, so it can't fill one here. For a command that needs the value use mcp__secrets__run; for a page, ask the user to fill the field on their Mac.";
+export const ACCESS_ON_WORKER = "Standing access is the Mac's own: on a Weft Worker each mcp__secrets__run, set_value and push_to_vercel asks the user with Touch ID, and a dev server asks at each start. Carry on; each call will ask.";
 
 type Listed = { name: string; environment: string; missing: boolean };
 
@@ -38,7 +45,7 @@ export function secretsMcpServer(cardId: () => string | undefined, folder: () =>
     tools: [
       tool("list", "List the names in a project's 🔐 vault, with their environment and whether each has a value. Never values.", { project }, ({ project: p }) =>
         attempt(async () => {
-          const r = await shell("/secrets/list", { folder: p ?? folder() });
+          const r = onWorker() ? await listOnWorker(cardId(), p ?? folder()) : await shell("/secrets/list", { folder: p ?? folder() });
           return text(describeList(asText(r.label), (r.secrets as Listed[] | undefined) ?? []));
         }),
       ),
@@ -53,12 +60,13 @@ export function secretsMcpServer(cardId: () => string | undefined, folder: () =>
         },
         ({ name, selector, environment, project: p }) =>
           attempt(async () => {
+            if (onWorker()) return text(FILL_ON_WORKER, true);
             const r = await shell("/secrets/fill", { ...cardProof(cardId(), "/secrets/fill"), thread: title(), folder: p ?? folder(), name, environment: environment ?? "development", selector });
             const vault = asText(r.label, "this");
             if (r.denied) return text(`The user didn't approve ${name}. Ask before trying again.`, true);
             if (r.missing) {
               const env = environment ?? "development";
-              return text(missingText([name], env, vault, await addMissingBlank(p ?? folder(), name, env)), true);
+              return text(missingText([name], env, vault, await addMissingBlank(p ?? folder(), name, env, cardId())), true);
             }
             if (!r.found) return text(`No element matches ${selector}`, true);
             markInUse(cardId());
@@ -79,10 +87,10 @@ export function secretsMcpServer(cardId: () => string | undefined, folder: () =>
         ({ name, environment, project: p }) =>
           attempt(async () => {
             const env = environment ?? "production";
-            const r = await shell("/vercel/env-push", { ...cardProof(cardId(), "/vercel/env-push"), folder: p ?? folder(), name, environment: env });
+            const r = onWorker() ? await pushOnWorker(cardId(), p ?? folder(), name, env) : await shell("/vercel/env-push", { ...cardProof(cardId(), "/vercel/env-push"), folder: p ?? folder(), name, environment: env });
             const vault = asText(r.label, "this");
             if (r.denied) return text(`The user didn't approve pushing ${name}. Ask before trying again.`, true);
-            if (r.missing) return text(missingText([name], env, vault, await addMissingBlank(p ?? folder(), name, env)), true);
+            if (r.missing) return text(missingText([name], env, vault, await addMissingBlank(p ?? folder(), name, env, cardId())), true);
             return text(`Pushed ${name} (${env}) from the ${vault} vault to Vercel project ${asText(r.project, "the linked project")}. It takes effect on the next deploy.`);
           }),
       ),
@@ -99,7 +107,7 @@ export function secretsMcpServer(cardId: () => string | undefined, folder: () =>
         ({ name, value, environment, replace, project: p }) =>
           attempt(async () => {
             const env = environment ?? "development";
-            const r = await shell("/secrets/set", { ...cardProof(cardId(), "/secrets/set"), folder: p ?? folder(), name, value, environment: env, ...(replace ? { replace: true } : {}) });
+            const r = onWorker() ? await setOnWorker(cardId(), p ?? folder(), { name, value, environment: env, replace }) : await shell("/secrets/set", { ...cardProof(cardId(), "/secrets/set"), folder: p ?? folder(), name, value, environment: env, ...(replace ? { replace: true } : {}) });
             const vault = asText(r.label, "this");
             if (r.denied) return text(`The user didn't approve ${replace ? "replacing" : "setting"} ${name}. Ask before trying again.`, true);
             if (r.filled) return text(`${name} already has a value in the ${vault} vault (${env}); set_value only fills blanks unless you pass replace: true. Call it again with replace: true if the new value should overwrite it; the user approves the overwrite with Touch ID.`, true);
@@ -120,6 +128,7 @@ export function secretsMcpServer(cardId: () => string | undefined, folder: () =>
         },
         ({ why, site, writes, span, project: p }) =>
           attempt(async () => {
+            if (onWorker()) return text(ACCESS_ON_WORKER, true);
             const r = await shell("/secrets/request-access", { ...cardProof(cardId(), "/secrets/request-access"), thread: title(), folder: p ?? folder(), why, site, writes: writes === true, span: span ?? "hour" });
             const vault = asText(r.label, "this");
             if (!r.granted) return text(`The user didn't give standing access to the ${vault} vault. Each use will ask for Touch ID instead.`, true);
@@ -130,8 +139,8 @@ export function secretsMcpServer(cardId: () => string | undefined, folder: () =>
             return text(`${how} this thread can use the ${vault} vault's secrets without asking${where}: ${what}.`);
           }),
       ),
-      addBlankTool(folder),
-      askAddTool(folder),
+      addBlankTool(folder, cardId),
+      askAddTool(folder, cardId),
       runTool(cardId, folder, title),
     ],
   });

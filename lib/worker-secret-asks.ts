@@ -8,6 +8,7 @@ import { globalSingleton } from "./global-singleton";
 import { openedUse, sameNames, secretUseBody, secretUseMessage, secretUsePurpose } from "./secret-use";
 import { macSigned, type MacKeys } from "./worker-mac-keys";
 import type { Sealed } from "./worker-seal";
+import { devEnvPurpose } from "./worker-vault-wire";
 
 interface Ask {
   cardId: string;
@@ -15,6 +16,9 @@ interface Ask {
   names: string[];
   environment: string;
   expiresAt: number;
+  // A dev server's ask (lib/worker-dev-env.ts): sealed for devEnvPurpose, and it takes whatever names the vault's
+  // development set has, since the worker can't know them before the Mac answers. A run's names are exact.
+  dev?: boolean;
   resolve: (values: Record<string, string>) => void;
   reject: (err: Error) => void;
 }
@@ -58,15 +62,15 @@ function checkMac(body: NonNullable<ReturnType<typeof secretUseBody>>, macs: Mac
 function openChecked(body: NonNullable<ReturnType<typeof secretUseBody>>, ask: Ask, open: (sealed: Sealed, purpose: string) => string, now: number): Record<string, string> {
   let text: string;
   try {
-    text = open(body.sealed, secretUsePurpose(ask.cardId, body.nonce, ask.command));
+    text = open(body.sealed, (ask.dev ? devEnvPurpose : secretUsePurpose)(ask.cardId, body.nonce, ask.command));
   } catch {
     throw new Error("That secret use wasn't sealed to this worker for this card's command.");
   }
   const use = openedUse(text);
   if (!use || use.card !== ask.cardId || use.nonce !== body.nonce) throw new Error("That secret use is for another ask.");
   if (use.command !== ask.command) throw new Error("That secret use is for another command.");
-  if (!sameNames(use.names, ask.names) || use.environment !== ask.environment) throw new Error("That secret use names other secrets.");
-  if (!sameNames(Object.keys(use.values), ask.names)) throw new Error("That secret use doesn't carry the values it names.");
+  if ((!ask.dev && !sameNames(use.names, ask.names)) || use.environment !== ask.environment) throw new Error("That secret use names other secrets.");
+  if (!sameNames(Object.keys(use.values), use.names)) throw new Error("That secret use doesn't carry the values it names.");
   if (now > use.expiresAt) throw new Error("That secret use came after its ask expired.");
   return use.values;
 }
