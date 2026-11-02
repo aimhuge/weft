@@ -3,10 +3,10 @@
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api-client";
 import { folderName } from "@/lib/format";
+import { hostFor } from "@/lib/project-host";
+import type { BacklogSummary } from "@/lib/project-reads";
 import Icon from "./Icon";
 import Tip from "./Tip";
-
-type BacklogSummary = { root: string; count: number; active: number };
 
 // "☰ 7" beside the uncommitted counter: the Backlog cards waiting in the project in view's repo.
 // Click to start a card that plans them into sprints and starts each sprint on your OK (lib/sprint-plan.ts).
@@ -28,10 +28,10 @@ export default function BacklogBadge({
   useEffect(() => {
     if (!cwd) return;
     let live = true;
-    apiFetch(`/api/sprint?cwd=${encodeURIComponent(cwd)}`)
-      .then((r) => r.json() as Promise<{ backlog: BacklogSummary | null }>)
-      .then((d) => {
-        if (live) setLoaded({ cwd, backlog: d.backlog });
+    hostFor(cwd)
+      .read("backlog", cwd)
+      .then((backlog) => {
+        if (live) setLoaded({ cwd, backlog });
       })
       .catch(() => {});
     return () => {
@@ -44,6 +44,8 @@ export default function BacklogBadge({
 
   async function start() {
     if (busy || !cwd) return;
+    // The plan's prompt is written from this Mac's store and points at its server.
+    if (!hostFor(cwd).can("projectActs")) throw new Error("Planning a worker's Backlog into sprints isn't here yet. Start a thread in that project instead.");
     setBusy(true);
     try {
       const r = await apiFetch(`/api/sprint?cwd=${encodeURIComponent(cwd)}&prompt=1`);

@@ -20,6 +20,10 @@ export const HOST_VERBS = [
   "card.schedule",
   "card.unschedule",
   "skills.list",
+  // The editor (H4): a folder's index, one file, a save.
+  "files.list",
+  "files.read",
+  "files.write",
 ] as const;
 
 /** Every verb a host runs. HOST_API is keyed by these, and it is the allowlist a remote host checks. */

@@ -52,6 +52,7 @@ import { folderName } from "./ProjectBar";
 import { CLOSED_BROWSER, showPage } from "@/lib/board-helpers";
 import { openWorkerThread, useBoardWorkers } from "@/lib/use-worker-board";
 import { localColumns, localPath, withWorkerProjects } from "@/lib/worker-project";
+import { projectFolders } from "@/lib/board-folders";
 import { useThreadHandlers } from "@/lib/thread-handlers";
 import { useBoardCards } from "@/lib/use-board-cards";
 import BoardHeader from "./BoardHeader";
@@ -238,9 +239,8 @@ export default function Board() {
   const shown = framedCard(selected, workerThread);
   const framed = Boolean(shown) || showNew;
   const footer = footerFor(selected);
-  // Each folder has its own shell; with All projects showing, the latest card's folder.
-  const folder = localPath(workFolder(selected, project, latest));
-  const terminalCwd = folder ?? home;
+  // Each folder has its own shell; with All projects showing, the latest card's folder. The badges read a worker's too.
+  const { folder, reads, terminalCwd } = projectFolders(workFolder(selected, project, latest), home);
   const counts = headerCounts(cards);
   // "Switch all" only shows once a thread hit its plan limit.
   const limitHit = hitPlanLimit(cards);
@@ -343,7 +343,7 @@ export default function Board() {
         onOpenNew={() => openNew()}
         slots={{
           restart: <RestartChip restart={restartView.restart} notify={notify} />,
-          badges: <HeaderBadges cwd={folder} cards={cards} start={improveQuality} notify={notify} toast={setToast} />,
+          badges: <HeaderBadges cwd={reads} cards={boardCards} start={improveQuality} notify={notify} toast={setToast} />,
           copilot: <CopilotButton open={laneOpen} needsYou={copilotNeedsYou} title={hint("copilot", "Copilot")} onClick={toggleCopilot} />,
           account: <AccountButton onOpenSettings={() => setShowSettings(true)} onShareBoard={() => setSharingBoard(true)} project={menuProject(folder, rootOf)} sync={sync} />,
         }}

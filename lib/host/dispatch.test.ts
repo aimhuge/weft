@@ -45,6 +45,20 @@ describe("cardKinds", () => {
     expect(r.card).toHaveBeenLastCalledWith(undefined, expect.anything(), "stopped");
   });
 
+  it("answers the editor's verbs with their value, a large one through the host's carry, and syncs nothing after", async () => {
+    const after = vi.fn();
+    const r = rules({ verb: vi.fn<CardRules["verb"]>(() => Promise.resolve({ files: ["a.ts"] })), after });
+    const list = cmd("host", { verb: "files.list", args: { id: "k1" } });
+    expect(await cardKinds(r).host(list)).toEqual({ cardId: "k1", result: { ok: true, cardId: "k1", value: { files: ["a.ts"] } } });
+    expect(after).not.toHaveBeenCalled();
+    const big = { file: { text: "x".repeat(5_000) } };
+    const carry = vi.fn(() => Promise.resolve("ab".repeat(32)));
+    const read = cmd("host", { verb: "files.read", args: { id: "k1", path: "a.ts" } });
+    const carried = await cardKinds(rules({ verb: () => Promise.resolve(big), carry })).host(read);
+    expect(carried.result).toEqual({ ok: true, cardId: "k1", blob: "ab".repeat(32) });
+    await expect(cardKinds(rules({ verb: () => Promise.resolve(big) })).host(read)).rejects.toThrow("can't send a large result");
+  });
+
   it("runs a host verb, refusing what widens the card and what the host keeps elevated", async () => {
     const r = rules({ elevated: () => Promise.resolve(null) });
     const done = await cardKinds(r).host(cmd("host", { verb: "card.stop", args: { id: "k1" } }));

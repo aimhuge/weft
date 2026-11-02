@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { BLOB_BUCKET } from "./cloud-sync-types";
-import { workerBlobClient, workerBlobReader, workerMayUpload } from "./worker-blobs";
+import { workerBlobClient, workerBlobReader, workerMayUpload, workerResults } from "./worker-blobs";
 
 // A worker's home laid out as a real one: the secrets beside the folders pages come from.
 const home = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "worker-home-")));
@@ -140,5 +140,41 @@ describe("workerBlobReader", () => {
 
   it("uses the site and fetch by default", () => {
     expect(typeof workerBlobReader("wwk_key", 10)).toBe("function");
+  });
+});
+
+describe("workerResults", () => {
+  function results(answers: { status?: number; body?: unknown; bad?: boolean }[], uploadError: { message: string } | null = null) {
+    const fetcher = vi.fn<typeof fetch>(() => {
+      const a = answers.shift() ?? {};
+      return Promise.resolve(new Response(a.bad ? "<html>" : JSON.stringify(a.body ?? {}), { status: a.status ?? 200 }));
+    });
+    const uploadToSignedUrl = vi.fn(() => Promise.resolve({ error: uploadError }));
+    const storage = { from: vi.fn(() => ({ uploadToSignedUrl })) };
+    return { r: workerResults("wwk_key", storage, "https://weft.test", fetcher), fetcher, uploadToSignedUrl };
+  }
+
+  it("puts a result up under results/ as JSON and answers its sha", async () => {
+    const { r, fetcher, uploadToSignedUrl } = results([{ body: { path: "org/results/x", token: "t" } }]);
+    const sha = await r.put('{"a":1}');
+    expect(sha).toMatch(/^[0-9a-f]{64}$/);
+    expect(JSON.parse(fetcher.mock.calls[0]?.[1]?.body as string)).toEqual({ sha, result: true });
+    expect(uploadToSignedUrl).toHaveBeenCalledWith("org/results/x", "t", Buffer.from('{"a":1}'), { contentType: "application/json" });
+  });
+
+  it("counts one already there, and says why one can't go", async () => {
+    await expect(results([{ body: { exists: true } }]).r.put("{}")).resolves.toMatch(/^[0-9a-f]{64}$/);
+    await expect(results([{ status: 401, body: { error: "That key isn't a worker's." } }]).r.put("{}")).rejects.toThrow("isn't a worker's");
+    await expect(results([{ status: 500, bad: true }]).r.put("{}")).rejects.toThrow("worker-blob: HTTP 500");
+    await expect(results([{ body: { path: "p", token: "t" } }], { message: "The resource already exists" }).r.put("{}")).resolves.toBeTruthy();
+    await expect(results([{ body: { path: "p", token: "t" } }], { message: "quota" }).r.put("{}")).rejects.toThrow("quota");
+  });
+
+  it("asks the route to sweep, and counts nothing when it can't", async () => {
+    const ok = results([{ body: { removed: 3 } }]);
+    await expect(ok.r.sweep()).resolves.toBe(3);
+    expect(JSON.parse(ok.fetcher.mock.calls[0]?.[1]?.body as string)).toEqual({ sweep: true });
+    await expect(results([{ body: {} }]).r.sweep()).resolves.toBe(0);
+    await expect(results([{ status: 503, bad: true }]).r.sweep()).resolves.toBe(0);
   });
 });

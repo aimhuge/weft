@@ -10,6 +10,7 @@ import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
+import { openInside, writeInside } from "./file-handle";
 import { isSecretFile } from "./secret-guard";
 
 const execFileAsync = promisify(execFile);
@@ -60,7 +61,7 @@ export class FileAccessError extends Error {
 // cwd that points outside is the trick a malicious repo would try). The rel path is then the
 // unresolved remainder under that realpath, so the .git / secret checks match what the user
 // typed, and the absolute path is the one on disk.
-async function safePath(cwd: string, input: string): Promise<{ abs: string; rel: string }> {
+export async function safePath(cwd: string, input: string): Promise<{ abs: string; rel: string; root: string }> {
   if (typeof input !== "string") throw new FileAccessError("A path is required.", "outside");
   // A path with a NUL or other control character is a sign of a malformed request; we treat
   // it like an out-of-tree path.
@@ -84,11 +85,11 @@ async function safePath(cwd: string, input: string): Promise<{ abs: string; rel:
       const rel = path.relative(realCwd, abs);
       const inside = rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
       if (!inside) throw new FileAccessError(`${input} is outside the card's folder.`, "outside");
-      // Anything inside .git is git's own state, not something a user opens.
-      if (rel === ".git" || rel.split(path.sep)[0] === ".git") throw new FileAccessError(`${input} is inside .git.`, "git");
+      // Anything inside a .git, a nested repo's or a submodule's included, is git's own state, not something a user opens.
+      if (rel.split(path.sep).includes(".git")) throw new FileAccessError(`${input} is inside .git.`, "git");
       // Same secret guard the thread sees: .env files, Weft's own sign-in tokens, etc.
       if (isSecretFile(abs)) throw new FileAccessError(`${input} is a secret file; the editor can't open it.`, "secret");
-      return { abs, rel };
+      return { abs, rel, root: realCwd };
     } catch (err) {
       if (err instanceof FileAccessError) throw err;
       if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
@@ -102,36 +103,33 @@ function sha1(text: string): string {
   return createHash("sha1").update(text).digest("hex");
 }
 
-// Reads up to 8 KB; returns true if it has a NUL byte (binary). A text file can theoretically
-// have a NUL too, but it's almost always a binary, and refusing is the safe default.
-async function looksBinary(abs: string): Promise<boolean> {
-  let fd: fs.promises.FileHandle | undefined;
+// What a file that left the card's folder between the check and the open throws (lib/file-handle.ts).
+const escaped = (input: string) => () => new FileAccessError(`${input} moved outside the card's folder.`, "outside");
+
+// Reads the first 8 KB through the handle; a NUL byte means binary. A text file can theoretically have a NUL too, but
+// it's almost always a binary, and refusing is the safe default. The size check and the read use the same handle.
+async function readText(abs: string, root: string, input: string): Promise<{ text: string; hash: string; size: number; mtime: number }> {
+  const fh = await openInside(abs, root, escaped(input));
   try {
-    fd = await fsp.open(abs, "r");
     const buf = Buffer.alloc(BINARY_SNIFF);
-    const { bytesRead } = await fd.read(buf, 0, BINARY_SNIFF, 0);
-    for (let i = 0; i < bytesRead; i++) if (buf[i] === 0) return true;
-    return false;
+    const { bytesRead } = await fh.read(buf, 0, BINARY_SNIFF, 0);
+    if (buf.subarray(0, bytesRead).includes(0)) throw new FileAccessError("Binary files can't be opened in the editor.", "binary");
+    const stat = await fh.stat();
+    if (stat.size > MAX_READ) throw new FileAccessError(`File is larger than ${MAX_READ} bytes; the editor won't open it.`, "binary");
+    const text = await fh.readFile("utf8");
+    return { text, hash: sha1(text), size: stat.size, mtime: Math.floor(stat.mtimeMs) };
   } finally {
-    await fd?.close();
+    await fh.close();
   }
 }
 
-async function readText(abs: string): Promise<{ text: string; hash: string; size: number; mtime: number }> {
-  if (await looksBinary(abs)) throw new FileAccessError("Binary files can't be opened in the editor.", "binary");
-  const stat = await fsp.stat(abs);
-  if (stat.size > MAX_READ) throw new FileAccessError(`File is larger than ${MAX_READ} bytes; the editor won't open it.`, "binary");
-  const text = await fsp.readFile(abs, "utf8");
-  return { text, hash: sha1(text), size: stat.size, mtime: Math.floor(stat.mtimeMs) };
-}
-
 export async function readFile(cwd: string, input: string): Promise<OpenedFile> {
-  const { abs, rel } = await safePath(cwd, input);
+  const { abs, rel, root } = await safePath(cwd, input);
   // readText refuses binaries and oversize files with FileAccessError, and reads utf8. The
   // only "the file disappeared" path is ENOENT from the underlying stat/readFile, which
   // we turn into an exists:false result so the editor can show a placeholder.
   try {
-    const { text, hash, size, mtime } = await readText(abs);
+    const { text, hash, size, mtime } = await readText(abs, root, input);
     return { path: rel, exists: true, text, hash, mtime, size };
   } catch (err) {
     if (err instanceof FileAccessError) throw err;
@@ -220,7 +218,7 @@ export async function writeFile(
   text: string,
   baseHash?: string | null,
 ): Promise<{ result: SaveResult } | { conflict: OpenedFile }> {
-  const { abs } = await safePath(cwd, input);
+  const { abs, root } = await safePath(cwd, input);
   if (baseHash !== undefined) {
     // readFile catches its own errors and returns {exists: false} for a missing file, and
     // throws a FileAccessError for the safety refusals (.git, secret, outside). A safety
@@ -230,18 +228,9 @@ export async function writeFile(
     const have = current.exists ? current.hash : null;
     if (want !== have) return { conflict: current };
   }
-  await fsp.mkdir(path.dirname(abs), { recursive: true });
-  // Atomic write: temp file in the same directory (so the rename is one filesystem move),
-  // then rename onto the target. A reader never sees a half-written file. If the rename
-  // fails, remove the temp so it doesn't sit there forever.
-  const tmp = `${abs}.${process.pid}.${Date.now()}.tmp`;
-  await fsp.writeFile(tmp, text, "utf8");
-  try {
-    await fsp.rename(tmp, abs);
-  } catch (err) {
-    await fsp.rm(tmp, { force: true });
-    throw err;
-  }
-  const stat = await fsp.stat(abs);
+  // Atomic and race-checked: a temp file in the parent's realpath, checked again right before the rename onto the
+  // target (lib/file-handle.ts).
+  const target = await writeInside(abs, root, text, escaped(input));
+  const stat = await fsp.stat(target);
   return { result: { hash: sha1(text), mtime: Math.floor(stat.mtimeMs) } };
 }

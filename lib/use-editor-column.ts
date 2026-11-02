@@ -19,7 +19,7 @@ import {
   type EditorTabsState,
 } from "@/lib/editor-tabs";
 import { drainOpenFiles, onOpenFile, type OpenFileRequest } from "@/lib/open-file";
-import { filesApi } from "@/lib/client-files";
+import { useFilesSource } from "@/lib/files-source";
 
 // State of the HEAD text for a code tab in Changes mode. A string once fetched (empty string when
 // untracked), or null when the fetch failed. "loading" is exposed as the `headLoading` boolean
@@ -70,6 +70,7 @@ function initialTabs(cardId: string, cwd: string): EditorTabsState {
 }
 
 export function useEditorColumn(cardId: string, cwd: string): UseEditorColumnResult {
+  const filesApi = useFilesSource();
   // The tabs state, initialized from storage and any pre-mount open requests.
   const [tabs, setTabs] = useState<EditorTabsState>(() => initialTabs(cardId, cwd));
   const [openQuick, setOpenQuick] = useState(false);
@@ -124,7 +125,7 @@ export function useEditorColumn(cardId: string, cwd: string): UseEditorColumnRes
     return () => {
       cancelled = true;
     };
-  }, [cardId, activeTab, headTexts]);
+  }, [cardId, activeTab, headTexts, filesApi]);
 
   // ⌘P and ⌘W when focus is anywhere in the column. The handler reads the latest tabs from
   // tabsRef so it doesn't need to re-bind on every tab change.

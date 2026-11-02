@@ -59,7 +59,7 @@ async function session(client: SupabaseClient): Promise<{ uid: string; org: stri
   return org ? { uid, org } : null;
 }
 
-async function requireSession(client: SupabaseClient) {
+export async function requireSession(client: SupabaseClient) {
   const who = await session(client);
   if (!who) throw new Error("Sign in to Weft to reach your worker.");
   return who;

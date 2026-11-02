@@ -43,6 +43,13 @@ vi.mock("@/lib/scheduler", () => ({
   unscheduleMessage: vi.fn((id: string) => db.cards.get(id)),
 }));
 vi.mock("@/lib/skills", () => ({ listSkills: vi.fn(() => [{ name: "ship", description: "d", source: "project" }]) }));
+vi.mock("@/lib/file-access", () => ({
+  listFiles: vi.fn(() => Promise.resolve(["a.ts"])),
+  readFile: vi.fn(() => Promise.resolve({ path: "a.ts", exists: true, text: "x", hash: "h", mtime: 1, size: 1 })),
+  headOf: vi.fn(() => Promise.resolve({ path: "a.ts", text: null })),
+  safePath: vi.fn(() => Promise.resolve({ abs: "/repo/a.ts", rel: "a.ts" })),
+  writeFile: vi.fn(() => Promise.resolve({ result: { hash: "h2", mtime: 2 } })),
+}));
 
 const runner = await import("@/lib/runner");
 const api = await import("./index");
@@ -75,6 +82,9 @@ const SAMPLES: Record<HostVerb, { args: unknown; reply: () => unknown }> = {
   "card.schedule": { args: { id: "c1", text: " later ", at: 9e12 }, reply: card },
   "card.unschedule": { args: { id: "c1", messageId: "m1" }, reply: card },
   "skills.list": { args: { id: "c1" }, reply: () => ({ skills: [{ name: "ship", description: "d", source: "project" }] }) },
+  "files.list": { args: { id: "c1" }, reply: () => ({ files: ["a.ts"] }) },
+  "files.read": { args: { id: "c1", path: "a.ts" }, reply: () => ({ file: { path: "a.ts", exists: true, text: "x", hash: "h", mtime: 1, size: 1 } }) },
+  "files.write": { args: { id: "c1", path: "a.ts", text: "y", baseHash: "h" }, reply: () => ({ result: { hash: "h2", mtime: 2 } }) },
 };
 
 // The local route each verb is mounted on.
@@ -96,6 +106,9 @@ const ROUTES: Record<HostVerb, string> = {
   "card.schedule": "scheduled/route.ts",
   "card.unschedule": "scheduled/route.ts",
   "skills.list": "../../skills/route.ts",
+  "files.list": "files/route.ts",
+  "files.read": "files/route.ts",
+  "files.write": "files/route.ts",
 };
 
 const verbs = Object.keys(HOST_API) as HostVerb[];
@@ -111,9 +124,11 @@ describe("HOST_API", () => {
     expect(verbs.sort()).toEqual(Object.keys(ROUTES).sort());
   });
 
+  // The files route's GET (list, read) checks guard() for a read; its PUT (a save) checks elevated().
   it.each(verbs)("%s is elevated exactly when its route checks elevated() first", (verb) => {
     const source = fs.readFileSync(path.join(process.cwd(), "app/api/cards/[id]", ROUTES[verb]), "utf8");
-    const first = /const denied = (guard|elevated)\(req[,)]/.exec(source)?.[1];
+    const write = verb === "files.write" ? source.slice(source.indexOf("export async function PUT")) : source;
+    const first = /const denied = (guard|elevated)\(req[,)]/.exec(write)?.[1];
     expect(first).toBeDefined();
     expect(HOST_API[verb].elevated).toBe(first === "elevated");
   });

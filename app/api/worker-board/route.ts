@@ -2,10 +2,12 @@ import { connection } from "next/server";
 import { elevated, fail, guard } from "@/lib/guard";
 import { qaState } from "@/lib/qa-switch";
 import { openWorkerLine, readWorkerBoard, sendWorkerAction, workerThreadPage, workerToolOutput, type LineAction, type WorkerAction } from "@/lib/worker-board";
+import { workerProjectSnapshot, workerResultBlob } from "@/lib/worker-board-reads";
 
 // Your Weft Workers' projects on the desktop board (lib/worker-board.ts): GET lists them with their cards, GET ?card=
 // reads a page of that card's thread (before= walks back, after= sends only the items past that seq), since= only the
-// cards changed after it, GET ?card=&tool= reads a full tool result, and POST sends
+// cards changed after it, GET ?card=&tool= reads a full tool result, GET ?project= a worker project's snapshot for the
+// header badges, GET ?blob= a host verb's answer too big for its row (the editor's), and POST sends
 // a reply, an answer, a stop, a mode, a tap or any host verb as a cloud_commands row, or a session line's sealed offer. A new thread goes through POST /api/cards like any other.
 
 export async function GET(req: Request) {
@@ -17,6 +19,10 @@ export async function GET(req: Request) {
   try {
     // What the Local Simulator switch shows: this Mac's own devices, and whether this card is approved here.
     if (params.has("devices")) return Response.json(await qaState(card));
+    const project = params.get("project");
+    if (project) return Response.json(await workerProjectSnapshot(project));
+    const blob = params.get("blob");
+    if (blob) return Response.json(await workerResultBlob(blob));
     const sinceParam = params.get("since");
     const since = sinceParam && Number.isFinite(Date.parse(sinceParam)) ? sinceParam : undefined;
     if (!card) return Response.json(await readWorkerBoard(undefined, undefined, undefined, since));
