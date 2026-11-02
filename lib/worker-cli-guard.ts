@@ -32,7 +32,7 @@ export function runsWorkerCli({ name, args }: Step): boolean {
 // Why a Bash command is turned away, or null to let it run.
 export function workerCliVerdict(command: string, cwd: string, clone = workerClone()): string | null {
   const all = steps(command, cwd);
-  if (fs.existsSync(clone) && (all.some((s) => writesClone(s, clone)) || redirectsIntoClone(command, cwd, clone))) return CLONE_REFUSAL;
+  if (fs.existsSync(clone) && (all.some((s) => writesClone(s, clone)) || redirectsIntoClone(command, cwd, clone, all.map((s) => s.cwd)))) return CLONE_REFUSAL;
   if (!all.some(runsWorkerCli)) return null;
   return "Refused: a thread can't run weft-worker (enrol, forget-macs and the rest), the daemon's script or the worker installer. They decide which Mac a worker trusts with secrets, so the user runs them from a terminal on the box.";
 }

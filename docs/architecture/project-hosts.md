@@ -546,18 +546,20 @@ Settings → Devices → m1mini → Re-pair
 - **The code that checks is guarded too.** `weft-worker` runs from the worker's own clone (`~/.weft-worker/weft`) through
   jiti, so editing `lib/worker-repair.ts` there would turn the check off. `lib/worker-clone-guard.ts` keeps that clone
   readable but unchangeable from a thread: Edit, Write and NotebookEdit are refused (`lib/secret-guard-tool.ts`), and so
-  is Bash that writes into it (`sed -i`, `perl -pi`, `cp`/`mv`/`tee`/`rm` and the like, a `>` redirect, `git` run in it).
+  is Bash that writes into it (`sed -i`, `perl -pi`, `cp`/`mv`/`tee`/`rm` and the like, `tar -C`, `unzip -d`, `curl -o`,
+  `patch` run in it, a `>` redirect from any folder a `cd` reaches, `git` run in it or pointed at it).
   Only the updater changes it. The CLI guard (`lib/worker-cli-guard.ts`) also sees `weft-worker` behind the wrappers
   that give it a terminal or run it for you (`script`, `expect`, `unbuffer`, `timeout`, `stdbuf`, `caffeinate`, `xargs`,
   `python -c` with `pty.spawn`, and others), even named inside a string.
 - **Why by hand, not a request the box posts.** A request the box posts can be posted by a thread too, putting
   unrequested Touch ID prompts on the Mac until one is approved by habit. Carried by hand, nothing reaches the Mac unless
   the user pastes it there. It needs no table and no migration either.
-- **Its limit.** Threads on a worker run as the same OS user as the daemon, and the guards read names on the command line.
-  A program a thread writes and runs, one that builds a path at run time, can still rewrite `mac-keys.json`,
-  `worker.json` or the clone directly (weft-worker.md, "the same limits as the data dir"). The approval holds against
-  every path the guards can see: the command line, its wrappers, the tools and the clone. The full fix is the process
-  boundary between the daemon and its cards.
+- **Its limit: the guards are speed bumps, the signature is the check.** Threads on a worker run as the same OS user as
+  the daemon, and the guards read names on the command line. A thread can still copy the clone out (`cp -R`, reading is
+  open), edit the copy's check away and run it with `node` under another name. It can also write and run a program that
+  rewrites `mac-keys.json` or `worker.json` directly (weft-worker.md, "the same limits as the data dir"). The guards make
+  the obvious routes fail loudly; none of them can stop the same user. The fix is a process boundary: the daemon as its
+  own OS user that owns `worker.json`, `mac-keys.json` and the clone, with cards run as another.
 
 ### Project reads and the editor (H4, as built)
 
