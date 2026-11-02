@@ -61,6 +61,7 @@ guard set: each is refused, or asked about, in the same words on all three.
 | Secret guard | `lib/secret-guard.ts` | reading `.env` files, Weft's data secrets, a Weft Worker's home ([what's sealed](weft-worker.md#whats-sealed-on-a-worker)), environment dumps, CLIs that print a sign-in token and the files they keep it in ([below](#credential-clis)) (Bash, Read, Grep…); a board thread's copy knows its card, so it may Read an attachment its user pasted in (`lib/secret-guard-pasted.ts`) |
 | Restart guard | `lib/restart-guard.ts` | killing or restarting Weft's own server, app or port while other cards' turns run; points the thread at `mcp__board__restart_weft_when_idle` |
 | Clipboard guard | `lib/clipboard-guard.ts` | reading the clipboard (`pbpaste`, `osascript` `the clipboard`, NSPasteboard, `wl-paste`, `xclip`, `xsel`) while a pairing code is open, since its link carries the pairing secret; main marks the code open in `vault/pairing-open.json` ([mobile-security.md](mobile-security.md#pairing-a-passkey)) |
+| Worker CLI guard | `lib/worker-cli-guard.ts` | *running* the Weft Worker's command line: `weft-worker …`, `sh`/`bash`/`./install/worker.sh`, `curl … worker.sh \| sh`, `node`/`tsx`/`jiti`/`pnpm exec`/`npx` on `scripts/weft-worker.ts`, the same behind `env`, `exec`, `xargs`, `sudo`, `nohup`, or any runner handed a `wph.` pairing code. Reads, edits, `git diff/log/show`, `sed -n`, and `pnpm lint`/`test`/`typecheck` on those files stay open; a shape it can't read is refused |
 | Git guard | `lib/git-guard.ts` | git commands that throw away or hide uncommitted work in the shared tree |
 | Route import guard | `lib/route-import-guard.ts` | an edit that makes a route file import a module that isn't there yet |
 | Prerender check | `lib/prerender-check.ts` (run by the route import guard) | a route segment config export `next build` refuses under cacheComponents; warns (doesn't deny) on runtime data awaited outside `<Suspense>` |
@@ -69,6 +70,14 @@ guard set: each is refused, or asked about, in the same words on all three.
 | Symbol claims | `lib/claim-guard.ts` | asks (doesn't deny) before an edit to a symbol another busy card is editing |
 | Bash claims | `lib/bash-claims.ts` | asks before a Bash line that writes a claimed file; claims what Bash wrote, drops claims on clean files, tells a failed check whose failures are another card's |
 | Folder gate | `lib/folder-guard.ts` | asks (doesn't deny) before a file tool or Bash command reaches a folder outside the card's project |
+
+**Worker CLI guard, what it can't see.** It reads the command line, so it refuses a runner given the script, a shell given
+`-c` (or `-lc`, `-ec`, `--`), `curl`/`cat` of the installer piped to a shell, and a shell or interpreter fed it by `<`.
+A `pnpm lint|test|typecheck|format` may name `scripts/weft-worker.ts` as a bare path, but not with `-c`, `--config`, `--plugin`,
+`--setupFiles`, `--import`, `-r`, a `wph.` code or a command word after it (a lint config is loaded as code). **Known gap:**
+`enrolRefusal`'s `--re-pair` check in `lib/worker-mac-keys.ts` asks only for a TTY, and a pty wrapper (`script`, `expect`,
+`tmux`) fakes one; the guard lists those wrappers, but a program a thread writes and runs can still open a pty. Closing it
+needs something a thread can't produce, such as the owner approving the re-pair from the Mac (Settings, Devices); not built yet.
 
 ## The local API's own gate
 
