@@ -2,10 +2,10 @@
 // per-tool check: file tools hit isSecretFile, Grep also checks glob, and Bash
 // is a thin wrapper around bashVerdict.
 
-import path from "node:path";
 import { DATA_DIR } from "./store";
+import { refusal } from "./secret-guard-why";
 import { bashVerdict } from "./secret-guard-bash";
-import { expandBraces, isSecretFile } from "./secret-guard-files";
+import { expandBraces, isSecretFile, isWorkerHome } from "./secret-guard-files";
 import { pastedElsewhere, pastedInto } from "./secret-guard-pasted";
 
 // A file:// URL's path, or "" for any other URL.
@@ -41,8 +41,8 @@ export function toolVerdict(toolName: string, input: unknown, dataDir = DATA_DIR
       // A pattern is a name too: `.env*` and `**/.env` reach a .env file.
       return patternReason([str("path"), ...expandBraces(str("pattern"))], dataDir);
     case "LS":
-      // Listing a folder is reading what is in it.
-      return pathReason(str("path"), dataDir);
+      // Listing a folder is reading what is in it; a worker's home lists only names (isWorkerHome).
+      return isWorkerHome(str("path")) ? null : pathReason(str("path"), dataDir);
     case "mcp__browser__open_url":
       return pathReason(filePath(str("url")), dataDir);
     case "Bash":
@@ -70,11 +70,5 @@ function patternReason(candidates: string[], dataDir: string): string | null {
   return hit ? reason(hit, true) : null;
 }
 
-// A file is named by its base name; literal text goes in as it is.
-function reason(what: string, literal = false): string {
-  const name = literal ? what : `\`${path.basename(what.replace(/^["']|["']$/g, ""))}\``;
-  return (
-    `Weft keeps secret values out of threads, so ${name} can't be read here. Work with names instead: ` +
-    "read or edit `.env.example`, and ask the user to set the value themselves."
-  );
-}
+// In words that fit what the path is (lib/secret-guard-why.ts).
+const reason = (what: string, literal = false) => refusal(what, undefined, literal);
