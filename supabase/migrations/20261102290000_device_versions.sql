@@ -29,7 +29,7 @@ begin
   if me is null then
     raise exception 'Sign in to Weft to report its version.';
   end if;
-  if p_channel not in ('release', 'dev') then
+  if p_channel is null or p_channel not in ('release', 'dev') then
     raise exception 'Unknown channel.';
   end if;
   update public.cloud_workers
@@ -43,8 +43,10 @@ $$;
 revoke all on function public.desktop_set_build(text, text, text) from public, anon;
 grant execute on function public.desktop_set_build(text, text, text) to authenticated;
 
--- app_version_submit with the commit: the old three-argument form goes, the new one keeps working for an old Mac
--- (p_commit defaults to null, and a null never overwrites a commit already recorded).
+-- app_version_submit with the commit. The three-argument form is replaced by one function whose p_commit defaults to
+-- null, not kept as an overload: with both, a three-argument call (an installed 0.6.x Mac, by position or by named
+-- args through PostgREST) matches both and fails as ambiguous. This way the old call shape still resolves, and a null
+-- never overwrites a commit already recorded. (Checked on a scratch Postgres: 3 positional, 3 named, 4 named.)
 drop function if exists public.app_version_submit(text, text, text);
 create or replace function public.app_version_submit(p_version text, p_channel text, p_platform text, p_commit text default null)
 returns void
