@@ -10,19 +10,21 @@ const { askOf, vaultFor } = require("./worker-ask.cjs");
 const { seal, secretUseMessage, secretUsePurpose } = require("./worker-seal.cjs");
 
 // The message a paired worker signs for an ask (lib/secret-use.ts askMessage is the same, checked by a test).
-const askMessage = (cardId, a) => JSON.stringify(["weft-secret-ask", cardId, a.nonce, a.command, a.names, a.environment, a.remote, a.cwd, a.script ?? null, a.expiresAt]);
+// boxKey is the worker's seal key, so the signature covers the key main seals to, after a Re-pin too.
+const askMessage = (cardId, boxKey, a) => JSON.stringify(["weft-secret-ask-v2", cardId, boxKey, a.nonce, a.command, a.names, a.environment, a.remote, a.cwd, a.script ?? null, a.expiresAt]);
 
 /**
  * Whether the ask came from the worker itself: signed by its Ed25519 sign key from pairing (H10, pinned at pairing by
  * electron/host-pairing.cjs) over askMessage, which lib/worker-secret-wiring.ts signs from sign-key.json. Always
  * required: an unsigned or wrongly signed ask is refused.
- * @param {string} signKey DER SPKI, base64 @param {string} cardId @param {ReturnType<typeof askOf>} a
+ * @param {string} signKey DER SPKI, base64 @param {string} cardId @param {string} boxKey the key main will seal to
+ * @param {ReturnType<typeof askOf>} a
  */
-function verifyAsk(signKey, cardId, a) {
+function verifyAsk(signKey, cardId, boxKey, a) {
   let ok = false;
   try {
     const key = crypto.createPublicKey({ key: Buffer.from(signKey, "base64"), format: "der", type: "spki" });
-    ok = Boolean(a.sig) && crypto.verify(null, Buffer.from(askMessage(cardId, a)), key, Buffer.from(String(a.sig), "base64"));
+    ok = Boolean(a.sig) && crypto.verify(null, Buffer.from(askMessage(cardId, boxKey, a)), key, Buffer.from(String(a.sig), "base64"));
   } catch {
     ok = false;
   }
@@ -72,7 +74,7 @@ function createWorkerSecrets({ vault, ask, describe, accountClient, pins, signer
     // Read only: a first-seen key is pinned after the user allows, never on a Deny or an error.
     const pin = pins.lookup({ id: worker.id, name: worker.name, publicKey: worker.public_key });
     const signKey = signKeyOf(pin, worker);
-    verifyAsk(signKey, row.card_id, a);
+    verifyAsk(signKey, row.card_id, pin.publicKey, a);
     const ref = vaultFor(a.remote, folder, await projectRepos(folder));
     const { values, missing } = await vault.valuesForVault(ref, a.names, a.environment, false);
     if (missing.length) return { missing, label: ref.label };

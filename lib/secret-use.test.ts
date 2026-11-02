@@ -22,8 +22,9 @@ describe("secretUsePurpose", () => {
 describe("the messages both sides sign", () => {
   it("are the same on the worker and in main", () => {
     const a = { nonce: NONCE, command: "npm run job", names: ["A"], environment: "development", remote: "r", cwd: ".", script: undefined, expiresAt: 5 };
-    expect(askMessage("c1", a)).toBe(mainAskMessage("c1", a));
-    expect(askMessage("c1", { ...a, script: "job: x" })).toBe(mainAskMessage("c1", { ...a, script: "job: x" }));
+    expect(askMessage("c1", "box", a)).toBe(mainAskMessage("c1", "box", a));
+    expect(askMessage("c1", "box", { ...a, script: "job: x" })).toBe(mainAskMessage("c1", "box", { ...a, script: "job: x" }));
+    expect(askMessage("c1", "box", a)).not.toBe(askMessage("c1", "other box", a));
     expect(secretUseMessage("c1", NONCE, SEALED as never)).toBe(cjs.secretUseMessage("c1", NONCE, SEALED));
     expect(secretUseMessage("c1", NONCE, SEALED as never)).toBe(`weft-secret-use-v1\nc1\n${NONCE}\nQQ==\nQQ==\nQQ==\nQQ==`);
   });

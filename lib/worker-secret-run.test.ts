@@ -179,10 +179,15 @@ describe("the review's limits", () => {
   it("signs the ask with the pairing key when the box has one", async () => {
     const { link, asked } = mac([{ status: "done", result: { denied: true }, error: null }]);
     link.sign = (message: string) => `signed:${message.length}`;
+    link.boxKey = keys.publicKey;
     await workerSecretRun(request(), deps(link));
     const [a] = asked;
     if (!a) throw new Error("no ask");
-    expect(a.sig).toBe(`signed:${askMessage(card, a).length}`);
+    expect(a.sig).toBe(`signed:${askMessage(card, keys.publicKey, a).length}`);
+    const keyless = mac([{ status: "done", result: { denied: true }, error: null }]);
+    keyless.link.sign = (message: string) => message;
+    await workerSecretRun(request(), deps(keyless.link));
+    expect(keyless.asked[0]?.sig).toContain('"weft-secret-ask-v2","' + card + '",""');
     const plain = mac([{ status: "done", result: { denied: true }, error: null }]);
     await workerSecretRun(request(), deps(plain.link));
     expect(plain.asked[0]?.sig).toBeUndefined();

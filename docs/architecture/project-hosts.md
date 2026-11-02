@@ -334,7 +334,11 @@ worker:      claim secret_use ─ deliverSecretUse: the ask for that nonce, same
   pairing code (`wph.<id>.<org>.<secret>.<mac key>`, carried from the Mac's screen to the box by hand;
   `lib/worker-mac-keys.ts` `trustPairingMac`, kept in `mac-keys.json`, sealed from threads). No key off the network is
   ever trusted, so a session of the owner's that seals and signs its own row before the real Touch ID gets nothing. A
-  token-enrolled box trusts no Mac and takes no secrets; `weft-worker forget-macs` stops a paired one.
+  token-enrolled box trusts no Mac and takes no secrets; `weft-worker forget-macs` stops a paired one. Enrolling
+  replaces the trusted Mac (never adds one), and an enrolled box enrols again only with `--re-pair` typed at a terminal
+  on it. Threads can't run any of this: `lib/worker-cli-guard.ts` refuses `weft-worker`, the daemon's script, the
+  installer and a pairing code handed to a runner, in every thread's guard set. The ask's signature also names the box
+  key (`askMessage`), so after a Re-pin main seals only to the key the worker itself signed for.
 - **The window** (`electron/approval-worker.cjs`) puts the full command and script first, with anything outside plain
   ASCII marked and named; then the folder, "the Weft Worker m1mini, not this Mac", the full git remote, the worker's key
   fingerprint ("first seen now" on the first ask) and, plainly, that the command and any code it runs on the worker get

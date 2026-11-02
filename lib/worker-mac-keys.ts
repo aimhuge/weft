@@ -50,10 +50,22 @@ export function macSigned(key: string, message: string, sig: string): boolean {
   }
 }
 
-// At enrolment by pairing: trust the Mac key the code carries. An older code without one leaves the box taking no secrets.
+// At enrolment by pairing: trust the Mac key the code carries, in place of any Mac trusted before, so a pairing can't
+// add a second Mac beside the real one. An older code without a key leaves the box taking no secrets.
 export function trustPairingMac(home: string, code: string): boolean {
   const key = parsePairCode(code)?.macKey;
+  const macs = macKeysAt(home);
+  macs.forget();
   if (!key) return false;
-  macKeysAt(home).pin(key);
+  macs.pin(key);
   return true;
+}
+
+// Why `weft-worker enrol` won't run, or null. An enrolled box re-pairs only with an explicit --re-pair typed at a real
+// terminal on the box: enrolling chooses the Mac the box trusts with secrets, which a thread (no terminal) must not do,
+// and lib/worker-cli-guard.ts already keeps threads from running weft-worker at all.
+export function enrolRefusal(enrolled: boolean, rePair: boolean, terminal: boolean): string | null {
+  if (!enrolled) return null;
+  if (!rePair) return "This box is already enrolled. To pair it again (and trust the Mac that shows the new code), run weft-worker enrol <code> --re-pair from a terminal on the box.";
+  return terminal ? null : "--re-pair only runs from a terminal on the box: it chooses the Mac this worker trusts with secrets.";
 }

@@ -1,7 +1,8 @@
 // `weft-worker`: the Weft Worker's command line (docs/architecture/weft-worker.md). Run from the worker's clone of
 // Weft with jiti (install/worker.sh sets up the `weft-worker` wrapper and the launchd or systemd service):
 //
-//   weft-worker enrol <token> [--name <name>]   pair with your Mac (a wph.… code) or trade a one-time token (wet_…)
+//   weft-worker enrol <token> [--name <name>]   pair with your Mac (a wph.… code) or trade a one-time token (wet_…);
+//                                               an enrolled box needs --re-pair, typed at a terminal on it
 //   weft-worker login                           sign Claude Code in for the daemon (claude setup-token)
 //   weft-worker start                           run the daemon (what the service runs)
 //   weft-worker status                          say whether this box is enrolled, with its key's fingerprint
@@ -43,6 +44,8 @@ function flag(name: string): string | undefined {
 
 async function enrolCommand(token: string | undefined) {
   if (!token) throw new Error("Usage: weft-worker enrol <token> [--name <name>]. Get the token in Weft → Settings → Sync → Workers.");
+  const refused = (await import("../lib/worker-mac-keys")).enrolRefusal(Boolean(readWorkerConfig(home)), process.argv.includes("--re-pair"), process.stdin.isTTY && process.stdout.isTTY);
+  if (refused) throw new Error(refused);
   const name = flag("name") || os.hostname().replace(/\.local$/, "");
   // A pairing code (wph.…, Settings → Devices) pairs the box with your Mac; a token (wet_…) is the older one-time trade.
   const config = isPairCode(token)
@@ -50,7 +53,8 @@ async function enrolCommand(token: string | undefined) {
     : await enrol(rpc, token, { name, platform: process.platform, arch: process.arch });
   writeWorkerConfig(home, config);
   // The Mac that showed the code: the one whose signed secret_use rows this box will take (lib/worker-mac-keys.ts).
-  if (isPairCode(token)) (await import("../lib/worker-mac-keys")).trustPairingMac(home, token);
+  // Replaces any Mac trusted before; a token (no Mac key) leaves the box taking no secrets.
+  (await import("../lib/worker-mac-keys")).trustPairingMac(home, token);
   console.log(`Enrolled ${config.name} as ${config.device}. Start it with: weft-worker start`);
 }
 

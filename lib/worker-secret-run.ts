@@ -28,6 +28,8 @@ export interface SecretLink {
   cancel: (id: string) => Promise<boolean>;
   // Signs an ask with the worker's pairing key (sign-key.json, H10); absent on a token-enrolled worker.
   sign?: (message: string) => string;
+  // This box's seal key, which the signed ask names so main seals only to it.
+  boxKey?: string;
 }
 
 export interface WorkerRunRequest {
@@ -175,7 +177,7 @@ export async function workerSecretRun(req: WorkerRunRequest, given: Partial<RunD
     const cwd = path.relative(req.root, req.cwd) || ".";
     const question: SecretAsk = { nonce, command: req.command, names: req.names, environment: req.environment, cwd, remote, expiresAt, timeoutMs: req.timeoutMs, script: req.script, why: req.why, thread: req.thread };
     // A paired worker signs what the user will approve; main refuses an unsigned ask from it (electron/worker-secret.cjs).
-    const id = await to.ask(cardId, to.sign ? { ...question, sig: to.sign(askMessage(cardId, question)) } : question);
+    const id = await to.ask(cardId, to.sign ? { ...question, sig: to.sign(askMessage(cardId, to.boxKey ?? "", question)) } : question);
     if (!id) throw new Error(NO_MAC);
     const outcome = await answered(to, id, ask, expiresAt, deps);
     if ("reply" in outcome) return outcome.reply;

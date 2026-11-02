@@ -4,7 +4,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { macSigner } from "./mac-signer.harness";
 import { pairCode } from "./host-pairing";
-import { macKeysAt, macSigned, trustPairingMac } from "./worker-mac-keys";
+import { enrolRefusal, macKeysAt, macSigned, trustPairingMac } from "./worker-mac-keys";
 
 describe("macKeysAt", () => {
   it("keeps the Macs a worker trusts in mac-keys.json, mode 600, and forgets them", () => {
@@ -51,5 +51,20 @@ describe("trustPairingMac", () => {
     expect(macKeysAt(home).pinned()).toEqual([]);
     expect(trustPairingMac(home, pairCode({ ...base, macKey: mac.key }))).toBe(true);
     expect(macKeysAt(home).pinned()).toEqual([mac.key]);
+    // A second pairing replaces the Mac; it never adds one beside it. A token clears it.
+    const next = macSigner();
+    trustPairingMac(home, pairCode({ ...base, macKey: next.key }));
+    expect(macKeysAt(home).pinned()).toEqual([next.key]);
+    expect(trustPairingMac(home, "wet_token")).toBe(false);
+    expect(macKeysAt(home).pinned()).toEqual([]);
+  });
+});
+
+describe("enrolRefusal", () => {
+  it("enrols a new box, and an enrolled one only with --re-pair at a terminal", () => {
+    expect(enrolRefusal(false, false, false)).toBeNull();
+    expect(enrolRefusal(true, false, true)).toMatch(/already enrolled.*--re-pair/);
+    expect(enrolRefusal(true, true, false)).toMatch(/only runs from a terminal/);
+    expect(enrolRefusal(true, true, true)).toBeNull();
   });
 });

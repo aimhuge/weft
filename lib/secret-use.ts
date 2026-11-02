@@ -58,8 +58,9 @@ export function secretUseMessage(card: string, nonce: string, sealed: Sealed): s
 
 // What a paired worker signs for an ask with its sign key (H10); electron/worker-secret.cjs askMessage is the same, and
 // main refuses an unsigned ask from a worker it pinned with a sign key.
-export function askMessage(cardId: string, a: Pick<SecretAsk, "nonce" | "command" | "names" | "environment" | "remote" | "cwd" | "script" | "expiresAt">): string {
-  return JSON.stringify(["weft-secret-ask", cardId, a.nonce, a.command, a.names, a.environment, a.remote, a.cwd, a.script ?? null, a.expiresAt]);
+// boxKey is the worker's seal key, so the signature also covers the key main seals the values to (after a Re-pin too).
+export function askMessage(cardId: string, boxKey: string, a: Pick<SecretAsk, "nonce" | "command" | "names" | "environment" | "remote" | "cwd" | "script" | "expiresAt">): string {
+  return JSON.stringify(["weft-secret-ask-v2", cardId, boxKey, a.nonce, a.command, a.names, a.environment, a.remote, a.cwd, a.script ?? null, a.expiresAt]);
 }
 
 export const newNonce = (bytes: (n: number) => Buffer) => bytes(32).toString("hex");

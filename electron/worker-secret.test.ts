@@ -19,7 +19,7 @@ const ask = (over: Record<string, unknown> = {}) => ({ nonce: NONCE, command: "n
 // The worker's sign key from pairing (H10): its asks carry a signature by it over askMessage.
 const workerSign = crypto.generateKeyPairSync("ed25519");
 const SIGN_KEY = workerSign.publicKey.export({ format: "der", type: "spki" }).toString("base64");
-const signed = (a: ReturnType<typeof ask>, card = "card-1") => ({ ...a, sig: crypto.sign(null, Buffer.from(askMessage(card, a)), workerSign.privateKey).toString("base64") });
+const signed = (a: ReturnType<typeof ask>, card = "card-1", box = keys.publicKey) => ({ ...a, sig: crypto.sign(null, Buffer.from(askMessage(card, box, a)), workerSign.privateKey).toString("base64") });
 const callRow = (over: Record<string, unknown> = {}) => ({ id: "call-1", org_id: "org-1", owner_user: "u1", worker_id: "w1", card_id: "card-1", tool: "secret_run", args: signed(ask()), status: "claimed", ...over });
 const workerRow = (over: Record<string, unknown> = {}) => ({ id: "w1", name: "m1mini", owner_user: "u1", public_key: keys.publicKey, sign_key: SIGN_KEY, ...over });
 const plainStore = () => ({ encryptString: (s: string) => Buffer.from(s), decryptString: (b: Buffer) => b.toString() });
@@ -109,7 +109,7 @@ describe("answer", () => {
     const unsigned = setup({ call: callRow({ args: ask() }) });
     await expect(unsigned.ws.answer("call-1")).rejects.toThrow("That ask isn't signed by the worker's pinned key.");
     const other = crypto.generateKeyPairSync("ed25519");
-    const forged = { ...ask(), sig: crypto.sign(null, Buffer.from(askMessage("card-1", ask())), other.privateKey).toString("base64") };
+    const forged = { ...ask(), sig: crypto.sign(null, Buffer.from(askMessage("card-1", keys.publicKey, ask())), other.privateKey).toString("base64") };
     await expect(setup({ call: callRow({ args: forged }) }).ws.answer("call-1")).rejects.toThrow("isn't signed by the worker's pinned key");
     const s = setup();
     await s.ws.answer("call-1");
@@ -130,7 +130,9 @@ describe("answer", () => {
     s.pins.pin("w1", { name: "m1mini", publicKey: keys.publicKey, signKey: SIGN_KEY });
     expect(s.pins.forget("w1")).toBe(true);
     const fresh = newSealKeys();
-    const repinned = setup({ worker: workerRow({ public_key: fresh.publicKey }), pins: s.pins });
+    // An ask signed for the old box key doesn't let a swapped one in: the signature names the key it seals to.
+    await expect(setup({ worker: workerRow({ public_key: fresh.publicKey }), pins: s.pins }).ws.answer("call-1")).rejects.toThrow("isn't signed");
+    const repinned = setup({ worker: workerRow({ public_key: fresh.publicKey }), pins: s.pins, call: callRow({ args: signed(ask(), "card-1", fresh.publicKey) }) });
     await expect(setup({ worker: workerRow({ public_key: fresh.publicKey }), pins: s.pins, call: callRow({ args: ask() }) }).ws.answer("call-1")).rejects.toThrow("isn't signed");
     expect(await repinned.ws.answer("call-1")).toMatchObject({ queued: true });
     expect(s.pins.lookup({ id: "w1", name: "m1mini", publicKey: fresh.publicKey })).toMatchObject({ signKey: SIGN_KEY, firstUse: false });
@@ -215,10 +217,12 @@ describe("verifyAsk", () => {
   const a = { nonce: NONCE, command: "npm run job", names: ["TOKEN"], environment: "production", remote: "r", cwd: ".", script: undefined, why: undefined, thread: undefined, expiresAt: NOW, sig: undefined as string | undefined };
 
   it("checks the ask's signature against the sign key, and refuses an unsigned or unreadable one", () => {
-    const sig = crypto.sign(null, Buffer.from(askMessage("card-1", a)), workerSign.privateKey).toString("base64");
-    expect(() => verifyAsk(SIGN_KEY, "card-1", { ...a, sig })).not.toThrow();
-    expect(() => verifyAsk(SIGN_KEY, "card-2", { ...a, sig })).toThrow("isn't signed by the worker's pinned key");
-    expect(() => verifyAsk(SIGN_KEY, "card-1", a)).toThrow("isn't signed");
-    expect(() => verifyAsk("bm90IGEga2V5", "card-1", { ...a, sig })).toThrow("isn't signed");
+    const sig = crypto.sign(null, Buffer.from(askMessage("card-1", keys.publicKey, a)), workerSign.privateKey).toString("base64");
+    expect(() => verifyAsk(SIGN_KEY, "card-1", keys.publicKey, { ...a, sig })).not.toThrow();
+    // The signature names the box key: an ask replayed against another box key (a Re-pin to a swapped key) fails.
+    expect(() => verifyAsk(SIGN_KEY, "card-1", newSealKeys().publicKey, { ...a, sig })).toThrow("isn't signed");
+    expect(() => verifyAsk(SIGN_KEY, "card-2", keys.publicKey, { ...a, sig })).toThrow("isn't signed by the worker's pinned key");
+    expect(() => verifyAsk(SIGN_KEY, "card-1", keys.publicKey, a)).toThrow("isn't signed");
+    expect(() => verifyAsk("bm90IGEga2V5", "card-1", keys.publicKey, { ...a, sig })).toThrow("isn't signed");
   });
 });

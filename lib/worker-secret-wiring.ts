@@ -26,7 +26,7 @@ function pairedSigner(home: string): ((message: string) => string) | undefined {
 export function secretWiring(home: string, reg: Pick<Registry, "secretAsk" | "deviceResult" | "deviceCancel">, keys: SealKeys) {
   const signer = pairedSigner(home);
   const macs = macKeysAt(home);
-  const link: SecretLink = { ask: reg.secretAsk, result: reg.deviceResult, cancel: reg.deviceCancel, ...(signer ? { sign: signer } : {}) };
+  const link: SecretLink = { ask: reg.secretAsk, result: reg.deviceResult, cancel: reg.deviceCancel, boxKey: keys.publicKey, ...(signer ? { sign: signer } : {}) };
   return {
     link,
     use: (command: CloudCommandRow) => deliverSecretUse(command, (sealed, purpose) => open(keys, sealed, purpose), macs),
