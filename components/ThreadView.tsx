@@ -24,6 +24,7 @@ import { PermissionRequest, ThreadReply } from "./ThreadFooter";
 import { ThreadEntries, groupThread } from "./ThreadItems";
 import FirstMessageErrorBanner from "./FirstMessageErrorBanner";
 import YouFirst from "./YouFirst";
+import { useAnsweredPrompt } from "@/lib/use-answered-prompt";
 import { firstMessageFailed } from "@/lib/first-message-failed";
 
 // Loaded in its own CrashGuard (components/guarded.tsx), so a broken strip leaves the thread and its reply box.
@@ -111,7 +112,6 @@ export default function ThreadView({
   findable?: boolean;
 }) {
   // The request already answered here, so a second click can't answer it (or the next one) again.
-  const [answeredId, setAnsweredId] = useState<string | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
   const live = isLive(card);
@@ -119,7 +119,7 @@ export default function ThreadView({
   // (newest THREAD_PAGE_SIZE) so first paint isn't blank; the server fetch then takes over.
   const [page, setPage] = useState<ThreadPage>(() => pageThread(items, { limit: THREAD_PAGE_SIZE }));
   const [loadingOlder, setLoadingOlder] = useState(false);
-  const answered = answeredId !== null && answeredId === card.pending?.id;
+  const { answered, setAnsweredId } = useAnsweredPrompt(card.pending?.id);
   const transport = useThreadTransport();
   // The folder's files, re-read as the thread grows, so the names it mentions link to the editor column.
   const fileIndex = useFileIndex(card.id, card.cwd, transport.listFiles, page.total);

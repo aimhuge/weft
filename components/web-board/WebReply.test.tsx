@@ -70,6 +70,23 @@ describe("the web reply box", () => {
     expect(mockState.inserts[0]?.row).toMatchObject({ kind: "answer", payload: { cardId: "c1", pendingId: "p1", allow: true } });
   });
 
+  it("takes the prompt away as Allow is clicked, and brings it back when the answer is refused or fails", async () => {
+    const pending = { id: "p1", tool: "Bash", toolName: "Bash", title: "Run ls", input: { command: "ls" } };
+    db.insertError = "offline";
+    const dialog = await board({ column: "review", card: { pending } });
+    fireEvent.click(await within(dialog).findByRole("button", { name: "Deny" }));
+    expect(within(dialog).queryByRole("button", { name: "Allow" })).toBeNull();
+    expect(await within(dialog).findByRole("button", { name: "Allow" })).toBeInTheDocument();
+    db.insertError = null;
+    fireEvent.click(within(dialog).getByRole("button", { name: "Allow" }));
+    // The harness counts the refused insert too.
+    await waitFor(() => expect(mockState.inserts).toHaveLength(2));
+    expect(within(dialog).queryByRole("button", { name: "Allow" })).toBeNull();
+    const answer = commandRow({ id: "a1", kind: "answer", status: "failed", error: "no such request", payload: { cardId: "c1", pendingId: "p1", allow: true } });
+    mockState.clients[0]?.trigger("cloud_commands", { eventType: "UPDATE", new: answer, old: null });
+    expect(await within(dialog).findByRole("button", { name: "Allow" })).toBeInTheDocument();
+  });
+
   it("keeps a new line on Shift+Enter and sends nothing empty", async () => {
     const dialog = await board();
     const box = (await within(dialog).findByRole("textbox", { name: "Message" }));
