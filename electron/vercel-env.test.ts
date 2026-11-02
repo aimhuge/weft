@@ -62,6 +62,14 @@ describe("vercel-env", () => {
     expect(vercel.envSet).toHaveBeenCalledWith("/dev/weft", "KEY", "production", "value-for-push KEY (aimhuge/weft, production) to Vercel project weft");
   });
 
+  it("names a worker's thread first and warns on production", async () => {
+    const { env, vercel } = make();
+    await env.push("/dev/weft", "KEY", "production", "", "on the worker m1mini");
+    expect(vercel.envSet).toHaveBeenLastCalledWith("/dev/weft", "KEY", "production", "value-for-let a thread on the worker m1mini push KEY (aimhuge/weft, production) to Vercel project weft. This is the PRODUCTION value");
+    await env.push("/dev/weft", "KEY", "production", "", "on the worker m1mini", 'Card: "Ship"');
+    expect(vercel.envSet).toHaveBeenLastCalledWith("/dev/weft", "KEY", "production", 'value-for-let a thread on the worker m1mini push KEY (aimhuge/weft, production) to Vercel project weft. This is the PRODUCTION value. Card: "Ship"');
+  });
+
   // The card that asked is passed on, so its grant can cover the push (2026-10-29).
   it("passes the card that asked on to the send, so its grant can cover the push", async () => {
     const { env, vault } = make();

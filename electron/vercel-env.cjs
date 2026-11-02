@@ -55,11 +55,12 @@ function createVercelEnv({ vercel, vault, onDrift, linked = (folder) => Boolean(
 
     // Pushes one vault value to the linked project, replacing what Vercel had for that name and environment.
     // card is the thread that asked (mcp__secrets__push_to_vercel): its grant may cover the push.
-    async push(folder, name, environment, card = "") {
+    // who, for a Weft Worker's card, is named in the Touch ID prompt (electron/worker-vault.cjs).
+    async push(folder, name, environment, card = "", who = "", note = "") {
       if (!NAME.test(name)) throw new Error(`${name || "A blank name"} isn't a variable name.`);
       if (!ENVIRONMENTS.includes(environment)) throw new Error(`Unknown environment: ${environment}`);
       const { project } = await vercel.envList(folder);
-      const r = await vault.sendValue(folder, name, environment, (label) => `push ${name} (${label}, ${environment}) to Vercel project ${project}`, (value) => vercel.envSet(folder, name, environment, value), card);
+      const r = await vault.sendValue(folder, name, environment, (label) => `${who ? `let a thread ${who} ` : ""}push ${name} (${label}, ${environment}) to Vercel project ${project}${who && environment === "production" ? ". This is the PRODUCTION value" : ""}${note ? `. ${note}` : ""}`, (value) => vercel.envSet(folder, name, environment, value), card);
       void cache.listed(folder).catch(() => null);
       return r;
     },

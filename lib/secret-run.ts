@@ -7,6 +7,7 @@ import { globalSingleton } from "./global-singleton";
 import { addMissingBlank, missingText } from "./secret-ask";
 import { checkCommand, checkNames, packageScript, resolveCwd } from "./secret-command";
 import { shellToken } from "./shell-token";
+import { devEnvOnWorker } from "./worker-dev-env";
 import { onWorker, redactOnWorker, workerSecretRun } from "./worker-secret-run";
 
 // Vault values in a command's env, for a thread that never sees them (docs/architecture/secrets.md). This side
@@ -105,7 +106,7 @@ export function runTool(cardId: () => string | undefined, folder: () => string, 
         const missing = r.missing ?? [];
         if (missing.length) {
           const env = environment ?? "development";
-          const added = await Promise.all(missing.map((name) => addMissingBlank(root, name, env)));
+          const added = await Promise.all(missing.map((name) => addMissingBlank(root, name, env, key)));
           return text(missingText(missing, env, asText(r.label, "this"), added.every(Boolean)), true);
         }
         if (!r.denied) markInUse(key);
@@ -130,12 +131,19 @@ export interface DevLaunch {
  * undefined starts it the plain way, with a note for its log when there's something to say.
  */
 export async function devSecrets(cardId: string, command: string, cwd: string, thread?: string): Promise<{ launch?: DevLaunch; note?: string }> {
-  if (!process.env.WEFT_SHELL_URL) return {};
+  const worker = onWorker();
+  if (!process.env.WEFT_SHELL_URL && !worker) return {};
   let checked;
   try {
     checked = checkCommand(command);
   } catch (err) {
     return { note: `Started without vault secrets: ${(err as Error).message}` };
+  }
+  // On a Weft Worker the owner's Mac approves once and seals the development values to this box (lib/worker-dev-env.ts).
+  if (worker) {
+    const r = await devEnvOnWorker({ cardId, thread, root: cwd, cwd, command: command.trim(), argv: checked.argv, env: checked.env, script: packageScript(checked.argv, cwd) });
+    if (r.launch) markInUse(cardId);
+    return r;
   }
   try {
     const r = await shell("/secrets/dev-grant", { ...cardProof(cardId, "/secrets/dev-grant"), thread, folder: cwd, cwd, command: command.trim(), argv: checked.argv, env: checked.env, script: packageScript(checked.argv, cwd) });

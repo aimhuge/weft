@@ -141,6 +141,7 @@ async function startCommand() {
   browserScreen.setBrowserScreenChannel((topic) => openScreenChannel(client, topic));
   setDeviceLink(deviceLink(reg, config.key));
   // A card's mcp__secrets__run asks the owner's Mac, and the answer comes back sealed to this box (lib/worker-secret-run.ts).
+  // The other secrets tools ask it too (lib/worker-vault.ts).
   const secrets = secretWiring(home, reg, keys);
   setSecretLink(secrets.link);
   subscribe(forgetOnTurnEnd);

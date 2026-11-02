@@ -83,7 +83,8 @@ export const onWorker = () => process.env.WEFT_WORKER === "1" && !process.env.WE
 
 const remembered = () => globalSingleton("__weftWorkerSecretValues", () => new Map<string, Map<string, string>>());
 
-function remember(cardId: string, values: Record<string, string>) {
+// Kept for redactStored until the card's turn ends; a dev server's env too (lib/worker-dev-env.ts).
+export function remember(cardId: string, values: Record<string, string>) {
   const kept = remembered().get(cardId) ?? new Map<string, string>();
   for (const [name, value] of Object.entries(values)) kept.set(name, value);
   remembered().set(cardId, kept);
@@ -103,7 +104,7 @@ export async function redactOnWorker(cardId: string, text: string): Promise<stri
   return redactor([...kept].map(([name, value]) => ({ name, value })))(text);
 }
 
-const gitRemote = (root: string) =>
+export const gitRemote = (root: string) =>
   new Promise<string | null>((done) => execFile("git", ["-C", root, "remote", "get-url", "origin"], { timeout: 5_000 }, (err, out) => done(err ? null : out.trim())));
 
 const execHere: Exec = async (req, label) => {

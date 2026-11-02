@@ -7,10 +7,12 @@ const path = require("node:path");
 const { vaultIdFor } = require("./vault-id.cjs");
 
 /**
+ * This Mac's projects with a worker folder's name, each with its vault id: a worker card's vault call
+ * (electron/worker-vault.cjs) acts on the one whose id its remote names, through this Mac's own clone.
  * @param {{ dataDir: string, idFor?: (folder: string) => Promise<{ id: string }> }} deps
- * @returns {(folder: string) => Promise<string[]>} the vault ids of this Mac's projects with that folder name
+ * @returns {(folder: string) => Promise<{ path: string, id: string }[]>}
  */
-function createProjectRepos({ dataDir, idFor = (folder) => vaultIdFor(folder) }) {
+function createProjectFolders({ dataDir, idFor = (folder) => vaultIdFor(folder) }) {
   function folders() {
     try {
       const s = JSON.parse(fs.readFileSync(path.join(dataDir, "settings.json"), "utf8"));
@@ -24,9 +26,15 @@ function createProjectRepos({ dataDir, idFor = (folder) => vaultIdFor(folder) })
   return async (folder) => {
     const name = String(folder).toLowerCase();
     const matches = folders().filter((f) => path.basename(f).toLowerCase() === name);
-    const ids = await Promise.all(matches.map((f) => idFor(f).then((r) => r.id, () => "")));
-    return ids.filter((id) => id.startsWith("github:"));
+    const found = await Promise.all(matches.map((f) => idFor(f).then((r) => ({ path: f, id: r.id }), () => ({ path: f, id: "" }))));
+    return found.filter((m) => m.id.startsWith("github:"));
   };
 }
 
-module.exports = { createProjectRepos };
+/** @param {Parameters<typeof createProjectFolders>[0]} deps @returns {(folder: string) => Promise<string[]>} the vault ids alone */
+function createProjectRepos(deps) {
+  const folders = createProjectFolders(deps);
+  return async (folder) => (await folders(folder)).map((m) => m.id);
+}
+
+module.exports = { createProjectRepos, createProjectFolders };
