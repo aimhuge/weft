@@ -146,6 +146,37 @@ describe("the daemon's push pings", () => {
   });
 });
 
+describe("the browser's sandbox on the row", () => {
+  const NOTE = "Browser runs without sandbox: it runs as root.";
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("shows on start even with no updates, and rides beside an update note", async () => {
+    const bare = makeDeps({ browserNote: NOTE });
+    const stop = bare.daemon.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(bare.setBuild).toHaveBeenCalledWith("", NOTE);
+    await stop();
+
+    const d = makeDeps({ browserNote: NOTE, update: fakeUpdate({ restart: false, note: "Skipping abc: it doesn't load." }) });
+    await d.daemon.checkForUpdate();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(d.setBuild).toHaveBeenLastCalledWith("0.6.6+abc1234", `Skipping abc: it doesn't load. ${NOTE}`);
+  });
+
+  it("starts with no line when it's sandboxed and nothing updates", async () => {
+    const d = makeDeps();
+    const stop = d.daemon.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(d.setBuild).not.toHaveBeenCalled();
+    await stop();
+  });
+});
+
 describe("the qa command", () => {
   it("sets the card's device, off the pass, and refuses another card", async () => {
     const d = makeDeps();

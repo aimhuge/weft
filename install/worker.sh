@@ -136,6 +136,49 @@ if [ "$(cat "$CHROMIUM_DIR/VERSION" 2>/dev/null)" != "$CHROMIUM_VERSION" ]; then
   install_chromium || say "Skipping Chromium: a worker card's browser tools other than open_url won't run"
 fi
 
+# Chromium's sandbox on Linux needs unprivileged user namespaces (chrome-headless-shell has no setuid chrome-sandbox to
+# fall back on), and Ubuntu 23.10+ grants them only to a binary an AppArmor profile names, as it does for Google
+# Chrome (docs/architecture/worker-browser.md#the-sandbox). So: a root-owned copy in /opt/weft/chromium, which nothing
+# the worker runs can swap, and a profile naming only it. Needs sudo once per Chromium version; without it the browser
+# runs with --no-sandbox and the worker's row in Settings → Devices says so. Keep both paths equal to
+# lib/worker-chromium-sandbox.ts.
+SANDBOXED_DIR=/opt/weft/chromium
+APPARMOR_PROFILE=/etc/apparmor.d/weft-chromium
+userns_restricted() { [ "$OS" = Linux ] && [ "$(cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns 2>/dev/null)" = 1 ]; }
+sandbox_chromium() {
+  [ "$(cat "$CHROMIUM_DIR/VERSION" 2>/dev/null)" = "$CHROMIUM_VERSION" ] || return 1
+  [ "$(cat "$SANDBOXED_DIR/VERSION" 2>/dev/null)" = "$CHROMIUM_VERSION" ] && [ -f "$APPARMOR_PROFILE" ] && return 0
+  # A password prompt needs someone at a terminal; a box with neither that nor passwordless sudo keeps --no-sandbox.
+  { sudo -n true 2>/dev/null || [ -t 1 ]; } || return 1
+  say "Giving Chromium its sandbox (an AppArmor profile; sudo asks for your password)"
+  tmp="$(mktemp -d)"
+  cat > "$tmp/profile" <<EOF
+abi <abi/4.0>,
+include <tunables/global>
+
+# Weft Worker's chrome-headless-shell (install/worker.sh): user namespaces for its sandbox, as Ubuntu's own chrome profile.
+profile weft-chromium $SANDBOXED_DIR/chrome-headless-shell flags=(unconfined) {
+  userns,
+
+  include if exists <local/weft-chromium>
+}
+EOF
+  sudo mkdir -p "$(dirname "$SANDBOXED_DIR")" &&
+    sudo rm -rf "$SANDBOXED_DIR.new" && sudo cp -R "$CHROMIUM_DIR" "$SANDBOXED_DIR.new" &&
+    sudo chown -R root:root "$SANDBOXED_DIR.new" && sudo chmod -R go-w,a+rX "$SANDBOXED_DIR.new" &&
+    sudo rm -rf "$SANDBOXED_DIR" && sudo mv "$SANDBOXED_DIR.new" "$SANDBOXED_DIR" &&
+    sudo install -m 644 -o root -g root "$tmp/profile" "$APPARMOR_PROFILE" &&
+    sudo apparmor_parser -r "$APPARMOR_PROFILE"
+  ok=$?
+  # A profile that didn't load must not stay: lib/worker-chromium-sandbox.ts reads the file as "loaded".
+  [ $ok -eq 0 ] || sudo rm -f "$APPARMOR_PROFILE" 2>/dev/null || true
+  rm -rf "$tmp"
+  return $ok
+}
+if userns_restricted && [ "$(id -u)" != 0 ]; then
+  sandbox_chromium || say "Chromium will run without its sandbox: AppArmor blocks its user namespaces and the profile couldn't be installed (rerun weft-worker update with sudo)"
+fi
+
 if [ ! -x "$CLOUDFLARED_BIN" ]; then
   install_cloudflared || say "Skipping cloudflared for now: Weft fetches it, checked the same way, on the first tunnel"
 fi

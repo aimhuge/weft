@@ -8,6 +8,7 @@ import os from "node:os";
 import path from "node:path";
 import { DATA_DIR } from "./store";
 import { workerDataDir, workerHome, workRoot } from "./worker-config";
+import { isCliCredential } from "./secret-guard-credentials";
 
 // .env, .env.local, .env.production.local, direnv's .envrc, Wrangler's .dev.vars, and globs like .env*.
 // Any case: macOS opens .ENV.LOCAL as .env.local.
@@ -125,6 +126,9 @@ export function isSecretFile(file: string, dataDir = DATA_DIR, dotGlob = false):
   if (reachesDataDir(clean, dataDir)) return true;
   // The CLI's own transcript dir: every secret value a thread ever saw is in there, in plaintext.
   if (inTranscriptDir(clean)) return true;
+  // A CLI's own sign-in: gh's hosts.yml, ~/.git-credentials, gog's keyring (lib/secret-guard-credentials.ts).
+  const at = placed(clean);
+  if (isCliCredential(at, /[*?[]/.test(at) ? globRegex(at, dotGlob) : undefined)) return true;
   const base = path.basename(clean);
   return matchesName(base, SECRET_FILE, SECRET_NAMES, dotGlob) && !TEMPLATE.test(base);
 }
