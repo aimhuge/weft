@@ -622,6 +622,9 @@ lib/line-answer.ts  ◀── sealed answer (one-time key) on Broadcast worker-l
   `input:<device>:<nonce>` channel to the line, renegotiated over `line` with `screen: {device, quality, channel}`. The
   worker attaches the watched device's `FastScreen` (`fastScreenOf`, `attach`, `input`) to the new m-line and stops it
   when that input channel closes. With no line, or a refused attach, the screen opens its own line as in H6a.
+- **A worker card's browser rides it too.** A `browser-<16 hex>` device has no video m-line: `useLineFrames`
+  (`lib/use-line-frames.ts`) adds only the input channel, and the worker sends the page's screencast JPEGs down it,
+  length-prefixed like the video channel, with pointer and keys coming back up ([worker-browser.md](worker-browser.md)).
 - **The terminal is refused**, on every line, with `TERMINAL_REFUSAL`. A pty is a shell, and H2 refuses a shell from the
   network because whoever holds the account's session can insert a row. A line is no better: the sealed offer proves
   that only the worker answers, not that Weft's own window offered (the worker's key is public, so anyone with the
