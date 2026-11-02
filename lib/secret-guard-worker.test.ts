@@ -88,7 +88,7 @@ describe("a worker's home", () => {
   });
 
   // The show folder is one of a worker's CLI working directories, so acceptEdits writes there with no prompt and this
-  // guard is all that stands behind it (lib/worker-pane.ts sessionDirs).
+  // guard is all that stands behind it (lib/show-dir.ts sessionDirs).
   it("opens the show folder to writes and nothing beside or above it", () => {
     for (const tool of ["Write", "Edit"]) {
       expect(verdict(tool, { file_path: path.join(data, "show", "plan.html") })).toBeNull();
