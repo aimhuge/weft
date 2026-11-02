@@ -635,3 +635,11 @@ html[data-build-error] nextjs-portal {
   background-color: var(--warn);
   color: var(--canvas);
 }
+
+/* A Settings card with a menu open rises above the cards after it: each card's backdrop-blur makes it its
+   own stacking context, so without this the menu's z-index stays inside it and the next card paints over
+   the menu. Below the sticky section nav (z-10), so a scrolled card still slides under that. */
+[data-settings-card]:has([role="menu"], [role="listbox"]) {
+  position: relative;
+  z-index: 5;
+}
