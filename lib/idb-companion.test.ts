@@ -184,16 +184,29 @@ describe("the live gesture and keyboard", () => {
 });
 
 describe("evenScale", () => {
-  const sides = (w: number, h: number) => [Math.round(w * evenScale(w, h)), Math.round(h * evenScale(w, h))];
+  const sides = (w: number, h: number, target?: number) => [Math.round(w * evenScale(w, h, target)), Math.round(h * evenScale(w, h, target))];
+  const screens = [[1179, 2556], [1206, 2622], [1320, 2868], [1290, 2796]] as const;
 
-  it("lands on even sides near half, for the screens an odd scale silently breaks", () => {
-    for (const [w, h] of [[1179, 2556], [1206, 2622], [1320, 2868], [1290, 2796]] as const) {
+  it("lands on even sides at full size, never above it, for the screens an odd side silently breaks", () => {
+    for (const [w, h] of screens) {
       const [x = 1, y = 1] = sides(w, h);
       expect(x % 2).toBe(0);
       expect(y % 2).toBe(0);
+      expect(x).toBeLessThanOrEqual(w);
     }
-    expect(evenScale(1320, 2868)).toBeCloseTo(0.5, 4);
-    expect(evenScale(1179, 2556)).toBeCloseTo(4 / 9, 4);
+    expect(evenScale(1206, 2622)).toBeCloseTo(1, 4);
+    expect(evenScale(1320, 2868)).toBeCloseTo(1, 4);
+    expect(evenScale(1179, 2556)).toBeCloseTo(8 / 9, 4);
+  });
+
+  it("lands on even sides near a smaller target too", () => {
+    for (const [w, h] of screens) {
+      const [x = 1, y = 1] = sides(w, h, 0.5);
+      expect(x % 2).toBe(0);
+      expect(y % 2).toBe(0);
+    }
+    expect(evenScale(1320, 2868, 0.5)).toBeCloseTo(0.5, 4);
+    expect(evenScale(1179, 2556, 0.5)).toBeCloseTo(4 / 9, 4);
   });
 
   it("never goes past full size, which an odd side can't take", () => {

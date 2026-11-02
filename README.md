@@ -977,7 +977,7 @@ once), and drop phones that uninstalled the app. Settings → Sync → **Phones*
 **A worker's simulator in the pane.** A worker streams its simulator to the card's pane, marked "streaming from" the worker.
 On the desktop board you can drive it without asking the thread: **📱 Start simulator** on a React Native or Expo card, a device
 menu to switch simulators, **Resume** when the 10 minutes run out, and a Low / Medium / High quality menu for the WebRTC video
-(15, 30 or 60 fps).
+(15, 30 or 60 fps; Medium is full size).
 
 **Local Simulator** (was Manual QA). Testing a worker's app by hand? **Local Simulator** in the card's pane toolbar sends its build to a simulator on your Mac, shown live with
 no tap latency, while the worker's agent keeps driving it. A build runs as you, so it asks for Touch ID, once per card for 8 hours. If the Mac

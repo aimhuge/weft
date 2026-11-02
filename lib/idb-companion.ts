@@ -14,23 +14,24 @@ import { findBin, TOOLS_DIR } from "./simulator-exec";
 
 const READY_MS = 15_000;
 const POLL_MS = 50;
-// The pane's quality menu. Medium is thirty frames a second near half size: a phone screen in a narrow pane. Low is for a
-// slow line, high for reading small text. Each keeps a key frame every 2 s, often enough to join quickly.
+// The pane's quality menu. Medium, the default, is thirty frames a second at full size: a pane on a retina screen draws
+// a phone at about its own pixels, so anything smaller came out soft, and text is what QA reads. Low is half size for a
+// slow line, high sixty frames for motion. Each keeps a key frame every 2 s, often enough to join quickly.
 const H264 = { format: "H264", key_frame_rate: 2 };
 export const VIDEO: Record<ScreenQuality, { scale: number; fps: number; compression_quality: number; avg_bitrate: number }> = {
-  low: { scale: 1 / 3, fps: 15, compression_quality: 0.4, avg_bitrate: 2_000_000 },
-  medium: { scale: 0.5, fps: 30, compression_quality: 0.6, avg_bitrate: 8_000_000 },
-  high: { scale: 1, fps: 60, compression_quality: 0.85, avg_bitrate: 20_000_000 },
+  low: { scale: 0.5, fps: 15, compression_quality: 0.6, avg_bitrate: 2_000_000 },
+  medium: { scale: 1, fps: 30, compression_quality: 0.85, avg_bitrate: 8_000_000 },
+  high: { scale: 1, fps: 60, compression_quality: 0.9, avg_bitrate: 20_000_000 },
 };
 
 const gcd = (a: number, b: number): number => (b ? gcd(b, a % b) : a);
 
 // The encoder silently sends nothing unless both sides come out even: 0.5 gets no video on an iPhone 16 (1179 wide) or a
-// 16 Pro (1206, so 603). This finds the scale nearest the target that lands on exact even numbers, measured on m1mini.
-// Never above full size, which an odd side (1179) can't be.
+// 16 Pro (1206, so 603), and full size gets none on the iPhone 16 either. This finds the scale nearest the target, never
+// above 1, that lands on exact even numbers, measured on m1mini.
 export function evenScale(width: number, height: number, target = VIDEO[DEFAULT_QUALITY].scale) {
   const step = 2 / gcd(width, height);
-  const steps = Math.max(1, Math.min(Math.floor(1 / step), Math.round(target / step)));
+  const steps = Math.max(1, Math.min(Math.round(target / step), Math.floor(1 / step + 1e-9)));
   // The nudge keeps idb's rounding on the even side.
   return Math.min(1, step * steps + 1e-6);
 }

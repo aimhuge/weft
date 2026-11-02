@@ -381,12 +381,12 @@ board ─ sealed offer, elevated input command ─▶ daemon ─ encrypted answe
   the watch and ends with it, and `tapAt` and `swipe` use it while it's open, which also speeds the command path. It reports
   the screen's size, so taps work with no AXe on the box.
 - **Even sides.** The encoder sends nothing, with no error, unless both sides of the video are even. 0.5 fails on a 1179-wide
-  iPhone 16 and a 1206-wide 16 Pro, so `evenScale` picks the scale nearest the target that lands on exact even numbers,
-  never above full size (a 1179-wide screen can't be even at 1).
-- **Quality** is the pane's menu, kept per board in `localStorage`: low (15 fps, a third of the size, 2 Mbps), medium (30 fps,
-  near half, 8 Mbps, the default) or high (60 fps, full size, 20 Mbps). It rides in the sealed offer (`quality`), and
-  `VIDEO` in `lib/idb-companion.ts` turns it into the encoder's settings when the video starts, so a new pick closes the line
-  and offers again at once.
+  iPhone 16 and a 1206-wide 16 Pro, and full size fails on the iPhone 16, so `evenScale` picks the scale nearest the
+  target, never above full size, that lands on exact even numbers (8/9 on the iPhone 16 at full size).
+- **Quality** is the pane's menu, kept per board in `localStorage`: low (15 fps, half size, 0.6, 2 Mbps), medium (30 fps,
+  full size, 0.85, 8 Mbps, the default: at half size and 0.6 a retina pane drew it soft) or high (60 fps, full size, 0.9,
+  20 Mbps). It rides in the sealed offer (`quality`), and `VIDEO` in `lib/idb-companion.ts` turns it into the encoder's
+  settings when the video starts, so a new pick closes the line and offers again at once.
 - **One line, named channels.** `answerOffer` takes a map of channel names to handlers. `video` carries H.264 and `input` the
   live gesture and keyboard. Other live streams can add a channel. A line only exists while someone is watching, so commands,
   card state and wake-ups stay on Supabase, which also carries the signalling.
