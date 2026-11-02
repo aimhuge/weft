@@ -1,17 +1,21 @@
 "use client";
 
 // The board's side of a worker's live screen (lib/worker-screen.ts): joins the card's Broadcast topic and hands each
-// JPEG to the view. Its own keyless client: the channel is public, the topic is the secret, and the desktop renderer
+// frame to the view. Its own keyless client: the channel is public, the topic is the secret, and the desktop renderer
 // has no Supabase session to use anyway.
-import { createClient } from "@supabase/supabase-js";
+import { createClient, REALTIME_SUBSCRIBE_STATES } from "@supabase/supabase-js";
 import { useEffect, useRef } from "react";
 import { ANSWER_EVENT, type SealedAnswer } from "./rtc-signal";
+import { BOARD_FORMATS } from "./screen-formats";
 import { SCREEN_EVENT, screenTopic } from "./share-types";
 import { SUPABASE_KEY, SUPABASE_URL } from "./supabase-project";
 import type { ScreenInput } from "./worker-commands";
 
+// A frame is { webp } once every board on the topic said it takes WebP (lib/screen-formats.ts), or { jpg } otherwise and
+// from an older worker. Either draws on the same <img>.
 export const frameSrc = (payload: unknown) => {
-  const jpg = (payload as { jpg?: unknown } | null)?.jpg;
+  const { webp, jpg } = (payload ?? {}) as { webp?: unknown; jpg?: unknown };
+  if (typeof webp === "string" && webp) return `data:image/webp;base64,${webp}`;
   return typeof jpg === "string" && jpg ? `data:image/jpeg;base64,${jpg}` : null;
 };
 
@@ -41,7 +45,11 @@ export function useScreenStream(token: string, onFrame: (src: string) => void, o
         if (src) latest.current(src);
       })
       .on("broadcast", { event: ANSWER_EVENT }, ({ payload }) => answer.current?.(payload as SealedAnswer))
-      .subscribe();
+      // Tells the worker this board draws WebP. A board too old to say so gets JPEG only when it watches alone: beside a
+      // new one it's invisible, gets WebP, and stays blank until it updates.
+      .subscribe((status) => {
+        if (status === REALTIME_SUBSCRIBE_STATES.SUBSCRIBED) void channel.track({ formats: BOARD_FORMATS }).catch(() => {});
+      });
     return () => void client.removeChannel(channel).catch(() => {});
   }, [token]);
 }

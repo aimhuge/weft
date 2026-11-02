@@ -11,7 +11,7 @@ vi.mock("./cloud-sync", () => ({ syncOrgId: (client: unknown, uid: string) => sy
 
 const { boardFrom, readWorkerBoard, workerPage, workerThreadPage, workerToolOutput } = await import("./worker-board");
 const sync = await import("./cloud-sync");
-const { OFFLINE_AFTER_MS } = await import("./workers-account");
+const { FRESH_AFTER_MS, SLOW_OFFLINE_AFTER_MS } = await import("./worker-presence");
 
 const NOW = Date.parse("2026-10-29T10:00:00.000Z");
 
@@ -46,9 +46,15 @@ describe("readWorkerBoard", () => {
       folderRows: [{ id: "w1", folders: ["ling"] }],
       cards: [cardRow()],
     });
-    const board = await readWorkerBoard(client, NOW);
+    const read = vi.fn(async (rpc: (fn: string, args: Record<string, unknown>) => PromiseLike<unknown>) => {
+      await rpc("worker_presence_topics", {});
+      return { known: new Set(["w1"]), present: new Map([["w1", "busy" as const]]) };
+    });
+    const board = await readWorkerBoard(client, NOW, { read });
+    expect(read).toHaveBeenCalledWith(expect.any(Function), ["w1"], { owner: "u-1", all: true });
+    expect(calls).toContainEqual({ op: "rpc", args: ["worker_presence_topics", {}] });
     expect(board.signedIn).toBe(true);
-    expect(board.projects).toEqual([{ path: "worker://w1/ling", workerId: "w1", worker: "m1mini", folder: "ling", status: "online" }]);
+    expect(board.projects).toEqual([{ path: "worker://w1/ling", workerId: "w1", worker: "m1mini", folder: "ling", status: "busy" }]);
     expect(board.cards).toHaveLength(1);
     expect(board.cards[0]!.cwd).toBe("worker://w1/ling");
     // Only your own workers, and never a desktop worker's.
@@ -119,9 +125,17 @@ describe("boardFrom", () => {
   });
 
   it("reads a worker that hasn't been seen lately as offline", () => {
-    const stale = workerRow({ last_seen_at: new Date(NOW - OFFLINE_AFTER_MS - 1).toISOString() });
+    const stale = workerRow({ last_seen_at: new Date(NOW - SLOW_OFFLINE_AFTER_MS - 1).toISOString() });
     const out = boardFrom([stale], new Map([["w1", ["ling"]]]), [], NOW);
     expect(out.projects[0]!.status).toBe("offline");
+  });
+
+  it("reads status from presence when the board has it", () => {
+    const quiet = workerRow({ status: "online", last_seen_at: new Date(NOW - FRESH_AFTER_MS - 1).toISOString() });
+    const folders = new Map([["w1", ["ling"]]]);
+    expect(boardFrom([quiet], folders, [], NOW, { known: new Set(["w1"]), present: new Map([["w1", "busy"]]) }).projects[0]!.status).toBe("busy");
+    expect(boardFrom([quiet], folders, [], NOW, { known: new Set(["w1"]), present: new Map() }).projects[0]!.status).toBe("offline");
+    expect(boardFrom([quiet], folders, [], NOW).projects[0]!.status).toBe("online");
   });
 
   it("reads a worker that has never been seen as offline", () => {

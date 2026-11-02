@@ -10,7 +10,7 @@ const syncOrgId = vi.fn<(client: unknown, uid: string) => Promise<string | null>
 vi.mock("./cloud-sync", () => ({ syncOrgId: (client: unknown, uid: string) => syncOrgId(client, uid) }));
 
 const { sendWorkerAction, startWorkerThread } = await import("./worker-board");
-const { OFFLINE_AFTER_MS } = await import("./workers-account");
+const { FRESH_AFTER_MS, SLOW_OFFLINE_AFTER_MS } = await import("./worker-presence");
 
 const NOW = Date.parse("2026-10-29T10:00:00.000Z");
 
@@ -184,8 +184,19 @@ describe("startWorkerThread", () => {
     expect(inserted()).toBeNull();
   });
 
+  it("asks presence whether the worker is up", async () => {
+    const quiet = workerRow({ last_seen_at: new Date(NOW - FRESH_AFTER_MS - 1).toISOString() });
+    const gone = { read: vi.fn(() => Promise.resolve({ known: new Set(["w1"]), present: new Map() })) };
+    await expect(startWorkerThread({ cwd: "worker://w1/ling", prompt: "go" }, fakeClient({ workers: [quiet] }).client, NOW, undefined, gone)).rejects.toThrow("m1mini is offline");
+    expect(gone.read).toHaveBeenCalledWith(expect.any(Function), ["w1"], { owner: "u-1" });
+    const up = { read: () => Promise.resolve({ known: new Set(["w1"]), present: new Map([["w1", "online" as const]]) }) };
+    const { client, inserted } = fakeClient({ workers: [quiet] });
+    await startWorkerThread({ cwd: "worker://w1/ling", prompt: "go" }, client, NOW, undefined, up);
+    expect(inserted()).not.toBeNull();
+  });
+
   it("refuses an offline worker, and inserts nothing", async () => {
-    const { client, inserted } = fakeClient({ workers: [workerRow({ last_seen_at: new Date(NOW - OFFLINE_AFTER_MS - 1).toISOString() })] });
+    const { client, inserted } = fakeClient({ workers: [workerRow({ last_seen_at: new Date(NOW - SLOW_OFFLINE_AFTER_MS - 1).toISOString() })] });
     await expect(startWorkerThread({ cwd: "worker://w1/ling", prompt: "go" }, client, NOW)).rejects.toThrow("m1mini is offline, so this didn't start. Nothing ran on this Mac; try again once it's back.");
     expect(inserted()).toBeNull();
   });

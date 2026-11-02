@@ -4,8 +4,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import sharp from "sharp";
 import { globalSingleton } from "./global-singleton";
+import { encodeFrame } from "./screen-frame";
 import { screenshot, type Device } from "./simulator-devices";
 import { largestFrame, uiTree } from "./simulator-ui";
 import { FRAME_MS, viewerHtml, type ScreenSize } from "./simulator-viewer";
@@ -15,8 +15,6 @@ export { FRAME_MS, viewerHtml };
 
 // How long a watch keeps capturing after it starts (each watch call starts the clock again), and how often.
 export const WATCH_MS = 10 * 60_000;
-// Small enough to write every second, big enough to read a label.
-const FRAME_WIDTH = 420;
 
 // `live` is set once the page plays the window capture: frames stop, since nothing reads them.
 // `size` is the screen in the units taps take, measured when the watch starts.
@@ -27,10 +25,7 @@ export const watchDir = (d: Device) => path.join(SHOW_DIR, "simulator", d.id.rep
 
 // The device's screen now, small enough to send.
 export async function frameJpeg(d: Device, png?: Buffer) {
-  return sharp(png ?? (await screenshot(d)))
-    .resize({ width: FRAME_WIDTH, withoutEnlargement: true })
-    .jpeg({ quality: 70 })
-    .toBuffer();
+  return (await encodeFrame(png ?? (await screenshot(d)), "jpeg")).bytes;
 }
 
 // One frame, written beside the page; written to a temp file first so the page never loads half a JPEG.

@@ -113,6 +113,7 @@ describe("listWorkers", () => {
           arch: "x64",
           status: "online",
           last_seen_at: new Date(now - OFFLINE_AFTER_MS - 1).toISOString(),
+          kind: "desktop",
         },
       ],
     });

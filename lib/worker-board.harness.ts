@@ -105,6 +105,8 @@ export function fakeClient(opts: FakeOptions = {}) {
       getSession: () => Promise.resolve({ data: { session: opts.user === null ? null : { user: { id: opts.user ?? "u-1" } } } }),
     },
     from: (t: string) => (calls.push({ op: "from", args: [t] }), builder(t)),
+    // Only worker_presence_topics, which has nothing to say here.
+    rpc: (fn: string, args: unknown) => (calls.push({ op: "rpc", args: [fn, args] }), Promise.resolve({ data: null, error: null })),
     storage: {
       from: () => ({
         upload: (objectPath: string, _body: unknown, o: { contentType?: string }) => (uploads.push({ path: objectPath, type: o.contentType }), Promise.resolve({ error: opts.uploadError ?? null })),

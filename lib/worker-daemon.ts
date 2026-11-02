@@ -19,6 +19,8 @@ import { createUpdateLoop, type Holder } from "./worker-update-loop";
 import type { Registry, WorkerStatus } from "./worker-registry";
 import type { Tick } from "./worker-update";
 import type { WakeHooks } from "./worker-wake";
+import { createBeat } from "./worker-beat";
+import type { Presence, PresenceHooks } from "./worker-presence";
 import type { Recovered } from "./worker-recover";
 
 // The engine, as the daemon uses it (lib/card-starter.ts, lib/runner.ts, lib/store.ts): injected so tests don't run a CLI.
@@ -59,6 +61,8 @@ export interface DaemonDeps {
   github: { login: (sealed: Sealed) => Promise<GithubStatus>; status: () => Promise<GithubStatus | null> };
   // Joins the worker's wake-up socket (lib/worker-wake.ts); the returned function leaves it.
   listen?: (hooks: WakeHooks) => () => void;
+  // Joins the worker's presence topic (lib/worker-presence.ts), so the row is written every few minutes, not every 20 s.
+  presence?: (hooks: PresenceHooks) => Presence;
   // Joins the topic a push to main pings (lib/worker-wake.ts listenForPushes).
   listenForPushes?: (hooks: WakeHooks) => () => void;
   // Calls back when a card changes, so a held update can go the moment the last one ends.
@@ -69,6 +73,7 @@ export interface DaemonDeps {
   pollMs?: number;
   slowPollMs?: number;
   beatMs?: number;
+  slowBeatMs?: number;
   githubMs?: number;
   updateMs?: number;
   pushedUpdateMs?: number;
@@ -244,15 +249,20 @@ export function createDaemon(deps: DaemonDeps) {
 
   const status = (): WorkerStatus => (engine.live() ? "busy" : "online");
   const startedAt = Date.now();
-  const beat = async (s: WorkerStatus = status()) => {
-    try {
-      await reg.heartbeat(s);
+  // An update counts as healthy once it has stayed up a while and its last heartbeat reached the database.
+  const beat = createBeat({
+    heartbeat: reg.heartbeat,
+    status,
+    after(landed) {
+      if (!landed) return;
       if (Date.now() - startedAt >= (deps.healthyMs ?? HEALTHY_AFTER_MS)) deps.update?.healthy();
       updates?.changed();
-    } catch (err) {
-      log(`Weft Worker: heartbeat: ${(err as Error).message}`);
-    }
-  };
+    },
+    presence: deps.presence,
+    log,
+    beatMs: deps.beatMs,
+    slowBeatMs: deps.slowBeatMs,
+  });
 
   // Puts what this box runs on its row. A database without the function yet only leaves the line off.
   let shown: string | null | undefined;
@@ -287,7 +297,7 @@ export function createDaemon(deps: DaemonDeps) {
   // Starts the loops; the returned stop says the worker is offline on the way out.
   function start(): () => Promise<void> {
     recovering = recover().finally(() => (recovering = null));
-    void beat();
+    beat.start();
     void poll();
     void publishGithub(deps.github.status);
     if (deps.update) void showBuild(null);
@@ -310,7 +320,6 @@ export function createDaemon(deps: DaemonDeps) {
       },
       down: () => pace(fast),
     });
-    const beatTimer = setInterval(() => void beat(), deps.beatMs ?? 20_000);
     const githubTimer = setInterval(() => void publishGithub(deps.github.status), deps.githubMs ?? GITHUB_CHECK_MS);
     updates?.start();
     const leavePushes = updates && deps.listenForPushes?.(updates);
@@ -322,11 +331,10 @@ export function createDaemon(deps: DaemonDeps) {
       leaveCards?.();
       updates?.stop();
       clearInterval(pollTimer);
-      clearInterval(beatTimer);
       clearInterval(githubTimer);
       clearInterval(flushTimer);
       await publisher.flush();
-      await beat("offline");
+      await beat.stop();
     };
   }
 

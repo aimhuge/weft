@@ -36,8 +36,8 @@ One worker per box, no worker picker on the board. The first box is a Mac mini (
   `card.permission.answer`, `card.stop` and `card.update` (`lib/worker-card-commands.ts`, the `Engine`'s one `host`
   method, bound to `runVerb` in `scripts/weft-worker.ts`); the folder grant and `CARD_MODES` stay checks there. It hears a
   [wake-up](#wake-ups) and reads `worker_pending` at once, with a poll as the backstop, because without a session
-  Realtime's row filters show it nothing. It claims with `worker_claim`, which only matches a pending row, and
-  heartbeats every 20 s.
+  Realtime's row filters show it nothing. It claims with `worker_claim`, which only matches a pending row, and says it's
+  up through [Realtime Presence](#liveness), writing its row every 5 minutes.
 - **Publishing:** `lib/worker-publish.ts` hears the engine's bus and ships cards and items through `worker_put_card`
   and `worker_put_items`. The rows are the Mac's projection (`lib/card-rows.ts`, one card schema: blobs, splitToolResult,
   redaction, scrub), with the worker's `RowHost`: no thumbs, a failed upload logged and kept as a path, the copilot never
@@ -67,7 +67,7 @@ One worker per box, no worker picker on the board. The first box is a Mac mini (
   and none of them can open it. The worker opens it, saves it to `worker.env` and restarts itself.
 - **The board side:** Settings → Sync → Workers (`components/WorkerSettings.tsx`, `/api/workers`,
   `lib/workers-account.ts`) lists the workspace's workers with their status. Add a worker shows the install line
-  with a token, and Send a run queues a prompt. A worker that hasn't heartbeat in 60 s reads as offline.
+  with a token, and Send a run queues a prompt. A worker's status comes from [presence](#liveness), then its row.
 
 - **Run on Worker, per project:** a project chip's right-click menu ticks **Run on This Machine** or **Run on Worker**
   (`lib/project-menu.ts`, `settings.workerFolders`, kept apart from the project list since its entries are rebuilt on
@@ -118,7 +118,7 @@ up 60 s and a heartbeat landed ──▶ update-trial deleted
   anything pushed while it was away.
 - **Held updates:** the row names the cards, those asking first, up to three: `Update to abc1234 is waiting for 2 cards:
   “Fix login” (needs your answer), “Docs”.` Card events keep that line current without touching the network, and the moment
-  the worker is idle it checks. Every card event wakes that, and so do the end of a pass or clone and the 20 s heartbeat as a backstop. Titles are
+  the worker is idle it checks. Every card event wakes that, and so do the end of a pass or clone and the 20 s heartbeat tick as a backstop. Titles are
   no new exposure: `cloud_cards` is already readable by the workspace.
 - **Update now:** a button on the worker's row, sent as an `update` command that carries nothing. It asks for the same check,
   so it can't cut off a turn. It runs after the pass that claimed it, since a pass counts as busy. A worker that doesn't
@@ -194,13 +194,55 @@ A command reaches a worker in about 200 ms, and an idle worker asks for commands
   one asks for another pass straight after it.
 - **Checking a box:** `~/.weft-worker/worker.log` says `wake socket joined` when push is on. No such line, on a build with
   this code, means it's on the fast poll, and the log says why.
-- **Not on this path:** the heartbeat stays at 20 s. The desktop's inbox still uses `postgres_changes`, since it has a
-  session.
+- **Not on this path:** liveness, which has its [own topic](#liveness). The desktop's inbox still uses `postgres_changes`,
+  since it has a session.
 
 **Proved on production on 2026-10-30**, before the daemon was built, with a throwaway worker, deleted afterwards: a
 keyless client joined and got the ping, a wrong topic heard nothing, and `run`, `login` and `github_login` inserted
 through RLS each reached `worker_pending` in 147 to 201 ms. A Mac-addressed row and another account's row sent no ping.
 A real socket cut read `CHANNEL_ERROR`, rejoined in 1.3 s, and the next ping arrived.
+
+### Liveness
+
+A worker used to write its row every 20 s: about 4,300 writes a day each, just to say it was up. Now it says so on a
+Realtime Presence topic, and the row is the slow record (`lib/worker-presence.ts`, `lib/worker-beat.ts`,
+`lib/worker-presence-watch.ts`, `supabase/migrations/20261102121500_worker_upkeep.sql`).
+
+```
+daemon ─ track {status} ─▶ presence topic worker-presence:<sha256(… key_hash)> ◀─ joined by the local server (keyless)
+   │                                                                               ▲ topics from worker_presence_topics()
+   └─ worker_heartbeat every 5 min, on a status change, and every 20 s while the socket is down ─▶ cloud_workers row
+```
+
+- **The topic is the secret**, as with [wake-ups](#wake-ups): `worker-presence:` + sha256(`weft-worker-presence:` +
+  `key_hash`). The worker computes it from its key. A board can't, so `worker_presence_topics()` (definer, signed in only)
+  hands each user the topics of the headless workers they enrolled in a workspace they're still a member of, and nobody
+  else's. A leaked topic shows when that
+  worker is up and lets someone show it online when it isn't; it never reaches a command.
+- **The beat** (`createBeat`) ticks every 20 s. With the socket up, a tick re-tracks a changed status and writes the row
+  only when the status changed or 5 minutes have passed: about 290 writes a day, plus two per turn. With the socket down,
+  or no socket (Node before 22), every tick writes the row, as before. On the way out it leaves the topic, then writes
+  `offline`. An update counts as healthy when it has been up a minute and its last row write landed.
+- **The board's side** is the local server, not the renderer: `presenceWatch()` asks for the topics once (again at most
+  once a minute for a worker it has none for), joins each on one keyless socket and keeps it joined (leaving a worker's
+  channel once it's off the list, and all of them when the account changes), so each poll of
+  `/api/worker-board` and `/api/workers` reads presence from memory. `liveStatus` decides: tracked on presence → that
+  status; row seen in the last 60 s → the row (a worker on the fast beat, or one that just said `offline`); topic synced
+  but the worker absent → offline; presence unknown (a teammate's worker, a database without the function, the first
+  poll) → the row, offline after 11 minutes. A desktop worker's row still beats every 20 s and goes offline after 60 s.
+- **What it costs:** a crashed worker drops off presence when Realtime notices its socket close, seconds to a minute.
+  A board that can't read presence takes up to 11 minutes to call it offline.
+
+### Expiring finished commands
+
+`cloud_commands` rows used to stay forever. `private.expire_cloud_commands()` (definer, nobody may call it) deletes the
+`done` and `failed` rows whose `updated_at` is over a day old, a failed `clone` after 7 days (so Settings → Sync →
+Workers keeps saying why it failed), `claimed` rows after 7 days (a Mac or worker that crashed mid-command leaves them
+claimed for good), and never a `pending` one, through the partial index `cloud_commands_expirable` on the same statuses.
+No migration used pg_cron before this one, so it doesn't install it. Where pg_cron was installed when the migration ran,
+it scheduled `expire-cloud-commands` at 04:17 UTC daily. A migration never runs twice, so a project that turns on
+Integrations → Cron later schedules it once by hand in the SQL editor:
+`select cron.schedule('expire-cloud-commands', '17 4 * * *', 'select private.expire_cloud_commands()');`.
 
 ### What's sealed on a worker
 
@@ -343,11 +385,18 @@ card.page and the open_url item carry blob:sha256:<hex>#anchor (lib/worker-publi
 window to capture on a headless box and no Electron to capture it with, so this is screenshots, not video.
 
 ```
-watch ─ simctl/adb screenshot ─ JPEG 420 px ─▶ Realtime Broadcast, topic worker-screen:<random>  ─▶ WorkerScreen in WebPane
+watch ─ simctl/adb screenshot ─ WebP 420 px ─▶ Realtime Broadcast, topic worker-screen:<random>  ─▶ WorkerScreen in WebPane
           lib/worker-screen.ts                 card.page = weft-screen:<token>?device&name&until      (either board)
 daemon ◀─ claim ◀─ cloud_commands kind=input ◀─ POST /api/worker-board (elevated) ◀─ click or drag, desktop only
 ```
 
+- **Format, agreed on the topic:** each board that draws WebP tracks `{ formats: ["webp","jpeg"] }` in the screen
+  topic's Presence once it joins (`lib/use-screen-stream.ts`). The worker binds a presence listener and, per frame, sends
+  WebP at quality 70 only while at least one board is there and every board there said it takes WebP, and its sharp can
+  write it (`agreedType` in `lib/screen-formats.ts`, `frameType` in `lib/screen-frame.ts`; `WEFT_SCREEN_FORMAT=jpeg` forces
+  JPEG). Otherwise it's JPEG. A board too old to announce says nothing, so it gets JPEG only when it watches alone:
+  beside a new board it's invisible, gets WebP, and stays blank until it updates. On iPhone simulator screenshots at 420 px a WebP
+  frame is 8.5 KB against 17 KB for JPEG, for ~15 ms more encoding. The payload is `{ webp }` or `{ jpg }`, base64.
 - **Pace:** up to 4 frames a second, sent only when the bytes changed, plus one every 3 s for a board that just opened. A
   still screen costs almost nothing. It ends with the watch (10 minutes, extended by another `watch`).
 - **Who can watch:** the channel is public, because a worker has no session, so the topic is the secret, as with
@@ -873,7 +922,7 @@ It does four things:
 3. **Enrols itself.** Calls the API with the workspace's service key, gets back a worker id and its own key, and
    writes both to `~/.weft-worker/worker.json` with mode `600`.
 4. **Runs as a service.** A `systemd` unit on Linux, a `launchd` agent on macOS. It starts on boot, restarts on
-   crash, and heartbeats every 20 seconds.
+   crash, and says it's up on Realtime Presence, with a row write every 5 minutes.
 
 Two things this design has to be honest about. First, the script runs code as the user who ran it — it is
 `curl | sh`, and the same caution applies as to any installer. Second, it needs the workspace's service key to

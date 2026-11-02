@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import sharp from "sharp";
-import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ANDROID, IOS, resetFakes, type Result } from "./simulator-tools.harness";
 
 // The tools that read and touch what is on the screen, the picture of it, and the live view of it.
@@ -26,12 +26,15 @@ const said = (r: Result) => r.content[0]?.text;
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "weft-sim-screen-"));
 afterAll(() => fs.rmSync(tmp, { recursive: true, force: true }));
+afterEach(() => vi.unstubAllEnvs());
 
 // A tiny real PNG, so the screenshot tool can read its size and shrink it.
 const PNG = await sharp({ create: { width: 60, height: 120, channels: 3, background: "#336699" } }).png().toBuffer();
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // These are a desktop's tools: on a Weft Worker box (WEFT_WORKER=1) watch would stream instead (lib/worker-pane.ts).
+  vi.stubEnv("WEFT_WORKER", "");
   card = "c1";
   resetFakes(devices, ui, watch, openInPane, PNG);
 });
