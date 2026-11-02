@@ -1,9 +1,10 @@
-// The daemon's heartbeat (docs/architecture/weft-worker.md#liveness). It ticks every 20 s, but while the presence
-// socket is up (lib/worker-presence.ts) a tick only re-tracks a changed status; the row is written every 5 minutes, or
-// at once when the status changes, so last-seen and a board without Realtime stay right. With the socket down, or no
-// socket at all, every tick writes the row, as before.
-import type { Presence, PresenceHooks } from "./worker-presence";
-import type { WorkerStatus } from "./worker-registry";
+// A host's heartbeat (docs/architecture/weft-worker.md#liveness), the one both hosts run. A worker's ticks every 20 s,
+// and a Mac's rides its inbox's 30 s check (lib/cloud-inbox.ts, tick only, no presence, no offline on the way out).
+// While the presence socket is up (lib/worker-presence.ts) a tick only re-tracks a changed status; the row is written
+// every 5 minutes, or at once when the status changes, so last-seen and a board without Realtime stay right. With the
+// socket down, or no socket at all, every tick writes the row, as before.
+import type { Presence, PresenceHooks } from "../worker-presence";
+import type { WorkerStatus } from "../worker-registry";
 
 export const BEAT_MS = 20_000;
 export const SLOW_BEAT_MS = 5 * 60_000;
@@ -16,6 +17,8 @@ export interface BeatDeps {
   // Joins the presence topic; absent on a worker that can't.
   presence?: (hooks: PresenceHooks) => Presence;
   log: (msg: string) => void;
+  // Who the log line names (default "Weft Worker").
+  label?: string;
   beatMs?: number;
   slowBeatMs?: number;
   now?: () => number;
@@ -43,7 +46,7 @@ export function createBeat(deps: BeatDeps) {
       landed = true;
     } catch (err) {
       landed = false;
-      deps.log(`Weft Worker: heartbeat: ${(err as Error).message}`);
+      deps.log(`${deps.label ?? "Weft Worker"}: heartbeat: ${(err as Error).message}`);
     }
   }
 

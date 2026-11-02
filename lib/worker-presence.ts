@@ -76,7 +76,7 @@ export interface PresenceRead {
   present: Map<string, WorkerStatus>;
 }
 
-// A worker whose socket is down writes its row every 20 s (lib/worker-beat.ts), so this is the old threshold.
+// A worker whose socket is down writes its row every 20 s (lib/host/beat.ts), so this is the old threshold.
 export const FRESH_AFTER_MS = 60_000;
 // One whose socket is up writes it every 5 minutes: two missed beats and some slack, for a board without presence.
 export const SLOW_OFFLINE_AFTER_MS = 11 * 60_000;

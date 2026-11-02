@@ -5,10 +5,9 @@
 import type { ProjectSummary, ProjectWorker, WorkerProjectStatus } from "./board-view";
 import type { MenuItem } from "./card-menu";
 import type { Card, Column } from "./types";
+import { formatProjectAddress, isWorkerPath, parseProjectAddress, workerAddress } from "./host/address";
 
 export type { WorkerProjectStatus };
-
-const SCHEME = "worker://";
 
 // One project on one of your workers.
 export interface WorkerProject {
@@ -34,19 +33,17 @@ export interface WorkerBoard {
 
 export const EMPTY_WORKER_BOARD: WorkerBoard = { signedIn: false, projects: [], cards: [] };
 
-export const workerProjectPath = (workerId: string, folder: string) => `${SCHEME}${workerId}/${folder}`;
+// The path is the wire form of a ProjectAddress (lib/host/address.ts), the one place worker:// is built and read.
+export const workerProjectPath = (workerId: string, folder: string) => formatProjectAddress(workerAddress(workerId, folder));
 
-export const isWorkerProject = (path: string | null | undefined): path is string => Boolean(path?.startsWith(SCHEME));
+export const isWorkerProject = isWorkerPath;
 
 export const isWorkerCard = (card: Pick<Card, "cwd">) => isWorkerProject(card.cwd);
 
 // The worker id and folder a project's path names, or null for anything else.
 export function parseWorkerProject(path: string): { workerId: string; folder: string } | null {
-  if (!isWorkerProject(path)) return null;
-  const rest = path.slice(SCHEME.length);
-  const slash = rest.indexOf("/");
-  if (slash < 1 || slash === rest.length - 1) return null;
-  return { workerId: rest.slice(0, slash), folder: rest.slice(slash + 1) };
+  const address = parseProjectAddress(path);
+  return address?.host.kind === "worker" ? { workerId: address.host.id, folder: address.repo } : null;
 }
 
 // A folder the Mac can act on: what the terminal, the header badges and the drawers get, never a worker's path.

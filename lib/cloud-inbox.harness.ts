@@ -217,6 +217,7 @@ export const deviceCallsMock = { drainDeviceCalls: () => Promise.resolve() };
 
 export const beats: string[] = [];
 export const desktopWorkerMock = {
+  desktopStatus: () => "online",
   beatDesktopWorker: (_client: unknown, uid: string) => {
     beats.push(uid);
     return Promise.resolve();

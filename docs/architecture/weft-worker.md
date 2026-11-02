@@ -205,7 +205,7 @@ A real socket cut read `CHANNEL_ERROR`, rejoined in 1.3 s, and the next ping arr
 ### Liveness
 
 A worker used to write its row every 20 s: about 4,300 writes a day each, just to say it was up. Now it says so on a
-Realtime Presence topic, and the row is the slow record (`lib/worker-presence.ts`, `lib/worker-beat.ts`,
+Realtime Presence topic, and the row is the slow record (`lib/worker-presence.ts`, `lib/host/beat.ts`,
 `lib/worker-presence-watch.ts`, `supabase/migrations/20261102121500_worker_upkeep.sql`).
 
 ```
@@ -590,7 +590,7 @@ itself in Settings → Sync → Workers beside the headless ones (`supabase/migr
 - **The row:** `cloud_workers.kind` is `headless` or `desktop`; a desktop row carries its `device` (the Mac's sync
   device id) and is one per (account, device). It has no key: `desktop_worker_beat` upserts it as `auth.uid()`, and
   its `key_hash` is never a hex digest, so no key can act as it.
-- **The beat** (`lib/desktop-worker.ts`) rides the inbox's 30 s check: only while the inbox listens (signed in, a
+- **The beat** (`lib/desktop-worker.ts`, through the host core's `createBeat`, [project-hosts.md](project-hosts.md#one-host-program-h5-as-built)) rides the inbox's 30 s check: only while the inbox listens (signed in, a
   folder synced), so a Mac that sleeps, signs out or stops syncing reads as offline a minute later. It says `busy`
   while any thread runs. It never throws: a database without the function just leaves the Mac off the list.
 - **A run sent to it** (`sendRun` looks the worker's kind up itself) is a plain `new_card` for its device, not a `run`.
