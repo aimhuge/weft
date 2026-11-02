@@ -114,7 +114,7 @@ export function workerKinds(deps: DaemonDeps, ctx: KindContext): KindTable {
     return published(command, await engine.start({ ...args, cwd, permissionMode }));
   }
 
-  const cards = createCardCommands(engine, create);
+  const cards = createCardCommands(engine, create, deps.owner);
   return {
     async login(command) {
       await deps.login(sealedToken(command));

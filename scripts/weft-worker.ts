@@ -154,6 +154,7 @@ async function startCommand() {
   });
   const daemon = createDaemon({
     reg,
+    owner: config.ownerUser,
     publisher,
     listen: (hooks) => listenForWakes(client, config.key, hooks, console.log),
     listenForPushes: (hooks) => listenForPushes(client, hooks, console.log),
