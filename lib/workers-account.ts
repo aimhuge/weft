@@ -10,6 +10,8 @@ import { deviceId } from "./device-id";
 import type { CommandResult } from "./worker-command-wait";
 import { cloneCommand, githubLoginCommand, loginCommand, runCommand, updateCommand, workerDevice } from "./worker-commands";
 import type { GithubState } from "./worker-github";
+import { liveStatus, type PresenceRead } from "./worker-presence";
+import { presenceWatch, type PresenceWatch } from "./worker-presence-watch";
 
 export interface WorkerView {
   id: string;
@@ -70,8 +72,14 @@ interface BuildRow {
   update_note: string | null;
 }
 
-// A worker that hasn't heartbeat in this long is offline, whatever its row last said (it heartbeats every 20 s).
+// A desktop that hasn't heartbeat in this long is offline, whatever its row last said (it heartbeats every 20 s). A
+// headless worker's status comes from presence, then its row (lib/worker-presence.ts liveStatus).
 export const OFFLINE_AFTER_MS = 60_000;
+
+const statusOf = (r: Row, seen: PresenceRead, now: number): WorkerView["status"] => {
+  if (r.kind !== "desktop") return liveStatus(r, seen, now);
+  return !r.last_seen_at || now - Date.parse(r.last_seen_at) > OFFLINE_AFTER_MS ? "offline" : r.status;
+};
 
 // The install line a new box runs, with its token.
 export const installLine = (token: string) => `curl -fsSL https://weft.zip/worker.sh | sh -s -- ${token}`;
@@ -117,7 +125,7 @@ async function workerBuilds(client: SupabaseClient, org: string): Promise<Map<st
 
 const buildView = (row?: BuildRow) => ({ build: row?.build ?? null, updateNote: row?.update_note ?? null });
 
-export async function listWorkers(client: SupabaseClient = accountClient(), now = Date.now()): Promise<WorkersView> {
+export async function listWorkers(client: SupabaseClient = accountClient(), now = Date.now(), presence: PresenceWatch = presenceWatch()): Promise<WorkersView> {
   const who = await session(client);
   if (!who) return { signedIn: false, workers: [] };
   const { data, error } = await client
@@ -127,16 +135,22 @@ export async function listWorkers(client: SupabaseClient = accountClient(), now 
     .order("created_at", { ascending: true });
   if (error) throw new Error(`Couldn't read your workers: ${error.message}`);
   const here = deviceId();
-  const [clones, signIns, builds] = await Promise.all([failedClones(client, who.org, who.uid), githubSignIns(client, who.org), workerBuilds(client, who.org)]);
-  const workers = ((data as Row[] | null) ?? []).map((r) => {
-    const stale = !r.last_seen_at || now - Date.parse(r.last_seen_at) > OFFLINE_AFTER_MS;
+  const rows = (data as Row[] | null) ?? [];
+  const mine = rows.filter((r) => r.owner_user === who.uid && r.kind !== "desktop").map((r) => r.id);
+  const [clones, signIns, builds, seen] = await Promise.all([
+    failedClones(client, who.org, who.uid),
+    githubSignIns(client, who.org),
+    workerBuilds(client, who.org),
+    presence.read((fn, args) => client.rpc(fn, args), mine, { owner: who.uid, all: true }),
+  ]);
+  const workers = rows.map((r) => {
     const device = r.device ?? null;
     return {
       id: r.id,
       name: r.name,
       platform: r.platform,
       arch: r.arch,
-      status: stale ? "offline" : r.status,
+      status: statusOf(r, seen, now),
       lastSeenAt: r.last_seen_at,
       mine: r.owner_user === who.uid,
       kind: r.kind === "desktop" ? "desktop" : "headless",

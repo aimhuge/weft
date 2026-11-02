@@ -1,10 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Device } from "./simulator-devices";
 
-const sim = vi.hoisted(() => ({ frameJpeg: vi.fn(), markLive: vi.fn(), noteWatchedSize: vi.fn(), stopWatching: vi.fn(), watch: vi.fn(), watching: vi.fn() }));
+const sim = vi.hoisted(() => ({ frame: vi.fn(), markLive: vi.fn(), noteWatchedSize: vi.fn(), stopWatching: vi.fn(), watch: vi.fn(), watching: vi.fn() }));
 const devices = vi.hoisted(() => ({ boot: vi.fn(), listDevices: vi.fn((): Promise<Device[]> => Promise.resolve([])), pickDevice: vi.fn() }));
 const notePage = vi.hoisted(() => vi.fn());
 vi.mock("./simulator-watch", () => ({ ...sim, WATCH_MS: 600_000 }));
+// The capture hands back raw bytes; the frame's type is the box's (lib/screen-frame.ts).
+const box: { type: "webp" | "jpeg" } = vi.hoisted(() => ({ type: "webp" }));
+vi.mock("./screen-frame", () => ({ frameType: () => box.type, screenFrame: async (dev: Device, type: string) => ({ type, bytes: (await sim.frame(dev)) as unknown }) }));
 vi.mock("./card-page", () => ({ notePage }));
 vi.mock("./simulator-devices", () => devices);
 
@@ -24,27 +27,28 @@ describe("pump", () => {
     let clock = 0;
     const frames = ["a", "a", "b", "b"];
     sim.watching.mockImplementation(() => frames.length > 0);
-    sim.frameJpeg.mockImplementation(() => Promise.resolve(Buffer.from(frames.shift() ?? "")));
+    sim.frame.mockImplementation(() => Promise.resolve(Buffer.from(frames.shift() ?? "")));
     const send = vi.fn(() => Promise.resolve());
-    await pump(d, { send, answer: vi.fn(), close: vi.fn() }, () => clock, (ms) => ((clock += ms), Promise.resolve()));
+    await pump(d, { send, answer: vi.fn(), close: vi.fn(), type: () => "webp" as const }, () => clock, (ms) => ((clock += ms), Promise.resolve()));
     expect(send).toHaveBeenCalledTimes(2);
+    expect(send).toHaveBeenCalledWith({ type: "webp", bytes: Buffer.from("a") });
     sim.watching.mockReset();
 
     const again = ["a", "a"];
     clock = 0;
     sim.watching.mockImplementation(() => again.length > 0);
-    sim.frameJpeg.mockImplementation(() => Promise.resolve(Buffer.from(again.shift() ?? "")));
+    sim.frame.mockImplementation(() => Promise.resolve(Buffer.from(again.shift() ?? "")));
     const later = vi.fn(() => Promise.resolve());
-    await pump(d, { send: later, answer: vi.fn(), close: vi.fn() }, () => clock, (ms) => ((clock += 5_000 + ms), Promise.resolve()));
+    await pump(d, { send: later, answer: vi.fn(), close: vi.fn(), type: () => "webp" as const }, () => clock, (ms) => ((clock += 5_000 + ms), Promise.resolve()));
     expect(later).toHaveBeenCalledTimes(2);
   });
 
   it("carries on past a bad capture", async () => {
     let passes = 2;
     sim.watching.mockImplementation(() => passes-- > 0);
-    sim.frameJpeg.mockRejectedValueOnce(new Error("mid boot")).mockResolvedValueOnce(Buffer.from("x"));
+    sim.frame.mockRejectedValueOnce(new Error("mid boot")).mockResolvedValueOnce(Buffer.from("x"));
     const send = vi.fn(() => Promise.resolve());
-    await pump(d, { send, answer: vi.fn(), close: vi.fn() }, () => 0, () => Promise.resolve());
+    await pump(d, { send, answer: vi.fn(), close: vi.fn(), type: () => "webp" as const }, () => 0, () => Promise.resolve());
     expect(send).toHaveBeenCalledTimes(1);
   });
 });
@@ -53,12 +57,12 @@ describe("nudgeScreen", () => {
   it("captures now instead of waiting out the tick", async () => {
     let passes = 2;
     sim.watching.mockImplementation(() => passes-- > 0);
-    sim.frameJpeg.mockResolvedValue(Buffer.from("x"));
-    const done = pump(d, { send: () => Promise.resolve(), answer: () => Promise.resolve(), close: vi.fn() }, () => 0, () => new Promise(() => {}));
-    await vi.waitFor(() => expect(sim.frameJpeg).toHaveBeenCalledTimes(1));
+    sim.frame.mockResolvedValue(Buffer.from("x"));
+    const done = pump(d, { send: () => Promise.resolve(), answer: () => Promise.resolve(), close: vi.fn(), type: () => "webp" as const }, () => 0, () => new Promise(() => {}));
+    await vi.waitFor(() => expect(sim.frame).toHaveBeenCalledTimes(1));
     await vi.waitFor(() => {
       nudgeScreen("udid-1");
-      expect(sim.frameJpeg).toHaveBeenCalledTimes(2);
+      expect(sim.frame).toHaveBeenCalledTimes(2);
     });
     nudgeScreen("udid-1");
     await done;
@@ -77,9 +81,9 @@ describe("screenOnWorker", () => {
   it("puts a screen page on the card and reuses its topic on a second watch", async () => {
     let live = true;
     sim.watching.mockImplementation(() => live);
-    sim.frameJpeg.mockResolvedValue(Buffer.from("x"));
+    sim.frame.mockResolvedValue(Buffer.from("x"));
     const close = vi.fn();
-    const open = vi.fn(() => Promise.resolve({ send: () => Promise.resolve(), answer: () => Promise.resolve(), close }));
+    const open = vi.fn(() => Promise.resolve({ send: () => Promise.resolve(), answer: () => Promise.resolve(), close, type: () => "webp" as const }));
     setScreenChannel(open);
     await screenOnWorker("c", d, () => 1_000);
     await screenOnWorker("c", d, () => 2_000);
@@ -94,18 +98,55 @@ describe("screenOnWorker", () => {
 });
 
 describe("openScreenChannel", () => {
-  const client = (status: string, err?: Error) => {
+  const client = (status: string, err?: Error, state: Record<string, unknown[]> = {}) => {
     const send = vi.fn(() => Promise.resolve());
     const removeChannel = vi.fn(() => Promise.resolve());
-    const channel = { send, subscribe: (cb: (s: string, e?: Error) => void) => status && cb(status, err) };
-    return { send, removeChannel, client: { channel: () => channel, removeChannel } };
+    const on = vi.fn();
+    const channel = {
+      send,
+      on: (...args: unknown[]) => (on(...args), channel),
+      subscribe: (cb: (s: string, e?: Error) => void) => status && cb(status, err),
+      presenceState: () => state,
+    };
+    return { send, on, removeChannel, state, client: { channel: () => channel, removeChannel } };
   };
+
+  it("sends JPEG to an old board, which says nothing, and to a mix with one, and WebP once every board takes it", async () => {
+    box.type = "webp";
+    const state: Record<string, unknown[]> = {};
+    const c = client("SUBSCRIBED", undefined, state);
+    const channel = await openScreenChannel(c.client, "t");
+    expect(c.on).toHaveBeenCalledWith("presence", { event: "sync" }, expect.any(Function));
+    expect(channel.type()).toBe("jpeg");
+    state.old = [{}];
+    state.new = [{ formats: ["webp", "jpeg"] }];
+    expect(channel.type()).toBe("jpeg");
+    delete state.old;
+    expect(channel.type()).toBe("webp");
+    // A box whose sharp can't write WebP, or told not to, stays on JPEG.
+    box.type = "jpeg";
+    expect(channel.type()).toBe("jpeg");
+    box.type = "webp";
+  });
+
+  it("encodes each frame in the agreed format", async () => {
+    let passes = 2;
+    sim.watching.mockImplementation(() => passes-- > 0);
+    sim.frame.mockResolvedValueOnce(Buffer.from("x")).mockResolvedValueOnce(Buffer.from("y"));
+    const send = vi.fn(() => Promise.resolve());
+    const types: ("webp" | "jpeg")[] = ["jpeg", "webp"];
+    await pump(d, { send, answer: vi.fn(), close: vi.fn(), type: () => types.shift()! }, () => 0, () => Promise.resolve());
+    expect(send).toHaveBeenCalledWith({ type: "jpeg", bytes: Buffer.from("x") });
+    expect(send).toHaveBeenCalledWith({ type: "webp", bytes: Buffer.from("y") });
+  });
 
   it("resolves joined and sends frames on the event", async () => {
     const c = client("SUBSCRIBED");
     const channel = await openScreenChannel(c.client, "t");
-    await channel.send("jpg");
-    expect(c.send).toHaveBeenCalledWith({ type: "broadcast", event: "frame", payload: { jpg: "jpg" } });
+    await channel.send({ type: "webp", bytes: Buffer.from("w") });
+    expect(c.send).toHaveBeenCalledWith({ type: "broadcast", event: "frame", payload: { webp: Buffer.from("w").toString("base64") } });
+    await channel.send({ type: "jpeg", bytes: Buffer.from("j") });
+    expect(c.send).toHaveBeenLastCalledWith({ type: "broadcast", event: "frame", payload: { jpg: Buffer.from("j").toString("base64") } });
     channel.close();
     expect(c.removeChannel).toHaveBeenCalled();
   });
@@ -118,8 +159,8 @@ describe("openScreenChannel", () => {
 });
 
 describe("the fast path", () => {
-  const fast = () => ({ size: { width: 1, height: 2 }, connect: vi.fn(() => Promise.resolve("answer-sdp")), close: vi.fn() });
-  const channel = () => ({ send: vi.fn(() => Promise.resolve()), answer: vi.fn(() => Promise.resolve()), close: vi.fn() });
+  const fast = () => ({ size: { width: 1, height: 2 }, connect: vi.fn(() => Promise.resolve("answer-sdp")), close: vi.fn(), type: () => "webp" as const });
+  const channel = () => ({ send: vi.fn(() => Promise.resolve()), answer: vi.fn(() => Promise.resolve()), close: vi.fn(), type: () => "webp" as const });
 
   beforeEach(() => {
     sim.watch.mockResolvedValue("file:///x");
@@ -149,7 +190,7 @@ describe("the fast path", () => {
     const ch = channel();
     let release: (v: unknown) => void = () => {};
     sim.watching.mockReturnValue(true);
-    sim.frameJpeg.mockImplementation(() => new Promise((go) => (release = go)));
+    sim.frame.mockImplementation(() => new Promise((go) => (release = go)));
     setScreenChannel(() => Promise.resolve(ch));
     const key = newAnswerKey();
     setFastScreen(() => Promise.resolve(f), () => JSON.stringify({ sdp: "offer-sdp", key }));
@@ -180,7 +221,7 @@ describe("watching from the pane", () => {
   beforeEach(() => {
     sim.watch.mockResolvedValue("file:///x");
     sim.watching.mockReturnValue(false);
-    setScreenChannel(() => Promise.resolve({ send: vi.fn(() => Promise.resolve()), answer: vi.fn(() => Promise.resolve()), close: vi.fn() }));
+    setScreenChannel(() => Promise.resolve({ send: vi.fn(() => Promise.resolve()), answer: vi.fn(() => Promise.resolve()), close: vi.fn(), type: () => "webp" as const }));
   });
 
   it("streams the booted device, and lists the worker's devices on the page", async () => {

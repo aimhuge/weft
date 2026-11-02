@@ -22,7 +22,8 @@ import { inputCommand, modeCommand, runCommand, type BoardInput, type BoardOffer
 import { seal } from "./worker-seal";
 import { RTC_PURPOSE } from "./rtc-signal";
 import { EMPTY_WORKER_BOARD, offlineMessage, parseWorkerProject, workerProjectPath, type WorkerBoard, type WorkerProject, type WorkerProjectStatus } from "./worker-project";
-import { OFFLINE_AFTER_MS } from "./workers-account";
+import { liveStatus, type PresenceRead } from "./worker-presence";
+import { presenceWatch, type PresenceWatch } from "./worker-presence-watch";
 
 // Where this Mac's composer saves what you paste (lib/attachments.ts ATTACHMENTS_DIR, without its image tools).
 const ATTACHMENTS = path.join(DATA_DIR, "attachments");
@@ -74,8 +75,6 @@ async function myWorkers(client: SupabaseClient, who: { uid: string; org: string
   return data;
 }
 
-const statusOf = (w: WorkerRow, now: number): WorkerProjectStatus => (!w.last_seen_at || now - Date.parse(w.last_seen_at) > OFFLINE_AFTER_MS ? "offline" : w.status);
-
 // The folders each worker reports, read apart from the list: a database without the column yet (the app ships ahead
 // of its migration) only leaves out the projects with no cards.
 async function reportedFolders(client: SupabaseClient, ids: string[]): Promise<Map<string, string[]>> {
@@ -85,28 +84,30 @@ async function reportedFolders(client: SupabaseClient, ids: string[]): Promise<M
 
 // Your workers' cards as the board draws them: each filed under its project's worker:// path. The copilot and
 // deleted cards stay out, as on the web board.
-export function boardFrom(workers: WorkerRow[], folders: Map<string, string[]>, rows: CardRow[], now: number): Pick<WorkerBoard, "projects" | "cards"> {
+// A worker's status comes from presence where the board has it (lib/worker-presence.ts liveStatus).
+export function boardFrom(workers: WorkerRow[], folders: Map<string, string[]>, rows: CardRow[], now: number, seen: PresenceRead | null = null): Pick<WorkerBoard, "projects" | "cards"> {
   const live = rows.filter((r) => r.card.role !== "copilot" && r.folder);
   const projects: WorkerProject[] = workers.flatMap((w) => {
     const names = new Set([...(folders.get(w.id) ?? []), ...live.filter((r) => r.owner_worker === w.id).map((r) => r.folder)]);
-    return [...names].sort().map((folder) => ({ path: workerProjectPath(w.id, folder), workerId: w.id, worker: w.name, folder, status: statusOf(w, now) }));
+    return [...names].sort().map((folder) => ({ path: workerProjectPath(w.id, folder), workerId: w.id, worker: w.name, folder, status: liveStatus(w, seen, now) }));
   });
   return { projects, cards: live.map((r) => ({ ...r.card, cwd: workerProjectPath(r.owner_worker, r.folder) })) };
 }
 
 // Your workers' projects, each listed even offline, and their cards.
-export async function readWorkerBoard(client: SupabaseClient = accountClient(), now = Date.now()): Promise<WorkerBoard> {
+export async function readWorkerBoard(client: SupabaseClient = accountClient(), now = Date.now(), presence: PresenceWatch = presenceWatch()): Promise<WorkerBoard> {
   const who = await session(client);
   if (!who) return EMPTY_WORKER_BOARD;
   const workers = await myWorkers(client, who);
   if (!workers.length) return { ...EMPTY_WORKER_BOARD, signedIn: true };
   const ids = workers.map((w) => w.id);
-  const [folders, cards] = await Promise.all([
+  const [seen, folders, cards] = await Promise.all([
+    presence.read((fn, args) => client.rpc(fn, args), ids, { owner: who.uid, all: true }),
     reportedFolders(client, ids),
     client.from("cloud_cards").select("card_id, owner_device, owner_worker, folder, card").eq("org_id", who.org).eq("deleted", false).in("owner_worker", ids).order("updated_at", { ascending: false }).limit(CARD_LIMIT),
   ]);
   if (cards.error) throw new Error(`Couldn't read your worker's threads: ${cards.error.message}`);
-  return { signedIn: true, ...boardFrom(workers, folders, cards.data, now) };
+  return { signedIn: true, ...boardFrom(workers, folders, cards.data, now, seen) };
 }
 
 // One page of a worker card's thread, the page the web board's transport reads. Null when it can't be read.
@@ -224,13 +225,20 @@ export interface WorkerThreadInput {
 
 // A new thread in a worker project: a run with that folder, or an error that says why not. It never starts anywhere
 // else: an offline worker refuses here rather than queue a run that would land hours later.
-export async function startWorkerThread(body: WorkerThreadInput, client: SupabaseClient = accountClient(), now = Date.now(), dir = ATTACHMENTS): Promise<{ commandId: string; worker: string }> {
+export async function startWorkerThread(
+  body: WorkerThreadInput,
+  client: SupabaseClient = accountClient(),
+  now = Date.now(),
+  dir = ATTACHMENTS,
+  presence: PresenceWatch = presenceWatch(),
+): Promise<{ commandId: string; worker: string }> {
   const project = parseWorkerProject(body.cwd);
   if (!project) throw new Error("That isn't a worker project.");
   const who = await requireSession(client);
   const worker = (await myWorkers(client, who)).find((w) => w.id === project.workerId);
   if (!worker) throw new Error("That worker isn't one of yours anymore.");
-  if (statusOf(worker, now) === "offline") throw new Error(offlineMessage(worker.name));
+  const seen = await presence.read((fn, args) => client.rpc(fn, args), [worker.id], { owner: who.uid });
+  if (liveStatus(worker, seen, now) === "offline") throw new Error(offlineMessage(worker.name));
   const row = runCommand({ orgId: who.org, workerId: worker.id, folder: project.folder }, body);
   if (!row) throw new Error("Write a prompt for this thread.");
   // runBody reads these as well; runCommand has no use for them on a Send a run from Settings.

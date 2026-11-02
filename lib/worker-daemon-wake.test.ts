@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { command, makeDeps } from "./worker-daemon.harness";
+import type { PresenceHooks } from "./worker-presence";
 import type { WakeHooks } from "./worker-wake";
 
 // A socket the test drives: it hands the hooks out and records the leave.
@@ -121,6 +122,39 @@ describe("the daemon's wake-ups", () => {
     await vi.advanceTimersByTimeAsync(60_000);
     expect(d.heartbeat).toHaveBeenCalledTimes(3);
     await d.stop();
+  });
+});
+
+describe("the daemon's presence", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it("writes the row every 5 minutes while presence is up, and every 20 s while it's down", async () => {
+    const track = vi.fn();
+    const leave = vi.fn();
+    const held: { hooks?: PresenceHooks } = {};
+    const d = makeDeps({
+      presence: (hooks) => {
+        held.hooks = hooks;
+        return { track, leave };
+      },
+    });
+    const stop = d.daemon.start();
+    held.hooks?.up();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(track).toHaveBeenCalledWith("online");
+    d.heartbeat.mockClear();
+    await vi.advanceTimersByTimeAsync(4 * 60_000);
+    expect(d.heartbeat).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(d.heartbeat).toHaveBeenCalledWith("online");
+    held.hooks?.down();
+    d.heartbeat.mockClear();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(d.heartbeat).toHaveBeenCalledTimes(3);
+    await stop();
+    expect(leave).toHaveBeenCalled();
+    expect(d.heartbeat).toHaveBeenLastCalledWith("offline");
   });
 });
 

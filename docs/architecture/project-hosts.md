@@ -245,8 +245,10 @@ Live traffic is what grows with use, so it leaves Supabase; the sealed history s
   outputs fetched on demand, mirrored only compressed and under a cap; items gzipped before sealing; the mirror batched
   while the line carries the live view; video on an RTP track with adaptive bitrate instead of a fixed 8 Mbps (built,
   H6a: loss-driven, 0.5 Mbps up to the quality's rate).
-- **Small, later:** heartbeats as Realtime Presence rather than a row write every 20 s; finished `cloud_commands` rows
-  expire after a day; WebP for the fallback screen frames.
+- **Upkeep (built):** a worker says it's up on Realtime Presence and writes its row every 5 minutes instead of every
+  20 s, about 290 writes a day instead of 4,300; finished `cloud_commands` rows expire after a day (a failed clone
+  or a stuck claim after 7); the fallback screen frames are WebP, about half the bytes of the JPEGs, where every board
+  watching says it takes WebP (weft-worker.md#liveness, #expiring-finished-commands, #the-live-screen).
 
 ## Phases
 

@@ -22,6 +22,7 @@ import { RTC_PURPOSE } from "../lib/rtc-signal";
 import { CLAUDE_TOKEN, GITHUB_PURPOSE, LOGIN_PURPOSE, newSealKeys, open } from "../lib/worker-seal";
 import { createUpdater, updatesOn } from "../lib/worker-update";
 import { listenForPushes, listenForWakes } from "../lib/worker-wake";
+import { joinPresence } from "../lib/worker-presence";
 
 const home = workerHome();
 // Before the engine is imported: lib/store.ts reads WEFT_DATA once, at import.
@@ -110,6 +111,7 @@ async function startCommand() {
     publisher,
     listen: (hooks) => listenForWakes(client, config.key, hooks, console.log),
     listenForPushes: (hooks) => listenForPushes(client, hooks, console.log),
+    presence: (hooks) => joinPresence(client, config.key, hooks, console.log),
     onCardChange: subscribe,
     engine: {
       start: async (body) => {

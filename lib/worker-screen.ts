@@ -1,13 +1,16 @@
 // mcp__simulator__watch on a Weft Worker (docs/architecture/weft-worker.md#the-live-screen). There's no window to capture
-// and no pane to open, so the device's screenshots go out as JPEGs on a Realtime Broadcast topic, and card.page names the
-// topic so either board can draw it. Frames only go out when the screen changed, plus one every few seconds for a board
-// that just opened, so a still screen costs almost nothing. The topic is random per watch and ends with it.
+// and no pane to open, so the device's screenshots go out as WebP frames (JPEG where the box can't, lib/screen-frame.ts)
+// on a Realtime Broadcast topic, and card.page names the topic so either board can draw it. Frames only go out when the
+// screen changed, plus one every few seconds for a board that just opened, so a still screen costs almost nothing. The
+// topic is random per watch and ends with it.
 import { createHash, randomBytes } from "node:crypto";
 import { notePage } from "./card-page";
 import { ANSWER_EVENT, sealAnswer, screenQuality, type ScreenQuality, type SealedAnswer } from "./rtc-signal";
 import { SCREEN_EVENT, screenPage, screenTopic } from "./share-types";
 import { boot, listDevices, pickDevice, type Device } from "./simulator-devices";
-import { frameJpeg, markLive, noteWatchedSize, stopWatching, watch, watching, WATCH_MS } from "./simulator-watch";
+import { frameType, screenFrame, type Frame } from "./screen-frame";
+import { agreedType, type FrameType } from "./screen-formats";
+import { markLive, noteWatchedSize, stopWatching, watch, watching, WATCH_MS } from "./simulator-watch";
 import type { ScreenInput } from "./worker-commands";
 import type { Sealed } from "./worker-seal";
 
@@ -17,7 +20,9 @@ const KEYFRAME_MS = 3_000;
 const JOIN_MS = 10_000;
 
 export interface ScreenChannel {
-  send(jpg: string): Promise<unknown>;
+  send(frame: Frame): Promise<unknown>;
+  // The format the boards on the topic agreed to, and this box can write (lib/screen-formats.ts).
+  type(): FrameType;
   answer(sealed: SealedAnswer): Promise<unknown>;
   close(): void;
 }
@@ -26,7 +31,10 @@ export type OpenScreenChannel = (topic: string) => Promise<ScreenChannel>;
 
 // supabase-js's channel, narrowed to what this needs, so tests hand in a fake.
 interface BroadcastChannel {
+  // Binding a presence listener before the join is what turns Presence on for the channel.
+  on(type: "presence", filter: { event: "sync" }, callback: () => void): BroadcastChannel;
   subscribe(callback: (status: string, err?: Error) => void): unknown;
+  presenceState(): Record<string, unknown[]>;
   send(message: { type: "broadcast"; event: string; payload: unknown }): Promise<unknown>;
 }
 
@@ -37,7 +45,7 @@ interface BroadcastClient {
 
 let open: OpenScreenChannel | null = null;
 
-// The fast path, beside the JPEGs (lib/worker-fast-screen.ts): null when this device or box can't do it. The JPEGs keep
+// The fast path, beside the frames (lib/worker-fast-screen.ts): null when this device or box can't do it. The frames keep
 // running either way, for a board with no direct route.
 export interface FastScreen {
   size: { width: number; height: number };
@@ -101,12 +109,14 @@ export function openScreenChannel(client: BroadcastClient, topic: string, joinMs
       leave();
       reject(new Error("Couldn't reach the live view's channel."));
     }, joinMs);
-    channel.subscribe((status, err) => {
+    channel.on("presence", { event: "sync" }, () => {}).subscribe((status, err) => {
       if (status !== "SUBSCRIBED" && status !== "CHANNEL_ERROR" && status !== "TIMED_OUT") return;
       clearTimeout(timer);
       if (status === "SUBSCRIBED") {
         resolve({
-          send: (jpg) => channel.send({ type: "broadcast", event: SCREEN_EVENT, payload: { jpg } }),
+          // { webp } or { jpg }, base64: lib/use-screen-stream.ts frameSrc reads either.
+          type: () => (agreedType(channel.presenceState()) === "webp" ? frameType() : "jpeg"),
+          send: (frame) => channel.send({ type: "broadcast", event: SCREEN_EVENT, payload: { [frame.type === "webp" ? "webp" : "jpg"]: frame.bytes.toString("base64") } }),
           answer: (sealed) => channel.send({ type: "broadcast", event: ANSWER_EVENT, payload: sealed }),
           close: leave,
         });
@@ -136,10 +146,10 @@ export async function pump(d: Device, channel: ScreenChannel, now: () => number 
   while (watching(d.id)) {
     const start = now();
     try {
-      const jpg = await frameJpeg(d);
-      const hash = createHash("sha1").update(jpg).digest("hex");
+      const frame = await screenFrame(d, channel.type());
+      const hash = createHash("sha1").update(frame.bytes).digest("hex");
       if (hash !== last || start - sentAt >= KEYFRAME_MS) {
-        await channel.send(jpg.toString("base64"));
+        await channel.send(frame);
         last = hash;
         sentAt = start;
       }
