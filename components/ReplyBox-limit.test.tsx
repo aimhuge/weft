@@ -15,7 +15,7 @@ vi.mock("@/lib/client", () => ({ api }));
 
 // The shared limit stores, read off /api/limits/plans (lib/use-start-gate.ts).
 const apiFetch = vi.hoisted(() => vi.fn());
-vi.mock("@/lib/api-client", () => ({ apiFetch }));
+vi.mock("@/lib/api-client", () => ({ API_HEADERS: {}, apiFetch }));
 
 vi.mock("./Composer", () => import("./composer-mock"));
 

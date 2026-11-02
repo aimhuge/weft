@@ -7,6 +7,7 @@ import { rememberPage } from "@/lib/settings-nav";
 import { useMemo } from "react";
 import type { BrowserState, NewCardInput } from "@/lib/client";
 import { planResets } from "@/lib/schedule";
+import { sameHostCards } from "@/lib/project-host";
 import type { Card, RestartStatus, ThreadItem } from "@/lib/types";
 import type { UseWorkspaceLayout } from "@/lib/use-workspace-layout";
 import type { threadHandlers } from "@/lib/thread-handlers";
@@ -89,7 +90,7 @@ export default function BoardFrame(props: BoardFrameProps) {
           worker={open.worker}
           items={open.items}
           streaming={open.streaming}
-          resets={planResets(cards)}
+          resets={planResets(sameHostCards(cards, open.card))}
           editTitle={props.renameId === open.card.id}
           workspace={props.workspace}
           browser={{ desktop: props.desktop, state: props.browser, width: props.browserWidth, onWidth: props.onBrowserWidth, obscured: props.obscured }}

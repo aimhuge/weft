@@ -54,6 +54,14 @@ describe("a host command from the web", () => {
     expect(reports()).toEqual([{ status: "done", card_id: "card-7", result: { ok: true, cardId: "card-7" } }]);
   });
 
+  it("answers a read verb in the result: this Mac's skills for the card's folder", async () => {
+    const hostApi = await import("./host-api");
+    vi.spyOn(hostApi, "runVerb").mockResolvedValueOnce({ skills: [{ name: "ship", description: "d", source: "user" }] } as never);
+    await run(host("skills.list"));
+    expect(reports()).toEqual([{ status: "done", card_id: "card-7", result: { ok: true, cardId: "card-7", skills: [["ship", "d", "user"]] } }]);
+    expect(control.syncNow).not.toHaveBeenCalled();
+  });
+
   it("fails an unknown verb, with the failure in the result", async () => {
     await run(host("card.explode"));
     const error = "This host doesn't run card.explode. Update it to the newest Weft.";

@@ -2,7 +2,7 @@
 
 Status: **design** (2026-11-01, merged with "one engine, two transports" 2026-11-02). Phase H1 is in progress; H2 (the
 `host` command) is built ([below](#the-host-command-h2-as-built)), and so is H3, `hostFor` and one open card
-([below](#hostfor-and-one-open-card-h3-as-built)). It follows on from [weft-worker.md](weft-worker.md#worker-projects-on-the-desktop-board),
+([below](#hostfor-and-one-open-card-h3-as-built)), and H3b, composer parity ([below](#composer-parity-h3b-as-built)). It follows on from [weft-worker.md](weft-worker.md#worker-projects-on-the-desktop-board),
 where a Worker project shows on the desktop board but most of what a local project gets drops out.
 
 ## The problem
@@ -32,7 +32,10 @@ engine: the daemon runs the same `lib/runner.ts`.
 | Wait, Me first, Others first | `permission` | as host verbs, on the tile and in the thread (H3) |
 | Stop a subagent task | `tasks/[taskId]/stop` | `card.stopTask` (H3) |
 | Attachments in a reply | `/api/attachments` | images and PDFs travel as blobs on `reply`, `run` and `new_card` (`lib/attachment-transfer.ts`, 2026-11-02) |
-| Send later, review panel, skills chip | `desktop: true` | none |
+| Send later | `desktop: true` | `card.schedule` / `card.unschedule`, the worker's daemon holding the timer (H3b) |
+| "/" skills list | `/api/skills?cwd=` | `skills.list`, the worker's own list for the card's checkout (H3b) |
+| Plan limits meter | this Mac's limits log | the card's own reading, from the worker's CLI (H3b) |
+| Review panel, skills chip | `desktop: true` | none |
 | Show rail, editor | Board's open card | the show rail, in Board's own open card (H3); the editor waits for file verbs (H4) |
 | Backlog | Backlog column | none |
 | Streaming | SSE | a 2.5 s poll |
@@ -199,6 +202,53 @@ board ── hostFor(card.cwd) ─┬─ localHost: thread = localTransport, act
   and drawers on a worker project (H4); the pane as the native `BrowserPane` (the worker's page still frames through
   `WebPane`); a `card.create` verb, so New thread still sends `run`.
 
+### Composer parity (H3b, as built)
+
+```
+composer ── useThreadTransport() ─┬─ localTransport:  api.skills(cwd) · api.schedule/unschedule · api.uploadAttachment   (unchanged)
+                                  ├─ workerTransport: askWorker("skills.list") · actOnWorker("card.schedule") · upload on this Mac
+                                  └─ useCloudTransport (weft.zip): cloudHostActs ─ host rows for the card's Mac or worker; no upload
+host (Mac inbox / worker daemon): runVerb ─▶ verbResult(verb, cardId, reply) ─▶ cloud_commands.result (skills fitted to 3 KB)
+```
+
+- **Three verbs** (`lib/host-api`, none elevated): `card.schedule` and `card.unschedule` (`card-schedule.ts`, over
+  `lib/scheduler.ts`, so the local route `app/api/cards/[id]/scheduled` is now a wrapper) and `skills.list`
+  (`skills-list.ts`, `listSkills` of the card's own folder; `/api/skills?card=` mounts it locally). The worker's daemon runs
+  `startScheduler({ briefs: false })` through `onRecovered` (`lib/worker-daemon.ts`), once recovery has published and
+  resumed, so a message that came due while it was down goes on the first check without racing a resumed turn; no
+  briefs, because baking one is a model call.
+- **Limits.** `at` is the board's clock and the host compares it with its own, so a skewed host sends early or late by
+  the skew and refuses a time it thinks has passed. Two daemons on one data folder would both send a due message; one
+  daemon per store is assumed, as for the rest of the engine.
+- **Shell rule.** `remoteRefusal` refuses a `card.schedule` whose text is a `!` command, with the shell's message. A due
+  message is sent with `sendUserMessage`, never run, so this is belt and braces. `card.schedule`'s text carries pasted files
+  (`textArgOf`), so a scheduled screenshot travels like a reply's.
+- **Results.** A read verb's answer goes in `result` (`verbResult`, `lib/host-command.ts`): the skills as
+  `[name, description, source]` triples, descriptions cut (120, 60, 30, then none) until the JSON is under 3,000 bytes,
+  then the list cut with `more` (`lib/skills-wire.ts`). The size is stored jsonb's, not JSON text's: `jsonbBytes` counts
+  from above (varlena and container headers, a JEntry per element, alignment padding), held to 3,600 bytes, so the whole
+  `result` stays at least 250 bytes under the 4,096 cap (tested up to 2,000 skills; not checked against a live Postgres). Chosen over the snapshot because the list is per folder and only
+  wanted when "/" opens, `result` already exists (no migration), and the snapshot row (`worker_put_project`) is H4's and
+  doesn't exist yet. `commandResult` now selects `result`; `askWorker` (`lib/worker-acts.ts`) posts and waits up to
+  ACT_WAIT, failing rather than queueing a read, and `workerSkills` keeps a card's list 5 minutes.
+- **Transport.** `ThreadTransport` gains `listSkills`, `schedule`, `unschedule` and `upload`. `useSkillTypeahead`,
+  `useReplySchedule` and the composer's uploads (`insertFiles` takes the upload, `Composer`, `ComposerBottomBar`) call them.
+  A worker card's upload is this Mac's `/api/attachments`: the file travels on the send, as before. A schedule a worker
+  hasn't taken stays drawn until it runs. `ThreadPanel` offers Send later when the transport has `schedule` (`cloudHost.can("schedule")`
+  is true too); the review panel stays desktop-only. A worker card's Send later times come from that worker's cards
+  (`sameHostCards`).
+- **weft.zip.** `useCloudTransport` gets ↑ edit, Send fresh, Send later and "/" through `lib/cloud-host-acts.ts` (rows
+  built in the browser by `lib/host-row.ts`, which `hostCommand` shares but which doesn't load `HOST_API`). Each is
+  followed to its result like `actOnWorker`: a refusal rejects, so the box puts the text back; one not taken yet is
+  `{ queued }`, so Send later's row stays drawn; a queued ↑ edit or Fresh refused later shows as a failed row with its text
+  above the box (`cardReplies`). The "/" list uses the same 5-minute `skillCache` as a worker card; the reply box now draws the card's
+  scheduled rows, so `WebReplyStatus` dropped its "After this turn" list, and `boardCommands` keeps `host` rows off the
+  strip. **No upload on the web:** the Mac's inbox can't receive a file yet, so a pasted file's node says it can't be
+  attached here (`NO_UPLOAD`).
+- **Limits.** `StatusStrip cardLimits` (set off the desktop transport) reads the card's own `stats.fiveHour`/`sevenDay`,
+  which the worker's CLI reported, instead of this Mac's limits log. Follow-up: the model pickers' "at its cap" marks
+  (`useLimitedModels`) are still this Mac's on a worker card, and a worker could publish its whole limits log.
+
 ## Security
 
 - **`lib/guard.ts` stays the local gate.** `/api/host/*` is behind `guard()`, and verbs that grant power (answer,
@@ -313,7 +363,8 @@ Each ships on its own.
    calls the same two. Still open: sealing the blobs, `cloud-inbox.ts` as a receiver, the web composer as a sender.
 3. **H3 `hostFor` and one open card** (built 2026-11-02, [as built](#hostfor-and-one-open-card-h3-as-built)). `ProjectHost`,
    `LocalHost`, `CloudHost`; worker tiles lose `readOnly`; the open card merges, so worker cards get the show rail, the
-   pickers, the menus and ↑ edit.
+   pickers, the menus and ↑ edit. **H3b composer parity** (built 2026-11-02, [as built](#composer-parity-h3b-as-built)): the "/"
+   list, Send later and the limits meter from the card's host, and ↑ edit, Fresh, Send later and "/" on weft.zip.
 4. **H4 project reads.** Snapshot rows (`worker_put_project`) for quality, pile, streak and Backlog; the editor through
    file verbs with results.
 5. **H5 one host program.** The inbox, heartbeat and publish merged across the Mac and the daemon; one card schema; the

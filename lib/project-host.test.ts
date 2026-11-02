@@ -16,6 +16,8 @@ const api = vi.hoisted(() => ({
   switchBackend: vi.fn(),
   rerunModel: vi.fn(),
   stopTask: vi.fn(),
+  schedule: vi.fn(),
+  unschedule: vi.fn(),
 }));
 const call = vi.hoisted(() => vi.fn());
 vi.mock("./client", () => ({ api, call }));
@@ -23,7 +25,7 @@ vi.mock("./client", () => ({ api, call }));
 const actOnWorker = vi.hoisted(() => vi.fn(() => Promise.resolve()));
 vi.mock("./worker-transport", () => ({ actOnWorker, workerToolSource: "worker tools", workerTransport: { desktop: false } }));
 
-const { cloudHost, hostFor, hostOf, localHost } = await import("./project-host");
+const { cloudHost, hostFor, hostOf, localHost, sameHostCards } = await import("./project-host");
 const { localTransport } = await import("./thread-transport");
 const { localToolSource } = await import("./use-tool-result");
 
@@ -90,6 +92,9 @@ describe("localHost", () => {
     ["card.switchBackend", { id: "c1", backend: "claude", replay: false, model: "opus" }, api.switchBackend, ["c1", "claude", false, "opus"]],
     ["card.rerunModel", { id: "c1", model: "sonnet" }, api.rerunModel, ["c1", "sonnet"]],
     ["card.stopTask", { id: "c1", taskId: "t1" }, api.stopTask, ["c1", "t1"]],
+    ["card.schedule", { id: "c1", text: "later", at: "5000" }, api.schedule, ["c1", "later", 5000]],
+    ["card.unschedule", { id: "c1", messageId: "m1" }, api.unschedule, ["c1", "m1"]],
+    ["skills.list", { id: "c 1" }, call, ["GET", "/api/skills?card=c%201"]],
   ] as const)("%s goes to the route the board has always called", async (verb, args, fn, expected) => {
     const run = localHost.act as (verb: string, args: unknown) => Promise<void>;
     await run(verb, args);
@@ -109,9 +114,11 @@ describe("cloudHost", () => {
     expect(cloudHost.tools).toBe("worker tools");
   });
 
-  it("has none of this Mac's own features", () => {
+  it("has none of this Mac's own features, but holds Send later's timer itself", () => {
     for (const feature of ["files", "shots", "pane", "folder", "agent", "shell", "skills", "share", "delete", "login", "vault", "dev"] as const)
       expect(cloudHost.can(feature)).toBe(false);
+    expect(cloudHost.can("schedule")).toBe(true);
+    expect(localHost.can("schedule")).toBe(true);
   });
 
   it("sends every verb to the worker, never the local call", async () => {
@@ -123,5 +130,22 @@ describe("cloudHost", () => {
 
   it("trims the menu to what a worker backs", () => {
     expect(cloudHost.menu([{ id: "rename", label: "Rename…" }, { id: "delete", label: "Delete…" }])).toEqual([{ id: "rename", label: "Rename…" }]);
+  });
+});
+
+describe("sameHostCards", () => {
+  const mac = { cwd: "/dev/app" };
+  const w1 = { cwd: "worker://w1/app" };
+  const w1b = { cwd: "worker://w1/site" };
+  const w2 = { cwd: "worker://w2/app" };
+  const all = [mac, w1, w1b, w2] as Parameters<typeof sameHostCards>[0];
+
+  it("is every card for one of this Mac's, as before", () => {
+    expect(sameHostCards(all, mac)).toBe(all);
+  });
+
+  it("is only that worker's cards for a worker's", () => {
+    expect(sameHostCards(all, w1)).toEqual([w1, w1b]);
+    expect(sameHostCards(all, w2)).toEqual([w2]);
   });
 });

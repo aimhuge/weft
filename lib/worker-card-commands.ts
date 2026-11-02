@@ -6,7 +6,7 @@
 // The old kinds stay on the wire for the phone and weft.zip. What only a worker does stays here as validation: an
 // answer's folder grant, and mode's CARD_MODES (never bypassPermissions).
 import { answerBody, answerGrant, replyBody, stopBody, type CloudCommandRow } from "./cloud-commands";
-import { hostResult, readHostCommand, remoteRefusal, textArgOf, type HostDone } from "./host-command";
+import { readHostCommand, remoteRefusal, textArgOf, verbResult, type HostDone } from "./host-command";
 import type { Card } from "./types";
 import type { Engine } from "./worker-daemon";
 import { inputBody, modeBody, qaBody } from "./worker-commands";
@@ -78,8 +78,8 @@ export function createCardCommands(engine: Engine) {
       const card = ownCard(body.args.id);
       const refused = remoteRefusal(body);
       if (refused) throw new Error(refused);
-      await engine.host(body.verb, await received(command, body.args, textArgOf(body.verb)));
-      return { cardId: card.id, result: hostResult(card.id) };
+      const reply = await engine.host(body.verb, await received(command, body.args, textArgOf(body.verb)));
+      return { cardId: card.id, result: verbResult(body.verb, card.id, reply) };
     },
   };
 }

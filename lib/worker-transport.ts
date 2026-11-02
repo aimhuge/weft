@@ -6,13 +6,15 @@
 // page every couple of seconds. Like the web's, it leaves out what only the machine running the card can do.
 import { useEffect, useRef } from "react";
 import { apiFetch } from "./api-client";
+import { api } from "./client";
 import type { HostArgs } from "./host-command";
 import { firstNow, otherFirstNow, stopNow, waitNow } from "./optimistic-cards";
 import { applyThreadEvent, type ThreadPage } from "./thread-page";
 import type { Device } from "./simulator-devices";
 import type { PageUpdate, ThreadTransport } from "./thread-transport";
+import { skillCache } from "./skills-wire";
 import type { ToolResultSource } from "./use-tool-result";
-import { actOnWorker, postWorkerAction } from "./worker-acts";
+import { actOnWorker, askWorker, postWorkerAction } from "./worker-acts";
 import { useShownItems } from "./worker-shown";
 
 export const THREAD_POLL_MS = 2_500;
@@ -70,6 +72,12 @@ function useWorkerLive(cardId: string, onUpdate: (update: PageUpdate) => void) {
   }, [cardId]);
 }
 
+// The "/" list of a worker's card, as its worker finds it for the card's checkout (kept a few minutes per card).
+const skillLists = skillCache((cardId) => askWorker("skills.list", { id: cardId }));
+export const workerSkills = (cardId: string | undefined, now?: number) => skillLists.get(cardId, now);
+// For tests: forget the lists.
+export const forgetWorkerSkills = () => skillLists.forget();
+
 // What a worker runs from a board, as host verbs (lib/host-api). Left out on purpose: `shell` and `grantFolder`, which
 // remoteRefusal (lib/host-command.ts) refuses from the network because they widen what the card can touch (a folder
 // grant still rides inside an answer: grantInAnswer), and `listFiles`, which waits for file verbs (project-hosts.md H4).
@@ -88,6 +96,13 @@ export const workerTransport: ThreadTransport = {
   putFirst: (cardId, pendingId) => firstNow(cardId, pendingId, () => actOnWorker("card.permission.first", pending(cardId, pendingId))),
   putHolderFirst: (cardId, pendingId) => otherFirstNow(cardId, pendingId, () => actOnWorker("card.permission.otherFirst", pending(cardId, pendingId))),
   stopTask: (cardId, taskId) => actOnWorker("card.stopTask", { id: cardId, taskId }).then(() => {}),
+  listSkills: (cardId) => workerSkills(cardId),
+  // The worker holds the timer, so a scheduled message goes even while this Mac sleeps. The text's pasted files
+  // travel with it, as a reply's do (lib/worker-board.ts).
+  schedule: (cardId, text, at) => actOnWorker("card.schedule", { id: cardId, text, at }),
+  unschedule: (cardId, messageId) => actOnWorker("card.unschedule", { id: cardId, messageId }),
+  // Saved on this Mac, as for a local card: the file goes up to the worker with the message that pastes it.
+  upload: (file, name, onProgress) => api.uploadAttachment(file, name, onProgress),
   grantInAnswer: true,
   cardEdits: true,
   desktop: false,

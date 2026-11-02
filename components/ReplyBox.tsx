@@ -358,6 +358,7 @@ export default function ReplyBox({
         ref={composer}
         variant="reply"
         cwd={cwd}
+        cardId={cardId}
         dropTarget={cardId}
         initial={initial}
         autoFocus={autoFocus}

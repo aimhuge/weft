@@ -39,6 +39,32 @@ describe("recovering after a restart", () => {
     expect(d.log).toHaveBeenCalledWith("Weft Worker: 1 turn(s) cut off by the last restart");
   });
 
+  it("starts the timed work (Send later's scheduler) only once the resumed turns are under way", async () => {
+    const order: string[] = [];
+    let release!: () => void;
+    const flushed = new Promise<void>((r) => (release = r));
+    const d = makeDeps({ onRecovered: () => void order.push("scheduler") });
+    d.flush.mockImplementationOnce(() => (order.push("flush"), flushed));
+    d.resume.mockImplementation(() => void order.push("resume"));
+    const stop = d.daemon.start();
+    await Promise.resolve();
+    expect(order).toEqual(["flush"]);
+    release();
+    await vi.waitFor(() => expect(order).toEqual(["flush", "resume", "scheduler"]));
+    await stop();
+  });
+
+  it("still starts the timed work when recovering fails", async () => {
+    const onRecovered = vi.fn();
+    const d = makeDeps({ onRecovered });
+    d.recover.mockImplementation(() => {
+      throw new Error("bad board");
+    });
+    const stop = d.daemon.start();
+    await vi.waitFor(() => expect(onRecovered).toHaveBeenCalledTimes(1));
+    await stop();
+  });
+
   it("still reads commands when recovering fails", async () => {
     const d = makeDeps();
     d.recover.mockImplementation(() => {

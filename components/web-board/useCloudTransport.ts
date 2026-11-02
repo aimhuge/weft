@@ -4,15 +4,19 @@
 // and ReplyBox: pages read from cloud_thread_items through the visitor's session (RLS gates them), live changes from
 // the board's one Realtime channel (useWebBoard hands them on through `bus`), blob refs signed as the items draw (the
 // URLs come through CloudBlobContext, so a URL landing redraws the items without making a new transport), and
-// Stop sent as a command for the Mac that runs the card (lib/cloud-inbox.ts). What only the Mac itself can do (a "!"
-// command, ↑ edit, Wait, a subagent's Stop) is left out, so its views don't offer it. Folder grants go inside the answer.
+// Stop sent as a command for the Mac that runs the card (lib/cloud-inbox.ts). ↑ edit, Send fresh, Send later and the
+// "/" list go as host verbs to whichever machine runs it (lib/cloud-host-acts.ts). What only the Mac itself can do (a
+// "!" command, Wait, a subagent's Stop) is left out, so its views don't offer it, and so are pasted files: the Mac's
+// inbox doesn't bring a file over yet, so the composer says they can't be attached here. Folder grants go inside the answer.
 import { createContext, useContext, useEffect, useMemo, useRef } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { NewCommand } from "@/lib/cloud-commands";
+import { stopCommand, type NewCommand } from "@/lib/cloud-commands";
+import { cloudHostActs, type CardTarget } from "@/lib/cloud-host-acts";
 import { THREAD_PAGE_SIZE, type CloudThreadItemRow } from "@/lib/cloud-sync-types";
 import { pageFromRows, pageUpdateFor, type CloudItemChange } from "@/lib/cloud-thread-page";
 import type { PageUpdate, ThreadTransport } from "@/lib/thread-transport";
 import type { ThreadItem } from "@/lib/types";
+import type { CommandResult } from "@/lib/worker-command-wait";
 import { collectBlobRefs, rewriteBlobRefs } from "@/lib/web-board";
 
 // Where useWebBoard's channel sends thread item changes, and its reconnects, to the open thread.
@@ -34,9 +38,17 @@ export interface CloudTransportInput {
   client: SupabaseClient;
   orgId: string;
   bus: ItemBus;
-  // Puts a command in for the Mac that runs the card; resolves to why it couldn't, or null.
-  stopCommand: (cardId: string) => NewCommand | string;
-  sendCommand: (row: NewCommand) => Promise<string | null>;
+  // Where the card runs, to address a command to, or why it can't be.
+  target: (cardId: string) => CardTarget | string;
+  // Puts a command in for the machine that runs the card; resolves to its id, or why it couldn't be sent.
+  sendCommand: (row: NewCommand) => Promise<{ id: string } | string>;
+}
+
+// How a command went, read with the visitor's session (RLS: their own rows).
+async function readCommand(client: SupabaseClient, id: string): Promise<CommandResult> {
+  const { data, error } = await client.from("cloud_commands").select("status, error, result").eq("id", id).maybeSingle<CommandResult>();
+  if (error || !data) throw new Error(error?.message ?? "That command is gone.");
+  return data;
 }
 
 function useCloudLive(bus: ItemBus, cardId: string, onUpdate: (update: PageUpdate) => void, onReconnect: () => void) {
@@ -72,9 +84,10 @@ function useCloudView(items: ThreadItem[]) {
   return useMemo(() => rewriteBlobRefs(items, urls), [items, urls]);
 }
 
-export function useCloudTransport({ client, orgId, bus, stopCommand, sendCommand }: CloudTransportInput): ThreadTransport {
-  return useMemo<ThreadTransport>(
-    () => ({
+export function useCloudTransport({ client, orgId, bus, target, sendCommand }: CloudTransportInput): ThreadTransport {
+  return useMemo<ThreadTransport>(() => {
+    const acts = cloudHostActs({ target, insert: sendCommand, read: (id) => readCommand(client, id) });
+    return {
       async loadPage(cardId, before) {
         let query = client.from("cloud_thread_items").select("card_id, seq, item").eq("org_id", orgId).eq("card_id", cardId);
         if (before !== undefined) query = query.lt("seq", before);
@@ -86,13 +99,17 @@ export function useCloudTransport({ client, orgId, bus, stopCommand, sendCommand
       },
       useView: useCloudView,
       async stop(cardId) {
-        const row = stopCommand(cardId);
-        const failed = typeof row === "string" ? row : await sendCommand(row);
-        if (failed) throw new Error(failed);
+        const to = target(cardId);
+        const sent = typeof to === "string" ? to : await sendCommand(stopCommand(to));
+        if (typeof sent === "string") throw new Error(sent);
       },
+      editLast: acts.editLast,
+      fresh: acts.fresh,
+      schedule: acts.schedule,
+      unschedule: acts.unschedule,
+      listSkills: acts.listSkills,
       grantInAnswer: true,
       desktop: false,
-    }),
-    [client, orgId, bus, stopCommand, sendCommand],
-  );
+    };
+  }, [client, orgId, bus, target, sendCommand]);
 }

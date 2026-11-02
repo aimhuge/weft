@@ -18,7 +18,10 @@ export type HostVerb =
   | "card.permission.otherFirst"
   | "card.switchBackend"
   | "card.rerunModel"
-  | "card.stopTask";
+  | "card.stopTask"
+  | "card.schedule"
+  | "card.unschedule"
+  | "skills.list";
 
 /**
  * One verb's handler: a plain function of its args. `elevated` says the verb grants power, so a local route checks it

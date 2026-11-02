@@ -74,6 +74,7 @@ async function loadEngine() {
     import("../lib/worker-device-link"),
     import("../lib/mobile-app"),
     import("../lib/host-api"),
+    import("../lib/scheduler"),
   ]);
   return { store, parts };
 }
@@ -88,7 +89,7 @@ async function startCommand() {
   const config = readWorkerConfig(home);
   if (!config) throw new Error("This box isn't enrolled yet. Run: weft-worker enrol <token>");
   const { store, parts } = await loadEngine();
-  const [{ startFeatureCard }, , , { subscribe }, { createDaemon }, { createPublisher }, paths, github, folderGrant, { createBlobStore }, { SHOW_DIR }, { setPageUpload }, { busyCards }, { recoverCards }, { resumeInterrupted }, { openScreenChannel, screenInput, setFastScreen, setScreenChannel }, { sendInput }, { openFastScreen }, { setDeviceLink }, { deviceLink }, { isMobileApp }, { runVerb }] = parts;
+  const [{ startFeatureCard }, , , { subscribe }, { createDaemon }, { createPublisher }, paths, github, folderGrant, { createBlobStore }, { SHOW_DIR }, { setPageUpload }, { busyCards }, { recoverCards }, { resumeInterrupted }, { openScreenChannel, screenInput, setFastScreen, setScreenChannel }, { sendInput }, { openFastScreen }, { setDeviceLink }, { deviceLink }, { isMobileApp }, { runVerb }, { startScheduler }] = parts;
   const reg = registry(rpc, config.key);
   // The public half goes on the worker's row, so Settings → Sync → Workers can seal a Claude token to this box.
   const keys = workerSealKeys(home, newSealKeys);
@@ -113,6 +114,9 @@ async function startCommand() {
     listenForPushes: (hooks) => listenForPushes(client, hooks, console.log),
     presence: (hooks) => joinPresence(client, config.key, hooks, console.log),
     onCardChange: subscribe,
+    // Send later on this worker's cards (card.schedule): the messages are saved on the cards, so one whose time passed
+    // while the daemon was down goes on the first check, after recovery, so it can't race a turn being resumed.
+    onRecovered: () => startScheduler({ briefs: false }),
     engine: {
       start: async (body) => {
         const card = await startFeatureCard(body);

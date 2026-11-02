@@ -257,6 +257,12 @@ export const commandText = (command: Pick<CloudCommandRow, "payload" | "kind">):
   if (p.text) return p.text;
   if (p.prompt) return p.prompt;
   if (kind === "stop") return "Stop";
+  // A host verb's typed text: an ↑ edit's or Send later's text, Send fresh's message (lib/host-row.ts).
+  if (kind === "host") {
+    const args = (command.payload as { args?: { text?: unknown; message?: unknown } }).args;
+    const typed = args?.text ?? args?.message;
+    return typeof typed === "string" ? typed : "";
+  }
   if (kind === "answer") {
     if (p.answers) {
       const joined = Object.values(p.answers).join("; ");

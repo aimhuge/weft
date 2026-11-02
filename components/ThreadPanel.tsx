@@ -25,7 +25,7 @@ import CopilotEmpty from "./CopilotEmpty";
 //
 // The same panel opens a card on weft.zip, inside a transport that isn't the desktop's (lib/thread-transport.ts):
 // there the title, CLI and mode are read-only and the card's own actions (skills, star, archive, delete, the review
-// panel, Send later) stay on the Mac, so the callbacks for them are left out.
+// panel) stay on the Mac, so the callbacks for them are left out. Send later follows the transport (threadExtras).
 // The header's ⏰: put the thread on a cron (docs/architecture/crons.md).
 const ThreadCronButton = guarded(() => import("./ThreadCronButton"), { what: "cron button" });
 const ReviewPanel = guarded(() => import("./ReviewPanel"), { what: "review panel", className: "mx-4 my-2" });
@@ -152,7 +152,7 @@ export default function ThreadPanel({
         onOpenSettings={onOpenSettings}
         onDeleted={onDeleted}
         findable
-        {...threadExtras(card, pilot, items, onSend, desktop ? resets : undefined, footer)}
+        {...threadExtras(card, pilot, items, onSend, desktop, transport.schedule && (resets ?? {}), footer)}
       />
     </aside>
   );
@@ -273,19 +273,21 @@ function HeaderMeta({ card, pilot, desktop, own, onMode, onTags }: {
 }
 
 // What the thread shows that differs for the copilot: no review panel or Send later, a few suggestions to start.
-// Without resets (off the desktop) there's no Send later or review panel either; the caller's footer shows instead.
-function threadExtras(card: Card, pilot: boolean, items: ThreadItem[], onSend: (text: string) => Promise<void>, resets: PlanResets | undefined, footer: ReactNode) {
+// Send later wherever the card's host can hold the message (the transport's schedule: this Mac, a worker, weft.zip
+// through the Mac); the review panel only on the desktop, and elsewhere the caller's footer shows instead.
+function threadExtras(card: Card, pilot: boolean, items: ThreadItem[], onSend: (text: string) => Promise<void>, desktop: boolean, resets: PlanResets | undefined, footer: ReactNode) {
   if (pilot) {
     return {
       empty: <CopilotEmpty onAsk={(text) => void onSend(text).catch(() => {})} />,
       placeholder: "Ask about your threads, or tell me what to start",
     };
   }
-  if (!resets) return { footer };
+  const scheduling = resets && { resets };
+  if (!desktop) return { footer, scheduling };
   return {
     footer: card.column === "review" && <ReviewPanel card={card} items={items} onSend={onSend} />,
     replaceReply: card.column === "review" && Boolean(card.review),
-    scheduling: { resets },
+    scheduling,
   };
 }
 

@@ -11,7 +11,7 @@ import { syncNow } from "./cloud-sync";
 import { deviceId } from "./device-id";
 import { applyFolderGrant } from "./folder-grant";
 import { needsElevation, runVerb, type HostVerb } from "./host-api";
-import { hostResult, readHostCommand, remoteRefusal, type HostDone, type HostPayload } from "./host-command";
+import { hostResult, readHostCommand, remoteRefusal, verbResult, type HostDone, type HostPayload } from "./host-command";
 import { getCard } from "./store";
 import { pairingStatus } from "./sync-security";
 import type { Card } from "./types";
@@ -99,6 +99,8 @@ async function elevatedProblem(verb: HostVerb, args: Record<string, unknown>): P
   return pairing.approvers > 0 && !pairing.webApprovals ? ELEVATED_REFUSED : null;
 }
 
+const READS = new Set<HostVerb>(["skills.list"]);
+
 // Any verb in lib/host-api, on a card in a synced folder. The author check (created_by) is the inbox's, as for every
 // kind; a host command adds no second one.
 export async function hostFromCommand(command: CloudCommandRow): Promise<HostDone> {
@@ -110,7 +112,8 @@ export async function hostFromCommand(command: CloudCommandRow): Promise<HostDon
   const card = macCard(body.args.id, command.folder, "The copilot can't be reached from the web.");
   const refused = remoteRefusal(body) ?? (await elevatedProblem(body.verb, body.args));
   if (refused) throw new Error(refused);
-  await runVerb(body.verb, { ...body.args, id: card.id });
-  syncNow();
-  return { cardId: card.id, result: hostResult(card.id) };
+  const reply = await runVerb(body.verb, { ...body.args, id: card.id });
+  // A read changes no card, so there's nothing to sync.
+  if (!READS.has(body.verb)) syncNow();
+  return { cardId: card.id, result: verbResult(body.verb, card.id, reply) };
 }

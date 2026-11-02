@@ -3,6 +3,8 @@
 export interface CommandResult {
   status: "pending" | "claimed" | "done" | "failed";
   error: string | null;
+  // What the host wrote back for a host command (lib/host-command.ts HostResult); a read verb's answer rides in it.
+  result?: unknown;
 }
 
 const EVERY_MS = 2_000;

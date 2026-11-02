@@ -251,7 +251,8 @@ export async function sendUpdate(body: { workerId: string }, client: SupabaseCli
 
 // How a command sent to a worker went, for the forms that wait on it (lib/worker-command-wait.ts).
 export async function commandResult(id: string, client: SupabaseClient = accountClient()): Promise<CommandResult> {
-  const { data, error } = await client.from("cloud_commands").select("status, error").eq("id", id).maybeSingle<CommandResult>();
+  // result is a host command's answer (lib/host-command.ts): a read verb's, like the skills a worker's card has.
+  const { data, error } = await client.from("cloud_commands").select("status, error, result").eq("id", id).maybeSingle<CommandResult>();
   if (error) throw new Error(`Couldn't read that command: ${error.message}`);
   if (!data) throw new Error("That command is gone.");
   return data;

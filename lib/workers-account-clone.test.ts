@@ -119,6 +119,11 @@ describe("commandResult", () => {
     expect(await commandResult("cmd-7", fakeClient({ command: { status: "failed", error: "no" } }))).toEqual({ status: "failed", error: "no" });
   });
 
+  it("reads a host command's result too", async () => {
+    const result = { ok: true, cardId: "c", skills: [["ship", "", "user"]] };
+    expect(await commandResult("cmd-7", fakeClient({ command: { status: "done", error: null, result } }))).toEqual({ status: "done", error: null, result });
+  });
+
   it("says when it can't", async () => {
     await expect(commandResult("cmd-7", fakeClient({ commandError: { message: "denied" } }))).rejects.toThrow("Couldn't read that command: denied");
     await expect(commandResult("cmd-7", fakeClient())).rejects.toThrow("That command is gone.");

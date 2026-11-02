@@ -7,13 +7,13 @@
 // (a "!" command, ↑ edit, folder grants, Wait), the way ToolResultSourceContext swaps where a long tool output comes from.
 import { createContext, useContext } from "react";
 import { apiFetch } from "./api-client";
-import { api } from "./client";
+import { api, type UploadedAttachment } from "./client";
 import { firstNow, otherFirstNow, stopNow, waitNow } from "./optimistic-cards";
 import { filesApi } from "./client-files";
 import { THREAD_PAGE_SIZE } from "./cloud-sync-types";
 import type { FindMatch } from "./thread-find";
 import { applyThreadEvent, type ThreadPage } from "./thread-page";
-import type { BoardEvent, ThreadItem } from "./types";
+import type { BoardEvent, SkillInfo, ThreadItem } from "./types";
 import { useBoardEvents } from "./use-events";
 
 // A change to the loaded window, applied to whatever it holds when it lands.
@@ -45,13 +45,22 @@ export interface ThreadTransport {
   stopTask?: (cardId: string, taskId: string) => Promise<void>;
   // The card folder's files, so file names in the thread link to the editor column (lib/use-file-index.ts).
   listFiles?: (cardId: string) => Promise<string[]>;
+  // The composer's "/" list: the skills of the card's folder on the machine that runs it (the skills.list verb). Off
+  // a card (the New thread dialog) there's no cardId, and cwd names the folder. Left out, "/" offers nothing.
+  listSkills?: (cardId: string | undefined, cwd: string | undefined) => Promise<SkillInfo[]>;
+  // Send later: the machine that runs the card holds the message until its time (card.schedule, card.unschedule).
+  schedule?: (cardId: string, text: string, at: number) => Promise<unknown>;
+  unschedule?: (cardId: string, messageId: string) => Promise<unknown>;
+  // A file pasted or dropped in the composer, saved where the message's text can point at it. Left out, the
+  // composer says files can't be attached here.
+  upload?: (file: Blob, name: string, onProgress?: (fraction: number) => void) => Promise<UploadedAttachment>;
   // A card on another machine: This card and Always go inside the answer, as one command, and that machine works out
   // the folder from its own pending request. "Read from" on a question has no such command, so it isn't offered.
   grantInAnswer?: boolean;
   // The card's own controls in the thread's header reach its host: rename, tags, star, archive and the model picker
   // (lib/project-host.ts). The desktop's always do; a worker card's do too (lib/worker-transport.ts); weft.zip's don't.
   cardEdits?: boolean;
-  // Send later, the review panel and the copilot's starters: the desktop board's own.
+  // The review panel, the skills chip and the copilot's starters: the desktop board's own.
   desktop: boolean;
 }
 
@@ -103,6 +112,11 @@ export const localTransport: ThreadTransport = {
   putHolderFirst: otherFirstNow,
   stopTask: (cardId, taskId) => api.stopTask(cardId, taskId).then(() => {}),
   listFiles: (cardId) => filesApi.list(cardId),
+  // The same /api/skills?cwd= read the composer always made, so a local card's "/" list is unchanged.
+  listSkills: (_cardId, cwd) => api.skills(cwd).then((r) => r.skills),
+  schedule: (cardId, text, at) => api.schedule(cardId, text, at),
+  unschedule: (cardId, messageId) => api.unschedule(cardId, messageId),
+  upload: (file, name, onProgress) => api.uploadAttachment(file, name, onProgress),
   cardEdits: true,
   desktop: true,
 };

@@ -15,6 +15,8 @@ export const db = {
   // Why an insert into or delete from cloud_commands fails, or null to let it through.
   insertError: null as string | null,
   deleteError: null as string | null,
+  // How a command read back by id went (the web's host verbs follow theirs, lib/cloud-host-acts.ts).
+  command: { status: "done", error: null } as { status: string; error: string | null; result?: unknown },
 };
 
 // A module-scoped object the mock factory closes over: each created client's Realtime handlers, so a
@@ -69,7 +71,8 @@ function query(table: string) {
     order: () => builder,
     limit: (n: number) => ((limit = n), builder),
     overrideTypes: () => builder,
-    maybeSingle: () => Promise.resolve({ data: db.toolOutput === null ? null : { result: db.toolOutput }, error: null }),
+    maybeSingle: () =>
+      Promise.resolve(table === "cloud_commands" ? { data: db.command, error: null } : { data: db.toolOutput === null ? null : { result: db.toolOutput }, error: null }),
     then: (resolve: (v: unknown) => unknown) => Promise.resolve(answer()).then(resolve),
   };
   return builder;
@@ -176,6 +179,7 @@ export function resetHarness() {
   db.signed = {};
   db.insertError = null;
   db.deleteError = null;
+  db.command = { status: "done", error: null };
   mockState.inserts.length = 0;
   mockState.deletes.length = 0;
 }

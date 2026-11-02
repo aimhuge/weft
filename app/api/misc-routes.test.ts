@@ -143,6 +143,16 @@ describe("GET /skills", () => {
     await skillsRoute.GET(req("/skills", { headers: READ }));
     expect(skills.listSkills).toHaveBeenLastCalledWith(undefined);
   });
+
+  it("lists a card's own folder's skills for ?card=, as the skills.list verb, and 404s a card that isn't here", async () => {
+    cardStore.set("c9", { id: "c9", cwd: "/dev/card" });
+    const res = await skillsRoute.GET(req("/skills?card=c9", { headers: READ }));
+    expect(await res.json()).toEqual({ skills: [{ name: "weft:done", description: "d", source: "weft" }] });
+    expect(skills.listSkills).toHaveBeenLastCalledWith("/dev/card");
+    const gone = await skillsRoute.GET(req("/skills?card=nope", { headers: READ }));
+    expect(gone.status).toBe(404);
+    cardStore.delete("c9");
+  });
 });
 
 describe("GET /quality", () => {

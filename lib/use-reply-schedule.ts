@@ -4,9 +4,11 @@
 // handoff. The composer ref and the draft saver are passed in so the box is the only state owner.
 // Each change draws at once: a scheduled message's row shows (and the box empties) before the server answers, an
 // X'd one's row leaves, so a second click can't schedule it twice. A refusal undoes the drawing.
+// Both go to the machine that runs the card, through the thread's transport (lib/thread-transport.ts): this Mac's
+// server, or a worker that holds the timer itself. One a worker hasn't taken yet stays drawn until it does.
 import { useCallback, useState, type RefObject } from "react";
-import { api } from "@/lib/client";
 import { canSendNow } from "@/lib/schedule";
+import { useThreadTransport } from "@/lib/thread-transport";
 import { STOP_SETTLE_MS } from "@/lib/optimistic-cards";
 import type { ComposerHandle } from "@/lib/composer-handle";
 import type { ScheduledMessage } from "@/lib/types";
@@ -35,6 +37,11 @@ export interface ScheduledSendNow {
 }
 
 let lastKey = 0;
+export const NO_SCHEDULE = "Send later isn't offered here.";
+const settled = async (reply: unknown) => {
+  const queued = (reply as { queued?: Promise<unknown> } | undefined)?.queued;
+  if (queued) await queued;
+};
 // A row being added is the server's once the server's list has a message with its text and time.
 const same = (a: ScheduledMessage, b: ScheduledMessage) => a.at === b.at && a.text.trim() === b.text.trim();
 
@@ -49,6 +56,15 @@ export function useReplySchedule(
   const [adding, setAdding] = useState<ScheduledMessage[]>([]);
   const [dropping, setDropping] = useState<ReadonlySet<string>>(new Set());
   const [sending, setSending] = useState(false);
+  const transport = useThreadTransport();
+  const schedule = useCallback(
+    (text: string, at: number) => (transport.schedule ? transport.schedule(cardId, text, at) : Promise.reject(new Error(NO_SCHEDULE))),
+    [cardId, transport],
+  );
+  const unschedule = useCallback(
+    (messageId: string) => (transport.unschedule ? transport.unschedule(cardId, messageId) : Promise.reject(new Error(NO_SCHEDULE))),
+    [cardId, transport],
+  );
   const undrop = useCallback((messageId: string) => {
     setDropping((prev) => {
       const next = new Set(prev);
@@ -62,12 +78,14 @@ export function useReplySchedule(
       // A row still on its way to the server has no id there yet.
       if (messageId.startsWith("pending-")) return;
       setDropping((prev) => new Set(prev).add(messageId));
-      api.unschedule(cardId, messageId).catch((err: unknown) => {
-        undrop(messageId);
-        setError(err);
-      });
+      unschedule(messageId)
+        .then(settled)
+        .catch((err: unknown) => {
+          undrop(messageId);
+          setError(err);
+        });
     },
-    [cardId, setError, undrop],
+    [setError, undrop, unschedule],
   );
 
   // Unscheduled first, so the turn the stop ends can't send it too (lib/runner.ts sendHeld); a send that fails after
@@ -78,7 +96,8 @@ export function useReplySchedule(
       setSending(true);
       setDropping((prev) => new Set(prev).add(m.id));
       try {
-        await api.unschedule(cardId, m.id);
+        // Not held for a worker that hasn't taken it: it runs its commands in order, so the send still comes after.
+        await unschedule(m.id);
       } catch (err) {
         undrop(m.id);
         setError(err);
@@ -96,7 +115,7 @@ export function useReplySchedule(
         setSending(false);
       }
     },
-    [cardId, composer, sending, setError, thread, undrop],
+    [composer, sending, setError, thread, undrop, unschedule],
   );
 
   const takeBackScheduled = useCallback(
@@ -131,7 +150,7 @@ export function useReplySchedule(
       saveDraft("", true);
       composer.current?.clear();
       try {
-        await api.schedule(cardId, text, at);
+        await settled(await schedule(text, at));
         setTimeout(unadd, STOP_SETTLE_MS);
       } catch (err) {
         unadd();
@@ -142,7 +161,7 @@ export function useReplySchedule(
         setError(err);
       }
     },
-    [cardId, composer, saveDraft, setError],
+    [composer, saveDraft, schedule, setError],
   );
 
   const scheduled = [...server.filter((m) => !dropping.has(m.id)), ...adding.filter((a) => !server.some((m) => same(m, a)))];

@@ -96,6 +96,18 @@ export function actOnWorker(verb: HostVerb, args: HostArgs): Promise<ActResult> 
   return sent;
 }
 
+// A verb run for its answer (a read like skills.list): what the worker wrote to the row's `result`. Nothing to keep
+// drawn meanwhile, so one the worker hasn't run within ACT_WAIT isn't queued for later: it fails, and the caller asks
+// again next time.
+export async function askWorker(verb: HostVerb, args: HostArgs): Promise<unknown> {
+  const { commandId } = await postWorkerAction({ action: "host", cardId: args.id, verb, args });
+  if (!commandId) throw new Error("Your worker didn't take that.");
+  const done = await waitForCommand(() => commandStatus(commandId), ACT_WAIT);
+  if (done.status === "done") return done.result;
+  outcome(done);
+  throw new Error("Your worker didn't answer. It may be offline.");
+}
+
 function subscribe(listener: () => void) {
   listeners.add(listener);
   return () => void listeners.delete(listener);
