@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { loginShell, shellEnv, spawnPty } from "./worker-pty";
+import { loadNodePty, loginShell, shellEnv, spawnPty } from "./worker-pty";
 
 describe("spawnPty", () => {
   it("starts a login shell in the folder and passes its pty through", () => {
@@ -31,8 +31,9 @@ describe("spawnPty", () => {
     expect(loginShell({}, "win32")).toBe("powershell.exe");
   });
 
+  // Only the load: spawning a real shell differs by platform (a missing folder throws on macOS, exits on Linux).
   it("loads node-pty by default", () => {
-    expect(() => spawnPty("/nonexistent-weft-dir", 80, 24)).toThrow();
+    expect(typeof loadNodePty().spawn).toBe("function");
   });
 });
 

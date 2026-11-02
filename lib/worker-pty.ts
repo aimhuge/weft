@@ -27,7 +27,9 @@ export function shellEnv(env: Record<string, string | undefined>): Record<string
   return { ...Object.fromEntries(kept), TERM: "xterm-256color" };
 }
 
-export function spawnPty(cwd: string, cols: number, rows: number, load: () => NodePty = () => createRequire(import.meta.url)("node-pty") as NodePty): Pty {
+export const loadNodePty = () => createRequire(import.meta.url)("node-pty") as NodePty;
+
+export function spawnPty(cwd: string, cols: number, rows: number, load: () => NodePty = loadNodePty): Pty {
   const proc = load().spawn(loginShell(process.env), ["-l"], { name: "xterm-256color", cols, rows, cwd, env: shellEnv(process.env) });
   return {
     onData: (fn) => void proc.onData(fn),
