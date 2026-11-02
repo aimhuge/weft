@@ -345,8 +345,8 @@ card.page and the open_url item carry blob:sha256:<hex>#anchor (lib/worker-publi
   and `additionalDirectories`. The show folder is neither, because a card's cwd is its checkout. Nothing on the desktop
   exempts it: an Accept edits card there asks about `~/.weft/show` too. A desktop card goes through because it runs in
   Auto or YOLO, or waits for you. A worker defaults to Accept edits, never runs YOLO, and has nobody at the box, so
-  `sessionDirs` (`lib/worker-pane.ts`) adds `SHOW_DIR` to `additionalDirectories` on a worker only. It makes the folder
-  first, because the CLI drops a directory that doesn't exist and asks again. Reads and edits of a page stop asking too.
+  `sessionDirs` (`lib/show-dir.ts`) adds `SHOW_DIR` to `additionalDirectories` for every thread, desktop and worker alike
+  (2026-10-31; the desktop asked too). It makes the folder first, because the CLI drops a directory that doesn't exist and asks again. Reads and edits of a page stop asking too.
   Spares get it as well, since it's set where a session's options are built (`lib/runner-session.ts`).
   - **Auto too.** The folder doesn't stop every prompt: a card in Auto on `m1mini` still asked about an Edit in the show
     folder, though Auto on a Mac doesn't. So `ownPageCall` (`lib/worker-pane.ts`) answers a file tool inside `SHOW_DIR`
