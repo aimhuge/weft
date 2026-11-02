@@ -149,6 +149,8 @@ describe("localHost", () => {
     ["card.create", { id: "n1", prompt: "p", start: false }, api.create, [{ prompt: "p", start: false }]],
     ["dev.open", { id: "c1" }, call, ["POST", "/api/cards/c1/dev", { action: "open" }]],
     ["dev.stop", { id: "c1" }, api.devAction, ["c1", "stop"]],
+    ["dev.restart", { id: "c1" }, call, ["POST", "/api/cards/c1/dev", { action: "rerun" }]],
+    ["dev.log", { id: "c1" }, call, ["POST", "/api/cards/c1/dev", { action: "log" }]],
   ] as const)("%s goes to the route the board has always called", async (verb, args, fn, expected) => {
     const run = localHost.act as (verb: string, args: unknown) => Promise<void>;
     await run(verb, args);

@@ -12,6 +12,9 @@ export interface MiniApp {
   name: string;
   url: string;
   addedAt: number;
+  // The page it was saved from when that wasn't its own address: a worker card's blob page (blob:sha256:<hex>), kept
+  // here on this Mac as a file (lib/mini-app-worker.ts), so the pane's Save as app knows that page is this app.
+  source?: string;
   // Its share link as last read from Supabase (lib/app-share.ts), so the Share dialog and My mini apps draw at once.
   share?: AppShareMemo;
 }
@@ -37,6 +40,19 @@ export function cleanAppUrl(raw: unknown): string | undefined {
     return undefined;
   }
 }
+
+// The sha of a page a worker card showed (a blob in the workspace's store, lib/worker-pane.ts), or null for any other
+// address. Saving one as an app brings the page to this Mac first (lib/mini-app-worker.ts).
+export function blobPageSha(raw: unknown): string | null {
+  return typeof raw === "string" ? (/^blob:sha256:([0-9a-f]{64})(#.*)?$/.exec(raw.trim())?.[1] ?? null) : null;
+}
+
+// An app saved from a worker card's page lives in ~/.weft/apps/worker-<sha16>/ under that id (lib/mini-app-worker.ts),
+// on this Mac and every Mac cloud sync brings it to. The page was written off this Mac and ran in a CSP sandbox there,
+// so nothing gives it more here: no data bridge in the pane (electron/app-data-frame.cjs), no manifest synced or shared.
+export const WORKER_APP_PREFIX = "worker-";
+export const workerAppId = (sha: string) => `${WORKER_APP_PREFIX}${sha.slice(0, 16)}`;
+export const isWorkerAppFolder = (folder: string) => (folder.split(/[\\/]/).filter(Boolean).pop() ?? "").toLowerCase().startsWith(WORKER_APP_PREFIX);
 
 export function cleanAppName(raw: unknown): string | undefined {
   const name = typeof raw === "string" ? raw.replace(/\s+/g, " ").trim().slice(0, MAX_APP_NAME).trim() : "";
@@ -70,7 +86,7 @@ export function appGlyph(name: string): { text: string; emoji: boolean; hue: num
 export function appFor(apps: readonly MiniApp[], url: string | undefined): MiniApp | undefined {
   if (!url) return undefined;
   const bare = (u: string) => u.replace(/#.*$/, "");
-  const exact = apps.find((a) => a.url === url) ?? apps.find((a) => bare(a.url) === bare(url));
+  const exact = apps.find((a) => a.url === url) ?? apps.find((a) => bare(a.url) === bare(url) || (a.source !== undefined && bare(a.source) === bare(url)));
   if (exact) return exact;
   return apps
     .filter((a) => url.startsWith(bare(a.url).replace(/\/?$/, "/")))

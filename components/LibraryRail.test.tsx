@@ -41,15 +41,23 @@ vi.mock("@/lib/use-services", () => ({ useServices: () => ({ services: [], loade
 
 // Drawers' bodies are stubs — they're gated behind their own open state and
 // the test only checks the rail's nav buttons.
-vi.mock("./VaultDrawer", () => ({ default: () => null }));
+const { drawn, keep } = vi.hoisted(() => {
+  const drawn = new Map<string, Record<string, unknown>>();
+  const keep = (name: string) => (props: Record<string, unknown>) => {
+    drawn.set(name, props);
+    return null;
+  };
+  return { drawn, keep };
+});
+vi.mock("./VaultDrawer", () => ({ default: keep("vault") }));
 vi.mock("./WebhooksDrawer", () => ({ default: () => null }));
 vi.mock("./VercelDrawer", () => ({ default: () => null }));
 vi.mock("./SupabaseDrawer", () => ({ default: () => null }));
 vi.mock("./CloudflareDrawer", () => ({ default: () => null }));
 vi.mock("./BlastcpDrawer", () => ({ default: () => null }));
-vi.mock("./GithubDrawer", () => ({ default: () => null }));
+vi.mock("./GithubDrawer", () => ({ default: keep("github") }));
 vi.mock("./SlackDrawer", () => ({ default: () => null }));
-vi.mock("./ServicesDrawer", () => ({ default: () => null }));
+vi.mock("./ServicesDrawer", () => ({ default: keep("services") }));
 vi.mock("./TagsDrawer", () => ({ default: () => null }));
 
 import { setBoardMode } from "@/lib/board-prefs";
@@ -82,6 +90,26 @@ const baseProps: Parameters<typeof SideRail>[0] = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  drawn.clear();
+});
+
+// A worker project's per-repo drawers read this Mac's checkout of its repo; Services and GitHub the project itself.
+describe("LibraryRail on a worker project", () => {
+  const worker = { ...baseProps.ctx, project: "worker://w1/app" };
+
+  it("gives the vault this Mac's checkout of the project's repo", () => {
+    render(<SideRail {...baseProps} open="vault" ctx={worker} />);
+    expect(drawn.get("vault")?.project).toBe("/Users/me/dev/app");
+  });
+
+  it("gives Services and GitHub the worker project, and asks GitHub about it", async () => {
+    const { useGithub } = await import("@/lib/use-github");
+    render(<SideRail {...baseProps} open="services" ctx={worker} />);
+    expect(drawn.get("services")?.project).toBe("worker://w1/app");
+    expect(vi.mocked(useGithub)).toHaveBeenCalledWith(["/Users/me/dev/app", "worker://w1/app"], false);
+    render(<SideRail {...baseProps} open="github" ctx={worker} />);
+    expect(drawn.get("github")?.project).toBe("worker://w1/app");
+  });
 });
 
 describe("LibraryRail admin group", () => {

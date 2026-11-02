@@ -21,7 +21,7 @@ import { APP_SLUG_RE, type AppOwner, type AppShareState, type AppShareUpdate } f
 import { isAppFolderUrl, listAppFolderFiles, reducedManifest, secretHit, type AppManifestUpload, type AppFolderFile } from "./app-folder";
 import { listApps } from "./mini-app-store";
 import { pageWithAssets } from "./page-assets";
-import type { MiniApp } from "./mini-apps";
+import { isWorkerAppFolder, type MiniApp } from "./mini-apps";
 import { isCardShareMode, newShareId } from "./share-types";
 import { currentPage, pageForWrite, readShare, sameFiles, sameManifest, stateOf, type Ready } from "./app-share-row";
 import { pageBytes, quotaErrorText, roomFor } from "./app-share-quota";
@@ -59,8 +59,9 @@ function explainLocalHost(u: URL): string {
 }
 
 function filePage(url: string, home?: string): AppPage {
+  // A worker card's page is shared as the one page it is, never as a folder with a manifest's powers.
   const folder = isAppFolderUrl(url);
-  if (folder) {
+  if (folder && !isWorkerAppFolder(folder.folder)) {
     try {
       const files = listAppFolderFiles(folder.folder);
       const manifest = readManifest(folder.folder);

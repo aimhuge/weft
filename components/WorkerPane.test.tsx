@@ -24,6 +24,13 @@ vi.mock("./QaSwitch", () => ({ useQa: () => ({ state: null, on: qa.on, refresh: 
 const sendWorkerAction = vi.hoisted(() => vi.fn(() => Promise.resolve({ commandId: "cmd-1" })));
 vi.mock("@/lib/worker-transport", () => ({ sendWorkerAction }));
 
+vi.mock("./SaveAppButton", () => ({
+  default: (props: Record<string, unknown>) => {
+    seen.set("save app", props);
+    return null;
+  },
+}));
+
 const { default: WorkerPane } = await import("./WorkerPane");
 
 const card = { id: "w1", title: "App", cwd: "worker://m1/app", mobileApp: true } as Card;
@@ -46,6 +53,17 @@ describe("WorkerPane", () => {
     expect(pane.onClose).toBe(onClose);
     await (pane.onScreenInput as (input: unknown) => Promise<void>)({ kind: "watch" });
     expect(sendWorkerAction).toHaveBeenCalledWith({ action: "input", cardId: "w1", input: { kind: "watch" } });
+  });
+
+  it("offers Save as app on a page the card wrote, and not on anything else", () => {
+    const url = `blob:sha256:${"a".repeat(64)}`;
+    const { rerender } = render(<WorkerPane card={card} url={url} browser={browser} marks={null} onClose={vi.fn()} />);
+    render(<>{seen.get("web pane")!.actions as React.ReactNode}</>);
+    expect(seen.get("save app")).toEqual({ url, title: "App" });
+    seen.clear();
+    rerender(<WorkerPane card={card} url="https://example.com" browser={browser} marks={null} onClose={vi.fn()} />);
+    render(<>{seen.get("web pane")!.actions as React.ReactNode}</>);
+    expect(seen.has("save app")).toBe(false);
   });
 
   it("is this Mac's native pane while Local Simulator runs the app here", () => {
