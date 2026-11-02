@@ -18,7 +18,7 @@ export const LINE_PURPOSE = "rtc-line";
 export const lineTopic = (token: string) => `worker-line:${token}`;
 
 export const TERMINAL_REFUSAL =
-  "A terminal on a worker opens only with your approval: Touch ID in Weft on your Mac, which this worker must trust (weft-worker trust).";
+  "A terminal on a worker opens only with your approval: Touch ID in Weft on your Mac, the Mac this worker was paired with (weft-worker enrol <code> --re-pair on the box).";
 
 // The terminal channel's messages (lib/host-line-terminal.ts on the worker, lib/line-terminal.ts on the board).
 export type TerminalIn =

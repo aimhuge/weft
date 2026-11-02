@@ -10,10 +10,12 @@ export interface NonceStore {
   save(nonces: Record<string, number>): void;
 }
 
+// A worker's book is the file below; a Mac's asks Electron main (electron/widen-nonces.cjs), hence the promises.
 export interface NonceBook {
-  has(nonce: string): boolean;
+  has(nonce: string): boolean | Promise<boolean>;
   // Marks a nonce used until `until`; false when it was already used, so of two racing commands only one runs.
-  take(nonce: string, until: number): boolean;
+  // `issuedAt` is the approval's own time, for a book that refuses what was signed before it could know.
+  take(nonce: string, until: number, issuedAt?: number): boolean | Promise<boolean>;
 }
 
 export function nonceBook(store: NonceStore, now: () => number = Date.now): NonceBook {

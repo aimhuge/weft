@@ -8,9 +8,17 @@ import type { HostVerb } from "../host-api";
 import { hostResult, readHostCommand, remoteRefusal, textArgOf, verbResult, type HostDone, type HostPayload } from "../host-command";
 import { carriesValue, valueResult, type Carry } from "../host-result";
 import type { Card } from "../types";
-import { widenChangeOf, withoutWiden } from "../widen";
+import { widenChangeOf, withoutWiden, type WidenChange } from "../widen";
 import type { WidenTarget } from "../widen-check";
 import type { Done } from "./identity";
+
+// What a signed widening leaves unsigned: a card.update's body without the fields its approval covered, or null when the
+// approval covers the verb whole (a "!" line, one sent later).
+function unsignedRest({ verb, args }: HostPayload, change: WidenChange): Record<string, unknown> | null {
+  if (verb !== "card.update") return null;
+  const body = Object.fromEntries(Object.entries(args.body as Record<string, unknown>).filter(([key]) => !(key in change)));
+  return { ...withoutWiden(args), body };
+}
 
 export type KindHandler = (command: CloudCommandRow) => Done | Promise<Done>;
 export type KindTable = Record<string, KindHandler>;
@@ -105,13 +113,17 @@ export function cardKinds(rules: CardRules) {
   }
 
   // What remoteRefusal turns away runs only with a signed approval for exactly that change (args.widen), which also
-  // stands in for the Mac's elevated rule; anything else passes that rule as before.
+  // stands in for the Mac's elevated rule over what it signed, and only that: the rest of the command (another mode in
+  // the same card.update) still passes that rule, so an approval for a new agent can't carry an unsigned mode change.
   async function allowed(body: HostPayload, card: Card) {
     const refused = remoteRefusal(body);
     const change = refused ? widenChangeOf(body) : null;
     if (refused && change && rules.widen && body.args.widen !== undefined) {
       const problem = await rules.widen({ card: card.id, verb: body.verb, change }, body.args.widen, refused);
       if (problem) throw new Error(problem);
+      const rest = unsignedRest(body, change);
+      const why = rest && (await rules.elevated?.(body.verb, rest));
+      if (why) throw new Error(why);
       return;
     }
     const why = refused ?? (await rules.elevated?.(body.verb, body.args));

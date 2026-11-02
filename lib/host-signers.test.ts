@@ -2,10 +2,11 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { createHostSigners, endorseMessage, ENDORSE_MAX_AGE_MS, NO_MAC, readEndorsement, type Endorsement } from "./host-signers";
+import { createHostSigners, endorseMessage, ENDORSE_MAX_AGE_MS, ENDORSE_USED, NO_MAC, readEndorsement, type Endorsement } from "./host-signers";
 import { macSigner, memoryMacs } from "./mac-signer.harness";
 import { makePasskey } from "./passkey.harness";
 import { PASSKEY_ORIGIN, PASSKEY_RP_ID } from "./passkey-verify";
+import { fileNonceStore, nonceBook } from "./widen-nonces";
 
 const ORIGINS = [{ origin: PASSKEY_ORIGIN, rpId: PASSKEY_RP_ID }];
 const home = () => path.join(fs.mkdtempSync(path.join(os.tmpdir(), "weft-signers-")), "home");
@@ -50,10 +51,24 @@ describe("createHostSigners: passkeys the Mac endorsed", () => {
     expect((await s.verifyPasskey(body("hello", await pk.sign("other")))).ok).toBe(false);
     expect((await s.verifyPasskey({ ...body("hello", await pk.sign("hello")), credId: "bm9wZQ" })).reason).toMatch(/isn't trusted/);
     // A second endorsement of the same key keeps its counter.
-    await s.endorse((endorsedAgain(mac, e)).raw, "w1", NOW);
+    await s.endorse((endorsedAgain(mac, { ...e, issuedAt: NOW + 1 })).raw, "w1", NOW);
     expect(s.read()).toHaveLength(2);
     await s.endorse((endorsedAgain(mac, { ...e, revoke: true })).raw, "w1", NOW);
     expect(s.read().map((p) => p.device)).toEqual(["browser-0"]);
+  });
+
+  it("runs each endorsement once, so one read off an earlier pin row can't undo a revoke, even after a restart", async () => {
+    const mac = macSigner();
+    const h = home();
+    // The book a worker keeps beside passkeys.json, on the test's clock.
+    const seen = () => nonceBook(fileNonceStore(path.join(h, "endorsements-seen.json")), () => NOW);
+    const s = createHostSigners(h, ORIGINS, memoryMacs([mac.key]), seen());
+    const { e, raw } = await endorsed(mac);
+    await s.endorse(raw, "w1", NOW);
+    await s.endorse(endorsedAgain(mac, { ...e, revoke: true, issuedAt: NOW + 1 }).raw, "w1", NOW);
+    await expect(s.endorse(raw, "w1", NOW + 2)).rejects.toThrow(ENDORSE_USED);
+    await expect(createHostSigners(h, ORIGINS, memoryMacs([mac.key]), seen()).endorse(raw, "w1", NOW + 2)).rejects.toThrow(ENDORSE_USED);
+    expect(s.read()).toEqual([]);
   });
 
   it("refuses an endorsement for another worker, an old one, a bent one, or one no pinned Mac signed", async () => {

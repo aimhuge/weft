@@ -16,7 +16,17 @@ vi.mock("./new-card", async () => (await import("./cloud-inbox.harness")).newCar
 vi.mock("./runner", async () => (await import("./cloud-inbox.harness")).runnerMock);
 vi.mock("./host-api", async (real) => (await import("./cloud-inbox.harness")).hostApiMock(real));
 vi.mock("./store", async () => (await import("./cloud-inbox.harness")).storeMock);
-const shellMock = vi.hoisted(() => vi.fn((route: string) => Promise.resolve(route === "/pairing/status" ? { approvers: 1, webApprovals: false } : { ok: true })));
+// Main's nonce book (electron/widen-nonces.cjs): a nonce is spent once.
+const spent = vi.hoisted(() => new Set<string>());
+const shellMock = vi.hoisted(() =>
+  vi.fn((route: string, body?: Record<string, unknown>) => {
+    if (route === "/pairing/status") return Promise.resolve({ approvers: 1, webApprovals: false });
+    if (route !== "/pairing/widen-nonce") return Promise.resolve({ ok: true });
+    const fresh = !spent.has(String(body?.nonce));
+    spent.add(String(body?.nonce));
+    return Promise.resolve({ ok: fresh });
+  }),
+);
 vi.mock("./browser-shell", () => ({ shell: shellMock }));
 
 const { refreshCloudInbox } = await import("./cloud-inbox");
@@ -52,7 +62,8 @@ describe("a signed widening from the web", () => {
     expect(control.verbs).toEqual([{ verb: "card.update", args: { id: "card-7", body: { cwd: "/dev/site" } } }]);
     const message = widenMessage({ host: "mac-1", card: "card-7", verb: "card.update", change: { cwd: "/dev/site" }, nonce: a.nonce, issuedAt: a.issuedAt });
     expect(shellMock).toHaveBeenCalledWith("/pairing/verify", { device: "mac-1", message, sig: "c2ln" });
-    // The same approval again is spent.
+    expect(shellMock).toHaveBeenCalledWith("/pairing/widen-nonce", { nonce: a.nonce, issuedAt: a.issuedAt });
+    // The same approval again is spent: main says so, not a file in ~/.weft a thread could edit.
     await run(host({ body: { cwd: "/dev/site" }, widen: a }));
     expect(reports()[0]?.error).toMatch(/used already/);
   });

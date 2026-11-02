@@ -37,8 +37,38 @@ function readWidenRequest(raw) {
   if (!VERBS.has(verb)) return "That isn't a change main signs.";
   if (!change || typeof change !== "object" || Array.isArray(change) || !Object.keys(change).length) return "That approval changes nothing.";
   if (Object.keys(change).some((k) => !CHANGE_KEYS.has(k))) return "That approval names a change main doesn't know.";
+  return changeProblem(change) ?? { host, card, verb, change };
+}
+
+// What the prompt shows of each field, at most: main signs nothing it would have to cut or bend to show, so the words
+// Touch ID asks over are the whole of what's signed (a long "!" line can't hide its tail past an ellipsis).
+const SHOWN = { cwd: 120, readScope: 120, shell: 160, schedule: 160, terminal: 60, agent: 60 };
+// Control and format characters: the prompt would show them as a space (a newline in a "!" line is a second command).
+const HIDDEN = /[\p{Cc}\p{Cf}\u2028\u2029]/u;
+
+function shownProblem(value, max) {
+  if (typeof value !== "string") return "That change isn't text main can show.";
+  if (value.length > max) return "That change is too long to show in full in Touch ID. Make it on the Mac or the box itself.";
+  return HIDDEN.test(value) ? "That change has characters Touch ID can't show, so main won't sign it." : null;
+}
+
+// Each field the type its host takes and short and plain enough to show whole; null when it all is.
+function changeProblem(change) {
   if (strings(change).some((s) => BIDI.test(s))) return "That change has text-direction characters, so main won't sign it.";
-  return { host, card, verb, change };
+  for (const [key, max] of Object.entries(SHOWN)) {
+    if (change[key] === undefined || (key === "agent" && change[key] === null)) continue;
+    const why = shownProblem(change[key], max);
+    if (why) return why;
+  }
+  if (change.permissionMode !== undefined && change.permissionMode !== "bypassPermissions") return "That isn't a mode main signs.";
+  return change.create === undefined ? null : createProblem(change.create);
+}
+
+// A new thread: its agent and folder shown, its first message signed as sent.
+function createProblem(c) {
+  if (!c || typeof c !== "object" || Array.isArray(c) || Object.keys(c).some((k) => !["agent", "folder", "prompt"].includes(k))) return "That new thread isn't one main signs.";
+  // The first message isn't in the prompt (the network may start a thread with any message); the agent and folder are.
+  return shownProblem(c.agent, 60) ?? shownProblem(c.folder, 60) ?? (typeof c.prompt === "string" ? null : "That new thread has no first message.");
 }
 
 // One line of prompt text: control and format characters out, whitespace collapsed, cut to `max`.

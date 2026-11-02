@@ -1,6 +1,7 @@
 // What a Weft Worker adds to signed widening (docs/architecture/project-hosts.md#signed-widening-as-built): its own
 // pins (lib/host-signers.ts) and nonces, and its limits. A card's new folder names one of its project folders, never a
 // path, and runs in that checkout; a read grant stays under its work root. The check itself is lib/widen-check.ts.
+import fs from "node:fs";
 import path from "node:path";
 import { TERMINAL_REFUSAL } from "./host-line-protocol";
 import type { HostSigners } from "./host-signers";
@@ -28,6 +29,15 @@ const inside = (child: string, root: string) => {
   return !rel.startsWith("..") && !path.isAbsolute(rel);
 };
 
+// Where a path really lands, symlinks followed, so a link inside a project (`app/up -> /`) isn't under the root.
+const real = (p: string) => {
+  try {
+    return fs.realpathSync(p);
+  } catch {
+    return path.resolve(p);
+  }
+};
+
 // A worker's limits on a new value: a folder (a card's, a terminal's) is one of its projects by name, a read grant is under its work root. A new
 // thread's folder is the run's own, which lib/worker-paths.ts repoPath already keeps under the root.
 export function workerConfine(w: Pick<WorkerWiden, "projects" | "root">, change: WidenChange): string | null {
@@ -35,7 +45,7 @@ export function workerConfine(w: Pick<WorkerWiden, "projects" | "root">, change:
     if (folder !== undefined && !w.projects().includes(folder)) return `${folder} isn't a project on this worker. Pick one of its folders.`;
   }
   const read = change.readScope;
-  const outside = read !== undefined && (typeof read !== "string" || !path.isAbsolute(read) || !inside(path.resolve(read), w.root));
+  const outside = read !== undefined && (typeof read !== "string" || !path.isAbsolute(read) || !inside(path.resolve(read), w.root) || !inside(real(read), real(w.root)));
   return outside ? "A worker card reads only from its own projects' folders." : null;
 }
 

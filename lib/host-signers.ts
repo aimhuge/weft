@@ -9,12 +9,14 @@
 //
 // Both files sit in the worker's home, mode 600; threads on the worker can't read or write that home
 // (lib/secret-guard-files.ts sealedInHome).
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { verifyPasskeyAssertion, type PasskeyOrigin } from "./passkey-verify";
 import { canonical } from "./widen";
 import type { Verified } from "./widen-check";
 import { macKeysAt, macSigned, type MacKeys } from "./worker-mac-keys";
+import { fileNonceStore, nonceBook, type NonceBook } from "./widen-nonces";
 
 export interface PinnedPasskey {
   device: string;
@@ -28,8 +30,10 @@ export interface PinnedPasskey {
 
 
 export const ENDORSE_V = "weft-endorse-v1";
-// An endorsement is signed for one worker and used at once: an old one can't be sent again to undo a revoke.
+// An endorsement is signed for one worker and used at once, and each runs once (`seen`): one read off an earlier `pin`
+// row can't be sent again to undo a revoke.
 export const ENDORSE_MAX_AGE_MS = 10 * 60_000;
+export const ENDORSE_USED = "That endorsement was used already. Send it again from your Mac.";
 
 // A Mac's statement that a passkey may (or may no longer) widen on this worker.
 export interface Endorsement {
@@ -60,7 +64,12 @@ export function readEndorsement(raw: unknown): (Endorsement & { mac: string; sig
 
 export const NO_MAC = "This worker trusts no Mac yet: pair it again from Settings → Devices (weft-worker enrol <code> --re-pair on the box).";
 
-export function createHostSigners(home: string, origins: readonly PasskeyOrigin[], macs: MacKeys = macKeysAt(home)) {
+export function createHostSigners(
+  home: string,
+  origins: readonly PasskeyOrigin[],
+  macs: MacKeys = macKeysAt(home),
+  seen: NonceBook = nonceBook(fileNonceStore(path.join(home, "endorsements-seen.json"))),
+) {
   const file = path.join(home, "passkeys.json");
 
   function read(): PinnedPasskey[] {
@@ -104,6 +113,8 @@ export function createHostSigners(home: string, origins: readonly PasskeyOrigin[
     if (Math.abs(now - e.issuedAt) > ENDORSE_MAX_AGE_MS) throw new Error("That endorsement is too old. Send it again from your Mac.");
     const checked = await verify({ device: e.mac, message: endorseMessage(e), sig: e.sig });
     if (!checked.ok) throw new Error(checked.reason);
+    const once = createHash("sha256").update(e.sig).digest("base64url");
+    if (!(await seen.take(once, e.issuedAt + ENDORSE_MAX_AGE_MS + 60_000, e.issuedAt))) throw new Error(ENDORSE_USED);
     const passkeys = read();
     const others = passkeys.filter((p) => !(p.device === e.device && p.credId === e.credId));
     const known = passkeys.find((p) => p.device === e.device && p.credId === e.credId && p.publicKey === e.publicKey);

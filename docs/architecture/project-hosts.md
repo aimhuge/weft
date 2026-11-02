@@ -673,11 +673,14 @@ pins, so each refusal lifts when, and only when, the command carries a fresh app
   signature }` (a passkey on sign.weft.zip). `readWidenAuth` takes only those shapes.
 - **The check** (`lib/widen-check.ts` `widenProblem`, called from `lib/host/dispatch.ts` `cardKinds.host` through
   `CardRules.widen`, from `lib/create-widen.ts` for a new thread and from the terminal): within `WIDEN_TTL_MS` (2 minutes)
-  of the host's clock; a nonce not seen (`lib/widen-nonces.ts`, a file in the host's own data folder, `widen-nonces.json`,
-  so a restart can't replay one, taken after the signature checks out so of two racing commands only one runs); no bidi
+  of the host's clock; a nonce not seen (on a worker `lib/widen-nonces.ts`, `widen-nonces.json` in its sealed home; on a
+  Mac Electron main's `electron/widen-nonces.cjs` over `POST /pairing/widen-nonce`, in memory and sealed with safeStorage
+  in `~/.weft/vault/`, failing closed when that copy is gone or garbled, so neither a restart nor a thread rewriting a file
+  replays one; taken after the signature checks out so of two racing commands only one runs); no bidi
   override in any string of the change; the host's limits; then the signature over the message **rebuilt from the host's
-  own id**. A signed widening also stands in for the Mac's `ELEVATED_REFUSED` rule. Without an approval the host says
-  exactly what it said before.
+  own id**. A signed widening also stands in for the Mac's `ELEVATED_REFUSED` rule over what it signed, and only that:
+  the rest of the same `card.update` (another mode beside a signed agent) still meets the rule (`unsignedRest`,
+  `lib/host/dispatch.ts`). Without an approval the host says exactly what it said before.
 - **Passkeys sign less**, as for answers (mobile-security.md): skipping permission prompts and a read grant stay on the
   Mac or a phone (`PASSKEY_TOO_WIDE`), and a shell line `phoneOnly` flags (a vault tool, an agent's config, a skip flag) is
   refused (`PHONE_ONLY`). A passkey can move a card, change its agent, and run or schedule a plain "!" line.
@@ -695,10 +698,15 @@ pins, so each refusal lifts when, and only when, the command carries a fresh app
   this Mac's server inserts them as a `pin` command (`lib/worker-pin.ts`, `POST /api/worker-board {action:"pin"}`,
   elevated). The worker checks each endorsement against the pairing Mac's key (fresh within 10 minutes, for itself) and
   keeps the passkey and its counter in `passkeys.json` (mode 600, sealed from threads like the rest of its home); a
-  `revoke: true` endorsement unpins it.
+  `revoke: true` endorsement unpins it. Each endorsement runs once (`endorsements-seen.json`), so one read off an earlier
+  `pin` row can't be sent again to undo a revoke. A read grant's path is checked with symlinks followed.
 - **The desktop's prompt** is main's own words over exactly the fields it signs (`readWidenRequest`, `widenPrompt`): "run
   the shell command make test, for card 1a2b3c4d on the host 7f3e…". Main's copy of the message is proven byte for byte
-  equal to @weft/client's (`electron/widen-sign.test.ts`). Board window only, never the control server a thread can call.
+  equal to @weft/client's (`electron/widen-sign.test.ts`). Main signs nothing the prompt would cut or bend: a field
+  longer than it shows (a "!" line over 160 characters), a control or format character (a newline is a second command),
+  or a value of the wrong type is refused rather than shown as "…" or a space. A new thread's first message isn't in the
+  prompt (the network may start any thread with any message); its agent and folder are. Board window only, never the
+  control server a thread can call.
 - **Where the board signs** (`lib/widen-signer.ts`): `actOnLine` signs before it routes, so every caller gets it: the
   menu's `agent:*` and Skip permissions (`remoteMenu(items, { agent, skip })`), the list view's folder picker (a worker
   card's folders are that worker's projects), the thread's "!" line and Read from (`workerTransportVia` gains `shell` and
@@ -720,8 +728,7 @@ pins, so each refusal lifts when, and only when, the command carries a fresh app
 - **Left refused.** A passkey can't skip permission prompts or grant a folder (H7's rule); a Mac card's terminal from
   weft.zip (the web has no line, and a Mac has no terminal service off the desktop); a new thread with an agent from
   weft.zip (the sign page signs host verbs only); "Always" on a worker's Read from (a grant is per card there); the phone
-  app, which doesn't build the message yet. A thread on a Mac could edit `~/.weft/widen-nonces.json` to replay an
-  approval inside its 2 minutes; the worker's copy is sealed in its home.
+  app, which doesn't build the message yet.
 
 ## Approvals and secrets
 

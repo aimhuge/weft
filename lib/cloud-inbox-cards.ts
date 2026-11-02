@@ -19,19 +19,23 @@ import { applyFolderGrant } from "./folder-grant";
 import { cardKinds, dispatcher, type CardRules } from "./host/dispatch";
 import { needsElevation, runVerb, type HostVerb } from "./host-api";
 import { defaultPermissionMode, syncFolders } from "./settings";
-import { DATA_DIR, getCard } from "./store";
+import { getCard } from "./store";
 import { pairingStatus } from "./sync-security";
 import type { WidenChange } from "./widen";
 import { widenProblem, type Verified } from "./widen-check";
-import { fileNonceStore, nonceBook, type NonceBook } from "./widen-nonces";
+import type { NonceBook } from "./widen-nonces";
 
 // Why a verb that grants power can't run from the web: a phone is paired, and only it approves. The phone can't sign
 // a host verb yet, so until it can, these stay on the Mac (or Settings → Sync lets the web approve).
 export const ELEVATED_REFUSED = "That needs this Mac while a phone is paired: run it here. (Settings → Sync can let the web approve.)";
 
-// The widening approvals this Mac has run, kept on disk so a restart can't replay one (lib/widen-nonces.ts).
-let nonces: NonceBook | null = null;
-const macNonces = () => (nonces ??= nonceBook(fileNonceStore(path.join(DATA_DIR, "widen-nonces.json"))));
+// The widening approvals this Mac has run: Electron main spends each nonce (electron/widen-nonces.cjs), never a file this
+// server reads back, which a thread running as the same user could rewrite to replay an approval. Main is asked only
+// once the signature checked out, so `has` leaves it all to `take`.
+export const macNonces: NonceBook = {
+  has: () => false,
+  take: async (nonce, _until, issuedAt) => (await shell("/pairing/widen-nonce", { nonce, issuedAt })).ok === true,
+};
 
 // A card the web moves goes only to a folder switched on in Settings → Sync: one the web sees, never "/" or ~.
 export function macConfine(change: WidenChange): string | null {
@@ -42,7 +46,7 @@ const macWiden: WidenCheck = (target, auth, refusal) =>
   widenProblem(target, auth, refusal, {
     host: deviceId(),
     now: Date.now(),
-    nonces: macNonces(),
+    nonces: macNonces,
     verify: async (body) => (await shell("/pairing/verify", body)) as Verified,
     passkey: async (body) => (await shell("/pairing/passkey-verify", body)) as Verified,
     confine: macConfine,

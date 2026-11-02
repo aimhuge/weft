@@ -53,7 +53,7 @@ export async function widenProblem(target: WidenTarget, raw: unknown, refusal: s
   const auth = readWidenAuth(raw);
   if (!auth) return refusal;
   if (!freshWiden(auth.issuedAt, deps.now)) return STALE;
-  if (deps.nonces.has(auth.nonce)) return USED;
+  if (await deps.nonces.has(auth.nonce)) return USED;
   if (strings(target.change).some((s) => BIDI.test(s))) return BIDI_REFUSED;
   const kept = deps.confine?.(target.change);
   if (kept) return kept;
@@ -68,5 +68,5 @@ export async function widenProblem(target: WidenTarget, raw: unknown, refusal: s
   }
   if (!verified.ok) return verified.reason ?? "That approval's signature doesn't check out.";
   // Taken after the check, in one step: of two commands racing with one approval, only the first runs.
-  return deps.nonces.take(auth.nonce, auth.issuedAt + WIDEN_TTL_MS + 60_000) ? null : USED;
+  return (await deps.nonces.take(auth.nonce, auth.issuedAt + WIDEN_TTL_MS + 60_000, auth.issuedAt)) ? null : USED;
 }

@@ -1,3 +1,6 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { TERMINAL_REFUSAL } from "./host-line-protocol";
 import { widenMessage } from "./widen";
@@ -32,6 +35,16 @@ describe("workerConfine", () => {
     expect(workerConfine(w, { readScope: "/w/app/docs" })).toBeNull();
     for (const readScope of ["/etc", "w/app", 3, "/w/../etc"]) expect(workerConfine(w, { readScope })).toMatch(/own projects/);
     expect(workerConfine(w, { shell: "ls" })).toBeNull();
+  });
+
+  it("follows symlinks, so a link inside a project doesn't let a read grant out of the root", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "weft-confine-"));
+    fs.mkdirSync(path.join(root, "app", "docs"), { recursive: true });
+    fs.symlinkSync(os.tmpdir(), path.join(root, "app", "up"));
+    const w = widen({ root });
+    expect(workerConfine(w, { readScope: path.join(root, "app", "docs") })).toBeNull();
+    expect(workerConfine(w, { readScope: path.join(root, "app", "up") })).toMatch(/own projects/);
+    fs.rmSync(root, { recursive: true, force: true });
   });
 });
 

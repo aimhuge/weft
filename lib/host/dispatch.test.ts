@@ -112,16 +112,33 @@ describe("a read verb through the core", () => {
 describe("signed widening on the host kind", () => {
   const host = (args: Record<string, unknown>, verb = "card.update") => cmd("host", { verb, args: { id: "k1", ...args } });
 
-  it("runs a widening only once its approval checks out, without the approval, and skips the elevated rule", async () => {
-    const elevated = vi.fn(() => Promise.resolve("phone paired"));
+  it("runs a widening only once its approval checks out, without the approval, and skips the elevated rule for what it signed", async () => {
+    // The Mac's rule refuses anything left in a card.update's body, and the shell.
+    const elevated = vi.fn<NonNullable<CardRules["elevated"]>>((verb, args) =>
+      Promise.resolve(verb === "card.shell" || Object.keys((args.body as object | undefined) ?? {}).length ? "phone paired" : null),
+    );
     const widen = vi.fn<NonNullable<CardRules["widen"]>>(() => Promise.resolve(null));
     const r = rules({ widen, elevated });
     await cardKinds(r).host(host({ body: { cwd: "site" }, widen: { kind: "ed25519" } }));
     expect(widen).toHaveBeenCalledWith({ card: "k1", verb: "card.update", change: { cwd: "site" } }, { kind: "ed25519" }, expect.stringMatching(/folder/));
     expect(r.verb).toHaveBeenCalledWith("card.update", { id: "k1", body: { cwd: "site" } });
-    expect(elevated).not.toHaveBeenCalled();
     await cardKinds(r).host(host({ command: "ls", widen: {} }, "card.shell"));
     expect(r.verb).toHaveBeenLastCalledWith("card.shell", { id: "k1", command: "ls" });
+    expect(elevated).not.toHaveBeenCalledWith("card.shell", expect.anything());
+  });
+
+  it("still holds the unsigned rest of a signed card.update to the elevated rule", async () => {
+    const elevated = vi.fn<NonNullable<CardRules["elevated"]>>((_verb, args) =>
+      Promise.resolve((args.body as Record<string, unknown>).permissionMode ? "phone paired" : null),
+    );
+    const r = rules({ widen: () => Promise.resolve(null), elevated });
+    // An approval for the agent can't carry a mode it never signed past the Mac's phone rule.
+    await expect(cardKinds(r).host(host({ body: { agent: "b", permissionMode: "acceptEdits" }, widen: {} }))).rejects.toThrow("phone paired");
+    expect(elevated).toHaveBeenCalledWith("card.update", { id: "k1", body: { permissionMode: "acceptEdits" } });
+    expect(r.verb).not.toHaveBeenCalled();
+    // Skipping prompts, when it's what was signed, is covered by the approval.
+    await cardKinds(r).host(host({ body: { permissionMode: "bypassPermissions", title: "t" }, widen: {} }));
+    expect(elevated).toHaveBeenLastCalledWith("card.update", { id: "k1", body: { title: "t" } });
   });
 
   it("refuses one whose approval doesn't check out, and keeps today's refusal without one or without a check", async () => {
