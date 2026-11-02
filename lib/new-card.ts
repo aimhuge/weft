@@ -83,7 +83,7 @@ export function createCardFromBody(body: Record<string, unknown>, id?: string): 
     ...marksFromBody(body, cwd),
     // Its own worktree, taken from the pool before its first turn (lib/worktree-start.ts).
     ...isolationFromBody(body),
-  }, id);
+  }, ...(id === undefined ? [] : [id]));
   touchProject(cwd);
   return card;
 }
