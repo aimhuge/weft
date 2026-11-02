@@ -200,6 +200,10 @@ contextBridge.exposeInMainWorld("weft", {
     settings: () => ipcRenderer.invoke("pairing:settings"),
     setSettings: (change) => ipcRenderer.invoke("pairing:set-settings", change),
   },
+  // The desktop's signed approval (electron/desktop-signer.cjs): Touch ID, then main signs; the key stays in main.
+  approval: {
+    sign: (request) => ipcRenderer.invoke("approval:sign", request),
+  },
   // Goose (electron/goose-ipc.cjs): a provider key per provider, sealed in the Keychain. The board sends a key
   // once and never reads one back — the runner's Goose subprocess gets it in its env (electron/goose-env.cjs).
   goose: {

@@ -2,6 +2,7 @@ import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-
 import { bashClaimHooks } from "../bash-claims";
 import { changelogStampHooks } from "../changelog-stamp";
 import { claimHooks } from "../claim-guard";
+import { clipboardGuardMatcher } from "../clipboard-guard";
 import { folderGuardMatcher } from "../folder-guard";
 import { CHECK_GUARD_MATCHER } from "../check-guard";
 import { commitHeldHook } from "../commit-held-guard";
@@ -16,7 +17,8 @@ import { SECRET_GUARD_MATCHER } from "../secret-guard";
 // reach it through their own hooks and Weft's guard route, which runs it with decide() (lib/guards/decide.ts).
 //
 // The hook that turns away reads of .env files and environment dumps in every permission mode, the one that won't
-// restart Weft while other cards' turns run (otherTurns counts them), the one that won't stash, reset --hard or clean
+// restart Weft while other cards' turns run (otherTurns counts them), the one that won't read the clipboard while a
+// pairing code is open (lib/clipboard-guard.ts), the one that won't stash, reset --hard or clean
 // away other cards' uncommitted work, the one that sends tsc and eslint through the pnpm scripts that take turns, the
 // one that refuses an edit making a route file import a module that isn't there yet, the one that reports an edit
 // breaking an import, symbol claims, which ask before an edit to what another busy card is editing (Bash writes too,
@@ -31,7 +33,7 @@ export function guardHooks(otherTurns: () => number, cardId: () => string | unde
   const bash = bashClaimHooks(cardId);
   const stamp = changelogStampHooks(cardId);
   return {
-    PreToolUse: [SECRET_GUARD_MATCHER, restartGuardMatcher(otherTurns), GIT_GUARD_MATCHER, CHECK_GUARD_MATCHER, ROUTE_IMPORT_GUARD_MATCHER, folderGuardMatcher(cardId), claims.pre, bash.pre, stamp.pre, commitHeldHook(cardId)],
+    PreToolUse: [SECRET_GUARD_MATCHER, restartGuardMatcher(otherTurns), GIT_GUARD_MATCHER, CHECK_GUARD_MATCHER, ROUTE_IMPORT_GUARD_MATCHER, folderGuardMatcher(cardId), claims.pre, bash.pre, stamp.pre, commitHeldHook(cardId), clipboardGuardMatcher()],
     PostToolUse: [IMPORT_GUARD_MATCHER, claims.post, bash.post, stamp.post],
     PostToolUseFailure: [bash.post],
   };

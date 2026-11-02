@@ -304,8 +304,9 @@ keeps the offline queue and history. A board talking to a worker on its LAN then
 
 ## Approvals and secrets
 
-A view owns one thing: **approval**. Today Touch ID is `promptTouchID` in Electron main, which approves but signs
-nothing, and only the phone signs (Ed25519 after Face ID, mobile-security.md). The browser's paired key sits in
+A view owns one thing: **approval**. Touch ID on the Mac is `promptTouchID` in Electron main, which approves but signs
+nothing on its own, so main now signs after it with a key only main holds (mobile-security.md, "The desktop signs
+too"); the phone signs (Ed25519 after Face ID, mobile-security.md). The browser's paired key sits in
 localStorage and can't sign. **Passkeys** close that: a WebAuthn key in the Secure Enclave, bound to `sign.weft.zip`, a
 host of its own that serves only the pairing and approve pages under a strict CSP, so a script injected into weft.zip
 can't reach it. The host pins it through its own pairing session (the link's secret opens only on sign.weft.zip, plus a
@@ -390,8 +391,10 @@ Each ships on its own.
    through its own pairing session, and the weft.zip board opens `sign.weft.zip/approve` in a new tab, which reads the
    ask itself, shows all of it and sends the signed answer. The Mac rebuilds the message from its own names and main
    checks it (origin and rp id sign.weft.zip only, the counter kept). Grants, vault, skip-permission and agent-config
-   asks stay on the phone or the Mac. Waiting on the domain, DNS, the Supabase redirect URL and the migration. Still
-   open: the desktop board signing with a passkey instead of `promptTouchID`, so every view has one verify path.
+   asks stay on the phone or the Mac. Waiting on the domain, DNS, the Supabase redirect URL and the migration. The
+   desktop signs too (built, not yet called by the board): main holds an Ed25519 key, signs the phone's message after
+   Touch ID, and `/pairing/verify` checks it like a phone's ([mobile-security.md](mobile-security.md#the-desktop-signs-too)).
+   Still open: the board's Allow asking for that signature, and a worker host pinning the Mac's key (with H10).
 8. **H8 secrets on a Worker.** The per-use seal first, then the vault in the host behind H7.
 9. **H9 `@weft/client`** for the phone: the transports, verbs and view models as one package.
 10. **H10 one device registry** and one pairing flow.
