@@ -6,6 +6,7 @@
 import { answerBody, answerGrant, replyBody, stopBody, type AnswerPayload, type CloudCommandRow, type GrantScope } from "../cloud-commands";
 import type { HostVerb } from "../host-api";
 import { hostResult, readHostCommand, remoteRefusal, textArgOf, verbResult, type HostDone, type HostPayload } from "../host-command";
+import { carriesValue, valueResult, type Carry } from "../host-result";
 import type { Card } from "../types";
 import type { Done } from "./identity";
 
@@ -36,6 +37,9 @@ export interface CardRules {
   questionReplies?: boolean;
   // The error for a stop that names no card; without it the card check says it.
   emptyStop?: string;
+  // Puts a verb's result that's over the row's cap (the editor's files.*) in the blob store, answering its sha; a host
+  // without it answers only small ones (lib/host-result.ts).
+  carry?: Carry;
 }
 
 // A host verb's answer as an answer kind: the same payload, so the same approval rule and a phone's signature
@@ -47,7 +51,7 @@ export function asAnswer(command: CloudCommandRow, { args }: HostPayload): Cloud
 }
 
 // Verbs a board runs for their answer: they change no card, so there's nothing to sync after them.
-const READS = new Set<HostVerb>(["skills.list"]);
+const READS = new Set<HostVerb>(["skills.list", "files.list", "files.read", "files.write"]);
 
 export function cardKinds(rules: CardRules) {
   async function received(command: CloudCommandRow, args: Record<string, unknown>, field: string | undefined) {
@@ -107,8 +111,10 @@ export function cardKinds(rules: CardRules) {
     const refused = remoteRefusal(body) ?? (await rules.elevated?.(body.verb, body.args));
     if (refused) throw new Error(refused);
     const reply = await verb(body.verb, await received(command, { ...body.args, id: card.id }, textArgOf(body.verb)));
-    // The card it touched, and for a read verb (skills.list) its answer.
-    return { cardId: card.id, result: verbResult(body.verb, card.id, reply) };
+    // The card it touched, and for a read verb (skills.list) its answer; the editor's verbs answer with their value,
+    // inline or as a blob when it's over the row's cap (lib/host-result.ts).
+    const result = carriesValue(body.verb) ? await valueResult(card.id, reply, rules.carry) : verbResult(body.verb, card.id, reply);
+    return { cardId: card.id, result };
   }
 
   return { reply, answer, stop, host };

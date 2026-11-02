@@ -3,7 +3,7 @@ import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Card } from "./types";
 
-const apiCreate = vi.fn<(...args: unknown[]) => Promise<{ card: Card }>>();
+const apiCreate = vi.fn<(...args: unknown[]) => Promise<{ card: Card | null; start?: { started: boolean; worker?: string } }>>();
 const apiWarm = vi.fn<(...args: unknown[]) => Promise<unknown>>();
 const apiSettings = vi.fn<() => Promise<{ reviewAllModel: string }>>();
 vi.mock("./client", () => ({
@@ -23,7 +23,7 @@ const { openCardById } = await import("./open-card");
 const card = (over: Partial<Card> = {}): Card =>
   ({ id: "c1", title: "T", column: "running", cwd: "/repo", tags: [], archived: false, starred: false, warm: false, ...over }) as Card;
 
-function make(over: Partial<{ selected: Card | null; project: string | null; latestCwd: string | null }> = {}) {
+function make(over: Partial<{ selected: Card | null; project: string | null; latestCwd: string | null; onSentToWorker: (worker: string) => void }> = {}) {
   const select = vi.fn();
   const setShowNew = vi.fn();
   const setNewCwd = vi.fn();
@@ -37,6 +37,7 @@ function make(over: Partial<{ selected: Card | null; project: string | null; lat
       project: over.project ?? null,
       latestCwd: over.latestCwd ?? null,
       notify,
+      onSentToWorker: over.onSentToWorker,
     }),
   );
   return { result, select, setShowNew, setNewCwd, notify };
@@ -119,6 +120,18 @@ describe("useBoardActions", () => {
     });
     expect(id).toBe("new");
     expect(apiCreate).toHaveBeenCalledWith({ title: "T", prompt: "p", cwd: "/c", backend: "claude", model: "model", start: true });
+  });
+
+  it("improveQuality on a worker's project sends the card there, with no card here to open", async () => {
+    const onSentToWorker = vi.fn();
+    apiCreate.mockResolvedValueOnce({ card: null, start: { started: false, worker: "m1mini" } });
+    const { result } = make({ onSentToWorker });
+    let id: string | undefined = "x";
+    await act(async () => {
+      id = await result.current.improveQuality("worker://w1/ling", "p", "T");
+    });
+    expect(id).toBeUndefined();
+    expect(onSentToWorker).toHaveBeenCalledWith("m1mini");
   });
 
   it("reviewAll resolves with no cwd and skips work", async () => {

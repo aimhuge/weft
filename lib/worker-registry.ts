@@ -67,6 +67,8 @@ export function registry(rpc: Rpc, key: string) {
       call<unknown>(rpc, "worker_report", { p_key: key, p_command: id, p_status: status, p_card: cardId, p_error: error, ...(result ? { p_result: result } : {}) }),
     putCard: (cardId: string, folder: string, card: unknown, deleted = false) =>
       call<unknown>(rpc, "worker_put_card", { p_key: key, p_card_id: cardId, p_folder: folder, p_card: card, p_deleted: deleted }),
+    // A folder's header reads, for the desktop board's badges (lib/worker-projects.ts).
+    putProject: (folder: string, snapshot: unknown) => call<unknown>(rpc, "worker_put_project", { p_key: key, p_folder: folder, p_snapshot: snapshot }),
     putItems: (cardId: string, items: ItemRow[], outputs: OutputRow[], fromSeq: number | null) =>
       call<unknown>(rpc, "worker_put_items", { p_key: key, p_card_id: cardId, p_items: items, p_outputs: outputs, p_from_seq: fromSeq }),
   };

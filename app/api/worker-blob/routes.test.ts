@@ -118,3 +118,39 @@ describe("POST /api/worker-blob with read", () => {
     expect(await res.json()).toEqual({ error: "Object not found" });
   });
 });
+
+describe("POST /api/worker-blob for a host verb's results", () => {
+  it("signs a result's upload under results/, which the mirror skips", async () => {
+    const { createSignedUploadUrl } = setup({ org_id: ORG });
+    expect((await post({ sha: SHA, result: true })).status).toBe(200);
+    expect(createSignedUploadUrl).toHaveBeenCalledWith(`${ORG}/results/${SHA}`);
+  });
+
+  function sweepSetup(listed: { data: unknown; error: { message: string } | null }, removed: { error: { message: string } | null } = { error: null }) {
+    const query = { select: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis(), maybeSingle: vi.fn(() => Promise.resolve({ data: { org_id: ORG } })) };
+    const list = vi.fn(() => Promise.resolve(listed));
+    const remove = vi.fn(() => Promise.resolve(removed));
+    serviceClient.mockReturnValue({ from: vi.fn(() => query), storage: { from: vi.fn(() => ({ list, remove })) } });
+    return { list, remove };
+  }
+
+  it("sweeps the workspace's results over a day old, and only those", async () => {
+    const old = new Date(Date.now() - 25 * 60 * 60_000).toISOString();
+    const fresh = new Date().toISOString();
+    const { list, remove } = sweepSetup({ data: [{ name: "a", created_at: old }, { name: "b", created_at: fresh }, { name: "c" }], error: null });
+    const res = await post({ sweep: true });
+    expect(await res.json()).toEqual({ removed: 1 });
+    expect(list).toHaveBeenCalledWith(`${ORG}/results`, expect.objectContaining({ limit: 1000 }));
+    expect(remove).toHaveBeenCalledWith([`${ORG}/results/a`]);
+  });
+
+  it("removes nothing when nothing is old, and says when the bucket fails", async () => {
+    const none = sweepSetup({ data: [], error: null });
+    expect(await (await post({ sweep: true })).json()).toEqual({ removed: 0 });
+    expect(none.remove).not.toHaveBeenCalled();
+    sweepSetup({ data: null, error: { message: "list failed" } });
+    expect((await post({ sweep: true })).status).toBe(502);
+    sweepSetup({ data: [{ name: "a", created_at: "2020-01-01T00:00:00Z" }], error: null }, { error: { message: "remove failed" } });
+    expect((await post({ sweep: true })).status).toBe(502);
+  });
+});

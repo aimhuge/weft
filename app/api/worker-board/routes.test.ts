@@ -19,6 +19,11 @@ const board = vi.hoisted(() => ({
   openWorkerLine: vi.fn(() => Promise.resolve({ commandId: "cmd-line" })),
 }));
 vi.mock("@/lib/worker-board", () => board);
+const reads = vi.hoisted(() => ({
+  workerProjectSnapshot: vi.fn(() => Promise.resolve({ snapshot: null, updatedAt: null, worker: "m1mini", status: "online" })),
+  workerResultBlob: vi.fn(() => Promise.resolve({ value: { files: ["a.ts"] } })),
+}));
+vi.mock("@/lib/worker-board-reads", () => reads);
 
 const route = await import("./route");
 
@@ -47,6 +52,22 @@ describe("GET /worker-board", () => {
     const res = await route.GET(get("/worker-board"));
     expect(await res.json()).toEqual({ signedIn: true, projects: [], cards: [] });
     expect(board.readWorkerBoard).toHaveBeenCalled();
+  });
+
+  it("reads a worker project's snapshot for the header badges", async () => {
+    const res = await route.GET(get("/worker-board?project=worker%3A%2F%2Fw1%2Fling"));
+    expect(await res.json()).toEqual({ snapshot: null, updatedAt: null, worker: "m1mini", status: "online" });
+    expect(reads.workerProjectSnapshot).toHaveBeenCalledWith("worker://w1/ling");
+  });
+
+  it("reads a host verb's answer that went to the blob store, and says why it can't", async () => {
+    const res = await route.GET(get("/worker-board?blob=abc"));
+    expect(await res.json()).toEqual({ value: { files: ["a.ts"] } });
+    expect(reads.workerResultBlob).toHaveBeenCalledWith("abc");
+    reads.workerResultBlob.mockRejectedValueOnce(new Error("That result isn't in the blob store."));
+    const gone = await route.GET(get("/worker-board?blob=def"));
+    expect(gone.status).toBe(502);
+    expect(await gone.json()).toEqual({ error: "That result isn't in the blob store." });
   });
 
   it("reads a page of a thread", async () => {

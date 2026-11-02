@@ -15,6 +15,7 @@ import type { PageUpdate, ThreadTransport } from "./thread-transport";
 import { skillCache } from "./skills-wire";
 import type { ToolResultSource } from "./use-tool-result";
 import { actOnWorker, askWorker, postWorkerAction } from "./worker-acts";
+import { workerFiles } from "./worker-files";
 import { startThreadPoll } from "./worker-poll";
 import { useShownItems } from "./worker-shown";
 
@@ -77,12 +78,13 @@ export const forgetWorkerSkills = () => skillLists.forget();
 
 // What a worker runs from a board, as host verbs (lib/host-api). Left out on purpose: `shell` and `grantFolder`, which
 // remoteRefusal (lib/host-command.ts) refuses from the network because they widen what the card can touch (a folder
-// grant still rides inside an answer: grantInAnswer), and `listFiles`, which waits for file verbs (project-hosts.md H4).
+// grant still rides inside an answer: grantInAnswer). `listFiles` is the files.list verb (H4), so file names in the
+// thread link to the editor.
 const pending = (cardId: string, pendingId: string): HostArgs => ({ id: cardId, pendingId });
 
 // A worker's transport over a route: the relay's commands and poll (workerTransport), or a session line that falls
 // back to them (lib/line-host.ts).
-export function workerTransportVia(act: typeof actOnWorker, useLive: ThreadTransport["useLive"]): ThreadTransport {
+export function workerTransportVia(act: typeof actOnWorker, useLive: ThreadTransport["useLive"], files = workerFiles): ThreadTransport {
   return {
     loadPage,
     useLive,
@@ -103,6 +105,8 @@ export function workerTransportVia(act: typeof actOnWorker, useLive: ThreadTrans
     unschedule: (cardId, messageId) => act("card.unschedule", { id: cardId, messageId }),
     // Saved on this Mac, as for a local card: the file goes up to the worker with the message that pastes it.
     upload: (file, name, onProgress) => api.uploadAttachment(file, name, onProgress),
+    // files.list (H4), so file names in the thread link to the editor.
+    listFiles: (cardId) => files.list(cardId),
     grantInAnswer: true,
     cardEdits: true,
     desktop: false,

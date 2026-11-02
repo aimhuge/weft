@@ -3,7 +3,7 @@
 // and writes a file that refuses to overwrite when its baseHash doesn't match.
 
 import { FileAccessError, headOf, listFiles, readFile, statFile, writeFile } from "@/lib/file-access";
-import { fail, guard } from "@/lib/guard";
+import { elevated, fail, guard } from "@/lib/guard";
 import { getCard } from "@/lib/store";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -42,8 +42,10 @@ export async function GET(req: Request, { params }: Ctx) {
   }
 }
 
+// A save writes the folder, so it takes Weft's own window (lib/host-api's files.write is elevated too): the editor
+// sends the launch token; a thread's curl, which can write files itself, has no use for it.
 export async function PUT(req: Request, { params }: Ctx) {
-  const denied = guard(req);
+  const denied = elevated(req);
   if (denied) return denied;
   const { id } = await params;
   try {

@@ -12,6 +12,7 @@ import type { UseWorkspaceLayout } from "@/lib/use-workspace-layout";
 import type { ThreadHandlerSet } from "@/lib/thread-handlers";
 import type { planResets } from "@/lib/schedule";
 import { NO_DRAG } from "@/lib/no-drag";
+import { FilesSourceContext } from "@/lib/files-source";
 import { ThreadTransportContext } from "@/lib/thread-transport";
 import { useProjectHost } from "@/lib/use-project-host";
 import { ToolResultSourceContext } from "@/lib/use-tool-result";
@@ -85,15 +86,16 @@ function WorkerNote({ worker, cardId }: { worker?: ProjectWorker; cardId: string
 function NotOnHost({ onClose }: { onClose: () => void }) {
   return (
     <div className="flex h-full flex-col items-center justify-center gap-2 border-l border-line px-6 text-center text-[12.5px] text-faint">
-      <p>The editor opens this Mac&apos;s files. A worker card&apos;s files aren&apos;t on a worker&apos;s board yet.</p>
+      <p>The editor can&apos;t open this card&apos;s files: its host doesn&apos;t serve them yet.</p>
       <button type="button" onClick={onClose} className="rounded-md px-2 py-1 text-muted hover:bg-sunken hover:text-ink">Close the editor</button>
     </div>
   );
 }
 
 // The open card in its host's context (lib/use-project-host.ts): the thread reads and acts through the host's transport,
-// so the same columns serve a card on this Mac and one on a worker. What only this Mac has (its files, its pane, its
-// page pictures) comes from the host or says it isn't there.
+// so the same columns serve a card on this Mac and one on a worker. The editor reads and saves through the host's files
+// (lib/files-source.ts: this Mac's card routes, or a worker's file verbs). What only this Mac has (its pane, its page
+// pictures) comes from the host or says it isn't there.
 export default function OpenCard(props: OpenCardProps) {
   const { card, items, browser, workspace, onShare, onStar, onArchive } = props;
   const { host, items: shown, page } = useProjectHost(card, { items, pageUrl: browser.state.url });
@@ -104,34 +106,36 @@ export default function OpenCard(props: OpenCardProps) {
   const marks = <PaneCardMarks card={card} onShare={share} onStar={onStar} onArchive={onArchive} />;
   return (
     <ToolResultSourceContext.Provider value={host.tools}>
-      <ThreadTransportContext.Provider value={host.thread}>
-        <Workspace
-          {...props}
-          onShare={share}
-          files={host.can("files")}
-          footer={host.kind === "cloud" ? <WorkerNote worker={props.worker} cardId={card.id} /> : null}
-          editor={host.can("files") ? <EditorColumn cardId={card.id} cwd={card.cwd} onClose={closeEditor} /> : <NotOnHost onClose={closeEditor} />}
-          pane={
-            host.can("pane") ? (
-              <BrowserPane
-                desktop={browser.desktop}
-                state={browser.state}
-                obscured={browser.obscured || workspace.dragging}
-                width={browser.width}
-                onWidth={browser.onWidth}
-                // The pane's X closes the pane column, not the card; the card is closed from
-                // the thread column's X or the framed window's backdrop / Escape.
-                onClose={closePane}
-                expanded
-                actions={marks}
-              />
-            ) : (
-              <WorkerPane card={card} worker={props.worker} url={page.url} browser={{ ...browser, obscured: browser.obscured || workspace.dragging }} marks={marks} onClose={closePane} />
-            )
-          }
-          show={<ShowRail card={card} hidden={false} items={shown} pageUrl={page.url} shots={page.shots} onReopen={page.open} />}
-        />
-      </ThreadTransportContext.Provider>
+      <FilesSourceContext.Provider value={host.files}>
+        <ThreadTransportContext.Provider value={host.thread}>
+          <Workspace
+            {...props}
+            onShare={share}
+            files={host.can("files")}
+            footer={host.kind === "cloud" ? <WorkerNote worker={props.worker} cardId={card.id} /> : null}
+            editor={host.can("files") ? <EditorColumn cardId={card.id} cwd={card.cwd} onClose={closeEditor} /> : <NotOnHost onClose={closeEditor} />}
+            pane={
+              host.can("pane") ? (
+                <BrowserPane
+                  desktop={browser.desktop}
+                  state={browser.state}
+                  obscured={browser.obscured || workspace.dragging}
+                  width={browser.width}
+                  onWidth={browser.onWidth}
+                  // The pane's X closes the pane column, not the card; the card is closed from
+                  // the thread column's X or the framed window's backdrop / Escape.
+                  onClose={closePane}
+                  expanded
+                  actions={marks}
+                />
+              ) : (
+                <WorkerPane card={card} worker={props.worker} url={page.url} browser={{ ...browser, obscured: browser.obscured || workspace.dragging }} marks={marks} onClose={closePane} />
+              )
+            }
+            show={<ShowRail card={card} hidden={false} items={shown} pageUrl={page.url} shots={page.shots} onReopen={page.open} />}
+          />
+        </ThreadTransportContext.Provider>
+      </FilesSourceContext.Provider>
     </ToolResultSourceContext.Provider>
   );
 }

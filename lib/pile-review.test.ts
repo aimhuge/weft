@@ -13,6 +13,13 @@ describe("fetchPileReview", () => {
     expect(fetch.mock.calls[0]?.[0]).toBe("/api/pile?cwd=%2Fa%20b&prompt=1");
   });
 
+  it("refuses a worker's project before asking, since the prompt points at this Mac", async () => {
+    const fetch = reply({ prompt: "p" });
+    vi.stubGlobal("fetch", fetch);
+    await expect(fetchPileReview("worker://w1/ling")).rejects.toThrow("isn't on a worker's projects yet");
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it("falls back to a plain title", async () => {
     vi.stubGlobal("fetch", reply({ prompt: "p" }));
     await expect(fetchPileReview("/a")).resolves.toEqual({ prompt: "p", title: "Commit the uncommitted pile" });

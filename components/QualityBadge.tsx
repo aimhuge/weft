@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { apiFetch } from "@/lib/api-client";
+import { hostFor } from "@/lib/project-host";
 import { fixPrompt, tone, type QualityReport, type Section } from "@/lib/quality-view";
 import { findingPrompt, findingTitle, headroomScore, openFindings, scoreNote, scoreParts, type ScoutState } from "@/lib/scout-view";
 import { folderName, timeAgo } from "@/lib/format";
@@ -117,10 +117,11 @@ export default function QualityBadge({
     let live = true;
     // Re-read on focus too, so a fresh `npm run coverage` or a split file shows up without a reload.
     const load = () => {
-      apiFetch(`/api/quality?cwd=${encodeURIComponent(cwd)}`)
-        .then((r) => r.json() as Promise<{ quality: QualityReport | null }>)
-        .then((d) => {
-          if (live) setLoaded({ cwd, q: d.quality });
+      // This Mac measures now; a worker's comes from its snapshot (lib/project-reads.ts).
+      hostFor(cwd)
+        .read("quality", cwd)
+        .then((q) => {
+          if (live) setLoaded({ cwd, q });
         })
         .catch(() => {});
     };

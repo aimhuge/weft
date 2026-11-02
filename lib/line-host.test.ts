@@ -9,11 +9,12 @@ import { LineDown, LineLost } from "./session-line-calls";
 import type { ThreadPage } from "./thread-page";
 
 const actOnWorker = vi.hoisted(() => vi.fn(() => Promise.resolve(undefined)));
-vi.mock("./worker-acts", () => ({ actOnWorker }));
+const askWorker = vi.hoisted(() => vi.fn(() => Promise.resolve({ ok: true, cardId: "c1", value: { files: ["relay.ts"] } })));
+vi.mock("./worker-acts", () => ({ actOnWorker, askWorker }));
 const polls = vi.hoisted(() => [] as (boolean | undefined)[]);
 vi.mock("./worker-transport", () => ({
   useWorkerLive: (_: string, __: unknown, poll?: boolean) => void polls.push(poll),
-  workerTransportVia: (act: unknown, useLive: unknown) => ({ act, useLive }),
+  workerTransportVia: (act: unknown, useLive: unknown, files: unknown) => ({ act, useLive, files }),
 }));
 const state = vi.hoisted(() => ({
   line: null as null | { up: () => boolean; call: ReturnType<typeof vi.fn>; onEvent: (fn: (e: LineEvent) => void) => () => void },
@@ -22,7 +23,7 @@ const state = vi.hoisted(() => ({
 }));
 vi.mock("./session-lines", () => ({ lineFor: () => state.line, useLineRoute: () => state.route }));
 
-const { actOnLine, lineTransport, useLineLive } = await import("./line-host");
+const { actOnLine, askOnLine, lineFiles, lineTransport, useLineLive } = await import("./line-host");
 
 function line(up = true) {
   state.line = {
@@ -119,5 +120,27 @@ describe("lineTransport", () => {
     expect(l.call).toHaveBeenCalled();
     renderHook(() => t.useLive("c1", vi.fn(), vi.fn()));
     expect(polls.at(-1)).toBe(true);
+  });
+});
+
+describe("the editor's verbs over the line", () => {
+  it("asks on the line when it's up, its result read like the relay's", async () => {
+    const l = line();
+    l.call.mockResolvedValueOnce({ ok: true, cardId: "c1", value: { files: ["line.ts"] } });
+    await expect(lineFiles("w-files").list("c1")).resolves.toEqual(["line.ts"]);
+    expect(l.call).toHaveBeenCalledWith("files.list", { id: "c1" });
+    expect(askWorker).not.toHaveBeenCalled();
+    expect(lineFiles("w-files")).toBe(lineFiles("w-files"));
+    expect((lineTransport("w-files") as unknown as { files: unknown }).files).toBe(lineFiles("w-files"));
+  });
+
+  it("takes the relay with no line, or one that couldn't send, and passes any other failure on", async () => {
+    await expect(askOnLine("w1", "files.list", { id: "c1" })).resolves.toMatchObject({ value: { files: ["relay.ts"] } });
+    const l = line();
+    l.call.mockRejectedValueOnce(new LineDown());
+    await expect(askOnLine("w1", "files.list", { id: "c1" })).resolves.toMatchObject({ value: { files: ["relay.ts"] } });
+    l.call.mockRejectedValueOnce(new LineLost());
+    await expect(askOnLine("w1", "files.read", { id: "c1", path: "a.ts" })).rejects.toThrow();
+    expect(askWorker).toHaveBeenCalledTimes(2);
   });
 });

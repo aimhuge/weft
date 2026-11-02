@@ -8,7 +8,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { filesApi, FileConflictError, type OpenedFile } from "./client-files";
+import { FileConflictError, type OpenedFile } from "./client-files";
+import { useFilesSource } from "./files-source";
 
 // Hash of the loaded text; "" means "the file was empty", null means "the file didn't exist".
 // useOpenFile takes it as a string for comparisons and to pass to filesApi.write.
@@ -107,6 +108,8 @@ function adoptWrite(
 }
 
 export function useOpenFile(cardId: string, path: string, enabled: boolean): UseOpenFileResult {
+  // This Mac's card routes, or a worker's file verbs (lib/files-source.ts).
+  const filesApi = useFilesSource();
   const [loaded, setLoaded] = useState<OpenedFile | null>(null);
   const [text, setTextState] = useState("");
   const [savedText, setSavedText] = useState("");
@@ -154,7 +157,7 @@ export function useOpenFile(cardId: string, path: string, enabled: boolean): Use
         setBusy(false);
       },
     );
-  }, [cardId, path]);
+  }, [cardId, path, filesApi]);
 
   useEffect(() => {
     if (!enabled) return undefined;
@@ -167,7 +170,8 @@ export function useOpenFile(cardId: string, path: string, enabled: boolean): Use
   // The poll runs while the tab is mounted, visible, and clean. The setStates happen inside the
   // .then chain, so the effect body itself doesn't synchronously set state.
   useEffect(() => {
-    if (!enabled) return undefined;
+    // A source that can't afford the poll (a worker's) reloads only when the file is opened again.
+    if (!enabled || filesApi.live === false) return undefined;
     pollCancelledRef.current = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
     function schedule(): void {
@@ -213,7 +217,7 @@ export function useOpenFile(cardId: string, path: string, enabled: boolean): Use
       pollCancelledRef.current = true;
       if (timer) clearTimeout(timer);
     };
-  }, [cardId, path, enabled]);
+  }, [cardId, path, enabled, filesApi]);
 
   // Save the user's text back to disk and adopt the response as the new baseline.
   const writeAndAdopt = useCallback(
@@ -240,7 +244,7 @@ export function useOpenFile(cardId: string, path: string, enabled: boolean): Use
         setBusy(false);
       }
     },
-    [cardId, path],
+    [cardId, path, filesApi],
   );
 
   const save = useCallback(async () => {

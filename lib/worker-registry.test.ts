@@ -96,6 +96,12 @@ describe("registry", () => {
     ]);
   });
 
+  it("puts a project's snapshot for the board's badges", async () => {
+    const { rpc, calls } = fakeRpc();
+    await registry(rpc, key).putProject("ling", { at: 1, quality: null });
+    expect(calls).toEqual([{ fn: "worker_put_project", args: { p_key: key, p_folder: "ling", p_snapshot: { at: 1, quality: null } } }]);
+  });
+
   it("puts a card", async () => {
     const { rpc, calls } = fakeRpc();
     await registry(rpc, key).putCard("card-1", "weft", { id: "card-1" });

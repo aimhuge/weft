@@ -16,7 +16,8 @@ import { LineDown } from "./session-line-calls";
 import { lineFor, useLineRoute } from "./session-lines";
 import { applyThreadEvent, type ThreadPage } from "./thread-page";
 import type { PageUpdate, ThreadTransport } from "./thread-transport";
-import { actOnWorker, type ActResult } from "./worker-acts";
+import { actOnWorker, askWorker, type ActResult } from "./worker-acts";
+import { workerFilesVia } from "./worker-files";
 import { useWorkerLive, workerTransportVia } from "./worker-transport";
 
 const EMPTY: ThreadPage = { items: [], start: 0, total: 0 };
@@ -33,6 +34,28 @@ export async function actOnLine(workerId: string, verb: HostVerb, args: HostArgs
     if (err instanceof LineDown) return actOnWorker(verb, args);
     throw err;
   }
+}
+
+// A verb run for its answer (the editor's files.*): the line's `host` channel answers with the same HostResult the relay
+// writes to the row, `value` or `blob`, so lib/worker-files.ts reads either alike. LineDown takes the relay.
+export async function askOnLine(workerId: string, verb: HostVerb, args: HostArgs): Promise<unknown> {
+  const line = lineFor(workerId);
+  if (!line?.up()) return askWorker(verb, args);
+  try {
+    return await line.call(verb, args);
+  } catch (err) {
+    if (err instanceof LineDown) return askWorker(verb, args);
+    throw err;
+  }
+}
+
+const files = new Map<string, ReturnType<typeof workerFilesVia>>();
+
+// The editor's files for a worker's cards, over its line when it's up.
+export function lineFiles(workerId: string) {
+  let f = files.get(workerId);
+  if (!f) files.set(workerId, (f = workerFilesVia((verb, args) => askOnLine(workerId, verb, args))));
+  return f;
 }
 
 export function useLineLive(workerId: string, cardId: string, onUpdate: (update: PageUpdate) => void, onReconnect: () => void) {
@@ -66,6 +89,7 @@ export function lineTransport(workerId: string): ThreadTransport {
     t = workerTransportVia(
       (verb, args) => actOnLine(workerId, verb, args),
       (cardId, onUpdate, onReconnect) => useLineLive(workerId, cardId, onUpdate, onReconnect),
+      lineFiles(workerId),
     );
     transports.set(workerId, t);
   }
