@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { BLOB_BUCKET } from "./cloud-sync-types";
-import { workerBlobClient, workerMayUpload } from "./worker-blobs";
+import { workerBlobClient, workerBlobReader, workerMayUpload } from "./worker-blobs";
 
 // A worker's home laid out as a real one: the secrets beside the folders pages come from.
 const home = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "worker-home-")));
@@ -106,5 +106,39 @@ describe("workerBlobClient", () => {
 
   it("doesn't read blobs back", async () => {
     expect(await client({}).bucket.download("o/abc")).toEqual({ data: null, error: { message: "A worker doesn't read blobs." } });
+  });
+});
+
+describe("workerBlobReader", () => {
+  const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
+  const reader = (...answers: Response[]) => {
+    const fetcher = vi.fn<typeof fetch>();
+    answers.forEach((a) => fetcher.mockResolvedValueOnce(a));
+    return { read: workerBlobReader("wwk_key", 10, "https://weft.test", fetcher), fetcher };
+  };
+
+  it("asks the route with its key for a read, then fetches the URL it signs", async () => {
+    const { read, fetcher } = reader(json({ url: "https://s/x" }), new Response("bytes"));
+    expect(await read("abc")).toEqual(Buffer.from("bytes"));
+    const [url, init] = fetcher.mock.calls[0] ?? [];
+    expect(url).toBe("https://weft.test/api/worker-blob");
+    expect(init?.headers).toMatchObject({ authorization: "Bearer wwk_key" });
+    expect(init?.body).toBe(JSON.stringify({ sha: "abc", read: true }));
+    expect(fetcher.mock.calls[1]?.[0]).toBe("https://s/x");
+  });
+
+  it("is null when the route refuses, says nothing, or the file doesn't come", async () => {
+    expect(await reader(json({ error: "no" }, 403)).read("abc")).toBeNull();
+    expect(await reader(new Response("not json")).read("abc")).toBeNull();
+    expect(await reader(json({ url: "https://s/x" }), new Response("gone", { status: 404 })).read("abc")).toBeNull();
+  });
+
+  it("doesn't read a body the server says is over the cap", async () => {
+    const big = new Response("x", { headers: { "content-length": "11" } });
+    expect(await reader(json({ url: "https://s/x" }), big).read("abc")).toBeNull();
+  });
+
+  it("uses the site and fetch by default", () => {
+    expect(typeof workerBlobReader("wwk_key", 10)).toBe("function");
   });
 });

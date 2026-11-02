@@ -20,6 +20,27 @@ describe("the daemon", () => {
     expect(started.repo).toBeUndefined();
   });
 
+  it("brings a run's pasted files over before the card starts, and a reply's before it's sent", async () => {
+    const d = makeDeps();
+    d.receive.mockImplementation((text) => Promise.resolve(`${text} (here)`));
+    const payload = { prompt: "look ![s](/Users/me/.weft/attachments/s-1.png)", attachments: [{ name: "s-1.png" }] };
+    await d.daemon.runOne(command({ payload: payload as never }));
+    expect(d.receive).toHaveBeenCalledWith(payload.prompt, payload);
+    expect(d.start).toHaveBeenCalledWith(expect.objectContaining({ prompt: `${payload.prompt} (here)` }));
+    await d.daemon.runOne(command({ kind: "reply", payload: { cardId: "card-1", text: "and this" } as never }));
+    expect(d.reply).toHaveBeenCalledWith("card-1", "and this (here)");
+  });
+
+  it("fails a message whose files can't come over, and sends nothing", async () => {
+    const d = makeDeps();
+    d.receive.mockRejectedValue(new Error("Couldn't bring s-1.png over from the Mac it was pasted on."));
+    await d.daemon.runOne(command({ kind: "reply", payload: { cardId: "card-1", text: "look" } as never }));
+    expect(d.reply).not.toHaveBeenCalled();
+    expect(d.report).toHaveBeenCalledWith("cmd-1", "failed", null, "Couldn't bring s-1.png over from the Mac it was pasted on.");
+    await d.daemon.runOne(command());
+    expect(d.start).not.toHaveBeenCalled();
+  });
+
   it("starts in the mode the run asked for", async () => {
     const d = makeDeps();
     await d.daemon.runOne(command({ payload: { prompt: "go", permissionMode: "plan" } as never }));

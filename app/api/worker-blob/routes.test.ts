@@ -80,3 +80,41 @@ describe("POST /api/worker-blob", () => {
     expect((await post()).status).toBe(502);
   });
 });
+
+describe("POST /api/worker-blob with read", () => {
+  const WORKER = { id: "w1", org_id: ORG };
+
+  function setupRead(named: unknown[] | null, signed: { data: unknown; error: { message: string } | null } = { data: { signedUrl: "https://s/x" }, error: null }) {
+    const commands = { select: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis(), in: vi.fn().mockReturnThis(), contains: vi.fn().mockReturnThis(), limit: vi.fn(() => Promise.resolve({ data: named })) };
+    const workers = { select: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis(), maybeSingle: vi.fn(() => Promise.resolve({ data: WORKER })) };
+    const createSignedUrl = vi.fn(() => Promise.resolve(signed));
+    serviceClient.mockReturnValue({ from: (t: string) => (t === "cloud_commands" ? commands : workers), storage: { from: () => ({ createSignedUrl }) } });
+    return { commands, createSignedUrl };
+  }
+
+  it("signs a download for a file an open command to this worker carries", async () => {
+    const { commands, createSignedUrl } = setupRead([{ id: "cmd-1" }]);
+    const res = await post({ sha: SHA, read: true });
+    expect(await res.json()).toEqual({ url: "https://s/x" });
+    expect(commands.eq).toHaveBeenCalledWith("org_id", ORG);
+    expect(commands.eq).toHaveBeenCalledWith("target_device", "worker:w1");
+    expect(commands.in).toHaveBeenCalledWith("status", ["pending", "claimed"]);
+    expect(commands.contains).toHaveBeenCalledWith("payload", { attachments: [{ sha: SHA }] });
+    expect(createSignedUrl).toHaveBeenCalledWith(`${ORG}/${SHA}`, 120);
+  });
+
+  it("refuses a sha no open command names", async () => {
+    const { createSignedUrl } = setupRead([]);
+    expect((await post({ sha: SHA, read: true })).status).toBe(403);
+    setupRead(null);
+    expect((await post({ sha: SHA, read: true })).status).toBe(403);
+    expect(createSignedUrl).not.toHaveBeenCalled();
+  });
+
+  it("says when the blob isn't there", async () => {
+    setupRead([{ id: "cmd-1" }], { data: null, error: { message: "Object not found" } });
+    const res = await post({ sha: SHA, read: true });
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: "Object not found" });
+  });
+});

@@ -25,6 +25,8 @@ export interface FakeOptions {
   toolError?: { message: string } | null;
   insertId?: string;
   insertError?: { message: string } | null;
+  // What the blobs bucket answers an upload with.
+  uploadError?: { message: string } | null;
 }
 
 // The rows a table answers with. `columns` is the select being read, so one table can answer each query on
@@ -66,6 +68,7 @@ function answer(table: string, columns: string, opts: FakeOptions): { data: unkn
 export function fakeClient(opts: FakeOptions = {}) {
   const calls: { op: string; args: unknown[] }[] = [];
   let inserted: unknown = null;
+  const uploads: { path: string; type?: string }[] = [];
 
   const builder = (table: string) => {
     // The columns of the select being built.
@@ -102,9 +105,14 @@ export function fakeClient(opts: FakeOptions = {}) {
       getSession: () => Promise.resolve({ data: { session: opts.user === null ? null : { user: { id: opts.user ?? "u-1" } } } }),
     },
     from: (t: string) => (calls.push({ op: "from", args: [t] }), builder(t)),
+    storage: {
+      from: () => ({
+        upload: (objectPath: string, _body: unknown, o: { contentType?: string }) => (uploads.push({ path: objectPath, type: o.contentType }), Promise.resolve({ error: opts.uploadError ?? null })),
+      }),
+    },
   } as unknown as SupabaseClient;
 
-  return { client, calls, inserted: () => inserted };
+  return { client, calls, uploads, inserted: () => inserted };
 }
 
 // A worker row as cloud_workers holds it.

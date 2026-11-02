@@ -23,6 +23,8 @@ import type { Recovered } from "./worker-recover";
 export interface Engine {
   start(body: Record<string, unknown>): Promise<Card>;
   reply(cardId: string, text: string): void;
+  // Brings the files a command's text pastes onto this box and points the text at them (lib/attachment-transfer.ts).
+  receive(text: string, payload: unknown): Promise<string>;
   answer(cardId: string, allow: boolean, answers: Record<string, string> | undefined, pendingId: string): void;
   // This card / Always on this worker (lib/folder-grant.ts).
   grant(cardId: string, directory: string, scope: GrantScope): void;
@@ -122,7 +124,8 @@ export function createDaemon(deps: DaemonDeps) {
     const run = command.kind === "run" ? runBody(command) : null;
     if (command.kind === "run" && !run) throw new Error("That run has no prompt.");
     const { repo, ...fields }: Record<string, unknown> = run ? { ...run } : newCardBody(command);
-    if (!fields.prompt) throw new Error("That card has no prompt.");
+    if (typeof fields.prompt !== "string" || !fields.prompt) throw new Error("That card has no prompt.");
+    fields.prompt = await engine.receive(fields.prompt, command.payload);
     const cwd = await deps.checkout(command.folder, typeof repo === "string" ? repo : undefined);
     const card = await engine.start({ ...fields, cwd, permissionMode: run?.permissionMode ?? DEFAULT_MODE });
     publisher.nameFolder(card.id, command.folder);

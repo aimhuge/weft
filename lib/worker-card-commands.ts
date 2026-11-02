@@ -13,10 +13,12 @@ export function createCardCommands(engine: Engine) {
   }
 
   return {
-    reply(command: CloudCommandRow): string {
+    // The files it pastes come over first (lib/attachment-transfer.ts), so the turn reads copies on this box.
+    async reply(command: CloudCommandRow): Promise<string> {
       const reply = replyBody(command);
       if (!reply) throw new Error("That reply is empty.");
-      engine.reply(ownCard(reply.cardId).id, reply.text);
+      const card = ownCard(reply.cardId);
+      engine.reply(card.id, await engine.receive(reply.text, command.payload));
       return reply.cardId;
     },
     answer(command: CloudCommandRow): string {
