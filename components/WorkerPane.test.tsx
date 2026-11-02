@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 // A worker card's pane column (components/WorkerPane.tsx): the web board's pane on the page on show, with taps on its
-// live screen sent to the worker, or this Mac's native pane while Local Simulator runs the app here.
+// live screen sent to the worker, or this Mac's native pane while Local Simulator runs the app here; the host chip
+// switches between them.
 import { cleanup, render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Card } from "@/lib/types";
@@ -20,7 +21,13 @@ vi.mock("./web-board/WebPane", () => ({
   },
 }));
 const qa = vi.hoisted(() => ({ on: false }));
-vi.mock("./QaSwitch", () => ({ useQa: () => ({ state: null, on: qa.on, refresh: vi.fn() }), QaSwitch: () => null }));
+vi.mock("./use-local-simulator", () => ({ useLocalSimulator: () => ({ on: qa.on, ready: true, approved: null, devices: [], busy: false, problem: "", send: vi.fn() }) }));
+vi.mock("./web-board/HostChip", () => ({
+  HostChip: (props: Record<string, unknown>) => {
+    seen.set("host chip", props);
+    return null;
+  },
+}));
 const sendWorkerAction = vi.hoisted(() => vi.fn(() => Promise.resolve({ commandId: "cmd-1" })));
 vi.mock("@/lib/worker-transport", () => ({ sendWorkerAction }));
 
@@ -51,6 +58,7 @@ describe("WorkerPane", () => {
     expect(pane.source).toBe("m1mini");
     expect(pane.mobileApp).toBe(true);
     expect(pane.onClose).toBe(onClose);
+    expect(pane.local).toMatchObject({ on: false });
     await (pane.onScreenInput as (input: unknown) => Promise<void>)({ kind: "watch" });
     expect(sendWorkerAction).toHaveBeenCalledWith({ action: "input", cardId: "w1", input: { kind: "watch" } });
   });
@@ -71,6 +79,8 @@ describe("WorkerPane", () => {
     render(<WorkerPane card={card} url="" browser={browser} marks={null} onClose={vi.fn()} />);
     expect(seen.has("web pane")).toBe(false);
     expect(seen.get("browser pane")).toMatchObject({ expanded: true, desktop: true });
+    render(<>{seen.get("browser pane")!.actions as React.ReactNode}</>);
+    expect(seen.get("host chip")).toMatchObject({ local: { on: true } });
   });
 
   it("names no worker when it doesn't know which", () => {

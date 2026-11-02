@@ -381,7 +381,9 @@ weft.zip board ── setHostForEveryCard(webHost) ── hostOf(card) = webHost
   (`ThreadView` sets `FileLinkContext` from it; `ToolLine` follows it), so a worker card links them again through H4's `files.list`
   and the web draws plain names (its one host has no `files` or `reads` yet: `lib/web-host.ts` answers both with a refusal); the first-message banner reads settings and offers Rerun only where there are settings to open (`openSettings`),
   and Delete only where the host can (`can("delete")`). Delete, Share…, Run /skill, bulk Resume/Switch, the Local Simulator
-  switch and the review panel are still desktop-only.
+  half of the host chip's menu and the review panel are still desktop-only. The host chip itself is shared
+  (`components/web-board/HostChip.tsx` in `WebPane`): on weft.zip it shows once a simulator streams or a mobile app could start one,
+  as "Worker" where the web doesn't know the worker's name.
 
 ### Settings on a worker (WP3)
 

@@ -985,9 +985,11 @@ On the desktop board you can drive it without asking the thread: **📱 Start si
 menu to switch simulators, **Resume** when the 10 minutes run out, and a Low / Medium / High quality menu for the WebRTC video
 (15, 30 or 60 fps; Medium is full size).
 
-**Local Simulator** (was Manual QA). Testing a worker's app by hand? **Local Simulator** in the card's pane toolbar sends its build to a simulator on your Mac, shown live with
-no tap latency, while the worker's agent keeps driving it. A build runs as you, so it asks for Touch ID, once per card for 8 hours. If the Mac
-sleeps, the agent falls back to the worker's own device.
+**Local Simulator** (was Manual QA). Testing a worker's app by hand? The **host chip** at the top right of the card's pane, beside Share, names
+where the card runs ("m1mini", "m1mini + simulator" while one streams, "this Mac + simulator" in Local Simulator mode). Its menu starts the
+worker's simulator or switches its device, or picks a simulator on your Mac: the build comes to it, shown live with no tap latency, while the
+worker's agent keeps driving it. A build runs as you, so it asks for Touch ID, once per card for 8 hours. If the Mac sleeps, the agent falls
+back to the worker's own device. Run this card on this Mac is in the menu but off: moving a running card between machines isn't built yet.
 
 **Dev servers and tunnels on a worker.** A worker's dev servers show in 🖥 Services under the worker's name. **Open**
 gives one a private address that only you can open, after your Touch ID on your Mac, and shows it in the pane; a worker

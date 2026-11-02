@@ -114,7 +114,7 @@ export function WebThreadPanel({
           className="flex h-full min-h-0 w-full flex-col bg-panel md:w-[44%] md:min-w-[380px] md:shrink-0"
         />
       </ThreadTransportContext.Provider>
-      <WebPane orgId={orgId} pane={pane} thumbUrl={card.thumb && /^https?:/.test(card.thumb) ? card.thumb : undefined} onScreenInput={onScreenInput} />
+      <WebPane orgId={orgId} pane={pane} thumbUrl={card.thumb && /^https?:/.test(card.thumb) ? card.thumb : undefined} onScreenInput={onScreenInput} mobileApp={card.mobileApp} />
       <div className="hidden md:flex">
         <ShowRail card={card} hidden={false} items={shown} pageUrl={reopened ?? card.page ?? ""} shots={shots} onReopen={(url) => setPicked({ card: card.id, page: card.page, url })} />
       </div>
