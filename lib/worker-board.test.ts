@@ -11,7 +11,7 @@ vi.mock("./cloud-sync", () => ({ syncOrgId: (client: unknown, uid: string) => sy
 
 const { boardFrom, readWorkerBoard, workerPage, workerThreadPage, workerToolOutput } = await import("./worker-board");
 const sync = await import("./cloud-sync");
-const { FRESH_AFTER_MS, SLOW_OFFLINE_AFTER_MS } = await import("./worker-presence");
+const { ABSENT_OFFLINE_AFTER_MS, SLOW_OFFLINE_AFTER_MS } = await import("./worker-presence");
 
 const NOW = Date.parse("2026-10-29T10:00:00.000Z");
 
@@ -188,7 +188,7 @@ describe("boardFrom", () => {
   });
 
   it("reads status from presence when the board has it", () => {
-    const quiet = workerRow({ status: "online", last_seen_at: new Date(NOW - FRESH_AFTER_MS - 1).toISOString() });
+    const quiet = workerRow({ status: "online", last_seen_at: new Date(NOW - ABSENT_OFFLINE_AFTER_MS - 1).toISOString() });
     const folders = new Map([["w1", ["ling"]]]);
     expect(boardFrom([quiet], folders, [], NOW, { known: new Set(["w1"]), present: new Map([["w1", "busy"]]) }).projects[0]!.status).toBe("busy");
     expect(boardFrom([quiet], folders, [], NOW, { known: new Set(["w1"]), present: new Map() }).projects[0]!.status).toBe("offline");

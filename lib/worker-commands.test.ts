@@ -85,6 +85,11 @@ describe("runBody", () => {
     });
   });
 
+  it("carries start=false only", () => {
+    expect(runBody(wire({ prompt: "p", start: false }))).toEqual({ prompt: "p", start: false });
+    expect(runBody(wire({ prompt: "p", start: true }))).toEqual({ prompt: "p" });
+  });
+
   it("is null without a prompt", () => {
     expect(runBody(wire({ prompt: "   " }))).toBeNull();
     expect(runBody(wire({ prompt: 42 }))).toBeNull();
