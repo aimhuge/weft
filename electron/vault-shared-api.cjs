@@ -1,13 +1,13 @@
 // The shared vault's side of the board's IPC (docs/architecture/teams-vault.md, "How a local vault
 // becomes a shared one" and "Granting a teammate's devices"). electron/vault-ipc.cjs calls into here.
 //
-// Two things happen here, both of which need the vault's unwrapped key and this device's keypair —
-// things only Electron main holds:
+// These need the vault's unwrapped key or this device's keypair, things only Electron main holds:
 //
-//   grantPending  the granter's side of a TOFU handshake: seal this vault's key to the device that
-//     accepted, and write the grant row (electron/vault-share.cjs).
 //   shareLocal    the first time a local vault is shared: the vault row, the first grant, and the
 //     local secrets imported as the server's rows.
+//   requestJoin   a teammate's Mac asks for a vault its workspace already shares.
+//   grantPending  an admin approves it: this vault's key sealed to that Mac (electron/vault-share.cjs).
+//   join          the teammate's Mac opens the grant and adopts the shared key.
 //
 // The key is read from the vault store, passed to the wrap, and dropped. It is never written to a
 // file, a log, a request or an IPC payload. The server only ever sees the sealed box.
@@ -22,25 +22,29 @@ const { rotateForMember, writeRotate } = require("./vault-rotate.cjs");
 /** @typedef {{ name: string, environment: string, ciphertext?: string, nonce?: string, keyVersion?: number, hint?: string }} Secret */
 
 /**
- * The two shared-vault calls the board can make.
+ * The shared-vault calls the board can make.
  *
  * @param {{ readVault: (folder: string) => Promise<{ id: string, label: string, key: string, keyVersion: number, secrets: Secret[] }>,
- *   device: { id?: string, publicKey: string, privateKey?: string }, sodium?: any,
+ *   readServerVault?: (vaultId: string) => Promise<{ localId?: string, key: string, keyVersion: number, label: string }>,
+ *   device: { id?: string, publicKey: string, privateKey?: string }, sodium?: any, prompt?: (reason: string) => Promise<boolean>,
+ *   adopt?: (folder: string, grant: { key: string, keyVersion: number, wrappedKey: string }, shared: { orgId: string, vaultId: string, repo: string, keyVersion: number }) => Promise<unknown>,
  *   sync?: any, checkRepo?: (repo: string) => Promise<boolean> }} deps
  */
-function createSharedApi({ readVault, device, sodium, sync = null, checkRepo }) {
+function createSharedApi({ readVault, readServerVault, device, sodium, prompt = async () => true, adopt, sync = null, checkRepo }) {
   return {
     /**
      * The granter seals this vault's key to the device that accepted the pending grant.
      *
      * The pending row names the server's vault; the local file is that vault's shadow. The key
-     * comes from the local file, because that is the only place it is.
+     * comes from the local file, because that is the only place it is. One device gets every key
+     * in the vault, so this takes Touch ID.
      */
     /** @param {{ pendingId: string, accountClient: any }} opts */
     async grantPending({ pendingId, accountClient }) {
       const pending = await readPending(accountClient, pendingId);
       if (!pending) throw new Error("That grant isn't waiting any more.");
-      const vault = await readVault(pending.vault_id);
+      const vault = await readServerVault(pending.vault_id);
+      if (!(await prompt(`give another Mac every key in ${vault.label}`))) return { denied: true };
       const granted = await grantPendingDevice({
         accountClient,
         pendingId,
@@ -48,10 +52,23 @@ function createSharedApi({ readVault, device, sodium, sync = null, checkRepo }) 
         device,
         sodium,
       });
-      // The device that just got the grant pulls the server's rows into its own shadow; the
-      // granter's machine only has to write the grant.
-      await sync?.pull?.(vault.localId ?? pending.vault_id).catch(() => null);
       return granted;
+    },
+
+    /** An admin says no, or the Mac's owner takes the request back. */
+    /** @param {{ pendingId: string, accountClient: any }} opts */
+    async declinePending({ pendingId, accountClient }) {
+      const { error } = await accountClient.supabase.rpc("decline_vault_device", { p_pending_id: pendingId });
+      if (error) throw new Error(`That request could not be declined: ${error.message}`);
+      return { declined: true };
+    },
+
+    /** This Mac asks to join a vault its workspace already shares. Nothing is sealed yet. */
+    /** @param {{ vaultId: string, accountClient: any }} opts */
+    async requestJoin({ vaultId, accountClient }) {
+      const { data, error } = await accountClient.supabase.rpc("request_vault_device", { p_vault_id: vaultId, p_device_id: device.id });
+      if (error) throw new Error(`This Mac could not ask to join: ${error.message}`);
+      return { pendingId: data };
     },
 
     /**
@@ -77,14 +94,15 @@ function createSharedApi({ readVault, device, sodium, sync = null, checkRepo }) 
     },
 
     /**
-     * The accepting side, on the new device: open the grant the granter wrote and fill the local
-     * shadow with the server's rows.
+     * The joining side, on the teammate's Mac, once an admin approved it: open the grant and make
+     * the shared key this Mac's key for the vault. Touch ID, because it replaces the local key.
      */
-    /** @param {{ vaultId: string, accountClient: any }} opts */
-    async accept({ vaultId, accountClient }) {
-      const { keyVersion } = await openGrant({ accountClient, vaultId, myDevice: device, sodium });
-      const rows = await sync?.pull?.(vaultId).catch(() => null);
-      return { keyVersion, opened: Boolean(rows) };
+    /** @param {{ folder: string, vaultId: string, orgId: string, repo: string, accountClient: any }} opts */
+    async join({ folder, vaultId, orgId, repo, accountClient }) {
+      if (!(await prompt(`open the shared vault for ${repo}`))) return { denied: true };
+      const grant = await openGrant({ accountClient, vaultId, myDevice: device, sodium });
+      await adopt(folder, grant, { orgId, vaultId, repo, keyVersion: grant.keyVersion });
+      return { joined: true, keyVersion: grant.keyVersion };
     },
 
     /**
@@ -112,4 +130,17 @@ function createSharedApi({ readVault, device, sodium, sync = null, checkRepo }) 
   };
 }
 
-module.exports = { createSharedApi };
+// The board's shared-vault calls, each on a fresh API: the device has to be read as the signed-in user.
+function sharedHandlers(shared, token) {
+  const call = (name, extra = () => ({})) => async (opts) => (await shared())[name]({ ...opts, ...extra() });
+  return {
+    grantPending: call("grantPending"),
+    declinePending: call("declinePending"),
+    requestJoin: call("requestJoin"),
+    join: call("join"),
+    shareLocal: call("shareLocal"),
+    rotate: call("rotate", () => ({ token: token() })),
+  };
+}
+
+module.exports = { createSharedApi, sharedHandlers };

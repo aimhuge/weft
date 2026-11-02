@@ -1,13 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Device } from "./simulator-devices";
 
-const sim = vi.hoisted(() => ({ frameJpeg: vi.fn(), markLive: vi.fn(), watch: vi.fn(), watching: vi.fn() }));
+const sim = vi.hoisted(() => ({ frameJpeg: vi.fn(), markLive: vi.fn(), noteWatchedSize: vi.fn(), watch: vi.fn(), watching: vi.fn() }));
 const notePage = vi.hoisted(() => vi.fn());
 vi.mock("./simulator-watch", () => ({ ...sim, WATCH_MS: 600_000 }));
 vi.mock("./card-page", () => ({ notePage }));
 
-const { nudgeScreen, openScreenChannel, pump, screenOnWorker, setScreenChannel } = await import("./worker-screen");
+const { nudgeScreen, openScreenChannel, pump, screenInput, screenOnWorker, setFastScreen, setScreenChannel } = await import("./worker-screen");
 const { paneFromUrl, screenTopic } = await import("./share-types");
+const { newAnswerKey, openAnswer } = await import("./rtc-signal");
 
 const d: Device = { id: "udid-1", name: "iPhone 17", platform: "ios", state: "booted" };
 
@@ -23,7 +24,7 @@ describe("pump", () => {
     sim.watching.mockImplementation(() => frames.length > 0);
     sim.frameJpeg.mockImplementation(() => Promise.resolve(Buffer.from(frames.shift() ?? "")));
     const send = vi.fn(() => Promise.resolve());
-    await pump(d, { send, close: vi.fn() }, () => clock, (ms) => ((clock += ms), Promise.resolve()));
+    await pump(d, { send, answer: vi.fn(), close: vi.fn() }, () => clock, (ms) => ((clock += ms), Promise.resolve()));
     expect(send).toHaveBeenCalledTimes(2);
     sim.watching.mockReset();
 
@@ -32,7 +33,7 @@ describe("pump", () => {
     sim.watching.mockImplementation(() => again.length > 0);
     sim.frameJpeg.mockImplementation(() => Promise.resolve(Buffer.from(again.shift() ?? "")));
     const later = vi.fn(() => Promise.resolve());
-    await pump(d, { send: later, close: vi.fn() }, () => clock, (ms) => ((clock += 5_000 + ms), Promise.resolve()));
+    await pump(d, { send: later, answer: vi.fn(), close: vi.fn() }, () => clock, (ms) => ((clock += 5_000 + ms), Promise.resolve()));
     expect(later).toHaveBeenCalledTimes(2);
   });
 
@@ -41,7 +42,7 @@ describe("pump", () => {
     sim.watching.mockImplementation(() => passes-- > 0);
     sim.frameJpeg.mockRejectedValueOnce(new Error("mid boot")).mockResolvedValueOnce(Buffer.from("x"));
     const send = vi.fn(() => Promise.resolve());
-    await pump(d, { send, close: vi.fn() }, () => 0, () => Promise.resolve());
+    await pump(d, { send, answer: vi.fn(), close: vi.fn() }, () => 0, () => Promise.resolve());
     expect(send).toHaveBeenCalledTimes(1);
   });
 });
@@ -51,7 +52,7 @@ describe("nudgeScreen", () => {
     let passes = 2;
     sim.watching.mockImplementation(() => passes-- > 0);
     sim.frameJpeg.mockResolvedValue(Buffer.from("x"));
-    const done = pump(d, { send: () => Promise.resolve(), close: vi.fn() }, () => 0, () => new Promise(() => {}));
+    const done = pump(d, { send: () => Promise.resolve(), answer: () => Promise.resolve(), close: vi.fn() }, () => 0, () => new Promise(() => {}));
     await vi.waitFor(() => expect(sim.frameJpeg).toHaveBeenCalledTimes(1));
     await vi.waitFor(() => {
       nudgeScreen("udid-1");
@@ -76,7 +77,7 @@ describe("screenOnWorker", () => {
     sim.watching.mockImplementation(() => live);
     sim.frameJpeg.mockResolvedValue(Buffer.from("x"));
     const close = vi.fn();
-    const open = vi.fn(() => Promise.resolve({ send: () => Promise.resolve(), close }));
+    const open = vi.fn(() => Promise.resolve({ send: () => Promise.resolve(), answer: () => Promise.resolve(), close }));
     setScreenChannel(open);
     await screenOnWorker("c", d, () => 1_000);
     await screenOnWorker("c", d, () => 2_000);
@@ -111,5 +112,61 @@ describe("openScreenChannel", () => {
     await expect(openScreenChannel(client("CHANNEL_ERROR", new Error("nope")).client, "t")).rejects.toThrow("nope");
     await expect(openScreenChannel(client("TIMED_OUT").client, "t")).rejects.toThrow("channel.");
     await expect(openScreenChannel(client("").client, "t", 1)).rejects.toThrow("channel.");
+  });
+});
+
+describe("the fast path", () => {
+  const fast = () => ({ size: { width: 1, height: 2 }, connect: vi.fn(() => Promise.resolve("answer-sdp")), close: vi.fn() });
+  const channel = () => ({ send: vi.fn(() => Promise.resolve()), answer: vi.fn(() => Promise.resolve()), close: vi.fn() });
+
+  beforeEach(() => {
+    sim.watch.mockResolvedValue("file:///x");
+    sim.watching.mockReturnValue(false);
+    setScreenChannel(() => Promise.resolve(channel()));
+  });
+
+  it("flags the page, and closes with the watch", async () => {
+    const f = fast();
+    setFastScreen(() => Promise.resolve(f));
+    await screenOnWorker("c", { ...d, id: "fast-1" });
+    expect(sim.noteWatchedSize).toHaveBeenCalledWith("fast-1", f.size);
+    expect(paneFromUrl(notePage.mock.calls.at(-1)?.[1] as string)).toMatchObject({ fast: true });
+    await vi.waitFor(() => expect(f.close).toHaveBeenCalled());
+    setFastScreen(null);
+  });
+
+  it("carries on with JPEGs when the fast path fails", async () => {
+    setFastScreen(() => Promise.reject(new Error("no idb")));
+    await screenOnWorker("c", { ...d, id: "fast-2" });
+    expect(paneFromUrl(notePage.mock.calls.at(-1)?.[1] as string)).toMatchObject({ fast: false });
+    setFastScreen(null);
+  });
+
+  it("answers a sealed offer under the board's key, on the watch's channel", async () => {
+    const f = fast();
+    const ch = channel();
+    let release: (v: unknown) => void = () => {};
+    sim.watching.mockReturnValue(true);
+    sim.frameJpeg.mockImplementation(() => new Promise((go) => (release = go)));
+    setScreenChannel(() => Promise.resolve(ch));
+    const key = newAnswerKey();
+    setFastScreen(() => Promise.resolve(f), () => JSON.stringify({ sdp: "offer-sdp", key }));
+    await screenOnWorker("c", { ...d, id: "fast-3" });
+    await screenInput({ kind: "offer", device: "fast-3", sealed: {} as never }, vi.fn());
+    expect(f.connect).toHaveBeenCalledWith("offer-sdp");
+    await expect(openAnswer(key, ch.answer.mock.calls[0]?.[0 as never] as never)).resolves.toBe("answer-sdp");
+    sim.watching.mockReturnValue(false);
+    release(Buffer.from("x"));
+    await vi.waitFor(() => expect(f.close).toHaveBeenCalled());
+    setFastScreen(null);
+  });
+
+  it("ignores an offer for a device with no fast path, and passes a touch through", async () => {
+    const touch = vi.fn(() => Promise.resolve());
+    await screenInput({ kind: "offer", device: "nobody", sealed: {} as never }, touch);
+    expect(touch).not.toHaveBeenCalled();
+    const tap = { kind: "tap", device: "d", x: 0, y: 0 } as const;
+    await screenInput(tap, touch);
+    expect(touch).toHaveBeenCalledWith(tap);
   });
 });

@@ -29,6 +29,8 @@ export const FIXED_SHORTCUTS: CatalogEntry[] = [
   { id: "reply-edit-queued", keys: ["ArrowUp"], description: "Edit your last message, or the last queued one (empty reply box)", group: "Thread" },
   { id: "reply-send-later", keys: ["alt+Enter"], description: "Send a reply later (Enter again: at the 5-hour reset)", group: "Thread" },
   { id: "reply-stop", keys: ["ctrl+c"], description: "Stop the running turn (in the reply box)", group: "Thread" },
+  { id: "find-thread", keys: ["mod+f"], description: "Find in the open thread, or in the page when the browser has focus", group: "Thread", desktop: true },
+  { id: "find-step", keys: ["mod+g", "mod+shift+g"], description: "Next or previous match", group: "Thread", desktop: true },
   { id: "close-thread", keys: ["Escape"], description: "Close the open thread or dialog", group: "Thread" },
   { id: "toggle-view", keys: ["Escape"], description: "Switch between board and list view (with nothing open)", group: "General" },
   { id: "new-send", keys: ["mod+Enter"], description: "Start the new thread", group: "Writing" },

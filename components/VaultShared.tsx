@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { VaultBridge, VaultSummary } from "@/lib/vault-view";
-import { keyVersionTitle, shareTargets, type VaultOrg } from "@/lib/vault-shared";
+import { keyVersionTitle, shareTargets, type VaultDeviceRequest, type VaultJoin, type VaultOrg } from "@/lib/vault-shared";
 import Icon from "./Icon";
 
 // The shared vault's pieces of the 🔐 drawer (docs/architecture/teams-vault.md, "What the 🔐 drawer
@@ -62,8 +62,9 @@ export function ShareOffer({
     if (!repo) return;
     setBusy(true);
     try {
-      await share(folder, chosen.id, repo, label);
+      const { keptLocal } = await share(folder, chosen.id, repo, label);
       onShared();
+      if (keptLocal?.length) notify(new Error(`Shared. ${keptLocal.join(", ")} stayed on this Mac: the team vault only takes upper-case names.`));
     } catch (err) {
       notify(err);
     } finally {
@@ -98,5 +99,80 @@ export function ShareOffer({
         Share
       </button>
     </div>
+  );
+}
+
+const BANNER = "mx-1.5 mt-1.5 flex flex-col gap-1 rounded-md border border-accent/40 bg-accent-soft px-2 py-1.5 text-[11px] leading-snug text-accent";
+const ACT = "shrink-0 rounded-md bg-accent px-2 py-0.5 text-[11px] font-medium text-on-accent disabled:opacity-50";
+
+// Runs one banner action: busy while it goes, the drawer reloaded after, a failure as a toast.
+function useBannerAction(onDone: () => void, notify: (err: unknown) => void) {
+  const [busy, setBusy] = useState(false);
+  const run = async (action: () => Promise<unknown>) => {
+    setBusy(true);
+    try {
+      await action();
+      onDone();
+    } catch (err) {
+      notify(err);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return { busy, run };
+}
+
+// The workspace already shares this repo and this Mac isn't in it: ask, wait, open.
+export function JoinOffer({ folder, join, bridge, onDone, notify }: { folder: string; join: VaultJoin; bridge: VaultBridge | null; onDone: () => void; notify: (err: unknown) => void }) {
+  const { busy, run } = useBannerAction(onDone, notify);
+  const requestJoin = bridge?.requestJoin?.bind(bridge);
+  const open = bridge?.join?.bind(bridge);
+  if (!requestJoin || !open) return null;
+  if (join.state === "asked") {
+    return (
+      <div className={BANNER}>
+        <span>Waiting for an admin. Read them this Mac&apos;s fingerprint:</span>
+        <code className="font-mono text-[10px] break-all">{join.fingerprint}</code>
+      </div>
+    );
+  }
+  const granted = join.state === "granted";
+  return (
+    <div className={BANNER}>
+      <div className="flex items-center gap-1.5">
+        <span className="min-w-0 flex-1">{granted ? "An admin approved this Mac." : "Your team shares this vault. This Mac isn't in it yet."}</span>
+        <button type="button" disabled={busy} className={ACT} onClick={() => void run(() => (granted ? open(folder, join) : requestJoin(join.vaultId)))}>
+          {granted ? "Open shared vault" : "Ask to join"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// The Macs waiting on this vault. One device gets every key, so the banner says so before Approve.
+export function DeviceRequests({ requests, bridge, onDone, notify }: { requests: VaultDeviceRequest[]; bridge: VaultBridge | null; onDone: () => void; notify: (err: unknown) => void }) {
+  const { busy, run } = useBannerAction(onDone, notify);
+  const deviceGrant = bridge?.deviceGrant?.bind(bridge);
+  const deviceDecline = bridge?.deviceDecline?.bind(bridge);
+  if (!deviceGrant || !deviceDecline) return null;
+  return (
+    <>
+      {requests.map((r) => (
+        <div key={r.id} className={BANNER}>
+          <span>
+            {r.person} asks to add {r.deviceName}. Approving gives it every key in this vault, production too.
+          </span>
+          <code className="font-mono text-[10px] break-all">{r.fingerprint}</code>
+          <div className="flex items-center justify-end gap-1.5">
+            <button type="button" disabled={busy} className="shrink-0 px-1 text-[11px] disabled:opacity-50" onClick={() => void run(() => deviceDecline(r.id))}>
+              Decline
+            </button>
+            <button type="button" disabled={busy} className={ACT} onClick={() => void run(() => deviceGrant(r.id))}>
+              Approve
+            </button>
+          </div>
+        </div>
+      ))}
+    </>
   );
 }

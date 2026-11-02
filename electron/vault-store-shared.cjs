@@ -49,7 +49,11 @@ function createSharedOps({ sync, environments, device, sodium, now, read, write,
       vault.keyVersion = diff.keyVersion;
       forget(id);
     }
-    for (const row of diff.rows) put(vault, entryOf(row));
+    for (const row of diff.rows) {
+      // A blank never replaces a value, here as in pushOne: this Mac may hold what the team is missing.
+      if (row.is_blank && vault.secrets[indexOf(vault, row.name, row.environment)]?.ciphertext) continue;
+      put(vault, entryOf(row));
+    }
     for (const gone of diff.removed) drop(vault, gone.name, gone.environment);
     write(vault);
     // A teammate's write arrives as an event; pulling again brings it into the shadow.
@@ -58,6 +62,22 @@ function createSharedOps({ sync, environments, device, sodium, now, read, write,
     });
     const drained = await sync.drain(id);
     return { changed: diff.rows.length, removed: diff.removed.length, queued: drained.remaining, ...(drained.conflict && { conflict: { name: drained.entry.name, environment: drained.entry.environment } }) };
+  }
+
+  // This Mac joins a vault the team already shares: the team's key replaces the one the local file was
+  // made with. A local vault has a key of its own, so a value already here is decrypted and sealed
+  // again under the team's key rather than lost. It stays on this Mac until someone writes it.
+  async function adopt(id, label, { key, keyVersion, wrappedKey }, shared) {
+    const old = read(id);
+    const secrets = (old?.secrets ?? []).map((entry) => {
+      if (!entry.ciphertext) return entry;
+      const value = sodium.decrypt(entry, keyOf(old), sodium.aad(id, entry.name, entry.environment, entry.keyVersion));
+      return { ...entry, ...sodium.encrypt(value, key, sodium.aad(id, entry.name, entry.environment, keyVersion)), keyVersion };
+    });
+    write({ id, label: old?.label ?? label, keyVersion, grants: [{ device: device.publicKey, keyVersion, wrapped: wrappedKey }], secrets });
+    forget(id);
+    sync.markShared(id, shared);
+    return pull(id);
   }
 
   // A write that lost the row: the shadow takes what the server holds, and the conflict is reported
@@ -108,7 +128,7 @@ function createSharedOps({ sync, environments, device, sodium, now, read, write,
     return !pushed.conflict;
   }
 
-  return { pull, set, remove };
+  return { pull, set, remove, adopt };
 }
 
 module.exports = { createSharedOps, entryOf, mergeGrants };

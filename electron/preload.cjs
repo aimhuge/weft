@@ -28,6 +28,9 @@ contextBridge.exposeInMainWorld("weft", {
     selectTab: (id) => ipcRenderer.send("browser:selectTab", id),
     closeTab: (id) => ipcRenderer.send("browser:closeTab", id),
     onState: (callback) => listen("browser:state", callback),
+    find: (text, options) => ipcRenderer.send("browser:find", text, options),
+    stopFind: (refocus) => ipcRenderer.send("browser:stopFind", refocus),
+    onFound: (callback) => listen("browser:found", callback),
   },
   dialog: {
     openFolder: () => ipcRenderer.invoke("dialog:openFolder"),
@@ -104,6 +107,9 @@ contextBridge.exposeInMainWorld("weft", {
     // local vault for an hour, while `deviceGrant` seals the vault key to a teammate's machine so it
     // can open the shared vault at all. Nothing here carries a value or a key.
     deviceGrant: (pendingId) => ipcRenderer.invoke("vault:device-grant", pendingId),
+    deviceDecline: (pendingId) => ipcRenderer.invoke("vault:device-decline", pendingId),
+    requestJoin: (vaultId) => ipcRenderer.invoke("vault:join-request", vaultId),
+    join: (folder, details) => ipcRenderer.invoke("vault:join", folder, details),
     share: (folder, orgId, repo, label) => ipcRenderer.invoke("vault:share", folder, orgId, repo, label),
     // A shared vault's rotate (docs/architecture/teams-vault.md, "Removal and rotation"): the new key
     // is made in main, because that is the only place a vault key exists. The board asks for it and

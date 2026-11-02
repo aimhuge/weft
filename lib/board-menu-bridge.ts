@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { MenuAction } from "./client";
+import { paneFindFocused, requestThreadFind, stepThreadFind } from "./find-events";
 import type { Card } from "./types";
 import { addWebhookAsk } from "./use-webhooks";
 import { parseWebhookAsk } from "./webhooks-view";
@@ -15,8 +16,19 @@ export interface MenuBridge {
   focusFilter: () => void;
   // A card or a dialog is open: ⌘F belongs to it then (the thread, Settings' search), not the board's filter box behind it.
   cardOpen?: boolean;
+  // A thread is open with no dialog over it, so ⌘F finds in it.
+  threadOpen?: boolean;
   toggleTerminal: () => void;
   openDrawer: (panel: "webhooks") => void;
+}
+
+// ⌘F and ⌘G. "pane" means the page had the focus, and the pane's own find field has it now if paneFindFocused:
+// either way they're the browser pane's (components/PaneFind.tsx). Settings' search listens for itself.
+function runFind(action: "find" | "find-next" | "find-previous", payload: string | undefined, b: MenuBridge) {
+  if (payload === "pane" || paneFindFocused()) return;
+  if (action === "find-next" || action === "find-previous") stepThreadFind(action === "find-next" ? 1 : -1);
+  else if (!b.cardOpen) b.focusFilter();
+  else if (b.threadOpen) requestThreadFind();
 }
 
 export function runMenuAction(action: MenuAction, payload: string | undefined, b: MenuBridge) {
@@ -34,7 +46,9 @@ export function runMenuAction(action: MenuAction, payload: string | undefined, b
       break;
     }
     case "find":
-      if (!b.cardOpen) b.focusFilter();
+    case "find-next":
+    case "find-previous":
+      runFind(action, payload, b);
       break;
     case "terminal":
       b.toggleTerminal();

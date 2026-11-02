@@ -29,6 +29,7 @@ arguments go through `shellQuote()`.
 | Live view | `lib/simulator-watch.ts`: `watch()`, `writeFrame()`, `viewerHtml()`, `stopWatching()` |
 | Setup checks + Install | `lib/simulator-status.ts` (the rows), `lib/simulator-install.ts` + `lib/simulator-install-steps.ts` (the jobs), `app/api/connectors/simulators/install/route.ts`, `components/SimulatorConnector.tsx` |
 | Tools + prompt | `lib/simulator-tools.ts`: `simulatorMcpServer()`, `SIMULATOR_PROMPT` (pinned in `lib/weft-prompts.ts`) |
+| A worker's calls to the Mac | `simulatorTools()` runs them; `lib/worker-device.ts` and `lib/device-calls.ts` carry them ([Manual QA mode](manual-qa.md)) |
 | Wiring | `lib/weft-mcp.ts`: `simulator` for threads, not the copilot; Codex gets it through the bridge |
 | Settings | `lib/simulator-status.ts` (types in `lib/simulator-view.ts`) → `app/api/connectors/simulators/route.ts` → `components/SimulatorConnector.tsx` on Settings → Connectors |
 
@@ -104,7 +105,8 @@ The page is a plain show page: `watch` opens it in the card's pane (`openInPane`
 page the pane showed, and `lib/page-shots.ts` takes its picture for the rail like any other.
 
 On a Weft Worker there's no window to capture, so `watch` streams screenshots over Realtime instead:
-[The live screen](weft-worker.md#the-live-screen).
+[The live screen](weft-worker.md#the-live-screen). To test by hand with no latency, a worker's card can run its build here on the Mac
+instead, and this live view shows it: [Manual QA mode](manual-qa.md).
 
 ## Setup
 

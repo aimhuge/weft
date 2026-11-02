@@ -108,3 +108,33 @@ describe("start", () => {
     expect(d.heartbeat).not.toHaveBeenCalled();
   });
 });
+
+describe("the manual QA switch", () => {
+  it("points the card's device tools at the Mac", async () => {
+    const d = makeDeps();
+    await d.daemon.runOne(command({ kind: "qa", payload: { cardId: "card-1", device: "mac-1" } as never }));
+    expect(d.setQa).toHaveBeenCalledWith("card-1", "mac-1");
+    expect(d.report).toHaveBeenCalledWith("cmd-1", "done", "card-1", null);
+  });
+
+  it("turns the switch off with a null device", async () => {
+    const d = makeDeps();
+    await d.daemon.runOne(command({ kind: "qa", payload: { cardId: "card-1", device: null } as never }));
+    expect(d.setQa).toHaveBeenCalledWith("card-1", null);
+  });
+
+  it("refuses a card that isn't this worker's", async () => {
+    const d = makeDeps();
+    await d.daemon.runOne(command({ kind: "qa", payload: { cardId: "card-other", device: "mac-1" } as never }));
+    expect(d.setQa).not.toHaveBeenCalled();
+    expect(d.touch).not.toHaveBeenCalled();
+    expect(d.report).toHaveBeenCalledWith("cmd-1", "failed", null, "That thread isn't on this worker.");
+  });
+
+  it("refuses a switch that names no card", async () => {
+    const d = makeDeps();
+    await d.daemon.runOne(command({ kind: "qa", payload: { device: "mac-1" } as never }));
+    expect(d.setQa).not.toHaveBeenCalled();
+    expect(d.report).toHaveBeenCalledWith("cmd-1", "failed", null, "That QA switch is empty.");
+  });
+});

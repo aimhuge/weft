@@ -36,6 +36,7 @@ const ground = (): Ground => {
 };
 
 const READ_TOOLS = new Set(["Read", "Glob", "Grep", "LS"]);
+const FILE_TOOLS = new Set(["Read", "Edit", "MultiEdit", "Write", "NotebookEdit"]);
 const GATED = "Read|Edit|MultiEdit|Write|NotebookEdit|Glob|Grep|LS|Bash";
 // A path in a Bash command. Quoted, it runs to its closing quote, spaces and all ("/Users/me/My Drive/app": a
 // project in Google Drive used to read as /Users/me/My, outside, so every command asked); bare, it ends at a
@@ -156,6 +157,14 @@ export function showPageCall(toolName: string, input: Record<string, unknown>, c
   const show = realish(showDir);
   const paths = pathsOf(toolName, input).map((t) => realish(expand(t, cwd, os.homedir())));
   return paths.length > 0 && paths.every((p) => inside(p, show));
+}
+
+// Whether a call is a file tool whose target really is inside dir: a link out of it counts as where it lands, and
+// Bash never counts, since its paths are a heuristic.
+export function fileCallInside(toolName: string, input: Record<string, unknown>, cwd: string, dir: string): boolean {
+  if (!FILE_TOOLS.has(toolName)) return false;
+  const paths = pathsOf(toolName, input).map((t) => realish(expand(t, cwd, os.homedir())));
+  return paths.length > 0 && paths.every((p) => inside(p, realish(dir)));
 }
 
 // What each pending call asked, by tool use id, from PreToolUse to canUseTool, which words the prompt with it.

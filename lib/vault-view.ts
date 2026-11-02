@@ -1,9 +1,9 @@
 import type { KeychainBridge } from "./keychain-audit-types";
 import type { MenuItem } from "./card-menu";
-import type { VaultOrg, VaultShared } from "./vault-shared";
+import type { VaultDeviceRequest, VaultJoin, VaultOrg, VaultShared } from "./vault-shared";
 import type { ImportScan } from "./vault-import";
 
-export type { VaultOrg, VaultShared };
+export type { VaultDeviceRequest, VaultJoin, VaultOrg, VaultShared };
 // The .env import's shape and the preview's rules (lib/vault-import.ts). Re-exported here so the
 // callers keep one import for the vault's types.
 export {
@@ -53,6 +53,10 @@ export interface VaultSummary {
   managed?: boolean;
   // Set when the vault is shared with a workspace (docs/architecture/teams-vault.md); undefined for a local one.
   shared?: VaultShared;
+  // Set when the workspace already shares this repo and this Mac isn't in it yet.
+  join?: VaultJoin;
+  // Teammates' Macs waiting for an admin to approve them.
+  requests?: VaultDeviceRequest[];
 }
 
 export interface VaultOverview {
@@ -104,7 +108,12 @@ export interface VaultBridge extends KeychainBridge {
   // Takes over .env.local: writes it from the vault and keeps it in step. Missing in older shells.
   writeBack?(folder: string): Promise<WriteBackResult>;
   // Shares a local vault with a workspace for the first time. Missing in older shells.
-  share?(folder: string, orgId: string, repo: string, label?: string): Promise<{ vaultId: string; repo: string; keyVersion: number; orgId: string }>;
+  share?(folder: string, orgId: string, repo: string, label?: string): Promise<{ vaultId: string; repo: string; keyVersion: number; orgId: string; keptLocal?: string[] }>;
+  // A teammate's Mac joining a shared vault: this Mac asks, an admin approves or declines, this Mac opens it.
+  requestJoin?(vaultId: string): Promise<{ pendingId: string }>;
+  deviceGrant?(pendingId: string): Promise<{ denied?: boolean }>;
+  deviceDecline?(pendingId: string): Promise<{ declined: boolean }>;
+  join?(folder: string, details: VaultJoin): Promise<{ denied?: boolean; joined?: boolean }>;
   onChange?(callback: (folder: string) => void): () => void;
 }
 

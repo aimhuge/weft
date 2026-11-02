@@ -13,6 +13,27 @@ export interface VaultOrg {
   name: string;
   // How many people are in the workspace. A team of one doesn't need to share with itself (Q15).
   members: number;
+  // Whether the user can share a vault here. Missing means unknown, and the server has the last word.
+  admin?: boolean;
+}
+
+// A vault the workspace already shares for this repo, on a Mac that isn't in it yet.
+export interface VaultJoin {
+  vaultId: string;
+  orgId: string;
+  repo: string;
+  // none: not asked. asked: waiting for an admin. granted: approved, and ready to open here.
+  state: "none" | "asked" | "granted";
+  // This Mac's fingerprint, to read to the admin who approves it.
+  fingerprint: string;
+}
+
+// A teammate's Mac waiting for an admin to approve it. Its fingerprint is what the two compare.
+export interface VaultDeviceRequest {
+  id: string;
+  person: string;
+  deviceName: string;
+  fingerprint: string;
 }
 
 // What a shared vault's header shows. `org` is the workspace the vault belongs to; the local id
@@ -32,7 +53,7 @@ export interface VaultShared {
 // The workspaces the user can share a local vault with: the ones they're in that have someone
 // else in them. A personal workspace (a team of one) stays local — there's nobody to share with.
 export function shareTargets(orgs: VaultOrg[]): VaultOrg[] {
-  return orgs.filter((o) => o.members > 1);
+  return orgs.filter((o) => o.members > 1 && o.admin !== false);
 }
 
 // The badge's tooltip: which key version the vault is on, and when it was bumped.

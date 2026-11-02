@@ -285,6 +285,10 @@ card.page and the open_url item carry blob:sha256:<hex>#anchor (lib/worker-publi
   `sessionDirs` (`lib/worker-pane.ts`) adds `SHOW_DIR` to `additionalDirectories` on a worker only. It makes the folder
   first, because the CLI drops a directory that doesn't exist and asks again. Reads and edits of a page stop asking too.
   Spares get it as well, since it's set where a session's options are built (`lib/runner-session.ts`).
+  - **Auto too.** The folder doesn't stop every prompt: a card in Auto on `m1mini` still asked about an Edit in the show
+    folder, though Auto on a Mac doesn't. So `ownPageCall` (`lib/worker-pane.ts`) answers a file tool inside `SHOW_DIR`
+    from `askAboutCall`, on a worker, in any mode but `default`. It goes by where a path really lands, never counts Bash,
+    and runs after the hooks.
   - **Nothing else opens.** Only `data/show` is added, not its parent, and every path past it stays with the secret guard,
     which runs first in every mode and follows links ([What's sealed on a worker](#whats-sealed-on-a-worker)). So
     `show/../../worker.json`, a link in `show` to a sealed file, `data/board.json` and `data/showcase` are all refused.
@@ -351,12 +355,62 @@ daemon ◀─ claim ◀─ cloud_commands kind=input ◀─ POST /api/worker-boa
 - **Latency:** the slow part is the box, not the network. On m1mini `axe` took 1.1 s for a tap, and the command path adds
   its own trips, so a tap's answer takes over a second. This path is the one that works from anywhere. The fast one is H.264
   and taps from `idb_companion`, which a spike got out of the simulator with no window (about 0.7 Mbps). Video doesn't belong
-  on Supabase, so that needs a direct route or a tunnel.
+  on Supabase, so it takes [the fast path](#the-fast-path) where WebRTC connects.
+
+### The fast path
+
+A watched iOS simulator also gets H.264 and live input over WebRTC, beside the JPEGs, which never stop. WebRTC finds a direct
+route on a LAN or through NAT with no open port, so home and away are one path. Anything that goes wrong leaves the pane on
+the JPEGs.
+
+```
+idb_companion ─ private unix socket, gRPC ─ daemon ═ WebRTC, encrypted ═▶ canvas in WorkerScreen
+  lib/idb-companion.ts                       lib/worker-rtc.ts              lib/use-rtc-screen.ts
+board ─ sealed offer, elevated input command ─▶ daemon ─ encrypted answer, Broadcast ─▶ board
+  lib/worker-board.ts                                     lib/rtc-signal.ts
+```
+
+- **The companion** has no login, so it listens on a unix socket in a `0700` folder, never on `--grpc-port`. It starts with
+  the watch and ends with it, and `tapAt` and `swipe` use it while it's open, which also speeds the command path. It reports
+  the screen's size, so taps work with no AXe on the box.
+- **Even sides.** The encoder sends nothing, with no error, unless both sides of the video are even. 0.5 fails on a 1179-wide
+  iPhone 16 and a 1206-wide 16 Pro, and full size fails on the iPhone 16, so `evenScale` picks the scale nearest full
+  size, never above it, that lands on exact even numbers (8/9 on the iPhone 16). The video goes out at full size and
+  quality 0.85: at half size and 0.6 a retina pane drew it soft.
+- **One line, named channels.** `answerOffer` takes a map of channel names to handlers. `video` carries H.264 and `input` the
+  live gesture and keyboard. Other live streams can add a channel. A line only exists while someone is watching, so commands,
+  card state and wake-ups stay on Supabase, which also carries the signalling.
+- **Proving who answered.** The board makes an offer and a one-time key. Its local server seals both to the worker's published
+  key (`sealedOffer`, purpose `RTC_PURPOSE`) and sends them as an `input` command. Only that worker can open it, and it answers
+  under the one-time key on the watch's Broadcast topic. The topic is public, so an answer that won't open is dropped. Both
+  DTLS fingerprints travel inside these protected messages, which keeps anyone from sitting in the middle.
+- **Who can watch and touch:** making an offer takes the elevated route, so reading a card buys neither. The line carries both.
+  `card.page` only gains `fast=1`, which says the watch takes offers.
+- **Gesture and keyboard.** `down`, `move` and `up` are sent as they happen, as fractions of the screen, and a gesture holds one
+  hid stream from press to release. Keys go as HID usages (`lib/hid-keys.ts`), down and up. With no line open, a finished tap or
+  swipe takes the command path. Paste isn't built.
+- **Wire format:** a 4-byte length, then one payload, chunked to 16 KB messages on a reliable, ordered channel and put back
+  together by `frameReader`. A viewer more than 2 MB behind skips to the next key frame.
+- **Measured on m1mini, LAN:** 198 ms median from a live gesture to the first frame arriving that shows movement (88 to 375 ms,
+  13 of 16 detected, before decoding and drawing), 29 fps, about 0.66 Mbps at quality 0.2 and a 2 Mbps cap. Fast scrolling
+  showed artifacts at those settings, so it's now 0.6 and 8 Mbps, not yet measured under motion. Nothing's been measured off
+  the LAN, and a slow link may need a lower bitrate.
+- **Not yet:** weft.zip and phones stay on JPEGs, since sealing an offer runs on the desktop's local server. There's no TURN
+  relay, so a network that blocks direct connections stays on JPEGs.
+- **Android** has no idb, so an emulator stays on JPEGs and `adb`. `adb exec-out screenrecord --output-format=h264` is the likely
+  next step, not built because no box here has adb to measure it on.
+- **Install:** `install/worker.sh` puts idb_companion 1.1.8 in `~/.weft/tools/idb-companion`, pinned by hash, on a Mac with
+  Xcode. A failure only skips it, and `lib/idb-companion.ts` also finds it on PATH. idb's GitHub release publishes no digest, so
+  the hash is of the file as downloaded. An auto-update runs `pnpm install` but not that script, so an enrolled box needs
+  `weft-worker update` to get it.
+
+**Manual QA.** To test by hand with no tap latency, a card can run its build on a simulator on your Mac, with the agent still driving it:
+[Manual QA mode](manual-qa.md).
 
 **Modes.** A worker's card has the mode picker in its thread header, sent as a `mode` command (`CARD_MODES`): Ask me, Accept
 edits or Auto, applied mid-turn. It's elevated, and the daemon holds it to the same list, so a row can't buy YOLO. Auto's
 blocks come back as a prompt on the board. The simulator tools are trusted (`lib/board-tools-trust.ts`) in every mode, like
-the browser's, since they only reach a sandboxed device.
+the browser's, since they only reach a sandboxed device. In manual QA mode that device is on your Mac and an iOS app isn't sandboxed from it, so the Touch ID grant stands in for the prompt ([Security](manual-qa.md#security)).
 
 **What a worker tunnel would need** (docs/architecture/tunnels.md runs on the desktop only):
 

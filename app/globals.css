@@ -626,3 +626,12 @@ html[data-build-error] nextjs-portal {
 [data-file-over] {
   box-shadow: inset 0 0 0 2px var(--accent), inset 0 0 0 9999px var(--accent-soft);
 }
+
+/* Find in a thread (lib/find-highlight.ts): every match, and the one you're on. */
+::highlight(thread-find) {
+  background-color: color-mix(in srgb, var(--warn) 28%, transparent);
+}
+::highlight(thread-find-now) {
+  background-color: var(--warn);
+  color: var(--canvas);
+}

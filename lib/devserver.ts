@@ -31,10 +31,13 @@ export const runs = globalSingleton("__weftDevServers", () => new Map<string, Ru
 
 const LOG_LIMIT = 4000;
 
+// A dev server busy compiling answers late, not never; a server that's down refuses at once, so this only waits on a hung one.
+const PROBE_TIMEOUT_MS = 5000;
+
 // Anything that answers HTTP counts as up, a 404 or redirect included.
 export async function reachable(url: string): Promise<boolean> {
   try {
-    await fetch(url, { signal: AbortSignal.timeout(2000), redirect: "manual" });
+    await fetch(url, { signal: AbortSignal.timeout(PROBE_TIMEOUT_MS), redirect: "manual" });
     return true;
   } catch {
     return false;

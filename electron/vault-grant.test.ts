@@ -4,7 +4,8 @@ import path from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 import { aadFor, acceptGrant, cryptoReady, openGrant, wrapForDevice } from "./vault-grant.cjs";
 import { grantPendingDevice } from "./vault-share.cjs";
-import { fakeSupabase, rowFor } from "./vault-grant.harness";
+import { fingerprint } from "./device-fingerprint.cjs";
+import { fakeSupabase } from "./vault-grant.harness";
 import * as sodium from "./vault-crypto.cjs";
 
 beforeAll(async () => {
@@ -93,26 +94,24 @@ describe("a sealed key opens the values under it", () => {
 });
 
 describe("grantPendingDevice", () => {
-  it("seals the vault key to the accepted device and writes the grant row", async () => {
+  it("seals the vault key to the accepted device and stores it through the server's function", async () => {
     const mine = granter();
     const theirs = newcomer();
     const vault = { id: "vault-1", key: sodium.newVaultKey(), keyVersion: 2 };
     const { written, client } = fakeSupabase({
-      pending: { id: "pending-1", vault_id: "vault-1", status: "accepted", matched_device_id: "device-2", target_public_key: theirs.publicKey },
-      device: { id: "device-2", public_key: theirs.publicKey, fingerprint: "aabb", name: "Weft on Sam's Mac" },
+      pending: { id: "pending-1", vault_id: "vault-1", status: "accepted", matched_device_id: "device-2", target_public_key: theirs.publicKey, target_fingerprint: fingerprint(theirs.publicKey) },
+      rpc: "device-2",
     });
 
     const result = await grantPendingDevice({ accountClient: client, pendingId: "pending-1", vault, device: { id: "device-1", publicKey: mine.publicKey }, sodium });
 
-    expect(result.deviceId).toBe("device-2");
-    expect(result.keyVersion).toBe(2);
-    const row = rowFor(written, "vault_grants") as { device_id: string; key_version: number; granted_by: string; wrapped_key: string };
-    expect(row.device_id).toBe("device-2");
-    expect(row.key_version).toBe(2);
-    expect(row.granted_by).toBe("user-1");
+    expect(result).toEqual({ deviceId: "device-2", keyVersion: 2 });
+    const call = written.find((w) => w.op === "grant_vault_device")!.row as { p_pending_id: string; p_key_version: number; p_wrapped_key: string };
+    expect(call.p_pending_id).toBe("pending-1");
+    expect(call.p_key_version).toBe(2);
     // The server got a sealed box, never the key.
-    expect(row.wrapped_key).not.toBe(vault.key);
-    expect(acceptGrant({ vault, myDevice: theirs, wrappedKey: row.wrapped_key }).key).toBe(vault.key);
+    expect(call.p_wrapped_key).not.toBe(vault.key);
+    expect(acceptGrant({ vault, myDevice: theirs, wrappedKey: call.p_wrapped_key }).key).toBe(vault.key);
   });
 
   it("refuses a pending row that isn't accepted, or isn't for this vault", async () => {
@@ -126,26 +125,15 @@ describe("grantPendingDevice", () => {
     await expect(grantPendingDevice({ accountClient: other.client, pendingId: "p", vault: { ...vault, id: "other" }, device: { id: "device-1", publicKey: mine.publicKey }, sodium })).rejects.toThrow(/another vault/);
   });
 
-  it("refuses when the devices table doesn't hold the accepted public key", async () => {
+  it("refuses a key that doesn't match the fingerprint the admin compared", async () => {
     const mine = granter();
     const vault = { id: "vault-1", key: sodium.newVaultKey() };
-    // A server that substituted a key of its own: the pending row says one thing, the devices
-    // table another.
-    const { client } = fakeSupabase({
-      pending: { id: "p", vault_id: "vault-1", status: "accepted", matched_device_id: "device-2", target_public_key: sodium.newKeypair().publicKey },
-      device: { id: "device-2", public_key: sodium.newKeypair().publicKey },
+    // A server that swapped in a key of its own, behind the fingerprint the teammate read out.
+    const { written, client } = fakeSupabase({
+      pending: { id: "p", vault_id: "vault-1", status: "accepted", matched_device_id: "device-2", target_public_key: sodium.newKeypair().publicKey, target_fingerprint: fingerprint(sodium.newKeypair().publicKey) },
     });
-    await expect(grantPendingDevice({ accountClient: client, pendingId: "p", vault, device: { id: "device-1", publicKey: mine.publicKey }, sodium })).rejects.toThrow(/doesn't match/);
-  });
-
-  it("refuses a revoked device", async () => {
-    const mine = granter();
-    const vault = { id: "vault-1", key: sodium.newVaultKey() };
-    const { client } = fakeSupabase({
-      pending: { id: "p", vault_id: "vault-1", status: "accepted", matched_device_id: "device-2", target_public_key: "k" },
-      device: { id: "device-2", public_key: "k", revoked_at: "2026-01-01T00:00:00Z" },
-    });
-    await expect(grantPendingDevice({ accountClient: client, pendingId: "p", vault, device: { id: "device-1", publicKey: mine.publicKey }, sodium })).rejects.toThrow(/revoked/);
+    await expect(grantPendingDevice({ accountClient: client, pendingId: "p", vault, device: { id: "device-1", publicKey: mine.publicKey }, sodium })).rejects.toThrow(/doesn't match its fingerprint/);
+    expect(written).toHaveLength(0);
   });
 });
 

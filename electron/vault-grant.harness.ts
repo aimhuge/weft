@@ -18,6 +18,8 @@ export interface FakeOptions {
   device?: Record<string, unknown> | null;
   grant?: Record<string, unknown> | null;
   rpc?: string;
+  // The vault a workspace already has for the repo, for a share that finds one.
+  vault?: Record<string, unknown> | null;
 }
 
 /** The account client the fake stands in for, and the rows it was asked to write. */
@@ -48,6 +50,7 @@ export function fakeSupabase(opts: FakeOptions = {}): FakeSupabase {
   };
   const tables: Record<string, Record<string, unknown>> = {
     pending_device_grants: { select: () => one(opts.pending) },
+    vaults: { select: () => one(opts.vault) },
     devices: { select: () => one(opts.device) },
     vault_grants: {
       select: () => one(opts.grant),

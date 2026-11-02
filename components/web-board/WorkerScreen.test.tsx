@@ -14,7 +14,7 @@ vi.mock("@/lib/use-screen-stream", async (actual) => ({
 const { act } = await import("react");
 const { WorkerScreen } = await import("./WorkerScreen");
 
-const pane = (until: number) => ({ kind: "screen", url: "", label: "iPhone 17", token: "t", device: "d", until }) as Extract<SharePane, { kind: "screen" }>;
+const pane = (until: number) => ({ kind: "screen", url: "", label: "iPhone 17", token: "t", device: "d", until, fast: false }) as Extract<SharePane, { kind: "screen" }>;
 const later = () => Date.now() + 60_000;
 
 const capture = vi.fn();
@@ -47,6 +47,7 @@ describe("WorkerScreen", () => {
     const img = screen.getByAltText("iPhone 17's screen");
     fireEvent.pointerDown(img, { clientX: 1, clientY: 1 });
     fireEvent.pointerUp(img, { clientX: 1, clientY: 1 });
+    await waitFor(() => expect(onInput).toHaveBeenCalled());
     expect(onInput).toHaveBeenCalledWith(expect.objectContaining({ kind: "tap", device: "d" }));
     expect(screen.getByTestId("ripple")).toBeTruthy();
     await waitFor(() => expect(screen.getByText("not watched")).toBeTruthy());

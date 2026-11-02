@@ -1,0 +1,112 @@
+// The part of idb's CompanionService Weft uses (lib/idb-companion.ts), trimmed from facebook/idb's proto/idb.proto
+// (MIT). Names and field numbers must stay as they are there: they are the wire format.
+syntax = "proto3";
+
+package idb;
+
+service CompanionService {
+  rpc describe(TargetDescriptionRequest) returns (TargetDescriptionResponse) {}
+  rpc hid(stream HIDEvent) returns (HIDResponse) {}
+  rpc video_stream(stream VideoStreamRequest) returns (stream VideoStreamResponse) {}
+}
+
+message Point {
+  double x = 1;
+  double y = 2;
+}
+
+message Payload {
+  oneof source {
+    string file_path = 1;
+    bytes data = 2;
+    string url = 3;
+  }
+}
+
+message TargetDescriptionRequest {}
+
+message TargetDescriptionResponse {
+  TargetDescription target_description = 1;
+}
+
+message ScreenDimensions {
+  uint64 width = 1;
+  uint64 height = 2;
+  double density = 3;
+  uint64 width_points = 4;
+  uint64 height_points = 5;
+}
+
+message TargetDescription {
+  string udid = 1;
+  string name = 2;
+  ScreenDimensions screen_dimensions = 3;
+}
+
+message HIDEvent {
+  enum HIDDirection {
+    DOWN = 0;
+    UP = 1;
+  }
+
+  message HIDTouch {
+    Point point = 1;
+  }
+
+  message HIDKey {
+    uint64 keycode = 1;
+  }
+
+  message HIDPressAction {
+    oneof action {
+      HIDTouch touch = 1;
+      HIDKey key = 3;
+    }
+  }
+
+  message HIDPress {
+    HIDPressAction action = 1;
+    HIDDirection direction = 2;
+  }
+
+  message HIDSwipe {
+    Point start = 1;
+    Point end = 2;
+    double delta = 5;
+    double duration = 6;
+  }
+
+  oneof event {
+    HIDPress press = 1;
+    HIDSwipe swipe = 2;
+  }
+}
+
+message HIDResponse {}
+
+message VideoStreamRequest {
+  enum Format {
+    H264 = 0;
+  }
+  message Start {
+    string file_path = 1;
+    uint64 fps = 2;
+    Format format = 3;
+    double compression_quality = 4;
+    double scale_factor = 5;
+    double avg_bitrate = 6;
+    double key_frame_rate = 7;
+  }
+  message Stop {}
+  oneof control {
+    Start start = 1;
+    Stop stop = 2;
+  }
+}
+
+message VideoStreamResponse {
+  oneof output {
+    bytes log_output = 1;
+    Payload payload = 2;
+  }
+}

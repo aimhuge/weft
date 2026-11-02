@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, type ReactNode } from "react";
+import { useFindReveal } from "@/lib/find-reveal";
 import { openFile } from "@/lib/open-file";
 import { shortToolName } from "@/lib/format";
 import { toolSizeLabel, useToolResult } from "@/lib/use-tool-result";
@@ -107,8 +108,10 @@ export default function ToolLine({ item, live, cardId }: { item: ToolCall; live:
   const showEdit = Boolean(item.edit) && !item.isError;
   const body = toolBody({ showEdit, edit: item.edit, fetched, loading, errored, trimmed });
   const indicator = toolIndicator(fetched, live, trimmed, item.isError);
+  // Find opens the row on its match, which also fetches a trimmed result; left undefined, the row is the user's to toggle.
+  const found = useFindReveal([item]);
   return (
-    <details ref={detailsRef} className="rounded-md border border-line bg-sunken">
+    <details ref={detailsRef} open={found || undefined} className="rounded-md border border-line bg-sunken">
       <summary className="flex cursor-pointer list-none items-center gap-2 px-2.5 py-1.5 text-[12px]">
         <Icon name="wrench" size={12} className="text-faint" />
         <span className="shrink-0 font-mono font-medium text-ink">{shortToolName(item.name)}</span>

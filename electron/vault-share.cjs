@@ -7,13 +7,17 @@
 //   private.share_vault(org, repo, label, device, wrapped_key)  the vault row and its first grant,
 //     in one transaction. The wrapped key is computed in main first, because the function can't:
 //     a sealed box needs the vault key, and the vault key never goes to the server.
-//   vault_grants                                            one row per device × key version, for a
-//     device that joined after the vault existed.
+//   public.grant_vault_device(pending, wrapped_key, version)  one grant, for a device that asked to
+//     join after the vault existed. vault_grants' own policy only takes the caller's device.
 //
 // The vault key stays in main. What leaves is a `crypto_box_seal` box the target device alone can
 // open, and the names of the secrets — never a value.
 
 const { wrapForDevice, cryptoReady } = require("./vault-grant.cjs");
+const { fingerprint, normalizeFingerprint } = require("./device-fingerprint.cjs");
+
+// The names the server's vault_secrets takes. A local vault also takes lower case.
+const SERVER_NAME = /^[A-Z_][A-Z0-9_]*$/;
 
 /** @typedef {{ id?: string, publicKey: string, privateKey?: string }} Device */
 /** @typedef {{ name: string, environment: string, ciphertext?: string, nonce?: string, keyVersion?: number, hint?: string }} Secret */
@@ -45,11 +49,11 @@ async function readPending(accountClient, pendingId) {
  * The granter's side of a TOFU handshake: seal this vault's key to the device that accepted, and
  * write the grant row.
  *
- * The pending row is the source of the target's public key — it was written by the accepting side,
- * which read it from the `devices` table and never from a request body. The granter's main re-reads
- * it here rather than trusting anything the board hands it, and re-checks that the public key is
- * really that device's, so a server that substituted a key of its own is caught before the vault
- * key is sealed to it.
+ * The pending row is the source of the target's public key. The granter's main re-reads it here
+ * rather than trusting anything the board hands it, and works the fingerprint out from that key
+ * itself: the admin compares what the row says with the teammate's screen, so a key swapped in
+ * behind a fingerprint fails here, before the vault key is sealed to it. The server checks the rest
+ * (the granter's role, the key version, the device's owner).
  *
  * @param {{ accountClient: any, pendingId: string, vault: SharedVault, device: Device, sodium?: any }} deps
  */
@@ -61,32 +65,26 @@ async function grantPendingDevice({ accountClient, pendingId, vault, device, sod
   if (pending.vault_id !== vault.id) throw new Error("That grant is for another vault.");
   if (!pending.target_public_key) throw new Error("That grant has no public key to seal the key to.");
 
-  // The public key has to be the matched device's own. The pending row carries a device id, so the
-  // devices table is the authority: a key that isn't there isn't the device's.
-  const { data: matched, error } = await accountClient.supabase
-    .from("devices")
-    .select("id, public_key, fingerprint, name, revoked_at")
-    .eq("id", pending.matched_device_id)
-    .maybeSingle();
-  if (error) throw new Error(`That device could not be read: ${error.message}`);
-  if (!matched) throw new Error("That device isn't registered.");
-  if (matched.revoked_at) throw new Error("That device has been revoked.");
-  if (matched.public_key !== pending.target_public_key) throw new Error("That device's key doesn't match the one that was accepted.");
+  if (fingerprint(pending.target_public_key) !== normalizeFingerprint(pending.target_fingerprint)) throw new Error("That device's key doesn't match its fingerprint.");
 
-  const { wrappedKey, keyVersion } = wrapForDevice({ vault, granterDevice: device, newDevice: { id: matched.id, publicKey: matched.public_key } });
-  await writeGrant({ accountClient, vaultId: vault.id, deviceId: matched.id, wrappedKey, keyVersion, grantedBy: actorId(accountClient) });
-  return { deviceId: matched.id, keyVersion, fingerprint: matched.fingerprint, name: matched.name };
+  const { wrappedKey, keyVersion } = wrapForDevice({ vault, granterDevice: device, newDevice: { id: pending.matched_device_id, publicKey: pending.target_public_key } });
+  const { data: deviceId, error } = await accountClient.supabase.rpc("grant_vault_device", { p_pending_id: pendingId, p_wrapped_key: wrappedKey, p_key_version: keyVersion });
+  if (error) throw new Error(`That device could not be approved: ${error.message}`);
+  return { deviceId, keyVersion };
 }
 
-/**
- * The grant row itself: one row per (vault, device, key version). The server refuses a second one
- * for the same three, so a repeat grant is a no-op rather than an error.
- */
-async function writeGrant({ accountClient, vaultId, deviceId, wrappedKey, keyVersion, grantedBy }) {
-  const row = { vault_id: vaultId, device_id: deviceId, key_version: keyVersion, wrapped_key: wrappedKey, granted_by: grantedBy };
-  const { error } = await accountClient.supabase.from("vault_grants").upsert(row, { onConflict: "vault_id,device_id,key_version" });
-  if (error) throw new Error(`That device could not be granted: ${error.message}`);
-  return row;
+// The vault a workspace already has for this repo, if any.
+async function existingVault(accountClient, orgId, repo) {
+  const { data, error } = await accountClient.supabase.from("vaults").select("id, current_key_version").eq("org_id", orgId).eq("repo", repo).maybeSingle();
+  if (error) throw new Error(`This vault could not be shared: ${error.message}`);
+  return data ?? null;
+}
+
+// Whether this device holds a grant on a server vault: only then is its key the vault's key.
+async function holdsGrant(accountClient, vaultId, deviceId) {
+  const { data, error } = await accountClient.supabase.from("vault_grants").select("id").eq("vault_id", vaultId).eq("device_id", deviceId).limit(1);
+  if (error) throw new Error(`This vault could not be shared: ${error.message}`);
+  return Boolean(data?.length);
 }
 
 /**
@@ -114,6 +112,12 @@ async function shareLocalVault({ accountClient, orgId, repo, label, device, vaul
   // is one request and saves a rename later.
   if (checkRepo && !(await checkRepo(name))) throw new Error(`${name} isn't a GitHub repository.`);
 
+  // A workspace has one vault per repo, under one key. A second Mac's local vault has a key of its
+  // own, so importing it would leave rows nobody in the team can open. Only the Mac that shared it
+  // goes on from here, to finish a share that stopped halfway.
+  const found = await existingVault(accountClient, orgId, name);
+  if (found && !(await holdsGrant(accountClient, found.id, device.id))) throw new Error(`${name} is already shared with this workspace. Ask to join it instead.`);
+
   // The wrapped key is computed here, before the call: the function is security definer and can't
   // seal anything, and the vault key never goes to the server.
   const { wrappedKey, keyVersion } = wrapForDevice({ vault, granterDevice: device, newDevice: { id: device.id ?? null, publicKey: device.publicKey } });
@@ -130,17 +134,19 @@ async function shareLocalVault({ accountClient, orgId, repo, label, device, vaul
 
   // The local secrets become the server's rows. They are already ciphertext under the same key
   // (the local key was kept as version 1), so only the row's shape changes.
-  await importSecrets({ accountClient, vaultId, secrets: vault.secrets ?? [], keyVersion, userId: actorId(accountClient) });
+  const secrets = vault.secrets ?? [];
+  await importSecrets({ accountClient, vaultId, secrets, keyVersion, userId: actorId(accountClient) });
 
   // From here on the local file is a shadow of the server.
   markShared?.(vault.id, { orgId, vaultId, repo: name, keyVersion });
-  return { vaultId, repo: name, keyVersion, orgId };
+  const kept = [...new Set(secrets.filter((s) => !SERVER_NAME.test(s?.name ?? "")).map((s) => s.name))];
+  return { vaultId, repo: name, keyVersion, orgId, keptLocal: kept };
 }
 
 // The local secrets as the server's rows: the same ciphertext and nonce, under the same key.
 async function importSecrets({ accountClient, vaultId, secrets, keyVersion, userId }) {
   const rows = secrets
-    .filter((s) => s && typeof s.name === "string" && typeof s.environment === "string")
+    .filter((s) => s && typeof s.name === "string" && typeof s.environment === "string" && SERVER_NAME.test(s.name))
     .map((s) => ({
       vault_id: vaultId,
       name: s.name,
@@ -158,4 +164,4 @@ async function importSecrets({ accountClient, vaultId, secrets, keyVersion, user
   return rows.length;
 }
 
-module.exports = { grantPendingDevice, shareLocalVault, readPending, writeGrant, importSecrets, actorId };
+module.exports = { grantPendingDevice, shareLocalVault, readPending, importSecrets, actorId };

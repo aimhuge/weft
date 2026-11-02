@@ -31,6 +31,8 @@ export interface Engine {
   setMode(cardId: string, mode: CardMode): void;
   // A tap or swipe on the device a card is watching (lib/simulator-input.ts).
   input(input: ScreenInput): Promise<unknown>;
+  // Manual QA mode: which Mac this card's device tools go to, null for this box's own (lib/worker-device.ts).
+  setQa(cardId: string, device: string | null): void;
   getCard(cardId: string): Card | undefined;
   // A turn is really running now, in a session this process holds (a card waiting on a permission counts).
   live(): boolean;
@@ -207,7 +209,7 @@ export function createDaemon(deps: DaemonDeps) {
     try {
       for (const command of await reg.pending()) {
         // A tap shouldn't wait behind a card that's starting, and the person who made it is watching the screen.
-        if (command.kind === "clone" || command.kind === "input") void cloneOne(command);
+        if (command.kind === "clone" || command.kind === "input" || command.kind === "qa") void cloneOne(command);
         else await runOne(command);
       }
     } catch (err) {

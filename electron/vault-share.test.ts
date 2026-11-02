@@ -3,6 +3,7 @@ import { acceptGrant, cryptoReady } from "./vault-grant.cjs";
 import { importSecrets, shareLocalVault } from "./vault-share.cjs";
 import { createSharedApi } from "./vault-shared-api.cjs";
 import { registerVault } from "./vault-ipc.cjs";
+import { fingerprint } from "./device-fingerprint.cjs";
 import { fakeSupabase, rowFor } from "./vault-grant.harness";
 import * as sodium from "./vault-crypto.cjs";
 
@@ -102,29 +103,103 @@ describe("importSecrets", () => {
   });
 });
 
+describe("shareLocalVault against a vault the workspace already has", () => {
+  const share = (client: ReturnType<typeof fakeSupabase>["client"]) => {
+    const mine = sodium.newKeypair();
+    return shareLocalVault({
+      accountClient: client,
+      orgId: "org-1",
+      repo: "owner/name",
+      device: { id: "device-2", publicKey: mine.publicKey },
+      vault: { id: "github:owner/name", key: sodium.newVaultKey(), keyVersion: 1, secrets: [{ name: "API_KEY", environment: "development", ciphertext: "a-different-key", nonce: "n", keyVersion: 1 }] },
+      sodium,
+    });
+  };
+
+  it("refuses a second Mac, whose key would leave rows nobody can open", async () => {
+    const { written, client } = fakeSupabase({ vault: { id: "vault-1", current_key_version: 1 } });
+    await expect(share(client)).rejects.toThrow(/already shared/);
+    expect(written).toHaveLength(0);
+  });
+
+  it("lets the Mac that holds a grant finish a share that stopped halfway", async () => {
+    const { written, client } = fakeSupabase({ vault: { id: "vault-1", current_key_version: 1 }, grant: { id: "g" } });
+    (client.supabase.from("vault_grants") as { select: () => { limit: () => unknown } }).select = () => ({ eq() { return this; }, limit: () => Promise.resolve({ data: [{ id: "g" }], error: null }) }) as never;
+    await share(client);
+    expect(rowFor(written, "vault_secrets")).toBeTruthy();
+  });
+
+  it("keeps a lower-case name on this Mac and says so", async () => {
+    const mine = sodium.newKeypair();
+    const { written, client } = fakeSupabase();
+    const result = await shareLocalVault({
+      accountClient: client,
+      orgId: "org-1",
+      repo: "owner/name",
+      device: { id: "device-1", publicKey: mine.publicKey },
+      vault: { id: "github:owner/name", key: sodium.newVaultKey(), keyVersion: 1, secrets: [{ name: "lower_key", environment: "development", hint: "x" }, { name: "UPPER", environment: "development", hint: "y" }] },
+      sodium,
+    });
+    expect(result.keptLocal).toEqual(["lower_key"]);
+    expect((rowFor(written, "vault_secrets") as { name: string }[]).map((r) => r.name)).toEqual(["UPPER"]);
+  });
+});
+
 describe("createSharedApi", () => {
   it("seals the key and marks the local file shared, without the key in any of it", async () => {
     const mine = sodium.newKeypair();
     const theirs = sodium.newKeypair();
     const key = sodium.newVaultKey();
     const { written, client } = fakeSupabase({
-      pending: { id: "pending-1", vault_id: "vault-1", status: "accepted", matched_device_id: "device-2", target_public_key: theirs.publicKey },
-      device: { id: "device-2", public_key: theirs.publicKey, fingerprint: "aabb", name: "Sam's Mac" },
+      pending: { id: "pending-1", vault_id: "vault-1", status: "accepted", matched_device_id: "device-2", target_public_key: theirs.publicKey, target_fingerprint: fingerprint(theirs.publicKey) },
+      rpc: "device-2",
     });
-    const marked: { id: string; value: Record<string, unknown> }[] = [];
+    const prompt = vi.fn(() => Promise.resolve(true));
     const api = createSharedApi({
-      readVault: () => Promise.resolve({ id: "github:owner/name", localId: "github:owner/name", label: "owner/name", key, keyVersion: 1, secrets: [] }),
+      readVault: () => Promise.reject(new Error("a server id isn't a folder")),
+      readServerVault: () => Promise.resolve({ localId: "github:owner/name", label: "owner/name", key, keyVersion: 1 }),
       device: { id: "device-1", publicKey: mine.publicKey },
       sodium,
-      sync: { markShared: (id: string, value: Record<string, unknown>) => marked.push({ id, value }) },
+      prompt,
     });
 
     const granted = await api.grantPending({ pendingId: "pending-1", accountClient: client });
-    expect(granted.deviceId).toBe("device-2");
+    expect(granted).toMatchObject({ deviceId: "device-2" });
 
-    const row = rowFor(written, "vault_grants") as { wrapped_key: string };
-    expect(row.wrapped_key).not.toBe(key);
-    expect(acceptGrant({ vault: { key }, myDevice: theirs, wrappedKey: row.wrapped_key }).key).toBe(key);
+    expect(prompt).toHaveBeenCalledOnce();
+    const call = rowFor(written, "rpc") as { p_wrapped_key: string };
+    expect(call.p_wrapped_key).not.toBe(key);
+    expect(acceptGrant({ vault: { key }, myDevice: theirs, wrappedKey: call.p_wrapped_key }).key).toBe(key);
+  });
+
+  it("seals nothing when Touch ID says no", async () => {
+    const theirs = sodium.newKeypair();
+    const { written, client } = fakeSupabase({ pending: { id: "p", vault_id: "vault-1", status: "accepted", matched_device_id: "d", target_public_key: theirs.publicKey, target_fingerprint: fingerprint(theirs.publicKey) } });
+    const api = createSharedApi({
+      readVault: () => Promise.reject(new Error("unused")),
+      readServerVault: () => Promise.resolve({ label: "owner/name", key: sodium.newVaultKey(), keyVersion: 1 }),
+      device: { id: "device-1", publicKey: sodium.newKeypair().publicKey },
+      sodium,
+      prompt: () => Promise.resolve(false),
+    });
+    expect(await api.grantPending({ pendingId: "p", accountClient: client })).toEqual({ denied: true });
+    expect(written).toHaveLength(0);
+  });
+
+  it("asks to join, declines, and opens an approved grant into the store", async () => {
+    const mine = sodium.newKeypair();
+    const key = sodium.newVaultKey();
+    const { written, client } = fakeSupabase({ grant: { key_version: 3, wrapped_key: sodium.wrapKey(key, mine.publicKey) }, rpc: "pending-9" });
+    const adopt = vi.fn(() => Promise.resolve({}));
+    const api = createSharedApi({ readVault: () => Promise.reject(new Error("unused")), adopt, device: { id: "device-1", ...mine }, sodium });
+
+    expect(await api.requestJoin({ vaultId: "vault-1", accountClient: client })).toEqual({ pendingId: "pending-9" });
+    expect(written[0]).toMatchObject({ op: "request_vault_device", row: { p_vault_id: "vault-1", p_device_id: "device-1" } });
+    expect(await api.declinePending({ pendingId: "pending-9", accountClient: client })).toEqual({ declined: true });
+
+    const joined = await api.join({ folder: "/repo", vaultId: "vault-1", orgId: "org-1", repo: "owner/name", accountClient: client });
+    expect(joined).toEqual({ joined: true, keyVersion: 3 });
+    expect(adopt).toHaveBeenCalledWith("/repo", expect.objectContaining({ key, keyVersion: 3 }), { orgId: "org-1", vaultId: "vault-1", repo: "owner/name", keyVersion: 3 });
   });
 
   it("shares a local vault and marks it shared next to its file", async () => {
@@ -152,6 +227,9 @@ describe("the device-grant IPC channel", () => {
   const shared = () => ({
     grantPending: vi.fn(() => Promise.resolve({ deviceId: "device-2" })),
     shareLocal: vi.fn(() => Promise.resolve({ vaultId: "vault-9" })),
+    declinePending: vi.fn(),
+    requestJoin: vi.fn(),
+    join: vi.fn(),
   });
 
   it("has a channel of its own, apart from the thread grant", () => {

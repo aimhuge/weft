@@ -35,7 +35,7 @@ export interface PaneTab {
 
 // What the app menu, dock, tray, global shortcuts and weft:// links ask a window to do.
 // open-card carries an id.
-export type MenuAction = "new-thread" | "settings" | "open-card" | "find" | "terminal" | "add-webhook";
+export type MenuAction = "new-thread" | "settings" | "open-card" | "find" | "find-next" | "find-previous" | "terminal" | "add-webhook";
 
 // The board's view of the signed-in user's billing (docs/architecture/billing.md). Mirrors the JSON the local
 // /api/account/billing route returns, kept client-side so React components don't pull in server-only modules.
@@ -80,6 +80,10 @@ export interface ShellBridge {
     selectTab?(id: number): void;
     closeTab?(id: number): void;
     onState(callback: (state: BrowserState) => void): () => void;
+    // Find in the page on screen (electron/pane-find.cjs). A shell from before it has none. next: a step in the same search.
+    find?(text: string, options?: { forward?: boolean; next?: boolean }): void;
+    stopFind?(refocus: boolean): void;
+    onFound?(callback: (found: { active: number; matches: number }) => void): () => void;
   };
   dialog: {
     // A native folder picker; resolves to null when cancelled.

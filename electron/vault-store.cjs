@@ -71,6 +71,7 @@ function createVaultStore({ dir, device, sodium, now = Date.now, sync = null, on
     // A shared vault (one with a <hash>.shared.json): pull before reading, and its queued writes for the drawer's chip.
     isShared,
     pull: (id) => (isShared(id) ? shared.pull(id) : Promise.resolve(null)),
+    adopt: (id, label, grant, value) => shared.adopt(id, label, grant, value),
     queued: (id) => (isShared(id) ? sync.queued(id) : 0),
 
     exists: (id) => fs.existsSync(fileOf(id)),

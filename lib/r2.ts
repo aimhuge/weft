@@ -81,6 +81,15 @@ function stringToSign(amzDate: string, day: string, canonical: string): string {
  * the reader may see it (org membership, or a live share): the URL itself is the only check R2 makes.
  */
 export function presignGet(cfg: R2Config, key: string, now = Date.now()): string {
+  return presign("GET", cfg, key, now);
+}
+
+/** A presigned PUT for one object, for a worker to send a build to directly: a Vercel function can't take its body. */
+export function presignPut(cfg: R2Config, key: string, now = Date.now()): string {
+  return presign("PUT", cfg, key, now);
+}
+
+function presign(method: "GET" | "PUT", cfg: R2Config, key: string, now: number): string {
   const signedAt = new Date(Math.floor(now / 1000 / SIGN_WINDOW_S) * SIGN_WINDOW_S * 1000);
   const { amzDate, day } = stamps(signedAt);
   const host = r2Host(cfg);
@@ -96,7 +105,7 @@ export function presignGet(cfg: R2Config, key: string, now = Date.now()): string
     .map(([k, v]) => `${rfc3986(k)}=${rfc3986(v)}`)
     .sort()
     .join("&");
-  const canonical = ["GET", path, query, `host:${host}`, "", "host", UNSIGNED].join("\n");
+  const canonical = [method, path, query, `host:${host}`, "", "host", UNSIGNED].join("\n");
   const sig = signature(cfg, day, stringToSign(amzDate, day, canonical));
   return `https://${host}${path}?${query}&X-Amz-Signature=${sig}`;
 }

@@ -145,3 +145,16 @@ describe("the daemon's push pings", () => {
     expect(unsubscribe).toHaveBeenCalledOnce();
   });
 });
+
+describe("the qa command", () => {
+  it("sets the card's device, off the pass, and refuses another card", async () => {
+    const d = makeDeps();
+    d.pending.mockResolvedValueOnce([command({ kind: "qa", payload: { cardId: "card-1", device: "mac-1" } })]);
+    await d.daemon.poll();
+    await vi.waitFor(() => expect(d.report).toHaveBeenCalledWith("cmd-1", "done", "card-1", null));
+    expect(d.setQa).toHaveBeenCalledWith("card-1", "mac-1");
+    d.pending.mockResolvedValueOnce([command({ kind: "qa", payload: { cardId: "nope", device: null } })]);
+    await d.daemon.poll();
+    await vi.waitFor(() => expect(d.report).toHaveBeenCalledWith("cmd-1", "failed", null, "That thread isn't on this worker."));
+  });
+});

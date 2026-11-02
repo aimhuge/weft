@@ -289,3 +289,10 @@ describe("the live view", () => {
     expect(w.watchedSize("nope")).toBeUndefined();
   });
 });
+
+describe("noteWatchedSize", () => {
+  it("does nothing for a device nobody is watching", () => {
+    w.noteWatchedSize("nobody", { width: 1, height: 1 });
+    expect(w.watchedSize("nobody")).toBeUndefined();
+  });
+});

@@ -7,7 +7,7 @@ const { registerVaultEvents } = require("./vault-events-ipc.cjs");
  * @param {{ handle: (channel: string, fn: (event: unknown, ...args: unknown[]) => Promise<unknown>) => void }} ipcMain
  * @param {{ vault: any, isBoard: (sender: unknown) => boolean, board?: () => any, dataDir?: string,
  *   accountClient?: (() => any) | null,
- *   shared?: { grantPending: (opts: any) => Promise<unknown>, shareLocal: (opts: any) => Promise<unknown>, rotate?: (opts: any) => Promise<unknown> } | null }} deps
+ *   shared?: { grantPending: (opts: any) => Promise<unknown>, declinePending: (opts: any) => Promise<unknown>, requestJoin: (opts: any) => Promise<unknown>, join: (opts: any) => Promise<unknown>, shareLocal: (opts: any) => Promise<unknown>, rotate?: (opts: any) => Promise<unknown> } | null }} deps
  */
 function registerVault(ipcMain, { vault, isBoard, board = null, dataDir = "", accountClient = null, shared = null }) {
   const handle = (channel, fn) =>
@@ -39,6 +39,9 @@ function registerVault(ipcMain, { vault, isBoard, board = null, dataDir = "", ac
   // Both need the signed-in user's client, so they only exist on a desktop that has one.
   if (accountClient && shared) {
     handle("vault:device-grant", (pendingId) => shared.grantPending({ pendingId: String(pendingId), accountClient: accountClient() }));
+    handle("vault:device-decline", (pendingId) => shared.declinePending({ pendingId: String(pendingId), accountClient: accountClient() }));
+    handle("vault:join-request", (vaultId) => shared.requestJoin({ vaultId: String(vaultId), accountClient: accountClient() }));
+    handle("vault:join", (folder, join) => shared.join({ folder: String(folder), vaultId: String(join?.vaultId), orgId: String(join?.orgId), repo: String(join?.repo), accountClient: accountClient() }));
     handle("vault:share", (folder, orgId, repo, label) => shared.shareLocal({ folder: String(folder), orgId: String(orgId), repo: String(repo), label: label ? String(label) : undefined, accountClient: accountClient() }));
     // A shared vault's rotate (docs/architecture/teams-vault.md, "Removal and rotation"): the new key
     // is made here, in main, because that is the only place a vault key exists. The plan — sealed

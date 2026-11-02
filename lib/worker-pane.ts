@@ -6,7 +6,10 @@ import fs from "node:fs";
 import { resolvePage } from "./blob-paths";
 import { notePage } from "./card-page";
 import type { BlobRef } from "./cloud-sync-types";
+import { fileCallInside } from "./folder-guard";
 import { paneFromUrl } from "./share-types";
+import { SHOW_DIR } from "./show-dir";
+import type { PermissionMode } from "./types-card";
 
 export type PageUpload = (local: string) => Promise<BlobRef | null>;
 
@@ -18,6 +21,22 @@ export function setPageUpload(fn: PageUpload | null) {
 }
 
 export const onWorker = (env: NodeJS.ProcessEnv = process.env) => env.WEFT_WORKER === "1";
+
+// The folders a session's CLI works in beyond its cwd: what the card was granted, and the show folder for every thread,
+// which is all of it and not its parent. The system prompt tells each thread to write its pages there, and without it
+// the CLI's working-directory gate asked first, which on a headless box nobody answers. The CLI drops a directory that
+// isn't there, so a worker makes it first. docs/architecture/weft-worker.md#pages-from-a-worker
+export function sessionDirs(readScope: string[] | undefined, env: NodeJS.ProcessEnv = process.env) {
+  if (onWorker(env)) fs.mkdirSync(SHOW_DIR, { recursive: true });
+  return [...new Set([...(readScope ?? []), SHOW_DIR])];
+}
+
+// A worker's own pane page doesn't ask, in any mode but the one that asks on purpose. The folder above settles
+// acceptEdits, but Auto can still reach canUseTool on a worker, and the page would wait on a box nobody is at. Default
+// is the mode you picked to be asked in. This sits after the hooks, so the secret guard's refusals still win.
+export function ownPageCall(toolName: string, input: Record<string, unknown>, spec: { cwd: string; permissionMode: PermissionMode }, env: NodeJS.ProcessEnv = process.env) {
+  return onWorker(env) && spec.permissionMode !== "default" && fileCallInside(toolName, input, spec.cwd, SHOW_DIR);
+}
 
 const titleOf = (file: string) => /<title[^>]*>([^<]*)<\/title>/i.exec(fs.readFileSync(file, "utf8").slice(0, 4096))?.[1]?.trim() ?? "";
 

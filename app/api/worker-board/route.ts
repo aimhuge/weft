@@ -1,5 +1,6 @@
 import { connection } from "next/server";
 import { elevated, fail, guard } from "@/lib/guard";
+import { qaState } from "@/lib/qa-switch";
 import { readWorkerBoard, sendWorkerAction, workerThreadPage, workerToolOutput, type WorkerAction } from "@/lib/worker-board";
 
 // Your Weft Workers' projects on the desktop board (lib/worker-board.ts): GET lists them with their cards, GET ?card=
@@ -13,6 +14,8 @@ export async function GET(req: Request) {
   const params = new URL(req.url).searchParams;
   const card = params.get("card");
   try {
+    // What the manual QA switch shows: this Mac's own devices, and whether this card is approved here.
+    if (params.has("devices")) return Response.json(await qaState(card));
     if (!card) return Response.json(await readWorkerBoard());
     const tool = params.get("tool");
     if (tool) return Response.json({ result: await workerToolOutput(card, tool) });
@@ -31,8 +34,8 @@ export async function POST(req: Request) {
     const body = (await req.json()) as WorkerAction;
     // An answer can allow a call or grant a folder, so it takes Weft's own window, like the local permission route:
     // a thread's curl must not approve its own prompt on a worker. A mode widens what a thread may do, and input drives
-    // the device, so they take it too.
-    const loose = body.action === "answer" || body.action === "mode" || body.action === "input" ? elevated(req) : null;
+    // the device, so they take it too, and manual QA runs a worker's build on this Mac.
+    const loose = body.action === "answer" || body.action === "mode" || body.action === "input" || body.action === "qa" ? elevated(req) : null;
     if (loose) return loose;
     return Response.json(await sendWorkerAction(body));
   } catch (err) {

@@ -6,13 +6,16 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { accountClient } from "./account";
 import { signPageAssets } from "./blob-page-sign";
 import { readBlob } from "./blob-read";
+import { switchQa } from "./qa-switch";
 import { answerCommand, replyCommand, stopCommand, type GrantScope, type NewCommand } from "./cloud-commands";
 import { syncOrgId } from "./cloud-sync";
 import { THREAD_PAGE_SIZE } from "./cloud-sync-types";
 import { pageFromRows } from "./cloud-thread-page";
 import type { ThreadPage } from "./thread-page";
 import type { Card, PermissionMode, QuestionReply } from "./types";
-import { inputCommand, modeCommand, runCommand, type ScreenInput } from "./worker-commands";
+import { inputCommand, modeCommand, runCommand, type BoardInput, type BoardOffer, type ScreenInput } from "./worker-commands";
+import { seal } from "./worker-seal";
+import { RTC_PURPOSE } from "./rtc-signal";
 import { EMPTY_WORKER_BOARD, offlineMessage, parseWorkerProject, workerProjectPath, type WorkerBoard, type WorkerProject, type WorkerProjectStatus } from "./worker-project";
 import { OFFLINE_AFTER_MS } from "./workers-account";
 
@@ -130,7 +133,7 @@ async function commandTarget(client: SupabaseClient, cardId: string) {
   const who = await requireSession(client);
   const { data } = await client.from("cloud_cards").select("owner_device, owner_worker, folder, owner_user").eq("org_id", who.org).eq("card_id", cardId).maybeSingle<{ owner_device: string; owner_worker: string | null; folder: string; owner_user: string }>();
   if (!data?.owner_worker || data.owner_user !== who.uid) throw new Error("That thread isn't on one of your workers.");
-  return { orgId: who.org, device: data.owner_device, folder: data.folder, cardId };
+  return { orgId: who.org, device: data.owner_device, folder: data.folder, cardId, workerId: data.owner_worker };
 }
 
 async function insert(client: SupabaseClient, row: NewCommand): Promise<{ commandId: string }> {
@@ -144,15 +147,30 @@ export type WorkerAction =
   | { action: "answer"; cardId: string; pendingId: string; allow: boolean; answers?: Record<string, string>; reply?: QuestionReply; grant?: GrantScope }
   | { action: "stop"; cardId: string }
   | { action: "mode"; cardId: string; mode: PermissionMode }
-  | { action: "input"; cardId: string; input: ScreenInput };
+  | { action: "input"; cardId: string; input: BoardInput }
+  | { action: "qa"; cardId: string; device: string | null };
+
+// A WebRTC offer goes out sealed to the worker's published key: only that worker can answer it, and the answer comes
+// back under the board's one-time key, so the board knows who it reached (weft-worker.md#the-fast-path).
+async function sealedOffer(client: SupabaseClient, workerId: string, offer: BoardOffer): Promise<ScreenInput> {
+  const { data } = await client.from("cloud_workers").select("public_key").eq("id", workerId).maybeSingle<{ public_key: string | null }>();
+  if (!data?.public_key) throw new Error("That worker hasn't published its key yet.");
+  return { kind: "offer", device: offer.device, sealed: seal(data.public_key, JSON.stringify({ sdp: offer.sdp, key: offer.key }), RTC_PURPOSE) };
+}
+
+const inputFor = (client: SupabaseClient, workerId: string, input: BoardInput) => ("sdp" in input ? sealedOffer(client, workerId, input) : input);
 
 // A reply, an answer or a Stop from the desktop: the same rows the web board sends. A command for an offline worker
 // waits in the queue until it's back, and the thread says so.
 export async function sendWorkerAction(body: WorkerAction, client: SupabaseClient = accountClient()): Promise<{ commandId: string }> {
   const target = await commandTarget(client, body.cardId);
+  if (body.action === "qa") {
+    const { data } = await client.from("cloud_workers").select("name").eq("id", target.workerId).maybeSingle<{ name: string }>();
+    return insert(client, await switchQa(body.cardId, body.device, { ...target, workerName: data?.name ?? "your worker" }));
+  }
   if (body.action === "stop") return insert(client, stopCommand(target));
   if (body.action === "mode" || body.action === "input") {
-    const row = body.action === "mode" ? modeCommand(target, body.mode) : inputCommand(target, body.input);
+    const row = body.action === "mode" ? modeCommand(target, body.mode) : inputCommand(target, await inputFor(client, target.workerId, body.input));
     if (!row) throw new Error(body.action === "mode" ? "A worker doesn't run in that mode." : "That tap can't be sent.");
     return insert(client, row);
   }
