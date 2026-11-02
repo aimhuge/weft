@@ -1,6 +1,7 @@
 import { connection } from "next/server";
 import { devStatus, reachable, startDev, stopDev } from "@/lib/devserver";
 import { fail, guard } from "@/lib/guard";
+import { hostFail, runVerb } from "@/lib/host-api";
 import { getCard } from "@/lib/store";
 import { workDir } from "@/lib/work-dir";
 
@@ -14,7 +15,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   return Response.json({ status: await devStatus(id, card.review?.url) });
 }
 
-// start: run the plan's dev command unless its url already answers; stop: end the server Weft started.
+// start: run the plan's dev command unless its url already answers; stop: end the server Weft started (dev.stop);
+// open: a private address for the card's server, after Touch ID (dev.open, lib/host-api/dev-servers.ts).
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const denied = guard(req);
   if (denied) return denied;
@@ -23,7 +25,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!card) return fail("No such card.", 404);
   const { action } = (await req.json().catch(() => ({}))) as { action?: string };
   const plan = card.review;
-  if (action === "stop") stopDev(id);
+  if (action === "open") return runVerb("dev.open", { id }).then((r) => Response.json(r), (err: unknown) => hostFail(err));
+  if (action === "stop") await runVerb("dev.stop", { id });
   else if (action === "start" || action === "restart") {
     if (!plan?.dev) return fail("The review tour has no dev command.");
     if (action === "restart") stopDev(id);

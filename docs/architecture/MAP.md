@@ -27,7 +27,7 @@ matching doc below. When a feature lands, add or update its entry here and in it
 - `billing.md` — Free and Pro per workspace, `@aimhuge/billing`, PlanMeter, the admin console (plans, refunds, resets, Stripe mode per org), coupons and referrals, what's built and what's still TODO.
 - `secrets.md` — the 🔐 vault: device key, on-disk encryption, IPC, Touch ID, agent tools, dev-server env, Supabase sync.
 - `webhooks.md` — the 🪝 rail drawer, the `mcp__webhooks__*` tools, the relay URL, `webhook_deliveries` on Supabase.
-- `tunnels.md` — a private address for a local dev server: `/t/<id>`, cloudflared quick tunnels, the local gate and tickets.
+- `tunnels.md` — a private address for a local dev server: `/t/<id>`, cloudflared quick tunnels, the local gate and tickets; on a worker, approved by the owner's Mac (`lib/tunnel-host.ts`, `lib/tunnel-mac.ts`, `lib/tunnel-worker.ts`, `lib/worker-mac-ask.ts`, `lib/device-call-approvals.ts`, `lib/worker-reach.ts`, `worker_tunnel_open`).
 - `dictation.md` — local whisper.cpp dictation: languages, the Advanced warm server, vocabulary, the transcribe route.
 - `vercel.md` — the ▲ rail drawer: token in the Keychain, `.vercel/project.json`, env push from the vault, deploys, `vercel_events` Realtime.
 - `supabase.md` — the Supabase rail drawer: token in the Keychain, `supabase/.temp/project-ref`, state, unapplied migrations, the Migrate card.
@@ -350,6 +350,7 @@ When a new doc lands in this folder, add it here on the same change.
   in the store until the target composer (`dropTarget`) mounts.
 - `lib/review.ts`: `weft-review` tour blocks. `lib/review-feedback.ts` + `components/ReviewPanelTour.tsx` + `components/ReviewPanelHeader.tsx`: the review tour's per-step feedback drafts (`weft.review.<cardId>.<step>` in localStorage), the header's unsent count, and the flush that sends every waiting note with the approval (docs/architecture/threads-and-sessions.md "Review tour"). `lib/devserver.ts` + `lib/devserver-list.ts` + `lib/devserver-tools.ts` + `components/ServicesDrawer.tsx`:
   dev servers Weft runs for threads (`mcp__devservers__*`) and review tours; `lib/task-stop.ts` is the task strip's per-task Stop (docs/architecture/dev-servers.md).
+  A worker's dev servers: `lib/worker-dev-servers.ts` (published on its row), `lib/worker-dev-list.ts` + `components/WorkerDevServers.tsx` (the drawer's "On <worker>" rows), `lib/host-api/dev-servers.ts` (`dev.open`, `dev.stop`), `lib/worker-dev-acts.ts`, `lib/tunnel-link.ts` (an address from a worker must be weft.zip's own `/t/<id>`) (dev-servers.md#on-a-worker).
   `lib/services.ts` + `lib/services-snapshot.ts` + `lib/services-kill.ts` + `app/api/services` + `lib/use-services.ts` + `lib/services-view.ts` + `lib/services-prefs.ts` + `components/ServicesDrawer.tsx`:
   the rail's 🖥 Services drawer, every process Weft spawned (one `ps` of the tree under Electron, split by thread CLI, dev server, terminal and other) with CPU, memory, End and a refresh-rate cookie.
   `lib/dev-commands.ts` + `lib/dev-launchers.ts` + `lib/dev-launchers-view.ts` + `components/DevLaunchers.tsx`: its Dev servers section, first in the drawer above the usage numbers: each working folder's dev command (package.json, Procfile, Rails, Django, deno, Makefile, wrangler) with Start, or Stop and Restart, whether it started or restarted and which card started it (its name opens the card); Weft's own folder is listed last as the board itself, with a link to its address that opens outside the pane. A thread's name in the services list opens its card.
@@ -582,7 +583,8 @@ When a new doc lands in this folder, add it here on the same change.
   `lib/webhook-relay.ts` + `app/api/hooks/[id]/[[...rest]]` + `lib/webhook-forward.ts`: its public relay URL on the deployed Weft (→ `webhook_deliveries` on
   Supabase → Realtime → the local target; the relay only accepts a delivery carrying the provider's signature, checked by
   `lib/webhook-signatures.ts` against the secret sealed into the row by `lib/relay-secret.ts` + `electron/relay-secret.cjs`;
-  docs/architecture/webhooks.md).
+  docs/architecture/webhooks.md). On a worker the relay is made by the owner's Mac (`lib/relay-worker.ts`, a `relay_create`
+  device call) and delivers only through the worker's tunnel (webhooks.md#on-a-worker).
 - `electron/vercel*.cjs` (`vercel-env.cjs`: 🔐 vault → Vercel env push, and the vault ⇄ Vercel drift from `vercel-env-cache.cjs` with `lib/vercel-drift*.ts`, `lib/use-vercel-drift.ts` and `components/VercelDriftActions.tsx`; Touch ID per push, also `mcp__secrets__push_to_vercel`; and `pull()`: plain Vercel vars the vault lacks → vault, by hand or live: `lib/vercel-hooks.ts` + `app/api/vercel/hooks` make the team webhook and listen, `lib/vercel-relay.ts` + `app/api/vercel/webhook` relay it on the deployed Weft → `vercel_events` on Supabase → Realtime) + `lib/vercel-view.ts` + `lib/use-vercel.ts` + `lib/use-linked-status.ts` (the three drawers' cached status hook) + `components/Vercel*.tsx`: the ▲ Vercel drawer (token sealed
   in the Keychain, link or create a project as `.vercel/project.json`, latest deploy; docs/architecture/vercel.md).
 - `electron/supabase.cjs` + `lib/supabase-view.ts` + `lib/use-supabase.ts` + `components/Supabase*.tsx`: the Supabase drawer (its bolt

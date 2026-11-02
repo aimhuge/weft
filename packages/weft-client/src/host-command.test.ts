@@ -104,6 +104,12 @@ describe("results and typed text", () => {
     });
     expect(verbResult("skills.list", "c", undefined)).toEqual({ ok: true, cardId: "c", skills: [] });
   });
+
+  it("carries dev.open's private address, capped, and nothing when there's none", () => {
+    expect(verbResult("dev.open", "c", { address: "https://weft.zip/t/t1" })).toEqual({ ok: true, cardId: "c", address: "https://weft.zip/t/t1" });
+    expect((verbResult("dev.open", "c", { address: `https://weft.zip/t/${"a".repeat(900)}` }) as { address: string }).address).toHaveLength(500);
+    expect(verbResult("dev.open", "c", undefined)).toEqual({ ok: true, cardId: "c" });
+  });
 });
 
 describe("remoteRefusal for the editor's verbs", () => {
