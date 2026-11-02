@@ -88,11 +88,10 @@ export async function runHolding(name, command, { args, dir = process.env.WEFT_L
   });
   const release = () => unlock(file);
   process.on("exit", release);
-  const child = spawn(command, args ?? [], { stdio: "inherit", shell: !args });
-  // An optional resident-memory cap on the command's whole process tree (scripts/test-watchdog.mjs), for a
-  // job whose workers can outgrow the box: a whole-suite vitest run beside a live Weft, say. The watcher
-  // SIGTERMs the child on breach; vitest's own limits only see V8's heap, not RSS.
-  const stopWatchdog = watchdog?.start?.(child, watchdog.limitMb);
+  // The handlers go on before the spawn: installed after it, a signal that came while the command was
+  // already starting (and printing) killed this script outright, exit code null, and left the command
+  // running. Signals reach JS on the event loop, so none can land between spawn() and `child` being set.
+  let child;
   const forward = (signal) => {
     release();
     child.kill(signal);
@@ -100,6 +99,11 @@ export async function runHolding(name, command, { args, dir = process.env.WEFT_L
   };
   const signals = ["SIGINT", "SIGTERM", "SIGHUP"];
   for (const signal of signals) process.on(signal, forward);
+  child = spawn(command, args ?? [], { stdio: "inherit", shell: !args });
+  // An optional resident-memory cap on the command's whole process tree (scripts/test-watchdog.mjs), for a
+  // job whose workers can outgrow the box: a whole-suite vitest run beside a live Weft, say. The watcher
+  // SIGTERMs the child on breach; vitest's own limits only see V8's heap, not RSS.
+  const stopWatchdog = watchdog?.start?.(child, watchdog.limitMb);
   return new Promise((resolve) =>
     child.on("exit", (code, signal) => {
       for (const s of signals) process.off(s, forward);
