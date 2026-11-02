@@ -34,6 +34,8 @@ export interface Engine {
   start(body: Record<string, unknown>): Promise<Card>;
   // One verb of lib/host-api, run in this process (runVerb): a reply, an answer, a stop, a mode and the rest.
   host(verb: HostVerb, args: Record<string, unknown>): Promise<unknown>;
+  // Puts a verb's large result in the blob store and answers its sha (lib/host-result.ts); absent, only small ones go.
+  carry?: (json: string) => Promise<string>;
   // Brings the files a command's text pastes onto this box and points the text at them (lib/attachment-transfer.ts).
   receive(text: string, payload: unknown): Promise<string>;
   // This card / Always on this worker (lib/folder-grant.ts).

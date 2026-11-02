@@ -32,6 +32,15 @@ describe("useScout", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("reads a worker project's scout from its snapshot, and never re-scouts it from here", async () => {
+    const { result } = renderHook(() => useScout("worker://w1/ling"));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/worker-board?project=worker%3A%2F%2Fw1%2Fling");
+    result.current.rescout();
+    result.current.started("f1");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("reads the folder's scout, and again on focus", async () => {
     const { result } = renderHook(() => useScout("/p q"));
     await waitFor(() => expect(result.current.scout).toEqual(idle));

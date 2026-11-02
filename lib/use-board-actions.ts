@@ -39,6 +39,9 @@ export interface BoardActionsDeps {
   onSentToWorker?: (worker: string) => void;
 }
 
+// POST /api/cards answers no card for a worker's project: the run went to the worker, and its card comes back later.
+const madeHere = (reply: { card: Card | null }) => reply.card?.id;
+
 export function useBoardActions({
   selected,
   select,
@@ -82,10 +85,12 @@ export function useBoardActions({
       const backend = (model && backendFor(model)) || "claude";
       // The card's model is the id the CLI takes, so a Goose pick loses its "goose:" prefix; the
       // card's backend says it runs on Goose.
-      const { card } = await api.create({ title, prompt, cwd, backend, model: cardModel(model), start: true });
-      return card.id;
+      // A worker project's card goes to the worker as a run, so there's no card here to open yet.
+      const reply = await api.create({ title, prompt, cwd, backend, model: cardModel(model), start: true });
+      if (reply.start?.worker) onSentToWorker?.(reply.start.worker);
+      return madeHere(reply);
     },
-    [],
+    [onSentToWorker],
   );
 
   const reviewAll = useCallback(async () => {

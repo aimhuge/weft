@@ -46,6 +46,10 @@ export const HOST_API = {
   "card.unschedule": { elevated: false, run: lazy(() => import("./card-schedule"), "unscheduleVerb") },
   // A read: the skills the card's folder has on that host, for the "/" typeahead.
   "skills.list": { elevated: false, run: lazy(() => import("./skills-list"), "skillsListVerb") },
+  // The editor (H4). A save writes the folder, so it takes Weft's own window locally and is confined from the network.
+  "files.list": { elevated: false, run: lazy(() => import("./files"), "listFilesVerb") },
+  "files.read": { elevated: false, run: lazy(() => import("./files"), "readFileVerb") },
+  "files.write": { elevated: true, run: lazy(() => import("./files"), "writeFileVerb") },
 } satisfies Record<HostVerb, Handler>;
 
 type Table = typeof HOST_API;

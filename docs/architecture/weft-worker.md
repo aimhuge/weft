@@ -613,6 +613,12 @@ How a Worker project gets everything a local one has (one handler layer, `hostFo
 everything live, passkey approvals, one device registry) is designed in [project-hosts.md](project-hosts.md), with its
 gap table and phases.
 
+Since H4 the daemon also publishes each folder's header reads (quality, the scout's last report, the pile and the
+Backlog) to `cloud_worker_projects` through `worker_put_project` (`lib/worker-projects.ts`, started in
+`scripts/weft-worker.ts`: every 5 minutes, 20 s after a card change, never mid-turn), and answers the editor's
+`files.*` verbs, putting a result over the row's 4 KB in the blob store through `Engine.carry`
+([project-hosts.md](project-hosts.md#project-reads-and-the-editor-h4-as-built)).
+
 The one-sentence version: **Weft already has a remote control plane, but not a remote compute plane.** The web
 board already commands a Mac across the network through `cloud_commands`; the CLI, though, always spawns on the
 board's own machine. A worker is a second implementation of the executor behind that same command bus. The board,

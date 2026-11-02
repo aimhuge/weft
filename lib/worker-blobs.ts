@@ -7,6 +7,7 @@
 // holds its key, worker.env its Claude token and github-credentials its GitHub token, and none of those names looks
 // like a secret, while a page a card wrote can name any path. So a worker goes the other way: only web files, only
 // inside its show folder or its checkouts, never in a dot folder (.git, .ssh), with symlinks followed first.
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -83,5 +84,31 @@ export function workerBlobReader(key: string, max: number, site = SITE, fetcher:
     const file = await fetcher(got.url);
     if (!file.ok || Number(file.headers.get("content-length") ?? 0) > max) return null;
     return Buffer.from(await file.arrayBuffer());
+  };
+}
+
+// A host verb's answer too big for its command's row (lib/host-result.ts): put up under <org>/results/<sha> through the
+// same key-checked route, which the R2 mirror skips and `sweep` empties of anything over a day old. Answers the sha.
+export function workerResults(key: string, storage: SignedStorage, site = SITE, fetcher: typeof fetch = fetch) {
+  const post = (body: unknown) =>
+    fetcher(`${site}/api/worker-blob`, { method: "POST", headers: { authorization: `Bearer ${key}`, "content-type": "application/json" }, body: JSON.stringify(body) });
+  return {
+    async put(json: string): Promise<string> {
+      const body = Buffer.from(json, "utf8");
+      const sha = createHash("sha256").update(body).digest("hex");
+      const res = await post({ sha, result: true });
+      const got = (await res.json().catch(() => ({}))) as { path?: string; token?: string; exists?: boolean; error?: string };
+      if (got.exists) return sha;
+      if (!res.ok || !got.path || !got.token) throw new Error(got.error || `worker-blob: HTTP ${String(res.status)}`);
+      const { error } = await storage.from(BLOB_BUCKET).uploadToSignedUrl(got.path, got.token, body, { contentType: "application/json" });
+      if (error && !/exists|duplicate/i.test(error.message)) throw new Error(error.message);
+      return sha;
+    },
+    // How many results over a day old the route removed; 0 when it couldn't.
+    async sweep(): Promise<number> {
+      const res = await post({ sweep: true });
+      const got = (await res.json().catch(() => ({}))) as { removed?: number };
+      return res.ok ? (got.removed ?? 0) : 0;
+    },
   };
 }
