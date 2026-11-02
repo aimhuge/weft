@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { GameState } from "@/lib/game-server";
@@ -108,6 +108,10 @@ describe("GameBadge", () => {
   it("replays the last popup on the replay event, and the current level before any", async () => {
     setup();
     await screen.findByRole("button", { name: /Wefter Profile/ });
+    // The button shows on the commit that sets `game`, but the replay listener is a passive effect of that same
+    // render. findByRole resolves from a MutationObserver microtask, before React flushes passive effects, so an
+    // event fired right away has no listener yet and is lost. Flush effects inside act before dispatching.
+    await act(async () => {});
     window.dispatchEvent(new Event("weft:achievement-replay"));
     expect(await screen.findByRole("dialog", { name: "Level up!" })).toHaveTextContent("Level 2 · Thread");
     await userEvent.click(screen.getByRole("button", { name: "Nice!" }));

@@ -64,7 +64,7 @@ describe("the endorse IPC", () => {
     expect(await worker.endorse(e, "w1", 5_000)).toBe(5_000);
     expect(worker.read().map((p) => p.device)).toEqual(["b1"]);
     // The vault copy is sealed.
-    expect(fs.readFileSync(path.join(h.dir, "vault", "endorsed-workers.json"), "utf8")).not.toContain("b1");
+    expect(fs.readFileSync(path.join(h.dir, "vault", "endorsed-workers.json"), "utf8")).not.toContain('"device"');
   });
 
   it("keeps a set pending, sent again as it was, until the worker's receipt signed with its pinned key says it holds it", async () => {
