@@ -77,6 +77,7 @@ afterAll(() => {
 describe.skipIf(!!reason)("a worker card's browser tools, in a real Chromium", () => {
   const frames: Buffer[] = [];
 
+  // The first call cold-starts Chromium; a loaded CI shard has taken over 30s for that.
   it("opens a dev server on localhost and reads it", async () => {
     screen.setBrowserScreenChannel(() => Promise.resolve({ send: (f) => (frames.push(f.bytes), Promise.resolve()), type: () => "jpeg", answer: () => Promise.resolve(), close: () => {} }));
     expect(await call("/browser/open", { url: `${origin}/` })).toEqual({ url: `${origin}/`, title: "Test page" });
@@ -85,7 +86,7 @@ describe.skipIf(!!reason)("a worker card's browser tools, in a real Chromium", (
     expect(await call("/browser/url")).toEqual({ url: `${origin}/` });
     // The pane now names the card's live view.
     expect(noted.at(-1)?.[1]).toMatch(/^weft-screen:[0-9a-f]{32}\?.*device=browser-[0-9a-f]{16}/);
-  }, 30_000);
+  }, 90_000);
 
   it("snapshots with refs, and clicks, types, submits and selects with trusted input", async () => {
     const snap = await call("/browser/snapshot");
