@@ -9,7 +9,8 @@ import { startPileReview } from "./pile-review";
 import { lastFolder } from "./board-helpers";
 import { onOpenCardRequest } from "./open-card";
 import { backendFor, cardModel } from "./new-thread";
-import { isWorkerCard, localPath } from "./worker-project";
+import { hostOf } from "./project-host";
+import { localPath } from "./worker-project";
 import type { Card } from "./types";
 
 export interface BoardActions {
@@ -65,8 +66,8 @@ export function useBoardActions({
   const openCard = useCallback(
     (card: Card) => {
       select(card.id);
-      // Start its CLI now so a reply doesn't wait.
-      if (!card.warm && card.column !== "done" && !isWorkerCard(card)) api.warm({ cardId: card.id }).catch(() => {}); // best-effort prefetch
+      // Start its CLI now so a reply doesn't wait: best effort, on its own host (a worker's only over its line).
+      if (!card.warm && card.column !== "done") hostOf(card).warm(card.id);
     },
     [select],
   );

@@ -25,6 +25,7 @@ vi.mock("@/lib/runner", () => ({
   endSession: vi.fn(() => Promise.resolve()),
   isBusy: vi.fn(() => false),
   setPermissionMode: vi.fn(),
+  warmUp: vi.fn(),
   answerPermission: vi.fn(),
   waitPermission: vi.fn(),
   switchBackend: vi.fn(() => Promise.resolve()),
@@ -44,6 +45,10 @@ vi.mock("@/lib/precedence", () => ({ putFirst: vi.fn(), putHolderFirst: vi.fn() 
 vi.mock("@/lib/scheduler", () => ({
   scheduleMessage: vi.fn((id: string) => db.cards.get(id)),
   unscheduleMessage: vi.fn((id: string) => db.cards.get(id)),
+}));
+vi.mock("@/lib/new-card", () => ({
+  createCardFromBody: vi.fn((_body: unknown, id: string) => ({ id, title: "t" })),
+  startCard: vi.fn(() => ({ started: true })),
 }));
 vi.mock("@/lib/skills", () => ({ listSkills: vi.fn(() => [{ name: "ship", description: "d", source: "project" }]) }));
 vi.mock("@/lib/file-access", () => ({
@@ -71,8 +76,10 @@ beforeEach(() => {
 // One sample call per verb, with the reply it gives.
 const card = () => ({ card: db.cards.get("c1") });
 const SAMPLES: Record<HostVerb, { args: unknown; reply: () => unknown }> = {
+  "card.create": { args: { id: "new-card-1", prompt: "hi" }, reply: () => ({ card: { id: "new-card-1", title: "t" }, start: { started: true } }) },
   "card.update": { args: { id: "c1", body: { title: "New" } }, reply: card },
   "card.stop": { args: { id: "c1" }, reply: () => ({ ok: true }) },
+  "card.warm": { args: { id: "c1" }, reply: () => ({ ok: true }) },
   "card.delete": { args: { id: "c1" }, reply: () => ({ ok: true }) },
   "card.shell": { args: { id: "c1", command: "ls" }, reply: () => ({ ok: true }) },
   "card.fresh": { args: { id: "c1", message: "hi" }, reply: () => ({ ok: true }) },
@@ -98,8 +105,10 @@ const SAMPLES: Record<HostVerb, { args: unknown; reply: () => unknown }> = {
 
 // The local route each verb is mounted on.
 const ROUTES: Record<HostVerb, string> = {
+  "card.create": "../route.ts",
   "card.update": "route.ts",
   "card.stop": "stop/route.ts",
+  "card.warm": "../../warm/route.ts",
   "card.delete": "route.ts",
   "card.shell": "shell/route.ts",
   "card.fresh": "fresh/route.ts",
@@ -165,6 +174,9 @@ describe("HOST_API", () => {
     expect(needsElevation("card.update", { id: "c1", body: { title: "x" } })).toBe(false);
     expect(needsElevation("card.update", { id: "c1", body: { permissionMode: "auto" } })).toBe(true);
     expect(needsElevation("card.update", { id: "c1", body: { readScope: "/x" } })).toBe(true);
+    expect(needsElevation("card.create", { id: "n1" })).toBe(false);
+    expect(needsElevation("card.create", { id: "n1", permissionMode: "default" })).toBe(false);
+    expect(needsElevation("card.create", { id: "n1", permissionMode: "acceptEdits" })).toBe(true);
   });
 });
 

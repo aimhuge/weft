@@ -67,6 +67,13 @@ describe("remoteRefusal", () => {
     expect(remoteRefusal({ verb: "card.delete", args: { id: "c" } })).toBeNull();
   });
 
+  it("holds a new card to the same rules as an update: no skipped prompts, no folder, agent or read scope", () => {
+    expect(remoteRefusal({ verb: "card.create", args: { id: "c", prompt: "p", permissionMode: "bypassPermissions" } })).toMatch(/can't skip permission prompts/);
+    expect(remoteRefusal({ verb: "card.create", args: { id: "c", prompt: "p", cwd: "/Users/x" } })).toMatch(/folder/);
+    expect(remoteRefusal({ verb: "card.create", args: { id: "c", prompt: "p", agent: "builder" } })).toMatch(/agent/);
+    expect(remoteRefusal({ verb: "card.create", args: { id: "c", prompt: "p", tags: ["a"], isolated: true, permissionMode: "plan", start: false } })).toBeNull();
+  });
+
   it("lets Send later and the skills list through, but never a scheduled \"!\" command", () => {
     expect(remoteRefusal({ verb: "card.schedule", args: { id: "c", text: "ship it", at: 1 } })).toBeNull();
     expect(remoteRefusal({ verb: "card.schedule", args: { id: "c", at: 1 } })).toBeNull();
@@ -94,6 +101,7 @@ describe("results and typed text", () => {
     expect(textArgOf("card.message.edit")).toBe("text");
     expect(textArgOf("card.fresh")).toBe("message");
     expect(textArgOf("card.schedule")).toBe("text");
+    expect(textArgOf("card.create")).toBe("prompt");
     expect(textArgOf("card.stop")).toBeUndefined();
   });
 

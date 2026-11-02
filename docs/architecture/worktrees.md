@@ -53,7 +53,8 @@ So the pool does the 15 seconds ahead of time and taking one is a move and a bra
 
 1. **Fill** (`fillPool(repo)`): `git worktree add --detach` at the main tree's HEAD, then the dependencies: an
    APFS clone of the main tree's `node_modules` when it has one (`cp -c`, which fails rather than copies on a
-   volume without clones; then a plain install), then the lockfile's own offline install (`pnpm install --offline`,
+   volume without clones; then a plain install; on a Linux Weft Worker `cp -R --reflink=auto`, a reflink on btrfs or
+   XFS and a plain copy elsewhere, `cloneArgs`), then the lockfile's own offline install (`pnpm install --offline`,
    `npm ci --prefer-offline`, `yarn install --offline`), falling back to `--prefer-offline`. Background only.
 2. **Freshen** (on the scheduler's tick, `freshenPools()`): an idle entry whose HEAD is behind the main tree's is
    checked out at the new HEAD (`git checkout --detach`, clean tree, milliseconds), and reinstalled only when the

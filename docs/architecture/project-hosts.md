@@ -25,21 +25,27 @@ engine: the daemon runs the same `lib/runner.ts`.
 | Feature | Local | On a Worker card |
 | --- | --- | --- |
 | Permission mode | PATCH `permissionMode` | default/acceptEdits/auto through the `mode` command; no `plan` mid-card |
-| Model, CLI, effort on an open card | `switch-backend`, `rerun-model` | the model picker and the first-message banner's rerun, as `card.switchBackend` / `card.rerunModel` (H3) |
+| Model, CLI, effort on an open card | `switch-backend`, `rerun-model` | the model picker and the first-message banner's rerun, as `card.switchBackend` / `card.rerunModel` (H3); the rerun is on the card's own CLI's default (`hostRerunModel`), not this Mac's backup model |
 | Agent | PATCH `agent` | none |
 | Rename, tags, star, archive, move, delete | PATCH, DELETE, `CardActions` | as `card.update` (H3), and `card.delete` (2026-11-02) |
 | Share… | `card-share`, `ShareCardDialog` | the same dialog over the rows the worker published (`lib/card-share-worker.ts`, 2026-11-02; sharing.md) |
 | ↑ edit, Restart, Fresh | `messages`, `fresh` | as host verbs (H3) |
-| "!" shell | `shell` | none |
+| "!" shell | `shell` | none: the box still turns amber and says "A shell runs only on this Mac's cards." (`shellRefusal`), sending nothing |
 | Wait, Me first, Others first | `permission` | as host verbs, on the tile and in the thread (H3) |
 | Stop a subagent task | `tasks/[taskId]/stop` | `card.stopTask` (H3) |
 | Attachments in a reply | `/api/attachments` | images and PDFs travel as blobs on `reply`, `run` and `new_card` (`lib/attachment-transfer.ts`, 2026-11-02) |
 | Send later | `desktop: true` | `card.schedule` / `card.unschedule`, the worker's daemon holding the timer (H3b) |
 | "/" skills list | `/api/skills?cwd=` | `skills.list`, the worker's own list for the card's checkout (H3b) |
 | Plan limits meter | this Mac's limits log | the card's own reading, from the worker's CLI (H3b) |
-| Review panel, skills chip | `desktop: true` | none |
 | Show rail, editor | Board's open card | the show rail, in Board's own open card (H3); the editor and file links through `files.*` (H4) |
-| Backlog | Backlog column | the header's count from the worker's snapshot (H4); no Backlog column or planning |
+| Review tour | `desktop: true` | the tour and the no-tour panel (card data), each step's page in the card's pane column (`lib/pane-open.ts`); no dev server step |
+| Skills menu, Run /skill | `/api/skills`, `api.send` | the header menu (its list from `skills.list`) and the right-click Run /<skill>, as `card.message` |
+| Skill set chip, ⏰ crons | `desktop: true` | none (`cardCan(card, transport, "skills" / "cron")`) |
+| ⌘F over the whole thread | `/thread/search` | `GET /api/worker-board?card=&q=` over the card's `cloud_thread_items` (`lib/worker-thread-reads.ts`); sealed rows and cut tool results aren't searched |
+| Pictures in the thread | `/api/attachments/<name>` | blob refs signed through `GET /api/worker-board?blobs=` and drawn by the transport's `useView` (`lib/worker-blob-view.ts`) |
+| New thread, Backlog | POST `/api/cards` | the header's count from the worker's snapshot (H4); `card.create` (tags, CLI, model, effort, mode, Isolated; `start: false` is the worker's Backlog), Backlog reorder as `card.update { before }` (board parity) |
+| Isolated | the warm worktree pool | the daemon's own pool (`startWorktreePool` after recovery), a reflink or plain copy of `node_modules` on Linux; lands on Done as on the Mac (board parity) |
+| Notifications, dock badge | `board-live` announce, chimes | the same `noticeCard` per read (`useWorkerNotices`); the badge counts every card on the board (board parity) |
 | Streaming | SSE | a 2.5 s poll |
 | weft.zip and the phone | | reply, answer, stop and new card, and since H2 any verb as a `host` command (`cloud-inbox-cards.ts`, the same `runVerb`); the phone still has its own copy of the command shapes |
 
@@ -200,9 +206,52 @@ board ── hostFor(card.cwd) ─┬─ localHost: thread = localTransport, act
   the card's page, puts the pane on a page it reopens (`onReopen`), and pictures a page with the card's last capture when
   it's an https picture, never `/api/cards/[id]/shots`. A saved page reads "page" under its picture
   (`lib/show-rail.ts` `pageLabel`). `WorkerOpenCard` is deleted. `Board.tsx` went from 396 to 395 counted lines.
+- **Board parity** (2026-11-02), [below](#board-parity-as-built).
+- **Open-card parity** (2026-11-02). The right-click menu keeps Run /<skill> (a `card.message`) and plan mode. The header
+  gates on `cardCan(card, transport, feature)` (`lib/project-host.ts`): the transport reaches the card's host and the
+  host has the feature, so `runSkill` (the Skills menu, listed by the transport's `listSkills`), `share` and `delete` show on
+  a worker card and `skills` (the chip), `cron` (⏰) and `settings` don't. The review tour shows on a worker card, its pages put in
+  the card's pane column through `PaneOpenContext` (`lib/pane-open.ts`, from `useProjectHost`'s `page.open`), with no dev
+  server step (`hostFor(cwd).can("dev")`). ⌘F reads the whole thread (`searchThread`, `lib/worker-thread-reads.ts`), the
+  thread's pictures are signed blob refs (`useWorkerView`, `lib/worker-blob-view.ts`; page refs stay refs for the rail and
+  the pane), the first-message banner reruns on the card's CLI's default (`hostRerunModel`), and "!" shows the amber box
+  with "A shell runs only on this Mac's cards." instead of sending (`shellRefusal`, `ReplyBox` `noShell`).
 - **Not yet.** The agent on a worker card; the editor and file links (H4); the header badges, terminal
   and drawers on a worker project (H4); the pane as the native `BrowserPane` (the worker's page still frames through
-  `WebPane`); a `card.create` verb, so New thread still sends `run`.
+  `WebPane`); crons and the skill set chip on a worker card; a
+  worker's own backup model (no worker settings sync); ⌘F over a worker card's cut tool results and sealed rows.
+
+### Board parity (as built)
+
+```
+New thread ── POST /api/cards {cwd: worker://…, start} ── startWorkerThread (lib/worker-new-thread.ts)
+     host row {verb: "card.create", args: {id: randomUUID, prompt, tags, backend, model, effort, permissionMode, isolated, branch, start}}
+worker: host kind ─ readHostCommand ─ remoteRefusal ─ rules.create (no card check: it's new) ─ checkout(folder)
+        ─ engine.start ─ runVerb("card.create") = createCardFromBody(body, id) (+ startCard unless start:false) ─ publish ─ report
+```
+
+- **`card.create`** (`lib/host-api/card-create.ts`): the card under the board's id (refused if taken or not id-shaped),
+  `start: false` leaving it in Backlog. `remoteRefusal` holds its args to an update's rules (no folder, agent, read scope or
+  skipped prompts); the folder is the row's own checkout. Its prompt carries pasted files (`textArgOf`). A Mac's inbox has
+  no `create` rule and refuses it: the web's `new_card` stays its kind. The route no longer refuses Backlog on a worker.
+- **Isolated.** The daemon starts the worktree pool after recovery (`scripts/weft-worker.ts`); `cloneModules` copies with
+  `cp -R --reflink=auto` off a Mac (`cloneArgs`). An isolated worker card takes a worktree and lands on Done through the
+  same runner code as on the Mac. The New thread dialog doesn't warm a worker's pool from this Mac.
+- **Notices.** `noticeCard` (`lib/card-notice.ts`) is board-live's chime, announce, unseen dot and Away open, and
+  `useWorkerNotices` runs it on each read of a worker's cards (a card's first sighting is its baseline). The dock badge
+  and the browser prune read `boardCards`.
+- **What reads `boardCards` now:** the header's "N running · M need you", Switch all (`lib/switch-cards.ts`: this Mac's
+  through the bulk route, a worker's one `card.switchBackend` each, a running one reported rather than retried), the ⌘K
+  palette (Stop through the card's host; prompt search adds `workerPromptHits` over the cards' first prompts), Archive all
+  Done and Shift+E, Resume all (`card.message "continue"` / `card.restart`), the 🏷 drop (`card.update { tags }`), Backlog
+  reorder within one worker's cards, the Backlog column's visibility and the project menu's counts. `localColumns` is gone.
+- **Project menu.** A worker project's right-click menu adds Pin/Unpin, Hide/Show (this board's own, in localStorage:
+  `lib/worker-project-marks.ts`, because this Mac's project list is read as folders by the spare, repos and sync code),
+  Archive Done and Stop Running. "More" says Changelog and Re-seed Backlog are this Mac's only for a worker project.
+- **Warm.** Opening a card warms its CLI on its host (`ProjectHost.warm`): `/api/warm` here, `card.warm` on a worker only
+  over a session line that's up, never as a row.
+- **Terminal.** With a worker card open (or a worker project chosen and no card open) the terminal drawer says it isn't
+  available on that worker rather than open this Mac's shell (`terminalAway`).
 
 ### Delete and Share… on a worker card (as built, 2026-11-02)
 
@@ -704,7 +753,7 @@ Each ships on its own.
    (in progress).
 2. **H2 the `host` command** (built 2026-11-02, [as built](#the-host-command-h2-as-built)). `kind = 'host'` with `{ verb, args }`
    and a `result` column; the daemon and `cloud-inbox.ts` run `runVerb`, and `reply`, `answer`, `stop` and `mode` are aliases
-   (`new_card` waits for a `card.create` verb). **Attachments travel:** built ahead of
+   (`new_card` stays the Mac's own kind; a worker's new thread is `card.create`, [board parity](#board-parity-as-built)). **Attachments travel:** built ahead of
    H2 for the worker's kinds (`lib/attachment-transfer.ts`: `encodeAttachments` for a sender, `attachmentsOf` +
    `receiveAttachments` for a host, [weft-worker.md](weft-worker.md#worker-projects-on-the-desktop-board)); `host`
    calls the same two. Still open: sealing the blobs, `cloud-inbox.ts` as a receiver, the web composer as a sender.

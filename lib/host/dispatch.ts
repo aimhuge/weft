@@ -40,7 +40,12 @@ export interface CardRules {
   // Puts a verb's result that's over the row's cap (the editor's files.*) in the blob store, answering its sha; a host
   // without it answers only small ones (lib/host-result.ts).
   carry?: Carry;
+  // card.create: makes the card the args name in the row's folder, and resolves with its id once it's published (a
+  // worker). Without it the host makes cards through its own new_card kind (a Mac).
+  create?(command: CloudCommandRow, args: Record<string, unknown>): Promise<string>;
 }
+
+const NO_CREATE = "This host starts new threads through new_card, not card.create.";
 
 // A host verb's answer as an answer kind: the same payload, so the same approval rule and a phone's signature
 // (args.auth) over the same fields. It needs the request's pendingId, as the answer kind does.
@@ -50,8 +55,8 @@ export function asAnswer(command: CloudCommandRow, { args }: HostPayload): Cloud
   return { ...command, kind: "answer", payload };
 }
 
-// Verbs a board runs for their answer: they change no card, so there's nothing to sync after them.
-const READS = new Set<HostVerb>(["skills.list", "files.list", "files.read", "files.write"]);
+// Verbs a board runs for their answer, or to warm a CLI: they change no card, so there's nothing to sync after them.
+const READS = new Set<HostVerb>(["skills.list", "files.list", "files.read", "files.write", "card.warm"]);
 
 export function cardKinds(rules: CardRules) {
   async function received(command: CloudCommandRow, args: Record<string, unknown>, field: string | undefined) {
@@ -107,6 +112,7 @@ export function cardKinds(rules: CardRules) {
       const cardId = await answer(asAnswer(command, body));
       return { cardId, result: hostResult(cardId) };
     }
+    if (body.verb === "card.create") return create(command, body);
     const card = rules.card(body.args.id, command, "reached");
     const refused = remoteRefusal(body) ?? (await rules.elevated?.(body.verb, body.args));
     if (refused) throw new Error(refused);
@@ -115,6 +121,15 @@ export function cardKinds(rules: CardRules) {
     // inline or as a blob when it's over the row's cap (lib/host-result.ts).
     const result = carriesValue(body.verb) ? await valueResult(card.id, reply, rules.carry) : verbResult(body.verb, card.id, reply);
     return { cardId: card.id, result };
+  }
+
+  // A new card: no card to check yet, so the host's own create rule, behind the same refusals as an update.
+  async function create(command: CloudCommandRow, body: HostPayload): Promise<HostDone> {
+    if (!rules.create) throw new Error(NO_CREATE);
+    const refused = remoteRefusal(body) ?? (await rules.elevated?.(body.verb, body.args));
+    if (refused) throw new Error(refused);
+    const cardId = await rules.create(command, await received(command, body.args, textArgOf(body.verb)));
+    return { cardId, result: hostResult(cardId) };
   }
 
   return { reply, answer, stop, host };
