@@ -49,7 +49,8 @@ export function NewCardDialogControls({
   agent?: AgentPick;
 }) {
   return (
-    <div className="flex shrink-0 flex-wrap items-center gap-2 px-5 pt-3">
+    // data-human-only: the folder, agent and mode a thread starts with are the user's to pick, not board_view's.
+    <div data-human-only className="flex shrink-0 flex-wrap items-center gap-2 px-5 pt-3">
       <RepoPicker value={cwd} home={home} onChange={onChooseFolder} />
       {isolate && <IsolateMenu cwd={cwd} {...isolate} />}
       {agent && <AgentSelect {...agent} />}

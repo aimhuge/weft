@@ -671,7 +671,7 @@ When a new doc lands in this folder, add it here on the same change.
   pages are small WebP pictures (`lib/page-shots.ts` + `app/api/cards/[id]/shots` + `lib/use-page-shots.ts`) and the pane follows the chat's scroll (`lib/use-pane-follow.ts`) (docs/architecture/show-rail.md).
 - `lib/board-view-tools.ts` + `electron/board-view.cjs` + `electron/control-server.cjs`: `mcp__board_view__*`, a thread's eyes and hands
   on the board window itself (screenshot, click, hover, type, read; fixed scripts, no arbitrary JS; `data-secret` reads as ‹secret›,
-  `data-secret-action` can't be clicked) through the pane's token-guarded control server (docs/architecture/board-view.md).
+  `data-secret-action` can't be clicked; `data-human-only` controls and any xterm can't be clicked or typed into) through the pane's token-guarded control server (docs/architecture/board-view.md).
 - `lib/import.ts`, `lib/search.ts`: pick up `~/.claude/projects` sessions as cards; search index.
 - `lib/hotkeys.ts` + `lib/shortcut-catalog.ts`: the keyboard shortcut registry and what the `?` sheet lists; tooltips, key badges,
   right-click menus and `ModifierHint` read their keys from it (docs/architecture/keyboard-shortcuts.md).

@@ -39,4 +39,25 @@ describe("NewCardDialogControls", () => {
     rerender(controls("claude"));
     expect(screen.queryByRole("note")).toBeNull();
   });
+
+  it("marks the folder, agent and mode row human-only, so board_view can't pick them", () => {
+    const { container } = render(
+      <NewCardDialogControls
+        cwd="/p"
+        home="/home"
+        backend="claude"
+        model=""
+        effort=""
+        permissionMode="default"
+        onChooseFolder={vi.fn()}
+        onPickModel={vi.fn()}
+        onPickCli={vi.fn()}
+        onPickEffort={vi.fn()}
+        onPickMode={vi.fn()}
+        agent={{ value: "builder", onPick: vi.fn() }}
+      />,
+    );
+    expect(container.firstElementChild).toHaveAttribute("data-human-only");
+    expect(screen.getByText("Agent").closest("[data-human-only]")).not.toBeNull();
+  });
 });
