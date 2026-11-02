@@ -730,7 +730,8 @@ another refactor, a stricter lint rule or a better type:
 - The scout's report is cached in `~/.weft/scout/` with the commit it ran on. It runs on its own only
   once, for a project with no report; after that `/weft:done` scouts the session's files and merges its findings
   in, and **Re-scout now** reads the whole project again. A new commit alone never starts a run.
-  It never runs on the start-a-card path.
+  It never runs on the start-a-card path. On a Weft Worker project, **Re-scout now** starts a card there that scouts and saves
+  the report, and the Backlog counter starts a sprint-planning card there.
 
 Hover the badge for how the number is made. Click it for a menu: **Fix the checklist, weakest first**
 starts one thread on the checklist, and each scout finding starts its own small card ("Long Function:

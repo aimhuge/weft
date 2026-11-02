@@ -583,8 +583,8 @@ editor: OpenCard ─ FilesSourceContext = host.files ─┬─ local: filesApi (
   reads didn't change until 10 minutes have passed, so `updated_at` still says it's up; the board calls a snapshot stale
   after 20 minutes, or when the worker is offline, and shows its age before the badges (`components/SnapshotAge.tsx`).
 - **`read` and `files` on `ProjectHost`**, and two features: `reads` and `files` are on for a worker. `projectActs` (a
-  re-scout, the commit walk-through, the sprint plan, whose prompts point at this Mac's store and server) stays off: those
-  say "isn't on a worker's projects yet". The streak and the sync ask stay this Mac's (`localPath`): your streak is yours.
+  re-scout, the commit walk-through, the sprint plan, whose prompts point at this Mac's store and server) stays off, and each
+  badge gates on it: where it's off but `reads` is on, the act is a card on the worker (T5/T6, below). The streak and the sync ask stay this Mac's (`localPath`): your streak is yours.
   Board's `localPath(workFolder)` became `projectFolders` (`lib/board-folders.ts`): the badges read any host's project, the
   terminal and the account menu only this Mac's folders. "Improve code quality" on a worker project starts the card there.
 - **File verbs with results.** `files.list`, `files.read` (`at: "HEAD"` for the diff) and `files.write` in `lib/host-api/files.ts`,
@@ -629,9 +629,24 @@ editor: OpenCard ─ FilesSourceContext = host.files ─┬─ local: filesApi (
   A Mac's inbox runs these verbs only where the web may approve. Snapshot roots are the folder's name, never a worker's
   absolute path.
 - **Not yet.** Live reload of a worker's open file (events over the H6 line); the streak counting a worker's turns; the
-  sprint plan and re-scout on a worker project (the commit walk-through came in T5); Realtime on `cloud_worker_projects` (the board polls on
+  Realtime on `cloud_worker_projects` (the board polls on
   turn ticks and focus); blob GC for results; the terminal on a worker project (the drawers came in T5); the
   `@weft/client` `HOST_VERBS` list (H9a) must add `files.list`, `files.read` and `files.write` when it lands.
+
+### Re-scout and sprint planning on a worker (T6)
+
+`projectActs` stays off for a worker, so the two badges that wrote their prompts from this Mac's store and server build
+them another way and start a card in the worker's project (`start` is the board's New thread, `card.create`):
+
+- **Re-scout** (`QualityBadge`'s ScoutDialog): `workerScoutPrompt()` in `lib/scout-worker.ts` is the scout's own instructions
+  (`lib/scout-prompt.ts`, moved out of `lib/scout.ts` so the board can import them without the SDK) with the findings written
+  to a temp file and saved by the plugin's `scout-save.mjs`, the file `/weft:done`'s scout writes. That fills the worker's
+  `scout/` report, which the worker publishes in its next snapshot, so the badge refreshes by itself. The card is read-only
+  for the project; if the script isn't on the worker it lists the findings in its reply instead.
+- **Sprint planning** (`BacklogBadge`): `workerSprintPrompt()` in `lib/sprint-worker.ts` lists the project's Backlog and
+  active cards from the board's own cards (the snapshot's count is the fallback). A worker thread has no way to move an
+  existing card, so the prompt has it name a sprint's cards for the user to start from the board, and add merged or split
+  cards with `mcp__board__create_card` (`start: false` leaves them in Backlog).
 
 ### Board tools on a worker
 
