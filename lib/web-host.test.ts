@@ -21,6 +21,8 @@ describe("webHost", () => {
     const host = webHost({ act: vi.fn() }, { desktop: false } as ThreadTransport, () => Promise.resolve(""));
     expect(host.can("schedule")).toBe(true);
     for (const feature of ["files", "pane", "delete", "share", "folder", "dev", "vault", "login"] as const) expect(host.can(feature)).toBe(false);
+    // No session line in a browser tab, so warming a card is a no-op rather than a host row.
+    host.warm("c1");
   });
 
   it("has no reads or editor of its own: each says so instead of reaching a Mac's routes", async () => {

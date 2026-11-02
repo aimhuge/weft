@@ -4,7 +4,8 @@
 // (lib/worker-card-commands.ts) act on a card it runs; `line` opens a session line (lib/host-line.ts); `secret_use`
 // hands a sealed answer to a card's waiting secret run; `connector` keeps a token the Mac lent. Each returns the card it
 // made or touched, or null.
-import { newCardBody, type CloudCommandRow } from "./cloud-commands";
+import { NEW_CARD_MODES, newCardBody, type CloudCommandRow, type NewCardMode } from "./cloud-commands";
+import { networkStartMode } from "./cloud-new-card-mode";
 import { dispatcher, type KindTable } from "./host/dispatch";
 import type { HostDone } from "./host-command";
 import { createCardCommands } from "./worker-card-commands";
@@ -12,10 +13,20 @@ import { cloneBody, runBody } from "./worker-commands";
 import type { DaemonDeps } from "./worker-daemon";
 import { explainClone, type GithubStatus } from "./worker-github";
 import { sealedOf, type Sealed } from "./worker-seal";
+import type { Card, PermissionMode } from "./types";
 
 const UNKNOWN_KIND = "This worker doesn't know that kind of request. Update it with weft-worker update.";
 // A run that names no mode edits files without asking, and still asks before a command it hasn't been allowed.
 const DEFAULT_MODE = "acceptEdits";
+
+// The mode a new card off the network starts in here, by the rule a Mac's does (lib/cloud-new-card-mode.ts): never
+// bypassPermissions, plan as default (the card maker has no plan mode and reads one it doesn't know as this box's own
+// default, which may skip prompts), any other mode it doesn't know refused, and none named the run default above. A
+// worker takes acceptEdits and auto from the web (CARD_MODES), so nothing else is refused.
+export function workerStartMode(named: unknown): Promise<PermissionMode> {
+  if (named !== undefined && !NEW_CARD_MODES.includes(named as NewCardMode)) return Promise.reject(new Error("That mode can't be set on a worker."));
+  return networkStartMode(named as NewCardMode | undefined, { defaultMode: () => DEFAULT_MODE, refusal: () => Promise.resolve(null) });
+}
 
 export interface KindContext {
   log: (msg: string) => void;
@@ -85,7 +96,10 @@ export function workerKinds(deps: DaemonDeps, ctx: KindContext): KindTable {
     if (start === false) throw new Error("A worker has no Backlog yet. Start the thread instead.");
     fields.prompt = await engine.receive(fields.prompt, command.payload);
     const cwd = await deps.checkout(command.folder, typeof repo === "string" ? repo : undefined);
-    const card = await engine.start({ ...fields, cwd, permissionMode: run?.permissionMode ?? fields.permissionMode ?? DEFAULT_MODE });
+    return published(command, await engine.start({ ...fields, cwd, permissionMode: await workerStartMode(run?.permissionMode ?? fields.permissionMode) }));
+  }
+
+  async function published(command: CloudCommandRow, card: Card): Promise<string> {
     publisher.nameFolder(card.id, command.folder);
     publisher.track(card.id);
     // The report names the card, and the database only takes a card this worker has published.
@@ -93,7 +107,15 @@ export function workerKinds(deps: DaemonDeps, ctx: KindContext): KindTable {
     return card.id;
   }
 
-  const cards = createCardCommands(engine);
+  // card.create (lib/host-api/card-create.ts): the board's id and fields, in the row's checkout. The args passed
+  // remoteRefusal, so they name no folder, agent or skipped prompts; the mode is workerStartMode's.
+  async function create(command: CloudCommandRow, args: Record<string, unknown>): Promise<string> {
+    const permissionMode = await workerStartMode(args.permissionMode);
+    const cwd = await deps.checkout(command.folder, undefined);
+    return published(command, await engine.start({ ...args, cwd, permissionMode }));
+  }
+
+  const cards = createCardCommands(engine, create);
   return {
     async login(command) {
       await deps.login(sealedToken(command));

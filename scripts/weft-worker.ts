@@ -93,6 +93,8 @@ async function loadEngine() {
     import("../lib/worker-folders"),
     import("../lib/worker-secret-run"),
     import("../lib/worker-secret-wiring"),
+    import("../lib/worktree-pool"),
+    import("../lib/worker-browser-screen"),
   ]);
   return { store, parts };
 }
@@ -107,7 +109,7 @@ async function startCommand() {
   const config = readWorkerConfig(home);
   if (!config) throw new Error("This box isn't enrolled yet. Run: weft-worker enrol <token>");
   const { store, parts } = await loadEngine();
-  const [{ startFeatureCard }, , , { subscribe }, { createDaemon }, { createPublisher }, paths, github, folderGrant, { createBlobStore }, { SHOW_DIR }, { setPageUpload }, { busyCards }, { recoverCards }, { resumeInterrupted }, { openScreenChannel, screenInput, setFastScreen, setScreenChannel, fastScreenOf, watcherOf }, { sendInput }, { openFastScreen }, { setDeviceLink }, { deviceLink }, { isMobileApp }, { runVerb }, { startScheduler }, { createHostLines }, { readProjectSnapshot }, { createProjectPublisher }, { listProjectFolders }, { setSecretLink, forgetOnTurnEnd }, { secretWiring }] = parts;
+  const [{ startFeatureCard }, , , { subscribe }, { createDaemon }, { createPublisher }, paths, github, folderGrant, { createBlobStore }, { SHOW_DIR }, { setPageUpload }, { busyCards }, { recoverCards }, { resumeInterrupted }, { openScreenChannel, screenInput, setFastScreen, setScreenChannel, fastScreenOf, watcherOf }, { sendInput }, { openFastScreen }, { setDeviceLink }, { deviceLink }, { isMobileApp }, { runVerb }, { startScheduler }, { createHostLines }, { readProjectSnapshot }, { createProjectPublisher }, { listProjectFolders }, { setSecretLink, forgetOnTurnEnd }, { secretWiring }, { startWorktreePool }, browserScreen] = parts;
   const reg = registry(rpc, config.key);
   // The public half goes on the worker's row, so Settings → Sync → Workers can seal a Claude token to this box.
   const keys = workerSealKeys(home, newSealKeys);
@@ -121,6 +123,8 @@ async function startCommand() {
   const readBlob = workerBlobReader(config.key, MAX_TRAVEL_BYTES);
   setPageUpload((file) => blobs.uploadPage(file, config.orgId));
   setScreenChannel((topic) => openScreenChannel(client, topic));
+  // The worker's browser, live in the pane on the same kind of topic (lib/worker-browser-screen.ts).
+  browserScreen.setBrowserScreenChannel((topic) => openScreenChannel(client, topic));
   setDeviceLink(deviceLink(reg, config.key));
   // A card's mcp__secrets__run asks the owner's Mac, and the answer comes back sealed to this box (lib/worker-secret-run.ts).
   // The other secrets tools ask it too (lib/worker-vault.ts), and the connector shims go first on the cards' PATH.
@@ -143,9 +147,9 @@ async function startCommand() {
       await channel.answer(sealed).finally(() => setTimeout(() => channel.close(), 5_000));
     },
     hear: (listener) => publisher.mirror(listener),
-    screen: fastScreenOf,
+    screen: (device) => browserScreen.browserScreenOf(device) ?? fastScreenOf(device),
     watcher: (device) => {
-      const id = watcherOf(device);
+      const id = browserScreen.browserWatcherOf(device) ?? watcherOf(device);
       return id ? store.getCard(id) : undefined;
     },
     log: console.log,
@@ -159,11 +163,16 @@ async function startCommand() {
     onCardChange: subscribe,
     // Send later on this worker's cards (card.schedule): the messages are saved on the cards, so one whose time passed
     // while the daemon was down goes on the first check, after recovery, so it can't race a turn being resumed.
-    onRecovered: () => startScheduler({ briefs: false }),
+    // And the worktree pool for its Isolated cards (lib/worktree-pool.ts), as the Mac's server keeps one.
+    onRecovered: () => {
+      startScheduler({ briefs: false });
+      startWorktreePool();
+    },
     line: (sealed, run) => lines.open(sealed, run),
     engine: {
+      // A card.create names its id (the board's) and may leave the card in Backlog; a run or new_card starts one.
       start: async (body) => {
-        const card = await startFeatureCard(body);
+        const card = typeof body.id === "string" ? (await runVerb("card.create", body as never)).card : await startFeatureCard(body);
         return isMobileApp(card.cwd) ? store.updateCard(card.id, { mobileApp: true }) : card;
       },
       // The same handlers the desktop's routes run (lib/host-api): a reply, an answer, a stop, a mode and the rest.
@@ -172,7 +181,8 @@ async function startCommand() {
       carry: (json) => results.put(json),
       receive: (text, payload) => receiveAttachments(text, attachmentsOf(payload), attachments, readBlob),
       grant: folderGrant.applyFolderGrant,
-      input: (input, cardId) => screenInput(input, sendInput, cardId),
+      // A browser device is the card's own headless Chromium; anything else, a simulator.
+      input: (input, cardId) => (browserScreen.isBrowserScreen(input.device) ? browserScreen.browserInput(input, cardId) : screenInput(input, sendInput, cardId)),
       setQa: (id, qaDevice) => void store.updateCard(id, { qaDevice }),
       getCard: store.getCard,
       live: () => busyCards().length > 0,

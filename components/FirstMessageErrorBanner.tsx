@@ -8,7 +8,7 @@ import { hostOf } from "@/lib/project-host";
 import { modelLabel } from "@/lib/new-thread";
 import { rememberPage } from "@/lib/settings-nav";
 import type { Card } from "@/lib/types";
-import { firstMessageFailed } from "@/lib/first-message-failed";
+import { firstMessageFailed, hostRerunModel } from "@/lib/first-message-failed";
 import type { ThreadItem } from "@/lib/types";
 import Icon from "./Icon";
 
@@ -18,7 +18,8 @@ import Icon from "./Icon";
 // escapes instead: delete the failed card, or rerun it on the backup model set under
 // Settings → Models. We read the backup model from the settings endpoint here so the
 // banner is self-contained — only when the predicate is true does the fetch run, so a
-// healthy thread never hits /api/settings from the banner.
+// healthy thread never hits /api/settings from the banner. This Mac's Settings don't speak for a card on another host
+// (a worker's), so there the rerun is on the card's own CLI's default (hostRerunModel) and nothing is fetched.
 //
 // The "Pick a backup model" button calls openSettings — the board-level opener from
 // components/Board.tsx — only when the parent supplies it. Without it (the read-only web
@@ -46,7 +47,8 @@ export default function FirstMessageErrorBanner({
   // (the board passes one when it knows what's open; the banner still deletes).
   onDeleted?: () => void;
 }) {
-  const [backupModel, setBackupModel] = useState<string | null>(null);
+  const local = hostOf(card).can("settings");
+  const [backupModel, setBackupModel] = useState<string | null>(() => (local ? null : hostRerunModel(card)));
   const [busy, setBusy] = useState<null | "rerun" | "delete">(null);
   const [error, setError] = useState<string | null>(null);
   // Only fetch the settings when this banner is going to render. The predicate is
@@ -55,7 +57,7 @@ export default function FirstMessageErrorBanner({
   // Off this Mac (weft.zip leaves openSettings out) there are no settings to read and none to open: no backup to offer.
   const settings = Boolean(openSettings);
   useEffect(() => {
-    if (!visible || !settings || backupModel !== null) return;
+    if (!local || !visible || !settings || backupModel !== null) return;
     let ignore = false;
     api
       .settings()
@@ -68,7 +70,7 @@ export default function FirstMessageErrorBanner({
     return () => {
       ignore = true;
     };
-  }, [visible, settings, backupModel]);
+  }, [local, visible, settings, backupModel]);
   if (!visible) return null;
   // Rerun on the backup model, or pick one in Settings; with neither, the banner only says what went wrong.
   const canRerun = Boolean(backupModel) || settings;

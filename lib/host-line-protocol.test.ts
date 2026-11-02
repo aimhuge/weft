@@ -1,6 +1,6 @@
 // The session line's wire (lib/host-line-protocol.ts): each side drops a message it can't read whole.
 import { describe, expect, it } from "vitest";
-import { deviceOfChannel, iceServers, lineTopic, readControl, readHostCall, readHostReply, readLineEvent, readLineOffer, screenChannel } from "./host-line-protocol";
+import { deviceOfChannel, iceServers, isBrowserScreen, lineTopic, readControl, readHostCall, readHostReply, readLineEvent, readLineOffer, screenChannel } from "./host-line-protocol";
 
 const j = (v: unknown) => JSON.stringify(v);
 
@@ -77,5 +77,11 @@ describe("control", () => {
     expect(deviceOfChannel("input:s/m:0123abcd")).toBeNull();
     expect(deviceOfChannel("input:")).toBeNull();
     expect(deviceOfChannel("host")).toBeNull();
+    // A worker's browser is a device too, and its channel label passes the same check.
+    expect(deviceOfChannel("input:browser-0123456789abcdef:0123abcd")).toBe("browser-0123456789abcdef");
+    expect(isBrowserScreen("browser-0123456789abcdef")).toBe(true);
+    expect(isBrowserScreen("browser-xyz")).toBe(false);
+    expect(isBrowserScreen("AB-12")).toBe(false);
+    expect(isBrowserScreen(undefined)).toBe(false);
   });
 });

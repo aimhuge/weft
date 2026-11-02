@@ -103,6 +103,8 @@ refused, stale refs, and a click at 150% zoom.
 
 ## Next
 
+- **On a worker**: built. A worker card's tools drive a headless Chromium on the box through these same modules, over
+  a webContents-shaped adapter, and the pane shows it live ([worker-browser.md](worker-browser.md)).
 - **Who's driving**: an outline on the pane while an agent acts, and agent input paused while you type.
 - **`upload_file`** (`DOM.setFileInputFiles`), once paths go through `lib/secret-guard.ts` so a thread can't upload
   what it isn't allowed to read.

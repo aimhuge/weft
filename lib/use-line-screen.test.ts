@@ -15,6 +15,11 @@ vi.mock("./session-lines", () => ({ lineFor: () => state.line, useLineRoute: () 
 const own = vi.hoisted(() => ({ fast: [] as boolean[] }));
 vi.mock("./use-rtc-screen", () => ({ useRtcScreen: (_: string, fast: boolean) => (own.fast.push(fast), { live: false, track: false, send: () => true, answer: vi.fn() }) }));
 
+// A worker's browser takes the frames path (lib/use-line-frames.ts); off unless a test says so.
+type FramesView = { on: boolean; live: boolean; send: (event: unknown) => boolean };
+const lineFrames = vi.hoisted(() => vi.fn<(...args: unknown[]) => FramesView>(() => ({ on: false, live: false, send: () => false })));
+vi.mock("./use-line-frames", () => ({ useLineFrames: lineFrames }));
+
 const { useLineScreen, useScreenVideo } = await import("./use-line-screen");
 
 class Channel {
@@ -146,5 +151,18 @@ describe("useScreenVideo", () => {
     expect(own.fast).toEqual([true]);
     expect(relayed.result.current).toMatchObject({ live: false, track: false });
     expect(relayed.result.current.send({ t: "up", x: 0, y: 0 })).toBe(true);
+  });
+
+  it("draws a worker's browser from its frames on the line, never its own line or a track, and sends input there", () => {
+    const frames = { on: true, live: true, send: vi.fn(() => true) };
+    lineFrames.mockReturnValue(frames);
+    const canvas = { current: null };
+    const { result } = renderHook(() => useScreenVideo("w1", "browser-0123456789abcdef", true, canvas, vi.fn(), "medium", video));
+    expect(own.fast).toEqual([false]);
+    expect(state.line!.renegotiate).not.toHaveBeenCalled();
+    expect(lineFrames).toHaveBeenCalledWith("w1", "browser-0123456789abcdef", true, canvas);
+    expect(result.current).toMatchObject({ live: true, track: false });
+    expect(result.current.send({ t: "up", x: 0, y: 0 })).toBe(true);
+    expect(frames.send).toHaveBeenCalled();
   });
 });

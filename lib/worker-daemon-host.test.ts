@@ -175,3 +175,41 @@ describe("a line command on a worker", () => {
     expect(old.report).toHaveBeenCalledWith("cmd-1", "failed", null, expect.stringMatching(/doesn't open lines yet/));
   });
 });
+
+describe("card.create on a worker", () => {
+  const create = (args: Record<string, unknown>, extra: Record<string, unknown> = {}) =>
+    command({ kind: "host", folder: "weft", payload: { verb: "card.create", args: { id: "new-card-1", prompt: "Fix it", ...args }, ...extra } as never });
+
+  it("makes the card in the row's checkout with the board's fields, publishes it, then reports it", async () => {
+    const d = makeDeps();
+    d.receive.mockImplementation((text) => Promise.resolve(`${text} (here)`));
+    d.start.mockResolvedValueOnce({ ...(await d.start({})), id: "new-card-1" });
+    await d.daemon.runOne(create({ tags: ["bug"], isolated: true, start: false, backend: "codex", model: "m", effort: "high" }, { attachments: [{ name: "s.png" }] }));
+    expect(d.checkout).toHaveBeenCalledWith("weft", undefined);
+    expect(d.start).toHaveBeenLastCalledWith({ id: "new-card-1", prompt: "Fix it (here)", tags: ["bug"], isolated: true, start: false, backend: "codex", model: "m", effort: "high", cwd: "/srv/work/weft", permissionMode: "acceptEdits" });
+    expect(d.nameFolder).toHaveBeenCalledWith("new-card-1", "weft");
+    expect(d.flush).toHaveBeenCalled();
+    expect(d.report).toHaveBeenLastCalledWith("cmd-1", "done", "new-card-1", null, { ok: true, cardId: "new-card-1" });
+  });
+
+  it("starts plan as default and auto as auto, never a mode the card maker would read as this box's own default", async () => {
+    const d = makeDeps();
+    await d.daemon.runOne(create({ permissionMode: "plan" }));
+    expect(d.start).toHaveBeenLastCalledWith(expect.objectContaining({ permissionMode: "default" }));
+    await d.daemon.runOne(create({ permissionMode: "auto" }));
+    expect(d.start).toHaveBeenLastCalledWith(expect.objectContaining({ permissionMode: "auto" }));
+    d.start.mockClear();
+    d.checkout.mockClear();
+    for (const bad of ["dontAsk", "", null, "BypassPermissions"]) await d.daemon.runOne(create({ permissionMode: bad }));
+    expect(d.start).not.toHaveBeenCalled();
+    expect(d.checkout).not.toHaveBeenCalled();
+    expect(d.report).toHaveBeenLastCalledWith("cmd-1", "failed", null, "That mode can't be set on a worker.", expect.anything());
+  });
+
+  it("refuses a folder, an agent or skipped prompts", async () => {
+    const d = makeDeps();
+    for (const bad of [{ cwd: "/etc" }, { agent: "x" }, { permissionMode: "bypassPermissions" }]) await d.daemon.runOne(create(bad));
+    expect(d.start).not.toHaveBeenCalled();
+    expect(d.report).toHaveBeenLastCalledWith("cmd-1", "failed", null, expect.stringMatching(/skip permission/), expect.anything());
+  });
+});

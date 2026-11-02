@@ -337,8 +337,9 @@ card.page and the open_url item carry blob:sha256:<hex>#anchor (lib/worker-publi
 ```
 
 - **The tools:** `scripts/weft-worker.ts` sets `WEFT_WORKER=1`. `open_url` then calls `openOnWorker`: a local page uploads
-  before the tool answers, a public https address is noted as it is, and localhost is refused with the reason. The other
-  browser tools say they need the desktop app. `WORKER_BROWSER_PROMPT` replaces `BROWSER_PROMPT` in the thread's prompt,
+  before the tool answers (and opens in the worker's own browser too), and a public https address or this box's own dev
+  server opens in the worker's headless Chromium, live in the pane. The other browser tools drive that browser
+  ([worker-browser.md](worker-browser.md)); only `fill_field` needs the desktop app. `WORKER_BROWSER_PROMPT` replaces `BROWSER_PROMPT` in the thread's prompt,
   so a thread knows the pane works and never tells you to open a file on the box. An image in a reply (`![…](/abs/x.png)`)
   goes up the same way.
 - **Writing a page asks nobody.** `acceptEdits` only writes without asking inside the CLI's working directories: its cwd

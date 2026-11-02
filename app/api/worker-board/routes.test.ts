@@ -22,8 +22,11 @@ vi.mock("@/lib/worker-board", () => board);
 const reads = vi.hoisted(() => ({
   workerProjectSnapshot: vi.fn(() => Promise.resolve({ snapshot: null, updatedAt: null, worker: "m1mini", status: "online" })),
   workerResultBlob: vi.fn(() => Promise.resolve({ value: { files: ["a.ts"] } })),
+  workerThreadSearch: vi.fn((): Promise<{ index: number; hits: number }[] | null> => Promise.resolve([])),
+  workerBlobUrls: vi.fn(() => Promise.resolve({})),
 }));
 vi.mock("@/lib/worker-board-reads", () => reads);
+vi.mock("@/lib/worker-thread-reads", () => reads);
 
 const route = await import("./route");
 
@@ -38,6 +41,31 @@ beforeEach(() => {
   board.sendWorkerAction.mockResolvedValue({ commandId: "cmd-1" });
   board.workerThreadPage.mockResolvedValue(null);
   board.workerToolOutput.mockResolvedValue("the whole thing");
+});
+
+describe("GET /worker-board thread reads", () => {
+  it("finds a query over a card's whole thread", async () => {
+    reads.workerThreadSearch.mockResolvedValueOnce([{ index: 3, hits: 2 }]);
+    const res = await route.GET(get("/worker-board?card=c1&q=deploy"));
+    expect(await res.json()).toEqual({ matches: [{ index: 3, hits: 2 }] });
+    expect(reads.workerThreadSearch).toHaveBeenCalledWith("c1", "deploy");
+    expect(board.workerThreadPage).not.toHaveBeenCalled();
+  });
+
+  it("says when a thread can't be searched", async () => {
+    reads.workerThreadSearch.mockResolvedValueOnce(null);
+    const res = await route.GET(get("/worker-board?card=c1&q=deploy"));
+    expect(res.status).toBe(502);
+  });
+
+  it("signs the blob refs a thread's pictures name", async () => {
+    const a = `blob:sha256:${"a".repeat(64)}`;
+    reads.workerBlobUrls.mockResolvedValueOnce({ [a]: "https://sb.test/sign/a" });
+    const res = await route.GET(get(`/worker-board?blobs=${a},nope`));
+    expect(await res.json()).toEqual({ urls: { [a]: "https://sb.test/sign/a" } });
+    expect(reads.workerBlobUrls).toHaveBeenCalledWith([a, "nope"]);
+    expect(board.readWorkerBoard).not.toHaveBeenCalled();
+  });
 });
 
 describe("GET /worker-board", () => {

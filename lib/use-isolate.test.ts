@@ -42,6 +42,13 @@ describe("useIsolate", () => {
     expect(result.current.branch).toBe("");
   });
 
+  it("leaves a worker project's pool to its worker", () => {
+    const { result } = renderHook(() => useIsolate("worker://w1/ling"));
+    act(() => result.current.toggleIsolated());
+    expect(result.current.isolated).toBe(true);
+    expect(apiFetch).not.toHaveBeenCalled();
+  });
+
   it("shrugs off a failed warm", () => {
     const failed = { catch: vi.fn() };
     apiFetch.mockReturnValue(failed);

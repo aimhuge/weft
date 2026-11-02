@@ -6,6 +6,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import type { SharePane } from "@/lib/share-types";
 import { hidUsage } from "@/lib/hid-keys";
+import { isBrowserScreen } from "@/lib/host-line-protocol";
 import { useScreenVideo } from "@/lib/use-line-screen";
 import { gesture, useScreenStream, type Point } from "@/lib/use-screen-stream";
 import type { BoardInput } from "@/lib/worker-commands";
@@ -106,7 +107,7 @@ export function WorkerScreen({ pane, onInput, source, workerId }: { pane: Screen
         ended={ended}
         watch={onInput ? watch : undefined}
         busy={starting}
-        quality={pane.fast && onInput ? { value: quality, pick: pickQuality } : undefined}
+        quality={pane.fast && onInput && !isBrowserScreen(pane.device) ? { value: quality, pick: pickQuality } : undefined}
       />
       {/* Sized to the picture, never letterboxed: a press is read as a fraction of this box. */}
       <div className="flex min-h-0 w-full flex-1 items-center justify-center">

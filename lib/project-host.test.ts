@@ -19,6 +19,8 @@ const api = vi.hoisted(() => ({
   stopTask: vi.fn(),
   schedule: vi.fn(),
   unschedule: vi.fn(),
+  create: vi.fn(),
+  warm: vi.fn(),
   devAction: vi.fn(),
 }));
 const call = vi.hoisted(() => vi.fn());
@@ -27,14 +29,15 @@ vi.mock("./client", () => ({ api, call }));
 const actOnWorker = vi.hoisted(() => vi.fn(() => Promise.resolve()));
 vi.mock("./worker-transport", () => ({ actOnWorker, workerToolSource: "worker tools", workerTransport: { desktop: false } }));
 const actOnLine = vi.hoisted(() => vi.fn(() => Promise.resolve()));
-vi.mock("./line-host", () => ({ actOnLine, lineTransport: (workerId: string) => ({ desktop: false, workerId }), lineFiles: (workerId: string) => `line files ${workerId}` }));
+const warmOnLine = vi.hoisted(() => vi.fn());
+vi.mock("./line-host", () => ({ actOnLine, warmOnLine, lineTransport: (workerId: string) => ({ desktop: false, workerId }), lineFiles: (workerId: string) => `line files ${workerId}` }));
 const filesApi = vi.hoisted(() => ({ list: vi.fn(), read: vi.fn(), head: vi.fn(), write: vi.fn(), stat: vi.fn() }));
 vi.mock("./client-files", () => ({ filesApi }));
 vi.mock("./worker-files", () => ({ workerFiles: "worker files" }));
 vi.mock("./project-reads", () => ({ localRead: "local read" }));
 vi.mock("./project-snapshot-view", () => ({ cloudRead: "cloud read" }));
 
-const { cloudHost, hostFor, hostOf, localHost, sameHostCards, setHostForEveryCard } = await import("./project-host");
+const { cardCan, cloudHost, hostFor, hostOf, localHost, sameHostCards, setHostForEveryCard } = await import("./project-host");
 const { localTransport } = await import("./thread-transport");
 const { localToolSource } = await import("./use-tool-result");
 
@@ -58,6 +61,10 @@ describe("hostFor", () => {
     expect(w1).toMatchObject({ kind: "cloud", tools: "worker tools", thread: { workerId: "w1" }, files: "line files w1", menu: cloudHost.menu });
     await w1.act("card.stop", { id: "c1" });
     expect(actOnLine).toHaveBeenCalledWith("w1", "card.stop", { id: "c1" });
+    w1.warm("c1");
+    expect(warmOnLine).toHaveBeenCalledWith("w1", "c1");
+    cloudHost.warm("c1");
+    expect(warmOnLine).toHaveBeenCalledOnce();
   });
 });
 
@@ -138,12 +145,21 @@ describe("localHost", () => {
     ["files.read", { id: "c1", path: "a.ts" }, filesApi.read, ["c1", "a.ts"]],
     ["files.read", { id: "c1", path: "a.ts", at: "HEAD" }, filesApi.head, ["c1", "a.ts"]],
     ["files.write", { id: "c1", path: "a.ts", text: "x", baseHash: "h" }, filesApi.write, ["c1", "a.ts", "x", "h"]],
+    ["card.warm", { id: "c1" }, api.warm, [{ cardId: "c1" }]],
+    ["card.create", { id: "n1", prompt: "p", start: false }, api.create, [{ prompt: "p", start: false }]],
     ["dev.open", { id: "c1" }, call, ["POST", "/api/cards/c1/dev", { action: "open" }]],
     ["dev.stop", { id: "c1" }, api.devAction, ["c1", "stop"]],
   ] as const)("%s goes to the route the board has always called", async (verb, args, fn, expected) => {
     const run = localHost.act as (verb: string, args: unknown) => Promise<void>;
     await run(verb, args);
     expect(fn).toHaveBeenCalledWith(...expected);
+  });
+
+  it("warms a card through /api/warm, best effort", async () => {
+    api.warm.mockRejectedValueOnce(new Error("down"));
+    localHost.warm("c1");
+    await Promise.resolve();
+    expect(api.warm).toHaveBeenCalledWith({ cardId: "c1" });
   });
 
   it("rejects with the route's refusal", async () => {
@@ -162,11 +178,14 @@ describe("cloudHost", () => {
     expect(cloudHost.files).toBe("worker files");
   });
 
-  it("has Send later, the files and the header reads (H4), shares its cloud rows and deletes, and none of this Mac's other features", () => {
-    for (const feature of ["projectActs", "shots", "pane", "folder", "agent", "shell", "skills", "login", "vault", "dev"] as const)
+  it("has Send later, the files and the header reads (H4), a skill as a message, shares its cloud rows and deletes, and none of this Mac's other features", () => {
+    for (const feature of ["projectActs", "shots", "pane", "folder", "agent", "shell", "skills", "login", "vault", "dev", "cron", "settings"] as const)
       expect(cloudHost.can(feature)).toBe(false);
-    for (const feature of ["schedule", "share", "delete"] as const) expect(cloudHost.can(feature)).toBe(true);
-    expect(localHost.can("schedule")).toBe(true);
+    for (const feature of ["schedule", "runSkill"] as const) {
+      expect(cloudHost.can(feature)).toBe(true);
+      expect(localHost.can(feature)).toBe(true);
+    }
+    for (const feature of ["share", "delete"] as const) expect(cloudHost.can(feature)).toBe(true);
     expect(cloudHost.can("files")).toBe(true);
     expect(cloudHost.can("reads")).toBe(true);
   });
@@ -200,5 +219,24 @@ describe("sameHostCards", () => {
   it("is only that worker's cards for a worker's", () => {
     expect(sameHostCards(all, w1)).toEqual([w1, w1b]);
     expect(sameHostCards(all, w2)).toEqual([w2]);
+  });
+});
+
+describe("cardCan", () => {
+  const mac = { cwd: "/dev/weft" };
+  const worker = { cwd: "worker://w1/ling" };
+  const desktop = { desktop: true };
+  const workerPanel = { desktop: false, cardEdits: true };
+  const web = { desktop: false };
+
+  it("is the card's host's answer where the panel reaches that host", () => {
+    expect(cardCan(mac, desktop, "cron")).toBe(true);
+    expect(cardCan(worker, workerPanel, "runSkill")).toBe(true);
+    expect(cardCan(worker, workerPanel, "skills")).toBe(false);
+  });
+
+  it("is never on weft.zip, whose panel reaches no host's card controls", () => {
+    expect(cardCan(mac, web, "skills")).toBe(false);
+    expect(cardCan(worker, web, "runSkill")).toBe(false);
   });
 });

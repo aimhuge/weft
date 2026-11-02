@@ -9,8 +9,9 @@ import { useCallback, useEffect, useRef, useState, type RefObject } from "react"
 import type { LiveEvent, ScreenQuality } from "./rtc-signal";
 import { offerVideoTrack, playTrack } from "./rtc-video-track";
 import { lineFor, useLineRoute } from "./session-lines";
-import { screenChannel } from "./host-line-protocol";
+import { isBrowserScreen, screenChannel } from "./host-line-protocol";
 import { lineToken } from "./line-answer";
+import { useLineFrames } from "./use-line-frames";
 import { useRtcScreen, type RtcScreen } from "./use-rtc-screen";
 import type { BoardInput } from "./worker-commands";
 
@@ -78,12 +79,15 @@ export function useScreenVideo(
   quality: ScreenQuality,
   videoEl: RefObject<HTMLVideoElement | null>,
 ): RtcScreen {
-  const onLine = useLineScreen(workerId, device, fast, quality, videoEl);
-  const own = useRtcScreen(device, fast && !onLine.on, canvasEl, onOffer, quality, videoEl);
+  // A worker's browser sends JPEGs on its input channel instead of video, and never on a line of its own.
+  const browser = isBrowserScreen(device);
+  const onLine = useLineScreen(workerId, device, fast && !browser, quality, videoEl);
+  const frames = useLineFrames(workerId, device, fast && browser, canvasEl);
+  const own = useRtcScreen(device, fast && !browser && !onLine.on, canvasEl, onOffer, quality, videoEl);
   return {
-    live: onLine.live || own.live,
+    live: onLine.live || frames.live || own.live,
     track: onLine.live || own.track,
-    send: (event) => onLine.send(event) || own.send(event),
+    send: (event) => onLine.send(event) || frames.send(event) || own.send(event),
     answer: own.answer,
   };
 }
