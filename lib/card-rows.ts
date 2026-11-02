@@ -4,13 +4,14 @@
 // (a direct upsert with the account's session, or the worker_put_card / worker_put_items RPCs), and seals what this
 // returns with its own Sealer, if it has one. The steps, in order:
 //
-//   card ─ thumb up as a blob (thumbs) ─ page up as a blob ─ redact ─ scrub ─▶ CardProjection ─ host's seal ─▶ row
+//   card ─ thumb up as a blob (thumbs) ─ page up as a blob ─ tour pages up as blobs ─ redact ─ scrub ─▶ CardProjection ─ host's seal ─▶ row
 //   item ─ local paths up as blobs ─ splitToolResult ─ redact ─ scrub ─▶ ItemProjection ─ host's seal ─▶ rows
 //
 // Where the two hosts still differ, the difference is a field of RowHost, not a second copy of the code.
 import { withUploadedPage, withUploadedThumbs } from "./card-rows-blobs";
 import { redactValue } from "./cloud-sync-redact";
 import { scrub, splitToolResult } from "./cloud-sync-rows";
+import { withUploadedTour } from "./review-blobs";
 import type { BlobStore, CloudCardRow } from "./cloud-sync-types";
 import { redactText } from "./share-redact";
 import { stripEnvBlock } from "./env-block";
@@ -66,7 +67,8 @@ async function withBlobs(card: Card, host: RowHost): Promise<CardProjection> {
   return guarded(host, `${card.id}'s page`, plain, async () => {
     const row = { org_id: host.orgId, card } as CloudCardRow;
     const [thumbed = row] = host.thumbs ? await withUploadedThumbs([row], store, host.orgId) : [row];
-    const { card: sent, page = null, page_thumb = null, pages = 0 } = await withUploadedPage(thumbed, store, host.orgId);
+    const { card: paged, page = null, page_thumb = null, pages = 0 } = await withUploadedPage(thumbed, store, host.orgId);
+    const sent = await withUploadedTour(paged, store, host.orgId);
     return { card: sent, page, page_thumb: host.thumbs ? page_thumb : null, pages };
   });
 }

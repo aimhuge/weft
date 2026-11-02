@@ -372,6 +372,12 @@ card.page and the open_url item carry blob:sha256:<hex>#anchor (lib/worker-publi
   ([worker-browser.md](worker-browser.md)); only `fill_field` needs the desktop app. `WORKER_BROWSER_PROMPT` replaces `BROWSER_PROMPT` in the thread's prompt,
   so a thread knows the pane works and never tells you to open a file on the box. An image in a reply (`![…](/abs/x.png)`)
   goes up the same way.
+- **A review tour's pages too.** A step that names a file on the box (`"path": "/Users/me/.weft-worker/data/show/todos.html#done"`)
+  used to reach the Mac as that path, and the pane said "This page only exists on the machine running this card."
+  `withUploadedTour` (`lib/review-blobs.ts`, a step of `projectCard` in `lib/card-rows.ts`) sends every such step's page up
+  through the same `uploadPage`, inside the same `workerMayUpload` roots, and the row's step reads
+  `blob:sha256:<hex>?query#anchor`. `stepUrl` (`lib/review.ts`) and `paneFromUrl` (`@weft/client`) open that as the
+  uploaded copy, so the tour works on the desktop board and weft.zip alike. The worker's own card keeps its paths.
 - **Writing a page asks nobody.** `acceptEdits` only writes without asking inside the CLI's working directories: its cwd
   and `additionalDirectories`. The show folder is neither, because a card's cwd is its checkout. Nothing on the desktop
   exempts it: an Accept edits card there asks about `~/.weft/show` too. A desktop card goes through because it runs in

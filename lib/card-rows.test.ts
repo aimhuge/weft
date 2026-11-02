@@ -52,6 +52,14 @@ describe("projectCard", () => {
     expect(out.page_thumb).toBe("https://example.com/t.png");
   });
 
+  it("sends a tour's local pages up, so another board opens the uploaded copy", async () => {
+    const tour = await import("./review-blobs");
+    const spy = vi.spyOn(tour, "withUploadedTour").mockImplementationOnce((c) => Promise.resolve({ ...c, review: { steps: [{ title: "a", path: REF }] } }));
+    const out = await projectCard(card({ review: { steps: [{ title: "a", path: "/home/me/.weft/show/a.html" }] } }), host({ blobs: blobs() }));
+    expect(out.card.review?.steps[0]?.path).toBe(REF);
+    spy.mockRestore();
+  });
+
   it("throws a failed upload for a host without onBlobError", async () => {
     const mod = await import("./card-rows-blobs");
     const spy = vi.spyOn(mod, "withUploadedPage").mockRejectedValueOnce(new Error("offline"));
