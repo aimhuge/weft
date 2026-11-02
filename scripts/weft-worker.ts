@@ -93,6 +93,10 @@ async function loadEngine() {
     import("../lib/worker-folders"),
     import("../lib/worker-secret-run"),
     import("../lib/worker-secret-wiring"),
+    // Loaded again in start, as the board tools' side (lib/worker-board-link.ts); here so `check` proves they load.
+    import("../lib/worker-board-link"),
+    import("../lib/worker-lists"),
+    import("../lib/cron-run"),
   ]);
   return { store, parts };
 }
@@ -131,6 +135,22 @@ async function startCommand() {
   const results = workerResults(config.key, client.storage);
   const publisher = createPublisher(reg, store, console.warn, { blobs, orgId: config.orgId });
   subscribe(publisher.hear);
+  // The board tools reach the user's board, not this store (docs/architecture/project-hosts.md#board-tools-on-a-worker):
+  // the owner's cards, a card for another host, and this worker's crons and webhooks published for the Mac's drawers.
+  const [{ setBoardLink }, { createListsPublisher }, { listCrons }, { listWebhooks, onWebhooksWrite }, { startCronClock }] = await Promise.all([
+    import("../lib/worker-board-link"),
+    import("../lib/worker-lists"),
+    import("../lib/cron-store"),
+    import("../lib/webhooks"),
+    import("../lib/cron-run"),
+  ]);
+  const boardLink = { workerId: config.workerId, root, cards: reg.boardCards, newCard: reg.newCard, setLists: reg.setLists };
+  setBoardLink(boardLink);
+  const lists = createListsPublisher(boardLink, { crons: listCrons, webhooks: () => listWebhooks() });
+  subscribe((event) => {
+    if (event.type === "crons") lists.poke();
+  });
+  onWebhooksWrite(() => lists.poke());
   // Session lines (lib/host-line.ts): the answer goes back on the board's own topic, events are what the
   // publisher ships (one projection, one upload), screens need a card of this box's own watching them, and verbs run
   // through the host kind's path (the daemon hands `run` in).
@@ -157,7 +177,12 @@ async function startCommand() {
     onCardChange: subscribe,
     // Send later on this worker's cards (card.schedule): the messages are saved on the cards, so one whose time passed
     // while the daemon was down goes on the first check, after recovery, so it can't race a turn being resumed.
-    onRecovered: () => startScheduler({ briefs: false }),
+    // Crons too: a cron for this worker's project fires here, where its runs' cards work.
+    onRecovered: () => {
+      startScheduler({ briefs: false });
+      startCronClock();
+      void lists.flush();
+    },
     line: (sealed, run) => lines.open(sealed, run),
     engine: {
       start: async (body) => {

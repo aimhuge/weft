@@ -1,6 +1,7 @@
 import type { CronPatch } from "@/lib/cron-types";
 import { deleteCron, updateCron } from "@/lib/crons";
 import { fail, guard } from "@/lib/guard";
+import { isWorkerItem, workerItemRefused } from "@/lib/worker-lists-read";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -10,6 +11,7 @@ export async function PATCH(req: Request, { params }: Ctx) {
   if (denied) return denied;
   const { id } = await params;
   try {
+    if (isWorkerItem(id)) throw new Error(workerItemRefused("cron"));
     const patch = (await req.json()) as CronPatch;
     return Response.json({ cron: updateCron(id, patch) });
   } catch (err) {
@@ -23,6 +25,7 @@ export async function DELETE(req: Request, { params }: Ctx) {
   if (denied) return denied;
   const { id } = await params;
   try {
+    if (isWorkerItem(id)) throw new Error(workerItemRefused("cron"));
     deleteCron(id);
     return Response.json({ ok: true });
   } catch (err) {

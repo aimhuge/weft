@@ -66,7 +66,7 @@ describe("webhooksMcpServer", () => {
     expect(said(await run("list"))).toContain("last delivery unreachable");
   });
 
-  it("records a blank, and its secret as a vault blank (best effort)", async () => {
+  it("records a blank, and its secret as a vault blank, saying so when the vault can't take it", async () => {
     reply({ added: true });
     const r = await run("add_blank", { name: "stripe", target: "/api/stripe/webhook", events: ["x"], hint: "Stripe dashboard", secret: "STRIPE_WEBHOOK_SECRET" });
     expect([r.isError, said(r)]).toEqual([
@@ -76,9 +76,13 @@ describe("webhooksMcpServer", () => {
     expect(sent()).toEqual({ url: "http://127.0.0.1:4567/secrets/add-blank", body: { folder: "/proj", names: ["STRIPE_WEBHOOK_SECRET"], environment: "development", hint: "Stripe dashboard" } });
     expect(registry.listWebhooks(["/proj"])[0]).toMatchObject({ name: "stripe", events: ["x"], secret: "STRIPE_WEBHOOK_SECRET" });
 
-    // Again: updated, and a vault that can't be reached doesn't fail the tool.
+    // Again: updated, and a vault that can't be reached doesn't fail the tool, but the thread hears it.
     reply({ error: "no vault" }, false);
-    expect(said(await run("add_blank", { name: "Stripe", target: "/api/v2", secret: "STRIPE_WEBHOOK_SECRET", project: "/proj" }))).toContain("stripe is updated on 🪝");
+    const again = said(await run("add_blank", { name: "Stripe", target: "/api/v2", secret: "STRIPE_WEBHOOK_SECRET", project: "/proj" }));
+    expect(again).toContain("stripe is updated on 🪝");
+    expect(again).toMatch(/ STRIPE_WEBHOOK_SECRET isn't in the 🔐 vault as a blank \(.+\): tell the user its name so they add it\.$/);
+    fetchMock.mockRejectedValueOnce("down");
+    expect(said(await run("add_blank", { name: "Stripe", target: "/api/v2", secret: "STRIPE_WEBHOOK_SECRET", project: "/proj" }))).toMatch(/isn't in the 🔐 vault as a blank \(.*down.*\)/);
 
     fetchMock.mockReset();
     await run("add_blank", { name: "gh", target: "/g" });
