@@ -11,6 +11,7 @@ import { createCardCommands } from "./worker-card-commands";
 import { cloneBody, runBody } from "./worker-commands";
 import type { DaemonDeps } from "./worker-daemon";
 import { explainClone, type GithubStatus } from "./worker-github";
+import { sentByWorker, WORKER_CARD_MODE } from "./worker-origin";
 import { sealedOf, type Sealed } from "./worker-seal";
 import type { Card, PermissionMode } from "./types";
 
@@ -26,6 +27,11 @@ export function workerStartMode(named: unknown): Promise<PermissionMode> {
   if (named !== undefined && !NEW_CARD_MODES.includes(named as NewCardMode)) return Promise.reject(new Error("That mode can't be set on a worker."));
   return networkStartMode(named as NewCardMode | undefined, { defaultMode: () => DEFAULT_MODE, refusal: () => Promise.resolve(null) });
 }
+
+// A card another of the user's workers sent starts in `default`, whatever it names (lib/worker-origin.ts); any other
+// takes workerStartMode's rule.
+const startMode = (command: CloudCommandRow, named: unknown): Promise<PermissionMode> =>
+  sentByWorker(command.payload) ? Promise.resolve(WORKER_CARD_MODE) : workerStartMode(named);
 
 export interface KindContext {
   log: (msg: string) => void;
@@ -95,7 +101,7 @@ export function workerKinds(deps: DaemonDeps, ctx: KindContext): KindTable {
     if (start === false) throw new Error("A worker has no Backlog yet. Start the thread instead.");
     fields.prompt = await engine.receive(fields.prompt, command.payload);
     const cwd = await deps.checkout(command.folder, typeof repo === "string" ? repo : undefined);
-    return published(command, await engine.start({ ...fields, cwd, permissionMode: await workerStartMode(run?.permissionMode ?? fields.permissionMode) }));
+    return published(command, await engine.start({ ...fields, cwd, permissionMode: await startMode(command, run?.permissionMode ?? fields.permissionMode) }));
   }
 
   async function published(command: CloudCommandRow, card: Card): Promise<string> {

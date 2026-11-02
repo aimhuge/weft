@@ -6,6 +6,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { Readable, Writable } from "node:stream";
+import { SANDBOXED_CHROMIUM, sandboxGap, sandboxNote } from "./worker-chromium-sandbox";
 
 // A command whose failure changes nothing (an ack, a cleanup, a page already gone): sent, and any rejection dropped.
 export function quietly(sent: Promise<unknown>): void {
@@ -112,8 +113,8 @@ export function cdpOver(out: Writable, inn: Readable, kill: () => void, callMs =
   };
 }
 
-// Where a Chromium might be: WEFT_CHROMIUM, the one install/worker.sh pins, Playwright's cached builds, then the
-// system's Chrome or Chromium.
+// Where a Chromium might be: WEFT_CHROMIUM, the one install/worker.sh pins (on a Linux whose AppArmor needed it, its
+// root-owned copy first, the one the sandbox profile names), Playwright's cached builds, then the system's Chrome.
 export function chromiumCandidates(env: NodeJS.ProcessEnv = process.env, home = os.homedir(), platform = process.platform): string[] {
   const own = path.join(home, ".weft", "tools", "chromium");
   const caches = platform === "darwin" ? path.join(home, "Library", "Caches", "ms-playwright") : path.join(home, ".cache", "ms-playwright");
@@ -122,7 +123,8 @@ export function chromiumCandidates(env: NodeJS.ProcessEnv = process.env, home = 
     platform === "darwin"
       ? ["/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", "/Applications/Chromium.app/Contents/MacOS/Chromium"]
       : ["/usr/bin/chromium", "/usr/bin/chromium-browser", "/usr/bin/google-chrome", "/usr/bin/google-chrome-stable"];
-  return [env.WEFT_CHROMIUM ?? "", path.join(own, "chrome-headless-shell"), ...shells, ...system].filter(Boolean);
+  const sandboxed = platform === "linux" ? [SANDBOXED_CHROMIUM] : [];
+  return [env.WEFT_CHROMIUM ?? "", ...sandboxed, path.join(own, "chrome-headless-shell"), ...shells, ...system].filter(Boolean);
 }
 
 // chromium_headless_shell-<rev>/chrome-headless-shell-<platform>/chrome-headless-shell, newest first.
@@ -159,23 +161,9 @@ export function findChromium(candidates = chromiumCandidates()): string | null {
 export const NO_CHROMIUM = "This worker has no Chromium for the browser tools. Run `weft-worker update` (install/worker.sh pins one), or set WEFT_CHROMIUM to a Chrome or chrome-headless-shell binary.";
 
 // The flags: headless, nothing that phones home or asks, and no file access across files. A full Chrome takes
-// --headless=new; chrome-headless-shell is headless already and ignores it. Root, or a Linux that blocks user namespaces, needs --no-sandbox.
-// Chrome's sandbox needs unprivileged user namespaces; Ubuntu 24.04 (GitHub's runners included) blocks them with AppArmor, and
-// then Chrome exits at once. Root, or a Linux box that forbids them, runs without the sandbox: the box is the worker's own.
-export function sandboxUnavailable(platform = process.platform, isRoot = process.getuid?.() === 0, read: (file: string) => string | null = readProc): boolean {
-  if (platform !== "linux") return false;
-  return isRoot || read("/proc/sys/kernel/apparmor_restrict_unprivileged_userns") === "1" || read("/proc/sys/kernel/unprivileged_userns_clone") === "0" || read("/proc/sys/user/max_user_namespaces") === "0";
-}
-
-function readProc(file: string): string | null {
-  try {
-    return fs.readFileSync(file, "utf8").trim();
-  } catch {
-    return null;
-  }
-}
-
-export function chromiumArgs(dataDir: string, noSandbox = sandboxUnavailable()) {
+// --headless=new; chrome-headless-shell is headless already and ignores it. --no-sandbox only where sandboxGap says
+// the sandbox can't start (lib/worker-chromium-sandbox.ts).
+export function chromiumArgs(dataDir: string, noSandbox: boolean) {
   return [
     "--headless=new",
     "--remote-debugging-pipe",
@@ -196,11 +184,18 @@ export function chromiumArgs(dataDir: string, noSandbox = sandboxUnavailable()) 
 export type Spawn = (bin: string, args: string[]) => ChildProcess;
 const spawnPiped: Spawn = (bin, args) => spawn(bin, args, { stdio: ["ignore", "ignore", "ignore", "pipe", "pipe"] });
 
-// Starts one browser with a profile of its own, removed when it exits.
-export function launchChromium(bin: string | null = findChromium(), run: Spawn = spawnPiped): Cdp {
+// What the worker's row says about its browser: null when it's sandboxed, or there's none to run.
+export function browserSandboxNote(bin: string | null = findChromium(), gap: (bin: string) => string | null = sandboxGap): string | null {
+  return bin ? sandboxNote(gap(bin)) : null;
+}
+
+// Starts one browser with a profile of its own, removed when it exits. Without its sandbox, it says so on the log.
+export function launchChromium(bin: string | null = findChromium(), run: Spawn = spawnPiped, gap = sandboxGap, warn: (msg: string) => void = console.warn): Cdp {
   if (!bin) throw new Error(NO_CHROMIUM);
+  const why = gap(bin);
+  if (why) warn(`Weft Worker: the browser runs without its sandbox, so a page that exploits it runs as this worker: ${why}.`);
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "weft-browser-"));
-  const child = run(bin, chromiumArgs(dataDir));
+  const child = run(bin, chromiumArgs(dataDir, why !== null));
   const cdp = cdpOver(child.stdio[3] as Writable, child.stdio[4] as Readable, () => child.kill());
   const cleanUp = () => fs.rmSync(dataDir, { recursive: true, force: true });
   child.on("exit", () => {

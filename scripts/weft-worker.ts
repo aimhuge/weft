@@ -27,6 +27,7 @@ import { CLAUDE_TOKEN, GITHUB_PURPOSE, LOGIN_PURPOSE, newSealKeys, open } from "
 import { createUpdater, updatesOn } from "../lib/worker-update";
 import { listenForPushes, listenForWakes } from "../lib/worker-wake";
 import { joinPresence } from "../lib/worker-presence";
+import { browserSandboxNote } from "../lib/worker-chromium";
 
 const home = workerHome();
 // Before the engine is imported: lib/store.ts reads WEFT_DATA once, at import.
@@ -93,6 +94,10 @@ async function loadEngine() {
     import("../lib/worker-folders"),
     import("../lib/worker-secret-run"),
     import("../lib/worker-secret-wiring"),
+    // Loaded again in start, as the board tools' side (lib/worker-board-link.ts); here so `check` proves they load.
+    import("../lib/worker-board-link"),
+    import("../lib/worker-lists"),
+    import("../lib/cron-run"),
     import("../lib/worktree-pool"),
     import("../lib/worker-browser-screen"),
   ]);
@@ -109,7 +114,7 @@ async function startCommand() {
   const config = readWorkerConfig(home);
   if (!config) throw new Error("This box isn't enrolled yet. Run: weft-worker enrol <token>");
   const { store, parts } = await loadEngine();
-  const [{ startFeatureCard }, , , { subscribe }, { createDaemon }, { createPublisher }, paths, github, folderGrant, { createBlobStore }, { SHOW_DIR }, { setPageUpload }, { busyCards }, { recoverCards }, { resumeInterrupted }, { openScreenChannel, screenInput, setFastScreen, setScreenChannel, fastScreenOf, watcherOf }, { sendInput }, { openFastScreen }, { setDeviceLink }, { deviceLink }, { isMobileApp }, { runVerb }, { startScheduler }, { createHostLines }, { readProjectSnapshot }, { createProjectPublisher }, { listProjectFolders }, { setSecretLink, forgetOnTurnEnd }, { secretWiring }, { startWorktreePool }, browserScreen] = parts;
+  const [{ startFeatureCard }, , , { subscribe }, { createDaemon }, { createPublisher }, paths, github, folderGrant, { createBlobStore }, { SHOW_DIR }, { setPageUpload }, { busyCards }, { recoverCards }, { resumeInterrupted }, { openScreenChannel, screenInput, setFastScreen, setScreenChannel, fastScreenOf, watcherOf }, { sendInput }, { openFastScreen }, { setDeviceLink }, { deviceLink }, { isMobileApp }, { runVerb }, { startScheduler }, { createHostLines }, { readProjectSnapshot }, { createProjectPublisher }, { listProjectFolders }, { setSecretLink, forgetOnTurnEnd }, { secretWiring }, , , , { startWorktreePool }, browserScreen] = parts;
   const reg = registry(rpc, config.key);
   // The public half goes on the worker's row, so Settings → Sync → Workers can seal a Claude token to this box.
   const keys = workerSealKeys(home, newSealKeys);
@@ -135,6 +140,22 @@ async function startCommand() {
   const results = workerResults(config.key, client.storage);
   const publisher = createPublisher(reg, store, console.warn, { blobs, orgId: config.orgId });
   subscribe(publisher.hear);
+  // The board tools reach the user's board, not this store (docs/architecture/project-hosts.md#board-tools-on-a-worker):
+  // the owner's cards, a card for another host, and this worker's crons and webhooks published for the Mac's drawers.
+  const [{ setBoardLink }, { createListsPublisher }, { listCrons }, { listWebhooks, onWebhooksWrite }, { startCronClock }] = await Promise.all([
+    import("../lib/worker-board-link"),
+    import("../lib/worker-lists"),
+    import("../lib/cron-store"),
+    import("../lib/webhooks"),
+    import("../lib/cron-run"),
+  ]);
+  const boardLink = { workerId: config.workerId, root, cards: reg.boardCards, newCard: reg.newCard, setLists: reg.setLists };
+  setBoardLink(boardLink);
+  const lists = createListsPublisher(boardLink, { crons: listCrons, webhooks: () => listWebhooks() });
+  subscribe((event) => {
+    if (event.type === "crons") lists.poke();
+  });
+  onWebhooksWrite(() => lists.poke());
   // Session lines (lib/host-line.ts): the answer goes back on the board's own topic, events are what the
   // publisher ships (one projection, one upload), screens need a card of this box's own watching them, and verbs run
   // through the host kind's path (the daemon hands `run` in).
@@ -162,9 +183,12 @@ async function startCommand() {
     onCardChange: subscribe,
     // Send later on this worker's cards (card.schedule): the messages are saved on the cards, so one whose time passed
     // while the daemon was down goes on the first check, after recovery, so it can't race a turn being resumed.
+    // Crons too: a cron for this worker's project fires here, where its runs' cards work.
     // And the worktree pool for its Isolated cards (lib/worktree-pool.ts), as the Mac's server keeps one.
     onRecovered: () => {
       startScheduler({ briefs: false });
+      startCronClock();
+      void lists.flush();
       startWorktreePool();
     },
     line: (sealed, run) => lines.open(sealed, run),
@@ -193,6 +217,8 @@ async function startCommand() {
       resume: resumeInterrupted,
     },
     update: updatesOn(home, process.cwd()) ? { ...createUpdater({ home, dir: process.cwd() }), restart: () => restart() } : undefined,
+    // "Browser runs without sandbox", on the worker's row, where Linux won't let its Chromium sandbox itself.
+    browserNote: browserSandboxNote(),
     async checkout(folder, repo) {
       const dir = paths.repoPath(root, folder);
       if ((await paths.materialise(dir, repo)) === "cloned") console.log(`Weft Worker: cloned ${repo} into ${dir}`);

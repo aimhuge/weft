@@ -88,6 +88,9 @@ export default function VaultEventsList({
   const [loading, setLoading] = useState(true);
   // The signed-in user's id, for the "mine" filter on the live feed's rows.
   const [userId, setUserId] = useState<string | null>(null);
+  // The same id, read by the live feed's listener. The feed must not re-subscribe when the first read
+  // lands (a row pushed in that gap went to a listener that still saw no user and dropped it).
+  const userIdRef = useRef<string | null>(null);
 
   // The log for a scope: the newest rows, and the filter that goes with them. The read happens in
   // the effect below, so the state is only written once the shell has answered.
@@ -109,6 +112,7 @@ export default function VaultEventsList({
         // slipped through never reaches the list.
         setEvents(filterEvents(result.events, scope, result.userId ?? null));
         setShared(result.shared !== false);
+        userIdRef.current = result.userId ?? null;
         setUserId(result.userId ?? null);
         setError(null);
         setLoading(false);
@@ -129,14 +133,14 @@ export default function VaultEventsList({
     const stop = bridge.onEvents?.((payload) => {
       if (payload.vaultId !== vaultId) return;
       const arrived = toVaultEvents(payload.rows);
-      setEvents((now) => mergeEvents(now, arrived, scope, userId));
+      setEvents((now) => mergeEvents(now, arrived, scope, userIdRef.current));
     });
     void bridge.watchEvents?.(vaultId, scope);
     return () => {
       stop?.();
       void bridge.unwatchEvents?.(vaultId);
     };
-  }, [bridge, vaultId, scope, userId]);
+  }, [bridge, vaultId, scope]);
 
   // The filter: a new scope means a new read, so the log says it's reading. The rows already shown
   // are re-filtered under the new scope at once, so the tab doesn't show a teammate's actions for

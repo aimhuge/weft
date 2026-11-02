@@ -3,12 +3,13 @@ import { runCron } from "@/lib/cron-run";
 import type { CronInput } from "@/lib/cron-types";
 import { createCron } from "@/lib/crons";
 import { fail, guard } from "@/lib/guard";
+import { workerLists } from "@/lib/worker-lists-read";
 
-// The rail's Crons drawer: every cron, soonest run first.
-export function GET(req: Request) {
+// The rail's Crons drawer: every cron, soonest run first, this Mac's and the ones your Weft Workers publish.
+export async function GET(req: Request) {
   const denied = guard(req, { write: false });
   if (denied) return denied;
-  const crons = listCrons().sort((a, b) => (a.nextAt ?? Infinity) - (b.nextAt ?? Infinity));
+  const crons = [...listCrons(), ...(await workerLists()).crons].sort((a, b) => (a.nextAt ?? Infinity) - (b.nextAt ?? Infinity));
   return Response.json({ crons });
 }
 

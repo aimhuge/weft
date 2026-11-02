@@ -19,6 +19,7 @@ import { cardKinds, dispatcher, type CardRules } from "./host/dispatch";
 import { needsElevation, runVerb, type HostVerb } from "./host-api";
 import { defaultPermissionMode, syncFolders } from "./settings";
 import { getCard } from "./store";
+import { holdWorkerCard, sentByWorker } from "./worker-origin";
 import { pairingStatus } from "./sync-security";
 
 // Why a verb that grants power can't run from the web: a phone is paired, and only it approves. The phone can't sign
@@ -80,14 +81,19 @@ export function syncFolderFor(name: string): string | null {
 // A new card from the web: its pasted files brought over first, its mode (named, or this Mac's default) held to the same
 // rule as a mode change (lib/cloud-new-card-mode.ts), and one asked for in Backlog made and left there.
 async function newCard(command: CloudCommandRow, receive: (text: string, payload: unknown) => Promise<string>): Promise<string> {
+  // A card a Weft Worker sent never starts itself here: Backlog, `default`, for the user to start (lib/worker-origin.ts).
+  if (sentByWorker(command.payload)) return made(createCardFromBody(holdWorkerCard(newCardBody(command))));
   const body = newCardBody(command);
   body.permissionMode = await networkStartMode(body.permissionMode as NewCardMode | undefined, {
     defaultMode: defaultPermissionMode,
     refusal: async (permissionMode) => (await macRules.elevated?.("card.update", { id: "", body: { permissionMode } })) ?? null,
   });
   if (typeof body.prompt === "string") body.prompt = await receive(body.prompt, command.payload);
-  const card = body.start === false ? createCardFromBody(body) : await startFeatureCard(body);
-  // The card and its first items are already in the outbox; send them now so the board sees it start.
+  return made(body.start === false ? createCardFromBody(body) : await startFeatureCard(body));
+}
+
+// The card and its first items are already in the outbox; send them now so the board sees it.
+function made(card: { id: string }): string {
   syncNow();
   return card.id;
 }

@@ -87,6 +87,9 @@ export interface DaemonDeps {
   onCardChange?: (listener: () => void) => () => void;
   // Keeps this box on the newest Weft (lib/worker-update.ts). Absent when it's switched off, or not the worker's clone.
   update?: { tick(hold: () => boolean): Promise<Tick>; build(): Promise<string>; healthy(): void; restart(): void };
+  // A standing warning for the worker's row beside any update note: the browser running without its sandbox
+  // (lib/worker-chromium.ts browserSandboxNote).
+  browserNote?: string | null;
   log?: (msg: string) => void;
   pollMs?: number;
   slowPollMs?: number;
@@ -174,7 +177,8 @@ export function createDaemon(deps: DaemonDeps) {
 
   // Puts what this box runs on its row. A database without the function yet only leaves the line off.
   let shown: string | null | undefined;
-  async function showBuild(note: string | null) {
+  async function showBuild(updateNote: string | null) {
+    const note = [updateNote, deps.browserNote].filter(Boolean).join(" ") || null;
     try {
       const build = (await deps.update?.build()) ?? "";
       if (`${build} ${note}` === shown) return;
@@ -211,7 +215,7 @@ export function createDaemon(deps: DaemonDeps) {
     beat.start();
     void poll();
     void github(deps.github.status);
-    if (deps.update) void showBuild(null);
+    if (deps.update || deps.browserNote) void showBuild(null);
     // Fast until the socket joins, and whenever it's down. A worker with no socket keeps the fast poll for good.
     const stopPolling = startPolling(() => void poll(), { fastMs: deps.pollMs ?? FAST_POLL_MS, slowMs: deps.slowPollMs ?? SLOW_POLL_MS, listen: deps.listen });
     const githubTimer = setInterval(() => void github(deps.github.status), deps.githubMs ?? GITHUB_CHECK_MS);

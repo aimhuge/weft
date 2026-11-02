@@ -43,6 +43,8 @@ export interface Webhook {
   deliveries?: Delivery[];
   createdAt: number;
   updatedAt: number;
+  // Set on a webhook a Weft Worker published (lib/worker-lists-read.ts): that worker's name. Its target is there.
+  worker?: string;
 }
 
 export type WebhookInput = Pick<Webhook, "folder" | "name"> & Partial<Pick<Webhook, "target" | "events" | "hint" | "secret" | "provider">>;

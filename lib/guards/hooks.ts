@@ -3,6 +3,7 @@ import { bashClaimHooks } from "../bash-claims";
 import { changelogStampHooks } from "../changelog-stamp";
 import { claimHooks } from "../claim-guard";
 import { clipboardGuardMatcher } from "../clipboard-guard";
+import { WORKER_TOOL_GATE } from "../worker-tools";
 import { folderGuardMatcher } from "../folder-guard";
 import { CHECK_GUARD_MATCHER } from "../check-guard";
 import { commitHeldHook } from "../commit-held-guard";
@@ -35,7 +36,7 @@ export function guardHooks(otherTurns: () => number, cardId: () => string | unde
   const bash = bashClaimHooks(cardId);
   const stamp = changelogStampHooks(cardId);
   return {
-    PreToolUse: [secretGuardMatcher(cardId), restartGuardMatcher(otherTurns), GIT_GUARD_MATCHER, CHECK_GUARD_MATCHER, ROUTE_IMPORT_GUARD_MATCHER, folderGuardMatcher(cardId), claims.pre, bash.pre, stamp.pre, commitHeldHook(cardId), clipboardGuardMatcher(), WORKER_CLI_GUARD_MATCHER],
+    PreToolUse: [secretGuardMatcher(cardId), restartGuardMatcher(otherTurns), GIT_GUARD_MATCHER, CHECK_GUARD_MATCHER, ROUTE_IMPORT_GUARD_MATCHER, folderGuardMatcher(cardId), claims.pre, bash.pre, stamp.pre, commitHeldHook(cardId), clipboardGuardMatcher(), WORKER_CLI_GUARD_MATCHER, WORKER_TOOL_GATE],
     PostToolUse: [IMPORT_GUARD_MATCHER, claims.post, bash.post, stamp.post],
     PostToolUseFailure: [bash.post],
   };

@@ -4,7 +4,7 @@ import { storedAgent, type ThreadAgent } from "./agents";
 import { listAgents, projectAgent } from "./agent-store";
 import { agentTools } from "./agent-tools";
 import { firstMessage } from "./automations";
-import { boardCard, cardLine, LIST_LIMIT, readThreadText } from "./board-tools-format";
+import { boardCard, LIST_LIMIT, listText, readThreadText } from "./board-tools-format";
 import { markSeen } from "./copilot-digest";
 import { setupReport } from "./copilot-setup";
 import { activeProjects } from "./copilot-sources";
@@ -19,6 +19,8 @@ import { defaultPermissionMode, touchProject } from "./settings";
 import { createCard, getCard, listCards, updateCard } from "./store";
 import { rememberTags } from "./tag-store";
 import { normalizeTags } from "./tags";
+import { onWorkerBoard } from "./worker-board-tools";
+import { onWorker } from "./worker-pane";
 import type { Backend, Card, PermissionMode } from "./types";
 
 // Re-exports for callers that import these from ./board-tools: lib/weft-mcp.ts builds the MCP
@@ -99,22 +101,11 @@ function listCardsTool() {
       include_done: z.boolean().optional().describe("Also list done and archived cards (default false)"),
       limit: z.number().int().positive().optional().describe(`Most cards to list (default ${LIST_LIMIT})`),
     },
-    ({ column, include_done = false, limit = LIST_LIMIT }) =>
-      attempt(() => {
-        const all = listCards().filter((c) => c.role !== "copilot" && (!column || c.column === column));
-        const cards = all
-          .filter((c) => include_done || (c.column !== "done" && !c.archived))
-          .sort((a, b) => b.updatedAt - a.updatedAt);
-        const hidden = all.length - cards.length;
-        const notes = [
-          cards.length > limit && `${cards.length - limit} more not shown; raise limit or pass column.`,
-          hidden > 0 && `${hidden} done or archived left out; pass include_done=true to list them.`,
-        ].filter(Boolean);
-        if (!cards.length) notes.unshift(`No ${hidden ? "open " : ""}cards${column ? ` in ${column}` : ""}.`);
-        return [...cards.slice(0, limit).map(cardLine), ...notes].join("\n");
-      }),
+    (opts) => attempt(() => listText(listCards(), opts)),
   );
 }
+
+type BoardTools = NonNullable<Parameters<typeof createSdkMcpServer>[0]["tools"]>;
 
 // What every board thread gets: look at the board and hand work off, nothing that touches other cards.
 // The card is read when the tool runs, since a spare CLI only gets its card later.
@@ -124,11 +115,7 @@ export function weftMcpServer(
   // The thread's folder, for its project's changelog before the card is known (a warm spare).
   getCwd: () => string = () => "",
 ) {
-  return createSdkMcpServer({
-    name: "board",
-    version: "0.1.0",
-    alwaysLoad: true,
-    tools: [
+  const tools: BoardTools = [
       listCardsTool(),
       tool(
         "create_card",
@@ -166,7 +153,13 @@ export function weftMcpServer(
       ...cronTools(getCardId),
       ...skillTools(getCwd),
       ...agentTools(getCardId),
-    ],
+    ];
+  return createSdkMcpServer({
+    name: "board",
+    version: "0.1.0",
+    alwaysLoad: true,
+    // On a Weft Worker the tools that write the board reach the user's, not the worker's own store.
+    tools: onWorker() ? onWorkerBoard(tools, { getCardId, start: actions.start, create: createBoardCard, defaultMode: defaultPermissionMode }) : tools,
   });
 }
 

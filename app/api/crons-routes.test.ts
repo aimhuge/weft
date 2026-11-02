@@ -18,6 +18,10 @@ type RunCard = { id: string; cronRun?: number; title: string };
 const runCron = vi.hoisted(() => vi.fn<(id: string, now?: number) => Promise<RunCard>>());
 vi.mock("@/lib/cron-run", () => ({ runCron }));
 
+// A Weft Worker's published crons (lib/worker-lists-read.ts), with the real id check and refusal.
+const workerLists = vi.hoisted(() => vi.fn(() => Promise.resolve({ crons: [] as Cron[], webhooks: [] })));
+vi.mock("@/lib/worker-lists-read", async (load) => ({ ...(await load<typeof import("@/lib/worker-lists-read")>()), workerLists }));
+
 const route = await import("./crons/route");
 const idRoute = await import("./crons/[id]/route");
 const runRoute = await import("./crons/[id]/run/route");
@@ -66,7 +70,7 @@ beforeEach(() => {
 describe("GET /api/crons", () => {
   it("lists the crons without needing x-weft-token", async () => {
     listCrons.mockReturnValue([cron()]);
-    const res = route.GET(req("/crons", { headers: READ }));
+    const res = await route.GET(req("/crons", { headers: READ }));
     expect(res.status).toBe(200);
     const json = (await res.json()) as { crons: { id: string }[] };
     expect(json.crons).toHaveLength(1);
@@ -79,13 +83,31 @@ describe("GET /api/crons", () => {
       cron({ id: "none", nextAt: undefined }),
       cron({ id: "soon", nextAt: 1000 }),
     ]);
-    const res = route.GET(req("/crons", { headers: READ }));
+    const res = await route.GET(req("/crons", { headers: READ }));
     const json = (await res.json()) as { crons: { id: string }[] };
     expect(json.crons.map((c) => c.id)).toEqual(["soon", "later", "none"]);
   });
 
-  it("rejects a foreign host", () => {
-    const res = route.GET(req("/crons", { headers: { host: "attacker.test" } }));
+  it("lists a worker's published crons beside this Mac's", async () => {
+    listCrons.mockReturnValue([cron({ id: "mac", nextAt: 5000 })]);
+    workerLists.mockResolvedValueOnce({ crons: [cron({ id: "worker:w1:c9", nextAt: 1000, worker: "mini" })], webhooks: [] });
+    const json = (await (await route.GET(req("/crons", { headers: READ }))).json()) as { crons: Cron[] };
+    expect(json.crons.map((c) => [c.id, c.worker])).toEqual([["worker:w1:c9", "mini"], ["mac", undefined]]);
+  });
+
+  it("refuses to change, delete or run a worker's cron from this Mac", async () => {
+    const id = "worker:w1:c9";
+    for (const res of [await idRoute.PATCH(req(`/crons/${id}`, { method: "PATCH", body: {} }), ctx(id)), await idRoute.DELETE(req(`/crons/${id}`, { method: "DELETE" }), ctx(id)), await runRoute.POST(req(`/crons/${id}/run`, { method: "POST" }), ctx(id))]) {
+      expect(res.status).toBe(400);
+      expect(((await res.json()) as { error: string }).error).toMatch(/lives on a Weft Worker/);
+    }
+    expect(updateCron).not.toHaveBeenCalled();
+    expect(deleteCron).not.toHaveBeenCalled();
+    expect(runCron).not.toHaveBeenCalled();
+  });
+
+  it("rejects a foreign host", async () => {
+    const res = await route.GET(req("/crons", { headers: { host: "attacker.test" } }));
     expect(res.status).toBe(403);
   });
 });

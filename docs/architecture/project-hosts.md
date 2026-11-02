@@ -3,7 +3,7 @@
 Status: **design** (2026-11-01, merged with "one engine, two transports" 2026-11-02). Phase H1 is in progress; H2 (the
 `host` command) is built ([below](#the-host-command-h2-as-built)), and so is H3, `hostFor` and one open card
 ([below](#hostfor-and-one-open-card-h3-as-built)), and H3b, composer parity ([below](#composer-parity-h3b-as-built)), and H5, one host program ([below](#one-host-program-h5-as-built)), and H4, project reads and the editor
-([below](#project-reads-and-the-editor-h4-as-built)). It follows on from [weft-worker.md](weft-worker.md#worker-projects-on-the-desktop-board),
+([below](#project-reads-and-the-editor-h4-as-built)) and the board tools on a worker ([below](#board-tools-on-a-worker)). It follows on from [weft-worker.md](weft-worker.md#worker-projects-on-the-desktop-board),
 where a Worker project shows on the desktop board but most of what a local project gets drops out.
 
 ## The problem
@@ -571,6 +571,77 @@ editor: OpenCard ─ FilesSourceContext = host.files ─┬─ local: filesApi (
   commit walk-through, sprint plan and re-scout on a worker project; Realtime on `cloud_worker_projects` (the board polls on
   turn ticks and focus); blob GC for results; the terminal and drawers (vault, dev servers) on a worker project; the
   `@weft/client` `HOST_VERBS` list (H9a) must add `files.list`, `files.read` and `files.write` when it lands.
+
+### Board tools on a worker
+
+```
+worker thread ── mcp__board__* (lib/board-tools.ts) ── onWorker? ── onWorkerBoard (lib/worker-board-tools.ts)
+   list_cards   ── boardCards ── worker_board_cards(key) ──▶ the owner's cloud_cards, every host (sealed fields read 🔒)
+   create_card  ── localFolder? ─ yes ─▶ createBoardCard here (publisher ships it)
+                                └ no ──▶ remoteTarget ─▶ worker_new_card(key) ─▶ cloud_commands new_card (a Mac) │ run (a worker)
+   *_cron       ── this worker's own crons.json, fired by its own cron clock ┐
+   webhooks     ── this worker's own webhooks.json                            ├─ worker_set_lists ─▶ cloud_worker_lists
+                                                                             ┘     └─ Mac: GET /api/crons, /api/webhooks merge them
+   create_agent ── refused (agents live in Settings → Agents on the Mac)
+every Weft tool ── WORKER_TOOLS (lib/worker-tools.ts): prompt says what doesn't work; WORKER_TOOL_GATE denies it with why
+```
+
+A worker's store (`WEFT_DATA`) holds only its own cards, so before this a thread there "created a card" or "added a
+webhook" in a board nobody sees. Now the tools that write the board reach the user's, the same one a Mac card's reach.
+
+- **The link.** `lib/worker-board-link.ts` holds `BoardLink` (`workerId`, the work root, `cards`, `newCard`, `setLists`),
+  bound in `scripts/weft-worker.ts` to the registry's three new calls. Off a worker there is none, and the tools say
+  "This worker can't reach your board yet". `lib/board-tools.ts` builds the same tools everywhere and, on a worker, hands
+  them to `onWorkerBoard`, which swaps handlers by name and keeps every name and schema.
+- **list_cards** lists this worker's own cards (its store is fresher than the cloud) plus every other synced card of the
+  owner's, read through `worker_board_cards` (key-checked, the owner's rows in the worker's workspace, newest 500). A
+  Mac card's folder is its path, another worker's `worker://<id>/<name>`. A worker has no workspace key, so a sealed
+  title reads `🔒 sealed` and the other sealed fields are left out.
+- **create_card.** `localFolder` decides: empty (the thread's own), `worker://<this worker>/<name>`, a path under the work
+  root, or a project name there starts the card here, in the parent's mode, through `createBoardCard`, and the
+  publisher ships it like any card. Anything else is looked up by `remoteTarget`: an explicit `worker://<id>/<name>`, or
+  the synced cards' folders matched by path or by name (one match, or an error naming the choices). It goes as
+  `worker_new_card`, which inserts a `new_card` (a Mac the owner has synced cards from) or `run` (another worker of the
+  owner's, headless and not revoked, same workspace) as the owner, so the target's inbox applies its usual checks: a
+  Mac's synced folder, a worker's work root. `start: false` travels in the payload (`NewCardPayload.start`,
+  `newCardBody`, `runBody`). An agent isn't carried to another host yet; the reply says so.
+- **A worker's card never runs unasked elsewhere.** A worker key belongs to a box, and a thread's prompt can be injected,
+  so `worker_new_card` treats both as untrusted: it rebuilds the payload from `prompt`, `title`, `tags` and
+  `start: false` alone (no mode, agent, model, repo or attachments) and stamps it `fromWorker: <id>`, which only the
+  function can write onto a worker's row, and refuses past 30 such commands per worker per hour. The target reads the
+  stamp (`lib/worker-origin.ts`): a Mac files the card in Backlog, in `default`, tagged `from-worker`, without fetching
+  pasted files (`holdWorkerCard` in `lib/cloud-inbox-cards.ts`), for the user to start; another worker starts it in
+  `default`, never its usual `acceptEdits` (`lib/worker-kinds.ts`). `worker_board_cards` returns only what `list_cards`
+  draws (title, column, tags, stage, starred, archived, role, backend, updatedAt), never a card's prompt, latest
+  reply, error or pending request, so a worker key can't read what threads on the Mac saw.
+- **Crons live where they fire.** A cron's runs are cards in a checkout, and a fork needs the session on that host's
+  disk, so a cron for a worker project lives in the worker's `crons.json` and fires on the worker's cron clock
+  (`startCronClock`, started after recovery beside the scheduler). `create_cron` on a worker refuses a folder or source
+  card that isn't this worker's; `list_crons` lists the worker's and says so. The worker publishes its whole list a
+  moment after any `crons` event (`lib/worker-lists.ts`, `worker_set_lists` into `cloud_worker_lists`, owner-only RLS,
+  256 KB cap; folders as project names, no fork session). The Mac's `GET /api/crons` adds them
+  (`lib/worker-lists-read.ts`, read at most every 15 s, signed-out or table-less reads as none) with
+  `worker://<id>/<name>` folders, ids `worker:<id>:<cron>` and `worker` set to the worker's name, so the ⏰ drawer lists
+  them. Changing one from the Mac is refused ("lives on a Weft Worker: change it from a thread on that worker"); a
+  `cron.*` host verb would lift that. Mac crons aren't listed from a worker.
+- **Webhooks the same way.** A webhook's target is the worker's own dev server, so its registry stays on the worker;
+  `lib/webhooks.ts` tells `onWebhooksWrite` listeners after each write, the worker republishes, and `GET /api/webhooks`
+  adds the worker's for the folders asked (or all), so the 🪝 drawer and its count show them. PATCH and DELETE on the Mac
+  refuse a worker's. `add_blank` no longer hides a vault blank it couldn't add: the reply names the secret and why.
+- **Changelog.** `changelog_*` keep writing the worker's `changelog.jsonl`, which is only a journal: the stamp hooks
+  (`lib/changelog-stamp.ts`, in every runner) write and commit the entries into the checkout's own `CHANGELOG.md` after
+  the card's commit, as on a Mac, and the user sees them when the worker pushes.
+- **create_agent** is refused with a message telling the thread to write the agent out for the user: agents are the
+  Mac's Settings → Agents.
+- **One capability table.** `WORKER_TOOLS` (`lib/worker-tools.ts`) says, per server and tool, whether it works on a worker
+  or why not. `toolPrompts` (`lib/weft-prompts.ts`) keeps a group's own prompt (secrets, webhooks, devservers, gog) only
+  when some of its tools work and appends `workerToolsPrompt`, the list of what doesn't with why; `WORKER_TOOL_GATE`, a
+  PreToolUse hook in `guardHooks`, denies a call to one of those with the same why, so Claude Code, Codex and Goose
+  all hear it before the tool runs. Landing a tool on workers is flipping its entry to `true`.
+- **Migration** `supabase/migrations/20261102210000_worker_board_tools.sql`: `worker_board_cards`, `worker_new_card`,
+  `cloud_worker_lists` and `worker_set_lists`. Not applied yet.
+- **Not yet:** list and change Mac crons from a worker; edit a worker's cron or webhook from the Mac's drawer; an agent on
+  a card sent to another host; `read_thread` and the copilot's tools (the copilot never runs on a worker).
 
 ## Security
 
