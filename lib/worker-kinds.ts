@@ -79,11 +79,12 @@ export function workerKinds(deps: DaemonDeps, ctx: KindContext): KindTable {
   async function startCard(command: CloudCommandRow): Promise<string> {
     const run = command.kind === "run" ? runBody(command) : null;
     if (command.kind === "run" && !run) throw new Error("That run has no prompt.");
-    const { repo, ...fields }: Record<string, unknown> = run ? { ...run } : newCardBody(command);
+    const { repo, start, ...fields }: Record<string, unknown> = run ? { ...run } : newCardBody(command);
     if (typeof fields.prompt !== "string" || !fields.prompt) throw new Error("That card has no prompt.");
+    if (start === false) throw new Error("A worker has no Backlog yet. Start the thread instead.");
     fields.prompt = await engine.receive(fields.prompt, command.payload);
     const cwd = await deps.checkout(command.folder, typeof repo === "string" ? repo : undefined);
-    const card = await engine.start({ ...fields, cwd, permissionMode: run?.permissionMode ?? DEFAULT_MODE });
+    const card = await engine.start({ ...fields, cwd, permissionMode: run?.permissionMode ?? fields.permissionMode ?? DEFAULT_MODE });
     publisher.nameFolder(card.id, command.folder);
     publisher.track(card.id);
     // The report names the card, and the database only takes a card this worker has published.

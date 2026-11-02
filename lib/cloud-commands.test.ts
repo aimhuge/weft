@@ -30,6 +30,18 @@ describe("newCardCommand", () => {
     expect(newCardCommand(target, { prompt: "x", model: CODEX_DEFAULT_MODEL })?.payload).toMatchObject({ backend: "codex", model: CODEX_DEFAULT_MODEL });
   });
 
+  it("carries the CLI with no model, a mode other than default, the tags and Backlog", () => {
+    expect(newCardCommand(target, { prompt: "x", backend: "codex", permissionMode: "plan", tags: [" ui ", ""], backlog: true })?.payload).toEqual({
+      prompt: "x",
+      backend: "codex",
+      permissionMode: "plan",
+      tags: ["ui"],
+      start: false,
+    });
+    expect(newCardCommand(target, { prompt: "x", tags: [] })?.payload).toEqual({ prompt: "x" });
+    expect(newCardCommand(target, { prompt: "x", permissionMode: "default" })?.payload).toEqual({ prompt: "x", permissionMode: "default" });
+  });
+
   it("leaves out a model no CLI serves and an empty pick", () => {
     expect(newCardCommand(target, { prompt: "x", model: "gpt-9", effort: "" })?.payload).toEqual({ prompt: "x" });
     expect(newCardCommand(target, { prompt: "x", model: "" })?.payload).toEqual({ prompt: "x" });
@@ -50,10 +62,15 @@ describe("newCardBody", () => {
   });
 
   it("carries over only what a card is made from, as the types it must be", () => {
-    const payload = { prompt: 4, tags: ["a", 7], permissionMode: "bypassPermissions", cwd: "/etc", start: false } as never;
+    const payload = { prompt: 4, tags: ["a", 7], permissionMode: "bypassPermissions", cwd: "/etc", start: true } as never;
     const body = newCardBody({ folder: "/dev/app", payload });
     expect(body).toEqual({ prompt: undefined, title: undefined, backend: undefined, model: undefined, effort: undefined, tags: ["a"], cwd: "/dev/app" });
     expect(Object.keys(body)).not.toContain("permissionMode");
+    expect(Object.keys(body)).not.toContain("start");
+  });
+
+  it("carries a mode a new card may start in, and Backlog when asked", () => {
+    expect(newCardBody({ folder: "/f", payload: { prompt: "p", permissionMode: "plan", start: false } as never })).toMatchObject({ permissionMode: "plan", start: false });
   });
 
   it("copes with a payload that isn't an object", () => {

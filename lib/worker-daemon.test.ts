@@ -223,6 +223,15 @@ describe("the daemon", () => {
     );
   });
 
+  it("starts a new_card from the web in the mode it names, and refuses one asked for in Backlog", async () => {
+    const d = makeDeps();
+    await d.daemon.runOne(command({ kind: "new_card", payload: { prompt: "Plan it", permissionMode: "plan" } as never }));
+    expect(d.start).toHaveBeenCalledWith(expect.objectContaining({ prompt: "Plan it", permissionMode: "plan" }));
+    await d.daemon.runOne(command({ id: "cmd-2", kind: "new_card", payload: { prompt: "Later", start: false } as never }));
+    expect(d.start).toHaveBeenCalledTimes(1);
+    expect(d.report).toHaveBeenCalledWith("cmd-2", "failed", null, "A worker has no Backlog yet. Start the thread instead.");
+  });
+
   it("fails a new_card with no prompt", async () => {
     const d = makeDeps();
     await d.daemon.runOne(command({ kind: "new_card", payload: { prompt: "" } as never }));

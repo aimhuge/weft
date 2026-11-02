@@ -8,13 +8,16 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { approvalProblem } from "./approval-check";
 import { shell } from "./browser-shell";
 import { startFeatureCard } from "./card-starter";
-import { newCardBody, type CloudCommandRow } from "./cloud-commands";
+import { createCardFromBody } from "./new-card";
+import { newCardBody, type CloudCommandRow, type NewCardMode } from "./cloud-commands";
+import { networkStartMode } from "./cloud-new-card-mode";
+import { macReceive } from "./cloud-inbox-receive";
 import { syncNow, syncOrgId } from "./cloud-sync";
 import { deviceId } from "./device-id";
 import { applyFolderGrant } from "./folder-grant";
 import { cardKinds, dispatcher, type CardRules } from "./host/dispatch";
 import { needsElevation, runVerb, type HostVerb } from "./host-api";
-import { syncFolders } from "./settings";
+import { defaultPermissionMode, syncFolders } from "./settings";
 import { getCard } from "./store";
 import { pairingStatus } from "./sync-security";
 
@@ -74,8 +77,16 @@ export function syncFolderFor(name: string): string | null {
   return named.length === 1 ? (named[0] ?? null) : null;
 }
 
-async function newCard(command: CloudCommandRow): Promise<string> {
-  const card = await startFeatureCard(newCardBody(command));
+// A new card from the web: its pasted files brought over first, its mode (named, or this Mac's default) held to the same
+// rule as a mode change (lib/cloud-new-card-mode.ts), and one asked for in Backlog made and left there.
+async function newCard(command: CloudCommandRow, receive: (text: string, payload: unknown) => Promise<string>): Promise<string> {
+  const body = newCardBody(command);
+  body.permissionMode = await networkStartMode(body.permissionMode as NewCardMode | undefined, {
+    defaultMode: defaultPermissionMode,
+    refusal: async (permissionMode) => (await macRules.elevated?.("card.update", { id: "", body: { permissionMode } })) ?? null,
+  });
+  if (typeof body.prompt === "string") body.prompt = await receive(body.prompt, command.payload);
+  const card = body.start === false ? createCardFromBody(body) : await startFeatureCard(body);
   // The card and its first items are already in the outbox; send them now so the board sees it start.
   syncNow();
   return card.id;
@@ -95,5 +106,8 @@ function macCheck(client: SupabaseClient, uid: string) {
   };
 }
 
-// The Mac's dispatch for one signed-in account.
-export const macDispatch = (client: SupabaseClient, uid: string) => dispatcher({ new_card: newCard, ...cardKinds(macRules) }, UNKNOWN_KIND, macCheck(client, uid));
+// The Mac's dispatch for one signed-in account. A file pasted on weft.zip comes down through the account's session.
+export function macDispatch(client: SupabaseClient, uid: string) {
+  const receive = macReceive(client, uid);
+  return dispatcher({ new_card: (command) => newCard(command, receive), ...cardKinds({ ...macRules, receive }) }, UNKNOWN_KIND, macCheck(client, uid));
+}

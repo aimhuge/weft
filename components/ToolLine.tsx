@@ -3,6 +3,7 @@
 import { useRef, type ReactNode } from "react";
 import { useFindReveal } from "@/lib/find-reveal";
 import { openFile } from "@/lib/open-file";
+import { useFileLink } from "./file-link-context";
 import { shortToolName } from "@/lib/format";
 import { toolSizeLabel, useToolResult } from "@/lib/use-tool-result";
 import type { ThreadItem } from "@/lib/types";
@@ -17,7 +18,9 @@ type ToolCall = Extract<ThreadItem, { kind: "tool" }>;
 // click from toggling the surrounding <details>.
 function ToolSummaryPath({ item, cardId }: { item: ToolCall; cardId: string }) {
   const path = item.file;
-  if (!path) return <>{item.summary}</>;
+  // No editor to open where the host doesn't list the card's files (components/ThreadView.tsx).
+  const linked = useFileLink();
+  if (!path || !linked) return <>{item.summary}</>;
   return (
     <button
       type="button"
@@ -44,6 +47,7 @@ function ToolEditChip({ edit }: { edit: NonNullable<ToolCall["edit"]> }) {
 }
 
 function ToolOpenDiff({ cardId, path }: { cardId: string; path: string }) {
+  if (!useFileLink()) return null;
   return (
     <div className="flex items-center gap-2 border-t border-line px-2.5 py-1.5 text-[11px] text-faint">
       <button

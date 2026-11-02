@@ -4,6 +4,7 @@
 // checkout yet, and the mode the thread starts in (never one that skips asking).
 import type { NewCardPayload, NewCommand, CloudCommandRow } from "./cloud-commands";
 import type { ScreenQuality } from "./rtc-signal";
+import { inputRow, plainScreenInput, type RawInput } from "./screen-input";
 import { CLAUDE_TOKEN, GITHUB_PURPOSE, GITHUB_TOKEN, LOGIN_PURPOSE, seal, sealedOf, type Sealed } from "./worker-seal";
 
 // The modes a run may ask for. bypassPermissions is left out on purpose: a command off the network can't buy a
@@ -124,35 +125,20 @@ export function modeBody(command: Pick<CloudCommandRow, "payload">): { cardId: s
   return cardId && mode ? { cardId, mode } : null;
 }
 
-const fraction = (v: unknown) => typeof v === "number" && Number.isFinite(v);
-
-type RawInput = Partial<Record<"kind" | "device" | "x" | "y" | "x2" | "y2" | "ms" | "sealed", unknown>>;
-
+// An offer is sealed to the worker (only a Mac seals one); a tap, swipe or watch is lib/screen-input.ts's.
 function screenInput(raw: unknown): ScreenInput | null {
   const p = (raw && typeof raw === "object" ? raw : {}) as RawInput;
+  if (p.kind !== "offer") return plainScreenInput(raw);
   const device = text(p.device);
-  if (p.kind === "offer") {
-    const sealed = sealedOf(p.sealed);
-    return device && sealed ? { kind: "offer", device, sealed } : null;
-  }
-  if (p.kind === "watch") return device ? { kind: "watch", device } : { kind: "watch" };
-  return device ? touchInput(p, device) : null;
-}
-
-function touchInput(p: RawInput, device: string): ScreenInput | null {
-  if ((p.kind !== "tap" && p.kind !== "swipe") || !fraction(p.x) || !fraction(p.y)) return null;
-  const point = { device, x: p.x as number, y: p.y as number };
-  if (p.kind === "tap") return { kind: "tap", ...point };
-  if (!fraction(p.x2) || !fraction(p.y2)) return null;
-  return { kind: "swipe", ...point, x2: p.x2 as number, y2: p.y2 as number, ...(fraction(p.ms) ? { ms: p.ms as number } : {}) };
+  const sealed = sealedOf(p.sealed);
+  return device && sealed ? { kind: "offer", device, sealed } : null;
 }
 
 // The `input` command: a tap or swipe on a worker's device. A command, not a message on the frames' public channel,
 // so only the account the worker obeys can touch the device.
 export function inputCommand(target: CardTarget, input: unknown): NewCommand | null {
   const clean = screenInput(input);
-  if (!clean) return null;
-  return { org_id: target.orgId, kind: "input", target_device: target.device, folder: target.folder, payload: { cardId: target.cardId, ...clean } };
+  return clean ? inputRow(target, clean) : null;
 }
 
 export function inputBody(command: Pick<CloudCommandRow, "payload">): { cardId: string; input: ScreenInput } | null {

@@ -51,8 +51,10 @@ export default function FirstMessageErrorBanner({
   // Only fetch the settings when this banner is going to render. The predicate is
   // re-evaluated each render, so the effect skips cleanly on a healthy thread.
   const visible = firstMessageFailed(card, items);
+  // Off this Mac (weft.zip leaves openSettings out) there are no settings to read and none to open: no backup to offer.
+  const settings = Boolean(openSettings);
   useEffect(() => {
-    if (!visible || backupModel !== null) return;
+    if (!visible || !settings || backupModel !== null) return;
     let ignore = false;
     api
       .settings()
@@ -65,8 +67,10 @@ export default function FirstMessageErrorBanner({
     return () => {
       ignore = true;
     };
-  }, [visible, backupModel]);
+  }, [visible, settings, backupModel]);
   if (!visible) return null;
+  // Rerun on the backup model, or pick one in Settings; with neither, the banner only says what went wrong.
+  const canRerun = Boolean(backupModel) || settings;
 
   const rerun = async () => {
     if (!backupModel) {
@@ -106,9 +110,11 @@ export default function FirstMessageErrorBanner({
       <Icon name="alert" size={12} className="shrink-0" />
       <span className="min-w-0 flex-1 break-words">{card.error}</span>
       <div className="flex shrink-0 items-center gap-1.5">
-        <button onClick={() => void rerun()} disabled={busy !== null} className={STYLE_PRIMARY}>
-          {label}
-        </button>
+        {canRerun && (
+          <button onClick={() => void rerun()} disabled={busy !== null} className={STYLE_PRIMARY}>
+            {label}
+          </button>
+        )}
         {/* No delete verb reaches another host yet (a worker's card). */}
         {hostOf(card).can("delete") && (
           <button onClick={() => void del()} disabled={busy !== null} aria-label="Delete this card" className={STYLE_DESTRUCTIVE}>

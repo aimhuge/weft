@@ -58,7 +58,7 @@ export interface ThreadTransport {
   // the folder from its own pending request. "Read from" on a question has no such command, so it isn't offered.
   grantInAnswer?: boolean;
   // The card's own controls in the thread's header reach its host: rename, tags, star, archive and the model picker
-  // (lib/project-host.ts). The desktop's always do; a worker card's do too (lib/worker-transport.ts); weft.zip's don't.
+  // (lib/project-host.ts). The desktop's always do; a worker card's do too (lib/worker-transport.ts), and so do weft.zip's on your own cards.
   cardEdits?: boolean;
   // The review panel, the skills chip and the copilot's starters: the desktop board's own.
   desktop: boolean;
