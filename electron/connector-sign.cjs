@@ -10,8 +10,10 @@ const allowMessage = (a) => JSON.stringify(["weft-connector-allow-v1", a.userId,
 
 const workerMessage = (w) => JSON.stringify(["weft-connector-worker-v1", w.userId, w.workerId, w.signKey, w.boxKey]);
 
+const startMessage = (s) => JSON.stringify(["weft-connector-start-v1", s.userId, s.workerId, s.cardId, s.folder, s.repo, s.issuedAt]);
+
 const signerMessage = (s) => JSON.stringify(["weft-connector-signer-v1", s.userId, s.key, s.name, s.issuedAt]);
 
 const endorseMessage = (e) => JSON.stringify(["weft-connector-endorse-v1", e.userId, e.key, e.by, e.issuedAt]);
 
-module.exports = { grantMessage, allowMessage, workerMessage, signerMessage, endorseMessage };
+module.exports = { grantMessage, allowMessage, workerMessage, startMessage, signerMessage, endorseMessage };

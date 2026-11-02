@@ -15,7 +15,7 @@ const { touchIdPrompt } = require("./touch-id.cjs");
 const { workerLabel } = require("./worker-label.cjs");
 
 // The pairing routes, looked up when called: pairing is set up after the pane (it needs the account client).
-const PAIRING_ROUTES = ["POST /sync/key", "POST /pairing/verify", "POST /pairing/passkey-verify", "POST /pairing/status"];
+const PAIRING_ROUTES = ["POST /sync/key", "POST /pairing/verify", "POST /pairing/passkey-verify", "POST /pairing/status", "POST /connectors/sign-start"];
 function pairingRoutes(pairing) {
   return Object.fromEntries(
     PAIRING_ROUTES.map((route) => [

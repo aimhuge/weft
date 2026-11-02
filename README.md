@@ -1213,7 +1213,7 @@ they send mail, change events or share files. More in [docs/architecture/connect
 **GitHub on a Weft Worker.** A worker's cards can push and open pull requests as you, with Weft, without your GitHub
 sign-in ever reaching the box: connect GitHub once on weft.zip, then turn it on for a worker from its **Connectors**
 badge in Settings → Devices (one Touch ID). Every yes is signed by your Mac's own approval key and checked again by
-weft.zip, so a stolen session can't turn it on; a new Mac's key counts a day after it's added (you're emailed) or as soon
+weft.zip, so a stolen session can't turn it on; a new Mac's key counts once you open the link Weft emails you, or as soon
 as a Mac you already trust vouches for it. weft.zip mints short tokens, narrowed to the card's repo by default, for cards
 you started there and rotates them hourly; Scope, Approval, Lifetime and Ask before tighten it, and Turn off ends the
 tokens at GitHub. More in

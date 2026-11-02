@@ -52,7 +52,7 @@ export function openToken(sealed: string | null | undefined, bound: string, k: C
   if (!key || !nonce || !body) return null;
   try {
     const data = Buffer.from(body, "base64");
-    const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(nonce, "base64"));
+    const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(nonce, "base64"), { authTagLength: 16 });
     decipher.setAAD(Buffer.from(bound));
     decipher.setAuthTag(data.subarray(data.length - 16));
     return Buffer.concat([decipher.update(data.subarray(0, data.length - 16)), decipher.final()]).toString("utf8");

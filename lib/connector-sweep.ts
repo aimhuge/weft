@@ -1,4 +1,4 @@
-// The connector minter's hourly sweep on weft.zip (app/api/cron/connectors, a Vercel cron;
+// The connector minter's daily sweep on weft.zip (app/api/cron/connectors, a Vercel cron; hourly needs a paid plan;
 // docs/architecture/connectors.md#connectors-on-a-worker-github-p1-as-built). The mint already refuses a grant past
 // its lifetime; this ends what such a grant left behind, and retries what GitHub didn't confirm:
 // - a grant past its lifetime: deleted, and its worker's tokens ended (lib/connector-revoke.ts revokeWorker);

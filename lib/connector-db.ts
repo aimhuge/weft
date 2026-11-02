@@ -61,6 +61,7 @@ export interface StartRow {
   folder: string;
   payload: unknown;
   created_by: string;
+  created_at?: string;
 }
 
 export interface PinnedCard {
@@ -127,6 +128,9 @@ export interface ConnectorDb extends TrustDb {
   deleteTokens(userId: string): Promise<void>;
   // Takes the user's refresh for a while; false when another mint (or a revoke) is refreshing it now.
   claimRefresh(userId: string, now: string, until: string): Promise<boolean>;
+  // Takes the making of a narrowed token for (worker, subject) for a while; false when another mint has it now.
+  claimLive(workerId: string, subject: string, now: string, until: string): Promise<boolean>;
+  releaseLive(workerId: string, subject: string): Promise<void>;
   liveToken(workerId: string, subject: string): Promise<LiveToken | null>;
   saveLiveToken(row: { user_id: string; worker_id: string; subject: string; repo: string; token_sealed: string; issued_at: string; expires_at: string | null }): Promise<void>;
   liveTokens(filter: { workerId?: string; userId?: string }): Promise<LiveToken[]>;
@@ -138,7 +142,7 @@ const GRANT = "id, user_id, worker_id, connector, scope, approval, lifetime, ask
 const TOKENS = "user_id, github_id, github_login, refresh_sealed, refresh_expires_at, access_sealed, access_issued_at, access_expires_at, disconnect_pending_at";
 const LIVE = "id, user_id, worker_id, subject, repo, token_sealed, issued_at, expires_at";
 const ALLOW = "grant_id, kind, subject, signer_id, sig, nonce, issued_at";
-// How many rows a sweep or a listing reads at once; the hourly sweep catches the rest next time.
+// How many rows a sweep or a listing reads at once; the daily sweep catches the rest next time.
 const BATCH = 500;
 
 // The start commands for a card: a host card.create names its card in its args (the owner wrote it); a run or new_card
@@ -180,7 +184,7 @@ export function supabaseConnectorDb(db: SupabaseClient): ConnectorDb {
       return must<AllowRow | null>(await t("connector_allows").select(ALLOW).eq("grant_id", grantId).eq("kind", kind).eq("subject", subject).maybeSingle(), "Reading the Allow");
     },
     async starts(workerId, cardId, userId) {
-      const q = t("cloud_commands").select("kind, folder, payload, created_by").eq("target_device", `worker:${workerId}`).eq("created_by", userId).or(startsFilter(cardId));
+      const q = t("cloud_commands").select("kind, folder, payload, created_by, created_at").eq("target_device", `worker:${workerId}`).eq("created_by", userId).or(startsFilter(cardId)).order("created_at", { ascending: true });
       return must<StartRow[] | null>(await q, "Reading the card's start") ?? [];
     },
     async pinnedCard(workerId, cardId) {
@@ -223,6 +227,16 @@ export function supabaseConnectorDb(db: SupabaseClient): ConnectorDb {
     async claimRefresh(userId, now, until) {
       const q = t("connector_github_tokens").update({ refreshing_until: until }).eq("user_id", userId).or(`refreshing_until.is.null,refreshing_until.lt.${now}`).select("user_id");
       return (must<unknown[] | null>(await q, "Claiming the refresh") ?? []).length > 0;
+    },
+    async claimLive(workerId, subject, now, until) {
+      const r = await t("connector_live_claims").insert({ worker_id: workerId, subject, until });
+      if (!r.error) return true;
+      if (r.error.code !== "23505") must(r, "Claiming the token");
+      const q = t("connector_live_claims").update({ until }).eq("worker_id", workerId).eq("subject", subject).lt("until", now).select("subject");
+      return (must<unknown[] | null>(await q, "Claiming the token") ?? []).length > 0;
+    },
+    async releaseLive(workerId, subject) {
+      must(await t("connector_live_claims").delete().eq("worker_id", workerId).eq("subject", subject), "Releasing the token claim");
     },
     async liveToken(workerId, subject) {
       return must<LiveToken | null>(await t("connector_live_tokens").select(LIVE).eq("worker_id", workerId).eq("subject", subject).maybeSingle(), "Reading the token");

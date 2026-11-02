@@ -2,7 +2,7 @@
 // (docs/architecture/connectors.md#connectors-on-a-worker-github-p1-as-built). The grant goes first, so minting stops at
 // once; then every token the worker could hold is ended at GitHub, and the answer says what GitHub confirmed:
 // - a narrowed token: DELETE /applications/{client_id}/token, confirmed only by its 204 (a 404 proves nothing), and
-//   its row kept until then, for the hourly sweep (lib/connector-sweep.ts) to retry;
+//   its row kept until then, for the daily sweep (lib/connector-sweep.ts) to retry;
 // - the shared user token, when this worker was handed the current one (the ledger names which one each answer gave):
 //   refreshed under the refresh claim, after any refresh in flight, which per GitHub's docs ends the old access token.
 //   If the refresh fails, the old token is deleted the same way as a narrowed one.
@@ -56,8 +56,14 @@ export async function endUserToken(deps: TokenDeps, userId: string, workerId: st
     held = true;
     const now = deps.now();
     if (await deps.db.claimRefresh(userId, new Date(now).toISOString(), new Date(now + CLAIM_MS).toISOString())) {
+      // Read again under the claim: one that finished since the read above already ended this token.
+      const fresh = await deps.db.tokens(userId);
+      if (!fresh || fresh.access_issued_at !== row.access_issued_at) {
+        await deps.db.saveTokens({ user_id: userId, refreshing_until: null });
+        continue;
+      }
       try {
-        await refreshNow(deps, userId, row.refresh_sealed, row.github_login);
+        await refreshNow(deps, userId, fresh.refresh_sealed, fresh.github_login);
         continue;
       } catch {
         const old = openToken(row.access_sealed, bound.access(userId), deps.key);

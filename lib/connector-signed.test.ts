@@ -39,9 +39,11 @@ describe("pinWorker", () => {
 
   it("stores a worker vouched for, tells you the first time, and says when a waiting key starts to count", async () => {
     const { d, state, w, mac, notify } = setup({ vouched: false, macTrustedFrom: NOW + DAY });
-    expect(await pinWorker(d, "u1", pinBody(mac, w.worker.sign_key!))).toEqual({ ok: true, waitingUntil: iso(NOW + DAY) });
+    expect(await pinWorker(d, "u1", pinBody(mac, w.worker.sign_key!), { ip: "203.0.113.9", ua: "Weft" })).toEqual({ ok: true, waiting: true });
     expect(state.pins[0]).toMatchObject({ worker_id: W, sign_key: w.worker.sign_key, box_key: "box", signer_id: mac.signer.id });
-    expect(notify).toHaveBeenCalledWith("u1", "Weft: the worker m1mini can use connectors", expect.stringContaining("MacBook"));
+    expect(notify).toHaveBeenCalledWith("u1", "Weft: a worker was vouched for", expect.stringContaining(`worker ${W}`));
+    expect(notify).toHaveBeenCalledWith("u1", expect.any(String), expect.stringContaining("From IP 203.0.113.9, client Weft."));
+    expect(notify).not.toHaveBeenCalledWith("u1", expect.any(String), expect.stringContaining("MacBook"));
     await pinWorker(d, "u1", pinBody(mac, w.worker.sign_key!));
     expect(notify).toHaveBeenCalledTimes(1);
   });
@@ -64,9 +66,9 @@ describe("pinWorker", () => {
 describe("writeGrant", () => {
   it("turns a connector on at epoch 1 and tells you", async () => {
     const { d, state, mac, notify } = setup();
-    expect(await writeGrant(d, "u1", grantBody(mac))).toEqual({ ok: true, epoch: 1, waitingUntil: null, tokensRevoked: 0 });
+    expect(await writeGrant(d, "u1", grantBody(mac))).toEqual({ ok: true, epoch: 1, waiting: false, tokensRevoked: 0 });
     expect(state.grants[0]).toMatchObject({ worker_id: W, scope: "project", epoch: 1, signer_id: mac.signer.id });
-    expect(notify).toHaveBeenCalledWith("u1", "Weft: GitHub turned on for the worker m1mini", expect.any(String));
+    expect(notify).toHaveBeenCalledWith("u1", "Weft: GitHub was turned on for a worker", expect.stringContaining(`worker ${W}`));
   });
 
   it("changes it only at the epoch the signature named, and never re-creates one turned off", async () => {
@@ -111,9 +113,9 @@ describe("writeGrant", () => {
     await expect(writeGrant(d, "u1", grantBody(mac, { prevEpoch: 1 }))).rejects.toMatchObject({ status: 404 });
   });
 
-  it("takes a waiting key's grant and says when it starts to work", async () => {
+  it("takes a pending key's grant and says it waits", async () => {
     const { d, mac } = setup({ macTrustedFrom: NOW + DAY });
-    expect((await writeGrant(d, "u1", grantBody(mac))).waitingUntil).toBe(iso(NOW + DAY));
+    expect((await writeGrant(d, "u1", grantBody(mac))).waiting).toBe(true);
   });
 
   it("refuses another user's worker", async () => {

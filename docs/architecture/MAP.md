@@ -33,7 +33,7 @@ matching doc below. When a feature lands, add or update its entry here and in it
 - `supabase.md` — the Supabase rail drawer: token in the Keychain, `supabase/.temp/project-ref`, state, unapplied migrations, the Migrate card.
 - `cloudflare.md` — the orange-cloud rail drawer: API token in the Keychain, Worker/Pages links in `~/.weft/cloudflare-links.json`, wrangler `account_id` and deploys.
 - `blastcp.md` — the BlastCP rail drawer: OAuth+PKCE, MCP-tool reads, `~/.weft/blastcp-links.json`.
-- `connectors.md` — Settings → Connectors: CLIs your threads use for your own accounts; gog (Google Workspace) shipped in the toolchain, its OAuth client and browser sign-in; and GitHub on a Weft Worker (P1): user tokens minted on weft.zip under a per-worker grant a Mac signed (the chain of trust: Mac approval keys trusted after a day or a vouch), the git credential helper and gh wrapper on the box.
+- `connectors.md` — Settings → Connectors: CLIs your threads use for your own accounts; gog (Google Workspace) shipped in the toolchain, its OAuth client and browser sign-in; and GitHub on a Weft Worker (P1): user tokens minted on weft.zip under a per-worker grant a Mac signed (the chain of trust: Mac approval keys trusted by an emailed link or a vouch), the git credential helper and gh wrapper on the box.
 - `manual-qa.md` — Local Simulator mode (was Manual QA): a worker's build on a simulator on your Mac, with the worker's agent driving it (`lib/device-call.ts`, `lib/device-calls.ts`, `lib/device-build.ts`, `lib/qa-grants.ts`, `lib/qa-switch.ts`, `lib/worker-device.ts`, `lib/worker-device-link.ts`, `lib/simulator-crashes.ts`, `app/api/worker-build`, `components/QaSwitch.tsx`, `public.device_calls`, `POST /qa/approve`).
 - `simulators.md` — `mcp__simulator__*`: iOS simulators and Android emulators through simctl, adb and AXe, the live view in the pane, Settings → Connectors → Simulators.
 - `site-notes.md` — shared notes about the sites the browser pane drives: the per-card trail, the after-turn Haiku capture, what `open_url` hands a card (wrapped as untrusted reference data), the local / team / public tiers on weft.zip (`site_notes`, `site_note_versions`, `site_note_reports`, service-role only), confirmation by 3 other users, staleness, and the scrub and safety pipeline.
@@ -505,10 +505,11 @@ When a new doc lands in this folder, add it here on the same change.
   called by the board: mobile-security.md, "The desktop signs too"). `electron/pairing-open.cjs` marks an open code for the clipboard guard.
 - GitHub on a worker (P1, docs/architecture/connectors.md#connectors-on-a-worker-github-p1-as-built): on weft.zip,
   `app/api/connectors/github/{start,callback,mint,revoke,grant,allow}`, `app/api/connectors/github` (status, disconnect),
-  `app/api/connectors/{pin,signers,signers/endorse}` and the hourly `app/api/cron/connectors` over
+  `app/api/connectors/{pin,signers,signers/endorse,signers/confirm,signers/revoke}` and the daily `app/api/cron/connectors` over
   `lib/connector-connect.ts` (the app's web flow with PKCE, a same-origin POST and a MACed cookie), `lib/connector-mint.ts`
   (the checks) + `lib/connector-auth.ts` (key and signature), the chain of trust in `lib/connector-trust.ts` (verify a Mac's
   signature against a signer trusted now) + `lib/connector-signers.ts` (register, vouch, remove a Mac key) +
+  `lib/connector-signer-links.ts` (the emailed confirm and revoke links) +
   `lib/connector-signed.ts` (signed grant, Allow and worker pin writes) + `lib/connector-messages.ts` (what's signed),
   `lib/connector-tokens.ts` (refresh under a claim, rotation, scoped tokens, retiring), `lib/connector-revoke.ts`
   (revoke, disconnect, only a 204 confirms), `lib/connector-sweep.ts`, `lib/connector-notify.ts` (email and ledger
@@ -517,8 +518,9 @@ When a new doc lands in this folder, add it here on the same change.
   shared `lib/connector-grant.ts` (settings, `mintMessage`, rotation timing). On the Mac, `components/WorkerConnectors.tsx`
   + `lib/use-worker-connectors.ts` + `app/api/devices/connectors/route.ts` + `lib/connector-view.ts` + `lib/connector-remote.ts`,
   `electron/connector-grants.cjs` (IPC `weft.connectors.*`: Touch ID, then the approval key signs; registers this Mac's key,
-  vouches for workers) + `electron/connector-sign.cjs` (main's copy of the messages), and `lib/worker-folder-repo.ts` (the
-  repo a `card.create` names). On the worker, `lib/connector-worker.ts` + `lib/connector-client.ts` + `lib/connector-socket.ts`
+  vouches for workers) + `electron/connector-sign.cjs` (main's copy of the messages) + `electron/connector-start.cjs` (signs a
+  worker card's start, `POST /connectors/sign-start`), and `lib/worker-folder-repo.ts` (the repo and signed start a
+  `card.create` carries). On the worker, `lib/connector-worker.ts` + `lib/connector-client.ts` + `lib/connector-socket.ts`
   + `lib/connector-peer.ts` (who's asking, from lsof or ss) + `lib/connector-env.ts` (added to every session's env by
   `lib/runner-session.ts` and `lib/codex-runner.ts`, bound to the CLI's pid by `lib/cli-process.ts`), and
   `scripts/weft-connector-helper.cjs` + `scripts/worker-bin/gh`. Tables in `supabase/migrations/20261102280000_worker_github_mint.sql`.

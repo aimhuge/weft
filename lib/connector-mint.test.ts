@@ -3,7 +3,7 @@ import { FRESH_MS } from "./connector-auth";
 import { openToken } from "./connector-crypto";
 import type { ConnectorDb, GrantRow, StartRow } from "./connector-db";
 import { CFG, deps, fakeDb, fakeGithub, iso, json, KEY, NOW, pair, pairedWorker, storeTokens, ticking } from "./connector.harness";
-import { DAY, signedAllow, signedGrant, trustedMac, vouch, type Mac } from "./connector-trust.harness";
+import { DAY, signedAllow, signedGrant, signedStartPayload, trustedMac, vouch, type Mac } from "./connector-trust.harness";
 import { LIMITS, mint, repoOfUrl } from "./connector-mint";
 import { bound, handedExpiry } from "./connector-tokens";
 
@@ -26,7 +26,7 @@ function setup(o: Setup = {}) {
   const mac: Mac = trustedMac(state, "u1", o.mac);
   if (o.vouched !== false) vouch(state, mac, w.worker);
   const grant: GrantRow | null = o.grant === null ? null : signedGrant(state, mac, o.grant);
-  if (o.start !== null) state.starts.push({ worker_id: "w1", card_id: "card-1", kind: "run", folder: "r", payload: { repo: "https://github.com/o/r.git" }, created_by: "u1", ...o.start });
+  if (o.start !== null) state.starts.push({ worker_id: "w1", card_id: "card-1", kind: "host", folder: "r", payload: signedStartPayload(mac), created_by: "u1", ...o.start });
   storeTokens(state, "u1");
   const gh = fakeGithub({ [SCOPED]: () => json({ token: "ghu_narrow", expires_at: null }), "POST /login/oauth/access_token": () => pair("ghu_new", "ghr_new") });
   let n = 0;
@@ -96,8 +96,9 @@ describe("mint: a token", () => {
     expect((await ask()).status).toBe(200);
   });
 
-  it("takes the board's card.create naming its repo as a start", async () => {
-    const { ask, state } = setup({ start: { kind: "host", payload: { verb: "card.create", repo: "o/r" } } });
+  it("takes a start signed with its git URL as the repo", async () => {
+    const { ask, state, mac } = setup({ start: null });
+    state.starts.push({ worker_id: "w1", card_id: "card-1", kind: "host", folder: "r", payload: { ...signedStartPayload(mac), repo: "https://github.com/o/r.git" }, created_by: "u1" });
     expect((await ask()).status).toBe(200);
     expect(state.pinned.get("w1/card-1")?.repo).toBe("o/r");
   });
@@ -218,21 +219,44 @@ describe("mint: refusals in the ledger", () => {
     await ledger(epoch, 403, "signature doesn't check");
   });
 
-  it("refuses a card with no owner-created start, or one another worker sent", async () => {
+  it("refuses a card with no owner-created start, or one another worker sent, or a run", async () => {
     await ledger(setup({ start: null }), 403, "a card you started");
     const other = setup();
-    await refused(other.ask({}, { starts: () => Promise.resolve([{ kind: "run", folder: "r", payload: null, created_by: "u2" }]) }), 403, "a card you started");
-    await ledger(setup({ start: { payload: { repo: "https://github.com/o/r.git", fromWorker: "w2" } } }), 403, "a card you started");
+    await refused(other.ask({}, { starts: () => Promise.resolve([{ kind: "host", folder: "r", payload: signedStartPayload(other.mac), created_by: "u2" }]) }), 403, "a card you started");
+    const sent = setup();
+    sent.state.starts[0]!.payload = { ...signedStartPayload(sent.mac), fromWorker: "w2" };
+    await ledger(sent, 403, "a card you started");
+    await ledger(setup({ start: { kind: "run", payload: { repo: "https://github.com/o/r.git" } } }), 403, "a card you started");
   });
 
   it("refuses a host command that isn't card.create", async () => {
-    await ledger(setup({ start: { kind: "host", payload: { verb: "card.reply", repo: "o/r" } } }), 403, "a card you started");
-    await ledger(setup({ start: { kind: "host", payload: null } }), 403, "a card you started");
+    await ledger(setup({ start: { payload: { verb: "card.reply", repo: "o/r" } } }), 403, "a card you started");
+    await ledger(setup({ start: { payload: null } }), 403, "a card you started");
   });
 
-  it("refuses a start that named no repo, whatever the worker asks", async () => {
-    await ledger(setup({ start: { kind: "new_card", folder: "r", payload: null } }), 403, "didn't name its GitHub repo");
-    await ledger(setup({ start: { kind: "host", payload: { verb: "card.create" } } }), 403, "didn't name its GitHub repo");
+  it("refuses a start that named no repo", async () => {
+    await ledger(setup({ start: { payload: { verb: "card.create" } } }), 403, "didn't name its GitHub repo");
+  });
+
+  it("refuses a start no trusted Mac signed: a session alone can queue one but not sign it", async () => {
+    const unsigned = setup();
+    unsigned.state.starts[0]!.payload = { verb: "card.create", repo: "o/r" };
+    await ledger(unsigned, 403, "wasn't signed by a Mac");
+    const otherRepo = setup();
+    otherRepo.state.starts[0]!.payload = { ...signedStartPayload(otherRepo.mac), repo: "victim/any" };
+    await refused(otherRepo.ask({ repo: "victim/any" }), 403, "start signature doesn't check");
+    const otherCard = setup();
+    otherCard.state.starts[0]!.payload = signedStartPayload(otherCard.mac, { cardId: "card-2" });
+    await ledger(otherCard, 403, "start signature doesn't check");
+    const pending = setup();
+    pending.state.starts[0]!.payload = signedStartPayload(trustedMac(pending.state, "u1", { trustedFrom: null }));
+    await ledger(pending, 403, "isn't trusted now");
+  });
+
+  it("refuses a card with more than one start", async () => {
+    const two = setup();
+    two.state.starts.push({ ...two.state.starts[0]! });
+    await ledger(two, 403, "more than one start");
   });
 
   it("refuses a repo that isn't the started or pinned one", async () => {

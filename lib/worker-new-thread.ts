@@ -9,7 +9,7 @@ import type { NewCommand } from "./cloud-commands";
 import { hostCommand } from "./host-command";
 import { ATTACHMENTS, insert, myWorkers, requireSession, withAttachments } from "./worker-board";
 import { RUN_MODES, workerDevice } from "./worker-commands";
-import { repoForWorkerFolder } from "./worker-folder-repo";
+import { connectorStart, START_CONNECTOR, type StartConnectorDeps } from "./worker-folder-repo";
 import { offlineMessage, parseWorkerProject } from "./worker-project";
 import { liveStatus } from "./worker-presence";
 import { presenceWatch, type PresenceWatch } from "./worker-presence-watch";
@@ -45,7 +45,7 @@ export async function startWorkerThread(
   now = Date.now(),
   dir = ATTACHMENTS,
   presence: PresenceWatch = presenceWatch(),
-  repoOf: (folder: string) => string | null = repoForWorkerFolder,
+  connector: StartConnectorDeps = START_CONNECTOR,
 ): Promise<{ commandId: string; worker: string; cardId: string }> {
   const project = parseWorkerProject(body.cwd);
   if (!project) throw new Error("That isn't a worker project.");
@@ -58,9 +58,10 @@ export async function startWorkerThread(
   const cardId = randomUUID();
   const target = { orgId: who.org, device: workerDevice(worker.id), folder: project.folder, cardId };
   const built = hostCommand(target, "card.create", createArgs(body)) as NewCommand;
-  // The repo this Mac knows the folder as, for the GitHub connector's mint (lib/worker-folder-repo.ts); the worker ignores it.
-  const repo = repoOf(project.folder);
-  const row = repo ? { ...built, payload: { ...(built.payload as object), repo } } : built;
+  // The repo this Mac knows the folder as, and main's signature over the start, for the GitHub connector's mint
+  // (lib/worker-folder-repo.ts); the worker ignores both.
+  const extra = await connectorStart({ workerId: worker.id, cardId, folder: project.folder }, connector);
+  const row: NewCommand = { ...built, payload: { ...(built.payload as object), ...extra } as NewCommand["payload"] };
   const { commandId } = await insert(client, await withAttachments(client, row, body.prompt, dir));
   return { commandId, worker: worker.name, cardId };
 }

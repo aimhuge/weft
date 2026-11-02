@@ -43,6 +43,19 @@ export interface WorkerStatement {
 
 export const workerMessage = (w: WorkerStatement) => JSON.stringify(["weft-connector-worker-v1", w.userId, w.workerId, w.signKey, w.boxKey]);
 
+// A card started from this Mac's board on a worker, in a folder this Mac knows as that GitHub repo. Only a start signed
+// so can mint: a session alone can queue a card.create naming any repo, but can't sign one.
+export interface StartStatement {
+  userId: string;
+  workerId: string;
+  cardId: string;
+  folder: string;
+  repo: string;
+  issuedAt: number;
+}
+
+export const startMessage = (s: StartStatement) => JSON.stringify(["weft-connector-start-v1", s.userId, s.workerId, s.cardId, s.folder, s.repo, s.issuedAt]);
+
 // A Mac's key offered as a signer, signed by that key (it holds the private half).
 export interface SignerStatement {
   userId: string;

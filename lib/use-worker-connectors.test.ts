@@ -12,7 +12,7 @@ vi.mock("./api-client", () => ({ apiFetch }));
 const openInPane = vi.hoisted(() => vi.fn());
 vi.mock("./open-in-pane", () => ({ openInPane }));
 
-const { connectorsBridge, useWorkerConnectors, waitingNote } = await import("./use-worker-connectors");
+const { connectorsBridge, useWorkerConnectors, WAITING_NOTE } = await import("./use-worker-connectors");
 
 const VIEW: ConnectorsView = { signedIn: true, github: { connected: true, login: "ada" }, connectUrl: "https://weft.zip/api/connectors/github/start", workers: {} };
 const json = (body: unknown, status = 200) => Promise.resolve(new Response(JSON.stringify(body), { status }));
@@ -157,13 +157,12 @@ describe("changes", () => {
     expect(result.current.note).toMatch(/GitHub didn't confirm, so remove Weft at github.com\/settings\/apps\/authorizations/);
   });
 
-  it("says when a change made with a key still waiting starts to work", async () => {
+  it("says a change made with a key not confirmed yet waits for the emailed link", async () => {
     const { result } = await loaded();
-    bridge.set.mockResolvedValueOnce({ ok: true, waitingUntil: "2026-11-03T10:00:00Z" });
+    bridge.set.mockResolvedValueOnce({ ok: true, waiting: true });
     await act(() => result.current.set("w1", "m1mini", DEFAULT_SETTINGS));
-    expect(result.current.note).toBe(`m1mini: saved.${waitingNote("2026-11-03T10:00:00Z")}`);
-    expect(waitingNote(null)).toBe("");
-    expect(waitingNote("2026-11-03T10:00:00Z")).toMatch(/^ It works from .+, when this Mac's key is trusted/);
+    expect(result.current.note).toBe(`m1mini: saved. ${WAITING_NOTE}`);
+    expect(WAITING_NOTE).toContain("open the link Weft emailed you");
   });
 
   it("reads the Mac keys from main once signed in, and trusts or removes one", async () => {

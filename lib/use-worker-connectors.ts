@@ -17,21 +17,20 @@ export interface MacKey {
   key: string;
   name: string;
   addedAt: string;
-  trustedFrom: string;
+  trustedFrom: string | null;
   trusted: boolean;
 }
 
 export interface ConnectorsBridge {
-  set(workerId: string, workerName: string, connector: "github", settings: GrantSettings): Promise<{ ok?: boolean; denied?: boolean; waitingUntil?: string | null }>;
+  set(workerId: string, workerName: string, connector: "github", settings: GrantSettings): Promise<{ ok?: boolean; denied?: boolean; waiting?: boolean }>;
   allow(grantId: string, workerName: string, kind: PendingAllow["kind"], subject: string, label: string): Promise<{ ok?: boolean; denied?: boolean }>;
   signers?(): Promise<{ mine: string; signers: MacKey[] }>;
   trust?(key: string, name: string): Promise<{ ok?: boolean; denied?: boolean }>;
   forgetSigner?(id: string): Promise<unknown>;
 }
 
-// What a grant written by a key still waiting out its day says.
-export const waitingNote = (until: string | null | undefined) =>
-  until ? ` It works from ${new Date(until).toLocaleString()}, when this Mac's key is trusted, or sooner if a trusted Mac vouches for it.` : "";
+// What a change written by a key not trusted yet says.
+export const WAITING_NOTE = "It works once this Mac's key is confirmed: open the link Weft emailed you, or vouch for this Mac from one you already trust.";
 
 export const connectorsBridge = (): ConnectorsBridge | undefined =>
   typeof window === "undefined" ? undefined : (window as unknown as { weft?: { connectors?: ConnectorsBridge } }).weft?.connectors;
@@ -108,7 +107,7 @@ export function useWorkerConnectors(bridge: ConnectorsBridge | undefined = conne
       act(async () => {
         if (!bridge) throw new Error("Turn connectors on from Weft's own window.");
         const r = await bridge.set(workerId, workerName, "github", settings);
-        return denied(r, "that") ?? (r.waitingUntil ? `${workerName}: saved.${waitingNote(r.waitingUntil)}` : null);
+        return denied(r, "that") ?? (r.waiting ? `${workerName}: saved. ${WAITING_NOTE}` : null);
       }),
     trust: (mac: MacKey) =>
       act(async () => {

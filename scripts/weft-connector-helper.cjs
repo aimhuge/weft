@@ -127,8 +127,14 @@ async function gh(args, env, io) {
     got = { error: err.message };
   }
   if (got.error || !got.token) {
-    io.err(`Weft: no GitHub token from the worker: ${got.error || "no answer"}\n`);
-    return 1;
+    // No connector token (GitHub isn't turned on for this worker, weft.zip isn't set up, or the daemon is down): gh
+    // works as it did before the connector, with the card's own env and the box's own sign-in, if any.
+    const real = realGh(env, io.exists);
+    if (!real) {
+      io.err(`Weft: no GitHub token from the worker (${got.error || "no answer"}), and no gh on PATH.\n`);
+      return 1;
+    }
+    return run(io, real, args, env);
   }
   if (!got.gh) {
     io.err("Weft: gh isn't installed on this worker.\n");
@@ -136,22 +142,47 @@ async function gh(args, env, io) {
   }
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "weft-gh-"));
   try {
-    return await new Promise((resolve) => {
-      const child = io.spawn(got.gh, args, { stdio: "inherit", env: ghEnv(env, got, dir) });
-      child.on("error", (err) => {
-        io.err(`Weft: couldn't run gh: ${err.message}\n`);
-        resolve(1);
-      });
-      child.on("exit", (code) => resolve(code ?? 1));
-    });
+    return await run(io, got.gh, args, ghEnv(env, got, dir));
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
 }
 
+/** Runs gh and answers its exit code. */
+function run(io, file, args, env) {
+  return new Promise((resolve) => {
+    const child = io.spawn(file, args, { stdio: "inherit", env });
+    child.on("error", (err) => {
+      io.err(`Weft: couldn't run gh: ${err.message}\n`);
+      resolve(1);
+    });
+    child.on("exit", (code) => resolve(code ?? 1));
+  });
+}
+
+const WRAPPER_DIR = path.join(__dirname, "worker-bin");
+const executable = (file) => {
+  try {
+    fs.accessSync(file, fs.constants.X_OK);
+    return fs.statSync(file).isFile();
+  } catch {
+    return false;
+  }
+};
+
+/** The real gh on the card's PATH, past this wrapper's folder; null when there's none. */
+function realGh(env, exists = executable) {
+  for (const dir of String(env.PATH || "").split(path.delimiter)) {
+    if (!dir || path.resolve(dir) === WRAPPER_DIR) continue;
+    const file = path.join(dir, "gh");
+    if (exists(file)) return file;
+  }
+  return null;
+}
+
 /* v8 ignore start -- the process entry */
 async function main(argv = process.argv.slice(2), env = process.env) {
-  const io = { out: (s) => process.stdout.write(s), err: (s) => process.stderr.write(s), spawn, connect: net.createConnection };
+  const io = { out: (s) => process.stdout.write(s), err: (s) => process.stderr.write(s), spawn, connect: net.createConnection, exists: undefined };
   if (argv[0] === "git-credential") {
     const chunks = [];
     for await (const c of process.stdin) chunks.push(c);
@@ -165,4 +196,4 @@ async function main(argv = process.argv.slice(2), env = process.env) {
 if (require.main === module) main().then((code) => process.exit(code));
 /* v8 ignore stop */
 
-module.exports = { ask, parseCredential, gitCredential, firstCommand, ghEnv, gh, REFUSED };
+module.exports = { ask, parseCredential, gitCredential, firstCommand, ghEnv, gh, realGh, REFUSED, WRAPPER_DIR };

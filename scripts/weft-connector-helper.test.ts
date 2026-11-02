@@ -141,6 +141,18 @@ describe("gitCredential", () => {
   });
 });
 
+describe("realGh", () => {
+  it("finds an executable gh on PATH past the wrapper's folder", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "wgh-"));
+    fs.writeFileSync(path.join(dir, "gh"), "#!/bin/sh\n", { mode: 0o755 });
+    fs.writeFileSync(path.join(dir, "notexec"), "x");
+    expect(helper.realGh({ PATH: [helper.WRAPPER_DIR, "", dir].join(path.delimiter) })).toBe(path.join(dir, "gh"));
+    expect(helper.realGh({ PATH: path.join(dir, "missing") })).toBeNull();
+    expect(helper.realGh({})).toBeNull();
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+});
+
 describe("gh", () => {
   it.each([...REFUSED])("refuses `gh %s`", async (cmd) => {
     const f = fakeConnect(TOKEN);
@@ -150,12 +162,30 @@ describe("gh", () => {
     expect(f.connect).not.toHaveBeenCalled();
   });
 
-  it("stops with no token, or no gh on the worker", async () => {
-    for (const [reply, why] of [[JSON.stringify({ error: "Not allowed." }), "Not allowed."], ["{}", "no answer"], [new Error("ENOENT"), "ENOENT"]] as const) {
-      const o = io(fakeConnect(reply).connect);
-      expect(await gh(["pr", "list"], ENV, o)).toBe(1);
-      expect(o.err).toHaveBeenCalledWith(`Weft: no GitHub token from the worker: ${why}\n`);
+  it("falls back to the real gh with the card's own env when there's no token", async () => {
+    for (const reply of [JSON.stringify({ error: "GitHub isn't turned on." }), "{}", new Error("ENOENT")]) {
+      let seen: { cmd: string; env: Record<string, string> } | undefined;
+      const spawn = vi.fn((cmd: string, _args: string[], opts: { env: Record<string, string> }) => {
+        seen = { cmd, env: opts.env };
+        const child = new EventEmitter();
+        queueMicrotask(() => child.emit("exit", 0));
+        return child;
+      });
+      const env = { ...ENV, PATH: [helper.WRAPPER_DIR, "/usr/local/bin", "/opt/homebrew/bin"].join(path.delimiter), HOME: "/h" };
+      const o = { ...io(fakeConnect(reply).connect, spawn), exists: (f: string) => f === "/opt/homebrew/bin/gh" || f === path.join(helper.WRAPPER_DIR, "gh") };
+      expect(await gh(["pr", "list"], env, o)).toBe(0);
+      expect(seen).toEqual({ cmd: "/opt/homebrew/bin/gh", env });
+      expect(o.err).not.toHaveBeenCalled();
     }
+  });
+
+  it("says so when there's no token and no gh on PATH, or no gh on the worker", async () => {
+    const none = { ...io(fakeConnect("{}").connect), exists: () => false };
+    expect(await gh(["pr", "list"], { ...ENV, PATH: "/x" }, none)).toBe(1);
+    expect(none.err).toHaveBeenCalledWith("Weft: no GitHub token from the worker (no answer), and no gh on PATH.\n");
+    const empty = { ...io(fakeConnect(JSON.stringify({ error: "Not allowed." })).connect), exists: () => true };
+    expect(await gh(["pr"], ENV, empty)).toBe(1);
+    expect(empty.err).toHaveBeenCalledWith("Weft: no GitHub token from the worker (Not allowed.), and no gh on PATH.\n");
     const o = io(fakeConnect(JSON.stringify({ token: "t", gh: null })).connect);
     expect(await gh(["pr", "list"], ENV, o)).toBe(1);
     expect(o.err).toHaveBeenCalledWith("Weft: gh isn't installed on this worker.\n");

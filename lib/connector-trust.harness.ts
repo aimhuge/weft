@@ -3,7 +3,7 @@
 // worker pins it signs, exactly as weft.zip's routes would store them (lib/connector-signed.ts).
 import { generateKeyPairSync, randomBytes, sign } from "node:crypto";
 import { settingsOf, type GrantSettings } from "./connector-grant";
-import { allowMessage, grantMessage, workerMessage } from "./connector-messages";
+import { allowMessage, grantMessage, startMessage, workerMessage } from "./connector-messages";
 import type { GrantRow, WorkerRow } from "./connector-db";
 import type { SignerRow } from "./connector-db-trust";
 import { iso, NOW, type FakeState } from "./connector.harness";
@@ -26,9 +26,9 @@ export function macKey() {
 let next = 1;
 
 // A Mac key registered for `userId`, trusted from `trustedFrom` (a day ago by default, so trusted now).
-export function trustedMac(state: FakeState, userId = "u1", o: { trustedFrom?: number; name?: string; revokedAt?: string } = {}): Mac {
+export function trustedMac(state: FakeState, userId = "u1", o: { trustedFrom?: number | null; name?: string; revokedAt?: string } = {}): Mac {
   const k = macKey();
-  const signer: SignerRow = { id: `mac-${next++}`, user_id: userId, sign_key: k.key, name: o.name ?? "MacBook", device: null, added_at: iso(NOW - 2 * DAY), trusted_from: iso(o.trustedFrom ?? NOW - DAY), endorsed_by: null, revoked_at: o.revokedAt ?? null };
+  const signer: SignerRow = { id: `mac-${next++}`, user_id: userId, sign_key: k.key, name: o.name ?? "MacBook", device: null, added_at: iso(NOW - 2 * DAY), trusted_from: o.trustedFrom === null ? null : iso(o.trustedFrom ?? NOW - DAY), endorsed_by: null, revoked_at: o.revokedAt ?? null };
   state.signers.push(signer);
   return { ...k, signer };
 }
@@ -61,4 +61,10 @@ export function signedAllow(state: FakeState, mac: Mac, grant: GrantRow, kind: "
   const issuedAt = NOW - 30_000;
   const sig = mac.sign(allowMessage({ userId: grant.user_id, grantId: grant.id, kind, subject, nonce, issuedAt }));
   state.allows.push({ grant_id: grant.id, user_id: grant.user_id, kind, subject, signer_id: mac.signer.id, sig, nonce, issued_at: iso(issuedAt) });
+}
+
+// The desktop board's card.create for a card, with the repo and the start the Mac signed (lib/worker-folder-repo.ts).
+export function signedStartPayload(mac: Mac, o: { userId?: string; workerId?: string; cardId?: string; folder?: string; repo?: string; issuedAt?: number } = {}) {
+  const st = { userId: o.userId ?? mac.signer.user_id, workerId: o.workerId ?? "w1", cardId: o.cardId ?? "card-1", folder: o.folder ?? "r", repo: o.repo ?? "o/r", issuedAt: o.issuedAt ?? NOW - 5_000 };
+  return { verb: "card.create", args: { id: st.cardId }, repo: st.repo, start: { key: mac.key, sig: mac.sign(startMessage(st)), issuedAt: st.issuedAt } };
 }

@@ -8,7 +8,8 @@ import { looser, settingsOf, CONNECTORS, type Connector } from "./connector-gran
 import { allowMessage, grantMessage, workerMessage } from "./connector-messages";
 import type { SignerRow } from "./connector-db-trust";
 import { MintError, type TokenDeps } from "./connector-tokens";
-import { fresh, isTrusted, verifyRaw } from "./connector-trust";
+import { fresh, isTrusted, keyFingerprint, verifyRaw } from "./connector-trust";
+import type { RequestMeta } from "./connector-signer-links";
 import { notice } from "./connector-notify";
 import { endWorkerTokens } from "./connector-revoke";
 
@@ -33,10 +34,12 @@ async function takeFresh(deps: TokenDeps, userId: string, b: Body): Promise<{ no
   return { nonce: b.nonce, issuedAt };
 }
 
-const waiting = (s: SignerRow, now: number) => (isTrusted(s, now) ? null : s.trusted_from);
+// A key not trusted yet: its grants mint nothing until it's confirmed from the email or vouched for.
+const waiting = (s: SignerRow, now: number) => !isTrusted(s, now);
+const from = (meta?: RequestMeta) => (meta ? ` From IP ${meta.ip}, client ${meta.ua}.` : "");
 
 // A worker vouched for: { workerId, signKey, boxKey, signerKey, sig }. Its row must have that sign key now.
-export async function pinWorker(deps: TokenDeps, userId: string, raw: unknown): Promise<{ ok: true; waitingUntil: string | null }> {
+export async function pinWorker(deps: TokenDeps, userId: string, raw: unknown, meta?: RequestMeta): Promise<{ ok: true; waiting: boolean }> {
   const b = bodyOf(raw);
   if (typeof b.workerId !== "string" || !UUID_RE.test(b.workerId) || typeof b.signKey !== "string" || typeof b.boxKey !== "string" || typeof b.sig !== "string") throw new MintError(400, "Name the worker, its keys and the signature.");
   const signer = await signerOf(deps, userId, b.signerKey);
@@ -46,8 +49,8 @@ export async function pinWorker(deps: TokenDeps, userId: string, raw: unknown): 
   if (!verifyRaw(signer.sign_key, workerMessage({ userId, workerId: worker.id, signKey: b.signKey, boxKey: b.boxKey }), b.sig)) throw new MintError(401, "That signature doesn't check.");
   const was = await deps.db.workerPin(worker.id);
   await deps.db.savePin({ worker_id: worker.id, user_id: userId, sign_key: b.signKey, box_key: b.boxKey, signer_id: signer.id, sig: b.sig });
-  if (!was || was.sign_key !== b.signKey) await notice(deps, userId, { workerId: worker.id, subject: `the worker ${worker.name} can use connectors`, text: `The Mac "${signer.name}" vouched for the worker "${worker.name}", so it can ask for connector tokens once you turn one on for it.` });
-  return { ok: true, waitingUntil: waiting(signer, deps.now()) };
+  if (!was || was.sign_key !== b.signKey) await notice(deps, userId, { workerId: worker.id, subject: "a worker was vouched for", text: `The Mac key ${keyFingerprint(signer.sign_key)} vouched for the worker ${worker.id} (pairing key ${keyFingerprint(b.signKey)}), so it can ask for connector tokens once one is turned on for it.${from(meta)}` });
+  return { ok: true, waiting: waiting(signer, deps.now()) };
 }
 
 // A grant turned on or changed: { workerId, connector, settings, nonce, issuedAt, prevEpoch, signerKey, sig }. It lands
@@ -73,7 +76,7 @@ async function vouchedWorker(deps: TokenDeps, userId: string, workerId: string) 
 
 const CHANGED = "GitHub on that worker changed since you looked. Try again.";
 
-export async function writeGrant(deps: TokenDeps, userId: string, raw: unknown): Promise<{ ok: true; epoch: number; waitingUntil: string | null; tokensRevoked: number }> {
+export async function writeGrant(deps: TokenDeps, userId: string, raw: unknown, meta?: RequestMeta): Promise<{ ok: true; epoch: number; waiting: boolean; tokensRevoked: number }> {
   const g = parseGrant(raw);
   const signer = await signerOf(deps, userId, g.b.signerKey);
   const worker = await vouchedWorker(deps, userId, g.workerId);
@@ -86,8 +89,8 @@ export async function writeGrant(deps: TokenDeps, userId: string, raw: unknown):
   if (!(await deps.db.writeGrant(row, g.prevEpoch))) throw new MintError(409, CHANGED);
   let tokensRevoked = 0;
   if (was && looser(g.settings, settingsOf(was))) tokensRevoked = (await endWorkerTokens(deps, userId, worker.id)).tokensRevoked;
-  if (!was) await notice(deps, userId, { workerId: worker.id, subject: `GitHub turned on for the worker ${worker.name}`, text: `The Mac "${signer.name}" turned GitHub on for "${worker.name}": cards you start on it can push and use gh as you, with Weft.` });
-  return { ok: true, epoch: g.prevEpoch + 1, waitingUntil: waiting(signer, deps.now()), tokensRevoked };
+  if (!was) await notice(deps, userId, { workerId: worker.id, subject: "GitHub was turned on for a worker", text: `The Mac key ${keyFingerprint(signer.sign_key)} turned GitHub on for the worker ${worker.id}: cards started on it from your board can push and use gh as you, with Weft.${from(meta)}` });
+  return { ok: true, epoch: g.prevEpoch + 1, waiting: waiting(signer, deps.now()), tokensRevoked };
 }
 
 // An Allow for a project or card: { grantId, kind, subject, nonce, issuedAt, signerKey, sig }.

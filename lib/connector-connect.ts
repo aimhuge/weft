@@ -124,3 +124,11 @@ export function startPage(login: string | null): Response {
   const html = `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Connect GitHub</title><body style="${PAGE_STYLE}"><h1 style="font-size:1.3rem">Connect GitHub to Weft</h1><p>Your workers' cards will push and use gh as you, with Weft, once you turn GitHub on for a worker.${again}</p><form method="post" action="${CONNECT_PATH}/start"><button type="submit" style="font:inherit;padding:.5rem 1rem">Continue to GitHub</button></form></body>`;
   return new Response(html, { headers: PAGE_HEADERS });
 }
+
+// A page with one button that POSTs back to `action` with `fields`, for an emailed link: opening the link shows it,
+// only pressing the button acts (lib/connector-signer-links.ts), so a mail scanner that fetches links does nothing.
+export function buttonPage(title: string, text: string, action: string, fields: Record<string, string>, button: string): Response {
+  const inputs = Object.entries(fields).map(([k, v]) => `<input type="hidden" name="${esc(k)}" value="${esc(v)}">`).join("");
+  const html = `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>${esc(title)}</title><body style="${PAGE_STYLE}"><h1 style="font-size:1.3rem">${esc(title)}</h1><p>${esc(text)}</p><form method="post" action="${esc(action)}">${inputs}<button type="submit" style="font:inherit;padding:.5rem 1rem">${esc(button)}</button></form></body>`;
+  return new Response(html, { headers: PAGE_HEADERS });
+}

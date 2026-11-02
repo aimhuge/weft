@@ -39,6 +39,7 @@ const lines = (run: NonNullable<WorkerConnectorDeps["run"]>, cmd: string, args: 
 
 // Every card's git runs the helper and every card's gh the wrapper, so a card that rewrote either would see the next
 // card's token. Their hashes at start, checked again on every ask: a changed file answers nothing until a restart.
+// Tamper-evidence only: code running as the worker's user can swap a file in and back out between two checks.
 export function integrity(files: string[], read: (file: string) => Buffer = fs.readFileSync): () => boolean {
   const digest = (file: string) => {
     try {

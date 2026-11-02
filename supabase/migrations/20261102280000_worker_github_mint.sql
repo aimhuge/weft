@@ -5,14 +5,15 @@
 --    (lib/connector-crypto.ts). RLS on with no policy and no grant: only the service role (weft.zip's routes) reads it.
 -- 2. connector_signers: the Mac keys that may say yes to a connector (each Mac's desktop approval key,
 --    electron/desktop-signer.cjs). Written only by weft.zip (lib/connector-signers.ts), which checks the key's own
---    signature; a key is trusted once a trusted Mac vouches for it, or a day after it was registered (you're emailed).
+--    signature; a key is trusted once a trusted Mac vouches for it, or once you open the one-time link emailed to your
+--    account's address. The email also carries a link that revokes the key with no session.
 -- 3. connector_worker_pins: a worker vouched for by a Mac, the sign and box keys it checked at pairing, signed.
 -- 4. connector_grants: your approval for one worker to use one connector, with its settings, signed by a signer.
 --    Written only by weft.zip's grant route, which checks the signature; the mint checks it again. Your session reads.
 -- 5. connector_allows: the per-project or per-card Allows a grant's approval setting asks for, signed the same way.
 -- 6. connector_mints: the ledger, every answer the minter gave a worker, and the notices. You read yours.
 --    connector_mint_admit logs a request under its nonce and both rate limits in one locked step.
--- 7. connector_live_tokens, connector_cards and connector_signed_nonces: service-only. The narrowed tokens handed out
+-- 7. connector_live_tokens, connector_live_claims, connector_cards and connector_signed_nonces: service-only. The narrowed tokens handed out
 --    or retired (so a revoke can delete them at GitHub), the cards a mint has checked you started, and the nonces of
 --    signed statements taken.
 -- 8. A worker revoked (device_revoke) loses its grants at once.
@@ -43,9 +44,18 @@ create table if not exists public.connector_signers (
   name         text not null check (char_length(name) between 1 and 80),
   device       text check (char_length(device) <= 100),
   added_at     timestamptz not null default now(),
-  trusted_from timestamptz not null,
+  -- Null until the emailed link is opened or a trusted Mac vouches for it.
+  trusted_from timestamptz,
   endorsed_by  uuid references public.connector_signers (id) on delete set null,
   revoked_at   timestamptz,
+  -- sha256 of the one-time confirm token (cleared once used) and of the revoke token, both emailed; never the tokens.
+  confirm_hash       text,
+  confirm_expires_at timestamptz,
+  confirm_sent_at    timestamptz,
+  revoke_hash        text,
+  -- Where the registration came from, for the email.
+  added_ip     text check (char_length(added_ip) <= 100),
+  added_ua     text check (char_length(added_ua) <= 300),
   unique (user_id, sign_key)
 );
 alter table public.connector_signers enable row level security;
@@ -53,7 +63,7 @@ drop policy if exists "connector signers: read own" on public.connector_signers;
 create policy "connector signers: read own" on public.connector_signers for select to authenticated
   using (user_id = (select auth.uid()));
 revoke all on table public.connector_signers from public, anon, authenticated;
-grant select on table public.connector_signers to authenticated;
+grant select (id, user_id, sign_key, name, device, added_at, trusted_from, endorsed_by, revoked_at) on table public.connector_signers to authenticated;
 
 create table if not exists public.connector_worker_pins (
   worker_id uuid primary key references public.cloud_workers (id) on delete cascade,
@@ -229,6 +239,16 @@ create table if not exists public.connector_live_tokens (
 alter table public.connector_live_tokens enable row level security;
 revoke all on table public.connector_live_tokens from public, anon, authenticated;
 
+-- A narrowed token being made for (worker, subject): one mint at a time, so none is made and lost beside another.
+create table if not exists public.connector_live_claims (
+  worker_id uuid not null,
+  subject   text not null check (char_length(subject) <= 201),
+  until     timestamptz not null,
+  primary key (worker_id, subject)
+);
+alter table public.connector_live_claims enable row level security;
+revoke all on table public.connector_live_claims from public, anon, authenticated;
+
 create table if not exists public.connector_cards (
   worker_id uuid not null references public.cloud_workers (id) on delete cascade,
   card_id   text not null check (char_length(card_id) <= 200),
@@ -242,7 +262,7 @@ alter table public.connector_cards enable row level security;
 revoke all on table public.connector_cards from public, anon, authenticated;
 
 -- A revoked worker's grants go with it. Its live tokens are revoked at GitHub by weft.zip's revoke route, which the
--- desktop calls right after device_revoke (lib/device-registry.ts), and by the hourly sweep for a worker with no grant;
+-- desktop calls right after device_revoke (lib/device-registry.ts), and by the daily sweep for a worker with no grant;
 -- the grant going here stops every mint at once even if that call never arrives, and the worker's key no longer works
 -- either (device_revoke replaces key_hash).
 create or replace function private.connector_grants_drop_revoked()

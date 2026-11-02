@@ -25,6 +25,16 @@ describe("userToken", () => {
     expect(await refusal(userToken(deps(db, fakeGithub({}).fetch), "u1"))).toMatchObject({ status: 403, message: expect.stringContaining("isn't connected") as string });
   });
 
+  it("hands out the pair a refresh made between its read and its claim, instead of spending the old refresh token", async () => {
+    const { db, state } = fakeDb();
+    storeTokens(state, "u1", { issuedAt: STALE });
+    let reads = 0;
+    const raced = { ...db, tokens: async (u: string) => (reads++ === 1 && storeTokens(state, "u1", { access: "ghu_fresh", issuedAt: NOW }), db.tokens(u)) };
+    const gh = fakeGithub({});
+    expect(await userToken(deps(raced, gh.fetch), "u1")).toMatchObject({ token: "ghu_fresh" });
+    expect(gh.calls).toHaveLength(0);
+  });
+
   it("refuses while a disconnect waits on GitHub", async () => {
     const { db, state } = fakeDb();
     storeTokens(state, "u1");
@@ -170,6 +180,34 @@ describe("narrowToken", () => {
     expect(retired).toMatchObject({ repo: "o/r", issued_at: iso(STALE) });
     expect(openToken(retired.token_sealed, bound.live("w1", retired.subject), KEY)).toBe("ghu_kept");
     expect(state.live.find((l) => l.subject === o.subject)).toBeTruthy();
+  });
+
+  it("makes one token at a time per subject: a second mint waits and hands out the first one's", async () => {
+    const { db, state, gh } = setup();
+    let release: () => void = () => {};
+    const slow = fakeGithub({ [SCOPED]: () => new Promise<Response>((r) => (release = () => r(json({ token: "ghu_narrow", expires_at: null })))), [REFRESH]: () => pair("ghu_new", "ghr_new") });
+    // The second mint finds the claim taken and waits; while it waits, GitHub answers the first.
+    const d = { ...deps(db, slow.fetch), sleep: () => (release(), new Promise<void>((r) => setTimeout(r, 5))) };
+    const [a, b] = await Promise.all([narrowToken(d, o), narrowToken(d, o)]);
+    expect(a.token).toBe("ghu_narrow");
+    expect(b.token).toBe("ghu_narrow");
+    expect(slow.called("POST", "/token/scoped")).toHaveLength(1);
+    expect(state.live.filter((l) => l.subject === o.subject)).toHaveLength(1);
+    expect(state.claims.size).toBe(0);
+    expect(gh.calls).toHaveLength(0);
+  });
+
+  it("gives up with a 503 while another mint holds the claim", async () => {
+    const { db, state, gh } = setup();
+    state.claims.set(`w1/${o.subject}`, iso(NOW + 3_600_000));
+    expect(await refusal(narrowToken(deps(db, gh.fetch), o))).toMatchObject({ status: 503 });
+  });
+
+  it("lets the claim go when GitHub won't narrow", async () => {
+    const { db, state } = setup();
+    const gh = fakeGithub({ [SCOPED]: () => json({ message: "nope" }, 422) });
+    await refusal(narrowToken(deps(db, gh.fetch), o));
+    expect(state.claims.size).toBe(0);
   });
 
   it("replaces a live token made before its parent was refreshed", async () => {

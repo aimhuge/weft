@@ -102,6 +102,8 @@ function setupPairing({ ipcMain, dataDir, accountClient, isBoard, confirm, safeS
   // Pairing vouches for the new worker on weft.zip under the same Touch ID, from the keys it just pinned.
   const vouchWorker = (id) => connectorSigner.vouch(id);
   require("./host-pairing-ipc.cjs").registerHostPairing(handle, { db, userId, macDevice, myDevice, confirm, macSignKey, macSign, vouchWorker }, workerPins);
+  const projectRepos = require("./worker-projects.cjs").createProjectRepos({ dataDir });
+  const signStart = require("./connector-start.cjs").createStartSigner({ userId, sign: macSign, signKey: macSignKey, projectRepos });
 
   const routes = {
     // The key the uploader seals with (lib/sync-seal-upload.ts); { none: true } when this Mac has no grant yet.
@@ -111,6 +113,8 @@ function setupPairing({ ipcMain, dataDir, accountClient, isBoard, confirm, safeS
     // Whether a passkey assertion is a pinned browser's (lib/approval-passkey-check.ts); main keeps its counter.
     "POST /pairing/passkey-verify": (b) => paired.verifyPasskey({ device: String(b?.device), credId: String(b?.credId), message: String(b?.message), authenticatorData: String(b?.authenticatorData), clientDataJSON: String(b?.clientDataJSON), signature: String(b?.signature) }),
     "POST /pairing/status": () => ({ approvers: paired.approvers(), devices: pairing.list().length, ...paired.settings() }),
+    // A worker card's start, signed for the GitHub connector when this Mac knows its folder as that repo (electron/connector-start.cjs).
+    "POST /connectors/sign-start": withSodium(signStart),
   };
   return { pairing, syncKeys, paired, signer, routes };
 }

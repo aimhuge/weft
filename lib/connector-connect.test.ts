@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
-import { callbackUrl, checkConnect, CONNECT_PATH, connectCookie, connectStatus, donePage, endPrevious, finishConnect, newConnect, sameOrigin, startPage } from "./connector-connect";
+import { buttonPage, callbackUrl, checkConnect, CONNECT_PATH, connectCookie, connectStatus, donePage, endPrevious, finishConnect, newConnect, sameOrigin, startPage } from "./connector-connect";
 import { openToken } from "./connector-crypto";
 import { CFG, deps, fakeDb, fakeGithub, iso, json, KEY, noContent, NOW, pair, storeTokens } from "./connector.harness";
 import { signedGrant, trustedMac } from "./connector-trust.harness";
@@ -161,5 +161,15 @@ describe("donePage and startPage", () => {
     expect(fresh).toContain(`<form method="post" action="${CONNECT_PATH}/start">`);
     expect(fresh).not.toContain("ends Weft's current connection");
     expect(await startPage("o<c").text()).toContain("ends Weft's current connection as @o&#60;c first");
+  });
+});
+
+describe("buttonPage", () => {
+  it("is one escaped, unframeable button that POSTs its fields back", async () => {
+    const res = buttonPage("T<", "x", "/a", { id: 'i"1', t: "tok" }, "Go");
+    expect(res.headers.get("x-frame-options")).toBe("DENY");
+    const html = await res.text();
+    expect(html).toContain('<form method="post" action="/a"><input type="hidden" name="id" value="i&#34;1"><input type="hidden" name="t" value="tok"><button');
+    expect(html).toContain("<title>T&#60;</title>");
   });
 });

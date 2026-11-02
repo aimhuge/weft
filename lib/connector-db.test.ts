@@ -56,7 +56,7 @@ describe("supabaseConnectorDb: reads", () => {
     expect(await db.starts("w1", "c1", "u1")).toEqual([]);
     expect(calls[0]).toEqual({
       table: "cloud_commands",
-      ops: [["select", "kind, folder, payload, created_by"], ["eq", "target_device", "worker:w1"], ["eq", "created_by", "u1"], ["or", "and(kind.eq.host,payload->args->>id.eq.c1),and(kind.in.(new_card,run),card_id.eq.c1)"]],
+      ops: [["select", "kind, folder, payload, created_by, created_at"], ["eq", "target_device", "worker:w1"], ["eq", "created_by", "u1"], ["or", "and(kind.eq.host,payload->args->>id.eq.c1),and(kind.in.(new_card,run),card_id.eq.c1)"], ["order", "created_at", { ascending: true }]],
     });
   });
 
@@ -142,6 +142,19 @@ describe("supabaseConnectorDb: writes", () => {
     expect([upsert, row.user_id, row.refreshing_until, typeof row.updated_at, opts]).toEqual(["upsert", "u1", null, "string", { onConflict: "user_id" }]);
     expect(calls[1]!.ops).toEqual([["delete"], ["eq", "user_id", "u1"]]);
     expect(calls[2]!.ops).toEqual([["update", { refreshing_until: "until" }], ["eq", "user_id", "u1"], ["or", "refreshing_until.is.null,refreshing_until.lt.now"], ["select", "user_id"]]);
+  });
+
+  it("claims the making of a narrowed token: a new claim, an expired one, or not; and lets it go", async () => {
+    const { db, calls } = fakeSupabase(ok(null), fail("dup", "23505"), ok([{ subject: "s" }]), fail("dup", "23505"), ok([]), fail("dup", "23505"), ok(null), fail("down"), ok(null));
+    expect(await db.claimLive("w1", "s", "now", "until")).toBe(true);
+    expect(await db.claimLive("w1", "s", "now", "until")).toBe(true);
+    expect(await db.claimLive("w1", "s", "now", "until")).toBe(false);
+    expect(await db.claimLive("w1", "s", "now", "until")).toBe(false);
+    await expect(db.claimLive("w1", "s", "now", "until")).rejects.toThrow("Claiming the token: down");
+    await db.releaseLive("w1", "s");
+    expect(calls[0]).toEqual({ table: "connector_live_claims", ops: [["insert", { worker_id: "w1", subject: "s", until: "until" }]] });
+    expect(calls[2]!.ops).toEqual([["update", { until: "until" }], ["eq", "worker_id", "w1"], ["eq", "subject", "s"], ["lt", "until", "now"], ["select", "subject"]]);
+    expect(calls.at(-1)!.ops).toEqual([["delete"], ["eq", "worker_id", "w1"], ["eq", "subject", "s"]]);
   });
 
   it("saves a live token and drops live tokens by id, skipping an empty list", async () => {

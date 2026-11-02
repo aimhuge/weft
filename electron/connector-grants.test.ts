@@ -63,8 +63,8 @@ describe("connectors:set", () => {
   });
 
   it("asks Touch ID naming the worker, then registers this Mac, vouches for the worker and sends a signed grant", async () => {
-    const s = setup({ answers: { "/github/grant": { ok: true, waitingUntil: "later" } } });
-    expect(await s.h("connectors:set")("w1", "m1\nmini", "github", { scope: "card", bogus: 1 })).toEqual({ ok: true, settings: { scope: "card", approval: "worker", lifetime: "revoked", asks: ["protected_push"] }, waitingUntil: "later" });
+    const s = setup({ answers: { "/github/grant": { ok: true, waiting: true } } });
+    expect(await s.h("connectors:set")("w1", "m1\nmini", "github", { scope: "card", bogus: 1 })).toEqual({ ok: true, settings: { scope: "card", approval: "worker", lifetime: "revoked", asks: ["protected_push"] }, waiting: true });
     expect(s.confirm).toHaveBeenCalledWith("let the worker m1?mini use GitHub as you, with Weft, for cards you start on it");
     expect(s.reads).toEqual([["user_id", "u1"], ["worker_id", "w1"], ["connector", "github"]]);
     expect(s.calls.map((c) => `${c[0]} ${c[1]}`)).toEqual(["POST /signers", "POST /pin", "POST /github/grant"]);
@@ -90,7 +90,7 @@ describe("connectors:set", () => {
 
   it("asks Touch ID for a stricter change too, and signs over the epoch it replaces", async () => {
     const s = setup({ read: { data: { scope: "installed", approval: "worker", lifetime: "revoked", asks: [], epoch: 4 } }, answers: { "/github/grant": { ok: true } } });
-    expect(await s.h("connectors:set")("w1", "box", "github", STRICT)).toMatchObject({ ok: true, waitingUntil: null });
+    expect(await s.h("connectors:set")("w1", "box", "github", STRICT)).toMatchObject({ ok: true, waiting: false });
     expect(s.confirm).toHaveBeenCalledWith("make GitHub on the worker box stricter (card repos, approval card, lifetime 8h)");
     expect(sent(s.calls, "/github/grant").prevEpoch).toBe(4);
   });
@@ -135,10 +135,10 @@ describe("connectors:allow", () => {
 });
 
 describe("connectors:signers, :trust and :forget-signer", () => {
-  it("registers this Mac's key without Touch ID and lists every key", async () => {
+  it("lists this Mac's key and every key, registering nothing", async () => {
     const s = setup({ answers: { "/signers": { signer: {}, signers: [{ id: "s1" }] } } });
     expect(await s.h("connectors:signers")()).toEqual({ mine: s.k.key, signers: [{ id: "s1" }] });
-    expect(s.calls.map((c) => `${c[0]} ${c[1]}`)).toEqual(["POST /signers", "GET /signers"]);
+    expect(s.calls.map((c) => `${c[0]} ${c[1]}`)).toEqual(["GET /signers"]);
     expect(s.confirm).not.toHaveBeenCalled();
   });
 

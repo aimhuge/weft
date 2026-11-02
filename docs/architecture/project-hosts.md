@@ -576,27 +576,29 @@ trusted weft.zip's rows, which any session of yours can write; it now trusts onl
   access token (8 hours by GitHub's clock, handed out for 1 hour and rotated after), narrowed to the card's repo by
   default, never a refresh token or the Mac's `gh` token.
 - **Who may say yes** ([the chain of trust](connectors.md#who-may-say-yes-the-chain-of-trust)). Each Mac registers its desktop
-  approval key (H7's `electron/desktop-signer.cjs`) as a signer on weft.zip; a key is trusted a day after it's registered
-  (you're emailed) or at once when a trusted Mac vouches for it under Touch ID. Pairing a worker signs the keys main just
-  pinned. Turning a connector on, any change to it and an Allow take Touch ID, then main signs exactly what's written;
-  weft.zip writes it only with a good signature (no session can write those tables) and the mint checks it again.
+  approval key (H7's `electron/desktop-signer.cjs`) as a signer on weft.zip, after a change's Touch ID; a key counts once
+  someone opens the one-time link mailed to the account's address (which also carries a no-session Revoke link), or when
+  a trusted Mac vouches for it under Touch ID. Pairing a worker signs the keys main just pinned. Turning a connector on,
+  any change to it and an Allow take Touch ID, then main signs exactly what's written; weft.zip writes it only with a good
+  signature (no session can write those tables) and the mint checks it again. Each new thread the desktop board starts
+  on a worker is signed by main too, with the repo main knows the folder as.
 - **The mint** (`app/api/connectors/github/mint`, `lib/connector-mint.ts`) reuses H8/H10's signing: the request is signed
   by the sign key `worker_pair_confirm` set, and a trusted Mac must have vouched for that key. Then a grant signed by a
-  trusted Mac, a card you started from the desktop board (T2's card-origin rule, never a reply, an H6-line verb or a card
-  another worker sent), the repo that start named from the Mac's own checkout, this worker's card not Done or deleted,
+  trusted Mac, a card whose one start is a `card.create` a trusted Mac signed (never a reply, an H6-line verb, a run or a
+  card another worker sent), the repo that signed start names, this worker's card not Done or deleted,
   a signed Allow when the approval asks one, a nonce once and the rate limits in one database step; it re-reads the grant
   after getting the token and answers only if it's unchanged. Every answer goes in a ledger you can read.
 - **On the box**, a card's git credential helper and gh wrapper ask the daemon over `~/.weft-worker/connector.sock` by a
   per-CLI-process capability, which the socket answers only for a process under that CLI (peer pid from lsof or ss) and
-  drops when the CLI exits; the helper's hash must be what the daemon started with. gh runs with an env built from
-  scratch and empty config, data and XDG folders.
+  drops when the CLI exits. gh runs with an env built from scratch and empty config, data and XDG folders, and falls back
+  to the box's own gh when there's no token.
 - **Revocation** works with the box offline: Turn off or Revoke deletes the grant (a trigger does it on `device_revoke`
   too), then weft.zip deletes narrowed tokens at GitHub and, if this worker holds the current user token, refreshes it under
-  the refresh claim (which ends it, per GitHub); only a 204 counts as confirmed, unconfirmed rows stay for an hourly sweep,
+  the refresh claim (which ends it, per GitHub); only a 204 counts as confirmed, unconfirmed rows stay for a daily sweep,
   which also ends what expired grants left behind.
 - **What it doesn't close:** a card can still copy the token it's handed, and with the worker's own key files can ask for
-  more while the grant lives (per-card scope is then advisory); a session can't turn anything on but can still turn things
-  off. The on-box helper (P4 on a Mac, P5 on Linux) is what closes the first two. A second red-team pass is due.
+  more while the grant lives (per-card scope is then advisory); a session can't turn anything on unless it also reads your
+  email, and can still turn things off. The on-box helper (P4 on a Mac, P5 on Linux) is what closes the first two. A second red-team pass is due.
 
 ### Project reads and the editor (H4, as built)
 

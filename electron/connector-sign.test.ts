@@ -14,6 +14,8 @@ describe("connector-sign.cjs", () => {
     expect(sign.allowMessage(allow)).toBe(shared.allowMessage(allow));
     const worker = { userId: "u1", workerId: "w1", signKey: "s", boxKey: "b" };
     expect(sign.workerMessage(worker)).toBe(shared.workerMessage(worker));
+    const start = { userId: "u1", workerId: "w1", cardId: "c1", folder: "ling", repo: "ada/ling", issuedAt: 5 };
+    expect(sign.startMessage(start)).toBe(shared.startMessage(start));
     const signer = { userId: "u1", key: "k", name: "Ada's \"Mac\"", issuedAt: 5 };
     expect(sign.signerMessage(signer)).toBe(shared.signerMessage(signer));
     const endorse = { userId: "u1", key: "k", by: "b", issuedAt: 5 };

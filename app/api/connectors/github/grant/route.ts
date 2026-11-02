@@ -4,8 +4,9 @@
 // (lib/connector-signed.ts); a stricter change also ends the worker's tokens at GitHub.
 import { connectorRoute, jsonBody } from "@/lib/connector-route";
 import { writeGrant } from "@/lib/connector-signed";
+import { requestMeta } from "@/lib/connector-signer-links";
 
 export async function POST(req: Request) {
   const body = await jsonBody(req);
-  return connectorRoute(req, (deps, user) => writeGrant(deps, user.id, body));
+  return connectorRoute(req, (deps, user) => writeGrant(deps, user.id, body, requestMeta(req)));
 }

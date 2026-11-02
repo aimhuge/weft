@@ -12,9 +12,21 @@ export interface SignerRow {
   name: string;
   device: string | null;
   added_at: string;
-  trusted_from: string;
+  trusted_from: string | null;
   endorsed_by: string | null;
   revoked_at: string | null;
+  confirm_hash?: string | null;
+  confirm_expires_at?: string | null;
+  confirm_sent_at?: string | null;
+  revoke_hash?: string | null;
+}
+
+// A new key, or a pending one's link sent again.
+export interface SignerConfirm {
+  confirm_hash: string | null;
+  confirm_expires_at: string | null;
+  confirm_sent_at: string | null;
+  revoke_hash?: string;
 }
 
 export interface WorkerPin {
@@ -57,8 +69,11 @@ export interface TrustDb {
   signerByKey(userId: string, key: string): Promise<SignerRow | null>;
   signers(userId: string): Promise<SignerRow[]>;
   // Adds a key, or puts a revoked one back as new (waiting again); the row as stored.
-  saveSigner(row: Omit<SignerRow, "id" | "added_at" | "endorsed_by" | "revoked_at"> & { endorsed_by?: string | null }): Promise<SignerRow>;
-  trustSigner(id: string, at: string, by: string): Promise<void>;
+  saveSigner(row: Omit<SignerRow, "id" | "added_at" | "endorsed_by" | "revoked_at"> & { endorsed_by?: string | null; added_ip?: string; added_ua?: string }): Promise<SignerRow>;
+  setConfirm(id: string, c: SignerConfirm): Promise<void>;
+  // Trusts a key from `at`, vouched for by `by` (or by the emailed link, null), and spends its confirm link.
+  trustSigner(id: string, at: string, by: string | null): Promise<void>;
+  dropPinsBySigner(signerId: string): Promise<void>;
   revokeSigner(id: string, at: string): Promise<void>;
   workerPin(workerId: string): Promise<WorkerPin | null>;
   savePin(pin: WorkerPin): Promise<void>;
@@ -86,6 +101,7 @@ export interface Q extends PromiseLike<R> {
   in(column: string, values: unknown[]): Q;
   or(filter: string): Q;
   limit(n: number): Q;
+  order(column: string, options?: object): Q;
   maybeSingle(): PromiseLike<R>;
   single(): PromiseLike<R>;
 }
@@ -96,7 +112,7 @@ export function must<T>(r: R, what: string): T {
   return r.data as T;
 }
 
-const SIGNER = "id, user_id, sign_key, name, device, added_at, trusted_from, endorsed_by, revoked_at";
+const SIGNER = "id, user_id, sign_key, name, device, added_at, trusted_from, endorsed_by, revoked_at, confirm_hash, confirm_expires_at, confirm_sent_at, revoke_hash";
 const PIN = "worker_id, user_id, sign_key, box_key, signer_id, sig";
 
 export function supabaseTrustDb(db: SupabaseClient): TrustDb {
@@ -115,8 +131,14 @@ export function supabaseTrustDb(db: SupabaseClient): TrustDb {
       const stored = { endorsed_by: null, ...row, revoked_at: null, added_at: new Date().toISOString() };
       return must<SignerRow>(await t("connector_signers").upsert(stored, { onConflict: "user_id,sign_key" }).select(SIGNER).single(), "Saving the Mac key");
     },
+    async setConfirm(id, c) {
+      must(await t("connector_signers").update(c).eq("id", id), "Saving the confirm link");
+    },
     async trustSigner(id, at, by) {
-      must(await t("connector_signers").update({ trusted_from: at, endorsed_by: by }).eq("id", id), "Trusting the Mac key");
+      must(await t("connector_signers").update({ trusted_from: at, endorsed_by: by, confirm_hash: null, confirm_expires_at: null }).eq("id", id), "Trusting the Mac key");
+    },
+    async dropPinsBySigner(signerId) {
+      must(await t("connector_worker_pins").delete().eq("signer_id", signerId), "Dropping the worker pins");
     },
     async revokeSigner(id, at) {
       must(await t("connector_signers").update({ revoked_at: at }).eq("id", id), "Revoking the Mac key");

@@ -51,11 +51,12 @@ export interface FakeState {
   pins: WorkerPin[];
   nonces: { user_id: string; nonce: string; at: string }[];
   emails: Map<string, string>;
+  claims: Map<string, string>;
 }
 
 const done = <T>(v: T) => Promise.resolve(v);
 
-function trustDb(state: FakeState, clock: () => number, nextId: () => number): Pick<ConnectorDb, "signerById" | "signerByKey" | "signers" | "saveSigner" | "trustSigner" | "revokeSigner" | "workerPin" | "savePin" | "takeNonce" | "dropNoncesBefore" | "writeGrant" | "saveAllow" | "userEmail"> {
+function trustDb(state: FakeState, clock: () => number, nextId: () => number): Pick<ConnectorDb, "signerById" | "signerByKey" | "signers" | "saveSigner" | "setConfirm" | "trustSigner" | "dropPinsBySigner" | "revokeSigner" | "workerPin" | "savePin" | "takeNonce" | "dropNoncesBefore" | "writeGrant" | "saveAllow" | "userEmail"> {
   return {
     signerById: (id) => done(state.signers.find((s) => s.id === id) ?? null),
     signerByKey: (userId, key) => done(state.signers.find((s) => s.user_id === userId && s.sign_key === key) ?? null),
@@ -66,8 +67,16 @@ function trustDb(state: FakeState, clock: () => number, nextId: () => number): P
       state.signers.push(stored);
       return done(stored);
     },
+    setConfirm: (id, c) => {
+      for (const s of state.signers) if (s.id === id) Object.assign(s, c);
+      return done(undefined);
+    },
     trustSigner: (id, at, by) => {
-      for (const s of state.signers) if (s.id === id) Object.assign(s, { trusted_from: at, endorsed_by: by });
+      for (const s of state.signers) if (s.id === id) Object.assign(s, { trusted_from: at, endorsed_by: by, confirm_hash: null, confirm_expires_at: null });
+      return done(undefined);
+    },
+    dropPinsBySigner: (signerId) => {
+      state.pins = state.pins.filter((p) => p.signer_id !== signerId);
       return done(undefined);
     },
     revokeSigner: (id, at) => {
@@ -133,7 +142,7 @@ function mintDb(state: FakeState, clock: () => number, nextId: () => number): Pi
   };
 }
 
-function tokenDb(state: FakeState, nextId: () => number): Pick<ConnectorDb, "tokens" | "pendingDisconnects" | "saveTokens" | "deleteTokens" | "claimRefresh" | "liveToken" | "saveLiveToken" | "liveTokens" | "dropLiveTokens"> {
+function tokenDb(state: FakeState, nextId: () => number): Pick<ConnectorDb, "tokens" | "pendingDisconnects" | "saveTokens" | "deleteTokens" | "claimRefresh" | "claimLive" | "releaseLive" | "liveToken" | "saveLiveToken" | "liveTokens" | "dropLiveTokens"> {
   const strip = (row: StoredTokens): TokenRow => {
     const copy: Partial<StoredTokens> = { ...row };
     delete copy.refreshing_until;
@@ -160,6 +169,17 @@ function tokenDb(state: FakeState, nextId: () => number): Pick<ConnectorDb, "tok
       row.refreshing_until = until;
       return done(true);
     },
+    claimLive: (workerId, subject, now, until) => {
+      const k = `${workerId}/${subject}`;
+      const held = state.claims.get(k);
+      if (held && held >= now) return done(false);
+      state.claims.set(k, until);
+      return done(true);
+    },
+    releaseLive: (workerId, subject) => {
+      state.claims.delete(`${workerId}/${subject}`);
+      return done(undefined);
+    },
     liveToken: (workerId, subject) => done(state.live.find((l) => l.worker_id === workerId && l.subject === subject) ?? null),
     saveLiveToken: (row) => {
       const at = state.live.findIndex((l) => l.worker_id === row.worker_id && l.subject === row.subject);
@@ -177,7 +197,7 @@ function tokenDb(state: FakeState, nextId: () => number): Pick<ConnectorDb, "tok
 }
 
 export function fakeDb(clock: () => number = () => NOW): { db: ConnectorDb; state: FakeState } {
-  const state: FakeState = { workers: [], grants: [], allows: [], starts: [], pinned: new Map(), cards: new Map(), mints: [], tokens: new Map(), live: [], signers: [], pins: [], nonces: [], emails: new Map() };
+  const state: FakeState = { workers: [], grants: [], allows: [], starts: [], pinned: new Map(), cards: new Map(), mints: [], tokens: new Map(), live: [], signers: [], pins: [], nonces: [], emails: new Map(), claims: new Map() };
   const strip = (w: WorkerRow & { key_hash: string }): WorkerRow => ({ id: w.id, org_id: w.org_id, owner_user: w.owner_user, name: w.name, sign_key: w.sign_key, revoked_at: w.revoked_at });
   let n = 1;
   const nextId = () => n++;

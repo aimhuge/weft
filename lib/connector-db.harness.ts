@@ -7,7 +7,7 @@ export type R = { data: unknown; error: { message: string; code?: string } | nul
 export const ok = (data: unknown, count?: number | null): R => ({ data, error: null, count });
 export const fail = (message: string, code?: string): R => ({ data: null, error: { message, code } });
 
-const BUILDERS = ["select", "insert", "update", "upsert", "delete", "eq", "gte", "lt", "not", "in", "or", "limit"];
+const BUILDERS = ["select", "insert", "update", "upsert", "delete", "eq", "gte", "lt", "not", "in", "or", "limit", "order"];
 
 export function fakeSupabase(...responses: R[]) {
   const calls: { table: string; ops: unknown[][] }[] = [];

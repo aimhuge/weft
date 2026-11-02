@@ -7,7 +7,7 @@ const fakeSupabase = (...responses: R[]) => {
   return { db: supabaseTrustDb(client), calls };
 };
 
-const SIGNER = "id, user_id, sign_key, name, device, added_at, trusted_from, endorsed_by, revoked_at";
+const SIGNER = "id, user_id, sign_key, name, device, added_at, trusted_from, endorsed_by, revoked_at, confirm_hash, confirm_expires_at, confirm_sent_at, revoke_hash";
 
 describe("supabaseTrustDb: Mac keys", () => {
   it("reads a key by id or by user and key, and a user's keys", async () => {
@@ -20,17 +20,21 @@ describe("supabaseTrustDb: Mac keys", () => {
     expect(calls[1]!.ops.slice(1)).toEqual([["eq", "user_id", "u1"], ["eq", "sign_key", "k"], ["maybeSingle"]]);
   });
 
-  it("saves a key as new (not revoked, not vouched), trusts and revokes one", async () => {
-    const { db, calls } = fakeSupabase(ok({ id: "s1" }), ok(null), ok(null), fail("x"));
-    expect(await db.saveSigner({ user_id: "u1", sign_key: "k", name: "Mac", device: null, trusted_from: "t" })).toEqual({ id: "s1" });
+  it("saves a key as new (not revoked, not vouched), trusts and revokes one, and resends its link", async () => {
+    const { db, calls } = fakeSupabase(ok({ id: "s1" }), ok(null), ok(null), fail("x"), ok(null), ok(null));
+    expect(await db.saveSigner({ user_id: "u1", sign_key: "k", name: "Mac", device: null, trusted_from: null })).toEqual({ id: "s1" });
     await db.trustSigner("s1", "now", "s0");
     await db.revokeSigner("s1", "now");
     await expect(db.revokeSigner("s1", "now")).rejects.toThrow("Revoking the Mac key: x");
+    await db.setConfirm("s1", { confirm_hash: "h", confirm_expires_at: "e", confirm_sent_at: "t" });
+    await db.dropPinsBySigner("s1");
     const [op, row, opts] = calls[0]!.ops[0] as [string, Record<string, unknown>, object];
-    expect([op, row.revoked_at, row.endorsed_by, row.trusted_from, typeof row.added_at, opts]).toEqual(["upsert", null, null, "t", "string", { onConflict: "user_id,sign_key" }]);
+    expect([op, row.revoked_at, row.endorsed_by, row.trusted_from, typeof row.added_at, opts]).toEqual(["upsert", null, null, null, "string", { onConflict: "user_id,sign_key" }]);
     expect(calls[0]!.ops.slice(1)).toEqual([["select", SIGNER], ["single"]]);
-    expect(calls[1]!.ops).toEqual([["update", { trusted_from: "now", endorsed_by: "s0" }], ["eq", "id", "s1"]]);
+    expect(calls[1]!.ops).toEqual([["update", { trusted_from: "now", endorsed_by: "s0", confirm_hash: null, confirm_expires_at: null }], ["eq", "id", "s1"]]);
     expect(calls[2]!.ops).toEqual([["update", { revoked_at: "now" }], ["eq", "id", "s1"]]);
+    expect(calls[4]!.ops).toEqual([["update", { confirm_hash: "h", confirm_expires_at: "e", confirm_sent_at: "t" }], ["eq", "id", "s1"]]);
+    expect(calls[5]).toEqual({ table: "connector_worker_pins", ops: [["delete"], ["eq", "signer_id", "s1"]] });
   });
 });
 

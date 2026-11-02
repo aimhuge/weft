@@ -2,7 +2,7 @@ import { connection } from "next/server";
 import { connectorDeps } from "@/lib/connector-deps";
 import { sweep } from "@/lib/connector-sweep";
 
-// The connector minter's hourly sweep (lib/connector-sweep.ts, docs/architecture/connectors.md), on the deployed Weft:
+// The connector minter's daily sweep (lib/connector-sweep.ts, docs/architecture/connectors.md), on the deployed Weft:
 // Vercel's cron (vercel.json) calls it with `Authorization: Bearer $CRON_SECRET`. It ends what grants past their
 // lifetime left behind and retries the token deletes and disconnects GitHub didn't confirm.
 

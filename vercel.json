@@ -4,6 +4,6 @@
   "crons": [
     { "path": "/api/league/emails", "schedule": "0 13 * * *" },
     { "path": "/api/cron/r2-mirror", "schedule": "30 3 * * *" },
-    { "path": "/api/cron/connectors", "schedule": "7 * * * *" }
+    { "path": "/api/cron/connectors", "schedule": "17 4 * * *" }
   ]
 }

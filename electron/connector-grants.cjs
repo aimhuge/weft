@@ -130,7 +130,7 @@ function registerConnectorGrants(handle, deps) {
     const statement = { userId: uid, workerId: worker, connector, settings: next, nonce: nonce(), issuedAt: now(), prevEpoch: Number(was?.epoch ?? 0) };
     const sig = await sign(grantMessage(statement));
     const r = await call("POST", "/github/grant", { workerId: worker, connector, settings: next, nonce: statement.nonce, issuedAt: statement.issuedAt, prevEpoch: statement.prevEpoch, signerKey: key, sig });
-    return { ok: true, settings: next, waitingUntil: r.waitingUntil ?? null };
+    return { ok: true, settings: next, waiting: r.waiting === true };
   });
 
   // Allows one project or card under a per-project or per-card approval, after Touch ID.
@@ -147,12 +147,11 @@ function registerConnectorGrants(handle, deps) {
     return { ok: true };
   });
 
-  // This Mac's key, registered if it wasn't (no Touch ID: it's this Mac's own key, and a new one only waits), and
-  // every Mac key of yours with whether it's trusted yet.
+  // This Mac's key and every Mac key of yours, with whether each is trusted yet. Read only: this Mac registers its key
+  // when a change it signs needs it, after that change's Touch ID, never just because Settings opened.
   handle("connectors:signers", async () => {
-    const { key } = await signer.register();
     const { signers } = await call("GET", "/signers");
-    return { mine: key, signers };
+    return { mine: await deps.signKey(), signers };
   });
 
   // Vouches for another Mac's key, so it's trusted now instead of after its day. Touch ID names it and its fingerprint.

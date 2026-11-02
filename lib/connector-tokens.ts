@@ -21,6 +21,8 @@ export interface TokenDeps {
   sleep?: (ms: number) => Promise<void>;
   // Tells you about a new grant, worker or Mac key (lib/connector-notify.ts): an email where weft.zip can send one.
   notify?: (userId: string, subject: string, text: string) => Promise<void>;
+  // weft.zip's own origin, for the links in an email (lib/connector-remote.ts connectorSite by default).
+  site?: string;
 }
 
 export interface Handed {
@@ -56,7 +58,14 @@ export async function userToken(deps: TokenDeps, userId: string): Promise<Handed
     const access = openToken(row.access_sealed, bound.access(userId), deps.key);
     if (access && reusable(issued, deps.now())) return { token: access, issuedAt: issued, login: row.github_login };
     const now = deps.now();
-    if (await deps.db.claimRefresh(userId, new Date(now).toISOString(), new Date(now + CLAIM_MS).toISOString())) return refreshNow(deps, userId, row.refresh_sealed, row.github_login);
+    if (await deps.db.claimRefresh(userId, new Date(now).toISOString(), new Date(now + CLAIM_MS).toISOString())) {
+      // Read again under the claim: a refresh that finished between the read above and the claim left a new pair, and
+      // spending the old refresh token now would fail (and lose the new one).
+      const fresh = await deps.db.tokens(userId);
+      if (fresh && fresh.access_issued_at === row.access_issued_at) return refreshNow(deps, userId, fresh.refresh_sealed, fresh.github_login);
+      await deps.db.saveTokens({ user_id: userId, refreshing_until: null });
+      continue;
+    }
     // Another mint is refreshing: its new token is what this one hands out too.
     await pause(deps);
   }
@@ -96,14 +105,30 @@ export async function refreshNow(deps: TokenDeps, userId: string, refreshSealed:
 // docs, so one made before the last refresh is never handed out again. Its predecessor is deleted at GitHub when it's
 // replaced.
 export async function narrowToken(deps: TokenDeps, o: { userId: string; workerId: string; subject: string; repo: string }): Promise<Handed> {
-  const [live, chain] = await Promise.all([deps.db.liveToken(o.workerId, o.subject), deps.db.tokens(o.userId)]);
-  if (!chain) throw new MintError(403, "GitHub isn't connected. Connect it in Weft → Settings → Devices.");
-  const seal = bound.live(o.workerId, o.subject);
-  const kept = live ? openToken(live.token_sealed, seal, deps.key) : null;
-  const parentIssued = chain.access_issued_at ? Date.parse(chain.access_issued_at) : Number.POSITIVE_INFINITY;
-  if (live && kept && live.repo === o.repo && Date.parse(live.issued_at) >= parentIssued && reusable(Date.parse(live.issued_at), deps.now())) {
-    return { token: kept, issuedAt: Date.parse(live.issued_at), login: chain.github_login };
+  for (let step = 0; step <= WAIT_STEPS; step++) {
+    const [live, chain] = await Promise.all([deps.db.liveToken(o.workerId, o.subject), deps.db.tokens(o.userId)]);
+    if (!chain) throw new MintError(403, "GitHub isn't connected. Connect it in Weft → Settings → Devices.");
+    const kept = live ? openToken(live.token_sealed, bound.live(o.workerId, o.subject), deps.key) : null;
+    const parentIssued = chain.access_issued_at ? Date.parse(chain.access_issued_at) : Number.POSITIVE_INFINITY;
+    if (live && kept && live.repo === o.repo && Date.parse(live.issued_at) >= parentIssued && reusable(Date.parse(live.issued_at), deps.now())) {
+      return { token: kept, issuedAt: Date.parse(live.issued_at), login: chain.github_login };
+    }
+    // One mint at a time makes a token for this (worker, subject): two at once would each overwrite the other's row
+    // and leave a working token nothing tracks. The other's token is what this one hands out, once it's saved.
+    const now = deps.now();
+    if (await deps.db.claimLive(o.workerId, o.subject, new Date(now).toISOString(), new Date(now + CLAIM_MS).toISOString())) {
+      try {
+        return await makeNarrow(deps, o, live && kept ? { live, token: kept } : null);
+      } finally {
+        await deps.db.releaseLive(o.workerId, o.subject);
+      }
+    }
+    await pause(deps);
   }
+  throw new MintError(503, "A token for that repo is being made. Try again in a moment.");
+}
+
+async function makeNarrow(deps: TokenDeps, o: { userId: string; workerId: string; subject: string; repo: string }, old: { live: LiveToken; token: string } | null): Promise<Handed> {
   const parent = await userToken(deps, o.userId);
   let narrowed;
   try {
@@ -113,9 +138,9 @@ export async function narrowToken(deps: TokenDeps, o: { userId: string; workerId
   }
   // The one it replaces ends first: deleted at GitHub, or kept as retired for the sweep to delete when GitHub didn't
   // confirm, so overwriting its row never loses track of a token that may still work.
-  if (live && kept) await retire(deps, { userId: o.userId, workerId: o.workerId, live, token: kept });
+  if (old) await retire(deps, { userId: o.userId, workerId: o.workerId, ...old });
   const issuedAt = deps.now();
-  await deps.db.saveLiveToken({ user_id: o.userId, worker_id: o.workerId, subject: o.subject, repo: o.repo, token_sealed: sealToken(narrowed.token, seal, deps.key), issued_at: new Date(issuedAt).toISOString(), expires_at: narrowed.expiresAt });
+  await deps.db.saveLiveToken({ user_id: o.userId, worker_id: o.workerId, subject: o.subject, repo: o.repo, token_sealed: sealToken(narrowed.token, bound.live(o.workerId, o.subject), deps.key), issued_at: new Date(issuedAt).toISOString(), expires_at: narrowed.expiresAt });
   return { token: narrowed.token, issuedAt, login: parent.login };
 }
 

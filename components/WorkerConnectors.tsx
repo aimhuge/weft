@@ -66,7 +66,7 @@ function Settings({ c, g, workerId, name, now }: { c: Connectors; g: WorkerConne
   );
 }
 
-// The Mac keys that may approve connectors: this Mac's while it waits out its day, and any other still waiting, which a
+// The Mac keys that may approve connectors: this Mac's while it waits for its emailed link, and any other still waiting, which a
 // trusted Mac can vouch for (Touch ID) or remove. Nothing shows once every key is trusted.
 function Macs({ c, now }: { c: Connectors; now: number }) {
   const keys = c.macs;
@@ -76,7 +76,7 @@ function Macs({ c, now }: { c: Connectors; now: number }) {
   const waiting = keys.signers.filter((k) => !k.trusted && k.key !== keys.mine);
   return (
     <>
-      {mine && !mine.trusted && <p className={`mt-1 ${SUBTLE}`}>This Mac can approve connectors from {new Date(mine.trustedFrom).toLocaleString()}, a day after it first asked (you were emailed), or now if a trusted Mac vouches for it.</p>}
+      {mine && !mine.trusted && <p className={`mt-1 ${SUBTLE}`}>This Mac can approve connectors once you open the link Weft emailed you, or a trusted Mac vouches for it.</p>}
       {waiting.map((k) => (
         <div key={k.id} className="mt-1 flex items-center gap-2 text-[12px] text-ink">
           <span className="min-w-0 truncate">

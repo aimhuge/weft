@@ -3,7 +3,9 @@
 // (scripts/weft-connector-helper.cjs) ask for that card's GitHub token. One JSON line each way. The card comes from the
 // capability in the asking session's env (lib/connector-env.ts), answered only for a peer process that descends from
 // the CLI the capability was handed to (lib/connector-peer.ts), and only while the helper and gh wrapper on disk are
-// the ones the daemon hashed at start (a card that rewrites them would see every other card's tokens). The repo comes
+// the ones the daemon hashed at start. That catches an accidental or careless edit; it is not a control against a card
+// running as the worker's user, which can rewrite the helper, ask, and put it back between two asks (the same user is
+// one trust domain; P4/P5 are what separate it). The repo comes
 // from that card's own checkout (its origin), never from the caller; the token comes from lib/connector-client.ts.
 // A card can still copy what it's handed: that's layer 1's accepted trade-off, and the on-box helper (P4/P5) is what
 // closes it.

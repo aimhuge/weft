@@ -124,7 +124,7 @@ Settings → Devices → **Add a worker** runs the phone's steps for a box:
 - **A Mac's approval key isn't a `devices` column.** `devices` holds each Mac's X25519 vault key, which any signed-in
   session can add, so nothing that needs a Touch ID-backed yes may trust a row there. The Ed25519 desktop approval key
   (`electron/desktop-signer.cjs`) reaches a worker only in its pairing code, and weft.zip's connectors keep their own list
-  of it, `connector_signers`, trusted after a day or a vouch from a trusted Mac
+  of it, `connector_signers`, trusted once the link emailed to the account is opened or a trusted Mac vouches for it
   ([connectors.md](connectors.md#who-may-say-yes-the-chain-of-trust)).
 - **Worker keys aren't pinned on the Mac**: `sealTarget` (`lib/workers-account.ts`) still reads the worker's box key
   from its row. The pairing checked that key; pinning it locally is H8's to use.

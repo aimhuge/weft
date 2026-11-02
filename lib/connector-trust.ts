@@ -1,16 +1,14 @@
 // Who may say yes to a connector on weft.zip (docs/architecture/connectors.md#who-may-say-yes-the-chain-of-trust): a
-// Mac's desktop approval key, registered as a signer, trusted once a trusted Mac vouched for it or COOLING_MS after it
-// was registered (and you were emailed). Every grant, Allow and worker pin carries a signature by a signer; the routes
+// Mac's desktop approval key, registered as a signer, trusted once a trusted Mac vouched for it or you opened the
+// one-time link emailed to your account (lib/connector-signer-links.ts). Every grant, Allow and worker pin carries a signature by a signer; the routes
 // check it on the way in and the mint (lib/connector-mint.ts) checks it again, against signers trusted now.
 import "server-only";
-import { createPublicKey, verify } from "node:crypto";
-import { allowMessage, grantMessage, workerMessage } from "./connector-messages";
+import { createHash, createPublicKey, verify } from "node:crypto";
+import { allowMessage, grantMessage, startMessage, workerMessage } from "./connector-messages";
 import { settingsOf } from "./connector-grant";
 import type { AllowRow, GrantRow, WorkerRow } from "./connector-db";
 import type { SignerRow, TrustDb, WorkerPin } from "./connector-db-trust";
 
-// A new Mac key waits this long before it may approve anything, unless a trusted Mac vouches for it.
-export const COOLING_MS = 24 * 3_600_000;
 // A signed statement is taken within this long of its time, and its nonce once.
 export const SIGNED_FRESH_MS = 2 * 60_000;
 
@@ -32,7 +30,10 @@ export function verifyRaw(key: string, message: string, sig: string): boolean {
 }
 
 export const isTrusted = (s: Pick<SignerRow, "trusted_from" | "revoked_at"> | null | undefined, now: number): boolean =>
-  Boolean(s && !s.revoked_at && Date.parse(s.trusted_from) <= now);
+  Boolean(s?.trusted_from && !s.revoked_at && Date.parse(s.trusted_from) <= now);
+
+// A key's fingerprint as main's Touch ID prompt and the emails show it (electron/connector-grants.cjs fingerprint).
+export const keyFingerprint = (key: string) => createHash("sha256").update(key).digest("hex").slice(0, 16).replace(/(.{4})(?!$)/g, "$1 ");
 
 // The signer behind a row, when it's the user's and trusted now; null otherwise.
 async function trustedSigner(db: TrustDb, userId: string, signerId: string | null, now: number): Promise<SignerRow | null> {
@@ -67,6 +68,16 @@ export async function pinProblem(db: TrustDb, worker: WorkerRow, now: number): P
   if (!signer) return `The Mac that vouched for ${worker.name} isn't trusted now.`;
   const message = workerMessage({ userId: worker.owner_user, workerId: worker.id, signKey: pin.sign_key, boxKey: pin.box_key });
   return verifyRaw(signer.sign_key, message, pin.sig) ? null : `${worker.name}'s pairing signature doesn't check.`;
+}
+
+// Whether a card's start was signed by a Mac of the owner's trusted now, for this worker, card, folder and repo.
+export async function startProblem(db: TrustDb, o: { userId: string; workerId: string; cardId: string; folder: string; repo: string; start: unknown }, now: number): Promise<string | null> {
+  const st = (o.start && typeof o.start === "object" ? o.start : {}) as { key?: unknown; sig?: unknown; issuedAt?: unknown };
+  if (typeof st.key !== "string" || typeof st.sig !== "string" || typeof st.issuedAt !== "number") return "That card's start wasn't signed by a Mac. Start it from the desktop board.";
+  const signer = await db.signerByKey(o.userId, st.key);
+  if (!isTrusted(signer, now)) return "That card was started from a Mac that isn't trusted now.";
+  const message = startMessage({ userId: o.userId, workerId: o.workerId, cardId: o.cardId, folder: o.folder, repo: o.repo, issuedAt: st.issuedAt });
+  return verifyRaw(st.key, message, st.sig) ? null : "That card's start signature doesn't check.";
 }
 
 export const fresh = (issuedAt: number, now: number) => Number.isFinite(issuedAt) && Math.abs(now - issuedAt) <= SIGNED_FRESH_MS;

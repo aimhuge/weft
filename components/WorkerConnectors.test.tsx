@@ -151,14 +151,14 @@ describe("WorkerConnectors", () => {
     const waiting = stub({}, { macs: { mine: "k1", signers: [mac("1", false), mac("2", false)] } });
     const { rerender } = show(waiting);
     await open();
-    expect(screen.getByText(/This Mac can approve connectors from /)).toBeInTheDocument();
+    expect(screen.getByText(/This Mac can approve connectors once you open the link Weft emailed you/)).toBeInTheDocument();
     expect(screen.getByText("Mac Mac 2, added 2h ago, waiting")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Trust" })).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: "Remove" }));
     expect(waiting.forgetMac).toHaveBeenCalledWith(mac("2", false));
     const trusted = stub({}, { macs: { mine: "k1", signers: [mac("1", true), mac("2", false)] } });
     rerender(<WorkerConnectors c={trusted} workerId="w1" name="m1mini" now={NOW} />);
-    expect(screen.queryByText(/This Mac can approve connectors from /)).toBeNull();
+    expect(screen.queryByText(/This Mac can approve connectors once/)).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: "Trust" }));
     expect(trusted.trust).toHaveBeenCalledWith(mac("2", false));
     rerender(<WorkerConnectors c={stub({}, { macs: { mine: "k9", signers: [] } })} workerId="w1" name="m1mini" now={NOW} />);

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { openToken, sealToken } from "./connector-crypto";
 import { CFG, deps, fakeDb, fakeGithub, iso, json, KEY, noContent, NOW, pair, pairedWorker, storeTokens, ticking, type FakeState, type Route } from "./connector.harness";
-import { signedGrant, trustedMac, vouch } from "./connector-trust.harness";
+import { signedGrant, signedStartPayload, trustedMac, vouch } from "./connector-trust.harness";
 import { ROTATE_MS } from "./connector-grant";
 import { mint } from "./connector-mint";
 import { disconnect, endAuthorization, revokeWorker, YOUNG_MS } from "./connector-revoke";
@@ -78,7 +78,7 @@ describe("revokeWorker", () => {
     const w = pairedWorker(s.state, { id: "w9", name: "Nine" });
     vouch(s.state, s.mac, w.worker);
     signedGrant(s.state, s.mac, { id: "g9", worker_id: "w9" });
-    s.state.starts.push({ worker_id: "w9", card_id: "card-1", kind: "run", folder: "r", payload: { repo: "o/r" }, created_by: "u1" });
+    s.state.starts.push({ worker_id: "w9", card_id: "card-1", kind: "host", folder: "r", payload: signedStartPayload(s.mac, { workerId: "w9" }), created_by: "u1" });
     storeTokens(s.state, "u1", { issuedAt: NOW - ROTATE_MS });
     const answer = await mint(s.d, w.auth, w.signed({ connector: "github", cardId: "card-1", repo: "o/r", ts: s.clock(), nonce: "a".repeat(32) }));
     expect(answer.body.token).toBe("ghu_new1");
@@ -133,6 +133,23 @@ describe("revokeWorker", () => {
     };
     expect((await revokeWorker(d, "u1", "w1")).userToken).toBe("rotated");
     expect(s.gh.called("POST", "/login/oauth/access_token")).toHaveLength(1);
+  });
+
+  it("lets the claim go and looks again when a refresh landed between its read and its claim", async () => {
+    const s = setup();
+    handed(s.state, NOW - 60_000);
+    let reads = 0;
+    const db = {
+      ...s.db,
+      tokens: async (u: string) => {
+        // The second read (under the claim) sees a pair someone else just made, which this worker was never handed.
+        if (reads++ === 1) storeTokens(s.state, "u1", { access: "ghu_theirs", issuedAt: NOW + 1 });
+        return s.db.tokens(u);
+      },
+    };
+    expect((await revokeWorker({ ...s.d, db }, "u1", "w1")).userToken).toBe("rotated");
+    expect(s.gh.called("POST", "/login/oauth/access_token")).toHaveLength(0);
+    expect(s.state.tokens.get("u1")!.refreshing_until).toBeNull();
   });
 
   it("is unconfirmed when the refresh stays claimed", async () => {
