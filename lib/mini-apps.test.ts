@@ -219,3 +219,14 @@ describe("blobPageSha", () => {
     expect(blobPageSha(42)).toBeNull();
   });
 });
+
+describe("worker apps", () => {
+  it("names a worker page's app by its sha and knows its folder", async () => {
+    const { isWorkerAppFolder, workerAppId } = await import("./mini-apps");
+    expect(workerAppId("0123456789abcdef".repeat(4))).toBe("worker-0123456789abcdef");
+    expect(isWorkerAppFolder("/Users/me/.weft/apps/Worker-0123/")).toBe(true);
+    expect(isWorkerAppFolder("worker-1")).toBe(true);
+    expect(isWorkerAppFolder("/Users/me/.weft/apps/growth")).toBe(false);
+    expect(isWorkerAppFolder("")).toBe(false);
+  });
+});

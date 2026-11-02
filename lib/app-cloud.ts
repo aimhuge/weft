@@ -13,7 +13,7 @@ import { resolvePage } from "./blob-paths";
 import { createBlobStore, sha256Of } from "./blob-store";
 import { syncOrgId } from "./cloud-sync";
 import { globalSingleton } from "./global-singleton";
-import type { MiniApp } from "./mini-apps";
+import { isWorkerAppFolder, type MiniApp } from "./mini-apps";
 import { listApps, insertAppAt } from "./mini-app-store";
 import { DATA_DIR } from "./store";
 
@@ -85,7 +85,8 @@ async function buildPayload(app: MiniApp, orgId: string): Promise<Payload | null
   const sha = await sha256Of(resolved.local);
   if (!sha) return null;
   const appDir = path.dirname(resolved.local);
-  const manifest = path.dirname(appDir) === APPS_DIR() ? readManifest(appDir) : undefined;
+  // A worker card's page carries no manifest anywhere (lib/mini-apps.ts isWorkerAppFolder).
+  const manifest = path.dirname(appDir) === APPS_DIR() && !isWorkerAppFolder(appDir) ? readManifest(appDir) : undefined;
   const isFolder = manifest !== undefined;
   return {
     local: resolved.local,
@@ -168,7 +169,7 @@ async function pullOne(client: SupabaseClient, row: CloudRow, orgId: string) {
   const appDir = path.join(APPS_DIR(), row.app_id);
   fs.mkdirSync(appDir, { recursive: true });
   fs.copyFileSync(file, path.join(appDir, "index.html"));
-  if (row.kind === "folder" && row.manifest) {
+  if (row.kind === "folder" && row.manifest && !isWorkerAppFolder(row.app_id)) {
     fs.writeFileSync(path.join(appDir, "weft-app.json"), JSON.stringify(row.manifest, null, 2));
   }
   const url = pathToFileURL(path.join(APPS_DIR(), row.app_id, "index.html")).href;

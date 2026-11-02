@@ -41,9 +41,16 @@ anything but HTML, a page over 5 MB, and bytes that don't hash to the address (n
 app) and saves it under the name given, else the page's `<title>`, with `source` naming the blob (`MiniApp.source`), so
 `appFor` lights the button on that page. From there it is an ordinary app: the rail opens it on this Mac,
 `cloud_mini_apps` carries it to your other Macs, and Share… serves it at `weft.zip/a/<id>` and the owner's links, on the
-web and the phone. A worker page is one file today, so nothing beside it comes along. Once saved it is a `file:` page
-in the pane, out of the blob route's CSP sandbox: like a thread's `~/.weft/show` page it gets `window.weft`, which stays
-inert without a `weft-app.json` and Touch ID, but `liveData` (`/api/infra/live`) answers it. The weft.zip board's pane has no
+web and the phone. A worker page is one file today, so nothing beside it comes along. **It gets no more power than it had
+where it came from**, where it ran in a CSP sandbox: the app's id is its folder's name, `worker-<sha16>`
+(`workerAppId`, `isWorkerAppFolder` in `lib/mini-apps.ts`), here and on every Mac cloud sync brings it to, and main
+refuses that folder's pages every `window.weft` capability, by the real path the file is in, never by what the page
+says: data reads, `fetch`, `env` and `requestSecret` (`appFolderFromUrl` in `electron/app-data-frame.cjs`, even with a
+`weft-app.json` beside it and a Touch ID), `liveData` (`electron/live-data.cjs`, `isWorkerAppPage`) and Upload secrets
+(`electron/app-secrets-push.cjs`). Its manifest never travels: `lib/app-cloud.ts` pushes it as a `file` row and a pull
+writes no `weft-app.json` for a `worker-` id, and `lib/app-share.ts` shares it as one page, never a folder, so the hosted
+bridge on weft.zip has no policy for it either. The prefix is one rule in two files (`WORKER_APP_PREFIX` in
+`lib/mini-apps.ts` and `electron/app-data-frame.cjs`), as main can't import `.ts`. The weft.zip board's pane has no
 Save as app: mini apps live on a Mac.
 
 ## Sharing an app

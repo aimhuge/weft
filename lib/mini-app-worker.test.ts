@@ -40,7 +40,7 @@ describe("saveWorkerPageApp", () => {
   it("brings the page home and saves it as an app that remembers the blob it came from", async () => {
     const app = await saveWorkerPageApp(PAGE, "  ", html("<html><title> Burndown </title></html>"), h.dir);
     expect(fs.readFileSync(file(), "utf8")).toBe("<html><title> Burndown </title></html>");
-    expect(app).toMatchObject({ name: "Burndown", url: pathToFileURL(file()).href, source: `blob:sha256:${SHA}` });
+    expect(app).toMatchObject({ id: `worker-${SHA.slice(0, 16)}`, name: "Burndown", url: pathToFileURL(file()).href, source: `blob:sha256:${SHA}` });
     expect(listApps()).toEqual([app]);
   });
 

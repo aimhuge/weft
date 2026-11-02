@@ -9,7 +9,7 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { blobPageSha, cleanAppName, type MiniApp } from "./mini-apps";
+import { blobPageSha, cleanAppName, workerAppId, type MiniApp } from "./mini-apps";
 import { saveApp } from "./mini-app-store";
 import { DATA_DIR } from "./store";
 
@@ -41,8 +41,9 @@ export async function saveWorkerPageApp(page: unknown, name: unknown, read: Read
   // anything else under that name was put there by someone else in the workspace.
   if (createHash("sha256").update(bytes).digest("hex") !== sha) throw new Error("That page's bytes don't match its address, so it wasn't saved.");
   const html = new TextDecoder().decode(bytes);
-  const file = path.join(home, "apps", `worker-${sha.slice(0, 16)}`, "index.html");
+  const id = workerAppId(sha);
+  const file = path.join(home, "apps", id, "index.html");
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, html);
-  return saveApp(pathToFileURL(file).href, cleanAppName(name) ?? cleanAppName(titleOf(html)) ?? "Worker page", `blob:sha256:${sha}`);
+  return saveApp(pathToFileURL(file).href, cleanAppName(name) ?? cleanAppName(titleOf(html)) ?? "Worker page", { source: `blob:sha256:${sha}`, id });
 }

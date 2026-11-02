@@ -47,6 +47,13 @@ export function blobPageSha(raw: unknown): string | null {
   return typeof raw === "string" ? (/^blob:sha256:([0-9a-f]{64})(#.*)?$/.exec(raw.trim())?.[1] ?? null) : null;
 }
 
+// An app saved from a worker card's page lives in ~/.weft/apps/worker-<sha16>/ under that id (lib/mini-app-worker.ts),
+// on this Mac and every Mac cloud sync brings it to. The page was written off this Mac and ran in a CSP sandbox there,
+// so nothing gives it more here: no data bridge in the pane (electron/app-data-frame.cjs), no manifest synced or shared.
+export const WORKER_APP_PREFIX = "worker-";
+export const workerAppId = (sha: string) => `${WORKER_APP_PREFIX}${sha.slice(0, 16)}`;
+export const isWorkerAppFolder = (folder: string) => (folder.split(/[\\/]/).filter(Boolean).pop() ?? "").toLowerCase().startsWith(WORKER_APP_PREFIX);
+
 export function cleanAppName(raw: unknown): string | undefined {
   const name = typeof raw === "string" ? raw.replace(/\s+/g, " ").trim().slice(0, MAX_APP_NAME).trim() : "";
   return name || undefined;

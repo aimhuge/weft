@@ -73,11 +73,12 @@ function readAppManifest(dataDir, app) {
   // The apps dir is the only place we trust; the rest of the file tree isn't ours. isInside
   // realpath's both sides so macOS's /var/folders/... → /private/var/folders/... symlink (and
   // any dataDir under it) doesn't fool the startsWith.
-  const { isInside } = require("./app-data-frame.cjs");
+  const { isInside, isWorkerAppPath, WORKER_APP_REFUSED } = require("./app-data-frame.cjs");
   const appsDir = path.join(dataDir, "apps");
   if (!isInside(appsDir, folder)) {
     throw new Error("This app's folder is outside Weft's apps directory.");
   }
+  if (isWorkerAppPath(dataDir, folder)) throw new Error(WORKER_APP_REFUSED);
   const manifestPath = path.join(folder, "weft-app.json");
   if (!fs.existsSync(manifestPath)) throw new Error("This app has no weft-app.json.");
   let manifest;
