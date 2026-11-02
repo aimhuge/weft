@@ -94,6 +94,7 @@ async function loadEngine() {
     import("../lib/worker-secret-run"),
     import("../lib/worker-secret-wiring"),
     import("../lib/worktree-pool"),
+    import("../lib/worker-browser-screen"),
   ]);
   return { store, parts };
 }
@@ -108,7 +109,7 @@ async function startCommand() {
   const config = readWorkerConfig(home);
   if (!config) throw new Error("This box isn't enrolled yet. Run: weft-worker enrol <token>");
   const { store, parts } = await loadEngine();
-  const [{ startFeatureCard }, , , { subscribe }, { createDaemon }, { createPublisher }, paths, github, folderGrant, { createBlobStore }, { SHOW_DIR }, { setPageUpload }, { busyCards }, { recoverCards }, { resumeInterrupted }, { openScreenChannel, screenInput, setFastScreen, setScreenChannel, fastScreenOf, watcherOf }, { sendInput }, { openFastScreen }, { setDeviceLink }, { deviceLink }, { isMobileApp }, { runVerb }, { startScheduler }, { createHostLines }, { readProjectSnapshot }, { createProjectPublisher }, { listProjectFolders }, { setSecretLink, forgetOnTurnEnd }, { secretWiring }, { startWorktreePool }] = parts;
+  const [{ startFeatureCard }, , , { subscribe }, { createDaemon }, { createPublisher }, paths, github, folderGrant, { createBlobStore }, { SHOW_DIR }, { setPageUpload }, { busyCards }, { recoverCards }, { resumeInterrupted }, { openScreenChannel, screenInput, setFastScreen, setScreenChannel, fastScreenOf, watcherOf }, { sendInput }, { openFastScreen }, { setDeviceLink }, { deviceLink }, { isMobileApp }, { runVerb }, { startScheduler }, { createHostLines }, { readProjectSnapshot }, { createProjectPublisher }, { listProjectFolders }, { setSecretLink, forgetOnTurnEnd }, { secretWiring }, { startWorktreePool }, browserScreen] = parts;
   const reg = registry(rpc, config.key);
   // The public half goes on the worker's row, so Settings → Sync → Workers can seal a Claude token to this box.
   const keys = workerSealKeys(home, newSealKeys);
@@ -122,6 +123,8 @@ async function startCommand() {
   const readBlob = workerBlobReader(config.key, MAX_TRAVEL_BYTES);
   setPageUpload((file) => blobs.uploadPage(file, config.orgId));
   setScreenChannel((topic) => openScreenChannel(client, topic));
+  // The worker's browser, live in the pane on the same kind of topic (lib/worker-browser-screen.ts).
+  browserScreen.setBrowserScreenChannel((topic) => openScreenChannel(client, topic));
   setDeviceLink(deviceLink(reg, config.key));
   // A card's mcp__secrets__run asks the owner's Mac, and the answer comes back sealed to this box (lib/worker-secret-run.ts).
   const secrets = secretWiring(home, reg, keys);
@@ -142,9 +145,9 @@ async function startCommand() {
       await channel.answer(sealed).finally(() => setTimeout(() => channel.close(), 5_000));
     },
     hear: (listener) => publisher.mirror(listener),
-    screen: fastScreenOf,
+    screen: (device) => browserScreen.browserScreenOf(device) ?? fastScreenOf(device),
     watcher: (device) => {
-      const id = watcherOf(device);
+      const id = browserScreen.browserWatcherOf(device) ?? watcherOf(device);
       return id ? store.getCard(id) : undefined;
     },
     log: console.log,
@@ -176,7 +179,8 @@ async function startCommand() {
       carry: (json) => results.put(json),
       receive: (text, payload) => receiveAttachments(text, attachmentsOf(payload), attachments, readBlob),
       grant: folderGrant.applyFolderGrant,
-      input: (input, cardId) => screenInput(input, sendInput, cardId),
+      // A browser device is the card's own headless Chromium; anything else, a simulator.
+      input: (input, cardId) => (browserScreen.isBrowserScreen(input.device) ? browserScreen.browserInput(input, cardId) : screenInput(input, sendInput, cardId)),
       setQa: (id, qaDevice) => void store.updateCard(id, { qaDevice }),
       getCard: store.getCard,
       live: () => busyCards().length > 0,
