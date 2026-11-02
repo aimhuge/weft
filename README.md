@@ -988,6 +988,11 @@ menu to switch simulators, **Resume** when the 10 minutes run out, and a Low / M
 no tap latency, while the worker's agent keeps driving it. A build runs as you, so it asks for Touch ID, once per card for 8 hours. If the Mac
 sleeps, the agent falls back to the worker's own device.
 
+**Dev servers and tunnels on a worker.** A worker's dev servers show in 🖥 Services under the worker's name. **Open**
+gives one a private address that only you can open, after your Touch ID on your Mac, and shows it in the pane; a worker
+card's `mcp__webhooks__tunnel` and `relay` ask your Mac the same way, so a provider's webhook reaches the worker's route
+through that address.
+
 **Live worker simulators.** Watching an iOS simulator on a worker streams live video to the pane over an encrypted WebRTC connection, and your clicks, drags and keys reach it as you make them. If the connection can't be made, the pane stays on the slower picture stream.
 
 **Weft Workers.** A worker is a Mac or Linux box that runs cards headless while your laptop sleeps. Settings → Sync →

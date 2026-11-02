@@ -61,6 +61,11 @@ export function registry(rpc: Rpc, key: string) {
     secretAsk: (cardId: string, args: unknown) => call<string | null>(rpc, "worker_secret_ask", { p_key: key, p_card: cardId, p_args: args }),
     deviceResult: (id: string) => call<DeviceAnswer | null>(rpc, "worker_device_result", { p_key: key, p_call: id }),
     deviceCancel: (id: string) => call<boolean>(rpc, "worker_device_cancel", { p_key: key, p_call: id }),
+    // A tunnel's Touch ID or a relay's sealed secret, asked of the owner's Mac (lib/worker-mac-ask.ts).
+    macAsk: (cardId: string, tool: string, args: unknown) => call<string | null>(rpc, "worker_mac_ask", { p_key: key, p_card: cardId, p_tool: tool, p_args: args }),
+    tunnelOpen: (id: string, url: string, secret: string) => call<string | null>(rpc, "worker_tunnel_open", { p_key: key, p_tunnel: id, p_url: url, p_secret: secret }),
+    tunnelClose: (id: string) => call<unknown>(rpc, "worker_tunnel_close", { p_key: key, p_tunnel: id }).then(() => undefined),
+    setDevServers: (servers: unknown[]) => call<unknown>(rpc, "worker_set_dev_servers", { p_key: key, p_servers: servers }),
     pending: async () => (await call<CloudCommandRow[] | null>(rpc, "worker_pending", { p_key: key })) ?? [],
     claim: (id: string) => call<boolean>(rpc, "worker_claim", { p_key: key, p_command: id }),
     // A host command's result goes as p_result; the other kinds leave it off, so they still report to a database

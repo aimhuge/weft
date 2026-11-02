@@ -50,6 +50,9 @@ export const HOST_API = {
   "files.list": { elevated: false, run: lazy(() => import("./files"), "listFilesVerb") },
   "files.read": { elevated: false, run: lazy(() => import("./files"), "readFileVerb") },
   "files.write": { elevated: true, run: lazy(() => import("./files"), "writeFileVerb") },
+  // A card's dev server: a private address for it (a tunnel, after the owner's Touch ID on their Mac), or its end.
+  "dev.open": { elevated: false, run: lazy(() => import("./dev-servers"), "devOpenVerb") },
+  "dev.stop": { elevated: false, run: lazy(() => import("./dev-servers"), "devStopVerb") },
 } satisfies Record<HostVerb, Handler>;
 
 type Table = typeof HOST_API;

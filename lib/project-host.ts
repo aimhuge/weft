@@ -80,6 +80,8 @@ const LOCAL: Record<HostVerb, LocalCall> = {
   "files.list": (a) => filesApi.list(a.id),
   "files.read": (a) => (a.at === "HEAD" ? filesApi.head(a.id, text(a.path)) : filesApi.read(a.id, text(a.path))),
   "files.write": (a) => filesApi.write(a.id, text(a.path), text(a.text), a.baseHash as string | null | undefined),
+  "dev.open": (a) => call("POST", `/api/cards/${a.id}/dev`, { action: "open" }),
+  "dev.stop": (a) => api.devAction(a.id, "stop"),
 };
 
 export const localHost: ProjectHost = {

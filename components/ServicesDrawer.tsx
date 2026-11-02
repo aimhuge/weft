@@ -11,10 +11,11 @@ import type { Card, MachineInfo, ServiceEntry } from "@/lib/types";
 import DevLaunchers from "./DevLaunchers";
 import Icon from "./Icon";
 import ServicesSummary from "./ServicesSummary";
+import WorkerDevServers from "./WorkerDevServers";
 import { Note } from "./VaultParts";
 
 type Services = ReturnType<typeof useServices>;
-type Props = Pick<Services, "services" | "loaded" | "error" | "kill" | "restart" | "refreshMs"> & Partial<Pick<Services, "launchers" | "launch">> & {
+type Props = Pick<Services, "services" | "loaded" | "error" | "kill" | "restart" | "refreshMs"> & Partial<Pick<Services, "launchers" | "launch" | "workers">> & {
   // This Mac's cores and RAM, once the first list arrives.
   machine?: MachineInfo;
   // The top bar's project, or null for every project.
@@ -28,11 +29,11 @@ type Props = Pick<Services, "services" | "loaded" | "error" | "kill" | "restart"
 
 const BUTTON = "rounded px-1.5 py-0.5 text-muted hover:bg-sunken disabled:opacity-50";
 
-// The rail's Services drawer: first each working folder's dev servers to start and stop (DevLaunchers),
-// then how busy the Mac is, then everything Weft spawned, one row per thread CLI, dev server, terminal
-// or other command, with its CPU and memory. A thread's row names its card, which a click opens.
+// The rail's Services drawer: first each working folder's dev servers to start and stop (DevLaunchers) and your
+// workers' (WorkerDevServers), then how busy the Mac is, then everything Weft spawned, one row per thread CLI, dev
+// server, terminal or other command, with its CPU and memory. A thread's row names its card, which a click opens.
 // Expand a row for its processes; ✕ ends a service or one process.
-export default function ServicesDrawer({ services, launchers = [], launch, machine, loaded, error, kill, restart, refreshMs, project, cards = [], onOpenCard, onOpenUrl, notify }: Props) {
+export default function ServicesDrawer({ services, launchers = [], workers = [], launch, machine, loaded, error, kill, restart, refreshMs, project, cards = [], onOpenCard, onOpenUrl, notify }: Props) {
   const now = useNow();
   const [busy, setBusy] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
@@ -61,6 +62,7 @@ export default function ServicesDrawer({ services, launchers = [], launch, machi
   return (
     <div className="flex flex-col">
       {launch && <DevLaunchers launchers={filterLaunchers(launchers, project)} launch={launch} stop={(id) => kill({ id })} onOpenCard={openById} onOpenUrl={onOpenUrl} notify={notify} />}
+      <WorkerDevServers groups={workers} project={project} onOpenUrl={onOpenUrl} notify={notify} />
       <div className="flex items-center gap-2 px-3 py-1.5 text-[11px] text-muted">
         <span className="flex-1 truncate text-ink" title={summary.share}>
           {summary.headline}

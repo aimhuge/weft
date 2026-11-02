@@ -18,6 +18,7 @@ const api = vi.hoisted(() => ({
   stopTask: vi.fn(),
   schedule: vi.fn(),
   unschedule: vi.fn(),
+  devAction: vi.fn(),
 }));
 const call = vi.hoisted(() => vi.fn());
 vi.mock("./client", () => ({ api, call }));
@@ -135,6 +136,8 @@ describe("localHost", () => {
     ["files.read", { id: "c1", path: "a.ts" }, filesApi.read, ["c1", "a.ts"]],
     ["files.read", { id: "c1", path: "a.ts", at: "HEAD" }, filesApi.head, ["c1", "a.ts"]],
     ["files.write", { id: "c1", path: "a.ts", text: "x", baseHash: "h" }, filesApi.write, ["c1", "a.ts", "x", "h"]],
+    ["dev.open", { id: "c1" }, call, ["POST", "/api/cards/c1/dev", { action: "open" }]],
+    ["dev.stop", { id: "c1" }, api.devAction, ["c1", "stop"]],
   ] as const)("%s goes to the route the board has always called", async (verb, args, fn, expected) => {
     const run = localHost.act as (verb: string, args: unknown) => Promise<void>;
     await run(verb, args);

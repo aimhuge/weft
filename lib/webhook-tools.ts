@@ -3,6 +3,7 @@ import { z } from "zod";
 import { attempt, shell, text } from "./browser-tools";
 import { closeTunnel, DEFAULT_HOURS, listTunnels, MAX_HOURS, openTunnel } from "./tunnels";
 import { createRelay } from "./webhook-forward";
+import { createRelayOnWorker } from "./relay-worker";
 import { addWebhook, listWebhooks, updateWebhook, type Webhook } from "./webhooks";
 
 // The 🪝 webhooks for threads (docs/architecture/webhooks.md): a thread records the routes providers post to as
@@ -51,8 +52,11 @@ async function record(folder: string, a: AddArgs) {
   return added;
 }
 
-/** mcp__webhooks__*. folder is the card's project, read when a tool runs. */
-export function webhooksMcpServer(folder: () => string) {
+// A worker's relay and tunnel are approved on its owner's Mac (lib/relay-worker.ts, lib/tunnel-worker.ts).
+const onWorker = () => process.env.WEFT_WORKER === "1";
+
+/** mcp__webhooks__*. folder is the card's project and cardId its card, read when a tool runs. */
+export function webhooksMcpServer(folder: () => string, cardId: () => string | undefined = () => undefined) {
   const where = (p?: string) => p ?? folder();
   return createSdkMcpServer({
     name: "webhooks",
@@ -96,9 +100,11 @@ export function webhooksMcpServer(folder: () => string) {
         { name: NAME, project: PROJECT },
         ({ name, project }) =>
           attempt(async () => {
-            const hook = await createRelay(findHook(where(project), name).id);
+            const id = findHook(where(project), name).id;
+            const hook = onWorker() ? await createRelayOnWorker(id, cardId()) : await createRelay(id);
+            const reach = onWorker() ? `through this worker's tunnel to ${hook.target}: open one with mcp__webhooks__tunnel, or the provider is told to retry` : `to ${hook.target} while Weft runs`;
             return text(
-              `${hook.name} has a public URL: ${hook.url}\nRegister it with the provider${hook.hint ? ` (${hook.hint})` : ""}. Deliveries forward to ${hook.target} while Weft runs. Once it's registered, call mcp__webhooks__mark_registered.`,
+              `${hook.name} has a public URL: ${hook.url}\nRegister it with the provider${hook.hint ? ` (${hook.hint})` : ""}. Deliveries forward ${reach}. Once it's registered, call mcp__webhooks__mark_registered.`,
             );
           }),
       ),
@@ -108,7 +114,7 @@ export function webhooksMcpServer(folder: () => string) {
         { target: z.string().describe("The dev server, e.g. http://localhost:3000"), hours: z.number().min(0.25).max(MAX_HOURS).optional().describe(`Hours until it closes; defaults to ${DEFAULT_HOURS}`), project: PROJECT },
         ({ target, hours, project }) =>
           attempt(async () => {
-            const t = await openTunnel({ folder: where(project), target, hours });
+            const t = await openTunnel({ folder: where(project), target, hours, cardId: cardId() });
             return text(`${t.target} is open at ${t.address}, for you only, until ${new Date(t.expiresAt).toLocaleTimeString()}. Relays to this server now answer through it.`);
           }),
       ),
