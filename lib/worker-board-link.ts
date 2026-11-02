@@ -8,7 +8,7 @@ import path from "node:path";
 import { formatProjectAddress, isWorkerPath, localAddress, parseProjectAddress, workerAddress } from "./host/address";
 import { isSealed, SEALED_CARD_FIELDS, SEALED_TITLE } from "./sync-seal";
 import type { Card } from "./types";
-import type { BoardRow } from "./worker-registry";
+import type { BoardRow, MacCronsRow } from "./worker-registry";
 
 export interface BoardLink {
   workerId: string;
@@ -17,6 +17,8 @@ export interface BoardLink {
   cards(limit: number): Promise<BoardRow[]>;
   newCard(target: string, folder: string, payload: Record<string, unknown>): Promise<string>;
   setLists(crons: unknown[], webhooks: unknown[]): Promise<unknown>;
+  // The owner's Macs' crons, for list_crons to show read-only; absent on a wiring that predates it.
+  macCrons?(): Promise<MacCronsRow[]>;
 }
 
 let link: BoardLink | null = null;

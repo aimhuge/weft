@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("./account", () => ({ accountClient: () => ({}) }));
 
-const { forgetWorkerLists, isWorkerItem, placeLists, readWorkerLists, workerItemRefused, workerLists } = await import("./worker-lists-read");
+const { forgetWorkerLists, forgetWorkerListsSoon, isWorkerItem, placeLists, readWorkerLists, workerLists } = await import("./worker-lists-read");
 
 type Answer = { data: unknown; error: unknown };
 function client({ session = true, lists = { data: [], error: null }, workers = { data: [], error: null }, throws = false }: { session?: boolean; lists?: Answer; workers?: Answer; throws?: boolean } = {}) {
@@ -61,11 +61,23 @@ describe("workerLists", () => {
     forgetWorkerLists();
     await workerLists(20_001);
   });
+
+  it("forgets now and again once the worker has republished", async () => {
+    vi.useFakeTimers();
+    const read = vi.fn(() => Promise.resolve({ crons: [], webhooks: [] }));
+    await workerLists(1_000, read);
+    forgetWorkerListsSoon(3_000);
+    await workerLists(1_001, read);
+    expect(read).toHaveBeenCalledTimes(2);
+    vi.advanceTimersByTime(3_000);
+    await workerLists(1_002, read);
+    expect(read).toHaveBeenCalledTimes(3);
+    vi.useRealTimers();
+  });
 });
 
 describe("worker items", () => {
-  it("are told apart by id, and refused with where to change them", () => {
+  it("are told apart by id", () => {
     expect([isWorkerItem("worker:w1:c1"), isWorkerItem("c1")]).toEqual([true, false]);
-    expect(workerItemRefused("webhook")).toMatch(/^That webhook lives on a Weft Worker/);
   });
 });

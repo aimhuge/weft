@@ -58,8 +58,8 @@ export const TONE_LABEL: Record<RunTone, string> = {
   gone: "card deleted",
 };
 
-// One line under the cron's name: its schedule, what each run does and who made it.
+// One line under the cron's name: its schedule, what each run does, who made it and the Weft Worker it fires on.
 export function cronSummary(cron: Cron, sourceTitle?: string): string {
   const what = cron.mode === "fork" ? `forks “${sourceTitle ?? cron.name}”` : "fresh thread";
-  return `${describeCron(cron.expr)} · ${what}${cron.by === "thread" ? " · made by a thread" : ""}`;
+  return `${describeCron(cron.expr)} · ${what}${cron.by === "thread" ? " · made by a thread" : ""}${cron.worker ? ` · on ${cron.worker}` : ""}`;
 }

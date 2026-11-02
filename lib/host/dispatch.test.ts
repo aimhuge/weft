@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { CloudCommandRow } from "../cloud-commands";
 import type { Card } from "../types";
-import { asAnswer, cardKinds, dispatcher, type CardRules } from "./dispatch";
+import { asAnswer, cardKinds, dispatcher, NO_LISTS, type CardRules } from "./dispatch";
 
 const cmd = (kind: string, payload: unknown) => ({ id: "c1", kind, folder: "/dev/app", payload }) as CloudCommandRow;
 const card = { id: "k1", cwd: "/dev/app", pending: { id: "p1", readScope: { directory: "/data" } } } as unknown as Card;
@@ -117,6 +117,30 @@ describe("cardKinds", () => {
     const out = asAnswer(cmd("host", {}), { verb: "card.permission.answer", args: { id: "k1", pendingId: "p1", allow: true } });
     expect(out.kind).toBe("answer");
     expect(out.payload).toMatchObject({ cardId: "k1", pendingId: "p1", allow: true });
+  });
+});
+
+describe("a cron or webhook the host keeps", () => {
+  const update = cmd("host", { verb: "cron.update", args: { id: "cr1", patch: { enabled: false } } });
+
+  it("runs it through the host's lists rule, with no card check, and leaves the row's card empty", async () => {
+    const lists = vi.fn<NonNullable<CardRules["lists"]>>(() => Promise.resolve(null));
+    const r = rules({ lists });
+    expect(await cardKinds(r).host(update)).toEqual({ cardId: null, result: { ok: true, cardId: "" } });
+    expect(lists).toHaveBeenCalledWith("cron.update", { id: "cr1", patch: { enabled: false } });
+    expect(r.card).not.toHaveBeenCalled();
+    lists.mockResolvedValueOnce("run-1");
+    expect(await cardKinds(r).host(cmd("host", { verb: "cron.run", args: { id: "cr1" } }))).toEqual({ cardId: null, result: { ok: true, cardId: "run-1" } });
+  });
+
+  it("refuses what the drawers can't change, and a host without the rule refuses them all", async () => {
+    const lists = vi.fn<NonNullable<CardRules["lists"]>>(() => Promise.resolve(null));
+    const bang = cmd("host", { verb: "cron.update", args: { id: "cr1", patch: { prompt: "!rm -rf /" } } });
+    await expect(cardKinds(rules({ lists })).host(bang)).rejects.toThrow(/shell line/);
+    const target = cmd("host", { verb: "webhook.update", args: { id: "h1", patch: { target: "http://localhost:9/x" } } });
+    await expect(cardKinds(rules({ lists })).host(target)).rejects.toThrow(/can't change a webhook's target/);
+    expect(lists).not.toHaveBeenCalled();
+    await expect(cardKinds(rules()).host(update)).rejects.toThrow(NO_LISTS);
   });
 });
 

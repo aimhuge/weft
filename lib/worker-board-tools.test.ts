@@ -11,6 +11,7 @@ vi.mock("./store", () => ({ DATA_DIR: "/tmp/weft-wbt-data", getCard: (id: string
 
 const { AGENT_REFUSED, CRON_ELSEWHERE, onWorkerBoard, workerCreateCard, workerListCards } = await import("./worker-board-tools");
 const { setBoardLink } = await import("./worker-board-link");
+const { MAC_CRON_REFUSED } = await import("./worker-mac-crons");
 
 let root = "";
 const rows: BoardRow[] = [];
@@ -89,7 +90,7 @@ describe("onWorkerBoard", () => {
   const original = vi.fn<Handler>(() => Promise.resolve({ content: [{ text: "ran" }] }));
   const swapped = () =>
     Object.fromEntries(
-      onWorkerBoard([t("list_cards", original), t("create_card", original), t("create_agent", original), t("create_cron", original), t("list_crons", original), t("changelog_add", original)], deps()).map((x) => [
+      onWorkerBoard([t("list_cards", original), t("create_card", original), t("create_agent", original), t("create_cron", original), t("list_crons", original), t("update_cron", original), t("delete_cron", original), t("run_cron_now", original), t("changelog_add", original)], deps()).map((x) => [
         (x as { name: string }).name,
         (x as unknown as { handler: Handler }).handler,
       ]),
@@ -124,8 +125,20 @@ describe("onWorkerBoard", () => {
     expect((await swapped().create_card!({ prompt: "x" })).content[0]?.text).toMatch(/^No project “”/);
   });
 
-  it("says list_crons is this worker's", async () => {
+  it("says list_crons is this worker's, then lists the Mac's read-only", async () => {
     const out = await swapped().list_crons!({});
-    expect(out.content.map((c) => c.text)).toEqual(["ran", expect.stringMatching(/this Weft Worker's crons/)]);
+    expect(out.content.map((c) => c.text)).toEqual(["ran", expect.stringMatching(/this Weft Worker's crons/), expect.stringMatching(/can't read the Mac's crons yet/)]);
+    const macCrons = () => Promise.resolve([{ device: "d1", label: "mbp", crons: [{ id: "k1", name: "Daily", expr: "0 9 * * *", mode: "fresh", enabled: true, folder: "app" }], updated_at: "t" }]);
+    setBoardLink({ workerId: "w1", root, cards: () => Promise.resolve(rows), newCard, setLists: () => Promise.resolve(null), macCrons });
+    expect((await swapped().list_crons!({})).content[2]?.text).toMatch(/^Crons on the user's Mac[^]*\nmac:k1 \| Daily \| every day at 9:00 \(0 9 \* \* \*\) \| fresh \| on \| no next run \| app on mbp$/);
+  });
+
+  it("refuses to change, delete or run a Mac's cron, and passes this worker's own through", async () => {
+    const tools = swapped();
+    for (const name of ["update_cron", "delete_cron", "run_cron_now"]) {
+      expect(await tools[name]!({ id: "mac:k1" })).toEqual({ content: [{ type: "text", text: MAC_CRON_REFUSED }], isError: true });
+      await tools[name]!({ id: "c1" });
+    }
+    expect(original).toHaveBeenCalledTimes(3);
   });
 });

@@ -19,6 +19,14 @@ export interface BoardRow {
   updated_at: string;
 }
 
+// One of the owner's Macs' published crons, as worker_mac_crons returns it (lib/mac-crons.ts writes it).
+export interface MacCronsRow {
+  device: string;
+  label: string;
+  crons: unknown[];
+  updated_at: string;
+}
+
 export type WorkerStatus = "online" | "busy" | "offline";
 
 export interface ItemRow {
@@ -93,6 +101,8 @@ export function registry(rpc: Rpc, key: string) {
     newCard: (target: string, folder: string, payload: Record<string, unknown>) =>
       call<string>(rpc, "worker_new_card", { p_key: key, p_target: target, p_folder: folder, p_payload: payload }),
     setLists: (crons: unknown[], webhooks: unknown[]) => call<unknown>(rpc, "worker_set_lists", { p_key: key, p_crons: crons, p_webhooks: webhooks }),
+    // The owner's Macs' crons, read-only, for list_crons (lib/worker-mac-crons.ts, supabase/migrations/*_mac_crons_for_workers.sql).
+    macCrons: async () => (await call<MacCronsRow[] | null>(rpc, "worker_mac_crons", { p_key: key })) ?? [],
   };
 }
 

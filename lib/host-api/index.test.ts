@@ -50,6 +50,9 @@ vi.mock("@/lib/new-card", () => ({
   createCardFromBody: vi.fn((_body: unknown, id: string) => ({ id, title: "t" })),
   startCard: vi.fn(() => ({ started: true })),
 }));
+vi.mock("@/lib/crons", () => ({ updateCron: vi.fn((id: string, patch: object) => ({ id, ...patch })), deleteCron: vi.fn() }));
+vi.mock("@/lib/cron-run", () => ({ runCron: vi.fn(() => Promise.resolve({ id: "run-1" })) }));
+vi.mock("@/lib/webhooks", () => ({ updateWebhook: vi.fn((id: string, patch: object) => ({ id, ...patch })), removeWebhook: vi.fn(() => ({ id: "h1" })) }));
 vi.mock("@/lib/skills", () => ({ listSkills: vi.fn(() => [{ name: "ship", description: "d", source: "project" }]) }));
 vi.mock("@/lib/file-access", () => ({
   listFiles: vi.fn(() => Promise.resolve(["a.ts"])),
@@ -101,6 +104,11 @@ const SAMPLES: Record<HostVerb, { args: unknown; reply: () => unknown }> = {
   "files.write": { args: { id: "c1", path: "a.ts", text: "y", baseHash: "h" }, reply: () => ({ result: { hash: "h2", mtime: 2 } }) },
   "dev.open": { args: { id: "c1" }, reply: () => ({ address: "https://weft.zip/t/t1" }) },
   "dev.stop": { args: { id: "c1" }, reply: () => ({ ok: true }) },
+  "cron.update": { args: { id: "k1", patch: { enabled: false } }, reply: () => ({ cron: { id: "k1", enabled: false } }) },
+  "cron.delete": { args: { id: "k1" }, reply: () => ({ ok: true }) },
+  "cron.run": { args: { id: "k1" }, reply: () => ({ card: { id: "run-1" } }) },
+  "webhook.update": { args: { id: "h1", patch: { registered: true } }, reply: () => ({ hook: { id: "h1", registered: true } }) },
+  "webhook.delete": { args: { id: "h1" }, reply: () => ({ ok: true }) },
   "dev.restart": { args: { id: "c1" }, reply: () => ({ ok: true }) },
   "dev.log": { args: { id: "c1" }, reply: () => ({ log: "ready" }) },
 };
@@ -132,6 +140,11 @@ const ROUTES: Record<HostVerb, string> = {
   "files.write": "files/route.ts",
   "dev.open": "dev/route.ts",
   "dev.stop": "dev/route.ts",
+  "cron.update": "../../crons/[id]/route.ts",
+  "cron.delete": "../../crons/[id]/route.ts",
+  "cron.run": "../../crons/[id]/run/route.ts",
+  "webhook.update": "../../webhooks/[id]/route.ts",
+  "webhook.delete": "../../webhooks/[id]/route.ts",
   "dev.restart": "dev/route.ts",
   "dev.log": "dev/route.ts",
 };
@@ -153,7 +166,8 @@ describe("HOST_API", () => {
   it.each(verbs)("%s is elevated exactly when its route checks elevated() first", (verb) => {
     const source = fs.readFileSync(path.join(process.cwd(), "app/api/cards/[id]", ROUTES[verb]), "utf8");
     const write = verb === "files.write" ? source.slice(source.indexOf("export async function PUT")) : source;
-    const first = /const denied = (guard|elevated)\(req[,)]/.exec(write)?.[1];
+    // A cron's or webhook's route gates a worker's with elevated() (a cloud act) and this Mac's own with guard().
+    const first = /const denied = (guard|elevated)\(req[,)]/.exec(write)?.[1] ?? /isWorkerItem\(id\) \? elevated\(req\) : (guard)\(req\)/.exec(write)?.[1];
     expect(first).toBeDefined();
     expect(HOST_API[verb].elevated).toBe(first === "elevated");
   });

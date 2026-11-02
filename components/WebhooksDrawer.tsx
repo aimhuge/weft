@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { folderName } from "@/lib/format";
+import { hostFor } from "@/lib/project-host";
 import { onWebhookAsk, type useWebhooks } from "@/lib/use-webhooks";
 import { vaultFilter, type VaultFilterPick } from "@/lib/vault-view";
 import { emptyForm, filterWebhooks, formInput, groupByFolder, type WebhookForm } from "@/lib/webhooks-view";
@@ -120,15 +121,16 @@ export default function WebhooksDrawer({
               <h3 className="min-w-0 flex-1 truncate text-[12px] font-semibold text-ink" title={s.folder}>
                 {s.label}
               </h3>
-              <button
+              {hostFor(s.folder).can("relay") && <button
                 onClick={() => setAdding({ folder: s.folder, form: emptyForm() })}
                 title={`Add a webhook to ${folderName(s.folder)} by hand`}
                 className="flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[11px] text-muted hover:bg-sunken hover:text-ink"
               >
                 <Icon name="plus" size={11} /> Add
-              </button>
+              </button>}
             </div>
-            <TunnelSection folder={s.folder} notify={notify} />
+            {/* A worker's tunnels and hand-added webhooks are its threads' (mcp__webhooks__*), not this Mac's. */}
+            {hostFor(s.folder).can("relay") && <TunnelSection folder={s.folder} notify={notify} />}
             {adding?.folder === s.folder && (
               <AddWebhookForm form={adding.form} busy={busy === "add"} onChange={(form) => setAdding({ folder: s.folder, form })} onSave={() => void save(s.folder, adding.form)} onCancel={() => setAdding(null)} />
             )}

@@ -169,4 +169,12 @@ describe("registry: the board tools", () => {
       { fn: "worker_set_lists", args: { p_key: key, p_crons: [{ id: "c" }], p_webhooks: [] } },
     ]);
   });
+
+  it("reads the owner's Macs' crons, an empty answer as none", async () => {
+    const rows = [{ device: "d1", label: "mbp", crons: [{ id: "k1" }], updated_at: "t" }];
+    const { rpc, calls } = fakeRpc({ data: rows });
+    expect(await registry(rpc, key).macCrons()).toEqual(rows);
+    expect(calls).toEqual([{ fn: "worker_mac_crons", args: { p_key: key } }]);
+    expect(await registry(fakeRpc().rpc, key).macCrons()).toEqual([]);
+  });
 });
