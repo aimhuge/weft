@@ -2,10 +2,12 @@
 // per-tool check: file tools hit isSecretFile, Grep also checks glob, and Bash
 // is a thin wrapper around bashVerdict.
 
-import path from "node:path";
 import { DATA_DIR } from "./store";
+import { refusal } from "./secret-guard-why";
 import { bashVerdict } from "./secret-guard-bash";
-import { expandBraces, isSecretFile } from "./secret-guard-files";
+import { expandBraces, isSecretFile, isWorkerHome } from "./secret-guard-files";
+import { pastedElsewhere, pastedInto } from "./secret-guard-pasted";
+import { CLONE_REFUSAL, editsClone } from "./worker-clone-guard";
 
 // A file:// URL's path, or "" for any other URL.
 function filePath(url: string): string {
@@ -22,12 +24,16 @@ function filePath(url: string): string {
 // overwrite one either: it could clobber a secret it is not allowed to see (2026-10-28).
 const FILE_TOOLS = new Set(["Read", "Edit", "MultiEdit", "Write", "NotebookRead", "NotebookEdit"]);
 
-// Why a tool call is turned away, or null to let it run.
-export function toolVerdict(toolName: string, input: unknown, dataDir = DATA_DIR): string | null {
+// Why a tool call is turned away, or null to let it run. cardId names the thread's card, so a Read of an
+// attachment its user pasted gets through (lib/secret-guard-pasted.ts).
+export function toolVerdict(toolName: string, input: unknown, dataDir = DATA_DIR, cardId?: string): string | null {
   const fields = (input ?? {}) as Record<string, unknown>;
   const str = (key: string) => (typeof fields[key] === "string" ? fields[key] : "");
   if (FILE_TOOLS.has(toolName)) {
     const file = str("file_path") || str("notebook_path") || str("path");
+    if (toolName === "Read") return readVerdict(file, dataDir, cardId);
+    // The worker's own clone is its daemon's code: readable, never changed by a thread (lib/worker-clone-guard.ts).
+    if (editsClone(file)) return CLONE_REFUSAL;
     return isSecretFile(file, dataDir) ? reason(file) : null;
   }
   switch (toolName) {
@@ -38,8 +44,8 @@ export function toolVerdict(toolName: string, input: unknown, dataDir = DATA_DIR
       // A pattern is a name too: `.env*` and `**/.env` reach a .env file.
       return patternReason([str("path"), ...expandBraces(str("pattern"))], dataDir);
     case "LS":
-      // Listing a folder is reading what is in it.
-      return pathReason(str("path"), dataDir);
+      // Listing a folder is reading what is in it; a worker's home lists only names (isWorkerHome).
+      return isWorkerHome(str("path")) ? null : pathReason(str("path"), dataDir);
     case "mcp__browser__open_url":
       return pathReason(filePath(str("url")), dataDir);
     case "Bash":
@@ -47,6 +53,12 @@ export function toolVerdict(toolName: string, input: unknown, dataDir = DATA_DIR
     default:
       return null;
   }
+}
+
+// A Read opens an attachment its user pasted, and one pasted on another machine is named as that, not as a secret.
+function readVerdict(file: string, dataDir: string, cardId: string | undefined): string | null {
+  if (pastedInto(cardId, file, dataDir)) return null;
+  return pastedElsewhere(file) ?? (isSecretFile(file, dataDir) ? reason(file) : null);
 }
 
 // One path, read as a path.
@@ -61,11 +73,5 @@ function patternReason(candidates: string[], dataDir: string): string | null {
   return hit ? reason(hit, true) : null;
 }
 
-// A file is named by its base name; literal text goes in as it is.
-function reason(what: string, literal = false): string {
-  const name = literal ? what : `\`${path.basename(what.replace(/^["']|["']$/g, ""))}\``;
-  return (
-    `Weft keeps secret values out of threads, so ${name} can't be read here. Work with names instead: ` +
-    "read or edit `.env.example`, and ask the user to set the value themselves."
-  );
-}
+// In words that fit what the path is (lib/secret-guard-why.ts).
+const reason = (what: string, literal = false) => refusal(what, undefined, literal);

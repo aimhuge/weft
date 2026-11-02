@@ -222,6 +222,21 @@ describe("workerToolSource", () => {
   });
 });
 
+describe("searchThread", () => {
+  it("finds over the card's whole thread on this Mac's server", async () => {
+    fetchMock.mockResolvedValueOnce(json({ matches: [{ index: 4, hits: 1 }] }));
+    expect(await workerTransport.searchThread!("c1", "deploy it")).toEqual([{ index: 4, hits: 1 }]);
+    expect(fetchMock.mock.calls[0]![0]).toBe("/api/worker-board?card=c1&q=deploy+it");
+  });
+
+  it("is null when the search can't be read, so find covers the loaded window", async () => {
+    fetchMock.mockResolvedValueOnce(json({ error: "nope" }, 502));
+    expect(await workerTransport.searchThread!("c1", "x")).toBeNull();
+    fetchMock.mockRejectedValueOnce(new Error("offline"));
+    expect(await workerTransport.searchThread!("c1", "x")).toBeNull();
+  });
+});
+
 describe("useView", () => {
   it("shows the items as they are", () => {
     const items = [item("one")];
@@ -254,6 +269,8 @@ describe("the worker card's verbs", () => {
 
   it("leaves out what a worker refuses from the network", () => {
     expect(workerTransport.shell).toBeUndefined();
+    // A "!" says so in the box instead of reaching the agent.
+    expect(workerTransport.shellRefusal).toBe("A shell runs only on this Mac's cards.");
     expect(workerTransport.grantFolder).toBeUndefined();
     expect(workerTransport.cardEdits).toBe(true);
   });

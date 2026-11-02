@@ -40,13 +40,16 @@ const text = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : und
 
 // The row the board inserts to run a prompt on a worker, or null when there's nothing to run. folder is the
 // project's name on the worker (its folder under the work root), not a path on this Mac.
-export function runCommand(target: { orgId: string; workerId: string; folder: string }, body: { prompt: string; repo?: string; model?: string; permissionMode?: string }): NewCommand | null {
+// A title and tags name the card the worker makes (a GitHub issue's, lib/issue-worker.ts).
+export function runCommand(target: { orgId: string; workerId: string; folder: string }, body: { prompt: string; repo?: string; model?: string; permissionMode?: string; title?: string; tags?: string[] }): NewCommand | null {
   const prompt = body.prompt.trim();
   const folder = target.folder.trim();
   if (!prompt || !folder) return null;
   const payload: RunPayload = { prompt };
   if (text(body.repo)) payload.repo = text(body.repo);
   if (text(body.model)) payload.model = text(body.model);
+  if (text(body.title)) payload.title = text(body.title);
+  if (body.tags?.length) payload.tags = body.tags;
   const mode = RUN_MODES.find((m) => m === body.permissionMode);
   if (mode) payload.permissionMode = mode;
   return { org_id: target.orgId, kind: "run", target_device: workerDevice(target.workerId), folder, payload };
@@ -70,6 +73,7 @@ export function runBody(command: Pick<CloudCommandRow, "payload">): RunPayload |
   const mode = RUN_MODES.find((m) => m === p.permissionMode);
   if (mode) out.permissionMode = mode;
   if (Array.isArray(p.tags)) out.tags = p.tags.filter((t): t is string => typeof t === "string");
+  if (p.start === false) out.start = false;
   return out;
 }
 

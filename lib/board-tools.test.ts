@@ -13,6 +13,9 @@ vi.mock("./copilot-sources", async () => (await import("./board-tools.harness"))
 vi.mock("./tag-store", async () => (await import("./board-tools.harness")).tagStoreMock(state));
 vi.mock("./settings", async () => (await import("./board-tools.harness")).settingsMock(state));
 vi.mock("./folders", async () => (await import("./board-tools.harness")).foldersMock());
+// Off a worker unless a test says so, whatever WEFT_WORKER the test run has (a worker's own checkout sets it).
+const worker = vi.hoisted(() => ({ on: false }));
+vi.mock("./worker-pane", async (load) => ({ ...(await load<typeof import("./worker-pane")>()), onWorker: () => worker.on }));
 
 const { card, capturedTool, nth, reset, textOf } = await import("./board-tools.harness");
 const { SAFE_BOARD_TOOLS, boardMcpServer, createBoardCard, describeBoardTool, isTrustedTool, weftMcpServer } = await import("./board-tools");
@@ -330,5 +333,22 @@ describe("read_thread card header", () => {
     const text = textOf(await capturedTool(state, "read_thread").handler({ card_id: "c1" }));
     const header = nth(text.split("\n\n---\n\n"), 0, "section").split("\n");
     expect(header).toEqual(expect.arrayContaining(["stage: First shot", "latest: Which db?", "waiting on the user for: Run npm test"]));
+  });
+});
+
+describe("weftMcpServer on a Weft Worker", () => {
+  it("swaps the tools that write the board for ones that reach the user's (lib/worker-board-tools.ts)", async () => {
+    worker.on = true;
+    try {
+      weftMcpServer(() => undefined, { start: vi.fn() });
+      // No link bound in this test: the swapped list_cards says so instead of reading the worker's own store.
+      const listed = await capturedTool(state, "list_cards").handler({});
+      expect(listed.isError).toBe(true);
+      expect(textOf(listed)).toMatch(/can't reach your board/);
+      const agent = await capturedTool(state, "create_agent").handler({ name: "X", soul: "s" });
+      expect(textOf(agent)).toMatch(/Settings → Agents/);
+    } finally {
+      worker.on = false;
+    }
   });
 });

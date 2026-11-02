@@ -29,7 +29,7 @@ export interface Run {
 const g = globalThis as unknown as { __weftDevExit?: boolean };
 export const runs = globalSingleton("__weftDevServers", () => new Map<string, Run>());
 
-const LOG_LIMIT = 4000;
+export const LOG_LIMIT = 4000;
 
 // A dev server busy compiling answers late, not never; a server that's down refuses at once, so this only waits on a hung one.
 const PROBE_TIMEOUT_MS = 5000;

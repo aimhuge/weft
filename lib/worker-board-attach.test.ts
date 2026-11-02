@@ -10,7 +10,8 @@ import { fakeClient, workerRow } from "./worker-board.harness";
 vi.mock("./account", () => ({ accountClient: () => { throw new Error("no default client in tests"); } }));
 vi.mock("./cloud-sync", () => ({ syncOrgId: () => Promise.resolve("org-1") }));
 
-const { sendWorkerAction, startWorkerThread } = await import("./worker-board");
+const { sendWorkerAction } = await import("./worker-board");
+const { startWorkerThread } = await import("./worker-new-thread");
 
 const NOW = Date.parse("2026-10-29T10:00:00.000Z");
 const PNG = Buffer.from("a screenshot");
@@ -38,7 +39,7 @@ describe("a message to a worker with a pasted file", () => {
   it("does the same for a new thread", async () => {
     const { client, inserted } = fakeClient({ workers: [workerRow({ last_seen_at: new Date(NOW).toISOString() })] });
     await startWorkerThread({ cwd: "worker://w1/ling", prompt: text(dir) }, client, NOW, dir);
-    expect(inserted()).toMatchObject({ kind: "run", payload: { prompt: text(dir), attachments: [{ name: "shot-1a2b.png", sha: SHA }] } });
+    expect(inserted()).toMatchObject({ kind: "host", payload: { verb: "card.create", args: { prompt: text(dir) }, attachments: [{ name: "shot-1a2b.png", sha: SHA }] } });
   });
 
   it("does the same for a host verb's typed text, and leaves a verb with none alone", async () => {

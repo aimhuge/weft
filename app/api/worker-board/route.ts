@@ -1,14 +1,26 @@
 import { connection } from "next/server";
 import { elevated, fail, guard } from "@/lib/guard";
 import { qaState } from "@/lib/qa-switch";
+import { workerBlobUrls, workerThreadSearch } from "@/lib/worker-thread-reads";
 import { openWorkerLine, readWorkerBoard, sendWorkerAction, workerThreadPage, workerToolOutput, type LineAction, type WorkerAction } from "@/lib/worker-board";
 import { workerProjectSnapshot, workerResultBlob } from "@/lib/worker-board-reads";
 
 // Your Weft Workers' projects on the desktop board (lib/worker-board.ts): GET lists them with their cards, GET ?card=
 // reads a page of that card's thread (before= walks back, after= sends only the items past that seq), since= only the
 // cards changed after it, GET ?card=&tool= reads a full tool result, GET ?project= a worker project's snapshot for the
-// header badges, GET ?blob= a host verb's answer too big for its row (the editor's), and POST sends
+// header badges, GET ?blob= a host verb's answer too big for its row (the editor's), GET ?card=&q= finds q over the
+// whole thread, GET ?blobs=<ref>,<ref> signs the blob refs a thread's pictures name (lib/worker-thread-reads.ts), and POST sends
 // a reply, an answer, a stop, a mode, a tap or any host verb as a cloud_commands row, or a session line's sealed offer. A new thread goes through POST /api/cards like any other.
+
+// The reads that name no card: a worker project's snapshot, a verb's oversized answer, and a thread's picture refs signed.
+async function blobReads(params: URLSearchParams): Promise<Response | null> {
+  const project = params.get("project");
+  if (project) return Response.json(await workerProjectSnapshot(project));
+  const blob = params.get("blob");
+  if (blob) return Response.json(await workerResultBlob(blob));
+  const blobs = params.get("blobs");
+  return blobs === null ? null : Response.json({ urls: await workerBlobUrls(blobs.split(",")) });
+}
 
 export async function GET(req: Request) {
   const denied = guard(req, { write: false });
@@ -19,15 +31,18 @@ export async function GET(req: Request) {
   try {
     // What the Local Simulator switch shows: this Mac's own devices, and whether this card is approved here.
     if (params.has("devices")) return Response.json(await qaState(card));
-    const project = params.get("project");
-    if (project) return Response.json(await workerProjectSnapshot(project));
-    const blob = params.get("blob");
-    if (blob) return Response.json(await workerResultBlob(blob));
+    const blobRead = await blobReads(params);
+    if (blobRead) return blobRead;
     const sinceParam = params.get("since");
     const since = sinceParam && Number.isFinite(Date.parse(sinceParam)) ? sinceParam : undefined;
     if (!card) return Response.json(await readWorkerBoard(undefined, undefined, undefined, since));
     const tool = params.get("tool");
     if (tool) return Response.json({ result: await workerToolOutput(card, tool) });
+    const q = params.get("q");
+    if (q !== null) {
+      const matches = await workerThreadSearch(card, q);
+      return matches ? Response.json({ matches }) : Response.json({ error: "That thread can't be searched." }, { status: 502 });
+    }
     const before = params.get("before");
     const after = Number(params.get("after") ?? Number.NaN);
     const page = await workerThreadPage(card, before === null ? undefined : Number(before), undefined, Number.isInteger(after) ? after : undefined);

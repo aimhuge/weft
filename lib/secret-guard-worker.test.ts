@@ -45,7 +45,7 @@ describe("a worker's home", () => {
     expect(verdict("Read", { file_path: `~/.weft-worker/${name}` })).toContain("can't be read");
     expect(verdict("Grep", { pattern: "wwk_", path: wh })).toContain("can't be read");
     expect(verdict("Glob", { pattern: "*", path: wh })).toContain("can't be read");
-    expect(verdict("LS", { path: wh })).toContain("can't be read");
+    expect(verdict("LS", { path: file })).toContain("can't be read");
     expect(verdict("mcp__browser__open_url", { url: `file://${file}` })).toContain("can't be read");
   });
 
@@ -88,7 +88,7 @@ describe("a worker's home", () => {
   });
 
   // The show folder is one of a worker's CLI working directories, so acceptEdits writes there with no prompt and this
-  // guard is all that stands behind it (lib/worker-pane.ts sessionDirs).
+  // guard is all that stands behind it (lib/show-dir.ts sessionDirs).
   it("opens the show folder to writes and nothing beside or above it", () => {
     for (const tool of ["Write", "Edit"]) {
       expect(verdict(tool, { file_path: path.join(data, "show", "plan.html") })).toBeNull();
@@ -138,5 +138,51 @@ describe("a worker's home", () => {
     vi.stubEnv("WEFT_WORKER_HOME", path.join(base, ".no-worker"));
     expect(toolVerdict("Bash", { command: "grep -rn .no-worker docs" }, data)).toBeNull();
     vi.stubEnv("WEFT_WORKER_HOME", wh);
+  });
+});
+
+// A bare listing shows the home's names and none of what's in them, so a thread can find the open folders (2026-11-02).
+describe("listing a worker's home", () => {
+  it.each(["ls ~/.weft-worker", "ls -la ~/.weft-worker/", "ls -la $HOME/.weft-worker", "ls ../.."])("lets `%s` run", (command) => expect(bash(command)).toBeNull());
+
+  it("lets the LS tool list it", () => {
+    expect(verdict("LS", { path: wh })).toBeNull();
+    expect(verdict("LS", { path: "~/.weft-worker" })).toBeNull();
+  });
+
+  it.each([
+    "ls -R ~/.weft-worker",
+    "ls --recursive ~/.weft-worker",
+    "ls ~/.weft-worker/*",
+    "ls ~/.weft-worker/data",
+    "ls ~/.weft-worker/data/vault",
+    "ls ~/.weft-worker && cat ~/.weft-worker/worker.json",
+    "cat ~/.weft-worker",
+    "find ~/.weft-worker",
+    "tar cf - ~/.weft-worker",
+    "cd ~/.weft-worker && ls | xargs cat",
+  ])("still refuses `%s`", (command) => expect(bash(command)).toContain("can't be read"));
+
+  it("still refuses the other tools on it", () => {
+    expect(verdict("Glob", { pattern: "**/*", path: wh })).toContain("can't be read");
+    expect(verdict("Grep", { pattern: "wwk_", path: wh })).toContain("can't be read");
+    expect(verdict("LS", { path: path.join(wh, "data") })).toContain("can't be read");
+  });
+
+  it("says what a sealed file in it is", () => {
+    expect(bash("cat ~/.weft-worker/worker.json")).toContain("holds this Weft Worker's keys");
+    expect(bash("cat ~/.weft-worker/github-credentials")).toContain("holds this Weft Worker's keys");
+    expect(bash("cat ~/.weft-worker/worker.log")).toContain("this Weft Worker's own folder");
+    expect(bash("cat ~/.weft-worker/worker.log")).toContain("`ls` lists the folder itself");
+  });
+});
+
+describe("the worker's own clone of Weft", () => {
+  it("reads open, but refuses an Edit, Write or NotebookEdit, since the daemon and weft-worker run it", () => {
+    const file = path.join(wh, "weft", "plugin", "x.ts");
+    expect(verdict("Read", { file_path: file })).toBeNull();
+    for (const tool of ["Edit", "MultiEdit", "Write"]) expect(verdict(tool, { file_path: file })).toMatch(/the worker's own copy of Weft/);
+    expect(verdict("NotebookEdit", { notebook_path: path.join(wh, "weft", "n.ipynb") })).toMatch(/own copy of Weft/);
+    expect(verdict("Write", { file_path: path.join(cwd, "x.ts") })).toBeNull();
   });
 });

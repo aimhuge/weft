@@ -10,7 +10,7 @@
 // /api/, and only the ones this bridge is given. A page that asks for anything else gets an error, and
 // the page can show that rather than a number it couldn't read.
 
-const { senderOk } = require("./app-data-frame.cjs");
+const { senderOk, isWorkerAppPage, WORKER_APP_REFUSED } = require("./app-data-frame.cjs");
 
 // The paths a page may ask for. Kept here, in main, so the page can't widen it.
 const ALLOWED = ["/api/infra/live"];
@@ -48,17 +48,19 @@ function createLiveData({ serverUrl, token, fetch: fetchImpl = globalThis.fetch 
   };
 }
 
-// The IPC handler. Same sender check as the app-data bridge: only the pane's own main frame.
-function registerLiveData(ipcMain, { liveData, owns }) {
+// The IPC handler. Same sender check as the app-data bridge: only the pane's own main frame, and never a page saved
+// from a worker card (electron/app-data-frame.cjs isWorkerAppPage), which gets no more than its sandbox gave it.
+function registerLiveData(ipcMain, { liveData, owns, dataDir }) {
   ipcMain.handle("live-data:read", async (event, path) => {
     if (!senderOk(owns, event)) throw new Error("Live data only answers the pane's main frame.");
+    if (dataDir && isWorkerAppPage(dataDir, event.senderFrame?.url)) throw new Error(WORKER_APP_REFUSED);
     return liveData(path);
   });
 }
 
-function setupLiveData({ ipcMain, serverUrl, token, owns, fetch: fetchImpl }) {
+function setupLiveData({ ipcMain, serverUrl, token, owns, dataDir, fetch: fetchImpl }) {
   const liveData = createLiveData({ serverUrl, token, fetch: fetchImpl });
-  registerLiveData(ipcMain, { liveData, owns });
+  registerLiveData(ipcMain, { liveData, owns, dataDir });
   return liveData;
 }
 

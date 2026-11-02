@@ -1,9 +1,5 @@
 import { elevated, fail, guard } from "@/lib/guard";
 import { hostFail, needsElevation, requireCard, runVerb, type CardPatch } from "@/lib/host-api";
-import { endSession } from "@/lib/runner";
-import { dismissSession } from "@/lib/settings";
-import { deleteCard, getCard } from "@/lib/store";
-import { dropWorktree } from "@/lib/worktree-pool";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -25,20 +21,14 @@ export async function PATCH(req: Request, { params }: Ctx) {
   }
 }
 
+// One card's DELETE is the card.delete verb (lib/host-api/card-delete.ts): it ends the CLI, forgets a picked-up
+// session, drops the card and an isolated card's worktree, and refuses the copilot. A worker runs the same verb.
 export async function DELETE(req: Request, { params }: Ctx) {
   const denied = guard(req);
   if (denied) return denied;
   const { id } = await params;
   try {
-    if (getCard(id)?.role === "copilot") return fail("The copilot can't be deleted. Start a new chat instead.");
-    const card = getCard(id);
-    await endSession(id);
-    // A picked-up session stays deleted; the sync won't bring it back.
-    if (card?.source === "claude-code" && card.sessionId) dismissSession(card.sessionId);
-    deleteCard(id);
-    // An isolated card's worktree goes with it; a branch with commits that never landed stays (lib/worktree-pool.ts).
-    if (card?.worktree) void dropWorktree(card.worktree).catch(() => {});
-    return Response.json({ ok: true });
+    return Response.json(await runVerb("card.delete", { id }));
   } catch (err) {
     return fail(err);
   }

@@ -1,10 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { copilotLaneOpen, copilotLanePeek, showBacklog, subscribeBoardPrefs } from "@/lib/board-prefs";
 import { laneStateFromPrefs, type LaneState } from "@/lib/copilot-lane";
-import { api } from "@/lib/client";
-import { worktreeParent } from "@/lib/format";
 import { COLUMNS, type Card, type Column, type Project } from "@/lib/types";
 import { useShortcutHint } from "@/lib/hotkeys";
 import { preloadChimes } from "@/lib/chimes";
@@ -17,11 +15,12 @@ import {
   summarizeProjects,
 } from "@/lib/board-view";
 import { useBoardLive } from "@/lib/board-live";
+import { useProjectRoots } from "@/lib/use-project-roots";
 import { useBoardDialogs } from "@/lib/use-board-dialogs";
 import { useOpenCard } from "@/lib/use-open-card";
 import { useAwayOpen } from "@/lib/use-away-open";
 import { useNewThreadPane } from "@/lib/use-new-thread-pane";
-import { filterState, footerFor, framedCard, headerCounts, menuProject, openCardMarks, openCardOf, workFolder } from "@/lib/board-derive";
+import { filterState, footerFor, framedCard, headerCounts, menuProject, openCardMarks, openCardOf, terminalAway, workFolder } from "@/lib/board-derive";
 import { useRestart } from "@/lib/use-restart";
 import { useDesktopBridge } from "@/lib/use-desktop-bridge";
 import { useStartupCheck } from "@/lib/use-startup-check";
@@ -51,8 +50,9 @@ import { useSwitchAll } from "./switch-all-button";
 import { folderName } from "./ProjectBar";
 import { CLOSED_BROWSER, showPage } from "@/lib/board-helpers";
 import { openWorkerThread, useBoardWorkers } from "@/lib/use-worker-board";
-import { localColumns, localPath, withWorkerProjects } from "@/lib/worker-project";
+import { localPath, withWorkerProjects } from "@/lib/worker-project";
 import { projectFolders } from "@/lib/board-folders";
+import { useWorkerNotices } from "@/lib/card-notice";
 import { useThreadHandlers } from "@/lib/thread-handlers";
 import { useBoardCards } from "@/lib/use-board-cards";
 import BoardHeader from "./BoardHeader";
@@ -107,7 +107,7 @@ export default function Board() {
   const copilotNeedsYou = copilot?.column === "needs_you";
   const [projects, setProjects] = useState<Project[]>([]);
   // Worktree folder -> its main repo, from the server; the bar shows each worktree's cards under that repo.
-  const [roots, setRoots] = useState<Record<string, string>>({});
+  const { setRoots, resolvedFolders, rootOf, resolveFolders } = useProjectRoots();
   const [showArchived, setShowArchived] = useState(false);
   // New thread, Settings, Share board, Help, the palette, a sign-in and the project menu (lib/use-board-dialogs.ts).
   const {
@@ -120,10 +120,8 @@ export default function Board() {
   const columns = useRef(new Map<string, Column>());
   // Each card's last known error, to chime when a new one appears.
   const errors = useRef(new Map<string, string | undefined>());
-  // Folders the server has already resolved into roots.
-  const resolvedFolders = useRef(new Set<string>());
   const now = useNow();
-  const { desktop, mac, browser } = useDesktopBridge(CLOSED_BROWSER, selectedId, cards);
+  const { desktop, mac, browser } = useDesktopBridge(CLOSED_BROWSER, selectedId, boardCards);
   // Cloud sync to weft.zip: the projects opted in and how the last flush went. The project's
   // right-click menu reads both (Sync / Don't Sync, Sync Status), and the avatar menu shares
   // this one instance instead of polling twice.
@@ -135,18 +133,6 @@ export default function Board() {
   // Decode the chime files now, so the first card that moves isn't late to sound.
   useEffect(() => preloadChimes(), []);
 
-  const rootOf = useCallback((cwd: string) => roots[cwd] ?? worktreeParent(cwd) ?? cwd, [roots]);
-
-  // A card or project in a folder the server hasn't seen yet fetches the roots again, in case it's a worktree.
-  const resolveFolders = useCallback((folders: string[]) => {
-    const fresh = folders.filter((f) => !resolvedFolders.current.has(f) && !worktreeParent(f));
-    if (!fresh.length) return;
-    for (const f of fresh) resolvedFolders.current.add(f);
-    api
-      .list()
-      .then((data) => setRoots(data.roots))
-      .catch(() => {});
-  }, []);
 
   // Computed early so the hooks below (actions, toggles, archive) can take it as a dep.
   const laneOpen = useSyncExternalStore(subscribeBoardPrefs, copilotLaneOpen, () => false);
@@ -203,6 +189,8 @@ export default function Board() {
     select, setSelectedId, setCards, setUnseen, setThread, setStreaming, setProjects, setLogin, setToast, setHome, setRoots, setLoaded,
     updateCopilot, loadCopilot, resolveFolders, restart: restartView, loadFromPrefs, loadThread, notify, awayMove,
   });
+  // A worker's card that moves chimes and announces as this Mac's do (lib/card-notice.ts).
+  useWorkerNotices(workers.cards, { ownMoves, selectedRef, select, setUnseen, awayMove });
 
   // Picking another project or changing the filter collapses the columns again (lib/board-derive.ts).
   const { filtering, view } = filterState(project, query, railFilter);
@@ -212,16 +200,14 @@ export default function Board() {
     () => groupByColumn(filterCards(boardCards, railFilter), { project, query, sort, showArchived, reviewFilter }, rootOf),
     [boardCards, railFilter, project, query, sort, showArchived, reviewFilter, rootOf],
   );
-  // What acts on many cards at once only ever sees this Mac's.
-  const ownColumns = useMemo(() => localColumns(byColumn), [byColumn]);
   const archivedCount = boardCards.filter((c) => c.archived && (!project || rootOf(c.cwd) === project)).length;
   // The Done cards on screen that Shift+E and "Archive all" file away.
-  const doneToArchive = (ownColumns.get("done") ?? []).filter((c) => !c.archived && c.column === "done");
-  const { resume, all: resumeAll } = resumeActions(ownColumns.get("review") ?? [], notify);
+  const doneToArchive = (byColumn.get("done") ?? []).filter((c) => !c.archived && c.column === "done");
+  const { resume, all: resumeAll } = resumeActions(byColumn.get("review") ?? [], notify);
   // Backlog hides unless Settings turns it on, but never hides cards waiting in it.
   const backlogOn = useSyncExternalStore(subscribeBoardPrefs, showBacklog, () => false);
   const visibleColumns = COLUMNS.filter(
-    (c) => c.id !== "backlog" || backlogOn || cards.some((card) => card.column === "backlog" && !card.archived),
+    (c) => c.id !== "backlog" || backlogOn || boardCards.some((card) => card.column === "backlog" && !card.archived),
   );
 
   const projectSummaries = useMemo(() => withWorkerProjects(summarizeProjects(projects, boardCards, rootOf), workers.projects), [projects, boardCards, rootOf, workers.projects]);
@@ -241,15 +227,15 @@ export default function Board() {
   const footer = footerFor(selected);
   // Each folder has its own shell; with All projects showing, the latest card's folder. The badges read a worker's too.
   const { folder, reads, terminalCwd } = projectFolders(workFolder(selected, project, latest), home);
-  const counts = headerCounts(cards);
+  const counts = headerCounts(boardCards);
   // "Switch all" only shows once a thread hit its plan limit.
-  const limitHit = hitPlanLimit(cards);
+  const limitHit = hitPlanLimit(boardCards);
 
   // Shortcuts that act on the board stand down while a dialog or the project menu is up.
 
   // Shortcuts, the command palette and the app menu (components/use-board-commands.ts).
   const { openPalette, paletteItems, findPrompts } = useBoardCommands({
-    cards, selected, selectedId, lastOpenId, projectSummaries, project, sort, home, columns: visibleColumns, query, boardKeys,
+    cards: boardCards, selected, selectedId, lastOpenId, projectSummaries, project, sort, home, columns: visibleColumns, query, boardKeys,
     dialogs: { showNew, showSettings, showHelp, showPalette, login },
     doneToArchive, lastArchived, archivedCount, showArchived, rootOf, restart: restartView.restart,
     openNew: () => openNew(), openCard, select, toggleCopilot, toggleBrowser, toggleTerminal, toggleColumn: workspace.toggle,
@@ -286,7 +272,7 @@ export default function Board() {
     return onOpenFile(selectedId, () => setOpenEditor("editor", true));
   }, [selectedId, setOpenEditor]);
   const { onCardMenu, onColumnMenu, toggleStar, tagging, editTags, saveTags, closeTags, sharing, closeShare, shareCard, deleteDialog } = useBoardMenus({
-    doneShown: ownColumns.get("done") ?? [],
+    doneShown: byColumn.get("done") ?? [],
     archivedCount,
     showArchived,
     openCard,
@@ -304,7 +290,7 @@ export default function Board() {
     notify,
   });
   const onProjectMenu = projectMenuHandler({
-    projects: projectSummaries, cards, rootOf, openNew, chooseProject, openDrawer: setLibraryOpen, archive: archiveCards, toast: setToast, notify,
+    projects: projectSummaries, cards: boardCards, rootOf, openNew, chooseProject, openDrawer: setLibraryOpen, archive: archiveCards, toast: setToast, notify,
     syncFolders: sync.folders, syncStatus: sync.status, readSync: sync.read,
   });
   const onTag = (tag: string) => setRailFilter((f) => toggleTag(f, tag));
@@ -325,7 +311,7 @@ export default function Board() {
   // "Switch all to <other CLI>" on the Running and Needs you columns. Idle cards flip right
   // away; busy ones come back in `pending` and the modal polls for them.
   const { switchColumn: switchAll, dialog: switchAllDialog } = useSwitchAll({
-    byColumn: ownColumns,
+    byColumn,
     setToast: (msg) => setToast(msg),
     notify,
   });
@@ -377,7 +363,7 @@ export default function Board() {
         <BoardRail
           open={libraryOpen}
           onOpen={setLibraryOpen}
-          ctx={{ project: localProject, folders: railFolders, cards, onOpenUrl: showPage, onOpenCard: openCard, onStartCard: improveQuality, notify }}
+          ctx={{ project, folders: railFolders, cards, onOpenUrl: showPage, onOpenCard: openCard, onStartCard: improveQuality, notify }}
           filter={railFilter}
           onFilter={setRailFilter}
           onStarCard={toggleStar}
@@ -435,7 +421,7 @@ export default function Board() {
       <BoardBottom
         footer={footer}
         onHelp={() => setShowHelp(true)}
-        terminal={{ open: terminalOpen, cwd: terminalCwd, height: terminalHeight, onHeight: setTerminalHeight, onClose: toggleTerminal }}
+        terminal={{ open: terminalOpen, cwd: terminalCwd, height: terminalHeight, onHeight: setTerminalHeight, onClose: toggleTerminal, away: terminalAway(workerThread?.worker, project, workers.projects, Boolean(selectedId)) }}
       />
 
       <BoardOverlays

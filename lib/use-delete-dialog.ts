@@ -10,7 +10,7 @@
 // The dialog is Weft's own modal (components/DeleteCardDialog.tsx): a native confirm can't show a
 // checkbox, so the "Don't ask again" tick lives in the modal and its flag in lib/delete-confirm.ts.
 import { createElement, useState } from "react";
-import { removeNow } from "@/lib/optimistic-cards";
+import { removeOnHost } from "@/lib/card-handlers-host";
 import { shouldConfirmDelete } from "@/lib/delete-confirm";
 import type { Card } from "@/lib/types";
 import { BoardDeleteDialog } from "@/components/DeleteCardDialog";
@@ -30,7 +30,7 @@ export interface UseDeleteDialog {
 // The confirmation is the only thing in front of it (lib/delete-confirm.ts).
 export function removeCard(card: Card, isOpen: (card: Card) => boolean, select: (id: string | null) => void, notify: (err: unknown) => void) {
   if (isOpen(card)) select(null);
-  removeNow(card.id).catch(notify);
+  removeOnHost(card).catch(notify);
 }
 
 // The delete confirmation the board draws. `remove` is what actually deletes: the menu's Delete

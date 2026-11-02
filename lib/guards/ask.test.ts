@@ -37,6 +37,13 @@ describe("askAboutCall", () => {
     expect(await askAboutCall({ ...session, cardId: null }, "Read", input, "t", signal)).toEqual({ behavior: "deny", message: "No card is attached yet." });
   });
 
+  it("lets a thread write its own pane page in the show folder without asking", async () => {
+    showPageCall.mockReturnValue(true);
+    expect(await askAboutCall(session, "Write", input, "t", signal)).toEqual({ behavior: "allow", updatedInput: input });
+    expect(showPageCall).toHaveBeenCalledWith("Write", input, "/w");
+    expect(askUser).not.toHaveBeenCalled();
+  });
+
   it("lets through a call you allowed once after auto mode blocked it", async () => {
     outOfAutoAnswer.mockReturnValue({ behavior: "allow", updatedInput: input });
     expect(await askAboutCall(session, "Read", input, "t", signal)).toEqual({ behavior: "allow", updatedInput: input });

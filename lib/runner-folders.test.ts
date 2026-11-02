@@ -9,8 +9,6 @@ const h = await vi.hoisted(async () => (await import("./runner.harness")).harnes
 
 vi.mock("@anthropic-ai/claude-agent-sdk", async () => (await import("./runner.harness")).sdkMock(h));
 vi.mock("./store", async () => (await import("./runner.harness")).storeMock(h));
-// The harness's data dir can't be made, and a worker's session makes its show folder.
-vi.mock("./show-dir", async () => ({ SHOW_DIR: (await import("node:os")).tmpdir() }));
 vi.mock("./bus", async () => (await import("./runner.harness")).busMock(h));
 vi.mock("./env", async () => (await import("./runner.harness")).envMock());
 vi.mock("./import", async () => (await import("./runner.harness")).importMock(h));

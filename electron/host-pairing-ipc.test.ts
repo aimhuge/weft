@@ -23,13 +23,44 @@ describe("registerHostPairing", () => {
       myDevice: () => Promise.resolve({ publicKey: "mac-key" }),
       confirm: () => Promise.resolve(true),
     });
-    expect([...handlers.keys()]).toEqual(["host-pairing:start", "host-pairing:check", "host-pairing:cancel", "worker-pins:forget"]);
+    expect([...handlers.keys()]).toEqual(["host-pairing:start", "host-pairing:check", "host-pairing:cancel", "worker-pins:forget", "worker-repair:approve"]);
     expect(await handlers.get("worker-pins:forget")!("w1", "m1mini")).toEqual({ forgotten: false });
     expect(await handlers.get("host-pairing:start")!(ORG)).toMatchObject({ id: PID });
     expect(rpc).toHaveBeenCalledWith("worker_pair_open", { p_org: ORG, p_mac_device: "mac-id", p_mac_key: "mac-key" });
     expect(await handlers.get("host-pairing:check")!("nope")).toEqual({ status: "expired" });
     await expect(handlers.get("host-pairing:cancel")!("nope")).resolves.toBeUndefined();
     await expect(handlers.get("host-pairing:start")!(null)).rejects.toThrow();
+  });
+});
+
+describe("Approve re-pair", () => {
+  it("signs a worker's move with this Mac's key after Touch ID, and only when main has a signer", async () => {
+    const handlers = new Map<string, (...args: unknown[]) => unknown>();
+    const W = "99999999-8888-4777-8666-555555555555";
+    const P = "99999999-8888-4777-8666-555555555556";
+    const O = "99999999-8888-4777-8666-555555555557";
+    const rows: Record<string, unknown> = {
+      [W]: { id: W, kind: "worker", name: "m1mini", owner_user: "u1" },
+      [P]: { id: P, kind: "phone", name: "iPhone", owner_user: "u1" },
+      [O]: { id: O, kind: "worker", name: "theirs", owner_user: "u2" },
+    };
+    const db = () => ({ from: () => ({ select: () => ({ eq: (_c: string, id: string) => ({ maybeSingle: () => Promise.resolve({ data: rows[id] ?? null }) }) }) }) });
+    const confirm = vi.fn(() => Promise.resolve(false));
+    const deps = { db, userId: () => "u1", macDevice: () => "mac-id", myDevice: () => Promise.resolve({ publicKey: "k" }), confirm };
+    registerHostPairing((channel, fn) => handlers.set(channel, fn), deps);
+    await expect(handlers.get("worker-repair:approve")!("w", "wph.x")).rejects.toThrow(/no approval key/);
+    const macSign = vi.fn(() => Promise.resolve("sig"));
+    registerHostPairing((channel, fn) => handlers.set(channel, fn), { ...deps, macSignKey: () => Promise.resolve("A".repeat(43) + "="), macSign });
+    const code = `wph.${PID}.${ORG}.${"s".repeat(43)}.${"B".repeat(43)}`;
+    expect(await handlers.get("worker-repair:approve")!(W, code)).toEqual({ denied: true });
+    expect(confirm).toHaveBeenCalledWith(expect.stringMatching(/^let the worker m1mini stop trusting this Mac/));
+    expect(macSign).not.toHaveBeenCalled();
+    // Main reads the worker itself: a phone, someone else's worker or no id at all is refused before Touch ID.
+    for (const id of [P, O, "w", undefined]) await expect(handlers.get("worker-repair:approve")!(id, code)).rejects.toThrow(/isn't a worker/);
+    expect(confirm).toHaveBeenCalledTimes(1);
+    // A code naming this Mac must be one it opened.
+    const mine = `wph.${PID}.${ORG}.${"s".repeat(43)}.${"A".repeat(43)}`;
+    await expect(handlers.get("worker-repair:approve")!(W, mine)).rejects.toThrow(/wasn't made on it/);
   });
 });
 

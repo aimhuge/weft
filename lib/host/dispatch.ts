@@ -5,8 +5,8 @@
 // rule and the elevated verbs it keeps while a phone is paired, a worker's pasted-file transfer.
 import { answerBody, answerGrant, replyBody, stopBody, type AnswerPayload, type CloudCommandRow, type GrantScope } from "../cloud-commands";
 import type { HostVerb } from "../host-api";
-import { isHostLevelVerb } from "@weft/client";
-import { hostResult, readHostCommand, remoteRefusal, textArgOf, verbResult, type HostDone, type HostPayload } from "../host-command";
+import { isHostLevelVerb, isListVerb, type ListVerb } from "@weft/client";
+import { hostResult, readHostCommand, remoteRefusal, textArgOf, verbResult, type HostArgs, type HostDone, type HostPayload } from "../host-command";
 import { carriesValue, valueResult, type Carry } from "../host-result";
 import type { Card } from "../types";
 import type { Done } from "./identity";
@@ -32,6 +32,9 @@ export interface CardRules {
   elevated?(verb: HostVerb, args: Record<string, unknown>): Promise<string | null>;
   // A verb on the host itself (settings.get / settings.put), from the network. Absent: this host refuses them (a Mac).
   hostVerb?(verb: HostVerb, args: Record<string, unknown>): Promise<unknown>;
+  // Whether the command's author is this host's owner. A verb in OWNER_VERBS runs only when it is; a host without the
+  // rule can't say, so none of those verbs runs there from the network.
+  fromOwner?(command: CloudCommandRow): boolean;
   // After a verb that changed a card ran: a Mac sends the change now rather than on the next tick.
   after?(): void;
   // A host card.permission.answer goes through the answer kind, so it takes the same approval rule (a Mac).
@@ -43,7 +46,21 @@ export interface CardRules {
   // Puts a verb's result that's over the row's cap (the editor's files.*) in the blob store, answering its sha; a host
   // without it answers only small ones (lib/host-result.ts).
   carry?: Carry;
+  // card.create: makes the card the args name in the row's folder, and resolves with its id once it's published (a
+  // worker). Without it the host makes cards through its own new_card kind (a Mac).
+  create?(command: CloudCommandRow, args: Record<string, unknown>): Promise<string>;
+  // cron.* and webhook.*: runs one on a cron or webhook this host keeps, past remoteRefusal, and resolves with the card a
+  // run made (or null). Without it the host refuses them from the network (a Mac: its own are changed in its window).
+  lists?(verb: ListVerb, args: HostArgs): Promise<string | null>;
 }
+
+// Verbs that put something on the internet or prompt the owner's Mac (dev.open: a tunnel and a Touch ID). Only the
+// owner's own command runs them from the network, never another member's of the workspace.
+export const OWNER_VERBS: ReadonlySet<HostVerb> = new Set<HostVerb>(["dev.open"]);
+const NOT_OWNER = "Only the owner of this card can do that.";
+
+const NO_CREATE = "This host starts new threads through new_card, not card.create.";
+export const NO_LISTS = "This Mac's crons and webhooks change only in its own window (its ⏰ and 🪝 drawers, or a thread there), not from the network.";
 
 // A host verb's answer as an answer kind: the same payload, so the same approval rule and a phone's signature
 // (args.auth) over the same fields. It needs the request's pendingId, as the answer kind does.
@@ -53,8 +70,8 @@ export function asAnswer(command: CloudCommandRow, { args }: HostPayload): Cloud
   return { ...command, kind: "answer", payload };
 }
 
-// Verbs a board runs for their answer: they change no card, so there's nothing to sync after them.
-const READS = new Set<HostVerb>(["skills.list", "files.list", "files.read", "files.write", "settings.get", "settings.put"]);
+// Verbs a board runs for their answer, or to warm a CLI: they change no card, so there's nothing to sync after them.
+const READS = new Set<HostVerb>(["skills.list", "files.list", "files.read", "files.write", "card.warm", "settings.get", "settings.put"]);
 
 const NO_HOST_VERBS = "This host takes its settings only from its own window.";
 
@@ -113,7 +130,10 @@ export function cardKinds(rules: CardRules) {
       return { cardId, result: hostResult(cardId) };
     }
     if (isHostLevelVerb(body.verb)) return onHost(body);
+    if (body.verb === "card.create") return create(command, body);
+    if (isListVerb(body.verb)) return list(body.verb, body);
     const card = rules.card(body.args.id, command, "reached");
+    if (OWNER_VERBS.has(body.verb) && !rules.fromOwner?.(command)) throw new Error(NOT_OWNER);
     const refused = remoteRefusal(body) ?? (await rules.elevated?.(body.verb, body.args));
     if (refused) throw new Error(refused);
     const reply = await verb(body.verb, await received(command, { ...body.args, id: card.id }, textArgOf(body.verb)));
@@ -130,6 +150,25 @@ export function cardKinds(rules: CardRules) {
     if (refused) throw new Error(refused);
     const reply = await rules.hostVerb(body.verb, body.args);
     return { cardId: "", result: verbResult(body.verb, "", reply) };
+  }
+
+  // A new card: no card to check yet, so the host's own create rule, behind the same refusals as an update.
+  async function create(command: CloudCommandRow, body: HostPayload): Promise<HostDone> {
+    if (!rules.create) throw new Error(NO_CREATE);
+    const refused = remoteRefusal(body) ?? (await rules.elevated?.(body.verb, body.args));
+    if (refused) throw new Error(refused);
+    const cardId = await rules.create(command, await received(command, body.args, textArgOf(body.verb)));
+    return { cardId, result: hostResult(cardId) };
+  }
+
+  // A cron or webhook the host keeps: args.id is the item, so there's no card to check, only remoteRefusal's limits. The
+  // row's card_id stays empty (it may name only a card this host published); `result` names a run's card.
+  async function list(verb: ListVerb, body: HostPayload): Promise<HostDone> {
+    if (!rules.lists) throw new Error(NO_LISTS);
+    const refused = remoteRefusal(body);
+    if (refused) throw new Error(refused);
+    const made = await rules.lists(verb, body.args);
+    return { cardId: null, result: hostResult(made ?? "") };
   }
 
   return { reply, answer, stop, host };

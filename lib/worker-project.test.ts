@@ -2,12 +2,10 @@
 // the folder a Mac can act on, and the summaries and menus the board draws from them.
 import { describe, expect, it } from "vitest";
 import type { ProjectSummary, ProjectWorker } from "./board-view";
-import type { Card, Column } from "./types";
 import {
   EMPTY_WORKER_BOARD,
   isWorkerCard,
   isWorkerProject,
-  localColumns,
   localPath,
   offlineMessage,
   parseWorkerProject,
@@ -19,7 +17,6 @@ import {
 
 const summary = (over: Partial<ProjectSummary> = {}): ProjectSummary => ({ path: "/dev/app", lastActivity: 0, cards: 0, running: 0, needsYou: 0, ...over });
 
-const card = (over: Partial<Card> = {}): Card => ({ id: "c1", cwd: "/dev/app", ...over }) as Card;
 
 describe("worker paths", () => {
   it("names a worker's project with the worker and the folder", () => {
@@ -95,6 +92,11 @@ describe("withWorkerProjects", () => {
     expect(out).toEqual([summary({ path: "/dev/app", cards: 3 })]);
   });
 
+  it("carries a worker project's pin and hide onto its summary", () => {
+    const out = withWorkerProjects([], [{ path: "worker://w1/ling", workerId: "w1", worker: "m1mini", folder: "ling", status: "online", pinned: true, hidden: true }]);
+    expect(out[0]).toMatchObject({ pinned: true, hidden: true });
+  });
+
   it("doesn't add a second row for a project the summaries already have", () => {
     const out = withWorkerProjects([summary({ path: "worker://w1/ling", cards: 2 })], [{ path: "worker://w1/ling", workerId: "w1", worker: "m1mini", folder: "ling", status: "online" }]);
     expect(out).toHaveLength(1);
@@ -102,33 +104,29 @@ describe("withWorkerProjects", () => {
   });
 });
 
-describe("localColumns", () => {
-  it("takes the worker's cards out of every column", () => {
-    const byColumn = new Map<Column, Card[]>([
-      ["review", [card({ id: "l1" }), card({ id: "w1", cwd: "worker://w1/ling" })]],
-      ["running", [card({ id: "w2", cwd: "worker://w2/other" })]],
-    ]);
-    const out = localColumns(byColumn);
-    expect(out.get("review")?.map((c) => c.id)).toEqual(["l1"]);
-    expect(out.get("running")).toEqual([]);
-  });
-
-  it("keeps the columns that have nothing in them", () => {
-    const out = localColumns(new Map<Column, Card[]>([["done", []]]));
-    expect(out.get("done")).toEqual([]);
-    expect(out.has("done")).toBe(true);
-  });
-});
-
 describe("workerProjectMenu", () => {
-  it("offers only a new thread, and says where it runs", () => {
+  it("offers a new thread, says where it runs, and pins, hides, archives and stops", () => {
     const worker: ProjectWorker = { name: "m1mini", status: "online" };
-    expect(workerProjectMenu("ling", worker)).toEqual([{ id: "new", label: "New Thread in ling", enabled: true, detail: "on m1mini" }]);
+    const items = workerProjectMenu("ling", worker);
+    expect(items[0]).toEqual({ id: "new", label: "New Thread in ling", enabled: true, detail: "on m1mini" });
+    expect(items.map((i) => ("id" in i ? i.id : "-"))).toEqual(["new", "-", "pin", "hide", "-", "archive-done", "stop-running"]);
+    expect(items.slice(-2)).toEqual([
+      { id: "archive-done", label: "Archive Done Cards", enabled: false },
+      { id: "stop-running", label: "Stop Running Cards", enabled: false },
+    ]);
+  });
+
+  it("counts what it can archive or stop, and turns pin and hide round", () => {
+    const worker: ProjectWorker = { name: "m1mini", status: "online" };
+    const one = workerProjectMenu("ling", worker, { pinned: true, hidden: true, done: 1, live: 1 });
+    expect(one.map((i) => ("label" in i ? i.label : "-"))).toEqual(["New Thread in ling", "-", "Unpin from Bar", "Show in Bar", "-", "Archive 1 Card in Done", "Stop 1 Running Card"]);
+    const many = workerProjectMenu("ling", worker, { done: 3, live: 2 });
+    expect(many.slice(-2).map((i) => ("label" in i ? i.label : ""))).toEqual(["Archive All 3 in Done", "Stop All 2 Running"]);
   });
 
   it("can't start a thread on a worker that's offline", () => {
     const worker: ProjectWorker = { name: "m1mini", status: "offline" };
-    expect(workerProjectMenu("ling", worker)).toEqual([{ id: "new", label: "New Thread in ling", enabled: false, detail: "on m1mini · offline" }]);
+    expect(workerProjectMenu("ling", worker)[0]).toEqual({ id: "new", label: "New Thread in ling", enabled: false, detail: "on m1mini · offline" });
   });
 });
 

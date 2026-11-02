@@ -58,9 +58,10 @@ guard set: each is refused, or asked about, in the same words on all three.
 
 | Hook | File | Turns away |
 | --- | --- | --- |
-| Secret guard | `lib/secret-guard.ts` | reading `.env` files, Weft's data secrets, a Weft Worker's home ([what's sealed](weft-worker.md#whats-sealed-on-a-worker)), environment dumps (Bash, Read, Grep…) |
+| Secret guard | `lib/secret-guard.ts` | reading `.env` files, Weft's data secrets, a Weft Worker's home ([what's sealed](weft-worker.md#whats-sealed-on-a-worker)), environment dumps, CLIs that print a sign-in token and the files they keep it in ([below](#credential-clis)) (Bash, Read, Grep…); a board thread's copy knows its card, so it may Read an attachment its user pasted in (`lib/secret-guard-pasted.ts`) |
 | Restart guard | `lib/restart-guard.ts` | killing or restarting Weft's own server, app or port while other cards' turns run; points the thread at `mcp__board__restart_weft_when_idle` |
 | Clipboard guard | `lib/clipboard-guard.ts` | reading the clipboard (`pbpaste`, `osascript` `the clipboard`, NSPasteboard, `wl-paste`, `xclip`, `xsel`) while a pairing code is open, since its link carries the pairing secret; main marks the code open in `vault/pairing-open.json` ([mobile-security.md](mobile-security.md#pairing-a-passkey)) |
+| Worker CLI guard | `lib/worker-cli-guard.ts` | *running* the Weft Worker's command line: `weft-worker …`, `sh`/`bash`/`./install/worker.sh`, `curl … worker.sh \| sh`, `node`/`tsx`/`jiti`/`pnpm exec`/`npx` on `scripts/weft-worker.ts`, the same behind `env`, `exec`, `xargs`, `sudo`, `nohup`, or any runner handed a `wph.` pairing code. Reads, edits, `git diff/log/show`, `sed -n`, and `pnpm lint`/`test`/`typecheck` on those files stay open; a shape it can't read is refused |
 | Git guard | `lib/git-guard.ts` | git commands that throw away or hide uncommitted work in the shared tree |
 | Route import guard | `lib/route-import-guard.ts` | an edit that makes a route file import a module that isn't there yet |
 | Prerender check | `lib/prerender-check.ts` (run by the route import guard) | a route segment config export `next build` refuses under cacheComponents; warns (doesn't deny) on runtime data awaited outside `<Suspense>` |
@@ -69,6 +70,14 @@ guard set: each is refused, or asked about, in the same words on all three.
 | Symbol claims | `lib/claim-guard.ts` | asks (doesn't deny) before an edit to a symbol another busy card is editing |
 | Bash claims | `lib/bash-claims.ts` | asks before a Bash line that writes a claimed file; claims what Bash wrote, drops claims on clean files, tells a failed check whose failures are another card's |
 | Folder gate | `lib/folder-guard.ts` | asks (doesn't deny) before a file tool or Bash command reaches a folder outside the card's project |
+
+**Worker CLI guard, what it can't see.** It reads the command line, so it refuses a runner given the script, a shell given
+`-c` (or `-lc`, `-ec`, `--`), `curl`/`cat` of the installer piped to a shell, and a shell or interpreter fed it by `<`.
+A `pnpm lint|test|typecheck|format` may name `scripts/weft-worker.ts` as a bare path, but not with `-c`, `--config`, `--plugin`,
+`--setupFiles`, `--import`, `-r`, a `wph.` code or a command word after it (a lint config is loaded as code). **Known gap:**
+`enrolRefusal`'s `--re-pair` check in `lib/worker-mac-keys.ts` asks only for a TTY, and a pty wrapper (`script`, `expect`,
+`tmux`) fakes one; the guard lists those wrappers, but a program a thread writes and runs can still open a pty. Closing it
+needs something a thread can't produce, such as the owner approving the re-pair from the Mac (Settings, Devices); not built yet.
 
 ## The local API's own gate
 
@@ -164,10 +173,15 @@ would refuse it, so Weft, not the OS, decides. The paths come from the tool's fi
 Bash, from every absolute, `~/`, `$HOME` and `../` token in the command (a quoted token runs to its closing quote and
 `\ ` escapes a space, so a project in `~/My Drive` isn't read as `~/My`), and only those under the user's own files
 (home, `/Users`, `/Volumes`), a heuristic that can't see a path a script builds. Paths are resolved first (`~`, `..`,
-symlinks, a file not created yet by its nearest folder).
+symlinks, a file not created yet by its nearest folder). A path only named in prose doesn't count (2026-11-02): a commit
+message, a PR's `--title` or `--body`, a sentence `echo` prints, a heredoc written to a page (`proseOf` in
+`lib/shell-text.ts`, the same words the secret guard skips). A `$(cat ~/x)` folded into a message still reaches `~/x`,
+so its own paths stay. Before this, a marketing card stalled on "Outside the project: use ~/.weftn", which was
+`~/.weft\n` inside a quoted string.
 
 - **Never asked about**: the project (an isolated card's worktree, for it), `card.readScope`, `settings.allowedFolders`, Weft's data folder (`~/.weft`, but not `~/.weft/worktrees`: another card's worktree asks like any other folder),
-  `~/.claude`, temp dirs, `/dev`, `/tmp` and the system's tool and library paths.
+  the card's own memory folder (`~/.claude/projects/<project>/memory`, `memoryDir`; nothing else in `~/.claude`), temp
+  dirs, `/dev`, `/tmp` and the system's tool and library paths.
 - **The prompt** reads "Outside the project: read ~/Downloads" with an **Outside project** chip. The folder is the call's
   project root (nearest ancestor with a `.git`, `package.json`…, below home), else the file's folder, never home itself
   (`grantRoot`). `folderAsk` carries the question, reason and folder from the hook to `canUseTool`
@@ -399,6 +413,35 @@ The Bash guards don't match strings: `lib/shell-parse.ts` reads the line the way
 `steps()` in `lib/restart-guard.ts` turns it into every command it would run, each with the folder it runs in.
 That covers `a && b; c | d`, `$( )` and backticks, `sh -c '…'`, a heredoc fed to `bash`, `eval`, `xargs`,
 `sudo`/`env FOO=1` prefixes, and `cd x &&` carrying to the commands after it. The git guard uses the same walk.
+`lib/shell-text.ts` says which words a command takes as text rather than as a path (`textWords`: `--message`, `--body`,
+`--title`, `--notes`… for any command that doesn't run its words, `-m`/`-t`/`-b` for git, gh and glab, and echo's
+quoted sentences), so neither the secret guard nor the folder gate reads a PR body as a list of files.
+
+## Credential CLIs
+
+A thread can run the user's own CLIs, and some of them print the sign-in they hold. Their output lands in the
+thread's context, and so in the model request and its transcript for good, so `lib/secret-guard-credentials.ts`
+refuses the command itself (a red-team review, 2026-11-02). `credentialVerdict` reads the command's words past its
+flags and their values, so `gh auth token -h github.com`, `gog -a me auth tokens export me` and
+`git -C . credential fill` are caught, and it runs on every command the line holds: `$(gh auth token)`, `sh -c '…'`,
+a heredoc fed to `bash`, `npx`/`pnpm exec` children. Refused:
+
+- gh: `auth token`, `auth status -t/--show-token`, `auth git-credential`, `config get oauth_token`
+- gog: `auth tokens export` (`gog auth tokens list` names keys only and stays open)
+- git: `credential fill|get`, `credential-<helper> get`, and the `git-credential-*` helpers run directly
+- macOS `security`: `find-generic-password`/`find-internet-password` with `-w` or `-g`, `dump-keychain -d`, `export`
+- supabase: `projects api-keys`, `branches get`; gcloud: `auth [application-default] print-access-token|print-identity-token`;
+  aws: `configure export-credentials`, `configure get` of a key or token. `vercel env pull` to stdout was already refused.
+
+The refusal names the command and says to keep the value in the 🔐 vault and use `mcp__secrets__run`. Everything else
+the CLIs do runs as ever: `gh pr`, `gh api`, `gh auth status`, `gog gmail search`, `supabase db push`.
+Because the check reads parsed words, a commit message, PR body or heredoc that only mentions `gh auth token` is one
+word of text, not a command, and isn't refused.
+
+The files those CLIs keep their sign-in in are sealed like a `.env` (`isCliCredential`, called from `isSecretFile`, so
+Bash, Read and Grep alike): `~/.config/gh/hosts.yml` (and the `~/.config/gh` folder, for `grep -r`), `~/.git-credentials`,
+`~/.config/git/credentials`, `.netrc`, `~/.supabase/access-token`, the Vercel CLI's `com.vercel.cli/auth.json`, and gog's
+`gogcli/credentials.json` and file keyring. Globs are tried against the known paths; `~/.config/gh/config.yml` stays open.
 
 ## Git guard
 

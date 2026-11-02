@@ -495,7 +495,7 @@ message to re-read the file and redo its edit on top of the new one. Two cards c
 that would close such a loop is refused and the card goes ahead instead, so one of the two always keeps running
 instead of the board locking up.
 
-A thread works in its card's project folder. When a file tool or a Bash command reaches anywhere else (say `~/Downloads`), Weft asks first, whether or not macOS would have refused it: **Allow once**, **This card** or **Always**, with an **Outside project** chip saying which folder. **Always** used to be a one-way door — nothing listed those folders and nothing took one back. Settings → General now has a **Trusted folders** row: **Add folder** opens the OS folder dialog, **Remove** takes one back out, and a thread already holding the folder keeps it only until that turn ends (`lib/folder-guard.ts`, `components/TrustedFolders.tsx`).
+A thread works in its card's project folder. When a file tool or a Bash command reaches anywhere else (say `~/Downloads`), Weft asks first, whether or not macOS would have refused it: **Allow once**, **This card** or **Always**, with an **Outside project** chip saying which folder. **Always** used to be a one-way door — nothing listed those folders and nothing took one back. Settings → General now has a **Trusted folders** row: **Add folder** opens the OS folder dialog, **Remove** takes one back out, and a thread already holding the folder keeps it only until that turn ends (`lib/folder-guard.ts`, `components/TrustedFolders.tsx`). A folder only mentioned in a commit message, a PR body or a page a thread writes doesn't ask, and the thread's own memory folder (`~/.claude/projects/<project>/memory`) is its own (`lib/shell-text.ts`). The secret guard reads the same way: a PR body that mentions the vault is fine, and a refusal says what it refused, the CLI's folder, another card's paste or a worker's key, instead of always "secret values" (`lib/secret-guard-why.ts`).
 
 Every thread runs inside Weft's own server, so restarting Weft cuts off every running turn. A thread
 can't do that behind your back: while other cards are running, a `kill`, `pkill`, `killall` or port-freeing
@@ -730,7 +730,8 @@ another refactor, a stricter lint rule or a better type:
 - The scout's report is cached in `~/.weft/scout/` with the commit it ran on. It runs on its own only
   once, for a project with no report; after that `/weft:done` scouts the session's files and merges its findings
   in, and **Re-scout now** reads the whole project again. A new commit alone never starts a run.
-  It never runs on the start-a-card path.
+  It never runs on the start-a-card path. On a Weft Worker project, **Re-scout now** starts a card there that scouts and saves
+  the report, and the Backlog counter starts a sprint-planning card there.
 
 Hover the badge for how the number is made. Click it for a menu: **Fix the checklist, weakest first**
 starts one thread on the checklist, and each scout finding starts its own small card ("Long Function:
@@ -988,6 +989,11 @@ menu to switch simulators, **Resume** when the 10 minutes run out, and a Low / M
 no tap latency, while the worker's agent keeps driving it. A build runs as you, so it asks for Touch ID, once per card for 8 hours. If the Mac
 sleeps, the agent falls back to the worker's own device.
 
+**Dev servers and tunnels on a worker.** A worker's dev servers show in 🖥 Services under the worker's name. **Open**
+gives one a private address that only you can open, after your Touch ID on your Mac, and shows it in the pane; a worker
+card's `mcp__webhooks__tunnel` and `relay` ask your Mac the same way, so a provider's webhook reaches the worker's route
+through that address.
+
 **Live worker simulators.** Watching an iOS simulator on a worker streams live video to the pane over an encrypted WebRTC connection, and your clicks, drags and keys reach it as you make them. If the connection can't be made, the pane stays on the slower picture stream.
 
 **Weft Workers.** A worker is a Mac or Linux box that runs cards headless while your laptop sleeps. Settings → Sync →
@@ -996,6 +1002,8 @@ It installs the toolchain and Weft, enrols with a one-time token, and starts a l
 Or pair it instead: Settings → **Devices** → **Add a worker** gives a line with a pairing code; the box makes its own key,
 claims the code, prints a check code, and joins once you confirm the same code with Touch ID on the Mac. Settings → Devices
 also lists every Mac, worker, phone and browser of yours, the keys each holds, and **Revoke** for any of them.
+**Re-pair** on a paired worker moves it to another Mac: paste that Mac's code, approve with Touch ID, and run the line it
+shows on the box. A worker never switches Macs without the one it trusts signing off.
 **Sign in to Claude** on its row signs its Claude Code in with one click: Weft opens Claude's approval page in a
 window beside the button, and the token it gets back is sealed to the worker's own key, so Supabase never holds it
 in the clear (or run `weft-worker login` on the box). **Sign in to GitHub** beside it does the same for private repos:
@@ -1008,8 +1016,12 @@ A worker's card can run a command with your vault's secrets (`mcp__secrets__run`
 A worker's card has the mode picker in its thread (Ask me, Accept edits or Auto; YOLO stays local), and when a thread watches a simulator or emulator on the worker, its screen streams to the pane, where you can tap and swipe it from the desktop.
 A worker's card opens like any card, with the show rail beside its pane, and you work it the same way: rename it, tag, star or archive it, drag it to another column, pick its model or CLI, stop it, continue or restart it, edit your last message, and answer Wait, This first or Others first, from the tile, its right-click menu or the open thread. Each change shows at once and goes back if the worker refuses it. A worker's card can't be deleted, shared, given another agent or folder, or run a "!" shell command from here yet.
 A worker's project shows the header's code quality, uncommitted pile and Backlog counts too, from what the worker last measured; when that's stale or the worker is offline, the header says how old it is ("12m ago, m1mini offline"). A worker card's editor opens, edits and saves the worker's files, and file names in its thread link there (no live reload yet; the worker won't open credentials such as `.ssh` or `.npmrc`, won't take a save into `.git`, an agent's settings, hook managers or `package.json`, and logs every remote read and save).
+A thread on a worker works on your real board: `list_cards` lists your cards from every Mac and worker (titles and columns, never their threads), `create_card` starts a card on that worker or sends it to your Mac or another worker, and the crons and webhooks it makes run on the worker and show in your ⏰ and 🪝 drawers, where you can pause, edit, run or delete them like your Mac's (a worker project's drawers show only that worker's). Its `list_crons` shows your Mac's crons too, read-only. A card a worker sends your Mac waits in Backlog, tagged `from-worker`, for you to start; one it sends another worker starts in Ask me mode. A worker can send at most 30 cards an hour.
+A new thread in a worker project keeps everything the dialog picked: tags, CLI, model, effort, mode and **Isolated** (a worktree from the worker's own pool, landed on Done). **Add to Backlog** puts it in the worker's Backlog, where you can reorder it. A worker's cards chime, notify and count on the dock badge like yours, and the header counts, ⌘K, Archive all Done, Resume all, Switch all and the 🏷 drawer include them. A worker project's right-click menu pins, hides, archives its Done cards and stops its running ones.
 A worker's card shows its pages in the browser pane too, on this board and on weft.zip: it writes a page, opens it, and Weft uploads it with its images. Only web files from the card's project and show folder can leave the box.
 Your Mac's automations, /weft:done's model and effort, push on done, the subagent and backup models and the thread instructions sync to your workers, so a worker card behaves as you set it up here. Settings → **Threads** → **On a worker** sets a worker's own threads at once, keep-alive, worktree pool and default CLI; its folders and modes are only ever set on that machine. A worker card's 5hr and 7d chart is the worker's own week, and work on your workers counts toward your streak and XP.
+The left rail works on a worker's project too. 🔐 shows the vault of its repo on your Mac (found by the project's name), and Vercel, Supabase, Cloudflare, BlastCP, Slack and Skills read that same checkout. 🖥 Services shows that worker's dev servers with **Log** (its last lines), **Restart** and **Stop**. GitHub's issue sync works for it: each new issue starts as a card on the worker (set the project's issues to **Run**; Backlog waits on the worker making unstarted cards). **Save as app** on a page a worker card wrote brings the page to your Mac as a mini app, which opens on the rail, reaches your other Macs and shares at `weft.zip/a/<id>`. The uncommitted pile's walk-through starts a card on the worker.
+A worker's card can browse like a local one: it opens a site or the worker's own dev server in a headless browser on the box, reads it, clicks, types, scrolls and checks its console, and you watch that browser live in the pane and can click it yourself. It can't open the worker's own secret files.
 A worker updates itself: when Weft has a new commit and no card is running there, it installs it, tests that it loads and restarts, and goes back on its own if the new code is bad. A push to main reaches it in seconds. Its row in Settings shows what it runs, which cards are holding an update, and **Update now** to ask by hand.
 **Send a run** queues a prompt in a project folder on the worker, and it clones the repo the first time. The card runs on the box with the same engine as your Mac and syncs back to the
 web board, where you can reply to it, answer it or stop it. Right-click a project chip and tick **Run on Worker**

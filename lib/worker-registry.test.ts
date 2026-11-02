@@ -158,3 +158,33 @@ describe("registry", () => {
     await expect(registry(rpc, key).putItems("card-1", [], [], null)).rejects.toThrow("worker_put_items: boom");
   });
 });
+
+describe("registry: the board tools", () => {
+  const key = "wwk_key";
+
+  it("reads the owner's board, an empty answer as none", async () => {
+    const rows = [{ card_id: "c1", folder: "weft", owner_device: "mac-1", owner_worker: null, card: {}, updated_at: "t" }];
+    const { rpc, calls } = fakeRpc({ data: rows });
+    expect(await registry(rpc, key).boardCards(50)).toEqual(rows);
+    expect(calls).toEqual([{ fn: "worker_board_cards", args: { p_key: key, p_limit: 50 } }]);
+    expect(await registry(fakeRpc().rpc, key).boardCards(5)).toEqual([]);
+  });
+
+  it("sends a card to another host and publishes its lists", async () => {
+    const { rpc, calls } = fakeRpc({ data: "cmd-9" });
+    expect(await registry(rpc, key).newCard("mac-1", "/Users/me/app", { prompt: "go" })).toBe("cmd-9");
+    await registry(rpc, key).setLists([{ id: "c" }], []);
+    expect(calls).toEqual([
+      { fn: "worker_new_card", args: { p_key: key, p_target: "mac-1", p_folder: "/Users/me/app", p_payload: { prompt: "go" } } },
+      { fn: "worker_set_lists", args: { p_key: key, p_crons: [{ id: "c" }], p_webhooks: [] } },
+    ]);
+  });
+
+  it("reads the owner's Macs' crons, an empty answer as none", async () => {
+    const rows = [{ device: "d1", label: "mbp", crons: [{ id: "k1" }], updated_at: "t" }];
+    const { rpc, calls } = fakeRpc({ data: rows });
+    expect(await registry(rpc, key).macCrons()).toEqual(rows);
+    expect(calls).toEqual([{ fn: "worker_mac_crons", args: { p_key: key } }]);
+    expect(await registry(fakeRpc().rpc, key).macCrons()).toEqual([]);
+  });
+});

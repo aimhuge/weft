@@ -5,7 +5,10 @@
 import path from "node:path";
 import { blankCommand, parseShell, type SimpleCommand } from "./shell-parse";
 import { DATA_DIR } from "./store";
-import { DATA_NAMES, expandBraces, followCd, inTranscriptDir, isSecretFile, reachesDataDir } from "./secret-guard-files";
+import { refusal } from "./secret-guard-why";
+import { credentialVerdict } from "./secret-guard-credentials";
+import { gitSubcommand, textWords } from "./shell-text";
+import { DATA_NAMES, expandBraces, followCd, inTranscriptDir, isSecretFile, isWorkerHome, reachesDataDir } from "./secret-guard-files";
 
 // Commands that print, copy out or send what they read.
 const READERS = new Set(
@@ -79,7 +82,7 @@ function pathTokens(word: string): string[] {
 }
 
 // Every secret name above has one of these in it, or a glob reaches it; the rest skip path.resolve.
-const MAYBE_SECRET = new RegExp(`env|dev\\.vars|${DATA_NAMES.map((n) => n.split(".")[0]).join("|")}|[*?[]`, "i");
+const MAYBE_SECRET = new RegExp(`env|dev\\.vars|gh|credentials|netrc|supabase|vercel|gogcli|${DATA_NAMES.map((n) => n.split(".")[0]).join("|")}|[*?[]`, "i");
 
 // A path that is the data dir or the CLI's transcript dir, whatever else is in it. These hold
 // the control server's token and every secret a thread ever saw, so they are named by their
@@ -220,7 +223,8 @@ function copierVerdict({ args, dataDir }: Call): string | null {
 
 // git only with a subcommand that shows file contents; log only with a patch.
 function gitVerdict(call: Call): string | null {
-  const sub = call.args.find((a) => !a.startsWith("-")) ?? "";
+  // Past git's own options and their values: `git -C . show HEAD:.env` is a show (2026-11-02).
+  const sub = gitSubcommand([call.cmd, ...call.args]) ?? "";
   const shows = GIT_READS.has(sub) || (sub === "log" && call.args.some((a) => /^(-p|-u|--patch)$/.test(a)));
   return shows ? readerVerdict(call) : null;
 }
@@ -250,6 +254,10 @@ function verdictFor(cmd: string): ((call: Call) => string | null) | null {
   return READERS.has(cmd) ? readerVerdict : null;
 }
 
+// `ls ~/.weft-worker` lists the worker home's names, not their contents; `ls -R` would walk into the sealed ones.
+const listsHome = (run: string[], word: string) =>
+  nameOf(run) === "ls" && !run.some((a) => /^(-[a-zA-Z]*R|--recursive)$/.test(a)) && isWorkerHome(word);
+
 // Why one simple command is turned away.
 function commandVerdict({ words: raw, inputs, stdin }: SimpleCommand, dataDir: string, depth: number, namesSecret: () => boolean): string | null {
   const redirected = inputs.find((f) => isSecretFile(f, dataDir));
@@ -259,10 +267,16 @@ function commandVerdict({ words: raw, inputs, stdin }: SimpleCommand, dataDir: s
   if (pullsToStdout(words)) return reason("`vercel env pull` to stdout", true);
   // A folder that holds secrets, named as a folder: `find ~/.weft -exec cat {} \;` and
   // `rsync -a ~/.weft/ /tmp/b/` name no secret file, but reach one (2026-10-28).
-  // The raw words, so `H=~/.weft-worker; cat $H/worker.json` counts.
-  const hard = hardPathIn([...raw, ...inputs], dataDir);
+  // The raw words, so `H=~/.weft-worker; cat $H/worker.json` counts, but not the ones the command takes as text:
+  // `gh pr create --body "…~/.weft/vault/…"` opens nothing (lib/shell-text.ts).
+  const run = unwrapEnv(words);
+  const prints = credentialVerdict(run);
+  if (prints) return prints;
+  const text = textWords(run);
+  const opened = [...raw.slice(0, raw.length - run.length), ...run.filter((w, i) => !text.has(i) && !listsHome(run, w))];
+  const hard = hardPathIn([...opened, ...inputs], dataDir);
   if (hard) return reason(hard);
-  const [first = "", ...args] = unwrapEnv(words);
+  const [first = "", ...args] = run;
   const cmd = path.basename(first);
   const own = verdictFor(cmd)?.({ cmd, args, stdin, dataDir, depth, namesSecret }) ?? null;
   if (own) return own;
@@ -274,6 +288,8 @@ function commandVerdict({ words: raw, inputs, stdin }: SimpleCommand, dataDir: s
 function execChildVerdict(cmd: string, args: string[], dataDir: string, depth: number, namesSecret: () => boolean): string | null {
   const child = execRunnerChild(cmd, args);
   if (!child?.length) return null;
+  const prints = credentialVerdict(child);
+  if (prints) return prints;
   const [childCmd = "", ...childArgs] = child;
   const name = path.basename(childCmd);
   const inner = verdictFor(name)?.({ cmd: name, args: childArgs, stdin: [], dataDir, depth, namesSecret }) ?? null;
@@ -307,14 +323,8 @@ export function bashVerdict(command: string, dataDir = DATA_DIR, depth = 0): str
   );
 }
 
-// A file is named by its base name; literal text goes in as it is.
-function reason(what: string, literal = false): string {
-  const name = literal ? what : `\`${path.basename(what.replace(/^["']|["']$/g, ""))}\``;
-  return (
-    `Weft keeps secret values out of threads, so ${name} can't be read here. Work with names instead: ` +
-    "read or edit `.env.example`, and ask the user to set the value themselves."
-  );
-}
+// In words that fit what the path is (lib/secret-guard-why.ts).
+const reason = (what: string, literal = false) => refusal(what, undefined, literal);
 
 export const ENV_DUMP =
   "Weft keeps secret values out of threads, so dumping the environment or printing a secret variable is blocked. " +

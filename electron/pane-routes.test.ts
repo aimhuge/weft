@@ -33,6 +33,17 @@ describe("paneRoutes", () => {
     }
   });
 
+  it("names a worker's ask by the name main pinned, or marks the row's name unverified", async () => {
+    const fs = await import("node:fs");
+    const os = await import("node:os");
+    const path = await import("node:path");
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "pane-pins-"));
+    const promptTouchID = vi.fn(() => Promise.resolve());
+    const { routes } = make({ dataDir, systemPreferences: { canPromptTouchID: () => true, promptTouchID } });
+    await routes["POST /tunnels/approve"]!({ folder: "weft", target: "http://localhost:4000/", hours: 4, worker: "w9", workerName: "your bank" });
+    expect(promptTouchID).toHaveBeenLastCalledWith("open a private tunnel to http://localhost:4000/ from weft on your bank (name not verified) for 4 hours");
+  });
+
   it("puts an asked-for key in as a development blank by default", async () => {
     const { routes, addBlanks } = make();
     await expect(routes["POST /secrets/ask-add"]!({ folder: "/p", name: "KEY" })).resolves.toEqual({ added: true });

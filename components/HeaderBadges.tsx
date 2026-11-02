@@ -50,7 +50,7 @@ export default function HeaderBadges({
           {cwd && hostFor(cwd).kind === "cloud" && <SnapshotAge project={cwd} refresh={turnTick} />}
           <QualityBadge cwd={cwd} onImprove={begin} />
           <PileBadge cwd={cwd} refresh={turnTick} onStart={start} onError={notify} />
-          <BacklogBadge cwd={cwd} refresh={`${turnTick}:${waiting}`} onStart={start} onError={notify} />
+          <BacklogBadge cwd={cwd} cards={cards} refresh={`${turnTick}:${waiting}`} onStart={start} onError={notify} />
           <GameBadge cwd={local} refresh={`${turnTick}:${done}`} onStart={begin} />
           <LeagueBadge refresh={done} />
         </>

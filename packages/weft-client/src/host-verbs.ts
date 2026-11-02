@@ -3,8 +3,11 @@
 // keyed by exactly these (`satisfies Record<HostVerb, Handler>`), so a verb added there without a name here, or the
 // other way round, fails the type check.
 export const HOST_VERBS = [
+  "card.create",
   "card.update",
+  "card.warm",
   "card.stop",
+  "card.delete",
   "card.shell",
   "card.fresh",
   "card.message",
@@ -27,6 +30,17 @@ export const HOST_VERBS = [
   // A host's own settings (./host-settings.ts), for no card: elevated, and only HOST_SETTINGS.
   "settings.get",
   "settings.put",
+  "dev.open",
+  "dev.stop",
+  // The crons and webhooks a host keeps (lib/host-api/lists.ts): args.id names the item, not a card.
+  "cron.update",
+  "cron.delete",
+  "cron.run",
+  "webhook.update",
+  "webhook.delete",
+  // T5: the Services drawer's Restart and Log on a worker's dev server.
+  "dev.restart",
+  "dev.log",
 ] as const;
 
 /** Every verb a host runs. HOST_API is keyed by these, and it is the allowlist a remote host checks. */
@@ -47,4 +61,11 @@ const HOST_LEVEL: ReadonlySet<string> = new Set<HostLevelVerb>(["settings.get", 
 
 export function isHostLevelVerb(verb: string): boolean {
   return HOST_LEVEL.has(verb);
+}
+
+/** The verbs on a host's own crons and webhooks, whose args.id is the item's id there rather than a card's. */
+export type ListVerb = Extract<HostVerb, `cron.${string}` | `webhook.${string}`>;
+
+export function isListVerb(verb: string): verb is ListVerb {
+  return isHostVerb(verb) && (verb.startsWith("cron.") || verb.startsWith("webhook."));
 }

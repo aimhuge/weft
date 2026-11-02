@@ -40,6 +40,25 @@ describe("removeNow", () => {
     expect(updates).toEqual([{ kind: "apply" }, { kind: "reload" }]);
     expect(overlay(card())).toEqual(card());
   });
+
+  it("keeps another host's card hidden after it agrees, until a reload reads it gone", async () => {
+    vi.useFakeTimers();
+    const remote = vi.fn(() => Promise.resolve(undefined));
+    await removeNow("a", remote);
+    expect(api.remove).not.toHaveBeenCalled();
+    expect(remote).toHaveBeenCalledOnce();
+    // The worker's last read still has it: it stays hidden.
+    expect(overlay(card())).toBeNull();
+    vi.advanceTimersByTime(STOP_SETTLE_MS);
+    expect(updates).toEqual([{ kind: "apply" }, { kind: "reload" }]);
+    expect(overlay(card())).toEqual(card());
+  });
+
+  it("brings another host's card back when it refuses", async () => {
+    await expect(removeNow("a", () => Promise.reject(new Error("That thread isn't on this worker.")))).rejects.toThrow("isn't on this worker");
+    expect(updates).toEqual([{ kind: "apply" }, { kind: "reload" }]);
+    expect(overlay(card())).toEqual(card());
+  });
 });
 
 describe("stopNow", () => {

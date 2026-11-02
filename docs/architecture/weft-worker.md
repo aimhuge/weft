@@ -257,10 +257,12 @@ A deny beats an ask, so the prompt never shows and a grant buys nothing here.
 
 | Under `~/.weft-worker` | A thread |
 | --- | --- |
-| `worker.json`, `worker.env`, `seal-key.json`, `github-credentials`, `worker.log`, `rollback.sh`, `update-trial`, `update-bad`, anything new | refused |
+| the home itself, listed: `ls ~/.weft-worker`, `ls -la`, the LS tool (not `-R`, not a glob of it) | open: names only, so a thread can find the folders below (2026-11-02) |
+| `worker.json`, `worker.env`, `seal-key.json`, `github-credentials` | refused: the worker's key, its Claude token, its private seal key, its GitHub token |
+| `worker.log`, `update-bad`, `update-trial`, `rollback.sh`, anything new | refused: the log is the daemon's raw stdout and stderr with no redaction pass, so whatever any process printed (an SDK error echoing a request, a CLI's debug output) lands there; `update-bad` keeps the first line of git and pnpm errors, which can carry a credentialed remote URL; `rollback.sh` is a copy of `install/worker-rollback.sh`, readable in the clone |
 | `data/`, as on a Mac | refused, save `data/show` and `data/apps` |
 | `work/` (or `WEFT_WORKER_ROOT`) | open: it's where cards run |
-| `weft/`, the clone of Weft | open: a public repo, and `/weft:done` runs `commit.sh` from the plugin inside it |
+| `weft/`, the clone of Weft | read and run: a public repo, and `/weft:done` runs `commit.sh` from the plugin inside it. Never changed by a thread: it's the code the daemon and `weft-worker` run, so an edit could turn off the re-pair check (`lib/worker-clone-guard.ts`, 2026-11-02) |
 
 - **A path is judged by where it lands.** Relative paths start from the card's cwd (`fromCwd`, from the hook's own input),
   not the daemon's, and a `cd` on the line moves them. Symlinks are followed, since a checkout is a repo somebody else
@@ -276,6 +278,27 @@ A deny beats an ask, so the prompt never shows and a grant buys nothing here.
   environment, so `node -e` can name it (only a whole-environment dump is refused), and a GitHub sign-in made through `gh` sits
   in `~/.config/gh/hosts.yml` and answers `gh auth token` and `git credential fill`. The real fix for both is a process
   boundary between the daemon and its cards.
+
+### Re-pairing and a lost Mac
+
+A paired worker takes secrets and signed settings from one Mac, the one whose key came in its pairing code
+(`mac-keys.json`). To move it to another Mac, or to pair it again into another workspace, that Mac approves the move:
+Settings → Devices → the worker → **Re-pair**, paste the new Mac's `wph.…` code, Touch ID, and run the line it shows in
+a terminal on the box (`weft-worker enrol wph.… --re-pair --approval wra.…`). The approval lasts 30 minutes and is
+good for that worker and that code only ([project-hosts.md](project-hosts.md#re-pairing-a-worker)).
+
+**A lost Mac, or a box that trusts none** (enrolled by token, or after `weft-worker forget-macs`): no Mac can approve,
+so wipe the box's enrolment and enrol it fresh. In a terminal on the box:
+
+```sh
+rm ~/.weft-worker/worker.json ~/.weft-worker/mac-keys.json
+weft-worker enrol <the wph.… code from the new Mac>
+weft-worker restart
+```
+
+Then **Revoke** the old worker row in Settings → Devices. `work/` and its checkouts stay. The secret guard refuses those
+two paths to threads by name. A passkey-confirmed re-pair at weft.zip, with a code shown on the box's console, would
+spare the wipe; it isn't built.
 
 ### Worker projects on the desktop board
 
@@ -335,16 +358,17 @@ card.page and the open_url item carry blob:sha256:<hex>#anchor (lib/worker-publi
 ```
 
 - **The tools:** `scripts/weft-worker.ts` sets `WEFT_WORKER=1`. `open_url` then calls `openOnWorker`: a local page uploads
-  before the tool answers, a public https address is noted as it is, and localhost is refused with the reason. The other
-  browser tools say they need the desktop app. `WORKER_BROWSER_PROMPT` replaces `BROWSER_PROMPT` in the thread's prompt,
+  before the tool answers (and opens in the worker's own browser too), and a public https address or this box's own dev
+  server opens in the worker's headless Chromium, live in the pane. The other browser tools drive that browser
+  ([worker-browser.md](worker-browser.md)); only `fill_field` needs the desktop app. `WORKER_BROWSER_PROMPT` replaces `BROWSER_PROMPT` in the thread's prompt,
   so a thread knows the pane works and never tells you to open a file on the box. An image in a reply (`![…](/abs/x.png)`)
   goes up the same way.
 - **Writing a page asks nobody.** `acceptEdits` only writes without asking inside the CLI's working directories: its cwd
   and `additionalDirectories`. The show folder is neither, because a card's cwd is its checkout. Nothing on the desktop
   exempts it: an Accept edits card there asks about `~/.weft/show` too. A desktop card goes through because it runs in
   Auto or YOLO, or waits for you. A worker defaults to Accept edits, never runs YOLO, and has nobody at the box, so
-  `sessionDirs` (`lib/worker-pane.ts`) adds `SHOW_DIR` to `additionalDirectories` on a worker only. It makes the folder
-  first, because the CLI drops a directory that doesn't exist and asks again. Reads and edits of a page stop asking too.
+  `sessionDirs` (`lib/show-dir.ts`) adds `SHOW_DIR` to `additionalDirectories` for every thread, desktop and worker alike
+  (2026-10-31; the desktop asked too). It makes the folder first, because the CLI drops a directory that doesn't exist and asks again. Reads and edits of a page stop asking too.
   Spares get it as well, since it's set where a session's options are built (`lib/runner-session.ts`).
   - **Auto too.** The folder doesn't stop every prompt: a card in Auto on `m1mini` still asked about an Edit in the show
     folder, though Auto on a Mac doesn't. So `ownPageCall` (`lib/worker-pane.ts`) answers a file tool inside `SHOW_DIR`
@@ -518,7 +542,13 @@ edits or Auto, applied mid-turn. It's elevated, and the daemon holds it to the s
 blocks come back as a prompt on the board. The simulator tools are trusted (`lib/board-tools-trust.ts`) in every mode, like
 the browser's, since they only reach a sandboxed device. In Local Simulator mode that device is on your Mac and an iOS app isn't sandboxed from it, so the Touch ID grant stands in for the prompt ([Security](manual-qa.md#security)).
 
-**What a worker tunnel would need** (docs/architecture/tunnels.md runs on the desktop only):
+**Tunnels, the relay and dev servers on a worker** (built 2026-11-02, [tunnels.md#on-a-worker](tunnels.md#on-a-worker),
+migration `20261102190000_worker_tunnels.sql` not applied). Each point below is now built: approval is a `tunnel_open`
+device call the owner's Mac answers after Touch ID; writes are the key-checked `worker_tunnel_open` and
+`worker_tunnel_close`; `install/worker.sh` pins cloudflared; the daemon owns the gate (`lib/worker-reach.ts`);
+`mcp__devservers__*` ran on the worker already and now publish to the Services drawer; and the pane gets `/t/<id>` with
+Open ↗. The relay goes through the same Mac ([webhooks.md#on-a-worker](webhooks.md#on-a-worker)). The design as it was
+set out:
 
 1. **Approval.** Touch ID lives in Electron main. A worker needs a `tunnel` command only the owner's account can send, and
    a thread must not be able to send it itself, so it goes through an elevated board action like an `answer`, and refuses

@@ -139,8 +139,11 @@ export function applyIntents(cards: Card[]): Card[] {
   return cards.flatMap((c) => shown(patched(c, false), intents.get(c.id)) ?? []);
 }
 
-// Delete a card: gone from the board now, back (by reload) if the server refuses.
-export function removeNow(id: string): Promise<void> {
+// Delete a card: gone from the board now, back (by reload) if the server refuses. `remote` is another host's delete
+// (card.delete on a worker, lib/project-host.ts): its card stays in the last read until the worker publishes the
+// deletion, so the card stays hidden until a reload after STOP_SETTLE_MS (or until a queued one runs) reads it gone.
+export function removeNow(id: string, remote?: () => Promise<unknown>): Promise<void> {
+  if (remote) return sendNow(id, { kind: "delete" }, remote);
   const intent: Intent = { kind: "delete" };
   intents.set(id, intent);
   emit({ kind: "apply" });

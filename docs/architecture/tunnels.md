@@ -49,6 +49,67 @@ the provider gets its real answer, which closes the challenge gap in docs/archit
 or 530, a network failure or a closed tunnel means the route wasn't reached, so the delivery is stored as before. A
 route slower than 8 s can see a delivery twice. The relay's 1 MB limit still applies.
 
+## On a worker
+
+Built 2026-11-02 with `supabase/migrations/20261102190000_worker_tunnels.sql` (not applied). Unit-tested; not yet run
+against a live worker and Mac.
+
+A worker has no session and no Touch ID, so its owner's Mac approves and writes the row, and the worker only publishes
+a URL on a row the Mac stamped for it. The gate and cloudflared are the same code on both; only the host differs
+(`lib/tunnel-host.ts`: `lib/tunnel-mac.ts` on the Mac, `lib/tunnel-worker.ts` on a worker, picked by `WEFT_WORKER`).
+
+```
+worker thread ─ mcp__webhooks__tunnel ─▶ worker_mac_ask(tunnel_open) ─▶ device_calls ─▶ owner's freshest desktop
+Mac inbox ─▶ lib/device-call-approvals.ts ─▶ Touch ID (POST /tunnels/approve) ─▶ tunnels row as the owner:
+           worker_id, approved_target, approved_until ─▶ answer { approved, until }
+worker ─▶ gate + cloudflared ─▶ worker_tunnel_open(key, id, quick URL, secret) ─▶ /t/<id> works, owner only
+```
+
+- **Approval** (`lib/worker-mac-ask.ts`): a `tunnel_open` device call through `worker_mac_ask`, which only takes a card
+  the worker owns, one ask per card and tool at a time (a trigger, `device_calls_approval_origin`, refuses an approval
+  tool queued any other way, such as through `worker_device_call`), and goes to the owner's most recently seen desktop. No Mac in
+  the last minute, or none that claims it within 45 s (its Realtime ping, else its 30 s check), is a plain error ("open Weft there"); an answer waits up to 5
+  minutes. A thread on the worker can ask, but only the person at the Mac can say yes.
+- **The Mac's half** (`lib/device-call-approvals.ts`, run by `lib/device-calls.ts` beside the inbox's other calls, not
+  behind them): every arg is re-read. The target must be an http localhost origin, the id a UUID, the hours 0.25 to 24,
+  and the folder and worker name are cleaned before they reach the prompt. A row that's already the Mac's own, or another
+  worker's, is refused. The Mac makes the row as the owner (so `/t/<id>` is owner-only as ever) and stamps
+  `approved_target` and `approved_until`.
+- **Who can ask** (no migration): a teammate can't reach a worker's commands at all (`cloud_commands` inserts need
+  `private.owns_device`, which for `worker:<id>` means owning the worker, and `worker_pending`/`worker_claim` take only
+  `created_by = owner_user`). The same rule is kept at the verb as defence in depth: `dev.open` is in `OWNER_VERBS`
+  (`lib/host/dispatch.ts`), so a host runs it only when `CardRules.fromOwner(command)` says the command's author is its
+  owner (the worker is given `ownerUser` through `DaemonDeps.owner`, the Mac compares to the signed-in uid), and a host
+  with no such rule refuses it. The Mac refuses an approval too (`requireOwn`, `lib/device-call-approvals.ts`) unless the
+  worker and the card are the signed-in account's and the card is that worker's.
+- **Prompt limits** (in memory on the Mac, `limited()`): per worker, one Touch ID prompt at a time (a second ask fails at
+  once), and after a no the worker waits `DENY_COOLDOWN_MS` (2 min) before it can prompt again. A restart of Weft clears them.
+- **Which worker** the prompt names: `electron/worker-label.cjs` uses the name this Mac pinned (`electron/worker-pins.cjs`),
+  which a worker key can't rewrite; a worker not yet pinned shows its row's name as "(name not verified)". Both the tunnel
+  and the relay-seal prompts say "on <name>".
+- **Writes** (`worker_tunnel_open`, `worker_tunnel_close`, key-checked): open puts a URL and secret on a row only while
+  `worker_id` is this worker's and `approved_until` hasn't passed, and only a `https://*.trycloudflare.com` URL and a
+  64-hex secret, so a stolen worker key can't approve itself or point the address at a site of its choosing. It can,
+  while an approval is live, swap in another quick tunnel's URL (one it runs): the owner would land on that host and a
+  worker relay's deliveries would follow it. That's the approval window's cost; revoking the worker ends it. Its expiry
+  is the approval's. Close clears the URL, the secret and the approval, so reopening asks again. The owner's grants on
+  `tunnels` gain `approved_target`/`approved_until` (update) and `worker_id` (insert, checked by `private.owns_worker`,
+  which also refuses a revoked worker).
+- **Opens don't stack**: `openTunnel` shares one in-flight open per folder and target, so the drawer's Open beside a
+  thread's call, both waiting minutes on the Mac, can't start two gates and orphan one.
+- **cloudflared on the box**: `install/worker.sh` fetches the same pinned release into
+  `~/.weft-worker/data/bin/cloudflared-<version>`, checked by hash (`lib/tunnel-cloudflared-install.test.ts` keeps the
+  script and `ASSETS` equal); without it, Weft fetches it on the first tunnel as on the Mac. Verified on m1mini
+  (darwin-arm64): download, hash, `--version`.
+- **The gate's lifetime** (`lib/worker-reach.ts`, from `scripts/weft-worker.ts`): the daemon process owns the gate and
+  cloudflared. On start it closes on the row whatever a dead process left published (`closeLeftovers`); on SIGTERM it
+  closes what it opened. `cleanGateTarget` refuses a non-localhost target the same way.
+- **The pane**: `openOnWorker` (`lib/worker-pane.ts`) trades a localhost URL for its open tunnel's `/t/<id>` address plus
+  the path, and the board shows it as a site with Open ↗. With no tunnel open it says to open one.
+
+Relays to a worker's server follow its tunnel (webhooks.md#on-a-worker); its dev servers reach the Services drawer through
+it (dev-servers.md#on-a-worker).
+
 ## What the spike found (2026-10-30, cloudflared 2026.10.6)
 
 | Test | Result |
@@ -65,8 +126,10 @@ route slower than 8 s can see a delivery twice. The relay's 1 MB limit still app
 - **AI streaming:** tiny chunks are held back, so a streaming reply appears late and all at once.
 - **Quick tunnels** are for testing and development, with no uptime guarantee and 200 requests in flight. A restart can
   take a minute or more to answer on its new URL.
-- **Workers** don't open tunnels yet: `lib/tunnels.ts` needs the desktop shell for approval and the account session.
-  The move to one's own edge would keep the stable address and the gate. Vercel Functions now hold WebSockets
+- **Workers** open tunnels through their owner's Mac ([On a worker](#on-a-worker)); the Mac has to be awake, signed in
+  and syncing to approve one. A worker key holder could still run cloudflared on the box within an approval's window:
+  the approval names the worker, not the process.
+- **Weft's own edge**: the move would keep the stable address and the gate. Vercel Functions now hold WebSockets
   (`experimental_upgradeWebSocket` in `@vercel/functions`), so that edge could live on the existing deployment instead
   of Cloudflare. Untested, including whether it carries streaming any better.
 - **Not exercised live:** the Next dev server's cross-origin check for hot reload through the gate.

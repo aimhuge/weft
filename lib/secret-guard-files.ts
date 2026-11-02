@@ -8,6 +8,7 @@ import os from "node:os";
 import path from "node:path";
 import { DATA_DIR } from "./store";
 import { workerDataDir, workerHome, workRoot } from "./worker-config";
+import { isCliCredential } from "./secret-guard-credentials";
 
 // .env, .env.local, .env.production.local, direnv's .envrc, Wrangler's .dev.vars, and globs like .env*.
 // Any case: macOS opens .ENV.LOCAL as .env.local.
@@ -110,6 +111,8 @@ export function followCd(words: string[]) {
 }
 
 const placed = (clean: string) => path.resolve(cardCwd ?? process.cwd(), clean);
+// Where a path a thread named lands: home spelled out, relative to the card's cwd.
+export const placedPath = (file: string) => placed(normalized(file));
 
 export function isSecretFile(file: string, dataDir = DATA_DIR, dotGlob = false): boolean {
   const clean = normalized(file);
@@ -123,6 +126,9 @@ export function isSecretFile(file: string, dataDir = DATA_DIR, dotGlob = false):
   if (reachesDataDir(clean, dataDir)) return true;
   // The CLI's own transcript dir: every secret value a thread ever saw is in there, in plaintext.
   if (inTranscriptDir(clean)) return true;
+  // A CLI's own sign-in: gh's hosts.yml, ~/.git-credentials, gog's keyring (lib/secret-guard-credentials.ts).
+  const at = placed(clean);
+  if (isCliCredential(at, /[*?[]/.test(at) ? globRegex(at, dotGlob) : undefined)) return true;
   const base = path.basename(clean);
   return matchesName(base, SECRET_FILE, SECRET_NAMES, dotGlob) && !TEMPLATE.test(base);
 }
@@ -242,11 +248,33 @@ export function reachesWorkerHome(file: string, home = workerHome(), root = work
   return sealedInHome(at, home, root) || sealedInHome(realPlace(at), realPlace(home), realPlace(root)) || namesHome(clean, home, root);
 }
 
+// The worker's home itself, named for a listing: `ls ~/.weft-worker` shows the names in it (worker.json, data, work,
+// weft) and nothing of what they hold, so a thread can find its way to the folders that are open (2026-11-02).
+export function isWorkerHome(file: string, home = workerHome()): boolean {
+  if (!file || !fs.existsSync(home)) return false;
+  const at = placed(normalized(file));
+  return at === path.resolve(home) || realPlace(at) === realPlace(home);
+}
+
 // Whether a path is the CLI's transcript dir or inside it: `~/.claude`, `~/.claude.json`, or any
 // file under `~/.claude/projects/…`. A path that names the dir by name only (`~/.claude/…`) counts,
 // because that dir is the same folder wherever the home is.
+// The one folder in it a thread may use is a project's memory, which the system prompt tells it to keep there.
 export function inTranscriptDir(file: string): boolean {
   const clean = normalized(file);
   if (/(?:^|\/)\.claude\.json$/i.test(clean)) return true;
-  return /(?:^|\/)\.claude(?:\/|$)/i.test(clean);
+  return /(?:^|\/)\.claude(?:\/|$)/i.test(clean) && !inMemoryDir(clean);
+}
+
+// `~/.claude/projects/<project>/memory/…` (2026-11-02). Only that: the transcripts beside it, settings*.json, hooks and
+// skills stay sealed, since a thread that could write them could grant itself permissions. `..` is folded first, and
+// a link is judged by where it lands: the memory folder must really be one, and the file really in it.
+const MEMORY = /^(.*\/\.claude\/projects\/[^/]+\/memory)(?:\/|$)/i;
+
+function inMemoryDir(clean: string): boolean {
+  const folded = path.posix.normalize(clean);
+  const folder = MEMORY.exec(folded)?.[1];
+  if (!folder || /(?:^|\/)\.\.(?:\/|$)/.test(folded) || (folded.match(/(?:^|\/)\.claude(?:\/|$)/gi) ?? []).length !== 1) return false;
+  const realFolder = realPlace(placed(folder));
+  return /\/projects\/[^/]+\/memory$/i.test(realFolder) && within(realPlace(placed(folded)), realFolder);
 }

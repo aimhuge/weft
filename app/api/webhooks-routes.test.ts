@@ -18,6 +18,15 @@ vi.mock("@/lib/webhook-forward", () => ({
   removeRelay: vi.fn(() => Promise.resolve({ id: "h1" })),
 }));
 
+const workerLists = vi.hoisted(() => vi.fn(() => Promise.resolve({ crons: [], webhooks: [] as { id: string; folder: string }[] })));
+vi.mock("@/lib/worker-lists-read", async (load) => ({ ...(await load<typeof import("@/lib/worker-lists-read")>()), workerLists }));
+
+const acts = vi.hoisted(() => ({
+  actOnWorkerItem: vi.fn<(...args: unknown[]) => Promise<{ queued?: true }>>(() => Promise.resolve({})),
+  deleteWorkerWebhook: vi.fn<(...args: unknown[]) => Promise<{ queued?: true }>>(() => Promise.resolve({})),
+}));
+vi.mock("@/lib/worker-list-acts", () => acts);
+
 const reg = await import("@/lib/webhooks");
 const fwd = await import("@/lib/webhook-forward");
 const list = await import("./webhooks/route");
@@ -51,6 +60,42 @@ describe("GET /api/webhooks", () => {
     });
     const res = await list.GET(new Request(URL, { headers: READ }));
     expect([res.status, ((await res.json()) as { error: string }).error]).toEqual([400, "broken"]);
+  });
+});
+
+describe("GET /api/webhooks: a worker's", () => {
+  it("adds a worker's published webhooks for the folders asked for, or all", async () => {
+    const hooks = [{ id: "worker:w1:h2", folder: "worker://w1/app" }, { id: "worker:w1:h3", folder: "worker://w1/other" }];
+    workerLists.mockResolvedValue({ crons: [], webhooks: hooks });
+    type Listed = { hooks: unknown[] };
+    const forApp = (await (await list.GET(new Request(`${URL}?folder=worker://w1/app`, { headers: READ }))).json()) as Listed;
+    expect(forApp.hooks).toEqual([{ id: "h1", name: "stripe" }, hooks[0]]);
+    const all = (await (await list.GET(new Request(URL, { headers: READ }))).json()) as Listed;
+    expect(all.hooks).toHaveLength(3);
+    workerLists.mockResolvedValue({ crons: [], webhooks: [] });
+  });
+
+  it("sends a change or a delete of a worker's webhook to that worker", async () => {
+    const wctx = () => ({ params: Promise.resolve({ id: "worker:w1:h2" }) });
+    expect(await (await one.PATCH(send("PATCH", { registered: true }), wctx())).json()).toEqual({});
+    acts.deleteWorkerWebhook.mockResolvedValueOnce({ queued: true });
+    expect(await (await one.DELETE(send("DELETE"), wctx())).json()).toEqual({ ok: true, queued: true });
+    expect(acts.actOnWorkerItem).toHaveBeenCalledWith("worker:w1:h2", "webhook.update", { patch: { registered: true } });
+    expect(acts.deleteWorkerWebhook).toHaveBeenCalledWith("worker:w1:h2");
+    acts.actOnWorkerItem.mockRejectedValueOnce(new Error("refused"));
+    expect((await one.PATCH(send("PATCH", { target: "/x" }), wctx())).status).toBe(400);
+    expect(reg.updateWebhook).not.toHaveBeenCalled();
+    expect(reg.removeWebhook).not.toHaveBeenCalled();
+  });
+
+  it("refuses a relay for a worker's webhook: a thread there makes it", async () => {
+    const wctx = () => ({ params: Promise.resolve({ id: "worker:w1:h2" }) });
+    for (const res of [await relay.POST(send("POST"), wctx()), await relay.DELETE(send("DELETE"), wctx())]) {
+      expect(res.status).toBe(400);
+      expect(((await res.json()) as { error: string }).error).toMatch(/thread on that worker/);
+    }
+    expect(fwd.createRelay).not.toHaveBeenCalled();
+    expect(fwd.removeRelay).not.toHaveBeenCalled();
   });
 });
 

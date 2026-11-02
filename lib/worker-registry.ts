@@ -11,6 +11,24 @@ import type { SyncedRow } from "./worker-settings-sync";
 // supabase-js's rpc, narrowed to what the worker needs, so tests hand in a fake.
 export type Rpc = (fn: string, args: Record<string, unknown>) => PromiseLike<{ data: unknown; error: { message: string } | null }>;
 
+// One of the owner's synced cards, as worker_board_cards returns it: this worker's, another's, or a Mac's.
+export interface BoardRow {
+  card_id: string;
+  folder: string;
+  owner_device: string;
+  owner_worker: string | null;
+  card: unknown;
+  updated_at: string;
+}
+
+// One of the owner's Macs' published crons, as worker_mac_crons returns it (lib/mac-crons.ts writes it).
+export interface MacCronsRow {
+  device: string;
+  label: string;
+  crons: unknown[];
+  updated_at: string;
+}
+
 export type WorkerStatus = "online" | "busy" | "offline";
 
 export interface ItemRow {
@@ -66,6 +84,11 @@ export function registry(rpc: Rpc, key: string) {
     secretAsk: (cardId: string, args: unknown) => call<string | null>(rpc, "worker_secret_ask", { p_key: key, p_card: cardId, p_args: args }),
     deviceResult: (id: string) => call<DeviceAnswer | null>(rpc, "worker_device_result", { p_key: key, p_call: id }),
     deviceCancel: (id: string) => call<boolean>(rpc, "worker_device_cancel", { p_key: key, p_call: id }),
+    // A tunnel's Touch ID or a relay's sealed secret, asked of the owner's Mac (lib/worker-mac-ask.ts).
+    macAsk: (cardId: string, tool: string, args: unknown) => call<string | null>(rpc, "worker_mac_ask", { p_key: key, p_card: cardId, p_tool: tool, p_args: args }),
+    tunnelOpen: (id: string, url: string, secret: string) => call<string | null>(rpc, "worker_tunnel_open", { p_key: key, p_tunnel: id, p_url: url, p_secret: secret }),
+    tunnelClose: (id: string) => call<unknown>(rpc, "worker_tunnel_close", { p_key: key, p_tunnel: id }).then(() => undefined),
+    setDevServers: (servers: unknown[]) => call<unknown>(rpc, "worker_set_dev_servers", { p_key: key, p_servers: servers }),
     pending: async () => (await call<CloudCommandRow[] | null>(rpc, "worker_pending", { p_key: key })) ?? [],
     claim: (id: string) => call<boolean>(rpc, "worker_claim", { p_key: key, p_command: id }),
     // A host command's result goes as p_result; the other kinds leave it off, so they still report to a database
@@ -78,6 +101,13 @@ export function registry(rpc: Rpc, key: string) {
     putProject: (folder: string, snapshot: unknown) => call<unknown>(rpc, "worker_put_project", { p_key: key, p_folder: folder, p_snapshot: snapshot }),
     putItems: (cardId: string, items: ItemRow[], outputs: OutputRow[], fromSeq: number | null) =>
       call<unknown>(rpc, "worker_put_items", { p_key: key, p_card_id: cardId, p_items: items, p_outputs: outputs, p_from_seq: fromSeq }),
+    // The board tools on a worker (lib/worker-board-link.ts, supabase/migrations/*_worker_board_tools.sql).
+    boardCards: async (limit: number) => (await call<BoardRow[] | null>(rpc, "worker_board_cards", { p_key: key, p_limit: limit })) ?? [],
+    newCard: (target: string, folder: string, payload: Record<string, unknown>) =>
+      call<string>(rpc, "worker_new_card", { p_key: key, p_target: target, p_folder: folder, p_payload: payload }),
+    setLists: (crons: unknown[], webhooks: unknown[]) => call<unknown>(rpc, "worker_set_lists", { p_key: key, p_crons: crons, p_webhooks: webhooks }),
+    // The owner's Macs' crons, read-only, for list_crons (lib/worker-mac-crons.ts, supabase/migrations/*_mac_crons_for_workers.sql).
+    macCrons: async () => (await call<MacCronsRow[] | null>(rpc, "worker_mac_crons", { p_key: key })) ?? [],
   };
 }
 

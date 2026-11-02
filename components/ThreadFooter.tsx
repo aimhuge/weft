@@ -132,6 +132,7 @@ export function ThreadReply({ card, show, live, placeholder, question, schedulin
       // (lib/new-thread.ts modelOn picks the card's own model only when it fits the CLI).
       model={modelOn(card.backend, card.model) ?? card.stats?.runsOn?.model}
       editLast={editLast} onEditing={onEditing}
+      noShell={shell ? undefined : transport.shellRefusal}
       onSend={onSend} onShell={shell && ((command) => shell(card.id, command))} onStop={() => transport.stop(card.id)} />
   );
 }

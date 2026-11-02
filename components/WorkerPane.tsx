@@ -14,6 +14,7 @@ import { sendWorkerAction } from "@/lib/worker-transport";
 import { parseWorkerProject } from "@/lib/worker-project";
 import { guarded } from "./guarded";
 import { QaSwitch, useQa } from "./QaSwitch";
+import SaveAppButton from "./SaveAppButton";
 import { WebPane } from "./web-board/WebPane";
 
 const BrowserPane = guarded(() => import("./BrowserPane"), { what: "browser pane", className: "m-3 w-[360px] self-start" });
@@ -31,8 +32,11 @@ export interface WorkerPaneProps {
 
 export default function WorkerPane({ card, worker, url, browser, marks, onClose }: WorkerPaneProps) {
   const qa = useQa(card);
+  const pane = paneFromUrl(url);
   const actions = (
     <>
+      {/* A page the card wrote can be an app, as in this Mac's own pane: it comes home on save (lib/mini-app-worker.ts). */}
+      {pane?.kind === "blob" && <SaveAppButton url={url} title={card.title} />}
       <QaSwitch card={card} qa={qa} />
       {marks}
     </>
@@ -41,7 +45,7 @@ export default function WorkerPane({ card, worker, url, browser, marks, onClose 
   return (
     <WebPane
       orgId={null}
-      pane={paneFromUrl(url)}
+      pane={pane}
       onClose={onClose}
       onScreenInput={(input) => sendWorkerAction({ action: "input", cardId: card.id, input }).then(() => {})}
       actions={actions}

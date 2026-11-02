@@ -37,6 +37,11 @@ describe("runCommand", () => {
     expect(row?.payload).toEqual({ prompt: "do it" });
   });
 
+  it("names the card with a title and tags when they're there", () => {
+    expect(runCommand(target, { prompt: "fix", title: "  Crash  ", tags: ["bug"] })?.payload).toEqual({ prompt: "fix", title: "Crash", tags: ["bug"] });
+    expect(runCommand(target, { prompt: "fix", title: " ", tags: [] })?.payload).toEqual({ prompt: "fix" });
+  });
+
   it("is null with an empty prompt or an empty folder", () => {
     expect(runCommand(target, { prompt: "   " })).toBeNull();
     expect(runCommand({ ...target, folder: "  " }, { prompt: "do it" })).toBeNull();
@@ -83,6 +88,11 @@ describe("runBody", () => {
       model: "sonnet",
       repo: "https://x/y.git",
     });
+  });
+
+  it("carries start=false only", () => {
+    expect(runBody(wire({ prompt: "p", start: false }))).toEqual({ prompt: "p", start: false });
+    expect(runBody(wire({ prompt: "p", start: true }))).toEqual({ prompt: "p" });
   });
 
   it("is null without a prompt", () => {

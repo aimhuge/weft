@@ -61,11 +61,12 @@ export function trustPairingMac(home: string, code: string): boolean {
   return true;
 }
 
-// Why `weft-worker enrol` won't run, or null. An enrolled box re-pairs only with an explicit --re-pair typed at a real
-// terminal on the box: enrolling chooses the Mac the box trusts with secrets, which a thread (no terminal) must not do,
-// and lib/worker-cli-guard.ts already keeps threads from running weft-worker at all.
+// Why `weft-worker enrol` won't run, or null. An enrolled box re-pairs only with an explicit --re-pair typed at a
+// terminal on the box, and then only on an approval its trusted Mac signed (lib/worker-repair.ts repairRefusal): the
+// terminal is a speed bump, since a thread fakes one with any pty; the signature is the check.
+// lib/worker-cli-guard.ts also keeps threads from running weft-worker at all.
 export function enrolRefusal(enrolled: boolean, rePair: boolean, terminal: boolean): string | null {
   if (!enrolled) return null;
-  if (!rePair) return "This box is already enrolled. To pair it again (and trust the Mac that shows the new code), run weft-worker enrol <code> --re-pair from a terminal on the box.";
+  if (!rePair) return "This box is already enrolled. To pair it again, approve the re-pair on the Mac it trusts now (Settings → Devices → this worker → Approve re-pair) and run the command that shows, from a terminal on the box.";
   return terminal ? null : "--re-pair only runs from a terminal on the box: it chooses the Mac this worker trusts with secrets.";
 }

@@ -102,6 +102,11 @@ describe("WorkerScreen", () => {
     expect(menu.disabled).toBe(true);
   });
 
+  it("offers no video quality for a worker's browser, which sends pictures, not video", () => {
+    render(<WorkerScreen pane={pane(later(), { fast: true, device: "browser-0123456789abcdef", label: "Browser" })} onInput={vi.fn(() => Promise.resolve())} />);
+    expect(screen.queryByRole("combobox", { name: "Video quality" })).toBeNull();
+  });
+
   it("offers a quality on the WebRTC path, and keeps the pick", () => {
     const kept = new Map<string, string>();
     vi.stubGlobal("localStorage", { getItem: (k: string) => kept.get(k) ?? null, setItem: (k: string, v: string) => kept.set(k, v) });

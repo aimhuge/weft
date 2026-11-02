@@ -8,17 +8,19 @@ import type { SkillInfo } from "./card";
 import { hostRow, type CardTarget, type HostCommandRow, type HostPayload } from "./host-row";
 import { readRefusal, writeRefusal } from "./file-policy";
 import { foreignSetting, type HostSettings } from "./host-settings";
-import { isHostLevelVerb, isHostVerb, type HostVerb } from "./host-verbs";
+import { isHostLevelVerb, isHostVerb, isListVerb, type HostVerb } from "./host-verbs";
+import { listRefusal } from "./list-policy";
 import { fitSkills, type SkillsOnWire } from "./skills-wire";
 
 // What a host writes to `result`. Never the card or its thread: those travel sealed (cloud_cards, the outbox), and
 // the row is plain jsonb, so it says whether the verb ran and which card it touched, plus what a read verb answers
 // (RESULTS below), kept small enough for the column's 4 KB cap.
 // A verb that answers with a value too big for that (the editor's files.*) adds it as `value` when it's small, else
-// `blob`, the sha of its JSON in the workspace's blob store (lib/host-result.ts). A host-level verb (settings.get /
-// settings.put) touched no card: its cardId is "".
+// `blob`, the sha of its JSON in the workspace's blob store (lib/host-result.ts). address: dev.open's private /t/<id>
+// address for the card's dev server. log: dev.log's last lines of it. A host-level verb (settings.get / settings.put)
+// touched no card: its cardId is "".
 export type HostResult =
-  | ({ ok: true; cardId: string; value?: unknown; blob?: string } & Partial<SkillsOnWire> & { settings?: HostSettings })
+  | ({ ok: true; cardId: string; value?: unknown; blob?: string; address?: string; log?: string } & Partial<SkillsOnWire> & { settings?: HostSettings })
   | { ok: false; error: string };
 
 const isObject = (v: unknown): v is Record<string, unknown> => Boolean(v) && typeof v === "object" && !Array.isArray(v);
@@ -54,36 +56,39 @@ const WIDENING_FIELDS = ["cwd", "agent", "readScope"] as const;
 
 const SHELL_REFUSED = "A shell command only runs from Weft's own window, not from the web.";
 
-// The editor stays inside the card's folder (lib/file-access.ts), off credentials and .git, and a save off what
-// configures its agent: what the card's own thread could do when asked, never what would widen it (./file-policy.ts).
-function fileRefusal(verb: "files.read" | "files.write", path: unknown): string | null {
-  if (typeof path !== "string") return "That names no file.";
-  return verb === "files.read" ? readRefusal(path) : writeRefusal(path);
+export function remoteRefusal({ verb, args }: HostPayload): string | null {
+  if (verb === "card.shell") return SHELL_REFUSED;
+  // Only a host's own settings come from the network: never its folders, modes or guards.
+  const foreign = verb === "settings.put" ? foreignSetting(args.patch) : null;
+  if (foreign) return `A request from the web can't change ${foreign.slice(0, 40)}. Do it in Weft's own window on that machine.`;
+  // A cron or webhook the host keeps: only what the Mac's drawers change (./list-policy.ts).
+  if (isListVerb(verb)) return listRefusal(verb, args);
+  // A scheduled message is sent as a reply when its time comes, never run, but a "!" one would read as a command
+  // waiting to run, so the network can't leave one on a card at all.
+  if (verb === "card.schedule" && typeof args.text === "string" && isBang(args.text)) return SHELL_REFUSED;
+  // The editor stays inside the card's folder (lib/file-access.ts), off credentials and .git, and a save off what
+  // configures its agent: what the card's own thread could do when asked, never what would widen it (./file-policy.ts).
+  if (verb === "files.read" || verb === "files.write") {
+    if (typeof args.path !== "string") return "That names no file.";
+    return verb === "files.read" ? readRefusal(args.path) : writeRefusal(args.path);
+  }
+  return cardFieldsRefusal(verb, args);
 }
 
-// A card.update body that would skip prompts or widen the card.
-function updateRefusal(body: Record<string, unknown> | undefined): string | null {
+// A card update's body, or a new card's fields (card.create, its folder the row's own): no skipped prompts, and nothing
+// that moves the card's folder, agent or read scope.
+function cardFieldsRefusal(verb: HostPayload["verb"], args: HostPayload["args"]): string | null {
+  const body = verb === "card.update" ? (args.body as Record<string, unknown> | undefined) : verb === "card.create" ? args : undefined;
   if (!body) return null;
   if (body.permissionMode === "bypassPermissions") return "A request from the web can't skip permission prompts. Pick that mode on the Mac.";
   const widening = WIDENING_FIELDS.find((field) => body[field] !== undefined);
   return widening ? `A request from the web can't change a card's ${widening === "cwd" ? "folder" : widening === "agent" ? "agent" : "read access"}. Do it in Weft's own window.` : null;
 }
 
-export function remoteRefusal({ verb, args }: HostPayload): string | null {
-  if (verb === "card.shell") return SHELL_REFUSED;
-  // Only a host's own settings come from the network: never its folders, modes or guards.
-  const foreign = verb === "settings.put" ? foreignSetting(args.patch) : null;
-  if (foreign) return `A request from the web can't change ${foreign.slice(0, 40)}. Do it in Weft's own window on that machine.`;
-  // A scheduled message is sent as a reply when its time comes, never run, but a "!" one would read as a command
-  // waiting to run, so the network can't leave one on a card at all.
-  if (verb === "card.schedule" && typeof args.text === "string" && isBang(args.text)) return SHELL_REFUSED;
-  if (verb === "files.read" || verb === "files.write") return fileRefusal(verb, args.path);
-  return verb === "card.update" ? updateRefusal(args.body as Record<string, unknown> | undefined) : null;
-}
-
 // A host command's outcome on the host that ran it: the card it touched, and what goes in the row's `result`.
 export interface HostDone {
-  cardId: string;
+  // Null for a verb on a cron or webhook (cron.*, webhook.*): the row's card_id names only a card the host published.
+  cardId: string | null;
   result: HostResult;
 }
 
@@ -97,11 +102,31 @@ const settingsOf = (reply: unknown) => {
   const settings = (reply as { settings?: HostSettings } | undefined)?.settings;
   return settings ? { settings } : {};
 };
-const RESULTS: Partial<Record<HostVerb, (reply: unknown) => Partial<SkillsOnWire> & { settings?: HostSettings }>> = {
+const RESULTS: Partial<Record<HostVerb, (reply: unknown) => Partial<SkillsOnWire> & { settings?: HostSettings } & { address?: string } & { log?: string }>> = {
   "skills.list": (reply) => fitSkills((reply as { skills?: SkillInfo[] } | undefined)?.skills ?? []),
   "settings.get": settingsOf,
   "settings.put": settingsOf,
+  "dev.open": (reply) => {
+    const address = (reply as { address?: unknown } | undefined)?.address;
+    return typeof address === "string" ? { address: address.slice(0, 500) } : {};
+  },
+  // A dev server's last lines, the end kept: the row's result is capped at 4 KB.
+  "dev.log": (reply) => {
+    const log = (reply as { log?: unknown } | undefined)?.log;
+    return typeof log === "string" ? { log: tailBytes(log, DEV_LOG_MAX) } : {};
+  },
 };
+
+// How much of a dev server's log a `dev.log` result carries, in UTF-8 bytes.
+export const DEV_LOG_MAX = 2_500;
+
+// The end of a text that fits in `max` UTF-8 bytes: a log's newest lines matter, and a wide character counts as 2 to 4.
+export function tailBytes(text: string, max: number): string {
+  const bytes = (t: string) => new TextEncoder().encode(t).length;
+  let out = text.slice(-max);
+  while (bytes(out) > max) out = out.slice(Math.max(1, Math.ceil((bytes(out) - max) / 4)));
+  return out;
+}
 
 // `result` for a verb that ran: the card, and for a read verb its answer.
 export function verbResult(verb: HostVerb, cardId: string, reply: unknown): HostResult {
@@ -111,7 +136,7 @@ export function verbResult(verb: HostVerb, cardId: string, reply: unknown): Host
 export const hostFailure = (error: string): HostResult => ({ ok: false, error });
 
 // The verbs whose text a person typed, and so may paste files (lib/attachment-transfer.ts): the arg that holds it.
-const TEXT_ARGS: Partial<Record<HostVerb, string>> = { "card.message": "text", "card.message.edit": "text", "card.fresh": "message", "card.schedule": "text" };
+const TEXT_ARGS: Partial<Record<HostVerb, string>> = { "card.create": "prompt", "card.message": "text", "card.message.edit": "text", "card.fresh": "message", "card.schedule": "text" };
 
 export function textArgOf(verb: HostVerb): string | undefined {
   return TEXT_ARGS[verb];
