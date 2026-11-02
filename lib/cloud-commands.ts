@@ -24,8 +24,8 @@ export interface NewCardPayload {
   model?: string;
   effort?: Effort | "";
   tags?: string[];
-  // The mode it starts in (RUN_MODES: never bypassPermissions; plan only on a worker, a Mac starts it as default);
-  // left out, the host's default.
+  // The mode it starts in (RUN_MODES: never bypassPermissions; plan only on a worker, a Mac starts it as default:
+  // lib/cloud-new-card-mode.ts); left out, the host's default (on a Mac, held to the same rule).
   permissionMode?: NewCardMode;
   // false: made in Backlog and left there; left out, it starts.
   start?: false;

@@ -9,14 +9,15 @@ import { approvalProblem } from "./approval-check";
 import { shell } from "./browser-shell";
 import { startFeatureCard } from "./card-starter";
 import { createCardFromBody } from "./new-card";
-import { newCardBody, type CloudCommandRow } from "./cloud-commands";
+import { newCardBody, type CloudCommandRow, type NewCardMode } from "./cloud-commands";
+import { networkStartMode } from "./cloud-new-card-mode";
 import { macReceive } from "./cloud-inbox-receive";
 import { syncNow, syncOrgId } from "./cloud-sync";
 import { deviceId } from "./device-id";
 import { applyFolderGrant } from "./folder-grant";
 import { cardKinds, dispatcher, type CardRules } from "./host/dispatch";
 import { needsElevation, runVerb, type HostVerb } from "./host-api";
-import { syncFolders } from "./settings";
+import { defaultPermissionMode, syncFolders } from "./settings";
 import { getCard } from "./store";
 import { pairingStatus } from "./sync-security";
 
@@ -76,13 +77,14 @@ export function syncFolderFor(name: string): string | null {
   return named.length === 1 ? (named[0] ?? null) : null;
 }
 
-// A new card from the web: its pasted files brought over first, a mode that asks less than the default held to the
-// same rule as a mode change (the phone's, while one is paired), and one asked for in Backlog made and left there.
+// A new card from the web: its pasted files brought over first, its mode (named, or this Mac's default) held to the same
+// rule as a mode change (lib/cloud-new-card-mode.ts), and one asked for in Backlog made and left there.
 async function newCard(command: CloudCommandRow, receive: (text: string, payload: unknown) => Promise<string>): Promise<string> {
   const body = newCardBody(command);
-  const mode = body.permissionMode as string | undefined;
-  const refused = mode && mode !== "default" && mode !== "plan" ? await macRules.elevated?.("card.update", { id: "", body: { permissionMode: mode } }) : null;
-  if (refused) throw new Error(refused);
+  body.permissionMode = await networkStartMode(body.permissionMode as NewCardMode | undefined, {
+    defaultMode: defaultPermissionMode,
+    refusal: async (permissionMode) => (await macRules.elevated?.("card.update", { id: "", body: { permissionMode } })) ?? null,
+  });
   if (typeof body.prompt === "string") body.prompt = await receive(body.prompt, command.payload);
   const card = body.start === false ? createCardFromBody(body) : await startFeatureCard(body);
   // The card and its first items are already in the outbox; send them now so the board sees it start.

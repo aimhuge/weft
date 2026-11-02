@@ -291,12 +291,14 @@ weft.zip board ── setHostForEveryCard(webHost) ── hostOf(card) = webHost
 - **New thread** (`WebNewCardDialog`): the desktop's `ModelSelect` with its CLI rows (the CLI is sent only once picked, so the
   machine's default holds), the effort, the desktop's `ModePicker` (never skip-permissions), tags and Backlog (`start: false`,
   a card made and left in Backlog); on a worker's folder, **Plan first** and no Backlog (a worker refuses `start: false` until
-  `card.create`). `NewCardPayload` gains `permissionMode` (`NEW_CARD_MODES`) and `start`; the Mac holds a mode looser than default
-  to the same phone rule as a mode change (`macRules.elevated`), and starts plan as default (a Mac has no plan mode); a worker
+  `card.create`). `NewCardPayload` gains `permissionMode` (`NEW_CARD_MODES`) and `start`; the Mac holds the mode it starts in,
+  named or its own default, to the rule a mode change is (`lib/cloud-new-card-mode.ts`): never skip-permissions, a looser one
+  named while a phone is paired refused, the Mac's own default (`auto` out of the box) dropped to default then, and plan
+  started as default (a Mac has no plan mode, and the card maker would read it as the Mac's default); a worker
   starts in the mode named (`lib/worker-kinds.ts`). Sent as `new_card`: WP2's `card.create` hadn't landed.
 - **What the web leaves out on purpose.** File names in a thread link to the editor only where the transport has `listFiles`
-  (`ThreadView` sets `FileLinkContext` from it; `ToolLine` follows it), so the web and a worker card draw plain names until H4's
-  file verbs; the first-message banner reads settings and offers Rerun only where there are settings to open (`openSettings`),
+  (`ThreadView` sets `FileLinkContext` from it; `ToolLine` follows it), so a worker card links them again through H4's `files.list`
+  and the web draws plain names (its one host has no `files` or `reads` yet: `lib/web-host.ts` answers both with a refusal); the first-message banner reads settings and offers Rerun only where there are settings to open (`openSettings`),
   and Delete only where the host can (`can("delete")`). Delete, Share…, Run /skill, bulk Resume/Switch, the Local Simulator
   switch and the review panel are still desktop-only.
 

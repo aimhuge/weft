@@ -20,4 +20,13 @@ describe("webHost", () => {
     expect(host.can("schedule")).toBe(true);
     for (const feature of ["files", "pane", "delete", "share", "folder", "dev", "vault", "login"] as const) expect(host.can(feature)).toBe(false);
   });
+
+  it("has no reads or editor of its own: each says so instead of reaching a Mac's routes", async () => {
+    const host = webHost({ act: vi.fn() }, { desktop: false } as ThreadTransport, () => Promise.resolve(""));
+    expect(host.can("reads")).toBe(false);
+    await expect(host.read("pile", "/p")).rejects.toThrow(/weft.zip/);
+    await expect(host.files.list("c1")).rejects.toThrow(/weft.zip/);
+    await expect(host.files.write("c1", "a.ts", "x")).rejects.toThrow(/weft.zip/);
+    expect(host.files.live).toBe(false);
+  });
 });

@@ -69,14 +69,26 @@ describe("a new card from weft.zip's form", () => {
     expect(control.made.at(-1)).toMatchObject({ prompt: undefined, start: false });
   });
 
-  it("starts in plan mode, and in a looser one only while the web may approve", async () => {
+  it("starts plan as default (a Mac has no plan mode), and a looser one only while the web may approve", async () => {
+    control.defaultMode = "bypassPermissions";
     await run(command({ payload: { prompt: "Plan", permissionMode: "plan" } as never }));
-    expect(control.made.at(-1)).toMatchObject({ permissionMode: "plan" });
+    expect(control.made.at(-1)).toMatchObject({ permissionMode: "default" });
     vi.stubEnv("WEFT_SHELL_URL", "http://127.0.0.1:1");
     shellMock.mockImplementation((route: string) => Promise.resolve(route === "/pairing/status" ? { approvers: 1, webApprovals: false } : { ok: true }));
     await run(command({ id: "cmd-2", payload: { prompt: "Go", permissionMode: "auto" } as never }));
     expect(reports()[0]).toMatchObject({ status: "failed", error: expect.stringMatching(/phone is paired/) as string });
     expect(control.made).toHaveLength(1);
+  });
+
+  it("doesn't start looser than the web may set by leaving the mode to this Mac's default", async () => {
+    vi.stubEnv("WEFT_SHELL_URL", "http://127.0.0.1:1");
+    shellMock.mockImplementation((route: string) => Promise.resolve(route === "/pairing/status" ? { approvers: 1, webApprovals: false } : { ok: true }));
+    await run(command({ payload: { prompt: "Go" } as never }));
+    expect(control.made.at(-1)).toMatchObject({ permissionMode: "default" });
+    control.defaultMode = "bypassPermissions";
+    shellMock.mockImplementation((route: string) => Promise.resolve(route === "/pairing/status" ? { approvers: 0 } : { ok: true }));
+    await run(command({ id: "cmd-2", payload: { prompt: "Go" } as never }));
+    expect(control.made.at(-1)).toMatchObject({ permissionMode: "default" });
   });
 
   it("brings a pasted file over before the card starts, and points its prompt at the copy", async () => {
