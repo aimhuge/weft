@@ -56,14 +56,16 @@ export function mergePage(prev: ThreadPage, page: ThreadPage): ThreadPage {
   return page.items.reduce((next, item, i) => applyThreadEvent(next, { index: page.start + i, item }), prev);
 }
 
-function useWorkerLive(cardId: string, onUpdate: (update: PageUpdate) => void) {
+// Polls the open thread (lib/worker-poll.ts); poll false stops it while a session line pushes the items (lib/line-host.ts).
+export function useWorkerLive(cardId: string, onUpdate: (update: PageUpdate) => void, poll = true) {
   const update = useRef(onUpdate);
   useEffect(() => {
     update.current = onUpdate;
   });
+  // Off while a session line pushes the items instead (lib/line-host.ts).
   useEffect(
-    () => startThreadPoll({ cardId, fetchPage: (after) => loadPage(cardId, undefined, after), apply: (page) => update.current((prev) => mergePage(prev, page)) }),
-    [cardId],
+    () => (poll ? startThreadPoll({ cardId, fetchPage: (after) => loadPage(cardId, undefined, after), apply: (page) => update.current((prev) => mergePage(prev, page)) }) : undefined),
+    [cardId, poll],
   );
 }
 
@@ -78,30 +80,36 @@ export const forgetWorkerSkills = () => skillLists.forget();
 // grant still rides inside an answer: grantInAnswer), and `listFiles`, which waits for file verbs (project-hosts.md H4).
 const pending = (cardId: string, pendingId: string): HostArgs => ({ id: cardId, pendingId });
 
-export const workerTransport: ThreadTransport = {
-  loadPage,
-  useLive: (cardId, onUpdate) => useWorkerLive(cardId, onUpdate),
-  // The items as drawn are the show rail's too: the rail sits outside the thread view (lib/worker-shown.ts).
-  useView: useShownItems,
-  // The tile and the menu stop a worker card with the same verb (lib/card-handlers-host.ts).
-  stop: (cardId) => stopNow(cardId, () => actOnWorker("card.stop", { id: cardId })),
-  editLast: (cardId, text) => actOnWorker("card.message.edit", { id: cardId, text }).then(() => {}),
-  fresh: (cardId, message) => actOnWorker("card.fresh", { id: cardId, message }).then(() => {}),
-  waitPermission: (cardId, pendingId) => waitNow(cardId, pendingId, () => actOnWorker("card.permission.wait", pending(cardId, pendingId))),
-  putFirst: (cardId, pendingId) => firstNow(cardId, pendingId, () => actOnWorker("card.permission.first", pending(cardId, pendingId))),
-  putHolderFirst: (cardId, pendingId) => otherFirstNow(cardId, pendingId, () => actOnWorker("card.permission.otherFirst", pending(cardId, pendingId))),
-  stopTask: (cardId, taskId) => actOnWorker("card.stopTask", { id: cardId, taskId }).then(() => {}),
-  listSkills: (cardId) => workerSkills(cardId),
-  // The worker holds the timer, so a scheduled message goes even while this Mac sleeps. The text's pasted files
-  // travel with it, as a reply's do (lib/worker-board.ts).
-  schedule: (cardId, text, at) => actOnWorker("card.schedule", { id: cardId, text, at }),
-  unschedule: (cardId, messageId) => actOnWorker("card.unschedule", { id: cardId, messageId }),
-  // Saved on this Mac, as for a local card: the file goes up to the worker with the message that pastes it.
-  upload: (file, name, onProgress) => api.uploadAttachment(file, name, onProgress),
-  grantInAnswer: true,
-  cardEdits: true,
-  desktop: false,
-};
+// A worker's transport over a route: the relay's commands and poll (workerTransport), or a session line that falls
+// back to them (lib/line-host.ts).
+export function workerTransportVia(act: typeof actOnWorker, useLive: ThreadTransport["useLive"]): ThreadTransport {
+  return {
+    loadPage,
+    useLive,
+    // The items as drawn are the show rail's too: the rail sits outside the thread view (lib/worker-shown.ts).
+    useView: useShownItems,
+    // The tile and the menu stop a worker card with the same verb (lib/card-handlers-host.ts).
+    stop: (cardId) => stopNow(cardId, () => act("card.stop", { id: cardId })),
+    editLast: (cardId, text) => act("card.message.edit", { id: cardId, text }).then(() => {}),
+    fresh: (cardId, message) => act("card.fresh", { id: cardId, message }).then(() => {}),
+    waitPermission: (cardId, pendingId) => waitNow(cardId, pendingId, () => act("card.permission.wait", pending(cardId, pendingId))),
+    putFirst: (cardId, pendingId) => firstNow(cardId, pendingId, () => act("card.permission.first", pending(cardId, pendingId))),
+    putHolderFirst: (cardId, pendingId) => otherFirstNow(cardId, pendingId, () => act("card.permission.otherFirst", pending(cardId, pendingId))),
+    stopTask: (cardId, taskId) => act("card.stopTask", { id: cardId, taskId }).then(() => {}),
+    listSkills: (cardId) => workerSkills(cardId),
+    // The worker holds the timer, so a scheduled message goes even while this Mac sleeps. The text's pasted files
+    // travel with it, as a reply's do (lib/worker-board.ts).
+    schedule: (cardId, text, at) => act("card.schedule", { id: cardId, text, at }),
+    unschedule: (cardId, messageId) => act("card.unschedule", { id: cardId, messageId }),
+    // Saved on this Mac, as for a local card: the file goes up to the worker with the message that pastes it.
+    upload: (file, name, onProgress) => api.uploadAttachment(file, name, onProgress),
+    grantInAnswer: true,
+    cardEdits: true,
+    desktop: false,
+  };
+}
+
+export const workerTransport: ThreadTransport = workerTransportVia(actOnWorker, (cardId, onUpdate) => useWorkerLive(cardId, onUpdate));
 
 export const workerToolSource: ToolResultSource = (cardId, toolId) =>
   apiFetch(`/api/worker-board?${new URLSearchParams({ card: cardId, tool: toolId }).toString()}`)

@@ -1,6 +1,6 @@
 // The `host` command on a Weft Worker (lib/host-command.ts): any verb of lib/host-api on a card the worker runs,
 // with its result written back beside the report.
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { card, command, fakeEngine, makeDeps } from "./worker-daemon.harness";
 
 const host = (verb: string, args: Record<string, unknown> = {}, extra: Record<string, unknown> = {}) =>
@@ -89,5 +89,47 @@ describe("a host command on a worker", () => {
     d.host.mockRejectedValueOnce(new Error("Write a message first."));
     await d.daemon.runOne(host("card.message", { text: "" }));
     expect(d.report).toHaveBeenCalledWith("cmd-1", "failed", null, "Write a message first.", { ok: false, error: "Write a message first." });
+  });
+});
+
+describe("a line command on a worker", () => {
+  const sealed = { v: 1, epk: "a", iv: "b", ct: "c", tag: "d" };
+  const line = (payload: unknown = { sealed }) => command({ kind: "line", folder: "", payload: payload as never });
+
+  it("opens the session line, whose verbs run through the host command's own checks", async () => {
+    const open = vi.fn((_: unknown, run: (payload: unknown) => Promise<unknown>) => run({ verb: "card.shell", args: { id: "card-1", command: "ls" } }).catch((err: unknown) => {
+        refused = (err as Error).message;
+      }));
+    let refused = "";
+    const d = makeDeps({ line: open as never });
+    await d.daemon.runOne(line());
+    expect(open).toHaveBeenCalledWith(sealed, expect.any(Function));
+    expect(refused).toMatch(/shell command only runs/);
+    expect(d.host).not.toHaveBeenCalled();
+    expect(d.report).toHaveBeenCalledWith("cmd-1", "done", null, null);
+    const run = open.mock.calls[0]![1];
+    await expect(run({ verb: "card.stop", args: { id: "card-1" } })).resolves.toEqual({ cardId: "card-1", result: { ok: true, cardId: "card-1" } });
+    expect(d.host).toHaveBeenCalledWith("card.stop", { id: "card-1" });
+  });
+
+  it("doesn't wait in the queue behind a card that's starting", async () => {
+    let started: () => void = () => {};
+    const open = vi.fn(() => new Promise<void>((done) => (started = done)));
+    const d = makeDeps({ line: open });
+    d.pending.mockResolvedValueOnce([line(), command({ id: "cmd-2", kind: "stop", payload: { cardId: "card-1" } as never })]);
+    await d.daemon.poll();
+    expect(d.host).toHaveBeenCalledWith("card.stop", { id: "card-1" });
+    started();
+    await vi.waitFor(() => expect(d.report).toHaveBeenCalledWith("cmd-1", "done", null, null));
+  });
+
+  it("refuses a line with no sealed offer, or on a worker that can't open one", async () => {
+    const d = makeDeps({ line: vi.fn() });
+    await d.daemon.runOne(line({ sealed: "nope" }));
+    await d.daemon.runOne(line(null));
+    expect(d.report).toHaveBeenCalledWith("cmd-1", "failed", null, "That line carries no sealed offer.");
+    const old = makeDeps();
+    await old.daemon.runOne(line());
+    expect(old.report).toHaveBeenCalledWith("cmd-1", "failed", null, expect.stringMatching(/doesn't open lines yet/));
   });
 });

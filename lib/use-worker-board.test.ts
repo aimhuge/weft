@@ -15,7 +15,8 @@ vi.mock("./worker-transport", () => ({ sendWorkerAction: (body: unknown) => send
 const hostAct = vi.fn<(verb: string, args: unknown) => Promise<void>>(() => Promise.resolve());
 vi.mock("./project-host", () => ({ hostOf: () => ({ act: (verb: string, args: unknown) => hostAct(verb, args) }) }));
 
-const { BOARD_POLL_MS, IDLE_POLL_MS, openWorkerThread, useBoardWorkers, useWorkerBoard, workerThreadHandlers } = await import("./use-worker-board");
+const { BOARD_POLL_MS, IDLE_POLL_MS, openWorkerThread, useBoardWorkers, useWorkerBoard, withLineEvent, workerThreadHandlers } = await import("./use-worker-board");
+const { closeLines, retainLine } = await import("./session-lines");
 const { forget, patchNow } = await import("./optimistic-cards");
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -125,6 +126,30 @@ describe("useWorkerBoard", () => {
       await vi.advanceTimersByTimeAsync(BOARD_POLL_MS * 3);
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("card changes off a session line", () => {
+  it("lays a pushed card over the one read, keeping its worker path, drops a deleted one, and waits on unknown ones", () => {
+    const cards = [card(), card({ id: "c2" })];
+    expect(withLineEvent(cards, { t: "card", card: card({ title: "Pushed", cwd: "/w/ling" }) })[0]).toMatchObject({ title: "Pushed", cwd: "worker://w1/ling" });
+    expect(withLineEvent(cards, { t: "card", card: card({ id: "c9" }) })).toEqual(cards);
+    expect(withLineEvent(cards, { t: "card_deleted", id: "c2" }).map((c) => c.id)).toEqual(["c1"]);
+    expect(withLineEvent(cards, { t: "thread_cleared", cardId: "c1" })).toBe(cards);
+  });
+
+  it("draws them on the board as they arrive", async () => {
+    fetchMock.mockResolvedValue(json(board({ projects: [project()], cards: [card()] })));
+    let emit: (e: unknown) => void = () => {};
+    retainLine("w1", () => ({ onRoute: () => () => {}, onEvent: (fn: (e: unknown) => void) => ((emit = fn), () => {}), close: vi.fn() }) as never);
+    const { result } = renderHook(() => useWorkerBoard());
+    await vi.waitFor(() => expect(result.current.cards).toHaveLength(1));
+    act(() => emit({ t: "card", card: card({ title: "Live", cwd: "/w/ling" }) }));
+    expect(result.current.cards[0]).toMatchObject({ title: "Live", cwd: "worker://w1/ling" });
+    act(() => emit({ t: "thread_cleared", cardId: "c1" }));
+    act(() => emit({ t: "card_deleted", id: "c1" }));
+    expect(result.current.cards).toEqual([]);
+    closeLines();
   });
 });
 

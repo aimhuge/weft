@@ -455,8 +455,10 @@ board ─ sealed offer, elevated input command ─▶ daemon ─ encrypted answe
   settings when the video starts, so a new pick closes the line and offers again at once.
 - **One line, named channels, one video track.** `answerOffer` takes a map of channel names to handlers, and a `media` hook
   that takes the offer's m-lines before the answer is made. `input` carries the live gesture and keyboard; other live streams
-  can add a channel. A line only exists while someone is watching, so commands,
-  card state and wake-ups stay on Supabase, which also carries the signalling.
+  can add a channel. `renegotiate` answers a later offer on the same peer, a label with no handler goes to `"*"`, and the
+  board's ICE servers (TURN) come in the offer. Since H6 a board also keeps a **session line** to each worker it shows,
+  with `host`, `events` and `line` channels, and the watched screen rides it as a track
+  ([project-hosts.md](project-hosts.md#the-session-line-h6-as-built)); this screen-only line is the fallback.
 - **Proving who answered.** The board makes an offer and a one-time key. Its local server seals both to the worker's published
   key (`sealedOffer`, purpose `RTC_PURPOSE`) and sends them as an `input` command. Only that worker can open it, and it answers
   under the one-time key on the watch's Broadcast topic. The topic is public, so an answer that won't open is dropped. Both
@@ -495,8 +497,9 @@ board ─ sealed offer, elevated input command ─▶ daemon ─ encrypted answe
   13 of 16 detected, before decoding and drawing), 29 fps, about 0.66 Mbps at quality 0.2 and a 2 Mbps cap. Fast scrolling
   showed artifacts at those settings, so it's now 0.6 and 8 Mbps, not yet measured under motion. Nothing's been measured off
   the LAN, and a slow link may need a lower bitrate.
-- **Not yet:** weft.zip and phones stay on JPEGs, since sealing an offer runs on the desktop's local server. There's no TURN
-  relay, so a network that blocks direct connections stays on JPEGs.
+- **Not yet:** weft.zip and phones stay on JPEGs, since sealing an offer runs on the desktop's local server. The screen's own
+  line has no TURN; on a network that blocks direct connections it rides the session line, which takes TURN when this
+  Mac holds a Cloudflare TURN key (`lib/rtc-ice.ts`), or stays on JPEGs.
 - **Android** has no idb, so an emulator stays on JPEGs and `adb`. `adb exec-out screenrecord --output-format=h264` is the likely
   next step, not built because no box here has adb to measure it on.
 - **Install:** `install/worker.sh` puts idb_companion 1.1.8 in `~/.weft/tools/idb-companion`, pinned by hash, on a Mac with

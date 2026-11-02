@@ -7,6 +7,7 @@ import { parseWorkerProject, workerLabel } from "@/lib/worker-project";
 import { routeLabel, useWorkerRoutes } from "@/lib/worker-route";
 import Icon from "./Icon";
 import ProjectStatusDot from "./ProjectStatusDot";
+import { useSessionLine } from "@/lib/session-lines";
 import type { ProjectSummary } from "@/lib/board-view";
 
 const CHIP = "flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1 text-[12px]";
@@ -38,6 +39,9 @@ export default function ProjectChips({
   const chips = chipProjects(projects, selected, RECENT_CHIPS);
   // "relay · 600 ms" in a worker chip's tooltip, per worker; H6 sets "direct · 4 ms" (lib/worker-route.ts).
   const routes = useWorkerRoutes();
+  // Showing a worker's project opens its session line (lib/session-lines.ts), whose pings set that "direct · N ms".
+  const shown = chips.find((p) => p.path === selected && p.worker && p.worker.status !== "offline");
+  useSessionLine(shown ? parseWorkerProject(shown.path)?.workerId : null);
 
   return (
     <div ref={chipsRef} className="flex min-w-0 items-center gap-1.5 overflow-x-auto [scrollbar-width:thin]">

@@ -13,6 +13,8 @@ import { agreedType, type FrameType } from "./screen-formats";
 import { markLive, noteWatchedSize, stopWatching, watch, watching, WATCH_MS } from "./simulator-watch";
 import type { ScreenInput } from "./worker-commands";
 import type { Sealed } from "./worker-seal";
+import type { VideoTransceiver } from "./rtp-video";
+import type { Channel } from "./worker-rtc";
 
 // Four frames a second at most; a capture that takes longer sets the pace itself.
 const FRAME_MS = 250;
@@ -51,6 +53,10 @@ export interface FastScreen {
   size: { width: number; height: number };
   // Answers a WebRTC offer at the quality it asks for; a new one replaces the line before it.
   connect: (sdp: string, quality?: ScreenQuality) => Promise<string>;
+  // The same screen on a session line instead of a line of its own (lib/host-line.ts): sends on the m-line it's
+  // handed and returns how to stop, or null when none of them can carry it; input takes the line's input channel.
+  attach?: (transceivers: VideoTransceiver[], quality?: ScreenQuality) => (() => void) | null;
+  input?: (channel: Channel) => void;
   close: () => void;
 }
 export type OpenFastScreen = (d: Device) => Promise<FastScreen | null>;
@@ -71,6 +77,9 @@ async function startFast(d: Device, channel: ScreenChannel) {
   noteWatchedSize(d.id, fast.size);
   fastScreens.set(d.id, { fast, channel });
 }
+
+// The watched device's fast screen, for a session line to carry as a track; null when it isn't being watched fast.
+export const fastScreenOf = (device: string): FastScreen | null => fastScreens.get(device)?.fast ?? null;
 
 async function takeOffer(device: string, sealed: Sealed) {
   const screen = fastScreens.get(device);
@@ -132,6 +141,9 @@ const streams = new Map<string, string>();
 // The device each card streams: picking another in the pane stops the one before, rather than leave it running unseen.
 const cardDevices = new Map<string, string>();
 const nudges = new Map<string, () => void>();
+
+// The card streaming a device, so a session line holds a screen to the relay's own-card check (lib/host-line-screen.ts).
+export const watcherOf = (device: string): string | undefined => [...cardDevices].find(([, d]) => d === device)?.[0];
 
 // A tap just landed: capture now rather than at the next tick, so the answer on screen comes back as soon as it can.
 export const nudgeScreen = (device: string) => nudges.get(device)?.();

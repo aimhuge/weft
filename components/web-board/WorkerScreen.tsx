@@ -6,7 +6,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import type { SharePane } from "@/lib/share-types";
 import { hidUsage } from "@/lib/hid-keys";
-import { useRtcScreen } from "@/lib/use-rtc-screen";
+import { useScreenVideo } from "@/lib/use-line-screen";
 import { gesture, useScreenStream, type Point } from "@/lib/use-screen-stream";
 import type { BoardInput } from "@/lib/worker-commands";
 import { ScreenBar, useScreenQuality } from "./ScreenBar";
@@ -31,8 +31,9 @@ function statusLine(ended: boolean, src: string | null, canTap: boolean, until: 
   return `${canTap ? "Live · tap and drag on the screen" : "Live"}${direct ? " · direct video" : ""} · until ${time}`;
 }
 
-// source: the worker's name, for "streaming from"; the web board, which doesn't know it, says "the worker".
-export function WorkerScreen({ pane, onInput, source }: { pane: ScreenPane; onInput?: (input: BoardInput) => Promise<unknown>; source?: string }) {
+// source: the worker's name, for "streaming from"; the web board, which doesn't know it, says "the worker". workerId: the
+// worker whose session line carries the video as a track when it's up; otherwise the screen opens a line of its own.
+export function WorkerScreen({ pane, onInput, source, workerId }: { pane: ScreenPane; onInput?: (input: BoardInput) => Promise<unknown>; source?: string; workerId?: string }) {
   const [src, setSrc] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const [now, setNow] = useState(() => Date.now());
@@ -45,7 +46,7 @@ export function WorkerScreen({ pane, onInput, source }: { pane: ScreenPane; onIn
   // The page a watch started from here is waiting to replace: the new page ends the wait.
   const [startedOn, setStartedOn] = useState<string | null>(null);
   const starting = startedOn === pane.url;
-  const { live, track, send, answer } = useRtcScreen(pane.device, pane.fast, canvas, onInput, quality, video);
+  const { live, track, send, answer } = useScreenVideo(onInput ? workerId : undefined, pane.device, pane.fast, canvas, onInput, quality, video);
   useScreenStream(pane.token, setSrc, answer);
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), CLOCK_MS);

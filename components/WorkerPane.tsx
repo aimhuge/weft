@@ -11,6 +11,7 @@ import type { BrowserState } from "@/lib/client";
 import type { Card } from "@/lib/types";
 import type { ProjectWorker } from "@/lib/board-view";
 import { sendWorkerAction } from "@/lib/worker-transport";
+import { parseWorkerProject } from "@/lib/worker-project";
 import { guarded } from "./guarded";
 import { QaSwitch, useQa } from "./QaSwitch";
 import { WebPane } from "./web-board/WebPane";
@@ -45,6 +46,7 @@ export default function WorkerPane({ card, worker, url, browser, marks, onClose 
       onScreenInput={(input) => sendWorkerAction({ action: "input", cardId: card.id, input }).then(() => {})}
       actions={actions}
       source={worker?.name}
+      workerId={parseWorkerProject(card.cwd)?.workerId}
       mobileApp={card.mobileApp}
     />
   );

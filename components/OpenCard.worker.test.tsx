@@ -7,7 +7,8 @@ import { useContext, type ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ThreadTransportContext } from "@/lib/thread-transport";
 import { ToolResultSourceContext } from "@/lib/use-tool-result";
-import { workerToolSource, workerTransport } from "@/lib/worker-transport";
+import { workerToolSource } from "@/lib/worker-transport";
+import { lineTransport } from "@/lib/line-host";
 import { useShownItems } from "@/lib/worker-shown";
 import type { Card, ThreadItem } from "@/lib/types";
 import type { UseWorkspaceLayout } from "@/lib/use-workspace-layout";
@@ -75,10 +76,10 @@ function setup(over: Partial<OpenCardProps> = {}) {
 }
 
 describe("a worker card in the board's own workspace", () => {
-  it("draws its thread over the worker's transport and tool outputs", () => {
+  it("draws its thread over its worker's transport (the session line, or the relay) and tool outputs", () => {
     setup();
     const thread = seen.get("thread")!;
-    expect(thread.transport).toBe(workerTransport);
+    expect(thread.transport).toBe(lineTransport("m1"));
     expect(thread.tools).toBe(workerToolSource);
     expect(thread.card).toBe(card);
     // No editor of this Mac's files, and no Share… for a card this Mac doesn't sync.

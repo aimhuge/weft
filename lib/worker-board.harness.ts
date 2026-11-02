@@ -30,6 +30,8 @@ export interface FakeOptions {
   insertError?: { message: string } | null;
   // What the blobs bucket answers an upload with.
   uploadError?: { message: string } | null;
+  // The worker's published key, for a sealed offer (a cloud_workers maybeSingle).
+  publicKey?: string | null;
 }
 
 // The rows a table answers with. `columns` is the select being read, so one table can answer each query on
@@ -94,6 +96,7 @@ export function fakeClient(opts: FakeOptions = {}) {
       maybeSingle: () => {
         if (table === "cloud_cards") return Promise.resolve({ data: opts.cardRow ?? null, error: null });
         if (table === "cloud_tool_outputs") return Promise.resolve({ data: opts.toolOutput ?? null, error: opts.toolError ?? null });
+        if (table === "cloud_workers" && opts.publicKey !== undefined) return Promise.resolve({ data: { public_key: opts.publicKey }, error: null });
         return Promise.resolve({ data: null, error: null });
       },
       single: () => Promise.resolve({ data: opts.insertError ? null : { id: opts.insertId ?? "cmd-1" }, error: opts.insertError ?? null }),

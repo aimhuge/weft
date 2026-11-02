@@ -18,9 +18,10 @@ import { hostCommand, textArgOf } from "./host-command";
 import { DATA_DIR } from "./store";
 import type { ThreadPage } from "./thread-page";
 import type { Card, PermissionMode, QuestionReply } from "./types";
-import { inputCommand, modeCommand, runCommand, type BoardInput, type BoardOffer, type ScreenInput } from "./worker-commands";
+import { inputCommand, modeCommand, runCommand, workerDevice, type BoardInput, type BoardOffer, type ScreenInput } from "./worker-commands";
 import { seal } from "./worker-seal";
 import { RTC_PURPOSE } from "./rtc-signal";
+import { LINE_PURPOSE, type LineOffer } from "./host-line-protocol";
 import { EMPTY_WORKER_BOARD, offlineMessage, parseWorkerProject, workerProjectPath, type WorkerBoard, type WorkerProject, type WorkerProjectStatus } from "./worker-project";
 import { liveStatus, type PresenceRead } from "./worker-presence";
 import { presenceWatch, type PresenceWatch } from "./worker-presence-watch";
@@ -203,12 +204,27 @@ export type WorkerAction =
   // Any verb in lib/host-api (lib/host-command.ts), for the board to reach every verb a worker runs.
   | { action: "host"; cardId: string; verb: string; args?: Record<string, unknown> };
 
+// A session line's offer (lib/session-line.ts): for a worker, not a card, so it goes through openWorkerLine.
+export type LineAction = { action: "line"; workerId: string; offer: LineOffer };
+
 // A WebRTC offer goes out sealed to the worker's published key: only that worker can answer it, and the answer comes
 // back under the board's one-time key, so the board knows who it reached (weft-worker.md#the-fast-path).
 async function sealedOffer(client: SupabaseClient, workerId: string, offer: BoardOffer): Promise<ScreenInput> {
   const { data } = await client.from("cloud_workers").select("public_key").eq("id", workerId).maybeSingle<{ public_key: string | null }>();
   if (!data?.public_key) throw new Error("That worker hasn't published its key yet.");
   return { kind: "offer", device: offer.device, sealed: seal(data.public_key, JSON.stringify({ sdp: offer.sdp, key: offer.key, quality: offer.quality }), RTC_PURPOSE) };
+}
+
+// Opens a session line: the board's offer, its answer key, topic and ICE servers, sealed to the worker's published key
+// (LINE_PURPOSE) on a `line` command, so only that worker can answer and both DTLS fingerprints travel protected.
+export async function openWorkerLine(body: LineAction, client: SupabaseClient = accountClient()): Promise<{ commandId: string }> {
+  const who = await requireSession(client);
+  if (!(await myWorkers(client, who)).some((w) => w.id === body.workerId)) throw new Error("That worker isn't one of yours.");
+  const { data } = await client.from("cloud_workers").select("public_key").eq("id", body.workerId).maybeSingle<{ public_key: string | null }>();
+  if (!data?.public_key) throw new Error("That worker hasn't published its key yet.");
+  const { sdp, key, topic, ice } = body.offer;
+  const sealed = seal(data.public_key, JSON.stringify({ sdp, key, topic, ice }), LINE_PURPOSE);
+  return insert(client, { org_id: who.org, kind: "line", target_device: workerDevice(body.workerId), folder: "", payload: { sealed } });
 }
 
 const inputFor = (client: SupabaseClient, workerId: string, input: BoardInput) => ("sdp" in input ? sealedOffer(client, workerId, input) : input);

@@ -17,7 +17,8 @@ import type { Backend, Card, QuestionReply } from "./types";
 import { localToolSource, type ToolResultSource } from "./use-tool-result";
 import type { ActResult } from "./worker-acts";
 import { actOnWorker, workerToolSource, workerTransport } from "./worker-transport";
-import { isWorkerProject, parseWorkerProject } from "./worker-project";
+import { parseWorkerProject } from "./worker-project";
+import { actOnLine, lineTransport } from "./line-host";
 
 // This Mac's own features, which another host offers only once it has a verb or a stream for them. `files` is the
 // editor and the thread's file links (H4), `shots` the show rail's page pictures (lib/page-shots.ts), `pane` the native
@@ -92,9 +93,18 @@ export const cloudHost: ProjectHost = {
   menu: remoteMenu,
 };
 
+// A worker's host takes its session line when it's up and the relay when it isn't (lib/line-host.ts).
+const cloudHosts = new Map<string, ProjectHost>();
+function cloudHostOf(workerId: string): ProjectHost {
+  let host = cloudHosts.get(workerId);
+  if (!host) cloudHosts.set(workerId, (host = { ...cloudHost, thread: lineTransport(workerId), act: (verb, args) => actOnLine(workerId, verb, args) }));
+  return host;
+}
+
 // The host of a project (a folder, or a worker:// path); no project is this Mac's.
 export function hostFor(project: string | null | undefined): ProjectHost {
-  return isWorkerProject(project) ? cloudHost : localHost;
+  const worker = project ? parseWorkerProject(project) : null;
+  return worker ? cloudHostOf(worker.workerId) : localHost;
 }
 
 export const hostOf = (card: Pick<Card, "cwd">) => hostFor(card.cwd);

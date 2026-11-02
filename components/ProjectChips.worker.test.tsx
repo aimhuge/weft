@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
 // A worker project's chip (components/ProjectChips.tsx): the project's name, the worker it runs on, and
 // where it says it lives.
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { act, render, screen } from "@testing-library/react";
 import { createRef } from "react";
 import { noteRelay, resetWorkerRoute, setWorkerRoute } from "@/lib/worker-route";
+const held = vi.hoisted(() => [] as (string | null | undefined)[]);
+vi.mock("@/lib/session-lines", () => ({ useSessionLine: (id: string | null | undefined) => void held.push(id) }));
 import ProjectChips from "./ProjectChips";
 import type { ProjectSummary } from "@/lib/board-view";
 import "./test-utils";
@@ -59,5 +61,17 @@ describe("a worker chip's route", () => {
     renderChips([summary({ worker: { name: "m1mini", status: "online" } })]);
     expect(screen.getByTitle("on m1mini")).toBeInTheDocument();
     act(() => resetWorkerRoute());
+  });
+});
+
+describe("showing a worker's project", () => {
+  it("holds its session line while it's selected and the worker is up, and nothing otherwise", () => {
+    held.length = 0;
+    renderChips([summary({ worker: { name: "m1mini", status: "online" } })], "worker://w1/ling");
+    expect(held.at(-1)).toBe("w1");
+    renderChips([summary({ worker: { name: "m1mini", status: "offline" } })], "worker://w1/ling");
+    expect(held.at(-1)).toBeNull();
+    renderChips([summary({ worker: { name: "m1mini", status: "online" } })]);
+    expect(held.at(-1)).toBeNull();
   });
 });

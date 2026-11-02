@@ -1,12 +1,12 @@
 import { connection } from "next/server";
 import { elevated, fail, guard } from "@/lib/guard";
 import { qaState } from "@/lib/qa-switch";
-import { readWorkerBoard, sendWorkerAction, workerThreadPage, workerToolOutput, type WorkerAction } from "@/lib/worker-board";
+import { openWorkerLine, readWorkerBoard, sendWorkerAction, workerThreadPage, workerToolOutput, type LineAction, type WorkerAction } from "@/lib/worker-board";
 
 // Your Weft Workers' projects on the desktop board (lib/worker-board.ts): GET lists them with their cards, GET ?card=
 // reads a page of that card's thread (before= walks back, after= sends only the items past that seq), since= only the
 // cards changed after it, GET ?card=&tool= reads a full tool result, and POST sends
-// a reply, an answer, a stop, a mode, a tap or any host verb as a cloud_commands row. A new thread goes through POST /api/cards like any other.
+// a reply, an answer, a stop, a mode, a tap or any host verb as a cloud_commands row, or a session line's sealed offer. A new thread goes through POST /api/cards like any other.
 
 export async function GET(req: Request) {
   const denied = guard(req, { write: false });
@@ -31,19 +31,21 @@ export async function GET(req: Request) {
   }
 }
 
-const ELEVATED = new Set<WorkerAction["action"]>(["answer", "mode", "input", "qa", "host"]);
+const ELEVATED = new Set<(WorkerAction | LineAction)["action"]>(["answer", "mode", "input", "qa", "host", "line"]);
 
 export async function POST(req: Request) {
   const denied = guard(req);
   if (denied) return denied;
   try {
-    const body = (await req.json()) as WorkerAction;
+    const body = (await req.json()) as WorkerAction | LineAction;
     // An answer can allow a call or grant a folder, so it takes Weft's own window, like the local permission route:
     // a thread's curl must not approve its own prompt on a worker. A mode widens what a thread may do, and input drives
     // the device, so they take it too, and Local Simulator runs a worker's build on this Mac. A host verb can be any of
     // those, so it always takes it: a cloud act is elevated by construction (docs/architecture/project-hosts.md).
     const loose = ELEVATED.has(body.action) ? elevated(req) : null;
     if (loose) return loose;
+    // A session line carries every verb, so its offer takes Weft's own window too.
+    if (body.action === "line") return Response.json(await openWorkerLine(body));
     return Response.json(await sendWorkerAction(body));
   } catch (err) {
     return fail(err);

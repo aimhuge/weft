@@ -3,7 +3,20 @@ import { RTCPeerConnection } from "werift";
 import { frameReader } from "./h264-frames";
 import { newAnswerKey, openAnswer, sealAnswer } from "./rtc-signal";
 import { inputChannel, sendFrame, videoChannel } from "./worker-fast-screen";
-import { answerOffer, type Channel } from "./worker-rtc";
+import { answerOffer, peerIce, type Channel } from "./worker-rtc";
+
+describe("peerIce", () => {
+  it("takes the board's Cloudflare servers only, else Cloudflare's STUN", () => {
+    const cf = { urls: ["turn:turn.cloudflare.com:3478?transport=udp", "turns:turn.cloudflare.com:443?transport=tcp", "turn:evil.example:3478"], username: "u", credential: "c" };
+    expect(peerIce([cf, { urls: "stun:stun.cloudflare.com:3478" }, { urls: "turn:cloudflare.com.evil.example" }, { urls: "turn:t" }])).toEqual([
+      { ...cf, urls: cf.urls.slice(0, 2) },
+      { urls: ["stun:stun.cloudflare.com:3478"] },
+    ]);
+    expect(peerIce([{ urls: "turn:t" }])).toEqual([{ urls: "stun:stun.cloudflare.com:3478" }]);
+    expect(peerIce([])).toEqual([{ urls: "stun:stun.cloudflare.com:3478" }]);
+    expect(peerIce()).toEqual([{ urls: "stun:stun.cloudflare.com:3478" }]);
+  });
+});
 
 describe("answerOffer", () => {
   it("answers with whatever a slow gather has so far, and closes", async () => {
@@ -50,6 +63,52 @@ describe("answerOffer", () => {
     const out = await answering;
     expect(out.answer).toBe("answer");
     out.close();
+  });
+
+  it("routes a label with no handler to *, renegotiates the same peer, takes the board's ICE servers and says once when it closes", async () => {
+    const dcs: ((c: Channel) => void)[] = [];
+    const states: ((s: string) => void)[] = [];
+    const remote: string[] = [];
+    const peer = {
+      onDataChannel: { subscribe: (fn: (c: Channel) => void) => dcs.push(fn) },
+      iceGatheringStateChange: { subscribe: vi.fn() },
+      iceGatheringState: "complete",
+      setRemoteDescription: (d: { sdp: string }) => Promise.resolve(remote.push(d.sdp)),
+      createAnswer: () => Promise.resolve({}),
+      setLocalDescription: () => Promise.resolve(),
+      localDescription: { sdp: "answer" },
+      getTransceivers: () => [{ kind: "video" }],
+      close: () => Promise.resolve(),
+      connectionStateChange: { subscribe: (fn: (s: string) => void) => states.push(fn) },
+    };
+    const make = vi.fn(() => peer as never);
+    const star = vi.fn();
+    const host = vi.fn();
+    const ice = [{ urls: "turn:t", username: "u", credential: "c" }];
+    const out = await answerOffer("offer", { host, "*": star }, { make, ice });
+    expect(make).toHaveBeenCalledWith(ice);
+    dcs[0]?.({ label: "host" } as Channel);
+    dcs[0]?.({ label: "input:sim:1" } as Channel);
+    expect(host).toHaveBeenCalledTimes(1);
+    expect(star).toHaveBeenCalledWith({ label: "input:sim:1" });
+    const media = vi.fn();
+    await expect(out.renegotiate("offer 2", media)).resolves.toBe("answer");
+    expect(remote).toEqual(["offer", "offer 2"]);
+    expect(media).toHaveBeenCalledWith([{ kind: "video" }]);
+    const gone = vi.fn();
+    out.onClosed(gone);
+    states[0]?.("connected");
+    states[0]?.("failed");
+    states[0]?.("closed");
+    expect(gone).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves a label nobody handles alone, and a peer with no state events never says it closed", async () => {
+    const dcs: ((c: Channel) => void)[] = [];
+    const peer = { onDataChannel: { subscribe: (fn: (c: Channel) => void) => dcs.push(fn) }, iceGatheringStateChange: { subscribe: vi.fn() }, iceGatheringState: "complete", setRemoteDescription: () => Promise.resolve(), createAnswer: () => Promise.resolve({}), setLocalDescription: () => Promise.resolve(), localDescription: { sdp: "a" }, getTransceivers: () => [], close: () => Promise.resolve() };
+    const out = await answerOffer("offer", {}, { make: () => peer });
+    expect(() => dcs[0]?.({ label: "x" } as Channel)).not.toThrow();
+    expect(() => out.onClosed(vi.fn())).not.toThrow();
   });
 
   it("refuses to answer with nothing", async () => {

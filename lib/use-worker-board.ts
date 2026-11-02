@@ -11,6 +11,16 @@ import { hostOf } from "./project-host";
 import { mergeBoard, FULL_READ_EVERY_MS } from "./worker-board-merge";
 import { clearActiveCards, markWholeRead, setActiveCards } from "./worker-poll";
 import { sendWorkerAction } from "./worker-transport";
+import { onLineEvents } from "./session-lines";
+import type { LineEvent } from "./host-line-protocol";
+
+// A card change off a worker's session line, laid over the cards read last: the card keeps the board's worker:// path,
+// and one the board hasn't read yet waits for the next read, which knows its project.
+export function withLineEvent(cards: Card[], event: LineEvent): Card[] {
+  if (event.t === "card_deleted") return cards.filter((c) => c.id !== event.id);
+  if (event.t !== "card") return cards;
+  return cards.map((c) => (c.id === event.card.id ? { ...event.card, cwd: c.cwd } : c));
+}
 
 // Your workers' projects and cards on the desktop board, read through the local server every few seconds (only the cards changed since the last read, a whole read every
 // FULL_READ_EVERY_MS). They stay
@@ -71,12 +81,16 @@ export function useWorkerBoard(): WorkerBoard {
       }
       else setBoard((b) => ({ ...b, cards: applyIntents(b.cards) }));
     });
+    const offLine = onLineEvents((_, event) => {
+      if (event.t === "card" || event.t === "card_deleted") setBoard((b) => ({ ...b, cards: overlayAll(withLineEvent(b.cards, event)) }));
+    });
     void tick();
     return () => {
       alive = false;
       clearTimeout(timer);
       clearActiveCards();
       off();
+      offLine();
     };
   }, []);
 
