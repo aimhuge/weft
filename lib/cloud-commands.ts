@@ -64,6 +64,11 @@ export interface LoginPayload {
   token: Sealed;
 }
 
+// A session line's offer, sealed to the worker (lib/worker-board.ts openWorkerLine, lib/host-line.ts).
+export interface LinePayload {
+  sealed: Sealed;
+}
+
 // A GitHub repo to put on a Weft Worker, with no thread.
 export interface ClonePayload {
   repo: string;
@@ -98,7 +103,8 @@ export interface QaPayload {
 }
 
 // "host" carries any verb in lib/host-api (lib/host-command.ts); reply, answer, stop and mode run as its verbs too.
-export type CloudCommandKind = "new_card" | "reply" | "answer" | "stop" | "run" | "login" | "github_login" | "clone" | "mode" | "input" | "qa" | "update" | "host";
+// "line" is a sealed WebRTC offer that opens a worker's session line (lib/host-line.ts).
+export type CloudCommandKind = "new_card" | "reply" | "answer" | "stop" | "run" | "login" | "github_login" | "clone" | "mode" | "input" | "qa" | "update" | "host" | "line";
 
 // public.cloud_commands.
 export interface CloudCommandRow {
@@ -109,7 +115,7 @@ export interface CloudCommandRow {
   // The Mac that runs it (cloud_cards.owner_device) and the folder it runs in (cloud_cards.folder).
   target_device: string;
   folder: string;
-  payload: NewCardPayload | ReplyPayload | AnswerPayload | StopPayload | LoginPayload | ClonePayload | ModePayload | InputPayload | QaPayload | UpdatePayload | HostPayload;
+  payload: NewCardPayload | ReplyPayload | AnswerPayload | StopPayload | LoginPayload | ClonePayload | ModePayload | InputPayload | QaPayload | UpdatePayload | HostPayload | LinePayload;
   status: CloudCommandStatus;
   card_id: string | null;
   error: string | null;

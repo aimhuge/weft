@@ -8,7 +8,7 @@ import type { ThreadPage } from "./thread-page";
 const fetchMock = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>();
 vi.mock("./api-client", () => ({ apiFetch: (url: string, init?: RequestInit) => fetchMock(url, init) }));
 
-const { mergePage, sendWorkerAction, THREAD_POLL_MS, workerToolSource, workerTransport } = await import("./worker-transport");
+const { mergePage, sendWorkerAction, THREAD_POLL_MS, useWorkerLive, workerToolSource, workerTransport } = await import("./worker-transport");
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
@@ -120,6 +120,15 @@ describe("stop", () => {
 });
 
 describe("useLive", () => {
+  it("doesn't poll while a session line pushes the items", async () => {
+    vi.useFakeTimers();
+    renderHook(() => useWorkerLive("c1", vi.fn(), false));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(THREAD_POLL_MS * 2);
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("re-reads the thread every couple of seconds and lays the page over", async () => {
     vi.useFakeTimers();
     fetchMock.mockResolvedValue(json({ items: [item("hi")], start: 0, total: 1 }));

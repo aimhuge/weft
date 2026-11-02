@@ -109,3 +109,22 @@ describe("the video track", () => {
     expect(stop).not.toHaveBeenCalled();
   });
 });
+
+describe("on a session line", () => {
+  it("sends on the line's new m-line at its quality, or says it can't, and takes the line's input channel", async () => {
+    const s = session();
+    idb.openIdb.mockResolvedValue(s);
+    const fast = await openFastScreen(ios);
+    const stop = vi.fn();
+    rtp.takeVideo.mockReturnValueOnce({ ssrc: 2 });
+    rtp.rtpVideo.mockReturnValueOnce(stop);
+    expect(fast?.attach?.([{ kind: "video" }] as never, "low")).toBe(stop);
+    expect(rtp.rtpVideo).toHaveBeenCalledWith(s, { ssrc: 2 }, "low");
+    rtp.takeVideo.mockReturnValueOnce(null);
+    expect(fast?.attach?.([] as never)).toBeNull();
+    let heard: (raw: string) => void = () => {};
+    fast?.input?.({ onMessage: { subscribe: (fn: (raw: string) => void) => (heard = fn) } } as never);
+    heard(JSON.stringify({ t: "down", x: 0.5, y: 0.5 }));
+    expect(s.touch).toHaveBeenCalledWith("down", 0.5, 1);
+  });
+});

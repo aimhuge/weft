@@ -15,15 +15,16 @@ import { apiFetch } from "./api-client";
 import type { HostVerb } from "./host-api/types";
 import type { HostArgs } from "./host-command";
 import type { Queued } from "./optimistic-cards";
-import type { WorkerAction } from "./worker-board";
+import type { LineAction, WorkerAction } from "./worker-board";
 import { wakeCard, workerOfCard } from "./worker-poll";
 import { noteRelay } from "./worker-route";
 import { waitForCommand, type CommandResult } from "./worker-command-wait";
 
-export async function postWorkerAction(body: WorkerAction): Promise<{ commandId?: string }> {
+export async function postWorkerAction(body: WorkerAction | LineAction): Promise<{ commandId?: string }> {
   const started = Date.now();
   const res = await apiFetch("/api/worker-board", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-  if (res.ok) {
+  // A session line's offer names a worker, not a card, and isn't a relay round trip.
+  if (res.ok && "cardId" in body) {
     noteRelay(workerOfCard(body.cardId), Date.now() - started);
     wakeCard(body.cardId);
   }

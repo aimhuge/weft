@@ -73,6 +73,12 @@ export async function openFastScreen(d: Device): Promise<FastScreen | null> {
   let line: { close: () => void } | null = null;
   return {
     size: idb.size,
+    // The screen as a track on a session line (lib/host-line.ts): the line's new video m-line, and its input channel.
+    attach: (transceivers, quality) => {
+      const sender = takeVideo(transceivers);
+      return sender ? rtpVideo(idb, sender, quality) : null;
+    },
+    input: (c) => inputChannel(idb, c),
     connect: async (sdp, quality) => {
       line?.close();
       // Set while the answer is made, before any channel opens. A board on the track leaves its "video" channel unused,

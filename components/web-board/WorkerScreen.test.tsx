@@ -11,6 +11,18 @@ vi.mock("@/lib/use-screen-stream", async (actual) => ({
   },
 }));
 
+// The session line's track (lib/use-line-screen.ts), off unless a test turns it on.
+const line = vi.hoisted(() => ({ live: false, send: vi.fn(() => false), args: [] as unknown[] }));
+vi.mock("@/lib/use-line-screen", async (actual) => {
+  const real = await actual<typeof import("@/lib/use-line-screen")>();
+  return {
+    useScreenVideo: (...args: Parameters<typeof real.useScreenVideo>) => {
+      line.args = args;
+      return line.live ? { live: true, track: true, send: line.send, answer: () => {} } : real.useScreenVideo(...args);
+    },
+  };
+});
+
 const { act } = await import("react");
 const { WorkerScreen } = await import("./WorkerScreen");
 
@@ -108,5 +120,19 @@ describe("WorkerScreen", () => {
     render(<WorkerScreen pane={pane(1, { fast: true, devices: [{ id: "ipad", name: "iPad" }] })} />);
     expect(screen.queryByRole("combobox")).toBeNull();
     expect(screen.queryByRole("button", { name: /Resume/ })).toBeNull();
+  });
+
+  it("asks for the video by the worker's session line, and says when it's direct", () => {
+    line.live = true;
+    const onInput = vi.fn(() => Promise.resolve());
+    render(<WorkerScreen pane={pane(later(), { fast: true })} onInput={onInput} workerId="w1" />);
+    expect(line.args.slice(0, 3)).toEqual(["w1", "d", true]);
+    expect(screen.getByText(/direct video/)).toBeTruthy();
+    line.live = false;
+  });
+
+  it("doesn't offer the line to a board that only watches", () => {
+    render(<WorkerScreen pane={pane(later(), { fast: true })} workerId="w1" />);
+    expect(line.args[0]).toBeUndefined();
   });
 });

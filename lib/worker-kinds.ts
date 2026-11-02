@@ -1,7 +1,7 @@
 // A Weft Worker's kind table (lib/worker-daemon.ts runs it through the host core's inbox, lib/host/inbox.ts): `run`
 // (and a web `new_card`) makes a card in the project's checkout and starts its thread; `login` and `github_login` open a
 // sealed sign-in; `clone` puts a repo in a folder; `update` asks for the update check; and the card kinds
-// (lib/worker-card-commands.ts) act on a card it runs. Each returns the card it made or touched, or null.
+// (lib/worker-card-commands.ts) act on a card it runs; `line` opens a session line (lib/host-line.ts). Each returns the card it made or touched, or null.
 import { newCardBody, type CloudCommandRow } from "./cloud-commands";
 import { dispatcher, type KindTable } from "./host/dispatch";
 import { createCardCommands } from "./worker-card-commands";
@@ -69,6 +69,7 @@ export function workerKinds(deps: DaemonDeps, ctx: KindContext): KindTable {
     return card.id;
   }
 
+  const cards = createCardCommands(engine);
   return {
     async login(command) {
       await deps.login(sealedToken(command));
@@ -83,7 +84,17 @@ export function workerKinds(deps: DaemonDeps, ctx: KindContext): KindTable {
     run: startCard,
     new_card: startCard,
     update: () => ctx.askForUpdate(),
-    ...createCardCommands(engine),
+    ...cards,
+    // A session line's sealed offer (lib/host-line.ts): its verbs run through this table's own `host`, so they pass
+    // exactly the checks a `host` command does (CardRules, remoteRefusal).
+    async line(command) {
+      if (!deps.line) throw new Error("This worker doesn't open lines yet. Update it with weft-worker update.");
+      const raw: unknown = command.payload;
+      const sealed = sealedOf(raw && typeof raw === "object" ? (raw as { sealed?: unknown }).sealed : null);
+      if (!sealed) throw new Error("That line carries no sealed offer.");
+      await deps.line(sealed, (payload) => cards.host({ ...command, kind: "host", payload } as CloudCommandRow));
+      return null;
+    },
   };
 }
 

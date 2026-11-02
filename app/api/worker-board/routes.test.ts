@@ -16,6 +16,7 @@ const board = vi.hoisted(() => ({
   sendWorkerAction: vi.fn(() => Promise.resolve({ commandId: "cmd-1" })),
   workerThreadPage: vi.fn((): Promise<ThreadPage | null> => Promise.resolve(null)),
   workerToolOutput: vi.fn(() => Promise.resolve("the whole thing")),
+  openWorkerLine: vi.fn(() => Promise.resolve({ commandId: "cmd-line" })),
 }));
 vi.mock("@/lib/worker-board", () => board);
 
@@ -142,6 +143,15 @@ describe("POST /worker-board", () => {
     const res = await route.POST(post(body));
     expect(res.status).toBe(403);
     expect(board.sendWorkerAction).not.toHaveBeenCalled();
+  });
+
+  it("opens a session line only from Weft's own window, for a worker rather than a card", async () => {
+    const body = { action: "line", workerId: "w1", offer: { sdp: "v=0", key: "k", topic: "t", ice: [] } };
+    expect(await (await route.POST(post(body))).json()).toEqual({ commandId: "cmd-line" });
+    expect(board.openWorkerLine).toHaveBeenCalledWith(body);
+    expect(board.sendWorkerAction).not.toHaveBeenCalled();
+    guard.elevated = Response.json({ error: "Needs the launch token" }, { status: 403 });
+    expect((await route.POST(post(body))).status).toBe(403);
   });
 
   it("says what went wrong when the action fails", async () => {

@@ -12,6 +12,7 @@
 import type { CloudCommandRow, GrantScope } from "./cloud-commands";
 import type { Card } from "./types";
 import type { HostVerb } from "./host-api";
+import type { HostDone } from "./host-command";
 import { createBeat } from "./host/beat";
 import { keyLine } from "./host/identity";
 import { createInbox, startPolling, type Connection } from "./host/inbox";
@@ -73,6 +74,9 @@ export interface DaemonDeps {
   // Runs once recovery has settled (published, resumed, or failed): the timed work that may start a turn, like Send
   // later's scheduler, so a message that fell due while the worker was down can't race a card about to be resumed.
   onRecovered?: () => void;
+  // Opens a session line from a sealed offer (lib/host-line.ts). `run` is the host command's own path (lib/host/dispatch.ts
+  // via lib/worker-kinds.ts), so a verb over the line passes exactly the checks it would over the relay.
+  line?: (sealed: Sealed, run: (payload: unknown) => Promise<HostDone>) => Promise<void>;
   // Calls back when a card changes, so a held update can go the moment the last one ends.
   onCardChange?: (listener: () => void) => () => void;
   // Keeps this box on the newest Weft (lib/worker-update.ts). Absent when it's switched off, or not the worker's clone.
@@ -97,7 +101,7 @@ const SLOW_POLL_MS = 30_000;
 const GITHUB_CHECK_MS = 60 * 60_000;
 // Run beside the queue: a clone can take minutes, and a tap shouldn't wait behind a card that's starting (the person
 // who made it is watching the screen).
-const ASIDE = new Set(["clone", "input", "qa"]);
+const ASIDE = new Set(["clone", "input", "qa", "line"]);
 
 export function createDaemon(deps: DaemonDeps) {
   const log = deps.log ?? ((msg: string) => console.log(msg));

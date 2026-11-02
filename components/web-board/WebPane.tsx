@@ -74,8 +74,8 @@ function StartSimulator({ onScreenInput, big }: { onScreenInput: ScreenInputFn; 
   );
 }
 
-function PaneBody({ orgId, pane, thumbUrl, onScreenInput, source }: { orgId: string | null; pane: SharePane | null; thumbUrl?: string; onScreenInput?: ScreenInputFn; source?: string }) {
-  if (pane?.kind === "screen") return <WorkerScreen pane={pane} onInput={onScreenInput} source={source} />;
+function PaneBody({ orgId, pane, thumbUrl, onScreenInput, source, workerId }: { orgId: string | null; pane: SharePane | null; thumbUrl?: string; onScreenInput?: ScreenInputFn; source?: string; workerId?: string }) {
+  if (pane?.kind === "screen") return <WorkerScreen pane={pane} onInput={onScreenInput} source={source} workerId={workerId} />;
   if (pane?.kind === "blob") {
     return <iframe title="Card page" src={pageSrc(orgId, pane)} sandbox={orgId ? SANDBOX : BOARD_SANDBOX} className="size-full border-0 bg-white" />;
   }
@@ -91,7 +91,8 @@ function PaneBody({ orgId, pane, thumbUrl, onScreenInput, source }: { orgId: str
 // actions: extra toolbar controls (the desktop's Local Simulator switch).
 // source: the worker's name, for the live screen's "streaming from". mobileApp: the card is a React Native or Expo app,
 // so the toolbar offers Start simulator while the pane shows something else.
-export function WebPane({ orgId, pane, thumbUrl, onClose, onScreenInput, actions, source, mobileApp }: { orgId: string | null; pane: SharePane | null; thumbUrl?: string; onClose?: () => void; onScreenInput?: ScreenInputFn; actions?: ReactNode; source?: string; mobileApp?: boolean }) {
+// workerId: the desktop board's worker, whose session line can carry the live screen as a track (lib/use-line-screen.ts).
+export function WebPane({ orgId, pane, thumbUrl, onClose, onScreenInput, actions, source, mobileApp, workerId }: { orgId: string | null; pane: SharePane | null; thumbUrl?: string; onClose?: () => void; onScreenInput?: ScreenInputFn; actions?: ReactNode; source?: string; mobileApp?: boolean; workerId?: string }) {
   return (
     <section aria-label="Browser pane" className="relative hidden min-w-0 flex-1 flex-col border-l border-line bg-panel md:flex">
       <div className="flex items-center gap-1 border-b border-line px-2 py-1.5">
@@ -125,7 +126,7 @@ export function WebPane({ orgId, pane, thumbUrl, onClose, onScreenInput, actions
         )}
       </div>
       <div className="relative min-h-0 flex-1 bg-canvas">
-        {!pane && mobileApp && onScreenInput ? <StartSimulator onScreenInput={onScreenInput} big /> : <PaneBody orgId={orgId} pane={pane} thumbUrl={thumbUrl} onScreenInput={onScreenInput} source={source} />}
+        {!pane && mobileApp && onScreenInput ? <StartSimulator onScreenInput={onScreenInput} big /> : <PaneBody orgId={orgId} pane={pane} thumbUrl={thumbUrl} onScreenInput={onScreenInput} source={source} workerId={workerId} />}
       </div>
     </section>
   );

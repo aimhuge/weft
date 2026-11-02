@@ -24,6 +24,8 @@ vi.mock("./client", () => ({ api, call }));
 
 const actOnWorker = vi.hoisted(() => vi.fn(() => Promise.resolve()));
 vi.mock("./worker-transport", () => ({ actOnWorker, workerToolSource: "worker tools", workerTransport: { desktop: false } }));
+const actOnLine = vi.hoisted(() => vi.fn(() => Promise.resolve()));
+vi.mock("./line-host", () => ({ actOnLine, lineTransport: (workerId: string) => ({ desktop: false, workerId }) }));
 
 const { cloudHost, hostFor, hostOf, localHost, sameHostCards } = await import("./project-host");
 const { localTransport } = await import("./thread-transport");
@@ -42,9 +44,13 @@ describe("hostFor", () => {
     expect(hostOf({ cwd: "/r" })).toBe(localHost);
   });
 
-  it("is a worker for a worker:// project, and for its cards", () => {
-    expect(hostFor("worker://w1/ling")).toBe(cloudHost);
-    expect(hostOf({ cwd: "worker://w1/ling" })).toBe(cloudHost);
+  it("is that worker's host for a worker:// project and its cards, one per worker, on its session line's route", async () => {
+    const w1 = hostFor("worker://w1/ling");
+    expect(hostOf({ cwd: "worker://w1/app" })).toBe(w1);
+    expect(hostFor("worker://w2/ling")).not.toBe(w1);
+    expect(w1).toMatchObject({ kind: "cloud", tools: "worker tools", thread: { workerId: "w1" }, menu: cloudHost.menu });
+    await w1.act("card.stop", { id: "c1" });
+    expect(actOnLine).toHaveBeenCalledWith("w1", "card.stop", { id: "c1" });
   });
 });
 

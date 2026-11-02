@@ -6,6 +6,8 @@
 // the pane is the card's last page, or the one the rail reopened, until the card opens another.
 import { useEffect, useMemo, useState } from "react";
 import { hostFor, type ProjectHost } from "./project-host";
+import { useSessionLine } from "./session-lines";
+import { parseWorkerProject } from "./worker-project";
 import type { Card, ThreadItem } from "./types";
 import { clearShown, useWorkerShown } from "./worker-shown";
 
@@ -31,6 +33,8 @@ function cardShots(page: string | undefined, thumb: string | undefined): Record<
 
 export function useProjectHost(card: Card, local: { items: ThreadItem[]; pageUrl: string }): OpenHost {
   const host = hostFor(card.cwd);
+  // An open worker card holds its worker's session line, so its acts and thread take the direct route.
+  useSessionLine(parseWorkerProject(card.cwd)?.workerId);
   const shown = useWorkerShown();
   const [picked, setPicked] = useState<Picked | null>(null);
   // The same pictures while the page and its capture stay put, so the rail doesn't redraw on every worker poll.

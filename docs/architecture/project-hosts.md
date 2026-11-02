@@ -333,6 +333,63 @@ and stays open while a board shows the worker's project rather than only during 
 `cloud_commands` plus the snapshot rows, used when no line forms (offline, a blocking network, before TURN), and it
 keeps the offline queue and history. A board talking to a worker on its LAN then gets local speed and live streaming.
 
+### The session line (H6, as built)
+
+```
+board (renderer)                          this Mac's server                    worker daemon
+lib/session-lines.ts  retainLine(worker) ─ GET /api/rtc-ice (elevated) ─ lib/rtc-ice.ts: STUN, + Cloudflare TURN
+lib/session-line.ts   offer + key + topic + ICE ─ POST /api/worker-board {action:"line"} (elevated)
+                                          openWorkerLine: seal to the worker's key (LINE_PURPOSE) ─ cloud_commands kind='line'
+                                                                    claim ─ lib/worker-kinds.ts line ─ lib/host-line.ts
+lib/line-answer.ts  ◀── sealed answer (one-time key) on Broadcast worker-line:<128 random bits> ────────┘
+            ═════ DTLS (fingerprints were inside the sealed offer and answer) ═════
+  host     {id, verb, args} ─▶ the `host` kind's own handler (lib/host/dispatch.ts: CardRules, remoteRefusal) ─▶ {id, ok, result|error}
+  events   ◀─ card, card_deleted, thread, thread_cleared, projected as the rows are (lib/host-line-events.ts, card-rows)
+  line     ping/pong every 5 s (→ setWorkerRoute(worker, "direct", ms)); offer/answer renegotiation
+  terminal refused on open
+```
+
+- **Who holds it.** The selected chip of a worker project that isn't offline (`components/ProjectChips.tsx`) and an open
+  worker card (`lib/use-project-host.ts`) each call `useSessionLine(workerId)`. One line per worker, shared, closed 30 s
+  after the last lets go. A worker keeps up to 4 lines (one per board) and closes one no board has pinged for 30 s.
+- **Acts.** `hostFor(worker://…)` is one `CloudHost` per worker whose `act` is `actOnLine` (`lib/line-host.ts`): on the line
+  when it's up; on the relay when there's no line, when the call couldn't be sent (`LineDown`), and for text that pastes
+  files (the relay uploads them). A call sent and then lost (`LineLost`, or no reply in 30 s) is refused rather than
+  resent, since the worker may have run it. A worker's refusal comes back as the same error the relay gives.
+- **Policy is the relay's.** The daemon hands `lines.open` the `host` kind's own handler (`lib/worker-kinds.ts` →
+  `createCardCommands` → `cardKinds(...).host`), so a verb over the line passes `readHostCommand`, the card check,
+  `remoteRefusal` and the CardRules exactly as a row does (`lib/session-line.real.test.ts` checks shell, folder and
+  foreign-card refusals over a real line).
+- **Live.** The open thread's `useLive` (`useLineLive`) stops the poll while the route is direct and applies `events`; it
+  re-reads the newest page whenever the route changes. The card list applies `card` and `card_deleted` events
+  (`withLineEvent`, `lib/use-worker-board.ts`) and keeps its poll for projects and cards it hasn't seen.
+- **Repair.** No pong for 15 s, or ICE `disconnected`: an ICE restart offered over the `line` channel itself (5 s to
+  answer). When that can't get through, or the connection fails, the line drops to the relay and a new one is offered
+  through Supabase after 5 s, 15 s, 1 min, then every 5 min. An offer this Mac's server refuses (no key published, not
+  your worker, a database without the `line` kind) stops the retries until the line is held again.
+- **The simulator is a track on it.** `useScreenVideo` (`lib/use-line-screen.ts`) adds a receive-only H.264 m-line and an
+  `input:<device>:<nonce>` channel to the line, renegotiated over `line` with `screen: {device, quality, channel}`. The
+  worker attaches the watched device's `FastScreen` (`fastScreenOf`, `attach`, `input`) to the new m-line and stops it
+  when that input channel closes. With no line, or a refused attach, the screen opens its own line as in H6a.
+- **The terminal is refused**, on every line, with `TERMINAL_REFUSAL`. A pty is a shell, and H2 refuses a shell from the
+  network because whoever holds the account's session can insert a row. A line is no better: the sealed offer proves
+  that only the worker answers, not that Weft's own window offered (the worker's key is public, so anyone with the
+  session can seal one). A terminal over the line needs the offer signed by a device key the worker pins (H7/H10).
+- **TURN.** `GET /api/rtc-ice` (elevated: a TURN allocation is billed relay traffic) mints Cloudflare credentials for 4 h
+  with `CLOUDFLARE_TURN_KEY_ID` and `CLOUDFLARE_TURN_KEY_API_TOKEN`, reused for half that, port-53 URLs dropped; without
+  them, or on any failure, STUN alone. The servers ride inside the sealed offer, so the worker relays through the same
+  credentials and never needs its own.
+- **The route chip.** Each pong calls `setWorkerRoute(workerId, "direct", ms)` (`lib/worker-route.ts`), so the worker
+  chip's tooltip reads "direct · 4 ms"; once pongs stop, relay notes take over after 15 s.
+- **Migration.** `supabase/migrations/20261102160000_line_command.sql` adds `line` to the kind check. Until it's applied
+  the offer's insert fails and the board stays on the relay.
+- **Verified** with two real werift peers (`lib/session-line.real.test.ts`): the sealed offer, the answer under the
+  one-time key, verbs and their refusals, a pushed event, ping/pong, an ICE restart over the line, and a video m-line
+  plus input channel renegotiated over it. Not yet run in Electron's own Chromium, against a real worker, through TURN,
+  or off the LAN.
+- **Not yet.** Streaming deltas on `events`; reconnecting a dropped line over a second path (the mDNS hint); weft.zip and the
+  phone sealing their own offers; Supabase leaving the card-list poll.
+
 ## Approvals and secrets
 
 A view owns one thing: **approval**. Touch ID on the Mac is `promptTouchID` in Electron main, which approves but signs
@@ -413,7 +470,8 @@ Each ships on its own.
    reports by restarting idb's encoder, a PLI answered with a restart for a key frame;
    [weft-worker.md](weft-worker.md#the-fast-path)); the line
    opens while a board shows the worker's project, not only during a watch; `host` (verbs and results) and `events`
-   (thread and project changes, streaming text) channels replace the 2.5 s poll; Supabase leaves the hot path (the
+   (thread and project changes, streaming text) channels replace the 2.5 s poll (**built 2026-11-02**, [as
+   built](#the-session-line-h6-as-built), with the simulator as a track on the line, TURN, and the terminal refused); Supabase leaves the hot path (the
    first sealed offer, then a history and offline mirror written beside the line, with reconnects over the line itself);
    a signed Bonjour/mDNS hint lets a board on the same LAN offer straight to the host; the browser and the phone seal
    their own offers (libsodium), so weft.zip and the phone open lines too; and a TURN relay beside the STUN server

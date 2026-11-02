@@ -80,6 +80,8 @@ async function loadEngine() {
     import("../lib/mobile-app"),
     import("../lib/host-api"),
     import("../lib/scheduler"),
+    import("../lib/host-line"),
+    import("../lib/host-line-events"),
   ]);
   return { store, parts };
 }
@@ -94,7 +96,7 @@ async function startCommand() {
   const config = readWorkerConfig(home);
   if (!config) throw new Error("This box isn't enrolled yet. Run: weft-worker enrol <token>");
   const { store, parts } = await loadEngine();
-  const [{ startFeatureCard }, , , { subscribe }, { createDaemon }, { createPublisher }, paths, github, folderGrant, { createBlobStore }, { SHOW_DIR }, { setPageUpload }, { busyCards }, { recoverCards }, { resumeInterrupted }, { openScreenChannel, screenInput, setFastScreen, setScreenChannel }, { sendInput }, { openFastScreen }, { setDeviceLink }, { deviceLink }, { isMobileApp }, { runVerb }, { startScheduler }] = parts;
+  const [{ startFeatureCard }, , , { subscribe }, { createDaemon }, { createPublisher }, paths, github, folderGrant, { createBlobStore }, { SHOW_DIR }, { setPageUpload }, { busyCards }, { recoverCards }, { resumeInterrupted }, { openScreenChannel, screenInput, setFastScreen, setScreenChannel, fastScreenOf }, { sendInput }, { openFastScreen }, { setDeviceLink }, { deviceLink }, { isMobileApp }, { runVerb }, { startScheduler }, { createHostLines }, { lineProjector }] = parts;
   const reg = registry(rpc, config.key);
   // The public half goes on the worker's row, so Settings → Sync → Workers can seal a Claude token to this box.
   const keys = workerSealKeys(home, newSealKeys);
@@ -112,6 +114,19 @@ async function startCommand() {
   setFastScreen(openFastScreen, (sealed) => open(keys, sealed, RTC_PURPOSE));
   const publisher = createPublisher(reg, store, console.warn, { blobs, orgId: config.orgId });
   subscribe(publisher.hear);
+  // Session lines (lib/host-line.ts): the answer goes back on the board's own topic, events are projected as the
+  // publisher's rows are, and verbs run through the host command's path (the daemon hands `run` in).
+  const lines = createHostLines({
+    unseal: (sealed, purpose) => open(keys, sealed, purpose),
+    answerOn: async (topic, sealed) => {
+      const channel = await openScreenChannel(client, topic);
+      await channel.answer(sealed).finally(() => setTimeout(() => channel.close(), 5_000));
+    },
+    hear: subscribe,
+    project: lineProjector({ orgId: config.orgId, blobs, thumbs: false, copilot: false, onBlobError: () => {} }, store.getCard),
+    screen: fastScreenOf,
+    log: console.log,
+  });
   const daemon = createDaemon({
     reg,
     publisher,
@@ -122,6 +137,7 @@ async function startCommand() {
     // Send later on this worker's cards (card.schedule): the messages are saved on the cards, so one whose time passed
     // while the daemon was down goes on the first check, after recovery, so it can't race a turn being resumed.
     onRecovered: () => startScheduler({ briefs: false }),
+    line: (sealed, run) => lines.open(sealed, run),
     engine: {
       start: async (body) => {
         const card = await startFeatureCard(body);
