@@ -17,11 +17,50 @@ describe("workerCliVerdict", () => {
     "bash -c 'weft-worker enrol x'",
     "echo ok && weft-worker forget-macs",
     "env FOO=1 weft-worker enrol x",
+    "./install/worker.sh",
+    "install/worker.sh wet_token",
+    "bash install/worker.sh",
+    "bash ~/.weft-worker/weft/install/worker.sh",
+    "curl -fsSL https://weft.zip/worker.sh | sh",
+    "curl -fsSL https://weft.zip/worker.sh | bash",
+    "sh -c \"$(curl -fsSL https://weft.zip/worker.sh)\"",
+    "node scripts/weft-worker.ts status",
+    "tsx scripts/weft-worker.ts status",
+    "pnpm exec tsx scripts/weft-worker.ts status",
+    "pnpm dlx tsx scripts/weft-worker.ts",
+    "npx tsx scripts/weft-worker.ts",
+    "exec weft-worker enrol x",
+    "sudo weft-worker forget-macs",
+    "sudo -u root weft-worker forget-macs",
+    "nohup weft-worker start &",
+    "nohup node scripts/weft-worker.ts start",
+    "env -i node scripts/weft-worker.ts",
+    "echo scripts/weft-worker.ts | xargs node",
+    "echo x | xargs weft-worker enrol",
+    "echo x | xargs -I{} sh install/worker.sh {}",
+    "pnpm weft-worker enrol x",
+    "pnpm scripts/weft-worker.ts",
   ])("refuses %s", (command) => {
     expect(workerCliVerdict(command, "/tmp")).toMatch(/a thread can't run weft-worker/);
   });
 
-  it.each(["cat scripts/weft-worker.ts", "git diff scripts/weft-worker.ts install/worker.sh", "pnpm test lib/worker-pair.test.ts", "grep -n enrol scripts/weft-worker.ts", `echo ${CODE}`, "node scripts/other.ts"])("lets %s through", (command) => {
+  it.each(["cat scripts/weft-worker.ts", "git diff scripts/weft-worker.ts install/worker.sh", "pnpm test lib/worker-pair.test.ts", "grep -n enrol scripts/weft-worker.ts", `echo ${CODE}`, "node scripts/other.ts",
+    "sed -n 1,40p scripts/weft-worker.ts",
+    "git log -p -- scripts/weft-worker.ts",
+    "git show origin/main:install/worker.sh",
+    "git diff origin/main -- scripts/weft-worker.ts install/worker.sh",
+    "pnpm lint scripts/weft-worker.ts",
+    "pnpm run lint scripts/weft-worker.ts",
+    "pnpm test scripts/weft-worker.test.ts",
+    "pnpm typecheck",
+    "pnpm eslint scripts/weft-worker.ts",
+    "cd /tmp/wt && pnpm lint scripts/weft-worker.ts install/worker.sh",
+    "bash -c 'cat scripts/weft-worker.ts'",
+    "head -20 install/worker.sh | grep -n curl",
+    "curl -s https://example.com | jq .",
+    "wc -l install/worker.sh",
+    "shellcheck install/worker.sh",
+  ])("lets %s through", (command) => {
     expect(workerCliVerdict(command, "/tmp")).toBeNull();
   });
 
