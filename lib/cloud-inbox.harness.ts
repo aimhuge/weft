@@ -116,10 +116,16 @@ export const control = {
   stop: vi.fn<(cardId: string) => Promise<void>>(),
   // Every host verb the inbox ran (hostApiMock).
   verbs: [] as { verb: string; args: Record<string, unknown> }[],
+  // This Mac's default mode for a new thread (lib/settings.ts defaultPermissionMode).
+  defaultMode: "auto" as string,
 };
 
 export const accountMock = { accountClient: () => control.account() };
-export const settingsMock = { syncFolders: () => [...control.folders], allowFolder: (folder: string) => control.allowed.push(folder) };
+export const settingsMock = {
+  syncFolders: () => [...control.folders],
+  allowFolder: (folder: string) => control.allowed.push(folder),
+  defaultPermissionMode: () => control.defaultMode,
+};
 export const deviceMock = { deviceId: () => "mac-1" };
 export const cloudSyncMock = { syncNow: () => control.syncNow(), syncOrgId: () => Promise.resolve(control.org) };
 export const newCardMock = {
@@ -201,6 +207,7 @@ export function resetInbox() {
   control.allowed.length = 0;
   control.stopped.length = 0;
   control.verbs.length = 0;
+  control.defaultMode = "auto";
   vi.clearAllMocks();
 }
 

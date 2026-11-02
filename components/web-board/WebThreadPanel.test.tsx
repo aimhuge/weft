@@ -18,6 +18,9 @@ async function loadBoard() {
   return import("./WebBoard");
 }
 
+// The thread's folded runs: the header's CLI and mode pickers are menu buttons too.
+const folded = (dialog: HTMLElement) => within(dialog).getAllByRole("button", { expanded: false }).filter((b) => !b.closest("header"))[0]!;
+
 const user = { id: "u1", email: "ada@b.co", name: "Ada", avatar: null };
 const orgs = [{ id: "o1", slug: "ada", name: "Ada's team" }, { id: "o2", slug: "lab", name: "Lab" }];
 const props = { orgId: "o1", orgSlug: "ada", userId: "u1", user, orgs, initialCommands: [] as CloudCommandRow[], openCardId: null, initialThread: [] as CloudThreadItemRow[], initialBlobUrls: {} };
@@ -47,7 +50,7 @@ describe("WebBoard thread panel", () => {
     render(<WebBoard {...open(rows)} />);
     const dialog = screen.getByRole("dialog", { name: /Open me/i });
     const text = dialog.textContent;
-    const run = within(dialog).getByRole("button", { expanded: false }).textContent;
+    const run = folded(dialog).textContent;
     // Oldest first: the question, the folded tool run, then the answer.
     expect(text.indexOf("please list files")).toBeLessThan(text.indexOf(run));
     expect(text.indexOf(run)).toBeLessThan(text.indexOf("All"));
@@ -55,9 +58,9 @@ describe("WebBoard thread panel", () => {
     expect(await within(dialog).findByRole("textbox", { name: "Message" })).toBeInTheDocument();
   });
 
-  it("draws the desktop panel's header read-only: the CLI as a badge, no rename, no card actions", async () => {
+  it("draws a teammate's card with the desktop panel's header read-only: the CLI as a badge, no rename, no card actions", async () => {
     const { WebBoard } = await loadBoard();
-    render(<WebBoard {...open([], { tags: ["bug"] })} />);
+    render(<WebBoard {...props} openCardId="c1" initialCards={[cardRow({ card_id: "c1", title: "Open me", column: "review", owner_user: "u2", card: { tags: ["bug"] } })]} />);
     const dialog = screen.getByRole("dialog", { name: /Open me/i });
     expect(within(dialog).queryByTitle("Click to rename")).toBeNull();
     expect(within(dialog).queryByRole("button", { name: /Archive/i })).toBeNull();
@@ -141,7 +144,7 @@ describe("WebBoard thread panel", () => {
     db.toolOutput = "the full output";
     const rows = [itemRow(1, { kind: "tool", id: "t9", name: "Bash", summary: "big", resultBytes: 9000, at: 1 })];
     render(<WebBoard {...open(rows)} />);
-    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { expanded: false }));
+    fireEvent.click(folded(screen.getByRole("dialog")));
     const details = document.querySelector("details") as HTMLDetailsElement;
     details.open = true;
     fireEvent(details, new Event("toggle"));
@@ -155,7 +158,7 @@ describe("WebBoard thread panel", () => {
     db.toolOutput = null;
     const rows = [itemRow(1, { kind: "tool", id: "t9", name: "Bash", summary: "big", resultBytes: 9000, at: 1 })];
     render(<WebBoard {...open(rows)} />);
-    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { expanded: false }));
+    fireEvent.click(folded(screen.getByRole("dialog")));
     const details = document.querySelector("details") as HTMLDetailsElement;
     details.open = true;
     fireEvent(details, new Event("toggle"));

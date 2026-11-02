@@ -121,14 +121,22 @@ describe("FirstMessageErrorBanner", () => {
     expect(api.rerunModel).not.toHaveBeenCalled();
   });
 
-  it("with no openSettings, the no-backup button is still shown but does nothing on click", async () => {
-    vi.mocked(api.settings).mockResolvedValue({ backupModel: "" } as never);
+  it("with no openSettings (weft.zip) reads no settings and offers no rerun, only the error", async () => {
     const card = makeCard({ error: "rate limit" });
     render(<FirstMessageErrorBanner card={card} items={failedThread()} />);
-    const button = await screen.findByRole("button", { name: "Pick a backup model" });
-    fireEvent.click(button);
-    expect(rememberPage).toHaveBeenCalledWith("models");
-    expect(api.rerunModel).not.toHaveBeenCalled();
+    await screen.findByTestId("first-message-error-banner");
+    expect(api.settings).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: /Pick a backup model|Rerun on/ })).toBeNull();
+  });
+
+  it("offers no Delete where the card's host has no delete verb (weft.zip's host for every card)", async () => {
+    const { setHostForEveryCard } = await import("@/lib/project-host");
+    const { webHost } = await import("@/lib/web-host");
+    const undo = setHostForEveryCard(webHost({ act: vi.fn() }, { desktop: false } as never, vi.fn()));
+    render(<FirstMessageErrorBanner card={makeCard({ error: "rate limit" })} items={failedThread()} />);
+    await screen.findByTestId("first-message-error-banner");
+    expect(screen.queryByRole("button", { name: "Delete this card" })).toBeNull();
+    undo();
   });
 
   it("Delete calls api.remove and the parent's onDeleted", async () => {
@@ -156,7 +164,7 @@ describe("FirstMessageErrorBanner", () => {
   it("shows an error message if Rerun fails", async () => {
     vi.mocked(api.rerunModel).mockRejectedValue(new Error("network down"));
     const card = makeCard({ error: "rate limit" });
-    render(<FirstMessageErrorBanner card={card} items={failedThread()} />);
+    render(<FirstMessageErrorBanner card={card} items={failedThread()} openSettings={vi.fn()} />);
     fireEvent.click(await screen.findByRole("button", { name: /Rerun on/ }));
     expect(await screen.findByText("network down")).toBeInTheDocument();
   });

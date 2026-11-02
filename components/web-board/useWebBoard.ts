@@ -18,7 +18,8 @@ import { cardThumbRefs, withThumbUrls } from "@/lib/web-board-thumbs";
 import { dropAnswer, withAnswers, type WebAnswer } from "@/lib/web-answers";
 import { applyCommandChange, isCardCommand, type CloudCommandChange, type WebTarget } from "@/lib/web-commands";
 import { loadWebKeyring, openSyncedCard, openSyncedTool } from "@/lib/web-sync-key";
-import { useCloudTransport, type CloudBlobs, type ItemBus } from "./useCloudTransport";
+import { withAttachmentRefs } from "@/lib/web-upload";
+import { useCloudTransport, webUploadsFor, type CloudBlobs, type ItemBus } from "./useCloudTransport";
 
 // The status of the Realtime channel; the dot beside the title reflects it.
 export type LiveStatus = "connecting" | "live" | "offline";
@@ -202,15 +203,25 @@ export function useWebBoard({ orgId, userId, initialCommands, initialCards, open
     setCardParam(null);
   }, [setCardParam]);
 
-  // Puts a command in for a Mac (lib/cloud-inbox.ts runs it). Resolves to the row, or why it couldn't be sent.
+  // Files pasted in a composer here, up in the workspace's blobs until a row names them (lib/web-upload.ts).
+  const [uploads] = useState(() => webUploadsFor(client, orgId));
+
+  // Puts a command in for a Mac (lib/cloud-inbox.ts runs it), listing the files its text pastes. Resolves to the row,
+  // or why it couldn't be sent.
   const sendCommand = useCallback(
-    async (row: NewCommand): Promise<CloudCommandRow | string> => {
+    async (plain: NewCommand): Promise<CloudCommandRow | string> => {
+      let row: NewCommand;
+      try {
+        row = withAttachmentRefs(plain, uploads);
+      } catch (err) {
+        return (err as Error).message;
+      }
       const { data, error } = await client.from("cloud_commands").insert(row).select().single<CloudCommandRow>();
       if (error) return error.message;
       setCommands((prev) => applyCommandChange(prev, { eventType: "INSERT", new: data, old: null }));
       return data;
     },
-    [client],
+    [client, uploads],
   );
 
   // Asks the Mac that owns `target` to start a card. Resolves to why it couldn't be sent, or null once the command is
@@ -255,7 +266,23 @@ export function useWebBoard({ orgId, userId, initialCommands, initialCards, open
     const sentRow = await sendCommand(row);
     return typeof sentRow === "string" ? sentRow : null;
   }, [sendCommand]);
-  const transport = useCloudTransport({ client, orgId, bus, target, sendCommand });
+  // The full result of a tool call whose result was cut out of its item (cloud_tool_outputs).
+  const toolOutput = useCallback(
+    async (cardId: string, toolId: string) => {
+      const { data, error } = await client
+        .from("cloud_tool_outputs")
+        .select("result")
+        .eq("org_id", orgId)
+        .eq("card_id", cardId)
+        .eq("tool_id", toolId)
+        .maybeSingle<{ result: string }>();
+      if (error || !data) throw error ?? new Error("no output");
+      return openSyncedTool({ org_id: orgId, card_id: cardId, tool_id: toolId, result: data.result });
+    },
+    [client, orgId],
+  );
+
+  const { transport, host } = useCloudTransport({ client, orgId, bus, target, sendCommand, uploads, tools: toolOutput });
 
   // Answers the card's waiting permission request or question on the Mac that runs it, as if clicked there. Resolves
   // like startCard; how it went shows under the reply box.
@@ -294,24 +321,8 @@ export function useWebBoard({ orgId, userId, initialCommands, initialCards, open
     openCard(id);
   }, [cards, commands, openCard]);
 
-  // The full result of a tool call whose result was cut out of its item (cloud_tool_outputs).
-  const toolOutput = useCallback(
-    async (cardId: string, toolId: string) => {
-      const { data, error } = await client
-        .from("cloud_tool_outputs")
-        .select("result")
-        .eq("org_id", orgId)
-        .eq("card_id", cardId)
-        .eq("tool_id", toolId)
-        .maybeSingle<{ result: string }>();
-      if (error || !data) throw error ?? new Error("no output");
-      return openSyncedTool({ org_id: orgId, card_id: cardId, tool_id: toolId, result: data.result });
-    },
-    [client, orgId],
-  );
-
   // The cards as CardView draws them: a thumb ref becomes its signed URL once it has one.
   const shown = useMemo(() => withThumbUrls(withAnswers(cards, answers, commands), blobUrls), [cards, answers, commands, blobUrls]);
 
-  return { client, cards: shown, commands, activeCardId, blobs, transport, live, openCard, closeCard, toolOutput, startCard, sendReply, answer, dropCommand };
+  return { client, cards: shown, commands, activeCardId, blobs, transport, host, live, send, openCard, closeCard, toolOutput, startCard, sendReply, answer, dropCommand };
 }

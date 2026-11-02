@@ -322,3 +322,16 @@ describe("secretGuard", () => {
     expect(SECRET_GUARD_HOOKS.PreToolUse?.[0]?.hooks).toEqual([secretGuard]);
   });
 });
+
+// The refactor scout's cache is findings about code, not a secret store (2026-10-31).
+describe("the scout cache", () => {
+  it("can be listed and read from the shell", () => {
+    expect(bashVerdict("ls /Users/me/.weft/scout", DATA)).toBeNull();
+    expect(bashVerdict("cat /Users/me/.weft/scout/0123456789abcdef.json", DATA)).toBeNull();
+  });
+
+  it("opens nothing beside it", () => {
+    expect(bashVerdict("ls /Users/me/.weft", DATA)).toContain("can't be read");
+    expect(bashVerdict("cat /Users/me/.weft/scout/../vault/acme.json", DATA)).toContain("can't be read");
+  });
+});

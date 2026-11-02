@@ -1,7 +1,8 @@
 // weft.zip's way to a card's host verbs (docs/architecture/project-hosts.md, H3b): the same `host` command the
 // desktop sends a worker (lib/host-row.ts), inserted with the visitor's own session for whichever machine runs the
 // card, the Mac's inbox (lib/cloud-inbox-cards.ts) or a worker's daemon. The web board's transport
-// (components/web-board/useCloudTransport.ts) hands these on as its ↑ edit, Send fresh, Send later and "/" list.
+// (components/web-board/useCloudTransport.ts) hands these on as its ↑ edit, Send fresh, Send later and "/" list, and
+// `act` is every other verb the board sends (lib/web-host.ts): card edits, the held-edit choices, a subagent's Stop.
 //
 // Each is followed to its result, as actOnWorker does on the desktop (lib/worker-acts.ts): a refusal rejects, so the
 // reply box puts the text back; one the machine hasn't taken within a few seconds answers `{ queued }`, a promise that
@@ -31,6 +32,9 @@ export interface CloudHostInput {
 }
 
 export interface CloudHostActs {
+  // Any verb on the card args.id names, followed to its result: what the board's tiles, menus and header send
+  // (lib/web-host.ts puts it behind every card's ProjectHost.act on weft.zip).
+  act: (verb: HostVerb, cardId: string, args: Record<string, unknown>) => Promise<Queued | undefined>;
   editLast: (cardId: string, text: string) => Promise<void>;
   fresh: (cardId: string, message: string) => Promise<void>;
   schedule: (cardId: string, text: string, at: number) => Promise<Queued | undefined>;
@@ -71,6 +75,7 @@ export function cloudHostActs({ target, insert, read, wait = ACT_WAIT, queuedWai
   });
 
   return {
+    act,
     editLast: (cardId, text) => act("card.message.edit", cardId, { text }).then(() => {}),
     fresh: (cardId, message) => act("card.fresh", cardId, { message }).then(() => {}),
     schedule: (cardId, text, at) => act("card.schedule", cardId, { text, at }),

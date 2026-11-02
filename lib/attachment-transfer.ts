@@ -8,39 +8,14 @@ import fs from "node:fs";
 import path from "node:path";
 import { ATTACHMENT_NAME, MEDIA_REF, attachmentName, extensionOf } from "./media";
 
-export interface AttachmentRef {
-  name: string;
-  sha: string;
-  mime: string;
-}
+// The pure half (the ref, the types that travel, the caps, the names a text pastes) is lib/attachment-refs.ts, which
+// weft.zip's composer uses in the browser (lib/web-upload.ts).
+import { MAX_TRAVEL_BYTES, MAX_TRAVEL_FILES, TRAVEL_MIME, pastedNames, type AttachmentRef } from "./attachment-refs";
 
-// Images and PDFs only: what a thread reads as a picture or a document. A screen recording stays on the Mac it was
-// pasted on, and the sender says so rather than send a path the other side can't open.
-export const TRAVEL_MIME: Record<string, string> = {
-  png: "image/png",
-  jpg: "image/jpeg",
-  jpeg: "image/jpeg",
-  gif: "image/gif",
-  webp: "image/webp",
-  pdf: "application/pdf",
-};
-
-export const MAX_TRAVEL_BYTES = 25 * 1024 ** 2;
-// More than a message would sensibly paste; a row can't make the host fetch without end.
-export const MAX_TRAVEL_FILES = 20;
+export { MAX_TRAVEL_BYTES, MAX_TRAVEL_FILES, TRAVEL_MIME, pastedNames, type AttachmentRef };
 
 const SHA_RE = /^[0-9a-f]{64}$/;
 const MB = (bytes: number) => `${Math.round(bytes / 1024 ** 2)} MB`;
-
-// The attachment names a message's text pastes, once each, in order.
-export function pastedNames(text: string): string[] {
-  const names = new Set<string>();
-  for (const m of text.matchAll(MEDIA_REF)) {
-    const name = attachmentName((m[2] ?? m[3]) as string);
-    if (name) names.add(name);
-  }
-  return [...names];
-}
 
 // Sending: every attachment the text names from this machine's attachments folder goes up through `upload` (which
 // answers the blob's sha), and comes back as the refs the command carries. A name that isn't in the folder isn't

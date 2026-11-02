@@ -58,7 +58,7 @@ guard set: each is refused, or asked about, in the same words on all three.
 
 | Hook | File | Turns away |
 | --- | --- | --- |
-| Secret guard | `lib/secret-guard.ts` | reading `.env` files, Weft's data secrets, a Weft Worker's home ([what's sealed](weft-worker.md#whats-sealed-on-a-worker)), environment dumps (Bash, Read, Grep…) |
+| Secret guard | `lib/secret-guard.ts` | reading `.env` files, Weft's data secrets, a Weft Worker's home ([what's sealed](weft-worker.md#whats-sealed-on-a-worker)), environment dumps (Bash, Read, Grep…); a board thread's copy knows its card, so it may Read an attachment its user pasted in (`lib/secret-guard-pasted.ts`) |
 | Restart guard | `lib/restart-guard.ts` | killing or restarting Weft's own server, app or port while other cards' turns run; points the thread at `mcp__board__restart_weft_when_idle` |
 | Clipboard guard | `lib/clipboard-guard.ts` | reading the clipboard (`pbpaste`, `osascript` `the clipboard`, NSPasteboard, `wl-paste`, `xclip`, `xsel`) while a pairing code is open, since its link carries the pairing secret; main marks the code open in `vault/pairing-open.json` ([mobile-security.md](mobile-security.md#pairing-a-passkey)) |
 | Git guard | `lib/git-guard.ts` | git commands that throw away or hide uncommitted work in the shared tree |
@@ -107,15 +107,22 @@ What the CLI does send is a `system`/`permission_denied` message (`decision_reas
   **Keep denied**. Once the last of them is answered, an allowed call becomes a one-time grant (keyed by tool name plus
   its input with sorted keys) and Weft sends the thread "retry exactly that call"; with nothing allowed the card goes back
   to the column the turn ended in.
-- `withRetryGrant` adds a PreToolUse hook that answers `allow` for the granted call, which skips the classifier, and
-  uses the grant up. `canUseTool` checks the grant too, in case the retry asks instead. A deny hook (the secret guard, say)
-  still wins, and a grant the retry turn didn't use is dropped when that turn ends.
-- Auto mode marks some calls **classifier-only**: hook allows and allow rules don't count for them, and when the
-  classifier gives no verdict ("it skipped this action", a hard failure) the CLI denies them with no prompt fallback,
-  so the PreToolUse allow alone let the retry be blocked again. So before the retry message goes out, the live CLI
-  steps out of auto mode into `default` (`query.setPermissionMode`; the card's saved mode stays `auto`), the hook
-  stands aside (`session.retryOutOfAuto`), and the retry reaches `canUseTool`, where the grant allows it. The CLI goes
-  back to the card's mode once the last grant is used, or when the retry turn ends.
+- `withRetryGrant` adds a PreToolUse hook that answers `allow` for the granted call and uses the grant up. A deny hook
+  (the secret guard, say) still wins, and a grant the retry turn didn't use is dropped when that turn ends.
+- In auto mode a hook's allow doesn't always count: the CLI sends an MCP tool's hook allow on to the classifier anyway
+  ("Hook approved tool use …, but auto mode requires classifier adjudication"), so the allow alone let the retry be
+  blocked again. So the granted call's own hook steps the live CLI out of auto mode first (`lib/retry-window.ts`:
+  `stepOut` awaits `query.setPermissionMode("default")`; the card's saved mode stays `auto`), and in default mode the
+  allow counts. The window closes, back to the card's mode, as soon as that call's PostToolUse or PostToolUseFailure
+  hook reports it ran, after `WINDOW_MS` (3 s) if it never does, or when the turn ends.
+- Only the granted call is decided in default mode. Every other call's PreToolUse hook, a background subagent's too,
+  waits for the window to close (`untilBackInAuto`), so the classifier decides it as usual. Before, the whole session
+  stepped out when you clicked **Allow once and retry** and stayed out until the retry used the grant: parallel
+  subagents asked about every path outside the cwd (worktrees in `/tmp`, say) on a card whose picker said Auto, and a
+  retry that never came, or came with other input, left the session in default for good.
+- `canUseTool` (`outOfAutoAnswer`, from `lib/guards/ask.ts`) allows the granted call if an ask rule still sends it
+  there, and turns back any other call caught in the window (its hook ran just before the window opened) with "run it
+  again", rather than asking you about something auto mode may well have allowed.
 - A reply instead of a click (`sendMessage`) drops the prompts and marks them denied in the thread.
 
 The mode's hint in `MODE_OPTIONS` (`lib/types-card.ts`) says this: "A classifier approves or blocks; Weft asks you about blocks".
@@ -157,10 +164,15 @@ would refuse it, so Weft, not the OS, decides. The paths come from the tool's fi
 Bash, from every absolute, `~/`, `$HOME` and `../` token in the command (a quoted token runs to its closing quote and
 `\ ` escapes a space, so a project in `~/My Drive` isn't read as `~/My`), and only those under the user's own files
 (home, `/Users`, `/Volumes`), a heuristic that can't see a path a script builds. Paths are resolved first (`~`, `..`,
-symlinks, a file not created yet by its nearest folder).
+symlinks, a file not created yet by its nearest folder). A path only named in prose doesn't count (2026-11-02): a commit
+message, a PR's `--title` or `--body`, a sentence `echo` prints, a heredoc written to a page (`proseOf` in
+`lib/shell-text.ts`, the same words the secret guard skips). A `$(cat ~/x)` folded into a message still reaches `~/x`,
+so its own paths stay. Before this, a marketing card stalled on "Outside the project: use ~/.weftn", which was
+`~/.weft\n` inside a quoted string.
 
 - **Never asked about**: the project (an isolated card's worktree, for it), `card.readScope`, `settings.allowedFolders`, Weft's data folder (`~/.weft`, but not `~/.weft/worktrees`: another card's worktree asks like any other folder),
-  `~/.claude`, temp dirs, `/dev`, `/tmp` and the system's tool and library paths.
+  the card's own memory folder (`~/.claude/projects/<project>/memory`, `memoryDir`; nothing else in `~/.claude`), temp
+  dirs, `/dev`, `/tmp` and the system's tool and library paths.
 - **The prompt** reads "Outside the project: read ~/Downloads" with an **Outside project** chip. The folder is the call's
   project root (nearest ancestor with a `.git`, `package.json`…, below home), else the file's folder, never home itself
   (`grantRoot`). `folderAsk` carries the question, reason and folder from the hook to `canUseTool`
@@ -392,6 +404,9 @@ The Bash guards don't match strings: `lib/shell-parse.ts` reads the line the way
 `steps()` in `lib/restart-guard.ts` turns it into every command it would run, each with the folder it runs in.
 That covers `a && b; c | d`, `$( )` and backticks, `sh -c '…'`, a heredoc fed to `bash`, `eval`, `xargs`,
 `sudo`/`env FOO=1` prefixes, and `cd x &&` carrying to the commands after it. The git guard uses the same walk.
+`lib/shell-text.ts` says which words a command takes as text rather than as a path (`textWords`: `--message`, `--body`,
+`--title`, `--notes`… for any command that doesn't run its words, `-m`/`-t`/`-b` for git, gh and glab, and echo's
+quoted sentences), so neither the secret guard nor the folder gate reads a PR body as a list of files.
 
 ## Git guard
 

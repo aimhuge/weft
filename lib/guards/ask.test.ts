@@ -4,12 +4,12 @@ import type { Session } from "../runner-state";
 // What an ask becomes on every CLI: a one-shot retry grant or a granted folder lets the call through, otherwise the
 // card asks you in the guard's own words (the folder gate's, a symbol claim's, or the guard's title).
 
-const takeGrant = vi.fn<(...a: unknown[]) => unknown>();
+const outOfAutoAnswer = vi.fn<(...a: unknown[]) => unknown>();
 const grantedRead = vi.fn<(...a: unknown[]) => unknown>();
 const folderAsk = vi.fn<(...a: unknown[]) => unknown>();
 const claimQuestion = vi.fn<(...a: unknown[]) => unknown>();
 const askUser = vi.fn<(...a: unknown[]) => unknown>();
-vi.mock("../classifier-denial", () => ({ takeGrant: (...a: unknown[]) => takeGrant(...a) }));
+vi.mock("../classifier-denial", () => ({ outOfAutoAnswer: (...a: unknown[]) => outOfAutoAnswer(...a) }));
 const showPageCall = vi.fn<(...a: unknown[]) => unknown>();
 vi.mock("../folder-guard", () => ({
   grantedRead: (...a: unknown[]) => grantedRead(...a),
@@ -28,7 +28,7 @@ const signal = new AbortController().signal;
 const input = { file_path: "/elsewhere/a" };
 
 beforeEach(() => {
-  for (const f of [takeGrant, grantedRead, folderAsk, claimQuestion, askUser, ownPageCall, showPageCall]) f.mockReset();
+  for (const f of [outOfAutoAnswer, grantedRead, folderAsk, claimQuestion, askUser, ownPageCall, showPageCall]) f.mockReset();
   askUser.mockResolvedValue({ behavior: "allow", updatedInput: input });
 });
 
@@ -38,8 +38,9 @@ describe("askAboutCall", () => {
   });
 
   it("lets through a call you allowed once after auto mode blocked it", async () => {
-    takeGrant.mockReturnValue(true);
+    outOfAutoAnswer.mockReturnValue({ behavior: "allow", updatedInput: input });
     expect(await askAboutCall(session, "Read", input, "t", signal)).toEqual({ behavior: "allow", updatedInput: input });
+    expect(outOfAutoAnswer).toHaveBeenCalledWith(session, "Read", input, "t");
     expect(askUser).not.toHaveBeenCalled();
   });
 

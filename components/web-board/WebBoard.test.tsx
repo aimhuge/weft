@@ -55,11 +55,11 @@ describe("WebBoard", () => {
     expect(within(screen.getByRole("banner")).getByText(/1 needs you/)).toBeInTheDocument();
   });
 
-  it("offers no way to act on a card: no stop, star, archive or drag", async () => {
+  it("offers a teammate's card no way to act on it: no stop, star, archive or drag", async () => {
     const { WebBoard } = await loadBoard();
-    render(<WebBoard {...props} initialCards={[cardRow({ card_id: "r", title: "Busy", column: "running" }), cardRow({ card_id: "d", title: "Finished", column: "done" })]} />);
+    render(<WebBoard {...props} initialCards={[cardRow({ card_id: "r", title: "Busy", column: "running", owner_user: "u2" }), cardRow({ card_id: "d", title: "Finished", column: "done", owner_user: "u2" })]} />);
     expect(screen.queryByLabelText("Stop this thread")).not.toBeInTheDocument();
-    // The rail's ★ filters the board (the desktop's own button), but a card carries no star of its own.
+    // The rail's ★ filters the board (the desktop's own button), but a teammate's card carries no star of its own.
     expect(within(screen.getByRole("navigation", { name: "Rail" })).getByRole("button", { name: /Starred cards/ })).toBeInTheDocument();
     expect(screen.queryByLabelText("Star this card")).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/archive/i)).not.toBeInTheDocument();
@@ -185,6 +185,30 @@ describe("WebBoard starting a thread on your Mac", () => {
     ]);
     // Until the Mac has it, the board says so.
     expect(screen.getByRole("list", { name: "Threads sent to your Mac" })).toHaveTextContent(/Add a dark mode.*Waiting for your Mac/);
+  });
+
+  it("sends the mode you pick, the tags and Backlog, and says it adds to Backlog", async () => {
+    const dialog = await open();
+    fireEvent.change(within(dialog).getByLabelText("Prompt"), { target: { value: "Later" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: /^Permissions:/ }));
+    fireEvent.click(within(dialog).getByRole("menuitemradio", { name: /Auto/ }));
+    fireEvent.change(within(dialog).getByLabelText("Tags"), { target: { value: "ui, , bug" } });
+    fireEvent.click(within(dialog).getByRole("checkbox", { name: "Backlog" }));
+    expect(within(dialog).queryByRole("checkbox", { name: "Plan first" })).toBeNull();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Add to Backlog" }));
+    await waitFor(() => expect(mockState.inserts).toHaveLength(1));
+    expect(mockState.inserts[0]?.row).toMatchObject({ kind: "new_card", payload: { prompt: "Later", permissionMode: "auto", tags: ["ui", "bug"], start: false } });
+  });
+
+  it("on a worker's folder offers Plan first and no Backlog", async () => {
+    const dialog = await open([cardRow({ card_id: "w", folder: "app", owner_device: "worker:w1" })]);
+    expect(dialog).toHaveTextContent("Runs on your worker, in");
+    expect(within(dialog).getByRole("checkbox", { name: "Backlog" })).toBeDisabled();
+    fireEvent.change(within(dialog).getByLabelText("Prompt"), { target: { value: "Think" } });
+    fireEvent.click(within(dialog).getByRole("checkbox", { name: "Plan first" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Start on my worker" }));
+    await waitFor(() => expect(mockState.inserts).toHaveLength(1));
+    expect(mockState.inserts[0]?.row).toMatchObject({ target_device: "worker:w1", payload: { prompt: "Think", permissionMode: "plan" } });
   });
 
   it("will not send an empty prompt", async () => {
