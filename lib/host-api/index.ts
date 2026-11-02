@@ -61,6 +61,9 @@ export const HOST_API = {
   "files.list": { elevated: false, run: lazy(() => import("./files"), "listFilesVerb") },
   "files.read": { elevated: false, run: lazy(() => import("./files"), "readFileVerb") },
   "files.write": { elevated: true, run: lazy(() => import("./files"), "writeFileVerb") },
+  // The host's own settings, for no card: only HOST_SETTINGS, and only from Weft's own window (lib/host-settings.ts).
+  "settings.get": { elevated: true, run: lazy(() => import("./settings"), "settingsGetVerb") },
+  "settings.put": { elevated: true, run: lazy(() => import("./settings"), "settingsPutVerb") },
   // A card's dev server: a private address for it (a tunnel, after the owner's Touch ID on their Mac), or its end.
   "dev.open": { elevated: false, run: lazy(() => import("./dev-servers"), "devOpenVerb") },
   "dev.stop": { elevated: false, run: lazy(() => import("./dev-servers"), "devStopVerb") },

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { GameState } from "@/lib/game-server";
 import type { ProjectReport } from "@/lib/project-badges";
 import GameBadge from "./GameBadge";
@@ -39,6 +39,12 @@ function game(over: Partial<GameState> = {}): GameState {
     ...over,
   };
 }
+
+// GameBadge loads the popup and the loom with next/dynamic, so the first test to open one used to pay for
+// transforming the module inside findByRole's 1s window, and lost the race on a loaded CI shard. Pay it up front.
+beforeAll(async () => {
+  await Promise.all([import("./AchievementPopup"), import("./LoomDialog")]);
+}, 60_000);
 
 let state = game();
 let league: unknown = { state: "signed-out" };

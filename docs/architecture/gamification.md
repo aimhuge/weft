@@ -36,6 +36,16 @@ checklist score and coverage), `limit` (a plan window a Weft thread ran out of, 
   changed (`changeEvents`). The copilot is left out.
 - Backfilled Done times are approximate (a card's last change), so "fastest ship" only times live Done events.
 
+## Work on a worker
+
+Cards your Weft Workers run count toward the streak, XP, badges and league like this Mac's. `/api/game` reads your
+workers' published cards through `readWorkerBoard` (only workers you enrolled, so only your account's), at most every
+5 minutes and never holding the game up more than 3 s (`lib/worker-activity.ts`), and backfills each one like a card the
+log never saw (`backfillEvents`: made, its turns on its last active day, Done). They're not written to
+`activity.jsonl`: a worker card that runs on counts its new turns next time. **No double counting:** `gameState({ worker })`
+merges them through `mergeWorkerEvents`, which drops any event whose id or card this Mac's log already has. A card sent
+with Run on Worker is two cards (the local record and the worker's run), so the record still counts as made.
+
 ## Rules
 
 - **XP**: created 2, turn 1, Done 10, or 15 when the project's latest quality snapshot before it scored 80+.

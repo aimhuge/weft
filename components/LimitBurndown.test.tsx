@@ -3,6 +3,7 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import LimitBurndown from "./LimitBurndown";
 import type { LimitSample } from "@/lib/limit-chart";
+import { forgetLimitSamples } from "@/lib/use-limit-samples";
 import type { CardStats } from "@/lib/types";
 
 // The chart draws the CLI's own plan from that CLI's readings: each CLI has its own plan
@@ -15,6 +16,7 @@ const WEEKLY_RESET = Math.floor(new Date("2026-10-23T11:00:00+07:00").getTime() 
 
 afterEach(() => {
   cleanup();
+  forgetLimitSamples();
   vi.unstubAllGlobals();
   vi.useRealTimers();
 });
@@ -51,6 +53,16 @@ describe("LimitBurndown", () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
     expect(fetchMock.mock.calls[1]?.[0]).toBe("/api/limits?backend=puku");
     expect(screen.getByText("puku-cli's plan")).toBeTruthy();
+  });
+
+  it("on a worker card, asks for that worker's published history and says so", async () => {
+    const fetchMock = serves([]);
+    vi.stubGlobal("fetch", fetchMock);
+    vi.setSystemTime(NOW);
+    render(<LimitBurndown backend="claude" worker="w 1" stats={{ sevenDay: { used: 14, resetsAt: WEEKLY_RESET } }} />);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/limits?backend=claude&worker=w%201");
+    expect(screen.getByText("Claude Code's plan on the worker")).toBeTruthy();
   });
 
   it("reaches back into last week when the CLI's history has those days", async () => {

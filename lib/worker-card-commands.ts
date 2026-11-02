@@ -37,6 +37,8 @@ export function workerRules(engine: Engine, create?: CardRules["create"], lists?
       return reply;
     },
     widen: widen && workerWidenCheck(widen),
+    // A worker's own settings, edited from your Mac's Settings (only HOST_SETTINGS; remoteRefusal and the verb check).
+    hostVerb: (verb, args) => engine.host(verb, args),
     grant: (cardId, directory, scope) => engine.grant(cardId, directory, scope),
     receive: (text, payload) => engine.receive(text, payload),
     // The editor's files.* results over the row's 4 KB go up as blobs (lib/host-result.ts).

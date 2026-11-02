@@ -208,3 +208,25 @@ describe("signed widening on the host kind", () => {
     await expect(cardKinds(rules({ widen: () => Promise.resolve(null) })).host(host({ path: ".git/config", widen: {} }, "files.read"))).rejects.toThrow();
   });
 });
+
+describe("a verb on the host itself", () => {
+  const settings = { maxThreads: 3, keepAliveMinutes: 0, worktreePool: 1, defaultBackend: "claude" };
+
+  it("runs settings.get with no card check, and reports no card", async () => {
+    const hostVerb = vi.fn<NonNullable<CardRules["hostVerb"]>>(() => Promise.resolve({ settings }));
+    const r = rules({ hostVerb });
+    const done = await cardKinds(r).host(cmd("host", { verb: "settings.get", args: { id: "k1" } }));
+    expect(done).toEqual({ cardId: "", result: { ok: true, cardId: "", settings } });
+    expect(hostVerb).toHaveBeenCalledWith("settings.get", { id: "" });
+    expect(r.card).not.toHaveBeenCalled();
+    expect(r.verb).not.toHaveBeenCalled();
+  });
+
+  it("refuses a setting outside the host's own, and a host that doesn't take them (a Mac)", async () => {
+    const hostVerb = vi.fn<NonNullable<CardRules["hostVerb"]>>(() => Promise.resolve({ settings }));
+    const put = (patch: unknown) => cmd("host", { verb: "settings.put", args: { patch } });
+    await expect(cardKinds(rules({ hostVerb })).host(put({ allowedFolders: ["/"] }))).rejects.toThrow(/can't change allowedFolders/);
+    expect(hostVerb).not.toHaveBeenCalled();
+    await expect(cardKinds(rules()).host(put({ maxThreads: 2 }))).rejects.toThrow("This host takes its settings only from its own window.");
+  });
+});

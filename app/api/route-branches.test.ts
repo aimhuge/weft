@@ -8,6 +8,7 @@ vi.mock("next/server", () => ({ connection: async () => {} }));
 vi.mock("@/lib/store", () => ({ getCard: vi.fn((id: string) => ({ id })) }));
 // The settings route saves the names the user gave their Goose models; this route doesn't touch
 // the settings file, so the writer is a stub.
+vi.mock("@/lib/account-settings", () => ({ pushAccountSettings: vi.fn() }));
 vi.mock("@/lib/goose-models", () => ({ setNamedModels: vi.fn() }));
 // No launch token (as in a browser or tests), so the elevated routes take x-weft-token: 1 (lib/guard.ts).
 vi.mock("@/lib/shell-token", () => ({ shellToken: () => "" }));

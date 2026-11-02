@@ -10,6 +10,9 @@ vi.mock("@/lib/github-profile", () => ({
 }));
 vi.mock("@/lib/profile-card", () => ({ profileCard: vi.fn(() => ({ className: "Shipper" })) }));
 vi.mock("@/lib/explore", () => ({ recordExplore: vi.fn(async () => {}) }));
+const WORKER = [{ id: "created:w1", at: 1, kind: "created", card: "w1" }];
+vi.mock("@/lib/worker-board", () => ({ readWorkerBoard: vi.fn(() => Promise.resolve({ cards: [] })) }));
+vi.mock("@/lib/worker-activity", () => ({ workerActivity: vi.fn(async (read: () => Promise<unknown>) => (await read(), WORKER)) }));
 vi.mock("@/lib/profile-card-sync", () => ({ syncProfileCard: vi.fn(() => Promise.reject(new Error("offline"))) }));
 
 const server = await import("@/lib/game-server");
@@ -24,10 +27,11 @@ describe("GET /api/game", () => {
   it("returns the game for the project in view", async () => {
     const res = await route.GET(new Request("http://localhost:3457/api/game?cwd=/dev/app&full=1", { headers: READ }));
     expect(await res.json()).toEqual({ game: { xp: 5, github: { login: "ada" } } });
-    expect(server.gameState).toHaveBeenLastCalledWith({ cwd: "/dev/app", full: true });
+    // Your workers' cards count too (lib/worker-activity.ts), read through the worker board.
+    expect(server.gameState).toHaveBeenLastCalledWith({ cwd: "/dev/app", full: true, worker: WORKER });
     const light = await route.GET(new Request("http://localhost:3457/api/game", { headers: READ }));
     expect(await light.json()).toEqual({ game: { xp: 5, github: null } });
-    expect(server.gameState).toHaveBeenLastCalledWith({ cwd: null, full: false });
+    expect(server.gameState).toHaveBeenLastCalledWith({ cwd: null, full: false, worker: WORKER });
   });
 
   it("posts the public builder card when the dialog asks, and shrugs off a failed post", async () => {

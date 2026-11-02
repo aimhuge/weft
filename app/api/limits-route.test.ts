@@ -13,7 +13,17 @@ vi.mock("@/lib/limit-history", () => ({
   ]),
 }));
 
+vi.mock("@/lib/worker-limits-read", () => ({
+  workerLimitSamples: vi.fn(() =>
+    Promise.resolve([
+      { at: 4, backend: "claude", kind: "seven_day", used: 40 },
+      { at: 5, backend: "puku", kind: "five_hour", used: 1 },
+    ]),
+  ),
+}));
+
 const history = await import("@/lib/limit-history");
+const workerRead = await import("@/lib/worker-limits-read");
 const route = await import("./limits/route");
 
 const READ = { host: "localhost:3457" };
@@ -44,6 +54,12 @@ describe("GET /api/limits", () => {
   it("keeps another plan's readings out of it", async () => {
     const codex = await route.GET(new Request("http://localhost:3457/api/limits?backend=codex", { headers: READ }));
     expect(await codex.json()).toEqual({ samples: [{ at: 3, backend: "codex", kind: "five_hour", used: 3 }] });
+  });
+
+  it("reads a worker's own published history with ?worker=, filtered by CLI the same way", async () => {
+    const res = await route.GET(new Request("http://localhost:3457/api/limits?backend=claude&worker=w-1", { headers: READ }));
+    expect(await res.json()).toEqual({ samples: [{ at: 4, backend: "claude", kind: "seven_day", used: 40 }] });
+    expect(workerRead.workerLimitSamples).toHaveBeenCalledWith("w-1");
   });
 
   it("refuses other hosts and reports errors", async () => {

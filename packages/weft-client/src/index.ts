@@ -10,8 +10,9 @@ export type { DiffLine, EditPreview } from "./edit-preview";
 export type { ElicitField, PendingElicitation, Question, QuestionReply, SecretAsk, ThreadItem, VaultEnvironment } from "./thread-items";
 export { paneFor, paneFromUrl, screenPage, screenTopic, SCREEN_EVENT, type ScreenDevice, type SharePane } from "./pane";
 export { followUrl, pageLabel, plain, showMinis, turnId, type Dot, type Mini, type Visit } from "./show-rail";
-export { HOST_VERBS, isHostVerb, isListVerb, type HostVerb, type ListVerb } from "./host-verbs";
+export { HOST_VERBS, isHostLevelVerb, isHostVerb, isListVerb, type CardVerb, type HostLevelVerb, type HostVerb, type ListVerb } from "./host-verbs";
 export { readRefusal, writeRefusal } from "./file-policy";
+export { ACCOUNT_SETTINGS, HOST_SETTINGS, foreignSetting, pickSettings, type AccountSetting, type HostSetting, type HostSettings } from "./host-settings";
 export {
   messageCall,
   permissionCall,
@@ -24,7 +25,7 @@ export {
   type Pending,
   type PermissionBody,
 } from "./host-calls";
-export { hostRow, type CardTarget, type HostArgs, type HostCommandRow, type HostPayload } from "./host-row";
+export { hostLevelRow, hostRow, type CardTarget, type HostArgs, type HostCommandRow, type HostPayload, type HostTarget } from "./host-row";
 export { DEV_LOG_MAX, hostCommand, hostFailure, hostResult, isHostDone, readHostCommand, remoteRefusal, tailBytes, textArgOf, verbResult, type HostDone, type HostResult } from "./host-command";
 export { listRefusal, CRON_PATCH_FIELDS, HOOK_PATCH_FIELDS } from "./list-policy";
 export { fitSkills, jsonbBytes, readSkills, skillCache, SKILLS_BUDGET, SKILLS_FRESH_MS, type SkillCache, type SkillsOnWire } from "./skills-wire";

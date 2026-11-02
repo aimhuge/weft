@@ -1,5 +1,6 @@
 import { backendFor, cardModel, effortFor } from "./new-thread";
 import { fallbackFor } from "./model-fallback";
+import { patternProblem, safeTest } from "./safe-pattern";
 import { automations, doneEffort, doneModel } from "./settings";
 import type { AutomationTrigger, Backend, Card, Column, Effort } from "./types";
 
@@ -11,14 +12,11 @@ function skillsFor(trigger: AutomationTrigger) {
   return [...new Set(automations().filter((rule) => rule.on === trigger).map((rule) => rule.skill))];
 }
 
-// A rule's pattern as a case-insensitive regex; one that's empty or doesn't compile never matches.
+// A rule's pattern as a case-insensitive regex; one that's empty, too long or doesn't compile never matches
+// (lib/safe-pattern.ts), and skillsForPrompt tests it under a timeout.
 export function patternRegex(source: string | undefined): RegExp | null {
-  if (!source?.trim()) return null;
-  try {
-    return new RegExp(source, "i");
-  } catch {
-    return null;
-  }
+  if (source === undefined || patternProblem(source)) return null;
+  return new RegExp(source, "i");
 }
 
 // A thread's first message: its prompt, plus the skills the "a thread starts" rules name. They go in
@@ -48,7 +46,10 @@ export function messagesForMove(card: Card, column: Column): string[] {
 export function skillsForPrompt(card: Card, prompt: string): string[] {
   const ran = new Set(card.promptSkills);
   const matched = automations()
-    .filter((rule) => rule.on === "prompt-matches" && patternRegex(rule.pattern)?.test(prompt))
+    .filter((rule) => {
+      const re = rule.on === "prompt-matches" ? patternRegex(rule.pattern) : null;
+      return re !== null && safeTest(re, prompt);
+    })
     .map((rule) => rule.skill);
   return [...new Set(matched)].filter((skill) => !ran.has(skill));
 }

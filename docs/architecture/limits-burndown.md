@@ -173,6 +173,17 @@ without saying so. It now shows only each CLI's plan. In an open card, the model
 `stats.runsOn` (set at session start), not `stats.model`, which is the last turn's costliest model and
 can be a subagent's, or blank after a turn that reported no usage.
 
+## On a worker card
+
+A Weft Worker runs the same 15-minute poll (`lib/worker-host-services.ts` starts `startLimitPoll` in the daemon) and
+publishes its history to its `cloud_workers.limits` row: the newest 1,000 samples, packed as
+`[at minutes, CLI, 5|7, used, reset]` tuples by `lib/limits-wire.ts`, a minute after start and every 5 minutes when the
+history grew (`lib/worker-limits.ts`, `worker_set_limits`). On a worker card (`StatusStrip` with `cardLimits` and a
+`worker://` cwd) the chart asks `/api/limits?backend=&worker=<id>` (`lib/worker-limits-read.ts`), which answers from that
+row instead of this Mac's log, and says "on the worker" in its header. Until the card reports a reading of its own, the
+strip shows the worker's newest (`latestReading`). `lib/use-limit-samples.ts` keeps one read per CLI and worker a
+minute for every strip and chart on screen. See project-hosts.md#settings-on-a-worker-wp3.
+
 ## Notes
 
 - The 15-minute slot size trades off bar width (~0.9 px each on a 640 px chart) for finer time

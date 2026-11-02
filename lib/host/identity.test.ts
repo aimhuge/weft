@@ -12,6 +12,8 @@ describe("outcomes", () => {
     // A result that names no card (a pin's receipt) reports none.
     expect(doneOutcome({ cardId: "", result: { ok: true, cardId: "" } })).toEqual({ status: "done", cardId: null, result: { ok: true, cardId: "" } });
     expect(doneOutcome({ cardId: "card-1", result: { ok: true, cardId: "card-1" } })).toEqual({ status: "done", cardId: "card-1", result: { ok: true, cardId: "card-1" } });
+    // A verb on the host itself touched no card, so the row's card_id stays null.
+    expect(doneOutcome({ cardId: "", result: { ok: true, cardId: "" } })).toEqual({ status: "done", cardId: null, result: { ok: true, cardId: "" } });
   });
 
   it("cuts a failure to 300 characters, and gives a host command a failed result", () => {

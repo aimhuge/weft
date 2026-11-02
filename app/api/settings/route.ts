@@ -1,16 +1,14 @@
-import { randomUUID } from "node:crypto";
 import { connection } from "next/server";
-import { patternRegex } from "@/lib/automations";
-import { asText } from "@/lib/format";
+import { pushAccountSettings } from "@/lib/account-settings";
+import { readAutomations } from "@/lib/automation-rules";
 import { elevated, fail, guard } from "@/lib/guard";
 import { EFFORTS, ALL_MODEL_IDS, BACKEND_IDS, isModelValue } from "@/lib/new-thread";
 import { setNamedModels, type GooseNamedModel } from "@/lib/goose-models";
 import { GOOSE_PROVIDERS } from "@/lib/goose-provider";
 import { setAutomations, setBackupModel, setCopilotModel, setDefaultBackend, setDefaultPermissionMode, setDoneEffort, setDoneModel, setGooseBaseUrl, setGooseModelId, setGooseProviderId, setKeepAliveMinutes, setMaxThreads, MAX_THREADS_CEILING, setPushOnDone, setReviewAllModel, setSubagentModel, setThreadPrompt, settingsView } from "@/lib/settings";
 import { freeSlots } from "@/lib/runner";
-import { SKILL_NAME } from "@/lib/skills";
 import { isSubagentModel } from "@/lib/subagents";
-import { AUTOMATION_TRIGGERS, MODES, type Automation, type Backend, type SettingsPatch } from "@/lib/types";
+import { MODES, type Automation, type Backend, type SettingsPatch } from "@/lib/types";
 
 // Every CLI a setting may name. Shared (lib/new-thread.ts), so a CLI added there is
 // settable here too.
@@ -19,24 +17,6 @@ const BACKENDS: Backend[] = BACKEND_IDS;
 // CLI to the one that serves it — so the API accepts them all too. The set is shared
 // (lib/new-thread.ts), so a CLI's models come with it.
 const DONE_EFFORT_IDS = new Set<string>(EFFORTS.map((e) => e.id));
-
-// The rules as sent, checked; a leading slash on a skill name is dropped.
-function readAutomations(value: unknown): Automation[] {
-  if (!Array.isArray(value)) throw new Error("automations must be a list.");
-  return value.map((raw) => {
-    const rule = (raw ?? {}) as Record<string, unknown>;
-    const trigger = AUTOMATION_TRIGGERS.find((t) => t.id === rule.on);
-    if (!trigger) throw new Error(`Unknown automation trigger ${JSON.stringify(rule.on)}.`);
-    const skill = asText(rule.skill).trim().replace(/^\//, "");
-    if (!SKILL_NAME.test(skill)) throw new Error(`Pick a skill for “when ${trigger.label}”.`);
-    const id = typeof rule.id === "string" && rule.id ? rule.id : randomUUID();
-    if (trigger.id !== "prompt-matches") return { id, on: trigger.id, skill };
-    const pattern = asText(rule.pattern).trim();
-    if (!pattern) throw new Error(`Enter a pattern for “when ${trigger.label}”.`);
-    if (!patternRegex(pattern)) throw new Error(`“${pattern}” isn't a valid pattern.`);
-    return { id, on: trigger.id, skill, pattern };
-  });
-}
 
 export async function GET(req: Request) {
   const denied = guard(req, { write: false });
@@ -199,6 +179,8 @@ export async function PATCH(req: Request) {
     // fields their names, and validate() checks each one before anything is saved.
     const body = (await req.json()) as SettingsPatch;
     commit(body, validate(body));
+    // The account's settings go to your workers (lib/account-settings.ts); not awaited, and it never throws.
+    void pushAccountSettings();
     return Response.json(settingsView());
   } catch (err) {
     return fail(err);
