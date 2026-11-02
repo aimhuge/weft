@@ -14,6 +14,7 @@ export interface ProjectSummary {
   pinned?: boolean; // always a chip, ahead of the recent ones (lib/project-menu.ts)
   hidden?: boolean; // no chip until it's used again; "More" still lists it
   worker?: ProjectWorker; // it lives on a Weft Worker, not on this Mac (lib/worker-project.ts)
+  folders?: string[]; // folders added to it ("Add Folder…", lib/project-folders.ts)
 }
 
 export type WorkerProjectStatus = "online" | "busy" | "offline";
@@ -223,6 +224,7 @@ export function summarizeProjects(projects: Project[], cards: Card[], rootOf: (c
     s.lastActivity = Math.max(s.lastActivity, p.lastUsedAt);
     if (p.pinned) s.pinned = true;
     if (p.hidden) s.hidden = true;
+    if (p.folders?.length) s.folders = [...new Set([...(s.folders ?? []), ...p.folders])];
   }
   for (const card of cards) {
     const s = summary(rootOf(card.cwd));

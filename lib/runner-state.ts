@@ -6,6 +6,7 @@ import type { CliProcess } from "./cli-process";
 import type { ThreadAgent } from "./agents";
 import type { CopilotPersona } from "./copilot-personas";
 import type { EditPreview } from "./edit-preview";
+import { projectFolders } from "./project-folders";
 import { allowedFolders, gooseBaseUrl, gooseModelId, gooseProviderId, keepAliveMinutes } from "./settings";
 import type { BoardStatus } from "./status";
 import { getCard, updateCard } from "./store";
@@ -213,9 +214,10 @@ export function errorText(err: unknown) {
 // through effortFor at the point we build the spec the CLI actually runs with. A card left over
 // from before switchBackend's xhigh guard is caught here on the next turn. Same for a Claude model id
 // left on a puku card (modelOn).
-// The directories a session may read beyond its folder: what the card was granted, and what the user allowed for every card.
+// The directories a session may read beyond its folder: what the card was granted, the folders added to its project,
+// and what the user allowed for every card.
 function readScopeFor(card: Card): string[] | undefined {
-  const dirs = [...new Set([...(card.readScope ?? []), ...allowedFolders()])];
+  const dirs = [...new Set([...(card.readScope ?? []), ...projectFolders(card.cwd), ...allowedFolders()])];
   return dirs.length ? dirs : undefined;
 }
 

@@ -445,8 +445,9 @@ shown beside it, that picks it while the menu is open: right-click, then `D` for
 
 Right-click a project chip in the project bar, or a project under **More**, for its own menu: start a new
 thread in it, reveal it in Finder, open it in your editor or terminal (the first one installed: Cursor,
-VS Code, Zed… and Ghostty, iTerm, Warp or Terminal), open it on GitHub, copy its path, open its 🔐
-Secrets, Dev Servers or Changelog, **Pin to Bar** (a pinned project always has a chip, ahead of the recent
+VS Code, Zed… and Ghostty, iTerm, Warp or Terminal), open it on GitHub, copy its path, **Add Folder…** (a
+project can span several folders, say an app and its API: every thread in it may read and edit the added folders
+with no "Outside project" prompt, and each one gets a **Remove** item), open its 🔐 Secrets, Dev Servers or Changelog, **Pin to Bar** (a pinned project always has a chip, ahead of the recent
 ones), **Hide from Bar** (its chip goes until you use it again; **More** still lists it), archive its Done
 cards and stop its running ones. (Desktop app only.)
 

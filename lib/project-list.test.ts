@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { marked, touched } from "./project-list";
+import { marked, touched, withFolder } from "./project-list";
 
 describe("touched", () => {
   it("puts the folder first with the new time, unhidden and still pinned", () => {
@@ -24,5 +24,26 @@ describe("marked", () => {
 
   it("saves a folder that wasn't on the list", () => {
     expect(marked([], "/cards", { hidden: true })).toEqual([{ path: "/cards", lastUsedAt: 0, hidden: true }]);
+  });
+});
+
+describe("withFolder", () => {
+  it("adds a folder once, takes it off, and drops the key with the last one", () => {
+    let list = withFolder([{ path: "/a", lastUsedAt: 1, pinned: true }], "/a", "/api", true);
+    list = withFolder(list, "/a", "/api", true);
+    expect(list).toEqual([{ path: "/a", lastUsedAt: 1, pinned: true, folders: ["/api"] }]);
+    list = withFolder(list, "/a", "/docs", true);
+    expect(list[0]!.folders).toEqual(["/api", "/docs"]);
+    list = withFolder(withFolder(list, "/a", "/api", false), "/a", "/docs", false);
+    expect(list).toEqual([{ path: "/a", lastUsedAt: 1, pinned: true }]);
+  });
+
+  it("never adds the project to itself, and saves a project only cards ran in", () => {
+    expect(withFolder([], "/a", "/a", true)).toEqual([{ path: "/a", lastUsedAt: 0 }]);
+    expect(withFolder([], "/a", "/api", true)).toEqual([{ path: "/a", lastUsedAt: 0, folders: ["/api"] }]);
+  });
+
+  it("keeps a project's folders when it's used again", () => {
+    expect(touched([{ path: "/a", lastUsedAt: 1, folders: ["/api"] }], "/a", 9, 40)).toEqual([{ path: "/a", lastUsedAt: 9, folders: ["/api"] }]);
   });
 });

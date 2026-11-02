@@ -578,7 +578,11 @@ When a new doc lands in this folder, add it here on the same change.
   `shell:openIn`: the first installed app of a fixed list, `open -a`). Pin and Hide are `pinned`/`hidden` on the
   saved project (`lib/project-list.ts`, `markProject` in `lib/settings.ts`, `PATCH /api/projects`); `chipProjects`
   in `lib/project-bar.ts` puts pinned chips first and leaves hidden ones out unless selected, and using a hidden
-  project (`touchProject`) brings it back.
+  project (`touchProject`) brings it back. **Add Folder…** puts a folder in the project's `folders`
+  (`withFolder` in `lib/project-list.ts`, `lib/project-folders.ts`, `PATCH /api/projects` with `{folder, on}`): every
+  thread of the project gets it as `additionalDirectories` (`readScopeFor` in `lib/runner-state.ts`, from its next CLI
+  start) and as inside the project for the folder gate (`grantedFor` in `lib/folder-guard.ts`). Codex has no
+  equivalent yet.
 - **Sync** in that same project menu (cloud sync to weft.zip, `docs/architecture/cloud-sync.md`):
   **Sync <project>** / **Don't Sync <project>** turns the switch for that folder (`POST /api/cloud-sync { folder, on }`,
   the same call as Settings → Sync and the avatar menu). The item carries the project's own sync state as its

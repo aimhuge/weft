@@ -20,6 +20,8 @@ export type ProjectAction =
   | "unpin"
   | "hide"
   | "show"
+  | "add-folder"
+  | `remove-folder:${string}`
   | "archive-done"
   | "stop-running";
 
@@ -38,6 +40,8 @@ export interface ProjectMenuState {
   syncStatus: string;
   // "Run on Worker": the project's new cards go to your Weft Worker instead of this machine (lib/worker-handoff.ts).
   onWorker: boolean;
+  // Folders added to the project (lib/project-folders.ts), each with a Remove item under Add Folder….
+  folders?: string[];
 }
 
 const SEPARATOR: MenuItem = { type: "separator" };
@@ -58,7 +62,10 @@ const KEYS: Record<string, string> = {
   "run-worker": "W",
   pin: "P",
   unpin: "P",
+  "add-folder": "O",
 };
+
+const base = (folder: string) => folder.split("/").filter(Boolean).pop() ?? folder;
 
 export function projectMenu(name: string, s: ProjectMenuState): MenuItem[] {
   const items: MenuItem[] = [
@@ -70,6 +77,8 @@ export function projectMenu(name: string, s: ProjectMenuState): MenuItem[] {
   items.push(
     { id: "github", label: "Open on GitHub" },
     { id: "copy-path", label: "Copy Folder Path" },
+    { id: "add-folder", label: "Add Folder…" },
+    ...(s.folders ?? []).map((f) => ({ id: `remove-folder:${f}`, label: `Remove ${base(f)}`, detail: f })),
     SEPARATOR,
     { id: "secrets", label: "Secrets…" },
     { id: "services", label: "Dev Servers…" },

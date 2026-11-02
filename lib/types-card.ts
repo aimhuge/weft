@@ -161,6 +161,8 @@ export interface Project {
   pinned?: boolean;
   // Hidden from the bar ("Hide from Bar"): its chip goes until the folder is used again; "More" still lists it.
   hidden?: boolean;
+  // Folders added to the project ("Add Folder…"): its threads read and edit there with no "Outside project" prompt.
+  folders?: string[];
 }
 
 // When an automation runs its skill: as a thread starts, when you move a card to Review or Done, or

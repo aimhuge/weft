@@ -5,9 +5,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // The folder gate (lib/folder-guard.ts) on real temp folders, with the board's card and the settings mocked.
 
-const h = vi.hoisted(() => ({ card: undefined as { id: string; role?: string; readScope?: string[] } | undefined, allowed: [] as string[] }));
+const h = vi.hoisted(() => ({ card: undefined as { id: string; role?: string; readScope?: string[]; cwd?: string } | undefined, allowed: [] as string[], folders: new Map<string, string[]>() }));
 vi.mock("./store", () => ({ DATA_DIR: "/nonexistent/.weft", getCard: (id: string) => (id === h.card?.id ? h.card : undefined) }));
 vi.mock("./settings", () => ({ allowedFolders: () => h.allowed }));
+vi.mock("./project-folders", () => ({ projectFolders: (project: string) => h.folders.get(project) ?? [] }));
 
 const { folderAsk, folderGuard, folderGuardMatcher, grantedRead, outsideFolder, pathsOf, tilde } = await import("./folder-guard");
 
@@ -210,6 +211,13 @@ describe("grantedRead", () => {
     h.card = { id: "c1" };
     h.allowed = [dir];
     expect(grantedRead("Glob", { pattern: "*.ts", path: dir }, project, "c1")).toBe(true);
+  });
+
+  it("counts the folders added to the card's project as granted", () => {
+    h.card = { id: "c1", cwd: project };
+    h.folders.set(project, [dir]);
+    expect(grantedRead("Read", { file_path: path.join(dir, "a.ts") }, project, "c1")).toBe(true);
+    h.folders.clear();
   });
 
   it("is false for writes, Bash, an ungranted folder, or a call with no path", () => {

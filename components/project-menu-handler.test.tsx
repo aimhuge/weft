@@ -6,6 +6,7 @@ import type { MenuItem } from "@/lib/card-menu";
 
 const api = vi.hoisted(() => ({
   markProject: vi.fn(() => Promise.resolve({ projects: [] })),
+  setProjectFolder: vi.fn(() => Promise.resolve({ projects: [] })),
   repos: vi.fn(() => Promise.resolve({ repos: [{ path: "/p", github: "me/p" }] })),
   workerFolders: vi.fn(() => Promise.resolve({ folders: [] as string[] })),
   setWorkerFolder: vi.fn((_folder: string, on: boolean) => Promise.resolve({ folders: on ? ["/p"] : [], worker: on ? "m1mini" : undefined })),
@@ -145,6 +146,26 @@ describe("projectMenuHandler", () => {
       await setup(pick).run();
       expect(api.markProject).toHaveBeenLastCalledWith("/p", marks);
     }
+  });
+
+  it("adds a picked folder to the project, and does nothing when the picker is cancelled", async () => {
+    const openFolder = vi.fn<() => Promise<string | null>>(() => Promise.resolve("/Users/me/api"));
+    const t = setup("add-folder", {}, { dialog: { openFolder } });
+    await t.run();
+    expect(api.setProjectFolder).toHaveBeenCalledWith("/p", "/Users/me/api", true);
+    expect(t.deps.toast).toHaveBeenCalledWith(expect.stringContaining("api"));
+    openFolder.mockResolvedValueOnce(null);
+    vi.mocked(api.setProjectFolder).mockClear();
+    await setup("add-folder", {}, { dialog: { openFolder } }).run();
+    expect(api.setProjectFolder).not.toHaveBeenCalled();
+  });
+
+  it("lists the project's added folders and removes the one picked", async () => {
+    const t = setup("remove-folder:/Users/me/api", { projects: [{ path: "/p", lastActivity: 0, cards: 0, running: 0, needsYou: 0, folders: ["/Users/me/api"] }] });
+    await t.run();
+    expect(t.popupMenu.mock.calls[0]![0]).toEqual(expect.arrayContaining([expect.objectContaining({ id: "remove-folder:/Users/me/api" })]));
+    expect(api.setProjectFolder).toHaveBeenCalledWith("/p", "/Users/me/api", false);
+    expect(t.deps.toast).toHaveBeenCalledWith("api is no longer part of p.");
   });
 
   it("archives its Done cards and stops its running ones", async () => {
