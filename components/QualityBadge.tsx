@@ -5,6 +5,7 @@ import { hostFor } from "@/lib/project-host";
 import { fixPrompt, tone, type QualityReport, type Section } from "@/lib/quality-view";
 import { findingPrompt, findingTitle, headroomScore, openFindings, scoreNote, scoreParts, type ScoutState } from "@/lib/scout-view";
 import { folderName, timeAgo } from "@/lib/format";
+import { workerScoutPrompt } from "@/lib/scout-worker";
 import { useNow } from "@/lib/use-now";
 import { useScout } from "@/lib/use-scout";
 import ScoutDialog from "./ScoutDialog";
@@ -167,7 +168,16 @@ export default function QualityBadge({
             markStarted(f.id);
             onImprove(cwd, findingPrompt(f), findingTitle(f));
           }}
-          onRescout={rescout}
+          onRescout={() => {
+            // A worker scouts as a card there (lib/scout-worker.ts); this Mac runs its own scout.
+            if (hostFor(cwd).can("projectActs")) {
+              rescout();
+              return;
+            }
+            close();
+            const w = workerScoutPrompt();
+            onImprove(cwd, w.prompt, w.title);
+          }}
         />
       )}
     </>

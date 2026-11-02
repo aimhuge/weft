@@ -5,7 +5,8 @@ import path from "node:path";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { captureAiGeneration } from "./ai-observability";
 import { projectRoot } from "./quality";
-import { MAX_FINDINGS, parseFindings, type ScoutReport, type ScoutState } from "./scout-view";
+import { scoutPrompt } from "./scout-prompt";
+import { parseFindings, type ScoutReport, type ScoutState } from "./scout-view";
 import { SECRET_GUARD_HOOKS } from "./secret-guard";
 import { DATA_DIR } from "./store";
 
@@ -19,6 +20,8 @@ const MAX_TURNS = 40;
 
 const running = new Map<string, Promise<void>>();
 const errors = new Map<string, string>();
+
+export { scoutPrompt };
 
 export function scoutFile(root: string) {
   return path.join(DIR, `${createHash("sha1").update(root).digest("hex").slice(0, 16)}.json`);
@@ -43,22 +46,6 @@ export function readScout(root: string): ScoutReport | null {
 function writeScout(report: ScoutReport) {
   fs.mkdirSync(DIR, { recursive: true });
   fs.writeFileSync(scoutFile(report.root), JSON.stringify(report, null, 2));
-}
-
-export function scoutPrompt() {
-  return `You are a refactor scout. Read this project (use Glob, Grep and Read; start from the largest and most-imported source files, skip tests, generated files and dependencies) and find the most valuable concrete improvements. Up to ${String(MAX_FINDINGS)}, best first, across these categories:
-
-- refactor: a code smell named the way Martin Fowler's Refactoring (2nd ed.) names it: Long Function, Large Class, Duplicated Code, Feature Envy, Primitive Obsession, Data Clumps, Long Parameter List, Shotgun Surgery, Divergent Change, Message Chains, Speculative Generality, Mysterious Name, Global Data, Repeated Switches, Temporary Field.
-- lint: a lint rule that isn't on yet and would catch something real here (read the lint config first; name the rule and where it would fire).
-- types: type looseness: a wide \`string\` or \`number\` where a union of literals fits, \`as\` casts, \`any\`, non-null \`!\`, optional fields that are always set, or a missing return type on an exported function.
-- tests: an important behaviour with no test, or a test that checks nothing.
-- guardrails: a missing check in the pre-commit hook or CI.
-
-Each finding must point at a real file and line you read. Be concrete: no generic advice, nothing you didn't see. Always find something: there is always another refactor, a stricter rule or a better type.
-
-Reply with only a JSON array, no prose:
-[{"file": "lib/x.ts", "line": 42, "smell": "Long Function", "category": "refactor", "severity": "high", "fix": "Extract the retry loop into retryWithBackoff()"}]
-severity is high, medium or low; fix is one short sentence, under 120 characters.`;
 }
 
 async function scout(root: string) {
