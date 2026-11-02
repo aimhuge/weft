@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { filesApi } from "@/lib/client-files";
+import { useFilesSource } from "@/lib/files-source";
 import Modal from "./Modal";
 
 // ⌘P: a fuzzy file picker over the card's folder, opened from the editor column. Keyboard-driven:
@@ -41,6 +41,7 @@ function score(query: string, path: string): number | null {
 }
 
 export default function QuickOpen({ cardId, onPick, onClose }: QuickOpenProps) {
+  const filesApi = useFilesSource();
   const [files, setFiles] = useState<string[] | null>(null);
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
@@ -57,7 +58,7 @@ export default function QuickOpen({ cardId, onPick, onClose }: QuickOpenProps) {
     return () => {
       cancelled = true;
     };
-  }, [cardId]);
+  }, [cardId, filesApi]);
 
   useEffect(() => {
     inputRef.current?.focus();

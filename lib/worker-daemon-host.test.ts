@@ -97,6 +97,41 @@ describe("a host command on a worker", () => {
     await d.daemon.runOne(host("card.message", { text: "" }));
     expect(d.report).toHaveBeenCalledWith("cmd-1", "failed", null, "Write a message first.", { ok: false, error: "Write a message first." });
   });
+
+  it("answers a small file verb's value in the result itself", async () => {
+    const d = makeDeps();
+    d.host.mockResolvedValueOnce({ files: ["a.ts"] });
+    await d.daemon.runOne(host("files.list"));
+    expect(d.report).toHaveBeenCalledWith("cmd-1", "done", "card-1", null, { ok: true, cardId: "card-1", value: { files: ["a.ts"] } });
+  });
+
+  it("carries a large one through the blob store, the result naming its sha", async () => {
+    const eng = fakeEngine();
+    const carry = vi.fn(() => Promise.resolve("ab".repeat(32)));
+    const d = makeDeps({ engine: { ...eng.engine, carry } });
+    eng.host.mockResolvedValueOnce({ file: { text: "x".repeat(5_000) } });
+    await d.daemon.runOne(host("files.read", { path: "big.ts" }));
+    expect(carry).toHaveBeenCalledWith(JSON.stringify({ file: { text: "x".repeat(5_000) } }));
+    expect(d.report).toHaveBeenCalledWith("cmd-1", "done", "card-1", null, { ok: true, cardId: "card-1", blob: "ab".repeat(32) });
+  });
+
+  it("fails a large result on a worker that can't carry one", async () => {
+    const d = makeDeps();
+    d.host.mockResolvedValueOnce({ files: Array.from({ length: 500 }, (_, i) => `file-${i}.ts`) });
+    await d.daemon.runOne(host("files.list"));
+    expect(d.report).toHaveBeenCalledWith("cmd-1", "failed", null, expect.stringContaining("can't send a large result"), expect.anything());
+  });
+
+  it("refuses a save into the agent's settings, or one that names no file, before the verb runs", async () => {
+    const d = makeDeps();
+    await d.daemon.runOne(host("files.write", { path: ".claude/settings.json", text: "{}" }));
+    expect(d.report).toHaveBeenLastCalledWith("cmd-1", "failed", null, expect.stringContaining("doesn't save into .claude"), expect.anything());
+    await d.daemon.runOne(host("files.write", { text: "{}" }));
+    expect(d.report).toHaveBeenLastCalledWith("cmd-1", "failed", null, "That names no file.", expect.anything());
+    expect(d.host).not.toHaveBeenCalled();
+    await d.daemon.runOne(host("files.write", { path: "src/a.ts", text: "x" }));
+    expect(d.host).toHaveBeenCalledWith("files.write", { id: "card-1", path: "src/a.ts", text: "x" });
+  });
 });
 
 describe("a line command on a worker", () => {

@@ -6,9 +6,10 @@ import { act, renderHook } from "@testing-library/react";
 import type { ThreadPage } from "./thread-page";
 
 const fetchMock = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>();
-vi.mock("./api-client", () => ({ apiFetch: (url: string, init?: RequestInit) => fetchMock(url, init) }));
+vi.mock("./api-client", () => ({ apiFetch: (url: string, init?: RequestInit) => fetchMock(url, init), API_HEADERS: {} }));
 
 const { mergePage, sendWorkerAction, THREAD_POLL_MS, useWorkerLive, workerToolSource, workerTransport } = await import("./worker-transport");
+const { workerFiles } = await import("./worker-files");
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
@@ -251,11 +252,16 @@ describe("the worker card's verbs", () => {
     expect(hostBody()).toEqual({ action: "host", cardId: "c1", verb, args });
   });
 
-  it("leaves out what a worker refuses from the network, and the file list it can't give yet", () => {
+  it("leaves out what a worker refuses from the network", () => {
     expect(workerTransport.shell).toBeUndefined();
     expect(workerTransport.grantFolder).toBeUndefined();
-    expect(workerTransport.listFiles).toBeUndefined();
     expect(workerTransport.cardEdits).toBe(true);
+  });
+
+  it("lists the card's files through the worker's files.list, so the thread's file names link (H4)", async () => {
+    const list = vi.spyOn(workerFiles, "list").mockResolvedValue(["a.ts"]);
+    await expect(workerTransport.listFiles!("w1")).resolves.toEqual(["a.ts"]);
+    expect(list).toHaveBeenCalledWith("w1");
   });
 });
 

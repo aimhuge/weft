@@ -11,6 +11,7 @@ export type { ElicitField, PendingElicitation, Question, QuestionReply, SecretAs
 export { paneFor, paneFromUrl, screenPage, screenTopic, SCREEN_EVENT, type ScreenDevice, type SharePane } from "./pane";
 export { followUrl, pageLabel, plain, showMinis, turnId, type Dot, type Mini, type Visit } from "./show-rail";
 export { HOST_VERBS, isHostVerb, type HostVerb } from "./host-verbs";
+export { readRefusal, writeRefusal } from "./file-policy";
 export {
   messageCall,
   permissionCall,

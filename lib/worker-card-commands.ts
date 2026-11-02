@@ -25,6 +25,8 @@ export function workerRules(engine: Engine): CardRules {
     verb: (verb, args) => engine.host(verb, args),
     grant: (cardId, directory, scope) => engine.grant(cardId, directory, scope),
     receive: (text, payload) => engine.receive(text, payload),
+    // The editor's files.* results over the row's 4 KB go up as blobs (lib/host-result.ts).
+    carry: engine.carry,
   };
 }
 

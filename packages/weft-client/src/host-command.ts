@@ -6,13 +6,16 @@
 import { isBang } from "./bang";
 import type { SkillInfo } from "./card";
 import { hostRow, type CardTarget, type HostCommandRow, type HostPayload } from "./host-row";
+import { readRefusal, writeRefusal } from "./file-policy";
 import { isHostVerb, type HostVerb } from "./host-verbs";
 import { fitSkills, type SkillsOnWire } from "./skills-wire";
 
 // What a host writes to `result`. Never the card or its thread: those travel sealed (cloud_cards, the outbox), and
 // the row is plain jsonb, so it says whether the verb ran and which card it touched, plus what a read verb answers
 // (RESULTS below), kept small enough for the column's 4 KB cap.
-export type HostResult = ({ ok: true; cardId: string } & Partial<SkillsOnWire>) | { ok: false; error: string };
+// A verb that answers with a value too big for that (the editor's files.*) adds it as `value` when it's small, else
+// `blob`, the sha of its JSON in the workspace's blob store (lib/host-result.ts).
+export type HostResult = ({ ok: true; cardId: string; value?: unknown; blob?: string } & Partial<SkillsOnWire>) | { ok: false; error: string };
 
 const isObject = (v: unknown): v is Record<string, unknown> => Boolean(v) && typeof v === "object" && !Array.isArray(v);
 
@@ -50,6 +53,12 @@ export function remoteRefusal({ verb, args }: HostPayload): string | null {
   // A scheduled message is sent as a reply when its time comes, never run, but a "!" one would read as a command
   // waiting to run, so the network can't leave one on a card at all.
   if (verb === "card.schedule" && typeof args.text === "string" && isBang(args.text)) return SHELL_REFUSED;
+  // The editor stays inside the card's folder (lib/file-access.ts), off credentials and .git, and a save off what
+  // configures its agent: what the card's own thread could do when asked, never what would widen it (./file-policy.ts).
+  if (verb === "files.read" || verb === "files.write") {
+    if (typeof args.path !== "string") return "That names no file.";
+    return verb === "files.read" ? readRefusal(args.path) : writeRefusal(args.path);
+  }
   const body = verb === "card.update" ? (args.body as Record<string, unknown> | undefined) : undefined;
   if (!body) return null;
   if (body.permissionMode === "bypassPermissions") return "A request from the web can't skip permission prompts. Pick that mode on the Mac.";

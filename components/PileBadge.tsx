@@ -1,11 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { apiFetch } from "@/lib/api-client";
 import { fetchPileReview } from "@/lib/pile-review";
+import { hostFor } from "@/lib/project-host";
+import type { PileSummary } from "@/lib/project-reads";
 import Tip from "./Tip";
-
-type PileSummary = { root: string; files: number; added: number; removed: number; cards: number };
 
 // One line of numbers, one line of pitch, and the click as a button (the bubble is interactive, so it takes it).
 function PileTip({ pile, busy, onStart }: { pile: PileSummary; busy: boolean; onStart: () => void }) {
@@ -48,10 +47,10 @@ export default function PileBadge({
     if (!cwd) return;
     let live = true;
     const load = () => {
-      apiFetch(`/api/pile?cwd=${encodeURIComponent(cwd)}`)
-        .then((r) => r.json() as Promise<{ pile: PileSummary | null }>)
-        .then((d) => {
-          if (live) setLoaded({ cwd, pile: d.pile });
+      hostFor(cwd)
+        .read("pile", cwd)
+        .then((pile) => {
+          if (live) setLoaded({ cwd, pile });
         })
         .catch(() => {});
     };

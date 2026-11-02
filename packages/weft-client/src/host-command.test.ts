@@ -107,3 +107,13 @@ describe("results and typed text", () => {
     expect(verbResult("skills.list", "c", undefined)).toEqual({ ok: true, cardId: "c", skills: [] });
   });
 });
+
+describe("remoteRefusal for the editor's verbs", () => {
+  it("refuses a read of a credential, a save into an agent's settings, and a call that names no file", () => {
+    expect(remoteRefusal({ verb: "files.read", args: { id: "c1", path: ".ssh/id_rsa" } })).toContain("holds credentials");
+    expect(remoteRefusal({ verb: "files.write", args: { id: "c1", path: ".codex/config.toml", text: "x" } })).toContain(".codex");
+    expect(remoteRefusal({ verb: "files.write", args: { id: "c1", text: "x" } })).toBe("That names no file.");
+    expect(remoteRefusal({ verb: "files.read", args: { id: "c1", path: "src/a.ts" } })).toBeNull();
+    expect(remoteRefusal({ verb: "files.list", args: { id: "c1" } })).toBeNull();
+  });
+});

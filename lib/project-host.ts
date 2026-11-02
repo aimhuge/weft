@@ -7,6 +7,10 @@
 // which of this Mac's own features the host has, and `.menu` trims a card's right-click menu to what it backs. The
 // board never asks whether a card is a worker's: the worker:// check lives here and in lib/worker-project.ts.
 import { api, call } from "./client";
+import { filesApi } from "./client-files";
+import type { FilesSource } from "./files-source";
+import { localRead, type ReadProject } from "./project-reads";
+import { cloudRead } from "./project-snapshot-view";
 import { remoteMenu } from "./card-menu-remote";
 import type { MenuItem } from "./card-menu";
 import type { ArgsOf } from "./host-api";
@@ -16,23 +20,28 @@ import { localTransport, type ThreadTransport } from "./thread-transport";
 import type { Backend, Card, QuestionReply } from "./types";
 import { localToolSource, type ToolResultSource } from "./use-tool-result";
 import type { ActResult } from "./worker-acts";
+import { workerFiles } from "./worker-files";
 import { actOnWorker, workerToolSource, workerTransport } from "./worker-transport";
 import { parseWorkerProject } from "./worker-project";
-import { actOnLine, lineTransport } from "./line-host";
+import { actOnLine, lineFiles, lineTransport } from "./line-host";
 
 // This Mac's own features, which another host offers only once it has a verb or a stream for them. `files` is the
 // editor and the thread's file links (H4), `shots` the show rail's page pictures (lib/page-shots.ts), `pane` the native
 // browser pane; `folder`, `agent` and `shell` widen what a card can touch, so a remote host refuses them from the network.
 // `skills` is the skill set chip (which skills a card gets); the "/" list is the transport's listSkills on every host.
-// `schedule` is Send later, which both hosts hold the timer for (card.schedule); `share` a weft.zip link to the card's
-// cloud rows; `delete` card.delete.
-export type HostFeature = "files" | "shots" | "pane" | "folder" | "agent" | "shell" | "skills" | "share" | "delete" | "login" | "vault" | "dev" | "schedule";
+// `schedule` is Send later, which both hosts hold the timer for (card.schedule). `reads` is the header badges (H4);
+// `projectActs` what they start from this Mac's store and server: a re-scout, the commit walk-through and the sprint
+// plan, whose prompts point at the Mac's own routes. `share` a weft.zip link to the card's cloud rows; `delete` card.delete.
+export type HostFeature = "files" | "reads" | "projectActs" | "shots" | "pane" | "folder" | "agent" | "shell" | "skills" | "share" | "delete" | "login" | "vault" | "dev" | "schedule";
 
 export interface ProjectHost {
   kind: "local" | "cloud";
   thread: ThreadTransport;
   tools: ToolResultSource;
   can: (feature: HostFeature) => boolean;
+  // The header badges' reads of a project (lib/project-reads.ts), and the editor's files (lib/files-source.ts).
+  read: ReadProject;
+  files: FilesSource;
   // Runs one verb on the card args.id names. `local` is the call this Mac's board has always made for it, when a
   // caller has its own (api.mark for a star); a remote host ignores it.
   // A worker that hasn't taken it yet answers `{ queued }` (lib/worker-acts.ts); this Mac always answers at once.
@@ -69,6 +78,9 @@ const LOCAL: Record<HostVerb, LocalCall> = {
   "card.schedule": (a) => api.schedule(a.id, text(a.text), Number(a.at)),
   "card.unschedule": (a) => api.unschedule(a.id, text(a.messageId)),
   "skills.list": (a) => call("GET", `/api/skills?card=${encodeURIComponent(a.id)}`),
+  "files.list": (a) => filesApi.list(a.id),
+  "files.read": (a) => (a.at === "HEAD" ? filesApi.head(a.id, text(a.path)) : filesApi.read(a.id, text(a.path))),
+  "files.write": (a) => filesApi.write(a.id, text(a.path), text(a.text), a.baseHash as string | null | undefined),
 };
 
 export const localHost: ProjectHost = {
@@ -76,6 +88,8 @@ export const localHost: ProjectHost = {
   thread: localTransport,
   tools: localToolSource,
   can: () => true,
+  read: localRead,
+  files: filesApi,
   act: async (verb, args, local) => {
     await (local ? local() : LOCAL[verb](args));
     return undefined;
@@ -83,16 +97,18 @@ export const localHost: ProjectHost = {
   menu: (items) => items,
 };
 
-// What a Worker has today: its cards' own verbs, the thread and its pages. Not this Mac's files, pane, vault or CLIs.
-// Share… reads the card's cloud rows, which a worker publishes like a Mac's outbox (lib/card-share-worker.ts), and
-// Delete is card.delete.
-const CLOUD_FEATURES = new Set<HostFeature>(["schedule", "share", "delete"]);
+// What a Worker has today: its cards' own verbs, the thread and its pages, Send later, its files through the file verbs
+// and the header's reads through its snapshots (H4). Share… reads the card's cloud rows, which a worker publishes like a
+// Mac's outbox (lib/card-share-worker.ts), and Delete is card.delete. Not this Mac's pane, vault or CLIs.
+const CLOUD_FEATURES = new Set<HostFeature>(["schedule", "files", "reads", "share", "delete"]);
 
 export const cloudHost: ProjectHost = {
   kind: "cloud",
   thread: workerTransport,
   tools: workerToolSource,
   can: (feature) => CLOUD_FEATURES.has(feature),
+  read: cloudRead,
+  files: workerFiles,
   act: (verb, args) => actOnWorker(verb, args),
   menu: remoteMenu,
 };
@@ -101,7 +117,7 @@ export const cloudHost: ProjectHost = {
 const cloudHosts = new Map<string, ProjectHost>();
 function cloudHostOf(workerId: string): ProjectHost {
   let host = cloudHosts.get(workerId);
-  if (!host) cloudHosts.set(workerId, (host = { ...cloudHost, thread: lineTransport(workerId), act: (verb, args) => actOnLine(workerId, verb, args) }));
+  if (!host) cloudHosts.set(workerId, (host = { ...cloudHost, thread: lineTransport(workerId), files: lineFiles(workerId), act: (verb, args) => actOnLine(workerId, verb, args) }));
   return host;
 }
 

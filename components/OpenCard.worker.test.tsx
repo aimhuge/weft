@@ -5,10 +5,11 @@
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { useContext, type ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { FilesSourceContext } from "@/lib/files-source";
 import { ThreadTransportContext } from "@/lib/thread-transport";
 import { ToolResultSourceContext } from "@/lib/use-tool-result";
 import { workerToolSource } from "@/lib/worker-transport";
-import { lineTransport } from "@/lib/line-host";
+import { lineFiles, lineTransport } from "@/lib/line-host";
 import { useShownItems } from "@/lib/worker-shown";
 import type { Card, ThreadItem } from "@/lib/types";
 import type { UseWorkspaceLayout } from "@/lib/use-workspace-layout";
@@ -18,7 +19,7 @@ const seen = new Map<string, Props>();
 vi.mock("./guarded", () => ({
   guarded: (_load: unknown, { what }: { what: string }) =>
     function Stub(props: Props) {
-      seen.set(what, { ...props, transport: useContext(ThreadTransportContext), tools: useContext(ToolResultSourceContext) });
+      seen.set(what, { ...props, transport: useContext(ThreadTransportContext), tools: useContext(ToolResultSourceContext), files: useContext(FilesSourceContext) });
       return <div data-what={what}>{props.columns && Object.entries(props.columns).map(([k, v]) => <div key={k} data-col={k}>{v}</div>)}</div>;
     },
 }));
@@ -82,9 +83,9 @@ describe("a worker card in the board's own workspace", () => {
     expect(thread.transport).toBe(lineTransport("m1"));
     expect(thread.tools).toBe(workerToolSource);
     expect(thread.card).toBe(card);
-    // No editor of this Mac's files; Share… links the rows the worker published (lib/card-share-worker.ts).
-    expect(thread.onEditor).toBeUndefined();
-    expect(thread.editorOpen).toBe(false);
+    // The editor opens the worker's files (H4); Share… links the rows the worker published (lib/card-share-worker.ts).
+    expect(typeof thread.onEditor).toBe("function");
+    expect(thread.editorOpen).toBe(true);
     expect(thread.onShare).toBe(props.onShare);
   });
 
@@ -119,11 +120,16 @@ describe("a worker card in the board's own workspace", () => {
     expect(p.workspace.setOpen).toHaveBeenCalledWith("pane", false);
   });
 
-  it("says the editor isn't there for a worker's files, and closes that column", () => {
+  it("opens the worker's files in the editor, through its file verbs on its line", () => {
     const p = setup();
-    expect(seen.has("editor column")).toBe(false);
-    screen.getByRole("button", { name: "Close the editor" }).click();
+    const editor = seen.get("editor column")!;
+    expect(editor.cardId).toBe("w1");
+    // Over the worker's session line when it's up, the relay when it isn't (lib/line-host.ts).
+    expect(editor.files).toBe(lineFiles("m1"));
+    (editor.onClose as () => void)();
     expect(p.workspace.setOpen).toHaveBeenCalledWith("editor", false);
+    (seen.get("thread")!.onEditor as () => void)();
+    expect(p.workspace.toggle).toHaveBeenCalledWith("editor");
   });
 
   it("says so in the thread when the worker is offline", () => {

@@ -103,7 +103,8 @@ describe("a worker card's header", () => {
       await new Promise((r) => setTimeout(r, 0));
     });
     const posted = fetchMock.mock.calls.filter(([url, init]) => url === "/api/worker-board" && init?.method === "POST").map(([, init]) => JSON.parse(init!.body as string) as unknown);
-    expect(posted).toEqual([{ action: "host", cardId: "c1", verb: "card.switchBackend", args: { id: "c1", backend: "puku", replay: false, model: "puku-ai-2.7" } }]);
+    // The thread also reads its file index once (files.list, cached a minute per card) so file names link to the editor.
+    expect(posted.filter((p) => (p as { verb?: string }).verb !== "files.list")).toEqual([{ action: "host", cardId: "c1", verb: "card.switchBackend", args: { id: "c1", backend: "puku", replay: false, model: "puku-ai-2.7" } }]);
     expect(api.switchBackend).not.toHaveBeenCalled();
   });
 });
@@ -117,7 +118,7 @@ describe("a worker card's reply box", () => {
     await userEvent.click(screen.getByRole("menuitem", { name: /Send later/ }));
     await userEvent.click(screen.getByRole("button", { name: /In 1 hour/ }));
     const posted = fetchMock.mock.calls.filter(([url, init]) => url === "/api/worker-board" && init?.method === "POST").map(([, init]) => JSON.parse(init!.body as string) as { verb: string; args: { text: string; at: number } });
-    expect(posted).toEqual([{ action: "host", cardId: "c1", verb: "card.schedule", args: { id: "c1", text: "Run the nightly", at: expect.any(Number) as number } }]);
+    expect(posted.filter((p) => p.verb !== "files.list")).toEqual([{ action: "host", cardId: "c1", verb: "card.schedule", args: { id: "c1", text: "Run the nightly", at: expect.any(Number) as number } }]);
     expect(api.schedule).not.toHaveBeenCalled();
   });
 });

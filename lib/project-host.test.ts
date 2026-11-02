@@ -26,7 +26,12 @@ vi.mock("./client", () => ({ api, call }));
 const actOnWorker = vi.hoisted(() => vi.fn(() => Promise.resolve()));
 vi.mock("./worker-transport", () => ({ actOnWorker, workerToolSource: "worker tools", workerTransport: { desktop: false } }));
 const actOnLine = vi.hoisted(() => vi.fn(() => Promise.resolve()));
-vi.mock("./line-host", () => ({ actOnLine, lineTransport: (workerId: string) => ({ desktop: false, workerId }) }));
+vi.mock("./line-host", () => ({ actOnLine, lineTransport: (workerId: string) => ({ desktop: false, workerId }), lineFiles: (workerId: string) => `line files ${workerId}` }));
+const filesApi = vi.hoisted(() => ({ list: vi.fn(), read: vi.fn(), head: vi.fn(), write: vi.fn(), stat: vi.fn() }));
+vi.mock("./client-files", () => ({ filesApi }));
+vi.mock("./worker-files", () => ({ workerFiles: "worker files" }));
+vi.mock("./project-reads", () => ({ localRead: "local read" }));
+vi.mock("./project-snapshot-view", () => ({ cloudRead: "cloud read" }));
 
 const { cloudHost, hostFor, hostOf, localHost, sameHostCards } = await import("./project-host");
 const { localTransport } = await import("./thread-transport");
@@ -34,7 +39,7 @@ const { localToolSource } = await import("./use-tool-result");
 
 beforeEach(() => {
   vi.clearAllMocks();
-  for (const fn of [...Object.values(api), call]) fn.mockResolvedValue({ ok: true });
+  for (const fn of [...Object.values(api), ...Object.values(filesApi), call]) fn.mockResolvedValue({ ok: true });
 });
 
 describe("hostFor", () => {
@@ -49,7 +54,7 @@ describe("hostFor", () => {
     const w1 = hostFor("worker://w1/ling");
     expect(hostOf({ cwd: "worker://w1/app" })).toBe(w1);
     expect(hostFor("worker://w2/ling")).not.toBe(w1);
-    expect(w1).toMatchObject({ kind: "cloud", tools: "worker tools", thread: { workerId: "w1" }, menu: cloudHost.menu });
+    expect(w1).toMatchObject({ kind: "cloud", tools: "worker tools", thread: { workerId: "w1" }, files: "line files w1", menu: cloudHost.menu });
     await w1.act("card.stop", { id: "c1" });
     expect(actOnLine).toHaveBeenCalledWith("w1", "card.stop", { id: "c1" });
   });
@@ -62,6 +67,9 @@ describe("localHost", () => {
     expect(localHost.tools).toBe(localToolSource);
     expect(localHost.can("files")).toBe(true);
     expect(localHost.can("shell")).toBe(true);
+    // The badges read this Mac's routes, the editor its card routes.
+    expect(localHost.read).toBe("local read");
+    expect(localHost.files).toBe(filesApi);
   });
 
   it("keeps the whole menu", () => {
@@ -103,6 +111,10 @@ describe("localHost", () => {
     ["card.schedule", { id: "c1", text: "later", at: "5000" }, api.schedule, ["c1", "later", 5000]],
     ["card.unschedule", { id: "c1", messageId: "m1" }, api.unschedule, ["c1", "m1"]],
     ["skills.list", { id: "c 1" }, call, ["GET", "/api/skills?card=c%201"]],
+    ["files.list", { id: "c1" }, filesApi.list, ["c1"]],
+    ["files.read", { id: "c1", path: "a.ts" }, filesApi.read, ["c1", "a.ts"]],
+    ["files.read", { id: "c1", path: "a.ts", at: "HEAD" }, filesApi.head, ["c1", "a.ts"]],
+    ["files.write", { id: "c1", path: "a.ts", text: "x", baseHash: "h" }, filesApi.write, ["c1", "a.ts", "x", "h"]],
   ] as const)("%s goes to the route the board has always called", async (verb, args, fn, expected) => {
     const run = localHost.act as (verb: string, args: unknown) => Promise<void>;
     await run(verb, args);
@@ -120,13 +132,18 @@ describe("cloudHost", () => {
     expect(cloudHost.kind).toBe("cloud");
     expect(cloudHost.thread).toEqual({ desktop: false });
     expect(cloudHost.tools).toBe("worker tools");
+    // The badges read the worker's snapshot, the editor its file verbs (H4).
+    expect(cloudHost.read).toBe("cloud read");
+    expect(cloudHost.files).toBe("worker files");
   });
 
-  it("has none of this Mac's own features, but holds Send later's timer, shares its cloud rows and deletes", () => {
-    for (const feature of ["files", "shots", "pane", "folder", "agent", "shell", "skills", "login", "vault", "dev"] as const)
+  it("has Send later, the files and the header reads (H4), shares its cloud rows and deletes, and none of this Mac's other features", () => {
+    for (const feature of ["projectActs", "shots", "pane", "folder", "agent", "shell", "skills", "login", "vault", "dev"] as const)
       expect(cloudHost.can(feature)).toBe(false);
     for (const feature of ["schedule", "share", "delete"] as const) expect(cloudHost.can(feature)).toBe(true);
     expect(localHost.can("schedule")).toBe(true);
+    expect(cloudHost.can("files")).toBe(true);
+    expect(cloudHost.can("reads")).toBe(true);
   });
 
   it("sends every verb to the worker, never the local call", async () => {

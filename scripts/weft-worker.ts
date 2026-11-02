@@ -16,7 +16,7 @@ import { createClient } from "@supabase/supabase-js";
 import { SUPABASE_KEY, SUPABASE_URL } from "../lib/supabase-project";
 import { readWorkerConfig, workerDataDir, workerHome, workerSealKeys, workRoot, writeWorkerConfig, writeWorkerEnv } from "../lib/worker-config";
 import { MAX_TRAVEL_BYTES, attachmentsOf, receiveAttachments } from "../lib/attachment-transfer";
-import { workerBlobClient, workerBlobReader, workerMayUpload } from "../lib/worker-blobs";
+import { workerBlobClient, workerBlobReader, workerMayUpload, workerResults } from "../lib/worker-blobs";
 import { enrol, registry, type Rpc } from "../lib/worker-registry";
 import { isPairCode, newSignKeys } from "../lib/host-pairing";
 import { pairWorker, workerSignKeys } from "../lib/worker-pair";
@@ -81,6 +81,9 @@ async function loadEngine() {
     import("../lib/host-api"),
     import("../lib/scheduler"),
     import("../lib/host-line"),
+    import("../lib/project-snapshot"),
+    import("../lib/worker-projects"),
+    import("../lib/worker-folders"),
   ]);
   return { store, parts };
 }
@@ -95,7 +98,7 @@ async function startCommand() {
   const config = readWorkerConfig(home);
   if (!config) throw new Error("This box isn't enrolled yet. Run: weft-worker enrol <token>");
   const { store, parts } = await loadEngine();
-  const [{ startFeatureCard }, , , { subscribe }, { createDaemon }, { createPublisher }, paths, github, folderGrant, { createBlobStore }, { SHOW_DIR }, { setPageUpload }, { busyCards }, { recoverCards }, { resumeInterrupted }, { openScreenChannel, screenInput, setFastScreen, setScreenChannel, fastScreenOf, watcherOf }, { sendInput }, { openFastScreen }, { setDeviceLink }, { deviceLink }, { isMobileApp }, { runVerb }, { startScheduler }, { createHostLines }] = parts;
+  const [{ startFeatureCard }, , , { subscribe }, { createDaemon }, { createPublisher }, paths, github, folderGrant, { createBlobStore }, { SHOW_DIR }, { setPageUpload }, { busyCards }, { recoverCards }, { resumeInterrupted }, { openScreenChannel, screenInput, setFastScreen, setScreenChannel, fastScreenOf, watcherOf }, { sendInput }, { openFastScreen }, { setDeviceLink }, { deviceLink }, { isMobileApp }, { runVerb }, { startScheduler }, { createHostLines }, { readProjectSnapshot }, { createProjectPublisher }, { listProjectFolders }] = parts;
   const reg = registry(rpc, config.key);
   // The public half goes on the worker's row, so Settings → Sync → Workers can seal a Claude token to this box.
   const keys = workerSealKeys(home, newSealKeys);
@@ -111,6 +114,8 @@ async function startCommand() {
   setScreenChannel((topic) => openScreenChannel(client, topic));
   setDeviceLink(deviceLink(reg, config.key));
   setFastScreen(openFastScreen, (sealed) => open(keys, sealed, RTC_PURPOSE));
+  // The editor's large answers, under results/ and swept after a day (lib/worker-blobs.ts workerResults).
+  const results = workerResults(config.key, client.storage);
   const publisher = createPublisher(reg, store, console.warn, { blobs, orgId: config.orgId });
   subscribe(publisher.hear);
   // Session lines (lib/host-line.ts): the answer goes back on the board's own topic, events are what the
@@ -148,6 +153,8 @@ async function startCommand() {
       },
       // The same handlers the desktop's routes run (lib/host-api): a reply, an answer, a stop, a mode and the rest.
       host: (verb, args) => runVerb(verb, args as never),
+      // A verb's result over the row's 4 KB (the editor's files.*) goes up as JSON (lib/host-result.ts).
+      carry: (json) => results.put(json),
       receive: (text, payload) => receiveAttachments(text, attachmentsOf(payload), attachments, readBlob),
       grant: folderGrant.applyFolderGrant,
       input: (input, cardId) => screenInput(input, sendInput, cardId),
@@ -185,8 +192,25 @@ async function startCommand() {
     },
   });
   const stop = daemon.start();
+  // Each folder's header reads, for the desktop board's badges (lib/worker-projects.ts).
+  const projects = createProjectPublisher({
+    folders: () => listProjectFolders(root),
+    read: (folder) => readProjectSnapshot(paths.repoPath(root, folder), store.listCards()),
+    put: (folder, snapshot) => reg.putProject(folder, snapshot),
+    idle: () => busyCards().length === 0,
+    log: console.log,
+  });
+  const stopProjects = projects.start();
+  const sweep = () => void results.sweep().catch((err: unknown) => console.log(`Weft Worker: sweeping results: ${(err as Error).message}`));
+  sweep();
+  const sweepTimer = setInterval(sweep, 60 * 60_000);
+  subscribe(() => projects.changed());
   console.log(`Weft Worker ${config.name} (${config.device}) is running. Work root ${root}.`);
-  const quit = () => void stop().finally(() => process.exit(0));
+  const quit = () => {
+    stopProjects();
+    clearInterval(sweepTimer);
+    void stop().finally(() => process.exit(0));
+  };
   restart = quit;
   process.on("SIGTERM", quit);
   process.on("SIGINT", quit);

@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
+import { createElement, type ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { OpenedFile } from "./client-files";
 
@@ -271,5 +272,35 @@ describe("useOpenFile — poll", () => {
     expect(filesApi.stat.mock.calls.length).toBe(callsBefore);
     Object.defineProperty(document, "hidden", { configurable: true, get: () => false });
     expect(result.current.text).toBe("hello");
+  });
+
+  it("reads and saves through the open card's source, and doesn't poll one that can't afford it (a worker's)", async () => {
+    vi.useFakeTimers();
+    const useOpenFile = await loadHook();
+    const { FilesSourceContext } = await import("./files-source");
+    const remote = {
+      read: vi.fn(() => Promise.resolve(file({ text: "on the worker" }))),
+      stat: vi.fn(),
+      head: vi.fn(),
+      list: vi.fn(),
+      write: vi.fn(() => Promise.resolve({ hash: "h9", mtime: 9 })),
+      live: false,
+    };
+    const wrapper = ({ children }: { children: ReactNode }) => createElement(FilesSourceContext.Provider, { value: remote }, children);
+    const { result } = renderHook(() => useOpenFile("w1", "lib/x.ts", true), { wrapper });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(result.current.text).toBe("on the worker");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
+    expect(remote.stat).not.toHaveBeenCalled();
+    expect(filesApi.read).not.toHaveBeenCalled();
+    act(() => result.current.setText("edited"));
+    await act(async () => {
+      await result.current.save();
+    });
+    expect(remote.write).toHaveBeenCalledWith("w1", "lib/x.ts", "edited", "h1");
   });
 });

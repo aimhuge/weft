@@ -2,7 +2,8 @@
 
 Status: **design** (2026-11-01, merged with "one engine, two transports" 2026-11-02). Phase H1 is in progress; H2 (the
 `host` command) is built ([below](#the-host-command-h2-as-built)), and so is H3, `hostFor` and one open card
-([below](#hostfor-and-one-open-card-h3-as-built)), and H3b, composer parity ([below](#composer-parity-h3b-as-built)), and H5, one host program ([below](#one-host-program-h5-as-built)). It follows on from [weft-worker.md](weft-worker.md#worker-projects-on-the-desktop-board),
+([below](#hostfor-and-one-open-card-h3-as-built)), and H3b, composer parity ([below](#composer-parity-h3b-as-built)), and H5, one host program ([below](#one-host-program-h5-as-built)), and H4, project reads and the editor
+([below](#project-reads-and-the-editor-h4-as-built)). It follows on from [weft-worker.md](weft-worker.md#worker-projects-on-the-desktop-board),
 where a Worker project shows on the desktop board but most of what a local project gets drops out.
 
 ## The problem
@@ -37,8 +38,8 @@ engine: the daemon runs the same `lib/runner.ts`.
 | "/" skills list | `/api/skills?cwd=` | `skills.list`, the worker's own list for the card's checkout (H3b) |
 | Plan limits meter | this Mac's limits log | the card's own reading, from the worker's CLI (H3b) |
 | Review panel, skills chip | `desktop: true` | none |
-| Show rail, editor | Board's open card | the show rail, in Board's own open card (H3); the editor waits for file verbs (H4) |
-| Backlog | Backlog column | none |
+| Show rail, editor | Board's open card | the show rail, in Board's own open card (H3); the editor and file links through `files.*` (H4) |
+| Backlog | Backlog column | the header's count from the worker's snapshot (H4); no Backlog column or planning |
 | Streaming | SSE | a 2.5 s poll |
 | weft.zip and the phone | | reply, answer, stop and new card, and since H2 any verb as a `host` command (`cloud-inbox-cards.ts`, the same `runVerb`); the phone still has its own copy of the command shapes |
 
@@ -305,6 +306,76 @@ Worker lib/worker-daemon.ts: key identity, Broadcast wake-up, 3 s / 30 s poll, 2
 - **The address.** `lib/worker-project.ts`'s `workerProjectPath` and `parseWorkerProject` read and write through
   `ProjectAddress`; the wire stays `worker://<id>/<folder>`.
 
+### Project reads and the editor (H4, as built)
+
+```
+worker: lib/worker-projects.ts ── every 5 min, 20 s after a change, never mid-turn ─▶ readProjectSnapshot (lib/project-snapshot.ts)
+          └─ worker_put_project(key, folder, snapshot) ─▶ cloud_worker_projects (worker_id, folder) ── RLS: workspace reads
+board:  HeaderBadges ─ hostFor(cwd).read(name) ─┬─ local: /api/quality, /api/scout, /api/pile, /api/sprint (lib/project-reads.ts)
+                                                └─ cloud: GET /api/worker-board?project= (15 s cache) ─▶ SnapshotAge "12m ago, m1mini offline"
+editor: OpenCard ─ FilesSourceContext = host.files ─┬─ local: filesApi (/api/cards/<id>/files)
+                                                    └─ cloud: workerFiles ─ askWorker(files.*) ─▶ result.value │ result.blob ─▶ GET ?blob=
+```
+
+- **Reads are snapshots.** `supabase/migrations/20261102141500_worker_projects.sql`: `cloud_worker_projects` (one row per
+  worker and folder, `snapshot jsonb` capped at 64 KB, `updated_at`), readable by the workspace's members (the owner is one),
+  written only through the key-checked `worker_put_project` (500 folders a worker at most). The snapshot is the same reads a
+  Mac's routes answer: quality, the scout's cached report (never a new run: a worker spends tokens on a scout only when a
+  card asks), the pile and the Backlog; the pile and Backlog counts come from `lib/project-summaries.ts`, which the
+  `/api/pile` and `/api/sprint` routes now call too, so the two hosts count the same way. The worker skips a folder whose
+  reads didn't change until 10 minutes have passed, so `updated_at` still says it's up; the board calls a snapshot stale
+  after 20 minutes, or when the worker is offline, and shows its age before the badges (`components/SnapshotAge.tsx`).
+- **`read` and `files` on `ProjectHost`**, and two features: `reads` and `files` are on for a worker. `projectActs` (a
+  re-scout, the commit walk-through, the sprint plan, whose prompts point at this Mac's store and server) stays off: those
+  say "isn't on a worker's projects yet". The streak and the sync ask stay this Mac's (`localPath`): your streak is yours.
+  Board's `localPath(workFolder)` became `projectFolders` (`lib/board-folders.ts`): the badges read any host's project, the
+  terminal and the account menu only this Mac's folders. "Improve code quality" on a worker project starts the card there.
+- **File verbs with results.** `files.list`, `files.read` (`at: "HEAD"` for the diff) and `files.write` in `lib/host-api/files.ts`,
+  through `lib/file-access.ts` (inside the card's folder, never any `.git` (nested ones too), a secret file or a binary,
+  reads capped at 2 MB, a save refused on a stale `baseHash`). `lib/file-handle.ts` closes the check-then-use race: a read
+  opens with `O_NOFOLLOW` and checks the handle it holds (its `/proc/self/fd` path on Linux, else the name's realpath with
+  the same device and inode) is still inside the folder; a save writes an `O_EXCL | O_NOFOLLOW` temp in the parent's
+  realpath and checks that realpath again just before the rename. Every remote read and save is a line in the host's
+  `<data>/remote-files.log` (when, verb, card, path). Their results don't fit H2's 4 KB `result`, so `lib/host-result.ts`
+  puts a small value in `result.value` and a larger one as JSON under `<org>/results/<sha>` in the blob bucket
+  (`workerResults` in `lib/worker-blobs.ts`, through the key-checked `/api/worker-blob` with `result: true`), `result.blob`
+  naming its sha; the board reads it with the account's session (`GET /api/worker-board?blob=`). Results live a day: the
+  worker asks the route to `sweep` its workspace's `results/` every hour, and the R2 mirror never copies them (its
+  pattern is `<org>/<sha>`). Why a blob and not a bigger column: every board and host polls `cloud_commands`, and it
+  carries Realtime pings, so the cap keeps it small; the bucket is already the workspace's member-readable place for a
+  worker's bytes. `lib/host/dispatch.ts` gives `CardRules` a `carry` (the worker's; a Mac has none, so its inbox answers
+  only small file results).
+- **Over the session line (H6).** The file verbs are host verbs, so the line's `host` channel runs them through the
+  same `cardKinds.host` (with the worker's `carry`) and answers the same `HostResult`, `value` or `blob`. A worker's host
+  reads its files through `lineFiles(workerId)` (`lib/line-host.ts` `askOnLine`: the line when it's up, the relay's
+  `askWorker` when it isn't or can't send; a call the line lost is refused, not resent), and `workerFilesVia` reads either
+  result alike, a blob through `GET /api/worker-board?blob=`.
+- **The editor through the host.** `lib/files-source.ts`: `OpenCard` provides `host.files`, and `useOpenFile`,
+  `useEditorColumn` and `QuickOpen` read it. A worker's (`lib/worker-files.ts`) has no live reload (`live: false`: a stat every
+  2 s would be a command each), caches the file index for a minute, and refuses a save over 150 KB before sending (the
+  command payload is capped at 200 KB). `workerTransport.listFiles` is `files.list`, so file names in a worker thread link
+  to the editor (a worker's absolute paths don't, since the board doesn't know its checkout's path).
+- **The policy for `files.write`.** It's `elevated: true` in `HOST_API`, and the local `PUT /api/cards/<id>/files` now checks
+  `elevated()` to match (the editor sends the launch token; a thread's curl can write files itself). From the network the
+  database can't tell the Mac's elevated route from weft.zip or the phone holding the same session (H2), so the worker
+  can't require "came through the Mac" until signed approvals (H7) or a Mac key (H10). What it enforces instead is what H2's
+  `remoteRefusal` enforces for every verb: nothing that widens the card. A save inside the card's folder adds nothing a
+  session holder can't already get by asking the card (a worker card runs `acceptEdits`, and answers are allowed from the
+  network). What would widen it is refused twice, by `@weft/client`'s `file-policy.ts`: `remoteRefusal` on the path the
+  row names, and the verb itself after the realpath (so a symlink can't point there), case-folded. A save may not go into
+  any agent's settings or Weft's own agent folders (`.claude`, `.codex`, `.goose`, `.puku-cli`, `.agents`, `.gemini`,
+  `.cursor`, `.weft`), git or hook managers (`.git`, `.githooks`, `.husky`, `lefthook*`, `.pre-commit-config.yaml`, and
+  any `package.json`, whose scripts run on install), editor tasks and dev containers (`.vscode`, `.idea`, `.zed`,
+  `.devcontainer`), `.mcp.json` or `.envrc`. Neither a read nor a save touches credentials anywhere in the folder:
+  `.ssh`, `.aws`, `.gnupg`, `.kube`, `.docker/config.json`, `.config/gh`, `.netrc`, `.npmrc`, `.pypirc`,
+  `.git-credentials`, `*.pem` and `id_*` keys (the index leaves them out too), on top of file-access's own secret files.
+  A Mac's inbox runs these verbs only where the web may approve. Snapshot roots are the folder's name, never a worker's
+  absolute path.
+- **Not yet.** Live reload of a worker's open file (events over the H6 line); the streak counting a worker's turns; the
+  commit walk-through, sprint plan and re-scout on a worker project; Realtime on `cloud_worker_projects` (the board polls on
+  turn ticks and focus); blob GC for results; the terminal and drawers (vault, dev servers) on a worker project; the
+  `@weft/client` `HOST_VERBS` list (H9a) must add `files.list`, `files.read` and `files.write` when it lands.
+
 ## Security
 
 - **`lib/guard.ts` stays the local gate.** `/api/host/*` is behind `guard()`, and verbs that grant power (answer,
@@ -491,8 +562,8 @@ Each ships on its own.
    `LocalHost`, `CloudHost`; worker tiles lose `readOnly`; the open card merges, so worker cards get the show rail, the
    pickers, the menus and ↑ edit. **H3b composer parity** (built 2026-11-02, [as built](#composer-parity-h3b-as-built)): the "/"
    list, Send later and the limits meter from the card's host, and ↑ edit, Fresh, Send later and "/" on weft.zip.
-4. **H4 project reads.** Snapshot rows (`worker_put_project`) for quality, pile, streak and Backlog; the editor through
-   file verbs with results.
+4. **H4 project reads** (built 2026-11-02, [as built](#project-reads-and-the-editor-h4-as-built)). Snapshot rows
+   (`worker_put_project`) for quality, the scout, the pile and Backlog; the editor through file verbs with results.
 5. **H5 one host program** (built 2026-11-02, [as built](#one-host-program-h5-as-built)). The inbox, heartbeat and
    publish merged across the Mac and the daemon; one card schema; the `(host, repo)` address. **H5a one publish path**
    ([Devices and records](#devices-and-records)), then the inbox, the beat and `ProjectAddress` in `lib/host/`. Leases
