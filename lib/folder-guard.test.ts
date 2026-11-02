@@ -60,7 +60,7 @@ describe("pathsOf", () => {
     expect(pathsOf("Bash", { command: 'cd "/Users/p/My Drive/app" && cat x' })).toEqual(["/Users/p/My Drive/app"]);
     expect(pathsOf("Bash", { command: "ls '~/My Drive/a b'" })).toEqual(["~/My Drive/a b"]);
     expect(pathsOf("Bash", { command: String.raw`ls ~/My\ Drive/app /tmp` })).toEqual(["~/My Drive/app", "/tmp"]);
-    expect(pathsOf("Bash", { command: 'echo "/a" "/b c"' })).toEqual(["/a", "/b c"]);
+    expect(pathsOf("Bash", { command: 'ls "/a" "/b c"' })).toEqual(["/a", "/b c"]);
   });
 });
 
