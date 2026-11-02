@@ -2,6 +2,8 @@ import { tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import { attempt, shell, text } from "./browser-tools";
 import { asText } from "./format";
+import { blankOnWorker } from "./worker-vault";
+import { onWorker } from "./worker-secret-run";
 
 // A key a thread needs that isn't in the 🔐 vault yet (docs/architecture/secrets.md). By default the thread
 // puts its name in as a blank (mcp__secrets__add_blank): the rail's 🔐 counts it and the user fills it in when
@@ -16,10 +18,12 @@ type Environment = (typeof ENVIRONMENTS)[number];
 const NAME = z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/, "Letters, digits and _, not starting with a digit");
 const PROJECT = z.string().optional().describe("Absolute path of the project whose vault to use; defaults to this thread's folder");
 
-// Puts a missing name in as a blank; false when Electron main can't be reached (only the desktop app has it).
-export async function addMissingBlank(folder: string, name: string, environment: Environment = "development"): Promise<boolean> {
+// Puts a missing name in as a blank; false when Electron main can't be reached (only the desktop app has it). On a Weft
+// Worker the blank goes into the vault on the owner's Mac (lib/worker-vault.ts), for the card that asked.
+export async function addMissingBlank(folder: string, name: string, environment: Environment = "development", cardId?: string): Promise<boolean> {
   try {
-    await shell("/secrets/ask-add", { folder, name, environment });
+    if (onWorker()) await blankOnWorker(cardId, folder, [name], environment);
+    else await shell("/secrets/ask-add", { folder, name, environment });
     return true;
   } catch {
     return false;
@@ -35,8 +39,12 @@ export function missingText(names: string[], environment: string, vault: string,
   return `${lack} ${many ? "They're blanks" : "It's a blank"} there now. If you're blocked on ${many ? "them" : "it"}, call mcp__secrets__ask_add for ${many ? "each" : names[0]} and end your turn: the user gets an input for it in this thread and tells you once it's in.`;
 }
 
+// ask_add on a Weft Worker: the blank goes in on the Mac, and the user fills it there (the thread's input is the Mac's).
+export const askOnWorkerText = (name: string, environment: string, vault: string) =>
+  `${name} (${environment}) is a blank in the ${vault} vault on the user's Mac now. This card runs on a Weft Worker, so ask the user to fill it in with 🔐 on their Mac, then end your turn; they'll tell you once it's in.`;
+
 /** mcp__secrets__ask_add. folder is the card's project, read when the tool runs. */
-export function askAddTool(folder: () => string) {
+export function askAddTool(folder: () => string, cardId: () => string | undefined) {
   return tool(
     "ask_add",
     "Ask the user for a key you're blocked on right now: its name goes in the 🔐 vault as a blank and this thread shows an input for it, where the user pastes the value; you never see it. End your turn after calling it; the user tells you once it's in. When you can carry on without the value, use add_blank instead. A name that already has a value keeps it (the answer says so); to replace a value you generated or got yourself, use set_value with replace: true.",
@@ -48,6 +56,11 @@ export function askAddTool(folder: () => string) {
     ({ name, environment, project }) =>
       attempt(async () => {
         const env = environment ?? "development";
+        if (onWorker()) {
+          const r = await blankOnWorker(cardId(), project ?? folder(), [name], env);
+          if (r.filled.includes(name)) return text(filledAskText(name, env, r.label || "this"), true);
+          return text(askOnWorkerText(name, env, r.label || "this"));
+        }
         const r = await shell("/secrets/ask-add", { folder: project ?? folder(), name, environment: env });
         if (r.filled) return text(filledAskText(name, env, asText(r.label, "this")), true);
         return text(`${name} (${environment ?? "development"}) is a blank in the 🔐 vault, and this thread shows the user an input for it. End your turn now; they'll tell you once it's in.`);
@@ -62,7 +75,7 @@ export function filledAskText(name: string, environment: string, vault: string):
 }
 
 /** mcp__secrets__add_blank: names into the vault with no value, nothing opens. folder is the card's project. */
-export function addBlankTool(folder: () => string) {
+export function addBlankTool(folder: () => string, cardId: () => string | undefined) {
   return tool(
     "add_blank",
     "Put secret names in the 🔐 vault as blanks (no value yet) for the user to fill in when they're ready: the default whenever the work needs a key that isn't in the vault. A name that already has a value keeps it. Nothing opens; you never see the values.",
@@ -75,6 +88,10 @@ export function addBlankTool(folder: () => string) {
     ({ names, hint, environment, project }) =>
       attempt(async () => {
         const env = environment ?? "development";
+        if (onWorker()) {
+          const r = await blankOnWorker(cardId(), project ?? folder(), names, env, hint);
+          return text(blankText(names, env, r.label || "this", r.filled));
+        }
         const r = await shell("/secrets/add-blank", { folder: project ?? folder(), names, environment: env, hint });
         return text(blankText(names, env, asText(r.label, "this"), Array.isArray(r.filled) ? r.filled.map(String) : []));
       }),

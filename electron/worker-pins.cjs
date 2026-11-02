@@ -62,6 +62,19 @@ function createWorkerPins({ dir, safeStorage, now = () => new Date() }) {
     },
 
     /**
+     * The name this Mac pinned a worker under, for main's own prompts; null when it hasn't pinned one (or the file won't
+     * open). @param {string} id
+     */
+    nameOf(id) {
+      try {
+        const name = read()[id]?.name;
+        return typeof name === "string" ? name : null;
+      } catch {
+        return null;
+      }
+    },
+
+    /**
      * Pins a worker's keys: after the user allowed its first ask (trust on first use), or at pairing, under that
      * Touch ID, with the Ed25519 key it signs asks with (electron/host-pairing.cjs).
      * @param {string} id @param {{ name: string, publicKey: string, signKey?: string }} keys
@@ -72,21 +85,16 @@ function createWorkerPins({ dir, safeStorage, now = () => new Date() }) {
       write({ ...pins, [id]: { publicKey, name, pinnedAt: now().toISOString(), ...(kept ? { signKey: kept } : {}) } });
     },
 
-    /**
-     * Re-pin (Settings → Devices, after Touch ID): drops a worker's box key, so its next allowed ask pins the one it has
-     * now. Its sign key stays: a paired worker's asks still need its signature, so a stolen `wwk_` key can't re-pin.
-     * @param {string} id
-     */
-    /** The name a worker was pinned under, for main's own prompts; null when it isn't pinned. @param {string} id */
-    nameOf(id) {
-      const pinned = read()[id];
-      return typeof pinned?.name === "string" ? pinned.name : null;
-    },
     /** The sign key pinned for a worker at pairing (H10), for its receipts; null when there's none. @param {string} id */
     signKeyOf(id) {
       const pinned = read()[id];
       return typeof pinned?.signKey === "string" ? pinned.signKey : null;
     },
+    /**
+     * Re-pin (Settings → Devices, after Touch ID): drops a worker's box key, so its next allowed ask pins the one it has
+     * now. Its sign key stays: a paired worker's asks still need its signature, so a stolen `wwk_` key can't re-pin.
+     * @param {string} id
+     */
     forget(id) {
       const pins = read();
       const pinned = pins[id];

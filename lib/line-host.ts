@@ -61,6 +61,12 @@ export function lineFiles(workerId: string) {
   return f;
 }
 
+// card.warm only where it's free: on a line that's up. Without one a cold start is fine, as on this Mac's own best effort.
+export function warmOnLine(workerId: string, cardId: string): void {
+  const line = lineFor(workerId);
+  if (line?.up()) line.call("card.warm", { id: cardId }).catch(() => {});
+}
+
 export function useLineLive(workerId: string, cardId: string, onUpdate: (update: PageUpdate) => void, onReconnect: () => void) {
   const direct = useLineRoute(workerId)?.kind === "direct";
   const update = useRef(onUpdate);

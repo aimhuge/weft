@@ -7,6 +7,7 @@ import { refusal } from "./secret-guard-why";
 import { bashVerdict } from "./secret-guard-bash";
 import { expandBraces, isSecretFile, isWorkerHome } from "./secret-guard-files";
 import { pastedElsewhere, pastedInto } from "./secret-guard-pasted";
+import { CLONE_REFUSAL, editsClone } from "./worker-clone-guard";
 
 // A file:// URL's path, or "" for any other URL.
 function filePath(url: string): string {
@@ -31,6 +32,8 @@ export function toolVerdict(toolName: string, input: unknown, dataDir = DATA_DIR
   if (FILE_TOOLS.has(toolName)) {
     const file = str("file_path") || str("notebook_path") || str("path");
     if (toolName === "Read") return readVerdict(file, dataDir, cardId);
+    // The worker's own clone is its daemon's code: readable, never changed by a thread (lib/worker-clone-guard.ts).
+    if (editsClone(file)) return CLONE_REFUSAL;
     return isSecretFile(file, dataDir) ? reason(file) : null;
   }
   switch (toolName) {

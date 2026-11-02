@@ -20,6 +20,7 @@ import { cardKinds, dispatcher, type CardRules } from "./host/dispatch";
 import { needsElevation, runVerb, type HostVerb } from "./host-api";
 import { defaultPermissionMode, syncFolders } from "./settings";
 import { getCard } from "./store";
+import { holdWorkerCard, sentByWorker } from "./worker-origin";
 import { pairingStatus } from "./sync-security";
 import type { WidenChange } from "./widen";
 import { widenProblem, type Verified } from "./widen-check";
@@ -116,6 +117,8 @@ export function syncFolderFor(name: string): string | null {
 // A new card from the web: its pasted files brought over first, its mode (named, or this Mac's default) held to the same
 // rule as a mode change (lib/cloud-new-card-mode.ts), and one asked for in Backlog made and left there.
 async function newCard(command: CloudCommandRow, receive: (text: string, payload: unknown) => Promise<string>): Promise<string> {
+  // A card a Weft Worker sent never starts itself here: Backlog, `default`, for the user to start (lib/worker-origin.ts).
+  if (sentByWorker(command.payload)) return made(createCardFromBody(holdWorkerCard(newCardBody(command))));
   const body = newCardBody(command);
   // An agent only with a signed approval for it, over the synced folder the check resolved (lib/create-widen.ts).
   const agent = await signedAgent(command, command.folder, macWiden);
@@ -125,8 +128,11 @@ async function newCard(command: CloudCommandRow, receive: (text: string, payload
     refusal: async (permissionMode) => (await macRules.elevated?.("card.update", { id: "", body: { permissionMode } })) ?? null,
   });
   if (typeof body.prompt === "string") body.prompt = await receive(body.prompt, command.payload);
-  const card = body.start === false ? createCardFromBody(body) : await startFeatureCard(body);
-  // The card and its first items are already in the outbox; send them now so the board sees it start.
+  return made(body.start === false ? createCardFromBody(body) : await startFeatureCard(body));
+}
+
+// The card and its first items are already in the outbox; send them now so the board sees it.
+function made(card: { id: string }): string {
   syncNow();
   return card.id;
 }
@@ -148,5 +154,5 @@ function macCheck(client: SupabaseClient, uid: string) {
 // The Mac's dispatch for one signed-in account. A file pasted on weft.zip comes down through the account's session.
 export function macDispatch(client: SupabaseClient, uid: string) {
   const receive = macReceive(client, uid);
-  return dispatcher({ new_card: (command) => newCard(command, receive), ...cardKinds({ ...macRules, receive }) }, UNKNOWN_KIND, macCheck(client, uid));
+  return dispatcher({ new_card: (command) => newCard(command, receive), ...cardKinds({ ...macRules, receive, fromOwner: (command) => command.created_by === uid }) }, UNKNOWN_KIND, macCheck(client, uid));
 }

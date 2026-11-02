@@ -112,10 +112,11 @@ export function useBoardMenus(deps: BoardMenuDeps) {
     return true;
   }
 
-  // "Run /<skill>" — sends a slash command to the card's CLI.
+  // "Run /<skill>" — sends a slash command to the card's CLI, on whichever host runs it (a message, card.message).
   async function runSkillAction(card: Card, action: CardAction) {
     if (!action.startsWith("skill:")) return false;
-    await api.send(card.id, `/${action.slice(6)}`);
+    const text = `/${action.slice(6)}`;
+    await hostOf(card).act("card.message", { id: card.id, text }, () => api.send(card.id, text));
     return true;
   }
 

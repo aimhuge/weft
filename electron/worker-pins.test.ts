@@ -27,6 +27,17 @@ describe("createWorkerPins", () => {
     expect(createWorkerPins({ dir: d, safeStorage: store }).lookup({ id: "w1", name: "m1mini", publicKey: KEY_A }).firstUse).toBe(false);
   });
 
+  it("gives the name it pinned, and null for an unpinned worker or a file that won't open", () => {
+    const d = dir();
+    const pins = createWorkerPins({ dir: d, safeStorage: store });
+    expect(pins.nameOf("w1")).toBeNull();
+    pins.pin("w1", { name: "m1mini", publicKey: KEY_A });
+    expect(pins.nameOf("w1")).toBe("m1mini");
+    expect(pins.nameOf("w2")).toBeNull();
+    fs.writeFileSync(path.join(d, "vault", "worker-pins.json"), "garbage");
+    expect(pins.nameOf("w1")).toBeNull();
+  });
+
   it("keeps a paired worker's sign key with its box key, through a Re-pin and the next pin", () => {
     const pins = createWorkerPins({ dir: dir(), safeStorage: store });
     pins.pin("w2", { name: "box", publicKey: KEY_A, signKey: "c2lnbg==" });

@@ -66,7 +66,9 @@ export function askMessage(cardId: string, boxKey: string, a: Pick<SecretAsk, "n
 export const newNonce = (bytes: (n: number) => Buffer) => bytes(32).toString("hex");
 
 const isObject = (v: unknown): v is Record<string, unknown> => Boolean(v) && typeof v === "object" && !Array.isArray(v);
-const isNames = (v: unknown): v is string[] => Array.isArray(v) && v.length > 0 && v.length <= 20 && v.every((n) => typeof n === "string" && NAME.test(n));
+// A run names up to 20; a dev server's env carries the vault's whole development set (lib/worker-dev-env.ts).
+const MAX_NAMES = 200;
+const isNames = (v: unknown): v is string[] => Array.isArray(v) && v.length > 0 && v.length <= MAX_NAMES && v.every((n) => typeof n === "string" && NAME.test(n));
 const isEnvironment = (v: unknown): v is string => ENVIRONMENTS.some((e) => e === v);
 
 // A secret_use as the worker reads it off the network, or null when it isn't one.

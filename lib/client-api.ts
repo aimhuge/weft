@@ -184,7 +184,7 @@ export const api = {
   list: () => call<{ cards: Card[]; home: string; roots: Record<string, string> }>("GET", "/api/cards"),
   // A thread in a worker project has no card here: the answer names the worker it went to (start.worker).
   // A new thread with an agent on a worker carries a Touch ID approval for it (lib/widen-signer.ts withCreateWiden).
-  create: async (input: NewCardInput) => call<{ card: Card; start?: { started: boolean; at?: number; worker?: string } }>("POST", "/api/cards", await withCreateWiden(input)),
+  create: async (input: NewCardInput) => call<{ card: Card; start?: { started: boolean; at?: number; worker?: string; cardId?: string } }>("POST", "/api/cards", await withCreateWiden(input)),
   move: (id: string, column: Column) => call<{ card: Card }>("PATCH", `/api/cards/${id}`, { column }),
   // Re-points a card at another folder (the list view's folder picker); the server refuses a busy card.
   setCwd: (id: string, cwd: string) => call<{ card: Card }>("PATCH", `/api/cards/${id}`, { cwd }),
@@ -392,7 +392,8 @@ export const api = {
   // The 🪝 drawer: each folder's webhooks, and a public relay URL for one (lib/webhooks.ts; signedIn: the relay needs a Weft account).
   webhooks: (folders: string[]) => call<{ hooks: Webhook[]; signedIn: boolean }>("GET", `/api/webhooks?${new URLSearchParams(folders.map((f) => ["folder", f]))}`),
   addWebhook: (input: WebhookInput) => call<{ hook: Webhook; existed: boolean }>("POST", "/api/webhooks", input),
-  updateWebhook: (id: string, patch: WebhookPatch) => call<{ hook: Webhook }>("PATCH", `/api/webhooks/${id}`, patch),
+  // A Weft Worker's webhook answers with no hook (the worker republishes its list) and maybe `queued`.
+  updateWebhook: (id: string, patch: WebhookPatch) => call<{ hook?: Webhook; queued?: true }>("PATCH", `/api/webhooks/${id}`, patch),
   removeWebhook: (id: string) => call<{ ok: true }>("DELETE", `/api/webhooks/${id}`),
   relayWebhook: (id: string) => call<{ hook: Webhook }>("POST", `/api/webhooks/${id}/relay`),
   unrelayWebhook: (id: string) => call<{ hook: Webhook }>("DELETE", `/api/webhooks/${id}/relay`),

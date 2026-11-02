@@ -128,6 +128,11 @@ describe("pushApp", () => {
     expect(db.writes.filter((w) => w.op === "insert").pop()!.row).toMatchObject({ kind: "file", manifest: null });
   });
 
+  it("never sends a worker card's page with a manifest, even with a weft-app.json beside it", async () => {
+    await pushApp(appAt("worker-0123456789abcdef", "W", "folder"));
+    expect(db.writes.find((w) => w.op === "insert")!.row).toMatchObject({ app_id: "worker-0123456789abcdef", kind: "file", manifest: null });
+  });
+
   it("skips a URL whose scheme is neither http(s) nor file", async () => {
     await pushApp({ id: "x", name: "X", url: "weft://x", addedAt: 0 });
     expect(db.writes).toEqual([]);
@@ -252,6 +257,18 @@ describe("pullApps", () => {
     await pullApps();
     expect(fs.readFileSync(path.join(DATA, "apps", "folder1", "weft-app.json"), "utf8")).toBe(JSON.stringify({ name: "📈 Growth", reads: {} }, null, 2));
     expect(inserted[0]!.app.url).toBe(pathToFileURL(path.join(DATA, "apps", "folder1", "index.html")).href);
+  });
+
+  it("writes no weft-app.json for a worker card's page, whatever its row says", async () => {
+    const cacheFile = path.join(DATA, "blob-cache", "y".repeat(64));
+    fs.mkdirSync(path.dirname(cacheFile), { recursive: true });
+    fs.writeFileSync(cacheFile, "<h1>page</h1>");
+    db.fetched = [{ ref: "o1/" + "y".repeat(64), file: cacheFile }];
+    db.sha = "y".repeat(64);
+    db.listRows = [{ app_id: "worker-0123456789abcdef", org_id: "o1", name: "W", url: "old", kind: "folder", page: "blob:sha256:" + "y".repeat(64), manifest: { name: "x" }, position: 0, deleted: false }];
+    await pullApps();
+    expect(fs.existsSync(path.join(DATA, "apps", "worker-0123456789abcdef", "index.html"))).toBe(true);
+    expect(fs.existsSync(path.join(DATA, "apps", "worker-0123456789abcdef", "weft-app.json"))).toBe(false);
   });
 
   it("skips a file/folder row when fetchBlob returns null or the page is missing", async () => {

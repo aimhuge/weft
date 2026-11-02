@@ -36,3 +36,4 @@ describe("createProjectRepos", () => {
     expect(await createProjectRepos({ dataDir: dataDir({ projects: [{ path: named }] }) })("weft")).toEqual(["github:aimhuge/weft"]);
   });
 });
+

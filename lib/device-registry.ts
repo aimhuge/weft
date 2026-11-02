@@ -26,6 +26,9 @@ export interface DeviceView {
   status: "online" | "busy" | "offline" | null;
   lastSeenAt: string | null;
   revokedAt: string | null;
+  // A worker's standing warning from its own row (cloud_workers.update_note): an update it's holding, or its browser
+  // running without its sandbox (lib/worker-chromium-sandbox.ts). Null for anything else.
+  note: string | null;
   // The Mac you're reading the list on.
   here: boolean;
 }
@@ -58,7 +61,7 @@ const COLUMNS = "id, kind, name, platform, owner_user, org_id, box_key, sign_key
 // Live first, then by kind, then by name.
 const ORDER: Record<DeviceKind, number> = { mac: 0, worker: 1, phone: 2, browser: 3 };
 
-export function deviceView(r: Row, here: string): DeviceView {
+export function deviceView(r: Row, here: string, note: string | null = null): DeviceView {
   const kind = (KINDS.includes(r.kind) ? r.kind : "mac") as DeviceKind;
   return {
     id: r.id,
@@ -75,6 +78,7 @@ export function deviceView(r: Row, here: string): DeviceView {
     status: r.status,
     lastSeenAt: r.last_seen_at,
     revokedAt: r.revoked_at,
+    note: kind === "worker" ? note : null,
     here: kind === "mac" && r.host === here,
   };
 }
@@ -96,7 +100,17 @@ export async function listDevices(client: SupabaseClient = accountClient(), here
   if (!me) return { signedIn: false, devices: [] };
   const { data, error } = await client.from("device_registry").select(COLUMNS).eq("owner_user", me);
   if (error) throw new Error(`Couldn't read your devices: ${error.message}`);
-  return { signedIn: true, devices: sortDevices(((data as Row[] | null) ?? []).map((r) => deviceView(r, here))) };
+  const rows = (data as Row[] | null) ?? [];
+  const notes = await workerNotes(client, rows.filter((r) => r.kind === "worker").map((r) => r.id));
+  return { signedIn: true, devices: sortDevices(rows.map((r) => deviceView(r, here, notes.get(r.id) ?? null))) };
+}
+
+// Each worker's note, read from its own row (the view doesn't carry it). Only a line under a name, so a failed read
+// leaves the notes off rather than the list.
+async function workerNotes(client: SupabaseClient, ids: string[]): Promise<Map<string, string>> {
+  if (!ids.length) return new Map();
+  const { data } = (await client.from("cloud_workers").select("id, update_note").in("id", ids)) as { data: { id: string; update_note: string | null }[] | null };
+  return new Map((data ?? []).flatMap((w) => (w.update_note ? [[w.id, w.update_note] as const] : [])));
 }
 
 // Revokes one of your devices, whatever its kind, and says which kind it was. A worker's key stops working at once;

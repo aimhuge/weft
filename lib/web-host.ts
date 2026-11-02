@@ -38,5 +38,7 @@ export function webHost(acts: Pick<CloudHostActs, "act">, thread: ThreadTranspor
     // Share… and Delete… are a worker card's on the desktop (a Mac builds the link, its store owns the delete); weft.zip
     // has neither yet, so its menu is the remote one without them, with the agent where a passkey can sign it.
     menu: (items) => remoteMenu(items.filter((item) => !("id" in item) || !NOT_ON_WEB.test(item.id)), { agent: passkey }),
+    // A browser tab holds no session line, so nothing is warmed ahead of a reply (a worker's warm is line-only).
+    warm: () => {},
   };
 }

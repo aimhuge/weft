@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { hostFor } from "@/lib/project-host";
 import { useCountdown } from "@/lib/use-countdown";
 import {
   badSecretName,
@@ -124,34 +125,46 @@ export function WebhookRow({ hook: h, expanded, highlight, signedIn, busy, now, 
   );
 }
 
+// The public URL, or the button that gets one. A worker's relay is made by a thread there (lib/relay-worker.ts), so
+// only its URL shows here.
+function RelayLine({ hook: h, relay, here, busy, actions }: { hook: Webhook; relay: ReturnType<typeof relayState>; here: boolean; busy: boolean; actions: RowActions }) {
+  if (!here) return <p className="text-faint">{h.url ? <code className="select-all text-ink">{h.url}</code> : "A thread on its worker gets it a public URL."}</p>;
+  if (relay === "url" && h.url) {
+    const url = h.url;
+    return (
+      <div className="flex items-center gap-1">
+        <code className="min-w-0 flex-1 select-all truncate rounded bg-sunken px-1.5 py-0.5 text-[10.5px] text-ink" title={url}>
+          {url}
+        </code>
+        <button onClick={() => actions.onCopy(url)} className="shrink-0 rounded bg-accent px-1.5 py-0.5 text-[10.5px] font-medium text-on-accent">
+          Copy
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div>
+      <button
+        onClick={actions.onRelay}
+        disabled={relay === "sign-in" || busy}
+        title="Forwards a provider's deliveries to your dev server, through the deployed Weft"
+        className="rounded bg-accent px-2 py-0.5 text-[11px] font-medium text-on-accent disabled:opacity-40"
+      >
+        Get a public URL
+      </button>
+      {relay === "sign-in" && <p className="mt-0.5 text-faint">Sign in to your Weft account to get one.</p>}
+    </div>
+  );
+}
+
 function WebhookDetail({ hook: h, signedIn, busy, now, actions }: { hook: Webhook; signedIn: boolean; busy: boolean; now: number; actions: RowActions }) {
   const { left, arm, disarm } = useCountdown(CONFIRM_WAIT_MS);
   const relay = relayState(h, signedIn);
+  const relayHere = hostFor(h.folder).can("relay");
   const link = "text-[11px] text-muted hover:text-ink disabled:opacity-40";
   return (
     <div onMouseLeave={disarm} className="mx-1.5 mb-1.5 mt-0.5 flex flex-col gap-1.5 border-l border-line pl-2 text-[11px] leading-snug text-muted">
-      {relay === "url" && h.url ? (
-        <div className="flex items-center gap-1">
-          <code className="min-w-0 flex-1 select-all truncate rounded bg-sunken px-1.5 py-0.5 text-[10.5px] text-ink" title={h.url}>
-            {h.url}
-          </code>
-          <button onClick={() => actions.onCopy(h.url ?? "")} className="shrink-0 rounded bg-accent px-1.5 py-0.5 text-[10.5px] font-medium text-on-accent">
-            Copy
-          </button>
-        </div>
-      ) : (
-        <div>
-          <button
-            onClick={actions.onRelay}
-            disabled={relay === "sign-in" || busy}
-            title="Forwards a provider's deliveries to your dev server, through the deployed Weft"
-            className="rounded bg-accent px-2 py-0.5 text-[11px] font-medium text-on-accent disabled:opacity-40"
-          >
-            Get a public URL
-          </button>
-          {relay === "sign-in" && <p className="mt-0.5 text-faint">Sign in to your Weft account to get one.</p>}
-        </div>
-      )}
+      <RelayLine hook={h} relay={relay} here={relayHere} busy={busy} actions={actions} />
       {h.hint && <p>{h.hint}</p>}
       {h.secret && (
         <p>
@@ -180,7 +193,7 @@ function WebhookDetail({ hook: h, signedIn, busy, now, actions }: { hook: Webhoo
         <button onClick={() => actions.onRegistered(!h.registered)} disabled={busy} className={link} title={h.registered ? "The provider no longer sends to it" : "You added it at the provider"}>
           {h.registered ? "Not registered" : "Mark registered"}
         </button>
-        {h.url && (
+        {h.url && relayHere && (
           <button onClick={actions.onUnrelay} disabled={busy} className={link} title="Take the public URL down">
             Stop relay
           </button>

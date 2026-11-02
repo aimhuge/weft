@@ -42,6 +42,21 @@ webhook declares `svix` explicitly. `providerFor` resolves it; a webhook with ne
 | `relay` | Gives it a public relay URL, to register at the provider (its dashboard in the pane, or a CLI). Needs the provider (`stripe`, `github`, `vercel`, `svix`) and the vault name of its signing secret: the secret is sealed into the relay row after one Touch ID. |
 | `mark_registered` | The thread registered it at the provider itself. |
 
+`add_blank` and `ask_add` say so when the signing secret couldn't go into the vault as a blank (no vault on a Weft
+Worker, the app closed), instead of dropping it silently.
+
+**On a Weft Worker** a webhook's target is the worker's own dev server, so the registry stays in the worker's store and
+`list`, `add_blank` and `mark_registered` work there. `lib/webhooks.ts` tells `onWebhooksWrite` listeners after every
+write; the worker republishes its webhooks with its crons (`lib/worker-lists.ts`, `cloud_worker_lists`, owner-only), and
+the Mac's `GET /api/webhooks` adds them for the folders asked (`worker://<id>/<name>`, ids `worker:<id>:<hook>`,
+`worker` set to its name), so 🪝 lists and counts them, and a worker project's 🪝 shows that worker's. Mark registered and
+Remove reach the worker as `webhook.update` and `webhook.delete` host verbs (`lib/worker-list-acts.ts`; a delete also
+takes its relay row down); a change from the Mac may name only `name`, `events`, `hint` and `registered`, never the
+target, provider or secret, and its relay comes from a thread there, so the drawer shows the URL without Get a public URL
+or Stop relay ([project-hosts.md](project-hosts.md#crons-and-webhooks-both-ways-as-built)). `relay`,
+`tunnel`, `close_tunnel` and `ask_add` don't work on a worker yet: `lib/worker-tools.ts` says why in the prompt and its
+gate answers a call with it ([project-hosts.md](project-hosts.md#board-tools-on-a-worker)).
+
 `WEBHOOKS_PROMPT` tells threads to record each webhook as soon as they know its route, use `relay` rather than a
 tunnel, register it themselves when they can and `ask_add` only when blocked.
 

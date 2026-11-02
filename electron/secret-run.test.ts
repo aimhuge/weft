@@ -235,6 +235,15 @@ describe("helpers", () => {
     expect(describeRun({ kind: "run", command: "x", cwd: "/", names: ["K"], environment: "development", label: "o/r", worker: "m1mini" }).detail).not.toContain("key:");
   });
 
+  it("describes a worker's dev server as one start, each restart asking again", () => {
+    const dev = describeRun({ kind: "dev", command: "pnpm dev", cwd: ".", names: ["K"], environment: "development", label: "o/r", thread: "Fix", worker: "m1mini" });
+    expect(dev.message).toBe("Start a dev server on the worker m1mini with o/r's development secrets?");
+    expect(dev.detail).toContain("sealed to that worker for this one start: a restart asks again");
+    expect(dev.detail).toContain("the project's code included");
+    expect(dev.detail).toContain("any process on m1mini can read a running server's env");
+    expect(dev.reason).toBe('start "pnpm dev" with K (o/r) for "Fix" on the worker m1mini');
+  });
+
   it("routes a worker's ask to main by its id, and says when main can't answer one", async () => {
     const workerAsk = vi.fn(() => Promise.resolve({ queued: true }));
     const routes = secretRunRoutes(() => ({ workerAsk }) as never);
@@ -243,6 +252,16 @@ describe("helpers", () => {
     expect(workerAsk).toHaveBeenLastCalledWith("");
     const old = secretRunRoutes(() => ({}) as never);
     expect(() => old["POST /secrets/worker-ask"]({ call: "call-1" })).toThrow("This Mac can't answer a worker's secrets yet.");
+  });
+
+  it("routes a worker card's vault call to main by its id too", async () => {
+    const workerVault = vi.fn(() => Promise.resolve({ label: "o/r", secrets: [] }));
+    const routes = secretRunRoutes(() => ({ workerVault }) as never);
+    expect(await routes["POST /secrets/worker-vault"]({ call: "call-2", tool: "ignored" })).toEqual({ label: "o/r", secrets: [] });
+    expect(workerVault).toHaveBeenCalledWith("call-2");
+    await routes["POST /secrets/worker-vault"]({});
+    expect(workerVault).toHaveBeenLastCalledWith("");
+    expect(() => secretRunRoutes(() => ({}) as never)["POST /secrets/worker-vault"]({ call: "c" })).toThrow("This Mac can't answer a worker's vault calls yet.");
   });
 
   it("asks with a dialog, then Touch ID where there is one", async () => {

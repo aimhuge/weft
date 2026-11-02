@@ -13,10 +13,11 @@ import { filterVaults, railBadge } from "@/lib/vault-view";
 import { useVercelDrift } from "@/lib/use-vercel-drift";
 import { driftBadge, shownDrift, vaultKey } from "@/lib/vercel-drift";
 import { useServices } from "@/lib/use-services";
-import { useCrons } from "@/lib/use-crons";
+import { useRailLists } from "@/lib/use-rail-lists";
 import { activeCount, cronsTitle } from "@/lib/crons-view";
 import { filterServices, liveCount, servicesTitle } from "@/lib/services-view";
-import { useWebhooks } from "@/lib/use-webhooks";
+import { githubFolders, railProjects } from "@/lib/rail-project";
+import { isWorkerProject } from "@/lib/worker-project";
 import { blankCount, failingCount, filterWebhooks, webhooksTitle } from "@/lib/webhooks-view";
 import { useVercel } from "@/lib/use-vercel";
 import { vercelTitle, type VercelStatus } from "@/lib/vercel-view";
@@ -106,7 +107,7 @@ export default function SideRail({
   // The page the board's pane shows, which lights its mini app below Services (components/AppsRail.tsx); unset outside the desktop app.
   paneUrl?: string;
 }) {
-  const { project, folders, cards, onOpenUrl, onOpenCard, onStartCard, notify } = ctx;
+  const { folders, cards, onOpenUrl, onOpenCard, onStartCard, notify } = ctx;
   const [pinned, setPinned] = useState(() => typeof window !== "undefined" && railPinned());
   // A card is being dragged somewhere on the board: ★ and 🏷 light up to show they take drops.
   const cardDrag = useRailCardDrag();
@@ -118,22 +119,25 @@ export default function SideRail({
   const router = useRouter();
   const isSuperAdmin = useSuperAdminGate();
   const vault = useVault(folders);
+  // A worker project's per-repo drawers read this Mac's checkout of its repo; Services and GitHub read the project (lib/rail-project.ts).
+  const vaults = vault.overview?.vaults ?? [];
+  const { repo: project, host } = railProjects(ctx.project, folders, vaults);
   // The vault ⇄ Vercel drift folds into 🔐's dot and title and ▲'s count (lib/vercel-drift.ts); no rows of its own.
-  const drift = driftBadge(shownDrift(useVercelDrift(folders, vaultKey(vault.overview?.vaults ?? [])), project));
-  const vaultBadge = { ...railBadge(filterVaults(vault.overview?.vaults ?? [], project)), vercel: drift.title };
-  const webhooks = useWebhooks(folders, open === "webhooks");
-  const shownHooks = filterWebhooks(webhooks.hooks, project);
+  const drift = driftBadge(shownDrift(useVercelDrift(folders, vaultKey(vaults)), project));
+  const vaultBadge = { ...railBadge(filterVaults(vaults, project)), vercel: drift.title };
+  // 🪝, and ⏰ under 🏷 (its crons counted while they'll run again); a worker project's show that worker's own (lib/use-rail-lists.ts).
+  const { webhooks, hookFolders, hookProject, crons } = useRailLists(isWorkerProject(host) ? host : null, folders, open === "webhooks");
+  const hooksFor = hookProject ?? host;
+  const shownHooks = filterWebhooks(webhooks.hooks, hooksFor);
   const vercel = useVercel(folders, open === "vercel");
   const supabase = useSupabase(folders, open === "supabase");
   const cloudflare = useCloudflare(folders, open === "cloudflare");
   const blastcp = useBlastcp(folders, open === "blastcp");
-  const github = useGithub(folders, open === "github");
+  const github = useGithub(githubFolders(folders, host), open === "github");
   const slack = useSlack(open === "slack");
   const services = useServices(open === "services");
-  const liveServices = liveCount(filterServices(services.services, project));
+  const liveServices = liveCount(filterServices(services.services, host));
   const starred = starredCount(cards);
-  // ⏰ under 🏷: the crons, counted while they'll run again (components/CronsDrawer.tsx).
-  const crons = useCrons();
 
   function pin(next: boolean) {
     setPinned(next);
@@ -177,15 +181,15 @@ export default function SideRail({
   const toolBodies: Record<Tool, React.ReactNode> = {
     crons: <CronsDrawer {...crons} cards={cards} onOpenCard={onOpenCard} notify={notify} />,
     vault: <VaultDrawer {...vault} project={project} notify={notify} />,
-    webhooks: <WebhooksDrawer {...webhooks} project={project} folders={folders} notify={notify} />,
+    webhooks: <WebhooksDrawer {...webhooks} project={hooksFor} folders={hookFolders} notify={notify} />,
     vercel: <VercelDrawer {...vercel} project={project} onOpenUrl={onOpenUrl} notify={notify} />,
     supabase: <SupabaseDrawer {...supabase} project={project} cards={cards} onOpenCard={onOpenCard} onStart={onStartCard} onOpenUrl={onOpenUrl} notify={notify} />,
     cloudflare: <CloudflareDrawer {...cloudflare} project={project} onOpenUrl={onOpenUrl} notify={notify} />,
     blastcp: <BlastcpDrawer {...blastcp} project={project} onOpenUrl={onOpenUrl} notify={notify} />,
-    github: <GithubDrawer {...github} project={project} onOpenUrl={onOpenUrl} onOpenCard={onOpenCard} notify={notify} />,
+    github: <GithubDrawer {...github} project={host} onOpenUrl={onOpenUrl} onOpenCard={onOpenCard} notify={notify} />,
     slack: <SlackDrawer {...slack} folders={folders} project={project} onOpenUrl={onOpenUrl} notify={notify} />,
     skills: <SkillsDrawer project={project} folders={folders} notify={notify} />,
-    services: <ServicesDrawer {...services} project={project} cards={cards} onOpenCard={onOpenCard} onOpenUrl={onOpenUrl} notify={notify} />,
+    services: <ServicesDrawer {...services} project={host} cards={cards} onOpenCard={onOpenCard} onOpenUrl={onOpenUrl} notify={notify} />,
   };
   const drawer = isTool(shown)
     ? drawerShell(TOOLS[shown], toolBodies[shown])
@@ -220,7 +224,7 @@ export default function SideRail({
           <RailIconButton icon={<SupabaseLogo />} label="Supabase" open={open === "supabase"} title={supabaseTitle(supabase.status, project)} count={pendingCount(supabase.status, project)} tone="bad" onClick={toggle("supabase")} />
           <RailIconButton icon={<CloudflareLogo />} label="Cloudflare" open={open === "cloudflare"} title={cloudflareTitle(cloudflare.status, project)} onClick={toggle("cloudflare")} />
           <RailIconButton icon={<BlastcpLogo />} label="BlastCP" open={open === "blastcp"} title={blastcpTitle(blastcp.status, project)} onClick={toggle("blastcp")} />
-          <RailIconButton icon={<GithubLogo />} label="GitHub" open={open === "github"} title={githubTitle(github.status, project)} onClick={toggle("github")} />
+          <RailIconButton icon={<GithubLogo />} label="GitHub" open={open === "github"} title={githubTitle(github.status, host)} onClick={toggle("github")} />
           <RailIconButton icon={<SlackLogo />} label="Slack" open={open === "slack"} title={slackTitle(slack.status, slack.settings)} onClick={toggle("slack")} />
           <RailIconButton icon="✦" label="Skills" open={open === "skills"} title="Skills: what threads in this project get" onClick={toggle("skills")} />
           <RailIconButton icon="🖥" label="Services" open={open === "services"} title={servicesTitle(liveServices)} count={liveServices} tone="ok" onClick={toggle("services")} />

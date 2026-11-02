@@ -8,6 +8,7 @@
 // Each handler's module loads on its first call, so a route pulls in only the code its own verbs run.
 import { isHostVerb } from "@weft/client";
 import { widens, type CardUpdateArgs } from "./calls";
+import type { CreateArgs } from "./card-create";
 import type { Handler, HostVerb } from "./types";
 
 export { NotFound, requireCard, type Handler, type HostVerb } from "./types";
@@ -22,12 +23,20 @@ function lazy<M, K extends keyof M>(load: () => Promise<M>, name: K): M[K] {
 }
 
 export const HOST_API = {
+  // A new thread, started or left in Backlog. Asking less than the default mode needs Weft's own window, as POST /api/cards.
+  "card.create": {
+    elevated: false,
+    elevatedFor: ({ permissionMode }: CreateArgs) => permissionMode !== undefined && permissionMode !== "default",
+    run: lazy(() => import("./card-create"), "createCardVerb"),
+  },
   "card.update": {
     elevated: false,
     // A mode change or a read grant widens what the thread may do, so only those need Weft's own window.
     elevatedFor: ({ body }: CardUpdateArgs) => widens(body),
     run: lazy(() => import("./card-update"), "updateCardVerb"),
   },
+  // Starts the card's CLI ahead of a reply; it changes nothing on the card.
+  "card.warm": { elevated: false, run: lazy(() => import("./card-warm"), "warmCardVerb") },
   "card.stop": { elevated: false, run: lazy(() => import("./card-stop"), "stopCard") },
   // Deleting your own card narrows what it can touch, so a plain guard() is enough, as the DELETE route always had.
   "card.delete": { elevated: false, run: lazy(() => import("./card-delete"), "deleteCardVerb") },
@@ -55,6 +64,15 @@ export const HOST_API = {
   // A card's dev server: a private address for it (a tunnel, after the owner's Touch ID on their Mac), or its end.
   "dev.open": { elevated: false, run: lazy(() => import("./dev-servers"), "devOpenVerb") },
   "dev.stop": { elevated: false, run: lazy(() => import("./dev-servers"), "devStopVerb") },
+  // The crons and webhooks this host keeps (the Mac's drawers reach a worker's). args.id is the item, not a card.
+  "cron.update": { elevated: false, run: lazy(() => import("./lists"), "cronUpdateVerb") },
+  "cron.delete": { elevated: false, run: lazy(() => import("./lists"), "cronDeleteVerb") },
+  "cron.run": { elevated: false, run: lazy(() => import("./lists"), "cronRunVerb") },
+  "webhook.update": { elevated: false, run: lazy(() => import("./lists"), "webhookUpdateVerb") },
+  "webhook.delete": { elevated: false, run: lazy(() => import("./lists"), "webhookDeleteVerb") },
+  // The same command again, and its last lines: neither widens what the card can touch.
+  "dev.restart": { elevated: false, run: lazy(() => import("./dev-servers"), "devRestartVerb") },
+  "dev.log": { elevated: false, run: lazy(() => import("./dev-servers"), "devLogVerb") },
 } satisfies Record<HostVerb, Handler>;
 
 type Table = typeof HOST_API;

@@ -32,6 +32,7 @@ const DEVICE = { id: "udid-1", name: "iPhone 17", platform: "ios", state: "boote
 const row = (over: Partial<DeviceCallRow> = {}): DeviceCallRow => ({
   id: "call-1",
   worker_id: "worker-1",
+  owner_user: "user-1",
   card_id: "card-1",
   tool: "tap",
   args: { element: "Login" },
@@ -308,6 +309,15 @@ describe("drainDeviceCalls", () => {
     expect(shell).toHaveBeenCalledWith("/secrets/worker-ask", { call: "call-1" });
     expect(requireGrant).not.toHaveBeenCalled();
     expect(calls.updates.at(-1)?.patch).toMatchObject({ status: "done", result: { queued: true, label: "aimhuge/weft" } });
+  });
+
+  it.each(["vault_list", "vault_blank", "vault_set", "vault_push", "dev_env"])("hands a worker card's %s to main by id, without holding up the drain", async (tool) => {
+    shell.mockResolvedValue({ label: "aimhuge/weft", secrets: [] });
+    const { client, calls } = fakeClient({ pending: [row({ tool, args: { names: ["A"] } })] });
+    await drainDeviceCalls(client, "user-1");
+    await vi.waitFor(() => expect(calls.updates.map((u) => u.patch.status)).toEqual(["claimed", "done"]));
+    expect(shell).toHaveBeenCalledWith("/secrets/worker-vault", { call: "call-1" });
+    expect(requireGrant).not.toHaveBeenCalled();
   });
 
   it("fails a secret ask main refused", async () => {

@@ -71,6 +71,9 @@ export interface LineScreen {
 export const screenChannel = (device: string, nonce: string) => `input:${device}:${nonce}`;
 // `input:<device>:<nonce>`: a device id (a simulator's UDID) and 8 to 32 hex digits, nothing else.
 const SCREEN_CHANNEL = /^input:([A-Za-z0-9-]{1,64}):[0-9a-f]{8,32}$/;
+// A worker card's own headless browser, live as a "device" (lib/worker-browser-screen.ts): its frames are JPEGs on the
+// input channel rather than a video track.
+export const isBrowserScreen = (device: string | undefined) => !!device && /^browser-[0-9a-f]{16}$/.test(device);
 // The device a well-formed input channel's label names, or null for any other label.
 export function deviceOfChannel(label: string): string | null {
   return SCREEN_CHANNEL.exec(label)?.[1] ?? null;

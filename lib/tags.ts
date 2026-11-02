@@ -1,3 +1,4 @@
+import { CONTROL_CHARS } from "./format";
 import type { Card } from "./types";
 
 // Card tags. They follow GitHub's label rules so a card's tags and its issue's labels are the same
@@ -21,9 +22,10 @@ export interface TagRow extends TagInfo {
   count: number;
 }
 
-// A tag as Weft stores it, or undefined when nothing is left: "  Bug  Fix " -> "bug fix", "#ui" -> "ui".
+// A tag as Weft stores it, with no control characters, or undefined when nothing is left: "  Bug  Fix " -> "bug fix", "#ui" -> "ui".
 export function normalizeTag(raw: string): string | undefined {
   const tag = raw
+    .replace(CONTROL_CHARS, "")
     .replace(/^[#\s]+/, "")
     .replace(/[,\n\r\t]+/g, " ")
     .replace(/\s+/g, " ")

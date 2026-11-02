@@ -6,6 +6,7 @@ import type { Cron } from "@/lib/cron-types";
 import { cronSummary, runTone, sortCrons, TONE_CLASS, TONE_LABEL } from "@/lib/crons-view";
 import type { CronsState } from "@/lib/use-crons";
 import { useNow } from "@/lib/use-now";
+import { hostFor } from "@/lib/project-host";
 import type { Card } from "@/lib/types";
 import CronEditor from "./CronEditor";
 import CronSwitch from "./CronSwitch";
@@ -43,6 +44,8 @@ function RunDots({ cron, cards, now, onOpen }: { cron: Cron; cards: readonly Car
 
 function CronItem({ cron, cards, now, onOpenCard, act, update, remove, run }: { cron: Cron; cards: readonly Card[]; now: number; onOpenCard: (card: Card) => void; act: (fn: () => Promise<unknown>) => void } & Pick<Props, "update" | "remove" | "run">) {
   const [editing, setEditing] = useState(false);
+  // A Weft Worker's cron changes there, as a host verb (lib/worker-list-acts.ts); a host without that only lists it.
+  const changes = hostFor(cron.cwd).can("lists");
   const source = cron.sourceId ? cards.find((c) => c.id === cron.sourceId) : undefined;
   const open = (id: string) => {
     const card = cards.find((c) => c.id === id);
@@ -58,19 +61,19 @@ function CronItem({ cron, cards, now, onOpenCard, act, update, remove, run }: { 
           <p className="text-[11.5px] text-muted">{cronSummary(cron, source?.title)}</p>
           <p className="text-[11.5px] text-muted">{nextLine(cron, now)}</p>
         </div>
-        <CronSwitch
+        {changes && <CronSwitch
           enabled={cron.enabled}
           label={cron.enabled ? `Pause ${cron.name}` : `Turn on ${cron.name}`}
           onToggle={() => act(() => update(cron.id, { enabled: !cron.enabled }))}
           className="mt-0.5"
-        />
+        />}
       </div>
       {cron.runs.length > 0 && <RunDots cron={cron} cards={cards} now={now} onOpen={open} />}
-      <div className="mt-1 flex gap-3">
+      {changes && <div className="mt-1 flex gap-3">
         <button type="button" className={ACTION} onClick={() => act(() => run(cron.id))}>Run now</button>
         <button type="button" className={ACTION} onClick={() => setEditing(!editing)}>{editing ? "Close" : "Edit"}</button>
         <button type="button" className="text-[11px] font-medium text-danger hover:underline" onClick={() => window.confirm(`Delete the cron “${cron.name}”? Its run cards stay on the board.`) && act(() => remove(cron.id))}>Delete</button>
-      </div>
+      </div>}
       {editing && (
         <CronEditor
           initial={formOf(cron)}

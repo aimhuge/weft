@@ -89,7 +89,12 @@ function setupPairing({ ipcMain, dataDir, accountClient, isBoard, confirm, safeS
     sodium ??= await ready();
     return signer.publicKey();
   };
-  require("./host-pairing-ipc.cjs").registerHostPairing(handle, { db, userId, macDevice, myDevice, confirm, macSignKey }, workerPins);
+  // And it signs a worker's re-pair to another Mac, after Touch ID (electron/worker-repair.cjs).
+  const macSign = async (message) => {
+    sodium ??= await ready();
+    return signer.sign(message);
+  };
+  require("./host-pairing-ipc.cjs").registerHostPairing(handle, { db, userId, macDevice, myDevice, confirm, macSignKey, macSign }, workerPins);
   // Signed widening for a remote host's card (electron/widen-sign.cjs), naming a worker by the name it was pinned under,
   // and the passkey endorsements for workers (electron/widen-endorse.cjs).
   require("./widen-sign.cjs").registerWidenSign(handle, { signer, macDevice, confirm, hostName: (id) => workerPins.nameOf(id) });

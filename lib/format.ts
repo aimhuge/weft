@@ -155,9 +155,13 @@ export const TITLE_WORDS = 6;
 const MAX_TITLE_CHARS = 80;
 const LEADING_EMOJI = /^\p{Extended_Pictographic}(?:️|‍\p{Extended_Pictographic})*/u;
 
-// A card title as given, trimmed and on one line, clipped only at MAX_TITLE_CHARS.
+// Control and bidi-override characters: invisible in a title or a tag, and a name off the network (card.create's
+// title and tags) could use them to garble a terminal log or read as another card.
+export const CONTROL_CHARS = /[\u0000-\u0008\u000e-\u001f\u007f-\u009f\u200e\u200f\u202a-\u202e\u2066-\u2069]/g;
+
+// A card title as given, trimmed and on one line with no control characters, clipped only at MAX_TITLE_CHARS.
 export function cleanTitle(input: string): string {
-  const line = input.trim().replace(/\s+/g, " ");
+  const line = input.replace(CONTROL_CHARS, "").trim().replace(/\s+/g, " ");
   return line.length > MAX_TITLE_CHARS ? `${line.slice(0, MAX_TITLE_CHARS - 1).trimEnd()}…` : line;
 }
 

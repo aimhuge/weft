@@ -17,7 +17,8 @@ async function call<T>(url: string, method = "GET", body?: unknown): Promise<T> 
 export const cronApi = {
   list: () => call<{ crons: Cron[] }>("/api/crons").then((d) => d.crons),
   create: (input: CronInput) => call<{ cron: Cron }>("/api/crons", "POST", input).then((d) => d.cron),
-  update: (id: string, patch: CronPatch) => call<{ cron: Cron }>(`/api/crons/${id}`, "PATCH", patch).then((d) => d.cron),
+  // A Weft Worker's cron answers with no cron (the worker republishes its list) and maybe `queued`.
+  update: (id: string, patch: CronPatch) => call<{ cron?: Cron; queued?: true }>(`/api/crons/${id}`, "PATCH", patch).then((d) => d.cron),
   remove: (id: string) => call<{ ok: true }>(`/api/crons/${id}`, "DELETE").then(() => undefined),
-  run: (id: string) => call<{ card: Card }>(`/api/crons/${id}/run`, "POST").then((d) => d.card),
+  run: (id: string) => call<{ card?: Card; cardId?: string; queued?: true }>(`/api/crons/${id}/run`, "POST").then((d) => d.card),
 };

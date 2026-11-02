@@ -99,7 +99,8 @@ export function createCron(input: CronInput, now = Date.now()): Cron {
   return saveCron({ ...cron, nextAt: nextFor(cron, now) });
 }
 
-export function updateCron(id: string, patch: CronPatch, now = Date.now()): Cron {
+// permissionMode is set only by a host narrowing a cron re-worded from the network (lib/host-api/lists.ts).
+export function updateCron(id: string, patch: CronPatch & Partial<Pick<Cron, "permissionMode">>, now = Date.now()): Cron {
   const cron = getCron(id);
   if (!cron) throw new Error("No such cron.");
   const next: Cron = { ...cron, ...patch, updatedAt: now };

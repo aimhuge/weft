@@ -17,10 +17,14 @@ const SECRET_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const REPO = /^[\w.-]+\/[\w.-]+$/;
 const PROVIDERS = new Set(["stripe", "github", "vercel", "svix"]);
 const HOUR_MS = 60 * 60 * 1000;
+// After a Touch ID that was declined, a worker's next ask waits this long, so a thread can't ask again and again.
+export const DENY_COOLDOWN_MS = 2 * 60_000;
 
 export interface ApprovalRow {
   id: string;
   worker_id: string;
+  // The account the call is for (the database's, from worker_mac_ask), which is the one signed in here.
+  owner_user: string;
   card_id: string;
   tool: string;
   args: unknown;
@@ -56,6 +60,40 @@ async function workerName(client: SupabaseClient, workerId: string): Promise<str
   return cleanWord(data?.name) || "your worker";
 }
 
+// Per worker, on this Mac: one Touch ID prompt at a time, and a wait after a no. Held in memory, so it needs no
+// migration; a restart of Weft clears it, which only lets one more prompt through.
+const busy = new Set<string>();
+const declinedUntil = new Map<string, number>();
+
+export function resetPromptLimits() {
+  busy.clear();
+  declinedUntil.clear();
+}
+
+async function limited<T extends { approved?: boolean; denied?: boolean }>(workerId: string, now: () => number, run: () => Promise<T>): Promise<T> {
+  const wait = (declinedUntil.get(workerId) ?? 0) - now();
+  if (wait > 0) throw new Error(`You declined this worker's last Touch ID prompt, so it can't ask again for ${Math.ceil(wait / 1000)} s.`);
+  if (busy.has(workerId)) throw new Error("This worker already has a Touch ID prompt open on this Mac.");
+  busy.add(workerId);
+  try {
+    const answer = await run();
+    if (answer.approved === false || answer.denied) declinedUntil.set(workerId, now() + DENY_COOLDOWN_MS);
+    return answer;
+  } finally {
+    busy.delete(workerId);
+  }
+}
+
+// A tunnel or relay is only for the account signed in here and a card it owns on a worker it owns: another member of
+// the workspace can't have their ask run on this Mac. (Their command never reaches the worker either: worker_pending
+// takes only the owner's, and OWNER_VERBS refuses dev.open from anyone else.)
+export async function requireOwn(client: SupabaseClient, row: ApprovalRow): Promise<void> {
+  const worker = (await client.from("cloud_workers").select("owner_user").eq("id", row.worker_id).maybeSingle()) as { data: { owner_user?: string } | null };
+  if (!row.owner_user || worker.data?.owner_user !== row.owner_user) throw new Error("That worker isn't yours.");
+  const card = (await client.from("cloud_cards").select("owner_user, owner_worker").eq("card_id", row.card_id).eq("owner_worker", row.worker_id).maybeSingle()) as { data: { owner_user?: string } | null };
+  if (card.data?.owner_user !== row.owner_user) throw new Error("That thread isn't one of yours on this worker.");
+}
+
 // Touch ID, then the row as the owner: made for this worker, or reused when it is already this worker's, and stamped
 // approved for this target until the hours run out. A row that's another host's (the Mac's own, another worker's) is refused.
 export async function approveTunnel(client: SupabaseClient, row: ApprovalRow, deps: ApprovalDeps = DEPS): Promise<{ approved: boolean; until?: number }> {
@@ -65,7 +103,8 @@ export async function approveTunnel(client: SupabaseClient, row: ApprovalRow, de
   const target = localOrigin(a.target).origin;
   const hours = Math.min(Math.max(Number(a.hours) || 4, 0.25), 24);
   const name = await workerName(client, row.worker_id);
-  const { approved } = (await deps.shell("/tunnels/approve", { folder: `${cleanWord(a.folder) || "a project"} on ${name}`, target, hours })) as { approved?: boolean };
+  // main names the worker by the name it pinned (electron/worker-label.cjs); this name is the row's, shown only if none is.
+  const { approved } = (await deps.shell("/tunnels/approve", { folder: cleanWord(a.folder) || "a project", target, hours, worker: row.worker_id, workerName: name })) as { approved?: boolean };
   if (!approved) return { approved: false };
   const { data, error } = (await client.from("tunnels").select("id, worker_id").eq("id", tunnel).maybeSingle()) as { data: { worker_id: string | null } | null; error: { message: string } | null };
   if (error) throw new Error(error.message);
@@ -110,7 +149,8 @@ const isSealed = (s: Sealed): s is Required<Pick<Sealed, "secret_ciphertext" | "
 
 export async function createWorkerRelay(client: SupabaseClient, row: ApprovalRow, deps: ApprovalDeps = DEPS): Promise<{ relayId?: string; url?: string; denied?: boolean; missing?: boolean }> {
   const { name, provider, secret, target, folder } = relayArgs(row, deps);
-  const sealed = (await deps.shell("/webhooks/relay-seal", { folder, name: secret, environment: "development", provider })) as Sealed;
+  const workerLabel = await workerName(client, row.worker_id);
+  const sealed = (await deps.shell("/webhooks/relay-seal", { folder, name: secret, environment: "development", provider, worker: row.worker_id, workerName: workerLabel })) as Sealed;
   if (sealed.denied) return { denied: true };
   if (sealed.missing || !isSealed(sealed)) return { missing: true };
   const open = (await client.from("tunnels").select("id").eq("worker_id", row.worker_id).eq("approved_target", target.origin).not("public_url", "is", null).limit(1)) as { data: { id: string }[] | null };
@@ -133,6 +173,8 @@ export async function createWorkerRelay(client: SupabaseClient, row: ApprovalRow
   return { relayId: data.id, url: relayUrl(data.id) };
 }
 
-export function runApproval(client: SupabaseClient, row: ApprovalRow, deps: ApprovalDeps = DEPS): Promise<unknown> {
-  return row.tool === TUNNEL_TOOL ? approveTunnel(client, row, deps) : createWorkerRelay(client, row, deps);
+export async function runApproval(client: SupabaseClient, row: ApprovalRow, deps: ApprovalDeps = DEPS): Promise<unknown> {
+  await requireOwn(client, row);
+  const run = (): Promise<{ approved?: boolean; denied?: boolean }> => (row.tool === TUNNEL_TOOL ? approveTunnel(client, row, deps) : createWorkerRelay(client, row, deps));
+  return limited(row.worker_id, deps.now, run);
 }

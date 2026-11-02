@@ -3,6 +3,7 @@ import { resolveFolder } from "@/lib/folders";
 import { fail, guard } from "@/lib/guard";
 import { relaySignedIn } from "@/lib/webhook-forward";
 import { addWebhook, listWebhooks } from "@/lib/webhooks";
+import { workerLists } from "@/lib/worker-lists-read";
 
 // The 🪝 drawer's webhooks (lib/webhooks.ts). GET ?folder=a&folder=b lists those projects' webhooks (all of them with no
 // folder) and says whether this Weft is signed in to get public relay URLs; POST { folder, name, target, ... } adds one.
@@ -14,7 +15,9 @@ export async function GET(req: Request) {
   try {
     const folders = new URL(req.url).searchParams.getAll("folder");
     const signedIn = await relaySignedIn().catch(() => false);
-    return Response.json({ hooks: listWebhooks(folders.length ? folders : undefined), signedIn });
+    // A Weft Worker's webhooks live on it and come from what it publishes, on its worker:// project paths.
+    const remote = (await workerLists()).webhooks.filter((h) => !folders.length || folders.includes(h.folder));
+    return Response.json({ hooks: [...listWebhooks(folders.length ? folders : undefined), ...remote], signedIn });
   } catch (err) {
     return fail(err);
   }

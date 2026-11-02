@@ -1,14 +1,15 @@
 // A card's right-click menu on a host other than this Mac (a Weft Worker, docs/architecture/project-hosts.md): the same
 // menu (lib/card-menu.ts), keeping only what a remote host's verbs back. Rename, Tags, Star, Archive and the column
-// moves are card.update; Stop is card.stop; the modes and Run on are card.update and card.switchBackend; New Thread in
-// This Folder starts one on that worker; Share… links its cloud rows (lib/card-share-worker.ts) and Delete… is
-// card.delete. What's left out reads or widens this Mac (its folder, a shell skill, the dev server, the vault). The agent
-// and skipping permission prompts widen the card, which the network may do only with a signed approval: kept when the
-// board can sign one (`signed`). The desktop signs both with Touch ID (lib/widen-signer.ts); a passkey on weft.zip signs
-// the agent, never skipping prompts (lib/widen-check.ts).
+// moves are card.update; Stop is card.stop; the modes (plan too, which a worker takes) and Run on are card.update and
+// card.switchBackend; Run /<skill> is just a message, "/<skill>" through card.message; New Thread in This Folder starts
+// one on that worker; Share… links its cloud rows (lib/card-share-worker.ts) and Delete… is card.delete. What's left out
+// reads or widens this Mac (its folder, the dev server, the vault). The agent and skipping permission prompts widen the
+// card, which the network may do only with a signed approval: kept when the board can sign one (`signed`). The desktop
+// signs both with Touch ID (lib/widen-signer.ts); a passkey on weft.zip signs the agent, never skipping prompts
+// (lib/widen-check.ts).
 import type { MenuItem } from "./card-menu";
 
-const REMOTE = /^(open|rename|start|move:.*|stop|mode:(default|acceptEdits|auto)|switch:.*|new-here|star|tags|share|archive|delete)$/;
+const REMOTE = /^(open|rename|start|move:.*|stop|skill:.+|mode:(default|acceptEdits|auto|plan)|switch:.*|new-here|star|tags|share|archive|delete)$/;
 export interface SignedMenu {
   agent?: boolean;
   skip?: boolean;

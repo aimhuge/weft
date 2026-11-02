@@ -10,16 +10,20 @@ const card = (over: Partial<Card> = {}) => ({ id: "c1", title: "Fix it", cwd: "w
 const ids = (items: MenuItem[]) => items.map((i) => ("id" in i ? i.id : "—"));
 
 describe("remoteMenu", () => {
-  it("keeps rename, the moves, the modes a remote host takes, Run on, the marks, Share…, archive and Delete…", () => {
+  it("keeps rename, the moves, the modes a remote host takes, Run on, the skills, the marks, Share…, archive and Delete…", () => {
     const kept = ids(remoteMenu(cardMenu(card({ review: { dev: { command: "pnpm dev" } } as never }), null, true)));
-    expect(kept).toEqual(expect.arrayContaining(["open", "rename", "move:done", "move:backlog", "mode:default", "mode:acceptEdits", "mode:auto", "new-here", "star", "tags", "share", "archive", "delete"]));
+    expect(kept).toEqual(expect.arrayContaining(["open", "rename", "move:done", "move:backlog", "mode:default", "mode:acceptEdits", "mode:auto", "new-here", "star", "tags", "share", "archive", "delete", "skill:weft:done", "skill:weft:commit"]));
     expect(kept.some((id) => id.startsWith("switch:"))).toBe(true);
   });
 
-  it("drops what reads or widens this Mac: skills, dev server, vault, agents, folder, skipping prompts", () => {
+  it("drops what reads or widens this Mac: dev server, vault, agents, folder, skipping prompts", () => {
     const kept = ids(remoteMenu(cardMenu(card({ review: { dev: { command: "pnpm dev" } } as never }), null, true)));
-    for (const gone of ["skill:weft:done", "dev:start", "vault:revoke", "mode:bypassPermissions", "reveal", "copy-path", "copy-resume"]) expect(kept).not.toContain(gone);
+    for (const gone of ["dev:start", "vault:revoke", "mode:bypassPermissions", "reveal", "copy-path", "copy-resume"]) expect(kept).not.toContain(gone);
     expect(kept.some((id) => id.startsWith("agent:"))).toBe(false);
+  });
+
+  it("keeps plan mode, which a worker takes, but never an empty skill", () => {
+    expect(ids(remoteMenu([{ id: "mode:plan", label: "Plan" }, { id: "skill:", label: "x" }]))).toEqual(["mode:plan"]);
   });
 
   it("keeps Stop on a live card and Start on a Backlog one", () => {
@@ -29,7 +33,7 @@ describe("remoteMenu", () => {
 
   it("never starts, ends or doubles a separator", () => {
     const sep = { type: "separator" } as const;
-    const out = remoteMenu([sep, { id: "skill:x", label: "x" }, sep, { id: "open", label: "Open" }, sep, sep, { id: "dev:start", label: "d" }, sep, { id: "star", label: "Star" }, sep, { id: "reveal", label: "R" }]);
+    const out = remoteMenu([sep, { id: "vault:grant", label: "x" }, sep, { id: "open", label: "Open" }, sep, sep, { id: "dev:start", label: "d" }, sep, { id: "star", label: "Star" }, sep, { id: "reveal", label: "R" }]);
     expect(ids(out)).toEqual(["open", "—", "star"]);
   });
 

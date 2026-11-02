@@ -81,7 +81,8 @@ export default function TerminalDrawer({
 
   const canSplit = panes.length < MAX_PANES;
 
-  // A shell: a thread driving the board (board_view) can't click or type here, xterm's own textarea included.
+  // data-human-only: the shell has none of a thread's guards, so board_view can't click or type in it
+  // (docs/architecture/board-view.md); electron/board-view.cjs refuses any xterm on top of the mark.
   return (
     <section data-human-only style={{ height }} className="relative flex shrink-0 flex-col border-t border-line-strong bg-[#16161a]">
       <div onPointerDown={startDrag} className="absolute -top-1 left-0 right-0 z-10 h-2 cursor-row-resize" aria-hidden="true" />
@@ -232,7 +233,7 @@ function TerminalPane({
 
   return (
     <div className={`group relative flex min-w-0 flex-1 flex-col ${divided ? "border-l border-white/10" : ""}`}>
-      <div ref={host} className="min-h-0 flex-1 px-2 py-1" />
+      <div ref={host} data-human-only className="min-h-0 flex-1 px-2 py-1" />
       <div className="absolute right-1.5 top-1 z-10 flex gap-0.5 text-zinc-400 opacity-0 transition-opacity group-hover:opacity-100">
         <button onClick={restart} title="Restart this shell" aria-label="Restart this shell" className="rounded bg-[#16161a] p-1 hover:bg-white/10 hover:text-zinc-100">
           <Icon name="reload" size={12} />

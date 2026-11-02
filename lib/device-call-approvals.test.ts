@@ -2,7 +2,7 @@
 // Touch ID, and what's written is written as the owner, for that worker only.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { approveTunnel, cleanWord, createWorkerRelay, runApproval, type ApprovalDeps, type ApprovalRow } from "./device-call-approvals";
+import { approveTunnel, cleanWord, createWorkerRelay, DENY_COOLDOWN_MS, resetPromptLimits, runApproval, type ApprovalDeps, type ApprovalRow } from "./device-call-approvals";
 
 vi.mock("./webhook-forward", () => ({ relayUrl: (id: string) => `https://weft.zip/api/hooks/${id}` }));
 
@@ -35,7 +35,7 @@ function fakeClient(answer: (op: Op) => Result) {
 }
 
 const TUNNEL = "11111111-1111-4111-8111-111111111111";
-const row = (tool: string, args: unknown): ApprovalRow => ({ id: "call-1", worker_id: "w1", card_id: "c1", tool, args });
+const row = (tool: string, args: unknown): ApprovalRow => ({ id: "call-1", worker_id: "w1", owner_user: "u1", card_id: "c1", tool, args });
 let shellCalls: { path: string; body: Record<string, unknown> }[];
 let shellAnswer: Record<string, unknown>;
 const deps: ApprovalDeps = {
@@ -48,6 +48,7 @@ const deps: ApprovalDeps = {
 };
 
 beforeEach(() => {
+  resetPromptLimits();
   shellCalls = [];
   shellAnswer = { approved: true };
 });
@@ -59,7 +60,7 @@ describe("approveTunnel", () => {
   it("asks Touch ID naming the worker, then makes the row for that worker and stamps the approval", async () => {
     const { client, ops } = fakeClient(named);
     expect(await approveTunnel(client, ok(), deps)).toEqual({ approved: true, until: 1_000 + 2 * 3_600_000 });
-    expect(shellCalls).toEqual([{ path: "/tunnels/approve", body: { folder: "weft on m1mini", target: "http://localhost:3000", hours: 2 } }]);
+    expect(shellCalls).toEqual([{ path: "/tunnels/approve", body: { folder: "weft", target: "http://localhost:3000", hours: 2, worker: "w1", workerName: "m1mini" } }]);
     expect(ops.filter((o) => o.op !== "select")).toEqual([
       { table: "tunnels", op: "insert", value: { id: TUNNEL, name: "m1mini localhost:3000", worker_id: "w1" } },
       { table: "tunnels", op: "update", value: { approved_target: "http://localhost:3000", approved_until: new Date(1_000 + 2 * 3_600_000).toISOString() } },
@@ -70,7 +71,7 @@ describe("approveTunnel", () => {
     const mine = fakeClient((op) => (op.table === "tunnels" && op.op === "select" ? { data: { worker_id: "w1" } } : {}));
     await approveTunnel(mine.client, ok({ hours: "lots" }), deps);
     expect(mine.ops.some((o) => o.op === "insert")).toBe(false);
-    expect(shellCalls[0]?.body).toMatchObject({ folder: "weft on your worker", hours: 4 });
+    expect(shellCalls[0]?.body).toMatchObject({ folder: "weft", workerName: "your worker", hours: 4 });
     const theirs = fakeClient((op) => (op.table === "tunnels" && op.op === "select" ? { data: { worker_id: null } } : {}));
     await expect(approveTunnel(theirs.client, ok(), deps)).rejects.toThrow("another host");
   });
@@ -79,7 +80,7 @@ describe("approveTunnel", () => {
     shellAnswer = {};
     const { client, ops } = fakeClient(named);
     expect(await approveTunnel(client, ok({ folder: "" }), deps)).toEqual({ approved: false });
-    expect(shellCalls[0]?.body.folder).toBe("a project on m1mini");
+    expect(shellCalls[0]?.body).toMatchObject({ folder: "a project", workerName: "m1mini" });
     expect(ops.map((o) => o.table)).toEqual(["cloud_workers"]);
   });
 
@@ -109,7 +110,7 @@ describe("createWorkerRelay", () => {
     shellAnswer = sealed;
     const { client, ops } = fakeClient((op) => (op.table === "tunnels" ? { data: [{ id: TUNNEL }] } : op.op === "insert" ? { data: { id: "r1" } } : {}));
     expect(await createWorkerRelay(client, row("relay_create", args), deps)).toEqual({ relayId: "r1", url: "https://weft.zip/api/hooks/r1" });
-    expect(shellCalls).toEqual([{ path: "/webhooks/relay-seal", body: { folder: "/Users/me/dev/weft", name: "STRIPE_WEBHOOK_SECRET", environment: "development", provider: "stripe" } }]);
+    expect(shellCalls).toEqual([{ path: "/webhooks/relay-seal", body: { folder: "/Users/me/dev/weft", name: "STRIPE_WEBHOOK_SECRET", environment: "development", provider: "stripe", worker: "w1", workerName: "your worker" } }]);
     expect(ops.find((o) => o.op === "insert")?.value).toEqual({
       name: "stripe",
       provider: "stripe",
@@ -136,7 +137,7 @@ describe("createWorkerRelay", () => {
     expect(await createWorkerRelay(client, row("relay_create", args), deps)).toEqual({ missing: true });
     shellAnswer = { secret_ciphertext: "c" };
     expect(await createWorkerRelay(client, row("relay_create", args), deps)).toEqual({ missing: true });
-    expect(ops).toEqual([]);
+    expect(ops.filter((o) => o.table !== "cloud_workers")).toEqual([]);
   });
 
   it("refuses what it can't check, and a repo this Mac has no clone of", async () => {
@@ -161,12 +162,67 @@ describe("createWorkerRelay", () => {
 });
 
 describe("runApproval", () => {
+  // The owner's worker and card, as the database has them.
+  const mine = (op: Op): Result => (op.table === "cloud_workers" ? { data: { owner_user: "u1", name: "m1mini" } } : op.table === "cloud_cards" ? { data: { owner_user: "u1" } } : {});
+  const tunnel = (over: Record<string, unknown> = {}) => row("tunnel_open", { tunnel: TUNNEL, target: "http://127.0.0.1:5173", ...over });
+
   it("sends each tool to its handler", async () => {
-    const { client } = fakeClient(() => ({}));
+    const { client } = fakeClient(mine);
     shellAnswer = {};
-    expect(await runApproval(client, row("tunnel_open", { tunnel: TUNNEL, target: "http://127.0.0.1:5173" }), deps)).toEqual({ approved: false });
+    expect(await runApproval(client, tunnel(), deps)).toEqual({ approved: false });
+    resetPromptLimits();
     shellAnswer = { denied: true };
     expect(await runApproval(client, row("relay_create", { provider: "github", secret: "S", repo: "aimhuge/weft", target: "http://localhost:3000/h" }), deps)).toEqual({ denied: true });
+  });
+
+  it("refuses a worker or a card that isn't the signed-in owner's, before any prompt", async () => {
+    const other = fakeClient((op) => (op.table === "cloud_workers" ? { data: { owner_user: "u2" } } : mine(op)));
+    await expect(runApproval(other.client, tunnel(), deps)).rejects.toThrow("That worker isn't yours.");
+    const card = fakeClient((op) => (op.table === "cloud_cards" ? { data: { owner_user: "u2" } } : mine(op)));
+    await expect(runApproval(card.client, tunnel(), deps)).rejects.toThrow("isn't one of yours");
+    const gone = fakeClient((op) => (op.table === "cloud_cards" ? { data: null } : mine(op)));
+    await expect(runApproval(gone.client, tunnel(), deps)).rejects.toThrow("isn't one of yours");
+    await expect(runApproval(fakeClient(mine).client, { ...tunnel(), owner_user: "" }, deps)).rejects.toThrow("isn't yours");
+    expect(shellCalls).toEqual([]);
+  });
+
+  it("holds one prompt per worker at a time", async () => {
+    const { client } = fakeClient(mine);
+    let release: (v: Record<string, unknown>) => void = () => undefined;
+    const slow: ApprovalDeps = { ...deps, shell: () => new Promise((r) => (release = r)) };
+    const first = runApproval(client, tunnel(), slow);
+    await vi.waitFor(() => expect(release).not.toBe(undefined));
+    await new Promise((r) => setTimeout(r, 0));
+    await expect(runApproval(client, row("relay_create", {}), deps)).rejects.toThrow("already has a Touch ID prompt open");
+    release({ approved: true });
+    await first;
+    await expect(runApproval(client, tunnel(), deps)).resolves.toMatchObject({ approved: true });
+  });
+
+  it("makes a worker wait after a no, then lets it ask again", async () => {
+    const { client } = fakeClient(mine);
+    let clock = 1_000;
+    const timed: ApprovalDeps = { ...deps, now: () => clock };
+    shellAnswer = { approved: false };
+    await runApproval(client, tunnel(), timed);
+    const before = shellCalls.length;
+    clock += 30_000;
+    await expect(runApproval(client, tunnel(), timed)).rejects.toThrow("declined this worker's last Touch ID prompt, so it can't ask again for 90 s");
+    expect(shellCalls).toHaveLength(before);
+    clock += DENY_COOLDOWN_MS;
+    shellAnswer = { approved: true };
+    await expect(runApproval(client, tunnel(), timed)).resolves.toMatchObject({ approved: true });
+  });
+
+  it("limits each worker apart, and a failed prompt frees the slot without a cooldown", async () => {
+    const { client } = fakeClient(mine);
+    shellAnswer = { approved: false };
+    await runApproval(client, tunnel(), deps);
+    shellAnswer = { approved: true };
+    await expect(runApproval(client, { ...tunnel(), worker_id: "w2" }, deps)).resolves.toMatchObject({ approved: true });
+    resetPromptLimits();
+    await expect(runApproval(client, tunnel({ target: "https://evil.example" }), deps)).rejects.toThrow("localhost");
+    await expect(runApproval(client, tunnel(), deps)).resolves.toMatchObject({ approved: true });
   });
 
   it("cleans a worker's word for a prompt", () => {

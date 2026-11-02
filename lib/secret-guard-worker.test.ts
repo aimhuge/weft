@@ -39,7 +39,7 @@ afterAll(() => {
 });
 
 describe("a worker's home", () => {
-  it.each(["worker.json", "worker.env", "seal-key.json", "github-credentials", "worker.log", "anything-new"])("refuses %s to every file tool", (name) => {
+  it.each(["worker.json", "worker.env", "seal-key.json", "github-credentials", "worker.log", "anything-new", "connectors.json", "connectors/bin/gh", "mac-keys.json", "sign-key.json"])("refuses %s to every file tool", (name) => {
     const file = path.join(wh, name);
     for (const tool of ["Read", "Edit", "Write"]) expect(verdict(tool, { file_path: file })).toContain("can't be read");
     expect(verdict("Read", { file_path: `~/.weft-worker/${name}` })).toContain("can't be read");
@@ -51,6 +51,8 @@ describe("a worker's home", () => {
 
   it.each([
     "cat ~/.weft-worker/worker.json",
+    "cat ~/.weft-worker/connectors.json",
+    "cat ~/.weft-worker/connectors/bin/gh",
     "cat $HOME/.weft-worker/worker.env",
     'cat "$HOME/.weft-worker/seal-key.json"',
     "cat ${HOME}/.weft-worker/github-credentials",
@@ -174,5 +176,15 @@ describe("listing a worker's home", () => {
     expect(bash("cat ~/.weft-worker/github-credentials")).toContain("holds this Weft Worker's keys");
     expect(bash("cat ~/.weft-worker/worker.log")).toContain("this Weft Worker's own folder");
     expect(bash("cat ~/.weft-worker/worker.log")).toContain("`ls` lists the folder itself");
+  });
+});
+
+describe("the worker's own clone of Weft", () => {
+  it("reads open, but refuses an Edit, Write or NotebookEdit, since the daemon and weft-worker run it", () => {
+    const file = path.join(wh, "weft", "plugin", "x.ts");
+    expect(verdict("Read", { file_path: file })).toBeNull();
+    for (const tool of ["Edit", "MultiEdit", "Write"]) expect(verdict(tool, { file_path: file })).toMatch(/the worker's own copy of Weft/);
+    expect(verdict("NotebookEdit", { notebook_path: path.join(wh, "weft", "n.ipynb") })).toMatch(/own copy of Weft/);
+    expect(verdict("Write", { file_path: path.join(cwd, "x.ts") })).toBeNull();
   });
 });

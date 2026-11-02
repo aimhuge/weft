@@ -18,7 +18,8 @@ import type { ToolResultSource } from "./use-tool-result";
 import { actOnWorker, askWorker, postWorkerAction } from "./worker-acts";
 import { workerFiles } from "./worker-files";
 import { startThreadPoll } from "./worker-poll";
-import { useShownItems } from "./worker-shown";
+import { useWorkerView } from "./worker-blob-view";
+import type { FindMatch } from "./thread-find";
 
 export { THREAD_POLL_MS } from "./worker-poll";
 
@@ -58,6 +59,16 @@ export function mergePage(prev: ThreadPage, page: ThreadPage): ThreadPage {
   return page.items.reduce((next, item, i) => applyThreadEvent(next, { index: page.start + i, item }), prev);
 }
 
+// ⌘F over the card's whole thread, the rows read and matched on this Mac's server (lib/worker-thread-reads.ts).
+export async function searchWorkerThread(cardId: string, query: string): Promise<FindMatch[] | null> {
+  try {
+    const res = await apiFetch(`/api/worker-board?${new URLSearchParams({ card: cardId, q: query }).toString()}`);
+    return res.ok ? ((await res.json()) as { matches: FindMatch[] }).matches : null;
+  } catch {
+    return null;
+  }
+}
+
 // Polls the open thread (lib/worker-poll.ts); poll false stops it while a session line pushes the items (lib/line-host.ts).
 export function useWorkerLive(cardId: string, onUpdate: (update: PageUpdate) => void, poll = true) {
   const update = useRef(onUpdate);
@@ -89,14 +100,19 @@ const signedVerbs = (act: typeof actOnWorker): Pick<ThreadTransport, "shell" | "
   grantFolder: (cardId, directory) => act("card.update", { id: cardId, body: { readScope: directory } }).then(() => {}),
 });
 
+// Where the board can't sign (weft.zip, or no Touch ID signer), a "!" says so in the box instead of reaching the agent.
+export const SHELL_ELSEWHERE = "A shell runs only on this Mac's cards.";
+
 // A worker's transport over a route: the relay's commands and poll (workerTransport), or a session line that falls
 // back to them (lib/line-host.ts).
 export function workerTransportVia(act: typeof actOnWorker, useLive: ThreadTransport["useLive"], files = workerFiles): ThreadTransport {
   return {
     loadPage,
+    searchThread: searchWorkerThread,
     useLive,
-    // The items as drawn are the show rail's too: the rail sits outside the thread view (lib/worker-shown.ts).
-    useView: useShownItems,
+    // Pictures drawn from their signed URLs (lib/worker-blob-view.ts); the items as they came are the show rail's too,
+    // since the rail sits outside the thread view (lib/worker-shown.ts).
+    useView: useWorkerView,
     // The tile and the menu stop a worker card with the same verb (lib/card-handlers-host.ts).
     stop: (cardId) => stopNow(cardId, () => act("card.stop", { id: cardId })),
     editLast: (cardId, text) => act("card.message.edit", { id: cardId, text }).then(() => {}),
@@ -114,7 +130,10 @@ export function workerTransportVia(act: typeof actOnWorker, useLive: ThreadTrans
     upload: (file, name, onProgress) => api.uploadAttachment(file, name, onProgress),
     // files.list (H4), so file names in the thread link to the editor.
     listFiles: (cardId) => files.list(cardId),
+    // A "!" and a folder grant run with a signed approval where the board can sign one (lib/widen-signer.ts); elsewhere
+    // remoteRefusal refuses card.shell from the network, so a "!" says so in the box instead of reaching the agent.
     ...(canSignWiden() ? signedVerbs(act) : {}),
+    shellRefusal: SHELL_ELSEWHERE,
     grantInAnswer: true,
     cardEdits: true,
     desktop: false,

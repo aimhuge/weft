@@ -1,3 +1,4 @@
+import os from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { guardedCli } from "../env";
@@ -15,7 +16,11 @@ import { openGuards } from "./turn";
 
 const PORT = "1000";
 // The card works in this repo: the git guard only protects a shared tree, never a scratch folder under /tmp.
-const cwd = process.cwd();
+// A checkout under a scratch dir (a /tmp worktree) would be exempt from that guard, so the card then works in a
+// stand-in project path outside every scratch dir; the guard decides on the path, not on what is there.
+const here = process.cwd();
+const inScratch = [os.tmpdir(), "/tmp", "/private/tmp"].some((d) => here === path.resolve(d) || here.startsWith(path.resolve(d) + path.sep));
+const cwd = inScratch ? path.join("/Users", "zzz-guard-parity", "repo") : here;
 const outside = path.join("/Users", "zzz-guard-parity", "notes.txt");
 
 const card: Card = {

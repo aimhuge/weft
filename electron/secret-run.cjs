@@ -13,6 +13,7 @@ const { decideAccess } = require("./vault-access.cjs");
 // How long a dev server's grant waits to be claimed.
 const GRANT_MS = 60_000;
 
+
 // thread is the asking card's title and why the thread's own reason, both shown so the user knows who asks and for what.
 // worker names the Weft Worker the command runs on, when it isn't this Mac (describeWorker).
 /** @param {{ kind: string, command: string, cwd: string, script?: string, names: string[], environment: string, label: string, thread?: string, why?: string, worker?: string, remote?: string, fingerprint?: string, firstUse?: boolean }} request */
@@ -30,11 +31,16 @@ function describe(request) {
 /** @param {Parameters<typeof describe>[0] & { worker: string }} request */
 function describeWorker({ kind, command, cwd, script, names, environment, label, thread, why, worker, remote, fingerprint, firstUse }) {
   const key = fingerprint ? `${worker}'s key: ${fingerprint}${firstUse ? " (first seen now: this Mac pins it)" : " (pinned)"}` : null;
-  const detail = [`Command: ${command}`, script ? `Runs:\n${script}` : null, `In: ${cwd} on the Weft Worker ${worker}, not this Mac`, remote ? `Repo: ${remote}` : null, `Secrets (${environment}) from ${label}: ${names.join(", ")}`, key, `The command and any code it runs on ${worker} get these values. They're sealed to that worker for this one run, and the thread's output shows ‹NAME› in their place.`, thread ? `Card: ${thread}` : null, why ? `The thread says why: ${why}` : null].filter(Boolean).join("\n\n");
+  const dev = kind === "dev";
+  // A dev server on a worker asks at every start and restart (electron/worker-dev-env.cjs), and the window says so.
+  const sealedFor = dev
+    ? `They're sealed to that worker for this one start: a restart asks again. Whatever the server runs, the project's code included, gets the values, and any process on ${worker} can read a running server's env. Its log shows ‹NAME› in their place.`
+    : "They're sealed to that worker for this one run, and the thread's output shows ‹NAME› in their place.";
+  const detail = [`Command: ${command}`, script ? `Runs:\n${script}` : null, `In: ${cwd} on the Weft Worker ${worker}, not this Mac`, remote ? `Repo: ${remote}` : null, `Secrets (${environment}) from ${label}: ${names.join(", ")}`, key, `The command and any code it runs on ${worker} get these values. ${sealedFor}`, thread ? `Card: ${thread}` : null, why ? `The thread says why: ${why}` : null].filter(Boolean).join("\n\n");
   return {
-    message: `A card on the worker ${worker} wants to run a command with secrets from ${label}.`,
+    message: dev ? `Start a dev server on the worker ${worker} with ${label}'s ${environment} secrets?` : `A card on the worker ${worker} wants to run a command with secrets from ${label}.`,
     detail,
-    reason: `run "${command}" with ${names.join(", ")} (${label})${thread ? ` for "${thread}"` : ""} on the worker ${worker}`,
+    reason: `${dev ? "start" : "run"} "${command}" with ${names.join(", ")} (${label})${thread ? ` for "${thread}"` : ""} on the worker ${worker}`,
     view: { kind, command, cwd, script, names, environment, label, thread, why, worker, remote, fingerprint, firstUse: Boolean(firstUse) },
   };
 }
@@ -175,7 +181,7 @@ function runApproval({ dialog, systemPreferences, window, askWindow = undefined 
 // server proves which card a request is for and main believes only that (electron/card-token.cjs).
 // A request that proves nothing has no card, so it runs for nobody.
 /**
- * @param {() => (ReturnType<typeof createSecretRun> & { workerAsk?: (call: string) => Promise<unknown> }) | undefined} get
+ * @param {() => (ReturnType<typeof createSecretRun> & { workerAsk?: (call: string) => Promise<unknown>, workerVault?: (call: string) => Promise<unknown> }) | undefined} get
  * @param {(body: Record<string, unknown>, route: string) => string} [cardFor]
  */
 function secretRunRoutes(get, cardFor = () => "") {
@@ -194,12 +200,25 @@ function secretRunRoutes(get, cardFor = () => "") {
       if (!r.workerAsk) throw new Error("This Mac can't answer a worker's secrets yet.");
       return r.workerAsk(String(body.call ?? ""));
     },
+    // A worker card's vault call (list, blanks, set_value, push_to_vercel, a dev server's env), by id only too
+    // (electron/worker-vault.cjs): main reads the tool and everything else off the row itself.
+    "POST /secrets/worker-vault": (body) => {
+      const r = runner();
+      if (!r.workerVault) throw new Error("This Mac can't answer a worker's vault calls yet.");
+      return r.workerVault(String(body.call ?? ""));
+    },
   };
 }
 
 // Wires it into Electron main with the vault, the approval dialog and the sealed rules file, and a Weft Worker's runs
 // (electron/worker-secret.cjs), which ask through the same window and read their requests with the account's session.
-function setupSecretRun({ vault, dataDir, window, accountClient = () => null }) {
+// What main keeps about worker vault asks across restarts (electron/worker-vault-guards.cjs).
+function vaultGuards(dataDir) {
+  const guards = require("./worker-vault-guards.cjs");
+  return { nonces: guards.createAskNonces({ dir: dataDir, safeStorage: () => require("./keychain-audit.cjs").keychainFor("worker ask nonces") }), cardOrigin: guards.createCardOrigins({ dataDir }) };
+}
+
+function setupSecretRun({ vault, dataDir, window, accountClient = () => null, vercelEnv = () => null }) {
   const { BrowserWindow, dialog, systemPreferences } = require("electron");
   const { audit, keychainFor } = require("./keychain-audit.cjs");
   const { askInWindow } = require("./approval-window.cjs");
@@ -216,9 +235,12 @@ function setupSecretRun({ vault, dataDir, window, accountClient = () => null }) 
     const sodium = require("libsodium-wrappers");
     return require("./desktop-signer.cjs").createDesktopSigner({ dir: dataDir, safeStorage: () => keychainFor("vault key"), sodium: () => sodium });
   };
-  const projectRepos = require("./worker-projects.cjs").createProjectRepos({ dataDir });
-  const worker = createWorkerSecrets({ vault, ask, describe, accountClient, pins, signer, projectRepos, audit });
-  return { ...createSecretRun({ vault, rules, spawn, audit, ask }), workerAsk: worker.answer };
+  const projects = require("./worker-projects.cjs");
+  const worker = createWorkerSecrets({ vault, ask, describe, accountClient, pins, signer, projectRepos: projects.createProjectRepos({ dataDir }), audit });
+  // A worker card's list, blanks, set_value, push_to_vercel and dev server env (electron/worker-vault.cjs).
+  const devEnv = require("./worker-dev-env.cjs").createWorkerDevEnv({ vault, ask, describe, pins, signer, audit });
+  const workerVault = require("./worker-vault.cjs").createWorkerVault({ vault, vercelEnv, accountClient, pins, signer, projectFolders: projects.createProjectFolders({ dataDir }), devEnv, ...vaultGuards(dataDir), audit });
+  return { ...createSecretRun({ vault, rules, spawn, audit, ask }), workerAsk: worker.answer, workerVault: workerVault.answer, devEnv };
 }
 
 module.exports = { setupSecretRun, createSecretRun, runApproval, secretRunRoutes, describe, baseEnv, REPLY_CHARS, KEEP_CHARS, GRANT_MS, KILL_GRACE_MS };

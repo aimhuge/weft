@@ -21,8 +21,13 @@ function ownCard(engine: Engine, cardId: string | undefined): Card {
 }
 
 // `widen` is the worker's signed-widening side (lib/worker-widen.ts): without it, every widening stays refused.
-export function workerRules(engine: Engine, widen?: WorkerWiden): CardRules {
+export function workerRules(engine: Engine, create?: CardRules["create"], lists?: CardRules["lists"], owner?: string, widen?: WorkerWiden): CardRules {
   return {
+    // The worker only claims its owner's commands (worker_pending and worker_claim check created_by); this is the same
+    // rule again at the verb, for the ones that reach the owner's Mac or the internet (OWNER_VERBS).
+    fromOwner: (command) => Boolean(owner) && command.created_by === owner,
+    ...(create ? { create } : {}),
+    ...(lists ? { lists } : {}),
     card: (cardId) => ownCard(engine, cardId),
     async verb(verb, args) {
       if (!widen) return engine.host(verb, args);
@@ -39,9 +44,11 @@ export function workerRules(engine: Engine, widen?: WorkerWiden): CardRules {
   };
 }
 
-export function createCardCommands(engine: Engine, widen?: WorkerWiden) {
+// `create` is the daemon's card.create (lib/worker-kinds.ts): a card in the row's checkout, published before the report.
+// `lists` runs cron.* and webhook.* on this worker's own crons and webhooks (lib/worker-kinds.ts). `widen` as workerRules'.
+export function createCardCommands(engine: Engine, create?: CardRules["create"], lists?: CardRules["lists"], owner?: string, widen?: WorkerWiden) {
   return {
-    ...cardKinds(workerRules(engine, widen)),
+    ...cardKinds(workerRules(engine, create, lists, owner, widen)),
     async mode(command: CloudCommandRow): Promise<string> {
       const body = modeBody(command);
       if (!body) throw new Error("That mode can't be set on a worker.");
