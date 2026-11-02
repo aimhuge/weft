@@ -50,6 +50,9 @@ vi.mock("@/lib/file-access", () => ({
   safePath: vi.fn(() => Promise.resolve({ abs: "/repo/a.ts", rel: "a.ts" })),
   writeFile: vi.fn(() => Promise.resolve({ result: { hash: "h2", mtime: 2 } })),
 }));
+vi.mock("@/lib/devserver", () => ({ stopDev: vi.fn() }));
+vi.mock("@/lib/devserver-list", () => ({ listDev: vi.fn(() => Promise.resolve([{ cardId: "c1", url: "http://localhost:3000/" }])) }));
+vi.mock("@/lib/tunnels", () => ({ openTunnel: vi.fn(() => Promise.resolve({ address: "https://weft.zip/t/t1" })) }));
 
 const runner = await import("@/lib/runner");
 const api = await import("./index");
@@ -85,6 +88,8 @@ const SAMPLES: Record<HostVerb, { args: unknown; reply: () => unknown }> = {
   "files.list": { args: { id: "c1" }, reply: () => ({ files: ["a.ts"] }) },
   "files.read": { args: { id: "c1", path: "a.ts" }, reply: () => ({ file: { path: "a.ts", exists: true, text: "x", hash: "h", mtime: 1, size: 1 } }) },
   "files.write": { args: { id: "c1", path: "a.ts", text: "y", baseHash: "h" }, reply: () => ({ result: { hash: "h2", mtime: 2 } }) },
+  "dev.open": { args: { id: "c1" }, reply: () => ({ address: "https://weft.zip/t/t1" }) },
+  "dev.stop": { args: { id: "c1" }, reply: () => ({ ok: true }) },
 };
 
 // The local route each verb is mounted on.
@@ -109,6 +114,8 @@ const ROUTES: Record<HostVerb, string> = {
   "files.list": "files/route.ts",
   "files.read": "files/route.ts",
   "files.write": "files/route.ts",
+  "dev.open": "dev/route.ts",
+  "dev.stop": "dev/route.ts",
 };
 
 const verbs = Object.keys(HOST_API) as HostVerb[];

@@ -282,6 +282,13 @@ denied). A file watcher notices hand edits and offers "Import changes", so editi
   - **`~/.weft/apps/` is open too (2026-10-29).** It holds the data mini apps (`apps/<slug>/index.html`
     and `weft-app.json`), and sealing the data dir had stopped threads building or editing one such as
     📈 Growth. App folders hold pages and manifests that name vault secrets by name only, never values.
+    `~/.weft/scout/`, the refactor scout's cache (findings about code), is open as well (2026-10-31).
+  - **An attachment opens to the card its user pasted it into (2026-10-31).** A thread couldn't Read the
+    screenshot its user had just pasted. A board thread's guard knows its card (`secretGuardMatcher(cardId)`
+    in `lib/guards/hooks.ts`), and `pastedInto` (`lib/secret-guard-pasted.ts`) lets a Read through when the
+    file sits straight in an attachments folder and a user message on that card names it. Only Read, one file
+    at a time: the folder can't be listed (it holds every card's uploads), another card's attachment stays
+    sealed, and a link in the folder is never followed. The scout and the skill reviewer have no card and get none.
     Every other folder and file in the data dir stays sealed: `vault/`, `threads/`, `attachments/`,
     `apps.json` (which pages are saved apps), `app-grants.json`, the tokens, and the control token. So does
     any path that climbs out of an open folder (`~/.weft/apps/../vault`, `~/.weft/show/../threads/x`: `..`
@@ -320,6 +327,20 @@ denied). A file watcher notices hand edits and offers "Import changes", so editi
   - **The CLI's own transcripts are secret.** `~/.claude` and `~/.claude.json` hold every secret value a
     thread ever saw, in plaintext, outside Weft's redaction path — so the secret guard turns them away
     (`inTranscriptDir`) and the folder guard no longer lists `~/.claude` as free to enter.
+    **Save its memory folders (2026-11-02):** the system prompt tells a thread to keep memory in
+    `~/.claude/projects/<project>/memory/`, and Write and an append to `MEMORY.md` were refused. `inMemoryDir` opens that
+    folder alone, after folding `..` and following links (the folder must really be a `projects/<p>/memory`, and the
+    file really in it), so `settings*.json`, hooks, skills and the `*.jsonl` transcripts beside it stay sealed: a thread
+    that could write those could grant itself permissions. The folder gate takes the card's own memory folder as its own.
+  - **Text isn't a path (2026-11-02).** `gh pr create --body "…~/.weft/vault/…"` was refused because the guard read
+    every word on the line. Words a command takes as text (`textWords`, `lib/shell-text.ts`) are skipped; a `$(…)`
+    inside them still runs, and is checked as the command it is. `--body-file`, `-F` and anything a shell or an
+    interpreter runs are still read as paths.
+  - **A refusal says what the place is** (`lib/secret-guard-why.ts`, 2026-11-02). Everything used to read "Weft keeps
+    secret values out of threads", so threads went looking for a secret in a memory file or a log. Now a `.env`, the
+    vault and the tokens still say that; `~/.claude` says it's the CLI's folder and that memory is open; an attachment
+    says it belongs to the card it was pasted into; the rest of the data dir and a worker's home say which of their
+    folders are open. A paste that never arrived says so (`pastedElsewhere`).
 - Paste guard in the Composer (`components/SecretPaste.tsx`): a paste that looks like a key (`lib/secret-detect.ts`)
   waits in a strip until you paste it anyway or drop it. A key that arrives any other way (typed, dictated,
   dropped in) shows the same strip as the message changes, with Remove it and Keep it.

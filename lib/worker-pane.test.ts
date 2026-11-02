@@ -5,6 +5,8 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vites
 
 const notePage = vi.hoisted(() => vi.fn());
 vi.mock("./card-page", () => ({ notePage }));
+const tunnelFor = vi.hoisted(() => vi.fn<(url: string) => { address: string } | undefined>(() => undefined));
+vi.mock("./tunnels", () => ({ tunnelFor }));
 const { onWorker, openOnWorker, ownPageCall, setPageUpload } = await import("./worker-pane");
 const { SHOW_DIR } = await import("./show-dir");
 
@@ -85,8 +87,18 @@ describe("openOnWorker", () => {
   });
 
   it("refuses a dev server and says why", async () => {
-    await expect(openOnWorker("c1", "http://localhost:3000")).rejects.toThrow(/dev server/);
+    await expect(openOnWorker("c1", "http://localhost:3000")).rejects.toThrow(/mcp__webhooks__tunnel/);
     expect(notePage).not.toHaveBeenCalled();
+  });
+
+  it("trades a dev server's URL for its tunnel's private address", async () => {
+    tunnelFor.mockReturnValue({ address: "https://weft.zip/t/t1" });
+    expect(await openOnWorker("c1", "http://localhost:3000")).toContain("private address https://weft.zip/t/t1.");
+    expect(notePage).toHaveBeenLastCalledWith("c1", "https://weft.zip/t/t1");
+    await openOnWorker("c1", "http://localhost:3000/a/b?x=1#h");
+    expect(notePage).toHaveBeenLastCalledWith("c1", "https://weft.zip/t/t1/a/b?x=1#h");
+    expect(tunnelFor).toHaveBeenCalledWith("http://localhost:3000/a/b?x=1#h");
+    tunnelFor.mockReturnValue(undefined);
   });
 
   it("refuses a relative or missing path", async () => {

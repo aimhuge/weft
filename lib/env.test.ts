@@ -154,7 +154,7 @@ describe("guardedCli", () => {
     expect(post[2]?.matcher).toBe("Bash");
     expect(opts.hooks?.PostToolUseFailure?.[0]).toBe(post[2]);
     const pre = opts.hooks?.PreToolUse ?? [];
-    expect(pre[0]).toBe(SECRET_GUARD_MATCHER);
+    expect(pre[0]).toMatchObject({ matcher: SECRET_GUARD_MATCHER.matcher });
     expect(pre[1]?.matcher).toBe("Bash");
     expect(pre[2]).toBe(GIT_GUARD_MATCHER);
     expect(pre[3]).toBe(CHECK_GUARD_MATCHER);

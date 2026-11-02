@@ -257,7 +257,9 @@ A deny beats an ask, so the prompt never shows and a grant buys nothing here.
 
 | Under `~/.weft-worker` | A thread |
 | --- | --- |
-| `worker.json`, `worker.env`, `seal-key.json`, `github-credentials`, `worker.log`, `rollback.sh`, `update-trial`, `update-bad`, anything new | refused |
+| the home itself, listed: `ls ~/.weft-worker`, `ls -la`, the LS tool (not `-R`, not a glob of it) | open: names only, so a thread can find the folders below (2026-11-02) |
+| `worker.json`, `worker.env`, `seal-key.json`, `github-credentials` | refused: the worker's key, its Claude token, its private seal key, its GitHub token |
+| `worker.log`, `update-bad`, `update-trial`, `rollback.sh`, anything new | refused: the log is the daemon's raw stdout and stderr with no redaction pass, so whatever any process printed (an SDK error echoing a request, a CLI's debug output) lands there; `update-bad` keeps the first line of git and pnpm errors, which can carry a credentialed remote URL; `rollback.sh` is a copy of `install/worker-rollback.sh`, readable in the clone |
 | `data/`, as on a Mac | refused, save `data/show` and `data/apps` |
 | `work/` (or `WEFT_WORKER_ROOT`) | open: it's where cards run |
 | `weft/`, the clone of Weft | open: a public repo, and `/weft:done` runs `commit.sh` from the plugin inside it |
@@ -518,7 +520,13 @@ edits or Auto, applied mid-turn. It's elevated, and the daemon holds it to the s
 blocks come back as a prompt on the board. The simulator tools are trusted (`lib/board-tools-trust.ts`) in every mode, like
 the browser's, since they only reach a sandboxed device. In Local Simulator mode that device is on your Mac and an iOS app isn't sandboxed from it, so the Touch ID grant stands in for the prompt ([Security](manual-qa.md#security)).
 
-**What a worker tunnel would need** (docs/architecture/tunnels.md runs on the desktop only):
+**Tunnels, the relay and dev servers on a worker** (built 2026-11-02, [tunnels.md#on-a-worker](tunnels.md#on-a-worker),
+migration `20261102190000_worker_tunnels.sql` not applied). Each point below is now built: approval is a `tunnel_open`
+device call the owner's Mac answers after Touch ID; writes are the key-checked `worker_tunnel_open` and
+`worker_tunnel_close`; `install/worker.sh` pins cloudflared; the daemon owns the gate (`lib/worker-reach.ts`);
+`mcp__devservers__*` ran on the worker already and now publish to the Services drawer; and the pane gets `/t/<id>` with
+Open ↗. The relay goes through the same Mac ([webhooks.md#on-a-worker](webhooks.md#on-a-worker)). The design as it was
+set out:
 
 1. **Approval.** Touch ID lives in Electron main. A worker needs a `tunnel` command only the owner's account can send, and
    a thread must not be able to send it itself, so it goes through an elevated board action like an `answer`, and refuses

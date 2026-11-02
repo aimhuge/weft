@@ -106,11 +106,11 @@ export function actOnWorker(verb: HostVerb, args: HostArgs): Promise<ActResult> 
 
 // A verb run for its answer (a read like skills.list): what the worker wrote to the row's `result`. Nothing to keep
 // drawn meanwhile, so one the worker hasn't run within ACT_WAIT isn't queued for later: it fails, and the caller asks
-// again next time.
-export async function askWorker(verb: HostVerb, args: HostArgs): Promise<unknown> {
+// again next time. `wait` is longer for a verb that waits on a person, like dev.open's Touch ID.
+export async function askWorker(verb: HostVerb, args: HostArgs, wait: typeof ACT_WAIT = ACT_WAIT): Promise<unknown> {
   const { commandId } = await postWorkerAction({ action: "host", cardId: args.id, verb, args });
   if (!commandId) throw new Error("Your worker didn't take that.");
-  const done = await waitForCommand(() => commandStatus(commandId), ACT_WAIT);
+  const done = await waitForCommand(() => commandStatus(commandId), wait);
   if (done.status === "done") return done.result;
   outcome(done);
   throw new Error("Your worker didn't answer. It may be offline.");

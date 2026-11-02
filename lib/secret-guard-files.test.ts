@@ -55,6 +55,21 @@ describe("isSecretFile", () => {
     expect(isSecretFile("/Users/me/.weft/apps", DATA)).toBe(false);
   });
 
+  // `scout/` is the refactor scout's cache: findings about code, which /weft:done reads and writes (2026-10-31).
+  it("lets a thread read the refactor scout's cache", () => {
+    expect(isSecretFile("/Users/me/.weft/scout", DATA)).toBe(false);
+    expect(isSecretFile("/Users/me/.weft/scout/0123456789abcdef.json", DATA)).toBe(false);
+    expect(isSecretFile("~/.weft/scout", DATA)).toBe(false);
+    expect(isSecretFile("/Users/me/.weft/scouts/x.json", DATA)).toBe(true);
+    expect(isSecretFile("/Users/me/.weft/scout/../vault/acme.json", DATA)).toBe(true);
+  });
+
+  // Attachments open one file at a time to the card that pasted them (lib/secret-guard-pasted.ts), never as a folder.
+  it("keeps the attachments folder sealed by path", () => {
+    expect(isSecretFile("/Users/me/.weft/attachments", DATA)).toBe(true);
+    expect(isSecretFile("/Users/me/.weft/attachments/pasted-image-ba4d04ab.webp", DATA)).toBe(true);
+  });
+
   // Opening `apps/` opens that folder alone: the app lists and grants beside it, and any path that
   // climbs out of it, stay sealed.
   it.each([
