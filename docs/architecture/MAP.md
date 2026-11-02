@@ -183,7 +183,8 @@ When a new doc lands in this folder, add it here on the same change.
   pasted into the card opens to Read through `lib/secret-guard-pasted.ts`), the CLI's own `~/.claude` transcripts (save a
   project's `memory/` folder, `inMemoryDir`), a worker's home save a bare listing of it (`isWorkerHome`); words a command takes as
   text, a PR body or a commit message, aren't paths (`lib/shell-text.ts`), and `lib/secret-guard-why.ts` words each refusal for what was refused —
-  `lib/secret-guard-bash.ts` for the shell, and `lib/secret-guard-tool.ts` for the file tools (Read, Edit, Write, Glob,
+  `lib/secret-guard-bash.ts` for the shell (with `lib/secret-guard-credentials.ts`: no `gh auth token`, `gog auth tokens export`,
+  `git credential fill` or the CLIs' token files), and `lib/secret-guard-tool.ts` for the file tools (Read, Edit, Write, Glob,
   Grep and LS — a thread that may not read a .env may not write, glob or list one either); `lib/shell-parse.ts` is the
   parser behind them, with `lib/shell-quoting.ts` spelling a word (a `$(…)` substitution's path-like words, ANSI-C
   quoting), so `cat $(echo .env)` is the same read as `cat .env`),
