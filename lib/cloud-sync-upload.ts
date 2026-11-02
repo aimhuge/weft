@@ -3,10 +3,10 @@
 // outbox) as it lands, so a big backlog makes progress and one bad batch can't hold the rest back.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { replaceOutboxHead } from "./cloud-outbox";
-import { cardRows } from "./cloud-sync-cards";
+import { cardRows, macRowHost } from "./cloud-sync-cards";
 import { check, isRowError, upsert } from "./cloud-sync-send";
-import { redactCardRow, redactItemRow, redactOutputRow } from "./cloud-sync-redact";
-import { scrub, splitToolResult } from "./cloud-sync-rows";
+import { lastPerKey, projectItem, publishes } from "./card-rows";
+import { scrub } from "./cloud-sync-rows";
 import { sealerFor, type Sealer } from "./sync-seal-upload";
 import type { BlobStore, CloudThreadItemRow, CloudToolOutputRow, OutboxEntry } from "./cloud-sync-types";
 import { getCard, getThread } from "./store";
@@ -43,7 +43,7 @@ export async function uploadPending(
 ): Promise<Skipped | null> {
   const seal = await (ctx.sealer ?? sealerFor)(orgId);
   const sealed = seal ? { ...ctx, seal } : ctx;
-  const cards = scrub((await cardRows(ctx.blobs, orgId, pending, ctx.now())).map(redactCardRow)).map((row) => seal?.card(row) ?? row);
+  const cards = (await cardRows(ctx.blobs, orgId, pending, ctx.now())).map((row) => seal?.card(row) ?? row);
   for (let i = 0; i < cards.length; i += ITEM_CHUNK) await putCards(client, cards.slice(i, i + ITEM_CHUNK));
   for (const entry of pending) {
     // The row keeps the card json it last uploaded; a card that never synced matches no row.
@@ -99,28 +99,24 @@ async function shipItems(ctx: ShipCtx, client: SupabaseClient, orgId: string, it
   return count ? { count, message } : null;
 }
 
-// Tool outputs first, then the items that point at them, each in one upsert. Returns the items shipped.
-async function putItems(ctx: ShipCtx, client: SupabaseClient, orgId: string, entries: OutboxEntry[]): Promise<number> {
+// Tool outputs first, then the items that point at them, each in one upsert. Returns the items shipped. Each row is the
+// item's projection (lib/card-rows.ts: redacted and scrubbed), then sealed: the server never sees what redaction would
+// have hidden either way.
+async function putItems(ctx: ShipCtx, client: SupabaseClient, orgId: string, entries: ItemEntry[]): Promise<number> {
+  const host = macRowHost(orgId, ctx.blobs);
   const items: CloudThreadItemRow[] = [];
   const outputs: CloudToolOutputRow[] = [];
   for (const entry of entries) {
-    if (entry.op !== "item" || !getCard(entry.cardId)) continue;
+    const card = getCard(entry.cardId);
+    if (!card || !publishes(card, host)) continue;
     const live = getThread(entry.cardId)[entry.seq];
     if (!live) continue;
-    const { item, output } = splitToolResult(await ctx.blobs.rewriteItem(live, orgId));
-    items.push({ org_id: orgId, card_id: entry.cardId, seq: entry.seq, kind: item.kind, item, at: new Date(live.at).toISOString() });
+    const { item, output } = await projectItem(entry.seq, live, host);
+    items.push({ org_id: orgId, card_id: entry.cardId, ...item });
     if (output) outputs.push({ org_id: orgId, card_id: entry.cardId, ...output });
   }
-  // Redact and scrub the plain row, then seal it: the server never sees what redaction would have hidden either way.
   const seal = ctx.seal;
-  if (outputs.length) await upsert(client, "cloud_tool_outputs", scrub(lastPerKey(outputs, (o) => `${o.card_id}/${o.tool_id}`).map(redactOutputRow)).map((r) => seal?.tool(r) ?? r));
-  if (items.length) await upsert(client, "cloud_thread_items", scrub(lastPerKey(items, (i) => `${i.card_id}/${i.seq}`).map(redactItemRow)).map((r) => seal?.item(r) ?? r));
+  if (outputs.length) await upsert(client, "cloud_tool_outputs", lastPerKey(outputs, (o) => `${o.card_id}/${o.tool_id}`).map((r) => seal?.tool(r) ?? r));
+  if (items.length) await upsert(client, "cloud_thread_items", lastPerKey(items, (i) => `${i.card_id}/${i.seq}`).map((r) => seal?.item(r) ?? r));
   return items.length;
-}
-
-// One row per primary key in a request: Postgres refuses an upsert that names a row twice ("ON CONFLICT DO UPDATE
-// command cannot affect row a second time"). Codex reuses tool ids like "item_1" from turn to turn, so a chunk can
-// hold two outputs for one key; the later one wins, as it would across requests.
-function lastPerKey<T>(rows: T[], key: (row: T) => string): T[] {
-  return [...new Map(rows.map((row) => [key(row), row])).values()];
 }

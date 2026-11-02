@@ -1,0 +1,2302 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`golden rows > a Mac's flush hands the sealer the finished rows 1`] = `
+[
+  [
+    "card",
+    {
+      "card": {
+        "backend": "claude",
+        "column": "review",
+        "createdAt": 1,
+        "cwd": "/home/me/dev/app",
+        "id": "plain",
+        "permissionMode": "default",
+        "prompt": "do it",
+        "title": "plain",
+        "updatedAt": 2,
+      },
+      "card_id": "plain",
+      "deleted": false,
+      "folder": "/home/me/dev/app",
+      "org_id": "org-1",
+      "owner_device": "mac-device",
+      "page": null,
+      "page_thumb": null,
+      "pages": 0,
+      "updated_at": "2026-11-01T10:01:40.000Z",
+    },
+  ],
+  [
+    "card",
+    {
+      "card": {
+        "backend": "claude",
+        "column": "review",
+        "createdAt": 1,
+        "cwd": "/home/me/dev/app",
+        "id": "secrets",
+        "pending": {
+          "input": {
+            "command": "curl -H "Authorization: Bearer ‹hidden: a GitHub token›"",
+          },
+        },
+        "permissionMode": "default",
+        "prompt": "token=‹hidden: a GitHub token›",
+        "title": "deploy with ‹hidden: a GitHub token›",
+        "updatedAt": 2,
+      },
+      "card_id": "secrets",
+      "deleted": false,
+      "folder": "/home/me/dev/app",
+      "org_id": "org-1",
+      "owner_device": "mac-device",
+      "page": null,
+      "page_thumb": null,
+      "pages": 0,
+      "updated_at": "2026-11-01T10:01:40.000Z",
+    },
+  ],
+  [
+    "card",
+    {
+      "card": {
+        "backend": "claude",
+        "column": "review",
+        "createdAt": 1,
+        "cwd": "/home/me/dev/app",
+        "id": "hostile",
+        "permissionMode": "default",
+        "prompt": "do it",
+        "title": "badtitle � here",
+        "updatedAt": 2,
+      },
+      "card_id": "hostile",
+      "deleted": false,
+      "folder": "/home/me/dev/app",
+      "org_id": "org-1",
+      "owner_device": "mac-device",
+      "page": null,
+      "page_thumb": null,
+      "pages": 0,
+      "updated_at": "2026-11-01T10:01:40.000Z",
+    },
+  ],
+  [
+    "card",
+    {
+      "card": {
+        "backend": "claude",
+        "column": "review",
+        "createdAt": 1,
+        "cwd": "/home/me/dev/app",
+        "id": "paged",
+        "page": "blob:sha256:fec5e4ce40fd7769bb13a530d642da7a33c1e9672e5b8fb0fce657d6ee2b9280#step-2",
+        "pages": 3,
+        "permissionMode": "default",
+        "prompt": "do it",
+        "thumb": "blob:sha256:74eb25bb5a5ad94c9fe40a0e9ae6cd1a6b377fed75ad9dd61a3c5fec2aa81343",
+        "title": "paged",
+        "updatedAt": 2,
+      },
+      "card_id": "paged",
+      "deleted": false,
+      "folder": "/home/me/dev/app",
+      "org_id": "org-1",
+      "owner_device": "mac-device",
+      "page": "blob:sha256:fec5e4ce40fd7769bb13a530d642da7a33c1e9672e5b8fb0fce657d6ee2b9280#step-2",
+      "page_thumb": null,
+      "pages": 3,
+      "updated_at": "2026-11-01T10:01:40.000Z",
+    },
+  ],
+  [
+    "card",
+    {
+      "card": {
+        "backend": "claude",
+        "column": "review",
+        "createdAt": 1,
+        "cwd": "/home/me/dev/app",
+        "id": "site",
+        "page": "https://example.com/docs",
+        "pages": 1,
+        "permissionMode": "default",
+        "prompt": "do it",
+        "thumb": "blob:sha256:e334ccbfcc66f2806ad502083c8ecdee62338177b4f45224ded2d107d155f1dd",
+        "title": "site",
+        "updatedAt": 2,
+      },
+      "card_id": "site",
+      "deleted": false,
+      "folder": "/home/me/dev/app",
+      "org_id": "org-1",
+      "owner_device": "mac-device",
+      "page": "https://example.com/docs",
+      "page_thumb": null,
+      "pages": 1,
+      "updated_at": "2026-11-01T10:01:40.000Z",
+    },
+  ],
+  [
+    "card",
+    {
+      "card": {
+        "backend": "claude",
+        "column": "review",
+        "createdAt": 1,
+        "cwd": "/home/me/dev/app",
+        "id": "localhost",
+        "page": "http://localhost:3000/",
+        "pages": 2,
+        "permissionMode": "default",
+        "prompt": "do it",
+        "thumb": "blob:sha256:6bc5a14c7b8a6a149001ba395be65c067bb4c6b28b58ffa0853c5e36a59c8857",
+        "title": "localhost",
+        "updatedAt": 2,
+      },
+      "card_id": "localhost",
+      "deleted": false,
+      "folder": "/home/me/dev/app",
+      "org_id": "org-1",
+      "owner_device": "mac-device",
+      "page": "http://localhost:3000/",
+      "page_thumb": "blob:sha256:6bc5a14c7b8a6a149001ba395be65c067bb4c6b28b58ffa0853c5e36a59c8857",
+      "pages": 2,
+      "updated_at": "2026-11-01T10:01:40.000Z",
+    },
+  ],
+  [
+    "card",
+    {
+      "card": {
+        "backend": "claude",
+        "column": "review",
+        "createdAt": 1,
+        "cwd": "/home/me/dev/app",
+        "id": "nopage",
+        "page": "   ",
+        "permissionMode": "default",
+        "prompt": "do it",
+        "thumb": "https://example.com/t.png",
+        "title": "nopage",
+        "updatedAt": 2,
+      },
+      "card_id": "nopage",
+      "deleted": false,
+      "folder": "/home/me/dev/app",
+      "org_id": "org-1",
+      "owner_device": "mac-device",
+      "page": null,
+      "page_thumb": null,
+      "pages": 0,
+      "updated_at": "2026-11-01T10:01:40.000Z",
+    },
+  ],
+  [
+    "tool",
+    {
+      "bytes": 2142,
+      "card_id": "secrets",
+      "org_id": "org-1",
+      "result": "line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+",
+      "tool_id": "toolu_long",
+    },
+  ],
+  [
+    "tool",
+    {
+      "bytes": 2100,
+      "card_id": "hostile",
+      "org_id": "org-1",
+      "result": "output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+",
+      "tool_id": "toolu_nul",
+    },
+  ],
+  [
+    "item",
+    {
+      "at": "2026-11-01T10:00:00.000Z",
+      "card_id": "plain",
+      "item": {
+        "at": 1793527200000,
+        "kind": "user",
+        "text": "make it dark",
+      },
+      "kind": "user",
+      "org_id": "org-1",
+      "seq": 0,
+    },
+  ],
+  [
+    "item",
+    {
+      "at": "2026-11-01T10:00:01.000Z",
+      "card_id": "plain",
+      "item": {
+        "at": 1793527201000,
+        "kind": "assistant",
+        "text": "On it.",
+      },
+      "kind": "assistant",
+      "org_id": "org-1",
+      "seq": 1,
+    },
+  ],
+  [
+    "item",
+    {
+      "at": "2026-11-01T10:00:02.000Z",
+      "card_id": "plain",
+      "item": {
+        "at": 1793527202000,
+        "kind": "result",
+        "text": "done",
+      },
+      "kind": "result",
+      "org_id": "org-1",
+      "seq": 2,
+    },
+  ],
+  [
+    "item",
+    {
+      "at": "2026-11-01T10:00:03.000Z",
+      "card_id": "secrets",
+      "item": {
+        "at": 1793527203000,
+        "kind": "assistant",
+        "text": "I found ‹hidden: a GitHub token› in .env",
+      },
+      "kind": "assistant",
+      "org_id": "org-1",
+      "seq": 0,
+    },
+  ],
+  [
+    "item",
+    {
+      "at": "2026-11-01T10:00:04.000Z",
+      "card_id": "secrets",
+      "item": {
+        "at": 1793527204000,
+        "id": "toolu_short",
+        "kind": "tool",
+        "name": "Bash",
+        "result": "GITHUB_TOKEN=‹hidden: a secret (GITHUB_TOKEN)› a secret (GITHUB_TOKEN)› a GitHub token›",
+        "summary": "env",
+      },
+      "kind": "tool",
+      "org_id": "org-1",
+      "seq": 1,
+    },
+  ],
+  [
+    "item",
+    {
+      "at": "2026-11-01T10:00:05.000Z",
+      "card_id": "secrets",
+      "item": {
+        "at": 1793527205000,
+        "id": "toolu_long",
+        "kind": "tool",
+        "name": "Bash",
+        "resultBytes": 2142,
+        "summary": "cat log",
+      },
+      "kind": "tool",
+      "org_id": "org-1",
+      "seq": 2,
+    },
+  ],
+  [
+    "item",
+    {
+      "at": "2026-11-01T10:00:06.000Z",
+      "card_id": "hostile",
+      "item": {
+        "at": 1793527206000,
+        "id": "toolu_nul",
+        "kind": "tool",
+        "name": "Bash",
+        "resultBytes": 2100,
+        "summary": "tty",
+      },
+      "kind": "tool",
+      "org_id": "org-1",
+      "seq": 0,
+    },
+  ],
+  [
+    "item",
+    {
+      "at": "2026-11-01T10:00:07.000Z",
+      "card_id": "hostile",
+      "item": {
+        "at": 1793527207000,
+        "kind": "assistant",
+        "text": "nul and �",
+      },
+      "kind": "assistant",
+      "org_id": "org-1",
+      "seq": 1,
+    },
+  ],
+  [
+    "item",
+    {
+      "at": "2026-11-01T10:00:08.000Z",
+      "card_id": "paged",
+      "item": {
+        "at": 1793527208000,
+        "id": "toolu_open",
+        "kind": "tool",
+        "name": "mcp__browser__open_url",
+        "summary": "file://blob:sha256:de2914d60420a0573cfb96cd9ab867da61f20eef2ab86b610de1d0e7c77f6b55",
+      },
+      "kind": "tool",
+      "org_id": "org-1",
+      "seq": 0,
+    },
+  ],
+  [
+    "item",
+    {
+      "at": "2026-11-01T10:00:09.000Z",
+      "card_id": "paged",
+      "item": {
+        "at": 1793527209000,
+        "kind": "assistant",
+        "text": "![chart](blob:sha256:aa3a9229ffe8255c4fad334079c2bfeb61b493d487393902556f406ee51205b6)",
+      },
+      "kind": "assistant",
+      "org_id": "org-1",
+      "seq": 1,
+    },
+  ],
+]
+`;
+
+exports[`golden rows > a Mac's flush, plain 1`] = `
+{
+  "cloud_cards": [
+    {
+      "card": {
+        "backend": "claude",
+        "column": "review",
+        "createdAt": 1,
+        "cwd": "/home/me/dev/app",
+        "id": "plain",
+        "permissionMode": "default",
+        "prompt": "do it",
+        "title": "plain",
+        "updatedAt": 2,
+      },
+      "card_id": "plain",
+      "deleted": false,
+      "folder": "/home/me/dev/app",
+      "org_id": "org-1",
+      "owner_device": "mac-device",
+      "page": null,
+      "page_thumb": null,
+      "pages": 0,
+      "updated_at": "2026-11-01T10:01:40.000Z",
+    },
+    {
+      "card": {
+        "backend": "claude",
+        "column": "review",
+        "createdAt": 1,
+        "cwd": "/home/me/dev/app",
+        "id": "secrets",
+        "pending": {
+          "input": {
+            "command": "curl -H "Authorization: Bearer ‹hidden: a GitHub token›"",
+          },
+        },
+        "permissionMode": "default",
+        "prompt": "token=‹hidden: a GitHub token›",
+        "title": "deploy with ‹hidden: a GitHub token›",
+        "updatedAt": 2,
+      },
+      "card_id": "secrets",
+      "deleted": false,
+      "folder": "/home/me/dev/app",
+      "org_id": "org-1",
+      "owner_device": "mac-device",
+      "page": null,
+      "page_thumb": null,
+      "pages": 0,
+      "updated_at": "2026-11-01T10:01:40.000Z",
+    },
+    {
+      "card": {
+        "backend": "claude",
+        "column": "review",
+        "createdAt": 1,
+        "cwd": "/home/me/dev/app",
+        "id": "hostile",
+        "permissionMode": "default",
+        "prompt": "do it",
+        "title": "badtitle � here",
+        "updatedAt": 2,
+      },
+      "card_id": "hostile",
+      "deleted": false,
+      "folder": "/home/me/dev/app",
+      "org_id": "org-1",
+      "owner_device": "mac-device",
+      "page": null,
+      "page_thumb": null,
+      "pages": 0,
+      "updated_at": "2026-11-01T10:01:40.000Z",
+    },
+    {
+      "card": {
+        "backend": "claude",
+        "column": "review",
+        "createdAt": 1,
+        "cwd": "/home/me/dev/app",
+        "id": "paged",
+        "page": "blob:sha256:fec5e4ce40fd7769bb13a530d642da7a33c1e9672e5b8fb0fce657d6ee2b9280#step-2",
+        "pages": 3,
+        "permissionMode": "default",
+        "prompt": "do it",
+        "thumb": "blob:sha256:74eb25bb5a5ad94c9fe40a0e9ae6cd1a6b377fed75ad9dd61a3c5fec2aa81343",
+        "title": "paged",
+        "updatedAt": 2,
+      },
+      "card_id": "paged",
+      "deleted": false,
+      "folder": "/home/me/dev/app",
+      "org_id": "org-1",
+      "owner_device": "mac-device",
+      "page": "blob:sha256:fec5e4ce40fd7769bb13a530d642da7a33c1e9672e5b8fb0fce657d6ee2b9280#step-2",
+      "page_thumb": null,
+      "pages": 3,
+      "updated_at": "2026-11-01T10:01:40.000Z",
+    },
+    {
+      "card": {
+        "backend": "claude",
+        "column": "review",
+        "createdAt": 1,
+        "cwd": "/home/me/dev/app",
+        "id": "site",
+        "page": "https://example.com/docs",
+        "pages": 1,
+        "permissionMode": "default",
+        "prompt": "do it",
+        "thumb": "blob:sha256:e334ccbfcc66f2806ad502083c8ecdee62338177b4f45224ded2d107d155f1dd",
+        "title": "site",
+        "updatedAt": 2,
+      },
+      "card_id": "site",
+      "deleted": false,
+      "folder": "/home/me/dev/app",
+      "org_id": "org-1",
+      "owner_device": "mac-device",
+      "page": "https://example.com/docs",
+      "page_thumb": null,
+      "pages": 1,
+      "updated_at": "2026-11-01T10:01:40.000Z",
+    },
+    {
+      "card": {
+        "backend": "claude",
+        "column": "review",
+        "createdAt": 1,
+        "cwd": "/home/me/dev/app",
+        "id": "localhost",
+        "page": "http://localhost:3000/",
+        "pages": 2,
+        "permissionMode": "default",
+        "prompt": "do it",
+        "thumb": "blob:sha256:6bc5a14c7b8a6a149001ba395be65c067bb4c6b28b58ffa0853c5e36a59c8857",
+        "title": "localhost",
+        "updatedAt": 2,
+      },
+      "card_id": "localhost",
+      "deleted": false,
+      "folder": "/home/me/dev/app",
+      "org_id": "org-1",
+      "owner_device": "mac-device",
+      "page": "http://localhost:3000/",
+      "page_thumb": "blob:sha256:6bc5a14c7b8a6a149001ba395be65c067bb4c6b28b58ffa0853c5e36a59c8857",
+      "pages": 2,
+      "updated_at": "2026-11-01T10:01:40.000Z",
+    },
+    {
+      "card": {
+        "backend": "claude",
+        "column": "review",
+        "createdAt": 1,
+        "cwd": "/home/me/dev/app",
+        "id": "nopage",
+        "page": "   ",
+        "permissionMode": "default",
+        "prompt": "do it",
+        "thumb": "https://example.com/t.png",
+        "title": "nopage",
+        "updatedAt": 2,
+      },
+      "card_id": "nopage",
+      "deleted": false,
+      "folder": "/home/me/dev/app",
+      "org_id": "org-1",
+      "owner_device": "mac-device",
+      "page": null,
+      "page_thumb": null,
+      "pages": 0,
+      "updated_at": "2026-11-01T10:01:40.000Z",
+    },
+  ],
+  "cloud_thread_items": [
+    {
+      "at": "2026-11-01T10:00:00.000Z",
+      "card_id": "plain",
+      "item": {
+        "at": 1793527200000,
+        "kind": "user",
+        "text": "make it dark",
+      },
+      "kind": "user",
+      "org_id": "org-1",
+      "seq": 0,
+    },
+    {
+      "at": "2026-11-01T10:00:01.000Z",
+      "card_id": "plain",
+      "item": {
+        "at": 1793527201000,
+        "kind": "assistant",
+        "text": "On it.",
+      },
+      "kind": "assistant",
+      "org_id": "org-1",
+      "seq": 1,
+    },
+    {
+      "at": "2026-11-01T10:00:02.000Z",
+      "card_id": "plain",
+      "item": {
+        "at": 1793527202000,
+        "kind": "result",
+        "text": "done",
+      },
+      "kind": "result",
+      "org_id": "org-1",
+      "seq": 2,
+    },
+    {
+      "at": "2026-11-01T10:00:03.000Z",
+      "card_id": "secrets",
+      "item": {
+        "at": 1793527203000,
+        "kind": "assistant",
+        "text": "I found ‹hidden: a GitHub token› in .env",
+      },
+      "kind": "assistant",
+      "org_id": "org-1",
+      "seq": 0,
+    },
+    {
+      "at": "2026-11-01T10:00:04.000Z",
+      "card_id": "secrets",
+      "item": {
+        "at": 1793527204000,
+        "id": "toolu_short",
+        "kind": "tool",
+        "name": "Bash",
+        "result": "GITHUB_TOKEN=‹hidden: a secret (GITHUB_TOKEN)› a secret (GITHUB_TOKEN)› a GitHub token›",
+        "summary": "env",
+      },
+      "kind": "tool",
+      "org_id": "org-1",
+      "seq": 1,
+    },
+    {
+      "at": "2026-11-01T10:00:05.000Z",
+      "card_id": "secrets",
+      "item": {
+        "at": 1793527205000,
+        "id": "toolu_long",
+        "kind": "tool",
+        "name": "Bash",
+        "resultBytes": 2142,
+        "summary": "cat log",
+      },
+      "kind": "tool",
+      "org_id": "org-1",
+      "seq": 2,
+    },
+    {
+      "at": "2026-11-01T10:00:06.000Z",
+      "card_id": "hostile",
+      "item": {
+        "at": 1793527206000,
+        "id": "toolu_nul",
+        "kind": "tool",
+        "name": "Bash",
+        "resultBytes": 2100,
+        "summary": "tty",
+      },
+      "kind": "tool",
+      "org_id": "org-1",
+      "seq": 0,
+    },
+    {
+      "at": "2026-11-01T10:00:07.000Z",
+      "card_id": "hostile",
+      "item": {
+        "at": 1793527207000,
+        "kind": "assistant",
+        "text": "nul and �",
+      },
+      "kind": "assistant",
+      "org_id": "org-1",
+      "seq": 1,
+    },
+    {
+      "at": "2026-11-01T10:00:08.000Z",
+      "card_id": "paged",
+      "item": {
+        "at": 1793527208000,
+        "id": "toolu_open",
+        "kind": "tool",
+        "name": "mcp__browser__open_url",
+        "summary": "file://blob:sha256:de2914d60420a0573cfb96cd9ab867da61f20eef2ab86b610de1d0e7c77f6b55",
+      },
+      "kind": "tool",
+      "org_id": "org-1",
+      "seq": 0,
+    },
+    {
+      "at": "2026-11-01T10:00:09.000Z",
+      "card_id": "paged",
+      "item": {
+        "at": 1793527209000,
+        "kind": "assistant",
+        "text": "![chart](blob:sha256:aa3a9229ffe8255c4fad334079c2bfeb61b493d487393902556f406ee51205b6)",
+      },
+      "kind": "assistant",
+      "org_id": "org-1",
+      "seq": 1,
+    },
+  ],
+  "cloud_tool_outputs": [
+    {
+      "bytes": 2142,
+      "card_id": "secrets",
+      "org_id": "org-1",
+      "result": "line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+",
+      "tool_id": "toolu_long",
+    },
+    {
+      "bytes": 2100,
+      "card_id": "hostile",
+      "org_id": "org-1",
+      "result": "output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+",
+      "tool_id": "toolu_nul",
+    },
+  ],
+}
+`;
+
+exports[`golden rows > a worker's publisher, with pages 1`] = `
+[
+  [
+    "putCard",
+    "plain",
+    "app",
+    {
+      "backend": "claude",
+      "column": "review",
+      "createdAt": 1,
+      "cwd": "/home/me/dev/app",
+      "id": "plain",
+      "permissionMode": "default",
+      "prompt": "do it",
+      "title": "plain",
+      "updatedAt": 2,
+    },
+    false,
+  ],
+  [
+    "putItems",
+    "plain",
+    [
+      {
+        "at": "2026-11-01T10:00:00.000Z",
+        "item": {
+          "at": 1793527200000,
+          "kind": "user",
+          "text": "make it dark",
+        },
+        "kind": "user",
+        "seq": 0,
+      },
+      {
+        "at": "2026-11-01T10:00:01.000Z",
+        "item": {
+          "at": 1793527201000,
+          "kind": "assistant",
+          "text": "On it.",
+        },
+        "kind": "assistant",
+        "seq": 1,
+      },
+      {
+        "at": "2026-11-01T10:00:02.000Z",
+        "item": {
+          "at": 1793527202000,
+          "kind": "result",
+          "text": "done",
+        },
+        "kind": "result",
+        "seq": 2,
+      },
+    ],
+    [],
+    null,
+  ],
+  [
+    "putCard",
+    "secrets",
+    "app",
+    {
+      "backend": "claude",
+      "column": "review",
+      "createdAt": 1,
+      "cwd": "/home/me/dev/app",
+      "id": "secrets",
+      "pending": {
+        "input": {
+          "command": "curl -H "Authorization: Bearer ‹hidden: a GitHub token›"",
+        },
+      },
+      "permissionMode": "default",
+      "prompt": "token=‹hidden: a GitHub token›",
+      "title": "deploy with ‹hidden: a GitHub token›",
+      "updatedAt": 2,
+    },
+    false,
+  ],
+  [
+    "putItems",
+    "secrets",
+    [
+      {
+        "at": "2026-11-01T10:00:03.000Z",
+        "item": {
+          "at": 1793527203000,
+          "kind": "assistant",
+          "text": "I found ‹hidden: a GitHub token› in .env",
+        },
+        "kind": "assistant",
+        "seq": 0,
+      },
+      {
+        "at": "2026-11-01T10:00:04.000Z",
+        "item": {
+          "at": 1793527204000,
+          "id": "toolu_short",
+          "kind": "tool",
+          "name": "Bash",
+          "result": "GITHUB_TOKEN=‹hidden: a secret (GITHUB_TOKEN)› a secret (GITHUB_TOKEN)› a GitHub token›",
+          "summary": "env",
+        },
+        "kind": "tool",
+        "seq": 1,
+      },
+      {
+        "at": "2026-11-01T10:00:05.000Z",
+        "item": {
+          "at": 1793527205000,
+          "id": "toolu_long",
+          "kind": "tool",
+          "name": "Bash",
+          "resultBytes": 2142,
+          "summary": "cat log",
+        },
+        "kind": "tool",
+        "seq": 2,
+      },
+    ],
+    [
+      {
+        "bytes": 2142,
+        "result": "line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+",
+        "tool_id": "toolu_long",
+      },
+    ],
+    null,
+  ],
+  [
+    "putCard",
+    "hostile",
+    "app",
+    {
+      "backend": "claude",
+      "column": "review",
+      "createdAt": 1,
+      "cwd": "/home/me/dev/app",
+      "id": "hostile",
+      "permissionMode": "default",
+      "prompt": "do it",
+      "title": "badtitle � here",
+      "updatedAt": 2,
+    },
+    false,
+  ],
+  [
+    "putItems",
+    "hostile",
+    [
+      {
+        "at": "2026-11-01T10:00:06.000Z",
+        "item": {
+          "at": 1793527206000,
+          "id": "toolu_nul",
+          "kind": "tool",
+          "name": "Bash",
+          "resultBytes": 2100,
+          "summary": "tty",
+        },
+        "kind": "tool",
+        "seq": 0,
+      },
+      {
+        "at": "2026-11-01T10:00:07.000Z",
+        "item": {
+          "at": 1793527207000,
+          "kind": "assistant",
+          "text": "nul and �",
+        },
+        "kind": "assistant",
+        "seq": 1,
+      },
+    ],
+    [
+      {
+        "bytes": 2100,
+        "result": "output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+",
+        "tool_id": "toolu_nul",
+      },
+    ],
+    null,
+  ],
+  [
+    "putCard",
+    "paged",
+    "app",
+    {
+      "backend": "claude",
+      "column": "review",
+      "createdAt": 1,
+      "cwd": "/home/me/dev/app",
+      "id": "paged",
+      "page": "blob:sha256:fec5e4ce40fd7769bb13a530d642da7a33c1e9672e5b8fb0fce657d6ee2b9280#step-2",
+      "pages": 3,
+      "permissionMode": "default",
+      "prompt": "do it",
+      "thumb": "/api/attachments/cap-1.png",
+      "title": "paged",
+      "updatedAt": 2,
+    },
+    false,
+  ],
+  [
+    "putItems",
+    "paged",
+    [
+      {
+        "at": "2026-11-01T10:00:08.000Z",
+        "item": {
+          "at": 1793527208000,
+          "id": "toolu_open",
+          "kind": "tool",
+          "name": "mcp__browser__open_url",
+          "summary": "file://blob:sha256:de2914d60420a0573cfb96cd9ab867da61f20eef2ab86b610de1d0e7c77f6b55",
+        },
+        "kind": "tool",
+        "seq": 0,
+      },
+      {
+        "at": "2026-11-01T10:00:09.000Z",
+        "item": {
+          "at": 1793527209000,
+          "kind": "assistant",
+          "text": "![chart](blob:sha256:aa3a9229ffe8255c4fad334079c2bfeb61b493d487393902556f406ee51205b6)",
+        },
+        "kind": "assistant",
+        "seq": 1,
+      },
+    ],
+    [],
+    null,
+  ],
+  [
+    "putCard",
+    "site",
+    "app",
+    {
+      "backend": "claude",
+      "column": "review",
+      "createdAt": 1,
+      "cwd": "/home/me/dev/app",
+      "id": "site",
+      "page": "https://example.com/docs",
+      "pages": 1,
+      "permissionMode": "default",
+      "prompt": "do it",
+      "thumb": "/home/me/.weft/attachments/cap-2.png",
+      "title": "site",
+      "updatedAt": 2,
+    },
+    false,
+  ],
+  [
+    "putCard",
+    "localhost",
+    "app",
+    {
+      "backend": "claude",
+      "column": "review",
+      "createdAt": 1,
+      "cwd": "/home/me/dev/app",
+      "id": "localhost",
+      "page": "http://localhost:3000/",
+      "pages": 2,
+      "permissionMode": "default",
+      "prompt": "do it",
+      "thumb": "/api/attachments/cap-3.png",
+      "title": "localhost",
+      "updatedAt": 2,
+    },
+    false,
+  ],
+  [
+    "putCard",
+    "nopage",
+    "app",
+    {
+      "backend": "claude",
+      "column": "review",
+      "createdAt": 1,
+      "cwd": "/home/me/dev/app",
+      "id": "nopage",
+      "page": "   ",
+      "permissionMode": "default",
+      "prompt": "do it",
+      "thumb": "https://example.com/t.png",
+      "title": "nopage",
+      "updatedAt": 2,
+    },
+    false,
+  ],
+]
+`;
+
+exports[`golden rows > a worker's publisher, without pages 1`] = `
+[
+  [
+    "putCard",
+    "plain",
+    "app",
+    {
+      "backend": "claude",
+      "column": "review",
+      "createdAt": 1,
+      "cwd": "/home/me/dev/app",
+      "id": "plain",
+      "permissionMode": "default",
+      "prompt": "do it",
+      "title": "plain",
+      "updatedAt": 2,
+    },
+    false,
+  ],
+  [
+    "putItems",
+    "plain",
+    [
+      {
+        "at": "2026-11-01T10:00:00.000Z",
+        "item": {
+          "at": 1793527200000,
+          "kind": "user",
+          "text": "make it dark",
+        },
+        "kind": "user",
+        "seq": 0,
+      },
+      {
+        "at": "2026-11-01T10:00:01.000Z",
+        "item": {
+          "at": 1793527201000,
+          "kind": "assistant",
+          "text": "On it.",
+        },
+        "kind": "assistant",
+        "seq": 1,
+      },
+      {
+        "at": "2026-11-01T10:00:02.000Z",
+        "item": {
+          "at": 1793527202000,
+          "kind": "result",
+          "text": "done",
+        },
+        "kind": "result",
+        "seq": 2,
+      },
+    ],
+    [],
+    null,
+  ],
+  [
+    "putCard",
+    "secrets",
+    "app",
+    {
+      "backend": "claude",
+      "column": "review",
+      "createdAt": 1,
+      "cwd": "/home/me/dev/app",
+      "id": "secrets",
+      "pending": {
+        "input": {
+          "command": "curl -H "Authorization: Bearer ‹hidden: a GitHub token›"",
+        },
+      },
+      "permissionMode": "default",
+      "prompt": "token=‹hidden: a GitHub token›",
+      "title": "deploy with ‹hidden: a GitHub token›",
+      "updatedAt": 2,
+    },
+    false,
+  ],
+  [
+    "putItems",
+    "secrets",
+    [
+      {
+        "at": "2026-11-01T10:00:03.000Z",
+        "item": {
+          "at": 1793527203000,
+          "kind": "assistant",
+          "text": "I found ‹hidden: a GitHub token› in .env",
+        },
+        "kind": "assistant",
+        "seq": 0,
+      },
+      {
+        "at": "2026-11-01T10:00:04.000Z",
+        "item": {
+          "at": 1793527204000,
+          "id": "toolu_short",
+          "kind": "tool",
+          "name": "Bash",
+          "result": "GITHUB_TOKEN=‹hidden: a secret (GITHUB_TOKEN)› a secret (GITHUB_TOKEN)› a GitHub token›",
+          "summary": "env",
+        },
+        "kind": "tool",
+        "seq": 1,
+      },
+      {
+        "at": "2026-11-01T10:00:05.000Z",
+        "item": {
+          "at": 1793527205000,
+          "id": "toolu_long",
+          "kind": "tool",
+          "name": "Bash",
+          "resultBytes": 2142,
+          "summary": "cat log",
+        },
+        "kind": "tool",
+        "seq": 2,
+      },
+    ],
+    [
+      {
+        "bytes": 2142,
+        "result": "line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+line with ‹hidden: a GitHub token›
+",
+        "tool_id": "toolu_long",
+      },
+    ],
+    null,
+  ],
+  [
+    "putCard",
+    "hostile",
+    "app",
+    {
+      "backend": "claude",
+      "column": "review",
+      "createdAt": 1,
+      "cwd": "/home/me/dev/app",
+      "id": "hostile",
+      "permissionMode": "default",
+      "prompt": "do it",
+      "title": "badtitle � here",
+      "updatedAt": 2,
+    },
+    false,
+  ],
+  [
+    "putItems",
+    "hostile",
+    [
+      {
+        "at": "2026-11-01T10:00:06.000Z",
+        "item": {
+          "at": 1793527206000,
+          "id": "toolu_nul",
+          "kind": "tool",
+          "name": "Bash",
+          "resultBytes": 2100,
+          "summary": "tty",
+        },
+        "kind": "tool",
+        "seq": 0,
+      },
+      {
+        "at": "2026-11-01T10:00:07.000Z",
+        "item": {
+          "at": 1793527207000,
+          "kind": "assistant",
+          "text": "nul and �",
+        },
+        "kind": "assistant",
+        "seq": 1,
+      },
+    ],
+    [
+      {
+        "bytes": 2100,
+        "result": "output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+output �
+",
+        "tool_id": "toolu_nul",
+      },
+    ],
+    null,
+  ],
+  [
+    "putCard",
+    "paged",
+    "app",
+    {
+      "backend": "claude",
+      "column": "review",
+      "createdAt": 1,
+      "cwd": "/home/me/dev/app",
+      "id": "paged",
+      "page": "/home/me/.weft/show/plan.html#step-2",
+      "pages": 3,
+      "permissionMode": "default",
+      "prompt": "do it",
+      "thumb": "/api/attachments/cap-1.png",
+      "title": "paged",
+      "updatedAt": 2,
+    },
+    false,
+  ],
+  [
+    "putItems",
+    "paged",
+    [
+      {
+        "at": "2026-11-01T10:00:08.000Z",
+        "item": {
+          "at": 1793527208000,
+          "id": "toolu_open",
+          "kind": "tool",
+          "name": "mcp__browser__open_url",
+          "summary": "file:///home/me/.weft/show/plan.html",
+        },
+        "kind": "tool",
+        "seq": 0,
+      },
+      {
+        "at": "2026-11-01T10:00:09.000Z",
+        "item": {
+          "at": 1793527209000,
+          "kind": "assistant",
+          "text": "![chart](/home/me/dev/app/chart.png)",
+        },
+        "kind": "assistant",
+        "seq": 1,
+      },
+    ],
+    [],
+    null,
+  ],
+  [
+    "putCard",
+    "site",
+    "app",
+    {
+      "backend": "claude",
+      "column": "review",
+      "createdAt": 1,
+      "cwd": "/home/me/dev/app",
+      "id": "site",
+      "page": "https://example.com/docs",
+      "pages": 1,
+      "permissionMode": "default",
+      "prompt": "do it",
+      "thumb": "/home/me/.weft/attachments/cap-2.png",
+      "title": "site",
+      "updatedAt": 2,
+    },
+    false,
+  ],
+  [
+    "putCard",
+    "localhost",
+    "app",
+    {
+      "backend": "claude",
+      "column": "review",
+      "createdAt": 1,
+      "cwd": "/home/me/dev/app",
+      "id": "localhost",
+      "page": "http://localhost:3000/",
+      "pages": 2,
+      "permissionMode": "default",
+      "prompt": "do it",
+      "thumb": "/api/attachments/cap-3.png",
+      "title": "localhost",
+      "updatedAt": 2,
+    },
+    false,
+  ],
+  [
+    "putCard",
+    "nopage",
+    "app",
+    {
+      "backend": "claude",
+      "column": "review",
+      "createdAt": 1,
+      "cwd": "/home/me/dev/app",
+      "id": "nopage",
+      "page": "   ",
+      "permissionMode": "default",
+      "prompt": "do it",
+      "thumb": "https://example.com/t.png",
+      "title": "nopage",
+      "updatedAt": 2,
+    },
+    false,
+  ],
+]
+`;

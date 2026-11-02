@@ -1,5 +1,5 @@
-// The pure steps that make a synced row out of a card or a thread item, shared by a Mac's outbox
-// (lib/cloud-sync-upload.ts) and a Weft Worker's publisher (lib/worker-publish.ts). No store, no client: just values.
+// The pure steps that make a synced row out of a card or a thread item, composed by lib/card-rows.ts for both a
+// Mac's outbox (lib/cloud-sync-upload.ts) and a Weft Worker's publisher (lib/worker-publish.ts). No store, no client.
 import { TOOL_RESULT_INLINE_MAX, type CloudToolOutputRow } from "./cloud-sync-types";
 import type { ThreadItem } from "./types";
 

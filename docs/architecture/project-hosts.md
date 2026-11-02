@@ -221,8 +221,14 @@ later move into the host, its key sealed to the host and opened only behind a si
 
 - **One address:** every project is `(host, repo)`, with this Mac one host among others, so `worker://` paths and
   `localPath` gates live only inside `hostFor`.
-- **One card schema:** the cloud row is a sealed projection of the host's `Card`, made by one function, not
-  `cloud-sync-rows` and `worker-publish` side by side.
+- **One card schema** (H5a, built 2026-11-02): the cloud row is a sealed projection of the host's `Card`, made by one
+  module, `lib/card-rows.ts` (`projectCard`, `projectItem`), for a Mac's flush and a worker's publisher alike. Identity
+  (`owner_device` and the full path on a Mac; `worker:<id>` and the project name, filled in by the RPC, on a worker), the
+  transport (an upsert with the account's session in chunks of 100; `worker_put_card` / `worker_put_items` per card) and
+  the sealer (the workspace key on a Mac; none yet on a worker) stay per host. The differences that remain are `RowHost`
+  fields: `thumbs`, `onBlobError`, `copilot`. Two were bugs and are fixed: a Mac's `page` column skipped redaction, and a
+  worker shipped the copilot from its thread events and could send one tool id twice in a batch. Also still per host:
+  a delete keeps the card json on a Mac and blanks it (`{}`) on a worker. Golden snapshots: `lib/card-rows.golden.test.ts`.
 - **One device registry:** worker enrolment tokens, `desktop` heartbeat rows and the phone and browser QR pairing become
   one pairing flow; enrolling a worker is pairing a host.
 
@@ -258,7 +264,8 @@ Each ships on its own.
 4. **H4 project reads.** Snapshot rows (`worker_put_project`) for quality, pile, streak and Backlog; the editor through
    file verbs with results.
 5. **H5 one host program.** The inbox, heartbeat and publish merged across the Mac and the daemon; one card schema; the
-   `(host, repo)` address.
+   `(host, repo)` address. **H5a one publish path** is built ([Devices and records](#devices-and-records)); the inbox,
+   the heartbeat and the address are still two.
 6. **H6 the WebRTC line for everything live.** In order: video moves from 16 KB chunks on a reliable, ordered
    DataChannel (`lib/use-rtc-screen.ts`) to an RTP track that drops late frames, so it can't delay a click; the line
    opens while a board shows the worker's project, not only during a watch; `host` (verbs and results) and `events`
