@@ -29,7 +29,7 @@ engine: the daemon runs the same `lib/runner.ts`.
 | "!" shell | `shell` | none |
 | Wait, Me first, Others first | `permission` | none |
 | Stop a subagent task | `tasks/[taskId]/stop` | none |
-| Attachments in a reply | `/api/attachments` | none: a reply is text, so a pasted screenshot arrives as a path to a file the worker doesn't have |
+| Attachments in a reply | `/api/attachments` | images and PDFs travel as blobs on `reply`, `run` and `new_card` (`lib/attachment-transfer.ts`, 2026-11-02) |
 | Send later, review panel, skills chip | `desktop: true` | none |
 | Show rail, editor | Board's open card | none: `WorkerOpenCard` is a separate layout |
 | Backlog | Backlog column | none |
@@ -213,8 +213,10 @@ Each ships on its own.
 1. **H1 card verbs into `host-api`.** The card routes become thin wrappers over `lib/host-api`, behaviour unchanged
    (in progress).
 2. **H2 the `host` command.** `kind = 'host'` with `{ verb, args }` and a `result` column; the daemon and `cloud-inbox.ts`
-   run `runVerb`, and `reply`, `answer`, `stop`, `mode` and `new_card` become aliases. **Attachments travel:** a reply's
-   files go up as sealed blobs and the host saves them before the turn (pulled forward on its own card).
+   run `runVerb`, and `reply`, `answer`, `stop`, `mode` and `new_card` become aliases. **Attachments travel:** built ahead of
+   H2 for the worker's kinds (`lib/attachment-transfer.ts`: `encodeAttachments` for a sender, `attachmentsOf` +
+   `receiveAttachments` for a host, [weft-worker.md](weft-worker.md#worker-projects-on-the-desktop-board)); `host`
+   calls the same two. Still open: sealing the blobs, `cloud-inbox.ts` as a receiver, the web composer as a sender.
 3. **H3 `hostFor` and one open card.** `ProjectHost`, `LocalHost`, `CloudHost`; worker tiles lose `readOnly`; the open
    card merges, so worker cards get the show rail, the pickers, the menus and ↑ edit.
 4. **H4 project reads.** Snapshot rows (`worker_put_project`) for quality, pile, streak and Backlog; the editor through
