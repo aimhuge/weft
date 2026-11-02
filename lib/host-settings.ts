@@ -59,6 +59,7 @@ const HOST_FIELDS: Record<keyof HostSettings, { ok: (v: unknown) => boolean; say
 
 /** Saves a settings.put patch: only host settings, each checked first. Returns what the host now has. */
 export function applyHostSettings(patch: unknown): HostSettings {
+  if (patch !== undefined && (patch === null || typeof patch !== "object" || Array.isArray(patch))) throw new Error("Those settings aren't a list of fields.");
   const foreign = foreignSetting(patch);
   if (foreign) throw new Error(`${foreign.slice(0, 40)} isn't a setting a worker takes from the network.`);
   const fields = Object.entries((patch ?? {}) as Record<string, unknown>) as [keyof HostSettings, unknown][];

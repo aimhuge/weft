@@ -34,6 +34,14 @@ describe("pushAccountSettings", () => {
     expect(upsert).toHaveBeenCalledTimes(2);
   });
 
+  it("writes again for someone else signed in, though nothing changed", async () => {
+    const first = client({ user: "u-1" });
+    expect(await pushAccountSettings(first.c)).toBe(true);
+    const other = client({ user: "u-2" });
+    expect(await pushAccountSettings(other.c)).toBe(true);
+    expect(other.upsert).toHaveBeenCalledWith(expect.objectContaining({ user_id: "u-2" }));
+  });
+
   it("does nothing signed out, and says nothing when the database refuses or the network is down", async () => {
     expect(await pushAccountSettings(client({ user: null }).c)).toBe(false);
     const refused = client({ error: { message: "no such table" } });

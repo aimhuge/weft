@@ -54,6 +54,21 @@ const WIDENING_FIELDS = ["cwd", "agent", "readScope"] as const;
 
 const SHELL_REFUSED = "A shell command only runs from Weft's own window, not from the web.";
 
+// The editor stays inside the card's folder (lib/file-access.ts), off credentials and .git, and a save off what
+// configures its agent: what the card's own thread could do when asked, never what would widen it (./file-policy.ts).
+function fileRefusal(verb: "files.read" | "files.write", path: unknown): string | null {
+  if (typeof path !== "string") return "That names no file.";
+  return verb === "files.read" ? readRefusal(path) : writeRefusal(path);
+}
+
+// A card.update body that would skip prompts or widen the card.
+function updateRefusal(body: Record<string, unknown> | undefined): string | null {
+  if (!body) return null;
+  if (body.permissionMode === "bypassPermissions") return "A request from the web can't skip permission prompts. Pick that mode on the Mac.";
+  const widening = WIDENING_FIELDS.find((field) => body[field] !== undefined);
+  return widening ? `A request from the web can't change a card's ${widening === "cwd" ? "folder" : widening === "agent" ? "agent" : "read access"}. Do it in Weft's own window.` : null;
+}
+
 export function remoteRefusal({ verb, args }: HostPayload): string | null {
   if (verb === "card.shell") return SHELL_REFUSED;
   // Only a host's own settings come from the network: never its folders, modes or guards.
@@ -62,17 +77,8 @@ export function remoteRefusal({ verb, args }: HostPayload): string | null {
   // A scheduled message is sent as a reply when its time comes, never run, but a "!" one would read as a command
   // waiting to run, so the network can't leave one on a card at all.
   if (verb === "card.schedule" && typeof args.text === "string" && isBang(args.text)) return SHELL_REFUSED;
-  // The editor stays inside the card's folder (lib/file-access.ts), off credentials and .git, and a save off what
-  // configures its agent: what the card's own thread could do when asked, never what would widen it (./file-policy.ts).
-  if (verb === "files.read" || verb === "files.write") {
-    if (typeof args.path !== "string") return "That names no file.";
-    return verb === "files.read" ? readRefusal(args.path) : writeRefusal(args.path);
-  }
-  const body = verb === "card.update" ? (args.body as Record<string, unknown> | undefined) : undefined;
-  if (!body) return null;
-  if (body.permissionMode === "bypassPermissions") return "A request from the web can't skip permission prompts. Pick that mode on the Mac.";
-  const widening = WIDENING_FIELDS.find((field) => body[field] !== undefined);
-  return widening ? `A request from the web can't change a card's ${widening === "cwd" ? "folder" : widening === "agent" ? "agent" : "read access"}. Do it in Weft's own window.` : null;
+  if (verb === "files.read" || verb === "files.write") return fileRefusal(verb, args.path);
+  return verb === "card.update" ? updateRefusal(args.body as Record<string, unknown> | undefined) : null;
 }
 
 // A host command's outcome on the host that ran it: the card it touched, and what goes in the row's `result`.

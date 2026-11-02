@@ -46,6 +46,9 @@ describe("host settings", () => {
     const { host, settings } = await loadHost();
     expect(() => host.applyHostSettings({ allowedFolders: ["/"] })).toThrow("allowedFolders isn't a setting a worker takes from the network.");
     expect(() => host.applyHostSettings({ maxThreads: 2, defaultPermissionMode: "bypassPermissions" })).toThrow(/defaultPermissionMode/);
+    expect(() => host.applyHostSettings("maxThreads")).toThrow("Those settings aren't a list of fields.");
+    expect(() => host.applyHostSettings([9])).toThrow("Those settings aren't a list of fields.");
+    expect(() => host.applyHostSettings(null)).toThrow("Those settings aren't a list of fields.");
     expect(settings.allowedFolders()).toEqual([]);
     expect(settings.defaultPermissionMode()).toBe("auto");
   });

@@ -7,7 +7,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { accountClient } from "./account";
 import { accountSettings } from "./host-settings";
 
-// What was last pushed, so a save that changed only this Mac's own settings sends nothing.
+// What was last pushed and for whom, so a save that changed only this Mac's own settings sends nothing, and a sign-in
+// as someone else still writes their row.
 let pushed: string | null = null;
 
 export async function pushAccountSettings(given?: SupabaseClient): Promise<boolean> {
@@ -17,7 +18,7 @@ export async function pushAccountSettings(given?: SupabaseClient): Promise<boole
     const uid = data.session?.user.id;
     if (!uid) return false;
     const settings = accountSettings();
-    const text = JSON.stringify(settings);
+    const text = `${uid}:${JSON.stringify(settings)}`;
     if (text === pushed) return false;
     const { error } = await client.from("account_settings").upsert({ user_id: uid, settings, updated_at: new Date().toISOString() });
     if (error) return false;

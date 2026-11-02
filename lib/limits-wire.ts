@@ -10,14 +10,17 @@ export interface PackedLimits {
   s: PackedSample[];
 }
 
-// The newest this many go up: a busy week is a few hundred, and the row's cap is 64 KB.
-export const MAX_PACKED = 1_000;
+// The newest this many go up. The row's check caps the jsonb at 64 KB, and a tuple there is up to ~76 bytes once `used`
+// is cut to two places and the reset to whole seconds (1,000 measured 72 KB and failed every publish), so 750 is ~57 KB.
+export const MAX_PACKED = 750;
+
+const twoPlaces = (n: number) => Math.round(n * 100) / 100;
 
 const BACKENDS: ReadonlySet<string> = new Set<Backend>(["claude", "puku", "codex", "goose"]);
 
 export function packLimits(samples: LimitSample[], max = MAX_PACKED): PackedLimits {
   const kept = samples.slice(-max);
-  return { v: 1, s: kept.map((x) => [Math.round(x.at / 60_000), x.backend, x.kind === "five_hour" ? 5 : 7, x.used, x.resetsAt ?? 0]) };
+  return { v: 1, s: kept.map((x) => [Math.round(x.at / 60_000), x.backend, x.kind === "five_hour" ? 5 : 7, twoPlaces(x.used), Math.round(x.resetsAt ?? 0)]) };
 }
 
 const isTuple = (t: unknown): t is PackedSample =>
