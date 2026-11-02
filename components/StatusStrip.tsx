@@ -4,9 +4,12 @@ import LimitBurndown from "./LimitBurndown";
 import Tip from "./Tip";
 import { cacheMinutesLeft, folderName, formatReset, formatTokens } from "@/lib/format";
 import { shareLeft } from "@/lib/limit-chart";
+import { latestReading } from "@/lib/limits-wire";
 import { liveWindow, PLAN_ORDER } from "@/lib/plan-limits";
 import { BACKEND_LABELS, type Backend, type CacheState, type CardStats, type LimitWindow } from "@/lib/types";
+import { useLimitSamples } from "@/lib/use-limit-samples";
 import { usePlanLimits } from "@/lib/use-plan-limits";
+import { parseWorkerProject } from "@/lib/worker-project";
 import { useNow } from "@/lib/use-now";
 
 // Green while plenty is left, then warn, then danger (same cut-offs as the terminal statusline).
@@ -61,13 +64,13 @@ function Limit({ label, window }: { label: string; window?: LimitWindow }) {
 
 // A CLI's plan: its 5-hour and weekly windows as of now (a passed reset reads full), named when the
 // strip lists more than one plan. The hover is the week's chart.
-function Plan({ backend, reading, named }: { backend: Backend; reading: Pick<CardStats, "fiveHour" | "sevenDay">; named: boolean }) {
+function Plan({ backend, reading, named, worker }: { backend: Backend; reading: Pick<CardStats, "fiveHour" | "sevenDay">; named: boolean; worker?: string }) {
   const now = useNow();
   const fiveHour = liveWindow(reading.fiveHour, now);
   const sevenDay = liveWindow(reading.sevenDay, now);
   if (!fiveHour && !sevenDay) return null;
   return (
-    <Tip text={<LimitBurndown backend={backend} stats={reading} />} width={664} className="inline-flex gap-x-3">
+    <Tip text={<LimitBurndown backend={backend} stats={reading} worker={worker} />} width={664} className="inline-flex gap-x-3">
       {named && <span className={modelTone(backend)}>{CLI_NAMES[backend]}</span>}
       <Limit label="5hr" window={fiveHour} />
       <Limit label="7d" window={sevenDay} />
@@ -79,26 +82,37 @@ function Plan({ backend, reading, named }: { backend: Backend; reading: Pick<Car
 // plan (lib/plan-pools.ts), so a card reads the windows of the CLI it actually runs on; they come from the
 // limits log (lib/use-plan-limits.ts), and where that isn't there (the web board), the card's own last
 // reading stands in. A card on another machine (`own`: a worker's) always reads its own: that machine's CLI
-// reported it, on that machine's sign-in, and this Mac's log would show the wrong plan.
-function Plans({ backend, stats, own }: { backend?: Backend; stats?: CardStats; own?: boolean }) {
+// reported it, on that machine's sign-in, and this Mac's log would show the wrong plan. On a Weft Worker's card the
+// chart is that worker's published history, and its newest reading stands in until the card reports its own.
+function Plans({ backend, stats, own, cwd }: { backend?: Backend; stats?: CardStats; own?: boolean; cwd?: string }) {
   const logged = usePlanLimits(own ? undefined : limitKey(stats));
   const plans = own ? null : logged;
+  const { worker, reading: ownReading } = useCardReading(backend, stats, own ? cwd : undefined);
   const shown: [Backend, Pick<CardStats, "fiveHour" | "sevenDay"> | undefined][] = plans
     ? backend
       ? [[backend, plans[backend]]]
       : PLAN_ORDER.filter((b) => plans[b]).map((b) => [b, plans[b]])
-    : stats
-      ? [[backend ?? "claude", stats]]
+    : ownReading
+      ? [[backend ?? "claude", ownReading]]
       : [];
   return shown.map(([b, reading]) =>
     reading ? (
-      <Plan key={b} backend={b} reading={reading} named={!backend && !stats} />
+      <Plan key={b} backend={b} reading={reading} named={!backend && !stats} worker={worker} />
     ) : (
       <Tip key={b} text={`${BACKEND_LABELS[b]} hasn't reported its plan's 5-hour and weekly limits yet.`}>
         <span className="text-faint">no plan limits yet</span>
       </Tip>
     ),
   );
+}
+
+// A card's own reading; on a Weft Worker's card (`cwd` a worker:// path) that worker's newest published one stands in
+// until the card has its own, and `worker` names it for the chart.
+function useCardReading(backend: Backend | undefined, stats: CardStats | undefined, cwd: string | undefined) {
+  const worker = cwd ? parseWorkerProject(cwd)?.workerId : undefined;
+  const published = useLimitSamples(backend ?? "claude", worker, !worker);
+  const has = Boolean(stats?.fiveHour || stats?.sevenDay);
+  return { worker, reading: !has && published.length ? latestReading(published) : stats };
 }
 
 // A card's new reading reads the plans again, so its strip never lags its own thread.
@@ -188,7 +202,7 @@ export default function StatusStrip({
             tok:{formatTokens(stats.tokens)}
           </Tip>
         )}
-        <Plans backend={backend} stats={stats} own={cardLimits} />
+        <Plans backend={backend} stats={stats} own={cardLimits} cwd={cwd} />
       </div>
     </div>
   );

@@ -5,7 +5,7 @@
 // rule and the elevated verbs it keeps while a phone is paired, a worker's pasted-file transfer.
 import { answerBody, answerGrant, replyBody, stopBody, type AnswerPayload, type CloudCommandRow, type GrantScope } from "../cloud-commands";
 import type { HostVerb } from "../host-api";
-import { isListVerb, type ListVerb } from "@weft/client";
+import { isHostLevelVerb, isListVerb, type ListVerb } from "@weft/client";
 import { hostResult, readHostCommand, remoteRefusal, textArgOf, verbResult, type HostArgs, type HostDone, type HostPayload } from "../host-command";
 import { carriesValue, valueResult, type Carry } from "../host-result";
 import type { Card } from "../types";
@@ -30,6 +30,8 @@ export interface CardRules {
   approve?(command: CloudCommandRow, answer: AnswerPayload, card: Card): Promise<string | null>;
   // Why a verb that grants power can't run from the web here, if it can't (a Mac with a phone paired).
   elevated?(verb: HostVerb, args: Record<string, unknown>): Promise<string | null>;
+  // A verb on the host itself (settings.get / settings.put), from the network. Absent: this host refuses them (a Mac).
+  hostVerb?(verb: HostVerb, args: Record<string, unknown>): Promise<unknown>;
   // Whether the command's author is this host's owner. A verb in OWNER_VERBS runs only when it is; a host without the
   // rule can't say, so none of those verbs runs there from the network.
   fromOwner?(command: CloudCommandRow): boolean;
@@ -69,7 +71,9 @@ export function asAnswer(command: CloudCommandRow, { args }: HostPayload): Cloud
 }
 
 // Verbs a board runs for their answer, or to warm a CLI: they change no card, so there's nothing to sync after them.
-const READS = new Set<HostVerb>(["skills.list", "files.list", "files.read", "files.write", "card.warm"]);
+const READS = new Set<HostVerb>(["skills.list", "files.list", "files.read", "files.write", "card.warm", "settings.get", "settings.put"]);
+
+const NO_HOST_VERBS = "This host takes its settings only from its own window.";
 
 export function cardKinds(rules: CardRules) {
   async function received(command: CloudCommandRow, args: Record<string, unknown>, field: string | undefined) {
@@ -125,6 +129,7 @@ export function cardKinds(rules: CardRules) {
       const cardId = await answer(asAnswer(command, body));
       return { cardId, result: hostResult(cardId) };
     }
+    if (isHostLevelVerb(body.verb)) return onHost(body);
     if (body.verb === "card.create") return create(command, body);
     if (isListVerb(body.verb)) return list(body.verb, body);
     const card = rules.card(body.args.id, command, "reached");
@@ -136,6 +141,15 @@ export function cardKinds(rules: CardRules) {
     // inline or as a blob when it's over the row's cap (lib/host-result.ts).
     const result = carriesValue(body.verb) ? await valueResult(card.id, reply, rules.carry) : verbResult(body.verb, card.id, reply);
     return { cardId: card.id, result };
+  }
+
+  // A verb on the host itself: no card to check, the same refusals, and the cardId left empty (reported as none).
+  async function onHost(body: HostPayload): Promise<HostDone> {
+    if (!rules.hostVerb) throw new Error(NO_HOST_VERBS);
+    const refused = remoteRefusal(body);
+    if (refused) throw new Error(refused);
+    const reply = await rules.hostVerb(body.verb, body.args);
+    return { cardId: "", result: verbResult(body.verb, "", reply) };
   }
 
   // A new card: no card to check yet, so the host's own create rule, behind the same refusals as an update.

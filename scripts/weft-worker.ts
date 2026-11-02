@@ -102,6 +102,7 @@ async function loadEngine() {
     import("../lib/worker-folders"),
     import("../lib/worker-secret-run"),
     import("../lib/worker-secret-wiring"),
+    import("../lib/worker-host-services"),
     // Loaded again in start, as the board tools' side (lib/worker-board-link.ts); here so `check` proves they load.
     import("../lib/worker-board-link"),
     import("../lib/worker-lists"),
@@ -122,7 +123,7 @@ async function startCommand() {
   const config = readWorkerConfig(home);
   if (!config) throw new Error("This box isn't enrolled yet. Run: weft-worker enrol <token>");
   const { store, parts } = await loadEngine();
-  const [{ startFeatureCard }, , , { subscribe }, { createDaemon }, { createPublisher }, paths, github, folderGrant, { createBlobStore }, { SHOW_DIR }, { setPageUpload }, { busyCards }, { recoverCards }, { resumeInterrupted }, { openScreenChannel, screenInput, setFastScreen, setScreenChannel, fastScreenOf, watcherOf }, { sendInput }, { openFastScreen }, { setDeviceLink }, { deviceLink }, { isMobileApp }, { runVerb }, { startScheduler }, { createHostLines }, { readProjectSnapshot }, { createProjectPublisher }, { listProjectFolders }, { setSecretLink, forgetOnTurnEnd }, { secretWiring }, , , , { startWorktreePool }, browserScreen] = parts;
+  const [{ startFeatureCard }, , , { subscribe }, { createDaemon }, { createPublisher }, paths, github, folderGrant, { createBlobStore }, { SHOW_DIR }, { setPageUpload }, { busyCards }, { recoverCards }, { resumeInterrupted }, { openScreenChannel, screenInput, setFastScreen, setScreenChannel, fastScreenOf, watcherOf }, { sendInput }, { openFastScreen }, { setDeviceLink }, { deviceLink }, { isMobileApp }, { runVerb }, { startScheduler }, { createHostLines }, { readProjectSnapshot }, { createProjectPublisher }, { listProjectFolders }, { setSecretLink, forgetOnTurnEnd }, { secretWiring }, { startHostServices }, , , , { startWorktreePool }, browserScreen] = parts;
   const reg = registry(rpc, config.key);
   // The public half goes on the worker's row, so Settings → Sync → Workers can seal a Claude token to this box.
   const keys = workerSealKeys(home, newSealKeys);
@@ -182,6 +183,8 @@ async function startCommand() {
     },
     log: console.log,
   });
+  // Your account's settings mirrored in, and this box's plan limits polled and published (lib/worker-host-services.ts).
+  const services = startHostServices(reg, console.log, home);
   const daemon = createDaemon({
     reg,
     owner: config.ownerUser,
@@ -204,11 +207,15 @@ async function startCommand() {
     engine: {
       // A card.create names its id (the board's) and may leave the card in Backlog; a run or new_card starts one.
       start: async (body) => {
+        services.nudge();
         const card = typeof body.id === "string" ? (await runVerb("card.create", body as never)).card : await startFeatureCard(body);
         return isMobileApp(card.cwd) ? store.updateCard(card.id, { mobileApp: true }) : card;
       },
       // The same handlers the desktop's routes run (lib/host-api): a reply, an answer, a stop, a mode and the rest.
-      host: (verb, args) => runVerb(verb, args as never),
+      host: (verb, args) => {
+        services.nudge();
+        return runVerb(verb, args as never);
+      },
       // A verb's result over the row's 4 KB (the editor's files.*) goes up as JSON (lib/host-result.ts).
       carry: (json) => results.put(json),
       receive: (text, payload) => receiveAttachments(text, attachmentsOf(payload), attachments, readBlob),
@@ -272,6 +279,7 @@ async function startCommand() {
   const quit = () => {
     stopProjects();
     clearInterval(sweepTimer);
+    services.stop();
     void Promise.all([stop(), stopReach()]).finally(() => process.exit(0));
   };
   restart = quit;

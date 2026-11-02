@@ -1,8 +1,10 @@
 // The Threads page: the keep-conversations-open select and the thread-instructions textarea (with a
-// reset-to-default button). The default permission mode lives on Security.
+// reset-to-default button). The default permission mode lives on Security. Last, a worker's own copy of the
+// per-machine ones (components/WorkerHostSettings.tsx), when you have a worker.
 import { KEEP_ALIVE, MAX_THREADS_CHOICES } from "@/lib/settings-shared";
 import { SELECT_CLASS } from "./ModelSelect";
 import { SettingsCard, SettingsSectionHeader } from "./SettingsLayout";
+import WorkerHostSettings from "./WorkerHostSettings";
 
 export default function SettingsThreadsPage({
   keepAlive,
@@ -113,6 +115,7 @@ export default function SettingsThreadsPage({
           </div>
         </section>
       </SettingsCard>
+      <WorkerHostSettings />
     </>
   );
 }

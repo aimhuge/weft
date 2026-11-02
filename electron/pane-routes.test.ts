@@ -21,7 +21,7 @@ describe("paneRoutes", () => {
   it("serves every route main used to declare inline", () => {
     const keys = Object.keys(make().routes);
     for (const key of ["POST /secrets/ask-add", "POST /folder-access/ask", "POST /app/restart", "POST /webhooks/ask-add", "POST /webhooks/relay-seal",
-      "POST /vercel/status", "POST /supabase/status", "POST /vercel/env-push"]) expect(keys).toContain(key);
+      "POST /vercel/status", "POST /supabase/status", "POST /vercel/env-push", "POST /account-settings/sign"]) expect(keys).toContain(key);
   });
 
   it("asks a person before a tunnel opens, and passes on their answer", async () => {
