@@ -428,7 +428,13 @@ Each ships on its own.
    Touch ID, and `/pairing/verify` checks it like a phone's ([mobile-security.md](mobile-security.md#the-desktop-signs-too)).
    Still open: the board's Allow asking for that signature, and a worker host pinning the Mac's key (with H10).
 8. **H8 secrets on a Worker.** The per-use seal first, then the vault in the host behind H7.
-9. **H9 `@weft/client`** for the phone: the transports, verbs and view models as one package.
+9. **H9 `@weft/client`** for the phone: the transports, verbs and view models as one package. **First pass built
+   2026-11-02:** `packages/weft-client`, a pnpm workspace package of plain TypeScript (no DOM, React, Next or Node; its
+   own tsconfig and an ESLint rule check that), holding the stable pure pieces with re-exports at their old `lib/` paths:
+   the thread-item types, the host verb names (`HOST_VERBS`, which `HOST_API` is keyed by) and arg shapes, the `host`
+   command's builder and readers, the BOARD STATUS parser, `paneFor`, `showMinis` and the signed-approval message.
+   Still in `lib/`: the cloud command builders (`lib/cloud-commands.ts`, under H7's change), the transports (H3b/H6),
+   board grouping, thread paging and the pending ask.
 10. **H10 one device registry** and one pairing flow.
 11. **Later: the process split.** Daemon and cards as separate processes on both hosts, behind the same interface.
 

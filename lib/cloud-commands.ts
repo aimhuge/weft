@@ -3,6 +3,7 @@
 // (`replyCommand` → `replyBody`), answer a thread's pending permission or question (`answerCommand` → `answerBody`),
 // and stop a card's running turn (`stopCommand` → `stopBody`). The web builds the row, the Mac (lib/cloud-inbox.ts)
 // reads the payload back; all four live here so the two sides can't drift.
+import { GRANT_SCOPES, type GrantScope } from "@weft/client";
 import { backendFor, CODEX_DEFAULT_MODEL } from "./new-thread";
 import type { HostPayload, HostResult } from "./host-command";
 import type { Sealed } from "./worker-seal";
@@ -31,9 +32,9 @@ export interface ReplyPayload {
   text: string;
 }
 
-// How far an Allow on an outside-folder prompt reaches: this card, or every card on the machine running it.
-export const GRANT_SCOPES = ["card", "always"] as const;
-export type GrantScope = (typeof GRANT_SCOPES)[number];
+// How far an Allow on an outside-folder prompt reaches: this card, or every card on the machine running it. The
+// signed message carries it too, so it lives with the approval shapes in @weft/client.
+export { GRANT_SCOPES, type GrantScope };
 
 // An answer to a card's pending permission request or question: the pendingId ties the answer to the
 // request the user saw (otherwise the oldest is answered), allow vs. deny, the question's answers, and

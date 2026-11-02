@@ -1,30 +1,19 @@
 // Card, column, project and board-event types used across the app.
 
+// The columns, the CLIs, the permission modes and a skill are @weft/client's, so the phone names them the same.
+import { COLUMNS, MODES, type Backend, type Column, type EditPreview, type PendingElicitation, type PermissionMode, type Question, type SkillInfo, type ThreadItem } from "@weft/client";
 import type { Effort, LoginView } from "./types-settings";
-import type { PendingElicitation, Question, ThreadItem } from "./types-thread";
 import type { Card } from "./types-card-detail";
-import type { EditPreview } from "./edit-preview-types";
 
-export const COLUMNS = [
-  { id: "backlog", label: "Backlog" },
-  { id: "running", label: "Running" },
-  { id: "needs_you", label: "Needs you" },
-  { id: "review", label: "Review" },
-  { id: "done", label: "Done" },
-] as const;
+export { COLUMNS, MODES, type Backend, type Column, type PermissionMode };
 
 // The copilot is one long-lived thread with this fixed id, kept off the board.
 export const COPILOT_ID = "copilot";
 
-export type Column = (typeof COLUMNS)[number]["id"];
-
-export type Backend = "claude" | "puku" | "codex" | "goose";
 export const BACKEND_LABELS: Record<Backend, string> = { claude: "Claude Code", puku: "puku-cli", codex: "Codex", goose: "Goose" };
 // The short name, for a label that sits beside something else ("Sonnet 5.5 (Claude)").
 export const BACKEND_SHORT: Record<Backend, string> = { claude: "Claude", puku: "Puku", codex: "Codex", goose: "Goose" };
 // bypassPermissions is "YOLO": every tool runs without asking.
-export type PermissionMode = "default" | "acceptEdits" | "auto" | "bypassPermissions";
-export const MODES: PermissionMode[] = ["default", "acceptEdits", "auto", "bypassPermissions"];
 
 // How the pickers (new thread, thread header, card menu) name each mode, loosest first.
 export const MODE_OPTIONS: { id: PermissionMode; label: string; hint: string }[] = [
@@ -186,13 +175,8 @@ export interface Automation {
   pattern?: string;
 }
 
-export interface SkillInfo {
-  // What follows the slash when running it.
-  name: string;
-  description: string;
-  // weft: ships with Weft (plugin/skills); user: ~/.claude/skills; project: <folder>/.claude/skills.
-  source: "weft" | "user" | "project";
-}
+// A skill a thread can run with "/": @weft/client's, since the "/" list travels to other boards.
+export type { SkillInfo };
 
 // A Claude Code plugin (/plugin install) a thread can be given or not, as a whole (lib/skill-library.ts).
 export interface PluginInfo {

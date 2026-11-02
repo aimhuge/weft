@@ -22,7 +22,9 @@ export {
 // What the 🔐 drawer and its rail icon show, from what Electron main's vault (electron/vault.cjs) sends:
 // names, environments and masked tails, never values. Values come back only from reveal, after Touch ID.
 
-export type VaultEnvironment = "development" | "preview" | "production";
+// The environment and a thread's ask for a key ride on thread items, so they are @weft/client's.
+import type { SecretAsk, VaultEnvironment } from "@weft/client";
+export type { SecretAsk, VaultEnvironment };
 
 export interface VaultSecret {
   name: string;
@@ -256,14 +258,6 @@ export function vaultFilter(top: string | null, pick: VaultFilterPick | null): s
 export function filterVaults(vaults: VaultSummary[], folder: string | null) {
   if (!folder) return vaults;
   return vaults.filter((v) => v.folders.includes(folder));
-}
-
-// A thread asking for a key it's blocked on (mcp__secrets__ask_add): the thread shows an input for it in place of
-// the tool call (components/SecretAskInput.tsx), so the user pastes the value where they're already reading.
-export interface SecretAsk {
-  folder: string;
-  name: string;
-  environment: VaultEnvironment;
 }
 
 // The ask in an mcp__secrets__ask_add call, read by lib/runner-turn.ts as the call arrives; folder is the

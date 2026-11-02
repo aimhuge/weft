@@ -23,7 +23,7 @@ export default defineConfig({
   },
   test: {
     // Component tests opt into jsdom per file (`// @vitest-environment jsdom`); everything else stays on node.
-    include: ["lib/**/*.test.ts", "lib/**/*.test.tsx", "app/**/*.test.ts", "components/**/*.test.tsx", "app/**/*.test.tsx", "electron/**/*.test.ts", "scripts/**/*.test.ts", "scripts/**/*.test.mjs", "plugin/**/*.test.ts", "supabase/functions/**/*.test.ts"],
+    include: ["lib/**/*.test.ts", "lib/**/*.test.tsx", "app/**/*.test.ts", "components/**/*.test.tsx", "app/**/*.test.tsx", "electron/**/*.test.ts", "scripts/**/*.test.ts", "scripts/**/*.test.mjs", "plugin/**/*.test.ts", "supabase/functions/**/*.test.ts", "packages/*/src/**/*.test.ts"],
     environment: "node",
     // Vitest 4's default threads pool times out spawning workers in CI under load (a few
     // files "fail to start forks worker" with no error in the worker). Forks is stable.
@@ -55,9 +55,9 @@ maxWorkers: Number(process.env.MAX_WORKERS) || 2,
     server: { deps: { inline: [/@aimhuge\//] } },
     coverage: {
       provider: "v8",
-      include: ["lib/**/*.ts", "app/api/**/*.ts"],
+      include: ["lib/**/*.ts", "app/api/**/*.ts", "packages/*/src/**/*.ts"],
       // Test files, and the shared fakes they import (lib/runner.harness.ts).
-      exclude: ["**/*.test.ts", "**/*.harness.ts"],
+      exclude: ["**/*.test.ts", "**/*.harness.ts", "**/*.d.ts"],
       reporter: ["text-summary", "text", "json-summary"],
     },
   },

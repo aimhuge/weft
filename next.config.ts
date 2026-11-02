@@ -60,6 +60,9 @@ const nextConfig: NextConfig = {
   // (node_modules/@esbuild/darwin-arm64/bin/esbuild); when Turbopack resolves it on the server it 500s every
   // route that imports it transitively (2026-10-19). Externalize it the same way.
   serverExternalPackages: ["@anthropic-ai/claude-agent-sdk", "esbuild"],
+  // @weft/client (packages/weft-client) is a workspace package that ships TypeScript source, so Next compiles it with
+  // the app's own code instead of loading it from node_modules at runtime.
+  transpilePackages: ["@weft/client"],
   // The "N" dev badge sits over the board's bottom-left corner; compile and runtime errors still show.
   devIndicators: false,
   // The desktop shell loads the app from 127.0.0.1, not localhost.

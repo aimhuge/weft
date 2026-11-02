@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { followUrl, showMinis as oldestFirst, pageLabel, plain, turnId } from "./show-rail";
-import type { ThreadItem } from "./types";
+import type { ThreadItem } from "./thread-items";
 
 const NOW = 1_000_000_000;
 const user = (text: string, at = NOW): ThreadItem => ({ kind: "user", text, at });

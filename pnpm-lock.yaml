@@ -95,6 +95,9 @@ importers:
       '@tiptap/starter-kit':
         specifier: ^3.31.4
         version: 3.31.4
+      '@weft/client':
+        specifier: workspace:*
+        version: link:packages/weft-client
       '@xterm/addon-fit':
         specifier: ^0.11.0
         version: 0.11.0
@@ -219,6 +222,8 @@ importers:
       vitest:
         specifier: ^4.1.11
         version: 4.1.12(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/coverage-v8@4.1.12)(happy-dom@21.0.3)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@7.3.7(@types/node@26.6.5)(jiti@2.7.0)(lightningcss@1.32.0))
+
+  packages/weft-client: {}
 
 packages:
 

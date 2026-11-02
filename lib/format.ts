@@ -1,3 +1,4 @@
+import { clip, shortToolName, timeAgo } from "@weft/client";
 import type { CacheState, Card } from "./types";
 
 // Display helpers shared by the server and the board UI.
@@ -8,9 +9,8 @@ export function isLive(card: Card) {
   return card.column === "running" || Boolean(card.pending);
 }
 
-export function shortToolName(name: string) {
-  return name.startsWith("mcp__") ? name.split("__").slice(1).join(" ") : name;
-}
+// The display helpers with no app types behind them are @weft/client's, so the phone words things the same.
+export { clip, shortToolName, timeAgo };
 
 export function folderName(cwd: string) {
   return cwd.split("/").filter(Boolean).pop() ?? cwd;
@@ -28,16 +28,6 @@ export function projectHue(name: string) {
 export function worktreeParent(cwd: string) {
   const match = /^(.+?)\/\.claude\/worktrees\/[^/]+(?:\/|$)/.exec(cwd);
   return match ? match[1] : undefined;
-}
-
-export function timeAgo(at: number, now: number) {
-  const s = Math.max(0, Math.round((now - at) / 1000));
-  if (s < 60) return "just now";
-  const m = Math.round(s / 60);
-  if (m < 60) return `${m}m ago`;
-  const h = Math.round(m / 60);
-  if (h < 24) return `${h}h ago`;
-  return `${Math.round(h / 24)}d ago`;
 }
 
 // What a tool call did, as a kind ("command", "read", "click"...), for the one-line summary of a run
@@ -228,13 +218,6 @@ export function asText(value: unknown, fallback = ""): string {
   if (typeof value === "string") return value;
   if (typeof value === "number" || typeof value === "boolean") return String(value);
   return fallback;
-}
-
-// Cuts text to at most `max` characters, ending in an ellipsis when it had to cut — the ellipsis is
-// counted, which is why the slice is `max - 1`. This is the one clip: electron/menus.cjs holds a CJS twin
-// main can't avoid, and lib/search.ts deliberately cuts without an ellipsis (it indexes the text).
-export function clip(text: string, max: number) {
-  return text.length > max ? `${text.slice(0, max - 1)}…` : text;
 }
 
 // The first non-blank line, trimmed and clipped: what a card shows as its last line.

@@ -100,6 +100,23 @@ const eslintConfig = defineConfig([
     plugins: { weft: { rules: { "no-client-server-leak": noClientServerLeak } } },
     rules: { "weft/no-client-server-leak": "error" },
   },
+  // @weft/client runs on the phone too (packages/weft-client/README.md): no DOM, React, Next, Node built-ins or app code.
+  {
+    files: ["packages/weft-client/src/**/*.ts"],
+    ignores: ["**/*.test.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            { group: ["node:*", "fs", "path", "os", "child_process", "crypto"], message: "@weft/client runs on the phone: no Node built-ins." },
+            { group: ["react", "react-dom", "react-dom/*", "next", "next/*"], message: "@weft/client is plain TypeScript: no React or Next." },
+            { group: ["@/*", "../../../*", "**/lib/*"], message: "@weft/client can't import the app: move the piece into the package instead." },
+          ],
+        },
+      ],
+    },
+  },
   // The ratchet: files over those limits today, each held at its current size so it can only shrink.
   ...Object.entries(OVERSIZE).map(([file, max]) => ({ files: [file], rules: { "max-lines": ["error", { max, ...LINE_COUNT }] } })),
   ...Object.entries(COMPLEX).map(([file, max]) => ({ files: [file], rules: { complexity: ["error", max] } })),

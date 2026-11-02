@@ -11,6 +11,6 @@ export async function sodium(): Promise<Sodium> {
   return sodiumModule;
 }
 
-// Standard base64 (with padding), the form every key and ciphertext is stored in.
-export const b64 = (s: Sodium, bytes: Uint8Array) => s.to_base64(bytes, s.base64_variants.ORIGINAL);
-export const unb64 = (s: Sodium, text: string) => s.from_base64(text, s.base64_variants.ORIGINAL);
+// Standard base64 (with padding), the form every key and ciphertext is stored in: @weft/client's, so the phone's
+// libsodium encodes the same way.
+export { b64, unb64 } from "@weft/client";

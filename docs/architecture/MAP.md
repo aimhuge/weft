@@ -90,6 +90,12 @@ When a new doc lands in this folder, add it here on the same change.
 
 ## File map
 
+- `packages/weft-client` (`@weft/client`, a pnpm workspace package; its README says what belongs there): the platform-free
+  client core the board, weft.zip and the phone share (project-hosts.md#views, H9). It holds the thread-item and card-basic
+  types, the host verb names and arg shapes, the `host` command's builder and readers, the BOARD STATUS parser, `paneFor` /
+  `paneFromUrl`, `showMinis` and the signed-approval message; the old `lib/` paths (`lib/status.ts`, `lib/show-rail.ts`,
+  `lib/host-command.ts`, `lib/host-api/calls.ts`, `lib/types-thread.ts`, `lib/edit-preview-types.ts`, `lib/approval-sig.ts`)
+  re-export it. Next compiles it (`transpilePackages`); `pnpm typecheck` also checks it alone with no DOM or Node types.
 - `electron/main.cjs`: shell; starts Next, windows, tray, dock, `weft://` links, global hotkey;
   `electron/startup-screen.cjs` runs the start screen and shows why the board didn't load (Retry, Logs, Quit);
   `electron/startup-timer.cjs` times every launch into `~/.weft/startup.jsonl` (`node electron/startup-timer.cjs` lists them).
@@ -211,7 +217,7 @@ When a new doc lands in this folder, add it here on the same change.
   the cap on threads running at once; docs/architecture/threads-and-sessions.md#cap-on-running-threads.
 - `lib/shell.ts` + `lib/bang.ts` + `app/api/cards/[id]/shell`: `!` in a reply box runs a shell command in the card's folder; its
   output shows in the thread (`ShellLine` in `components/ThreadItems.tsx`) and goes to Claude with your next message.
-- `lib/status.ts` + `lib/settings.ts`: the BOARD STATUS protocol (thread prompt and its parser).
+- `lib/status.ts` + `lib/settings.ts`: the BOARD STATUS protocol (thread prompt and its parser, which is `@weft/client`'s).
 - `components/QuestionForm.tsx` + `components/QuestionParts.tsx` + `lib/question-answers.ts` + `lib/question-keys.ts` +
   `lib/question-preview.ts`: a thread's AskUserQuestion, asked the Claude Code way above the reply box, whose composer is its
   one input (own answer or a note, sent as `annotations`); option previews open in the card's browser pane; text typed on the

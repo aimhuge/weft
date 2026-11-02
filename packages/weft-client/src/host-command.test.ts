@@ -1,9 +1,8 @@
 import { describe, expect, it } from "vitest";
-import type { CloudCommandRow } from "./cloud-commands";
 import { hostCommand, hostFailure, hostResult, isHostDone, readHostCommand, remoteRefusal, textArgOf, verbResult } from "./host-command";
 
 const target = { orgId: "org-1", device: "worker:w-1", folder: "weft", cardId: "card-1" };
-const read = (payload: unknown) => readHostCommand({ payload } as Pick<CloudCommandRow, "payload">);
+const read = (payload: unknown) => readHostCommand({ payload });
 
 describe("hostCommand", () => {
   it("builds a host row addressed to the card's host, with args naming that card", () => {

@@ -1,0 +1,20 @@
+{
+  "name": "@weft/client",
+  "version": "0.1.0",
+  "description": "Weft's platform-free client core: the shapes and pure view models the desktop board, weft.zip and the phone share.",
+  "private": true,
+  "license": "SEE LICENSE IN ../../LICENSE",
+  "type": "module",
+  "sideEffects": false,
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src",
+    "!src/**/*.test.ts",
+    "README.md"
+  ]
+}

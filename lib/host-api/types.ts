@@ -3,25 +3,8 @@
 import { getCard } from "../store";
 import type { Card } from "../types";
 
-/** Every verb a host runs. The table in ./index.ts is keyed by these, and it is the allowlist a remote host checks. */
-export type HostVerb =
-  | "card.update"
-  | "card.stop"
-  | "card.shell"
-  | "card.fresh"
-  | "card.message"
-  | "card.message.edit"
-  | "card.restart"
-  | "card.permission.answer"
-  | "card.permission.wait"
-  | "card.permission.first"
-  | "card.permission.otherFirst"
-  | "card.switchBackend"
-  | "card.rerunModel"
-  | "card.stopTask"
-  | "card.schedule"
-  | "card.unschedule"
-  | "skills.list";
+/** Every verb a host runs: @weft/client's list (HOST_VERBS), which the table in ./index.ts is keyed by. */
+export type { HostVerb } from "@weft/client";
 
 /**
  * One verb's handler: a plain function of its args. `elevated` says the verb grants power, so a local route checks it
