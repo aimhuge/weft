@@ -1,8 +1,10 @@
 // Joins idb to the WebRTC line for one watch (docs/architecture/weft-worker.md#the-fast-path). iOS only: Android has no
-// idb, so an emulator stays on the JPEG path. Channels: "video" carries H.264, "input" the live gesture and keyboard.
+// idb, so an emulator stays on the JPEG path. H.264 goes on the board's video track where it offered one
+// (lib/rtp-video.ts), else on the "video" channel; "input" carries the live gesture and keyboard.
 import { openIdb } from "./idb-companion";
 import type { IdbSession } from "./idb-session";
 import { liveEvent, type ScreenQuality } from "./rtc-signal";
+import { rtpVideo, takeVideo } from "./rtp-video";
 import type { Device } from "./simulator-devices";
 import { answerOffer, type Channel } from "./worker-rtc";
 import type { FastScreen } from "./worker-screen";
@@ -48,6 +50,12 @@ export function videoChannel(idb: Pick<IdbSession, "video">, channel: Channel, q
   });
 }
 
+export function untilClosed(channel: Pick<Channel, "stateChanged">, stop: () => void) {
+  channel.stateChanged.subscribe((state) => {
+    if (state === "closed") stop();
+  });
+}
+
 // Fractions become points here, so nothing on the wire depends on the device's size.
 export function inputChannel(idb: Pick<IdbSession, "size" | "touch" | "key">, channel: Pick<Channel, "onMessage">) {
   channel.onMessage.subscribe((raw) => {
@@ -67,8 +75,25 @@ export async function openFastScreen(d: Device): Promise<FastScreen | null> {
     size: idb.size,
     connect: async (sdp, quality) => {
       line?.close();
-      const opened = await answerOffer(sdp, { video: (c) => videoChannel(idb, c, quality), input: (c) => inputChannel(idb, c) });
-      line = opened;
+      // Set while the answer is made, before any channel opens. A board on the track leaves its "video" channel unused,
+      // and the channel closing is still how the worker hears it left.
+      let track: (() => void) | null = null;
+      const opened = await answerOffer(
+        sdp,
+        { video: (c) => (track ? untilClosed(c, track) : videoChannel(idb, c, quality)), input: (c) => inputChannel(idb, c) },
+        {
+          media: (transceivers) => {
+            const sender = takeVideo(transceivers);
+            if (sender) track = rtpVideo(idb, sender, quality);
+          },
+        },
+      );
+      line = {
+        close: () => {
+          track?.();
+          opened.close();
+        },
+      };
       return opened.answer;
     },
     close: () => {

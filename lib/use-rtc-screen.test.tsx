@@ -29,6 +29,7 @@ class FakePeer {
   setLocalDescription = vi.fn(() => Promise.resolve());
   setRemoteDescription = vi.fn(() => Promise.resolve());
   createOffer = () => Promise.resolve({});
+  addTransceiver = vi.fn(() => ({ setCodecPreferences: vi.fn(), receiver: {} }));
   addEventListener = (name: string, fn: () => void) => (this.listeners[name] = fn);
   createDataChannel = (label: string) => {
     const c = new FakeChannel(label);
@@ -152,5 +153,87 @@ describe("useRtcScreen", () => {
     expect(peer.close).toHaveBeenCalled();
     unmount();
     expect(FakeDecoder.made[0]?.close).toHaveBeenCalled();
+  });
+
+  it("waits for gathering to finish before it offers", async () => {
+    const onOffer = offered();
+    class Gathering extends FakePeer {
+      iceGatheringState = "gathering";
+    }
+    vi.stubGlobal("RTCPeerConnection", Gathering);
+    renderHook(() => useRtcScreen("d", true, canvas, onOffer));
+    await waitFor(() => expect(FakePeer.made[0]?.listeners.icegatheringstatechange).toBeDefined());
+    const peer = FakePeer.made[0] as FakePeer;
+    peer.listeners.icegatheringstatechange?.();
+    expect(onOffer).not.toHaveBeenCalled();
+    peer.iceGatheringState = "complete";
+    peer.listeners.icegatheringstatechange?.();
+    await waitFor(() => expect(onOffer).toHaveBeenCalled());
+  });
+
+  describe("on a video track", () => {
+    const h264 = { mimeType: "video/H264", sdpFmtpLine: "packetization-mode=1;profile-level-id=64001f" };
+    let frame: (() => void) | null = null;
+    const video = () => ({ current: { play: () => Promise.resolve(), srcObject: null, requestVideoFrameCallback: (fn: () => void) => (frame = fn) } as unknown as HTMLVideoElement });
+
+    beforeEach(() => {
+      frame = null;
+      vi.stubGlobal("RTCRtpReceiver", { getCapabilities: () => ({ codecs: [h264] }) });
+      vi.stubGlobal("MediaStream", class { constructor(readonly tracks: unknown[]) {} });
+    });
+
+    it("offers a receive-only H.264 m-line and goes live on the track's first frame", async () => {
+      const onOffer = offered();
+      const el = video();
+      const { result } = renderHook(() => useRtcScreen("d", true, canvas, onOffer, "medium", el));
+      await waitFor(() => expect(onOffer).toHaveBeenCalled());
+      const peer = FakePeer.made[0] as FakePeer;
+      expect(peer.addTransceiver).toHaveBeenCalledWith("video", { direction: "recvonly" });
+      act(() => (peer.listeners.track as unknown as (e: { track: unknown }) => void)({ track: { id: "t" } }));
+      expect(result.current.live).toBe(false);
+      act(() => frame?.());
+      expect(result.current).toMatchObject({ live: true, track: true });
+      peer.connectionState = "failed";
+      act(() => peer.listeners.connectionstatechange?.());
+      expect(result.current).toMatchObject({ live: false, track: false });
+      expect(el.current.srcObject).toBeNull();
+    });
+
+    it("stays on the channel without a <video> to play in", async () => {
+      const onOffer = offered();
+      renderHook(() => useRtcScreen("d", true, canvas, onOffer, "medium", { current: null }));
+      await waitFor(() => expect(onOffer).toHaveBeenCalled());
+      expect(FakePeer.made[0]?.addTransceiver).not.toHaveBeenCalled();
+    });
+
+    it("leaves the track out of the next offer when it negotiated but never showed a frame", async () => {
+      vi.useFakeTimers();
+      try {
+        const onOffer = offered();
+        renderHook(() => useRtcScreen("d", true, canvas, onOffer, "medium", video()));
+        await act(() => vi.advanceTimersByTimeAsync(0));
+        expect(onOffer).toHaveBeenCalledTimes(1);
+        const first = FakePeer.made[0] as FakePeer;
+        act(() => (first.listeners.track as unknown as (e: { track: unknown }) => void)({ track: {} }));
+        await act(() => vi.advanceTimersByTimeAsync(15_000 + 30_000));
+        expect(onOffer).toHaveBeenCalledTimes(2);
+        expect(FakePeer.made[1]?.addTransceiver).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("keeps offering the track after a try that never reached it", async () => {
+      vi.useFakeTimers();
+      try {
+        const onOffer = offered();
+        renderHook(() => useRtcScreen("d", true, canvas, onOffer, "medium", video()));
+        await act(() => vi.advanceTimersByTimeAsync(15_000 + 30_000));
+        expect(onOffer).toHaveBeenCalledTimes(2);
+        expect(FakePeer.made[1]?.addTransceiver).toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 });
