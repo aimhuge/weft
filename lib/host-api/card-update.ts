@@ -1,16 +1,16 @@
 // card.update: the PATCH body of one card (title, archive, marks, read scope, mode, agent, folder, column, place),
 // applied in that order. The validation is here, not in the route, so every host refuses what the Mac refuses.
-import { isAgent, storedAgent } from "@/lib/agents";
-import { listAgents } from "@/lib/agent-store";
-import { repointCard } from "@/lib/card-repoint";
-import { resolveFolder } from "@/lib/folders";
-import { asText, cleanTitle } from "@/lib/format";
-import { withReadScope } from "@/lib/read-scope";
-import { endSession, isBusy, setPermissionMode } from "@/lib/runner";
-import { getCard, reorderCard, updateCard } from "@/lib/store";
-import { rememberTags } from "@/lib/tag-store";
-import { normalizeTags } from "@/lib/tags";
-import { MODES, type Card, type PermissionMode } from "@/lib/types";
+import { isAgent, storedAgent } from "../agents";
+import { listAgents } from "../agent-store";
+import { repointCard } from "../card-repoint";
+import { resolveFolder } from "../folders";
+import { asText, cleanTitle } from "../format";
+import { withReadScope } from "../read-scope";
+import { endSession, isBusy, setPermissionMode } from "../runner";
+import { getCard, reorderCard, updateCard } from "../store";
+import { rememberTags } from "../tag-store";
+import { normalizeTags } from "../tags";
+import { MODES, type Card, type PermissionMode } from "../types";
 import { moveCard } from "./card-move";
 import type { CardPatch, CardUpdateArgs } from "./calls";
 import { requireCard } from "./types";

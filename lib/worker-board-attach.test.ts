@@ -41,6 +41,16 @@ describe("a message to a worker with a pasted file", () => {
     expect(inserted()).toMatchObject({ kind: "run", payload: { prompt: text(dir), attachments: [{ name: "shot-1a2b.png", sha: SHA }] } });
   });
 
+  it("does the same for a host verb's typed text, and leaves a verb with none alone", async () => {
+    const { client, inserted, uploads } = fakeClient({ cardRow: target });
+    await sendWorkerAction({ action: "host", cardId: "c1", verb: "card.message.edit", args: { text: text(dir) } }, client, dir);
+    expect(inserted()).toMatchObject({ kind: "host", payload: { verb: "card.message.edit", args: { id: "c1", text: text(dir) }, attachments: [{ name: "shot-1a2b.png", sha: SHA }] } });
+    await sendWorkerAction({ action: "host", cardId: "c1", verb: "card.fresh", args: { message: 3 } }, client, dir);
+    await sendWorkerAction({ action: "host", cardId: "c1", verb: "card.stop" }, client, dir);
+    expect(uploads).toHaveLength(1);
+    expect((inserted() as { payload: object }).payload).toEqual({ verb: "card.stop", args: { id: "c1" } });
+  });
+
   it("leaves a text reply's row as it was", async () => {
     const { client, inserted, uploads } = fakeClient({ cardRow: target });
     await sendWorkerAction({ action: "reply", cardId: "c1", text: "no files" }, client, dir);

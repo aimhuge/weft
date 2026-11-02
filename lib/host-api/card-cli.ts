@@ -1,8 +1,8 @@
 // The card's CLI and model: switch to another CLI (or model on its own), or rerun the last message on a backup model.
-import { ALL_MODEL_IDS, BACKEND_IDS, MODELS, NO_MODEL, backendFor } from "@/lib/new-thread";
-import { rerunOnModel, switchBackend } from "@/lib/runner";
-import { getCard } from "@/lib/store";
-import type { Backend, Card } from "@/lib/types";
+import { ALL_MODEL_IDS, BACKEND_IDS, MODELS, NO_MODEL, backendFor } from "../new-thread";
+import { rerunOnModel, switchBackend } from "../runner";
+import { getCard } from "../store";
+import type { Backend, Card } from "../types";
 import { requireCard } from "./types";
 
 type CardReply = { card: Card | undefined };

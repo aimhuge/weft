@@ -1,4 +1,4 @@
-import { runShell } from "@/lib/shell";
+import { runShell } from "../shell";
 import { OK, settle, type Ok } from "./types";
 
 // "!" in the reply box: starts your command in the card's folder. It answers once the command has started;

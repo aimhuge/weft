@@ -1,7 +1,7 @@
 // The shapes every host-api handler shares (docs/architecture/project-hosts.md): a verb's name, its handler and the
 // one error a route turns into a 404.
-import { getCard } from "@/lib/store";
-import type { Card } from "@/lib/types";
+import { getCard } from "../store";
+import type { Card } from "../types";
 
 /** Every verb a host runs. The table in ./index.ts is keyed by these, and it is the allowlist a remote host checks. */
 export type HostVerb =

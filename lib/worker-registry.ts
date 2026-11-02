@@ -2,6 +2,7 @@
 // the worker_* functions with the publishable key and passes its own key as the first argument, and each function
 // checks sha256(key) before it acts. Enrolment trades a one-time token for that key.
 import type { CloudCommandRow } from "./cloud-commands";
+import type { HostResult } from "./host-command";
 import type { WorkerConfig } from "./worker-config";
 import type { GithubState } from "./worker-github";
 
@@ -60,8 +61,10 @@ export function registry(rpc: Rpc, key: string) {
     deviceCancel: (id: string) => call<boolean>(rpc, "worker_device_cancel", { p_key: key, p_call: id }),
     pending: async () => (await call<CloudCommandRow[] | null>(rpc, "worker_pending", { p_key: key })) ?? [],
     claim: (id: string) => call<boolean>(rpc, "worker_claim", { p_key: key, p_command: id }),
-    report: (id: string, status: "done" | "failed", cardId: string | null, error: string | null) =>
-      call<unknown>(rpc, "worker_report", { p_key: key, p_command: id, p_status: status, p_card: cardId, p_error: error }),
+    // A host command's result goes as p_result; the other kinds leave it off, so they still report to a database
+    // whose worker_report predates it (supabase/migrations/*_host_command.sql).
+    report: (id: string, status: "done" | "failed", cardId: string | null, error: string | null, result?: HostResult) =>
+      call<unknown>(rpc, "worker_report", { p_key: key, p_command: id, p_status: status, p_card: cardId, p_error: error, ...(result ? { p_result: result } : {}) }),
     putCard: (cardId: string, folder: string, card: unknown, deleted = false) =>
       call<unknown>(rpc, "worker_put_card", { p_key: key, p_card_id: cardId, p_folder: folder, p_card: card, p_deleted: deleted }),
     putItems: (cardId: string, items: ItemRow[], outputs: OutputRow[], fromSeq: number | null) =>

@@ -4,6 +4,7 @@
 // and stop a card's running turn (`stopCommand` → `stopBody`). The web builds the row, the Mac (lib/cloud-inbox.ts)
 // reads the payload back; all four live here so the two sides can't drift.
 import { backendFor, CODEX_DEFAULT_MODEL } from "./new-thread";
+import type { HostPayload, HostResult } from "./host-command";
 import type { Sealed } from "./worker-seal";
 import type { ApprovalAuth } from "./approval-sig";
 import { readQuestionReply } from "./question-reply";
@@ -93,7 +94,8 @@ export interface QaPayload {
   device: string | null;
 }
 
-export type CloudCommandKind = "new_card" | "reply" | "answer" | "stop" | "run" | "login" | "github_login" | "clone" | "mode" | "input" | "qa" | "update";
+// "host" carries any verb in lib/host-api (lib/host-command.ts); reply, answer, stop and mode run as its verbs too.
+export type CloudCommandKind = "new_card" | "reply" | "answer" | "stop" | "run" | "login" | "github_login" | "clone" | "mode" | "input" | "qa" | "update" | "host";
 
 // public.cloud_commands.
 export interface CloudCommandRow {
@@ -104,10 +106,13 @@ export interface CloudCommandRow {
   // The Mac that runs it (cloud_cards.owner_device) and the folder it runs in (cloud_cards.folder).
   target_device: string;
   folder: string;
-  payload: NewCardPayload | ReplyPayload | AnswerPayload | StopPayload | LoginPayload | ClonePayload | ModePayload | InputPayload | QaPayload | UpdatePayload;
+  payload: NewCardPayload | ReplyPayload | AnswerPayload | StopPayload | LoginPayload | ClonePayload | ModePayload | InputPayload | QaPayload | UpdatePayload | HostPayload;
   status: CloudCommandStatus;
   card_id: string | null;
   error: string | null;
+  // What a `host` command came to, written by the host that ran it (lib/host-command.ts HostResult). Absent on a
+  // database without the column yet, and null for the other kinds.
+  result?: HostResult | null;
   created_at: string;
   updated_at: string;
 }

@@ -1,4 +1,4 @@
-import { sendFresh } from "@/lib/splice";
+import { sendFresh } from "../splice";
 import { OK, type Ok } from "./types";
 
 // "Send fresh" on a card with a cold prompt cache: a new session in the same card, started from a brief of the

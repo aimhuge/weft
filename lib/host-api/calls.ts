@@ -1,7 +1,7 @@
 // What a route's body asks for, without loading any handler: the card.update body and whether it widens the
 // thread's power, and which messages or permission verb a body names. Kept apart from the handlers so a route
 // (or, next, the worker daemon) can pick a verb before HOST_API loads the module that runs it.
-import type { Column, PermissionMode } from "@/lib/types";
+import type { Column, PermissionMode } from "../types";
 
 export type CardPatch = {
   column?: Column;

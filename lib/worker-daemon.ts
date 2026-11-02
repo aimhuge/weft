@@ -1,14 +1,16 @@
 // The Weft Worker daemon (docs/architecture/weft-worker.md): headless Weft on a host. It heartbeats, asks for the
 // commands addressed to it, claims each one (so it can't run twice), and runs it with the same engine the desktop
-// runs: `run` (and a web `new_card`) makes a card in the project's checkout and starts its thread, `reply`,
-// `answer` and `stop` act on a card it runs. The publisher ships the card and its thread back as they change.
+// runs: `run` (and a web `new_card`) makes a card in the project's checkout and starts its thread, `host` runs any
+// verb in lib/host-api on a card it runs, and `reply`, `answer`, `stop` and `mode` run as those verbs too. The publisher ships the card and its thread back as they change.
 //
 // It has no session, so Realtime's row filters would show it nothing. A trigger pings it instead (lib/worker-wake.ts)
 // and it asks at once. It still polls: every 30 s to catch a missed ping, and every 3 s while the socket is down.
 import { newCardBody, type CloudCommandRow, type GrantScope } from "./cloud-commands";
 import type { Card } from "./types";
+import type { HostVerb } from "./host-api";
+import { hostFailure, isHostDone, type HostDone } from "./host-command";
 import { createCardCommands } from "./worker-card-commands";
-import { cloneBody, runBody, type CardMode, type ScreenInput } from "./worker-commands";
+import { cloneBody, runBody, type ScreenInput } from "./worker-commands";
 import { explainClone, type GithubStatus } from "./worker-github";
 import type { Publisher } from "./worker-publish";
 import { sealedOf, type Sealed } from "./worker-seal";
@@ -22,15 +24,12 @@ import type { Recovered } from "./worker-recover";
 // The engine, as the daemon uses it (lib/card-starter.ts, lib/runner.ts, lib/store.ts): injected so tests don't run a CLI.
 export interface Engine {
   start(body: Record<string, unknown>): Promise<Card>;
-  reply(cardId: string, text: string): void;
+  // One verb of lib/host-api, run in this process (runVerb): a reply, an answer, a stop, a mode and the rest.
+  host(verb: HostVerb, args: Record<string, unknown>): Promise<unknown>;
   // Brings the files a command's text pastes onto this box and points the text at them (lib/attachment-transfer.ts).
   receive(text: string, payload: unknown): Promise<string>;
-  answer(cardId: string, allow: boolean, answers: Record<string, string> | undefined, pendingId: string): void;
   // This card / Always on this worker (lib/folder-grant.ts).
   grant(cardId: string, directory: string, scope: GrantScope): void;
-  stop(cardId: string): Promise<void>;
-  // The thread's mode picker (lib/runner.ts setPermissionMode), mid-turn included.
-  setMode(cardId: string, mode: CardMode): void;
   // A tap or swipe on the device a card is watching (lib/simulator-input.ts), or the pane starting its stream.
   input(input: ScreenInput, cardId: string): Promise<unknown>;
   // Local Simulator mode: which Mac this card's device tools go to, null for this box's own (lib/worker-device.ts).
@@ -144,7 +143,7 @@ export function createDaemon(deps: DaemonDeps) {
     return null;
   }
 
-  async function act(command: CloudCommandRow): Promise<string | null> {
+  async function act(command: CloudCommandRow): Promise<string | null | HostDone> {
     const kind: string = command.kind;
     if (kind === "login") {
       await deps.login(sealedToken(command));
@@ -171,12 +170,15 @@ export function createDaemon(deps: DaemonDeps) {
     if (!(await reg.claim(command.id))) return;
     log(`Weft Worker: ${command.kind} in ${command.folder}`);
     try {
-      const cardId = await act(command);
-      await reg.report(command.id, "done", cardId, null);
+      const done = await act(command);
+      if (isHostDone(done)) await reg.report(command.id, "done", done.cardId, null, done.result);
+      else await reg.report(command.id, "done", done, null);
     } catch (err) {
       const message = (err as Error).message.slice(0, ERROR_MAX);
       log(`Weft Worker: ${command.kind} failed: ${message}`);
-      await reg.report(command.id, "failed", null, message).catch(() => {});
+      // A host command's result says it failed too, so a board waiting on `result` reads one place.
+      const failed = command.kind === "host" ? reg.report(command.id, "failed", null, message, hostFailure(message)) : reg.report(command.id, "failed", null, message);
+      await failed.catch(() => {});
     }
   }
 

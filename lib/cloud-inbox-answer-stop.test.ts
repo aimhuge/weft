@@ -10,6 +10,7 @@ vi.mock("./device-calls", async () => (await import("./cloud-inbox.harness")).de
 vi.mock("./cloud-sync", async () => (await import("./cloud-inbox.harness")).cloudSyncMock);
 vi.mock("./new-card", async () => (await import("./cloud-inbox.harness")).newCardMock);
 vi.mock("./runner", async () => (await import("./cloud-inbox.harness")).runnerMock);
+vi.mock("./host-api", async (real) => (await import("./cloud-inbox.harness")).hostApiMock(real));
 vi.mock("./store", async () => (await import("./cloud-inbox.harness")).storeMock);
 // Main's pairing routes (electron/pairing-ipc.cjs): no phone paired unless a test says so.
 const shellMock = vi.hoisted(() => vi.fn((route: string) => Promise.resolve(route === "/pairing/status" ? { approvers: 0 } : { ok: true })));

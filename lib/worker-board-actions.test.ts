@@ -79,6 +79,26 @@ describe("sendWorkerAction", () => {
     await expect(sendWorkerAction({ action: "input", cardId: "c1", input: { kind: "tap", device: "", x: 0, y: 0 } }, client)).rejects.toThrow("That tap can't be sent.");
   });
 
+  it("sends any host verb, addressed to the card's worker, with args naming that card", async () => {
+    const { client, inserted } = fakeClient({ cardRow: target });
+    await sendWorkerAction({ action: "host", cardId: "c1", verb: "card.update", args: { id: "other", body: { title: "T" } } }, client);
+    expect(inserted()).toEqual({
+      org_id: "org-1",
+      kind: "host",
+      target_device: "dev-1",
+      folder: "ling",
+      payload: { verb: "card.update", args: { id: "c1", body: { title: "T" } } },
+    });
+    await sendWorkerAction({ action: "host", cardId: "c1", verb: "card.stop" }, client);
+    expect(inserted()).toMatchObject({ kind: "host", payload: { verb: "card.stop", args: { id: "c1" } } });
+  });
+
+  it("refuses a verb no host runs", async () => {
+    const { client, inserted } = fakeClient({ cardRow: target });
+    await expect(sendWorkerAction({ action: "host", cardId: "c1", verb: "card.explode" }, client)).rejects.toThrow("A worker doesn't run card.explode.");
+    expect(inserted()).toBeNull();
+  });
+
   it("says to write a message when the reply is empty", async () => {
     const { client } = fakeClient({ cardRow: target });
     await expect(sendWorkerAction({ action: "reply", cardId: "c1", text: "   " }, client)).rejects.toThrow("Write a message first.");
