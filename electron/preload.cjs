@@ -204,6 +204,13 @@ contextBridge.exposeInMainWorld("weft", {
   approval: {
     sign: (request) => ipcRenderer.invoke("approval:sign", request),
   },
+  // Adding a worker by pairing it (electron/host-pairing-ipc.cjs, docs/architecture/device-registry.md): the install
+  // line comes back; the code's secret check and Touch ID stay in main.
+  hostPairing: {
+    start: (orgId) => ipcRenderer.invoke("host-pairing:start", orgId),
+    check: (id) => ipcRenderer.invoke("host-pairing:check", id),
+    cancel: (id) => ipcRenderer.invoke("host-pairing:cancel", id),
+  },
   // Goose (electron/goose-ipc.cjs): a provider key per provider, sealed in the Keychain. The board sends a key
   // once and never reads one back — the runner's Goose subprocess gets it in its env (electron/goose-env.cjs).
   goose: {

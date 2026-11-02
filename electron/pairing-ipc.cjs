@@ -81,6 +81,9 @@ function setupPairing({ ipcMain, dataDir, accountClient, isBoard, confirm, safeS
     return { device, issuedAt, sig: signer.sign(message), publicKey: signer.publicKey() };
   });
 
+  // Workers added by pairing from Settings → Devices: the same claim, proof and Touch ID (electron/host-pairing.cjs).
+  require("./host-pairing-ipc.cjs").registerHostPairing(handle, { db, userId, macDevice, myDevice, confirm });
+
   const routes = {
     // The key the uploader seals with (lib/sync-seal-upload.ts); { none: true } when this Mac has no grant yet.
     "POST /sync/key": withSodium(async ({ orgId, create }) => (await syncKeys.current(String(orgId), { create: create === true })) ?? { none: true }),

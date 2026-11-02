@@ -74,6 +74,7 @@ matching doc below. When a feature lands, add or update its entry here and in it
 - `faq-site.md` — `docs/FAQ.md` as the weft.zip FAQ: the home page's six questions, `/faq` rendering the whole file, how GitHub-shaped paths, image rows and heading ids map onto the site.
 - `marketing-site.md` — the weft.zip home page's own sections: the content split across `lib/home.ts` / `lib/home-release.ts` / `components/home/*`, the pricing section reading its prices off the billing catalog, the Weft Cloud Workers request card under it (`components/home/CloudWorkers.tsx`, `lib/cloud-worker-request.ts`, `app/api/cloud-workers/request`), `loadHome()`'s parse-error fallback, and `data-track`.
 - `cloud-sync.md` — server-side cards: the outbox, the content-addressed blob store, thread paging, the `cloud_*` tables and their policies.
+- `device-registry.md` — H10: `public.device_registry` (one view over `devices`, `cloud_workers`, `phone_pairings`), `device_revoke` for every kind, Settings → Devices, and enrolling a worker by pairing it (`worker_pair_*`).
 - `mobile-security.md` — pairing a phone or browser (QR, pinned by the Mac, Touch ID), the workspace sync key, sealed rows, signed approvals, passkey approvals from weft.zip (H7).
 - `mobile.md` — the phone app's server side: `push_devices`, the `cloud_cards` push trigger, the `push-card` Edge Function and its Expo payload, Settings → Sync → Phones.
 - `profiles.md` — public profiles at `weft.zip/@username`: `profiles.username`, the `/@` → `/u/[username]` rewrite, what the page shows and never shows.
@@ -493,6 +494,12 @@ When a new doc lands in this folder, add it here on the same change.
   `electron/desktop-signer.cjs` + `electron/approval-sign.cjs`: this Mac's own Ed25519 approval key (sealed in `~/.weft/vault/desktop-sign-key.json`); board IPC
   `weft.approval.sign` finds the request on main's own server, asks Touch ID in main's words, then signs the phone's message, and `/pairing/verify` checks it like a phone's (not yet
   called by the board: mobile-security.md, "The desktop signs too"). `electron/pairing-open.cjs` marks an open code for the clipboard guard.
+- `lib/device-registry.ts` + `lib/use-devices.ts` + `components/DevicesSettings.tsx` + `app/api/devices/route.ts`: Settings → Devices
+  over `public.device_registry`, Revoke by kind (`revokeRoute`: a phone or browser this Mac pinned through `weft.pairing.revoke`,
+  the rest through `device_revoke`). `lib/host-pairing.ts` + `lib/worker-pair.ts` (the box: `weft-worker enrol wph.…`) and
+  `electron/host-pairing.cjs` + `electron/host-pairing-ipc.cjs` (main: open, check, Touch ID, confirm; IPC `weft.hostPairing.*`,
+  registered by `electron/pairing-ipc.cjs`) enrol a worker by pairing it; `electron/device-beat.cjs` `linkHost` names the Mac's
+  device id on its key row (docs/architecture/device-registry.md).
 - `lib/sync-seal.ts` + `lib/sodium.ts` + `lib/approval-sig.ts` + `lib/pairing-link.ts`: the isomorphic half (Mac server, web, phone):
   sealed envelopes with org/card/slot bound in, the signed approval message, the pairing link and claim. `lib/sync-seal-upload.ts`
   seals rows in `lib/cloud-sync-upload.ts` when the switch is on; `lib/approval-check.ts` is `lib/cloud-inbox.ts`'s rule for answers;

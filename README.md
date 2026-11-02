@@ -989,6 +989,9 @@ sleeps, the agent falls back to the worker's own device.
 **Weft Workers.** A worker is a Mac or Linux box that runs cards headless while your laptop sleeps. Settings → Sync →
 **Workers** → **Add a worker** shows one line to run on the box (`curl -fsSL https://weft.zip/worker.sh | sh -s -- <token>`).
 It installs the toolchain and Weft, enrols with a one-time token, and starts a launchd or systemd service.
+Or pair it instead: Settings → **Devices** → **Add a worker** gives a line with a pairing code; the box makes its own key,
+claims the code, prints a check code, and joins once you confirm the same code with Touch ID on the Mac. Settings → Devices
+also lists every Mac, worker, phone and browser of yours, the keys each holds, and **Revoke** for any of them.
 **Sign in to Claude** on its row signs its Claude Code in with one click: Weft opens Claude's approval page in a
 window beside the button, and the token it gets back is sealed to the worker's own key, so Supabase never holds it
 in the clear (or run `weft-worker login` on the box). **Sign in to GitHub** beside it does the same for private repos:

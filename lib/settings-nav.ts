@@ -1,7 +1,7 @@
 import { FIRST_SCENES, SCENES, sceneOf, type Base, type Scene, type SceneId } from "./theme";
 
 // The Settings screen's pages, down the left. Each is one scrolling page of cards; no tabs.
-export type SettingsPage = "general" | "laptop" | "models" | "threads" | "agents" | "security" | "automations" | "shortcuts" | "accounts" | "connectors" | "team" | "sync";
+export type SettingsPage = "general" | "laptop" | "models" | "threads" | "agents" | "security" | "automations" | "shortcuts" | "accounts" | "connectors" | "team" | "devices" | "sync";
 
 export const SETTINGS_PAGES: { id: SettingsPage; label: string; hint: string }[] = [
   { id: "general", label: "General", hint: "How the board looks and sounds." },
@@ -15,6 +15,7 @@ export const SETTINGS_PAGES: { id: SettingsPage; label: string; hint: string }[]
   { id: "accounts", label: "Accounts", hint: "Your Weft account and the CLIs' logins." },
   { id: "connectors", label: "Connectors", hint: "Outside services your threads can work in, like Gmail, Calendar and Drive." },
   { id: "team", label: "Teams", hint: "Every Weft team you're in, and the people in each." },
+  { id: "devices", label: "Devices", hint: "Every Mac, worker, phone and browser of yours, the keys each holds, and Revoke." },
   { id: "sync", label: "Sync", hint: "Which projects upload their cards to your workspace, and how it's going." },
 ];
 

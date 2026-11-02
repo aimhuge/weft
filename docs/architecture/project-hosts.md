@@ -360,8 +360,9 @@ later move into the host, its key sealed to the host and opened only behind a si
   fields: `thumbs`, `onBlobError`, `copilot`. Two were bugs and are fixed: a Mac's `page` column skipped redaction, and a
   worker shipped the copilot from its thread events and could send one tool id twice in a batch. Also still per host:
   a delete keeps the card json on a Mac and blanks it (`{}`) on a worker. Golden snapshots: `lib/card-rows.golden.test.ts`.
-- **One device registry:** worker enrolment tokens, `desktop` heartbeat rows and the phone and browser QR pairing become
-  one pairing flow; enrolling a worker is pairing a host.
+- **One device registry** (H10, built 2026-11-02, [device-registry.md](device-registry.md)): `public.device_registry` shows
+  every Mac, worker, phone and browser with its keys, owner, org and last seen; `device_revoke` revokes any kind; enrolling a
+  worker is pairing a host (`worker_pair_*`: the same claim, proof and Touch ID), with token enrolment kept beside it.
 
 ## Cost and speed
 
@@ -435,7 +436,9 @@ Each ships on its own.
    command's builder and readers, the BOARD STATUS parser, `paneFor`, `showMinis` and the signed-approval message.
    Still in `lib/`: the cloud command builders (`lib/cloud-commands.ts`, under H7's change), the transports (H3b/H6),
    board grouping, thread paging and the pending ask.
-10. **H10 one device registry** and one pairing flow.
+10. **H10 one device registry** and one pairing flow (built 2026-11-02, migration not applied:
+    [device-registry.md](device-registry.md)): `public.device_registry`, `device_revoke` for every kind, Settings → Devices,
+    and Add a worker as a pairing (`worker_pair_*`); `worker_enrol` stays for tokens.
 11. **Later: the process split.** Daemon and cards as separate processes on both hosts, behind the same interface.
 
 

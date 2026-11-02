@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { BEAT_MS, FIRST_BEAT_MS, beatDevice, startDeviceBeat } from "./device-beat.cjs";
+import { BEAT_MS, FIRST_BEAT_MS, beatDevice, linkHost, startDeviceBeat } from "./device-beat.cjs";
 
 const tmp = (key: unknown = { publicKey: "pub-1", privateKey: "sealed" }) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "weft-beat-"));
@@ -97,5 +97,80 @@ describe("startDeviceBeat", () => {
     stop();
     await vi.advanceTimersByTimeAsync(BEAT_MS * 3);
     expect(from).toHaveBeenCalledTimes(2);
+  });
+});
+
+const HOST = "ab".repeat(32);
+const withHost = (id = HOST) => {
+  const dir = tmp();
+  fs.writeFileSync(path.join(dir, "device-id"), `${id}\n`);
+  return dir;
+};
+
+// The host link's query: update, then two eq filters, awaited.
+const linkClient = (error: { message: string } | null = null, sub: unknown = "user-1") => {
+  const calls: { patch?: unknown; filters: unknown[][] }[] = [];
+  const supabase = {
+    from: () => {
+      const call: { patch?: unknown; filters: unknown[][] } = { filters: [] };
+      calls.push(call);
+      // Thenable like supabase-js's builder: the link awaits it after its filters, the beat after `is`.
+      const query = {
+        update: (patch: unknown) => ((call.patch = patch), query),
+        eq: (...f: unknown[]) => (call.filters.push(f), query),
+        is: () => Promise.resolve({ error: null }),
+        then: (done: (r: { error: unknown }) => unknown) => done({ error }),
+      };
+      return query;
+    },
+  };
+  return { calls, accountClient: { getClaims: () => ({ sub }), supabase } };
+};
+
+describe("linkHost", () => {
+  it("names this Mac's device id on its own key row", async () => {
+    const { calls, accountClient } = linkClient();
+    expect(await linkHost({ accountClient, dir: withHost() })).toBe(true);
+    expect(calls[0]).toMatchObject({ patch: { host_device: HOST }, filters: [["user_id", "user-1"], ["public_key", "pub-1"]] });
+  });
+
+  it("sends nothing signed out, without a device id, or with one that isn't a device id", async () => {
+    const { calls, accountClient } = linkClient();
+    expect(await linkHost({ accountClient: linkClient(null, null).accountClient, dir: withHost() })).toBe(false);
+    expect(await linkHost({ accountClient, dir: tmp() })).toBe(false);
+    expect(await linkHost({ accountClient, dir: withHost("not-an-id") })).toBe(false);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("says why when the server refuses, and reports it didn't land", async () => {
+    const warn = vi.fn();
+    const { accountClient } = linkClient({ message: 'column "host_device" does not exist' });
+    expect(await linkHost({ accountClient, dir: withHost(), warn })).toBe(false);
+    expect(warn).toHaveBeenCalledWith('Device host link: column "host_device" does not exist');
+  });
+});
+
+describe("startDeviceBeat's host link", () => {
+  it("links once, then only beats", async () => {
+    vi.useFakeTimers();
+    const { calls, accountClient } = linkClient();
+    const stop = startDeviceBeat({ accountClient: () => accountClient, dir: withHost() });
+    await vi.advanceTimersByTimeAsync(FIRST_BEAT_MS);
+    await vi.advanceTimersByTimeAsync(BEAT_MS);
+    stop();
+    expect(calls.filter((c) => (c.patch as { host_device?: string }).host_device)).toHaveLength(1);
+    expect(calls.filter((c) => (c.patch as { last_seen_at?: string }).last_seen_at)).toHaveLength(2);
+  });
+
+  it("keeps trying while the server refuses, and warns only once", async () => {
+    vi.useFakeTimers();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { calls, accountClient } = linkClient({ message: "no column" });
+    const stop = startDeviceBeat({ accountClient: () => accountClient, dir: withHost() });
+    await vi.advanceTimersByTimeAsync(FIRST_BEAT_MS);
+    await vi.advanceTimersByTimeAsync(BEAT_MS);
+    stop();
+    expect(calls.filter((c) => (c.patch as { host_device?: string }).host_device)).toHaveLength(2);
+    expect(warn.mock.calls.filter(([line]) => String(line).startsWith("Device host link"))).toHaveLength(1);
   });
 });
