@@ -100,8 +100,10 @@ const TERM_WORDS = { permissionMode: "mode", backend: "CLI", model: "model", rep
 // thread's first message (cut, with its length) and its mode, CLI, model and repo.
 function argsWords(verb, change, args) {
   if (verb === "card.update") {
-    const others = Object.keys(plain(args.body) ? args.body : {}).filter((k) => !(k in change));
-    return others.length ? ` (and its ${others.map((k) => oneLine(k, 30)).join(", ")} with it)` : "";
+    const body = plain(args.body) ? args.body : {};
+    const others = Object.keys(body).filter((k) => !(k in change));
+    const shown = (v) => oneLine(typeof v === "string" ? v : canonical(v), 60);
+    return others.length ? ` (and its ${others.map((k) => `${oneLine(k, 30)} ${shown(body[k])}`).join(", ")} with it)` : "";
   }
   if (verb === "card.schedule") return Number.isFinite(args.at) ? ` to send at ${new Date(args.at).toLocaleString()}` : "";
   if (verb !== "card.create") return "";

@@ -94,7 +94,15 @@ function setupPairing({ ipcMain, dataDir, accountClient, isBoard, confirm, safeS
   // and the passkey endorsements for workers (electron/widen-endorse.cjs).
   require("./widen-sign.cjs").registerWidenSign(handle, { signer, macDevice, confirm, hostName: (id) => workerPins.nameOf(id) });
   const { registerWidenEndorse, createEndorsed } = require("./widen-endorse.cjs");
-  registerWidenEndorse(handle, { signer, macDevice, confirm, passkeys: () => paired.list(), endorsed: createEndorsed({ dir: dataDir, safeStorage: keychain }) });
+  registerWidenEndorse(handle, {
+    signer,
+    macDevice,
+    confirm,
+    passkeys: () => paired.list(),
+    endorsed: createEndorsed({ dir: dataDir, safeStorage: keychain }),
+    workerName: (id) => workerPins.nameOf(id),
+    workerSignKey: (id) => workerPins.signKeyOf(id),
+  });
 
   const widenNonces = require("./widen-nonces.cjs").createWidenNonces({ dir: dataDir, safeStorage: keychain });
   const routes = {

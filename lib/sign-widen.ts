@@ -105,7 +105,8 @@ export async function loadWidenCard(client: SupabaseClient, ask: WidenAsk, userI
   const t = ask.target;
   const row = data.find((r) => r.org_id === t.orgId && r.owner_device === t.device && r.folder === t.folder && !r.deleted);
   if (!row) return "That card isn't one of yours on that host.";
-  if (row.owner_user && row.owner_user !== userId) return "That card is another account's: only its owner approves its changes.";
+  // A row that names no owner is no one's to approve.
+  if (row.owner_user !== userId) return "That card is another account's: only its owner approves its changes.";
   const title = typeof row.card.title === "string" && row.card.title ? row.card.title : "(untitled)";
   return { title, folder: row.folder };
 }

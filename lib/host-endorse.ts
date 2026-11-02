@@ -9,6 +9,12 @@ export const ENDORSE_V = "weft-endorse-v2";
 export const ENDORSE_MAX_AGE_MS = 10 * 60_000;
 export const ENDORSE_OLD = "That endorsement is older than the one this worker has. Send it again from your Mac.";
 
+// The worker's receipt, signed with its pairing sign key (sign-key.json, H10): it holds this generation or newer. The
+// Mac checks it against the key it pinned for that worker (electron/worker-pins.cjs) before it stops re-sending a revoke,
+// so a row a stolen session deletes, or one a stolen worker key claims and drops, can't pass for one the worker took.
+export const HELD_V = "weft-endorse-held-v1";
+export const heldMessage = (h: { worker: string; generation: number }) => canonical({ v: HELD_V, worker: h.worker, generation: h.generation });
+
 export interface EndorsedKey {
   device: string;
   credId: string;

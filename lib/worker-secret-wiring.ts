@@ -12,7 +12,7 @@ import { macKeysAt } from "./worker-mac-keys";
 import { open, sealFingerprint, type SealKeys } from "./worker-seal";
 
 // The pairing's sign key, read only: a token-enrolled box has none, and making one here would sign with a key no Mac pinned.
-function pairedSigner(home: string): ((message: string) => string) | undefined {
+export function pairedSigner(home: string): ((message: string) => string) | undefined {
   try {
     const keys = JSON.parse(fs.readFileSync(path.join(home, "sign-key.json"), "utf8")) as { privateKey?: unknown };
     if (typeof keys.privateKey !== "string") return undefined;

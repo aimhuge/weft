@@ -21,6 +21,8 @@ export interface WorkerWiden {
   projectPath(folder: string): string;
   // Files a card under its new folder's name, as a run does (lib/worker-publish.ts).
   nameFolder(cardId: string, folder: string): void;
+  // Signs with the pairing's sign key (sign-key.json), for a pin's receipt; absent on a token-enrolled box.
+  signHeld?: (message: string) => string;
   now?: () => number;
 }
 

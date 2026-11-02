@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { CANCELLED, canSignWiden, endorsePasskeys, NO_SIGNER, refreshEndorsements, signedArgs, signWiden, withCreateWiden, workerFolderOf } from "./widen-signer";
+import { CANCELLED, canSignWiden, confirmEndorsement, endorsePasskeys, NO_SIGNER, refreshEndorsements, signedArgs, signWiden, withCreateWiden, workerFolderOf } from "./widen-signer";
 
 const auth = { kind: "ed25519", device: "mac", issuedAt: 1, nonce: "abcdefghijklmnop", sig: "c2ln" };
 const bridge = (widen?: unknown, endorse?: unknown) => ((window as unknown as { weft?: unknown }).weft = { approval: { widen, endorse } });
@@ -67,6 +67,16 @@ describe("endorsePasskeys", () => {
     bridge(undefined, endorse);
     await expect(endorsePasskeys("w1", true)).resolves.toEqual([{ e: 1 }]);
     expect(endorse).toHaveBeenCalledWith({ worker: "w1", revoke: true });
+  });
+});
+
+describe("confirmEndorsement", () => {
+  it("hands main a worker's receipt, and is false without the desktop app", async () => {
+    expect(await confirmEndorsement("w1", { generation: 1 })).toBe(false);
+    const endorseConfirm = vi.fn(() => Promise.resolve(true));
+    (window as unknown as { weft?: unknown }).weft = { approval: { endorseConfirm } };
+    expect(await confirmEndorsement("w1", { generation: 1 })).toBe(true);
+    expect(endorseConfirm).toHaveBeenCalledWith({ worker: "w1", receipt: { generation: 1 } });
   });
 });
 

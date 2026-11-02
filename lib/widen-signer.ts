@@ -16,11 +16,12 @@ export interface WidenRequest {
   args: Record<string, unknown>;
 }
 
-type Refreshed = { worker: string; endorsements: unknown[] };
+export type Refreshed = { worker: string; generation?: number; endorsements: unknown[] };
 type Bridge = {
   widen?: (req: WidenRequest) => Promise<WidenAuth | null>;
   endorse?: (req: { worker: string; revoke?: boolean }) => Promise<unknown[] | null>;
   endorseRefresh?: () => Promise<Refreshed[]>;
+  endorseConfirm?: (req: { worker: string; receipt: unknown }) => Promise<boolean>;
 };
 
 const bridge = (): Bridge | undefined =>
@@ -69,10 +70,16 @@ export async function endorsePasskeys(worker: string, revoke = false): Promise<u
   return endorse({ worker, revoke });
 }
 
-// After a passkey is unpaired here: each worker's endorsed set without it, signed by main with no Touch ID (a
-// narrowing), for the caller to send as `pin` commands. [] without the desktop app.
+// Every worker whose passkey set it hasn't confirmed yet, narrowed to what's still paired here (signed by main with no
+// Touch ID), for the caller to send as `pin` commands until each confirms. [] without the desktop app.
 export async function refreshEndorsements(): Promise<Refreshed[]> {
   return (await bridge()?.endorseRefresh?.()) ?? [];
+}
+
+// A worker's receipt for a pin, for main to check against the sign key it pinned for that worker: true once the worker
+// holds the set main last signed for it, and main stops re-sending.
+export async function confirmEndorsement(worker: string, receipt: unknown): Promise<boolean> {
+  return (await bridge()?.endorseConfirm?.({ worker, receipt })) === true;
 }
 
 // A new thread on a worker that names an agent: the approval for that agent, that project and that first message (as

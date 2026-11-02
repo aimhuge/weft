@@ -40,5 +40,7 @@ describe("shellEnv", () => {
   it("keeps the daemon's own settings and credentials out of the shell", () => {
     const env = { PATH: "/bin", HOME: "/h", LANG: "en", WEFT_WORKER: "1", SUPABASE_URL: "u", GITHUB_TOKEN: "t", AWS_SECRET: "s", API_KEY: "k", CLAUDE_CODE_OAUTH_TOKEN: "o", ANTHROPIC_API_KEY: "a" };
     expect(shellEnv(env)).toEqual({ PATH: "/bin", HOME: "/h", LANG: "en", TERM: "xterm-256color" });
+    const more = { GH_PAT: "p", GOOGLE_APPLICATION_CREDENTIALS: "/c.json", DATABASE_URL: "postgres://x", REDIS: "redis://u:pw@h:6379", MIRROR: "https://tok@git.example", SITE: "https://example.com/a@b", EDITOR: "vim" };
+    expect(shellEnv(more)).toEqual({ SITE: "https://example.com/a@b", EDITOR: "vim", TERM: "xterm-256color" });
   });
 });

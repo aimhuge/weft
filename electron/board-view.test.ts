@@ -255,6 +255,21 @@ describe("operations", () => {
     await expect(view.type("#nope", "x")).rejects.toThrow(/matches #nope/);
   });
 
+  it("types nothing when focus doesn't land on the field, or moves off it before the typing", async () => {
+    document.body.insertAdjacentHTML("beforeend", `<div class="xterm"><textarea class="xterm-helper-textarea" id="tty"></textarea></div><input id="hidden" disabled>`);
+    (document.getElementById("tty") as HTMLTextAreaElement).focus();
+    // A field that can't take focus leaves it on the terminal.
+    await expect(view.type("#hidden", "rm -rf ~\n")).rejects.toThrow(/can't take focus/);
+    const real = wc.executeJavaScript.getMockImplementation()!;
+    wc.executeJavaScript.mockImplementation((s: string) => {
+      // Something takes focus back to the terminal between the focus and the typing.
+      if (s.includes("activeElement; return")) (document.getElementById("tty") as HTMLTextAreaElement).focus();
+      return real(s);
+    });
+    await expect(view.type("#name", "x")).rejects.toThrow(/Focus moved off/);
+    expect(wc.insertText).not.toHaveBeenCalled();
+  });
+
   it("read gives the whole board, or one element, and a miss is an error", async () => {
     expect((await view.read()).text).toContain("Go");
     expect((await view.read("#plain")).text).toBe("text");

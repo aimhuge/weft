@@ -61,8 +61,13 @@ const scripts = {
   isField: (sel) =>
     `(() => { ${find(sel)} if (el.closest(${q(GUARDED)})) return { found: true, humanOnly: true }; if (!el.matches("input, textarea, [contenteditable]:not([contenteditable='false'])")) return { found: true, refused: true }; return { found: true }; })()`,
   // Focuses a field and selects what's in it, so the typing that follows replaces it.
+  // Then checks focus really landed there: a field that can't take it (hidden, disabled) leaves focus where it was,
+  // perhaps the terminal or the reply box, and the typing that follows would go there instead.
   focusField: (sel) =>
-    `(() => { ${find(sel)} if (el.closest(${q(GUARDED)})) return { found: true, humanOnly: true }; if (!el.matches("input, textarea, [contenteditable]:not([contenteditable='false'])")) return { found: true, refused: true }; el.focus(); if (typeof el.select === "function") el.select(); else document.execCommand("selectAll"); return { found: true }; })()`,
+    `(() => { ${find(sel)} if (el.closest(${q(GUARDED)})) return { found: true, humanOnly: true }; if (!el.matches("input, textarea, [contenteditable]:not([contenteditable='false'])")) return { found: true, refused: true }; el.focus(); if (document.activeElement !== el) return { found: true, unfocused: true }; if (typeof el.select === "function") el.select(); else document.execCommand("selectAll"); return { found: true }; })()`,
+  // Right before the typing: focus is still on that field, and on nothing guarded.
+  stillFocused: (sel) =>
+    `(() => { ${find(sel)} const at = document.activeElement; return { found: true, ok: at === el && !(at && at.closest(${q(GUARDED)})) }; })()`,
   // The element's visible text with every data-secret value inside the page cut out.
   read: (sel) =>
     `(() => { const el = ${sel ? `(${findExpression(sel)})` : "document.body"}; if (!el) return { found: false };` +
@@ -162,6 +167,10 @@ function createBoardView({ board }) {
     if (!r.found) throw miss(sel);
     if (r.humanOnly) throw humanOnly(sel);
     if (r.refused) throw new Error(`${sel} isn't a text field.`);
+    if (r.unfocused) throw new Error(`${sel} can't take focus here, so nothing was typed.`);
+    // insertText types wherever focus is: check it's still that field, and nothing guarded, at the last moment.
+    const still = await wc.executeJavaScript(scripts.stillFocused(sel));
+    if (!still.found || !still.ok) throw new Error(`Focus moved off ${sel} before typing, so nothing was typed.`);
     await wc.insertText(String(text ?? ""));
     return { typed: sel };
   }

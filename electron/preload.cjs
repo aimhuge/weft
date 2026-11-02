@@ -207,6 +207,7 @@ contextBridge.exposeInMainWorld("weft", {
     widen: (request) => ipcRenderer.invoke("approval:widen", request),
     endorse: (request) => ipcRenderer.invoke("approval:endorse", request),
     endorseRefresh: () => ipcRenderer.invoke("approval:endorse-refresh"),
+    endorseConfirm: (request) => ipcRenderer.invoke("approval:endorse-confirm", request),
   },
   // Adding a worker by pairing it (electron/host-pairing-ipc.cjs, docs/architecture/device-registry.md): the install
   // line comes back; the code's secret check and Touch ID stay in main.

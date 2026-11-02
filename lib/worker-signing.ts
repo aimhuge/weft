@@ -16,6 +16,7 @@ export interface WorkerWidenOptions {
   listFolders: (root: string) => string[];
   repoPath: (root: string, folder: string) => string;
   nameFolder: (cardId: string, folder: string) => void;
+  signHeld?: (message: string) => string;
   env?: { NODE_ENV?: string; WEFT_PASSKEY_DEV_ORIGIN?: string };
 }
 
@@ -28,6 +29,7 @@ export function workerWidenFor(o: WorkerWidenOptions): WorkerWiden {
     root: o.root,
     projectPath: (folder) => o.repoPath(o.root, folder),
     nameFolder: o.nameFolder,
+    ...(o.signHeld ? { signHeld: o.signHeld } : {}),
   };
 }
 

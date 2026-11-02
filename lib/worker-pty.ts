@@ -17,10 +17,14 @@ export const loginShell = (env: Record<string, string | undefined>, platform: st
 
 // The daemon's own settings and credentials (its worker key, Supabase and Claude tokens) stay out of the shell's env:
 // the shell is yours, but nothing it runs should find the daemon's keys in its environment.
-const DAEMON_ONLY = /^(WEFT_|SUPABASE_|CLAUDE_CODE_OAUTH|ANTHROPIC_)|(TOKEN|SECRET|PASSWORD|_KEY)$/i;
+// By name: Weft's, Supabase's and Claude's settings, and anything named like a credential. By value: a URL with a
+// user and password in it, or a token before the @ of a git or https URL.
+const DAEMON_ONLY = /^(WEFT_|SUPABASE_|CLAUDE_CODE_OAUTH|ANTHROPIC_|DATABASE_URL$)|(TOKEN|SECRET|PASSWORD|PASSWD|_KEY|_PAT|CREDENTIALS?)$/i;
+const URL_WITH_CREDENTIALS = /^[a-z][a-z0-9+.-]*:\/\/[^/@\s]+@/i;
 
 export function shellEnv(env: Record<string, string | undefined>): Record<string, string | undefined> {
-  return { ...Object.fromEntries(Object.entries(env).filter(([name]) => !DAEMON_ONLY.test(name))), TERM: "xterm-256color" };
+  const kept = Object.entries(env).filter(([name, value]) => !DAEMON_ONLY.test(name) && !URL_WITH_CREDENTIALS.test(value ?? ""));
+  return { ...Object.fromEntries(kept), TERM: "xterm-256color" };
 }
 
 export function spawnPty(cwd: string, cols: number, rows: number, load: () => NodePty = () => createRequire(import.meta.url)("node-pty") as NodePty): Pty {

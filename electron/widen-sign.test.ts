@@ -77,8 +77,8 @@ describe("widenPrompt", () => {
 
   it("says the change, what rides with it, the card and the host in main's words", () => {
     const change = { cwd: "site", agent: "b", permissionMode: "bypassPermissions", readScope: "/r" };
-    expect(widenPrompt({ host: "w1234567890", card: "card-123456", verb: "card.update", change, args: { body: { ...change, title: "t" } } }, self)).toBe(
-      "move it to the folder site, give it the agent b, let it skip permission prompts, let it read from /r (and its title with it), for card card-123 on the host w1234567890",
+    expect(widenPrompt({ host: "w1234567890", card: "card-123456", verb: "card.update", change, args: { body: { ...change, title: "t", column: { x: 1 } } } }, self)).toBe(
+      'move it to the folder site, give it the agent b, let it skip permission prompts, let it read from /r (and its title t, column {"x":1} with it), for card card-123 on the host w1234567890',
     );
     expect(widenPrompt({ host: "w1", card: "c", verb: "card.update", change: { cwd: "x" }, args: { body: { cwd: "x" } } }, self, () => "m1mini")).toBe("move it to the folder x, for card c on the worker m1mini (w1)");
     expect(widenPrompt({ host: self, card: "", verb: "terminal.open", change: { terminal: "app" }, args: {} }, self)).toBe("open a full shell (a terminal) in app, for a new card on this Mac");

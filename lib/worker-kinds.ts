@@ -5,6 +5,7 @@
 // hands a sealed answer to a card's waiting secret run. Each returns the card it made or touched, or null.
 import { newCardBody, type CloudCommandRow } from "./cloud-commands";
 import { signedAgent } from "./create-widen";
+import { heldMessage } from "./host-endorse";
 import { dispatcher, type KindTable } from "./host/dispatch";
 import type { HostDone } from "./host-command";
 import { createCardCommands } from "./worker-card-commands";
@@ -116,8 +117,11 @@ export function workerKinds(deps: DaemonDeps, ctx: KindContext): KindTable {
       if (!deps.widen) throw new Error("This worker doesn't take passkeys yet. Update it with weft-worker update.");
       const list: unknown = (command.payload as { endorsements?: unknown } | null)?.endorsements;
       if (!Array.isArray(list) || !list.length || list.length > 20) throw new Error("That pin carries no endorsements.");
-      for (const e of list) await deps.widen.signers.endorse(e, deps.widen.host, (deps.widen.now ?? Date.now)());
-      return null;
+      let generation = 0;
+      for (const e of list) generation = await deps.widen.signers.endorse(e, deps.widen.host, (deps.widen.now ?? Date.now)());
+      // The receipt the Mac waits on before it stops re-sending (lib/host-endorse.ts heldMessage).
+      const sig = deps.widen.signHeld?.(heldMessage({ worker: deps.widen.host, generation }));
+      return { cardId: "", result: { ok: true, cardId: "", value: { generation, ...(sig ? { sig } : {}) } } };
     },
     ...cards,
     // A session line's sealed offer (lib/host-line.ts): its verbs run through this table's own `host`, so they pass

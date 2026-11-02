@@ -76,6 +76,22 @@ describe("createHostSigners: passkeys the Mac endorsed", () => {
     expect(s.read()).toEqual([]);
   });
 
+  it("takes a set that only takes passkeys away however old it is, and the set it holds again, with its generation", async () => {
+    const mac = macSigner();
+    const s = createHostSigners(home(), ORIGINS, memoryMacs([mac.key]));
+    const { key, raw } = await endorsed(mac);
+    expect(await s.endorse(raw, "w1", NOW)).toBe(1);
+    // The same set sent again (its receipt was lost) is held, not refused.
+    expect(await s.endorse(raw, "w1", NOW + ENDORSE_MAX_AGE_MS * 50)).toBe(1);
+    // A worker that was off for a day still takes the revoke waiting for it.
+    expect(await s.endorse(endorsement(mac, [], 2), "w1", NOW + ENDORSE_MAX_AGE_MS * 100)).toBe(2);
+    expect(s.read()).toEqual([]);
+    // A set that adds one is still fresh or refused.
+    await expect(s.endorse(endorsement(mac, [key], 3), "w1", NOW + ENDORSE_MAX_AGE_MS + 1)).rejects.toThrow(/too old/);
+    // The same generation with another set is no receipt.
+    await expect(s.endorse(endorsement(mac, [key], 2), "w1", NOW)).rejects.toThrow(ENDORSE_OLD);
+  });
+
   it("refuses an endorsement for another worker, an old one, a bent one, or one no pinned Mac signed", async () => {
     const mac = macSigner();
     const s = createHostSigners(home(), ORIGINS, memoryMacs([mac.key]));

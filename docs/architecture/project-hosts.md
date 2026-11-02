@@ -703,12 +703,22 @@ pins, so each refusal lifts when, and only when, the command carries a fresh app
   asks Touch ID once, main signs `weft-endorse-v2` over the **whole set** of passkeys it pinned, for that worker, with a
   generation that only grows (`electron/widen-endorse.cjs` `approval:endorse`), and this Mac's server inserts it as a
   `pin` command (`lib/worker-pin.ts`, `POST /api/worker-board {action:"pin"}`, elevated). The worker checks it against the
-  pairing Mac's key (fresh within 10 minutes, for itself, newer than the generation it holds) and replaces its list in
-  `passkeys.json` (mode 600, sealed from threads like the rest of its home), keeping each kept passkey's counter. So a
-  revoke is a smaller set, and an older endorsement read off an earlier `pin` row is refused (`ENDORSE_OLD`). Main
-  remembers which passkeys it endorsed for which worker (`vault/endorsed-workers.json`, sealed); unpairing a passkey in
-  Settings → Devices re-sends every such worker its set without it (`approval:endorse-refresh`, `resendPasskeys`): a
-  narrowing, signed without Touch ID, as is `approval:endorse {revoke: true}` (an empty set).
+  pairing Mac's key (for itself, newer than the generation it holds; within 10 minutes only when the set adds a passkey,
+  so a revoke still lands on a worker that was off for a day) and replaces its list in `passkeys.json` (mode 600, sealed
+  from threads like the rest of its home), keeping each kept passkey's counter. So a revoke is a smaller set, and an
+  older endorsement read off an earlier `pin` row is refused (`ENDORSE_OLD`); the set it holds, sent again, is held.
+  The pin's result is a **receipt**: the generation it holds, signed with the worker's pairing sign key (`sign-key.json`,
+  `heldMessage`). Main remembers, per worker, the exact passkeys (device, credential, key) it endorsed, the signed set
+  and whether a receipt confirmed it (`vault/endorsed-workers.json`, sealed). `lib/passkey-sync.ts` (on Settings →
+  Devices, every 15 s, and after Passkeys or a revoke) asks main for every unconfirmed set (`approval:endorse-refresh`,
+  which first narrows each to the passkeys still paired here, exactly, without Touch ID), sends it as a `pin`, waits for
+  the receipt and hands it to main, which checks it against the sign key it pinned for that worker
+  (`approval:endorse-confirm`, `worker-pins.cjs` `signKeyOf`). A pin row a stolen session deletes, one a stolen worker
+  key claims and drops, or one an offline worker hasn't taken leaves the set pending: it's sent again (one row at a time
+  per worker), and the worker's row says "passkeys not updated yet". A device id paired again with a new credential
+  isn't in a narrowing; adding passkeys asks Touch ID. `approval:endorse {revoke: true}` is an empty set, no Touch ID.
+  Not built: a worker refusing passkey approvals while its generation is behind the Mac's latest, which needs a
+  channel the Mac publishes to that the worker trusts.
 - **The desktop's prompt** is main's own words over exactly the fields it signs (`readWidenRequest`, `widenPrompt`): "run
   the shell command make test, for card 1a2b3c4d on the worker m1mini (7f3e…)", naming a worker by the name main pinned
   it under (`worker-pins.cjs` `nameOf`) and any other host by its whole id; what rides with the change too ("(and its
@@ -720,6 +730,9 @@ pins, so each refusal lifts when, and only when, the command carries a fresh app
   server a thread can call; and a thread driving the board (`board_view`) can't reach the controls that ask for one: the
   terminal drawer (xterm's own textarea, marked or not), the New thread dialog's folder, agent and mode, and the list
   view's folder picker are `data-human-only` (`electron/board-view.cjs`). The card menu is the shell's native menu.
+  `board_view` types only once focus really is on the field it named, and checks again right before it types, so a field
+  that can't take focus can't leave the typing in the terminal or the reply box. Extra fields riding with a
+  `card.update` show with their values.
 - **Where the board signs** (`lib/widen-signer.ts`): `actOnLine` signs before it routes, so every caller gets it: the
   menu's `agent:*` and Skip permissions (`remoteMenu(items, { agent, skip })`), the list view's folder picker (a worker
   card's folders are that worker's projects), the thread's "!" line and Read from (`workerTransportVia` gains `shell` and
@@ -727,7 +740,7 @@ pins, so each refusal lifts when, and only when, the command carries a fresh app
   `cloudHost.can` turns on `folder`, `agent`, `shell` and `terminal` where the desktop app can sign. With no signer the
   command goes unsigned and the host refuses it in its own words. On weft.zip with a paired passkey, `cloudHostActs`
   hands a widening to `openWidenWindow`: sign.weft.zip/approve?widen=… reads the card itself with its own session and
-  refuses one that isn't this account's on the host and folder the link names (`loadWidenCard`), names it by title and
+  refuses one that isn't this account's on the host and folder the link names, or names no owner (`loadWidenCard`), names it by title and
   folder, rebuilds the args from the change alone (`argsFromChange`, a "!" line's send-at time kept and shown), shows
   them whole (`lib/sign-widen-sheet.ts`), signs them and inserts the host row itself (`lib/sign-widen.ts`), so nothing
   the link put beside the change rides along; the web host's menu offers the agent and its transport
@@ -737,7 +750,8 @@ pins, so each refusal lifts when, and only when, the command carries a fresh app
   `terminalBridgeFor`, the same bridge shape as `window.weft.terminal`: Touch ID for the folder, then a `terminal` channel
   on the live connection (`SessionLine.channel`, no renegotiation) whose first message is `{ t: "open", folder, cols, rows,
   widen }`. The worker checks it, spawns a login shell in that checkout (`lib/worker-pty.ts`, node-pty, with the daemon's
-  own settings and credentials left out of its env: `WEFT_*`, `SUPABASE_*`, tokens, secrets, keys), and carries
+  own settings and credentials left out of its env: `WEFT_*`, `SUPABASE_*`, `DATABASE_URL`, tokens, secrets, keys, PATs,
+  credentials, and any URL with a user and password in it), and carries
   `input`/`resize` in and `data` (16 KB chunks)/`exit` out. One terminal per line at a time; it's killed when its channel
   closes, and every one is killed when the line closes. With no direct line the drawer says so.
 - **Migration** `supabase/migrations/20261102200000_signed_widening.sql` adds the `pin` kind (not applied). The widenings

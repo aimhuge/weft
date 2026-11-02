@@ -12,7 +12,7 @@
 // (lib/secret-guard-files.ts sealedInHome).
 import fs from "node:fs";
 import path from "node:path";
-import { endorseMessage, ENDORSE_MAX_AGE_MS, ENDORSE_OLD, readEndorsement } from "./host-endorse";
+import { endorseMessage, ENDORSE_MAX_AGE_MS, ENDORSE_OLD, readEndorsement, type EndorsedKey } from "./host-endorse";
 import { verifyPasskeyAssertion, type PasskeyOrigin } from "./passkey-verify";
 import type { Verified } from "./widen-check";
 import { macKeysAt, macSigned, type MacKeys } from "./worker-mac-keys";
@@ -77,19 +77,26 @@ export function createHostSigners(home: string, origins: readonly PasskeyOrigin[
   }
 
   // A pinned Mac's endorsement of the whole set of passkeys for this worker: once it checks out and is newer than the
-  // one kept, it replaces the list (a passkey kept keeps its counter; one left out is unpinned).
-  async function endorse(raw: unknown, self: string, now: number): Promise<void> {
+  // one kept, it replaces the list (a passkey kept keeps its counter; one left out is unpinned). The generation it holds
+  // after, for the receipt the Mac waits on (lib/host-endorse.ts heldMessage). A set that only takes passkeys away has no
+  // age limit: the generation already stops a replay, and a revoke must still land on a worker that was off for a day.
+  // The one it holds, sent again (a receipt that got lost), is taken as held.
+  async function endorse(raw: unknown, self: string, now: number): Promise<number> {
     const e = readEndorsement(raw);
     if (!e) throw new Error("That passkey endorsement is incomplete.");
     if (e.worker !== self) throw new Error("That endorsement is for another worker.");
-    if (Math.abs(now - e.issuedAt) > ENDORSE_MAX_AGE_MS) throw new Error("That endorsement is too old. Send it again from your Mac.");
+    const pinned = load();
+    const same = (p: EndorsedKey, k: EndorsedKey) => p.device === k.device && p.credId === k.credId && p.publicKey === k.publicKey;
+    const adds = e.passkeys.some((k) => !pinned.passkeys.some((p) => same(p, k)));
+    if (adds && Math.abs(now - e.issuedAt) > ENDORSE_MAX_AGE_MS) throw new Error("That endorsement is too old. Send it again from your Mac.");
     const checked = await verify({ device: e.mac, message: endorseMessage(e), sig: e.sig });
     if (!checked.ok) throw new Error(checked.reason);
-    const pinned = load();
+    const held = e.generation === pinned.generation && !adds && e.passkeys.length === pinned.passkeys.length;
+    if (held) return pinned.generation;
     if (e.generation <= pinned.generation) throw new Error(ENDORSE_OLD);
-    const same = (p: PinnedPasskey, k: { device: string; credId: string; publicKey: string }) => p.device === k.device && p.credId === k.credId && p.publicKey === k.publicKey;
     const passkeys = e.passkeys.map((k) => ({ ...k, counter: pinned.passkeys.find((p) => same(p, k))?.counter ?? 0, by: e.mac }));
     write({ generation: e.generation, passkeys });
+    return e.generation;
   }
 
   return { read, verify, verifyPasskey, endorse, file };

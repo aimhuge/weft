@@ -76,11 +76,12 @@ describe("loadWidenCard", () => {
 
   it("names the card by its title and folder as this page reads it", async () => {
     expect(await loadWidenCard(rows([row]), ask, "u1")).toEqual({ title: "Fix login", folder: "app" });
-    expect(await loadWidenCard(rows([{ ...row, card: {}, owner_user: undefined }]), ask, "u1")).toEqual({ title: "(untitled)", folder: "app" });
+    expect(await loadWidenCard(rows([{ ...row, card: {} }]), ask, "u1")).toEqual({ title: "(untitled)", folder: "app" });
   });
 
   it("refuses a card that isn't this account's on the host and folder the link names", async () => {
     expect(await loadWidenCard(rows([row]), ask, "u2")).toMatch(/another account's/);
+    expect(await loadWidenCard(rows([{ ...row, owner_user: null }]), ask, "u1")).toMatch(/another account's/);
     expect(await loadWidenCard(rows([{ ...row, owner_device: "worker:w2" }]), ask, "u1")).toMatch(/isn't one of yours/);
     expect(await loadWidenCard(rows([{ ...row, folder: "other" }]), ask, "u1")).toMatch(/isn't one of yours/);
     expect(await loadWidenCard(rows([{ ...row, deleted: true }]), ask, "u1")).toMatch(/isn't one of yours/);

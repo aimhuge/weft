@@ -82,6 +82,11 @@ function createWorkerPins({ dir, safeStorage, now = () => new Date() }) {
       const pinned = read()[id];
       return typeof pinned?.name === "string" ? pinned.name : null;
     },
+    /** The sign key pinned for a worker at pairing (H10), for its receipts; null when there's none. @param {string} id */
+    signKeyOf(id) {
+      const pinned = read()[id];
+      return typeof pinned?.signKey === "string" ? pinned.signKey : null;
+    },
     forget(id) {
       const pins = read();
       const pinned = pins[id];

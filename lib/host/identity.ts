@@ -17,7 +17,8 @@ export type Outcome = { status: "done"; cardId: string | null; result?: HostResu
 // What a kind's handler returns: the card, nothing (a sign-in), or a host verb's card and result.
 export type Done = string | null | HostDone;
 
-export const doneOutcome = (done: Done): Outcome => (isHostDone(done) ? { status: "done", cardId: done.cardId, result: done.result } : { status: "done", cardId: done });
+// A result that names no card (a pin's receipt) reports none.
+export const doneOutcome = (done: Done): Outcome => (isHostDone(done) ? { status: "done", cardId: done.cardId || null, result: done.result } : { status: "done", cardId: done });
 
 // A failure's message, cut to fit the row. A host command's result says it failed too, so a board waiting on `result`
 // reads one place; the other kinds leave the column alone.

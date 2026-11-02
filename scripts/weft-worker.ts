@@ -132,7 +132,7 @@ async function startCommand() {
   const publisher = createPublisher(reg, store, console.warn, { blobs, orgId: config.orgId });
   subscribe(publisher.hear);
   // Signed widening: the pairing Mac's approvals and its endorsed passkeys lift the network's refusals (lib/worker-signing.ts).
-  const { widen, terminal } = (await import("../lib/worker-signing")).workerSigning({ home, workerId: config.workerId, root, listFolders: listProjectFolders, repoPath: paths.repoPath, nameFolder: publisher.nameFolder });
+  const { widen, terminal } = (await import("../lib/worker-signing")).workerSigning({ home, workerId: config.workerId, root, listFolders: listProjectFolders, repoPath: paths.repoPath, nameFolder: publisher.nameFolder, signHeld: (await import("../lib/worker-secret-wiring")).pairedSigner(home) });
   // Session lines (lib/host-line.ts): the answer goes back on the board's own topic, events are what the
   // publisher ships (one projection, one upload), screens need a card of this box's own watching them, and verbs run
   // through the host kind's path (the daemon hands `run` in).

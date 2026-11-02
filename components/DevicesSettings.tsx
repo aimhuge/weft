@@ -79,6 +79,7 @@ export default function DevicesSettings() {
                 <div className="truncate text-[13px] text-ink">{d.name}</div>
                 <div className={SUBTLE}>
                   {holdsLine(d)} · {seenLine(d, now)}
+                  {devices.untaken.includes(d.id) && <span className="text-warn" title="This Mac changed which passkeys this worker trusts, and the worker hasn't confirmed it yet: until it does, a passkey you revoked may still approve there. Weft keeps sending it."> · passkeys not updated yet</span>}
                 </div>
               </div>
               {!d.revokedAt && (
