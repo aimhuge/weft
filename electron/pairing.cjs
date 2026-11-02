@@ -11,11 +11,19 @@ const TTL_MS = 5 * 60_000;
 /**
  * @param {{ db: () => any, userId?: () => string, sodium: () => any, macDevice: () => string, myDevice: () => Promise<{ id: string, publicKey: string }>,
  *   paired: ReturnType<typeof import("./paired-devices.cjs").createPairedDevices>, syncKeys: ReturnType<typeof import("./sync-keys.cjs").createSyncKeys>,
- *   confirm: (reason: string) => Promise<boolean>, now?: () => number }} deps
+ *   confirm: (reason: string) => Promise<boolean>, now?: () => number, markOpen?: (until: number) => void }} deps
  */
-function createPairing({ db, userId = () => "", sodium, macDevice, myDevice, paired, syncKeys, confirm, now = Date.now }) {
+function createPairing({ db, userId = () => "", sodium, macDevice, myDevice, paired, syncKeys, confirm, now = Date.now, markOpen = () => {} }) {
   /** @type {Map<string, { secret: string, orgId: string, expiresAt: number }>} */
   const open = new Map();
+  // While a code is open its link (and secret) may be on the clipboard: the thread guards refuse clipboard reads until
+  // the last one closes (electron/pairing-open.cjs, lib/clipboard-guard.ts). A code left to expire marks a past time.
+  const marked = () => markOpen(Math.max(0, ...[...open.values()].map((c) => c.expiresAt)));
+  const close = (id) => {
+    const had = open.delete(id);
+    marked();
+    return had;
+  };
 
   const fail = (r, what) => {
     if (r.error) throw new Error(`${what}: ${r.error.message}`);
@@ -38,6 +46,7 @@ function createPairing({ db, userId = () => "", sodium, macDevice, myDevice, pai
     const secret = newSecret(sodium());
     const expiresAt = now() + TTL_MS;
     open.set(row.id, { secret, orgId, expiresAt, passkey });
+    marked();
     const link = pairingLink({ id: row.id, secret, orgId, mac: fingerprint(me.publicKey) }, passkey ? SIGN_PAIR_URL : undefined);
     return { id: row.id, link, expiresAt, ...(passkey ? { passkey: true } : {}) };
   }
@@ -70,17 +79,17 @@ function createPairing({ db, userId = () => "", sodium, macDevice, myDevice, pai
     const code = open.get(id);
     if (!code) return { status: "expired" };
     if (now() > code.expiresAt) {
-      open.delete(id);
+      close(id);
       await setStatus(id, { status: "cancelled" }).catch(() => {});
       return { status: "expired" };
     }
     const row = fail(await db().from("phone_pairings").select("*").eq("id", id).single(), "The pairing couldn't be read");
     if (row.status === "open") return { status: "open" };
     if (row.status !== "claimed") {
-      open.delete(id);
+      close(id);
       return { status: "cancelled" };
     }
-    open.delete(id);
+    close(id);
     const why = checkClaim(sodium(), { id, orgId: code.orgId, secret: code.secret }, row) ?? sessionProblem(code, row);
     if (why) {
       await setStatus(id, { status: "cancelled" });
@@ -106,7 +115,7 @@ function createPairing({ db, userId = () => "", sodium, macDevice, myDevice, pai
   }
 
   async function cancel(id) {
-    if (!open.delete(id)) return;
+    if (!close(id)) return;
     await setStatus(id, { status: "cancelled" }).catch(() => {});
   }
 

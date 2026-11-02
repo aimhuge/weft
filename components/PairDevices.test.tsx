@@ -47,6 +47,9 @@ describe("PairDevices", () => {
     await userEvent.click(await screen.findByRole("button", { name: "Pair a phone" }));
     expect(await screen.findByRole("img", { name: "Pairing QR code" })).toBeInTheDocument();
     expect(screen.getByText(/2:05 more/)).toBeInTheDocument();
+    // The QR and the link carry the pairing secret: hatched in board-view screenshots, its button unclickable there.
+    expect(screen.getByRole("img", { name: "Pairing QR code" }).closest("[data-secret]")).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Copy link for a browser" })).toHaveAttribute("data-secret-action");
     bridge.check.mockResolvedValueOnce({ status: "paired", device: PHONE });
     expect(await screen.findByText("Paired Alex's iPhone.", undefined, { timeout: 3000 })).toBeInTheDocument();
     expect(bridge.check).toHaveBeenCalledWith("code-1");
@@ -62,6 +65,9 @@ describe("PairDevices", () => {
     expect(bridge.start).toHaveBeenCalledWith(undefined, { passkey: true });
     expect(await screen.findByText(/makes a passkey on sign\.weft\.zip/)).toBeInTheDocument();
     expect(screen.queryByRole("img", { name: "Pairing QR code" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Copy link" })).toHaveAttribute("data-secret-action", "copy");
+    expect(screen.getByRole("button", { name: "Open in browser" })).toHaveAttribute("data-secret-action", "open");
+    expect(screen.getByRole("button", { name: "Cancel" })).not.toHaveAttribute("data-secret-action");
     await userEvent.click(screen.getByRole("button", { name: "Copy link" }));
     expect(writeText).toHaveBeenCalledWith("https://sign.weft.zip/pair#v=1&p=x");
     const openExternal = vi.fn();

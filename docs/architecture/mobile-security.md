@@ -291,12 +291,54 @@ is paired, an unsigned Allow from the web is refused, and the host verbs that gr
 - **Labels.** The sheet shows ids, the tool, the input and the card's folder, all signed. A card's title and the
   synced card's other text aren't signed, and the server could relabel a card in the board's list; what the passkey
   signs is still exactly the request on the Mac.
-- **Follow-up:** the thread guards (`lib/guards`) don't yet refuse `pbpaste` while a passkey code is open; the code
-  match on the page and in Touch ID is the defence meanwhile.
+- **Clipboard.** While any pairing code is open, the thread guards refuse Bash that reads the clipboard (`pbpaste`,
+  `osascript` `the clipboard` / `clipboard as`, JXA `theClipboard`, NSPasteboard, `pboard`, `pyperclip`, `clipboardy`,
+  `wl-paste`, `xclip`, `xsel`, matched after quotes, backslashes and `$''` are stripped, whitespace collapsed and case lowered;
+  `lib/clipboard-guard.ts`, in `lib/guards/hooks.ts` so every CLI has it). Only main knows a code is open, so
+  `electron/pairing.cjs` writes the latest open expiry to `vault/pairing-open.json` (`electron/pairing-open.cjs`; threads
+  can neither read nor delete the vault folder) and removes it when the last code closes; a code left to expire leaves
+  a past time, and Weft's start clears it. The guard reads the file only for a command that looks like a clipboard read.
+  Best-effort (a script written to a file first isn't seen): the code match on the page and in Touch ID stays the defence.
+  The QR is marked `data-secret` and Open in browser / Copy link `data-secret-action` (`components/PairDevices.tsx`), so a
+  thread driving the board view (`electron/board-view.cjs`) gets the QR hatched in a screenshot and can't click them.
 - **Dev origin.** Main takes one more origin only when Weft isn't packaged and both `WEFT_PASSKEY_DEV=1` and
   `WEFT_PASSKEY_DEV_ORIGIN` are set, and logs a warning at startup when it does (`passkeyDevOrigin`).
 - **The weft.zip board** can be made to open the sign page for any card; the sheet still shows what that card's
   request is, and the user decides there.
+
+### The desktop signs too
+
+Goal (project-hosts.md, "Approvals and secrets"): every view produces the same signed approval, and a host has one verify
+path. The Mac's own Touch ID (`promptTouchID`) approves but signs nothing. Three ways were weighed:
+
+- **A Secure Enclave key in main.** The strongest key, but Electron has no API for it and nothing in the dependency tree
+  reaches CryptoKit (`security` can't sign with an SE key); it would take a native module or a signed Swift helper to
+  build, notarize and ship on every release. Not worth it while main already holds the vault and the pinned list.
+- **The desktop opening sign.weft.zip/approve**, as the web board does. One more signer type for nothing: it puts the
+  internet, Supabase and a browser tab in the path of a local Allow (slow, dead offline), and the desktop's answer
+  doesn't go through the cloud inbox anyway.
+- **Chosen: Touch ID, then main signs with a key only main holds** (`electron/desktop-signer.cjs`). An Ed25519 key, made
+  on first use and sealed with safeStorage in `~/.weft/vault/desktop-sign-key.json`, where threads can't read it. It signs
+  **the phone's message** (`lib/approval-sig.ts` `approvalMessage`; main's copy is proven byte for byte equal), so the
+  auth is the phone's shape, `{ device, issuedAt, sig }`, with `device` this Mac's `lib/device-id.ts` id, and a host
+  checks it on the same path: `approvalProblem` → `POST /pairing/verify` → `paired-devices.cjs` `verify`, which takes
+  this Mac's own id against main's public key. That key is never pinned in the list, so it isn't an approver and turns
+  nothing on. The trust is the same as the vault's: main, safeStorage and Touch ID; a thread can't reach the key, and
+  it signs only over board-window IPC (`approval:sign`, `weft.approval.sign` in the preload), never the control server.
+
+`approval:sign` takes `{ orgId, cardId, pendingId, allow, answers?, grant? }` (`electron/approval-sign.cjs`
+`readSignRequest`; any other field, a label or a host, is dropped). **The prompt is main's own words**: main reads the
+card from its own server (`GET /api/cards`), refuses a card it doesn't have or a request that isn't the one waiting, and
+asks Touch ID with the card's title, the request's tool and what it runs (its command, file or url, one line, control
+and format characters out), plus the grant. So a board-side script can't show "allow ls" over a request that runs
+something else. It answers `{ device, issuedAt, sig, publicKey }`, or null when Touch ID is refused. Main signs only for
+this Mac (the message's host is its own id); another host's card is refused until that host's requests are main's to read.
+
+**Follow-up.** Nothing calls it yet. (1) The desktop board's Allow asks for the signature and sends it as `auth`, and
+`card.permission.answer` runs `approvalProblem` on it. Which Allows take Touch ID is a product call: every one would slow
+the board, so likely the phone-only asks (`lib/passkey-phone-only.ts`), folder grants, and any card on another host.
+(2) A worker host pins the Mac's `publicKey` when it pairs (H10, one device registry), and main reads that worker's
+pending request and its name from the registry, so a worker card's Allow from the desktop is signed for it and verifies there. Until then a remote host can't check a desktop signature.
 
 ## Tables (`supabase/migrations/*_mobile_security.sql`)## Tables (`supabase/migrations/*_mobile_security.sql`)
 

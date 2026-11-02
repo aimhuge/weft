@@ -56,10 +56,12 @@ export default function PairDevices() {
             <Spinner size={11} /> Waiting for the browser · {Math.floor(left / 60)}:{String(left % 60).padStart(2, "0")} left
           </p>
           <div className="mt-1 flex gap-2">
-            <button type="button" className={BUTTON} onClick={() => openExternal(code.link)}>
+            {/* The link carries the pairing secret: data-secret-action keeps the board view's clicks off these
+                (electron/board-view.cjs), so a thread driving the board can't open or copy it. */}
+            <button type="button" className={BUTTON} data-secret-action="open" onClick={() => openExternal(code.link)}>
               Open in browser
             </button>
-            <button type="button" className={BUTTON} title="Cleared from the clipboard after a minute" onClick={() => void copyBriefly(code.link)}>
+            <button type="button" className={BUTTON} data-secret-action="copy" title="Cleared from the clipboard after a minute" onClick={() => void copyBriefly(code.link)}>
               Copy link
             </button>
             <button type="button" className={BUTTON} onClick={() => void p.cancel()}>
@@ -69,7 +71,10 @@ export default function PairDevices() {
         </div>
       ) : code ? (
         <div className="flex gap-4">
-          <QrCode text={code.link} />
+          {/* data-secret: the board view hatches the QR (the pairing secret) in screenshots. */}
+          <div data-secret className="shrink-0">
+            <QrCode text={code.link} />
+          </div>
           <div className="flex min-w-0 flex-col gap-2">
             <p className="text-[13px] text-ink">Scan this with the Weft app on your phone.</p>
             <p className={SUBTLE}>
@@ -80,7 +85,7 @@ export default function PairDevices() {
               <Spinner size={11} /> Waiting for the phone
             </p>
             <div className="mt-1 flex gap-2">
-              <button type="button" className={BUTTON} onClick={() => void navigator.clipboard.writeText(code.link)}>
+              <button type="button" className={BUTTON} data-secret-action="copy" onClick={() => void navigator.clipboard.writeText(code.link)}>
                 Copy link for a browser
               </button>
               <button type="button" className={BUTTON} onClick={() => void p.cancel()}>

@@ -7,12 +7,17 @@ const { createPairedDevices } = require("./paired-devices.cjs");
 const { createSyncKeys } = require("./sync-keys.cjs");
 const { createPairing } = require("./pairing.cjs");
 const { registeredDevice } = require("./device-key.cjs");
+const { pairingOpenMarker } = require("./pairing-open.cjs");
+const { approvalMessage, createDesktopSigner } = require("./desktop-signer.cjs");
+const { readSignRequest, serverCards, signPrompt, waitingRequest } = require("./approval-sign.cjs");
 
 /**
  * @param {{ ipcMain: any, dataDir: string, accountClient: () => any, isBoard: (sender: unknown) => boolean,
- *   confirm: (reason: string) => Promise<boolean>, safeStorage?: () => any, crypto?: () => any, devOrigin?: string | null }} deps
+ *   confirm: (reason: string) => Promise<boolean>, safeStorage?: () => any, crypto?: () => any, devOrigin?: string | null,
+ *   getServer?: () => { url: string } | undefined, cards?: () => Promise<any[]> }} deps
  */
-function setupPairing({ ipcMain, dataDir, accountClient, isBoard, confirm, safeStorage, crypto, devOrigin = null }) {
+function setupPairing({ ipcMain, dataDir, accountClient, isBoard, confirm, safeStorage, crypto, devOrigin = null, getServer = () => undefined, cards }) {
+  const boardCards = cards ?? serverCards(getServer);
   const keychain = safeStorage ?? (() => require("./keychain-audit.cjs").keychainFor("vault key"));
   const vaultCrypto = crypto ?? (() => require("./vault-crypto.cjs"));
   const ready = async () => {
@@ -30,10 +35,14 @@ function setupPairing({ ipcMain, dataDir, accountClient, isBoard, confirm, safeS
   }
   const macDevice = () => fs.readFileSync(path.join(dataDir, "device-id"), "utf8").trim();
 
-  const paired = createPairedDevices({ dir: dataDir, safeStorage: keychain, sodium: () => sodium, devOrigin });
+  const signer = createDesktopSigner({ dir: dataDir, safeStorage: keychain, sodium: () => sodium });
+  const paired = createPairedDevices({ dir: dataDir, safeStorage: keychain, sodium: () => sodium, devOrigin, self: { id: () => { try { return macDevice(); } catch { return ""; } }, verify: signer.verify } });
   const syncKeys = createSyncKeys({ dir: dataDir, safeStorage: keychain, crypto: vaultCrypto, db, myDevice });
   const userId = () => String(accountClient().getClaims()?.sub ?? "");
-  const pairing = createPairing({ db, userId, sodium: () => sodium, macDevice, myDevice, paired, syncKeys, confirm });
+  // Codes live in memory, so none is open at start: a marker left by a crash goes.
+  const markOpen = pairingOpenMarker(dataDir);
+  markOpen(0);
+  const pairing = createPairing({ db, userId, sodium: () => sodium, macDevice, myDevice, paired, syncKeys, confirm, markOpen });
   const withSodium = (fn) => async (...args) => {
     sodium ??= await ready();
     return fn(...args);
@@ -57,6 +66,21 @@ function setupPairing({ ipcMain, dataDir, accountClient, isBoard, confirm, safeS
     return paired.setSettings(patch);
   });
 
+  // The desktop's signed approval (electron/desktop-signer.cjs, electron/approval-sign.cjs): main finds the request
+  // waiting on its own server, asks Touch ID in its own words, then signs the phone's message with this Mac's key.
+  // Board window only; null when Touch ID is refused.
+  handle("approval:sign", async (raw) => {
+    const req = readSignRequest(raw);
+    if (typeof req === "string") throw new Error(req);
+    const found = await waitingRequest(boardCards, req);
+    if (typeof found === "string") throw new Error(found);
+    if (!(await confirm(signPrompt(found.card, found.pending, req.allow, req.grant)))) return null;
+    const device = macDevice();
+    const issuedAt = Date.now();
+    const message = approvalMessage(sodium, { ...req, macDevice: device, issuedAt });
+    return { device, issuedAt, sig: signer.sign(message), publicKey: signer.publicKey() };
+  });
+
   const routes = {
     // The key the uploader seals with (lib/sync-seal-upload.ts); { none: true } when this Mac has no grant yet.
     "POST /sync/key": withSodium(async ({ orgId, create }) => (await syncKeys.current(String(orgId), { create: create === true })) ?? { none: true }),
@@ -66,7 +90,7 @@ function setupPairing({ ipcMain, dataDir, accountClient, isBoard, confirm, safeS
     "POST /pairing/passkey-verify": (b) => paired.verifyPasskey({ device: String(b?.device), credId: String(b?.credId), message: String(b?.message), authenticatorData: String(b?.authenticatorData), clientDataJSON: String(b?.clientDataJSON), signature: String(b?.signature) }),
     "POST /pairing/status": () => ({ approvers: paired.approvers(), devices: pairing.list().length, ...paired.settings() }),
   };
-  return { pairing, syncKeys, paired, routes };
+  return { pairing, syncKeys, paired, signer, routes };
 }
 
 module.exports = { setupPairing };

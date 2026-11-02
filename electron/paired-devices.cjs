@@ -22,9 +22,12 @@ const DEFAULTS = { seal: false, webApprovals: false };
 
 /**
  * devOrigin: one extra origin a passkey may sign from (a local web board), passed only when Weft isn't packaged.
- * @param {{ dir: string, safeStorage: () => { encryptString: (s: string) => Buffer, decryptString: (b: Buffer) => string }, sodium: () => any, devOrigin?: string | null }} deps
+ * self: this Mac's own approval key (electron/desktop-signer.cjs), so the desktop's signed Allow checks on the same
+ * path as a phone's. It is never pinned in the list, so it doesn't count as an approver.
+ * @param {{ dir: string, safeStorage: () => { encryptString: (s: string) => Buffer, decryptString: (b: Buffer) => string }, sodium: () => any, devOrigin?: string | null,
+ *   self?: { id: () => string, verify: (message: string, sig: string) => boolean } }} deps
  */
-function createPairedDevices({ dir, safeStorage, sodium, devOrigin = null }) {
+function createPairedDevices({ dir, safeStorage, sodium, devOrigin = null, self = null }) {
   const origins = passkeyOrigins(devOrigin);
   const file = path.join(dir, "vault", "paired-devices.json");
 
@@ -105,8 +108,9 @@ function createPairedDevices({ dir, safeStorage, sodium, devOrigin = null }) {
     return { ok: true, name: found.name };
   }
 
-  /** Whether `sig` over `message` is a pinned phone's. @returns {{ ok: true, name: string } | { ok: false, reason: string }} */
+  /** Whether `sig` over `message` is a pinned phone's or this Mac's own. @returns {{ ok: true, name: string } | { ok: false, reason: string }} */
   function verify({ device, message, sig }) {
+    if (self && device === self.id()) return self.verify(message, sig) ? { ok: true, name: "This Mac" } : { ok: false, reason: "The approval's signature doesn't check out." };
     const found = read().devices.find((d) => d.id === device);
     if (!found) return { ok: false, reason: "That device isn't paired with this Mac." };
     if (found.kind !== "phone") return { ok: false, reason: "Only a paired phone can approve." };
