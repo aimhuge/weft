@@ -72,14 +72,14 @@ describe("workerCreateCard", () => {
     rows.push(macRow());
     const text = await workerCreateCard({ prompt: "Fix the Mac app", folder: "app", title: "Fix", tags: ["bug"], start: false, agent: "copywriter" }, deps());
     expect(newCard).toHaveBeenCalledWith("mac-1", "/Users/me/app", { prompt: "Fix the Mac app", title: "Fix", tags: ["bug"], start: false });
-    expect(text).toMatch(/^Sent to your Mac for \/Users\/me\/app \(command cmd-1\)\. It lands in Backlog there/);
+    expect(text).toMatch(/^Sent to your Mac for \/Users\/me\/app \(command cmd-1\)\. It lands in Backlog there, tagged from-worker, for the user to start/);
     expect(text).toMatch(/agent isn't carried/);
   });
 
   it("sends a card for another worker as run, started", async () => {
     const text = await workerCreateCard({ prompt: "Go", folder: "worker://w2/site" }, deps());
     expect(newCard).toHaveBeenCalledWith("worker:w2", "site", { prompt: "Go" });
-    expect(text).toMatch(/It starts there once that worker takes it/);
+    expect(text).toMatch(/It starts there once that worker takes it, in default mode/);
   });
 });
 

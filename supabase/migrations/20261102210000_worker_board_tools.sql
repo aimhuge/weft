@@ -5,7 +5,11 @@
 --   worker_board_cards  the owner's synced cards in the worker's workspace (its own and every Mac's), for list_cards
 --   worker_new_card     a new card for another host: `new_card` to one of the owner's Macs, `run` to another of their
 --                       workers. Inserted as the owner, so the target's inbox obeys it under its usual checks (a Mac's
---                       synced folder and its own default permission mode; a worker's RUN_MODES)
+--                       synced folder; a worker's work root), but the payload is rebuilt here from the prompt, title,
+--                       tags and start=false alone, stamped with `fromWorker`, and capped at WORKER_CARDS_PER_HOUR. A
+--                       worker key is a box's, not the user's: the stamp is how the target tells a row a worker sent
+--                       from one the user did, and it holds such a card to `default` (and, on a Mac, to Backlog), so a
+--                       stolen key or an injected thread can't start anything that runs unasked on another host
 --   worker_set_lists    the worker's crons and webhooks, published so the Mac's ⏰ and 🪝 drawers list them
 --
 -- cloud_worker_lists is readable by the worker's owner only: a cron's prompt is as private as a card's.
@@ -21,8 +25,15 @@ as $$
 declare
   w public.cloud_workers := private.worker_for_key(p_key);
 begin
+  -- Only what list_cards draws, never a card's prompt, latest reply, error or pending request: those may hold what a
+  -- thread on another host read, and a worker key shouldn't carry it off (nor feed it to this worker's threads).
   return query
-    select c.card_id, c.folder, c.owner_device, c.owner_worker, c.card, c.updated_at
+    select c.card_id, c.folder, c.owner_device, c.owner_worker,
+           jsonb_strip_nulls(jsonb_build_object(
+             'title', c.card->'title', 'column', c.card->'column', 'tags', c.card->'tags', 'stage', c.card->'stage',
+             'starred', c.card->'starred', 'archived', c.card->'archived', 'role', c.card->'role',
+             'backend', c.card->'backend', 'updatedAt', c.card->'updatedAt')),
+           c.updated_at
     from public.cloud_cards c
     where c.org_id = w.org_id and c.owner_user = w.owner_user and not c.deleted
     order by c.updated_at desc
@@ -47,9 +58,23 @@ declare
   w public.cloud_workers := private.worker_for_key(p_key);
   v_kind text;
   v_id uuid;
+  v_payload jsonb;
 begin
-  if p_payload is null or jsonb_typeof(p_payload) <> 'object' or octet_length(p_payload::text) > 64000 then
+  if p_payload is null or jsonb_typeof(p_payload) <> 'object' or octet_length(p_payload::text) > 64000
+     or jsonb_typeof(p_payload->'prompt') is distinct from 'string' or char_length(btrim(p_payload->>'prompt')) = 0 then
     raise exception 'that card is too big or not a card' using errcode = '22023';
+  end if;
+  -- What a card from a worker may carry, and nothing else: no mode, agent, model, repo, schedule or attachments.
+  v_payload := jsonb_strip_nulls(jsonb_build_object(
+    'prompt', p_payload->'prompt',
+    'title', case when jsonb_typeof(p_payload->'title') = 'string' then p_payload->'title' end,
+    'tags', case when jsonb_typeof(p_payload->'tags') = 'array' then p_payload->'tags' end,
+    'start', case when p_payload->'start' = 'false'::jsonb then p_payload->'start' end,
+    'fromWorker', w.id::text));
+  if (select count(*) from public.cloud_commands c
+      where c.org_id = w.org_id and c.created_at > now() - interval '1 hour'
+        and c.payload->>'fromWorker' = w.id::text) >= 30 then
+    raise exception 'this worker has sent 30 cards in the last hour; wait, or start them from the board' using errcode = '54000';
   end if;
   if p_folder is null or char_length(p_folder) not between 1 and 500 then
     raise exception 'that card names no folder' using errcode = '22023';
@@ -58,7 +83,8 @@ begin
     raise exception 'a worker starts its own cards itself' using errcode = '22023';
   elsif p_target like 'worker:%' then
     if not exists (select 1 from public.cloud_workers x
-                   where 'worker:' || x.id::text = p_target and x.owner_user = w.owner_user and x.org_id = w.org_id) then
+                   where 'worker:' || x.id::text = p_target and x.owner_user = w.owner_user and x.org_id = w.org_id
+                     and x.kind = 'headless' and x.revoked_at is null) then
       raise exception 'that worker isn''t one of yours' using errcode = '42501';
     end if;
     v_kind := 'run';
@@ -70,7 +96,7 @@ begin
     v_kind := 'new_card';
   end if;
   insert into public.cloud_commands (org_id, created_by, kind, target_device, folder, payload)
-    values (w.org_id, w.owner_user, v_kind, p_target, p_folder, p_payload)
+    values (w.org_id, w.owner_user, v_kind, p_target, p_folder, v_payload)
     returning id into v_id;
   return v_id;
 end;

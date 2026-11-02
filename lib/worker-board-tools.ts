@@ -72,6 +72,13 @@ function remotePayload(args: NewCardArgs): Record<string, unknown> {
   return payload;
 }
 
+// A card a worker sends never runs unasked there (lib/worker-origin.ts): a Mac files it in Backlog for the user to start,
+// and a worker starts it in `default`, asking before each edit and command.
+function arrival(where: string, start: boolean | undefined): string {
+  if (where === "Mac") return "It lands in Backlog there, tagged from-worker, for the user to start: a worker's card never starts itself on their Mac.";
+  return `It ${start === false ? "lands in Backlog" : "starts"} there once that worker takes it, in default mode (it asks before edits and commands).`;
+}
+
 export async function workerCreateCard(args: NewCardArgs, deps: WorkerBoardDeps): Promise<string> {
   const link = boardLink();
   const parent = parentOf(deps);
@@ -85,7 +92,7 @@ export async function workerCreateCard(args: NewCardArgs, deps: WorkerBoardDeps)
   const to = remoteTarget(args.folder ?? "", await link.cards(BOARD_READ), link.workerId);
   const id = await link.newCard(to.target, to.folder, remotePayload(args));
   const agent = args.agent ? " The agent isn't carried to another host yet: that project's default agent runs it." : "";
-  return `Sent to your ${to.where} for ${to.folder} (command ${id}). It ${args.start === false ? "lands in Backlog" : "starts"} there once that ${to.where} takes it, in its own default mode; list_cards shows the card after.${agent}`;
+  return `Sent to your ${to.where} for ${to.folder} (command ${id}). ${arrival(to.where, args.start)} list_cards shows the card after.${agent}`;
 }
 
 export const CRON_ELSEWHERE =

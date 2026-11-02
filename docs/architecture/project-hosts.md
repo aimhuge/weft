@@ -528,10 +528,18 @@ webhook" in a board nobody sees. Now the tools that write the board reach the us
   publisher ships it like any card. Anything else is looked up by `remoteTarget`: an explicit `worker://<id>/<name>`, or
   the synced cards' folders matched by path or by name (one match, or an error naming the choices). It goes as
   `worker_new_card`, which inserts a `new_card` (a Mac the owner has synced cards from) or `run` (another worker of the
-  owner's, same workspace) as the owner, so the target's inbox applies its usual checks: a Mac's synced folder and its
-  own default mode (the payload never carries one), a worker's `RUN_MODES`. `start: false` travels in the payload
-  (`NewCardPayload.start`, `newCardBody`, `runBody`) and `startFeatureCard` leaves such a card in Backlog on either host.
-  An agent isn't carried to another host yet; the reply says so.
+  owner's, headless and not revoked, same workspace) as the owner, so the target's inbox applies its usual checks: a
+  Mac's synced folder, a worker's work root. `start: false` travels in the payload (`NewCardPayload.start`,
+  `newCardBody`, `runBody`). An agent isn't carried to another host yet; the reply says so.
+- **A worker's card never runs unasked elsewhere.** A worker key belongs to a box, and a thread's prompt can be injected,
+  so `worker_new_card` treats both as untrusted: it rebuilds the payload from `prompt`, `title`, `tags` and
+  `start: false` alone (no mode, agent, model, repo or attachments) and stamps it `fromWorker: <id>`, which only the
+  function can write onto a worker's row, and refuses past 30 such commands per worker per hour. The target reads the
+  stamp (`lib/worker-origin.ts`): a Mac files the card in Backlog, in `default`, tagged `from-worker`, without fetching
+  pasted files (`holdWorkerCard` in `lib/cloud-inbox-cards.ts`), for the user to start; another worker starts it in
+  `default`, never its usual `acceptEdits` (`lib/worker-kinds.ts`). `worker_board_cards` returns only what `list_cards`
+  draws (title, column, tags, stage, starred, archived, role, backend, updatedAt), never a card's prompt, latest
+  reply, error or pending request, so a worker key can't read what threads on the Mac saw.
 - **Crons live where they fire.** A cron's runs are cards in a checkout, and a fork needs the session on that host's
   disk, so a cron for a worker project lives in the worker's `crons.json` and fires on the worker's cron clock
   (`startCronClock`, started after recovery beside the scheduler). `create_cron` on a worker refuses a folder or source

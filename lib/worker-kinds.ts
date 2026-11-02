@@ -10,11 +10,15 @@ import { createCardCommands } from "./worker-card-commands";
 import { cloneBody, runBody } from "./worker-commands";
 import type { DaemonDeps } from "./worker-daemon";
 import { explainClone, type GithubStatus } from "./worker-github";
+import { sentByWorker, WORKER_CARD_MODE } from "./worker-origin";
 import { sealedOf, type Sealed } from "./worker-seal";
 
 const UNKNOWN_KIND = "This worker doesn't know that kind of request. Update it with weft-worker update.";
 // A run that names no mode edits files without asking, and still asks before a command it hasn't been allowed.
 const DEFAULT_MODE = "acceptEdits";
+
+// A card another of the user's workers sent starts in `default`, whatever it names (lib/worker-origin.ts).
+const startMode = (command: CloudCommandRow, named: unknown) => (sentByWorker(command.payload) ? WORKER_CARD_MODE : named ?? DEFAULT_MODE);
 
 export interface KindContext {
   log: (msg: string) => void;
@@ -84,7 +88,7 @@ export function workerKinds(deps: DaemonDeps, ctx: KindContext): KindTable {
     if (start === false) throw new Error("A worker has no Backlog yet. Start the thread instead.");
     fields.prompt = await engine.receive(fields.prompt, command.payload);
     const cwd = await deps.checkout(command.folder, typeof repo === "string" ? repo : undefined);
-    const card = await engine.start({ ...fields, cwd, permissionMode: run?.permissionMode ?? fields.permissionMode ?? DEFAULT_MODE });
+    const card = await engine.start({ ...fields, cwd, permissionMode: startMode(command, run?.permissionMode ?? fields.permissionMode) });
     publisher.nameFolder(card.id, command.folder);
     publisher.track(card.id);
     // The report names the card, and the database only takes a card this worker has published.
