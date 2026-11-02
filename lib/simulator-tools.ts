@@ -11,7 +11,7 @@ import { deviceRoute } from "./worker-device";
 import { onWorker } from "./worker-pane";
 import { screenOnWorker } from "./worker-screen";
 
-export const SIMULATOR_PROMPT = `When the user asks about a React Native or Expo app (react-native or expo in its package.json), offer the web build first: start \`npx expo start --web\` with mcp__devservers__start and show it in the browser pane at phone size (set_viewport phone). It renders through react-native-web, live and clickable with hot reload, and boots no device, which costs gigabytes of memory. Plain React Native needs react-native-web set up before --web works. Boot a simulator when the change needs native code (push, camera, native modules, native gestures) or for a final check on a real device. To try a mobile app or a site on a phone, drive an iOS simulator or Android emulator with the mcp__simulator__* tools: list_devices, boot, install and launch the app (or open_url for a deep link or a local dev server in mobile Safari or Chrome), then ui_tree to read the screen and tap, type_text or swipe by element. Call watch so the user sees the device live in the browser pane, and screenshot when a step is worth showing. When a tool says Xcode, a runtime, the Android SDK or AXe is missing, tell the user to click Install beside it in Settings → Connectors → Simulators (Weft downloads and sets it up), and ask before installing anything yourself. On a Weft Worker the user can switch a card to Manual QA: these tools then run on a simulator on the user's Mac, which can't reach Metro on this box, so build with the JavaScript inside the app (for Expo, \`npx expo prebuild\`, then \`xcodebuild -configuration Release -sdk iphonesimulator -derivedDataPath build\` or \`./gradlew assembleRelease\`) and call install with the path of the .app or .apk here; it travels to the Mac for you. Each change means a rebuild. Don't start Metro for it.`;
+export const SIMULATOR_PROMPT = `When the user asks about a React Native or Expo app (react-native or expo in its package.json), offer the web build first: start \`npx expo start --web\` with mcp__devservers__start and show it in the browser pane at phone size (set_viewport phone). It renders through react-native-web, live and clickable with hot reload, and boots no device, which costs gigabytes of memory. Plain React Native needs react-native-web set up before --web works. Boot a simulator when the change needs native code (push, camera, native modules, native gestures) or for a final check on a real device. To try a mobile app or a site on a phone, drive an iOS simulator or Android emulator with the mcp__simulator__* tools: list_devices, boot, install and launch the app (or open_url for a deep link or a local dev server in mobile Safari or Chrome), then ui_tree to read the screen and tap, type_text or swipe by element. Call watch so the user sees the device live in the browser pane, and screenshot when a step is worth showing. When a tool says Xcode, a runtime, the Android SDK or AXe is missing, tell the user to click Install beside it in Settings → Connectors → Simulators (Weft downloads and sets it up), and ask before installing anything yourself. On a Weft Worker the user can switch a card to Local Simulator: these tools then run on a simulator on the user's Mac, which can't reach Metro on this box, so build with the JavaScript inside the app (for Expo, \`npx expo prebuild\`, then \`xcodebuild -configuration Release -sdk iphonesimulator -derivedDataPath build\` or \`./gradlew assembleRelease\`) and call install with the path of the .app or .apk here; it travels to the Mac for you. Each change means a rebuild. Don't start Metro for it.`;
 
 // The picture a thread sees: tall phone screens shrunk to a height that reads well and costs little.
 const SHOT_HEIGHT = 1000;
@@ -49,7 +49,7 @@ async function shot(device: string | undefined, saveTo: string | undefined): Pro
 }
 
 // The tools themselves, with no idea who's asking: a thread here through simulatorMcpServer, or a worker's thread in
-// manual QA mode through lib/device-calls.ts. Only watch needs the card, to open its live page in that card's pane.
+// Local Simulator mode through lib/device-calls.ts. Only watch needs the card, to open its live page in that card's pane.
 export function simulatorTools(cardId: () => string | undefined) {
   return [
       tool("list_devices", "List iOS simulators and Android emulators (running and not), with ids, runtimes and states.", {}, () =>
@@ -175,7 +175,7 @@ export function simulatorTools(cardId: () => string | undefined) {
 }
 
 // A fresh server per query, like the browser's: an MCP server instance serves one connection. On a worker, a card in
-// manual QA mode sends each call to its owner's Mac (lib/worker-device.ts); everywhere else the call runs here.
+// Local Simulator mode sends each call to its owner's Mac (lib/worker-device.ts); everywhere else the call runs here.
 export function simulatorMcpServer(cardId: () => string | undefined) {
   const tools = simulatorTools(cardId).map((t) => ({
     ...t,

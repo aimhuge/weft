@@ -1,4 +1,4 @@
-// The yes behind manual QA mode (lib/qa-grants.ts): one card, one worker, one device, for 8 hours, held in memory.
+// The yes behind Local Simulator mode (lib/qa-grants.ts): one card, one worker, one device, for 8 hours, held in memory.
 import { beforeEach, describe, expect, it } from "vitest";
 import { activeGrant, grantQa, hasQaGrant, QA_GRANT_MS, requireGrant, revokeQa } from "./qa-grants";
 

@@ -7,7 +7,7 @@ import { markLive, watchedSize, watching } from "./simulator-watch";
 
 import type { ScreenInput } from "./worker-commands";
 
-export type LiveInput = Exclude<ScreenInput, { kind: "offer" }> | { kind: "tap" | "swipe" | "live"; device: string; x?: number; y?: number; x2?: number; y2?: number; ms?: number };
+export type LiveInput = Exclude<ScreenInput, { kind: "offer" | "watch" }> | { kind: "tap" | "swipe" | "live"; device: string; x?: number; y?: number; x2?: number; y2?: number; ms?: number };
 
 const unit = (n: unknown) => (typeof n === "number" && Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : 0.5);
 

@@ -171,7 +171,7 @@ export type WorkerAction =
 async function sealedOffer(client: SupabaseClient, workerId: string, offer: BoardOffer): Promise<ScreenInput> {
   const { data } = await client.from("cloud_workers").select("public_key").eq("id", workerId).maybeSingle<{ public_key: string | null }>();
   if (!data?.public_key) throw new Error("That worker hasn't published its key yet.");
-  return { kind: "offer", device: offer.device, sealed: seal(data.public_key, JSON.stringify({ sdp: offer.sdp, key: offer.key }), RTC_PURPOSE) };
+  return { kind: "offer", device: offer.device, sealed: seal(data.public_key, JSON.stringify({ sdp: offer.sdp, key: offer.key, quality: offer.quality }), RTC_PURPOSE) };
 }
 
 const inputFor = (client: SupabaseClient, workerId: string, input: BoardInput) => ("sdp" in input ? sealedOffer(client, workerId, input) : input);

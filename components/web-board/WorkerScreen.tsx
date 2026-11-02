@@ -9,6 +9,7 @@ import { hidUsage } from "@/lib/hid-keys";
 import { useRtcScreen } from "@/lib/use-rtc-screen";
 import { gesture, useScreenStream, type Point } from "@/lib/use-screen-stream";
 import type { BoardInput } from "@/lib/worker-commands";
+import { ScreenBar, useScreenQuality } from "./ScreenBar";
 
 // How often the status line looks at the clock, to say the watch ran out.
 const CLOCK_MS = 5_000;
@@ -24,13 +25,14 @@ function pointIn(el: HTMLElement, e: PointerEvent): Point {
 }
 
 function statusLine(ended: boolean, src: string | null, canTap: boolean, until: number, direct: boolean) {
-  if (ended) return "Paused: ask the thread to watch again";
+  if (ended) return canTap ? "Paused" : "Paused: ask the thread to watch again";
   if (!src && !direct) return "Waiting for the first frame…";
   const time = new Date(until).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   return `${canTap ? "Live · tap and drag on the screen" : "Live"}${direct ? " · direct video" : ""} · until ${time}`;
 }
 
-export function WorkerScreen({ pane, onInput }: { pane: ScreenPane; onInput?: (input: BoardInput) => Promise<unknown> }) {
+// source: the worker's name, for "streaming from"; the web board, which doesn't know it, says "the worker".
+export function WorkerScreen({ pane, onInput, source }: { pane: ScreenPane; onInput?: (input: BoardInput) => Promise<unknown>; source?: string }) {
   const [src, setSrc] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const [now, setNow] = useState(() => Date.now());
@@ -38,7 +40,11 @@ export function WorkerScreen({ pane, onInput }: { pane: ScreenPane; onInput?: (i
   const [ripple, setRipple] = useState<{ x: number; y: number } | null>(null);
   const down = useRef<(Point & { at: number }) | null>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
-  const { live, send, answer } = useRtcScreen(pane.device, pane.fast, canvas, onInput);
+  const [quality, pickQuality] = useScreenQuality();
+  // The page a watch started from here is waiting to replace: the new page ends the wait.
+  const [startedOn, setStartedOn] = useState<string | null>(null);
+  const starting = startedOn === pane.url;
+  const { live, send, answer } = useRtcScreen(pane.device, pane.fast, canvas, onInput, quality);
   useScreenStream(pane.token, setSrc, answer);
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), CLOCK_MS);
@@ -74,13 +80,31 @@ export function WorkerScreen({ pane, onInput }: { pane: ScreenPane; onInput?: (i
     if (code === null || e.metaKey || e.ctrlKey || e.repeat) return;
     if (send({ t: "key", code, down: isDown })) e.preventDefault();
   };
+  const ended = now > pane.until;
+  const watch = (device: string) => {
+    if (!onInput) return;
+    setStartedOn(pane.url);
+    setNote("");
+    onInput({ kind: "watch", device }).catch((err: unknown) => {
+      setStartedOn(null);
+      setNote((err as Error).message);
+    });
+  };
   const surface = `max-h-full max-w-full touch-none rounded-2xl border-4 border-line ${onInput ? "cursor-pointer" : ""}`;
 
   return (
     <div className="flex h-full flex-col items-center gap-2 overflow-hidden p-3">
-      <p className="shrink-0 text-[12px] text-muted">
-        <b className="text-ink">{pane.label}</b> · {statusLine(now > pane.until, src, Boolean(onInput), pane.until, live)}
-      </p>
+      <ScreenBar
+        label={pane.label}
+        device={pane.device}
+        devices={pane.devices}
+        source={source}
+        status={statusLine(ended, src, Boolean(onInput), pane.until, live)}
+        ended={ended}
+        watch={onInput ? watch : undefined}
+        busy={starting}
+        quality={pane.fast && onInput ? { value: quality, pick: pickQuality } : undefined}
+      />
       {/* Sized to the picture, never letterboxed: a press is read as a fraction of this box. */}
       <div className="flex min-h-0 w-full flex-1 items-center justify-center">
         <canvas

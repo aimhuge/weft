@@ -1,4 +1,4 @@
-// The worker's end of manual QA mode's wire: the key-checked database calls, and a build's trip to R2 (app/api/worker-build).
+// The worker's end of Local Simulator mode's wire: the key-checked database calls, and a build's trip to R2 (app/api/worker-build).
 // The PUT goes straight to R2 as a stream: a build doesn't fit through a Vercel function, or in the daemon's memory.
 import fs from "node:fs";
 import { Readable } from "node:stream";

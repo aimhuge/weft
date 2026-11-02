@@ -109,7 +109,7 @@ describe("start", () => {
   });
 });
 
-describe("the manual QA switch", () => {
+describe("the Local Simulator switch", () => {
   it("points the card's device tools at the Mac", async () => {
     const d = makeDeps();
     await d.daemon.runOne(command({ kind: "qa", payload: { cardId: "card-1", device: "mac-1" } as never }));

@@ -1,4 +1,4 @@
-// The Mac's side of manual QA mode (docs/architecture/manual-qa.md). A worker's simulator tool queues a row in
+// The Mac's side of Local Simulator mode (docs/architecture/manual-qa.md). A worker's simulator tool queues a row in
 // public.device_calls; the inbox (lib/cloud-inbox.ts) hears it and this runs it on the device its owner picked, then
 // writes the answer back for the tool that's waiting. A call is untrusted: it needs a live grant for that card and worker
 // (lib/qa-grants.ts), its arguments are re-read (lib/device-call.ts), and the device comes from the grant, never the row.
@@ -76,7 +76,7 @@ async function finish(client: SupabaseClient, id: string, patch: { status: "done
     .from("device_calls")
     .update({ ...patch, updated_at: new Date().toISOString() })
     .eq("id", id);
-  if (error) console.warn(`Manual QA: couldn't answer ${id}: ${error.message}`);
+  if (error) console.warn(`Local Simulator: couldn't answer ${id}: ${error.message}`);
 }
 
 async function take(client: SupabaseClient, row: DeviceCallRow) {

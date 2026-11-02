@@ -1,4 +1,4 @@
-// What `logs` can't see in manual QA mode: when an iOS simulator app crashes the report lands on the Mac, in
+// What `logs` can't see in Local Simulator mode: when an iOS simulator app crashes the report lands on the Mac, in
 // ~/Library/Logs/DiagnosticReports, not in the device's log. Those reports cover every process on the Mac, so only a report
 // whose path names this device goes back to a worker, and only what explains the crash: never a whole report.
 import fs from "node:fs";

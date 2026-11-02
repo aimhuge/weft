@@ -1,7 +1,7 @@
-# Manual QA mode
+# Local Simulator mode (was Manual QA)
 
 An agent fixing things alone uses the device on the worker. A person testing by hand wants the device on their own Mac, because a
-local simulator has no tap latency and already has the [30 fps live view](simulators.md#live-view). Manual QA mode gives them that:
+local simulator has no tap latency and already has the [30 fps live view](simulators.md#live-view). Local Simulator mode gives them that:
 the worker builds, the app runs on the Mac, and the worker's agent keeps driving it. Both modes stay, and this one is per card.
 
 ```
@@ -24,7 +24,7 @@ Your own taps go through the normal live view (`lib/simulator-input.ts`) and nev
 
 ## The switch
 
-**Manual QA** sits in a worker card's pane toolbar on the desktop board (`components/QaSwitch.tsx`), and needs no extra row. It lists
+**Local Simulator** sits in a worker card's pane toolbar on the desktop board (`components/QaSwitch.tsx`), and needs no extra row. It lists
 this Mac's devices, and picking one goes `POST /api/worker-board` `{ action: "qa" }`, which is `elevated`, so a thread's curl can't reach
 it. `lib/qa-switch.ts` asks Electron main (`POST /qa/approve`, Touch ID, naming the worker, project and device), keeps the grant, then
 sends a `qa` command. The worker writes `card.qaDevice`, the Mac's sync device id, and that comes back on the card's row. With it set and

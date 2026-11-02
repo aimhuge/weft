@@ -6,7 +6,7 @@
 // leaves the view on the JPEGs (lib/use-screen-stream.ts), which never stop, and a later try may still connect.
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { codecOf, frameReader, isKey } from "./h264-frames";
-import { newAnswerKey, openAnswer, STUN, type LiveEvent, type SealedAnswer } from "./rtc-signal";
+import { DEFAULT_QUALITY, newAnswerKey, openAnswer, STUN, type LiveEvent, type ScreenQuality, type SealedAnswer } from "./rtc-signal";
 import type { BoardInput } from "./worker-commands";
 
 const GATHER_MS = 2_500;
@@ -70,7 +70,8 @@ export interface RtcScreen {
 
 type Attempt = { pc: RTCPeerConnection; key: string };
 
-export function useRtcScreen(device: string, fast: boolean, canvasEl: RefObject<HTMLCanvasElement | null>, onOffer?: (input: BoardInput) => Promise<unknown>): RtcScreen {
+// A new quality closes the line and offers again at once: the worker's encoder takes its settings when the video starts.
+export function useRtcScreen(device: string, fast: boolean, canvasEl: RefObject<HTMLCanvasElement | null>, onOffer?: (input: BoardInput) => Promise<unknown>, quality: ScreenQuality = DEFAULT_QUALITY): RtcScreen {
   const attempt = useRef<Attempt | null>(null);
   const input = useRef<RTCDataChannel | null>(null);
   const offering = useRef(onOffer);
@@ -121,7 +122,7 @@ export function useRtcScreen(device: string, fast: boolean, canvasEl: RefObject<
       await gathered(pc);
       const key = newAnswerKey();
       attempt.current = { pc, key };
-      await offering.current?.({ kind: "offer", device, sdp: pc.localDescription?.sdp ?? "", key });
+      await offering.current?.({ kind: "offer", device, sdp: pc.localDescription?.sdp ?? "", key, quality });
     };
     void connect().catch(() => cleanup());
     return () => {
@@ -129,7 +130,7 @@ export function useRtcScreen(device: string, fast: boolean, canvasEl: RefObject<
       clearTimeout(retry);
       cleanup();
     };
-  }, [fast, canOffer, device, canvasEl]);
+  }, [fast, canOffer, device, canvasEl, quality]);
 
   const answer = useCallback((sealed: SealedAnswer) => {
     const now = attempt.current;

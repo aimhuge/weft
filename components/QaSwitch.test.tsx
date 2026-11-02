@@ -29,7 +29,7 @@ describe("QaSwitch", () => {
   it("offers this Mac's devices, and says what saying yes means", async () => {
     api.readQa.mockResolvedValue({ devices: [IPHONE, PIXEL], mac: "mac-1", approved: null });
     render(<Harness card={{ id: "c1" }} />);
-    fireEvent.click(await screen.findByRole("button", { name: /Manual QA/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Local Simulator/ }));
     expect(screen.getByText(/run on your Mac as you, for 8 hours/)).toBeTruthy();
     expect(screen.getAllByRole("menuitem")).toHaveLength(2);
   });
@@ -37,7 +37,7 @@ describe("QaSwitch", () => {
   it("names an iOS device by its udid and an emulator by its name", async () => {
     api.readQa.mockResolvedValue({ devices: [IPHONE, PIXEL], mac: "mac-1", approved: null });
     render(<Harness card={{ id: "c1" }} />);
-    fireEvent.click(await screen.findByRole("button", { name: /Manual QA/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Local Simulator/ }));
     fireEvent.click(screen.getByRole("menuitem", { name: /Weft_Pixel_9/ }));
     await waitFor(() => expect(api.sendWorkerAction).toHaveBeenCalledWith({ action: "qa", cardId: "c1", device: "Weft_Pixel_9" }));
   });
@@ -45,51 +45,51 @@ describe("QaSwitch", () => {
   it("sends the udid for a simulator", async () => {
     api.readQa.mockResolvedValue({ devices: [IPHONE], mac: "mac-1", approved: null });
     render(<Harness card={{ id: "c1" }} />);
-    fireEvent.click(await screen.findByRole("button", { name: /Manual QA/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Local Simulator/ }));
     fireEvent.click(screen.getByRole("menuitem", { name: /iPhone 17/ }));
     await waitFor(() => expect(api.sendWorkerAction).toHaveBeenCalledWith({ action: "qa", cardId: "c1", device: "udid-1" }));
   });
 
   it("shows a refusal on the button, and stays off", async () => {
     api.readQa.mockResolvedValue({ devices: [IPHONE], mac: "mac-1", approved: null });
-    api.sendWorkerAction.mockRejectedValue(new Error("Manual QA stays off: you didn't approve it."));
+    api.sendWorkerAction.mockRejectedValue(new Error("Local Simulator stays off: you didn't approve it."));
     render(<Harness card={{ id: "c1" }} />);
-    fireEvent.click(await screen.findByRole("button", { name: /Manual QA/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Local Simulator/ }));
     fireEvent.click(screen.getByRole("menuitem", { name: /iPhone 17/ }));
-    const button = await screen.findByRole("button", { name: /Manual QA ⚠/ });
-    expect(button.getAttribute("title")).toBe("Manual QA stays off: you didn't approve it.");
+    const button = await screen.findByRole("button", { name: /Local Simulator ⚠/ });
+    expect(button.getAttribute("title")).toBe("Local Simulator stays off: you didn't approve it.");
   });
 
   it("points at Settings when this Mac has no simulators", async () => {
     api.readQa.mockResolvedValue({ devices: [], mac: "mac-1", approved: null });
     render(<Harness card={{ id: "c1" }} />);
-    fireEvent.click(await screen.findByRole("button", { name: /Manual QA/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Local Simulator/ }));
     expect(screen.getByText(/Settings → Connectors → Simulators/)).toBeTruthy();
   });
 
   it("is on only when this Mac approved it and the worker points at this Mac", async () => {
     api.readQa.mockResolvedValue({ devices: [IPHONE], mac: "mac-1", approved: "iPhone 17" });
     render(<Harness card={{ id: "c1", qaDevice: "mac-1" }} />);
-    expect(await screen.findByRole("button", { name: /QA on iPhone 17/ })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: /Local: iPhone 17/ })).toBeTruthy();
   });
 
   it("reads as off when the approval has lapsed, so a click asks again", async () => {
     api.readQa.mockResolvedValue({ devices: [IPHONE], mac: "mac-1", approved: null });
     render(<Harness card={{ id: "c1", qaDevice: "mac-1" }} />);
-    expect(await screen.findByRole("button", { name: /Manual QA/ })).toBeTruthy();
-    expect(screen.queryByText(/QA on/)).toBeNull();
+    expect(await screen.findByRole("button", { name: /Local Simulator/ })).toBeTruthy();
+    expect(screen.queryByText(/Local: /)).toBeNull();
   });
 
   it("reads as off when the worker points at another Mac", async () => {
     api.readQa.mockResolvedValue({ devices: [IPHONE], mac: "mac-1", approved: "iPhone 17" });
     render(<Harness card={{ id: "c1", qaDevice: "mac-2" }} />);
-    expect(await screen.findByRole("button", { name: /Manual QA/ })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: /Local Simulator/ })).toBeTruthy();
   });
 
   it("switches off with a null device", async () => {
     api.readQa.mockResolvedValue({ devices: [IPHONE], mac: "mac-1", approved: "iPhone 17" });
     render(<Harness card={{ id: "c1", qaDevice: "mac-1" }} />);
-    fireEvent.click(await screen.findByRole("button", { name: /QA on iPhone 17/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Local: iPhone 17/ }));
     await waitFor(() => expect(api.sendWorkerAction).toHaveBeenCalledWith({ action: "qa", cardId: "c1", device: null }));
   });
 
@@ -97,6 +97,6 @@ describe("QaSwitch", () => {
     api.readQa.mockRejectedValue(new Error("HTTP 500"));
     render(<Harness card={{ id: "c1" }} />);
     await waitFor(() => expect(api.readQa).toHaveBeenCalled());
-    expect(screen.getByRole<HTMLButtonElement>("button", { name: /Manual QA/ }).disabled).toBe(true);
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: /Local Simulator/ }).disabled).toBe(true);
   });
 });

@@ -92,6 +92,17 @@ describe("sessionOver", () => {
     expect(ended).toHaveBeenCalledTimes(1);
   });
 
+  it("encodes at the quality the board picked, on even sides", () => {
+    const { client, video } = fakeClient();
+    const session = sessionOver(client, { width: 1, height: 1 }, vi.fn(), { width: 1179, height: 2556 });
+    session.video(vi.fn(), vi.fn(), "high");
+    expect(video.write).toHaveBeenLastCalledWith({ start: expect.objectContaining({ fps: 60, avg_bitrate: 20_000_000, scale_factor: expect.closeTo(8 / 9, 4) as unknown }) as unknown });
+    session.video(vi.fn(), vi.fn(), "low");
+    expect(video.write).toHaveBeenLastCalledWith({ start: expect.objectContaining({ fps: 15, avg_bitrate: 2_000_000 }) as unknown });
+    session.video(vi.fn(), vi.fn());
+    expect(video.write).toHaveBeenLastCalledWith({ start: expect.objectContaining({ fps: 30 }) as unknown });
+  });
+
   it("doesn't report an end the caller asked for", () => {
     const { client, video } = fakeClient();
     const ended = vi.fn();
@@ -196,5 +207,10 @@ describe("evenScale", () => {
     }
     expect(evenScale(1320, 2868, 0.5)).toBeCloseTo(0.5, 4);
     expect(evenScale(1179, 2556, 0.5)).toBeCloseTo(4 / 9, 4);
+  });
+
+  it("never goes past full size, which an odd side can't take", () => {
+    expect(evenScale(1179, 2556, 1)).toBeCloseTo(8 / 9, 4);
+    expect(evenScale(1320, 2868, 1)).toBeCloseTo(1, 4);
   });
 });

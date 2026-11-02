@@ -1,4 +1,4 @@
-// The manual QA switch on a worker's card (lib/qa-switch.ts): nothing runs without the yes, so an approval that
+// The Local Simulator switch on a worker's card (lib/qa-switch.ts): nothing runs without the yes, so an approval that
 // doesn't come leaves no grant and no command behind.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -34,13 +34,13 @@ beforeEach(() => {
 describe("switchQa", () => {
   it("throws and leaves no grant and no command when the user didn't approve", async () => {
     shell.mockResolvedValue({ approved: false });
-    await expect(switchQa(TARGET.cardId, IOS.id, TARGET)).rejects.toThrow("Manual QA stays off");
+    await expect(switchQa(TARGET.cardId, IOS.id, TARGET)).rejects.toThrow("Local Simulator stays off");
     expect(grantQa).not.toHaveBeenCalled();
   });
 
   it("throws when the approval says nothing", async () => {
     shell.mockResolvedValue({});
-    await expect(switchQa(TARGET.cardId, IOS.id, TARGET)).rejects.toThrow("Manual QA stays off");
+    await expect(switchQa(TARGET.cardId, IOS.id, TARGET)).rejects.toThrow("Local Simulator stays off");
     expect(grantQa).not.toHaveBeenCalled();
   });
 

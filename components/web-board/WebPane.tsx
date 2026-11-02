@@ -7,7 +7,7 @@
 // Mac, so the card's latest pane capture stands in for it. The desktop board draws this too, for a worker's card
 // (components/WorkerOpenCard.tsx), with orgId null: it frames through its own server, more tightly, because a frame there
 // shares the board window's session (app/api/worker-board/page/[sha]), and that's why it never frames a public site.
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import type { SharePane } from "@/lib/share-types";
 import type { BoardInput } from "@/lib/worker-commands";
 import Icon from "../Icon";
@@ -42,8 +42,40 @@ function Snapshot({ src, note }: { src?: string; note: string }) {
   );
 }
 
-function PaneBody({ orgId, pane, thumbUrl, onScreenInput }: { orgId: string | null; pane: SharePane | null; thumbUrl?: string; onScreenInput?: (input: BoardInput) => Promise<void> }) {
-  if (pane?.kind === "screen") return <WorkerScreen pane={pane} onInput={onScreenInput} />;
+type ScreenInputFn = (input: BoardInput) => Promise<void>;
+
+// A React Native or Expo card on a worker, with nothing streaming yet: start its simulator from here, not from the thread.
+// The live screen replaces the pane once the worker streams, so "starting" only ends early on a failure.
+function StartSimulator({ onScreenInput, big }: { onScreenInput: ScreenInputFn; big?: boolean }) {
+  const [starting, setStarting] = useState(false);
+  const [failed, setFailed] = useState("");
+  const start = () => {
+    setStarting(true);
+    setFailed("");
+    onScreenInput({ kind: "watch" }).catch((err: unknown) => {
+      setStarting(false);
+      setFailed((err as Error).message);
+    });
+  };
+  const label = starting ? "Starting simulator…" : "📱 Start simulator";
+  if (!big)
+    return (
+      <button type="button" disabled={starting} title={failed || "Boot a simulator on the worker and stream it here"} onClick={start} className="whitespace-nowrap rounded-md px-2 py-1 text-[12px] text-muted hover:bg-sunken hover:text-ink disabled:opacity-50">
+        {failed ? "📱 Start simulator ⚠" : label}
+      </button>
+    );
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-2">
+      <button type="button" disabled={starting} onClick={start} className="rounded-lg bg-accent px-3 py-1.5 text-[13px] font-medium text-white disabled:opacity-50">
+        {label}
+      </button>
+      <p className="max-w-xs text-center text-[12px] text-faint">{failed || "Boots a simulator on the worker and streams it here, so you can tap through the app."}</p>
+    </div>
+  );
+}
+
+function PaneBody({ orgId, pane, thumbUrl, onScreenInput, source }: { orgId: string | null; pane: SharePane | null; thumbUrl?: string; onScreenInput?: ScreenInputFn; source?: string }) {
+  if (pane?.kind === "screen") return <WorkerScreen pane={pane} onInput={onScreenInput} source={source} />;
   if (pane?.kind === "blob") {
     return <iframe title="Card page" src={pageSrc(orgId, pane)} sandbox={orgId ? SANDBOX : BOARD_SANDBOX} className="size-full border-0 bg-white" />;
   }
@@ -56,8 +88,10 @@ function PaneBody({ orgId, pane, thumbUrl, onScreenInput }: { orgId: string | nu
 // onClose: the toolbar's X, left out where the thread beside it carries the close (WebThreadPanel, so a phone, where
 // the pane is hidden, still has one).
 // onScreenInput: taps on a worker's live screen, where this board can send them (the desktop's).
-// actions: extra toolbar controls (the desktop's manual QA switch).
-export function WebPane({ orgId, pane, thumbUrl, onClose, onScreenInput, actions }: { orgId: string | null; pane: SharePane | null; thumbUrl?: string; onClose?: () => void; onScreenInput?: (input: BoardInput) => Promise<void>; actions?: ReactNode }) {
+// actions: extra toolbar controls (the desktop's Local Simulator switch).
+// source: the worker's name, for the live screen's "streaming from". mobileApp: the card is a React Native or Expo app,
+// so the toolbar offers Start simulator while the pane shows something else.
+export function WebPane({ orgId, pane, thumbUrl, onClose, onScreenInput, actions, source, mobileApp }: { orgId: string | null; pane: SharePane | null; thumbUrl?: string; onClose?: () => void; onScreenInput?: ScreenInputFn; actions?: ReactNode; source?: string; mobileApp?: boolean }) {
   return (
     <section aria-label="Browser pane" className="relative hidden min-w-0 flex-1 flex-col border-l border-line bg-panel md:flex">
       <div className="flex items-center gap-1 border-b border-line px-2 py-1.5">
@@ -82,6 +116,7 @@ export function WebPane({ orgId, pane, thumbUrl, onClose, onScreenInput, actions
             Open ↗
           </a>
         )}
+        {mobileApp && onScreenInput && pane && pane.kind !== "screen" && <StartSimulator onScreenInput={onScreenInput} />}
         {actions}
         {onClose && (
           <button onClick={onClose} aria-label="Close thread" title="Close (Esc)" className="rounded-md p-1.5 text-muted hover:bg-sunken hover:text-ink">
@@ -90,7 +125,7 @@ export function WebPane({ orgId, pane, thumbUrl, onClose, onScreenInput, actions
         )}
       </div>
       <div className="relative min-h-0 flex-1 bg-canvas">
-        <PaneBody orgId={orgId} pane={pane} thumbUrl={thumbUrl} onScreenInput={onScreenInput} />
+        {!pane && mobileApp && onScreenInput ? <StartSimulator onScreenInput={onScreenInput} big /> : <PaneBody orgId={orgId} pane={pane} thumbUrl={thumbUrl} onScreenInput={onScreenInput} source={source} />}
       </div>
     </section>
   );

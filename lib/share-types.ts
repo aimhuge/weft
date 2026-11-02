@@ -109,7 +109,7 @@ export type SharePane =
   | { kind: "local"; url: string; label: string }
   // A worker's device, live: frames arrive on a Realtime Broadcast topic (lib/worker-screen.ts). Never in a thread item,
   // only in card.page, so a share link can't carry it.
-  | { kind: "screen"; url: string; label: string; token: string; device: string; until: number; fast: boolean };
+  | { kind: "screen"; url: string; label: string; token: string; device: string; until: number; fast: boolean; devices: ScreenDevice[] };
 
 // GET /api/s/[id]/live?after=<seq> (new items) or ?before=<seq> (older page), as the viewer polls it.
 // Items are newest first like the thread route, already redacted (lib/share-redact.ts) and with blob refs left in;
@@ -137,11 +137,26 @@ const SCREEN_PAGE = /^weft-screen:([0-9a-f]{32})\?(.*)$/;
 export const SCREEN_EVENT = "frame";
 export const screenTopic = (token: string) => `worker-screen:${token}`;
 
+// The worker's other devices, for the pane's device menu: few enough to ride in card.page.
+export type ScreenDevice = { id: string; name: string };
+const MAX_DEVICES = 40;
+
 // fast: this watch also takes a WebRTC offer (lib/use-rtc-screen.ts).
-export function screenPage(token: string, d: { id: string; name: string }, until: number, fast = false) {
+export function screenPage(token: string, d: { id: string; name: string }, until: number, fast = false, devices: ScreenDevice[] = []) {
   const params = new URLSearchParams({ device: d.id, name: d.name, until: String(until) });
   if (fast) params.set("fast", "1");
+  if (devices.length) params.set("devices", JSON.stringify(devices.slice(0, MAX_DEVICES).map((x) => [x.id, x.name])));
   return `weft-screen:${token}?${params.toString()}`;
+}
+
+function devicesOf(raw: string | null): ScreenDevice[] {
+  try {
+    const list: unknown = JSON.parse(raw ?? "[]");
+    if (!Array.isArray(list)) return [];
+    return list.flatMap((x: unknown) => (Array.isArray(x) && typeof x[0] === "string" && typeof x[1] === "string" ? [{ id: x[0], name: x[1] }] : [])).slice(0, MAX_DEVICES);
+  } catch {
+    return [];
+  }
 }
 
 function screenPane(url: string): SharePane | null {
@@ -152,7 +167,7 @@ function screenPane(url: string): SharePane | null {
   const device = params.get("device");
   const until = Number(params.get("until"));
   if (!device || !Number.isFinite(until)) return null;
-  return { kind: "screen", url, label: params.get("name") || device, token, device, until, fast: params.get("fast") === "1" };
+  return { kind: "screen", url, label: params.get("name") || device, token, device, until, fast: params.get("fast") === "1", devices: devicesOf(params.get("devices")) };
 }
 
 const BLOB_PAGE = /^(blob:sha256:[0-9a-f]{64})(#.*)?$/;

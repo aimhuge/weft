@@ -352,6 +352,13 @@ daemon ◀─ claim ◀─ cloud_commands kind=input ◀─ POST /api/worker-boa
   the local route takes it only from Weft's window (`elevated`), the daemon checks the card is its own, and
   `lib/simulator-input.ts` refuses a device that isn't being watched. It skips the queue behind a starting card, as a clone
   does, and a tap asks for a frame at once (`nudgeScreen`). weft.zip watches but doesn't tap yet.
+- **The pane's own controls** (`components/web-board/ScreenBar.tsx`), on the desktop board, which can send commands: a
+  "☁︎ streaming from <worker>" badge beside the device's name, so it reads as remote and not this Mac; a **device menu** from
+  `card.page`'s `devices` (the worker's list, at most 40, written at each watch); **Resume** once the 10 minutes are up; and
+  **📱 Start simulator** in the toolbar (or the empty pane) of a card on a React Native or Expo app (`card.mobileApp`, set by the
+  worker when it starts the card, `lib/mobile-app.ts`). Each is an `input` command of kind `watch` with a device or none:
+  `watchFromBoard` in `lib/worker-screen.ts` takes the named device, else the booted one, else the first simulator, boots it,
+  and streams it. Switching device stops the card's last one. The thread isn't asked, and the agent still has `watch` itself.
 - **Latency:** the slow part is the box, not the network. On m1mini `axe` took 1.1 s for a tap, and the command path adds
   its own trips, so a tap's answer takes over a second. This path is the one that works from anywhere. The fast one is H.264
   and taps from `idb_companion`, which a spike got out of the simulator with no window (about 0.7 Mbps). Video doesn't belong
@@ -374,9 +381,12 @@ board ─ sealed offer, elevated input command ─▶ daemon ─ encrypted answe
   the watch and ends with it, and `tapAt` and `swipe` use it while it's open, which also speeds the command path. It reports
   the screen's size, so taps work with no AXe on the box.
 - **Even sides.** The encoder sends nothing, with no error, unless both sides of the video are even. 0.5 fails on a 1179-wide
-  iPhone 16 and a 1206-wide 16 Pro, and full size fails on the iPhone 16, so `evenScale` picks the scale nearest full
-  size, never above it, that lands on exact even numbers (8/9 on the iPhone 16). The video goes out at full size and
-  quality 0.85: at half size and 0.6 a retina pane drew it soft.
+  iPhone 16 and a 1206-wide 16 Pro, and full size fails on the iPhone 16, so `evenScale` picks the scale nearest the
+  target, never above full size, that lands on exact even numbers (8/9 on the iPhone 16 at full size).
+- **Quality** is the pane's menu, kept per board in `localStorage`: low (15 fps, half size, 0.6, 2 Mbps), medium (30 fps,
+  full size, 0.85, 8 Mbps, the default: at half size and 0.6 a retina pane drew it soft) or high (60 fps, full size, 0.9,
+  20 Mbps). It rides in the sealed offer (`quality`), and `VIDEO` in `lib/idb-companion.ts` turns it into the encoder's
+  settings when the video starts, so a new pick closes the line and offers again at once.
 - **One line, named channels.** `answerOffer` takes a map of channel names to handlers. `video` carries H.264 and `input` the
   live gesture and keyboard. Other live streams can add a channel. A line only exists while someone is watching, so commands,
   card state and wake-ups stay on Supabase, which also carries the signalling.
@@ -404,13 +414,13 @@ board ─ sealed offer, elevated input command ─▶ daemon ─ encrypted answe
   the hash is of the file as downloaded. An auto-update runs `pnpm install` but not that script, so an enrolled box needs
   `weft-worker update` to get it.
 
-**Manual QA.** To test by hand with no tap latency, a card can run its build on a simulator on your Mac, with the agent still driving it:
-[Manual QA mode](manual-qa.md).
+**Local Simulator.** To test by hand with no tap latency, a card can run its build on a simulator on your Mac, with the agent still driving it:
+[Local Simulator mode](manual-qa.md).
 
 **Modes.** A worker's card has the mode picker in its thread header, sent as a `mode` command (`CARD_MODES`): Ask me, Accept
 edits or Auto, applied mid-turn. It's elevated, and the daemon holds it to the same list, so a row can't buy YOLO. Auto's
 blocks come back as a prompt on the board. The simulator tools are trusted (`lib/board-tools-trust.ts`) in every mode, like
-the browser's, since they only reach a sandboxed device. In manual QA mode that device is on your Mac and an iOS app isn't sandboxed from it, so the Touch ID grant stands in for the prompt ([Security](manual-qa.md#security)).
+the browser's, since they only reach a sandboxed device. In Local Simulator mode that device is on your Mac and an iOS app isn't sandboxed from it, so the Touch ID grant stands in for the prompt ([Security](manual-qa.md#security)).
 
 **What a worker tunnel would need** (docs/architecture/tunnels.md runs on the desktop only):
 

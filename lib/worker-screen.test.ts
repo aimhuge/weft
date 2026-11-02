@@ -1,12 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Device } from "./simulator-devices";
 
-const sim = vi.hoisted(() => ({ frameJpeg: vi.fn(), markLive: vi.fn(), noteWatchedSize: vi.fn(), watch: vi.fn(), watching: vi.fn() }));
+const sim = vi.hoisted(() => ({ frameJpeg: vi.fn(), markLive: vi.fn(), noteWatchedSize: vi.fn(), stopWatching: vi.fn(), watch: vi.fn(), watching: vi.fn() }));
+const devices = vi.hoisted(() => ({ boot: vi.fn(), listDevices: vi.fn((): Promise<Device[]> => Promise.resolve([])), pickDevice: vi.fn() }));
 const notePage = vi.hoisted(() => vi.fn());
 vi.mock("./simulator-watch", () => ({ ...sim, WATCH_MS: 600_000 }));
 vi.mock("./card-page", () => ({ notePage }));
+vi.mock("./simulator-devices", () => devices);
 
-const { nudgeScreen, openScreenChannel, pump, screenInput, screenOnWorker, setFastScreen, setScreenChannel } = await import("./worker-screen");
+const { nudgeScreen, openScreenChannel, pump, screenInput, screenOnWorker, setFastScreen, setScreenChannel, watchFromBoard } = await import("./worker-screen");
 const { paneFromUrl, screenTopic } = await import("./share-types");
 const { newAnswerKey, openAnswer } = await import("./rtc-signal");
 
@@ -153,7 +155,7 @@ describe("the fast path", () => {
     setFastScreen(() => Promise.resolve(f), () => JSON.stringify({ sdp: "offer-sdp", key }));
     await screenOnWorker("c", { ...d, id: "fast-3" });
     await screenInput({ kind: "offer", device: "fast-3", sealed: {} as never }, vi.fn());
-    expect(f.connect).toHaveBeenCalledWith("offer-sdp");
+    expect(f.connect).toHaveBeenCalledWith("offer-sdp", "medium");
     await expect(openAnswer(key, ch.answer.mock.calls[0]?.[0 as never] as never)).resolves.toBe("answer-sdp");
     sim.watching.mockReturnValue(false);
     release(Buffer.from("x"));
@@ -168,5 +170,43 @@ describe("the fast path", () => {
     const tap = { kind: "tap", device: "d", x: 0, y: 0 } as const;
     await screenInput(tap, touch);
     expect(touch).toHaveBeenCalledWith(tap);
+  });
+});
+
+describe("watching from the pane", () => {
+  const other: Device = { id: "udid-2", name: "iPad", platform: "ios", state: "shutdown" };
+  const android: Device = { id: "avd:Pixel", name: "Pixel", platform: "android", state: "shutdown" };
+
+  beforeEach(() => {
+    sim.watch.mockResolvedValue("file:///x");
+    sim.watching.mockReturnValue(false);
+    setScreenChannel(() => Promise.resolve({ send: vi.fn(() => Promise.resolve()), answer: vi.fn(() => Promise.resolve()), close: vi.fn() }));
+  });
+
+  it("streams the booted device, and lists the worker's devices on the page", async () => {
+    devices.listDevices.mockResolvedValue([other, d]);
+    await screenInput({ kind: "watch" }, vi.fn(), "card-1");
+    expect(sim.watch).toHaveBeenCalledWith(d, expect.any(Function));
+    expect(paneFromUrl(notePage.mock.calls.at(-1)?.[1] as string)).toMatchObject({ device: "udid-1", devices: [{ id: "udid-2", name: "iPad" }, { id: "udid-1", name: "iPhone 17" }] });
+  });
+
+  it("boots the one it names, and stops the card's device before", async () => {
+    devices.listDevices.mockResolvedValue([d, other]);
+    devices.pickDevice.mockReturnValue(d);
+    devices.boot.mockResolvedValue({ ...other, state: "booted" });
+    await watchFromBoard("card-2", "udid-1", () => Promise.resolve([d]));
+    devices.pickDevice.mockReturnValue(other);
+    await screenInput({ kind: "watch", device: "udid-2" }, vi.fn(), "card-2");
+    expect(devices.boot).toHaveBeenCalledWith("udid-2");
+    expect(sim.stopWatching).toHaveBeenCalledWith("udid-1");
+  });
+
+  it("with nothing booted, takes the first simulator, else any device, else says there are none", async () => {
+    devices.boot.mockImplementation((id: string) => Promise.resolve({ ...[other, android].find((x) => x.id === id), state: "booted" }));
+    await watchFromBoard("card-3", undefined, () => Promise.resolve([android, other]));
+    expect(devices.boot).toHaveBeenLastCalledWith("udid-2");
+    await watchFromBoard("card-4", undefined, () => Promise.resolve([android]));
+    expect(devices.boot).toHaveBeenLastCalledWith("avd:Pixel");
+    await expect(watchFromBoard("card-5", undefined, () => Promise.resolve([]))).rejects.toThrow("no simulators");
   });
 });

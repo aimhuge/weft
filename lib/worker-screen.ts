@@ -4,10 +4,10 @@
 // that just opened, so a still screen costs almost nothing. The topic is random per watch and ends with it.
 import { createHash, randomBytes } from "node:crypto";
 import { notePage } from "./card-page";
-import { ANSWER_EVENT, sealAnswer, type SealedAnswer } from "./rtc-signal";
+import { ANSWER_EVENT, sealAnswer, screenQuality, type ScreenQuality, type SealedAnswer } from "./rtc-signal";
 import { SCREEN_EVENT, screenPage, screenTopic } from "./share-types";
-import type { Device } from "./simulator-devices";
-import { frameJpeg, markLive, noteWatchedSize, watch, watching, WATCH_MS } from "./simulator-watch";
+import { boot, listDevices, pickDevice, type Device } from "./simulator-devices";
+import { frameJpeg, markLive, noteWatchedSize, stopWatching, watch, watching, WATCH_MS } from "./simulator-watch";
 import type { ScreenInput } from "./worker-commands";
 import type { Sealed } from "./worker-seal";
 
@@ -41,8 +41,8 @@ let open: OpenScreenChannel | null = null;
 // running either way, for a board with no direct route.
 export interface FastScreen {
   size: { width: number; height: number };
-  // Answers a WebRTC offer; a new one replaces the line before it.
-  connect: (sdp: string) => Promise<string>;
+  // Answers a WebRTC offer at the quality it asks for; a new one replaces the line before it.
+  connect: (sdp: string, quality?: ScreenQuality) => Promise<string>;
   close: () => void;
 }
 export type OpenFastScreen = (d: Device) => Promise<FastScreen | null>;
@@ -67,13 +67,24 @@ async function startFast(d: Device, channel: ScreenChannel) {
 async function takeOffer(device: string, sealed: Sealed) {
   const screen = fastScreens.get(device);
   if (!screen || !unseal) return;
-  const { sdp, key } = JSON.parse(unseal(sealed)) as { sdp: string; key: string };
-  await screen.channel.answer(await sealAnswer(key, await screen.fast.connect(sdp)));
+  const { sdp, key, quality } = JSON.parse(unseal(sealed)) as { sdp: string; key: string; quality?: unknown };
+  await screen.channel.answer(await sealAnswer(key, await screen.fast.connect(sdp, screenQuality(quality))));
 }
 
-// What the daemon does with an `input` command: an offer opens the WebRTC line, anything else is a touch.
-export function screenInput(input: ScreenInput, touch: (input: Exclude<ScreenInput, { kind: "offer" }>) => Promise<unknown>) {
+// The pane's Start, Resume and device menu: the device it names, or the one booted, or the first simulator, booted
+// when it has to be. The thread doesn't have to be asked.
+export async function watchFromBoard(cardId: string | undefined, query?: string, devices: () => Promise<Device[]> = listDevices) {
+  const all = await devices();
+  const d = query ? pickDevice(all, query) : (all.find((x) => x.state === "booted") ?? all.find((x) => x.platform === "ios") ?? all[0]);
+  if (!d) throw new Error("This worker has no simulators. Settings → Connectors → Simulators installs one.");
+  return screenOnWorker(cardId, d.state === "booted" ? d : await boot(d.id));
+}
+
+// What the daemon does with an `input` command: an offer opens the WebRTC line, a watch starts the stream, anything
+// else is a touch.
+export function screenInput(input: ScreenInput, touch: (input: Exclude<ScreenInput, { kind: "offer" | "watch" }>) => Promise<unknown>, cardId?: string) {
   if (input.kind === "offer") return takeOffer(input.device, input.sealed);
+  if (input.kind === "watch") return watchFromBoard(cardId, input.device);
   return touch(input).finally(() => nudgeScreen(input.device));
 }
 
@@ -108,6 +119,8 @@ export function openScreenChannel(client: BroadcastClient, topic: string, joinMs
 }
 
 const streams = new Map<string, string>();
+// The device each card streams: picking another in the pane stops the one before, rather than leave it running unseen.
+const cardDevices = new Map<string, string>();
 const nudges = new Map<string, () => void>();
 
 // A tap just landed: capture now rather than at the next tick, so the answer on screen comes back as soon as it can.
@@ -141,6 +154,9 @@ export async function pump(d: Device, channel: ScreenChannel, now: () => number 
 // Starts or extends the stream and puts it in the card's pane; what it returns is the tool's answer.
 export async function screenOnWorker(cardId: string | undefined, d: Device, now: () => number = Date.now): Promise<string> {
   if (!open) throw new Error("This worker can't stream its screen yet. Update it with weft-worker update.");
+  const before = cardId ? cardDevices.get(cardId) : undefined;
+  if (before && before !== d.id) stopWatching(before);
+  if (cardId) cardDevices.set(cardId, d.id);
   // watch() measures the screen and lets taps through (lib/simulator-input.ts); marked live, it writes no frame files.
   await watch(d, now);
   markLive(d.id);
@@ -160,6 +176,7 @@ export async function screenOnWorker(cardId: string | undefined, d: Device, now:
     });
   }
   const fast = fastScreens.has(d.id);
-  notePage(cardId, screenPage(token, d, until, fast));
+  const devices = await listDevices().catch(() => []);
+  notePage(cardId, screenPage(token, d, until, fast, devices));
   return `Streaming ${d.name} to the pane on the user's board for 10 minutes, ${fast ? "as live video where the board can connect to this box, otherwise" : ""} at up to 4 frames a second. They can tap and swipe it there. Call watch again to extend it.`;
 }

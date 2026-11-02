@@ -31,9 +31,9 @@ export interface Engine {
   stop(cardId: string): Promise<void>;
   // The thread's mode picker (lib/runner.ts setPermissionMode), mid-turn included.
   setMode(cardId: string, mode: CardMode): void;
-  // A tap or swipe on the device a card is watching (lib/simulator-input.ts).
-  input(input: ScreenInput): Promise<unknown>;
-  // Manual QA mode: which Mac this card's device tools go to, null for this box's own (lib/worker-device.ts).
+  // A tap or swipe on the device a card is watching (lib/simulator-input.ts), or the pane starting its stream.
+  input(input: ScreenInput, cardId: string): Promise<unknown>;
+  // Local Simulator mode: which Mac this card's device tools go to, null for this box's own (lib/worker-device.ts).
   setQa(cardId: string, device: string | null): void;
   getCard(cardId: string): Card | undefined;
   // A turn is really running now, in a session this process holds (a card waiting on a permission counts).

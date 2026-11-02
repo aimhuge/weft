@@ -1,6 +1,6 @@
 "use client";
 
-// The manual QA switch in a worker card's pane toolbar (docs/architecture/manual-qa.md). Off: a menu of this Mac's devices,
+// The Local Simulator switch in a worker card's pane toolbar (docs/architecture/manual-qa.md). Off: a menu of this Mac's devices,
 // and picking one asks for Touch ID. On: names the device and switches off. It takes no row: the pane's toolbar has room.
 // Only the desktop draws it, because the yes has to be given on the Mac the build will run on.
 import { useCallback, useEffect, useState } from "react";
@@ -46,14 +46,14 @@ export function QaSwitch({ card, qa }: { card: Pick<Card, "id" | "qaDevice">; qa
   if (qa.on) {
     return (
       <button type="button" className={BUTTON} disabled={busy} title="Runs on this Mac. Click to go back to the worker's device." onClick={() => send(null)}>
-        QA on {qa.state?.approved} ✕
+        Local: {qa.state?.approved} ✕
       </button>
     );
   }
   return (
     <div className="relative">
       <button type="button" className={BUTTON} disabled={busy || !qa.state} title={problem || "Run this thread's app on a simulator on this Mac"} aria-expanded={open} onClick={() => setOpen((v) => !v)}>
-        {busy ? "Waiting for Touch ID…" : problem ? "Manual QA ⚠" : "Manual QA"}
+        {busy ? "Waiting for Touch ID…" : problem ? "Local Simulator ⚠" : "Local Simulator"}
       </button>
       {open && (
         <div role="menu" aria-label="Devices on this Mac" className="absolute right-0 top-full z-40 mt-1 max-h-72 w-64 overflow-y-auto rounded-lg border border-line bg-panel p-1 shadow-lg">
