@@ -5,7 +5,7 @@
 // same items at the pointer and answers the same way, and useBoardMenus (components/use-board-menus.ts) runs as it does
 // on the desktop. One menu at a time; Escape, a click outside or a scroll closes it with nothing picked.
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import type { MenuItem } from "@/lib/card-menu";
+import { humanOnlyItem, type MenuItem } from "@/lib/card-menu";
 
 interface Open {
   items: MenuItem[];
@@ -100,6 +100,7 @@ function WebMenu({ items, x, y, pick }: Open) {
             key={item.id}
             type="button"
             role="menuitem"
+            data-human-only={humanOnlyItem(item.id) || undefined}
             disabled={item.enabled === false}
             onClick={() => pick(item.id)}
             className="flex w-full items-start gap-2 px-3 py-1 text-left hover:bg-accent hover:text-on-accent focus:bg-accent focus:text-on-accent focus:outline-none disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-ink"

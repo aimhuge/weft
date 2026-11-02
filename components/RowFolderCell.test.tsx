@@ -185,3 +185,13 @@ describe("FolderPicker", () => {
     expect(props.onClose).toHaveBeenCalled();
   });
 });
+
+describe("human-only marks", () => {
+  it("keeps board_view off the folder button and every row of the picker", () => {
+    const { view } = setup({ onFolder: vi.fn() });
+    expect(view.getByRole("button", { name: "weft" }).closest("[data-human-only]")).not.toBeNull();
+    const picker = render(<FolderPicker anchor={new DOMRect(0, 0, 100, 20)} current="/dev/weft" folders={["/dev/weft", "/dev/x"]} onPick={vi.fn()} onClose={vi.fn()} />);
+    for (const row of picker.getAllByRole("option")) expect(row.closest("[data-human-only]")).not.toBeNull();
+    expect(picker.getByPlaceholderText("Type a folder name or path…").closest("[data-human-only]")).not.toBeNull();
+  });
+});

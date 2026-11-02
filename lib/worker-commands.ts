@@ -70,6 +70,7 @@ export function runBody(command: Pick<CloudCommandRow, "payload">): RunPayload |
   const mode = RUN_MODES.find((m) => m === p.permissionMode);
   if (mode) out.permissionMode = mode;
   if (Array.isArray(p.tags)) out.tags = p.tags.filter((t): t is string => typeof t === "string");
+  if (p.start === false) out.start = false;
   return out;
 }
 

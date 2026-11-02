@@ -40,6 +40,8 @@ export interface FeatureCard {
   isolated?: boolean;
   // The branch that worktree works on (lib/branch-name.ts); left out, its own weft/* branch.
   branch?: string;
+  // false: made in Backlog and left there (a board tool's create_card with start=false, sent from a worker).
+  start?: boolean;
 }
 
 // What a caller may hand the helper: the fields above, or a body read off the network whose types
@@ -55,6 +57,6 @@ export type FeatureCardInput = Partial<FeatureCard> & Record<string, unknown>;
 export async function startFeatureCard(card: FeatureCardInput, beforeStart?: (card: Card) => void | Promise<void>): Promise<Card> {
   const made = createCardFromBody({ ...card });
   if (beforeStart) await beforeStart(made);
-  startCard(made);
+  if (card.start !== false) startCard(made);
   return made;
 }

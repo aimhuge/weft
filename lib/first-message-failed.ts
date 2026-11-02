@@ -1,4 +1,5 @@
 import { isLive } from "./format";
+import { MODELS } from "./new-thread";
 import type { Card, ThreadItem } from "./types";
 
 // Why only the open thread shows the rerun banner (lib/components/FirstMessageErrorBanner.tsx):
@@ -16,3 +17,10 @@ export function firstMessageFailed(card: Card, items: readonly (ThreadItem | nul
   return !items.some((i) => i?.kind === "assistant" && i.text.trim());
 }
 
+// What a card whose host doesn't read this Mac's Settings (a worker's: no settings sync yet) reruns on instead of the
+// backup model set there: its own CLI's default, the first model that CLI serves, or the next one when the card
+// already ran on the default, since a rerun on the model that failed would likely hit the same wall.
+export function hostRerunModel(card: Pick<Card, "backend" | "model">): string {
+  // Only a CLI with one model (Codex's, Goose's own pick) finds none other, and then the card is on that one.
+  return MODELS[card.backend].find((m) => m.id !== card.model)?.id ?? String(card.model);
+}

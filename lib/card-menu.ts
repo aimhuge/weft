@@ -39,6 +39,11 @@ export type CardAction =
   | "archive"
   | "delete";
 
+// Items that widen what a card can do (its permissions, agent, CLI, vault access, a folder): the page's own menu
+// (components/web-board/WebMenu.tsx) marks them data-human-only so board_view can't pick them.
+const HUMAN_ONLY_ITEM = /^(mode|agent|switch):|^(vault:grant|new-here|reveal)$/;
+export const humanOnlyItem = (id: string): boolean => HUMAN_ONLY_ITEM.test(id);
+
 const SEPARATOR: MenuItem = { type: "separator" };
 
 // Weft's own skills, offered on every card.

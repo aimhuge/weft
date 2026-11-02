@@ -45,11 +45,17 @@ function findHook(folder: string, name: string): Webhook {
   return hook;
 }
 
-// Records the webhook (and, best effort, its signing secret as a vault blank).
+// Records the webhook, and its signing secret as a vault blank. A blank that couldn't be added (no vault on a Weft
+// Worker, the app closed) doesn't undo the webhook; `vault` says so, for the thread to tell the user.
 async function record(folder: string, a: AddArgs) {
   const added = addWebhook({ folder, name: a.name, target: a.target, events: a.events, hint: a.hint, secret: a.secret, provider: a.provider });
-  if (a.secret) await shell("/secrets/add-blank", { folder, names: [a.secret], environment: "development", hint: a.hint }).catch(() => null);
-  return added;
+  const vault = a.secret
+    ? await shell("/secrets/add-blank", { folder, names: [a.secret], environment: "development", hint: a.hint }).then(
+        () => "",
+        (err: unknown) => ` ${a.secret} isn't in the 🔐 vault as a blank (${err instanceof Error ? err.message : String(err)}): tell the user its name so they add it.`,
+      )
+    : "";
+  return { ...added, vault };
 }
 
 // A worker's relay and tunnel are approved on its owner's Mac (lib/relay-worker.ts, lib/tunnel-worker.ts).
@@ -76,9 +82,9 @@ export function webhooksMcpServer(folder: () => string, cardId: () => string | u
         FIELDS,
         (a) =>
           attempt(async () => {
-            const { hook, existed } = await record(where(a.project), a);
+            const { hook, existed, vault } = await record(where(a.project), a);
             return text(
-              `${hook.name} ${existed ? "is updated" : "is a blank"} on 🪝 now (${hook.target}); the user registers it with the provider when they're ready. Carry on with what doesn't need it. For a public URL that forwards to ${hook.target}, call mcp__webhooks__relay.`,
+              `${hook.name} ${existed ? "is updated" : "is a blank"} on 🪝 now (${hook.target}); the user registers it with the provider when they're ready. Carry on with what doesn't need it. For a public URL that forwards to ${hook.target}, call mcp__webhooks__relay.${vault}`,
             );
           }),
       ),
@@ -89,9 +95,9 @@ export function webhooksMcpServer(folder: () => string, cardId: () => string | u
         (a) =>
           attempt(async () => {
             const dir = where(a.project);
-            const { hook } = await record(dir, a);
+            const { hook, vault } = await record(dir, a);
             await shell("/webhooks/ask-add", { folder: dir, id: hook.id });
-            return text(`Opened the 🪝 drawer on ${hook.name}. Ask the user to register it with the provider (mcp__webhooks__relay gives it a public URL); mcp__webhooks__list shows when it's registered.`);
+            return text(`Opened the 🪝 drawer on ${hook.name}. Ask the user to register it with the provider (mcp__webhooks__relay gives it a public URL); mcp__webhooks__list shows when it's registered.${vault}`);
           }),
       ),
       tool(

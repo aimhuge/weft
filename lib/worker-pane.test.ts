@@ -5,6 +5,9 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vites
 
 const notePage = vi.hoisted(() => vi.fn());
 vi.mock("./card-page", () => ({ notePage }));
+// The worker's browser open_url reaches when no test hands in its own.
+const workerShell = vi.hoisted(() => vi.fn(() => Promise.resolve({ url: "https://example.com/", title: "Example" })));
+vi.mock("./worker-browser-routes", () => ({ workerShell }));
 const tunnelFor = vi.hoisted(() => vi.fn<(url: string) => { address: string } | undefined>(() => undefined));
 vi.mock("./tunnels", () => ({ tunnelFor }));
 const { onWorker, openOnWorker, ownPageCall, setPageUpload } = await import("./worker-pane");
@@ -16,6 +19,7 @@ const page = path.join(home, "plan.html");
 fs.writeFileSync(page, "<html><head><title> The plan </title></head></html>");
 const REF = `blob:sha256:${"a".repeat(64)}` as const;
 const upload = vi.fn(() => Promise.resolve<typeof REF | null>(REF));
+const browse = vi.fn(() => Promise.resolve({ url: "", title: "" }));
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -67,7 +71,7 @@ describe("ownPageCall", () => {
 
 describe("openOnWorker", () => {
   it("uploads a page before it answers, and notes it on the card", async () => {
-    const said = await openOnWorker("c1", `file://${page}#step-2`);
+    const said = await openOnWorker("c1", `file://${page}#step-2`, browse);
     expect(upload).toHaveBeenCalledWith(page);
     expect(notePage).toHaveBeenCalledWith("c1", `file://${page}#step-2`);
     expect(said).toContain("The plan");
@@ -77,48 +81,71 @@ describe("openOnWorker", () => {
   it("takes a bare absolute path, and a page with no title", async () => {
     const plain = path.join(home, "plain.html");
     fs.writeFileSync(plain, "<p>hi</p>");
-    expect(await openOnWorker("c1", ` ${plain} `)).toContain("— page.");
+    expect(await openOnWorker("c1", ` ${plain} `, browse)).toContain("— page.");
   });
 
-  it("opens a public site with no upload", async () => {
-    expect(await openOnWorker("c1", "https://example.com/a")).toBe("Opened https://example.com/a");
+  it("opens a public site in the worker's browser, live, with no upload", async () => {
+    const browse = vi.fn(() => Promise.resolve({ url: "https://example.com/a", title: "Example" }));
+    expect(await openOnWorker("c1", "https://example.com/a", browse)).toBe("Opened https://example.com/a — Example. It's live in the pane on the user's board, from this worker's browser.");
+    expect(browse).toHaveBeenCalledWith("c1", "https://example.com/a");
     expect(upload).not.toHaveBeenCalled();
+  });
+
+  it("opens through the worker's browser routes by default", async () => {
+    expect(await openOnWorker("c1", "https://example.com")).toContain("— Example.");
+    expect(workerShell).toHaveBeenCalledWith("/browser/open", { key: "c1", url: "https://example.com" });
+  });
+
+  it("still shows a public site as itself when the browser can't start", async () => {
+    const browse = vi.fn(() => Promise.reject(new Error("no Chromium")));
+    expect(await openOnWorker("c1", "https://example.com/a", browse)).toBe("Opened https://example.com/a");
     expect(notePage).toHaveBeenCalledWith("c1", "https://example.com/a");
   });
 
-  it("refuses a dev server and says why", async () => {
-    await expect(openOnWorker("c1", "http://localhost:3000")).rejects.toThrow(/mcp__webhooks__tunnel/);
+  it("opens this box's dev server in its browser, or says why it can't", async () => {
+    const browse = vi.fn(() => Promise.resolve({ url: "http://localhost:3000/", title: "" }));
+    expect(await openOnWorker(undefined, "http://localhost:3000", browse)).toContain("Opened http://localhost:3000/ — page. It's live");
+    expect(browse).toHaveBeenCalledWith("", "http://localhost:3000");
+    await expect(openOnWorker("c1", "http://localhost:3000", () => Promise.reject(new Error("no Chromium")))).rejects.toThrow(/mcp__webhooks__tunnel.*no Chromium/);
     expect(notePage).not.toHaveBeenCalled();
   });
 
   it("trades a dev server's URL for its tunnel's private address", async () => {
+    const browse = vi.fn();
     tunnelFor.mockReturnValue({ address: "https://weft.zip/t/t1" });
-    expect(await openOnWorker("c1", "http://localhost:3000")).toContain("private address https://weft.zip/t/t1.");
+    expect(await openOnWorker("c1", "http://localhost:3000", browse)).toContain("private address https://weft.zip/t/t1.");
     expect(notePage).toHaveBeenLastCalledWith("c1", "https://weft.zip/t/t1");
-    await openOnWorker("c1", "http://localhost:3000/a/b?x=1#h");
+    await openOnWorker("c1", "http://localhost:3000/a/b?x=1#h", browse);
     expect(notePage).toHaveBeenLastCalledWith("c1", "https://weft.zip/t/t1/a/b?x=1#h");
     expect(tunnelFor).toHaveBeenCalledWith("http://localhost:3000/a/b?x=1#h");
+    expect(browse).not.toHaveBeenCalled();
     tunnelFor.mockReturnValue(undefined);
   });
 
+  it("opens an uploaded page in the worker's browser too, and doesn't mind when it can't", async () => {
+    const browse = vi.fn(() => Promise.reject(new Error("no Chromium")));
+    expect(await openOnWorker(undefined, page, browse)).toContain("The plan");
+    expect(browse).toHaveBeenCalledWith("", page);
+  });
+
   it("refuses a relative or missing path", async () => {
-    await expect(openOnWorker("c1", "plan.html")).rejects.toThrow(/Can't show/);
-    await expect(openOnWorker("c1", path.join(home, "gone.html"))).rejects.toThrow(/Can't show/);
+    await expect(openOnWorker("c1", "plan.html", browse)).rejects.toThrow(/Can't show/);
+    await expect(openOnWorker("c1", path.join(home, "gone.html"), browse)).rejects.toThrow(/Can't show/);
   });
 
   it("refuses what the worker's rule vetoes, and notes nothing", async () => {
     upload.mockResolvedValueOnce(null);
-    await expect(openOnWorker("c1", page)).rejects.toThrow(/Can't show/);
+    await expect(openOnWorker("c1", page, browse)).rejects.toThrow(/Can't show/);
     expect(notePage).not.toHaveBeenCalled();
   });
 
   it("passes a failed upload to the agent", async () => {
     upload.mockRejectedValueOnce(new Error("That key isn't a worker's."));
-    await expect(openOnWorker("c1", page)).rejects.toThrow("That key isn't a worker's.");
+    await expect(openOnWorker("c1", page, browse)).rejects.toThrow("That key isn't a worker's.");
   });
 
   it("says to update a build with no uploader", async () => {
     setPageUpload(null);
-    await expect(openOnWorker("c1", page)).rejects.toThrow(/weft-worker update/);
+    await expect(openOnWorker("c1", page, browse)).rejects.toThrow(/weft-worker update/);
   });
 });

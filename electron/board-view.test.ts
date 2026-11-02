@@ -180,6 +180,37 @@ describe("human-only controls", () => {
   });
 });
 
+describe("terminals", () => {
+  beforeEach(() => {
+    // An xterm with no mark on it at all: the gate refuses it anyway.
+    document.body.innerHTML = `<div class="xterm" id="term"><div class="xterm-screen" id="screen">$</div><textarea class="xterm-helper-textarea" id="input"></textarea></div>
+      <div id="wrap"><span id="label">Shell</span></div><input id="dead" disabled>`;
+    stubHitTesting();
+  });
+
+  it("won't type into an xterm's input, marked or not", async () => {
+    await expect(view.type(".xterm-helper-textarea", "rm -rf ~\n")).rejects.toThrow(/is a terminal; only you can do that/);
+    await expect(view.type("#input", "id")).rejects.toThrow(/only you can do that/);
+    expect(wc.insertText).not.toHaveBeenCalled();
+    expect(document.activeElement?.id).not.toBe("input");
+  });
+
+  it("won't click into an xterm, or anything whose centre lands on one", async () => {
+    await expect(view.click("#screen")).rejects.toThrow(/only you can do that/);
+    await expect(view.click("#term")).rejects.toThrow(/only you can do that/);
+    // A wrapper around the terminal: the trusted click would land in the xterm, so it's refused too.
+    document.getElementById("wrap")!.appendChild(document.getElementById("term")!);
+    (document as unknown as { elementFromPoint?: unknown }).elementFromPoint = () => document.getElementById("screen");
+    await expect(view.click("#wrap")).rejects.toThrow(/only you can do that/);
+    expect(wc.sendInputEvent).not.toHaveBeenCalled();
+  });
+
+  it("won't type past a field that can't take focus into whatever has it", async () => {
+    await expect(view.type("#dead", "id")).rejects.toThrow(/won't take focus/);
+    expect(wc.insertText).not.toHaveBeenCalled();
+  });
+});
+
 describe("operations", () => {
   beforeEach(() => {
     document.body.innerHTML = `<button id="go">Go</button><input id="name"><div id="note" contenteditable>hi</div><div id="plain">text</div>`;

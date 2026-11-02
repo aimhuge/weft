@@ -34,11 +34,19 @@ function read(): Webhook[] {
   }
 }
 
+// Told after every write: a Weft Worker publishes its webhooks for the Mac's 🪝 drawer (lib/worker-lists.ts).
+const writes = new Set<() => void>();
+export function onWebhooksWrite(listener: () => void): () => void {
+  writes.add(listener);
+  return () => void writes.delete(listener);
+}
+
 function write(hooks: Webhook[]) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
   const tmp = `${file()}.${process.pid}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify({ hooks }, null, 2));
   fs.renameSync(tmp, file());
+  writes.forEach((listener) => listener());
 }
 
 export function cleanName(raw: unknown): string {

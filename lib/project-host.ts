@@ -6,7 +6,7 @@
 // transport, `.tools` where a trimmed tool output comes from, `.act` runs one host-api verb on the card, `.can` says
 // which of this Mac's own features the host has, and `.menu` trims a card's right-click menu to what it backs. The
 // board never asks whether a card is a worker's: the worker:// check lives here and in lib/worker-project.ts.
-import { api, call } from "./client";
+import { api, call, type NewCardInput } from "./client";
 import { filesApi } from "./client-files";
 import type { FilesSource } from "./files-source";
 import { localRead, type ReadProject } from "./project-reads";
@@ -23,16 +23,19 @@ import type { ActResult } from "./worker-acts";
 import { workerFiles } from "./worker-files";
 import { actOnWorker, workerToolSource, workerTransport } from "./worker-transport";
 import { parseWorkerProject } from "./worker-project";
-import { actOnLine, lineFiles, lineTransport } from "./line-host";
+import { actOnLine, lineFiles, lineTransport, warmOnLine } from "./line-host";
 
 // This Mac's own features, which another host offers only once it has a verb or a stream for them. `files` is the
 // editor and the thread's file links (H4), `shots` the show rail's page pictures (lib/page-shots.ts), `pane` the native
 // browser pane; `folder`, `agent` and `shell` widen what a card can touch, so a remote host refuses them from the network.
 // `skills` is the skill set chip (which skills a card gets); the "/" list is the transport's listSkills on every host.
+// `runSkill` is the header's Skills menu, which sends "/<skill>" as a message (the list from skills.list).
 // `schedule` is Send later, which both hosts hold the timer for (card.schedule). `reads` is the header badges (H4);
 // `projectActs` what they start from this Mac's store and server: a re-scout, the commit walk-through and the sprint
-// plan, whose prompts point at the Mac's own routes. `share` a weft.zip link to the card's cloud rows; `delete` card.delete.
-export type HostFeature = "files" | "reads" | "projectActs" | "shots" | "pane" | "folder" | "agent" | "shell" | "skills" | "share" | "delete" | "login" | "vault" | "dev" | "schedule";
+// plan, whose prompts point at the Mac's own routes. `cron` is the header's ⏰, this Mac's crons; `settings` says this
+// Mac's Settings (the backup model) speak for the card. `share` a weft.zip link to the card's cloud rows; `delete` card.delete.
+export type HostFeature =
+  | "files" | "reads" | "projectActs" | "shots" | "pane" | "folder" | "agent" | "shell" | "skills" | "runSkill" | "share" | "delete" | "login" | "vault" | "dev" | "schedule" | "cron" | "settings";
 
 export interface ProjectHost {
   kind: "local" | "cloud";
@@ -47,6 +50,9 @@ export interface ProjectHost {
   // A worker that hasn't taken it yet answers `{ queued }` (lib/worker-acts.ts); this Mac always answers at once.
   act: <V extends HostVerb>(verb: V, args: ArgsOf<V>, local?: () => Promise<unknown>) => Promise<ActResult>;
   menu: (items: MenuItem[]) => MenuItem[];
+  // Starts an open card's CLI ahead of a reply, best effort: this Mac's /api/warm; a worker only over its session line
+  // when that's up, so opening a card never costs a command row.
+  warm: (cardId: string) => void;
 }
 
 type LocalCall = (args: HostArgs) => Promise<unknown>;
@@ -59,6 +65,9 @@ const given = <T extends unknown[]>(...args: T) => {
 
 // Each verb as the local server's card routes take it (lib/client-api.ts), the routes that mount the same handlers.
 const LOCAL: Record<HostVerb, LocalCall> = {
+  // The board's own New thread goes through POST /api/cards; this is the verb's local form, the id the server's to pick.
+  "card.create": (a) => api.create(Object.fromEntries(Object.entries(a).filter(([k]) => k !== "id")) as unknown as NewCardInput),
+  "card.warm": (a) => api.warm({ cardId: a.id }),
   "card.update": (a) => call("PATCH", `/api/cards/${a.id}`, a.body),
   "card.stop": (a) => api.stop(a.id),
   "card.delete": (a) => api.remove(a.id),
@@ -97,12 +106,14 @@ export const localHost: ProjectHost = {
     return undefined;
   },
   menu: (items) => items,
+  warm: (cardId) => void api.warm({ cardId }).catch(() => {}),
 };
 
-// What a Worker has today: its cards' own verbs, the thread and its pages, Send later, its files through the file verbs
-// and the header's reads through its snapshots (H4). Share… reads the card's cloud rows, which a worker publishes like a
-// Mac's outbox (lib/card-share-worker.ts), and Delete is card.delete. Not this Mac's pane, vault or CLIs.
-const CLOUD_FEATURES = new Set<HostFeature>(["schedule", "files", "reads", "share", "delete"]);
+// What a Worker has today: its cards' own verbs, the thread and its pages, Send later, a skill run as a message, its
+// files through the file verbs and the header's reads through its snapshots (H4). Share… reads the card's cloud rows,
+// which a worker publishes like a Mac's outbox (lib/card-share-worker.ts), and Delete is card.delete. Not this Mac's
+// pane, vault or CLIs.
+const CLOUD_FEATURES = new Set<HostFeature>(["schedule", "files", "reads", "runSkill", "share", "delete"]);
 
 export const cloudHost: ProjectHost = {
   kind: "cloud",
@@ -113,13 +124,14 @@ export const cloudHost: ProjectHost = {
   files: workerFiles,
   act: (verb, args) => actOnWorker(verb, args),
   menu: remoteMenu,
+  warm: () => {},
 };
 
 // A worker's host takes its session line when it's up and the relay when it isn't (lib/line-host.ts).
 const cloudHosts = new Map<string, ProjectHost>();
 function cloudHostOf(workerId: string): ProjectHost {
   let host = cloudHosts.get(workerId);
-  if (!host) cloudHosts.set(workerId, (host = { ...cloudHost, thread: lineTransport(workerId), files: lineFiles(workerId), act: (verb, args) => actOnLine(workerId, verb, args) }));
+  if (!host) cloudHosts.set(workerId, (host = { ...cloudHost, thread: lineTransport(workerId), files: lineFiles(workerId), act: (verb, args) => actOnLine(workerId, verb, args), warm: (id) => warmOnLine(workerId, id) }));
   return host;
 }
 
@@ -143,6 +155,11 @@ export function hostFor(project: string | null | undefined): ProjectHost {
 }
 
 export const hostOf = (card: Pick<Card, "cwd">) => hostFor(card.cwd);
+
+// Whether an open card's panel offers a feature: its transport reaches the card's host (this Mac's always, a worker's
+// card edits too; never weft.zip's) and that host has it.
+export const cardCan = (card: Pick<Card, "cwd">, transport: Pick<ThreadTransport, "desktop" | "cardEdits">, feature: HostFeature) =>
+  (transport.desktop || Boolean(transport.cardEdits)) && hostOf(card).can(feature);
 
 // The cards whose plan readings say when the card's own CLI plan resets (Send later's default times, lib/schedule.ts):
 // on this Mac every card, as always; on a worker only that worker's, which run on its own sign-in, not this Mac's.

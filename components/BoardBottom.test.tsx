@@ -2,7 +2,7 @@
 // The footer always shows the given card's info; the terminal drawer shows only while open, keyed by
 // its folder. guarded() is stubbed so each piece records its props by `what`.
 
-import { cleanup, render } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 type Props = Record<string, unknown>;
@@ -42,6 +42,15 @@ describe("BoardBottom", () => {
     expect(seen.get("terminal")).toMatchObject({ cwd: "/r", height: 240, onHeight: t.onHeight, onClose: t.onClose });
     rerender(<BoardBottom footer={footer} onHelp={vi.fn()} terminal={terminal({ cwd: "/other" })} />);
     expect(mounts).toEqual(["/r", "/other"]);
+  });
+
+  it("says the terminal isn't there for a worker's card instead of opening a shell on this Mac", () => {
+    const t = terminal({ away: "m1mini" });
+    render(<BoardBottom footer={footer} onHelp={vi.fn()} terminal={t} />);
+    expect(seen.has("terminal")).toBe(false);
+    expect(screen.getByText(/isn't available for cards on m1mini/)).toBeTruthy();
+    fireEvent.click(screen.getByLabelText("Close terminal"));
+    expect(t.onClose).toHaveBeenCalled();
   });
 
   it("renders nothing of its own around the footer and terminal (no stray text like a debug probe's 'none')", () => {

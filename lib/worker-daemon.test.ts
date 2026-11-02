@@ -41,10 +41,12 @@ describe("the daemon", () => {
     expect(d.start).not.toHaveBeenCalled();
   });
 
-  it("starts in the mode the run asked for", async () => {
+  it("starts in the mode the run asked for, plan as default (the card maker would read it as this box's default)", async () => {
     const d = makeDeps();
+    await d.daemon.runOne(command({ payload: { prompt: "go", permissionMode: "auto" } as never }));
+    expect(d.start).toHaveBeenLastCalledWith(expect.objectContaining({ permissionMode: "auto" }));
     await d.daemon.runOne(command({ payload: { prompt: "go", permissionMode: "plan" } as never }));
-    expect(d.start).toHaveBeenCalledWith(expect.objectContaining({ permissionMode: "plan" }));
+    expect(d.start).toHaveBeenLastCalledWith(expect.objectContaining({ permissionMode: "default" }));
   });
 
   it("switches a card's mode, and refuses what a worker won't run", async () => {
@@ -223,10 +225,10 @@ describe("the daemon", () => {
     );
   });
 
-  it("starts a new_card from the web in the mode it names, and refuses one asked for in Backlog", async () => {
+  it("starts a new_card from the web in the mode it names (plan as default), and refuses one asked for in Backlog", async () => {
     const d = makeDeps();
     await d.daemon.runOne(command({ kind: "new_card", payload: { prompt: "Plan it", permissionMode: "plan" } as never }));
-    expect(d.start).toHaveBeenCalledWith(expect.objectContaining({ prompt: "Plan it", permissionMode: "plan" }));
+    expect(d.start).toHaveBeenCalledWith(expect.objectContaining({ prompt: "Plan it", permissionMode: "default" }));
     await d.daemon.runOne(command({ id: "cmd-2", kind: "new_card", payload: { prompt: "Later", start: false } as never }));
     expect(d.start).toHaveBeenCalledTimes(1);
     expect(d.report).toHaveBeenCalledWith("cmd-2", "failed", null, "A worker has no Backlog yet. Start the thread instead.");

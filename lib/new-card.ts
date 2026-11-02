@@ -45,8 +45,9 @@ function modelFromBody(body: Record<string, unknown>): string | undefined {
   return value;
 }
 
-// Throws with a message to show when the body can't make a card (no prompt, a folder that isn't one).
-export function createCardFromBody(body: Record<string, unknown>): Card {
+// Throws with a message to show when the body can't make a card (no prompt, a folder that isn't one). `id` is the
+// card's id when the caller picked it (card.create, so a board can name the card it asked a worker for).
+export function createCardFromBody(body: Record<string, unknown>, id?: string): Card {
   const prompt = asText(body.prompt).trim();
   if (!prompt) throw new Error("Write a prompt for this thread.");
   const typedTitle = cleanTitle(asText(body.title));
@@ -82,7 +83,7 @@ export function createCardFromBody(body: Record<string, unknown>): Card {
     ...marksFromBody(body, cwd),
     // Its own worktree, taken from the pool before its first turn (lib/worktree-start.ts).
     ...isolationFromBody(body),
-  });
+  }, ...(id === undefined ? [] : [id]));
   touchProject(cwd);
   return card;
 }
