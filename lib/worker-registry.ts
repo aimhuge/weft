@@ -57,6 +57,8 @@ export function registry(rpc: Rpc, key: string) {
     setGithub: (state: GithubState, account: string | null) => call<unknown>(rpc, "worker_set_github", { p_key: key, p_state: state, p_account: account }),
     setBuild: (build: string, note: string | null) => call<unknown>(rpc, "worker_set_build", { p_key: key, p_build: build, p_note: note }),
     deviceCall: (device: string, cardId: string, tool: string, args: unknown) => call<string | null>(rpc, "worker_device_call", { p_key: key, p_device: device, p_card: cardId, p_tool: tool, p_args: args }),
+    // A card's mcp__secrets__run asking the owner's newest live Mac (lib/worker-secret-run.ts); null when none is up.
+    secretAsk: (cardId: string, args: unknown) => call<string | null>(rpc, "worker_secret_ask", { p_key: key, p_card: cardId, p_args: args }),
     deviceResult: (id: string) => call<DeviceAnswer | null>(rpc, "worker_device_result", { p_key: key, p_call: id }),
     deviceCancel: (id: string) => call<boolean>(rpc, "worker_device_cancel", { p_key: key, p_call: id }),
     pending: async () => (await call<CloudCommandRow[] | null>(rpc, "worker_pending", { p_key: key })) ?? [],

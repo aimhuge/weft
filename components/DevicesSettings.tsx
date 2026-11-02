@@ -82,9 +82,16 @@ export default function DevicesSettings() {
                 </div>
               </div>
               {!d.revokedAt && (
-                <button type="button" className={BUTTON} onClick={() => void devices.revoke(d)} aria-label={`Revoke ${d.name}`}>
-                  Revoke
-                </button>
+                <div className="flex shrink-0 gap-2">
+                  {d.kind === "worker" && devices.canRepin && (
+                    <button type="button" className={BUTTON} onClick={() => void devices.repin(d)} aria-label={`Re-pin ${d.name}`} title="Forget the keys this Mac pinned for this worker's secrets, after Touch ID; its next ask pins new ones">
+                      Re-pin
+                    </button>
+                  )}
+                  <button type="button" className={BUTTON} onClick={() => void devices.revoke(d)} aria-label={`Revoke ${d.name}`}>
+                    Revoke
+                  </button>
+                </div>
               )}
             </li>
           ))}

@@ -61,6 +61,12 @@ describe("registry", () => {
     expect(calls).toEqual([{ fn: "worker_pending", args: { p_key: key } }]);
   });
 
+  it("asks the owner's Mac for a card's secrets with names only, and hears null when no Mac is up", async () => {
+    const { rpc, calls } = fakeRpc({ data: null });
+    expect(await registry(rpc, key).secretAsk("card-1", { nonce: "n", names: ["A"] })).toBeNull();
+    expect(calls).toEqual([{ fn: "worker_secret_ask", args: { p_key: key, p_card: "card-1", p_args: { nonce: "n", names: ["A"] } } }]);
+  });
+
   it("treats no pending commands as none", async () => {
     const { rpc } = fakeRpc({ data: null });
     expect(await registry(rpc, key).pending()).toEqual([]);

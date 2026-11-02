@@ -7,12 +7,20 @@ const { createHostPairing } = require("./host-pairing.cjs");
 /**
  * @param {(channel: string, fn: (...args: any[]) => unknown) => void} handle the board-only IPC handler
  * @param {Parameters<typeof createHostPairing>[0]} deps
+ * @param {{ pin: (id: string, keys: { name: string, publicKey: string, signKey: string }) => void, forget: (id: string) => boolean }} [pins]
  */
-function registerHostPairing(handle, deps) {
-  const hosts = createHostPairing(deps);
+function registerHostPairing(handle, deps, pins = undefined) {
+  const hosts = createHostPairing({ ...deps, ...(pins ? { pinWorker: (id, keys) => pins.pin(id, keys) } : {}) });
   handle("host-pairing:start", (orgId) => hosts.start(String(orgId ?? "")));
   handle("host-pairing:check", (id) => hosts.check(String(id)));
   handle("host-pairing:cancel", (id) => hosts.cancel(String(id)));
+  // Re-pin (Settings → Devices): forget a worker's pinned keys after Touch ID, so its next secret ask pins afresh
+  // (electron/worker-pins.cjs). For a worker reset on purpose; the board window only, like the rest of this file.
+  handle("worker-pins:forget", async (id, name) => {
+    if (!pins) return { forgotten: false };
+    if (!(await deps.confirm(`forget the keys this Mac pinned for the worker ${String(name ?? id)}, so its next secret ask pins new ones`))) return { denied: true };
+    return { forgotten: pins.forget(String(id)) };
+  });
   return hosts;
 }
 

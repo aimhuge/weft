@@ -62,9 +62,16 @@ function checkHostClaim(code, row) {
 
 /**
  * @param {{ db: () => any, userId: () => string, macDevice: () => string, myDevice: () => Promise<{ publicKey: string }>,
- *   confirm: (reason: string) => Promise<boolean>, now?: () => number }} deps
+ *   confirm: (reason: string) => Promise<boolean>, now?: () => number,
+ *   pinWorker?: (id: string, keys: { name: string, publicKey: string, signKey: string }) => void,
+ *   macSignKey?: () => Promise<string> }} deps
+ * macSignKey is this Mac's Ed25519 approval key (electron/desktop-signer.cjs, base64): it rides in the code, which the
+ * user carries to the box by hand, so the box trusts the secret_use rows this Mac signs and no one else's
+ * (lib/worker-mac-keys.ts). Never through the database, where any session of yours could swap it.
+ * pinWorker pins the keys main just checked (electron/worker-pins.cjs), under the same Touch ID, so the worker's secret
+ * asks must carry its sign key's signature (electron/worker-secret.cjs) and its box key can't be swapped later.
  */
-function createHostPairing({ db, userId, macDevice, myDevice, confirm, now = Date.now }) {
+function createHostPairing({ db, userId, macDevice, myDevice, confirm, now = Date.now, pinWorker = () => {}, macSignKey = undefined }) {
   /** @type {Map<string, { secret: string, orgId: string, expiresAt: number }>} */
   const open = new Map();
 
@@ -88,7 +95,8 @@ function createHostPairing({ db, userId, macDevice, myDevice, confirm, now = Dat
     const secret = crypto.randomBytes(32).toString("base64url");
     const expiresAt = now() + TTL_MS;
     open.set(id, { secret, orgId, expiresAt });
-    const code = `${PREFIX}${id}.${orgId}.${secret}`;
+    const mac = macSignKey ? `.${Buffer.from(await macSignKey(), "base64").toString("base64url")}` : "";
+    const code = `${PREFIX}${id}.${orgId}.${secret}${mac}`;
     return { id, code, command: `curl -fsSL https://weft.zip/worker.sh | sh -s -- ${code}`, expiresAt };
   }
 
@@ -124,6 +132,13 @@ function createHostPairing({ db, userId, macDevice, myDevice, confirm, now = Dat
       await db().rpc("worker_pair_confirm", { p_pairing: id, p_key_hash: row.key_hash, p_box_key: row.box_key, p_sign_key: row.sign_key }),
       "The worker couldn't be added",
     );
+    try {
+      pinWorker(String(workerId), { name: String(row.name), publicKey: String(row.box_key), signKey: String(row.sign_key) });
+    } catch (err) {
+      // An unpinned worker would be pinned later from the row, which anyone with its key can change: take it back.
+      await Promise.resolve(db().rpc("device_revoke", { p_id: workerId })).catch(() => {});
+      return { status: "failed", error: `The worker's keys couldn't be pinned on this Mac, so it wasn't added: ${err.message}` };
+    }
     return { status: "paired", worker: { id: workerId, name: row.name, platform: row.platform, code: shown } };
   }
 

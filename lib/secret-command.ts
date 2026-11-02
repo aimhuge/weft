@@ -13,6 +13,19 @@ const ASSIGNMENT = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/;
 // Outside single quotes these mean something to a shell, and nothing here runs one.
 const META = new Set(["|", "&", ";", "<", ">", "(", ")", "`", "$", "\n", "\r"]);
 
+// Control (Cc), format (Cf: zero-width and bidi controls) and line or paragraph separators: they make a command or a
+// script show the user something other than what runs. electron/command-rules.cjs holds main to the same rule.
+const UNSAFE = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u;
+
+/** Whether text holds a character that would show differently from what it is; a script's own line breaks are fine. */
+export function hasUnsafeText(text: string, lines = false): boolean {
+  return UNSAFE.test(lines ? text.replace(/\n/g, "") : text);
+}
+
+// Variables that make a program load code the approval doesn't show: a preload library, Node's --require, a shell's
+// startup file. Neither the command line nor a vault name may set one (electron/command-rules.cjs holds the same list).
+export const LOADER_VAR = /^(NODE_OPTIONS|LD_[A-Z_]+|DYLD_[A-Z_]+|BASH_ENV|ENV|PYTHONSTARTUP|PERL5OPT|RUBYOPT)$/;
+
 const SHELLS = new Set("sh bash zsh dash ksh fish csh tcsh eval exec source . osascript".split(" "));
 // Run another command: what they run wouldn't be the command the user approved.
 const WRAPPERS = new Set("env sudo doas xargs nohup time command builtin nice watch script parallel timeout stdbuf caffeinate".split(" "));
@@ -82,6 +95,38 @@ function inlineCode(name: string, args: string[]): boolean {
   return false;
 }
 
+// Package runners that start another program: what they start is checked as a command of its own ("" = no verb).
+const RUNS_NEXT: Record<string, string[]> = { npx: [""], bunx: [""], pnpx: [""], pnpm: ["exec", "dlx"], npm: ["exec", "x"], yarn: ["exec", "dlx"], bun: ["x"] };
+
+// The program a package runner would start, with its args, past the runner's own flags.
+function innerCommand(name: string, args: string[]): string[] | undefined {
+  const verbs = RUNS_NEXT[name];
+  if (!verbs) return undefined;
+  let rest = args;
+  if (!verbs.includes("")) {
+    if (!verbs.includes(rest[0] as string)) return undefined;
+    rest = rest.slice(1);
+  }
+  while (rest[0]?.startsWith("-")) {
+    const flag = rest[0];
+    rest = rest.slice(1);
+    if (flag === "--") break;
+  }
+  return rest.length ? rest : undefined;
+}
+
+// git's options before its subcommand that change what it runs: -c (core.pager, alias.*, core.sshCommand…),
+// --config-env and --exec-path.
+function gitRunsConfig(args: string[]): boolean {
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i] as string;
+    if (!a.startsWith("-")) return false;
+    if (a === "-c" || /^-c./.test(a) || a.startsWith("--config-env") || a.startsWith("--exec-path")) return true;
+    if (a === "-C") i++;
+  }
+  return false;
+}
+
 function refusal(name: string, args: string[]): string | undefined {
   if (SHELLS.has(name)) return `${name} runs a script the user can't see in the approval. Run the program itself, or put the steps in a package.json script.`;
   if (WRAPPERS.has(name)) return `${name} runs another command. Run that command directly.`;
@@ -89,7 +134,10 @@ function refusal(name: string, args: string[]): string | undefined {
   if (NETWORK.has(name)) return `${name} sends data off the machine, so it doesn't get vault secrets.`;
   if (inlineCode(name, args)) return `${name} with inline code isn't allowed: put the code in a file or a package.json script, so the user sees what runs.`;
   if (name === "npm" && args[0] === "exec" && args.some((a) => a === "-c" || a.startsWith("--call"))) return "npm exec -c runs a shell string. Run the program directly.";
-  return undefined;
+  if (name === "find" && args.some((a) => /^-(exec|execdir|ok|okdir)$/.test(a))) return "find -exec runs another command. Run that command directly.";
+  if (name === "git" && gitRunsConfig(args)) return "git -c, --config-env and --exec-path can make git run another program (a pager, an alias, an ssh command).";
+  const inner = innerCommand(name, args);
+  return inner ? refusal(program(inner[0] as string), inner.slice(1)) : undefined;
 }
 
 /** Splits a command for main to run without a shell, or throws why it can't run with secrets. */
@@ -101,11 +149,13 @@ export function checkCommand(command: string, names: string[] = []): CheckedComm
     const what = syntax === "$" ? "$ (variables and $(…) aren't expanded: the program reads the secrets from its env)" : syntax === "'" || syntax === '"' ? "an unclosed quote" : `shell syntax (${JSON.stringify(syntax)})`;
     throw new Error(`The command has ${what}. It runs as one program with no shell: no pipes, redirects, ; or &&.`);
   }
+  if (hasUnsafeText(line)) throw new Error("The command holds control or invisible characters (a bidi mark, a zero-width space): type it plainly so the approval shows what runs.");
   const words = parseShell(line).commands.flatMap((c) => c.words);
   const env: Record<string, string> = {};
   while (words.length && ASSIGNMENT.test(words[0] as string)) {
     const [, key, value] = ASSIGNMENT.exec(words.shift() as string) as RegExpExecArray;
     if (names.includes(key as string)) throw new Error(`${key} comes from the vault; don't set it on the command line.`);
+    if (LOADER_VAR.test(key as string)) throw new Error(`${key} makes the program load code the approval doesn't show, so it can't be set here.`);
     env[key as string] = value as string;
   }
   const [first, ...args] = words;
@@ -121,6 +171,8 @@ export function checkNames(names: string[]): string[] {
   if (!unique.length) throw new Error("Name at least one secret to put in the command's env.");
   const bad = unique.find((n) => !NAME.test(n));
   if (bad !== undefined) throw new Error(`${bad || "A blank name"} isn't a variable name.`);
+  const loader = unique.find((n) => LOADER_VAR.test(n));
+  if (loader !== undefined) throw new Error(`${loader} makes the program load code the approval doesn't show, so a vault value can't go in it.`);
   return unique;
 }
 

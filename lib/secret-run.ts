@@ -7,6 +7,7 @@ import { globalSingleton } from "./global-singleton";
 import { addMissingBlank, missingText } from "./secret-ask";
 import { checkCommand, checkNames, packageScript, resolveCwd } from "./secret-command";
 import { shellToken } from "./shell-token";
+import { onWorker, redactOnWorker, workerSecretRun } from "./worker-secret-run";
 
 // Vault values in a command's env, for a thread that never sees them (docs/architecture/secrets.md). This side
 // checks the command and splits it; Electron main asks the user (the exact command, its package.json script,
@@ -37,6 +38,8 @@ export function usesSecrets(cardId: string): boolean {
  */
 export async function redactStored(cardId: string, value: string): Promise<string> {
   if (!value || !inUse.has(cardId)) return value;
+  // A worker card's values never passed through a main here: this process kept them (lib/worker-secret-run.ts).
+  if (onWorker()) return redactOnWorker(cardId, value);
   try {
     return asText((await shell("/secrets/redact", { ...cardProof(cardId, "/secrets/redact"), text: value })).text);
   } catch {
@@ -96,20 +99,9 @@ export function runTool(cardId: () => string | undefined, folder: () => string, 
         const dir = resolveCwd(root, cwd);
         const timeoutMs = Math.min(Math.max(timeout_seconds ?? DEFAULT_TIMEOUT_S, 1), MAX_TIMEOUT_S) * 1000;
         const key = cardId();
-        const r = (await shell("/secrets/run", {
-          ...cardProof(key, "/secrets/run"),
-          thread: title(),
-          why: asText(why).trim() || undefined,
-          folder: root,
-          cwd: dir,
-          command: command.trim(),
-          argv,
-          env,
-          names: wanted,
-          environment: environment ?? "development",
-          script: packageScript(argv, dir),
-          timeoutMs,
-        })) as RunReply;
+        const request = { thread: title(), why: asText(why).trim() || undefined, cwd: dir, command: command.trim(), argv, env, names: wanted, environment: environment ?? "development", script: packageScript(argv, dir), timeoutMs };
+        // On a Weft Worker the vault is on the owner's Mac: it approves and seals the values to this box for this run.
+        const r: RunReply = onWorker() ? await workerSecretRun({ ...request, cardId: key, root }) : await shell("/secrets/run", { ...cardProof(key, "/secrets/run"), ...request, folder: root });
         const missing = r.missing ?? [];
         if (missing.length) {
           const env = environment ?? "development";

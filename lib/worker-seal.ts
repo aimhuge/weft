@@ -65,3 +65,10 @@ export const CLAUDE_TOKEN = /^sk-ant-[\w-]{20,}$/;
 // The same for the github_login command: a fine-grained token, or a classic or OAuth one.
 export const GITHUB_PURPOSE = "github-login";
 export const GITHUB_TOKEN = /^(github_pat_|gh[op]_)\w{20,}$/;
+
+// A short fingerprint of a worker's public key, the one the Mac's approval window and Settings show
+// (electron/worker-pins.cjs fingerprint is the same, checked by a test): `weft-worker status` prints it to compare.
+export function sealFingerprint(publicKey: string): string {
+  const hex = crypto.createHash("sha256").update(Buffer.from(publicKey, "base64")).digest("hex").slice(0, 16);
+  return (hex.match(/.{4}/g) as string[]).join(" ");
+}
