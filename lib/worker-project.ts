@@ -4,7 +4,7 @@
 // cloud_commands, and every path that would touch a local folder or start a local CLI checks here first.
 import type { ProjectSummary, ProjectWorker, WorkerProjectStatus } from "./board-view";
 import type { MenuItem } from "./card-menu";
-import type { Card, Column } from "./types";
+import type { Card } from "./types";
 import { formatProjectAddress, isWorkerPath, parseProjectAddress, workerAddress } from "./host/address";
 
 export type { WorkerProjectStatus };
@@ -16,6 +16,9 @@ export interface WorkerProject {
   worker: string;
   folder: string;
   status: WorkerProjectStatus;
+  // Pin to Bar and Hide from Bar, this board's own (lib/worker-project-marks.ts).
+  pinned?: boolean;
+  hidden?: boolean;
 }
 
 export interface WorkerBoard {
@@ -58,22 +61,36 @@ export const offlineMessage = (worker: string) => `${worker} is offline, so this
 // The local projects with the workers' beside them: a worker project with no cards yet gets a row of its own, and
 // each one says which worker it's on.
 export function withWorkerProjects(summaries: ProjectSummary[], projects: WorkerProject[]): ProjectSummary[] {
-  const marks = new Map(projects.map((p) => [p.path, { name: p.worker, status: p.status }]));
+  const byPath = new Map(projects.map((p) => [p.path, p]));
   const known = new Set(summaries.map((s) => s.path));
   const empty = projects.filter((p) => !known.has(p.path)).map((p): ProjectSummary => ({ path: p.path, lastActivity: 0, cards: 0, running: 0, needsYou: 0 }));
   return [...summaries, ...empty].map((s) => {
-    const worker = marks.get(s.path);
-    return worker ? { ...s, worker } : s;
+    const p = byPath.get(s.path);
+    if (!p) return s;
+    return { ...s, worker: { name: p.worker, status: p.status }, ...(p.pinned ? { pinned: true } : {}), ...(p.hidden ? { hidden: true } : {}) };
   });
 }
 
-// The columns without the worker's cards, for what acts on many local cards at once (Archive all, Resume all, Switch
-// all): none of those reach a worker.
-export function localColumns(byColumn: Map<Column, Card[]>): Map<Column, Card[]> {
-  return new Map([...byColumn].map(([column, cards]) => [column, cards.filter((c) => !isWorkerCard(c))]));
+const SEPARATOR: MenuItem = { type: "separator" };
+
+// What a worker project's right-click menu counts: its marks and the cards it could archive or stop.
+export interface WorkerMenuState {
+  pinned?: boolean;
+  hidden?: boolean;
+  done: number;
+  live: number;
 }
 
-// A worker project's right-click menu: only what a board can do from here. An offline worker can't take a thread.
-export function workerProjectMenu(name: string, worker: ProjectWorker): MenuItem[] {
-  return [{ id: "new", label: `New Thread in ${name}`, enabled: worker.status !== "offline", detail: workerLabel(worker) }];
+// A worker project's right-click menu: what a board can do from here. An offline worker can't take a thread; pins and
+// hides are this board's own, and archiving and stopping go to the worker as each card's verbs.
+export function workerProjectMenu(name: string, worker: ProjectWorker, s: WorkerMenuState = { done: 0, live: 0 }): MenuItem[] {
+  return [
+    { id: "new", label: `New Thread in ${name}`, enabled: worker.status !== "offline", detail: workerLabel(worker) },
+    SEPARATOR,
+    s.pinned ? { id: "unpin", label: "Unpin from Bar" } : { id: "pin", label: "Pin to Bar" },
+    s.hidden ? { id: "show", label: "Show in Bar" } : { id: "hide", label: "Hide from Bar" },
+    SEPARATOR,
+    { id: "archive-done", label: s.done === 1 ? "Archive 1 Card in Done" : s.done ? `Archive All ${s.done} in Done` : "Archive Done Cards", enabled: s.done > 0 },
+    { id: "stop-running", label: s.live === 1 ? "Stop 1 Running Card" : s.live ? `Stop All ${s.live} Running` : "Stop Running Cards", enabled: s.live > 0 },
+  ];
 }

@@ -63,6 +63,15 @@ describe("remoteRefusal", () => {
     expect(remoteRefusal({ verb: "card.update", args: { id: "c", body: { title: "T", tags: ["a"] } } })).toBeNull();
     expect(remoteRefusal({ verb: "card.update", args: { id: "c" } })).toBeNull();
     expect(remoteRefusal({ verb: "card.stop", args: { id: "c" } })).toBeNull();
+    // Deleting your own card narrows what the network can reach: nothing to refuse.
+    expect(remoteRefusal({ verb: "card.delete", args: { id: "c" } })).toBeNull();
+  });
+
+  it("holds a new card to the same rules as an update: no skipped prompts, no folder, agent or read scope", () => {
+    expect(remoteRefusal({ verb: "card.create", args: { id: "c", prompt: "p", permissionMode: "bypassPermissions" } })).toMatch(/can't skip permission prompts/);
+    expect(remoteRefusal({ verb: "card.create", args: { id: "c", prompt: "p", cwd: "/Users/x" } })).toMatch(/folder/);
+    expect(remoteRefusal({ verb: "card.create", args: { id: "c", prompt: "p", agent: "builder" } })).toMatch(/agent/);
+    expect(remoteRefusal({ verb: "card.create", args: { id: "c", prompt: "p", tags: ["a"], isolated: true, permissionMode: "plan", start: false } })).toBeNull();
   });
 
   it("lets Send later and the skills list through, but never a scheduled \"!\" command", () => {
@@ -92,6 +101,7 @@ describe("results and typed text", () => {
     expect(textArgOf("card.message.edit")).toBe("text");
     expect(textArgOf("card.fresh")).toBe("message");
     expect(textArgOf("card.schedule")).toBe("text");
+    expect(textArgOf("card.create")).toBe("prompt");
     expect(textArgOf("card.stop")).toBeUndefined();
   });
 
@@ -103,6 +113,12 @@ describe("results and typed text", () => {
       skills: [["ship", "Ship it", "project"]],
     });
     expect(verbResult("skills.list", "c", undefined)).toEqual({ ok: true, cardId: "c", skills: [] });
+  });
+
+  it("carries dev.open's private address, capped, and nothing when there's none", () => {
+    expect(verbResult("dev.open", "c", { address: "https://weft.zip/t/t1" })).toEqual({ ok: true, cardId: "c", address: "https://weft.zip/t/t1" });
+    expect((verbResult("dev.open", "c", { address: `https://weft.zip/t/${"a".repeat(900)}` }) as { address: string }).address).toHaveLength(500);
+    expect(verbResult("dev.open", "c", undefined)).toEqual({ ok: true, cardId: "c" });
   });
 });
 

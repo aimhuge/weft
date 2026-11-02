@@ -8,6 +8,7 @@
 // Each handler's module loads on its first call, so a route pulls in only the code its own verbs run.
 import { isHostVerb } from "@weft/client";
 import { widens, type CardUpdateArgs } from "./calls";
+import type { CreateArgs } from "./card-create";
 import type { Handler, HostVerb } from "./types";
 
 export { NotFound, requireCard, type Handler, type HostVerb } from "./types";
@@ -22,13 +23,23 @@ function lazy<M, K extends keyof M>(load: () => Promise<M>, name: K): M[K] {
 }
 
 export const HOST_API = {
+  // A new thread, started or left in Backlog. Asking less than the default mode needs Weft's own window, as POST /api/cards.
+  "card.create": {
+    elevated: false,
+    elevatedFor: ({ permissionMode }: CreateArgs) => permissionMode !== undefined && permissionMode !== "default",
+    run: lazy(() => import("./card-create"), "createCardVerb"),
+  },
   "card.update": {
     elevated: false,
     // A mode change or a read grant widens what the thread may do, so only those need Weft's own window.
     elevatedFor: ({ body }: CardUpdateArgs) => widens(body),
     run: lazy(() => import("./card-update"), "updateCardVerb"),
   },
+  // Starts the card's CLI ahead of a reply; it changes nothing on the card.
+  "card.warm": { elevated: false, run: lazy(() => import("./card-warm"), "warmCardVerb") },
   "card.stop": { elevated: false, run: lazy(() => import("./card-stop"), "stopCard") },
+  // Deleting your own card narrows what it can touch, so a plain guard() is enough, as the DELETE route always had.
+  "card.delete": { elevated: false, run: lazy(() => import("./card-delete"), "deleteCardVerb") },
   "card.shell": { elevated: true, run: lazy(() => import("./card-shell"), "shellCommand") },
   "card.fresh": { elevated: false, run: lazy(() => import("./card-fresh"), "sendFreshVerb") },
   "card.message": { elevated: false, run: lazy(() => import("./card-messages"), "sendMessageVerb") },
@@ -50,6 +61,9 @@ export const HOST_API = {
   "files.list": { elevated: false, run: lazy(() => import("./files"), "listFilesVerb") },
   "files.read": { elevated: false, run: lazy(() => import("./files"), "readFileVerb") },
   "files.write": { elevated: true, run: lazy(() => import("./files"), "writeFileVerb") },
+  // A card's dev server: a private address for it (a tunnel, after the owner's Touch ID on their Mac), or its end.
+  "dev.open": { elevated: false, run: lazy(() => import("./dev-servers"), "devOpenVerb") },
+  "dev.stop": { elevated: false, run: lazy(() => import("./dev-servers"), "devStopVerb") },
 } satisfies Record<HostVerb, Handler>;
 
 type Table = typeof HOST_API;

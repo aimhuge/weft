@@ -11,7 +11,10 @@ vi.mock("@/lib/store", () => ({
   getCard: vi.fn((id: string) => db.cards.get(id)),
   updateCard: vi.fn((id: string, patch: Partial<Card>) => Object.assign(db.cards.get(id)!, patch)),
   reorderCard: vi.fn(),
+  deleteCard: vi.fn((id: string) => db.cards.delete(id)),
 }));
+vi.mock("@/lib/settings", () => ({ dismissSession: vi.fn() }));
+vi.mock("@/lib/worktree-pool", () => ({ dropWorktree: vi.fn(() => Promise.resolve()) }));
 vi.mock("@/lib/runner", () => ({
   stop: vi.fn(() => Promise.resolve()),
   sendMessage: vi.fn(),
@@ -22,6 +25,7 @@ vi.mock("@/lib/runner", () => ({
   endSession: vi.fn(() => Promise.resolve()),
   isBusy: vi.fn(() => false),
   setPermissionMode: vi.fn(),
+  warmUp: vi.fn(),
   answerPermission: vi.fn(),
   waitPermission: vi.fn(),
   switchBackend: vi.fn(() => Promise.resolve()),
@@ -42,6 +46,10 @@ vi.mock("@/lib/scheduler", () => ({
   scheduleMessage: vi.fn((id: string) => db.cards.get(id)),
   unscheduleMessage: vi.fn((id: string) => db.cards.get(id)),
 }));
+vi.mock("@/lib/new-card", () => ({
+  createCardFromBody: vi.fn((_body: unknown, id: string) => ({ id, title: "t" })),
+  startCard: vi.fn(() => ({ started: true })),
+}));
 vi.mock("@/lib/skills", () => ({ listSkills: vi.fn(() => [{ name: "ship", description: "d", source: "project" }]) }));
 vi.mock("@/lib/file-access", () => ({
   listFiles: vi.fn(() => Promise.resolve(["a.ts"])),
@@ -50,6 +58,9 @@ vi.mock("@/lib/file-access", () => ({
   safePath: vi.fn(() => Promise.resolve({ abs: "/repo/a.ts", rel: "a.ts" })),
   writeFile: vi.fn(() => Promise.resolve({ result: { hash: "h2", mtime: 2 } })),
 }));
+vi.mock("@/lib/devserver", () => ({ stopDev: vi.fn() }));
+vi.mock("@/lib/devserver-list", () => ({ listDev: vi.fn(() => Promise.resolve([{ cardId: "c1", url: "http://localhost:3000/" }])) }));
+vi.mock("@/lib/tunnels", () => ({ openTunnel: vi.fn(() => Promise.resolve({ address: "https://weft.zip/t/t1" })) }));
 
 const runner = await import("@/lib/runner");
 const api = await import("./index");
@@ -65,8 +76,11 @@ beforeEach(() => {
 // One sample call per verb, with the reply it gives.
 const card = () => ({ card: db.cards.get("c1") });
 const SAMPLES: Record<HostVerb, { args: unknown; reply: () => unknown }> = {
+  "card.create": { args: { id: "new-card-1", prompt: "hi" }, reply: () => ({ card: { id: "new-card-1", title: "t" }, start: { started: true } }) },
   "card.update": { args: { id: "c1", body: { title: "New" } }, reply: card },
   "card.stop": { args: { id: "c1" }, reply: () => ({ ok: true }) },
+  "card.warm": { args: { id: "c1" }, reply: () => ({ ok: true }) },
+  "card.delete": { args: { id: "c1" }, reply: () => ({ ok: true }) },
   "card.shell": { args: { id: "c1", command: "ls" }, reply: () => ({ ok: true }) },
   "card.fresh": { args: { id: "c1", message: "hi" }, reply: () => ({ ok: true }) },
   "card.message": { args: { id: "c1", text: "hi" }, reply: card },
@@ -85,12 +99,17 @@ const SAMPLES: Record<HostVerb, { args: unknown; reply: () => unknown }> = {
   "files.list": { args: { id: "c1" }, reply: () => ({ files: ["a.ts"] }) },
   "files.read": { args: { id: "c1", path: "a.ts" }, reply: () => ({ file: { path: "a.ts", exists: true, text: "x", hash: "h", mtime: 1, size: 1 } }) },
   "files.write": { args: { id: "c1", path: "a.ts", text: "y", baseHash: "h" }, reply: () => ({ result: { hash: "h2", mtime: 2 } }) },
+  "dev.open": { args: { id: "c1" }, reply: () => ({ address: "https://weft.zip/t/t1" }) },
+  "dev.stop": { args: { id: "c1" }, reply: () => ({ ok: true }) },
 };
 
 // The local route each verb is mounted on.
 const ROUTES: Record<HostVerb, string> = {
+  "card.create": "../route.ts",
   "card.update": "route.ts",
   "card.stop": "stop/route.ts",
+  "card.warm": "../../warm/route.ts",
+  "card.delete": "route.ts",
   "card.shell": "shell/route.ts",
   "card.fresh": "fresh/route.ts",
   "card.message": "messages/route.ts",
@@ -109,6 +128,8 @@ const ROUTES: Record<HostVerb, string> = {
   "files.list": "files/route.ts",
   "files.read": "files/route.ts",
   "files.write": "files/route.ts",
+  "dev.open": "dev/route.ts",
+  "dev.stop": "dev/route.ts",
 };
 
 const verbs = Object.keys(HOST_API) as HostVerb[];
@@ -134,10 +155,10 @@ describe("HOST_API", () => {
   });
 
   it("refuses a verb that isn't in the table", async () => {
-    expect(isHostVerb("card.delete")).toBe(false);
+    expect(isHostVerb("card.explode")).toBe(false);
     expect(isHostVerb("toString")).toBe(false);
     expect(isHostVerb("card.stop")).toBe(true);
-    await expect(runVerb("card.delete" as HostVerb, { id: "c1" })).rejects.toThrow("Unknown host verb: card.delete");
+    await expect(runVerb("card.explode" as HostVerb, { id: "c1" })).rejects.toThrow("Unknown host verb: card.explode");
     expect(runner.stop).not.toHaveBeenCalled();
   });
 
@@ -153,6 +174,9 @@ describe("HOST_API", () => {
     expect(needsElevation("card.update", { id: "c1", body: { title: "x" } })).toBe(false);
     expect(needsElevation("card.update", { id: "c1", body: { permissionMode: "auto" } })).toBe(true);
     expect(needsElevation("card.update", { id: "c1", body: { readScope: "/x" } })).toBe(true);
+    expect(needsElevation("card.create", { id: "n1" })).toBe(false);
+    expect(needsElevation("card.create", { id: "n1", permissionMode: "default" })).toBe(false);
+    expect(needsElevation("card.create", { id: "n1", permissionMode: "acceptEdits" })).toBe(true);
   });
 });
 

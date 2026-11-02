@@ -77,8 +77,30 @@ describe("outside the desktop app", () => {
   it("says the pane needs the desktop app, and doesn't call out", async () => {
     vi.resetModules();
     vi.stubEnv("WEFT_SHELL_URL", "");
+    vi.stubEnv("WEFT_WORKER", "");
     const bare = await import("./browser-shell");
     await expect(bare.shell("/browser/url")).rejects.toThrow(/only exists in the desktop app/);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("on a Weft Worker", () => {
+  it("serves the browser routes from the worker's own browser, and says the rest need the desktop app", async () => {
+    vi.resetModules();
+    vi.stubEnv("WEFT_SHELL_URL", "");
+    vi.stubEnv("WEFT_WORKER", "1");
+    const workerShell = vi.fn(() => Promise.resolve({ url: "http://localhost:3000/" }));
+    vi.doMock("./worker-browser-routes", () => ({ workerShell }));
+    const bare = await import("./browser-shell");
+    expect(await bare.shell("/browser/url", { key: "c1" })).toEqual({ url: "http://localhost:3000/" });
+    await bare.shell("/secrets/fill", { key: "c1" });
+    expect(workerShell.mock.calls).toEqual([
+      ["/browser/url", { key: "c1" }],
+      ["/secrets/fill", { key: "c1" }],
+    ]);
+    await expect(bare.shell("/board/cards")).rejects.toThrow("This needs the desktop app, and this card runs on a Weft Worker.");
+    expect(fetchMock).not.toHaveBeenCalled();
+    vi.doUnmock("./worker-browser-routes");
+    vi.stubEnv("WEFT_WORKER", "");
   });
 });

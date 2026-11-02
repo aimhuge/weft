@@ -5,7 +5,9 @@ import { stopNow } from "@/lib/optimistic-cards";
 import { folderName } from "@/lib/project-bar";
 import { projectMenu, type ProjectAction } from "@/lib/project-menu";
 import { projectSyncLine } from "@/lib/sync-menu";
+import { hostOf } from "@/lib/project-host";
 import { workerProjectMenu } from "@/lib/worker-project";
+import { setWorkerMarks } from "@/lib/worker-project-marks";
 import type { CloudSyncStatus } from "@/lib/cloud-sync-view";
 import type { ProjectSummary } from "@/lib/board-view";
 import type { RailPanel } from "@/lib/rail-view";
@@ -41,16 +43,12 @@ export function projectMenuHandler(deps: ProjectMenuDeps) {
     e.preventDefault();
     e.stopPropagation();
     const project = deps.projects.find((p) => p.path === path);
-    // A worker's project has no folder here, so only what a board can do from afar is on its menu.
-    if (project?.worker) {
-      const picked = await shell.popupMenu(workerProjectMenu(folderName(path), project.worker));
-      if (picked === "new") deps.openNew(path);
-      return Boolean(picked);
-    }
     const mine = deps.cards.filter((c) => deps.rootOf(c.cwd) === path && !c.archived);
     const done = mine.filter((c) => c.column === "done");
     const live = mine.filter(isLive);
     const name = folderName(path);
+    // A worker's project has no folder here, so only what a board can do from afar is on its menu.
+    if (project?.worker) return workerMenu(shell, path, name, project, { ...deps, done, live });
     // Read sync fresh, so the line beside Sync says how it stands now, not when the board last looked.
     // A failed read keeps what the board already knows rather than blocking the menu.
     let folders = deps.syncFolders;
@@ -83,6 +81,29 @@ export function projectMenuHandler(deps: ProjectMenuDeps) {
     Promise.resolve(run()).catch(deps.notify);
     return true;
   };
+}
+
+// A worker project's menu (lib/worker-project.ts workerProjectMenu): a new thread, this board's pin and hide, and its
+// Done and running cards archived or stopped through each card's host (the archive's own hostOf, stopNow's host call).
+async function workerMenu(shell: NonNullable<typeof window.weft>, path: string, name: string, project: ProjectSummary, c: ProjectMenuDeps & { done: Card[]; live: Card[] }) {
+  const worker = project.worker as NonNullable<ProjectSummary["worker"]>;
+  const picked = await shell.popupMenu(workerProjectMenu(name, worker, { pinned: project.pinned, hidden: project.hidden, done: c.done.length, live: c.live.length }));
+  const stop = async () => {
+    await Promise.all(c.live.map((card) => stopNow(card.id, () => hostOf(card).act("card.stop", { id: card.id }))));
+    c.toast(`Stopped ${c.live.length === 1 ? "1 card" : `${c.live.length} cards`} in ${name}.`);
+  };
+  const actions: Record<string, () => unknown> = {
+    new: () => c.openNew(path),
+    pin: () => setWorkerMarks(path, { pinned: true }),
+    unpin: () => setWorkerMarks(path, { pinned: false }),
+    hide: () => setWorkerMarks(path, { hidden: true }),
+    show: () => setWorkerMarks(path, { hidden: false }),
+    "archive-done": () => c.archive(c.done),
+    "stop-running": stop,
+  };
+  const run = picked ? actions[picked] : undefined;
+  if (run) Promise.resolve(run()).catch(c.notify);
+  return Boolean(picked);
 }
 
 // "Add Folder…": picks a folder in the shell's dialog and adds it to the project, so its threads work there too.

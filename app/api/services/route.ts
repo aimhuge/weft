@@ -4,15 +4,17 @@ import { restartDev } from "@/lib/devserver";
 import { fail, guard } from "@/lib/guard";
 import { killProc, killService, ServiceRefused } from "@/lib/services-kill";
 import { listServices, machineInfo } from "@/lib/services-snapshot";
+import { workerDevServers } from "@/lib/worker-dev-list";
 
 // The rail's Services drawer: every process Weft spawned, grouped by what started it, with CPU and
-// memory (lib/services-snapshot.ts). Reads need no x-weft-token header; writes do (guard()).
+// memory (lib/services-snapshot.ts), and your workers' dev servers (lib/worker-dev-list.ts). Reads need no
+// x-weft-token header; writes do (guard()).
 export async function GET(req: Request) {
   const denied = guard(req, { write: false });
   if (denied) return denied;
   await connection();
-  const [services, launchers] = await Promise.all([listServices(), listLaunchers()]);
-  return Response.json({ services, launchers, machine: machineInfo() });
+  const [services, launchers, workers] = await Promise.all([listServices(), listLaunchers(), workerDevServers()]);
+  return Response.json({ services, launchers, workers, machine: machineInfo() });
 }
 
 // kill: end a service by id, or one process in it by pid. restart: start a Weft dev server again

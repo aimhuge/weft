@@ -23,7 +23,7 @@ const state = vi.hoisted(() => ({
 }));
 vi.mock("./session-lines", () => ({ lineFor: () => state.line, useLineRoute: () => state.route }));
 
-const { actOnLine, askOnLine, lineFiles, lineTransport, useLineLive } = await import("./line-host");
+const { actOnLine, askOnLine, lineFiles, lineTransport, useLineLive, warmOnLine } = await import("./line-host");
 
 function line(up = true) {
   state.line = {
@@ -71,6 +71,20 @@ describe("actOnLine", () => {
     l.call.mockRejectedValueOnce(new Error("A shell command only runs from Weft's own window, not from the web."));
     await expect(actOnLine("w1", "card.shell", { id: "c1" })).rejects.toThrow("only runs");
     expect(actOnWorker).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("warmOnLine", () => {
+  it("warms a card only over a line that's up, never as a row, and shrugs off a failure", async () => {
+    warmOnLine("w1", "c1");
+    line(false);
+    warmOnLine("w1", "c1");
+    const l = line();
+    l.call.mockRejectedValueOnce(new Error("gone"));
+    warmOnLine("w1", "c1");
+    await Promise.resolve();
+    expect(l.call).toHaveBeenCalledWith("card.warm", { id: "c1" });
+    expect(actOnWorker).not.toHaveBeenCalled();
   });
 });
 

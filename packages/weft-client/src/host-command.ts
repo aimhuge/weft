@@ -14,8 +14,9 @@ import { fitSkills, type SkillsOnWire } from "./skills-wire";
 // the row is plain jsonb, so it says whether the verb ran and which card it touched, plus what a read verb answers
 // (RESULTS below), kept small enough for the column's 4 KB cap.
 // A verb that answers with a value too big for that (the editor's files.*) adds it as `value` when it's small, else
-// `blob`, the sha of its JSON in the workspace's blob store (lib/host-result.ts).
-export type HostResult = ({ ok: true; cardId: string; value?: unknown; blob?: string } & Partial<SkillsOnWire>) | { ok: false; error: string };
+// `blob`, the sha of its JSON in the workspace's blob store (lib/host-result.ts). address: dev.open's private /t/<id>
+// address for the card's dev server.
+export type HostResult = ({ ok: true; cardId: string; value?: unknown; blob?: string; address?: string } & Partial<SkillsOnWire>) | { ok: false; error: string };
 
 const isObject = (v: unknown): v is Record<string, unknown> => Boolean(v) && typeof v === "object" && !Array.isArray(v);
 
@@ -59,7 +60,13 @@ export function remoteRefusal({ verb, args }: HostPayload): string | null {
     if (typeof args.path !== "string") return "That names no file.";
     return verb === "files.read" ? readRefusal(args.path) : writeRefusal(args.path);
   }
-  const body = verb === "card.update" ? (args.body as Record<string, unknown> | undefined) : undefined;
+  return cardFieldsRefusal(verb, args);
+}
+
+// A card update's body, or a new card's fields (card.create, its folder the row's own): no skipped prompts, and nothing
+// that moves the card's folder, agent or read scope.
+function cardFieldsRefusal(verb: HostPayload["verb"], args: HostPayload["args"]): string | null {
+  const body = verb === "card.update" ? (args.body as Record<string, unknown> | undefined) : verb === "card.create" ? args : undefined;
   if (!body) return null;
   if (body.permissionMode === "bypassPermissions") return "A request from the web can't skip permission prompts. Pick that mode on the Mac.";
   const widening = WIDENING_FIELDS.find((field) => body[field] !== undefined);
@@ -78,8 +85,12 @@ export const isHostDone = (done: unknown): done is HostDone => Boolean(done) && 
 export const hostResult = (cardId: string): HostResult => ({ ok: true, cardId });
 
 // The verbs a board runs for their answer, and the part of it that goes in `result`.
-const RESULTS: Partial<Record<HostVerb, (reply: unknown) => SkillsOnWire>> = {
+const RESULTS: Partial<Record<HostVerb, (reply: unknown) => SkillsOnWire | { address?: string }>> = {
   "skills.list": (reply) => fitSkills((reply as { skills?: SkillInfo[] } | undefined)?.skills ?? []),
+  "dev.open": (reply) => {
+    const address = (reply as { address?: unknown } | undefined)?.address;
+    return typeof address === "string" ? { address: address.slice(0, 500) } : {};
+  },
 };
 
 // `result` for a verb that ran: the card, and for a read verb its answer.
@@ -90,7 +101,7 @@ export function verbResult(verb: HostVerb, cardId: string, reply: unknown): Host
 export const hostFailure = (error: string): HostResult => ({ ok: false, error });
 
 // The verbs whose text a person typed, and so may paste files (lib/attachment-transfer.ts): the arg that holds it.
-const TEXT_ARGS: Partial<Record<HostVerb, string>> = { "card.message": "text", "card.message.edit": "text", "card.fresh": "message", "card.schedule": "text" };
+const TEXT_ARGS: Partial<Record<HostVerb, string>> = { "card.create": "prompt", "card.message": "text", "card.message.edit": "text", "card.fresh": "message", "card.schedule": "text" };
 
 export function textArgOf(verb: HostVerb): string | undefined {
   return TEXT_ARGS[verb];

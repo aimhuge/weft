@@ -27,6 +27,7 @@ vi.mock("@/lib/services-snapshot", () => ({
 const LaunchRefused = class LaunchRefused extends Error {};
 const listLaunchers = vi.hoisted(() => vi.fn<() => Promise<unknown>>());
 const launch = vi.hoisted(() => vi.fn<(cwd: string, command: string) => Promise<{ result: "started" | "restarted"; id: string }>>());
+vi.mock("@/lib/worker-dev-list", () => ({ workerDevServers: () => Promise.resolve([{ workerId: "w1", worker: "m1mini", servers: [] }]) }));
 vi.mock("@/lib/dev-launchers", () => ({
   LaunchRefused,
   listLaunchers: () => listLaunchers(),
@@ -74,6 +75,11 @@ describe("GET /api/services", () => {
     expect(res.status).toBe(200);
     expect(json.launchers).toEqual(launchers);
     expect(listLaunchers).toHaveBeenCalled();
+  });
+
+  it("returns your workers' dev servers", async () => {
+    const json = (await (await route.GET(req("/services", { headers: READ }))).json()) as { workers: unknown };
+    expect(json.workers).toEqual([{ workerId: "w1", worker: "m1mini", servers: [] }]);
   });
 
   it("rejects a foreign host", async () => {

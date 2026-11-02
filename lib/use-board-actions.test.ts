@@ -17,6 +17,9 @@ vi.mock("./client", () => ({
 const startPileReview = vi.fn<(...args: unknown[]) => Promise<void>>();
 vi.mock("./pile-review", () => ({ startPileReview: (...args: unknown[]) => startPileReview(...args) }));
 
+const lineWarm = vi.fn();
+vi.mock("./line-host", () => ({ actOnLine: vi.fn(), lineTransport: vi.fn(() => ({})), lineFiles: vi.fn(() => ({})), warmOnLine: (...args: unknown[]) => { lineWarm(...args); } }));
+
 const { useBoardActions } = await import("./use-board-actions");
 const { openCardById } = await import("./open-card");
 
@@ -95,6 +98,13 @@ describe("useBoardActions", () => {
     const { result } = make();
     act(() => result.current.openCard(card({ id: "x", warm: false, column: "running" })));
     expect(apiWarm).toHaveBeenCalledWith({ cardId: "x" });
+  });
+
+  it("openCard warms a worker card on its own host, never through this Mac's /api/warm", () => {
+    const { result } = make();
+    act(() => result.current.openCard(card({ id: "k", cwd: "worker://w1/ling" })));
+    expect(apiWarm).not.toHaveBeenCalled();
+    expect(lineWarm).toHaveBeenCalledWith("w1", "k");
   });
 
   it("openCard does not warm a warm or done card", () => {

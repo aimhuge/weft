@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cardMenu, columnMenu, resumeCommand, type MenuItem } from "./card-menu";
+import { cardMenu, columnMenu, humanOnlyItem, resumeCommand, type MenuItem } from "./card-menu";
 import { BUILT_IN_AGENTS } from "./agents";
 import type { Card } from "./types";
 
@@ -146,5 +146,19 @@ describe("columnMenu archived toggle", () => {
   it("reads Hide Archived while archived cards are shown", () => {
     expect(item(columnMenu("done", { count: 0, archived: 2, showArchived: true }), "toggle-archived")?.label).toBe("Hide Archived");
     expect(item(columnMenu("done", { count: 0, archived: 2, showArchived: false }), "toggle-archived")?.label).toBe("Show 2 Archived");
+  });
+});
+
+describe("humanOnlyItem", () => {
+  it("names the items that widen what a card can do", () => {
+    for (const id of ["mode:bypassPermissions", "mode:default", "agent:builder", "switch:codex", "vault:grant", "new-here", "reveal"]) {
+      expect(humanOnlyItem(id), id).toBe(true);
+    }
+  });
+
+  it("leaves the rest to board_view", () => {
+    for (const id of ["open", "rename", "move:review", "stop", "vault:revoke", "copy-path", "archive", "star"]) {
+      expect(humanOnlyItem(id), id).toBe(false);
+    }
   });
 });

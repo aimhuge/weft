@@ -68,6 +68,27 @@ describe("cardKinds", () => {
     await expect(cardKinds(kept).host(cmd("host", { verb: "card.stop", args: { id: "k1" } }))).rejects.toThrow("Not from the web.");
   });
 
+  it("makes a card through the host's create rule, never the card check, with its prompt's files brought over", async () => {
+    const create = vi.fn<NonNullable<CardRules["create"]>>(() => Promise.resolve("n1"));
+    const r = rules({ create, receive: (text) => Promise.resolve(`${text} (here)`) });
+    const done = await cardKinds(r).host(cmd("host", { verb: "card.create", args: { id: "n1", prompt: "go", start: false } }));
+    expect(done).toEqual({ cardId: "n1", result: { ok: true, cardId: "n1" } });
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ kind: "host" }), { id: "n1", prompt: "go (here)", start: false });
+    expect(r.card).not.toHaveBeenCalled();
+    await expect(cardKinds(r).host(cmd("host", { verb: "card.create", args: { id: "n2", prompt: "go", permissionMode: "bypassPermissions" } }))).rejects.toThrow(/skip permission/);
+    await expect(cardKinds(rules()).host(cmd("host", { verb: "card.create", args: { id: "n3", prompt: "go" } }))).rejects.toThrow(/new_card/);
+    expect(create).toHaveBeenCalledOnce();
+  });
+
+  it("holds a new card to the host's elevated rule too, as an update is", async () => {
+    const create = vi.fn<NonNullable<CardRules["create"]>>(() => Promise.resolve("n1"));
+    const elevated = vi.fn<NonNullable<CardRules["elevated"]>>(() => Promise.resolve("Approve it on the phone."));
+    const args = { id: "n1", prompt: "go", permissionMode: "acceptEdits" };
+    await expect(cardKinds(rules({ create, elevated })).host(cmd("host", { verb: "card.create", args }))).rejects.toThrow("Approve it on the phone.");
+    expect(elevated).toHaveBeenCalledWith("card.create", args);
+    expect(create).not.toHaveBeenCalled();
+  });
+
   it("sends a host answer through the answer kind where the host asks for that, and straight to the verb otherwise", async () => {
     const payload = { verb: "card.permission.answer", args: { id: "k1", pendingId: "p1", allow: false } };
     const approve = vi.fn(() => Promise.resolve(null));

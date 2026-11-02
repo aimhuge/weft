@@ -5,7 +5,7 @@
 import type React from "react";
 import type { ResumeHow } from "./card-resume";
 import { cardHandlers, type CardActionsCtx } from "./card-handlers";
-import { answerNow, firstNow, otherFirstNow, patchNow, stopNow, waitNow } from "./optimistic-cards";
+import { answerNow, firstNow, otherFirstNow, patchNow, removeNow, stopNow, waitNow } from "./optimistic-cards";
 import { hostOf } from "./project-host";
 import type { Card } from "./types";
 
@@ -28,6 +28,12 @@ export function remoteCardHandlers(card: Card, ctx: CardActionsCtx): ReturnType<
     onArchive: () => ctx.toggleArchive(card),
     onTag: ctx.onTag,
   };
+}
+
+// Delete a card on its host, gone from the board at once: this Mac's DELETE route, or card.delete on a worker.
+export function removeOnHost(card: Pick<Card, "id" | "cwd">): Promise<void> {
+  const host = hostOf(card);
+  return removeNow(card.id, host.kind === "local" ? undefined : () => host.act("card.delete", { id: card.id }));
 }
 
 export function handlersFor(card: Card, ctx: CardActionsCtx): ReturnType<typeof cardHandlers> {

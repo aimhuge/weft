@@ -38,9 +38,16 @@ describe("useServices", () => {
     const { result } = renderHook(() => useServices());
     await waitFor(() => expect(result.current.loaded).toBe(true));
     expect(result.current.services).toEqual([svc]);
-    expect(result.current.services).toEqual([svc]);
+    expect(result.current.workers).toEqual([]);
     window.dispatchEvent(new Event("focus"));
     await waitFor(() => expect(api.services).toHaveBeenCalledTimes(2));
+  });
+
+  it("keeps the workers' dev servers the list brought", async () => {
+    const workers = [{ workerId: "w1", worker: "m1mini", servers: [] }];
+    api.services.mockResolvedValue({ services: [svc], workers });
+    const { result } = renderHook(() => useServices());
+    await waitFor(() => expect(result.current.workers).toEqual(workers));
   });
 
   it("polls at IDLE_POLL_MS while closed, and at the open-drawer rate while open", async () => {

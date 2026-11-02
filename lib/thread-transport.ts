@@ -32,6 +32,8 @@ export interface ThreadTransport {
   stop(cardId: string): Promise<void>;
   // Only where the Mac itself runs the card:
   shell?: (cardId: string, command: string) => Promise<void>;
+  // Where there's no shell, why: a "!" message still turns the box amber and says this, rather than going to the agent.
+  shellRefusal?: string;
   editLast?: (cardId: string, text: string) => Promise<void>;
   // A cold card's next message in a new session of the same card, started from a brief of the thread.
   fresh?: (cardId: string, message: string) => Promise<void>;

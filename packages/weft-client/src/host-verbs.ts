@@ -3,8 +3,11 @@
 // keyed by exactly these (`satisfies Record<HostVerb, Handler>`), so a verb added there without a name here, or the
 // other way round, fails the type check.
 export const HOST_VERBS = [
+  "card.create",
   "card.update",
+  "card.warm",
   "card.stop",
+  "card.delete",
   "card.shell",
   "card.fresh",
   "card.message",
@@ -24,6 +27,8 @@ export const HOST_VERBS = [
   "files.list",
   "files.read",
   "files.write",
+  "dev.open",
+  "dev.stop",
 ] as const;
 
 /** Every verb a host runs. HOST_API is keyed by these, and it is the allowlist a remote host checks. */

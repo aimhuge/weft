@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { cloneModules, installDeps, installerFor, lockHash } from "./worktree-deps";
+import { cloneArgs, cloneModules, installDeps, installerFor, lockHash } from "./worktree-deps";
 
 const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "weft-deps-")));
 afterAll(() => fs.rmSync(tmp, { recursive: true, force: true }));
@@ -35,6 +35,14 @@ describe("lockHash", () => {
     fs.writeFileSync(path.join(d, "pnpm-lock.yaml"), "b");
     expect(lockHash(d)).not.toBe(before);
     expect(lockHash(dir("none"))).toBe("");
+  });
+});
+
+describe("cloneArgs", () => {
+  it("clones copy-on-write on a Mac, and on a Linux worker takes a reflink or falls back to a plain copy", () => {
+    expect(cloneArgs("darwin")).toEqual(["-c", "-R"]);
+    expect(cloneArgs("linux")).toEqual(["-R", "--reflink=auto"]);
+    expect(cloneArgs()).toEqual(cloneArgs(process.platform));
   });
 });
 

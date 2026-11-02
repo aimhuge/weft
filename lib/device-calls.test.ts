@@ -1,7 +1,7 @@
 // The Mac's side of Local Simulator mode (lib/device-calls.ts): a worker's call is untrusted, so it needs a live grant,
 // its arguments are re-read, and the device comes from the grant, never from the row.
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import { fakeClient } from "./device-calls-fake";
 
 const simulatorTools = vi.hoisted(() => vi.fn());
 const listDevices = vi.hoisted(() => vi.fn());
@@ -13,6 +13,7 @@ const sweepBuilds = vi.hoisted(() => vi.fn());
 const deviceId = vi.hoisted(() => vi.fn());
 const requireGrant = vi.hoisted(() => vi.fn());
 const shell = vi.hoisted(() => vi.fn());
+const runApproval = vi.hoisted(() => vi.fn());
 
 vi.mock("./simulator-tools", () => ({ simulatorTools }));
 vi.mock("./simulator-devices", () => ({ listDevices, bootedDevice }));
@@ -21,6 +22,7 @@ vi.mock("./device-build", () => ({ downloadBuild, unpackBuild, sweepBuilds }));
 vi.mock("./device-id", () => ({ deviceId }));
 vi.mock("./qa-grants", () => ({ requireGrant }));
 vi.mock("./browser-shell", async (importOriginal) => ({ ...(await importOriginal<typeof import("./browser-shell")>()), shell }));
+vi.mock("./device-call-approvals", () => ({ APPROVAL_TOOLS: new Set(["tunnel_open", "relay_create"]), runApproval }));
 
 const { drainDeviceCalls, runDeviceCall } = await import("./device-calls");
 type DeviceCallRow = import("./device-calls").DeviceCallRow;
@@ -227,52 +229,6 @@ describe("runDeviceCall", () => {
   });
 });
 
-// A Supabase client with the chained methods this module uses, and the calls it makes recorded.
-interface FakeCalls {
-  updates: Array<{ patch: Record<string, unknown>; eqs: string[] }>;
-  selects: string[];
-}
-
-function fakeClient({ session = "token-1", pending = [] as DeviceCallRow[], claimable = true, selectError = null as { message: string } | null, answerError = null as { message: string } | null }: { session?: string | null; pending?: DeviceCallRow[]; claimable?: boolean; selectError?: { message: string } | null; answerError?: { message: string } | null } = {}) {
-  const calls: FakeCalls = { updates: [], selects: [] };
-  const table = () => {
-    // The chain: update().eq().eq().select() for a claim, update().eq() for an answer,
-    // select().eq().eq().eq().order().limit().overrideTypes() for the pending rows.
-    const chain: Record<string, unknown> = {};
-    // The answer's chain ends at the first eq(), and the claim's at the second.
-    const first = {
-      then: (resolve: (v: unknown) => unknown) => resolve({ error: answerError }),
-    } as Record<string, unknown>;
-    chain.eq = vi.fn(() => ({
-      ...first,
-      eq: vi.fn((column: string) => {
-        calls.updates.at(-1)?.eqs.push(column);
-        return { select: vi.fn(() => Promise.resolve({ data: claimable ? [{ id: "call-1" }] : [], error: null })) };
-      }),
-    }));
-    chain.update = vi.fn((patch: Record<string, unknown>) => {
-      calls.updates.push({ patch, eqs: [] });
-      return chain;
-    });
-    chain.select = vi.fn((columns: string) => {
-      calls.selects.push(columns);
-      const q = {
-        eq: vi.fn(() => q),
-        order: vi.fn(() => q),
-        limit: vi.fn(() => q),
-        overrideTypes: vi.fn(() => Promise.resolve(selectError ? { data: null, error: selectError } : { data: pending, error: null })),
-      };
-      return q;
-    });
-    return chain;
-  };
-  const client = {
-    auth: { getSession: vi.fn(() => Promise.resolve({ data: { session: session === null ? null : { access_token: session } } })) },
-    from: vi.fn(() => table()),
-  } as unknown as SupabaseClient;
-  return { client, calls };
-}
-
 describe("drainDeviceCalls", () => {
   it("claims a pending row, runs it, and answers it done", async () => {
     tool("tap");
@@ -282,6 +238,16 @@ describe("drainDeviceCalls", () => {
     // The claim set status claimed, then the answer set status done.
     expect(calls.updates.map((u) => u.patch.status)).toEqual(["claimed", "done"]);
     expect(calls.updates.at(-1)?.patch).toMatchObject({ status: "done" });
+  });
+
+  it("runs a worker's tunnel approval without a QA grant, beside the device calls", async () => {
+    tool("tap");
+    runApproval.mockResolvedValueOnce({ approved: true, until: 5 });
+    requireGrant.mockClear();
+    const { client, calls } = fakeClient({ pending: [row({ tool: "tunnel_open", args: { tunnel: "t" } })] });
+    await drainDeviceCalls(client, "user-1");
+    await vi.waitFor(() => expect(calls.updates.at(-1)?.patch).toMatchObject({ status: "done", result: { approved: true, until: 5 } }));
+    expect(requireGrant).not.toHaveBeenCalled();
   });
 
   it("skips a row it can't claim", async () => {

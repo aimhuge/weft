@@ -56,9 +56,12 @@ export function hasFinishedTurn(card: Card, live: boolean): boolean {
   return Boolean(card.turns) || (Boolean(card.sessionId) && !live);
 }
 
-export default function CardActions({ onSend, onDelete, marksInPane = false, ...marks }: CardMarkProps & {
+// skills: the Skills menu, on a host that runs a skill as a message (lib/project-host.ts runSkill). onDelete left out:
+// the card's host has no delete, so there's no trash button.
+export default function CardActions({ onSend, onDelete, skills = true, marksInPane = false, ...marks }: CardMarkProps & {
   onSend: (text: string) => Promise<void>;
-  onDelete: () => void;
+  onDelete?: () => void;
+  skills?: boolean;
   // The browser pane shows the marks in its toolbar, so the header leaves them out.
   marksInPane?: boolean;
 }) {
@@ -69,7 +72,7 @@ export default function CardActions({ onSend, onDelete, marksInPane = false, ...
   // Deleting asks first, unless the user ticked "Don't ask again" (lib/delete-confirm.ts).
   const askToDelete = () => {
     if (!shouldConfirmDelete()) {
-      onDelete();
+      onDelete?.();
       return;
     }
     setDeleting(true);
@@ -77,9 +80,9 @@ export default function CardActions({ onSend, onDelete, marksInPane = false, ...
 
   return (
     <>
-      <CrashGuard inline what="skill menu"><SkillMenu cwd={card.cwd} disabled={live} onRun={(skill) => onSend(`/${skill}`)} /></CrashGuard>
+      {skills && <CrashGuard inline what="skill menu"><SkillMenu cardId={card.id} cwd={card.cwd} disabled={live} onRun={(skill) => onSend(`/${skill}`)} /></CrashGuard>}
       {!marksInPane && <CardMarks {...marks} />}
-      {!hasFinishedTurn(card, live) && <button
+      {onDelete && !hasFinishedTurn(card, live) && <button
         onClick={askToDelete}
         title="Delete card"
         aria-label="Delete card"
@@ -94,7 +97,7 @@ export default function CardActions({ onSend, onDelete, marksInPane = false, ...
           onCancel={() => setDeleting(false)}
           onConfirm={() => {
             setDeleting(false);
-            onDelete();
+            onDelete?.();
           }}
         />
       )}

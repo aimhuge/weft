@@ -16,6 +16,8 @@ vi.mock("./webhook-forward", () => ({ createRelay: vi.fn() }));
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "weft-webhook-tools-"));
 process.env.WEFT_DATA = dir;
 vi.stubEnv("WEFT_SHELL_URL", "http://127.0.0.1:4567");
+// The Mac's tools (a worker's relay is lib/webhook-tools-worker.test.ts), even when this suite runs on a worker.
+vi.stubEnv("WEFT_WORKER", "");
 vi.mock("./shell-token", () => ({ shellToken: () => "tok" }));
 const wt = await import("./webhook-tools");
 const registry = await import("./webhooks");

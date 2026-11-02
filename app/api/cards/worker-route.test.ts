@@ -1,4 +1,4 @@
-// A new thread in a worker project (app/api/cards/route.ts): the card never lands on this Mac; the run goes
+// A new thread in a worker project (app/api/cards/route.ts): the card never lands on this Mac; a card.create goes
 // to the worker instead, and a worker that's offline says so. The guard, the store and the engine are mocked.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -24,9 +24,9 @@ const handoff = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/worker-handoff", () => handoff);
 const workerBoard = vi.hoisted(() => ({
-  startWorkerThread: vi.fn(() => Promise.resolve({ commandId: "cmd-1", worker: "m1mini" })),
+  startWorkerThread: vi.fn(() => Promise.resolve({ commandId: "cmd-1", worker: "m1mini", cardId: "n1" })),
 }));
-vi.mock("@/lib/worker-board", () => workerBoard);
+vi.mock("@/lib/worker-new-thread", () => workerBoard);
 
 const cardsRoute = await import("./route");
 
@@ -34,23 +34,22 @@ const post = (body: unknown) => new Request("http://localhost/api/cards", { meth
 
 beforeEach(() => {
   vi.clearAllMocks();
-  workerBoard.startWorkerThread.mockResolvedValue({ commandId: "cmd-1", worker: "m1mini" });
+  workerBoard.startWorkerThread.mockResolvedValue({ commandId: "cmd-1", worker: "m1mini", cardId: "n1" });
 });
 
 describe("POST /cards in a worker project", () => {
   it("starts the thread on the worker and makes no card here", async () => {
     const res = await cardsRoute.POST(post({ cwd: "worker://w1/ling", prompt: "go", start: true }));
-    expect(await res.json()).toEqual({ card: null, start: { started: false, worker: "m1mini" } });
+    expect(await res.json()).toEqual({ card: null, start: { started: false, worker: "m1mini", cardId: "n1" } });
     expect(workerBoard.startWorkerThread).toHaveBeenCalledWith({ cwd: "worker://w1/ling", prompt: "go", start: true });
     expect(engine.createCardFromBody).not.toHaveBeenCalled();
     expect(engine.startCard).not.toHaveBeenCalled();
   });
 
-  it("says a worker project has no backlog when there's no start", async () => {
-    const res = await cardsRoute.POST(post({ cwd: "worker://w1/ling", prompt: "go" }));
-    expect(res.status).toBe(400);
-    expect(await res.json()).toEqual({ error: "A worker project has no Backlog. Start the thread instead." });
-    expect(workerBoard.startWorkerThread).not.toHaveBeenCalled();
+  it("puts the card in the worker's Backlog when there's no start", async () => {
+    const res = await cardsRoute.POST(post({ cwd: "worker://w1/ling", prompt: "go", tags: ["ui"], isolated: true }));
+    expect(res.status).toBe(200);
+    expect(workerBoard.startWorkerThread).toHaveBeenCalledWith({ cwd: "worker://w1/ling", prompt: "go", tags: ["ui"], isolated: true, start: false });
     expect(engine.createCardFromBody).not.toHaveBeenCalled();
   });
 

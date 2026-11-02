@@ -4,7 +4,7 @@
 #   curl -fsSL https://weft.zip/worker.sh | sh -s -- <enrolment token>
 #   sh install/worker.sh <enrolment token>          (from a clone)
 #
-# 1. the toolchain: git, node 20+, pnpm and git-lfs (Homebrew on macOS, apt-get on Linux)
+# 1. the toolchain: git, node 20+, pnpm and git-lfs (Homebrew on macOS, apt-get on Linux), and cloudflared pinned by hash
 # 2. Weft itself, cloned into ~/.weft-worker/weft (WEFT_WORKER_REPO picks another remote)
 # 3. enrolment: the one-time token from Weft → Settings → Sync → Workers becomes this box's own key
 # 4. a service that starts on boot and restarts on a crash: a launchd agent on macOS, a systemd user unit on Linux
@@ -24,6 +24,8 @@ OS="$(uname -s)"
 say() { printf '\033[1m==> %s\033[0m\n' "$1"; }
 die() { printf 'weft-worker: %s\n' "$1" >&2; exit 1; }
 have() { command -v "$1" >/dev/null 2>&1; }
+# A file's SHA-256: shasum ships with macOS (and Perl), sha256sum with coreutils on a bare Linux box.
+sha256() { if have sha256sum; then sha256sum "$1"; else shasum -a 256 "$1"; fi | cut -d' ' -f1; }
 
 # macOS keeps Homebrew outside a non-login shell's PATH.
 for p in /opt/homebrew/bin /usr/local/bin; do
@@ -64,7 +66,7 @@ IDB_DIR="$HOME/.weft/tools/idb-companion"
 install_idb() {
   tmp="$(mktemp -d)"
   curl -fsSL -o "$tmp/idb.tgz" "https://github.com/facebook/idb/releases/download/v$IDB_VERSION/idb-companion.universal.tar.gz" &&
-    [ "$(shasum -a 256 "$tmp/idb.tgz" | cut -d' ' -f1)" = "$IDB_SHA" ] &&
+    [ "$(sha256 "$tmp/idb.tgz")" = "$IDB_SHA" ] &&
     rm -rf "$IDB_DIR" && mkdir -p "$IDB_DIR" &&
     tar -xzf "$tmp/idb.tgz" -C "$IDB_DIR" --strip-components 1
   ok=$?
@@ -73,6 +75,69 @@ install_idb() {
 }
 if [ "$OS" = Darwin ] && [ -x /usr/bin/xcrun ] && [ ! -x "$IDB_DIR/bin/idb_companion" ]; then
   install_idb || say "Skipping idb_companion: a watched simulator stays on the slower JPEG stream"
+fi
+
+# A headless Chromium for a worker card's browser tools (docs/architecture/worker-browser.md): Chrome for Testing's
+# chrome-headless-shell, pinned by version and hash (the release publishes no digest, so the hash is of the zip as
+# downloaded). Not worth stopping for: without it open_url still uploads pages, and lib/worker-chromium.ts also finds
+# WEFT_CHROMIUM, Playwright's cache or a system Chrome. On Linux it needs the libraries Chrome does (libnss3 and friends).
+CHROMIUM_VERSION=156.0.8078.80
+CHROMIUM_DIR="$HOME/.weft/tools/chromium"
+chromium_platform() {
+  case "$OS-$(uname -m)" in
+    Darwin-arm64) echo "mac-arm64 ea615baa2e9caf0d02d1898a6562b5f8fa9c35239707dae0f592178df5b986ac" ;;
+    Darwin-x86_64) echo "mac-x64 535d417d9034cbd11e7dacd1a71aa3d6e1b525e6d5dcd2671eb2532f01481228" ;;
+    Linux-x86_64) echo "linux64 547dcd374e02961bf998f6046a267644f8502225c36bb78ca307dab32a0b3eb4" ;;
+    *) return 1 ;;
+  esac
+}
+install_chromium() {
+  platform="$(chromium_platform)" || return 1
+  name="${platform% *}"
+  sha="${platform#* }"
+  have unzip || ( install_pkgs unzip ) || return 1
+  tmp="$(mktemp -d)"
+  curl -fsSL -o "$tmp/c.zip" "https://storage.googleapis.com/chrome-for-testing-public/$CHROMIUM_VERSION/$name/chrome-headless-shell-$name.zip" &&
+    [ "$(sha256 "$tmp/c.zip")" = "$sha" ] &&
+    unzip -q "$tmp/c.zip" -d "$tmp/x" &&
+    rm -rf "$CHROMIUM_DIR" && mkdir -p "$(dirname "$CHROMIUM_DIR")" &&
+    mv "$tmp/x/chrome-headless-shell-$name" "$CHROMIUM_DIR" &&
+    echo "$CHROMIUM_VERSION" > "$CHROMIUM_DIR/VERSION"
+  ok=$?
+  rm -rf "$tmp"
+  return $ok
+}
+
+# cloudflared, which gives a worker's dev server a private address (docs/architecture/tunnels.md#on-a-worker). Weft
+# fetches the same pinned release on first use, so this only saves the first tunnel the wait. Pinned by hash: keep
+# CLOUDFLARED_VERSION and the digests equal to lib/tunnel-cloudflared.ts (lib/tunnel-cloudflared-install.test.ts checks).
+CLOUDFLARED_VERSION=2026.10.6
+CLOUDFLARED_BIN="$HOME_DIR/data/bin/cloudflared-$CLOUDFLARED_VERSION"
+sha256_of() { if have shasum; then shasum -a 256 "$1" | cut -d' ' -f1; else sha256sum "$1" | cut -d' ' -f1; fi; }
+install_cloudflared() {
+  case "$OS-$(uname -m)" in
+    Darwin-arm64) file=cloudflared-darwin-arm64.tgz sha=ea1e5105d35bbe16cee5b2f7b4742059ada341fbd35938ed827c24b85efa51c8 ;;
+    Darwin-x86_64) file=cloudflared-darwin-amd64.tgz sha=6c04a13835ca5ff29a0c6f58d17d1f3956aad1b7df1631f5b5efbc06269deded ;;
+    Linux-aarch64 | Linux-arm64) file=cloudflared-linux-arm64 sha=0ae0e179475b2c77651a718d2b376e0151f4fca5954702a84f02843a4d5fcac0 ;;
+    Linux-x86_64) file=cloudflared-linux-amd64 sha=1d356dac769d0dbf62ebe588c4034824bbff98d5790c2f844cc99e0e2f57462d ;;
+    *) return 1 ;;
+  esac
+  tmp="$(mktemp -d)"
+  curl -fsSL -o "$tmp/$file" "https://github.com/cloudflare/cloudflared/releases/download/$CLOUDFLARED_VERSION/$file" &&
+    [ "$(sha256_of "$tmp/$file")" = "$sha" ] &&
+    { case "$file" in *.tgz) tar -xzf "$tmp/$file" -C "$tmp" cloudflared && mv "$tmp/cloudflared" "$tmp/out" ;; *) mv "$tmp/$file" "$tmp/out" ;; esac; } &&
+    chmod 755 "$tmp/out" && mkdir -p "$(dirname "$CLOUDFLARED_BIN")" && mv "$tmp/out" "$CLOUDFLARED_BIN"
+  ok=$?
+  rm -rf "$tmp"
+  return $ok
+}
+
+if [ "$(cat "$CHROMIUM_DIR/VERSION" 2>/dev/null)" != "$CHROMIUM_VERSION" ]; then
+  install_chromium || say "Skipping Chromium: a worker card's browser tools other than open_url won't run"
+fi
+
+if [ ! -x "$CLOUDFLARED_BIN" ]; then
+  install_cloudflared || say "Skipping cloudflared for now: Weft fetches it, checked the same way, on the first tunnel"
 fi
 
 # ── 2. Weft ─────────────────────────────────────────────────────────────────
