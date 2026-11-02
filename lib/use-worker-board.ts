@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { apiFetch } from "./api-client";
 import type { ProjectWorker } from "./board-view";
 import type { Card, PermissionMode, QuestionReply } from "./types";
 import { EMPTY_WORKER_BOARD, type WorkerBoard } from "./worker-project";
+import { readWorkerMarks, subscribeWorkerMarks, workerMarksSnapshot, type WorkerMarks } from "./worker-project-marks";
 import type { GrantScope } from "./cloud-commands";
 import { applyIntents, onOptimistic, overlayAll, patchNow } from "./optimistic-cards";
 import { hostOf } from "./project-host";
@@ -98,10 +99,18 @@ export function useWorkerBoard(): WorkerBoard {
 }
 
 // The board's cards with your workers' beside them: `cards` stays this Mac's own, and what's drawn reads boardCards.
+// Each worker project carries this board's pin and hide for it (lib/worker-project-marks.ts).
 export function useBoardWorkers(cards: Card[]) {
-  const workers = useWorkerBoard();
+  const read = useWorkerBoard();
+  const marks = useSyncExternalStore(subscribeWorkerMarks, workerMarksSnapshot, () => "{}");
+  const workers = useMemo(() => withMarks(read, readWorkerMarks(marks)), [read, marks]);
   const boardCards = useMemo(() => [...cards, ...workers.cards], [cards, workers.cards]);
   return { workers, boardCards };
+}
+
+export function withMarks(board: WorkerBoard, marks: Record<string, WorkerMarks>): WorkerBoard {
+  if (!board.projects.some((p) => marks[p.path])) return board;
+  return { ...board, projects: board.projects.map((p) => (marks[p.path] ? { ...p, ...marks[p.path] } : p)) };
 }
 
 interface ThreadCtx {

@@ -32,6 +32,12 @@ export function lockHash(dir: string): string {
   return createHash("sha1").update(fs.readFileSync(path.join(dir, inst.lock))).digest("hex").slice(0, 12);
 }
 
+// How `cp` clones a tree: APFS clonefile on a Mac; on Linux (a Weft Worker) a reflink where the filesystem has them
+// (btrfs, XFS) and a plain copy where it doesn't, which costs the disk but still beats a cold install.
+export function cloneArgs(platform: NodeJS.Platform = process.platform): string[] {
+  return platform === "darwin" ? ["-c", "-R"] : ["-R", "--reflink=auto"];
+}
+
 // Clones `from/node_modules` into `to/node_modules` copy-on-write. False when there's nothing to clone or the volume
 // can't clone (`cp -c` fails instead of copying), so the caller falls back to a plain install.
 export async function cloneModules(from: string, to: string): Promise<boolean> {
@@ -39,7 +45,7 @@ export async function cloneModules(from: string, to: string): Promise<boolean> {
   const dest = path.join(to, "node_modules");
   if (!fs.existsSync(src) || fs.existsSync(dest)) return false;
   try {
-    await run("/bin/cp", ["-c", "-R", src, dest], { timeout: 10 * 60_000 });
+    await run("/bin/cp", [...cloneArgs(), src, dest], { timeout: 10 * 60_000 });
     return true;
   } catch {
     fs.rmSync(dest, { recursive: true, force: true });

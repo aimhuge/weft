@@ -13,6 +13,7 @@ import type { ThreadHandlerSet } from "@/lib/thread-handlers";
 import type { planResets } from "@/lib/schedule";
 import { NO_DRAG } from "@/lib/no-drag";
 import { FilesSourceContext } from "@/lib/files-source";
+import { PaneOpenContext } from "@/lib/pane-open";
 import { ThreadTransportContext } from "@/lib/thread-transport";
 import { useProjectHost } from "@/lib/use-project-host";
 import { ToolResultSourceContext } from "@/lib/use-tool-result";
@@ -108,32 +109,35 @@ export default function OpenCard(props: OpenCardProps) {
     <ToolResultSourceContext.Provider value={host.tools}>
       <FilesSourceContext.Provider value={host.files}>
         <ThreadTransportContext.Provider value={host.thread}>
-          <Workspace
-            {...props}
-            onShare={share}
-            files={host.can("files")}
-            footer={host.kind === "cloud" ? <WorkerNote worker={props.worker} cardId={card.id} /> : null}
-            editor={host.can("files") ? <EditorColumn cardId={card.id} cwd={card.cwd} onClose={closeEditor} /> : <NotOnHost onClose={closeEditor} />}
-            pane={
-              host.can("pane") ? (
-                <BrowserPane
-                  desktop={browser.desktop}
-                  state={browser.state}
-                  obscured={browser.obscured || workspace.dragging}
-                  width={browser.width}
-                  onWidth={browser.onWidth}
-                  // The pane's X closes the pane column, not the card; the card is closed from
-                  // the thread column's X or the framed window's backdrop / Escape.
-                  onClose={closePane}
-                  expanded
-                  actions={marks}
-                />
-              ) : (
-                <WorkerPane card={card} worker={props.worker} url={page.url} browser={{ ...browser, obscured: browser.obscured || workspace.dragging }} marks={marks} onClose={closePane} />
-              )
-            }
-            show={<ShowRail card={card} hidden={false} items={shown} pageUrl={page.url} shots={page.shots} onReopen={page.open} />}
-          />
+          {/* A worker card's review tour puts its pages in this pane column, not this Mac's native pane (lib/pane-open.ts). */}
+          <PaneOpenContext.Provider value={page.open}>
+            <Workspace
+              {...props}
+              onShare={share}
+              files={host.can("files")}
+              footer={host.kind === "cloud" ? <WorkerNote worker={props.worker} cardId={card.id} /> : null}
+              editor={host.can("files") ? <EditorColumn cardId={card.id} cwd={card.cwd} onClose={closeEditor} /> : <NotOnHost onClose={closeEditor} />}
+              pane={
+                host.can("pane") ? (
+                  <BrowserPane
+                    desktop={browser.desktop}
+                    state={browser.state}
+                    obscured={browser.obscured || workspace.dragging}
+                    width={browser.width}
+                    onWidth={browser.onWidth}
+                    // The pane's X closes the pane column, not the card; the card is closed from
+                    // the thread column's X or the framed window's backdrop / Escape.
+                    onClose={closePane}
+                    expanded
+                    actions={marks}
+                  />
+                ) : (
+                  <WorkerPane card={card} worker={props.worker} url={page.url} browser={{ ...browser, obscured: browser.obscured || workspace.dragging }} marks={marks} onClose={closePane} />
+                )
+              }
+              show={<ShowRail card={card} hidden={false} items={shown} pageUrl={page.url} shots={page.shots} onReopen={page.open} />}
+            />
+          </PaneOpenContext.Provider>
         </ThreadTransportContext.Provider>
       </FilesSourceContext.Provider>
     </ToolResultSourceContext.Provider>

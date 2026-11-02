@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { api } from "@/lib/client";
+import { switchCards } from "@/lib/switch-cards";
 import { BACKENDS } from "@/lib/new-thread";
 import type { Backend, Card, Column } from "@/lib/types";
 import { BACKEND_LABELS } from "@/lib/types";
@@ -70,8 +70,8 @@ function PendingDialog({ count, onClose }: PendingDialogProps) {
 export function useSwitchAll({ byColumn, setToast, notify }: { byColumn: Map<Column, Card[]>; setToast: (msg: string) => void; notify: (err: unknown) => void }) {
   const [pending, setPending] = useState<{ ids: string[]; target: Backend; targetLabel: string } | null>(null);
   const send = useCallback(
-    async (ids: string[], target: Backend, targetLabel: string) =>
-      api.switchBackends(ids, target).then(
+    async (cards: readonly Pick<Card, "id" | "cwd" | "column" | "rateLimitHit">[], target: Backend, targetLabel: string) =>
+      switchCards(cards, target).then(
         (r) => {
           const ok = r.switched.length;
           const fail = r.failed.length;
@@ -100,7 +100,7 @@ export function useSwitchAll({ byColumn, setToast, notify }: { byColumn: Map<Col
       const targetLabel = BACKEND_LABELS[target];
       const columnLabel = column.replace("_", " ");
       if (!window.confirm(`Switch ${list.length} thread${list.length > 1 ? "s" : ""} in ${columnLabel} to ${targetLabel}?`)) return;
-      const first = await send(list.map((c) => c.id), target, targetLabel);
+      const first = await send(list, target, targetLabel);
       if (!first) return;
       if (first.pending.length) {
         setPending({ ids: first.pending, target, targetLabel });
@@ -121,7 +121,8 @@ export function useSwitchAll({ byColumn, setToast, notify }: { byColumn: Map<Col
       let stillPending = ids;
       while (stillPending.length) {
         await new Promise<void>((resolve) => setTimeout(resolve, POLL_MS));
-        const retried = await send(stillPending, target, targetLabel);
+        // Only this Mac's route leaves a card pending, so a retry is this Mac's cards.
+        const retried = await send(stillPending.map((id) => ({ id, cwd: "", column: "running" as const })), target, targetLabel);
         if (!retried) return;
         stillPending = retried.pending;
         if (!stillPending.length) break;

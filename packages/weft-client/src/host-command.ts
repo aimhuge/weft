@@ -59,7 +59,13 @@ export function remoteRefusal({ verb, args }: HostPayload): string | null {
     if (typeof args.path !== "string") return "That names no file.";
     return verb === "files.read" ? readRefusal(args.path) : writeRefusal(args.path);
   }
-  const body = verb === "card.update" ? (args.body as Record<string, unknown> | undefined) : undefined;
+  return cardFieldsRefusal(verb, args);
+}
+
+// A card update's body, or a new card's fields (card.create, its folder the row's own): no skipped prompts, and nothing
+// that moves the card's folder, agent or read scope.
+function cardFieldsRefusal(verb: HostPayload["verb"], args: HostPayload["args"]): string | null {
+  const body = verb === "card.update" ? (args.body as Record<string, unknown> | undefined) : verb === "card.create" ? args : undefined;
   if (!body) return null;
   if (body.permissionMode === "bypassPermissions") return "A request from the web can't skip permission prompts. Pick that mode on the Mac.";
   const widening = WIDENING_FIELDS.find((field) => body[field] !== undefined);
@@ -90,7 +96,7 @@ export function verbResult(verb: HostVerb, cardId: string, reply: unknown): Host
 export const hostFailure = (error: string): HostResult => ({ ok: false, error });
 
 // The verbs whose text a person typed, and so may paste files (lib/attachment-transfer.ts): the arg that holds it.
-const TEXT_ARGS: Partial<Record<HostVerb, string>> = { "card.message": "text", "card.message.edit": "text", "card.fresh": "message", "card.schedule": "text" };
+const TEXT_ARGS: Partial<Record<HostVerb, string>> = { "card.create": "prompt", "card.message": "text", "card.message.edit": "text", "card.fresh": "message", "card.schedule": "text" };
 
 export function textArgOf(verb: HostVerb): string | undefined {
   return TEXT_ARGS[verb];

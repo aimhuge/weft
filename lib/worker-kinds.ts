@@ -11,6 +11,7 @@ import { cloneBody, runBody } from "./worker-commands";
 import type { DaemonDeps } from "./worker-daemon";
 import { explainClone, type GithubStatus } from "./worker-github";
 import { sealedOf, type Sealed } from "./worker-seal";
+import type { Card } from "./types";
 
 const UNKNOWN_KIND = "This worker doesn't know that kind of request. Update it with weft-worker update.";
 // A run that names no mode edits files without asking, and still asks before a command it hasn't been allowed.
@@ -84,7 +85,10 @@ export function workerKinds(deps: DaemonDeps, ctx: KindContext): KindTable {
     if (start === false) throw new Error("A worker has no Backlog yet. Start the thread instead.");
     fields.prompt = await engine.receive(fields.prompt, command.payload);
     const cwd = await deps.checkout(command.folder, typeof repo === "string" ? repo : undefined);
-    const card = await engine.start({ ...fields, cwd, permissionMode: run?.permissionMode ?? fields.permissionMode ?? DEFAULT_MODE });
+    return published(command, await engine.start({ ...fields, cwd, permissionMode: run?.permissionMode ?? fields.permissionMode ?? DEFAULT_MODE }));
+  }
+
+  async function published(command: CloudCommandRow, card: Card): Promise<string> {
     publisher.nameFolder(card.id, command.folder);
     publisher.track(card.id);
     // The report names the card, and the database only takes a card this worker has published.
@@ -92,7 +96,14 @@ export function workerKinds(deps: DaemonDeps, ctx: KindContext): KindTable {
     return card.id;
   }
 
-  const cards = createCardCommands(engine);
+  // card.create (lib/host-api/card-create.ts): the board's id and fields, in the row's checkout. The args passed
+  // remoteRefusal, so they name no folder, agent or skipped prompts; a mode left out is a run's default.
+  async function create(command: CloudCommandRow, args: Record<string, unknown>): Promise<string> {
+    const cwd = await deps.checkout(command.folder, undefined);
+    return published(command, await engine.start({ ...args, cwd, permissionMode: args.permissionMode ?? DEFAULT_MODE }));
+  }
+
+  const cards = createCardCommands(engine, create);
   return {
     async login(command) {
       await deps.login(sealedToken(command));

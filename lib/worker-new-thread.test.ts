@@ -1,0 +1,103 @@
+// A new thread in a worker project (lib/worker-new-thread.ts): a card.create host command in the project's folder,
+// under an id picked here, with the fields the New thread dialog chose. The Supabase client is a fake.
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { fakeClient, workerRow } from "./worker-board.harness";
+
+vi.mock("./account", () => ({ accountClient: () => { throw new Error("no default client in tests"); } }));
+
+const syncOrgId = vi.fn<(client: unknown, uid: string) => Promise<string | null>>();
+vi.mock("./cloud-sync", () => ({ syncOrgId: (client: unknown, uid: string) => syncOrgId(client, uid) }));
+
+const { startWorkerThread, createArgs } = await import("./worker-new-thread");
+const { FRESH_AFTER_MS, SLOW_OFFLINE_AFTER_MS } = await import("./worker-presence");
+
+const NOW = Date.parse("2026-10-29T10:00:00.000Z");
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  syncOrgId.mockReset();
+  syncOrgId.mockResolvedValue("org-1");
+});
+
+describe("startWorkerThread", () => {
+  const online = workerRow({ last_seen_at: new Date(NOW).toISOString() });
+
+  it("builds a card.create for the worker, in the project's folder, under the id it answers with", async () => {
+    const { client, inserted } = fakeClient({ workers: [online], insertId: "cmd-3" });
+    const got = await startWorkerThread({ cwd: "worker://w1/ling", prompt: " Add dark mode " }, client, NOW);
+    expect(got).toMatchObject({ commandId: "cmd-3", worker: "m1mini" });
+    expect(got.cardId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(inserted()).toEqual({
+      org_id: "org-1",
+      kind: "host",
+      target_device: "worker:w1",
+      folder: "ling",
+      payload: { verb: "card.create", args: { id: got.cardId, prompt: "Add dark mode", start: true } },
+    });
+  });
+
+  it("carries the title, CLI, model, effort, mode, tags and isolation, and start: false for Backlog", async () => {
+    const { client, inserted } = fakeClient({ workers: [online] });
+    const body = { cwd: "worker://w1/ling", prompt: "go", title: "Dark mode", backend: "codex", model: "gpt-5", effort: "high", permissionMode: "plan", tags: ["ui"], isolated: true, branch: "feat/x", start: false };
+    await startWorkerThread(body, client, NOW);
+    expect(inserted()).toMatchObject({
+      payload: { verb: "card.create", args: { prompt: "go", title: "Dark mode", backend: "codex", model: "gpt-5", effort: "high", permissionMode: "plan", tags: ["ui"], isolated: true, branch: "feat/x", start: false } },
+    });
+  });
+
+  it("leaves out what wasn't given", () => {
+    expect(createArgs({ cwd: "x", prompt: "p", model: "", effort: undefined })).toEqual({ prompt: "p", start: true });
+  });
+
+  it("never asks for a thread that runs without asking", async () => {
+    const { client, inserted } = fakeClient({ workers: [online] });
+    await startWorkerThread({ cwd: "worker://w1/ling", prompt: "go", permissionMode: "bypassPermissions" }, client, NOW);
+    const row = inserted() as { payload: { args: Record<string, unknown> } };
+    expect(row.payload.args.permissionMode).toBeUndefined();
+    expect(JSON.stringify(row)).not.toContain("bypassPermissions");
+  });
+
+  it("refuses a path that isn't a worker project", async () => {
+    const { client, inserted } = fakeClient({ workers: [online] });
+    await expect(startWorkerThread({ cwd: "/dev/app", prompt: "go" }, client, NOW)).rejects.toThrow("That isn't a worker project.");
+    expect(inserted()).toBeNull();
+  });
+
+  it("refuses a worker that isn't yours, and inserts nothing", async () => {
+    const { client, inserted } = fakeClient({ workers: [workerRow({ id: "w2", owner_user: "u-2" })] });
+    await expect(startWorkerThread({ cwd: "worker://w1/ling", prompt: "go" }, client, NOW)).rejects.toThrow("That worker isn't one of yours anymore.");
+    expect(inserted()).toBeNull();
+  });
+
+  it("asks presence whether the worker is up", async () => {
+    const quiet = workerRow({ last_seen_at: new Date(NOW - FRESH_AFTER_MS - 1).toISOString() });
+    const gone = { read: vi.fn(() => Promise.resolve({ known: new Set(["w1"]), present: new Map() })) };
+    await expect(startWorkerThread({ cwd: "worker://w1/ling", prompt: "go" }, fakeClient({ workers: [quiet] }).client, NOW, undefined, gone)).rejects.toThrow("m1mini is offline");
+    expect(gone.read).toHaveBeenCalledWith(expect.any(Function), ["w1"], { owner: "u-1" });
+    const up = { read: () => Promise.resolve({ known: new Set(["w1"]), present: new Map([["w1", "online" as const]]) }) };
+    const { client, inserted } = fakeClient({ workers: [quiet] });
+    await startWorkerThread({ cwd: "worker://w1/ling", prompt: "go" }, client, NOW, undefined, up);
+    expect(inserted()).not.toBeNull();
+  });
+
+  it("refuses an offline worker, and inserts nothing", async () => {
+    const { client, inserted } = fakeClient({ workers: [workerRow({ last_seen_at: new Date(NOW - SLOW_OFFLINE_AFTER_MS - 1).toISOString() })] });
+    await expect(startWorkerThread({ cwd: "worker://w1/ling", prompt: "go" }, client, NOW)).rejects.toThrow("m1mini is offline, so this didn't start. Nothing ran on this Mac; try again once it's back.");
+    expect(inserted()).toBeNull();
+  });
+
+  it("refuses a run with no prompt", async () => {
+    const { client, inserted } = fakeClient({ workers: [online] });
+    await expect(startWorkerThread({ cwd: "worker://w1/ling", prompt: "  " }, client, NOW)).rejects.toThrow("Write a prompt for this thread.");
+    expect(inserted()).toBeNull();
+  });
+
+  it("refuses when signed out", async () => {
+    const { client } = fakeClient({ user: null });
+    await expect(startWorkerThread({ cwd: "worker://w1/ling", prompt: "go" }, client, NOW)).rejects.toThrow("Sign in to Weft to reach your worker.");
+  });
+
+  it("uses the account client by default", async () => {
+    await expect(startWorkerThread({ cwd: "worker://w1/ling", prompt: "go" })).rejects.toThrow("no default client in tests");
+  });
+});

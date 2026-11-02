@@ -15,7 +15,8 @@ vi.mock("./worker-transport", () => ({ sendWorkerAction: (body: unknown) => send
 const hostAct = vi.fn<(verb: string, args: unknown) => Promise<void>>(() => Promise.resolve());
 vi.mock("./project-host", () => ({ hostOf: () => ({ act: (verb: string, args: unknown) => hostAct(verb, args) }) }));
 
-const { BOARD_POLL_MS, IDLE_POLL_MS, openWorkerThread, useBoardWorkers, useWorkerBoard, withLineEvent, workerThreadHandlers } = await import("./use-worker-board");
+const { BOARD_POLL_MS, IDLE_POLL_MS, openWorkerThread, useBoardWorkers, useWorkerBoard, withLineEvent, withMarks, workerThreadHandlers } = await import("./use-worker-board");
+const { setWorkerMarks } = await import("./worker-project-marks");
 const { closeLines, retainLine } = await import("./session-lines");
 const { forget, patchNow } = await import("./optimistic-cards");
 
@@ -238,6 +239,16 @@ describe("useBoardWorkers", () => {
     });
     expect(result.current.boardCards.map((c) => c.id)).toEqual(["m1", "c1"]);
     expect(result.current.workers.projects).toHaveLength(1);
+    expect(result.current.workers.projects[0]?.pinned).toBeUndefined();
+    act(() => setWorkerMarks(project().path, { pinned: true }));
+    expect(result.current.workers.projects[0]).toMatchObject({ pinned: true });
+    act(() => setWorkerMarks(project().path, { pinned: false }));
+  });
+
+  it("lays this board's marks only on the projects they name", () => {
+    const read = board({ projects: [project(), project({ path: "worker://w1/other", folder: "other" })] });
+    expect(withMarks(read, {})).toBe(read);
+    expect(withMarks(read, { "worker://w1/other": { hidden: true } }).projects.map((p) => p.hidden)).toEqual([undefined, true]);
   });
 });
 

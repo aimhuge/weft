@@ -8,7 +8,7 @@ import { forget } from "@/lib/optimistic-cards";
 import { useBoardMenus, type BoardMenuDeps } from "./use-board-menus";
 import { makeCard } from "./test-utils";
 
-const api = vi.hoisted(() => ({ devStatus: vi.fn(), mark: vi.fn(), stop: vi.fn(), switchBackend: vi.fn(), setMode: vi.fn() }));
+const api = vi.hoisted(() => ({ devStatus: vi.fn(), mark: vi.fn(), stop: vi.fn(), switchBackend: vi.fn(), setMode: vi.fn(), send: vi.fn() }));
 vi.mock("@/lib/client", () => ({ api }));
 const fetchMock = vi.hoisted(() => vi.fn<(url: string, init?: RequestInit) => Promise<Response>>());
 vi.mock("@/lib/api-client", () => ({ API_HEADERS: {}, apiFetch: (url: string, init?: RequestInit) => fetchMock(url, init) }));
@@ -52,12 +52,12 @@ afterEach(() => {
 });
 
 describe("a worker card's menu", () => {
-  it("offers what a worker backs and not its agent, skills, folder, vault, share or delete", async () => {
+  it("offers what a worker backs, Run /<skill> too, and not its agent, folder, vault, share or delete", async () => {
     const { popupMenu, vault, open } = setup(null);
     await open();
     const ids = popupMenu.mock.calls[0]![0].flatMap((item) => ("id" in item ? [item.id] : []));
-    expect(ids).toEqual(expect.arrayContaining(["open", "rename", "stop", "star", "tags", "archive", "mode:acceptEdits"]));
-    for (const gone of ["delete", "share", "reveal", "copy-path", "skill:weft:done", "mode:bypassPermissions"]) expect(ids).not.toContain(gone);
+    expect(ids).toEqual(expect.arrayContaining(["open", "rename", "stop", "star", "tags", "archive", "mode:acceptEdits", "skill:weft:done"]));
+    for (const gone of ["delete", "share", "reveal", "copy-path", "mode:bypassPermissions"]) expect(ids).not.toContain(gone);
     expect(ids.some((id) => id.startsWith("agent:"))).toBe(false);
     // Nothing of this Mac's is read for a worker's card.
     expect(vault.grants).not.toHaveBeenCalled();
@@ -69,6 +69,8 @@ describe("a worker card's menu", () => {
     ["mode:acceptEdits", { verb: "card.update", args: { id: "c1", body: { permissionMode: "acceptEdits" } } }],
     ["switch:codex", { verb: "card.switchBackend", args: { id: "c1", backend: "codex", replay: false } }],
     ["stop", { verb: "card.stop", args: { id: "c1" } }],
+    // A skill is a message: "/<skill>" through card.message, never this Mac's send.
+    ["skill:weft:done", { verb: "card.message", args: { id: "c1", text: "/weft:done" } }],
   ])("%s goes to the worker as a host command", async (pick, sent) => {
     const { open } = setup(pick);
     await open();
@@ -80,5 +82,6 @@ describe("a worker card's menu", () => {
     expect(api.stop).not.toHaveBeenCalled();
     expect(api.switchBackend).not.toHaveBeenCalled();
     expect(api.setMode).not.toHaveBeenCalled();
+    expect(api.send).not.toHaveBeenCalled();
   });
 });

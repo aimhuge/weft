@@ -1,11 +1,13 @@
 // @vitest-environment jsdom
 // A worker's card open on the desktop board (components/ThreadPanel.tsx over lib/worker-transport.ts): its header offers
-// the controls a worker's verbs back (rename, tags, star, archive, the model picker) and nothing that only this Mac has
-// (delete, skills, the editor, Share…), and a pick goes out as a `host` command.
+// the controls a worker's verbs back (rename, tags, star, archive, the model picker, the Skills menu, the review tour)
+// and nothing that only this Mac has (delete, the skill set chip, crons, the dev server, the editor, Share…), and a pick
+// goes out as a `host` command.
 import { act, cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { forget } from "@/lib/optimistic-cards";
+import { PaneOpenContext } from "@/lib/pane-open";
 import { ThreadTransportContext } from "@/lib/thread-transport";
 import { workerTransport } from "@/lib/worker-transport";
 import { makeCard } from "./test-utils";
@@ -15,17 +17,20 @@ const api = vi.hoisted(() => ({ skills: vi.fn(() => Promise.resolve({ skills: []
 vi.mock("@/lib/client", () => ({ api }));
 vi.mock("./Composer", () => import("./composer-mock"));
 vi.mock("@/lib/use-events", () => ({ useBoardEvents: () => {} }));
+vi.mock("./ReviewPanelDevServer", () => ({ ReviewPanelDevServer: () => <p>dev server</p> }));
 const fetchMock = vi.hoisted(() => vi.fn<(url: string, init?: RequestInit) => Promise<Response>>());
 vi.mock("@/lib/api-client", () => ({ API_HEADERS: {}, apiFetch: (url: string, init?: RequestInit) => fetchMock(url, init) }));
 
 const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
 const card = makeCard({ cwd: "worker://w1/ling", backend: "claude", model: "claude-opus-5-5", tags: [] });
 
-function renderWorkerPanel(shown = card) {
-  const handlers = { onSend: vi.fn(() => Promise.resolve()), onAnswer: vi.fn(), onRename: vi.fn(), onMode: vi.fn(), onClose: vi.fn(), onStar: vi.fn(), onTags: vi.fn(), onArchive: vi.fn() };
+function renderWorkerPanel(shown = card, openPage?: (url: string) => void) {
+  const handlers = { onSend: vi.fn(() => Promise.resolve()), onAnswer: vi.fn(), onRename: vi.fn(), onMode: vi.fn(), onClose: vi.fn(), onStar: vi.fn(), onTags: vi.fn(), onArchive: vi.fn(), onDelete: vi.fn() };
   render(
     <ThreadTransportContext.Provider value={workerTransport}>
-      <ThreadPanel card={shown} items={[]} streaming="" {...handlers} />
+      <PaneOpenContext.Provider value={openPage}>
+        <ThreadPanel card={shown} items={[]} streaming="" {...handlers} />
+      </PaneOpenContext.Provider>
     </ThreadTransportContext.Provider>,
   );
   return handlers;
@@ -64,12 +69,18 @@ describe("a worker card's header", () => {
     expect(screen.getByRole("button", { name: /Switch model/ })).toBeInTheDocument();
   });
 
-  it("leaves out what only this Mac has: delete, skills, Share…, the editor", () => {
+  it("leaves out what only this Mac has: delete, the skill set chip, crons, Share…, the editor", () => {
     renderWorkerPanel();
     expect(screen.queryByRole("button", { name: "Delete card" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Share" })).toBeNull();
     expect(screen.queryByRole("button", { name: /editor/i })).toBeNull();
-    expect(screen.queryByRole("button", { name: /skill/i })).toBeNull();
+    expect(screen.queryByTitle("Skills this thread gets")).toBeNull();
+    expect(screen.queryByLabelText("Crons")).toBeNull();
+  });
+
+  it("offers the Skills menu, which sends /<skill> as a message", () => {
+    renderWorkerPanel();
+    expect(screen.getByTitle("Run a skill in this thread")).toBeInTheDocument();
   });
 
   it("sends a model pick to the worker as a host command, and never to this Mac", async () => {
@@ -87,6 +98,16 @@ describe("a worker card's header", () => {
 });
 
 describe("a worker card's reply box", () => {
+  it("keeps a ! command off the agent: the box turns amber and says a shell runs only on this Mac's cards", async () => {
+    const { onSend } = renderWorkerPanel({ ...card, sessionId: "s-1" });
+    await userEvent.type(screen.getByRole("textbox", { name: "Message" }), "!git status{Enter}");
+    expect(screen.getByText("A shell runs only on this Mac's cards.")).toBeInTheDocument();
+    expect(onSend).not.toHaveBeenCalled();
+    // Only the thread's file index read (files.list, H4) goes out; nothing that sends the message.
+    const posted = fetchMock.mock.calls.filter(([, init]) => init?.method === "POST").map(([, init]) => JSON.parse(init!.body as string) as { verb?: string });
+    expect(posted.filter((p) => p.verb !== "files.list")).toEqual([]);
+  });
+
   it("offers Send later, and schedules on the worker that holds the timer, not this Mac", async () => {
     // A card with a session: one without starts fresh, which has no Send later (lib/reply-mode.ts).
     renderWorkerPanel({ ...card, sessionId: "s-1" });
@@ -97,5 +118,23 @@ describe("a worker card's reply box", () => {
     const posted = fetchMock.mock.calls.filter(([url, init]) => url === "/api/worker-board" && init?.method === "POST").map(([, init]) => JSON.parse(init!.body as string) as { verb: string; args: { text: string; at: number } });
     expect(posted.filter((p) => p.verb !== "files.list")).toEqual([{ action: "host", cardId: "c1", verb: "card.schedule", args: { id: "c1", text: "Run the nightly", at: expect.any(Number) as number } }]);
     expect(api.schedule).not.toHaveBeenCalled();
+  });
+});
+
+describe("a worker card's review tour", () => {
+  const review = { url: "http://localhost:3000", dev: "pnpm dev", steps: [{ title: "Check the pricing page", path: "https://ling.example.com/pricing" }] };
+
+  it("shows the tour's steps, puts each step's page in the card's own pane column, and leaves the dev server out", async () => {
+    const browser = { open: vi.fn(() => Promise.resolve()), setVisible: vi.fn() };
+    (window as unknown as { weft: unknown }).weft = { browser };
+    const openPage = vi.fn();
+    renderWorkerPanel({ ...card, column: "review", review }, openPage);
+    expect(await screen.findByText("Check the pricing page")).toBeInTheDocument();
+    expect(openPage).toHaveBeenCalledWith("https://ling.example.com/pricing");
+    await userEvent.click(screen.getByRole("button", { name: /Open browser/ }));
+    expect(openPage).toHaveBeenCalledTimes(2);
+    expect(browser.open).not.toHaveBeenCalled();
+    expect(screen.queryByText("dev server")).toBeNull();
+    delete (window as unknown as { weft?: unknown }).weft;
   });
 });

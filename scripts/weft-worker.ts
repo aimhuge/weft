@@ -93,6 +93,7 @@ async function loadEngine() {
     import("../lib/worker-folders"),
     import("../lib/worker-secret-run"),
     import("../lib/worker-secret-wiring"),
+    import("../lib/worktree-pool"),
   ]);
   return { store, parts };
 }
@@ -107,7 +108,7 @@ async function startCommand() {
   const config = readWorkerConfig(home);
   if (!config) throw new Error("This box isn't enrolled yet. Run: weft-worker enrol <token>");
   const { store, parts } = await loadEngine();
-  const [{ startFeatureCard }, , , { subscribe }, { createDaemon }, { createPublisher }, paths, github, folderGrant, { createBlobStore }, { SHOW_DIR }, { setPageUpload }, { busyCards }, { recoverCards }, { resumeInterrupted }, { openScreenChannel, screenInput, setFastScreen, setScreenChannel, fastScreenOf, watcherOf }, { sendInput }, { openFastScreen }, { setDeviceLink }, { deviceLink }, { isMobileApp }, { runVerb }, { startScheduler }, { createHostLines }, { readProjectSnapshot }, { createProjectPublisher }, { listProjectFolders }, { setSecretLink, forgetOnTurnEnd }, { secretWiring }] = parts;
+  const [{ startFeatureCard }, , , { subscribe }, { createDaemon }, { createPublisher }, paths, github, folderGrant, { createBlobStore }, { SHOW_DIR }, { setPageUpload }, { busyCards }, { recoverCards }, { resumeInterrupted }, { openScreenChannel, screenInput, setFastScreen, setScreenChannel, fastScreenOf, watcherOf }, { sendInput }, { openFastScreen }, { setDeviceLink }, { deviceLink }, { isMobileApp }, { runVerb }, { startScheduler }, { createHostLines }, { readProjectSnapshot }, { createProjectPublisher }, { listProjectFolders }, { setSecretLink, forgetOnTurnEnd }, { secretWiring }, { startWorktreePool }] = parts;
   const reg = registry(rpc, config.key);
   // The public half goes on the worker's row, so Settings → Sync → Workers can seal a Claude token to this box.
   const keys = workerSealKeys(home, newSealKeys);
@@ -157,11 +158,16 @@ async function startCommand() {
     onCardChange: subscribe,
     // Send later on this worker's cards (card.schedule): the messages are saved on the cards, so one whose time passed
     // while the daemon was down goes on the first check, after recovery, so it can't race a turn being resumed.
-    onRecovered: () => startScheduler({ briefs: false }),
+    // And the worktree pool for its Isolated cards (lib/worktree-pool.ts), as the Mac's server keeps one.
+    onRecovered: () => {
+      startScheduler({ briefs: false });
+      startWorktreePool();
+    },
     line: (sealed, run) => lines.open(sealed, run),
     engine: {
+      // A card.create names its id (the board's) and may leave the card in Backlog; a run or new_card starts one.
       start: async (body) => {
-        const card = await startFeatureCard(body);
+        const card = typeof body.id === "string" ? (await runVerb("card.create", body as never)).card : await startFeatureCard(body);
         return isMobileApp(card.cwd) ? store.updateCard(card.id, { mobileApp: true }) : card;
       },
       // The same handlers the desktop's routes run (lib/host-api): a reply, an answer, a stop, a mode and the rest.

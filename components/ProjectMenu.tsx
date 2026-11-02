@@ -5,7 +5,7 @@ import { useState } from "react";
 import { api } from "@/lib/client";
 import { openChangelog } from "@/lib/changelog-open";
 import { filterProjects, folderName, plural, shortPath } from "@/lib/project-bar";
-import { workerLabel } from "@/lib/worker-project";
+import { isWorkerProject, workerLabel } from "@/lib/worker-project";
 import type { ProjectSummary } from "@/lib/board-view";
 import Icon from "./Icon";
 import ProjectCloneForm from "./ProjectCloneForm";
@@ -20,6 +20,20 @@ type Form = "none" | "open" | "new" | "clone";
 
 function errorText(err: unknown) {
   return err instanceof Error ? err.message : String(err);
+}
+
+// The selected project's Changelog and Re-seed Backlog. Both read and write files in its folder, which on a worker
+// project is on the worker, not here, so there the menu says so instead.
+function ProjectFileActions({ path, onSelect }: { path: string; onSelect: (path: string | null) => void }) {
+  if (isWorkerProject(path)) return <p className="px-2.5 py-1.5 text-[11px] text-faint">Changelog and Re-seed Backlog run on this Mac&apos;s projects only for now.</p>;
+  return (
+    <>
+      <button onClick={() => { onSelect(path); openChangelog(path); }} className={MENU_ACTION}>
+        <Icon name="list" size={14} className="text-muted" /> Changelog of {folderName(path)}
+      </button>
+      <ReseedButton path={path} className={MENU_ACTION} />
+    </>
+  );
 }
 
 export default function ProjectMenu({
@@ -180,12 +194,7 @@ export default function ProjectMenu({
 
       {variant === "desktop" && (
       <div className="shrink-0 border-t border-line p-1">
-        {selected && (
-          <button onClick={() => { onSelect(selected); openChangelog(selected); }} className={MENU_ACTION}>
-            <Icon name="list" size={14} className="text-muted" /> Changelog of {folderName(selected)}
-          </button>
-        )}
-        {selected && <ReseedButton path={selected} className={MENU_ACTION} />}
+        {selected && <ProjectFileActions path={selected} onSelect={onSelect} />}
         <button onClick={openFolder} disabled={busy} className={MENU_ACTION}>
           <Icon name="folder" size={14} className="text-muted" /> Open folder…
         </button>

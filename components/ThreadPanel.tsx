@@ -3,13 +3,14 @@
 import { useState, type ReactNode } from "react";
 import { folderName, isLive } from "@/lib/format";
 import type { PlanResets } from "@/lib/schedule";
-import { useThreadTransport } from "@/lib/thread-transport";
+import { useThreadTransport, type ThreadTransport } from "@/lib/thread-transport";
+import { cardCan, hostOf } from "@/lib/project-host";
 import type { GrantScope } from "@/lib/cloud-commands";
 import type { Card, PermissionMode, QuestionReply, ThreadItem } from "@/lib/types";
 import AwayStackChip from "./AwayStackChip";
 import BackendBadge from "./BackendBadge";
 import { BackendPicker } from "./CardView";
-import CardActions, { CardMarks, type CardMarkProps } from "./CardActions";
+import CardActions, { type CardMarkProps } from "./CardActions";
 import CrashGuard from "./CrashGuard";
 import SkillsChip from "./SkillsChip";
 import { guarded } from "./guarded";
@@ -26,6 +27,7 @@ import CopilotEmpty from "./CopilotEmpty";
 // The same panel opens a card on weft.zip, inside a transport that isn't the desktop's (lib/thread-transport.ts):
 // there the title, CLI and mode are read-only and the card's own actions (skills, star, archive, delete, the review
 // panel) stay on the Mac, so the callbacks for them are left out. Send later follows the transport (threadExtras).
+// A worker card's panel offers what its host backs (lib/project-host.ts cardCan): its skills menu, marks and tour.
 // The header's ⏰: put the thread on a cron (docs/architecture/crons.md).
 const ThreadCronButton = guarded(() => import("./ThreadCronButton"), { what: "cron button" });
 const ReviewPanel = guarded(() => import("./ReviewPanel"), { what: "review panel", className: "mx-4 my-2" });
@@ -112,7 +114,7 @@ export default function ThreadPanel({
       <header className="flex items-start gap-3 border-b border-line px-4 py-3">
         <div className="min-w-0 flex-1">
           <PanelTitle card={card} editable={!pilot && own} editTitle={editTitle} onRename={onRename} />
-          <HeaderMeta card={card} pilot={pilot} desktop={desktop} own={own} onMode={onMode} onTags={onTags} />
+          <HeaderMeta card={card} pilot={pilot} desktop={desktop} own={own} skills={cardCan(card, transport, "skills")} onMode={onMode} onTags={onTags} />
           {(card.stage || card.remaining) && (
             <div className="mt-1.5 flex min-w-0 items-center gap-1.5 text-[11.5px]">
               {card.stage && <span className="shrink-0 rounded bg-sunken px-1.5 py-px text-muted">{card.stage}</span>}
@@ -124,7 +126,7 @@ export default function ThreadPanel({
         {pilot ? (
           <NewChatButton onClick={onNewChat} />
         ) : (
-          <CardButtons card={card} live={live} desktop={desktop} own={own} onSend={onSend} onShare={onShare} onStar={onStar} onArchive={onArchive} onDelete={onDelete} marksInPane={marksInPane} />
+          <CardButtons card={card} live={live} transport={transport} onSend={onSend} onShare={onShare} onStar={onStar} onArchive={onArchive} onDelete={onDelete} marksInPane={marksInPane} />
         )}
         <ThreadCronButton card={card} items={items} />
         <EditorToggle open={editorOpen} onClick={onEditor} />
@@ -152,7 +154,7 @@ export default function ThreadPanel({
         onOpenSettings={onOpenSettings}
         onDeleted={onDeleted}
         findable
-        {...threadExtras(card, pilot, items, onSend, desktop, transport.schedule && (resets ?? {}), footer)}
+        {...threadExtras(card, pilot, items, onSend, own, transport.schedule && (resets ?? {}), footer)}
       />
     </aside>
   );
@@ -160,21 +162,19 @@ export default function ThreadPanel({
 
 const ownsCard = (t: ReturnType<typeof useThreadTransport>) => t.desktop || Boolean(t.cardEdits);
 
-// The card's buttons in the header: on this Mac its skills, marks and delete (CardActions); on another host just the
-// marks its verbs back, star and archive (a worker's card has no skills of this Mac's, no Share… and no delete verb).
-function CardButtons({ desktop, own, onSend, onDelete, marksInPane, ...marks }: Omit<CardMarkProps, "onArchive"> & {
-  desktop: boolean;
-  own: boolean;
+// The card's buttons in the header, as far as its host backs them: the Skills menu (a "/<skill>" message, on this Mac
+// and a worker), the marks, and delete (this Mac's only; a worker has no delete verb). weft.zip's panel has none.
+function CardButtons({ transport, onSend, onDelete, marksInPane, ...marks }: Omit<CardMarkProps, "onArchive"> & {
+  transport: ThreadTransport;
   onSend: (text: string) => Promise<void>;
   onDelete?: () => void;
   marksInPane?: boolean;
   onArchive?: () => void;
 }) {
-  const { onArchive } = marks;
-  if (!onArchive) return null;
-  if (desktop) return onDelete ? <CardActions {...marks} onArchive={onArchive} onSend={onSend} onDelete={onDelete} marksInPane={marksInPane} /> : null;
-  if (!own || marksInPane) return null;
-  return <CardMarks {...marks} onShare={undefined} onArchive={onArchive} />;
+  const { card, onArchive } = marks;
+  if (!onArchive || !ownsCard(transport)) return null;
+  const host = hostOf(card);
+  return <CardActions {...marks} onArchive={onArchive} onSend={onSend} onDelete={host.can("delete") ? onDelete : undefined} skills={host.can("runSkill")} marksInPane={marksInPane} />;
 }
 
 // A thread picked up from Claude Code: it continues the same session, unless a CLI elsewhere has it open right now
@@ -245,11 +245,13 @@ function PanelTitle({ card, editable, editTitle, onRename }: {
 
 // Under the title: the CLI, its mode, the folder (the copilot covers the whole board), the session and its tags.
 // Off the desktop the CLI is a badge. The mode stays the Mac's unless the transport can send it (a worker's card), and YOLO stays off the network.
-function HeaderMeta({ card, pilot, desktop, own, onMode, onTags }: {
+function HeaderMeta({ card, pilot, desktop, own, skills, onMode, onTags }: {
   card: Card;
   pilot: boolean;
   desktop: boolean;
   own: boolean;
+  // The skill set chip: this Mac's skill sets, so on its own cards only (cardCan "skills").
+  skills: boolean;
   onMode?: (mode: PermissionMode) => void;
   onTags?: () => void;
 }) {
@@ -259,7 +261,7 @@ function HeaderMeta({ card, pilot, desktop, own, onMode, onTags }: {
       {onMode && (
         <CrashGuard inline what="mode picker"><ModePicker small backend={card.backend} value={card.permissionMode} onChange={onMode} yolo={desktop && card.backend !== "puku" && !pilot} disabled={card.backend === "codex" && Boolean(card.sessionId)} /></CrashGuard>
       )}
-      {desktop && !pilot && <CrashGuard inline what="skills"><SkillsChip card={card} /></CrashGuard>}
+      {skills && !pilot && <CrashGuard inline what="skills"><SkillsChip card={card} /></CrashGuard>}
       <span className="min-w-[3rem] truncate" title={card.cwd}>{pilot ? "✨ whole board" : folderName(card.cwd)}</span>
       {card.sessionId && (
         <span className="shrink-0 whitespace-nowrap font-mono text-faint" title={card.sessionId}>· {card.sessionId.slice(0, 8)}</span>
@@ -274,8 +276,9 @@ function HeaderMeta({ card, pilot, desktop, own, onMode, onTags }: {
 
 // What the thread shows that differs for the copilot: no review panel or Send later, a few suggestions to start.
 // Send later wherever the card's host can hold the message (the transport's schedule: this Mac, a worker, weft.zip
-// through the Mac); the review panel only on the desktop, and elsewhere the caller's footer shows instead.
-function threadExtras(card: Card, pilot: boolean, items: ThreadItem[], onSend: (text: string) => Promise<void>, desktop: boolean, resets: PlanResets | undefined, footer: ReactNode) {
+// through the Mac); the review panel (its tour is card data) wherever the panel reaches the card's host, this Mac or a
+// worker, above the caller's footer; on weft.zip just the footer.
+function threadExtras(card: Card, pilot: boolean, items: ThreadItem[], onSend: (text: string) => Promise<void>, own: boolean, resets: PlanResets | undefined, footer: ReactNode) {
   if (pilot) {
     return {
       empty: <CopilotEmpty onAsk={(text) => void onSend(text).catch(() => {})} />,
@@ -283,9 +286,14 @@ function threadExtras(card: Card, pilot: boolean, items: ThreadItem[], onSend: (
     };
   }
   const scheduling = resets && { resets };
-  if (!desktop) return { footer, scheduling };
+  if (!own) return { footer, scheduling };
   return {
-    footer: card.column === "review" && <ReviewPanel card={card} items={items} onSend={onSend} />,
+    footer: (
+      <>
+        {card.column === "review" && <ReviewPanel card={card} items={items} onSend={onSend} />}
+        {footer}
+      </>
+    ),
     replaceReply: card.column === "review" && Boolean(card.review),
     scheduling,
   };

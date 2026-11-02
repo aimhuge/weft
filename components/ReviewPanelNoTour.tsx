@@ -3,13 +3,16 @@
 import { useEffect } from "react";
 import type { ThreadItem } from "@/lib/types";
 import { lastLocalUrl } from "@/lib/review-tour";
+import { usePaneOpen } from "@/lib/pane-open";
 
 // A Review card whose thread wrote no tour (it predates them): still show its app, and offer to ask for one or finish.
 export function ReviewPanelNoTour({ cardId, items, onSend }: { cardId: string; items: ThreadItem[]; onSend: (text: string) => Promise<void> }) {
   const url = lastLocalUrl(items);
+  // This Mac's pane, or a worker card's own pane column (lib/pane-open.ts).
+  const openPage = usePaneOpen(cardId);
   useEffect(() => {
-    if (url) window.weft?.browser.open(url, cardId).catch(() => {});
-  }, [url, cardId]);
+    if (url) openPage(url);
+  }, [url, openPage]);
 
   return (
     <section className="flex items-center gap-2 border-t border-line bg-accent-soft/40 px-4 py-2 text-[12px]">

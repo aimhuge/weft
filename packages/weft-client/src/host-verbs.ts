@@ -3,7 +3,9 @@
 // keyed by exactly these (`satisfies Record<HostVerb, Handler>`), so a verb added there without a name here, or the
 // other way round, fails the type check.
 export const HOST_VERBS = [
+  "card.create",
   "card.update",
+  "card.warm",
   "card.stop",
   "card.shell",
   "card.fresh",
