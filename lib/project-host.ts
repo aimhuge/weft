@@ -33,7 +33,7 @@ import { actOnLine, lineFiles, lineTransport, warmOnLine } from "./line-host";
 // `schedule` is Send later, which both hosts hold the timer for (card.schedule). `reads` is the header badges (H4);
 // `projectActs` what they start from this Mac's store and server: a re-scout, the commit walk-through and the sprint
 // plan, whose prompts point at the Mac's own routes. `cron` is the header's ⏰, this Mac's crons; `settings` says this
-// Mac's Settings (the backup model) speak for the card.
+// Mac's Settings (the backup model) speak for the card. `share` a weft.zip link to the card's cloud rows; `delete` card.delete.
 export type HostFeature =
   | "files" | "reads" | "projectActs" | "shots" | "pane" | "folder" | "agent" | "shell" | "skills" | "runSkill" | "share" | "delete" | "login" | "vault" | "dev" | "schedule" | "cron" | "settings";
 
@@ -70,6 +70,7 @@ const LOCAL: Record<HostVerb, LocalCall> = {
   "card.warm": (a) => api.warm({ cardId: a.id }),
   "card.update": (a) => call("PATCH", `/api/cards/${a.id}`, a.body),
   "card.stop": (a) => api.stop(a.id),
+  "card.delete": (a) => api.remove(a.id),
   "card.shell": (a) => api.shell(a.id, text(a.command)),
   "card.fresh": (a) => api.fresh(a.id, text(a.message)),
   "card.message": (a) => api.send(a.id, text(a.text)),
@@ -89,6 +90,8 @@ const LOCAL: Record<HostVerb, LocalCall> = {
   "files.list": (a) => filesApi.list(a.id),
   "files.read": (a) => (a.at === "HEAD" ? filesApi.head(a.id, text(a.path)) : filesApi.read(a.id, text(a.path))),
   "files.write": (a) => filesApi.write(a.id, text(a.path), text(a.text), a.baseHash as string | null | undefined),
+  "dev.open": (a) => call("POST", `/api/cards/${a.id}/dev`, { action: "open" }),
+  "dev.stop": (a) => api.devAction(a.id, "stop"),
 };
 
 export const localHost: ProjectHost = {
@@ -107,8 +110,10 @@ export const localHost: ProjectHost = {
 };
 
 // What a Worker has today: its cards' own verbs, the thread and its pages, Send later, a skill run as a message, its
-// files through the file verbs and the header's reads through its snapshots (H4). Not this Mac's pane, vault or CLIs.
-const CLOUD_FEATURES = new Set<HostFeature>(["schedule", "files", "reads", "runSkill"]);
+// files through the file verbs and the header's reads through its snapshots (H4). Share… reads the card's cloud rows,
+// which a worker publishes like a Mac's outbox (lib/card-share-worker.ts), and Delete is card.delete. Not this Mac's
+// pane, vault or CLIs.
+const CLOUD_FEATURES = new Set<HostFeature>(["schedule", "files", "reads", "runSkill", "share", "delete"]);
 
 export const cloudHost: ProjectHost = {
   kind: "cloud",

@@ -57,7 +57,7 @@ export function hasFinishedTurn(card: Card, live: boolean): boolean {
 }
 
 // skills: the Skills menu, on a host that runs a skill as a message (lib/project-host.ts runSkill). onDelete left out:
-// the card's host has no delete (a worker's), so there's no trash button.
+// the card's host has no delete, so there's no trash button.
 export default function CardActions({ onSend, onDelete, skills = true, marksInPane = false, ...marks }: CardMarkProps & {
   onSend: (text: string) => Promise<void>;
   onDelete?: () => void;

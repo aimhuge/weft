@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 // A worker's card open on the desktop board (components/ThreadPanel.tsx over lib/worker-transport.ts): its header offers
-// the controls a worker's verbs back (rename, tags, star, archive, the model picker, the Skills menu, the review tour)
-// and nothing that only this Mac has (delete, the skill set chip, crons, the dev server, the editor, Share…), and a pick
-// goes out as a `host` command.
+// the controls a worker's verbs back (rename, tags, star, archive, the model picker, the Skills menu, the review tour,
+// Share… and delete when the board gives them) and nothing that only this Mac has (the skill set chip, crons, the dev
+// server, the editor), and a pick goes out as a `host` command.
 import { act, cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -24,8 +24,8 @@ vi.mock("@/lib/api-client", () => ({ API_HEADERS: {}, apiFetch: (url: string, in
 const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
 const card = makeCard({ cwd: "worker://w1/ling", backend: "claude", model: "claude-opus-5-5", tags: [] });
 
-function renderWorkerPanel(shown = card, openPage?: (url: string) => void) {
-  const handlers = { onSend: vi.fn(() => Promise.resolve()), onAnswer: vi.fn(), onRename: vi.fn(), onMode: vi.fn(), onClose: vi.fn(), onStar: vi.fn(), onTags: vi.fn(), onArchive: vi.fn(), onDelete: vi.fn() };
+function renderWorkerPanel(shown = card, extra: { onShare?: () => void; onDelete?: () => void } = {}, openPage?: (url: string) => void) {
+  const handlers = { onSend: vi.fn(() => Promise.resolve()), onAnswer: vi.fn(), onRename: vi.fn(), onMode: vi.fn(), onClose: vi.fn(), onStar: vi.fn(), onTags: vi.fn(), onArchive: vi.fn(), ...extra };
   render(
     <ThreadTransportContext.Provider value={workerTransport}>
       <PaneOpenContext.Provider value={openPage}>
@@ -69,7 +69,7 @@ describe("a worker card's header", () => {
     expect(screen.getByRole("button", { name: /Switch model/ })).toBeInTheDocument();
   });
 
-  it("leaves out what only this Mac has: delete, the skill set chip, crons, Share…, the editor", () => {
+  it("leaves out what only this Mac has (the skill set chip, crons, the editor), and delete and Share… when the board gives none", () => {
     renderWorkerPanel();
     expect(screen.queryByRole("button", { name: "Delete card" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Share" })).toBeNull();
@@ -81,6 +81,29 @@ describe("a worker card's header", () => {
   it("offers the Skills menu, which sends /<skill> as a message", () => {
     renderWorkerPanel();
     expect(screen.getByTitle("Run a skill in this thread")).toBeInTheDocument();
+  });
+
+  it("offers Share… and delete, with the same confirm as a local card, when the board gives them", async () => {
+    const onShare = vi.fn();
+    const onDelete = vi.fn();
+    renderWorkerPanel(card, { onShare, onDelete });
+    await userEvent.click(screen.getByRole("button", { name: "Share" }));
+    expect(onShare).toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: "Delete card" }));
+    expect(onDelete).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: "Delete" }));
+    expect(onDelete).toHaveBeenCalledOnce();
+    expect(screen.getByTitle("Run a skill in this thread")).toBeInTheDocument();
+  });
+
+  it("leaves the header's marks to the pane's toolbar while the pane is open", () => {
+    render(
+      <ThreadTransportContext.Provider value={workerTransport}>
+        <ThreadPanel card={card} items={[]} streaming="" onSend={vi.fn(() => Promise.resolve())} onAnswer={vi.fn()} onClose={vi.fn()} onArchive={vi.fn()} onShare={vi.fn()} marksInPane />
+      </ThreadTransportContext.Provider>,
+    );
+    expect(screen.queryByRole("button", { name: "Share" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Archive card" })).toBeNull();
   });
 
   it("sends a model pick to the worker as a host command, and never to this Mac", async () => {
@@ -128,7 +151,7 @@ describe("a worker card's review tour", () => {
     const browser = { open: vi.fn(() => Promise.resolve()), setVisible: vi.fn() };
     (window as unknown as { weft: unknown }).weft = { browser };
     const openPage = vi.fn();
-    renderWorkerPanel({ ...card, column: "review", review }, openPage);
+    renderWorkerPanel({ ...card, column: "review", review }, {}, openPage);
     expect(await screen.findByText("Check the pricing page")).toBeInTheDocument();
     expect(openPage).toHaveBeenCalledWith("https://ling.example.com/pricing");
     await userEvent.click(screen.getByRole("button", { name: /Open browser/ }));

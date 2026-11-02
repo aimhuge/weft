@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const api = vi.hoisted(() => ({
   stop: vi.fn(),
+  remove: vi.fn(),
   shell: vi.fn(),
   fresh: vi.fn(),
   send: vi.fn(),
@@ -20,6 +21,7 @@ const api = vi.hoisted(() => ({
   unschedule: vi.fn(),
   create: vi.fn(),
   warm: vi.fn(),
+  devAction: vi.fn(),
 }));
 const call = vi.hoisted(() => vi.fn());
 vi.mock("./client", () => ({ api, call }));
@@ -119,6 +121,7 @@ describe("localHost", () => {
 
   it.each([
     ["card.stop", { id: "c1" }, api.stop, ["c1"]],
+    ["card.delete", { id: "c1" }, api.remove, ["c1"]],
     ["card.shell", { id: "c1", command: "ls" }, api.shell, ["c1", "ls"]],
     ["card.shell", { id: "c1" }, api.shell, ["c1", ""]],
     ["card.fresh", { id: "c1", message: "go" }, api.fresh, ["c1", "go"]],
@@ -144,6 +147,8 @@ describe("localHost", () => {
     ["files.write", { id: "c1", path: "a.ts", text: "x", baseHash: "h" }, filesApi.write, ["c1", "a.ts", "x", "h"]],
     ["card.warm", { id: "c1" }, api.warm, [{ cardId: "c1" }]],
     ["card.create", { id: "n1", prompt: "p", start: false }, api.create, [{ prompt: "p", start: false }]],
+    ["dev.open", { id: "c1" }, call, ["POST", "/api/cards/c1/dev", { action: "open" }]],
+    ["dev.stop", { id: "c1" }, api.devAction, ["c1", "stop"]],
   ] as const)("%s goes to the route the board has always called", async (verb, args, fn, expected) => {
     const run = localHost.act as (verb: string, args: unknown) => Promise<void>;
     await run(verb, args);
@@ -173,13 +178,14 @@ describe("cloudHost", () => {
     expect(cloudHost.files).toBe("worker files");
   });
 
-  it("has Send later, the files and the header reads (H4), a skill as a message, and none of this Mac's other features", () => {
-    for (const feature of ["projectActs", "shots", "pane", "folder", "agent", "shell", "skills", "share", "delete", "login", "vault", "dev", "cron", "settings"] as const)
+  it("has Send later, the files and the header reads (H4), a skill as a message, shares its cloud rows and deletes, and none of this Mac's other features", () => {
+    for (const feature of ["projectActs", "shots", "pane", "folder", "agent", "shell", "skills", "login", "vault", "dev", "cron", "settings"] as const)
       expect(cloudHost.can(feature)).toBe(false);
     for (const feature of ["schedule", "runSkill"] as const) {
       expect(cloudHost.can(feature)).toBe(true);
       expect(localHost.can(feature)).toBe(true);
     }
+    for (const feature of ["share", "delete"] as const) expect(cloudHost.can(feature)).toBe(true);
     expect(cloudHost.can("files")).toBe(true);
     expect(cloudHost.can("reads")).toBe(true);
   });
@@ -192,7 +198,10 @@ describe("cloudHost", () => {
   });
 
   it("trims the menu to what a worker backs", () => {
-    expect(cloudHost.menu([{ id: "rename", label: "Rename…" }, { id: "delete", label: "Delete…" }])).toEqual([{ id: "rename", label: "Rename…" }]);
+    expect(cloudHost.menu([{ id: "rename", label: "Rename…" }, { id: "reveal", label: "Reveal" }, { id: "delete", label: "Delete…" }])).toEqual([
+      { id: "rename", label: "Rename…" },
+      { id: "delete", label: "Delete…" },
+    ]);
   });
 });
 

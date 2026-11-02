@@ -225,11 +225,14 @@ async function startCommand() {
   sweep();
   const sweepTimer = setInterval(sweep, 60 * 60_000);
   subscribe(() => projects.changed());
+  // Tunnels, the relay and dev servers reach the boards through the owner's Mac (lib/worker-reach.ts).
+  const { startWorkerReach } = await import("../lib/worker-reach");
+  const stopReach = startWorkerReach(reg, console.log);
   console.log(`Weft Worker ${config.name} (${config.device}) is running. Work root ${root}.`);
   const quit = () => {
     stopProjects();
     clearInterval(sweepTimer);
-    void stop().finally(() => process.exit(0));
+    void Promise.all([stop(), stopReach()]).finally(() => process.exit(0));
   };
   restart = quit;
   process.on("SIGTERM", quit);

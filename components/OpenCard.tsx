@@ -102,7 +102,7 @@ export default function OpenCard(props: OpenCardProps) {
   const { host, items: shown, page } = useProjectHost(card, { items, pageUrl: browser.state.url });
   const closeEditor = () => workspace.setOpen("editor", false);
   const closePane = () => workspace.setOpen("pane", false);
-  // Share… links a card this Mac syncs; a worker's card isn't one of those.
+  // Share… links the card's cloud rows: a synced card's on this Mac, the rows a worker published for its own.
   const share = host.can("share") ? onShare : undefined;
   const marks = <PaneCardMarks card={card} onShare={share} onStar={onStar} onArchive={onArchive} />;
   return (

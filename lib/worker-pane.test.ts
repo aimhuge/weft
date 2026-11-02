@@ -5,7 +5,9 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vites
 
 const notePage = vi.hoisted(() => vi.fn());
 vi.mock("./card-page", () => ({ notePage }));
-const { onWorker, openOnWorker, ownPageCall, sessionDirs, setPageUpload } = await import("./worker-pane");
+const tunnelFor = vi.hoisted(() => vi.fn<(url: string) => { address: string } | undefined>(() => undefined));
+vi.mock("./tunnels", () => ({ tunnelFor }));
+const { onWorker, openOnWorker, ownPageCall, setPageUpload } = await import("./worker-pane");
 const { SHOW_DIR } = await import("./show-dir");
 
 fs.mkdirSync(os.homedir(), { recursive: true });
@@ -26,26 +28,6 @@ describe("onWorker", () => {
   it("reads the flag scripts/weft-worker.ts sets", () => {
     expect(onWorker({ WEFT_WORKER: "1" } as unknown as NodeJS.ProcessEnv)).toBe(true);
     expect(onWorker({} as NodeJS.ProcessEnv)).toBe(false);
-  });
-});
-
-describe("sessionDirs", () => {
-  const worker = { WEFT_WORKER: "1" } as unknown as NodeJS.ProcessEnv;
-
-  it("adds the show folder on a desktop card too", () => {
-    expect(sessionDirs(undefined, {} as NodeJS.ProcessEnv)).toEqual([SHOW_DIR]);
-    expect(sessionDirs(["/a"], {} as NodeJS.ProcessEnv)).toEqual(["/a", SHOW_DIR]);
-  });
-
-  it("adds the show folder on a worker, and nothing above it", () => {
-    expect(sessionDirs(undefined, worker)).toEqual([SHOW_DIR]);
-    expect(sessionDirs(["/a", SHOW_DIR], worker)).toEqual(["/a", SHOW_DIR]);
-  });
-
-  it("makes the folder first, because the CLI drops one that isn't there", () => {
-    fs.rmSync(SHOW_DIR, { recursive: true, force: true });
-    sessionDirs(undefined, worker);
-    expect(fs.statSync(SHOW_DIR).isDirectory()).toBe(true);
   });
 });
 
@@ -105,8 +87,18 @@ describe("openOnWorker", () => {
   });
 
   it("refuses a dev server and says why", async () => {
-    await expect(openOnWorker("c1", "http://localhost:3000")).rejects.toThrow(/dev server/);
+    await expect(openOnWorker("c1", "http://localhost:3000")).rejects.toThrow(/mcp__webhooks__tunnel/);
     expect(notePage).not.toHaveBeenCalled();
+  });
+
+  it("trades a dev server's URL for its tunnel's private address", async () => {
+    tunnelFor.mockReturnValue({ address: "https://weft.zip/t/t1" });
+    expect(await openOnWorker("c1", "http://localhost:3000")).toContain("private address https://weft.zip/t/t1.");
+    expect(notePage).toHaveBeenLastCalledWith("c1", "https://weft.zip/t/t1");
+    await openOnWorker("c1", "http://localhost:3000/a/b?x=1#h");
+    expect(notePage).toHaveBeenLastCalledWith("c1", "https://weft.zip/t/t1/a/b?x=1#h");
+    expect(tunnelFor).toHaveBeenCalledWith("http://localhost:3000/a/b?x=1#h");
+    tunnelFor.mockReturnValue(undefined);
   });
 
   it("refuses a relative or missing path", async () => {

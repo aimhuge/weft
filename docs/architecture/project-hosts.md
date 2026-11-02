@@ -27,7 +27,8 @@ engine: the daemon runs the same `lib/runner.ts`.
 | Permission mode | PATCH `permissionMode` | default/acceptEdits/auto through the `mode` command; no `plan` mid-card |
 | Model, CLI, effort on an open card | `switch-backend`, `rerun-model` | the model picker and the first-message banner's rerun, as `card.switchBackend` / `card.rerunModel` (H3); the rerun is on the card's own CLI's default (`hostRerunModel`), not this Mac's backup model |
 | Agent | PATCH `agent` | none |
-| Rename, tags, star, archive, move, delete | PATCH, `CardActions` | all but delete, as `card.update` (H3); no delete verb yet |
+| Rename, tags, star, archive, move, delete | PATCH, DELETE, `CardActions` | as `card.update` (H3), and `card.delete` (2026-11-02) |
+| Share… | `card-share`, `ShareCardDialog` | the same dialog over the rows the worker published (`lib/card-share-worker.ts`, 2026-11-02; sharing.md) |
 | ↑ edit, Restart, Fresh | `messages`, `fresh` | as host verbs (H3) |
 | "!" shell | `shell` | none: the box still turns amber and says "A shell runs only on this Mac's cards." (`shellRefusal`), sending nothing |
 | Wait, Me first, Others first | `permission` | as host verbs, on the tile and in the thread (H3) |
@@ -157,7 +158,7 @@ Mac inbox:     claim ─▶ readHostCommand ─▶ macCard ─▶ approval rule 
   checked as an `answer` (a signature in `args.auth`), and any other verb `needsElevation` names is refused while a phone
   is paired and the web may not approve, since the phone can't sign one yet. `result` is capped at 4 KB by a check
   constraint. Found by a security review before H2 shipped.
-- **Desktop-only.** None of the 14 card verbs needs the desktop; the copilot does, so `card.message` loads `lib/copilot`
+- **Desktop-only.** None of the card verbs needs the desktop; the copilot does, so `card.message` loads `lib/copilot`
   only for it, and both hosts refuse the copilot before the verb ("That thread isn't on this worker."). `lib/host-api` imports
   relatively, because the daemon runs under jiti, which doesn't read the `@/` alias.
 - **Attachments:** the inbox receives pasted files and the web composer sends them since H3c (below). The board's UI for it is H3 (below).
@@ -181,8 +182,8 @@ board ── hostFor(card.cwd) ─┬─ localHost: thread = localTransport, act
   (then reloads). The same verb and args while one is on its way joins it instead of sending another; an opposite one
   is sent after it and the worker runs them in order (a row can't be taken back). The thread's Stop and mode picker
   send the same `card.stop` and `card.update` as the tile and the menu. `can(feature)` is all true on the
-  Mac and false on a worker for `files`, `shots`, `pane`, `folder`, `agent`, `shell`, `skills`, `share`, `delete`,
-  `login`, `vault` and `dev`. `menu` trims a card's right-click menu (`lib/card-menu-remote.ts`). `hostFor` and
+  Mac and false on a worker for `files`, `shots`, `pane`, `folder`, `agent`, `shell`, `skills`,
+  `login`, `vault` and `dev` (`schedule`, `share` and `delete` are true on both; Delete and Share… below). `menu` trims a card's right-click menu (`lib/card-menu-remote.ts`). `hostFor` and
   `hostOf(card)` are the only place that reads `worker://`, for the code H3 touched; `localColumns`, the header badges and
   the drawers still use `localPath` (H4).
 - **The tile and the menu.** `use-board-cards` draws every card with `handlersFor` (`lib/card-handlers-host.ts`): this
@@ -208,14 +209,14 @@ board ── hostFor(card.cwd) ─┬─ localHost: thread = localTransport, act
 - **Board parity** (2026-11-02), [below](#board-parity-as-built).
 - **Open-card parity** (2026-11-02). The right-click menu keeps Run /<skill> (a `card.message`) and plan mode. The header
   gates on `cardCan(card, transport, feature)` (`lib/project-host.ts`): the transport reaches the card's host and the
-  host has the feature, so `runSkill` (the Skills menu, listed by the transport's `listSkills`) shows on a worker card and
-  `skills` (the chip), `cron` (⏰), `delete` and `settings` don't. The review tour shows on a worker card, its pages put in
+  host has the feature, so `runSkill` (the Skills menu, listed by the transport's `listSkills`), `share` and `delete` show on
+  a worker card and `skills` (the chip), `cron` (⏰) and `settings` don't. The review tour shows on a worker card, its pages put in
   the card's pane column through `PaneOpenContext` (`lib/pane-open.ts`, from `useProjectHost`'s `page.open`), with no dev
   server step (`hostFor(cwd).can("dev")`). ⌘F reads the whole thread (`searchThread`, `lib/worker-thread-reads.ts`), the
   thread's pictures are signed blob refs (`useWorkerView`, `lib/worker-blob-view.ts`; page refs stay refs for the rail and
   the pane), the first-message banner reruns on the card's CLI's default (`hostRerunModel`), and "!" shows the amber box
   with "A shell runs only on this Mac's cards." instead of sending (`shellRefusal`, `ReplyBox` `noShell`).
-- **Not yet.** Delete, Share… and the agent on a worker card; the editor and file links (H4); the header badges, terminal
+- **Not yet.** The agent on a worker card; the editor and file links (H4); the header badges, terminal
   and drawers on a worker project (H4); the pane as the native `BrowserPane` (the worker's page still frames through
   `WebPane`); crons and the skill set chip on a worker card; a
   worker's own backup model (no worker settings sync); ⌘F over a worker card's cut tool results and sealed rows.
@@ -251,6 +252,30 @@ worker: host kind ─ readHostCommand ─ remoteRefusal ─ rules.create (no car
   over a session line that's up, never as a row.
 - **Terminal.** With a worker card open (or a worker project chosen and no card open) the terminal drawer says it isn't
   available on that worker rather than open this Mac's shell (`terminalAway`).
+
+### Delete and Share… on a worker card (as built, 2026-11-02)
+
+```
+menu / header Delete… ─ useDeleteDialog (same confirm) ─ removeOnHost(card) ─┬─ local: removeNow ─ DELETE /api/cards/<id> ─ runVerb("card.delete")
+                                                                            └─ cloud: removeNow(id, act("card.delete")) ─ host command
+worker daemon: card.delete ─ deleteCard ─ card_deleted ─ publisher putCard(deleted) ─ next changed read lists it in `removed`
+Share… ─ /api/cards/<id>/share ─ not in this Mac's store ─ lib/card-share-worker.ts finds the worker's row (no verb)
+```
+
+- **`card.delete`** (`lib/host-api/card-delete.ts`, in `HOST_VERBS`): ends the CLI, keeps a picked-up session dismissed,
+  drops the card and an isolated card's worktree, refuses the copilot. `app/api/cards/[id]` DELETE is now its wrapper
+  (behind `guard()`, so `elevated: false`). `remoteRefusal` lets it through: deleting your own card narrows what a card
+  can touch, and only a command the worker's owner made reaches the worker. Both hosts already refuse the copilot and a
+  card they don't run before the verb.
+- **Drawn at once.** `removeOnHost` (`lib/card-handlers-host.ts`) is the one delete every caller uses (the menu's
+  `removeCard`, the first-message banner, the worker thread's `onDelete`). A worker's delete goes through `sendNow`:
+  the card stays hidden after the worker says yes, since the last read still has it until the publisher's deleted row
+  lands, and a reload after `STOP_SETTLE_MS` (a whole read, which leaves deleted rows out) takes over; a queued one stays
+  hidden until it runs, a refusal brings it back.
+- **Share…** needs no verb: the cloud rows suffice (sharing.md#a-worker-card).
+- **UI.** `remoteMenu` keeps `share` and `delete`; the thread header's `CardButtons` draws `CardActions` for a worker
+  card too (`skills={false}`), so Share… and the not-yet-finished card's delete sit where a local card's do, with no new
+  row or chip.
 
 ### Composer parity (H3b, as built)
 

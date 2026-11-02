@@ -12,6 +12,7 @@ import type { ReadProject } from "./project-reads";
 import type { ThreadTransport } from "./thread-transport";
 import type { ToolResultSource } from "./use-tool-result";
 
+const NOT_ON_WEB = /^(share|delete)$/;
 const WEB_FEATURES = new Set<HostFeature>(["schedule"]);
 
 // No header badges or editor on weft.zip yet (H4's reads and files.* are the desktop's): `can` says so, and a caller
@@ -33,7 +34,9 @@ export function webHost(acts: Pick<CloudHostActs, "act">, thread: ThreadTranspor
       const { id, ...rest } = args as { id: string } & Record<string, unknown>;
       return acts.act(verb, id, rest);
     },
-    menu: remoteMenu,
+    // Share… and Delete… are a worker card's on the desktop (a Mac builds the link, its store owns the delete); weft.zip
+    // has neither yet, so its menu is the remote one without them.
+    menu: (items) => remoteMenu(items.filter((item) => !("id" in item) || !NOT_ON_WEB.test(item.id))),
     // A browser tab holds no session line, so nothing is warmed ahead of a reply (a worker's warm is line-only).
     warm: () => {},
   };

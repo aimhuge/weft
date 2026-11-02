@@ -14,6 +14,13 @@ describe("a host command on a worker", () => {
     expect(d.report).toHaveBeenCalledWith("cmd-1", "done", "card-1", null, { ok: true, cardId: "card-1" });
   });
 
+  it("deletes its own card from the network: the worker drops it and the publisher marks its row deleted", async () => {
+    const d = makeDeps();
+    await d.daemon.runOne(host("card.delete"));
+    expect(d.host).toHaveBeenCalledWith("card.delete", { id: "card-1" });
+    expect(d.report).toHaveBeenCalledWith("cmd-1", "done", "card-1", null, { ok: true, cardId: "card-1" });
+  });
+
   it("writes a read verb's answer into the result: the worker's own skills for the card", async () => {
     const d = makeDeps();
     d.host.mockResolvedValueOnce({ skills: [{ name: "deploy", description: "Ship it", source: "project" }] });

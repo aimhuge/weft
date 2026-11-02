@@ -82,3 +82,22 @@ describe("a relay with a tunnel open", () => {
     expect(saved).toHaveLength(3);
   });
 });
+
+describe("a worker's relay", () => {
+  const onWorker = { ...relay, worker_id: "w1" };
+
+  it("goes through the worker's tunnel like a Mac's", async () => {
+    vi.stubGlobal("fetch", () => Promise.resolve(new Response("ok", { status: 200 })));
+    expect((await send(store({ relay: () => Promise.resolve(onWorker) }))).status).toBe(200);
+    expect(saved).toEqual([]);
+  });
+
+  it("stores nothing with the tunnel closed, so the provider retries rather than a Mac dropping it", async () => {
+    vi.stubGlobal("fetch", () => Promise.resolve(new Response("", { status: 502 })));
+    const res = await send(store({ relay: () => Promise.resolve(onWorker) }));
+    expect(res.status).toBe(503);
+    expect(saved).toEqual([]);
+    const closed = await send(store({ relay: () => Promise.resolve({ ...onWorker, tunnel_id: null }) }));
+    expect(closed.status).toBe(503);
+  });
+});

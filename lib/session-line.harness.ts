@@ -99,6 +99,11 @@ export const flush = async () => {
     await new Promise((done) => setImmediate(done));
   }
 };
+// Flushes until a condition holds (up to 200 turns), for work that waits on Web Crypto's thread pool, which a fixed
+// number of turns can outrun on a busy machine.
+export const flushUntil = async (done: () => boolean) => {
+  for (let i = 0; i < 200 && !done(); i++) await flush();
+};
 export function last(): FakePc {
   const pc = seen.pcs.at(-1);
   if (!pc) throw new Error("No peer yet.");
@@ -107,8 +112,9 @@ export function last(): FakePc {
 
 export async function answer(pc = last(), offer: LineOffer | undefined = seen.offers.at(-1)) {
   if (!offer) throw new Error("No offer yet.");
+  const before = pc.remote.length;
   seen.topics.get(offer.topic)?.(await sealAnswer(offer.key, "the answer"));
-  await flush();
+  await flushUntil(() => pc.remote.length > before);
   return pc;
 }
 

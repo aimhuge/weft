@@ -4,6 +4,7 @@
 import { act, cleanup, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MenuItem } from "@/lib/card-menu";
+import { rememberDeleteConfirm } from "@/lib/delete-confirm";
 import { forget } from "@/lib/optimistic-cards";
 import { useBoardMenus, type BoardMenuDeps } from "./use-board-menus";
 import { makeCard } from "./test-utils";
@@ -33,7 +34,7 @@ function setup(pick: string | null) {
   const open = () => act(async () => {
     await menus!.onCardMenu(card, { preventDefault: vi.fn(), stopPropagation: vi.fn() } as unknown as React.MouseEvent);
   });
-  return { popupMenu, vault, deps, open };
+  return { popupMenu, vault, deps, open, menus: () => menus };
 }
 
 // The `host` commands sent to /api/worker-board.
@@ -52,12 +53,12 @@ afterEach(() => {
 });
 
 describe("a worker card's menu", () => {
-  it("offers what a worker backs, Run /<skill> too, and not its agent, folder, vault, share or delete", async () => {
+  it("offers what a worker backs, Run /<skill>, Share… and Delete… too, and not its agent, folder or vault", async () => {
     const { popupMenu, vault, open } = setup(null);
     await open();
     const ids = popupMenu.mock.calls[0]![0].flatMap((item) => ("id" in item ? [item.id] : []));
-    expect(ids).toEqual(expect.arrayContaining(["open", "rename", "stop", "star", "tags", "archive", "mode:acceptEdits", "skill:weft:done"]));
-    for (const gone of ["delete", "share", "reveal", "copy-path", "mode:bypassPermissions"]) expect(ids).not.toContain(gone);
+    expect(ids).toEqual(expect.arrayContaining(["open", "rename", "stop", "star", "tags", "share", "archive", "delete", "mode:acceptEdits", "skill:weft:done"]));
+    for (const gone of ["reveal", "copy-path", "mode:bypassPermissions"]) expect(ids).not.toContain(gone);
     expect(ids.some((id) => id.startsWith("agent:"))).toBe(false);
     // Nothing of this Mac's is read for a worker's card.
     expect(vault.grants).not.toHaveBeenCalled();
@@ -83,5 +84,17 @@ describe("a worker card's menu", () => {
     expect(api.switchBackend).not.toHaveBeenCalled();
     expect(api.setMode).not.toHaveBeenCalled();
     expect(api.send).not.toHaveBeenCalled();
+  });
+
+  it("opens Share… for it, and deletes it through the board's remove (straight away when told not to ask)", async () => {
+    rememberDeleteConfirm(true);
+    const shared = setup("share");
+    await shared.open();
+    expect(shared.menus()!.sharing).toBe(card);
+    cleanup();
+    const deleted = setup("delete");
+    await deleted.open();
+    expect(deleted.deps.remove).toHaveBeenCalledWith(card);
+    rememberDeleteConfirm(false);
   });
 });

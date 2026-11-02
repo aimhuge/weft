@@ -7,6 +7,7 @@ import type { TagInfo, TagRow } from "./tags";
 // that hold them: naming a server module's type still makes Turbopack resolve that module (node:fs,
 // node:child_process), and a browser chunk can't hold those — the board failed to compile.
 import type { Webhook, WebhookInput, WebhookPatch } from "./webhook-types";
+import type { WorkerDevGroup } from "./worker-dev-list";
 import type { IntakeResult } from "./intake-types";
 import type { CloneJob } from "./clone-progress-types";
 import type { CloudSyncStatus } from "./cloud-sync-view";
@@ -278,7 +279,7 @@ export const api = {
   devAction: (id: string, action: "start" | "restart" | "stop") =>
     call<{ status: DevServerStatus }>("POST", `/api/cards/${id}/dev`, { action }),
   // The rail's Services drawer: every process Weft spawned (thread CLIs, dev servers, terminals), with CPU and memory.
-  services: () => call<{ services: ServiceEntry[]; launchers?: DevLauncher[]; machine?: MachineInfo }>("GET", "/api/services"),
+  services: () => call<{ services: ServiceEntry[]; launchers?: DevLauncher[]; workers?: WorkerDevGroup[]; machine?: MachineInfo }>("GET", "/api/services"),
   launchDev: (cwd: string, command: string) => call<{ ok: true; result: "started" | "restarted"; id: string }>("POST", "/api/services", { action: "launch", cwd, command }),
   serviceAction: (body: { action: "kill"; id?: string; pid?: number } | { action: "restart"; id: string }) =>
     call<{ ok: true }>("POST", "/api/services", body),

@@ -10,7 +10,7 @@ import type { Card, PermissionMode, QuestionReply, ThreadItem } from "@/lib/type
 import AwayStackChip from "./AwayStackChip";
 import BackendBadge from "./BackendBadge";
 import { BackendPicker } from "./CardView";
-import CardActions, { type CardMarkProps } from "./CardActions";
+import CardActions, { CardMarks, type CardMarkProps } from "./CardActions";
 import CrashGuard from "./CrashGuard";
 import SkillsChip from "./SkillsChip";
 import { guarded } from "./guarded";
@@ -163,7 +163,7 @@ export default function ThreadPanel({
 const ownsCard = (t: ReturnType<typeof useThreadTransport>) => t.desktop || Boolean(t.cardEdits);
 
 // The card's buttons in the header, as far as its host backs them: the Skills menu (a "/<skill>" message, on this Mac
-// and a worker), the marks, and delete (this Mac's only; a worker has no delete verb). weft.zip's panel has none.
+// and a worker), the marks (Share… when its host can), and delete (this Mac's, and a worker's through card.delete).
 function CardButtons({ transport, onSend, onDelete, marksInPane, ...marks }: Omit<CardMarkProps, "onArchive"> & {
   transport: ThreadTransport;
   onSend: (text: string) => Promise<void>;
@@ -174,7 +174,10 @@ function CardButtons({ transport, onSend, onDelete, marksInPane, ...marks }: Omi
   const { card, onArchive } = marks;
   if (!onArchive || !ownsCard(transport)) return null;
   const host = hostOf(card);
-  return <CardActions {...marks} onArchive={onArchive} onSend={onSend} onDelete={host.can("delete") ? onDelete : undefined} skills={host.can("runSkill")} marksInPane={marksInPane} />;
+  const skills = host.can("runSkill");
+  const del = host.can("delete") ? onDelete : undefined;
+  if (del || skills) return <CardActions {...marks} onArchive={onArchive} onSend={onSend} onDelete={del} skills={skills} marksInPane={marksInPane} />;
+  return transport.desktop || marksInPane ? null : <CardMarks {...marks} onArchive={onArchive} />;
 }
 
 // A thread picked up from Claude Code: it continues the same session, unless a CLI elsewhere has it open right now

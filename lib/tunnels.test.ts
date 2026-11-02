@@ -14,12 +14,13 @@ const m = vi.hoisted(() => ({
   stops: 0,
   quickFails: 0,
   hooks: [] as { name: string; relayId?: string; target: string }[],
+  updateError: null as string | null,
 }));
 
 vi.mock("./store", () => ({ DATA_DIR: dir }));
 vi.mock("./site", () => ({ SITE: "https://weft.zip" }));
 vi.mock("./webhooks", () => ({ listWebhooks: () => m.hooks }));
-vi.mock("./browser-tools", () => ({ shell: () => Promise.resolve({ approved: m.approved }) }));
+vi.mock("./browser-shell", () => ({ shell: () => Promise.resolve({ approved: m.approved }) }));
 vi.mock("./tunnel-cloudflared", () => ({
   ensureCloudflared: () => Promise.resolve("/bin/cloudflared"),
   startQuickTunnel: (_bin: string, _port: number, onExit: () => void) => {
@@ -43,20 +44,22 @@ vi.mock("./account", () => ({
       update: (fields: Record<string, unknown>) => ({
         eq: (_col: string, id: string) => {
           m.updates.push({ table, fields, id });
-          return Promise.resolve({ error: null });
+          return Promise.resolve({ error: m.updateError ? { message: m.updateError } : null });
         },
       }),
     }),
   }),
 }));
 
-const { closeTunnel, listTunnels, MAX_HOURS, openTunnel, tunnelAddress } = await import("./tunnels");
+const { closeLeftovers, closeTunnel, listTunnels, MAX_HOURS, openTunnel, readRecords, tunnelAddress, tunnelFor } = await import("./tunnels");
 const TARGET = "http://localhost:4000/";
 const open = (hours?: number) => openTunnel({ folder: "/p", target: TARGET, hours });
 const published = () => m.updates.filter((u) => u.table === "tunnels").map((u) => u.fields);
 
 beforeEach(() => {
-  Object.assign(m, { session: { user: { id: "me" } }, approved: true, updates: [], inserts: [], exits: [], stops: 0, quickFails: 0, hooks: [] });
+  // The Mac's host (a worker's is lib/tunnels-worker.test.ts), even when this suite itself runs on a worker.
+  vi.stubEnv("WEFT_WORKER", "");
+  Object.assign(m, { session: { user: { id: "me" } }, approved: true, updates: [], inserts: [], exits: [], stops: 0, quickFails: 0, hooks: [], updateError: null });
   fs.rmSync(path.join(dir, "tunnels.json"), { force: true });
 });
 afterEach(async () => {
@@ -87,7 +90,7 @@ describe("opening a tunnel", () => {
   it("refuses Weft's own port", async () => {
     vi.stubEnv("PORT", "4000");
     await expect(open()).rejects.toThrow(/Weft's own port/);
-    vi.unstubAllEnvs();
+    vi.stubEnv("PORT", "");
   });
 
   it("returns the one already open, and keeps its address the next time", async () => {
@@ -95,6 +98,13 @@ describe("opening a tunnel", () => {
     expect((await open()).id).toBe(first.id);
     await closeTunnel(first.id);
     expect((await open()).id).toBe(first.id);
+  });
+
+  it("shares one open between calls that overlap, so a slow approval can't start two", async () => {
+    const [a, b] = await Promise.all([open(), open()]);
+    expect(b.id).toBe(a.id);
+    expect(m.exits).toHaveLength(1);
+    expect(listTunnels()).toHaveLength(1);
   });
 
   it("caps how long one stays open", async () => {
@@ -146,5 +156,60 @@ describe("while it's open", () => {
     expect(m.stops).toBe(1);
     expect(published().at(-1)).toMatchObject({ public_url: null, ticket_secret: null, expires_at: null });
     await expect(closeTunnel("gone")).resolves.toBeUndefined();
+  });
+});
+
+describe("finding and tidying", () => {
+  it("finds the open tunnel to a localhost URL's server, from any folder", async () => {
+    const t = await open();
+    expect(tunnelFor("http://localhost:4000/a?b=1")?.id).toBe(t.id);
+    expect(tunnelFor("http://localhost:5000/")).toBeUndefined();
+    expect(tunnelFor("not a url")).toBeUndefined();
+  });
+
+  it("closes on the row what a last process left published, and keeps going past a failure", async () => {
+    const t = await open();
+    fs.writeFileSync(
+      path.join(dir, "tunnels.json"),
+      JSON.stringify({ tunnels: [{ id: t.id, folder: "/p", name: "a", target: TARGET }, { id: "old", folder: "/p", name: "old", target: "http://localhost:1/" }] }),
+    );
+    m.updates = [];
+    await closeLeftovers();
+    expect(m.updates.map((u) => u.id)).toEqual(["old"]);
+    expect(readRecords()).toHaveLength(2);
+  });
+
+  it("reads a record file with no list as none", () => {
+    fs.writeFileSync(path.join(dir, "tunnels.json"), "{}");
+    expect(readRecords()).toEqual([]);
+  });
+
+  it("ignores cloudflared ending after its tunnel closed", async () => {
+    const t = await open();
+    await closeTunnel(t.id);
+    m.exits[0]!();
+    expect(listTunnels()).toEqual([]);
+  });
+
+  it("warns, and carries on, when a relay can't be linked", async () => {
+    m.hooks = [{ name: "stripe", relayId: "r1", target: "http://localhost:4000/api/stripe" }];
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    m.updateError = null;
+    const original = m.updates.push.bind(m.updates);
+    m.updates.push = (...items) => {
+      m.updateError = items.some((u) => u.table === "webhook_relays") ? "rls" : null;
+      return original(...items);
+    };
+    await open();
+    expect(warn).toHaveBeenCalledWith("Tunnel: couldn't link stripe: rls");
+    warn.mockRestore();
+  });
+
+  it("logs a leftover it couldn't close", async () => {
+    fs.writeFileSync(path.join(dir, "tunnels.json"), JSON.stringify({ tunnels: [{ id: "old", folder: "/p", name: "old", target: "http://localhost:1/" }] }));
+    m.updateError = "denied";
+    const log = vi.fn();
+    await closeLeftovers(log);
+    expect(log).toHaveBeenCalledWith("Tunnel old: denied");
   });
 });

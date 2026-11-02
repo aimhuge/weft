@@ -12,7 +12,9 @@ describe("webHost", () => {
     await expect(host.act("card.update", { id: "c1", body: { starred: true } })).resolves.toBeUndefined();
     expect(act).toHaveBeenCalledWith("card.update", "c1", { body: { starred: true } });
     expect(host.kind).toBe("cloud");
-    expect(host.menu).toBe(remoteMenu);
+    const ids = (host.menu([{ id: "star", label: "Star" }, { id: "share", label: "Share…" }, { id: "delete", label: "Delete…" }, { id: "reveal", label: "Reveal" }]) as { id: string }[]).map((i) => i.id);
+    expect(ids).toEqual(["star"]);
+    expect(host.menu([{ id: "star", label: "Star" }])).toEqual(remoteMenu([{ id: "star", label: "Star" }]));
   });
 
   it("offers Send later and none of a Mac's own features", () => {

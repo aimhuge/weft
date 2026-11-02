@@ -26,7 +26,7 @@ import { switchSpare } from "./spare-switch";
 import { backendEnv, refillsSpare } from "./puku-idle";
 import { subagentEnv, subagentModelFor, subagentPrompt, type SubagentModel } from "./subagents";
 import { weftMcpServers } from "./weft-mcp";
-import { sessionDirs } from "./worker-pane";
+import { sessionDirs } from "./show-dir";
 import { promptsBuild, weftSystemPrompt } from "./weft-prompts";
 import { CODEX_CODE, driveCodex } from "./codex-runner";
 import { GOOSE_RUNNER_CODE, driveGoose } from "./goose-runner";

@@ -103,6 +103,22 @@ own signature.
 Existing relay rows keep their deliveries in `webhook_deliveries` flowing, but stop accepting new ones until the
 local Weft recreates them with a known provider and a sealed secret.
 
+## On a worker
+
+Built 2026-11-02 (migration `20261102190000_worker_tunnels.sql`, not applied). A worker has neither a Weft session nor the
+vault, so `mcp__webhooks__relay` on a worker card (`lib/relay-worker.ts`) asks its owner's Mac with a `relay_create`
+device call carrying names only: the provider, the secret's vault name, the checkout's GitHub repo and the target.
+
+- **The Mac** (`lib/device-call-approvals.ts`) checks each, finds its own clone of that repo (`localRepos`), so the vault
+  is the one keyed by the same remote, seals the secret through `POST /webhooks/relay-seal` after Touch ID as for its own
+  relays, and inserts the `webhook_relays` row as the owner with `worker_id`, `worker_origin` (the server) and
+  `tunnel_path` (the route), plus `tunnel_id` when that worker already has a tunnel to the server open. It answers the
+  relay id and URL; the worker keeps them on its webhook. A Mac with no clone of the repo says so.
+- **Deliveries** reach the route only through the worker's tunnel: `worker_tunnel_open` links the worker's relays for that
+  server, close unlinks them. With no tunnel, or one that didn't reach the route, the deployed relay answers **503** and
+  stores nothing (`lib/webhook-relay.ts`), so the provider retries later; a stored row would be dropped by a Mac that
+  doesn't know the relay. The relay still reads a database without `worker_id` (a 400 retries the old select).
+
 ## The drawer
 
 `components/WebhooksDrawer.tsx`, `lib/use-webhooks.ts` (loads through `/api/webhooks`, polls while open so

@@ -92,6 +92,29 @@ The top of the Services drawer, above the usage summary (`components/DevLauncher
 - In the services list below, a row whose `cardId` is still on the board names its card as a button (`ServiceName`),
   which opens it through the rail's `onOpenCard`.
 
+## On a worker
+
+Built 2026-11-02 (migration `20261102190000_worker_tunnels.sql`, not applied). `mcp__devservers__start`, `status` and
+`stop` already ran on a worker, spawning in the daemon's process; what was missing was a way for the board to see them.
+
+- **Published** (`lib/worker-dev-servers.ts`): every 10 s the daemon reads `listDev()` and, when it changed, puts up to
+  20 rows on its `cloud_workers.dev_servers` (`worker_set_dev_servers`, key-checked, capped at 16 KB): card id, folder name,
+  command (inline env values redacted; no card title, since a card travels sealed and the whole workspace reads the
+  row), localhost url, state, and the `/t/<id>` address when a tunnel to that server is open.
+- **Read** (`lib/worker-dev-list.ts`): `GET /api/services` adds `workers`, your own headless workers' rows read with your
+  session (the migration grants `select (dev_servers)`, since the table's grants are per column); a database without
+  the column, or signed out, gives none. The worker wrote the row, so an `address` that isn't weft.zip's own
+  `/t/<uuid>` is dropped (`lib/tunnel-link.ts`), and `dev.open`'s answer is held to the same check.
+- **Shown** (`components/WorkerDevServers.tsx`, under the Dev servers section): "On m1mini", one row per server, filtered
+  to the picked project by folder name. **Open** opens the address in the pane when one is open; otherwise it sends the
+  `dev.open` host verb (`lib/host-api/dev-servers.ts`, `lib/worker-dev-acts.ts`), which opens a tunnel on the worker
+  after your Touch ID on this Mac (tunnels.md#on-a-worker) and answers the address in the command's `result`. It waits
+  up to 6 minutes for that, since a person is involved. **Stop** sends `dev.stop`. The pane is the native one, so `/t`
+  needs a weft.zip sign-in there once.
+- **Locally** the same verbs mount on `POST /api/cards/:id/dev` as `open` and `stop`.
+- **The vault's env** (H8): `devSecrets` (`lib/secret-run.ts`) gives a worker's run `{}` until the sealed `secret_use`
+  lands; the hook is that call in `startDev`.
+
 ## Stopping one task
 
 Separately, every running row in the task strip has a ■ Stop (`app/api/cards/[id]/tasks/[taskId]/stop` →

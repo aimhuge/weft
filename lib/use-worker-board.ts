@@ -9,6 +9,7 @@ import { readWorkerMarks, subscribeWorkerMarks, workerMarksSnapshot, type Worker
 import type { GrantScope } from "./cloud-commands";
 import { applyIntents, onOptimistic, overlayAll, patchNow } from "./optimistic-cards";
 import { hostOf } from "./project-host";
+import { removeOnHost } from "./card-handlers-host";
 import { mergeBoard, FULL_READ_EVERY_MS } from "./worker-board-merge";
 import { clearActiveCards, markWholeRead, setActiveCards } from "./worker-poll";
 import { sendWorkerAction } from "./worker-transport";
@@ -146,6 +147,12 @@ export function workerThreadHandlers(card: Card, ctx: ThreadCtx) {
     // The same card.update the tile's menu sends (lib/use-board-menus.ts); a worker refuses YOLO from the network.
     onMode: (mode: PermissionMode) => void patchNow(card.id, { permissionMode: mode }, () => hostOf(card).act("card.update", { id: card.id, body: { permissionMode: mode } })).catch(ctx.notify),
     onRename: (title: string) => void patchNow(card.id, { title }, () => hostOf(card).act("card.update", { id: card.id, body: { title } })).catch(ctx.notify),
+    // Delete (the header's, and the first-message banner's): card.delete, the card gone from the board at once.
+    onDelete: () => {
+      ctx.select(null);
+      removeOnHost(card).catch(ctx.notify);
+    },
+    onDeleted: () => ctx.select(null),
     onClose: () => ctx.select(null),
   };
 }

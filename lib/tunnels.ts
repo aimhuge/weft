@@ -1,27 +1,23 @@
 import fs from "node:fs";
 import path from "node:path";
 import { randomBytes, randomUUID } from "node:crypto";
-import { accountClient } from "./account";
-import { shell } from "./browser-tools";
 import { globalSingleton } from "./global-singleton";
 import { SITE } from "./site";
 import { DATA_DIR } from "./store";
 import { ensureCloudflared, startQuickTunnel, type QuickTunnel } from "./tunnel-cloudflared";
 import { cleanGateTarget, startGate } from "./tunnel-gate";
-import { listWebhooks } from "./webhooks";
+import { macTunnels } from "./tunnel-mac";
+import { workerTunnels } from "./tunnel-worker";
+import type { TunnelHost, TunnelRecord } from "./tunnel-host";
 
-// Tunnels, the Mac's half (docs/architecture/tunnels.md): a public address for a local port, private to you. Each open
-// tunnel is a gate (lib/tunnel-gate.ts) with cloudflared in front of it. The URL changes on every start, so it goes on
-// a Supabase row behind the stable /t/<id>. The record in ~/.weft/tunnels.json keeps that id for the same target, so
-// an address you saved still works next time. Opening asks for Touch ID, a thread's call included. Tunnels close on
-// their expiry, and nothing reopens one after a restart.
+// Tunnels (docs/architecture/tunnels.md): a public address for a local port, private to you. Each open tunnel is a
+// gate (lib/tunnel-gate.ts) with cloudflared in front of it. The URL changes on every start, so it goes on a Supabase
+// row behind the stable /t/<id>. The record in tunnels.json keeps that id for the same target, so an address you saved
+// still works next time. Opening asks for Touch ID, a thread's call included. Tunnels close on their expiry, and nothing
+// reopens one after a restart. Who approves and who writes the row is the host's (lib/tunnel-host.ts): the Mac does
+// both itself (lib/tunnel-mac.ts); a worker asks its owner's Mac and writes through its key (lib/tunnel-worker.ts).
 
-export interface TunnelRecord {
-  id: string;
-  folder: string;
-  name: string;
-  target: string;
-}
+export type { TunnelRecord } from "./tunnel-host";
 
 export interface OpenTunnel extends TunnelRecord {
   address: string;
@@ -43,11 +39,13 @@ interface Live {
 }
 
 const live = () => globalSingleton("__weftTunnels", () => new Map<string, Live>());
+const opening = () => globalSingleton("__weftTunnelsOpening", () => new Map<string, Promise<OpenTunnel>>());
 const file = () => path.join(DATA_DIR, "tunnels.json");
 export const tunnelAddress = (id: string) => `${SITE}/t/${id}`;
-const weftPort = () => Number(process.env.PORT) || undefined;
+// A worker runs with WEFT_WORKER=1 (scripts/weft-worker.ts), read here rather than from lib/worker-pane.ts, which imports this.
+const host = (): TunnelHost => (process.env.WEFT_WORKER === "1" ? workerTunnels : macTunnels);
 
-function readRecords(): TunnelRecord[] {
+export function readRecords(): TunnelRecord[] {
   try {
     return (JSON.parse(fs.readFileSync(file(), "utf8")) as { tunnels?: TunnelRecord[] }).tunnels ?? [];
   } catch {
@@ -60,6 +58,14 @@ function saveRecord(record: TunnelRecord) {
   fs.writeFileSync(file(), JSON.stringify({ tunnels: [...readRecords().filter((r) => r.id !== record.id), record] }, null, 2));
 }
 
+// The same project and target keep their id, and so their address.
+function recordFor(folder: string, target: string, name: string): TunnelRecord {
+  const known = readRecords().find((r) => r.folder === folder && r.target === target);
+  const record = { id: known?.id ?? randomUUID(), folder, name, target };
+  saveRecord(record);
+  return record;
+}
+
 const view = (t: Live): OpenTunnel => ({ ...t.record, address: tunnelAddress(t.record.id), expiresAt: t.expiresAt });
 
 export function listTunnels(folders?: readonly string[]): OpenTunnel[] {
@@ -67,29 +73,17 @@ export function listTunnels(folders?: readonly string[]): OpenTunnel[] {
   return [...live().values()].filter((t) => !keep || keep.has(t.record.folder)).map(view);
 }
 
-async function publish(id: string, fields: { public_url: string | null; ticket_secret: string | null; expires_at: string | null }) {
-  const { error } = await accountClient()
-    .from("tunnels")
-    .update({ ...fields, updated_at: new Date().toISOString() })
-    .eq("id", id);
-  if (error) throw new Error(error.message);
-}
-
-// Points this target's webhook relays at the tunnel, or back at the stored relay, so a provider gets the route's real answer while it's open.
-async function linkRelays(target: string, tunnelId: string | null) {
-  const origin = new URL(target).origin;
-  for (const hook of listWebhooks()) {
-    if (!hook.relayId || new URL(hook.target).origin !== origin) continue;
-    const tunnel_path = tunnelId ? new URL(hook.target).pathname : null;
-    const { error } = await accountClient().from("webhook_relays").update({ tunnel_id: tunnelId, tunnel_path }).eq("id", hook.relayId);
-    if (error) console.warn(`Tunnel: couldn't link ${hook.name}: ${error.message}`);
-  }
+// The open tunnel to a localhost URL's server, from any folder: what a worker's pane trades the URL for.
+export function tunnelFor(url: string): OpenTunnel | undefined {
+  if (!URL.canParse(url)) return undefined;
+  const origin = new URL(url).origin;
+  return listTunnels().find((t) => new URL(t.target).origin === origin);
 }
 
 async function startQuick(t: Live) {
   const bin = await ensureCloudflared();
   t.quick = await startQuickTunnel(bin, t.gate.port, () => void restart(t));
-  await publish(t.record.id, { public_url: t.quick.url, ticket_secret: t.secret, expires_at: new Date(t.expiresAt).toISOString() });
+  await host().publish(t.record.id, { url: t.quick.url, secret: t.secret, expiresAt: t.expiresAt });
 }
 
 // cloudflared ended on its own. A new start means a new URL, which the same address picks up from the row.
@@ -107,43 +101,36 @@ async function restart(t: Live) {
   });
 }
 
-// The same project and target keep their id, and so their address.
-async function recordFor(folder: string, target: string, name: string): Promise<TunnelRecord> {
-  const known = readRecords().find((r) => r.folder === folder && r.target === target);
-  const id = known?.id ?? randomUUID();
-  // A plain insert: an upsert would also update id, which the table's grants leave out.
-  const { data, error: readError } = await accountClient().from("tunnels").select("id").eq("id", id).maybeSingle();
-  if (readError) throw new Error(readError.message);
-  if (!data) {
-    const { error } = await accountClient().from("tunnels").insert({ id, name });
-    if (error) throw new Error(error.message);
-  }
-  const record = { id, folder, name, target };
-  saveRecord(record);
-  return record;
-}
-
-export async function openTunnel(input: { folder: string; target: string; hours?: number }, now = Date.now()): Promise<OpenTunnel> {
-  const { data } = await accountClient().auth.getSession();
-  if (!data.session) throw new Error("Sign in to your Weft account first: a tunnel's address only lets you in.");
-  const target = cleanGateTarget(input.target, weftPort()).toString();
+export async function openTunnel(input: { folder: string; target: string; hours?: number; cardId?: string }, now = Date.now()): Promise<OpenTunnel> {
+  const h = host();
+  await h.ready();
+  const target = cleanGateTarget(input.target, h.weftPort()).toString();
   const running = [...live().values()].find((t) => t.record.folder === input.folder && t.record.target === target);
   if (running) return view(running);
-  const hours = Math.min(Math.max(input.hours ?? DEFAULT_HOURS, 0.25), MAX_HOURS);
-  const name = new URL(target).host;
-  const { approved } = (await shell("/tunnels/approve", { folder: input.folder, target, hours })) as { approved?: boolean };
-  if (!approved) throw new Error("Weft didn't get your Touch ID, so no tunnel was opened.");
+  // One open per server at a time: a worker's approval waits minutes on the Mac, and a second open meanwhile (the
+  // drawer's Open beside a thread's call) would start a second gate and cloudflared and orphan the first.
+  const key = `${input.folder}\n${target}`;
+  const pending = opening().get(key);
+  if (pending) return pending;
+  const started = startTunnel(h, input, target, now).finally(() => opening().delete(key));
+  opening().set(key, started);
+  return started;
+}
 
-  const record = await recordFor(input.folder, target, name);
+async function startTunnel(h: TunnelHost, input: { folder: string; hours?: number; cardId?: string }, target: string, now: number): Promise<OpenTunnel> {
+  const hours = Math.min(Math.max(input.hours ?? DEFAULT_HOURS, 0.25), MAX_HOURS);
+  const record = recordFor(input.folder, target, new URL(target).host);
+  const { until } = await h.approve(record, hours, input.cardId);
+
   const secret = randomBytes(32).toString("hex");
-  const gate = await startGate({ tunnelId: record.id, secret, target, weftPort: weftPort() });
-  const expiresAt = now + hours * 60 * 60 * 1000;
+  const gate = await startGate({ tunnelId: record.id, secret, target, weftPort: h.weftPort() });
+  const expiresAt = Math.min(now + hours * 60 * 60 * 1000, until ?? Infinity);
   const t: Live = { record, expiresAt, secret, gate, quick: null, restarts: 0, timer: setTimeout(() => void closeTunnel(record.id), expiresAt - now) };
   t.timer.unref();
   live().set(record.id, t);
   try {
     await startQuick(t);
-    await linkRelays(target, record.id);
+    await h.linkRelays(target, record.id);
   } catch (err) {
     await closeTunnel(record.id).catch(() => {});
     throw err;
@@ -159,6 +146,16 @@ export async function closeTunnel(id: string) {
   clearTimeout(t.timer);
   t.quick?.stop();
   await t.gate.close();
-  await linkRelays(t.record.target, null);
-  await publish(id, { public_url: null, ticket_secret: null, expires_at: null });
+  await host().linkRelays(t.record.target, null);
+  await host().unpublish(id);
+}
+
+// A worker's start: whatever the last process left published is closed, since its gate and cloudflared died with it.
+export async function closeLeftovers(log: (msg: string) => void = console.warn) {
+  for (const record of readRecords()) {
+    if (live().has(record.id)) continue;
+    await host()
+      .unpublish(record.id)
+      .catch((err: unknown) => log(`Tunnel ${record.name}: ${(err as Error).message}`));
+  }
 }

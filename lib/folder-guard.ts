@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { editedPath } from "./overlap";
 import { projectFolders } from "./project-folders";
+import { proseOf } from "./shell-text";
 import { allowedFolders } from "./settings";
 import { SHOW_DIR } from "./show-dir";
 import { DATA_DIR, getCard } from "./store";
@@ -47,8 +48,34 @@ const BASH_PATH = new RegExp(
   String.raw`(?:^|[\s=(<>|;&])"((?:${HEAD})[^"]*)"|(?:^|[\s=(<>|;&])'((?:${HEAD})[^']*)'|(?:^|[\s"'=(<>|;&])((?:~|\$HOME|\$\{HOME\})(?:\/${BARE}*)?|\.{1,2}\/${BARE}*|\/${BARE}+)`,
   "g",
 );
-const bashPaths = (command: string) =>
+const matchPaths = (command: string) =>
   [...command.matchAll(BASH_PATH)].map((m) => m[1] ?? m[2] ?? (m[3] as string).replace(/\\(.)/g, "$1"));
+
+// The paths one piece of prose adds to the line's matches. A quoted word that starts like a path matched whole; a
+// `$(…)` folded into it brings the paths in its text, which the line matched inside the substitution.
+const STARTS_AS_PATH = new RegExp(`^(?:${HEAD})`);
+function prosePaths(text: string, substituted: Set<string>): string[] {
+  const bare = matchPaths(` ${text}`);
+  return STARTS_AS_PATH.test(text) ? [text, ...bare.filter((p) => p !== text && substituted.has(p))] : bare;
+}
+
+// The paths a command reaches, less those only named in its prose: a commit message, a PR body, a heredoc written to a
+// page (lib/shell-text.ts). A nested `$(cat ~/x)` folded into a message still reaches ~/x, so its own paths stay.
+function bashPaths(command: string, depth = 0): string[] {
+  const all = matchPaths(command);
+  if (depth > 5) return all;
+  const { prose, nested } = proseOf(command);
+  if (!prose.length) return all;
+  const drop = new Map<string, number>();
+  const substituted = new Set(nested.flatMap((n) => matchPaths(n)));
+  for (const p of prose.flatMap((t) => prosePaths(t, substituted))) drop.set(p, (drop.get(p) ?? 0) + 1);
+  for (const p of nested.flatMap((n) => bashPaths(n, depth + 1))) drop.set(p, (drop.get(p) ?? 0) - 1);
+  return all.filter((p) => {
+    const n = drop.get(p) ?? 0;
+    if (n > 0) drop.set(p, n - 1);
+    return n <= 0;
+  });
+}
 const MARKERS = [".git", "package.json", "pyproject.toml", "Cargo.toml", "go.mod", "pom.xml", "build.gradle"];
 
 // The real path of a path that may not exist yet: its nearest existing ancestor, resolved, plus the rest.
@@ -118,9 +145,14 @@ export interface Outside {
 
 const verbOf = (toolName: string) => (READ_TOOLS.has(toolName) ? "read" : toolName === "Bash" ? "use" : "change");
 
+// The CLI's memory folder for a card's project, which the system prompt tells the thread to keep: the folder path with
+// every other character a dash (/Users/me/app is -Users-me-app). The secret guard opens memory folders and nothing
+// else in ~/.claude (lib/secret-guard-files.ts).
+export const memoryDir = (cwd: string, home = os.homedir()) => path.join(home, ".claude", "projects", cwd.replace(/[^a-zA-Z0-9]/g, "-"), "memory");
+
 // The first folder a tool call reaches that's neither the project, one the user granted, nor a system path.
 export function outsideFolder(toolName: string, input: Record<string, unknown>, cwd: string, granted: string[], at: Ground = ground()): Outside | undefined {
-  const mine = [cwd, ...granted].map(realish);
+  const mine = [cwd, ...granted, memoryDir(cwd, at.home)].map(realish);
   const free = at.free.map(realish);
   const fenced = (at.fenced ?? []).map(realish);
   // A Bash command's paths only count under the user's own files; /\d+/ in a script isn't a folder.

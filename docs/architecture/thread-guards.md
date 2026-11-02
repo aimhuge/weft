@@ -58,7 +58,7 @@ guard set: each is refused, or asked about, in the same words on all three.
 
 | Hook | File | Turns away |
 | --- | --- | --- |
-| Secret guard | `lib/secret-guard.ts` | reading `.env` files, Weft's data secrets, a Weft Worker's home ([what's sealed](weft-worker.md#whats-sealed-on-a-worker)), environment dumps (Bash, Read, Grep…) |
+| Secret guard | `lib/secret-guard.ts` | reading `.env` files, Weft's data secrets, a Weft Worker's home ([what's sealed](weft-worker.md#whats-sealed-on-a-worker)), environment dumps (Bash, Read, Grep…); a board thread's copy knows its card, so it may Read an attachment its user pasted in (`lib/secret-guard-pasted.ts`) |
 | Restart guard | `lib/restart-guard.ts` | killing or restarting Weft's own server, app or port while other cards' turns run; points the thread at `mcp__board__restart_weft_when_idle` |
 | Clipboard guard | `lib/clipboard-guard.ts` | reading the clipboard (`pbpaste`, `osascript` `the clipboard`, NSPasteboard, `wl-paste`, `xclip`, `xsel`) while a pairing code is open, since its link carries the pairing secret; main marks the code open in `vault/pairing-open.json` ([mobile-security.md](mobile-security.md#pairing-a-passkey)) |
 | Git guard | `lib/git-guard.ts` | git commands that throw away or hide uncommitted work in the shared tree |
@@ -164,10 +164,15 @@ would refuse it, so Weft, not the OS, decides. The paths come from the tool's fi
 Bash, from every absolute, `~/`, `$HOME` and `../` token in the command (a quoted token runs to its closing quote and
 `\ ` escapes a space, so a project in `~/My Drive` isn't read as `~/My`), and only those under the user's own files
 (home, `/Users`, `/Volumes`), a heuristic that can't see a path a script builds. Paths are resolved first (`~`, `..`,
-symlinks, a file not created yet by its nearest folder).
+symlinks, a file not created yet by its nearest folder). A path only named in prose doesn't count (2026-11-02): a commit
+message, a PR's `--title` or `--body`, a sentence `echo` prints, a heredoc written to a page (`proseOf` in
+`lib/shell-text.ts`, the same words the secret guard skips). A `$(cat ~/x)` folded into a message still reaches `~/x`,
+so its own paths stay. Before this, a marketing card stalled on "Outside the project: use ~/.weftn", which was
+`~/.weft\n` inside a quoted string.
 
 - **Never asked about**: the project (an isolated card's worktree, for it), `card.readScope`, `settings.allowedFolders`, Weft's data folder (`~/.weft`, but not `~/.weft/worktrees`: another card's worktree asks like any other folder),
-  `~/.claude`, temp dirs, `/dev`, `/tmp` and the system's tool and library paths.
+  the card's own memory folder (`~/.claude/projects/<project>/memory`, `memoryDir`; nothing else in `~/.claude`), temp
+  dirs, `/dev`, `/tmp` and the system's tool and library paths.
 - **The prompt** reads "Outside the project: read ~/Downloads" with an **Outside project** chip. The folder is the call's
   project root (nearest ancestor with a `.git`, `package.json`…, below home), else the file's folder, never home itself
   (`grantRoot`). `folderAsk` carries the question, reason and folder from the hook to `canUseTool`
@@ -399,6 +404,9 @@ The Bash guards don't match strings: `lib/shell-parse.ts` reads the line the way
 `steps()` in `lib/restart-guard.ts` turns it into every command it would run, each with the folder it runs in.
 That covers `a && b; c | d`, `$( )` and backticks, `sh -c '…'`, a heredoc fed to `bash`, `eval`, `xargs`,
 `sudo`/`env FOO=1` prefixes, and `cd x &&` carrying to the commands after it. The git guard uses the same walk.
+`lib/shell-text.ts` says which words a command takes as text rather than as a path (`textWords`: `--message`, `--body`,
+`--title`, `--notes`… for any command that doesn't run its words, `-m`/`-t`/`-b` for git, gh and glab, and echo's
+quoted sentences), so neither the secret guard nor the folder gate reads a PR body as a list of files.
 
 ## Git guard
 

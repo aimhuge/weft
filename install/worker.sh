@@ -4,7 +4,7 @@
 #   curl -fsSL https://weft.zip/worker.sh | sh -s -- <enrolment token>
 #   sh install/worker.sh <enrolment token>          (from a clone)
 #
-# 1. the toolchain: git, node 20+, pnpm and git-lfs (Homebrew on macOS, apt-get on Linux)
+# 1. the toolchain: git, node 20+, pnpm and git-lfs (Homebrew on macOS, apt-get on Linux), and cloudflared pinned by hash
 # 2. Weft itself, cloned into ~/.weft-worker/weft (WEFT_WORKER_REPO picks another remote)
 # 3. enrolment: the one-time token from Weft → Settings → Sync → Workers becomes this box's own key
 # 4. a service that starts on boot and restarts on a crash: a launchd agent on macOS, a systemd user unit on Linux
@@ -73,6 +73,33 @@ install_idb() {
 }
 if [ "$OS" = Darwin ] && [ -x /usr/bin/xcrun ] && [ ! -x "$IDB_DIR/bin/idb_companion" ]; then
   install_idb || say "Skipping idb_companion: a watched simulator stays on the slower JPEG stream"
+fi
+
+# cloudflared, which gives a worker's dev server a private address (docs/architecture/tunnels.md#on-a-worker). Weft
+# fetches the same pinned release on first use, so this only saves the first tunnel the wait. Pinned by hash: keep
+# CLOUDFLARED_VERSION and the digests equal to lib/tunnel-cloudflared.ts (lib/tunnel-cloudflared-install.test.ts checks).
+CLOUDFLARED_VERSION=2026.10.6
+CLOUDFLARED_BIN="$HOME_DIR/data/bin/cloudflared-$CLOUDFLARED_VERSION"
+sha256_of() { if have shasum; then shasum -a 256 "$1" | cut -d' ' -f1; else sha256sum "$1" | cut -d' ' -f1; fi; }
+install_cloudflared() {
+  case "$OS-$(uname -m)" in
+    Darwin-arm64) file=cloudflared-darwin-arm64.tgz sha=ea1e5105d35bbe16cee5b2f7b4742059ada341fbd35938ed827c24b85efa51c8 ;;
+    Darwin-x86_64) file=cloudflared-darwin-amd64.tgz sha=6c04a13835ca5ff29a0c6f58d17d1f3956aad1b7df1631f5b5efbc06269deded ;;
+    Linux-aarch64 | Linux-arm64) file=cloudflared-linux-arm64 sha=0ae0e179475b2c77651a718d2b376e0151f4fca5954702a84f02843a4d5fcac0 ;;
+    Linux-x86_64) file=cloudflared-linux-amd64 sha=1d356dac769d0dbf62ebe588c4034824bbff98d5790c2f844cc99e0e2f57462d ;;
+    *) return 1 ;;
+  esac
+  tmp="$(mktemp -d)"
+  curl -fsSL -o "$tmp/$file" "https://github.com/cloudflare/cloudflared/releases/download/$CLOUDFLARED_VERSION/$file" &&
+    [ "$(sha256_of "$tmp/$file")" = "$sha" ] &&
+    { case "$file" in *.tgz) tar -xzf "$tmp/$file" -C "$tmp" cloudflared && mv "$tmp/cloudflared" "$tmp/out" ;; *) mv "$tmp/$file" "$tmp/out" ;; esac; } &&
+    chmod 755 "$tmp/out" && mkdir -p "$(dirname "$CLOUDFLARED_BIN")" && mv "$tmp/out" "$CLOUDFLARED_BIN"
+  ok=$?
+  rm -rf "$tmp"
+  return $ok
+}
+if [ ! -x "$CLOUDFLARED_BIN" ]; then
+  install_cloudflared || say "Skipping cloudflared for now: Weft fetches it, checked the same way, on the first tunnel"
 fi
 
 # ── 2. Weft ─────────────────────────────────────────────────────────────────
