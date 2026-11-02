@@ -168,3 +168,25 @@ describe("a line command on a worker", () => {
     expect(old.report).toHaveBeenCalledWith("cmd-1", "failed", null, expect.stringMatching(/doesn't open lines yet/));
   });
 });
+
+describe("a worker's own settings over the host command", () => {
+  const settings = { maxThreads: 3, keepAliveMinutes: 0, worktreePool: 1, defaultBackend: "claude" };
+
+  it("reads and saves its host settings with no card, and reports none", async () => {
+    const d = makeDeps();
+    d.host.mockResolvedValueOnce({ settings });
+    await d.daemon.runOne(command({ kind: "host", payload: { verb: "settings.get", args: {} } as never }));
+    expect(d.host).toHaveBeenCalledWith("settings.get", { id: "" });
+    expect(d.report).toHaveBeenLastCalledWith("cmd-1", "done", null, null, { ok: true, cardId: "", settings });
+    d.host.mockResolvedValueOnce({ settings });
+    await d.daemon.runOne(command({ kind: "host", payload: { verb: "settings.put", args: { patch: { maxThreads: 3 } } } as never }));
+    expect(d.host).toHaveBeenLastCalledWith("settings.put", { id: "", patch: { maxThreads: 3 } });
+  });
+
+  it("never takes its folders or modes from the network", async () => {
+    const d = makeDeps();
+    await d.daemon.runOne(command({ kind: "host", payload: { verb: "settings.put", args: { patch: { allowedFolders: ["/"] } } } as never }));
+    expect(d.host).not.toHaveBeenCalled();
+    expect(d.report).toHaveBeenLastCalledWith("cmd-1", "failed", null, expect.stringMatching(/can't change allowedFolders/), expect.anything());
+  });
+});

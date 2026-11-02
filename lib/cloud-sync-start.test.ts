@@ -29,6 +29,9 @@ vi.mock("./cloud-inbox", () => ({ startCloudInbox: () => startCloudInbox() }));
 const stopRepos = vi.fn();
 const startSyncRepos = vi.fn(() => stopRepos);
 vi.mock("./cloud-sync-repos", () => ({ startSyncRepos: () => startSyncRepos() }));
+const stopSettings = vi.fn();
+const startAccountSettingsPush = vi.fn(() => stopSettings);
+vi.mock("./account-settings", () => ({ startAccountSettingsPush: () => startAccountSettingsPush() }));
 
 const { startAccountCloudSync } = await import("./cloud-sync-start");
 
@@ -43,7 +46,9 @@ describe("startAccountCloudSync", () => {
     expect(passed).toBeDefined();
     expect(startCloudInbox).toHaveBeenCalledTimes(1);
     expect(startSyncRepos).toHaveBeenCalledTimes(1);
+    expect(startAccountSettingsPush).toHaveBeenCalledTimes(1);
     end();
+    expect(stopSettings).toHaveBeenCalledTimes(1);
     expect(stop).toHaveBeenCalledTimes(1);
     expect(stopInbox).toHaveBeenCalledTimes(1);
     expect(stopRepos).toHaveBeenCalledTimes(1);

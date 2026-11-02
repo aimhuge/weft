@@ -2,7 +2,8 @@
 
 Status: **design** (2026-11-01, merged with "one engine, two transports" 2026-11-02). Phase H1 is in progress; H2 (the
 `host` command) is built ([below](#the-host-command-h2-as-built)), and so is H3, `hostFor` and one open card
-([below](#hostfor-and-one-open-card-h3-as-built)), and H3b, composer parity ([below](#composer-parity-h3b-as-built)), and H5, one host program ([below](#one-host-program-h5-as-built)), and H4, project reads and the editor
+([below](#hostfor-and-one-open-card-h3-as-built)), and H3b, composer parity ([below](#composer-parity-h3b-as-built)), and WP3, settings, limits and the game on a worker
+([below](#settings-on-a-worker-wp3)), and H5, one host program ([below](#one-host-program-h5-as-built)), and H4, project reads and the editor
 ([below](#project-reads-and-the-editor-h4-as-built)). It follows on from [weft-worker.md](weft-worker.md#worker-projects-on-the-desktop-board),
 where a Worker project shows on the desktop board but most of what a local project gets drops out.
 
@@ -35,7 +36,9 @@ engine: the daemon runs the same `lib/runner.ts`.
 | Attachments in a reply | `/api/attachments` | images and PDFs travel as blobs on `reply`, `run` and `new_card` (`lib/attachment-transfer.ts`, 2026-11-02) |
 | Send later | `desktop: true` | `card.schedule` / `card.unschedule`, the worker's daemon holding the timer (H3b) |
 | "/" skills list | `/api/skills?cwd=` | `skills.list`, the worker's own list for the card's checkout (H3b) |
-| Plan limits meter | this Mac's limits log | the card's own reading, from the worker's CLI (H3b) |
+| Plan limits meter | this Mac's limits log | the card's own reading, from the worker's CLI (H3b); the burndown from the worker's published history (WP3) |
+| Settings | this Mac's settings.json | account settings synced from the Mac, host settings per worker in Settings → Threads (WP3) |
+| Streaks and XP | this Mac's activity log | the worker's cards count too (WP3) |
 | Review panel, skills chip | `desktop: true` | none |
 | Show rail, editor | Board's open card | the show rail, in Board's own open card (H3); the editor and file links through `files.*` (H4) |
 | Backlog | Backlog column | the header's count from the worker's snapshot (H4); no Backlog column or planning |
@@ -301,6 +304,65 @@ weft.zip board ── setHostForEveryCard(webHost) ── hostOf(card) = webHost
   and the web draws plain names (its one host has no `files` or `reads` yet: `lib/web-host.ts` answers both with a refusal); the first-message banner reads settings and offers Rerun only where there are settings to open (`openSettings`),
   and Delete only where the host can (`can("delete")`). Delete, Share…, Run /skill, bulk Resume/Switch, the Local Simulator
   switch and the review panel are still desktop-only.
+
+### Settings on a worker (WP3)
+
+```
+this Mac  Settings → Save ─ PATCH /api/settings ─ pushAccountSettings ──▶ account_settings (your row, RLS own)
+          server start (+20 s) ─────────────────── startAccountSettingsPush ─┘
+worker    createSettingsSync: start, every 60 s, nudge per command (≥15 s) ─ worker_account_settings(key) ─▶ applyAccountSettings ─▶ its settings.json
+this Mac  Settings → Threads → On a worker ─ POST /api/worker-settings (elevated) ─ host row, no card ─▶ settings.get / settings.put
+worker    startWorkerLimits: startLimitPoll, then worker_set_limits(packLimits(readSamples())) ─▶ cloud_workers.limits
+board     StatusStrip on a worker card ─ /api/limits?worker= ─ workerLimitSamples ─▶ LimitBurndown + the strip's reading
+          /api/game ─ workerActivity(readWorkerBoard) ─▶ gameState({ worker }) ─ mergeWorkerEvents
+```
+
+- **Which settings a card's run reads.** The engine reads `threadPrompt` (every thread's system prompt), `automations`
+  (Done and the other column moves, `lib/automations.ts`), `doneModel`/`doneEffort` (`doneOverrides`), `pushOnDone`
+  (`/weft:done`'s push.sh reads settings.json), `subagentModel`, `backupModel` (the failed-first-message rerun),
+  `defaultBackend` (a run that names no CLI, and the limit poll), `maxThreads` (`lib/thread-slots.ts`),
+  `keepAliveMinutes` (warm CLIs), `worktreePool`, `defaultPermissionMode`, `allowedFolders` (the folder guard) and the
+  Goose provider, model and endpoint. The rest (`copilotModel`, `reviewAllModel`, issue landings, sync and worker folders,
+  the project list) are this Mac's board.
+- **Two lists, never overlapping** (`packages/weft-client/src/host-settings.ts`). `ACCOUNT_SETTINGS` are how a card
+  behaves wherever it runs: automations, push on done, the done model and effort, the subagent model, the thread
+  instructions, the backup model. They sync from your Mac to your account and every worker of yours mirrors them.
+  `HOST_SETTINGS` are what one machine carries: threads at once, keep-alive, the worktree pool, the default CLI. Settings →
+  Threads edits them per worker. **Never on either:** allowed folders, the default permission mode, the Goose provider and
+  endpoint (where a card's traffic and key go), issue, sync and worker folders. A folder grant still rides inside an answer.
+- **Sync model: pushed snapshot, mirrored.** The Mac upserts every account field explicitly (a default too, so a reset
+  resets the worker) to `public.account_settings` (`lib/account-settings.ts`), on each Save and once 20 s after start; it
+  skips a push whose snapshot hasn't changed. A worker reads it with its key (`worker_account_settings`, which returns only
+  the allowlisted keys) and writes it into its own settings.json through the same setters (`applyAccountSettings`, which
+  checks each field again, skips a bad one alone and writes only what changed), so `push.sh` and every reader see it with
+  no overlay. Chosen over a read at each turn's start because that would put a round trip on the start-a-card path: the
+  sync reads at start, every minute and on each command (`nudge`, at most every 15 s, never awaited), so a turn starts on
+  what was mirrored last, at most a minute old.
+- **Host verbs with no card.** `settings.get` and `settings.put` are `HOST_API` verbs (`lib/host-api/settings.ts`,
+  `elevated: true`) that name no card: `isHostLevelVerb` in `@weft/client`, a row built by `hostLevelRow` (`folder` and
+  `args.id` empty), read by `readHostCommand` with `id: ""` whatever the row says, run by the `host` kind's `onHost` branch
+  (`lib/host/dispatch.ts`) only when the host's `CardRules` has `hostVerb` (a worker; a Mac's settings stay in its own
+  window), reported with `card_id` null (`doneOutcome`). `remoteRefusal` refuses a `settings.put` naming any field outside
+  `HOST_SETTINGS`, and `applyHostSettings` refuses it again and checks every field before saving any. The board's side is
+  `lib/worker-host-verbs.ts` (only to a worker you enrolled) behind `POST /api/worker-settings` (elevated), followed to its
+  result by `lib/worker-host-settings.ts`; `ProjectHost.act` takes only card verbs (`CardVerb`).
+- **Settings UI.** `components/WorkerHostSettings.tsx` at the foot of Settings → Threads: a worker picker (your headless
+  workers), its four settings loaded from it, Save on worker sends only what changed. Drawn only when you have a worker.
+  Phone, Away, Dictation, Shortcuts, Sound and Laptop stay this Mac's.
+- **Limits.** The daemon starts `startLimitPoll` (`lib/worker-host-services.ts` → `lib/worker-limits.ts`), so the worker's
+  history fills between turns and its parked cards resume on its own resets, and publishes the history (newest 1,000
+  samples, packed by `lib/limits-wire.ts`) to `cloud_workers.limits` a minute in and every 5 minutes when it grew. Per worker,
+  not in H4's per-folder snapshot, because a plan is per CLI sign-in, which is per box. A worker card's strip charts it
+  (`/api/limits?worker=`, `lib/use-limit-samples.ts`), and shows its newest reading until the card reports its own.
+- **The game.** `/api/game` adds your workers' cards (`lib/worker-activity.ts`): each backfilled like a card the log never
+  saw (made, its turns on its last active day, Done), read at most every 5 minutes and never holding the game up more than
+  3 s. Not written to this Mac's activity log. `mergeWorkerEvents` drops any event whose id or card the log already has.
+- **Migration.** `supabase/migrations/20261102180000_host_settings.sql`: `account_settings` (RLS own row, 40 KB),
+  `worker_account_settings`, `cloud_workers.limits`/`limits_at` and `worker_set_limits`. Until it's applied the push and the
+  sync say nothing and change nothing, and a worker's limits don't show.
+- **Not yet.** A Run on Worker card and its worker card are two cards, so a handed-off card's local record still counts as
+  made; Agents (souls) per worker project; Goose's provider on a worker; the model pickers' "at its cap" marks from a
+  worker's limits.
 
 ### One host program (H5, as built)
 

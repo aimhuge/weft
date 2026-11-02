@@ -50,6 +50,9 @@ export const HOST_API = {
   "files.list": { elevated: false, run: lazy(() => import("./files"), "listFilesVerb") },
   "files.read": { elevated: false, run: lazy(() => import("./files"), "readFileVerb") },
   "files.write": { elevated: true, run: lazy(() => import("./files"), "writeFileVerb") },
+  // The host's own settings, for no card: only HOST_SETTINGS, and only from Weft's own window (lib/host-settings.ts).
+  "settings.get": { elevated: true, run: lazy(() => import("./settings"), "settingsGetVerb") },
+  "settings.put": { elevated: true, run: lazy(() => import("./settings"), "settingsPutVerb") },
 } satisfies Record<HostVerb, Handler>;
 
 type Table = typeof HOST_API;

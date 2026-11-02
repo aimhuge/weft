@@ -7,15 +7,19 @@ import { isBang } from "./bang";
 import type { SkillInfo } from "./card";
 import { hostRow, type CardTarget, type HostCommandRow, type HostPayload } from "./host-row";
 import { readRefusal, writeRefusal } from "./file-policy";
-import { isHostVerb, type HostVerb } from "./host-verbs";
+import { foreignSetting, type HostSettings } from "./host-settings";
+import { isHostLevelVerb, isHostVerb, type HostVerb } from "./host-verbs";
 import { fitSkills, type SkillsOnWire } from "./skills-wire";
 
 // What a host writes to `result`. Never the card or its thread: those travel sealed (cloud_cards, the outbox), and
 // the row is plain jsonb, so it says whether the verb ran and which card it touched, plus what a read verb answers
 // (RESULTS below), kept small enough for the column's 4 KB cap.
 // A verb that answers with a value too big for that (the editor's files.*) adds it as `value` when it's small, else
-// `blob`, the sha of its JSON in the workspace's blob store (lib/host-result.ts).
-export type HostResult = ({ ok: true; cardId: string; value?: unknown; blob?: string } & Partial<SkillsOnWire>) | { ok: false; error: string };
+// `blob`, the sha of its JSON in the workspace's blob store (lib/host-result.ts). A host-level verb (settings.get /
+// settings.put) touched no card: its cardId is "".
+export type HostResult =
+  | ({ ok: true; cardId: string; value?: unknown; blob?: string } & Partial<SkillsOnWire> & { settings?: HostSettings })
+  | { ok: false; error: string };
 
 const isObject = (v: unknown): v is Record<string, unknown> => Boolean(v) && typeof v === "object" && !Array.isArray(v);
 
@@ -33,6 +37,8 @@ export function readHostCommand(command: { payload: unknown }): HostPayload {
   if (typeof p.verb !== "string" || !p.verb) throw new Error("That request names no verb.");
   if (!isHostVerb(p.verb)) throw new Error(`This host doesn't run ${p.verb.slice(0, 60)}. Update it to the newest Weft.`);
   const args = isObject(p.args) ? p.args : {};
+  // A verb on the host itself names no card; its id is "" whatever the row says, so it can't reach one.
+  if (isHostLevelVerb(p.verb)) return { verb: p.verb, args: { ...args, id: "" } };
   if (typeof args.id !== "string" || !args.id) throw new Error("That request names no card.");
   if (p.verb === "card.update" && !isObject(args.body)) throw new Error("That update has no changes.");
   return { verb: p.verb, args: { ...args, id: args.id } };
@@ -50,6 +56,9 @@ const SHELL_REFUSED = "A shell command only runs from Weft's own window, not fro
 
 export function remoteRefusal({ verb, args }: HostPayload): string | null {
   if (verb === "card.shell") return SHELL_REFUSED;
+  // Only a host's own settings come from the network: never its folders, modes or guards.
+  const foreign = verb === "settings.put" ? foreignSetting(args.patch) : null;
+  if (foreign) return `A request from the web can't change ${foreign.slice(0, 40)}. Do it in Weft's own window on that machine.`;
   // A scheduled message is sent as a reply when its time comes, never run, but a "!" one would read as a command
   // waiting to run, so the network can't leave one on a card at all.
   if (verb === "card.schedule" && typeof args.text === "string" && isBang(args.text)) return SHELL_REFUSED;
@@ -78,8 +87,14 @@ export const isHostDone = (done: unknown): done is HostDone => Boolean(done) && 
 export const hostResult = (cardId: string): HostResult => ({ ok: true, cardId });
 
 // The verbs a board runs for their answer, and the part of it that goes in `result`.
-const RESULTS: Partial<Record<HostVerb, (reply: unknown) => SkillsOnWire>> = {
+const settingsOf = (reply: unknown) => {
+  const settings = (reply as { settings?: HostSettings } | undefined)?.settings;
+  return settings ? { settings } : {};
+};
+const RESULTS: Partial<Record<HostVerb, (reply: unknown) => Partial<SkillsOnWire> & { settings?: HostSettings }>> = {
   "skills.list": (reply) => fitSkills((reply as { skills?: SkillInfo[] } | undefined)?.skills ?? []),
+  "settings.get": settingsOf,
+  "settings.put": settingsOf,
 };
 
 // `result` for a verb that ran: the card, and for a read verb its answer.

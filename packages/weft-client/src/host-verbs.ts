@@ -24,6 +24,9 @@ export const HOST_VERBS = [
   "files.list",
   "files.read",
   "files.write",
+  // A host's own settings (./host-settings.ts), for no card: elevated, and only HOST_SETTINGS.
+  "settings.get",
+  "settings.put",
 ] as const;
 
 /** Every verb a host runs. HOST_API is keyed by these, and it is the allowlist a remote host checks. */
@@ -33,4 +36,15 @@ const VERBS: ReadonlySet<string> = new Set(HOST_VERBS);
 
 export function isHostVerb(verb: string): verb is HostVerb {
   return VERBS.has(verb);
+}
+
+// The verbs that act on the host itself rather than a card: their row names no card, and a host runs them only when
+// its CardRules say it takes them from the network (a worker does; a Mac's settings stay in its own window).
+export type HostLevelVerb = "settings.get" | "settings.put";
+/** The verbs that act on a card: every one but the host-level ones. */
+export type CardVerb = Exclude<HostVerb, HostLevelVerb>;
+const HOST_LEVEL: ReadonlySet<string> = new Set<HostLevelVerb>(["settings.get", "settings.put"]);
+
+export function isHostLevelVerb(verb: string): boolean {
+  return HOST_LEVEL.has(verb);
 }

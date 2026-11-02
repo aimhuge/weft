@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // default CLI. Each one refuses a value it can't honour with a 400 before any setter runs.
 
 vi.mock("next/server", () => ({ connection: async () => {} }));
+vi.mock("@/lib/account-settings", () => ({ pushAccountSettings: vi.fn(() => Promise.resolve(true)) }));
 
 vi.mock("@/lib/store", () => ({
   DATA_DIR: "/tmp/weft-api-test-data",

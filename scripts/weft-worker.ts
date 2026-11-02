@@ -93,6 +93,7 @@ async function loadEngine() {
     import("../lib/worker-folders"),
     import("../lib/worker-secret-run"),
     import("../lib/worker-secret-wiring"),
+    import("../lib/worker-host-services"),
   ]);
   return { store, parts };
 }
@@ -107,7 +108,7 @@ async function startCommand() {
   const config = readWorkerConfig(home);
   if (!config) throw new Error("This box isn't enrolled yet. Run: weft-worker enrol <token>");
   const { store, parts } = await loadEngine();
-  const [{ startFeatureCard }, , , { subscribe }, { createDaemon }, { createPublisher }, paths, github, folderGrant, { createBlobStore }, { SHOW_DIR }, { setPageUpload }, { busyCards }, { recoverCards }, { resumeInterrupted }, { openScreenChannel, screenInput, setFastScreen, setScreenChannel, fastScreenOf, watcherOf }, { sendInput }, { openFastScreen }, { setDeviceLink }, { deviceLink }, { isMobileApp }, { runVerb }, { startScheduler }, { createHostLines }, { readProjectSnapshot }, { createProjectPublisher }, { listProjectFolders }, { setSecretLink, forgetOnTurnEnd }, { secretWiring }] = parts;
+  const [{ startFeatureCard }, , , { subscribe }, { createDaemon }, { createPublisher }, paths, github, folderGrant, { createBlobStore }, { SHOW_DIR }, { setPageUpload }, { busyCards }, { recoverCards }, { resumeInterrupted }, { openScreenChannel, screenInput, setFastScreen, setScreenChannel, fastScreenOf, watcherOf }, { sendInput }, { openFastScreen }, { setDeviceLink }, { deviceLink }, { isMobileApp }, { runVerb }, { startScheduler }, { createHostLines }, { readProjectSnapshot }, { createProjectPublisher }, { listProjectFolders }, { setSecretLink, forgetOnTurnEnd }, { secretWiring }, { startHostServices }] = parts;
   const reg = registry(rpc, config.key);
   // The public half goes on the worker's row, so Settings → Sync → Workers can seal a Claude token to this box.
   const keys = workerSealKeys(home, newSealKeys);
@@ -148,6 +149,8 @@ async function startCommand() {
     },
     log: console.log,
   });
+  // Your account's settings mirrored in, and this box's plan limits polled and published (lib/worker-host-services.ts).
+  const services = startHostServices(reg, console.log);
   const daemon = createDaemon({
     reg,
     publisher,
@@ -161,11 +164,15 @@ async function startCommand() {
     line: (sealed, run) => lines.open(sealed, run),
     engine: {
       start: async (body) => {
+        services.nudge();
         const card = await startFeatureCard(body);
         return isMobileApp(card.cwd) ? store.updateCard(card.id, { mobileApp: true }) : card;
       },
       // The same handlers the desktop's routes run (lib/host-api): a reply, an answer, a stop, a mode and the rest.
-      host: (verb, args) => runVerb(verb, args as never),
+      host: (verb, args) => {
+        services.nudge();
+        return runVerb(verb, args as never);
+      },
       // A verb's result over the row's 4 KB (the editor's files.*) goes up as JSON (lib/host-result.ts).
       carry: (json) => results.put(json),
       receive: (text, payload) => receiveAttachments(text, attachmentsOf(payload), attachments, readBlob),
@@ -223,6 +230,7 @@ async function startCommand() {
   const quit = () => {
     stopProjects();
     clearInterval(sweepTimer);
+    services.stop();
     void stop().finally(() => process.exit(0));
   };
   restart = quit;

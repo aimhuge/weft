@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { hostCommand, hostFailure, hostResult, isHostDone, readHostCommand, remoteRefusal, textArgOf, verbResult } from "./host-command";
+import { hostLevelRow } from "./host-row";
+import { isHostLevelVerb } from "./host-verbs";
 
 const target = { orgId: "org-1", device: "worker:w-1", folder: "weft", cardId: "card-1" };
 const read = (payload: unknown) => readHostCommand({ payload });
@@ -113,5 +115,40 @@ describe("remoteRefusal for the editor's verbs", () => {
     expect(remoteRefusal({ verb: "files.write", args: { id: "c1", text: "x" } })).toBe("That names no file.");
     expect(remoteRefusal({ verb: "files.read", args: { id: "c1", path: "src/a.ts" } })).toBeNull();
     expect(remoteRefusal({ verb: "files.list", args: { id: "c1" } })).toBeNull();
+  });
+});
+
+describe("verbs on the host itself", () => {
+  const settings = { maxThreads: 3, keepAliveMinutes: 0, worktreePool: 1, defaultBackend: "claude" };
+
+  it("builds a row for the worker with no folder and no card", () => {
+    expect(hostLevelRow({ orgId: "org-1", device: "worker:w-1" }, "settings.put", { patch: { maxThreads: 3 }, id: "card-1" })).toEqual({
+      org_id: "org-1",
+      kind: "host",
+      target_device: "worker:w-1",
+      folder: "",
+      payload: { verb: "settings.put", args: { patch: { maxThreads: 3 }, id: "" } },
+    });
+    expect(hostLevelRow({ orgId: "o", device: "d" }, "settings.get").payload.args).toEqual({ id: "" });
+    expect(isHostLevelVerb("settings.get")).toBe(true);
+    expect(isHostLevelVerb("card.stop")).toBe(false);
+  });
+
+  it("reads one without a card, and never lets it name one", () => {
+    expect(read({ verb: "settings.get" })).toEqual({ verb: "settings.get", args: { id: "" } });
+    expect(read({ verb: "settings.put", args: { id: "card-1", patch: { maxThreads: 2 } } })).toEqual({ verb: "settings.put", args: { id: "", patch: { maxThreads: 2 } } });
+  });
+
+  it("refuses a settings.put that names anything but a host setting", () => {
+    expect(remoteRefusal({ verb: "settings.put", args: { id: "", patch: { maxThreads: 2, worktreePool: 0 } } })).toBeNull();
+    expect(remoteRefusal({ verb: "settings.put", args: { id: "", patch: { allowedFolders: ["/"] } } })).toMatch(/can't change allowedFolders/);
+    expect(remoteRefusal({ verb: "settings.put", args: { id: "", patch: { defaultPermissionMode: "bypassPermissions" } } })).toMatch(/can't change defaultPermissionMode/);
+    expect(remoteRefusal({ verb: "settings.get", args: { id: "" } })).toBeNull();
+  });
+
+  it("puts the host's settings in the result, and nothing when the reply has none", () => {
+    expect(verbResult("settings.get", "", { settings })).toEqual({ ok: true, cardId: "", settings });
+    expect(verbResult("settings.put", "", { settings })).toEqual({ ok: true, cardId: "", settings });
+    expect(verbResult("settings.get", "", undefined)).toEqual({ ok: true, cardId: "" });
   });
 });

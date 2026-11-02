@@ -66,7 +66,7 @@ export async function requireSession(client: SupabaseClient) {
 }
 
 // Your headless workers. A teammate's won't obey you, and a desktop worker's cards are that Mac's own.
-async function myWorkers(client: SupabaseClient, who: { uid: string; org: string }): Promise<WorkerRow[]> {
+export async function myWorkers(client: SupabaseClient, who: { uid: string; org: string }): Promise<WorkerRow[]> {
   const { data, error } = await client
     .from("cloud_workers")
     .select("id, name, status, last_seen_at")

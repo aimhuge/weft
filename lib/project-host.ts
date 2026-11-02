@@ -14,7 +14,7 @@ import { cloudRead } from "./project-snapshot-view";
 import { remoteMenu } from "./card-menu-remote";
 import type { MenuItem } from "./card-menu";
 import type { ArgsOf } from "./host-api";
-import type { HostVerb } from "./host-api/types";
+import type { CardVerb as HostVerb } from "@weft/client";
 import type { HostArgs } from "./host-command";
 import { localTransport, type ThreadTransport } from "./thread-transport";
 import type { Backend, Card, QuestionReply } from "./types";

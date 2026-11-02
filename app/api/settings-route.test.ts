@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // to the CLI that serves it, so the API takes them all.
 
 vi.mock("next/server", () => ({ connection: async () => {} }));
+vi.mock("@/lib/account-settings", () => ({ pushAccountSettings: vi.fn(() => Promise.resolve(true)) }));
 
 vi.mock("@/lib/store", () => ({
   DATA_DIR: "/tmp/weft-api-test-data",
@@ -115,6 +116,9 @@ describe("/settings", () => {
     expect(rules[0]).toEqual({ id: "a1", on: "done", skill: "weft:done" });
     expect(rules[1]).toMatchObject({ on: "prompt-matches", skill: "deploy", pattern: "ship it" });
     expect(rules[1]!.id).toBeTruthy();
+    // The account's settings then go to your workers (lib/account-settings.ts).
+    const { pushAccountSettings } = await import("@/lib/account-settings");
+    expect(pushAccountSettings).toHaveBeenCalled();
   });
 
   it("PATCH saves the cap on running threads, then lets the waiting threads go", async () => {

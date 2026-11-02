@@ -6,6 +6,8 @@ import { cachedGithubProfile, githubProfile } from "@/lib/github-profile";
 import { fail, guard } from "@/lib/guard";
 import { profileCard } from "@/lib/profile-card";
 import { syncProfileCard } from "@/lib/profile-card-sync";
+import { readWorkerBoard } from "@/lib/worker-board";
+import { workerActivity } from "@/lib/worker-activity";
 
 // Streaks, XP, achievements and the builder card (lib/game-server.ts). ?cwd= is the project in view;
 // &full=1 (the dialog) measures your busiest projects for the code health and production-ready badges
@@ -20,7 +22,9 @@ export async function GET(req: Request) {
   const full = url.searchParams.get("full") === "1";
   try {
     const github = full ? await githubProfile() : cachedGithubProfile();
-    const game = gameState({ cwd: url.searchParams.get("cwd"), full });
+    // Your workers' cards count too (lib/worker-activity.ts); signed out or unreachable, they add nothing.
+    const worker = await workerActivity(() => readWorkerBoard());
+    const game = gameState({ cwd: url.searchParams.get("cwd"), full, worker });
     if (full) void syncProfileCard({ card: () => Promise.resolve(profileCard(game, github)) }).catch(() => {});
     return Response.json({ game: { ...game, github } });
   } catch (err) {
