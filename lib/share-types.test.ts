@@ -31,6 +31,7 @@ describe("paneFromUrl", () => {
   it("reads an uploaded page with its anchor", () => {
     expect(paneFromUrl(`blob:sha256:${SHA}#step-2`)).toEqual({ kind: "blob", ref: `blob:sha256:${SHA}`, hash: "#step-2", label: "Page" });
     expect(paneFromUrl(` blob:sha256:${SHA} `)).toMatchObject({ kind: "blob", hash: "" });
+    expect(paneFromUrl(`blob:sha256:${SHA}?tab=2#done`)).toMatchObject({ kind: "blob", hash: "?tab=2#done" });
   });
 
   it("refuses a malformed blob ref", () => {

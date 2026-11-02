@@ -72,6 +72,11 @@ describe("extractReview", () => {
 describe("stepUrl", () => {
   const plan = { url: "http://localhost:3000", steps: [] };
 
+  it("opens an uploaded page as itself, with its query and anchor", () => {
+    const ref = `blob:sha256:${"c".repeat(64)}?tab=2#done`;
+    expect(stepUrl(plan, { title: "t", path: ref })).toBe(ref);
+  });
+
   it("joins a path onto the plan url", () => {
     expect(stepUrl(plan, { title: "t", path: "/login" })).toBe("http://localhost:3000/login");
     expect(stepUrl(plan, { title: "t", path: "settings?tab=1" })).toBe("http://localhost:3000/settings?tab=1");
