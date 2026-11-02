@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 
 // lib/show-dir.ts reads DATA_DIR from the store, which these tests mock.
 vi.mock("@/lib/show-dir", () => ({ SHOW_DIR: "/weft/show" }));
-vi.mock("@/lib/store", () => ({ getCard: (id: string) => (id === "pile" ? { id } : undefined) }));
+vi.mock("@/lib/store", () => ({ DATA_DIR: "/weft-data", getCard: (id: string) => (id === "pile" ? { id } : undefined) }));
 vi.mock("@/lib/runner", () => ({}));
 vi.mock("@/lib/automations", () => ({}));
 vi.mock("@/lib/skills", () => ({ PLUGIN_DIR: "/weft/plugin" }));

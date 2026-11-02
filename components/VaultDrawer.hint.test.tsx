@@ -6,6 +6,9 @@ import type { VaultBridge, VaultOverview } from "@/lib/vault-view";
 import "./test-utils";
 import VaultDrawer from "./VaultDrawer";
 
+// The recovery menu reads the router; these tests don't mount an app router.
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
+
 // A blank's hint in the 🔐 drawer: shown in full, its links open in the browser pane.
 const NAME = "STRIPE_PRICE_PRO_MONTHLY_ID_FOR_THE_TEAM_PLAN";
 

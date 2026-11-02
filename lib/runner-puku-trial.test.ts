@@ -1,7 +1,7 @@
 // Weft's Puku trial in the runner: a puku thread with no Puku login of its own runs on the trial (queryOptions),
 // and a failed sign-in tries a fresh trial token before opening Puku's login. Same harness as lib/runner.test.ts.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { PUKU_IDLE_ENV } from "./puku-idle";
+import { backendEnv } from "./puku-idle";
 import { flush, makeCard, nth, resetHarness } from "./runner.harness";
 import type { Card } from "./types";
 
@@ -48,7 +48,7 @@ describe("Puku trial", () => {
     addCard({ id: "c1", backend: "puku" });
     addCard({ id: "c2" });
     const q = await send("c1");
-    expect(q.options.env).toEqual({ PATH: "/usr/bin", ...PUKU_IDLE_ENV, PUKU_AI_BASE_URL: "https://weft.example/api/puku" });
+    expect(q.options.env).toEqual({ PATH: "/usr/bin", ...backendEnv("puku", {}), PUKU_AI_BASE_URL: "https://weft.example/api/puku" });
     expect(q.options.settings).toEqual({ apiKeyHelper: "/bin/cat 'tok'" });
     // Only puku threads use it.
     const other = await send("c2");
@@ -59,7 +59,7 @@ describe("Puku trial", () => {
   it("starts a puku thread with no trial token as it always did", async () => {
     addCard({ id: "c1", backend: "puku" });
     const q = await send("c1");
-    expect(q.options.env).toEqual({ PATH: "/usr/bin", ...PUKU_IDLE_ENV });
+    expect(q.options.env).toEqual({ PATH: "/usr/bin", ...backendEnv("puku", {}) });
     expect(q.options.settings).toBeUndefined();
   });
 
