@@ -111,6 +111,10 @@ Built 2026-11-02 (migration `20261102190000_worker_tunnels.sql`, not applied). `
   after your Touch ID on this Mac (tunnels.md#on-a-worker) and answers the address in the command's `result`. It waits
   up to 6 minutes for that, since a person is involved. **Stop** sends `dev.stop`. The pane is the native one, so `/t`
   needs a weft.zip sign-in there once.
+- **Owner only**: `dev.open` is an owner verb (`OWNER_VERBS`, `lib/host/dispatch.ts`): the worker (and a Mac) run it
+  only for a command its owner made, so no other workspace member can raise a Touch ID prompt on the owner's Mac
+  (tunnels.md#on-a-worker). There is no `dev.restart` verb; the Mac's `restart` action on `POST /api/cards/:id/dev`
+  is behind the local token guard.
 - **Locally** the same verbs mount on `POST /api/cards/:id/dev` as `open` and `stop`.
 - **The vault's env** (H8): `devSecrets` (`lib/secret-run.ts`) gives a worker's run `{}` until the sealed `secret_use`
   lands; the hook is that call in `startDev`.
