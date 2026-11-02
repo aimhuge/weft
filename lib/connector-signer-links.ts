@@ -1,6 +1,6 @@
 // The emailed links that make a new Mac key trusted, or revoke it, with no session (docs/architecture/connectors.md#who-may-say-yes-the-chain-of-trust).
 // Registering a key mails the account's own address a one-time confirm link and a revoke link; weft.zip keeps only
-// their sha256. The email's wording is fixed: it shows the key's fingerprint, the time, and the IP and browser the
+// their sha256, and every revoke link it ever mailed for the key keeps working. The email's wording is fixed: it shows the key's fingerprint, the time, and the IP and browser the
 // registration came from, never the name the registering client chose. Opening a link shows a page with one button
 // (app/api/connectors/signers/{confirm,revoke}), so a mail scanner that fetches links can't press it.
 import "server-only";
@@ -38,9 +38,10 @@ export function matches(hash: string | null | undefined, token: unknown): boolea
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
+// The id and token go in the fragment, which no browser sends, so they never reach a server log; the page posts them.
 export const links = (id: string, confirm: string, revoke: string, site = connectorSite(process.env)) => ({
-  confirm: `${site}/api/connectors/signers/confirm?id=${encodeURIComponent(id)}&t=${encodeURIComponent(confirm)}`,
-  revoke: `${site}/api/connectors/signers/revoke?id=${encodeURIComponent(id)}&t=${encodeURIComponent(revoke)}`,
+  confirm: `${site}/api/connectors/signers/confirm#id=${encodeURIComponent(id)}&t=${encodeURIComponent(confirm)}`,
+  revoke: `${site}/api/connectors/signers/revoke#id=${encodeURIComponent(id)}&t=${encodeURIComponent(revoke)}`,
 });
 
 // The confirm email, in fixed words. Throws when it can't be sent, so the caller can say so.
@@ -77,6 +78,6 @@ export async function confirmByLink(deps: TokenDeps, id: unknown, token: unknown
 // The emailed revoke link, pressed: the key is revoked, with the grants it signed (lib/connector-signers.ts).
 export async function revokeByLink(deps: TokenDeps, id: unknown, token: unknown, revoke: (deps: TokenDeps, userId: string, id: string) => Promise<unknown>): Promise<void> {
   const s = typeof id === "string" ? await deps.db.signerById(id) : null;
-  if (!s || !matches(s.revoke_hash, token)) throw new MintError(404, "That link isn't one Weft sent.");
+  if (!s || !(s.revoke_hashes ?? []).some((h) => matches(h, token))) throw new MintError(404, "That link isn't one Weft sent.");
   if (!s.revoked_at) await revoke(deps, s.user_id, s.id);
 }

@@ -4,7 +4,9 @@ import type { Card } from "@/lib/types";
 
 const made = vi.hoisted(() => new Map<string, Card>());
 
-vi.mock("@/lib/store", () => ({ getCard: vi.fn((id: string) => made.get(id)) }));
+vi.mock("@/lib/store", () => ({ getCard: vi.fn((id: string) => made.get(id)), DATA_DIR: "/nonexistent-weft-data" }));
+const used = vi.hoisted(() => new Set<string>());
+vi.mock("./card-ids", () => ({ cardIds: () => ({ used: (id: string) => used.has(id), remember: (id: string) => void used.add(id) }) }));
 vi.mock("@/lib/new-card", () => ({
   createCardFromBody: vi.fn((body: Record<string, unknown>, id: string) => ({ id, column: "backlog", ...body }) as unknown as Card),
   startCard: vi.fn(() => ({ started: true })),
@@ -15,6 +17,7 @@ const { createCardVerb } = await import("./card-create");
 
 beforeEach(() => {
   made.clear();
+  used.clear();
   vi.clearAllMocks();
 });
 
@@ -31,6 +34,12 @@ describe("createCardVerb", () => {
     const got = await createCardVerb({ id: "1234abcd-0001", prompt: "Later", start: false });
     expect(startCard).not.toHaveBeenCalled();
     expect(got.start).toEqual({ started: false });
+  });
+
+  it("refuses an id this host has used before, even once its card is gone", async () => {
+    await createCardVerb({ id: "1234abcd-0009", prompt: "p" });
+    await expect(createCardVerb({ id: "1234abcd-0009", prompt: "again" })).rejects.toThrow("used on this host before");
+    expect(createCardFromBody).toHaveBeenCalledOnce();
   });
 
   it("refuses an id that isn't one, and one that's taken", async () => {

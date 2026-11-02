@@ -24,7 +24,7 @@ function fakeDb(read: { data?: unknown; error?: unknown } = {}) {
   return { db: () => ({ from: () => ({ select: () => chain }) }), reads };
 }
 
-function setup(o: { uid?: string | null; yes?: boolean; read?: { data?: unknown; error?: unknown }; pin?: object | null; answers?: Record<string, unknown> } = {}) {
+function setup(o: { uid?: string | null; yes?: boolean; read?: { data?: unknown; error?: unknown }; pin?: object | null; answers?: Record<string, unknown>; repos?: string[] } = {}) {
   const handlers = new Map<string, Fn>();
   const k = macKey();
   const { db, reads } = fakeDb(o.read);
@@ -42,6 +42,7 @@ function setup(o: { uid?: string | null; yes?: boolean; read?: { data?: unknown;
     macName: () => "Ada's Mac\n",
     device: () => "dev-1",
     now: () => 1_000,
+    knownRepos: () => Promise.resolve(o.repos ?? ["ada/app", "ada/web"]),
   };
   const signer = registerConnectorGrants((ch: string, fn: (...args: never[]) => unknown) => void handlers.set(ch, fn as Fn), deps as never);
   const h = (ch: string) => handlers.get(ch)!;
@@ -65,7 +66,7 @@ describe("connectors:set", () => {
   it("asks Touch ID naming the worker, then registers this Mac, vouches for the worker and sends a signed grant", async () => {
     const s = setup({ answers: { "/github/grant": { ok: true, waiting: true } } });
     expect(await s.h("connectors:set")("w1", "m1\nmini", "github", { scope: "card", bogus: 1 })).toEqual({ ok: true, settings: { scope: "card", approval: "worker", lifetime: "revoked", asks: ["protected_push"] }, waiting: true });
-    expect(s.confirm).toHaveBeenCalledWith("let the worker m1?mini use GitHub as you, with Weft, for cards you start on it");
+    expect(s.confirm).toHaveBeenCalledWith("let the worker m1?mini use GitHub as you, with Weft, for cards you start on it, for ada/app, ada/web");
     expect(s.reads).toEqual([["user_id", "u1"], ["worker_id", "w1"], ["connector", "github"]]);
     expect(s.calls.map((c) => `${c[0]} ${c[1]}`)).toEqual(["POST /signers", "POST /pin", "POST /github/grant"]);
     const reg = sent(s.calls, "/signers");
@@ -77,7 +78,8 @@ describe("connectors:set", () => {
     const g = sent(s.calls, "/github/grant");
     expect(g).toMatchObject({ workerId: "w1", connector: "github", prevEpoch: 0, issuedAt: 1_000, signerKey: s.k.key });
     expect(g.nonce).toMatch(/^[0-9a-f]{64}$/);
-    const message = grantMessage({ userId: "u1", workerId: "w1", connector: "github", settings: g.settings as shared.GrantSettings, nonce: g.nonce as string, issuedAt: 1_000, prevEpoch: 0 });
+    expect(g.repos).toEqual(["ada/app", "ada/web"]);
+    const message = grantMessage({ userId: "u1", workerId: "w1", connector: "github", settings: g.settings as shared.GrantSettings, repos: ["ada/app", "ada/web"], nonce: g.nonce as string, issuedAt: 1_000, prevEpoch: 0 });
     expect(verifyRaw(s.k.key, message, g.sig as string)).toBe(true);
   });
 
@@ -89,16 +91,22 @@ describe("connectors:set", () => {
   });
 
   it("asks Touch ID for a stricter change too, and signs over the epoch it replaces", async () => {
-    const s = setup({ read: { data: { scope: "installed", approval: "worker", lifetime: "revoked", asks: [], epoch: 4 } }, answers: { "/github/grant": { ok: true } } });
+    const s = setup({ read: { data: { scope: "installed", approval: "worker", lifetime: "revoked", asks: [], repos: ["ada/app", "ada/web", "ada/old"], epoch: 4 } }, answers: { "/github/grant": { ok: true } } });
     expect(await s.h("connectors:set")("w1", "box", "github", STRICT)).toMatchObject({ ok: true, waiting: false });
-    expect(s.confirm).toHaveBeenCalledWith("make GitHub on the worker box stricter (card repos, approval card, lifetime 8h)");
+    expect(s.confirm).toHaveBeenCalledWith("make GitHub on the worker box stricter (card repos, approval card, lifetime 8h, for ada/app, ada/web)");
     expect(sent(s.calls, "/github/grant").prevEpoch).toBe(4);
   });
 
   it("names a looser change as giving cards more", async () => {
     const s = setup({ read: { data: STRICT } });
     await s.h("connectors:set")("w1", "box", "github", { ...STRICT, scope: "installed" });
-    expect(s.confirm).toHaveBeenCalledWith("give cards on the worker box more GitHub access (installed repos, approval card, lifetime 8h)");
+    expect(s.confirm).toHaveBeenCalledWith("give cards on the worker box more GitHub access (installed repos, approval card, lifetime 8h, for ada/app, ada/web)");
+    const more = setup({ read: { data: { ...STRICT, repos: ["ada/app"] } }, repos: ["ada/app", "b/1", "b/2", "b/3"] });
+    await more.h("connectors:set")("w1", "box", "github", STRICT);
+    expect(more.confirm).toHaveBeenCalledWith("give cards on the worker box more GitHub access (card repos, approval card, lifetime 8h, for ada/app, b/1, b/2 and 1 more)");
+    const none = setup({ repos: [] });
+    await none.h("connectors:set")("w1", "box", "github", STRICT);
+    expect(none.confirm.mock.calls[0]![0]).toContain("for no repos (this Mac has no GitHub checkouts)");
   });
 
   it("refuses to vouch for a worker this Mac didn't pair, and throws on a read error", async () => {
@@ -246,5 +254,17 @@ describe("parity with lib/connector-grant.ts", () => {
       }
     expect(loose).toBeGreaterThan(0);
     expect(loose).toBeLessThan(all.length * all.length);
+  });
+});
+
+describe("registerConnectorGrants defaults", () => {
+  it("covers no repos when it isn't told how to find them", async () => {
+    const handlers = new Map<string, Fn>();
+    const k = macKey();
+    const calls: Call[] = [];
+    const call = (method: string, path: string, body?: Record<string, unknown>) => (calls.push([method, path, body]), Promise.resolve({ signer: {} }));
+    registerConnectorGrants((ch: string, fn: (...args: never[]) => unknown) => void handlers.set(ch, fn as Fn), { db: fakeDb().db, userId: () => "u1", confirm: () => Promise.resolve(true), sign: (m: string) => Promise.resolve(k.sign(m)), signKey: () => Promise.resolve(k.key), pins: { pinned: () => PIN }, call } as never);
+    await handlers.get("connectors:set")!("w1", "box", "github", {});
+    expect(sent(calls, "/github/grant").repos).toEqual([]);
   });
 });

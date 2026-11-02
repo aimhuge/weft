@@ -1,18 +1,17 @@
-// /api/connectors/signers/revoke?id=&t=, on weft.zip: the "not me" link emailed when a Mac key is added. GET shows one
+// /api/connectors/signers/revoke#id=&t=, on weft.zip: the "not me" link emailed when a Mac key is added. GET shows one
 // button; its POST revokes the key with the grants it signed and their tokens (lib/connector-signer-links.ts
 // revokeByLink). No session needed, so it works when the session itself is what was stolen.
 import { connection } from "next/server";
-import { buttonPage, donePage } from "@/lib/connector-connect";
+import { donePage, linkPage } from "@/lib/connector-connect";
 import { connectorDeps } from "@/lib/connector-deps";
 import { revokeByLink } from "@/lib/connector-signer-links";
 import { revokeSigner } from "@/lib/connector-signers";
 
 const PATH = "/api/connectors/signers/revoke";
 
-export async function GET(req: Request) {
+export async function GET() {
   await connection();
-  const q = new URL(req.url).searchParams;
-  return buttonPage("Revoke this Mac key?", "It will approve nothing more, and what it turned on is turned off. Then change your password, which signs Weft out everywhere.", PATH, { id: q.get("id") ?? "", t: q.get("t") ?? "" }, "Revoke this key");
+  return linkPage("Revoke this Mac key?", "It will approve nothing more, and what it turned on is turned off. Then change your password, which signs Weft out everywhere.", PATH, "Revoke this key");
 }
 
 export async function POST(req: Request) {

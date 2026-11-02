@@ -27,6 +27,8 @@ export interface WorkerThreadInput {
   branch?: string;
   // false leaves it in the worker's Backlog.
   start?: boolean;
+  // Whether this Mac signs the start for the GitHub connector: only when Weft's own window asked (app/api/cards).
+  signStart?: boolean;
 }
 
 // The fields a new worker card is made from: never its folder (the row's), agent or read scope, which remoteRefusal
@@ -60,7 +62,7 @@ export async function startWorkerThread(
   const built = hostCommand(target, "card.create", createArgs(body)) as NewCommand;
   // The repo this Mac knows the folder as, and main's signature over the start, for the GitHub connector's mint
   // (lib/worker-folder-repo.ts); the worker ignores both.
-  const extra = await connectorStart({ workerId: worker.id, cardId, folder: project.folder }, connector);
+  const extra = body.signStart ? await connectorStart({ workerId: worker.id, cardId, folder: project.folder }, connector) : {};
   const row: NewCommand = { ...built, payload: { ...(built.payload as object), ...extra } as NewCommand["payload"] };
   const { commandId } = await insert(client, await withAttachments(client, row, body.prompt, dir));
   return { commandId, worker: worker.name, cardId };

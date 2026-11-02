@@ -4,15 +4,16 @@
 //
 //   key + signature (lib/connector-auth.ts) ─ a trusted Mac vouched for this pairing (lib/connector-trust.ts)
 //   ─ nonce once and the rate limits, in one DB step ─ the grant: on, inside its lifetime, signed by a trusted Mac
-//   ─ you started the card from a trusted Mac, which signed its repo ─ the repo is the card's ─ the card (this worker's) isn't
+//   ─ you started the card from a trusted Mac, which signed its repo, fresh, once ─ the repo is the card's and the grant's ─ the card (this worker's) isn't
 //   Done or deleted ─ the approval's signed Allow, when it asks one ─ a token (lib/connector-tokens.ts), logged
 //   ─ the grant re-read: still there at the epoch checked, else no answer
 import "server-only";
 import { allowSubject, isLive, settingsOf } from "./connector-grant";
-import type { ConnectorDb, GrantRow, MintLimits, MintLog, PinnedCard, StartRow, WorkerRow } from "./connector-db";
+import type { ConnectorDb, GrantRow, MintLimits, MintLog, WorkerRow } from "./connector-db";
 import { parseMint, signedWorker, type SignedMint } from "./connector-auth";
 import { handedExpiry, MintError, narrowToken, userToken, type Handed, type TokenDeps } from "./connector-tokens";
-import { allowProblem, grantProblem, pinProblem, startProblem } from "./connector-trust";
+import { allowProblem, grantProblem, pinProblem } from "./connector-trust";
+import { cardProject, openCard } from "./connector-card";
 
 // Per worker: enough for every card's git and gh to ask a few times a minute (the daemon caches tokens), not enough to
 // hammer GitHub's refresh endpoint with a stolen key. Per user, across all their workers, a cap on top.
@@ -23,47 +24,7 @@ export interface MintAnswer {
   body: Record<string, unknown>;
 }
 
-// The command that starts a card the connector serves: the desktop board's card.create, whose card id is in the args you
-// wrote. A run or new_card gets its card id from the worker's report, so it can't carry a signed start; a reply or a verb
-// over the H6 line makes no such row; and a card another worker sent (worker_new_card stamps it fromWorker) isn't yours.
-const startsCard = (r: StartRow) => {
-  const p = (r.payload ?? {}) as { verb?: unknown; fromWorker?: unknown };
-  return !p.fromWorker && r.kind === "host" && p.verb === "card.create";
-};
-
-// The repo a start names: a run's git URL (https://github.com/<owner>/<name>.git) or the owner/name the desktop board
-// put on a card.create from the project's own origin (lib/worker-folder-repo.ts). Null for anything else.
-export function repoOfUrl(url: unknown): string | null {
-  if (typeof url !== "string") return null;
-  const m = /^(?:https:\/\/github\.com\/)?([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+?)(?:\.git)?\/?$/.exec(url);
-  return m?.[1] ?? null;
-}
-
 const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
-
-// The card's project, pinned the first time a mint checks it (start commands expire after a day): the folder and repo
-// of the one start command you created for it, signed by a Mac of yours trusted now (lib/worker-folder-repo.ts asks main
-// to sign every desktop card.create). A session alone can queue a card.create naming any repo, but can't sign one, so an
-// unsigned start never mints; nor does a card with several starts (which one would it be?).
-async function cardProject(db: ConnectorDb, worker: WorkerRow, req: SignedMint, now: number): Promise<PinnedCard> {
-  const pinned = await db.pinnedCard(worker.id, req.cardId);
-  if (pinned) {
-    if (pinned.user_id !== worker.owner_user) throw new MintError(403, "That card isn't one you started.");
-    return pinned;
-  }
-  const rows = (await db.starts(worker.id, req.cardId, worker.owner_user)).filter((r) => r.created_by === worker.owner_user);
-  if (rows.length > 1) throw new MintError(403, "That card has more than one start, so Weft can't tell which is yours. Start a new card for this project.");
-  const start = rows.find(startsCard);
-  if (!start) throw new MintError(403, "Connectors only work in a card you started on this worker from the board. Start a new card for this project.");
-  const payload = start.payload as { repo?: unknown; start?: unknown };
-  const repo = repoOfUrl(payload.repo);
-  if (!repo) throw new MintError(403, "That card's start didn't name its GitHub repo. Start it from the desktop board, which reads the project's origin.");
-  const problem = await startProblem(db, { userId: worker.owner_user, workerId: worker.id, cardId: req.cardId, folder: start.folder, repo, start: payload.start }, now);
-  if (problem) throw new MintError(403, problem);
-  const card = { user_id: worker.owner_user, folder: start.folder, repo };
-  await db.pinCard(worker.id, req.cardId, card);
-  return card;
-}
 
 async function checkGrant(db: ConnectorDb, worker: WorkerRow, req: SignedMint, now: number): Promise<GrantRow> {
   const grant = await db.grant(worker.owner_user, worker.id, req.connector);
@@ -83,10 +44,10 @@ async function checkAllow(db: ConnectorDb, worker: WorkerRow, grant: GrantRow, a
 
 async function decide(deps: TokenDeps, worker: WorkerRow, req: SignedMint, grant: GrantRow, now: number): Promise<{ handed: Handed; kind: "user" | "scoped" }> {
   const { db } = deps;
-  const project = await cardProject(db, worker, req, now);
+  const project = await cardProject(db, worker, req.cardId, now);
   if (!same(project.repo, req.repo)) throw new MintError(403, `That card's project is ${project.repo}, not ${req.repo}.`);
-  const state = await db.cardState(worker.org_id, worker.id, req.cardId);
-  if (state?.deleted || state?.column === "done") throw new MintError(403, "That card is Done or deleted, so it gets no token.");
+  if (!grant.repos.includes(project.repo.toLowerCase())) throw new MintError(403, `GitHub on ${worker.name} doesn't cover ${project.repo}. Turn it on again from the Mac with that checkout to add it.`);
+  await openCard(db, worker, req.cardId, now);
   const settings = settingsOf(grant);
   const allow = allowSubject(settings.approval, { id: req.cardId, repo: project.repo });
   if (allow) await checkAllow(db, worker, grant, allow, now);

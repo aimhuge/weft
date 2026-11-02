@@ -4,7 +4,7 @@
 // checked again by the mint (lib/connector-trust.ts), against keys trusted then, so a key still waiting out its day
 // can write, and nothing it signed mints until it's trusted.
 import "server-only";
-import { looser, settingsOf, CONNECTORS, type Connector } from "./connector-grant";
+import { looser, settingsOf, CONNECTORS, REPO_RE, type Connector } from "./connector-grant";
 import { allowMessage, grantMessage, workerMessage } from "./connector-messages";
 import type { SignerRow } from "./connector-db-trust";
 import { MintError, type TokenDeps } from "./connector-tokens";
@@ -60,9 +60,17 @@ function parseGrant(raw: unknown) {
   const b = bodyOf(raw);
   const connector = b.connector as Connector;
   const prevEpoch = Number(b.prevEpoch);
-  const shaped = typeof b.workerId === "string" && UUID_RE.test(b.workerId) && CONNECTORS.includes(connector) && Number.isInteger(prevEpoch) && prevEpoch >= 0 && typeof b.sig === "string";
-  if (!shaped) throw new MintError(400, "Name the worker, the connector, the epoch and the signature.");
-  return { b, workerId: b.workerId as string, connector, prevEpoch, sig: b.sig as string, settings: settingsOf(b.settings), issuedAt: Number(b.issuedAt), nonce: String(b.nonce) };
+  const repos = reposOf(b.repos);
+  const shaped = typeof b.workerId === "string" && UUID_RE.test(b.workerId) && CONNECTORS.includes(connector) && Number.isInteger(prevEpoch) && prevEpoch >= 0 && typeof b.sig === "string" && repos;
+  if (!shaped) throw new MintError(400, "Name the worker, the connector, the repos, the epoch and the signature.");
+  return { b, workerId: b.workerId as string, connector, prevEpoch, repos, sig: b.sig as string, settings: settingsOf(b.settings), issuedAt: Number(b.issuedAt), nonce: String(b.nonce) };
+}
+
+// The repos a grant covers: lowercase owner/name, at most 500, or null for anything else.
+function reposOf(raw: unknown): string[] | null {
+  if (!Array.isArray(raw) || raw.length > 500) return null;
+  const ok = raw.every((r): r is string => typeof r === "string" && REPO_RE.test(r) && r === r.toLowerCase());
+  return ok ? [...new Set(raw)].sort() : null;
 }
 
 // A paired worker of the user's that a Mac has vouched for, at the sign key its row has now.
@@ -80,15 +88,15 @@ export async function writeGrant(deps: TokenDeps, userId: string, raw: unknown, 
   const g = parseGrant(raw);
   const signer = await signerOf(deps, userId, g.b.signerKey);
   const worker = await vouchedWorker(deps, userId, g.workerId);
-  const statement = { userId, workerId: worker.id, connector: g.connector, settings: g.settings, nonce: g.nonce, issuedAt: g.issuedAt, prevEpoch: g.prevEpoch };
+  const statement = { userId, workerId: worker.id, connector: g.connector, settings: g.settings, repos: g.repos, nonce: g.nonce, issuedAt: g.issuedAt, prevEpoch: g.prevEpoch };
   if (!verifyRaw(signer.sign_key, grantMessage(statement), g.sig)) throw new MintError(401, "That approval's signature doesn't check.");
   await takeFresh(deps, userId, g.b);
   const was = await deps.db.grant(userId, worker.id, g.connector);
   if ((was?.epoch ?? 0) !== g.prevEpoch) throw new MintError(409, CHANGED);
-  const row = { user_id: userId, worker_id: worker.id, connector: g.connector, ...g.settings, signer_id: signer.id, sig: g.sig, nonce: g.nonce, issued_at: new Date(g.issuedAt).toISOString(), epoch: g.prevEpoch + 1 };
+  const row = { user_id: userId, worker_id: worker.id, connector: g.connector, ...g.settings, repos: g.repos, signer_id: signer.id, sig: g.sig, nonce: g.nonce, issued_at: new Date(g.issuedAt).toISOString(), epoch: g.prevEpoch + 1 };
   if (!(await deps.db.writeGrant(row, g.prevEpoch))) throw new MintError(409, CHANGED);
   let tokensRevoked = 0;
-  if (was && looser(g.settings, settingsOf(was))) tokensRevoked = (await endWorkerTokens(deps, userId, worker.id)).tokensRevoked;
+  if (was && (looser(g.settings, settingsOf(was)) || was.repos.some((r) => !g.repos.includes(r)))) tokensRevoked = (await endWorkerTokens(deps, userId, worker.id)).tokensRevoked;
   if (!was) await notice(deps, userId, { workerId: worker.id, subject: "GitHub was turned on for a worker", text: `The Mac key ${keyFingerprint(signer.sign_key)} turned GitHub on for the worker ${worker.id}: cards started on it from your board can push and use gh as you, with Weft.${from(meta)}` });
   return { ok: true, epoch: g.prevEpoch + 1, waiting: waiting(signer, deps.now()), tokensRevoked };
 }

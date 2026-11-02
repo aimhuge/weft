@@ -98,7 +98,8 @@ function setupPairing({ ipcMain, dataDir, accountClient, isBoard, confirm, safeS
   // signs it for weft.zip (electron/connector-grants.cjs), which writes it only with a good signature.
   const grants = require("./connector-grants.cjs");
   const call = grants.weftZip({ db, site: process.env.WEFT_CONNECTOR_URL || "https://weft.zip" });
-  const connectorSigner = grants.registerConnectorGrants(handle, { db, userId, confirm, sign: macSign, signKey: macSignKey, pins: workerPins, call, device: () => { try { return macDevice(); } catch { return ""; } } });
+  const knownRepos = require("./worker-projects.cjs").createKnownRepos({ dataDir });
+  const connectorSigner = grants.registerConnectorGrants(handle, { db, userId, confirm, sign: macSign, signKey: macSignKey, pins: workerPins, call, knownRepos, device: () => { try { return macDevice(); } catch { return ""; } } });
   // Pairing vouches for the new worker on weft.zip under the same Touch ID, from the keys it just pinned.
   const vouchWorker = (id) => connectorSigner.vouch(id);
   require("./host-pairing-ipc.cjs").registerHostPairing(handle, { db, userId, macDevice, myDevice, confirm, macSignKey, macSign, vouchWorker }, workerPins);

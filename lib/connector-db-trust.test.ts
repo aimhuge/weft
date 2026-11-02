@@ -7,7 +7,7 @@ const fakeSupabase = (...responses: R[]) => {
   return { db: supabaseTrustDb(client), calls };
 };
 
-const SIGNER = "id, user_id, sign_key, name, device, added_at, trusted_from, endorsed_by, revoked_at, confirm_hash, confirm_expires_at, confirm_sent_at, revoke_hash";
+const SIGNER = "id, user_id, sign_key, name, device, added_at, trusted_from, endorsed_by, revoked_at, confirm_hash, confirm_expires_at, confirm_sent_at, confirm_sends, revoke_hashes";
 
 describe("supabaseTrustDb: Mac keys", () => {
   it("reads a key by id or by user and key, and a user's keys", async () => {
@@ -60,7 +60,7 @@ describe("supabaseTrustDb: pins, nonces and signed writes", () => {
 
   it("inserts a new grant at epoch 0, and updates one only at its epoch", async () => {
     const { db, calls } = fakeSupabase(ok(null), fail("dup", "23505"), fail("down"), ok([{ id: "g1" }]), ok([]), ok(null));
-    const row = { user_id: "u1", worker_id: "w1", connector: "github", scope: "project", approval: "worker", lifetime: "revoked", asks: [], signer_id: "s1", sig: "x", nonce: "n", issued_at: "t", epoch: 1 };
+    const row = { user_id: "u1", worker_id: "w1", connector: "github", scope: "project", approval: "worker", lifetime: "revoked", asks: [], repos: [], signer_id: "s1", sig: "x", nonce: "n", issued_at: "t", epoch: 1 };
     expect(await db.writeGrant(row, 0)).toBe(true);
     expect(await db.writeGrant(row, 0)).toBe(false);
     await expect(db.writeGrant(row, 0)).rejects.toThrow("Saving the grant: down");

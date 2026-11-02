@@ -25,6 +25,7 @@ export interface GrantRow {
   approval: string;
   lifetime: string;
   asks: string[];
+  repos: string[];
   signer_id: string | null;
   sig: string;
   nonce: string;
@@ -68,6 +69,10 @@ export interface PinnedCard {
   user_id: string;
   folder: string;
   repo: string;
+  // The Mac key that signed the card's start, and that signature's sha256 (one card per signature).
+  signer_id: string | null;
+  start_sig: string | null;
+  closed_at?: string | null;
 }
 
 export interface LiveToken {
@@ -114,7 +119,10 @@ export interface ConnectorDb extends TrustDb {
   allow(grantId: string, kind: string, subject: string): Promise<AllowRow | null>;
   starts(workerId: string, cardId: string, userId: string): Promise<StartRow[]>;
   pinnedCard(workerId: string, cardId: string): Promise<PinnedCard | null>;
-  pinCard(workerId: string, cardId: string, card: PinnedCard): Promise<void>;
+  // Pins a card to its start; false when the card is pinned already or the start's signature pinned another card.
+  pinCard(workerId: string, cardId: string, card: PinnedCard): Promise<boolean>;
+  // Closes a card's pin for good (it was Done or deleted).
+  closePin(workerId: string, cardId: string, at: string): Promise<void>;
   cardState(orgId: string, workerId: string, cardId: string): Promise<{ deleted: boolean; column: string | null } | null>;
   // Logs a request under its nonce and the rate limits, in one step: its id, "replay" or "limited".
   admitMint(row: MintLog, limits: MintLimits): Promise<number | "replay" | "limited">;
@@ -138,7 +146,7 @@ export interface ConnectorDb extends TrustDb {
 }
 
 const WORKER = "id, org_id, owner_user, name, sign_key, revoked_at";
-const GRANT = "id, user_id, worker_id, connector, scope, approval, lifetime, asks, signer_id, sig, nonce, issued_at, epoch, expires_at, last_used_at";
+const GRANT = "id, user_id, worker_id, connector, scope, approval, lifetime, asks, repos, signer_id, sig, nonce, issued_at, epoch, expires_at, last_used_at";
 const TOKENS = "user_id, github_id, github_login, refresh_sealed, refresh_expires_at, access_sealed, access_issued_at, access_expires_at, disconnect_pending_at";
 const LIVE = "id, user_id, worker_id, subject, repo, token_sealed, issued_at, expires_at";
 const ALLOW = "grant_id, kind, subject, signer_id, sig, nonce, issued_at";
@@ -188,10 +196,16 @@ export function supabaseConnectorDb(db: SupabaseClient): ConnectorDb {
       return must<StartRow[] | null>(await q, "Reading the card's start") ?? [];
     },
     async pinnedCard(workerId, cardId) {
-      return must<PinnedCard | null>(await t("connector_cards").select("user_id, folder, repo").eq("worker_id", workerId).eq("card_id", cardId).maybeSingle(), "Reading the card");
+      return must<PinnedCard | null>(await t("connector_cards").select("user_id, folder, repo, signer_id, start_sig, closed_at").eq("worker_id", workerId).eq("card_id", cardId).maybeSingle(), "Reading the card");
     },
     async pinCard(workerId, cardId, card) {
-      must(await t("connector_cards").upsert({ worker_id: workerId, card_id: cardId, ...card }, { onConflict: "worker_id,card_id", ignoreDuplicates: true }), "Pinning the card");
+      const r = await t("connector_cards").insert({ worker_id: workerId, card_id: cardId, ...card });
+      if (r.error?.code === "23505") return false;
+      must(r, "Pinning the card");
+      return true;
+    },
+    async closePin(workerId, cardId, at) {
+      must(await t("connector_cards").update({ closed_at: at }).eq("worker_id", workerId).eq("card_id", cardId), "Closing the card's pin");
     },
     async cardState(orgId, workerId, cardId) {
       const q = t("cloud_cards").select("deleted, col:card->>column").eq("org_id", orgId).eq("owner_worker", workerId).eq("card_id", cardId).maybeSingle();

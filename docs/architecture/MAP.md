@@ -509,7 +509,8 @@ When a new doc lands in this folder, add it here on the same change.
   `lib/connector-connect.ts` (the app's web flow with PKCE, a same-origin POST and a MACed cookie), `lib/connector-mint.ts`
   (the checks) + `lib/connector-auth.ts` (key and signature), the chain of trust in `lib/connector-trust.ts` (verify a Mac's
   signature against a signer trusted now) + `lib/connector-signers.ts` (register, vouch, remove a Mac key) +
-  `lib/connector-signer-links.ts` (the emailed confirm and revoke links) +
+  `lib/connector-signer-links.ts` (the emailed confirm and revoke links) + `lib/connector-card.ts` (a card's signed start,
+  its pin, closed on Done) +
   `lib/connector-signed.ts` (signed grant, Allow and worker pin writes) + `lib/connector-messages.ts` (what's signed),
   `lib/connector-tokens.ts` (refresh under a claim, rotation, scoped tokens, retiring), `lib/connector-revoke.ts`
   (revoke, disconnect, only a 204 confirms), `lib/connector-sweep.ts`, `lib/connector-notify.ts` (email and ledger
@@ -520,7 +521,8 @@ When a new doc lands in this folder, add it here on the same change.
   `electron/connector-grants.cjs` (IPC `weft.connectors.*`: Touch ID, then the approval key signs; registers this Mac's key,
   vouches for workers) + `electron/connector-sign.cjs` (main's copy of the messages) + `electron/connector-start.cjs` (signs a
   worker card's start, `POST /connectors/sign-start`), and `lib/worker-folder-repo.ts` (the repo and signed start a
-  `card.create` carries). On the worker, `lib/connector-worker.ts` + `lib/connector-client.ts` + `lib/connector-socket.ts`
+  `card.create` carries), and `electron/worker-projects.cjs` `createKnownRepos` (the repos a grant names). On every host,
+  `lib/host-api/card-ids.ts` keeps card.create from reusing a card id. On the worker, `lib/connector-worker.ts` + `lib/connector-client.ts` + `lib/connector-socket.ts`
   + `lib/connector-peer.ts` (who's asking, from lsof or ss) + `lib/connector-env.ts` (added to every session's env by
   `lib/runner-session.ts` and `lib/codex-runner.ts`, bound to the CLI's pid by `lib/cli-process.ts`), and
   `scripts/weft-connector-helper.cjs` + `scripts/worker-bin/gh`. Tables in `supabase/migrations/20261102280000_worker_github_mint.sql`.

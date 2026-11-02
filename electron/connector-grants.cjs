@@ -44,11 +44,22 @@ function looser(was, next) {
 const clean = (s, max) => String(s ?? "").replace(/[^\x20-\x7e]/g, "?").slice(0, max);
 const fingerprint = (key) => crypto.createHash("sha256").update(String(key)).digest("hex").slice(0, 16).replace(/(.{4})(?!$)/g, "$1 ");
 
+// The repos a grant covers, for the prompt: the first three by name, then how many more.
+function repoList(repos) {
+  if (!repos.length) return "no repos (this Mac has no GitHub checkouts)";
+  const shown = repos.slice(0, 3).map((r) => clean(r, 80)).join(", ");
+  return repos.length > 3 ? `${shown} and ${repos.length - 3} more` : shown;
+}
+
+// Whether the change covers a repo the grant didn't.
+const moreRepos = (was, repos) => repos.some((r) => !(Array.isArray(was?.repos) ? was.repos : []).includes(r));
+
 // What the Touch ID prompt says for a change: turning on, giving cards more, or making it stricter.
-function changeReason(was, next, name, connector) {
-  if (!was) return `let the worker ${name} use ${CONNECTOR_NAMES[connector]}, for cards you start on it`;
-  const what = `${next.scope} repos, approval ${next.approval}, lifetime ${next.lifetime}`;
-  if (looser(settingsOf(was), next)) return `give cards on the worker ${name} more ${SHORT_NAMES[connector]} access (${what})`;
+function changeReason(was, next, repos, name, connector) {
+  const covers = `for ${repoList(repos)}`;
+  if (!was) return `let the worker ${name} use ${CONNECTOR_NAMES[connector]}, for cards you start on it, ${covers}`;
+  const what = `${next.scope} repos, approval ${next.approval}, lifetime ${next.lifetime}, ${covers}`;
+  if (looser(settingsOf(was), next) || moreRepos(was, repos)) return `give cards on the worker ${name} more ${SHORT_NAMES[connector]} access (${what})`;
   return `make ${SHORT_NAMES[connector]} on the worker ${name} stricter (${what})`;
 }
 
@@ -108,10 +119,10 @@ function createConnectorSigner({ userId, sign, signKey, pins, call, macName = ()
 
 /**
  * @param {(channel: string, fn: (...args: any[]) => unknown) => void} handle the board-only IPC handler
- * @param {Parameters<typeof createConnectorSigner>[0] & { confirm: (reason: string) => Promise<boolean> }} deps
+ * @param {Parameters<typeof createConnectorSigner>[0] & { confirm: (reason: string) => Promise<boolean>, knownRepos?: () => Promise<string[]> }} deps
  */
 function registerConnectorGrants(handle, deps) {
-  const { db, userId, confirm, sign, call, now = Date.now } = deps;
+  const { db, userId, confirm, sign, call, now = Date.now, knownRepos = async () => [] } = deps;
   const signer = createConnectorSigner(deps);
   const nonce = () => crypto.randomBytes(32).toString("hex");
 
@@ -122,14 +133,16 @@ function registerConnectorGrants(handle, deps) {
     if (!CONNECTOR_NAMES[connector]) throw new Error("Weft doesn't know that connector.");
     const worker = String(workerId);
     const next = settingsOf(rawSettings);
-    const { data: was, error } = await db().from("connector_grants").select("scope, approval, lifetime, asks, epoch").eq("user_id", uid).eq("worker_id", worker).eq("connector", connector).maybeSingle();
+    const { data: was, error } = await db().from("connector_grants").select("scope, approval, lifetime, asks, repos, epoch").eq("user_id", uid).eq("worker_id", worker).eq("connector", connector).maybeSingle();
     if (error) throw new Error(`Couldn't read the grant: ${error.message}`);
-    if (!(await confirm(changeReason(was, next, clean(workerName || worker, 60), connector)))) return { denied: true };
+    // The repos this Mac has checkouts of, read now and named in the prompt: the grant covers these and no others.
+    const repos = await knownRepos();
+    if (!(await confirm(changeReason(was, next, repos, clean(workerName || worker, 60), connector)))) return { denied: true };
     const { key } = await signer.register();
     await signer.vouch(worker);
-    const statement = { userId: uid, workerId: worker, connector, settings: next, nonce: nonce(), issuedAt: now(), prevEpoch: Number(was?.epoch ?? 0) };
+    const statement = { userId: uid, workerId: worker, connector, settings: next, repos, nonce: nonce(), issuedAt: now(), prevEpoch: Number(was?.epoch ?? 0) };
     const sig = await sign(grantMessage(statement));
-    const r = await call("POST", "/github/grant", { workerId: worker, connector, settings: next, nonce: statement.nonce, issuedAt: statement.issuedAt, prevEpoch: statement.prevEpoch, signerKey: key, sig });
+    const r = await call("POST", "/github/grant", { workerId: worker, connector, settings: next, repos, nonce: statement.nonce, issuedAt: statement.issuedAt, prevEpoch: statement.prevEpoch, signerKey: key, sig });
     return { ok: true, settings: next, waiting: r.waiting === true };
   });
 

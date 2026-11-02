@@ -154,12 +154,24 @@ describe("realGh", () => {
 });
 
 describe("gh", () => {
-  it.each([...REFUSED])("refuses `gh %s`", async (cmd) => {
+  it.each([...REFUSED])("refuses `gh %s` while the connector's token is in use", async (cmd) => {
     const f = fakeConnect(TOKEN);
-    const o = io(f.connect);
+    const spawn = vi.fn();
+    const o = io(f.connect, spawn);
     expect(await gh(["--hostname", "github.com", cmd, "x"], ENV, o)).toBe(1);
     expect(o.err).toHaveBeenCalledWith(expect.stringContaining(`\`gh ${cmd}\` isn't available`));
-    expect(f.connect).not.toHaveBeenCalled();
+    expect(spawn).not.toHaveBeenCalled();
+  });
+
+  it("lets `gh auth` through to the box's own gh when the connector has no token", async () => {
+    const spawn = vi.fn(() => {
+      const child = new EventEmitter();
+      queueMicrotask(() => child.emit("exit", 0));
+      return child;
+    });
+    const o = { ...io(fakeConnect(JSON.stringify({ error: "GitHub isn't turned on." })).connect, spawn), exists: (f: string) => f === "/usr/bin/gh" };
+    expect(await gh(["auth", "status"], { ...ENV, PATH: "/usr/bin" }, o)).toBe(0);
+    expect(spawn).toHaveBeenCalledWith("/usr/bin/gh", ["auth", "status"], expect.anything());
   });
 
   it("falls back to the real gh with the card's own env when there's no token", async () => {

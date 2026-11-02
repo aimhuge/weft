@@ -46,7 +46,7 @@ async function trustedSigner(db: TrustDb, userId: string, signerId: string | nul
 export async function grantProblem(db: TrustDb, grant: GrantRow, now: number): Promise<string | null> {
   const signer = await trustedSigner(db, grant.user_id, grant.signer_id, now);
   if (!signer) return "That grant isn't signed by a Mac of yours that's trusted now.";
-  const message = grantMessage({ userId: grant.user_id, workerId: grant.worker_id, connector: grant.connector, settings: settingsOf(grant), nonce: grant.nonce, issuedAt: Date.parse(grant.issued_at), prevEpoch: grant.epoch - 1 });
+  const message = grantMessage({ userId: grant.user_id, workerId: grant.worker_id, connector: grant.connector, settings: settingsOf(grant), repos: grant.repos, nonce: grant.nonce, issuedAt: Date.parse(grant.issued_at), prevEpoch: grant.epoch - 1 });
   // settingsOf drops what it doesn't know; a row it changed isn't the one that was signed.
   const exact = settingsOf(grant);
   if (exact.scope !== grant.scope || exact.approval !== grant.approval || exact.lifetime !== grant.lifetime) return "That grant's settings aren't ones a Mac signs.";
@@ -70,14 +70,14 @@ export async function pinProblem(db: TrustDb, worker: WorkerRow, now: number): P
   return verifyRaw(signer.sign_key, message, pin.sig) ? null : `${worker.name}'s pairing signature doesn't check.`;
 }
 
-// Whether a card's start was signed by a Mac of the owner's trusted now, for this worker, card, folder and repo.
-export async function startProblem(db: TrustDb, o: { userId: string; workerId: string; cardId: string; folder: string; repo: string; start: unknown }, now: number): Promise<string | null> {
-  const st = (o.start && typeof o.start === "object" ? o.start : {}) as { key?: unknown; sig?: unknown; issuedAt?: unknown };
-  if (typeof st.key !== "string" || typeof st.sig !== "string" || typeof st.issuedAt !== "number") return "That card's start wasn't signed by a Mac. Start it from the desktop board.";
+// The Mac key of the owner's, trusted now, that signed a card's start for this worker, card, folder and repo, or why not.
+export async function startSigner(db: TrustDb, o: { userId: string; workerId: string; cardId: string; folder: string; repo: string; start: unknown }, now: number): Promise<SignerRow | string> {
+  const st = (o.start && typeof o.start === "object" ? o.start : {}) as { key?: unknown; sig?: unknown; issuedAt?: unknown; nonce?: unknown };
+  if (typeof st.key !== "string" || typeof st.sig !== "string" || typeof st.issuedAt !== "number" || typeof st.nonce !== "string") return "That card's start wasn't signed by a Mac. Start it from the desktop board.";
   const signer = await db.signerByKey(o.userId, st.key);
-  if (!isTrusted(signer, now)) return "That card was started from a Mac that isn't trusted now.";
-  const message = startMessage({ userId: o.userId, workerId: o.workerId, cardId: o.cardId, folder: o.folder, repo: o.repo, issuedAt: st.issuedAt });
-  return verifyRaw(st.key, message, st.sig) ? null : "That card's start signature doesn't check.";
+  if (!signer || !isTrusted(signer, now)) return "That card was started from a Mac that isn't trusted now.";
+  const message = startMessage({ userId: o.userId, workerId: o.workerId, cardId: o.cardId, folder: o.folder, repo: o.repo, nonce: st.nonce, issuedAt: st.issuedAt });
+  return verifyRaw(st.key, message, st.sig) ? signer : "That card's start signature doesn't check.";
 }
 
 export const fresh = (issuedAt: number, now: number) => Number.isFinite(issuedAt) && Math.abs(now - issuedAt) <= SIGNED_FRESH_MS;

@@ -154,8 +154,10 @@ pair a box of its own (the `worker_pair_*` functions are plain RPCs), insert a s
   change's Touch ID (turning a connector on, an Allow, vouching, pairing a worker), never because Settings opened.
 - **Chosen: an emailed one-time link, or a vouch from a trusted Mac.** A session can register a key of its own, so a new
   key is **untrusted until someone opens the link mailed to the account's own address**: a one-time confirm link (good for
-  24 hours, sent again on a later registration after 10 minutes) and a revoke link, both of which weft.zip keeps only as
-  sha256 (`lib/connector-signer-links.ts`). There's no path by time alone, and with no mailer (`RESEND_API_KEY` unset) a key
+  24 hours, sent again on a later registration after 10 minutes, at most 4 emails in all) and a revoke link, which
+  weft.zip keeps only as sha256; every revoke link ever mailed for the key keeps working (`lib/connector-signer-links.ts`).
+  The id and token ride in the link's **fragment**, which browsers never send, so they stay out of server and Vercel
+  logs; the page's one hash-allowed script copies them into its form. There's no path by time alone, and with no mailer (`RESEND_API_KEY` unset) a key
   can't be registered at all: weft.zip refuses with a clear message rather than leave a key nobody can confirm. The email
   is in fixed words: the key's fingerprint, the time, the IP address and client the registration came from, never the
   name the registering client chose. Each link opens a page with one button (`/api/connectors/signers/confirm`,
@@ -165,18 +167,27 @@ pair a box of its own (the `worker_pair_*` functions are plain RPCs), insert a s
   then signs `weft-connector-endorse-v1` (`POST /api/connectors/signers/endorse`). A session can always take trust
   **away** (Remove: `DELETE /api/connectors/signers?id=`), which ends the grants that key signed, the worker pins it
   signed and the tokens under them; at worst that's a denial of service.
+- **Setup checks for this to hold.** Supabase Auth's **Secure email change** must be on (a session alone can't move the
+  account to an address it controls), and changing the password must sign out the account's other sessions, since that's
+  what the emails tell you to do.
 - **What remains: whoever controls the inbox controls trust.** A stolen session plus the account's email (or a mailbox
   rule forwarding it) confirms a key of the attacker's own. The vouch path doesn't have that weakness, but the first Mac
   has nobody to vouch for it.
-- **Starts are signed too.** A grant is per worker, so the mint also needs to know a card was really started from your
-  board: `cloud_commands` is insertable by any session, and a `card.create` naming any repo would otherwise mint for it.
-  When the desktop board starts a thread on a worker (`lib/worker-new-thread.ts`), the server asks main over the
-  token-guarded control server (`POST /connectors/sign-start`, `electron/connector-start.cjs`) to sign
-  `weft-connector-start-v1` over you, the worker, the card id, the folder and the repo; main signs only a repo it knows
-  that folder as itself (`electron/worker-projects.cjs`). No Touch ID per card: the grant is the yes. The mint takes only
-  a signed `card.create`, the only start row for that card id (several, in `created_at` order, is refused as ambiguous),
-  signed by a key trusted now, before it pins the card. A local thread that can start a card through the board's own
-  route gets that card signed too: it's the board starting it.
+- **Starts are signed too, once, fresh, and only from the board.** A grant is per worker, so the mint also needs to know
+  a card was really started from your board: `cloud_commands` is insertable by any session. When **Weft's own window**
+  starts a thread on a worker (`POST /api/cards` passing `elevated`, never a thread's curl with the plain token), the
+  server asks main over the token-guarded control server (`POST /connectors/sign-start`, `electron/connector-start.cjs`) to
+  sign `weft-connector-start-v1` over you, the worker, the card id, the folder, the repo and a fresh nonce; main signs
+  only a repo it knows that folder as (`electron/worker-projects.cjs`). No Touch ID per card: the grant is the yes. The
+  mint (`lib/connector-card.ts`) takes only the one `card.create` for that card id, signed by a key trusted now, whose
+  row was made within 5 minutes of signing (a replayed row is late), and pins the card to that signature
+  (`connector_cards.start_sig`, unique: one signature pins one card). Every later mint re-checks the start's signer is
+  still trusted; a card seen Done or deleted has its pin **closed** for good, and the worker never makes a card under an
+  id it has had before (`lib/host-api/card-ids.ts`, a list kept in its data folder).
+- **The grant names its repos.** When you turn GitHub on (or change it), main reads the GitHub repos this Mac has
+  checkouts of (`createKnownRepos`), names them in the Touch ID prompt, and signs them into the grant. The mint refuses a
+  card in any repo the grant doesn't list, so rewriting a checkout's origin later (a thread could) can't widen it; covering
+  a new repo means turning GitHub on again from the Mac with that checkout (more repos counts as looser).
 - **Workers are vouched for the same way.** Pairing (`electron/host-pairing.cjs`) pins the box key and sign key it just
   checked under Touch ID, then signs them for weft.zip (`vouchWorker`); turning a connector on vouches again from that
   local pin, never from the row. A worker this Mac didn't pair (or paired before this change, with no sign key pinned)
@@ -287,11 +298,12 @@ in that env.
   helper in, let it run, and put the original back between two checks. The same user is one trust domain.
 - **git** runs the helper's `git-credential get` (through `env -u NODE_OPTIONS -u NODE_PATH`), which asks the socket and
   prints `username=x-access-token`, the token and `password_expiry_utc` on stdout to git. `erase` drops the daemon's copy.
-- **gh with no token** works as it did before the connector: when the socket has nothing for the card (GitHub isn't
-  turned on for the worker, weft.zip isn't set up yet, the daemon is down), the wrapper runs the real gh found on the
-  card's PATH past its own folder, with the card's own env and the box's own sign-in, if any.
-- **gh** is `scripts/worker-bin/gh`, the same helper's `gh` mode: it refuses `auth`, `alias`, `extension` and `config`
-  (finding the subcommand past global flags), then runs the real gh the daemon named with an env built from scratch:
+- **gh with no token** works as it did before the connector, `gh auth` included: when the socket has nothing for the
+  card (GitHub isn't turned on for the worker, weft.zip isn't set up yet, the daemon is down), the wrapper runs the real
+  gh found on the card's PATH past its own folder, with the card's own env and the box's own sign-in, if any. Only while
+  the connector's token is in use are `auth`, `alias`, `extension` and `config` refused.
+- **gh** is `scripts/worker-bin/gh`, the same helper's `gh` mode: with a token it refuses `auth`, `alias`, `extension` and
+  `config` (finding the subcommand past global flags), then runs the real gh the daemon named with an env built from scratch:
   `HOME`, `USER`, the locale and terminal, the daemon's PATH, `GH_TOKEN`, `GH_HOST=github.com`, and one fresh empty folder
   (removed after) as `GH_CONFIG_DIR`, `GH_DATA_DIR` and `XDG_CONFIG_HOME`/`XDG_DATA_HOME`/`XDG_STATE_HOME`/`XDG_CACHE_HOME`, so
   no alias or extension of the card's runs; prompts, pager and update checks off. No `NODE_OPTIONS`, `GIT_*`, `PAGER`,
@@ -365,8 +377,10 @@ box (a session can register a key; only the inbox or a trusted Mac can make it c
 - **Ask before a protected-branch push is a setting, not yet a gate.** Weft can't see a push's ref without a proxy; the
   setting is stored and handed to the worker with each token (`asks`), for the helper's git forwarder (P4) to enforce.
   Deleting a repo needs no ask: the app has no Administration permission, so no token Weft hands out can do it.
-- **Only the desktop board's new threads get GitHub tokens**: a card started on weft.zip (which can't read the project's
-  origin), a `run` from Settings → Workers or a card another worker sent carries no start a Mac signed.
+- **Only the desktop board's new threads get GitHub tokens**, in repos the grant names: a card started on weft.zip (which
+  can't read the project's origin), by a thread through the board's route, a `run` from Settings → Workers or a card
+  another worker sent carries no start a Mac signed. A local thread can't get a start signed, but anything that can
+  click in Weft's own window can.
 - **One chain per user**: turning GitHub off for one worker rotates the shared user token when that worker held it, so
   another worker's next git call fetches a fresh one (its held copy is refused once, then `erase` and a new ask).
 - **Not verified live**: PostgREST's handling of the `->>` filter inside `or=` for the start lookup, lsof/ss output on every

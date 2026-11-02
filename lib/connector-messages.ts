@@ -12,13 +12,15 @@ export interface GrantStatement {
   workerId: string;
   connector: string;
   settings: GrantSettings;
+  // The repos (owner/name, lowercase) this grant covers, from the Mac's own checkouts when it was signed.
+  repos: string[];
   nonce: string;
   issuedAt: number;
   prevEpoch: number;
 }
 
 export const grantMessage = (g: GrantStatement) =>
-  JSON.stringify(["weft-connector-grant-v1", g.userId, g.workerId, g.connector, g.settings.scope, g.settings.approval, g.settings.lifetime, [...g.settings.asks].sort(), g.nonce, g.issuedAt, g.prevEpoch]);
+  JSON.stringify(["weft-connector-grant-v1", g.userId, g.workerId, g.connector, g.settings.scope, g.settings.approval, g.settings.lifetime, [...g.settings.asks].sort(), [...g.repos].sort(), g.nonce, g.issuedAt, g.prevEpoch]);
 
 // An Allow for one project or card under a per-project or per-card approval.
 export interface AllowStatement {
@@ -51,10 +53,12 @@ export interface StartStatement {
   cardId: string;
   folder: string;
   repo: string;
+  // Fresh per start, carried in the command row: one signature names one command.
+  nonce: string;
   issuedAt: number;
 }
 
-export const startMessage = (s: StartStatement) => JSON.stringify(["weft-connector-start-v1", s.userId, s.workerId, s.cardId, s.folder, s.repo, s.issuedAt]);
+export const startMessage = (s: StartStatement) => JSON.stringify(["weft-connector-start-v1", s.userId, s.workerId, s.cardId, s.folder, s.repo, s.nonce, s.issuedAt]);
 
 // A Mac's key offered as a signer, signed by that key (it holds the private half).
 export interface SignerStatement {

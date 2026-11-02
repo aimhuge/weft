@@ -22,10 +22,11 @@ function setup(o: { macTrustedFrom?: number; vouched?: boolean } = {}) {
 
 const nonce = () => randomBytes(16).toString("hex");
 
-function grantBody(mac: Mac, o: { settings?: Partial<GrantSettings>; prevEpoch?: number; issuedAt?: number; userId?: string; workerId?: string } = {}) {
+function grantBody(mac: Mac, o: { settings?: Partial<GrantSettings>; prevEpoch?: number; issuedAt?: number; userId?: string; workerId?: string; repos?: string[] } = {}) {
   const settings = settingsOf({ scope: "project", ...o.settings });
-  const statement = { userId: o.userId ?? "u1", workerId: o.workerId ?? W, connector: "github", settings, nonce: nonce(), issuedAt: o.issuedAt ?? NOW, prevEpoch: o.prevEpoch ?? 0 };
-  return { workerId: statement.workerId, connector: "github", settings, nonce: statement.nonce, issuedAt: statement.issuedAt, prevEpoch: statement.prevEpoch, signerKey: mac.key, sig: mac.sign(grantMessage(statement)) };
+  const repos = o.repos ?? ["o/r"];
+  const statement = { userId: o.userId ?? "u1", workerId: o.workerId ?? W, connector: "github", settings, repos, nonce: nonce(), issuedAt: o.issuedAt ?? NOW, prevEpoch: o.prevEpoch ?? 0 };
+  return { workerId: statement.workerId, connector: "github", settings, repos, nonce: statement.nonce, issuedAt: statement.issuedAt, prevEpoch: statement.prevEpoch, signerKey: mac.key, sig: mac.sign(grantMessage(statement)) };
 }
 
 describe("pinWorker", () => {
@@ -87,6 +88,17 @@ describe("writeGrant", () => {
     await expect(writeGrant(raced, "u1", grantBody(mac))).rejects.toMatchObject({ status: 409 });
   });
 
+  it("stores the repos sorted, refuses repos that aren't lowercase owner/name, and ends tokens when a repo is dropped", async () => {
+    const { d, state, mac } = setup();
+    await writeGrant(d, "u1", grantBody(mac, { repos: ["z/y", "a/b"] }));
+    expect(state.grants[0]!.repos).toEqual(["a/b", "z/y"]);
+    for (const repos of [["A/B"], ["nope"], "a/b", Array.from({ length: 501 }, (_, i) => `a/r${i}`)]) {
+      await expect(writeGrant(d, "u1", { ...grantBody(mac, { prevEpoch: 1 }), repos })).rejects.toMatchObject({ status: 400 });
+    }
+    state.mints.push({ id: 901, at: iso(NOW - 70_000), user_id: "u1", worker_id: W, grant_id: "g1", connector: "github", card_id: "c", repo: "o/r", outcome: "minted", reason: null, token_kind: "user", token_issued_at: iso(NOW - 60_000), nonce: "n9" });
+    expect((await writeGrant(d, "u1", grantBody(mac, { prevEpoch: 1, repos: ["a/b"] }))).tokensRevoked).toBe(1);
+  });
+
   it("ends the worker's tokens when a change is stricter", async () => {
     const { d, state, mac, gh } = setup();
     signedGrant(state, mac, { worker_id: W, scope: "installed" });
@@ -100,7 +112,7 @@ describe("writeGrant", () => {
     const { d, mac, state } = setup();
     const body = grantBody(mac);
     await writeGrant(d, "u1", body);
-    await expect(writeGrant(d, "u1", { ...grantBody(mac, { prevEpoch: 1 }), nonce: body.nonce, sig: mac.sign(grantMessage({ userId: "u1", workerId: W, connector: "github", settings: settingsOf({ scope: "project" }), nonce: body.nonce, issuedAt: NOW, prevEpoch: 1 })) })).rejects.toMatchObject({ status: 401, message: expect.stringContaining("used already") as string });
+    await expect(writeGrant(d, "u1", { ...grantBody(mac, { prevEpoch: 1 }), nonce: body.nonce, sig: mac.sign(grantMessage({ userId: "u1", workerId: W, connector: "github", settings: settingsOf({ scope: "project" }), repos: ["o/r"], nonce: body.nonce, issuedAt: NOW, prevEpoch: 1 })) })).rejects.toMatchObject({ status: 401, message: expect.stringContaining("used already") as string });
     await expect(writeGrant(d, "u1", grantBody(mac, { prevEpoch: 1, issuedAt: NOW - 10 * 60_000 }))).rejects.toMatchObject({ status: 401, message: expect.stringContaining("too old") as string });
     await expect(writeGrant(d, "u1", { ...grantBody(mac, { prevEpoch: 1 }), settings: { scope: "installed" } })).rejects.toMatchObject({ status: 401, message: expect.stringContaining("doesn't check") as string });
     await expect(writeGrant(d, "u1", { ...grantBody(mac, { prevEpoch: 1 }), nonce: "zz" })).rejects.toMatchObject({ status: 401 });

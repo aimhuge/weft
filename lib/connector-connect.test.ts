@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
-import { buttonPage, callbackUrl, checkConnect, CONNECT_PATH, connectCookie, connectStatus, donePage, endPrevious, finishConnect, newConnect, sameOrigin, startPage } from "./connector-connect";
+import { callbackUrl, linkPage, checkConnect, CONNECT_PATH, connectCookie, connectStatus, donePage, endPrevious, finishConnect, newConnect, sameOrigin, startPage } from "./connector-connect";
 import { openToken } from "./connector-crypto";
 import { CFG, deps, fakeDb, fakeGithub, iso, json, KEY, noContent, NOW, pair, storeTokens } from "./connector.harness";
 import { signedGrant, trustedMac } from "./connector-trust.harness";
@@ -164,12 +164,16 @@ describe("donePage and startPage", () => {
   });
 });
 
-describe("buttonPage", () => {
-  it("is one escaped, unframeable button that POSTs its fields back", async () => {
-    const res = buttonPage("T<", "x", "/a", { id: 'i"1', t: "tok" }, "Go");
+describe("linkPage", () => {
+  it("is one unframeable button whose fields a hash-allowed script fills from the fragment", async () => {
+    const res = linkPage("T<", "x", "/a", "Go");
     expect(res.headers.get("x-frame-options")).toBe("DENY");
+    expect(res.headers.get("referrer-policy")).toBe("no-referrer");
     const html = await res.text();
-    expect(html).toContain('<form method="post" action="/a"><input type="hidden" name="id" value="i&#34;1"><input type="hidden" name="t" value="tok"><button');
+    const script = /<script>(.*)<\/script>/.exec(html)![1]!;
+    expect(res.headers.get("content-security-policy")).toContain(`script-src 'sha256-${createHash("sha256").update(script).digest("base64")}'`);
+    expect(script).toContain("location.hash");
+    expect(html).toContain('<form method="post" action="/a"><input type="hidden" id="id" name="id"><input type="hidden" id="t" name="t"><button');
     expect(html).toContain("<title>T&#60;</title>");
   });
 });

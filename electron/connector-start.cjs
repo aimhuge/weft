@@ -5,6 +5,7 @@
 // itself (electron/worker-projects.cjs reads this Mac's own checkouts), never the caller's word for it. No Touch ID
 // per card: the grant (per worker, behind Touch ID) is the yes; this signature only says the card was started here,
 // for that repo, so a session alone can't make a card.create that mints.
+const crypto = require("node:crypto");
 const { startMessage } = require("./connector-sign.cjs");
 
 const CARD_RE = /^[A-Za-z0-9_-]{1,200}$/;
@@ -15,7 +16,7 @@ const REPO_RE = /^[A-Za-z0-9_.-]{1,100}\/[A-Za-z0-9_.-]{1,100}$/;
  *   projectRepos: (folder: string) => Promise<string[]>, now?: () => number }} deps
  */
 function createStartSigner({ userId, sign, signKey, projectRepos, now = Date.now }) {
-  /** @param {any} body @returns {Promise<{ key: string, sig: string, issuedAt: number }>} */
+  /** @param {any} body @returns {Promise<{ key: string, sig: string, issuedAt: number, nonce: string }>} */
   return async (body) => {
     const uid = userId();
     if (!uid) throw new Error("Sign in to Weft first.");
@@ -26,8 +27,10 @@ function createStartSigner({ userId, sign, signKey, projectRepos, now = Date.now
     const known = [...new Set(await projectRepos(folder))];
     if (known.length !== 1 || known[0] !== `github:${repo.toLowerCase()}`) throw new Error(`This Mac doesn't know ${folder} as ${repo}, so it won't sign that start.`);
     const issuedAt = now();
-    const sig = await sign(startMessage({ userId: uid, workerId, cardId, folder, repo, issuedAt }));
-    return { key: await signKey(), sig, issuedAt };
+    // A fresh nonce, carried in the command row beside the signature: the mint pins a card to one signature once.
+    const nonce = crypto.randomBytes(16).toString("hex");
+    const sig = await sign(startMessage({ userId: uid, workerId, cardId, folder, repo, nonce, issuedAt }));
+    return { key: await signKey(), sig, issuedAt, nonce };
   };
 }
 

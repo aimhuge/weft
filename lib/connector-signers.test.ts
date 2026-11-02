@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { endorseMessage, signerMessage } from "./connector-messages";
 import { deps, fakeDb, fakeGithub, iso, NOW, noContent, pairedWorker, storeTokens, ticking, CFG } from "./connector.harness";
 import { DAY, macKey, signedGrant, trustedMac, vouch } from "./connector-trust.harness";
-import { endorseSigner, listSigners, MAX_SIGNERS, registerSigner, revokeSigner } from "./connector-signers";
+import { endorseSigner, listSigners, MAX_SENDS, MAX_SIGNERS, registerSigner, revokeSigner } from "./connector-signers";
 import { keyFingerprint } from "./connector-trust";
 
 function setup() {
@@ -31,14 +31,15 @@ describe("registerSigner", () => {
     expect(view).toMatchObject({ key: body.key, trusted: false, trustedFrom: null, endorsed: false });
     expect(state.signers[0]).toMatchObject({ device: "dev-1", user_id: "u1", added_ip: META.ip, added_ua: META.ua });
     expect(state.signers[0]!.confirm_hash).toMatch(/^[0-9a-f]{64}$/);
-    expect(state.signers[0]!.revoke_hash).toMatch(/^[0-9a-f]{64}$/);
+    expect(state.signers[0]!.revoke_hashes).toEqual([expect.stringMatching(/^[0-9a-f]{64}$/)]);
+    expect(state.signers[0]!.confirm_sends).toBe(1);
     expect(notify).toHaveBeenCalledWith("u1", "Weft: confirm a new Mac key", expect.any(String));
     const text = mailed(notify);
     expect(text).toContain(`Key fingerprint: ${keyFingerprint(body.key)}`);
     expect(text).toContain("From IP: 203.0.113.9");
     expect(text).toContain("Client: Weft/0.7 (Macintosh)");
-    expect(text).toMatch(/\/api\/connectors\/signers\/confirm\?id=.+&t=/);
-    expect(text).toMatch(/\/api\/connectors\/signers\/revoke\?id=.+&t=/);
+    expect(text).toMatch(/\/api\/connectors\/signers\/confirm#id=.+&t=/);
+    expect(text).toMatch(/\/api\/connectors\/signers\/revoke#id=.+&t=/);
     expect(text).not.toContain("click confirm");
   });
 
@@ -71,6 +72,28 @@ describe("registerSigner", () => {
     expect(state.signers).toHaveLength(1);
   });
 
+  it("keeps every emailed revoke link working across resends, and mails at most MAX_SENDS times", async () => {
+    const { d, state, notify, clock } = setup();
+    const { k, body } = offer();
+    await registerSigner(d, "u1", body, META);
+    for (let i = 1; i <= MAX_SENDS + 1; i++) {
+      clock.set(NOW + i * 11 * 60_000);
+      await registerSigner(d, "u1", offer(k, { issuedAt: clock() }).body, META);
+    }
+    expect(notify).toHaveBeenCalledTimes(MAX_SENDS);
+    expect(state.signers[0]!.confirm_sends).toBe(MAX_SENDS);
+    expect(state.signers[0]!.revoke_hashes).toHaveLength(MAX_SENDS);
+    expect(new Set(state.signers[0]!.revoke_hashes).size).toBe(MAX_SENDS);
+  });
+
+  it("resends for a pending key with no send count or revoke links yet", async () => {
+    const { d, state, notify } = setup();
+    const mac = trustedMac(state, "u1", { trustedFrom: null });
+    await registerSigner(d, "u1", { key: mac.key, name: "M", issuedAt: NOW, sig: mac.sign(signerMessage({ userId: "u1", key: mac.key, name: "M", issuedAt: NOW })) }, META);
+    expect(notify).toHaveBeenCalledTimes(1);
+    expect(mac.signer).toMatchObject({ confirm_sends: 1, revoke_hashes: [expect.any(String)] });
+  });
+
   it("lets a pending key's link go again later when a resend can't be mailed", async () => {
     const { d, state, clock } = setup();
     const { k, body } = offer();
@@ -79,6 +102,7 @@ describe("registerSigner", () => {
     const failing = { ...d, notify: () => Promise.reject(new Error("down")) };
     await registerSigner(failing, "u1", offer(k, { issuedAt: clock() }).body, META);
     expect(state.signers[0]!.confirm_sent_at).toBeNull();
+    expect(state.signers[0]!.revoke_hashes).toHaveLength(2);
   });
 
   it("puts a revoked key back as new and untrusted", async () => {

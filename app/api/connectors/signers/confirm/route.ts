@@ -1,17 +1,16 @@
-// /api/connectors/signers/confirm?id=&t=, on weft.zip: the link emailed when a Mac key is added. GET shows one button;
+// /api/connectors/signers/confirm#id=&t=, on weft.zip: the link emailed when a Mac key is added. GET shows one button;
 // its POST trusts the key, once, within a day (lib/connector-signer-links.ts confirmByLink). No session needed: the
 // one-time token, sent only to the account's own address, is the proof.
 import { connection } from "next/server";
-import { buttonPage, donePage } from "@/lib/connector-connect";
+import { donePage, linkPage } from "@/lib/connector-connect";
 import { connectorDeps } from "@/lib/connector-deps";
 import { confirmByLink } from "@/lib/connector-signer-links";
 
 const PATH = "/api/connectors/signers/confirm";
 
-export async function GET(req: Request) {
+export async function GET() {
   await connection();
-  const q = new URL(req.url).searchParams;
-  return buttonPage("Confirm this Mac key?", "Confirm only if you just set Weft up on a Mac of yours. It will be able to approve GitHub on your workers.", PATH, { id: q.get("id") ?? "", t: q.get("t") ?? "" }, "Confirm this Mac key");
+  return linkPage("Confirm this Mac key?", "Confirm only if you just set Weft up on a Mac of yours. It will be able to approve GitHub on your workers.", PATH, "Confirm this Mac key");
 }
 
 export async function POST(req: Request) {

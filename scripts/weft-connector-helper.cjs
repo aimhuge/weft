@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // A worker card's way to GitHub (docs/architecture/connectors.md#connectors-on-a-worker-github-p1-as-built), run as
 //   weft-connector-helper.cjs git-credential <get|store|erase>   git's credential helper for https://github.com
-//   weft-connector-helper.cjs gh <args…>                          scripts/worker-bin/gh, the gh a card runs
+//   weft-connector-helper.cjs gh <args…>                          scripts/worker-bin/gh, the gh a card runs (the box's
+//                                                                  own gh, untouched, when the connector has no token)
 // Both ask the worker daemon's socket (lib/connector-socket.ts) for the card's token, by the capability in the card's
 // env. git gets it on stdout, the way every credential helper answers, so it's in no environment. gh gets it as GH_TOKEN
 // in one gh process whose env is built from scratch: no NODE_OPTIONS, GIT_*, PAGER, BROWSER, EDITOR or anything else of
@@ -115,11 +116,6 @@ function ghEnv(env, got, configDir) {
 }
 
 async function gh(args, env, io) {
-  const command = firstCommand(args);
-  if (command && REFUSED.has(command)) {
-    io.err(`Weft: \`gh ${command}\` isn't available in a worker card. GitHub here is Weft's connector, signed in as you.\n`);
-    return 1;
-  }
   let got;
   try {
     got = await ask(env.WEFT_CONNECTOR_SOCKET, { cap: env.WEFT_CONNECTOR_CAP, op: "get" }, io.connect);
@@ -135,6 +131,12 @@ async function gh(args, env, io) {
       return 1;
     }
     return run(io, real, args, env);
+  }
+  // With the connector's token in use, nothing that prints or changes the sign-in, or runs code it was told to.
+  const command = firstCommand(args);
+  if (command && REFUSED.has(command)) {
+    io.err(`Weft: \`gh ${command}\` isn't available in a worker card while GitHub is Weft's connector, signed in as you.\n`);
+    return 1;
   }
   if (!got.gh) {
     io.err("Weft: gh isn't installed on this worker.\n");

@@ -100,14 +100,12 @@ describe("the emailed links", () => {
   const form = (fields: Record<string, string>) => new Request("https://weft.zip/x", { method: "POST", body: new URLSearchParams(fields) });
   const text = async (res: Response) => res.text();
 
-  it("show one button that POSTs back, with the link's id and token, and act only on the POST", async () => {
+  it("show one button that POSTs back what the link's fragment carries, and act only on the POST", async () => {
     for (const [route, path, button] of [[confirmRoute, "/api/connectors/signers/confirm", "Confirm this Mac key"], [revokeRoute, "/api/connectors/signers/revoke", "Revoke this key"]] as const) {
-      const page = await text(await route.GET(new Request(`https://weft.zip${path}?id=s1&t=tok`)));
+      const page = await text(await route.GET());
       expect(page).toContain(`<form method="post" action="${path}">`);
-      expect(page).toContain('name="id" value="s1"');
-      expect(page).toContain('name="t" value="tok"');
+      expect(page).toContain('name="t"');
       expect(page).toContain(button);
-      expect(await text(await route.GET(new Request(`https://weft.zip${path}`)))).toContain('name="t" value=""');
     }
     expect(lib.confirmByLink).not.toHaveBeenCalled();
     expect(lib.revokeByLink).not.toHaveBeenCalled();

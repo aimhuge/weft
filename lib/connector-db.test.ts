@@ -7,7 +7,7 @@ const fakeSupabase = (...responses: R[]) => {
   return { db: supabaseConnectorDb(client), calls };
 };
 
-const GRANT_COLS = "id, user_id, worker_id, connector, scope, approval, lifetime, asks, signer_id, sig, nonce, issued_at, epoch, expires_at, last_used_at";
+const GRANT_COLS = "id, user_id, worker_id, connector, scope, approval, lifetime, asks, repos, signer_id, sig, nonce, issued_at, epoch, expires_at, last_used_at";
 
 describe("supabaseConnectorDb: reads", () => {
   it("reads a headless worker by key hash or id", async () => {
@@ -104,10 +104,15 @@ describe("supabaseConnectorDb: writes", () => {
     expect(calls[2]!.ops).toEqual([["delete"], ["eq", "user_id", "u1"], ["eq", "connector", "github"], ["select", "id"]]);
   });
 
-  it("pins a card once", async () => {
-    const { db, calls } = fakeSupabase(ok(null));
-    await db.pinCard("w1", "c1", { user_id: "u1", folder: "r", repo: "o/r" });
-    expect(calls[0]!.ops).toEqual([["upsert", { worker_id: "w1", card_id: "c1", user_id: "u1", folder: "r", repo: "o/r" }, { onConflict: "worker_id,card_id", ignoreDuplicates: true }]]);
+  it("pins a card once, says when it or its start was pinned already, and closes a pin", async () => {
+    const { db, calls } = fakeSupabase(ok(null), fail("dup", "23505"), fail("down"), ok(null));
+    const card = { user_id: "u1", folder: "r", repo: "o/r", signer_id: "s1", start_sig: "h" };
+    expect(await db.pinCard("w1", "c1", card)).toBe(true);
+    expect(await db.pinCard("w1", "c1", card)).toBe(false);
+    await expect(db.pinCard("w1", "c1", card)).rejects.toThrow("Pinning the card: down");
+    await db.closePin("w1", "c1", "t");
+    expect(calls[0]!.ops).toEqual([["insert", { worker_id: "w1", card_id: "c1", ...card }]]);
+    expect(calls[3]!.ops).toEqual([["update", { closed_at: "t" }], ["eq", "worker_id", "w1"], ["eq", "card_id", "c1"]]);
   });
 
   it("admits a request through connector_mint_admit: an id, a replay or a limit", async () => {

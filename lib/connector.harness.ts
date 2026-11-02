@@ -231,7 +231,14 @@ export function fakeDb(clock: () => number = () => NOW): { db: ConnectorDb; stat
       done(state.starts.filter((s) => s.worker_id === workerId && s.card_id === cardId && s.created_by === userId && ["new_card", "run", "host"].includes(s.kind))),
     pinnedCard: (workerId, cardId) => done(state.pinned.get(`${workerId}/${cardId}`) ?? null),
     pinCard: (workerId, cardId, card) => {
-      if (!state.pinned.has(`${workerId}/${cardId}`)) state.pinned.set(`${workerId}/${cardId}`, card);
+      const k = `${workerId}/${cardId}`;
+      if (state.pinned.has(k) || (card.start_sig && [...state.pinned.values()].some((p) => p.start_sig === card.start_sig))) return done(false);
+      state.pinned.set(k, card);
+      return done(true);
+    },
+    closePin: (workerId, cardId, at) => {
+      const p = state.pinned.get(`${workerId}/${cardId}`);
+      if (p) p.closed_at = at;
       return done(undefined);
     },
     cardState: (orgId, workerId, cardId) => {

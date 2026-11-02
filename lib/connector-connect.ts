@@ -125,10 +125,15 @@ export function startPage(login: string | null): Response {
   return new Response(html, { headers: PAGE_HEADERS });
 }
 
-// A page with one button that POSTs back to `action` with `fields`, for an emailed link: opening the link shows it,
-// only pressing the button acts (lib/connector-signer-links.ts), so a mail scanner that fetches links does nothing.
-export function buttonPage(title: string, text: string, action: string, fields: Record<string, string>, button: string): Response {
-  const inputs = Object.entries(fields).map(([k, v]) => `<input type="hidden" name="${esc(k)}" value="${esc(v)}">`).join("");
-  const html = `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>${esc(title)}</title><body style="${PAGE_STYLE}"><h1 style="font-size:1.3rem">${esc(title)}</h1><p>${esc(text)}</p><form method="post" action="${esc(action)}">${inputs}<button type="submit" style="font:inherit;padding:.5rem 1rem">${esc(button)}</button></form></body>`;
-  return new Response(html, { headers: PAGE_HEADERS });
+// The emailed link's id and token ride in its fragment, which browsers never send, so they stay out of every server and
+// Vercel log; this script (allowed by its hash alone) copies them into the form and wipes them from the address bar.
+const LINK_SCRIPT = `(function(){var p=new URLSearchParams(location.hash.slice(1));document.getElementById("id").value=p.get("id")||"";document.getElementById("t").value=p.get("t")||"";history.replaceState(null,"",location.pathname);})();`;
+const LINK_SCRIPT_HASH = createHash("sha256").update(LINK_SCRIPT).digest("base64");
+
+// A page with one button that POSTs the link's id and token back to `action`: opening an emailed link only shows it,
+// pressing the button acts (lib/connector-signer-links.ts), so a mail scanner that fetches links does nothing.
+export function linkPage(title: string, text: string, action: string, button: string): Response {
+  const html = `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>${esc(title)}</title><body style="${PAGE_STYLE}"><h1 style="font-size:1.3rem">${esc(title)}</h1><p>${esc(text)}</p><form method="post" action="${esc(action)}"><input type="hidden" id="id" name="id"><input type="hidden" id="t" name="t"><button type="submit" style="font:inherit;padding:.5rem 1rem">${esc(button)}</button></form><script>${LINK_SCRIPT}</script></body>`;
+  const csp = `${PAGE_HEADERS["content-security-policy"]}; script-src 'sha256-${LINK_SCRIPT_HASH}'`;
+  return new Response(html, { headers: { ...PAGE_HEADERS, "content-security-policy": csp, "referrer-policy": "no-referrer" } });
 }

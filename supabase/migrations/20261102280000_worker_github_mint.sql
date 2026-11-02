@@ -48,11 +48,13 @@ create table if not exists public.connector_signers (
   trusted_from timestamptz,
   endorsed_by  uuid references public.connector_signers (id) on delete set null,
   revoked_at   timestamptz,
-  -- sha256 of the one-time confirm token (cleared once used) and of the revoke token, both emailed; never the tokens.
+  -- sha256 of the one-time confirm token (cleared once used) and of every revoke token emailed (each email's revoke link
+  -- keeps working); never the tokens. confirm_sends caps how often a pending key's link is mailed.
   confirm_hash       text,
   confirm_expires_at timestamptz,
   confirm_sent_at    timestamptz,
-  revoke_hash        text,
+  confirm_sends      int not null default 0,
+  revoke_hashes      text[] not null default '{}' check (cardinality(revoke_hashes) <= 10),
   -- Where the registration came from, for the email.
   added_ip     text check (char_length(added_ip) <= 100),
   added_ua     text check (char_length(added_ua) <= 300),
@@ -90,6 +92,9 @@ create table if not exists public.connector_grants (
   approval     text not null default 'worker' check (approval in ('worker', 'project', 'card')),
   lifetime     text not null default 'revoked' check (lifetime in ('revoked', '24h', '8h')),
   asks         text[] not null default '{protected_push}' check (asks <@ array['protected_push']::text[]),
+  -- The repos (owner/name, lowercase) the grant covers, captured from the Mac's own checkouts when it was signed: the
+  -- mint refuses a card in any other repo, whatever a checkout's origin says later.
+  repos        text[] not null default '{}' check (cardinality(repos) <= 500),
   -- The signature over every field above (lib/connector-messages.ts grantMessage), by a signer, and what it named:
   -- its nonce and time, and the epoch it replaced (epoch - 1). Each signed change makes the epoch one more, and the
   -- mint answers only while the epoch it checked is still the grant's.
@@ -255,7 +260,12 @@ create table if not exists public.connector_cards (
   user_id   uuid not null references auth.users (id) on delete cascade,
   folder    text not null,
   repo      text not null,
+  -- The Mac key that signed the start (re-checked at every mint) and that signature, which pins one card only once.
+  signer_id uuid references public.connector_signers (id) on delete cascade,
+  start_sig text unique,
   pinned_at timestamptz not null default now(),
+  -- Set once the card was seen Done or deleted: it never mints again, and its start can't pin it afresh.
+  closed_at timestamptz,
   primary key (worker_id, card_id)
 );
 alter table public.connector_cards enable row level security;

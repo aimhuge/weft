@@ -18,7 +18,8 @@ export interface SignerRow {
   confirm_hash?: string | null;
   confirm_expires_at?: string | null;
   confirm_sent_at?: string | null;
-  revoke_hash?: string | null;
+  confirm_sends?: number;
+  revoke_hashes?: string[];
 }
 
 // A new key, or a pending one's link sent again.
@@ -26,7 +27,8 @@ export interface SignerConfirm {
   confirm_hash: string | null;
   confirm_expires_at: string | null;
   confirm_sent_at: string | null;
-  revoke_hash?: string;
+  confirm_sends?: number;
+  revoke_hashes?: string[];
 }
 
 export interface WorkerPin {
@@ -46,6 +48,7 @@ export interface GrantWrite {
   approval: string;
   lifetime: string;
   asks: string[];
+  repos: string[];
   signer_id: string;
   sig: string;
   nonce: string;
@@ -112,7 +115,7 @@ export function must<T>(r: R, what: string): T {
   return r.data as T;
 }
 
-const SIGNER = "id, user_id, sign_key, name, device, added_at, trusted_from, endorsed_by, revoked_at, confirm_hash, confirm_expires_at, confirm_sent_at, revoke_hash";
+const SIGNER = "id, user_id, sign_key, name, device, added_at, trusted_from, endorsed_by, revoked_at, confirm_hash, confirm_expires_at, confirm_sent_at, confirm_sends, revoke_hashes";
 const PIN = "worker_id, user_id, sign_key, box_key, signer_id, sig";
 
 export function supabaseTrustDb(db: SupabaseClient): TrustDb {

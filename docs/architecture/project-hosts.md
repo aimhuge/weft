@@ -580,8 +580,9 @@ trusted weft.zip's rows, which any session of yours can write; it now trusts onl
   someone opens the one-time link mailed to the account's address (which also carries a no-session Revoke link), or when
   a trusted Mac vouches for it under Touch ID. Pairing a worker signs the keys main just pinned. Turning a connector on,
   any change to it and an Allow take Touch ID, then main signs exactly what's written; weft.zip writes it only with a good
-  signature (no session can write those tables) and the mint checks it again. Each new thread the desktop board starts
-  on a worker is signed by main too, with the repo main knows the folder as.
+  signature (no session can write those tables) and the mint checks it again. The grant names the repos this Mac had
+  checkouts of when it was signed. Each new thread Weft's own window starts on a worker is signed by main too (fresh, with
+  a nonce, once per card), with the repo main knows the folder as.
 - **The mint** (`app/api/connectors/github/mint`, `lib/connector-mint.ts`) reuses H8/H10's signing: the request is signed
   by the sign key `worker_pair_confirm` set, and a trusted Mac must have vouched for that key. Then a grant signed by a
   trusted Mac, a card whose one start is a `card.create` a trusted Mac signed (never a reply, an H6-line verb, a run or a

@@ -16,6 +16,8 @@ import { CONFIRM_MS, mailConfirm, newToken, RESEND_MS, tokenHash, type RequestMe
 
 // At most this many live keys per account, so a session can't flood the list a user reviews.
 export const MAX_SIGNERS = 10;
+// A pending key's confirm email goes out at most this many times.
+export const MAX_SENDS = 4;
 
 export interface SignerView {
   id: string;
@@ -51,12 +53,15 @@ function checkedOffer(userId: string, raw: unknown, now: number) {
 
 const confirmFields = (confirm: string, now: number) => ({ confirm_hash: tokenHash(confirm), confirm_expires_at: new Date(now + CONFIRM_MS).toISOString(), confirm_sent_at: new Date(now).toISOString() });
 
-// A pending key's link, sent again when the last one is old enough (a lost email shouldn't strand a Mac).
+// A pending key's link, sent again when the last one is old enough (a lost email shouldn't strand a Mac), at most
+// MAX_SENDS times in all. Each email's revoke link keeps working: its hash joins the ones sent before.
 async function resend(deps: TokenDeps, s: SignerRow, meta: RequestMeta, now: number) {
   if (s.confirm_sent_at && now - Date.parse(s.confirm_sent_at) < RESEND_MS) return;
+  const sends = s.confirm_sends ?? 0;
+  if (sends >= MAX_SENDS) return;
   const confirm = newToken();
   const revoke = newToken();
-  await deps.db.setConfirm(s.id, { ...confirmFields(confirm, now), revoke_hash: tokenHash(revoke) });
+  await deps.db.setConfirm(s.id, { ...confirmFields(confirm, now), confirm_sends: sends + 1, revoke_hashes: [...(s.revoke_hashes ?? []), tokenHash(revoke)] });
   await mailConfirm(deps, s, { confirm, revoke }, meta, now).catch(() => deps.db.setConfirm(s.id, { confirm_hash: null, confirm_expires_at: null, confirm_sent_at: null }));
 }
 
@@ -76,7 +81,7 @@ export async function registerSigner(deps: TokenDeps, userId: string, raw: unkno
   if (live.length >= MAX_SIGNERS) throw new MintError(409, `You have ${MAX_SIGNERS} Mac keys already. Remove one in Settings → Devices first.`);
   const confirm = newToken();
   const revoke = newToken();
-  const row = await deps.db.saveSigner({ user_id: userId, sign_key: offer.key, name: offer.name, device: offer.device, trusted_from: null, ...confirmFields(confirm, now), revoke_hash: tokenHash(revoke), added_ip: meta.ip, added_ua: meta.ua });
+  const row = await deps.db.saveSigner({ user_id: userId, sign_key: offer.key, name: offer.name, device: offer.device, trusted_from: null, ...confirmFields(confirm, now), confirm_sends: 1, revoke_hashes: [tokenHash(revoke)], added_ip: meta.ip, added_ua: meta.ua });
   try {
     await mailConfirm(deps, row, { confirm, revoke }, meta, now);
   } catch {

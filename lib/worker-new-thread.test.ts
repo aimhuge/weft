@@ -42,6 +42,8 @@ describe("startWorkerThread", () => {
     const { client, inserted } = fakeClient({ workers: [online] });
     const repoOf = vi.fn(() => "ada/ling");
     await startWorkerThread({ cwd: "worker://w1/ling", prompt: "go" }, client, NOW, undefined, undefined, { repoOf, sign: vi.fn() });
+    expect(repoOf).not.toHaveBeenCalled();
+    await startWorkerThread({ cwd: "worker://w1/ling", prompt: "go", signStart: true }, client, NOW, undefined, undefined, { repoOf, sign: vi.fn() });
     expect(repoOf).toHaveBeenCalledWith("ling");
     expect(inserted()).toMatchObject({ kind: "host", payload: { verb: "card.create", repo: "ada/ling" } });
   });

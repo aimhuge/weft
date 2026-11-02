@@ -15,7 +15,7 @@ function pending(state: ReturnType<typeof setup>["state"], o: { expiresAt?: numb
   const mac = trustedMac(state, "u1", { trustedFrom: null });
   const confirm = newToken();
   const revoke = newToken();
-  Object.assign(mac.signer, { confirm_hash: tokenHash(confirm), confirm_expires_at: iso(o.expiresAt ?? NOW + CONFIRM_MS), revoke_hash: tokenHash(revoke) });
+  Object.assign(mac.signer, { confirm_hash: tokenHash(confirm), confirm_expires_at: iso(o.expiresAt ?? NOW + CONFIRM_MS), revoke_hashes: [tokenHash(newToken()), tokenHash(revoke)] });
   return { mac, confirm, revoke };
 }
 
@@ -39,7 +39,7 @@ describe("matches and links", () => {
   });
 
   it("builds both links on weft.zip by default", () => {
-    expect(links("s 1", "c", "r", "https://weft.test")).toEqual({ confirm: "https://weft.test/api/connectors/signers/confirm?id=s%201&t=c", revoke: "https://weft.test/api/connectors/signers/revoke?id=s%201&t=r" });
+    expect(links("s 1", "c", "r", "https://weft.test")).toEqual({ confirm: "https://weft.test/api/connectors/signers/confirm#id=s%201&t=c", revoke: "https://weft.test/api/connectors/signers/revoke#id=s%201&t=r" });
     expect(links("s", "c", "r").confirm.startsWith("https://")).toBe(true);
   });
 });
@@ -90,5 +90,7 @@ describe("revokeByLink", () => {
     expect(done).toHaveBeenCalledTimes(1);
     await expect(revokeByLink(d, mac.signer.id, newToken(), done)).rejects.toMatchObject({ status: 404 });
     await expect(revokeByLink(d, undefined, revoke, done)).rejects.toMatchObject({ status: 404 });
+    delete mac.signer.revoke_hashes;
+    await expect(revokeByLink(d, mac.signer.id, revoke, done)).rejects.toMatchObject({ status: 404 });
   });
 });

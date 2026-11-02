@@ -42,15 +42,16 @@ export function vouch(state: FakeState, mac: Mac, worker: WorkerRow, o: { signKe
 }
 
 // A grant the Mac signed, stored as weft.zip's grant route stores it.
-export function signedGrant(state: FakeState, mac: Mac, o: Partial<GrantSettings> & { id?: string; user_id?: string; worker_id?: string; epoch?: number; expires_at?: string | null; issuedAt?: number } = {}): GrantRow {
+export function signedGrant(state: FakeState, mac: Mac, o: Partial<GrantSettings> & { id?: string; user_id?: string; worker_id?: string; epoch?: number; expires_at?: string | null; issuedAt?: number; repos?: string[] } = {}): GrantRow {
   const settings = settingsOf({ scope: "installed", ...o });
   const epoch = o.epoch ?? 1;
   const issuedAt = o.issuedAt ?? NOW - 60_000;
   const nonce = randomBytes(16).toString("hex");
   const user = o.user_id ?? mac.signer.user_id;
   const worker = o.worker_id ?? "w1";
-  const sig = mac.sign(grantMessage({ userId: user, workerId: worker, connector: "github", settings, nonce, issuedAt, prevEpoch: epoch - 1 }));
-  const grant: GrantRow = { id: o.id ?? "g1", user_id: user, worker_id: worker, connector: "github", ...settings, signer_id: mac.signer.id, sig, nonce, issued_at: iso(issuedAt), epoch, expires_at: o.expires_at ?? null, last_used_at: null };
+  const repos = o.repos ?? ["o/r"];
+  const sig = mac.sign(grantMessage({ userId: user, workerId: worker, connector: "github", settings, repos, nonce, issuedAt, prevEpoch: epoch - 1 }));
+  const grant: GrantRow = { id: o.id ?? "g1", user_id: user, worker_id: worker, connector: "github", ...settings, repos, signer_id: mac.signer.id, sig, nonce, issued_at: iso(issuedAt), epoch, expires_at: o.expires_at ?? null, last_used_at: null };
   state.grants.push(grant);
   return grant;
 }
@@ -64,7 +65,14 @@ export function signedAllow(state: FakeState, mac: Mac, grant: GrantRow, kind: "
 }
 
 // The desktop board's card.create for a card, with the repo and the start the Mac signed (lib/worker-folder-repo.ts).
-export function signedStartPayload(mac: Mac, o: { userId?: string; workerId?: string; cardId?: string; folder?: string; repo?: string; issuedAt?: number } = {}) {
-  const st = { userId: o.userId ?? mac.signer.user_id, workerId: o.workerId ?? "w1", cardId: o.cardId ?? "card-1", folder: o.folder ?? "r", repo: o.repo ?? "o/r", issuedAt: o.issuedAt ?? NOW - 5_000 };
-  return { verb: "card.create", args: { id: st.cardId }, repo: st.repo, start: { key: mac.key, sig: mac.sign(startMessage(st)), issuedAt: st.issuedAt } };
+export function signedStartPayload(mac: Mac, o: { userId?: string; workerId?: string; cardId?: string; folder?: string; repo?: string; issuedAt?: number; nonce?: string } = {}) {
+  const st = { userId: o.userId ?? mac.signer.user_id, workerId: o.workerId ?? "w1", cardId: o.cardId ?? "card-1", folder: o.folder ?? "r", repo: o.repo ?? "o/r", nonce: o.nonce ?? randomBytes(16).toString("hex"), issuedAt: o.issuedAt ?? NOW - 5_000 };
+  return { verb: "card.create", args: { id: st.cardId }, repo: st.repo, start: { key: mac.key, sig: mac.sign(startMessage(st)), issuedAt: st.issuedAt, nonce: st.nonce } };
+}
+
+// The card.create row the board sends, made a moment after it was signed.
+export function signedStart(state: FakeState, mac: Mac, o: Parameters<typeof signedStartPayload>[1] & { createdAt?: number } = {}) {
+  const payload = signedStartPayload(mac, o);
+  state.starts.push({ worker_id: o.workerId ?? "w1", card_id: o.cardId ?? "card-1", kind: "host", folder: o.folder ?? "r", payload, created_by: o.userId ?? mac.signer.user_id, created_at: iso(o.createdAt ?? payload.start.issuedAt + 1_000) });
+  return payload;
 }

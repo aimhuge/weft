@@ -19,8 +19,9 @@ describe("createStartSigner", () => {
   it("signs a start in a folder this Mac knows as that repo", async () => {
     const s = setup();
     const r = await s.sign(BODY);
-    expect(r).toMatchObject({ key: s.k.key, issuedAt: 7 });
-    expect(verifyRaw(s.k.key, startMessage({ userId: "u1", ...BODY, issuedAt: 7 }), r.sig)).toBe(true);
+    expect(r).toMatchObject({ key: s.k.key, issuedAt: 7, nonce: expect.stringMatching(/^[0-9a-f]{32}$/) as string });
+    expect(verifyRaw(s.k.key, startMessage({ userId: "u1", ...BODY, nonce: r.nonce, issuedAt: 7 }), r.sig)).toBe(true);
+    expect((await s.sign(BODY)).nonce).not.toBe(r.nonce);
     expect(s.projectRepos).toHaveBeenCalledWith("ling");
   });
 

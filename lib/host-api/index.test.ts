@@ -14,6 +14,7 @@ vi.mock("@/lib/store", () => ({
   deleteCard: vi.fn((id: string) => db.cards.delete(id)),
 }));
 vi.mock("@/lib/settings", () => ({ dismissSession: vi.fn() }));
+vi.mock("./card-ids", () => ({ cardIds: () => ({ used: () => false, remember: () => undefined }) }));
 vi.mock("@/lib/worktree-pool", () => ({ dropWorktree: vi.fn(() => Promise.resolve()) }));
 vi.mock("@/lib/runner", () => ({
   stop: vi.fn(() => Promise.resolve()),
