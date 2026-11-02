@@ -45,12 +45,43 @@ async function beatDevice({ accountClient, dir, now = Date.now }) {
 }
 
 /**
+ * Names this Mac's host address (its lib/device-id.ts id, the one its cards, commands and desktop heartbeat use) on
+ * its devices row, so the device registry shows its key row and its host row as one Mac
+ * (docs/architecture/device-registry.md). Never throws; false until it lands, so the beat tries again. A database
+ * without the column yet (the app ships ahead of its migration) just says so once.
+ * @param {{ accountClient: any, dir: string, warn?: (line: string) => void }} deps
+ * @returns {Promise<boolean>}
+ */
+async function linkHost({ accountClient, dir, warn = console.warn }) {
+  try {
+    const userId = accountClient?.getClaims?.()?.sub;
+    const publicKey = publicKeyIn(dir);
+    const host = fs.readFileSync(path.join(dir, "device-id"), "utf8").trim();
+    if (typeof userId !== "string" || !publicKey || !/^[0-9a-f]{64}$/.test(host)) return false;
+    const { error } = await accountClient.supabase.from("devices").update({ host_device: host }).eq("user_id", userId).eq("public_key", publicKey);
+    if (error) warn(`Device host link: ${error.message}`);
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Beat from now on. The timers are unref'd so they never hold the app open.
  * @param {{ accountClient: () => any, dir: string }} deps
  * @returns {() => void} stops the beat
  */
 function startDeviceBeat({ accountClient, dir }) {
-  const beat = () => void beatDevice({ accountClient: accountClient(), dir });
+  let linked = false;
+  let warned = false;
+  const warnOnce = (line) => {
+    if (!warned) console.warn(line);
+    warned = true;
+  };
+  const beat = () =>
+    void beatDevice({ accountClient: accountClient(), dir }).then(async () => {
+      if (!linked) linked = await linkHost({ accountClient: accountClient(), dir, warn: warnOnce });
+    });
   const first = setTimeout(beat, FIRST_BEAT_MS);
   const every = setInterval(beat, BEAT_MS);
   first.unref?.();
@@ -61,4 +92,4 @@ function startDeviceBeat({ accountClient, dir }) {
   };
 }
 
-module.exports = { beatDevice, startDeviceBeat, BEAT_MS, FIRST_BEAT_MS };
+module.exports = { beatDevice, linkHost, startDeviceBeat, BEAT_MS, FIRST_BEAT_MS };

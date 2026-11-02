@@ -25,6 +25,8 @@ vi.mock("./LaptopModeCard", () => ({ default: () => <p>laptop mode card</p> }));
 // TeamSettings is a real component but reads from lib/use-team, which would need a board-side
 // data fetch. Here it just needs to be reachable without throwing.
 vi.mock("./TeamSettings", () => ({ default: () => <p>team settings</p> }));
+// DevicesSettings has its own test; here the Devices page only has to reach it.
+vi.mock("./DevicesSettings", () => ({ default: () => <p>devices settings</p> }));
 // SyncSettings is the real component on the new "sync" page; it has its own test. Here it just
 // needs to render so we can reach the page without firing useCloudSync / useAccount.
 vi.mock("./SyncSettings", () => ({ default: ({ recentProjects }: { recentProjects: string[] }) => <p>sync settings: {recentProjects.join(",")}</p> }));
@@ -206,6 +208,12 @@ describe("SettingsDialog", () => {
     render(<SettingsDialog onClose={() => {}} />);
     await go("Teams");
     expect(screen.getByText("team settings")).toBeInTheDocument();
+  });
+
+  it("renders the Devices page from the nav", async () => {
+    render(<SettingsDialog onClose={() => {}} />);
+    await go("Devices");
+    expect(screen.getByText("devices settings")).toBeInTheDocument();
   });
 
   it("gives the Laptop mode card its own page", async () => {

@@ -1,7 +1,7 @@
 // `weft-worker`: the Weft Worker's command line (docs/architecture/weft-worker.md). Run from the worker's clone of
 // Weft with jiti (install/worker.sh sets up the `weft-worker` wrapper and the launchd or systemd service):
 //
-//   weft-worker enrol <token> [--name <name>]   trade a one-time token from the app for this box's key
+//   weft-worker enrol <token> [--name <name>]   pair with your Mac (a wph.… code) or trade a one-time token (wet_…)
 //   weft-worker login                           sign Claude Code in for the daemon (claude setup-token)
 //   weft-worker start                           run the daemon (what the service runs)
 //   weft-worker status                          say whether this box is enrolled
@@ -18,6 +18,8 @@ import { readWorkerConfig, workerDataDir, workerHome, workerSealKeys, workRoot, 
 import { MAX_TRAVEL_BYTES, attachmentsOf, receiveAttachments } from "../lib/attachment-transfer";
 import { workerBlobClient, workerBlobReader, workerMayUpload } from "../lib/worker-blobs";
 import { enrol, registry, type Rpc } from "../lib/worker-registry";
+import { isPairCode, newSignKeys } from "../lib/host-pairing";
+import { pairWorker, workerSignKeys } from "../lib/worker-pair";
 import { RTC_PURPOSE } from "../lib/rtc-signal";
 import { CLAUDE_TOKEN, GITHUB_PURPOSE, LOGIN_PURPOSE, newSealKeys, open } from "../lib/worker-seal";
 import { createUpdater, updatesOn } from "../lib/worker-update";
@@ -41,7 +43,10 @@ function flag(name: string): string | undefined {
 async function enrolCommand(token: string | undefined) {
   if (!token) throw new Error("Usage: weft-worker enrol <token> [--name <name>]. Get the token in Weft → Settings → Sync → Workers.");
   const name = flag("name") || os.hostname().replace(/\.local$/, "");
-  const config = await enrol(rpc, token, { name, platform: process.platform, arch: process.arch });
+  // A pairing code (wph.…, Settings → Devices) pairs the box with your Mac; a token (wet_…) is the older one-time trade.
+  const config = isPairCode(token)
+    ? await pairWorker(token, { name, platform: process.platform, arch: process.arch, boxKey: workerSealKeys(home, newSealKeys).publicKey, sign: workerSignKeys(home, newSignKeys) }, { rpc, say: console.log })
+    : await enrol(rpc, token, { name, platform: process.platform, arch: process.arch });
   writeWorkerConfig(home, config);
   console.log(`Enrolled ${config.name} as ${config.device}. Start it with: weft-worker start`);
 }

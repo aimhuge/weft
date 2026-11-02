@@ -9,6 +9,7 @@ import { useSettingsBackdrop } from "@/lib/use-scene";
 import { useSettingsSections } from "@/lib/use-settings-sections";
 import type { SettingsView } from "@/lib/types";
 import { SettingsCard, SettingsUnsavedDot } from "./SettingsLayout";
+import DevicesSettings from "./DevicesSettings";
 import Icon, { Spinner } from "./Icon";
 import Modal from "./Modal";
 import SettingsAccountsPage from "./SettingsAccountsPage";
@@ -36,6 +37,7 @@ const SELF_DRAWN: Partial<Record<SettingsPage, () => ReactNode>> = {
   connectors: () => <SettingsConnectorsPage />,
   // TeamSettings draws its own cards, one per section.
   team: () => <TeamSettings />,
+  devices: () => <DevicesSettings />,
 };
 
 function message(err: unknown) {

@@ -114,7 +114,7 @@ elif [ -n "$TOKEN" ]; then
   say "Enrolling"
   "$BIN_DIR/weft-worker" enrol "$TOKEN"
 else
-  die "pass the enrolment token from Weft → Settings → Sync → Workers: sh worker.sh <token>"
+  die "pass the code from Weft → Settings → Devices → Add a worker (or a token from Settings → Sync → Workers): sh worker.sh <code>"
 fi
 
 # ── 4. service ──────────────────────────────────────────────────────────────

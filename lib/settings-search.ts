@@ -46,6 +46,7 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
   { page: "accounts", title: "CLIs", words: "claude code puku codex goose login" },
   { page: "connectors", title: "Google Workspace", words: "gog gmail calendar drive docs sheets" },
   { page: "connectors", title: "📱 Simulators", words: "ios android emulator xcode simulator" },
+  { page: "devices", title: "Your devices", words: "devices revoke worker phone browser mac keys passkey pair add a worker" },
   { page: "sync", title: "Status", words: "sync now upload" },
   { page: "sync", title: "Projects", words: "folders upload" },
   { page: "sync", title: "Phones", words: "phone mobile push notifications" },
