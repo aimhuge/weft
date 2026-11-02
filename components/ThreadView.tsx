@@ -272,7 +272,8 @@ export default function ThreadView({
           </div>
         )}
         {entries.length === 0 && !live && empty}
-        <FileLinkContext.Provider value={card.id}>
+        {/* File names link to the editor only where the host lists the card's files: elsewhere there's no editor to open. */}
+        <FileLinkContext.Provider value={transport.listFiles ? card.id : null}>
           <FileIndexContext.Provider value={fileIndex}>
             <FindRevealContext.Provider value={find.reveal}>
               <ThreadEntries entries={entries} live={live} streaming={streaming} editFrom={editFrom} onSend={send} cardId={card.id} />

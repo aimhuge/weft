@@ -47,6 +47,12 @@ describe("cloudHostActs", () => {
     ]);
   });
 
+  it("sends any verb through act, the card's id always the target's", async () => {
+    const { acts, rows } = setup();
+    await expect(acts.act("card.update", "c1", { body: { starred: true }, id: "other" })).resolves.toBeUndefined();
+    expect(payloads(rows)).toEqual([{ verb: "card.update", args: { body: { starred: true }, id: "c1" } }]);
+  });
+
   it("rejects with the machine's refusal, so the box can put the text back", async () => {
     await expect(setup([{ status: "failed", error: "That time has already passed." }]).acts.schedule("c1", "x", 1)).rejects.toThrow("That time has already passed.");
     await expect(setup([{ status: "failed", error: null }]).acts.editLast("c1", "x")).rejects.toThrow("Your Mac couldn't do that.");

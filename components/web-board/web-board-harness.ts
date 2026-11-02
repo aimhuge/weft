@@ -1,9 +1,13 @@
 // Shared by the weft.zip board's component tests: a stand-in for @supabase/ssr's browser client whose
 // Realtime handlers a test fires by hand and whose queries answer from `db`, plus card and thread-row builders.
+import { forget } from "@/lib/optimistic-cards";
 import { vi } from "vitest";
 import type { CloudCommandRow } from "@/lib/cloud-commands";
 import type { CloudCardRow, CloudThreadItemRow } from "@/lib/cloud-sync-types";
 import type { Card, ThreadItem } from "@/lib/types";
+
+// jsdom has no Web Animations; the show rail pulses a mini with one (lib/show-events.ts).
+if (typeof Element !== "undefined" && typeof Element.prototype.animate !== "function") Element.prototype.animate = () => ({}) as Animation;
 
 export type Table = "cloud_cards" | "cloud_thread_items" | "cloud_commands";
 
@@ -27,15 +31,19 @@ export const mockState = {
   // What the board wrote: the row of each insert, the filters of each delete.
   inserts: [] as Array<{ table: string; row: Record<string, unknown> }>,
   deletes: [] as Array<{ table: string; filters: Array<[string, unknown]> }>,
+  // What went up to the blob store: its path and type.
+  uploads: [] as Array<{ path: string; contentType?: string }>,
 };
 
-// db.items as a page query reads them: the card's rows (card_id=), before a seq (seq<), newest first, up to the limit.
+// db.items as a page query reads them: the card's rows (card_id=), before a seq (seq<), newest first, up to the limit;
+// or, past a seq (seq>, find's read), oldest first.
 function threadRows(filters: Array<[string, unknown]>, limit: number): CloudThreadItemRow[] {
   const card = filters.find(([k]) => k === "card_id")?.[1];
   const before = filters.find(([k]) => k === "seq<")?.[1] as number | undefined;
+  const after = filters.find(([k]) => k === "seq>")?.[1] as number | undefined;
   return db.items
-    .filter((r) => (card === undefined || r.card_id === card) && (before === undefined || r.seq < before))
-    .toSorted((a, b) => b.seq - a.seq)
+    .filter((r) => (card === undefined || r.card_id === card) && (before === undefined || r.seq < before) && (after === undefined || r.seq > after))
+    .toSorted((a, b) => (after === undefined ? b.seq - a.seq : a.seq - b.seq))
     .slice(0, limit);
 }
 
@@ -68,6 +76,7 @@ function query(table: string) {
       ),
     eq: (k: string, v: unknown) => (filters.push([k, v]), builder),
     lt: (k: string, v: unknown) => (filters.push([`${k}<`, v]), builder),
+    gt: (k: string, v: unknown) => (filters.push([`${k}>`, v]), builder),
     order: () => builder,
     limit: (n: number) => ((limit = n), builder),
     overrideTypes: () => builder,
@@ -100,6 +109,10 @@ export const supabaseSsrMock = {
         from: () => ({
           createSignedUrls: (paths: string[]) =>
             Promise.resolve({ data: paths.map((path) => ({ path, signedUrl: db.signed[path.split("/").pop() ?? ""] ?? null })), error: null }),
+          upload: (path: string, _body: unknown, opts: { contentType?: string }) => {
+            mockState.uploads.push({ path, contentType: opts.contentType });
+            return Promise.resolve({ error: null });
+          },
         }),
       },
     };
@@ -172,6 +185,10 @@ export function itemRow(seq: number, item: ThreadItem, card_id = "c1"): CloudThr
 
 // Back to a clean slate between tests.
 export function resetHarness() {
+  // What a test drew on a card (a Stop, an answer, a star) stays in lib/optimistic-cards.ts until it settles; the next test starts clean.
+  for (const id of ["c1", "c2", "c3"]) forget(id);
+  // A reply box's draft is kept in localStorage, which a run shares across files.
+  if (typeof localStorage !== "undefined") localStorage.clear();
   mockState.clients.length = 0;
   mockState.queries.length = 0;
   db.items = [];
@@ -182,4 +199,5 @@ export function resetHarness() {
   db.command = { status: "done", error: null };
   mockState.inserts.length = 0;
   mockState.deletes.length = 0;
+  mockState.uploads.length = 0;
 }

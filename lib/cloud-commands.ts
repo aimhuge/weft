@@ -24,7 +24,17 @@ export interface NewCardPayload {
   model?: string;
   effort?: Effort | "";
   tags?: string[];
+  // The mode it starts in (RUN_MODES: never bypassPermissions; plan only on a worker, a Mac starts it as default);
+  // left out, the host's default.
+  permissionMode?: NewCardMode;
+  // false: made in Backlog and left there; left out, it starts.
+  start?: false;
 }
+
+// The modes a new card may start in from the web: plan too, never bypassPermissions (lib/worker-commands.ts RUN_MODES).
+export const NEW_CARD_MODES = ["default", "acceptEdits", "auto", "plan"] as const;
+export type NewCardMode = (typeof NEW_CARD_MODES)[number];
+const isNewCardMode = (v: unknown): v is NewCardMode => NEW_CARD_MODES.includes(v as NewCardMode);
 
 // A message typed into a card's thread on the web, for the Mac that runs the card to send as if typed there.
 export interface ReplyPayload {
@@ -138,6 +148,12 @@ export interface NewCardForm {
   // A model id from MODELS ("" or absent: the CLI's own default). It also says which CLI runs the card.
   model?: string;
   effort?: Effort | "";
+  // The CLI, when no model names it (the CLI picker's "default model").
+  backend?: Backend;
+  permissionMode?: NewCardMode;
+  tags?: string[];
+  // Made in Backlog instead of started.
+  backlog?: boolean;
 }
 
 function backendOf(model: string): Backend | undefined {
@@ -153,8 +169,12 @@ export function newCardCommand(target: { orgId: string; device: string; folder: 
   if (form.model && backend) {
     payload.backend = backend;
     payload.model = form.model;
-  }
+  } else if (form.backend) payload.backend = form.backend;
   if (form.effort) payload.effort = form.effort;
+  if (form.permissionMode) payload.permissionMode = form.permissionMode;
+  const tags = form.tags?.map((t) => t.trim()).filter(Boolean);
+  if (tags?.length) payload.tags = tags;
+  if (form.backlog) payload.start = false;
   return { org_id: target.orgId, kind: "new_card", target_device: target.device, folder: target.folder, payload };
 }
 
@@ -200,6 +220,9 @@ export function newCardBody(command: Pick<CloudCommandRow, "folder" | "payload">
     model: text(p.model),
     effort: text(p.effort),
     tags: Array.isArray(p.tags) ? p.tags.filter((t): t is string => typeof t === "string") : undefined,
+    // Only a mode a new card may start in, and only when it names one; Backlog only when it asks for it.
+    ...(isNewCardMode(p.permissionMode) ? { permissionMode: p.permissionMode } : {}),
+    ...(p.start === false ? { start: false } : {}),
     cwd: command.folder,
   };
 }

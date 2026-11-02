@@ -2,7 +2,7 @@ import { useState } from "react";
 import { api } from "@/lib/client";
 import { patchNow, stopNow } from "@/lib/optimistic-cards";
 import { hostOf } from "@/lib/project-host";
-import { cardMenu, columnMenu, resumeCommand, withAccelerators, type CardAction, type ColumnAction } from "@/lib/card-menu";
+import { cardMenu, columnMenu, resumeCommand, withAccelerators, type CardAction, type ColumnAction, type MenuItem } from "@/lib/card-menu";
 import { toAccelerator, useShortcutList } from "@/lib/hotkeys";
 import { BACKEND_LABELS, type Backend, type Card, type Column, type DevServerStatus, type PermissionMode } from "@/lib/types";
 import { useDeleteDialog } from "@/lib/use-delete-dialog";
@@ -28,11 +28,16 @@ export interface BoardMenuDeps {
   toggleArchived: () => void;
   toast: (message: string) => void;
   notify: (err: unknown) => void;
+  // Shows a menu and answers the item picked; the native one (electron/main.cjs) by default. weft.zip draws its own
+  // (components/web-board/WebMenu.tsx), so a browser tab gets the same menus.
+  popupMenu?: (items: MenuItem[]) => Promise<string | null>;
 }
 
-// The menus are native (electron/main.cjs). In a plain browser tab there's no shell, so the browser's own menu shows.
+// The menus are native (electron/main.cjs), or the page's own where the board brings one (weft.zip). In a plain
+// browser tab with neither, the browser's own menu shows.
 export function useBoardMenus(deps: BoardMenuDeps) {
   const shell = typeof window === "undefined" ? undefined : window.weft;
+  const popup = deps.popupMenu ?? (shell?.popupMenu ? (items: MenuItem[]) => shell.popupMenu(items) : undefined);
   // Menu items that have a board shortcut use its key, read from the registry: menu item id -> shortcut id.
   // Keys the open menu handles itself (Return, arrows…) are skipped, so card-open shows O, not ↩.
   const shortcuts = useShortcutList();
@@ -53,7 +58,7 @@ export function useBoardMenus(deps: BoardMenuDeps) {
     );
 
   async function onCardMenu(card: Card, e: React.MouseEvent) {
-    if (!shell?.popupMenu) return;
+    if (!popup) return;
     e.preventDefault();
     e.stopPropagation();
     // A card on another host gets what its verbs back (lib/project-host.ts): no dev server or vault of this Mac's.
@@ -61,7 +66,7 @@ export function useBoardMenus(deps: BoardMenuDeps) {
     const dev = card.review?.dev && host.can("dev") ? await api.devStatus(card.id).then((r) => r.status, () => null) : null;
     const access = host.can("vault") ? await hasVaultAccess(card) : undefined;
     const menu = host.menu(cardMenu(card, dev, access, agents));
-    const picked = (await shell.popupMenu(withAccelerators(menu, keys({ open: "card-open", archive: "archive" })))) as CardAction | null;
+    const picked = (await popup(withAccelerators(menu, keys({ open: "card-open", archive: "archive" })))) as CardAction | null;
     if (picked) runCardAction(card, picked).catch(deps.notify);
   }
 
@@ -212,11 +217,11 @@ export function useBoardMenus(deps: BoardMenuDeps) {
 
   // Right-clicking a column's empty space; a card's own menu stops the event before it gets here.
   async function onColumnMenu(column: Column, e: React.MouseEvent) {
-    if (!shell?.popupMenu) return;
+    if (!popup) return;
     e.preventDefault();
     const done = deps.doneShown.filter((c) => !c.archived);
     const menu = columnMenu(column, { count: done.length, archived: deps.archivedCount, showArchived: deps.showArchived });
-    const picked = (await shell.popupMenu(withAccelerators(menu, keys({ new: "new-thread", "archive-done": "archive-done" })))) as ColumnAction | null;
+    const picked = (await popup(withAccelerators(menu, keys({ new: "new-thread", "archive-done": "archive-done" })))) as ColumnAction | null;
     if (picked === "new") deps.openNew();
     if (picked === "toggle-archived") deps.toggleArchived();
     if (picked === "archive-done") deps.archive(done);
