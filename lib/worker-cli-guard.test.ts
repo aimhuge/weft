@@ -110,3 +110,13 @@ describe("workerCliGuard", () => {
     expect(guardHooks(() => 0, () => undefined).PreToolUse).toContain(WORKER_CLI_GUARD_MATCHER);
   });
 });
+
+describe("weft-worker named inside an interpreter's string", () => {
+  it.each([`python3 -c 'import pty; pty.spawn(["weft-worker", "enrol", "x"])'`, `python3 -c 'import pty; pty.spawn(["/x/bin/node", "y", "${CODE}"])'`, `expect -c 'spawn weft-worker enrol x; interact'`])("refuses %s", (command) => {
+    expect(workerCliVerdict(command, "/tmp")).toMatch(/a thread can't run weft-worker/);
+  });
+
+  it.each(["node ~/.weft-worker/work/app/server.js", "python3 ~/.weft-worker/work/x/run.py"])("lets %s through", (command) => {
+    expect(workerCliVerdict(command, "/tmp")).toBeNull();
+  });
+});

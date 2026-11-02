@@ -57,6 +57,8 @@ export interface Engine {
 
 export interface DaemonDeps {
   reg: Registry;
+  // The account that owns this worker (its config's ownerUser): the author a command needs for dev.open.
+  owner?: string;
   engine: Engine;
   publisher: Publisher;
   // The checkout a command's folder names, cloned when it isn't there (lib/worker-paths.ts).

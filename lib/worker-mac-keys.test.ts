@@ -63,7 +63,7 @@ describe("trustPairingMac", () => {
 describe("enrolRefusal", () => {
   it("enrols a new box, and an enrolled one only with --re-pair at a terminal", () => {
     expect(enrolRefusal(false, false, false)).toBeNull();
-    expect(enrolRefusal(true, false, true)).toMatch(/already enrolled.*--re-pair/);
+    expect(enrolRefusal(true, false, true)).toMatch(/already enrolled.*Approve re-pair/);
     expect(enrolRefusal(true, true, false)).toMatch(/only runs from a terminal/);
     expect(enrolRefusal(true, true, true)).toBeNull();
   });

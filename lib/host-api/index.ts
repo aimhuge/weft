@@ -70,6 +70,9 @@ export const HOST_API = {
   "cron.run": { elevated: false, run: lazy(() => import("./lists"), "cronRunVerb") },
   "webhook.update": { elevated: false, run: lazy(() => import("./lists"), "webhookUpdateVerb") },
   "webhook.delete": { elevated: false, run: lazy(() => import("./lists"), "webhookDeleteVerb") },
+  // The same command again, and its last lines: neither widens what the card can touch.
+  "dev.restart": { elevated: false, run: lazy(() => import("./dev-servers"), "devRestartVerb") },
+  "dev.log": { elevated: false, run: lazy(() => import("./dev-servers"), "devLogVerb") },
 } satisfies Record<HostVerb, Handler>;
 
 type Table = typeof HOST_API;

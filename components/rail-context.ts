@@ -3,11 +3,8 @@ import type { Card } from "@/lib/types";
 // What the left rail hands every drawer behind it (🔐, 🪝, ▲, Supabase, Cloudflare, BlastCP, GitHub, Slack,
 // skills, 🖥 Services): the board's project and cards, and the few board actions a drawer can take.
 export interface RailContext {
-  // The board's selected project folder, or null for all of them.
+  // The board's selected project, a worker's path too (lib/rail-project.ts maps it per drawer), or null for all of them.
   project: string | null;
-  // The selected project when it's on a Weft Worker (its worker:// path; project is then null): ⏰ and 🪝 show that
-  // worker's own crons and webhooks for it.
-  workerProject?: string | null;
   // The folders whose vaults 🔐 shows: every project on the board (its filter starts on project).
   folders: string[];
   cards: Card[];

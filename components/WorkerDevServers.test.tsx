@@ -22,7 +22,7 @@ const server = (over: Partial<WorkerDevGroup["servers"][number]> = {}): WorkerDe
 });
 const groups = (servers = [server()]): WorkerDevGroup[] => [{ workerId: "w1", worker: "m1mini", servers }];
 const setup = (over: Partial<Parameters<typeof WorkerDevServers>[0]> = {}) => {
-  const props = { groups: groups(), project: null, onOpenUrl: vi.fn(), notify: vi.fn(), open: vi.fn<(id: string) => Promise<string>>(() => Promise.resolve("https://weft.zip/t/new")), stop: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()), ...over };
+  const props = { groups: groups(), project: null, onOpenUrl: vi.fn(), notify: vi.fn(), open: vi.fn<(id: string) => Promise<string>>(() => Promise.resolve("https://weft.zip/t/new")), stop: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()), restart: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()), readLog: vi.fn<(id: string) => Promise<string>>(() => Promise.resolve("ready on :3000")), ...over };
   render(<WorkerDevServers {...props} />);
   return props;
 };
@@ -61,6 +61,33 @@ describe("WorkerDevServers", () => {
     expect(screen.getAllByRole("button", { name: "Open" })).toHaveLength(2);
     await userEvent.click(stops[0]!);
     await waitFor(() => expect(p.stop).toHaveBeenCalledWith("c1"));
+  });
+
+  it("restarts a Weft run, or starts one that ended", async () => {
+    const p = setup({ groups: groups([server(), server({ cardId: "c2", state: "failed" })]) });
+    await userEvent.click(screen.getByRole("button", { name: "Restart" }));
+    await waitFor(() => expect(p.restart).toHaveBeenCalledWith("c1"));
+    await userEvent.click(screen.getByRole("button", { name: "Start" }));
+    await waitFor(() => expect(p.restart).toHaveBeenCalledWith("c2"));
+  });
+
+  it("reads a run's log into its row, and hides it on a second click", async () => {
+    const p = setup({ groups: groups([server(), server({ cardId: "c2", source: "thread" })]) });
+    expect(screen.getAllByRole("button", { name: "Log" })).toHaveLength(1);
+    await userEvent.click(screen.getByRole("button", { name: "Log" }));
+    expect(await screen.findByText("ready on :3000")).toBeTruthy();
+    expect(p.readLog).toHaveBeenCalledWith("c1");
+    await userEvent.click(screen.getByRole("button", { name: "Log" }));
+    expect(screen.queryByText("ready on :3000")).toBeNull();
+    vi.mocked(p.readLog).mockRejectedValueOnce(new Error("offline"));
+    await userEvent.click(screen.getByRole("button", { name: "Log" }));
+    await waitFor(() => expect(p.notify).toHaveBeenCalledWith(new Error("offline")));
+  });
+
+  it("shows a worker project's own servers only", () => {
+    setup({ groups: [...groups(), { workerId: "w2", worker: "vps", servers: [server({ cardId: "c9" })] }], project: "worker://w2/weft" });
+    expect(screen.queryByText("On m1mini")).toBeNull();
+    expect(screen.getByText("On vps")).toBeTruthy();
   });
 
   it("shows the whole command in its tooltip", () => {

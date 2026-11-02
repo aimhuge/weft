@@ -31,6 +31,28 @@ A mini app is a page from the browser pane, saved so it is one click away on the
    button so a save shows on the rail at once. Every change goes to the server and then reloads the list from it.
    The list also reloads when the window gets focus, so an app saved elsewhere (a thread calling the route) shows up.
 
+## From a worker card
+
+The pane beside a worker card (`components/WorkerPane.tsx`) has Save as app too, on a page the card wrote: a blob page,
+`blob:sha256:<hex>`, framed through this Mac's server (T5, project-hosts.md#drawers-and-mini-apps-on-a-worker-project-t5-as-built).
+An app is a page this Mac's pane opens, so `POST /api/apps` with that address brings the page home first
+(`lib/mini-app-worker.ts`): it reads the blob with the account's own session (RLS keeps it to your workspace), refuses
+anything but HTML, a page over 5 MB, and bytes that don't hash to the address (nothing checks a sha on upload), writes it to `~/.weft/apps/worker-<first 16 of the sha>/index.html` (where a cloud sync pull puts an
+app) and saves it under the name given, else the page's `<title>`, with `source` naming the blob (`MiniApp.source`), so
+`appFor` lights the button on that page. From there it is an ordinary app: the rail opens it on this Mac,
+`cloud_mini_apps` carries it to your other Macs, and Share… serves it at `weft.zip/a/<id>` and the owner's links, on the
+web and the phone. A worker page is one file today, so nothing beside it comes along. **It gets no more power than it had
+where it came from**, where it ran in a CSP sandbox: the app's id is its folder's name, `worker-<sha16>`
+(`workerAppId`, `isWorkerAppFolder` in `lib/mini-apps.ts`), here and on every Mac cloud sync brings it to, and main
+refuses that folder's pages every `window.weft` capability, by the real path the file is in, never by what the page
+says: data reads, `fetch`, `env` and `requestSecret` (`appFolderFromUrl` in `electron/app-data-frame.cjs`, even with a
+`weft-app.json` beside it and a Touch ID), `liveData` (`electron/live-data.cjs`, `isWorkerAppPage`) and Upload secrets
+(`electron/app-secrets-push.cjs`). Its manifest never travels: `lib/app-cloud.ts` pushes it as a `file` row and a pull
+writes no `weft-app.json` for a `worker-` id, and `lib/app-share.ts` shares it as one page, never a folder, so the hosted
+bridge on weft.zip has no policy for it either. The prefix is one rule in two files (`WORKER_APP_PREFIX` in
+`lib/mini-apps.ts` and `electron/app-data-frame.cjs`), as main can't import `.ts`. The weft.zip board's pane has no
+Save as app: mini apps live on a Mac.
+
 ## Sharing an app
 
 Views are unlimited and links uncounted on every plan; a plan caps the bytes a workspace's open links serve

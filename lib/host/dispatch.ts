@@ -30,6 +30,9 @@ export interface CardRules {
   approve?(command: CloudCommandRow, answer: AnswerPayload, card: Card): Promise<string | null>;
   // Why a verb that grants power can't run from the web here, if it can't (a Mac with a phone paired).
   elevated?(verb: HostVerb, args: Record<string, unknown>): Promise<string | null>;
+  // Whether the command's author is this host's owner. A verb in OWNER_VERBS runs only when it is; a host without the
+  // rule can't say, so none of those verbs runs there from the network.
+  fromOwner?(command: CloudCommandRow): boolean;
   // After a verb that changed a card ran: a Mac sends the change now rather than on the next tick.
   after?(): void;
   // A host card.permission.answer goes through the answer kind, so it takes the same approval rule (a Mac).
@@ -48,6 +51,11 @@ export interface CardRules {
   // run made (or null). Without it the host refuses them from the network (a Mac: its own are changed in its window).
   lists?(verb: ListVerb, args: HostArgs): Promise<string | null>;
 }
+
+// Verbs that put something on the internet or prompt the owner's Mac (dev.open: a tunnel and a Touch ID). Only the
+// owner's own command runs them from the network, never another member's of the workspace.
+export const OWNER_VERBS: ReadonlySet<HostVerb> = new Set<HostVerb>(["dev.open"]);
+const NOT_OWNER = "Only the owner of this card can do that.";
 
 const NO_CREATE = "This host starts new threads through new_card, not card.create.";
 export const NO_LISTS = "This Mac's crons and webhooks change only in its own window (its ⏰ and 🪝 drawers, or a thread there), not from the network.";
@@ -120,6 +128,7 @@ export function cardKinds(rules: CardRules) {
     if (body.verb === "card.create") return create(command, body);
     if (isListVerb(body.verb)) return list(body.verb, body);
     const card = rules.card(body.args.id, command, "reached");
+    if (OWNER_VERBS.has(body.verb) && !rules.fromOwner?.(command)) throw new Error(NOT_OWNER);
     const refused = remoteRefusal(body) ?? (await rules.elevated?.(body.verb, body.args));
     if (refused) throw new Error(refused);
     const reply = await verb(body.verb, await received(command, { ...body.args, id: card.id }, textArgOf(body.verb)));

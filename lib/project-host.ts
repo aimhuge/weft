@@ -103,6 +103,8 @@ const LOCAL: Record<HostVerb, LocalCall> = {
   "cron.run": (a) => cronApi.run(a.id),
   "webhook.update": (a) => api.updateWebhook(a.id, a.patch as WebhookPatch),
   "webhook.delete": (a) => api.removeWebhook(a.id),
+  "dev.restart": (a) => call("POST", `/api/cards/${a.id}/dev`, { action: "rerun" }),
+  "dev.log": (a) => call("POST", `/api/cards/${a.id}/dev`, { action: "log" }),
 };
 
 export const localHost: ProjectHost = {

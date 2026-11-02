@@ -3,6 +3,8 @@ import { dropCloudApp, pushApp, syncAppsSoon } from "@/lib/app-cloud";
 import { dropAppShare } from "@/lib/app-share";
 import { fail, guard } from "@/lib/guard";
 import { listApps, removeApp, saveApp, updateApp } from "@/lib/mini-app-store";
+import { saveWorkerPageApp } from "@/lib/mini-app-worker";
+import { blobPageSha } from "@/lib/mini-apps";
 
 // The apps sidebar's mini apps (lib/mini-app-store.ts): pages from the browser pane saved as apps.
 // Saves, renames, moves and removes also push to prod (lib/app-cloud.ts); the push runs after the
@@ -18,13 +20,14 @@ export function GET(req: Request) {
   return Response.json({ apps: listApps() });
 }
 
-// { url, name? }: saves the page as an app (or renames the app it already is).
+// { url, name? }: saves the page as an app (or renames the app it already is). url may be a worker card's blob page.
 export async function POST(req: Request) {
   const denied = guard(req);
   if (denied) return denied;
   try {
     const body = (await req.json()) as Body;
-    const app = saveApp(body.url, body.name);
+    // A worker card's page comes home first (lib/mini-app-worker.ts); anything else is saved by its address.
+    const app = blobPageSha(body.url) ? await saveWorkerPageApp(body.url, body.name) : saveApp(body.url, body.name);
     after(() => pushApp(app));
     return Response.json({ app });
   } catch (err) {

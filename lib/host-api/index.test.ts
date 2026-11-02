@@ -61,7 +61,7 @@ vi.mock("@/lib/file-access", () => ({
   safePath: vi.fn(() => Promise.resolve({ abs: "/repo/a.ts", rel: "a.ts" })),
   writeFile: vi.fn(() => Promise.resolve({ result: { hash: "h2", mtime: 2 } })),
 }));
-vi.mock("@/lib/devserver", () => ({ stopDev: vi.fn() }));
+vi.mock("@/lib/devserver", () => ({ LOG_LIMIT: 200_000, stopDev: vi.fn(), restartDev: vi.fn(() => Promise.resolve()), runs: new Map([["c1", { log: "ready\n" }]]) }));
 vi.mock("@/lib/devserver-list", () => ({ listDev: vi.fn(() => Promise.resolve([{ cardId: "c1", url: "http://localhost:3000/" }])) }));
 vi.mock("@/lib/tunnels", () => ({ openTunnel: vi.fn(() => Promise.resolve({ address: "https://weft.zip/t/t1" })) }));
 
@@ -109,6 +109,8 @@ const SAMPLES: Record<HostVerb, { args: unknown; reply: () => unknown }> = {
   "cron.run": { args: { id: "k1" }, reply: () => ({ card: { id: "run-1" } }) },
   "webhook.update": { args: { id: "h1", patch: { registered: true } }, reply: () => ({ hook: { id: "h1", registered: true } }) },
   "webhook.delete": { args: { id: "h1" }, reply: () => ({ ok: true }) },
+  "dev.restart": { args: { id: "c1" }, reply: () => ({ ok: true }) },
+  "dev.log": { args: { id: "c1" }, reply: () => ({ log: "ready" }) },
 };
 
 // The local route each verb is mounted on.
@@ -143,6 +145,8 @@ const ROUTES: Record<HostVerb, string> = {
   "cron.run": "../../crons/[id]/run/route.ts",
   "webhook.update": "../../webhooks/[id]/route.ts",
   "webhook.delete": "../../webhooks/[id]/route.ts",
+  "dev.restart": "dev/route.ts",
+  "dev.log": "dev/route.ts",
 };
 
 const verbs = Object.keys(HOST_API) as HostVerb[];

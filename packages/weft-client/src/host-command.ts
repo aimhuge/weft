@@ -16,8 +16,8 @@ import { fitSkills, type SkillsOnWire } from "./skills-wire";
 // (RESULTS below), kept small enough for the column's 4 KB cap.
 // A verb that answers with a value too big for that (the editor's files.*) adds it as `value` when it's small, else
 // `blob`, the sha of its JSON in the workspace's blob store (lib/host-result.ts). address: dev.open's private /t/<id>
-// address for the card's dev server.
-export type HostResult = ({ ok: true; cardId: string; value?: unknown; blob?: string; address?: string } & Partial<SkillsOnWire>) | { ok: false; error: string };
+// address for the card's dev server. log: dev.log's last lines of it.
+export type HostResult = ({ ok: true; cardId: string; value?: unknown; blob?: string; address?: string; log?: string } & Partial<SkillsOnWire>) | { ok: false; error: string };
 
 const isObject = (v: unknown): v is Record<string, unknown> => Boolean(v) && typeof v === "object" && !Array.isArray(v);
 
@@ -89,13 +89,29 @@ export const isHostDone = (done: unknown): done is HostDone => Boolean(done) && 
 export const hostResult = (cardId: string): HostResult => ({ ok: true, cardId });
 
 // The verbs a board runs for their answer, and the part of it that goes in `result`.
-const RESULTS: Partial<Record<HostVerb, (reply: unknown) => SkillsOnWire | { address?: string }>> = {
+const RESULTS: Partial<Record<HostVerb, (reply: unknown) => SkillsOnWire | { address?: string } | { log?: string }>> = {
   "skills.list": (reply) => fitSkills((reply as { skills?: SkillInfo[] } | undefined)?.skills ?? []),
   "dev.open": (reply) => {
     const address = (reply as { address?: unknown } | undefined)?.address;
     return typeof address === "string" ? { address: address.slice(0, 500) } : {};
   },
+  // A dev server's last lines, the end kept: the row's result is capped at 4 KB.
+  "dev.log": (reply) => {
+    const log = (reply as { log?: unknown } | undefined)?.log;
+    return typeof log === "string" ? { log: tailBytes(log, DEV_LOG_MAX) } : {};
+  },
 };
+
+// How much of a dev server's log a `dev.log` result carries, in UTF-8 bytes.
+export const DEV_LOG_MAX = 2_500;
+
+// The end of a text that fits in `max` UTF-8 bytes: a log's newest lines matter, and a wide character counts as 2 to 4.
+export function tailBytes(text: string, max: number): string {
+  const bytes = (t: string) => new TextEncoder().encode(t).length;
+  let out = text.slice(-max);
+  while (bytes(out) > max) out = out.slice(Math.max(1, Math.ceil((bytes(out) - max) / 4)));
+  return out;
+}
 
 // `result` for a verb that ran: the card, and for a read verb its answer.
 export function verbResult(verb: HostVerb, cardId: string, reply: unknown): HostResult {

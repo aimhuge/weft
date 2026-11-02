@@ -2,6 +2,7 @@ import { connection } from "next/server";
 import { resolveFolder } from "@/lib/folders";
 import { asText } from "@/lib/format";
 import { removeHook } from "@/lib/github-hooks";
+import { issueProject } from "@/lib/issue-worker";
 import { disableIssueSync, enableIssueSync, issueSyncFolders, issueSyncStatus, syncIssues } from "@/lib/github-issues";
 import { fail, guard } from "@/lib/guard";
 import { isIssueLanding, workflowOf } from "@/lib/issue-landing";
@@ -9,7 +10,8 @@ import { issueWorkflow, setIssueWorkflow } from "@/lib/settings";
 
 // GitHub issues as cards (lib/github-issues.ts). GET lists the folders that sync and how their
 // last sync went; POST { folder } syncs it now and keeps it syncing; PATCH { folder, landing } says
-// where that folder's cards land; DELETE { folder } stops that.
+// where that folder's cards land; DELETE { folder } stops that. A folder may be a worker project's
+// path, whose issues become cards on the worker (lib/issue-worker.ts).
 
 export async function GET(req: Request) {
   const denied = guard(req, { write: false });
@@ -23,7 +25,7 @@ export async function POST(req: Request) {
   if (denied) return denied;
   try {
     const body = (await req.json()) as Record<string, unknown>;
-    const folder = resolveFolder(body.folder);
+    const folder = issueProject(body.folder, resolveFolder);
     // Synced first, so a folder with no GitHub remote isn't left polling.
     const counts = await syncIssues(folder);
     enableIssueSync(folder);
@@ -41,7 +43,7 @@ export async function PATCH(req: Request) {
   if (denied) return denied;
   try {
     const body = (await req.json()) as Record<string, unknown>;
-    const folder = resolveFolder(body.folder);
+    const folder = issueProject(body.folder, resolveFolder);
     const landing = body.landing;
     if (!isIssueLanding(landing)) throw new Error("Pick where the cards land: Backlog, Needs you or Run.");
     const skill = asText(body.skill).trim();

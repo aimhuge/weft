@@ -232,6 +232,18 @@ describe("SaveAppButton", () => {
     expect(appActions.save).toHaveBeenCalledWith("https://example.com/foo", "My Page");
   });
 
+  it("saves a worker card's page by its blob, and is lit once that page is an app", async () => {
+    const page = `blob:sha256:${"d".repeat(64)}`;
+    setApps([]);
+    const { unmount } = render(<SaveAppButton url={page} title="Burndown" notify={vi.fn()} />);
+    await userEvent.click(screen.getByRole("button", { name: "Save as app" }));
+    expect(appActions.save).toHaveBeenCalledWith(page, "Burndown");
+    unmount();
+    setApps([{ id: "w", name: "Burndown", url: "file:///Users/me/.weft/apps/worker-dddd/index.html", source: page, addedAt: 4 }]);
+    render(<SaveAppButton url={page} title="Burndown" notify={vi.fn()} />);
+    expect(screen.getByRole("button", { name: "Remove from apps" })).toHaveAttribute("aria-pressed", "true");
+  });
+
   it("falls back to the URL's name when no title is given", async () => {
     setApps([]);
     render(<SaveAppButton url="https://example.com/foo" title="" notify={vi.fn()} />);

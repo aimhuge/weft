@@ -158,6 +158,8 @@ describe("localHost", () => {
     ["cron.run", { id: "k1" }, cronApi.run, ["k1"]],
     ["webhook.update", { id: "h1", patch: { registered: true } }, api.updateWebhook, ["h1", { registered: true }]],
     ["webhook.delete", { id: "h1" }, api.removeWebhook, ["h1"]],
+    ["dev.restart", { id: "c1" }, call, ["POST", "/api/cards/c1/dev", { action: "rerun" }]],
+    ["dev.log", { id: "c1" }, call, ["POST", "/api/cards/c1/dev", { action: "log" }]],
   ] as const)("%s goes to the route the board has always called", async (verb, args, fn, expected) => {
     const run = localHost.act as (verb: string, args: unknown) => Promise<void>;
     await run(verb, args);

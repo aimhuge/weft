@@ -25,7 +25,7 @@ export {
   type PermissionBody,
 } from "./host-calls";
 export { hostRow, type CardTarget, type HostArgs, type HostCommandRow, type HostPayload } from "./host-row";
-export { hostCommand, hostFailure, hostResult, isHostDone, readHostCommand, remoteRefusal, textArgOf, verbResult, type HostDone, type HostResult } from "./host-command";
+export { DEV_LOG_MAX, hostCommand, hostFailure, hostResult, isHostDone, readHostCommand, remoteRefusal, tailBytes, textArgOf, verbResult, type HostDone, type HostResult } from "./host-command";
 export { listRefusal, CRON_PATCH_FIELDS, HOOK_PATCH_FIELDS } from "./list-policy";
 export { fitSkills, jsonbBytes, readSkills, skillCache, SKILLS_BUDGET, SKILLS_FRESH_MS, type SkillCache, type SkillsOnWire } from "./skills-wire";
 export { b64, unb64, type Sodium } from "./sodium-like";

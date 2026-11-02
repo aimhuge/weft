@@ -5,7 +5,9 @@ import { promisify } from "node:util";
 import { globalSingleton } from "./global-singleton";
 import { hookedRepos } from "./github-hooks";
 import { ghError, issueSyncFolders, issueSyncStatus, repoOf } from "./github-issues";
+import { workerIssueDeps, workerIssueRepo } from "./issue-worker";
 import { issueWorkflow } from "./settings";
+import { isWorkerProject } from "./worker-project";
 import type { GithubAccount, GithubFolder, GithubStatus } from "./github-view";
 
 // The GitHub drawer's status (lib/github-view.ts): who the gh CLI is signed in as, and each board folder's repo,
@@ -34,10 +36,12 @@ async function folderRepo(folder: string, now: number): Promise<{ repo: string |
   const hit = cache.get(folder);
   if (hit && now - hit.at < (hit.repo ? REPO_TTL : MISS_TTL)) return hit;
   let found: { repo: string | null; error: string | null };
-  if (!fs.existsSync(folder)) found = { repo: null, error: `${path.basename(folder)} isn't there anymore.` };
+  // A worker project is no folder here: its repo is read through this Mac's checkout of it (lib/issue-worker.ts).
+  const worker = isWorkerProject(folder);
+  if (!worker && !fs.existsSync(folder)) found = { repo: null, error: `${path.basename(folder)} isn't there anymore.` };
   else {
     try {
-      found = { repo: await repoOf(folder), error: null };
+      found = { repo: worker ? (await workerIssueRepo(folder, workerIssueDeps().folders(), repoOf)).repo : await repoOf(folder), error: null };
     } catch (err) {
       found = { repo: null, error: (err as Error).message };
     }
