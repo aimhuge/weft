@@ -1,5 +1,5 @@
 import type { PermissionResult } from "@anthropic-ai/claude-agent-sdk";
-import { takeGrant } from "../classifier-denial";
+import { outOfAutoAnswer } from "../classifier-denial";
 import { claimQuestion, claimSymbols, claimWhy } from "../claim-guard";
 import { folderAsk, grantedRead, showPageCall } from "../folder-guard";
 import { askUser } from "../runner-ask";
@@ -19,8 +19,10 @@ export function askAboutCall(
   title?: string,
 ): Promise<PermissionResult> {
   if (!session.cardId) return Promise.resolve({ behavior: "deny", message: "No card is attached yet." });
-  // A call auto mode blocked that you allowed once (lib/classifier-denial.ts), in case the retry asks instead.
-  if (takeGrant(session, toolName, input)) return Promise.resolve({ behavior: "allow", updatedInput: input });
+  // A call auto mode blocked that you allowed once, or another call caught while the CLI stepped out of auto mode for it
+  // (lib/classifier-denial.ts).
+  const retry = outOfAutoAnswer(session, toolName, input, toolUseID);
+  if (retry) return Promise.resolve(retry);
   // A folder the user granted (lib/folder-guard.ts) is read without the CLI's own working-directory prompt.
   if (grantedRead(toolName, input, session.spec.cwd, session.cardId)) return Promise.resolve({ behavior: "allow", updatedInput: input });
   // A thread's own pane page in SHOW_DIR (lib/show-dir.ts) is read and written with no prompt, whatever the permission mode.
