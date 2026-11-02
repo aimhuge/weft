@@ -940,7 +940,11 @@ open them. **New thread** on the web board starts a card on your Mac: pick one o
 owns the folder makes the card and runs it, then the board opens it (the Mac has to be on and running Weft). The open card's reply
 box is the desktop's own and sends to that Mac too: your message goes into the thread as if typed there (held until the running
 turn ends, or **Send now** to stop it first), a permission request or question the thread is waiting on can be answered right there,
-■ stops the turn, and what the thread says comes back within about a second. Thread text goes up unencrypted unless you
+■ stops the turn, and what the thread says comes back within about a second. Your own cards act there as on the desktop:
+★, Stop, archive with Undo, drag between columns, the right-click menu, rename, tags, the CLI, model and mode pickers in the
+open card's header, Wait / This first / Others first on a held edit, ⌘F over the whole thread and the show rail beside the pane.
+A picture or PDF you paste into the reply box goes up to your workspace and down to the machine that runs the card. New thread
+takes the CLI, model, effort, mode, tags and Backlog too (and Plan first on a worker). A teammate's card stays read-only. Thread text goes up unencrypted unless you
 turn on **Seal synced threads** in Settings → Sync → Pair a phone: then thread items, card titles and prompts, and long tool
 output are encrypted with a workspace key that only your Mac and the devices you pair hold. **Pair a phone** shows a QR code
 for the Weft phone app (or a link to open in another browser); your Mac checks the claim and asks for Touch ID, and once a

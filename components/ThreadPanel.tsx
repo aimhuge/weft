@@ -104,7 +104,7 @@ export default function ThreadPanel({
   const pilot = card.role === "copilot";
   const transport = useThreadTransport();
   const { desktop } = transport;
-  // The card's own controls reach its host: this Mac's always, a worker's too (lib/project-host.ts), weft.zip's not.
+  // The card's own controls reach its host: this Mac's always, a worker's too (lib/project-host.ts), weft.zip's on your own cards.
   const own = ownsCard(transport);
 
   return (

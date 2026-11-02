@@ -121,8 +121,21 @@ function cloudHostOf(workerId: string): ProjectHost {
   return host;
 }
 
+// weft.zip's board (components/web-board/useWebHost.ts) runs on no Mac: every card there is another machine's, a Mac's
+// inbox or a worker's daemon, whatever its folder looks like. While it's set, every card's host is that one.
+let everyCard: ProjectHost | null = null;
+
+// Puts one host in front of every card, or (null) takes it away; answers the way to take it back.
+export function setHostForEveryCard(host: ProjectHost | null): () => void {
+  everyCard = host;
+  return () => {
+    if (everyCard === host) everyCard = null;
+  };
+}
+
 // The host of a project (a folder, or a worker:// path); no project is this Mac's.
 export function hostFor(project: string | null | undefined): ProjectHost {
+  if (everyCard) return everyCard;
   const worker = project ? parseWorkerProject(project) : null;
   return worker ? cloudHostOf(worker.workerId) : localHost;
 }

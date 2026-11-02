@@ -155,7 +155,7 @@ Mac inbox:     claim ─▶ readHostCommand ─▶ macCard ─▶ approval rule 
 - **Desktop-only.** None of the card verbs needs the desktop; the copilot does, so `card.message` loads `lib/copilot`
   only for it, and both hosts refuse the copilot before the verb ("That thread isn't on this worker."). `lib/host-api` imports
   relatively, because the daemon runs under jiti, which doesn't read the `@/` alias.
-- **Not yet:** the inbox as an attachment receiver, the web composer as a sender. The board's UI for it is H3 (below).
+- **Attachments:** the inbox receives pasted files and the web composer sends them since H3c (below). The board's UI for it is H3 (below).
 
 ### `hostFor` and one open card (H3, as built)
 
@@ -269,11 +269,63 @@ host (Mac inbox / worker daemon): runVerb ─▶ verbResult(verb, cardId, reply)
   `{ queued }`, so Send later's row stays drawn; a queued ↑ edit or Fresh refused later shows as a failed row with its text
   above the box (`cardReplies`). The "/" list uses the same 5-minute `skillCache` as a worker card; the reply box now draws the card's
   scheduled rows, so `WebReplyStatus` dropped its "After this turn" list, and `boardCommands` keeps `host` rows off the
-  strip. **No upload on the web:** the Mac's inbox can't receive a file yet, so a pasted file's node says it can't be
-  attached here (`NO_UPLOAD`).
+  strip. Pasted files came in H3c (below): the Mac's inbox receives them now.
 - **Limits.** `StatusStrip cardLimits` (set off the desktop transport) reads the card's own `stats.fiveHour`/`sevenDay`,
   which the worker's CLI reported, instead of this Mac's limits log. Follow-up: the model pickers' "at its cap" marks
   (`useLimitedModels`) are still this Mac's on a worker card, and a worker could publish its whole limits log.
+
+### Web board parity (H3c, as built)
+
+```
+weft.zip board ── setHostForEveryCard(webHost) ── hostOf(card) = webHost for every card, a Mac's or a worker's
+  tiles, rows   ── useBoardCards + remoteCardHandlers ─┐
+  drag, archive ── useBoardCardActions (all "remote"), useBoardArchive ─┼─ webHost.act ─ cloudHostActs.act ─ host row ─▶ Mac inbox │ worker daemon
+  menus         ── useBoardMenus(popupMenu: WebMenu) ──┤                     (followed to its result, drawn at once by optimistic-cards)
+  open card     ── ThreadPanel edits, holds, stopTask ─┘
+  pasted file   ── webUploads: browser sha256 ─▶ weft-blobs <org>/<sha> as the visitor ─▶ row.payload.attachments ─▶ host receiveAttachments
+```
+
+- **One host for every card on the web.** `hostOf(card)` read the folder, so on weft.zip a Mac's card (a local path) got
+  `localHost` and called this Mac's server, which isn't there. `lib/project-host.ts` `setHostForEveryCard(host)` puts one host
+  in front of every card while it's set; the web board installs `lib/web-host.ts` `webHost` (`components/web-board/useWebHost.ts`,
+  set during the first render so the tiles pick their handlers by it). It's a worker card's host on the desktop: `kind: "cloud"`,
+  `can` only `schedule`, `menu` = `remoteMenu`, and `act` = `cloudHostActs.act` (any verb as a `host` row for the card's machine,
+  followed to its result). So the desktop's own `remoteCardHandlers`, `useBoardMenus`, `useBoardArchive`,
+  `useBoardCardActions`, `BackendPicker`, `RateLimitSwitch`, `holdNow` and `FirstMessageErrorBanner` run unchanged on the web.
+- **The board** (`components/web-board/useWebCards.tsx`): `useBoardCards` draws your own cards with the desktop's handlers
+  (★, Stop, ▶, archive, drag; Allow/Deny go through the board's own answer path so a paired passkey still signs); every card is
+  `useBoardCardActions`' `remote`, so a drop is `card.update { column }`; `useBoardArchive` gives archive with Undo and Done's
+  Archive all; `useBoardMenus` takes a `popupMenu` and `components/web-board/WebMenu.tsx` draws the same `MenuItem[]` at the pointer.
+  Tags… is the desktop's `TagsDialog`. A teammate's card stays read-only (only its owner's machine obeys). Cards are drawn through
+  `overlayAll` and redrawn on `onOptimistic`, as `useWorkerBoard` does.
+- **The open card** (`WebThreadPanel`): the header's rename, ★, archive, tags, the model/CLI picker and the mode picker
+  (`cardEdits: true`, with `edits` from `useWebCards`; a teammate's card gets a transport copy with `cardEdits: false`); Wait,
+  This first, Others first and a subagent's Stop as `card.permission.*` and `card.stopTask`; the desktop's `ShowRail` beside the
+  pane, with the card's capture as a page's picture and Reopen putting the pane on it; ⌘F / ⌘G (`requestThreadFind`,
+  `stepThreadFind`) and `searchThread` over every synced row (`lib/cloud-thread-search.ts`: batches of 1,000 oldest first, opened
+  in the browser because a sealed row only opens there, up to 20,000 rows); taps and Start on a worker's live screen as `input`
+  rows (`lib/screen-input.ts`, the browser-safe half of `inputCommand`; the offer, which a Mac seals, stays in `lib/worker-commands.ts`).
+- **Pasted files** (`lib/web-upload.ts`): the composer's upload hashes the file in the browser, puts it in `weft-blobs` at
+  `<org>/<sha>` as the visitor (the member insert policy; "already exists" counts), and pastes `/attachments/<slug>-<sha8>.<ext>`.
+  `useWebBoard.sendCommand` lists the refs a row's text pastes (`withAttachmentRefs`: a reply's text, a new card's prompt, a host
+  verb's text or message) as `payload.attachments`, the same `{ name, sha, mime }` a Mac sends a worker (`lib/attachment-refs.ts`,
+  split out of `lib/attachment-transfer.ts` so the browser can use it). Images and PDFs only, 25 MB, 20 a message. A worker brings
+  them over as before (`/api/worker-blob` read mode). **The Mac now receives too**: `lib/cloud-inbox-receive.ts` `macReceive` reads
+  each blob through the account's own session (`readBlob`), checks it and saves it in `~/.weft/attachments`, through the same
+  `receiveAttachments`; `macDispatch` gives it to the card kinds as `receive` and to `new_card`'s prompt.
+- **New thread** (`WebNewCardDialog`): the desktop's `ModelSelect` with its CLI rows (the CLI is sent only once picked, so the
+  machine's default holds), the effort, the desktop's `ModePicker` (never skip-permissions), tags and Backlog (`start: false`,
+  a card made and left in Backlog); on a worker's folder, **Plan first** and no Backlog (a worker refuses `start: false` until
+  `card.create`). `NewCardPayload` gains `permissionMode` (`NEW_CARD_MODES`) and `start`; the Mac holds the mode it starts in,
+  named or its own default, to the rule a mode change is (`lib/cloud-new-card-mode.ts`): never skip-permissions, a looser one
+  named while a phone is paired refused, the Mac's own default (`auto` out of the box) dropped to default then, and plan
+  started as default (a Mac has no plan mode, and the card maker would read it as the Mac's default); a worker
+  starts in the mode named (`lib/worker-kinds.ts`). Sent as `new_card`: WP2's `card.create` hadn't landed.
+- **What the web leaves out on purpose.** File names in a thread link to the editor only where the transport has `listFiles`
+  (`ThreadView` sets `FileLinkContext` from it; `ToolLine` follows it), so a worker card links them again through H4's `files.list`
+  and the web draws plain names (its one host has no `files` or `reads` yet: `lib/web-host.ts` answers both with a refusal); the first-message banner reads settings and offers Rerun only where there are settings to open (`openSettings`),
+  and Delete only where the host can (`can("delete")`). Delete, Share…, Run /skill, bulk Resume/Switch, the Local Simulator
+  switch and the review panel are still desktop-only.
 
 ### One host program (H5, as built)
 

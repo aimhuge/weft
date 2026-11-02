@@ -2,6 +2,7 @@ import type { PermissionResult, Query, SDKUserMessage } from "@anthropic-ai/clau
 import { messageContent } from "./attachments";
 import type { BoardActions } from "./board-tools";
 import type { ClassifierDenial } from "./classifier-denial";
+import type { RetryWindow } from "./retry-window";
 import type { CliProcess } from "./cli-process";
 import type { ThreadAgent } from "./agents";
 import type { CopilotPersona } from "./copilot-personas";
@@ -131,8 +132,8 @@ export interface Session {
   // Auto mode's classifier denials this turn, asked about when it ends, and the calls you then allowed once (lib/classifier-denial.ts).
   denials?: ClassifierDenial[];
   retryGrants?: string[];
-  // True while the live CLI is out of auto mode for those calls' retry, so they reach canUseTool (lib/classifier-denial.ts).
-  retryOutOfAuto?: boolean;
+  // Open while the live CLI is out of auto mode for one of those calls (lib/retry-window.ts).
+  retryWindow?: RetryWindow;
   toolIndex: Map<string, number>;
   // Ids of the messages sent mid-turn that the CLI hasn't taken in yet (lib/runner-steer.ts).
   steered?: Set<string>;

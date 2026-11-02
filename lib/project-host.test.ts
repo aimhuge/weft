@@ -33,7 +33,7 @@ vi.mock("./worker-files", () => ({ workerFiles: "worker files" }));
 vi.mock("./project-reads", () => ({ localRead: "local read" }));
 vi.mock("./project-snapshot-view", () => ({ cloudRead: "cloud read" }));
 
-const { cloudHost, hostFor, hostOf, localHost, sameHostCards } = await import("./project-host");
+const { cloudHost, hostFor, hostOf, localHost, sameHostCards, setHostForEveryCard } = await import("./project-host");
 const { localTransport } = await import("./thread-transport");
 const { localToolSource } = await import("./use-tool-result");
 
@@ -57,6 +57,28 @@ describe("hostFor", () => {
     expect(w1).toMatchObject({ kind: "cloud", tools: "worker tools", thread: { workerId: "w1" }, files: "line files w1", menu: cloudHost.menu });
     await w1.act("card.stop", { id: "c1" });
     expect(actOnLine).toHaveBeenCalledWith("w1", "card.stop", { id: "c1" });
+  });
+});
+
+describe("setHostForEveryCard", () => {
+  it("answers one host for every card while set, a folder's and a worker's alike, until taken back", () => {
+    const web = { ...cloudHost, kind: "cloud" as const };
+    const undo = setHostForEveryCard(web);
+    expect(hostFor("/Users/me/dev/weft")).toBe(web);
+    expect(hostOf({ cwd: "worker://w1/app" })).toBe(web);
+    undo();
+    expect(hostFor("/Users/me/dev/weft")).toBe(localHost);
+  });
+
+  it("leaves a newer host in place when an older one's undo runs late", () => {
+    const first = { ...cloudHost };
+    const second = { ...cloudHost };
+    const undoFirst = setHostForEveryCard(first);
+    const undoSecond = setHostForEveryCard(second);
+    undoFirst();
+    expect(hostFor(null)).toBe(second);
+    undoSecond();
+    expect(hostFor(null)).toBe(localHost);
   });
 });
 
