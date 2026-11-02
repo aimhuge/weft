@@ -12,14 +12,15 @@ const { auditOutbox, markAuditSynced } = require("./keychain-audit.cjs");
 // grant names writes (electron/vault-grants.cjs): the user approved its writes up front. Even then an overwrite asks,
 // since it destroys the value that was there. who, for a Weft Worker's card, says so in the prompt, with note (the value's
 // fingerprint) after it and a PRODUCTION warning (electron/worker-vault.cjs).
-// The Touch ID prompt's words for a fill: which of the three it is, then a worker's note and a PRODUCTION warning.
+// The Touch ID prompt's words for a fill: which of the three it is, a PRODUCTION warning, then a worker's note last (the
+// value's fingerprint and the card's title, which is the worker's word, so it never comes before what's being done).
 function fillReason(action, by, name, label, environment, note, fromWorker) {
   const what = {
     added: `let ${by} add ${name} (${label}, ${environment})`,
     set: `let ${by} set ${name} (${label}, ${environment})`,
     replaced: `let ${by} overwrite the ${environment} value of ${name} (${label}) with a new one`,
   }[action];
-  return what + (note ? `, ${note}` : "") + (fromWorker && environment === "production" ? ". This is the PRODUCTION value" : "");
+  return what + (fromWorker && environment === "production" ? ". This is the PRODUCTION value" : "") + (note ? `. ${note}` : "");
 }
 
 async function fillBlank(vault, folder, name, environment, value, replace = false, card = "", who = "", note) {

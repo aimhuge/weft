@@ -9,7 +9,6 @@ const path = require("node:path");
 const { createExec, reply, baseEnv, KEEP_CHARS, REPLY_CHARS, KILL_GRACE_MS } = require("./secret-exec.cjs");
 const { redactor } = require("./secret-redact.cjs");
 const { decideAccess } = require("./vault-access.cjs");
-const { DEV_GRANT_HOURS } = require("./worker-vault-wire.cjs");
 
 // How long a dev server's grant waits to be claimed.
 const GRANT_MS = 60_000;
@@ -33,9 +32,9 @@ function describe(request) {
 function describeWorker({ kind, command, cwd, script, names, environment, label, thread, why, worker, remote, fingerprint, firstUse }) {
   const key = fingerprint ? `${worker}'s key: ${fingerprint}${firstUse ? " (first seen now: this Mac pins it)" : " (pinned)"}` : null;
   const dev = kind === "dev";
-  // A dev server's approval stands for its restarts (electron/worker-dev-env.cjs), so the window says how long.
+  // A dev server on a worker asks at every start and restart (electron/worker-dev-env.cjs), and the window says so.
   const sealedFor = dev
-    ? `They're sealed to that worker for this server. Allow covers its restarts with the same command for up to ${DEV_GRANT_HOURS} hours, until the card gets a new message, and that includes any change to the code in this project in between: whatever the server runs gets the values. Any process on ${worker} can read a running server's env. Its log shows ‹NAME› in their place.`
+    ? `They're sealed to that worker for this one start: a restart asks again. Whatever the server runs, the project's code included, gets the values, and any process on ${worker} can read a running server's env. Its log shows ‹NAME› in their place.`
     : "They're sealed to that worker for this one run, and the thread's output shows ‹NAME› in their place.";
   const detail = [`Command: ${command}`, script ? `Runs:\n${script}` : null, `In: ${cwd} on the Weft Worker ${worker}, not this Mac`, remote ? `Repo: ${remote}` : null, `Secrets (${environment}) from ${label}: ${names.join(", ")}`, key, `The command and any code it runs on ${worker} get these values. ${sealedFor}`, thread ? `Card: ${thread}` : null, why ? `The thread says why: ${why}` : null].filter(Boolean).join("\n\n");
   return {
@@ -213,6 +212,12 @@ function secretRunRoutes(get, cardFor = () => "") {
 
 // Wires it into Electron main with the vault, the approval dialog and the sealed rules file, and a Weft Worker's runs
 // (electron/worker-secret.cjs), which ask through the same window and read their requests with the account's session.
+// What main keeps about worker vault asks across restarts (electron/worker-vault-guards.cjs).
+function vaultGuards(dataDir) {
+  const guards = require("./worker-vault-guards.cjs");
+  return { nonces: guards.createAskNonces({ dir: dataDir, safeStorage: () => require("./keychain-audit.cjs").keychainFor("worker ask nonces") }), cardOrigin: guards.createCardOrigins({ dataDir }) };
+}
+
 function setupSecretRun({ vault, dataDir, window, accountClient = () => null, vercelEnv = () => null }) {
   const { BrowserWindow, dialog, systemPreferences } = require("electron");
   const { audit, keychainFor } = require("./keychain-audit.cjs");
@@ -234,7 +239,7 @@ function setupSecretRun({ vault, dataDir, window, accountClient = () => null, ve
   const worker = createWorkerSecrets({ vault, ask, describe, accountClient, pins, signer, projectRepos: projects.createProjectRepos({ dataDir }), audit });
   // A worker card's list, blanks, set_value, push_to_vercel and dev server env (electron/worker-vault.cjs).
   const devEnv = require("./worker-dev-env.cjs").createWorkerDevEnv({ vault, ask, describe, pins, signer, audit });
-  const workerVault = require("./worker-vault.cjs").createWorkerVault({ vault, vercelEnv, accountClient, pins, signer, projectFolders: projects.createProjectFolders({ dataDir }), devEnv, cardFolder: projects.createCardFolderPins({ dataDir }), audit });
+  const workerVault = require("./worker-vault.cjs").createWorkerVault({ vault, vercelEnv, accountClient, pins, signer, projectFolders: projects.createProjectFolders({ dataDir }), devEnv, ...vaultGuards(dataDir), audit });
   return { ...createSecretRun({ vault, rules, spawn, audit, ask }), workerAsk: worker.answer, workerVault: workerVault.answer, devEnv };
 }
 

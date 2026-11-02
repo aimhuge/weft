@@ -235,12 +235,12 @@ describe("helpers", () => {
     expect(describeRun({ kind: "run", command: "x", cwd: "/", names: ["K"], environment: "development", label: "o/r", worker: "m1mini" }).detail).not.toContain("key:");
   });
 
-  it("describes a worker's dev server as a start whose Allow covers its restarts", () => {
+  it("describes a worker's dev server as one start, each restart asking again", () => {
     const dev = describeRun({ kind: "dev", command: "pnpm dev", cwd: ".", names: ["K"], environment: "development", label: "o/r", thread: "Fix", worker: "m1mini" });
     expect(dev.message).toBe("Start a dev server on the worker m1mini with o/r's development secrets?");
-    expect(dev.detail).toContain("Allow covers its restarts with the same command for up to 2 hours, until the card gets a new message");
-    expect(dev.detail).toContain("any change to the code in this project");
-    expect(dev.detail).toContain("Any process on");
+    expect(dev.detail).toContain("sealed to that worker for this one start: a restart asks again");
+    expect(dev.detail).toContain("the project's code included");
+    expect(dev.detail).toContain("any process on m1mini can read a running server's env");
     expect(dev.reason).toBe('start "pnpm dev" with K (o/r) for "Fix" on the worker m1mini');
   });
 

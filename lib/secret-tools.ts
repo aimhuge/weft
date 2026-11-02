@@ -25,7 +25,7 @@ const ENVIRONMENTS = ["development", "preview", "production"] as const;
 // On a Weft Worker (docs/architecture/project-hosts.md#the-vault-on-a-worker-t2-as-built) the vault is on the
 // owner's Mac: list, set_value and push_to_vercel ask it (lib/worker-vault.ts). These two stay the Mac's own.
 export const FILL_ON_WORKER = "fill_field types a value into the browser pane on the user's Mac, and this card runs on a Weft Worker, whose pages aren't that pane, so it can't fill one here. For a command that needs the value use mcp__secrets__run; for a page, ask the user to fill the field on their Mac.";
-export const ACCESS_ON_WORKER = "Standing access is the Mac's own: on a Weft Worker each mcp__secrets__run, set_value and push_to_vercel asks the user with Touch ID, and a dev server's approval already covers its restarts for up to 2 hours, until the card gets a new message. Carry on; each call will ask.";
+export const ACCESS_ON_WORKER = "Standing access is the Mac's own: on a Weft Worker each mcp__secrets__run, set_value and push_to_vercel asks the user with Touch ID, and a dev server asks at each start. Carry on; each call will ask.";
 
 type Listed = { name: string; environment: string; missing: boolean };
 

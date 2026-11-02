@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { createCardFolderPins, createProjectRepos } from "./worker-projects.cjs";
+import { createProjectRepos } from "./worker-projects.cjs";
 
 function dataDir(settings: unknown) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "weft-worker-projects-"));
@@ -37,16 +37,3 @@ describe("createProjectRepos", () => {
   });
 });
 
-describe("createCardFolderPins", () => {
-  it("pins a card's folder the first time and refuses it when the folder changes", () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "weft-card-folders-"));
-    const pin = createCardFolderPins({ dataDir: dir });
-    pin("w1", "card-1", "weft");
-    pin("w1", "card-1", "weft");
-    pin("w2", "card-1", "other");
-    expect(() => pin("w1", "card-1", "secrets")).toThrow("was in weft when it first reached the vault, and says secrets now");
-    expect(fs.statSync(path.join(dir, "vault", "worker-card-folders.json")).mode & 0o777).toBe(0o600);
-    fs.writeFileSync(path.join(dir, "vault", "worker-card-folders.json"), "garbage");
-    pin("w1", "card-9", "weft");
-  });
-});

@@ -519,11 +519,11 @@ worker card: list · add_blank · ask_add · set_value · push_to_vercel · a de
                                  tools vault_list, vault_blank, vault_set, vault_push, dev_env
 Mac server:  drainDeviceCalls ─ claim ─ POST /secrets/worker-vault {call} ──▶ Electron main
 main:        electron/worker-vault.cjs ─ readWorkerAsk (its own session; a revoked worker gets nothing) ─ vaultAskOf(tool)
-             ─ pinned sign key + signature ─ the nonce answered once ─ the card's folder pinned (createCardFolderPins)
+             ─ pinned sign key + signature ─ a card its owner started (createCardOrigins) ─ the nonce answered once
              ─ vaultFor(remote, the card's folder from cloud_cards) ─ this Mac's own clone of that repo
              list: names only │ blank: addBlanks │ set: openBox, held to the row, fillBlank (Touch ID) │ push: Vercel (Touch ID)
-             dev:  electron/worker-dev-env.cjs ─ Touch ID, then a grant of up to 2 h tied to the card's latest instruction
-                   ─ seal(devEnvPurpose) to the pinned box key ─ secret_use {use: "dev"}
+             dev:  electron/worker-dev-env.cjs ─ Touch ID at every start and restart ─ seal(devEnvPurpose) to the pinned
+                   box key ─ secret_use {use: "dev"}
 worker:      deliverSecretUse (the open ask, dev purpose) ─ electron/secret-env.cjs gets the values on stdin ─ redacted log
 ```
 
@@ -531,12 +531,18 @@ worker:      deliverSecretUse (the open ask, dev purpose) ─ electron/secret-en
 `vaultAskMessage(card, box key, tool, every field main acts on)` with its pairing key (`lib/worker-vault-wire.ts`, held to
 `electron/worker-vault-wire.cjs` by a test), and main answers only a worker whose sign key it pinned at pairing (not
 one taken off the row, as H8 allows before the first Allow). A stolen `wwk_` key alone can't even list names, and can't
-replay a signed ask into a new row: main answers each nonce once, until the ask expires. The vault is the one the
+replay a signed ask into a new row: main answers each nonce once, until the ask expires, and keeps the nonces sealed in
+`~/.weft/vault/worker-ask-nonces.json` so a restart doesn't reopen them (a file that won't open fails closed: no ask that
+could have been signed before main read it is answered). Both are in `electron/worker-vault-guards.cjs`. The vault is the one the
 checkout's git remote names, refused unless it's the repo this Mac knows the card's project as (`vaultFor`, as H8), and
 main acts through its own clone of that repo (`createProjectFolders`, `electron/worker-projects.cjs`), so `vault.names`,
-`addBlanks` and the rest run unchanged. The card's folder on `cloud_cards` is the worker's word, so main pins it the
-first time a card reaches the vault (`createCardFolderPins`, `~/.weft/vault/worker-card-folders.json`) and refuses the
-card if it later names another. The folder isn't in the signed message: the worker's secrets tools know the checkout's
+`addBlanks` and the rest run unchanged. The card's folder on `cloud_cards` is the worker's word, so main answers only a
+card its owner started: the first time a card reaches the vault, main needs a `new_card`, `run` or `card.create`
+command the signed-in owner sent to that worker for that card, naming the same folder (`createCardOrigins`, read with
+the owner's own session), then pins the card's folder in `~/.weft/vault/worker-card-folders.json` (written whole, one
+check at a time) and refuses the card if it later names another. A card the worker made itself, or one whose start
+command expired (finished commands go after a day) before it first reached the vault, is refused with a message to
+start a new card. The folder isn't in the signed message: the worker's secrets tools know the checkout's
 path, not the name the publisher put on the row, and the signed remote already has to match. A blank's source says
 "a thread on the worker m1mini". `ask_add` on a worker makes the blank and tells the thread the user fills it in 🔐 on
 the Mac: the in-thread input (`SecretAskInput`) is left off a worker card's item (`threadAskOf`, `lib/runner-turn.ts`),
@@ -548,36 +554,31 @@ code carried; `openBox` in `electron/desktop-signer.cjs` opens it, so the privat
 for both signatures and these boxes is the construction libsodium supports; the box carries no purpose of its own, so
 the plaintext repeats the card, the ask's nonce, the name and the environment, `openBox` has no caller but this one,
 and main refuses a value sealed for anything else. It's stored by `fillBlank` (`electron/vault-routes.cjs`), so the
-Touch ID prompt is the Mac's own, naming the worker, the card, the vault, the environment and the value's sha256
-fingerprint ("let a thread on the worker m1mini (card "Fix login") add SIGNING (o/r, production), value sha256 1a2b3c4d….
-This is the PRODUCTION value"), with no grant shortcut and an overwrite only with `replace`. The environment is in the
+Touch ID prompt is the Mac's own, naming the worker, the vault and the environment first, then the PRODUCTION warning,
+then the value's sha256 fingerprint and, last and quoted, the card's title, which is the worker's word ("let a thread on
+the worker m1mini add SIGNING (o/r, production). This is the PRODUCTION value. Value sha256 1a2b3c4d…. Card: "Fix
+login""), with no grant shortcut and an overwrite only with `replace`. The environment is in the
 signed ask and in the sealed plaintext, so it can't be swapped on the way. `push_to_vercel` runs on the Mac
-(`vercel-env.cjs push`, "let a thread on the worker m1mini … push KEY (o/r, production) to Vercel project p", with the
-same warning on production) against the Vercel project this Mac's clone links. **`fill_field` stays refused** on a
+(`vercel-env.cjs push`, "let a thread on the worker m1mini push KEY (o/r, production) to Vercel project p. This is the
+PRODUCTION value. Card: "…"") against the Vercel project this Mac's clone links. **`fill_field` stays refused** on a
 worker, with a message that says to use `mcp__secrets__run` or ask the user: the value is typed by main into the Mac's
 browser pane, and a worker card's pages aren't that pane. The worker's own headless browser (T4, PR #38) would need the
 value in the worker's process and a browser the worker drives, so the seal would go to a box that then types into a page
 any code on it can read; until a page there can be held to a site and a field the way the Mac's pane is
 (`electron/pane-secrets.cjs` masks the field and checks the site), it's not worth the risk. `request_access` is refused
-too: grants are the Mac's, and the dev server has its own. A `set_value`'s device call is blanked once it's answered
+too: grants are the Mac's, and a dev server asks at each start. A `set_value`'s device call is blanked once it's answered
 (`private.blank_vault_set`).
 
 **3. A dev server's env.** `devSecrets` on a worker (`lib/worker-dev-env.ts`) opens an ask in the H8 registry marked
 `dev` (its names are the Mac's to name), sends a signed `dev_env` call with the command, cwd and package.json script,
 and waits. Main (`electron/worker-dev-env.cjs`) reads the vault's whole development set, drops any variable that loads
-code (`NODE_OPTIONS`, `DYLD_*` …), and asks in the worker window ("Start a dev server on the worker m1mini with …?"). The
-window says the Allow covers restarts with the same command for up to 2 hours, until the card gets a new message, that
-this includes any change to the project's code in between, and that any process on the worker can read a running
-server's env. The Allow becomes a standing grant in main's memory keyed on the worker, the sha256 of its pinned box key,
-the card, the vault, and the sha256 of the command, the script, the folder and the sorted names, and on the id of the
-card's latest instruction (its newest `new_card`, `run`, `reply`, `answer`, `host`, `mode` or `stop` command, read with
-the owner's session). A restart in the same turn is sealed with no prompt. Anything new asks again: a new command, a
-changed script or folder, another set of names, a re-pinned key (a key not yet pinned never rides a grant), and any new
-message to the card. That last one is the guard against a stolen weft.zip session: this Mac can't tell a reply sent from
-its own board from one sent from the web, so a reply from either starts with a fresh Touch ID on the Mac before its
-thread's server gets values. Moving the card to Done is a command too. A revoked worker gets nothing (`readWorkerAsk`),
-and when the latest instruction can't be read there's no grant. Quitting Weft on the Mac ends them all. The values are
-sealed to the pinned box key for `devEnvPurpose(card, nonce, command)` and signed by the Mac, as a `secret_use` with
+code (`NODE_OPTIONS`, `DYLD_*` …), and asks in the worker window ("Start a dev server on the worker m1mini with …?") at
+every start and every restart. There's no standing grant on a worker: one keyed to the card's latest instruction was
+built and dropped after a red team, because this Mac can't see every way a turn starts (the H6 line carries host verbs
+with no `cloud_commands` row, the owner can delete finished rows, and a command's card is only set when it's reported),
+so a stolen weft.zip session could still reach a grant. The window says the values are for this one start, that
+whatever the server runs (the project's code included) gets them, and that any process on the worker can read a
+running server's env. A revoked worker gets nothing (`readWorkerAsk`). The values are sealed to the pinned box key for `devEnvPurpose(card, nonce, command)` and signed by the Mac, as a `secret_use` with
 `use: "dev"`, so a run's answer can't open as a dev server's or the reverse. On the worker they go to the launcher on its
 stdin (`electron/secret-env.cjs` takes `values` in place of a grant to claim): never the daemon's env, an argument or a
 file. The server's output is redacted line by line, `run.log` names the secrets but never a value, the published
@@ -591,13 +592,13 @@ workspace's (the web board's "waiting for your Mac"). The worker reads its comma
 **What it guarantees.** No vault value is ever in Supabase in the clear, the model or a transcript. Every Mac-side answer
 is decided from the device_calls row and the worker row main reads itself, a signature by the sign key pinned at pairing,
 and the vault the card's own repo names; the caller passes only an id. Values reach a worker only after Touch ID (a run,
-a set, a push, a dev server's start for each new instruction), and only sealed to the box key this Mac pinned. A stolen
+a set, a push, each dev server start), and only sealed to the box key this Mac pinned. A stolen
 `wwk_` key alone gets nothing: it can't sign an ask, replay one, or open a seal. A stolen box (all its keys) gets what the
-user approved for it while the approval lasts: a dev grant's 2 hours at most, for that card, command and instruction.
+user approved for it, one Touch ID at a time.
 
 **Its limits.** There's still no process boundary between the daemon and its cards (weft-worker.md): code a thread
 writes and runs as the same user can read a running server's env, so a dev server's development values are as safe as
-the worker's cards are trusted. A dev grant lives in main's memory, so it can't outlast Weft. The device_calls row of a
+the worker's cards are trusted. The device_calls row of a
 `set_value` keeps its sealed bytes while it waits, until it's answered or swept.
 
 **Follow-ups.** `fill_field` on the worker's browser once T4 can hold a field to a site, the in-thread `ask_add` input for

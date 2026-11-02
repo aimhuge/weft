@@ -28,8 +28,8 @@ function pinned() {
   return pins;
 }
 
-type Setup = { cardFolder?: (w: string, c: string, f: string) => void; card?: Record<string, unknown>; tool?: string; args?: Record<string, unknown>; worker?: Record<string, unknown>; pins?: ReturnType<typeof createWorkerPins>; folders?: { path: string; id: string }[]; vercel?: boolean; open?: (s: string) => string; status?: string };
-function setup({ cardFolder, card = { folder: "weft" }, tool = "vault_list", args, worker, pins = pinned(), folders = [{ path: "/Users/me/dev/weft", id: "github:aimhuge/weft" }], vercel = true, open = (s) => Buffer.from(s, "base64").toString(), status = "claimed" }: Setup = {}) {
+type Setup = { cardOrigin?: (...args: unknown[]) => Promise<void>; card?: Record<string, unknown>; tool?: string; args?: Record<string, unknown>; worker?: Record<string, unknown>; pins?: ReturnType<typeof createWorkerPins>; folders?: { path: string; id: string }[]; vercel?: boolean; open?: (s: string) => string; status?: string };
+function setup({ cardOrigin, card = { folder: "weft" }, tool = "vault_list", args, worker, pins = pinned(), folders = [{ path: "/Users/me/dev/weft", id: "github:aimhuge/weft" }], vercel = true, open = (s) => Buffer.from(s, "base64").toString(), status = "claimed" }: Setup = {}) {
   const row = { id: "call-1", org_id: "org-1", owner_user: "u1", worker_id: "w1", card_id: "card-1", tool, args: args ?? signed(tool, base()), status };
   const data: Record<string, unknown> = { device_calls: row, cloud_workers: { id: "w1", name: "m1mini", owner_user: "u1", public_key: keys.publicKey, sign_key: SIGN_KEY, ...worker }, cloud_cards: card };
   const chain = (table: string) => {
@@ -46,7 +46,7 @@ function setup({ cardFolder, card = { folder: "weft" }, tool = "vault_list", arg
   const push = vi.fn(() => Promise.resolve({ ok: true, label: "Aimhuge/Weft" }));
   const devEnv = { answer: vi.fn(() => Promise.resolve({ queued: true })) };
   const audit = vi.fn();
-  const wv = createWorkerVault({ vault, vercelEnv: () => (vercel ? { push } : null), accountClient: () => ({ supabase, getClaims: () => ({ sub: "u1" }) }), pins, signer: () => Promise.resolve({ openBox: open }), projectFolders: () => Promise.resolve(folders), devEnv, ...(cardFolder ? { cardFolder } : {}), audit, now: () => NOW });
+  const wv = createWorkerVault({ vault, vercelEnv: () => (vercel ? { push } : null), accountClient: () => ({ supabase, getClaims: () => ({ sub: "u1" }) }), pins, signer: () => Promise.resolve({ openBox: open }), projectFolders: () => Promise.resolve(folders), devEnv, ...(cardOrigin ? { cardOrigin } : {}), audit, now: () => NOW });
   return { wv, vault, push, devEnv, audit };
 }
 
@@ -73,13 +73,11 @@ describe("createWorkerVault", () => {
     expect(await empty.wv.answer("call-1")).toEqual({ label: undefined, filled: [] });
   });
 
-  it("refuses a card whose folder changed since it first reached the vault", async () => {
-    const cardFolder = vi.fn(() => {
-      throw new Error("That card was in weft when it first reached the vault");
-    });
-    const s = setup({ cardFolder });
-    await expect(s.wv.answer("call-1")).rejects.toThrow("first reached the vault");
-    expect(cardFolder).toHaveBeenCalledWith("w1", "card-1", "weft");
+  it("answers only a card its owner started, after the signature and before the vault", async () => {
+    const cardOrigin = vi.fn(() => Promise.reject(new Error("only answers the vault for a worker card you started")));
+    const s = setup({ cardOrigin });
+    await expect(s.wv.answer("call-1")).rejects.toThrow("card you started");
+    expect(cardOrigin).toHaveBeenCalledWith(expect.anything(), "u1", "w1", "card-1", "weft");
     expect(s.vault.names).not.toHaveBeenCalled();
   });
 
@@ -91,7 +89,7 @@ describe("createWorkerVault", () => {
   it("opens set_value's sealed value and stores it after a Touch ID that names the worker", async () => {
     const s = setup({ tool: "vault_set", args: signed("vault_set", base({ name: "SIGNING", environment: "development", replace: false, sealed: sealedFor() })) });
     expect(await s.wv.answer("call-1")).toEqual({ ok: true, added: true, label: "Aimhuge/Weft" });
-    expect(s.vault.confirm).toHaveBeenCalledWith("let a thread on the worker m1mini add SIGNING (Aimhuge/Weft, development), value sha256 f0b733fb…");
+    expect(s.vault.confirm).toHaveBeenCalledWith("let a thread on the worker m1mini add SIGNING (Aimhuge/Weft, development). Value sha256 f0b733fb…");
     expect(s.vault.setValue).toHaveBeenCalledWith("/Users/me/dev/weft", "SIGNING", "development", "gen3rated", { source: "a thread on the worker m1mini", by: "thread" });
     expect(JSON.stringify(s.audit.mock.calls)).not.toContain("gen3rated");
   });
@@ -107,16 +105,16 @@ describe("createWorkerVault", () => {
   it("names the card and warns on a production value", async () => {
     const s = setup({ tool: "vault_set", args: signed("vault_set", base({ name: "SIGNING", environment: "production", replace: true, sealed: sealedFor({ environment: "production" }) })), card: { folder: "weft", title: "Fix\u202e login\n" } });
     await s.wv.answer("call-1");
-    expect(s.vault.confirm).toHaveBeenCalledWith("let a thread on the worker m1mini (card \"Fix login\") add SIGNING (Aimhuge/Weft, production), value sha256 f0b733fb…. This is the PRODUCTION value");
+    expect(s.vault.confirm).toHaveBeenCalledWith("let a thread on the worker m1mini add SIGNING (Aimhuge/Weft, production). This is the PRODUCTION value. Value sha256 f0b733fb…. Card: \"Fix login\"");
   });
 
   it("pushes to Vercel through this Mac's linked clone, naming the worker", async () => {
     const s = setup({ tool: "vault_push", args: signed("vault_push", base({ name: "KEY", environment: "production" })) });
     expect(await s.wv.answer("call-1")).toEqual({ ok: true, label: "Aimhuge/Weft" });
-    expect(s.push).toHaveBeenCalledWith("/Users/me/dev/weft", "KEY", "production", "", "on the worker m1mini");
+    expect(s.push).toHaveBeenCalledWith("/Users/me/dev/weft", "KEY", "production", "", "on the worker m1mini", "");
     const titled = setup({ tool: "vault_push", args: signed("vault_push", base({ name: "KEY", environment: "preview" })), card: { folder: "weft", title: "Ship it" } });
     await titled.wv.answer("call-1");
-    expect(titled.push).toHaveBeenCalledWith("/Users/me/dev/weft", "KEY", "preview", "", 'on the worker m1mini (card "Ship it")');
+    expect(titled.push).toHaveBeenCalledWith("/Users/me/dev/weft", "KEY", "preview", "", "on the worker m1mini", 'Card: "Ship it"');
     await expect(setup({ tool: "vault_push", args: signed("vault_push", base({ name: "KEY", environment: "production" })), vercel: false }).wv.answer("call-1")).rejects.toThrow("Vercel isn't set up");
   });
 

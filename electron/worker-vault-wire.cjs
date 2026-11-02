@@ -8,8 +8,6 @@ const VAULT_SET = "vault_set";
 const VAULT_PUSH = "vault_push";
 const DEV_ENV = "dev_env";
 const VAULT_TOOLS = new Set([VAULT_LIST, VAULT_BLANK, VAULT_SET, VAULT_PUSH, DEV_ENV]);
-// How long a worker's dev server approval covers its restarts (electron/worker-dev-env.cjs, the window's words).
-const DEV_GRANT_HOURS = 2;
 
 /** @param {string} cardId @param {string} boxKey @param {string} tool @param {Record<string, any>} a */
 function vaultAskMessage(cardId, boxKey, tool, a) {
@@ -21,4 +19,4 @@ function devEnvPurpose(card, nonce, command) {
   return `dev-env:${card}:${nonce}:${crypto.createHash("sha256").update(command, "utf8").digest("hex")}`;
 }
 
-module.exports = { VAULT_LIST, VAULT_BLANK, VAULT_SET, VAULT_PUSH, DEV_ENV, VAULT_TOOLS, DEV_GRANT_HOURS, vaultAskMessage, devEnvPurpose };
+module.exports = { VAULT_LIST, VAULT_BLANK, VAULT_SET, VAULT_PUSH, DEV_ENV, VAULT_TOOLS, vaultAskMessage, devEnvPurpose };

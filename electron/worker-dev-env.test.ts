@@ -1,9 +1,9 @@
-// A worker's dev server env on main's side (electron/worker-dev-env.cjs): one Touch ID, then a standing grant for that
-// worker, card, vault, command and script; the development set sealed to the pinned key, never a loader variable.
+// A worker's dev server env on main's side (electron/worker-dev-env.cjs): Touch ID at every start, no standing grant;
+// the development set sealed to the pinned key, never a loader variable.
 import crypto from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { describe as describeRun } from "./secret-run.cjs";
-import { createWorkerDevEnv, GRANT_MS } from "./worker-dev-env.cjs";
+import { createWorkerDevEnv } from "./worker-dev-env.cjs";
 import { secretUseMessage } from "../lib/secret-use";
 import { macSigned } from "../lib/worker-mac-keys";
 import { newSealKeys, open, type Sealed } from "../lib/worker-seal";
@@ -18,10 +18,7 @@ let now = 1_000_000;
 
 function setup(values: Record<string, string> = { API_KEY: "sk-dev-1", NODE_OPTIONS: "--require x" }, answer: string | null = "once") {
   const inserted: Record<string, unknown>[] = [];
-  // The card's latest instruction, as main reads it: a new one (a message from the board or the web) ends the grant.
-  const latest = { id: "cmd-1" as string | null, error: null as { message: string } | null };
-  const query = { eq: () => query, in: () => query, order: () => query, limit: () => query, maybeSingle: () => Promise.resolve({ data: latest.id ? { id: latest.id } : null, error: latest.error }) };
-  const supabase = { from: () => ({ insert: (row: Record<string, unknown>) => (inserted.push(row), Promise.resolve({ error: null })), select: () => query }) };
+  const supabase = { from: () => ({ insert: (row: Record<string, unknown>) => (inserted.push(row), Promise.resolve({ error: null })) }) };
   const ask = vi.fn<(request: { message: string }) => Promise<string | null>>(() => Promise.resolve(answer));
   const pins = { pin: vi.fn() };
   const audit = vi.fn();
@@ -36,7 +33,7 @@ function setup(values: Record<string, string> = { API_KEY: "sk-dev-1", NODE_OPTI
     signKey: "SK",
     ref: { id: "github:o/r", label: "o/r" },
   });
-  return { dev, ctx, ask, pins, audit, inserted, vault, latest };
+  return { dev, ctx, ask, pins, audit, inserted, vault };
 }
 
 beforeEach(() => {
@@ -59,48 +56,13 @@ describe("createWorkerDevEnv", () => {
     expect(s.pins.pin).not.toHaveBeenCalled();
   });
 
-  it("restarts under the standing grant without asking, until it runs out or the command changes", async () => {
+  it("asks at every start and restart: no standing grant on a worker", async () => {
     const s = setup();
     await s.dev.answer(s.ctx());
     expect(await s.dev.answer(s.ctx())).toMatchObject({ queued: true });
-    expect(s.ask).toHaveBeenCalledTimes(1);
-    expect(s.audit).toHaveBeenLastCalledWith(expect.objectContaining({ via: "grant" }));
-    await s.dev.answer(s.ctx({ command: "pnpm start" }));
-    await s.dev.answer(s.ctx({ script: "dev: next dev --turbo" }));
-    expect(s.ask).toHaveBeenCalledTimes(3);
-    // The same command and script in another folder of the checkout runs other code: it asks again.
-    await s.dev.answer(s.ctx({ cwd: "packages/other" }));
-    expect(s.ask).toHaveBeenCalledTimes(4);
-    now += GRANT_MS + 1;
-    await s.dev.answer(s.ctx());
-    expect(s.ask).toHaveBeenCalledTimes(5);
-    s.dev.forgetWorker("w1");
-    await s.dev.answer(s.ctx());
-    expect(s.ask).toHaveBeenCalledTimes(6);
-    expect(GRANT_MS).toBe(2 * 60 * 60_000);
-  });
-
-  it("asks again after a new message to the card, a changed set of names, or a key that isn't pinned", async () => {
-    const s = setup();
-    await s.dev.answer(s.ctx());
-    await s.dev.answer(s.ctx());
-    expect(s.ask).toHaveBeenCalledTimes(1);
-    // A reply from weft.zip (or the board): a new instruction, so the thread it starts can't reuse the grant.
-    s.latest.id = "cmd-2";
-    await s.dev.answer(s.ctx());
     expect(s.ask).toHaveBeenCalledTimes(2);
-    s.vault.valuesForVault.mockResolvedValueOnce({ values: { API_KEY: "a", OTHER: "b" } });
-    await s.dev.answer(s.ctx());
-    expect(s.ask).toHaveBeenCalledTimes(3);
-    // A re-pinned box key (firstUse) never rides a grant, nor does a different box key.
-    await s.dev.answer(s.ctx({}, { firstUse: true }));
-    await s.dev.answer(s.ctx({}, { publicKey: newSealKeys().publicKey }));
-    expect(s.ask).toHaveBeenCalledTimes(5);
-    // When the latest instruction can't be read, there's no grant to use or keep.
-    s.latest.error = { message: "offline" };
-    await s.dev.answer(s.ctx());
-    await s.dev.answer(s.ctx());
-    expect(s.ask).toHaveBeenCalledTimes(7);
+    expect(s.audit).toHaveBeenLastCalledWith(expect.objectContaining({ via: "once" }));
+    expect(s.inserted).toHaveLength(2);
   });
 
   it("pins a first-seen key with the Allow", async () => {

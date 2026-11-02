@@ -11,6 +11,7 @@ const { readWorkerAsk, signKeyOf, signedIn, verifySigned } = require("./worker-a
 const { vaultAskOf } = require("./worker-vault-ask.cjs");
 const { DEV_ENV, VAULT_BLANK, VAULT_LIST, VAULT_PUSH, VAULT_SET, VAULT_TOOLS, vaultAskMessage } = require("./worker-vault-wire.cjs");
 const { fillBlank } = require("./vault-routes.cjs");
+const { createAskNonces } = require("./worker-vault-guards.cjs");
 
 // set_value's sealed value, opened and held to the row: the same card, ask, name and environment, or nothing.
 /** @param {string} text @param {{ card_id: string }} row @param {{ nonce: string, name?: unknown, environment?: unknown }} a @returns {string} */
@@ -29,28 +30,19 @@ function openedValue(text, row, a) {
 /**
  * @param {{
  *   vault: any,
- *   vercelEnv: () => { push: (folder: string, name: string, environment: string, card: string, who: string) => Promise<Record<string, unknown>> } | null | undefined,
+ *   vercelEnv: () => { push: (folder: string, name: string, environment: string, card: string, who: string, note?: string) => Promise<Record<string, unknown>> } | null | undefined,
  *   accountClient: () => any,
  *   pins: { lookup: (worker: { id: string, name: string, publicKey: string }) => { publicKey: string, fingerprint: string, firstUse: boolean, signKey?: string } },
  *   signer: () => Promise<{ openBox: (sealed: string) => string }>,
  *   projectFolders: (folder: string) => Promise<{ path: string, id: string }[]>,
  *   devEnv: { answer: (ctx: Record<string, any>) => Promise<unknown> },
- *   cardFolder?: (workerId: string, cardId: string, folder: string) => void,
+ *   nonces?: { take: (nonce: string, expiresAt: number) => void },
+ *   cardOrigin?: (supabase: any, uid: string, workerId: string, cardId: string, folder: string) => Promise<void>,
  *   audit?: (entry: Record<string, unknown>) => unknown,
  *   now?: () => number,
  * }} deps
  */
-function createWorkerVault({ vault, vercelEnv, accountClient, pins, signer, projectFolders, devEnv, cardFolder = () => {}, audit = (entry) => entry, now = Date.now }) {
-  // Nonces answered, until their ask expires: a signed ask copied into a new row (anyone with the worker's wwk_ key can
-  // make one) is answered once, never again.
-  /** @type {Map<string, number>} */
-  const answered = new Map();
-  function once(a) {
-    for (const [n, until] of answered) if (until < now()) answered.delete(n);
-    if (answered.has(a.nonce)) throw new Error("That ask was already answered.");
-    answered.set(a.nonce, a.expiresAt);
-  }
-
+function createWorkerVault({ vault, vercelEnv, accountClient, pins, signer, projectFolders, devEnv, audit = (entry) => entry, now = Date.now, nonces = createAskNonces({ now }), cardOrigin = async () => {} }) {
   async function context(callId) {
     const { account, uid } = signedIn(accountClient);
     const { row, worker, folder, title } = await readWorkerAsk(account.supabase, uid, callId, VAULT_TOOLS);
@@ -60,12 +52,13 @@ function createWorkerVault({ vault, vercelEnv, accountClient, pins, signer, proj
     if (!pin.signKey) throw new Error(`${worker.name} has no pinned signing key on this Mac, so its cards can't reach the vault. Pair it from Settings → Devices → Add a worker.`);
     const signKey = signKeyOf(pin, worker);
     verifySigned(signKey, vaultAskMessage(row.card_id, pin.publicKey, row.tool, a), a.sig);
-    once(a);
-    cardFolder(worker.id, row.card_id, folder);
+    // Only a card its owner started, in the folder it was started in; then each signed ask once, restarts included.
+    await cardOrigin(account.supabase, uid, worker.id, row.card_id, folder);
+    nonces.take(a.nonce, a.expiresAt);
     const matches = await projectFolders(folder);
     const ref = vaultFor(a.remote, folder, matches.map((m) => m.id));
     const local = /** @type {{ path: string }} */ (matches.find((m) => m.id === ref.id)).path;
-    return { account, row, worker, a, pin, signKey, ref, local, who: `on the worker ${worker.name}${title ? ` (card "${title}")` : ""}` };
+    return { account, row, worker, a, pin, signKey, ref, local, who: `on the worker ${worker.name}`, card: title ? `Card: "${title}"` : "" };
   }
 
   const ops = {
@@ -77,16 +70,16 @@ function createWorkerVault({ vault, vercelEnv, accountClient, pins, signer, proj
       const r = await vault.addBlanks(local, a.names, [a.environment], { source: `a thread ${who}`, hint: a.hint });
       return { label: r?.label, filled: Array.isArray(r?.filled) ? r.filled : [] };
     },
-    [VAULT_SET]: async ({ local, a, row, who }) => {
+    [VAULT_SET]: async ({ local, a, row, who, card }) => {
       const value = openedValue(await openSealed(a.sealed), row, a);
       // A short fingerprint of the value, so the prompt can be matched to what the thread made.
       const print = crypto.createHash("sha256").update(value, "utf8").digest("hex").slice(0, 8);
-      return fillBlank(vault, local, a.name, a.environment, value, a.replace, "", who, `value sha256 ${print}…`);
+      return fillBlank(vault, local, a.name, a.environment, value, a.replace, "", who, [`Value sha256 ${print}…`, card].filter(Boolean).join(". "));
     },
-    [VAULT_PUSH]: ({ local, a, who }) => {
+    [VAULT_PUSH]: ({ local, a, who, card }) => {
       const env = vercelEnv();
       if (!env) throw new Error("Vercel isn't set up in Weft on this Mac yet.");
-      return env.push(local, a.name, a.environment, "", who);
+      return env.push(local, a.name, a.environment, "", who, card);
     },
     [DEV_ENV]: (ctx) => devEnv.answer(ctx),
   };

@@ -1,7 +1,7 @@
 // A dev server's vault env on a Weft Worker (docs/architecture/project-hosts.md#the-vault-on-a-worker-t2-as-built).
 // On the Mac, devSecrets gets a one-time grant from main and electron/secret-env.cjs claims it. A worker has no main, so
-// it asks the owner's Mac with a signed `dev_env` device call (lib/worker-vault.ts askVault): the Mac asks Touch ID once,
-// then holds a standing grant for this card, command and script for up to 2 hours, until the card gets a new message, and seals
+// it asks the owner's Mac with a signed `dev_env` device call (lib/worker-vault.ts askVault): the Mac asks Touch ID at
+// every start and restart (no standing grant on a worker), and seals
 // the vault's development values to this box as a `secret_use` with `use: "dev"`. The values go to the launcher on its
 // stdin (never an env var of the daemon, an argument or a file), the launcher puts them in the server's env only and
 // redacts them from its output, and the published dev-server list carries the command and names, never a value.
