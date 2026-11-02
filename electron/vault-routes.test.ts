@@ -78,6 +78,9 @@ describe("vaultRoutes", () => {
     expect(prompt.mock.calls.flat().join("\n")).not.toContain(VALUE);
     expect(await vault.valuesFor(folder, ["SIGNING"], "production")).toMatchObject({ values: { SIGNING: VALUE }, missing: [] });
     expect((await vault.valuesFor(folder, ["SIGNING"], "development")).values).toEqual({});
+    // A worker's project names the same vault by its remote, with no folder on this disk (electron/worker-secret.cjs).
+    expect(await vault.valuesForVault({ id: "github:owner/repo", label: "Owner/Repo" }, ["SIGNING", "NOPE"], "production", false)).toMatchObject({ label: "Owner/Repo", values: { SIGNING: VALUE }, missing: ["NOPE"] });
+    expect(await vault.valuesForVault({ id: "github:nobody/none", label: "nobody/none" }, ["SIGNING"], "production", false)).toMatchObject({ values: {}, missing: ["SIGNING"] });
     expect(onChange).toHaveBeenCalledWith(folder);
     // On disk: ciphertext only, in 0600 files.
     const dir = path.join(dataDir, "vault");

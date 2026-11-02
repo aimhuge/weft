@@ -7,12 +7,17 @@ import crypto from "node:crypto";
 
 // `wph.<pairing id>.<org id>.<secret>`: shell-safe, so it rides `sh -s -- <code>` like an enrolment token.
 export const PAIR_CODE_PREFIX = "wph.";
+// A raw 32-byte Ed25519 key, base64url without padding.
+const MAC_KEY = /^[A-Za-z0-9_-]{43}$/;
 
 export interface HostPairCode {
   id: string;
   orgId: string;
   // 32 random bytes, base64url.
   secret: string;
+  // The pairing Mac's Ed25519 approval key (electron/desktop-signer.cjs), base64: the code is carried to the box by hand,
+  // so this is the one Mac key the box can trust for its secret_use rows (lib/worker-mac-keys.ts). Absent from older codes.
+  macKey?: string;
 }
 
 export interface HostClaimBody {
@@ -54,15 +59,17 @@ export function safeName(name: string): string {
 export const isPairCode = (code: string) => code.trim().startsWith(PAIR_CODE_PREFIX);
 
 export function pairCode(c: HostPairCode): string {
-  return `${PAIR_CODE_PREFIX}${c.id}.${c.orgId}.${c.secret}`;
+  const mac = c.macKey ? `.${Buffer.from(c.macKey, "base64").toString("base64url")}` : "";
+  return `${PAIR_CODE_PREFIX}${c.id}.${c.orgId}.${c.secret}${mac}`;
 }
 
 export function parsePairCode(code: string): HostPairCode | null {
   const trimmed = code.trim();
   if (!isPairCode(trimmed)) return null;
-  const [id = "", orgId = "", secret = "", ...rest] = trimmed.slice(PAIR_CODE_PREFIX.length).split(".");
+  const [id = "", orgId = "", secret = "", mac, ...rest] = trimmed.slice(PAIR_CODE_PREFIX.length).split(".");
   if (rest.length || !UUID.test(id) || !UUID.test(orgId) || !SECRET.test(secret)) return null;
-  return { id, orgId, secret };
+  if (mac === undefined) return { id, orgId, secret };
+  return MAC_KEY.test(mac) ? { id, orgId, secret, macKey: Buffer.from(mac, "base64url").toString("base64") } : null;
 }
 
 export const newPairSecret = () => crypto.randomBytes(32).toString("base64url");

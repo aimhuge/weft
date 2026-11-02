@@ -306,6 +306,101 @@ Worker lib/worker-daemon.ts: key identity, Broadcast wake-up, 3 s / 30 s poll, 2
 - **The address.** `lib/worker-project.ts`'s `workerProjectPath` and `parseWorkerProject` read and write through
   `ProjectAddress`; the wire stays `worker://<id>/<folder>`.
 
+### Secrets on a worker (H8, the per-use seal, as built)
+
+A worker card's `mcp__secrets__run` used to throw "only exists in the desktop app". Now it asks the Mac, the way a
+local card asks main, and the values cross once, sealed to that worker, for that card's one command.
+
+```
+worker card: mcp__secrets__run ─ checkCommand ─ openAsk(nonce, expiry) ─ worker_secret_ask ──▶ device_calls
+             (lib/secret-run.ts → lib/worker-secret-run.ts)                    tool='secret_run', newest live desktop
+Mac server:  drainDeviceCalls ─ claim ─ POST /secrets/worker-ask {call} ──▶ Electron main (electron/worker-secret.cjs)
+main:        re-reads the row with its own session ─ askOf (shape, expiry) ─ the worker's public_key ─ the vault the
+             project's git remote names ─ the approval window, "on the worker m1mini", Touch ID ─ seal(values,
+             purpose = secret-use:<card>:<nonce>:<sha256(command)>) ─ cloud_commands kind='secret_use' ──▶ {queued}
+worker:      claim secret_use ─ deliverSecretUse: the ask for that nonce, same card, opens under the purpose, same
+             command, names and environment, not expired ─ resolves the waiting tool ─ spawn, no shell ─ redact ─ reply
+```
+
+- **The ask** is a `device_calls` row (the worker-to-Mac table Local Simulator mode built), tool `secret_run`, queued by
+  `worker_secret_ask` (`supabase/migrations/20261102170000_secret_use.sql`) for the owner's most recently seen desktop.
+  It carries names, never values: the command, names, environment, cwd relative to the project, its package.json script,
+  the thread's why and title, the checkout's git remote (which vault), a 64-hex nonce and an expiry 5 minutes out. Only
+  the owner reads it, and it's deleted once the worker reads the answer. The Mac's drain doesn't wait on it, so a
+  Touch ID left open doesn't hold up Local Simulator calls. One ask per card at a time, three ways: the worker's
+  `openAsk`, `worker_secret_ask` (one per card, five per worker, in the last 10 minutes, counted under a per-worker advisory lock so two
+  asks at once can't both slip under) and main, which shows one
+  window at a time and refuses a second ask from a card that has one waiting.
+- **Main decides from the database, not the caller.** The server only passes the call id; main reads the row through its
+  own Supabase session (`owner_user` must be the signed-in user, status `claimed`, tool `secret_run`) and checks the ask
+  (`electron/worker-ask.cjs`): its shape and expiry, the command again with `checkCommand`'s refusals
+  (`electron/command-rules.cjs`, held to `lib/secret-command.ts` by a parity test), and no control, format or bidi
+  character in the command, script, folder or remote (both sides refuse them). Both rule sets also check what a package
+  runner starts (`pnpm exec sh -c`, `npx printenv`, `yarn dlx curl`) and refuse `find -exec` and git's `-c`,
+  `--config-env` and `--exec-path`. The thread's why and title are capped (300 and 120 chars). The vault is the one the
+  remote names, and only when that GitHub owner/repo is the repo this Mac knows the card's project as: its own projects
+  and worker folders with that folder name (`electron/worker-projects.cjs` reads `settings.json` and each one's
+  remote), never the worker's word for it. A project this Mac has never had is refused.
+- **The worker's key is pinned.** `cloud_workers.public_key` is the worker's word (anyone with its `wwk_` key can rewrite
+  it), so main seals only to a key it pinned (`electron/worker-pins.cjs`, sealed with safeStorage in
+  `~/.weft/vault/worker-pins.json`, beside the paired devices), and refuses, before asking anything, when the row's key is
+  another. A worker added by pairing (H10, Settings → Devices) is pinned at `worker_pair_confirm`, under that Touch ID,
+  with the box key and the Ed25519 sign key main just checked (`electron/host-pairing.cjs` `pinWorker`); every ask from
+  it must then carry a signature by that key over `askMessage` (`lib/secret-use.ts`, signed from `sign-key.json` by
+  `lib/worker-secret-wiring.ts`), and an unsigned one is refused. The requirement is sticky: main reads
+  `cloud_workers.sign_key`, pins it with the Allow if it wasn't pinned yet, and refuses a row whose sign key went or
+  changed. A pin that can't be written at pairing fails the pairing and revokes the new worker. A worker with no sign
+  key was enrolled by token and gets no secrets: pair it. **Re-pin** in Settings → Devices (after Touch ID,
+  `worker-pins:forget`) drops the box key only; the sign key stays, so the next pin still needs the worker's signature.
+  `weft-worker status` prints the box key's fingerprint, the one the window shows. A file that won't open refuses every
+  worker.
+- **The worker checks it's the Mac.** Sealing needs only the worker's public key, so main also signs each `secret_use`
+  with this Mac's device key (`electron/desktop-signer.cjs`) over the card, the nonce and the sealed bytes
+  (`secretUseMessage`). The worker takes a row only when that signature checks against the Mac key that came in the
+  pairing code (`wph.<id>.<org>.<secret>.<mac key>`, carried from the Mac's screen to the box by hand;
+  `lib/worker-mac-keys.ts` `trustPairingMac`, kept in `mac-keys.json`, sealed from threads). No key off the network is
+  ever trusted, so a session of the owner's that seals and signs its own row before the real Touch ID gets nothing. A
+  token-enrolled box trusts no Mac and takes no secrets; `weft-worker forget-macs` stops a paired one. Enrolling
+  replaces the trusted Mac (never adds one), and an enrolled box enrols again only with `--re-pair` typed at a terminal
+  on it. Threads can't run any of this: `lib/worker-cli-guard.ts` refuses `weft-worker`, the daemon's script, the
+  installer and a pairing code handed to a runner, in every thread's guard set. The ask's signature also names the box
+  key (`askMessage`), so after a Re-pin main seals only to the key the worker itself signed for.
+- **The window** (`electron/approval-worker.cjs`) puts the full command and script first, with anything outside plain
+  ASCII marked and named; then the folder, "the Weft Worker m1mini, not this Mac", the full git remote, the worker's key
+  fingerprint ("first seen now" on the first ask) and, plainly, that the command and any code it runs on the worker get
+  the values; the thread's title and why come last, as the thread's claim. Allow once only (no Always rule, no hour
+  grant), and Allow and Touch ID wait until the end of the page has been on screen.
+- **The seal** is `lib/worker-seal.ts`'s construction (`electron/worker-seal.cjs` is main's copy of `seal`, held to it by
+  a round-trip test): X25519 to the worker's key, HKDF bound to both keys and the purpose, AES-256-GCM. The purpose names
+  the card, the nonce and the command's hash (`lib/secret-use.ts`), and the plaintext repeats them with the names,
+  environment and expiry.
+- **The worker** (`lib/worker-secret-asks.ts`) keeps each open ask in memory only, by nonce. A `secret_use` is refused
+  unless an ask with that nonce is open on that card, the payload opens under that ask's purpose, and the command, names
+  and environment match exactly, before the expiry. A refusal leaves the real ask open (junk can't burn it); success
+  deletes it, so a replayed row finds nothing. The tool then runs the command with `electron/secret-exec.cjs` (the code
+  main's own runs use), once it has read `package.json` again and found the same script the user saw: no shell, the values in the child's env only, over the thread's own env (`cliEnv`, so the
+  worker's sign-in tokens stay out), the output redacted by `electron/secret-redact.cjs` and cut to 20,000 chars. The
+  values are dropped when the run ends, except in memory for `redactStored` until the card's turn ends
+  (`forgetOnTurnEnd`), so a tool result in that turn that prints one is redacted too. A finished `secret_use` row's
+  payload is blanked by a trigger, and one nobody took is failed (so blanked) 10 minutes on by
+  `private.sweep_secret_use`, run on each new ask and every 5 minutes where pg_cron is on, so a `seal-key.json` stolen
+  later can't open an old row from a backup.
+- **What it guarantees.** A value is never in the model, the transcript, Supabase in the clear or the worker's disk: it
+  lives in main, in the sealed row until it finishes, and in the worker daemon's memory. A row replayed, late, for
+  another card or another command, or naming other secrets, opens nothing or is refused. Values leave the Mac only after
+  Touch ID, per run, in a window naming the command, the names, the card and the worker.
+- **Its limits.** Secrets need a paired worker; token-enrolled ones are refused on both sides. A worker trusts only the Mac
+  that paired it: with two Macs signed in, the newest beat gets the ask, and the other Mac's answer is refused (route asks
+  to the pairing Mac: follow-up). A worker paired before this change has no Mac key, so it must be paired again.
+  Variables that load code (`NODE_OPTIONS`, `LD_*`, `DYLD_*`, `BASH_ENV`, `ENV`, `PYTHONSTARTUP`, `PERL5OPT`, `RUBYOPT`)
+  are refused on the command line and as vault names, on both sides. The command runs with the
+  worker's privileges, so a script that writes a value to a file leaves it there, as on the Mac. With two Macs signed
+  in, the newest beat gets the ask.
+- **Not yet.** A dev server's env on a worker (the vault's whole development set held for the server's life: the same ask
+  with `kind: "dev"` and a long-lived redacting launcher), `fill_field` (the pane is the Mac's), missing names made into
+  blanks from the worker (it says to add them on the Mac), and the vault on the host itself, its key sealed to the worker
+  and opened behind a signed approval (after H7).
+
 ### Project reads and the editor (H4, as built)
 
 ```
@@ -387,7 +482,7 @@ editor: OpenCard ─ FilesSourceContext = host.files ─┬─ local: filesApi (
 - **The vault never leaves the Mac in the clear.** Touch ID lives in Electron main. A worker card that needs a
   secret (`mcp__secrets__run`, a dev server's env) asks the board; the Mac approves with Touch ID and seals the values
   to the worker's X25519 key (`lib/worker-seal.ts`, the Claude sign-in's model) on a `secret_use` command bound to
-  that card and command. The worker opens it, runs, and redacts as the Mac does. `fill_field` stays desktop-only:
+  that card, nonce and command ([H8](#secrets-on-a-worker-h8-the-per-use-seal-as-built)). The worker opens it, runs, and redacts as the Mac does. `fill_field` stays desktop-only:
   the pane is on the Mac.
 - **Snapshots are workspace-readable,** like `cloud_cards`. Quality, pile counts and the streak are fine there; file
   names in the pile are as visible as they are in a card's thread today. Nothing secret goes in one.
@@ -590,7 +685,8 @@ Each ships on its own.
    desktop signs too (built, not yet called by the board): main holds an Ed25519 key, signs the phone's message after
    Touch ID, and `/pairing/verify` checks it like a phone's ([mobile-security.md](mobile-security.md#the-desktop-signs-too)).
    Still open: the board's Allow asking for that signature, and a worker host pinning the Mac's key (with H10).
-8. **H8 secrets on a Worker.** The per-use seal first, then the vault in the host behind H7.
+8. **H8 secrets on a Worker.** The per-use seal first (built 2026-11-02 for `mcp__secrets__run`,
+   [as built](#secrets-on-a-worker-h8-the-per-use-seal-as-built); a dev server's env next), then the vault in the host behind H7.
 9. **H9 `@weft/client`** for the phone: the transports, verbs and view models as one package. **First pass built
    2026-11-02:** `packages/weft-client`, a pnpm workspace package of plain TypeScript (no DOM, React, Next or Node; its
    own tsconfig and an ESLint rule check that), holding the stable pure pieces with re-exports at their old `lib/` paths:

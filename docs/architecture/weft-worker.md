@@ -246,6 +246,9 @@ Integrations → Cron later schedules it once by hand in the SQL editor:
 
 ### What's sealed on a worker
 
+Vault values for a card's `mcp__secrets__run` reach a worker sealed to its `seal-key.json` for one run and stay in the
+daemon's memory, never on this disk ([project-hosts.md, H8](project-hosts.md#secrets-on-a-worker-h8-the-per-use-seal-as-built)).
+
 The secret guard seals the worker's home as it seals the data dir (`reachesWorkerHome`, `lib/secret-guard-files.ts`), in
 every permission mode. The folder gate can't do this job: it asks, and **Always** would grant all of `~/.weft-worker` to
 every card on the box. Before this, all four secret files passed the guard, and `~/.weft-worker/data/...` by its `~` path

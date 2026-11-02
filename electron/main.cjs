@@ -381,7 +381,7 @@ vault = require("./vault.cjs").setupVault({ ipcMain, dataDir: dataDir(), window:
 require("./device-key.cjs").registerDeviceHandlers({ ipcMain, accountClient: () => accountClient, dataDir: dataDir(), isBoard: (sender) => Boolean(sender) && sender === appView?.webContents });
 // Phones and browsers paired from Settings → Sync, and the workspace key synced rows are sealed with (docs/architecture/mobile-security.md).
 pairing = require("./pairing-ipc.cjs").setupPairing({ ipcMain, dataDir: dataDir(), accountClient: () => accountClient, isBoard: (sender) => Boolean(sender) && sender === appView?.webContents, confirm: (reason) => vault.confirm(reason), getServer: () => server, devOrigin: require("./passkey-verify.cjs").passkeyDevOrigin({ packaged: app.isPackaged, env: process.env, warn: console.warn }) });
-secretRun = require("./secret-run.cjs").setupSecretRun({ vault, dataDir: dataDir(), window: () => win });
+secretRun = require("./secret-run.cjs").setupSecretRun({ vault, dataDir: dataDir(), window: () => win, accountClient: () => accountClient });
 // So does Vercel: its token is in the Keychain and its links are .vercel/project.json.
 ({ vercel: vercelApi, env: vercelEnv } = require("./vercel.cjs").setupVercel({ ipcMain, dataDir: dataDir(), board: () => appView?.webContents, vault }));
 // And Supabase: its token is in the Keychain and its links are supabase/.temp/project-ref.

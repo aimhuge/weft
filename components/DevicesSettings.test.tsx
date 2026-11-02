@@ -12,7 +12,7 @@ const apiFetch = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/api-client", () => ({ apiFetch }));
 
 const { default: DevicesSettings } = await import("./DevicesSettings");
-const { POLL_MS, revokeRoute, workerOutcome, useDevices, hostPairingBridge } = await import("@/lib/use-devices");
+const { POLL_MS, revokeRoute, repinOutcome, workerOutcome, useDevices, hostPairingBridge } = await import("@/lib/use-devices");
 
 const base: DeviceView = {
   id: "m1", kind: "mac", name: "MacBook", platform: "darwin", orgId: "o", host: "h", hasBoxKey: true, hasSignKey: false, hasPasskey: false,
@@ -66,6 +66,24 @@ describe("DevicesSettings", () => {
     await userEvent.click(screen.getByRole("button", { name: "Revoke m1mini" }));
     await waitFor(() => expect(apiFetch).toHaveBeenCalledWith("/api/devices?id=w1", { method: "DELETE" }));
     expect(pairing.revoke).toHaveBeenCalledTimes(1);
+  });
+
+  it("re-pins a worker through main, and offers it only for workers", async () => {
+    const forgetPin = vi.fn(() => Promise.resolve({ forgotten: true }));
+    (window as unknown as { weft: unknown }).weft = { pairing, hostPairing: { ...hosts, forgetPin } };
+    render(<DevicesSettings />);
+    await userEvent.click(await screen.findByRole("button", { name: "Re-pin m1mini" }));
+    expect(forgetPin).toHaveBeenCalledWith("w1", "m1mini");
+    expect(await screen.findByText("Forgot m1mini's pinned keys: its next secret ask pins the keys it has now.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Re-pin iPhone" })).toBeNull();
+    expect(repinOutcome("m1mini", { denied: true })).toBe("Not re-pinned.");
+    expect(repinOutcome("m1mini", { forgotten: false })).toBe("m1mini had no pinned keys on this Mac.");
+  });
+
+  it("offers no Re-pin without main's bridge for it", async () => {
+    render(<DevicesSettings />);
+    await screen.findByText("m1mini");
+    expect(screen.queryByRole("button", { name: "Re-pin m1mini" })).toBeNull();
   });
 
   it("shows why a revoke or a read failed", async () => {
@@ -194,7 +212,7 @@ describe("use-devices helpers", () => {
     function Probe() {
       const d = useDevices({});
       return (
-        <button type="button" onClick={() => void d.addWorker().then(() => d.cancelWorker())}>
+        <button type="button" onClick={() => void d.addWorker().then(() => d.cancelWorker()).then(() => d.repin(DEVICES[1] as DeviceView))}>
           go
         </button>
       );

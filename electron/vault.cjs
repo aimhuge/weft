@@ -145,7 +145,7 @@ function createVault({ dataDir, safeStorage, sodium, prompt, clipboard, run = gi
   // What a thread may do with a vault: fill a value into a site, hand one to a write elsewhere, ask for
   // a confirmation, and read names for a command main runs (electron/vault-thread-tools.cjs).
   const threadTools = createThreadTools({ idOf, storeReady, existing, store: () => store, log, grants, prompt, now, onChange });
-  const { useFor, sendValue, confirm, valuesFor, notify, threadUnlocks } = threadTools;
+  const { useFor, sendValue, confirm, valuesFor, valuesForVault, notify, threadUnlocks } = threadTools;
 
   return {
     unlock,
@@ -369,6 +369,7 @@ function createVault({ dataDir, safeStorage, sodium, prompt, clipboard, run = gi
     // name with a value in that environment, for a dev server. The caller asks the user first. use says who read
     // them for the audit line (default: Weft itself), or is false when the caller writes its own line.
     valuesFor,
+    valuesForVault,
 
     // Grants (vault-grants.cjs) outlive a lock: the drawer locks itself when idle, and a grant is a separate yes.
     lock() {

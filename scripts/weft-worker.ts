@@ -1,10 +1,12 @@
 // `weft-worker`: the Weft Worker's command line (docs/architecture/weft-worker.md). Run from the worker's clone of
 // Weft with jiti (install/worker.sh sets up the `weft-worker` wrapper and the launchd or systemd service):
 //
-//   weft-worker enrol <token> [--name <name>]   pair with your Mac (a wph.… code) or trade a one-time token (wet_…)
+//   weft-worker enrol <token> [--name <name>]   pair with your Mac (a wph.… code) or trade a one-time token (wet_…);
+//                                               an enrolled box needs --re-pair, typed at a terminal on it
 //   weft-worker login                           sign Claude Code in for the daemon (claude setup-token)
 //   weft-worker start                           run the daemon (what the service runs)
-//   weft-worker status                          say whether this box is enrolled
+//   weft-worker status                          say whether this box is enrolled, with its key's fingerprint
+//   weft-worker forget-macs                     stop taking secrets from the paired Mac (lib/worker-mac-keys.ts)
 //   weft-worker check                           load the whole engine and exit (lib/worker-update.ts trusts a commit by this)
 //
 // The worker keeps its own store (WEFT_DATA under ~/.weft-worker), so a desktop Weft on the same Mac is untouched.
@@ -42,12 +44,17 @@ function flag(name: string): string | undefined {
 
 async function enrolCommand(token: string | undefined) {
   if (!token) throw new Error("Usage: weft-worker enrol <token> [--name <name>]. Get the token in Weft → Settings → Sync → Workers.");
+  const refused = (await import("../lib/worker-mac-keys")).enrolRefusal(Boolean(readWorkerConfig(home)), process.argv.includes("--re-pair"), process.stdin.isTTY && process.stdout.isTTY);
+  if (refused) throw new Error(refused);
   const name = flag("name") || os.hostname().replace(/\.local$/, "");
   // A pairing code (wph.…, Settings → Devices) pairs the box with your Mac; a token (wet_…) is the older one-time trade.
   const config = isPairCode(token)
     ? await pairWorker(token, { name, platform: process.platform, arch: process.arch, boxKey: workerSealKeys(home, newSealKeys).publicKey, sign: workerSignKeys(home, newSignKeys) }, { rpc, say: console.log })
     : await enrol(rpc, token, { name, platform: process.platform, arch: process.arch });
   writeWorkerConfig(home, config);
+  // The Mac that showed the code: the one whose signed secret_use rows this box will take (lib/worker-mac-keys.ts).
+  // Replaces any Mac trusted before; a token (no Mac key) leaves the box taking no secrets.
+  (await import("../lib/worker-mac-keys")).trustPairingMac(home, token);
   console.log(`Enrolled ${config.name} as ${config.device}. Start it with: weft-worker start`);
 }
 
@@ -84,6 +91,8 @@ async function loadEngine() {
     import("../lib/project-snapshot"),
     import("../lib/worker-projects"),
     import("../lib/worker-folders"),
+    import("../lib/worker-secret-run"),
+    import("../lib/worker-secret-wiring"),
   ]);
   return { store, parts };
 }
@@ -98,7 +107,7 @@ async function startCommand() {
   const config = readWorkerConfig(home);
   if (!config) throw new Error("This box isn't enrolled yet. Run: weft-worker enrol <token>");
   const { store, parts } = await loadEngine();
-  const [{ startFeatureCard }, , , { subscribe }, { createDaemon }, { createPublisher }, paths, github, folderGrant, { createBlobStore }, { SHOW_DIR }, { setPageUpload }, { busyCards }, { recoverCards }, { resumeInterrupted }, { openScreenChannel, screenInput, setFastScreen, setScreenChannel, fastScreenOf, watcherOf }, { sendInput }, { openFastScreen }, { setDeviceLink }, { deviceLink }, { isMobileApp }, { runVerb }, { startScheduler }, { createHostLines }, { readProjectSnapshot }, { createProjectPublisher }, { listProjectFolders }] = parts;
+  const [{ startFeatureCard }, , , { subscribe }, { createDaemon }, { createPublisher }, paths, github, folderGrant, { createBlobStore }, { SHOW_DIR }, { setPageUpload }, { busyCards }, { recoverCards }, { resumeInterrupted }, { openScreenChannel, screenInput, setFastScreen, setScreenChannel, fastScreenOf, watcherOf }, { sendInput }, { openFastScreen }, { setDeviceLink }, { deviceLink }, { isMobileApp }, { runVerb }, { startScheduler }, { createHostLines }, { readProjectSnapshot }, { createProjectPublisher }, { listProjectFolders }, { setSecretLink, forgetOnTurnEnd }, { secretWiring }] = parts;
   const reg = registry(rpc, config.key);
   // The public half goes on the worker's row, so Settings → Sync → Workers can seal a Claude token to this box.
   const keys = workerSealKeys(home, newSealKeys);
@@ -113,6 +122,10 @@ async function startCommand() {
   setPageUpload((file) => blobs.uploadPage(file, config.orgId));
   setScreenChannel((topic) => openScreenChannel(client, topic));
   setDeviceLink(deviceLink(reg, config.key));
+  // A card's mcp__secrets__run asks the owner's Mac, and the answer comes back sealed to this box (lib/worker-secret-run.ts).
+  const secrets = secretWiring(home, reg, keys);
+  setSecretLink(secrets.link);
+  subscribe(forgetOnTurnEnd);
   setFastScreen(openFastScreen, (sealed) => open(keys, sealed, RTC_PURPOSE));
   // The editor's large answers, under results/ and swept after a day (lib/worker-blobs.ts workerResults).
   const results = workerResults(config.key, client.storage);
@@ -178,6 +191,7 @@ async function startCommand() {
       const dir = paths.repoPath(root, folder);
       if ((await paths.cloneProject(dir, repo)) === "cloned") console.log(`Weft Worker: cloned ${repo} into ${dir}`);
     },
+    secretUse: secrets.use,
     // No restart: git asks its credential helper afresh each time.
     github: { login: (sealed) => github.signInGithub(home, open(keys, sealed, GITHUB_PURPOSE)), status: () => github.githubStatus() },
     // A sign-in from the desktop: save the token where the wrapper loads it, then restart (the service brings the
@@ -255,13 +269,20 @@ async function loginCommand() {
   console.log(`Saved to ${path.join(home, "worker.env")}. Restart the worker to use it: weft-worker restart`);
 }
 
-function statusCommand() {
+async function statusCommand() {
   const config = readWorkerConfig(home);
   console.log(config ? `Enrolled: ${config.name} (${config.device}), workspace ${config.orgId}` : "Not enrolled. Run: weft-worker enrol <token>");
+  if (config) for (const line of (await import("../lib/worker-secret-wiring")).keyStatus(home)) console.log(line);
+}
+
+// Stop taking secrets from any Mac until the box is paired again (Settings → Devices → Add a worker).
+async function forgetMacsCommand() {
+  (await import("../lib/worker-secret-wiring")).forgetMacs(home);
+  console.log("Forgot the Mac this worker took secrets from. Pair it again from Settings → Devices to use secrets on it.");
 }
 
 const [command, arg] = process.argv.slice(2);
-const commands: Record<string, () => unknown> = { enrol: () => enrolCommand(arg), login: loginCommand, start: startCommand, status: statusCommand, check: checkCommand };
+const commands: Record<string, () => unknown> = { enrol: () => enrolCommand(arg), login: loginCommand, start: startCommand, status: statusCommand, check: checkCommand, "forget-macs": forgetMacsCommand };
 Promise.resolve((commands[command ?? ""] ?? (() => console.log("Usage: weft-worker enrol <token> | login | start | status | restart | update")))()).catch((err: unknown) => {
   const e = err as Error;
   console.error(process.env.WEFT_WORKER_DEBUG ? e.stack : e.message);

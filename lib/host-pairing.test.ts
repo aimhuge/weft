@@ -20,6 +20,14 @@ describe("the pairing code", () => {
     expect(parsePairCode(` ${text}\n`)).toEqual(code);
   });
 
+  it("carries the pairing Mac's approval key, and round-trips it", () => {
+    const macKey = Buffer.alloc(32, 7).toString("base64");
+    const text = pairCode({ ...code, macKey });
+    expect(text).toMatch(/^wph\.[\w.-]+$/);
+    expect(parsePairCode(text)).toEqual({ ...code, macKey });
+    expect(parsePairCode(`${pairCode(code)}.short`)).toBeNull();
+  });
+
   it("refuses anything that isn't a whole code", () => {
     expect(parsePairCode("wet_abc")).toBeNull();
     expect(parsePairCode(`wph.${ID}.${ORG}`)).toBeNull();
@@ -27,6 +35,7 @@ describe("the pairing code", () => {
     expect(parsePairCode(`wph.${ID}.nope.${code.secret}`)).toBeNull();
     expect(parsePairCode(`wph.${ID}.${ORG}.short`)).toBeNull();
     expect(parsePairCode(`${pairCode(code)}.extra`)).toBeNull();
+    expect(parsePairCode(`${pairCode(code)}.${"k".repeat(43)}.more`)).toBeNull();
     expect(isPairCode("wet_abc")).toBe(false);
   });
 });

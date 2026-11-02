@@ -23,12 +23,30 @@ describe("registerHostPairing", () => {
       myDevice: () => Promise.resolve({ publicKey: "mac-key" }),
       confirm: () => Promise.resolve(true),
     });
-    expect([...handlers.keys()]).toEqual(["host-pairing:start", "host-pairing:check", "host-pairing:cancel"]);
+    expect([...handlers.keys()]).toEqual(["host-pairing:start", "host-pairing:check", "host-pairing:cancel", "worker-pins:forget"]);
+    expect(await handlers.get("worker-pins:forget")!("w1", "m1mini")).toEqual({ forgotten: false });
     expect(await handlers.get("host-pairing:start")!(ORG)).toMatchObject({ id: PID });
     expect(rpc).toHaveBeenCalledWith("worker_pair_open", { p_org: ORG, p_mac_device: "mac-id", p_mac_key: "mac-key" });
     expect(await handlers.get("host-pairing:check")!("nope")).toEqual({ status: "expired" });
     await expect(handlers.get("host-pairing:cancel")!("nope")).resolves.toBeUndefined();
     await expect(handlers.get("host-pairing:start")!(null)).rejects.toThrow();
+  });
+});
+
+describe("Re-pin", () => {
+  it("forgets a worker's pinned keys only after Touch ID, and pins what a pairing confirmed", async () => {
+    const handlers = new Map<string, (...args: unknown[]) => unknown>();
+    const pins = { pin: vi.fn(), forget: vi.fn(() => true) };
+    const confirm = vi.fn(() => Promise.resolve(false));
+    const hosts = registerHostPairing((channel, fn) => handlers.set(channel, fn), { db: () => ({}), userId: () => "u1", macDevice: () => "mac-id", myDevice: () => Promise.resolve({ publicKey: "k" }), confirm }, pins);
+    expect(await handlers.get("worker-pins:forget")!("w1", "m1mini")).toEqual({ denied: true });
+    expect(pins.forget).not.toHaveBeenCalled();
+    expect(confirm).toHaveBeenCalledWith("forget the keys this Mac pinned for the worker m1mini, so its next secret ask pins new ones");
+    confirm.mockResolvedValueOnce(true);
+    expect(await handlers.get("worker-pins:forget")!("w1")).toEqual({ forgotten: true });
+    expect(confirm).toHaveBeenLastCalledWith(expect.stringContaining("the worker w1"));
+    expect(pins.forget).toHaveBeenCalledWith("w1");
+    expect(hosts).toBeDefined();
   });
 });
 

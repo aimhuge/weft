@@ -74,7 +74,12 @@ function createThreadTools({ idOf, storeReady, existing, store, log, grants, pro
   // name with a value in that environment, for a dev server. The caller asks the user first. use says who read
   // them for the audit line (default: Weft itself), or is false when the caller writes its own line.
   async function valuesFor(folder, names, environment, use = {}) {
-    const { id, label } = await idOf(folder);
+    return valuesForVault(await idOf(folder), names, environment, use);
+  }
+
+  // The same for a vault named by id rather than a folder on this disk: a Weft Worker's project, by its git remote
+  // (electron/worker-secret.cjs).
+  async function valuesForVault({ id, label }, names, environment, use = {}) {
     // s is null when there's no vault for this project yet.
     const s = (await existing())?.exists(id) ? store() : null;
     const all = s ? s.list(id).filter((e) => e.environment === environment && !e.missing).map((e) => e.name) : [];
@@ -87,7 +92,7 @@ function createThreadTools({ idOf, storeReady, existing, store, log, grants, pro
   // Tells the board a folder's vault changed, for a write that doesn't itself (the intake's import).
   const notify = (folder) => onChange(folder);
 
-  return { useFor, sendValue, confirm, valuesFor, notify, threadUnlocks };
+  return { useFor, sendValue, confirm, valuesFor, valuesForVault, notify, threadUnlocks };
 }
 
 module.exports = { createThreadTools };

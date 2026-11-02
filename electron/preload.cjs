@@ -210,6 +210,8 @@ contextBridge.exposeInMainWorld("weft", {
     start: (orgId) => ipcRenderer.invoke("host-pairing:start", orgId),
     check: (id) => ipcRenderer.invoke("host-pairing:check", id),
     cancel: (id) => ipcRenderer.invoke("host-pairing:cancel", id),
+    // Re-pin: main forgets the worker's pinned keys after Touch ID (electron/worker-pins.cjs).
+    forgetPin: (id, name) => ipcRenderer.invoke("worker-pins:forget", id, name),
   },
   // Goose (electron/goose-ipc.cjs): a provider key per provider, sealed in the Keychain. The board sends a key
   // once and never reads one back — the runner's Goose subprocess gets it in its env (electron/goose-env.cjs).

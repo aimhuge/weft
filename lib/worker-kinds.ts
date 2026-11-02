@@ -1,7 +1,8 @@
 // A Weft Worker's kind table (lib/worker-daemon.ts runs it through the host core's inbox, lib/host/inbox.ts): `run`
 // (and a web `new_card`) makes a card in the project's checkout and starts its thread; `login` and `github_login` open a
 // sealed sign-in; `clone` puts a repo in a folder; `update` asks for the update check; and the card kinds
-// (lib/worker-card-commands.ts) act on a card it runs; `line` opens a session line (lib/host-line.ts). Each returns the card it made or touched, or null.
+// (lib/worker-card-commands.ts) act on a card it runs; `line` opens a session line (lib/host-line.ts); `secret_use`
+// hands a sealed answer to a card's waiting secret run. Each returns the card it made or touched, or null.
 import { newCardBody, type CloudCommandRow } from "./cloud-commands";
 import { dispatcher, type KindTable } from "./host/dispatch";
 import type { HostDone } from "./host-command";
@@ -116,6 +117,8 @@ export function workerKinds(deps: DaemonDeps, ctx: KindContext): KindTable {
       await deps.line(sealed, (payload) => lineVerb(() => cards.host({ ...command, kind: "host", payload } as CloudCommandRow), payload, ctx));
       return null;
     },
+    // The Mac's sealed answer to a card's mcp__secrets__run (lib/worker-secret-asks.ts); an old wiring without it can't open one.
+    ...(deps.secretUse ? { secret_use: deps.secretUse } : {}),
   };
 }
 
