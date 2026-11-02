@@ -183,7 +183,7 @@ async function desktopDevice(client: SupabaseClient, workerId: string): Promise<
 
 // Queues a run on one of your workers; the worker hears it at once and its card syncs back. A desktop
 // worker takes it as its own new_card command (lib/cloud-inbox.ts), which finds the synced folder by name.
-export async function sendRun(body: { workerId: string; folder: string; prompt: string; repo?: string }, client: SupabaseClient = accountClient()): Promise<{ commandId: string }> {
+export async function sendRun(body: { workerId: string; folder: string; prompt: string; repo?: string; title?: string; tags?: string[] }, client: SupabaseClient = accountClient()): Promise<{ commandId: string }> {
   const who = await session(client);
   if (!who) throw new Error("Sign in to Weft to send a run.");
   const device = await desktopDevice(client, body.workerId);

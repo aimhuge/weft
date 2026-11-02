@@ -89,7 +89,12 @@ function setupPairing({ ipcMain, dataDir, accountClient, isBoard, confirm, safeS
     sodium ??= await ready();
     return signer.publicKey();
   };
-  require("./host-pairing-ipc.cjs").registerHostPairing(handle, { db, userId, macDevice, myDevice, confirm, macSignKey }, workerPins);
+  // And it signs a worker's re-pair to another Mac, after Touch ID (electron/worker-repair.cjs).
+  const macSign = async (message) => {
+    sodium ??= await ready();
+    return signer.sign(message);
+  };
+  require("./host-pairing-ipc.cjs").registerHostPairing(handle, { db, userId, macDevice, myDevice, confirm, macSignKey, macSign }, workerPins);
 
   const routes = {
     // The key the uploader seals with (lib/sync-seal-upload.ts); { none: true } when this Mac has no grant yet.

@@ -5,6 +5,7 @@ import { COPILOT_PROMPT } from "./board-tools";
 import { PERSONA_PROMPTS, personaOf } from "./copilot-personas";
 import { BROWSER_PROMPT, WORKER_BROWSER_PROMPT } from "./browser-tools";
 import { onWorker } from "./worker-pane";
+import { groupWorks, workerToolsPrompt } from "./worker-tools";
 import { ASK_BUTTONS_PROMPT, decisionsPrompt, MIGRATIONS_PROMPT } from "./decisions-prompt";
 import { DEVSERVERS_PROMPT } from "./devserver-tools";
 import { GOG_PROMPT } from "./gog";
@@ -68,6 +69,14 @@ export const ISOLATED_PROMPT = `This card is isolated: your working directory is
 
 const built = new Map<string, string>();
 
+// The tool groups' own prompts. On a Weft Worker a group whose tools don't work there is left out, and the worker's
+// table (lib/worker-tools.ts) says what doesn't work and why.
+export function toolPrompts(worker = onWorker()): string[] {
+  if (!worker) return [BROWSER_PROMPT, SECRETS_PROMPT, WEBHOOKS_PROMPT, DEVSERVERS_PROMPT, GOG_PROMPT];
+  const groups: [string, string][] = [["secrets", SECRETS_PROMPT], ["webhooks", WEBHOOKS_PROMPT], ["devservers", DEVSERVERS_PROMPT], ["gog", GOG_PROMPT]];
+  return [WORKER_BROWSER_PROMPT, ...groups.filter(([group]) => groupWorks(group)).map(([, prompt]) => prompt), workerToolsPrompt()];
+}
+
 // Weft's part of the system prompt. Puku's gateway drops it, so a puku session sends it in its first message (lib/puku-context.ts).
 export function weftSystemPrompt(spec: PromptSpec): string {
   const key = `${promptsBuild()}|${spec.copilot ? `copilot:${personaOf(spec.persona).id}` : `${spec.backend}:${agentOf(spec.agent, listAgents()).id}`}${spec.project ? "|isolated" : ""}`;
@@ -75,7 +84,7 @@ export function weftSystemPrompt(spec: PromptSpec): string {
   if (cached !== undefined) return cached;
   const parts = spec.copilot
     ? [WEFT_SOUL_PROMPT, BROWSER_PROMPT, COPILOT_PROMPT, personaOf(spec.persona).prompt].filter(Boolean)
-    : [agentOf(spec.agent, listAgents()).soul, onWorker() ? WORKER_BROWSER_PROMPT : BROWSER_PROMPT, SECRETS_PROMPT, WEBHOOKS_PROMPT, DEVSERVERS_PROMPT, GOG_PROMPT, SIMULATOR_PROMPT, decisionsPrompt(spec.backend), RESTART_PROMPT, subagentPrompt(subagentModelFor(), spec.backend), threadPrompt(), REVIEW_PROMPT, spec.project ? ISOLATED_PROMPT : ""].filter(Boolean);
+    : [agentOf(spec.agent, listAgents()).soul, ...toolPrompts(), SIMULATOR_PROMPT, decisionsPrompt(spec.backend), RESTART_PROMPT, subagentPrompt(subagentModelFor(), spec.backend), threadPrompt(), REVIEW_PROMPT, spec.project ? ISOLATED_PROMPT : ""].filter(Boolean);
   // A settings change makes a new key; the old prompts are of no further use.
   if (built.size >= 8) built.clear();
   const text = parts.join("\n\n");

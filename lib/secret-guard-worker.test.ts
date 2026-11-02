@@ -178,3 +178,13 @@ describe("listing a worker's home", () => {
     expect(bash("cat ~/.weft-worker/worker.log")).toContain("`ls` lists the folder itself");
   });
 });
+
+describe("the worker's own clone of Weft", () => {
+  it("reads open, but refuses an Edit, Write or NotebookEdit, since the daemon and weft-worker run it", () => {
+    const file = path.join(wh, "weft", "plugin", "x.ts");
+    expect(verdict("Read", { file_path: file })).toBeNull();
+    for (const tool of ["Edit", "MultiEdit", "Write"]) expect(verdict(tool, { file_path: file })).toMatch(/the worker's own copy of Weft/);
+    expect(verdict("NotebookEdit", { notebook_path: path.join(wh, "weft", "n.ipynb") })).toMatch(/own copy of Weft/);
+    expect(verdict("Write", { file_path: path.join(cwd, "x.ts") })).toBeNull();
+  });
+});

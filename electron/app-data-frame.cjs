@@ -52,6 +52,37 @@ function err(kind, message) {
   return e;
 }
 
+// An app saved from a worker card's page (lib/mini-app-worker.ts) lives in <dataDir>/apps/worker-<sha16>/, here and on
+// every Mac cloud sync brings it to (its app id is the folder's name). That page was written off this Mac, where it ran
+// in a CSP sandbox, so it gets no more here: no data reads, fetch, env or secrets, whatever manifest sits beside it,
+// and no live data. Judged by the folder the file really is in, never by the page.
+const WORKER_APP_PREFIX = "worker-";
+
+function isWorkerAppPath(dataDir, real) {
+  let apps;
+  try {
+    apps = fs.realpathSync(path.join(dataDir, APPS_DIR));
+  } catch {
+    return false;
+  }
+  const rel = path.relative(apps, real);
+  if (!rel || rel.startsWith("..") || path.isAbsolute(rel)) return false;
+  return rel.split(path.sep)[0].toLowerCase().startsWith(WORKER_APP_PREFIX);
+}
+
+// The same for a frame's URL: true for a file: page in a worker app's folder (a folder path counts too).
+function isWorkerAppPage(dataDir, frameUrl) {
+  try {
+    const url = new URL(frameUrl);
+    if (url.protocol !== "file:") return false;
+    return isWorkerAppPath(dataDir, fs.realpathSync(decodeURIComponent(url.pathname)));
+  } catch {
+    return false;
+  }
+}
+
+const WORKER_APP_REFUSED = "This app came from a worker card's page, so it runs without Weft's data bridge.";
+
 // The frame URL → an app folder under <dataDir>/apps/<slug>/. Realpath catches symlink escapes; if
 // the real path points outside the apps dir the frame isn't one of ours.
 function appFolderFromUrl(dataDir, frameUrl) {
@@ -72,6 +103,7 @@ function appFolderFromUrl(dataDir, frameUrl) {
   }
   const appsDir = path.join(dataDir, APPS_DIR);
   if (!isInside(appsDir, real)) throw err("not-weft", "Open this app in Weft on your Mac to load its data.");
+  if (isWorkerAppPath(dataDir, real)) throw err("worker-app", WORKER_APP_REFUSED);
   // The folder is real's parent, and it has to be one app's own folder (<apps>/<slug>), not the apps
   // folder itself or a folder nested deeper in an app, which could carry a manifest of its own.
   const folder = path.dirname(real);
@@ -207,6 +239,10 @@ module.exports = {
   findSavedApp,
   loadApps,
   isInside,
+  isWorkerAppPath,
+  isWorkerAppPage,
+  WORKER_APP_PREFIX,
+  WORKER_APP_REFUSED,
   APPS_DIR,
   APPS_FILE,
   err,

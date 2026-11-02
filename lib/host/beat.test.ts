@@ -63,6 +63,20 @@ describe("createBeat", () => {
     await t.beat.stop();
   });
 
+  it("tracks again on the next tick when the server refused the track", async () => {
+    vi.useFakeTimers();
+    const t = setup();
+    t.track.mockResolvedValueOnce(false);
+    t.beat.start();
+    t.hooks().up();
+    await vi.waitFor(() => expect(t.track).toHaveBeenCalledTimes(1));
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(t.track).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(t.track).toHaveBeenCalledTimes(2);
+    await t.beat.stop();
+  });
+
   it("goes back to writing every tick when the socket drops, and re-tracks on a rejoin", async () => {
     const t = setup();
     t.beat.start();

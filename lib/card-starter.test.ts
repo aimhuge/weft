@@ -32,6 +32,13 @@ describe("startFeatureCard", () => {
     expect(order).toEqual(["setup:card-1", "start"]);
   });
 
+  it("leaves a start=false card in Backlog", async () => {
+    newCard.startCard.mockClear();
+    const card = await startFeatureCard({ prompt: "later", cwd: "/dev/app", start: false });
+    expect(card.id).toBe("card-1");
+    expect(newCard.startCard).not.toHaveBeenCalled();
+  });
+
   it("takes a body read off the network as it comes", async () => {
     const card = await startFeatureCard({ prompt: "fix it", cwd: "/dev/app", backend: "nonsense" });
     expect(card.backend).toBe("nonsense");

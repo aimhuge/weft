@@ -156,3 +156,16 @@ describe("provider", () => {
     expect(w.providerFor(team)).toBeNull();
   });
 });
+
+describe("onWebhooksWrite", () => {
+  it("tells its listener after every write, until it stops listening", async () => {
+    const w = await load();
+    const heard = vi.fn();
+    const stop = w.onWebhooksWrite(heard);
+    w.addWebhook({ folder: "/a", name: "stripe", target: "/x" }, 1);
+    expect(heard).toHaveBeenCalledTimes(1);
+    stop();
+    w.addWebhook({ folder: "/a", name: "github", target: "/y" }, 2);
+    expect(heard).toHaveBeenCalledTimes(1);
+  });
+});

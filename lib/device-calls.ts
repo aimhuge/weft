@@ -23,6 +23,7 @@ const LOCAL = /^(localhost|127\.0\.0\.1|\[::1\]|0\.0\.0\.0)$/i;
 export interface DeviceCallRow {
   id: string;
   worker_id: string;
+  owner_user: string;
   card_id: string;
   tool: string;
   args: unknown;
@@ -118,7 +119,7 @@ export async function drainDeviceCalls(client: SupabaseClient, uid: string) {
       g.again = false;
       const { data, error } = await client
         .from("device_calls")
-        .select("id, worker_id, card_id, tool, args")
+        .select("id, worker_id, owner_user, card_id, tool, args")
         .eq("target_device", deviceId())
         .eq("owner_user", uid)
         .eq("status", "pending")

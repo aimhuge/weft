@@ -61,6 +61,15 @@ function createWorkerPins({ dir, safeStorage, now = () => new Date() }) {
       return { publicKey: pinned.publicKey, ...(pinned.signKey ? { signKey: pinned.signKey } : {}), fingerprint: fingerprint(publicKey), firstUse: false };
     },
 
+    /** The name this Mac pinned a worker under, or null when it hasn't pinned one (or the file won't open). @param {string} id */
+    nameOf(id) {
+      try {
+        return read()[id]?.name ?? null;
+      } catch {
+        return null;
+      }
+    },
+
     /**
      * Pins a worker's keys: after the user allowed its first ask (trust on first use), or at pairing, under that
      * Touch ID, with the Ed25519 key it signs asks with (electron/host-pairing.cjs).

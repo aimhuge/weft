@@ -12,6 +12,7 @@ const { gooseRoutes } = require("./goose-ipc.cjs");
 const { appSecretsRoutes } = require("./app-secrets-push.cjs");
 const { slackRoutes } = require("./slack.cjs");
 const { touchIdPrompt } = require("./touch-id.cjs");
+const { workerLabel } = require("./worker-label.cjs");
 
 // The pairing routes, looked up when called: pairing is set up after the pane (it needs the account client).
 const PAIRING_ROUTES = ["POST /sync/key", "POST /pairing/verify", "POST /pairing/passkey-verify", "POST /pairing/status"];
@@ -31,6 +32,17 @@ function pairingRoutes(pairing) {
 // The copilot's chips (lib/copilot-sources.ts): a linked service's state per folder, read-only.
 function statusRoute(api) {
   return ({ folders }) => api()?.status((folders ?? []).map(String)) ?? { folders: [] };
+}
+
+// The worker pins, opened when a prompt needs one (the keychain is ready by then).
+function pinsFor(dataDir) {
+  const { createWorkerPins } = require("./worker-pins.cjs");
+  return createWorkerPins({ dir: dataDir, safeStorage: () => require("./keychain-audit.cjs").keychainFor("worker pins") });
+}
+
+// " on <worker>" for a prompt about a worker's ask, nothing for this Mac's own (no worker id in the body).
+function onWorker(dataDir, worker, name) {
+  return worker ? ` on ${workerLabel(pinsFor(dataDir), worker, name)}` : "";
 }
 
 function paneRoutes({ dataDir, app, dialog, systemPreferences = require("electron").systemPreferences, shell, window, board, sendMenu, updater, vault, vercelEnv, vercelApi, supabaseApi, blastcpApi = () => null, gooseApi = () => null, slackApi = () => null, pairing = () => null, cardFor = () => "" }) {
@@ -59,7 +71,7 @@ function paneRoutes({ dataDir, app, dialog, systemPreferences = require("electro
     // never crosses IPC or the Next server, so even a thread driving the createRelay flow can't read it
     // or get a relay row sealed with a secret it chose (pentest 2026-10-20, F-12). Returns just the hex
     // trio the server hands to Supabase.
-    "POST /webhooks/relay-seal": ({ folder, name, environment, provider }) => {
+    "POST /webhooks/relay-seal": ({ folder, name, environment, provider, worker, workerName }) => {
       const env = String(environment || "development");
       // Same allowlist the deployed relay uses (lib/webhook-signatures.ts PROVIDERS). Kept inline so
       // this CommonJS file doesn't need to compile a TS module just for a check.
@@ -70,15 +82,15 @@ function paneRoutes({ dataDir, app, dialog, systemPreferences = require("electro
         String(folder),
         String(name),
         env,
-        (label) => `seal the ${provider} signing secret ${name} (${label}, ${env}) and store it on the relay`,
+        (label) => `seal the ${provider} signing secret ${name} (${label}, ${env}) and store it on the relay${onWorker(dataDir, worker, workerName)}`,
         (value) => sealedToHex(sealSecret(value, key)),
       );
     },
     // Opening a tunnel puts a local port on the internet, so a person says yes each time, a thread's call included
     // (lib/tunnels.ts). Cancelled means no tunnel; only the answer goes back.
-    "POST /tunnels/approve": async ({ folder, target, hours }) => {
+    "POST /tunnels/approve": async ({ folder, target, hours, worker, workerName }) => {
       const ask = touchIdPrompt({ systemPreferences, dialog, window });
-      return { approved: await ask(`open a private tunnel to ${target} from ${folder} for ${hours} hours`) };
+      return { approved: await ask(`open a private tunnel to ${target} from ${folder}${onWorker(dataDir, worker, workerName)} for ${hours} hours`) };
     },
     // Local Simulator mode: a worker's build runs on this Mac as a process with your permissions, so a person says yes, and only
     // the answer goes back. The server keeps the grant for 8 hours (lib/qa-grants.ts).
