@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/client";
 import { patchNow, removeNow } from "@/lib/optimistic-cards";
+import { hostOf } from "@/lib/project-host";
 import { modelLabel } from "@/lib/new-thread";
 import { rememberPage } from "@/lib/settings-nav";
 import type { Card } from "@/lib/types";
@@ -78,7 +79,7 @@ export default function FirstMessageErrorBanner({
     setError(null);
     try {
       // The banner goes and the card runs again at once (lib/optimistic-cards.ts); a refusal brings it back.
-      await patchNow(card.id, { column: "running", error: undefined }, () => api.rerunModel(card.id, backupModel));
+      await patchNow(card.id, { column: "running", error: undefined }, () => hostOf(card).act("card.rerunModel", { id: card.id, model: backupModel }));
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -108,9 +109,12 @@ export default function FirstMessageErrorBanner({
         <button onClick={() => void rerun()} disabled={busy !== null} className={STYLE_PRIMARY}>
           {label}
         </button>
-        <button onClick={() => void del()} disabled={busy !== null} aria-label="Delete this card" className={STYLE_DESTRUCTIVE}>
-          <Icon name="trash" size={12} />
-        </button>
+        {/* No delete verb reaches another host yet (a worker's card). */}
+        {hostOf(card).can("delete") && (
+          <button onClick={() => void del()} disabled={busy !== null} aria-label="Delete this card" className={STYLE_DESTRUCTIVE}>
+            <Icon name="trash" size={12} />
+          </button>
+        )}
       </div>
       {error && <span className="basis-full text-[11.5px] text-danger">{error}</span>}
     </div>

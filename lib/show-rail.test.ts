@@ -171,6 +171,8 @@ describe("browser history", () => {
     expect(pageLabel("file:///Users/me/show/rail/index.html#live")).toBe("rail#live");
     expect(pageLabel("file:///index.html")).toBe("index");
     expect(pageLabel("file:///")).toBe("");
+    expect(pageLabel(`blob:sha256:${"a".repeat(64)}`)).toBe("page");
+    expect(pageLabel(`blob:sha256:${"a".repeat(64)}#plan`)).toBe("page#plan");
     expect(pageLabel("https://weft.zip/docs/")).toBe("/docs");
     expect(pageLabel("http://localhost:3000/a%20b")).toBe("/a b");
     expect(pageLabel("not a url")).toBe("not a url");

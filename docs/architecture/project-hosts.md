@@ -1,7 +1,8 @@
 # Project hosts: one code path for local and Worker projects
 
 Status: **design** (2026-11-01, merged with "one engine, two transports" 2026-11-02). Phase H1 is in progress; H2 (the
-`host` command) is built ([below](#the-host-command-h2-as-built)). It follows on from [weft-worker.md](weft-worker.md#worker-projects-on-the-desktop-board),
+`host` command) is built ([below](#the-host-command-h2-as-built)), and so is H3, `hostFor` and one open card
+([below](#hostfor-and-one-open-card-h3-as-built)). It follows on from [weft-worker.md](weft-worker.md#worker-projects-on-the-desktop-board),
 where a Worker project shows on the desktop board but most of what a local project gets drops out.
 
 ## The problem
@@ -23,16 +24,16 @@ engine: the daemon runs the same `lib/runner.ts`.
 | Feature | Local | On a Worker card |
 | --- | --- | --- |
 | Permission mode | PATCH `permissionMode` | default/acceptEdits/auto through the `mode` command; no `plan` mid-card |
-| Model, CLI, effort on an open card | `switch-backend`, `rerun-model` | a badge only |
+| Model, CLI, effort on an open card | `switch-backend`, `rerun-model` | the model picker and the first-message banner's rerun, as `card.switchBackend` / `card.rerunModel` (H3) |
 | Agent | PATCH `agent` | none |
-| Rename, tags, star, archive, move, delete | PATCH, `CardActions` | none: the tile is `readOnly` |
-| ↑ edit, Restart, Fresh | `messages`, `fresh` | none |
+| Rename, tags, star, archive, move, delete | PATCH, `CardActions` | all but delete, as `card.update` (H3); no delete verb yet |
+| ↑ edit, Restart, Fresh | `messages`, `fresh` | as host verbs (H3) |
 | "!" shell | `shell` | none |
-| Wait, Me first, Others first | `permission` | none |
-| Stop a subagent task | `tasks/[taskId]/stop` | none |
+| Wait, Me first, Others first | `permission` | as host verbs, on the tile and in the thread (H3) |
+| Stop a subagent task | `tasks/[taskId]/stop` | `card.stopTask` (H3) |
 | Attachments in a reply | `/api/attachments` | images and PDFs travel as blobs on `reply`, `run` and `new_card` (`lib/attachment-transfer.ts`, 2026-11-02) |
 | Send later, review panel, skills chip | `desktop: true` | none |
-| Show rail, editor | Board's open card | none: `WorkerOpenCard` is a separate layout |
+| Show rail, editor | Board's open card | the show rail, in Board's own open card (H3); the editor waits for file verbs (H4) |
 | Backlog | Backlog column | none |
 | Streaming | SSE | a 2.5 s poll |
 | weft.zip and the phone | | reply, answer, stop and new card, and since H2 any verb as a `host` command (`cloud-inbox-cards.ts`, the same `runVerb`); the phone still has its own copy of the command shapes |
@@ -149,7 +150,54 @@ Mac inbox:     claim ─▶ readHostCommand ─▶ macCard ─▶ approval rule 
 - **Desktop-only.** None of the 14 card verbs needs the desktop; the copilot does, so `card.message` loads `lib/copilot`
   only for it, and both hosts refuse the copilot before the verb ("That thread isn't on this worker."). `lib/host-api` imports
   relatively, because the daemon runs under jiti, which doesn't read the `@/` alias.
-- **Not yet:** the board's UI for it (H3), the inbox as an attachment receiver, the web composer as a sender.
+- **Not yet:** the inbox as an attachment receiver, the web composer as a sender. The board's UI for it is H3 (below).
+
+### `hostFor` and one open card (H3, as built)
+
+```
+board ── hostFor(card.cwd) ─┬─ localHost: thread = localTransport, act = the api client's card routes (or the caller's own call)
+                            └─ cloudHost: thread = workerTransport, act = actOnWorker ── POST /api/worker-board {action:"host"}
+                                                                     └─ GET /api/workers?command=<id> every 0.5 s ─ failed → reject
+```
+
+- **`lib/project-host.ts`.** `ProjectHost` is `{ kind, thread, tools, can, act, menu }`. `localHost.act` maps each verb to the
+  `lib/client-api.ts` call the board already made (`card.stop` → `api.stop`, `card.switchBackend` → `api.switchBackend`, …),
+  and takes the caller's own call where it had a specific one (`api.mark` for a star, `api.archive`), so every local
+  request is unchanged. `cloudHost.act` is `actOnWorker` (`lib/worker-acts.ts`): the `host` command, then
+  `waitForCommand` on its row with a backoff (`ACT_WAIT`: 0.5, 1, 2, 4 s; 10 s for a claim, 30 s to finish), rejecting
+  with the worker's error, so a refusal takes the change back. One the worker hasn't taken by then answers `{ queued }`:
+  read every 15 s for up to an hour, counted per card (`useWorkerQueued`, shown in the open card's offline line), and
+  `lib/optimistic-cards.ts` keeps its change drawn with no timeout until it runs (then settles as usual) or is refused
+  (then reloads). The same verb and args while one is on its way joins it instead of sending another; an opposite one
+  is sent after it and the worker runs them in order (a row can't be taken back). The thread's Stop and mode picker
+  send the same `card.stop` and `card.update` as the tile and the menu. `can(feature)` is all true on the
+  Mac and false on a worker for `files`, `shots`, `pane`, `folder`, `agent`, `shell`, `skills`, `share`, `delete`,
+  `login`, `vault` and `dev`. `menu` trims a card's right-click menu (`lib/card-menu-remote.ts`). `hostFor` and
+  `hostOf(card)` are the only place that reads `worker://`, for the code H3 touched; `localColumns`, the header badges and
+  the drawers still use `localPath` (H4).
+- **The tile and the menu.** `use-board-cards` draws every card with `handlersFor` (`lib/card-handlers-host.ts`): this
+  Mac's keep `cardHandlers`, a worker's get the same props over host verbs. The shared actions (star and tags in
+  `use-board-menus`, archive and Undo in `use-board-archive`, column moves in `use-board-card-actions`, the model picker,
+  the rate-limit switch, the held-edit choices on a card, the first-message banner's rerun) all go through
+  `hostOf(card).act`. The list view's folder picker stays local (`can("folder")`).
+- **Optimistic.** `useWorkerBoard` draws its cards through `overlayAll` / `applyIntents` and re-reads on a `reload`, as
+  `lib/board-live.ts` does for local cards (only the newest of two overlapping reads draws and re-arms the poll), so `patchNow`, `stopNow`, `answerNow` and the held-edit intents land on a
+  worker card at once. `stopNow`, `waitNow`, `firstNow` and `otherFirstNow` take the host's call as an optional argument.
+- **The transport.** `workerTransport` gains `editLast`, `fresh`, `waitPermission`, `putFirst`, `putHolderFirst` and
+  `stopTask` as host verbs, `stop` through `stopNow`, and `cardEdits: true`, which `ThreadPanel` reads (with `desktop`) to
+  offer rename, tags, star, archive and the model picker. `shell` and `grantFolder` stay out because `remoteRefusal`
+  refuses them from the network (a folder grant still rides inside an answer), and `listFiles` waits for H4.
+- **One open card.** `BoardFrame` opens a worker card in `OpenCard`, like a local one; `OpenCard` calls
+  `useProjectHost(card, …)` (`lib/use-project-host.ts`) and provides the host's transport and tool source. On a worker the
+  pane column is `components/WorkerPane.tsx` (the old `WorkerOpenCard`'s `WebPane`, `WorkerScreen` input and Local
+  Simulator switch, with star and archive in its toolbar), the editor column says the files aren't there, and the show
+  rail reads the items the thread view drew (`workerTransport.useView` publishes them, `lib/worker-shown.ts`), starts on
+  the card's page, puts the pane on a page it reopens (`onReopen`), and pictures a page with the card's last capture when
+  it's an https picture, never `/api/cards/[id]/shots`. A saved page reads "page" under its picture
+  (`lib/show-rail.ts` `pageLabel`). `WorkerOpenCard` is deleted. `Board.tsx` went from 396 to 395 counted lines.
+- **Not yet.** Delete, Share… and the agent on a worker card; the editor and file links (H4); the header badges, terminal
+  and drawers on a worker project (H4); the pane as the native `BrowserPane` (the worker's page still frames through
+  `WebPane`); a `card.create` verb, so New thread still sends `run`.
 
 ## Security
 
@@ -179,7 +227,7 @@ the phone get every verb too.
 ## Views
 
 The desktop board and weft.zip are one React DOM app (Electron on your Mac, a browser on weft.zip). The open card's
-fork, `WebThreadPanel`/`WebPane` beside `ThreadPanel`/`BrowserPane`, plus `WorkerOpenCard`, merges into Board's own:
+fork, `WebThreadPanel`/`WebPane` beside `ThreadPanel`/`BrowserPane`, plus `WorkerOpenCard` (merged in H3), merges into Board's own:
 the thread, the pane and the show rail, fed by `hostFor(project).thread`, wherever the card runs. The show rail is
 already a projection of the thread's items (`showMinis`); its page pictures come from the pane that shows the page.
 
@@ -262,8 +310,9 @@ Each ships on its own.
    H2 for the worker's kinds (`lib/attachment-transfer.ts`: `encodeAttachments` for a sender, `attachmentsOf` +
    `receiveAttachments` for a host, [weft-worker.md](weft-worker.md#worker-projects-on-the-desktop-board)); `host`
    calls the same two. Still open: sealing the blobs, `cloud-inbox.ts` as a receiver, the web composer as a sender.
-3. **H3 `hostFor` and one open card.** `ProjectHost`, `LocalHost`, `CloudHost`; worker tiles lose `readOnly`; the open
-   card merges, so worker cards get the show rail, the pickers, the menus and ↑ edit.
+3. **H3 `hostFor` and one open card** (built 2026-11-02, [as built](#hostfor-and-one-open-card-h3-as-built)). `ProjectHost`,
+   `LocalHost`, `CloudHost`; worker tiles lose `readOnly`; the open card merges, so worker cards get the show rail, the
+   pickers, the menus and ↑ edit.
 4. **H4 project reads.** Snapshot rows (`worker_put_project`) for quality, pile, streak and Backlog; the editor through
    file verbs with results.
 5. **H5 one host program.** The inbox, heartbeat and publish merged across the Mac and the daemon; one card schema; the

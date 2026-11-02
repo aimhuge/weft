@@ -13,17 +13,27 @@ const CLAIMED_MS = 11 * 60_000;
 
 const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+export interface WaitOptions {
+  sleep?: (ms: number) => Promise<unknown>;
+  now?: () => number;
+  // How often to ask (a pause, or one per ask for a backoff), and how long to wait for a claim and then for the
+  // result: a form waits minutes, a card's own action on the board only seconds (lib/worker-acts.ts).
+  every?: number | ((ask: number) => number);
+  unclaimed?: number;
+  claimed?: number;
+}
+
 export async function waitForCommand(
   read: () => Promise<CommandResult>,
-  { sleep = pause, now = Date.now }: { sleep?: (ms: number) => Promise<unknown>; now?: () => number } = {},
+  { sleep = pause, now = Date.now, every = EVERY_MS, unclaimed = UNCLAIMED_MS, claimed = CLAIMED_MS }: WaitOptions = {},
 ): Promise<CommandResult> {
   const started = now();
   let last: CommandResult = { status: "pending", error: null };
-  for (;;) {
+  for (let ask = 0; ; ask++) {
     // A read that fails is a blip: the command is still on its way, so keep the last answer and ask again.
     last = await read().catch(() => last);
     if (last.status === "done" || last.status === "failed") return last;
-    if (now() - started > (last.status === "pending" ? UNCLAIMED_MS : CLAIMED_MS)) return last;
-    await sleep(EVERY_MS);
+    if (now() - started > (last.status === "pending" ? unclaimed : claimed)) return last;
+    await sleep(typeof every === "number" ? every : every(ask));
   }
 }

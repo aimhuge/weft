@@ -5,7 +5,9 @@ import { api } from "@/lib/client";
 import { isLive } from "@/lib/format";
 import { BACKEND_LABELS, type Backend, type Card } from "@/lib/types";
 import { useRegularMode } from "@/lib/use-regular-mode";
-import { firstNow, otherFirstNow, patchNow, waitNow } from "@/lib/optimistic-cards";
+import { patchNow } from "@/lib/optimistic-cards";
+import { holdNow, type Hold } from "@/lib/card-handlers-host";
+import { hostOf } from "@/lib/project-host";
 import ArchiveButton from "./ArchiveButton";
 import CardFooterMeta from "./CardFooterMeta";
 import CronMark, { cronCardClass } from "./CronMark";
@@ -62,7 +64,7 @@ function RateLimitSwitch({ card }: { card: Card }) {
     <button
       onClick={(e) => {
         e.stopPropagation();
-        void api.switchBackend(card.id, other, true).catch(() => {});
+        void hostOf(card).act("card.switchBackend", { id: card.id, backend: other, replay: true }).catch(() => {});
       }}
       className="mt-2 rounded-md bg-accent px-2.5 py-1 text-[12px] font-medium text-on-accent hover:opacity-90"
     >
@@ -205,7 +207,7 @@ export default function CardView({
 function CardPrompts({ card, answered, onAnswer, onOpen, onResume }: { card: Card; answered: boolean; onAnswer: (allow: boolean) => void; onOpen: () => void; onResume?: (how: ResumeHow) => void }) {
   return (
     <>
-      {waitsForLogin(card) && (
+      {waitsForLogin(card) && hostOf(card).can("login") && (
         <button
           onClick={(e) => {
             e.stopPropagation();
@@ -265,9 +267,9 @@ function PermissionRow({ card, answered, onAnswer }: { card: Card; answered: boo
     onAnswer(allow);
   };
   const holder = card.pending?.why?.holder;
-  const send = (call: typeof waitNow) => (e: React.MouseEvent) => {
+  const send = (hold: Hold) => (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (card.pending) void call(card.id, card.pending.id).catch(() => {});
+    if (card.pending) void holdNow(card, hold, card.pending.id).catch(() => {});
   };
   const btn = "whitespace-nowrap rounded-md px-2.5 py-1 text-[12px] disabled:opacity-50";
   const primary = `${btn} bg-accent font-medium text-on-accent hover:opacity-90`;
@@ -279,14 +281,14 @@ function PermissionRow({ card, answered, onAnswer }: { card: Card; answered: boo
       <div className="mt-2 flex items-center gap-1.5">
         <CardFace face={holder} tip={`‘${holder.title}’ is editing this file`} />
         {!card.pending?.waiting && (
-          <button onClick={send(waitNow)} disabled={answered} className={primary} title={`Hold this edit until ‘${holder.title}’ finishes or commits, then redo it on top`}>
+          <button onClick={send("wait")} disabled={answered} className={primary} title={`Hold this edit until ‘${holder.title}’ finishes or commits, then redo it on top`}>
             Wait
           </button>
         )}
-        <button onClick={send(firstNow)} disabled={answered} className={card.pending?.waiting ? primary : secondary} title={`Go ahead, and ‘${holder.title}’ leaves this file to this card until it commits or finishes`}>
+        <button onClick={send("first")} disabled={answered} className={card.pending?.waiting ? primary : secondary} title={`Go ahead, and ‘${holder.title}’ leaves this file to this card until it commits or finishes`}>
           This first
         </button>
-        <button onClick={send(otherFirstNow)} disabled={answered} className={secondary} title={`Let ‘${holder.title}’ go first: it keeps this file, and this card waits until it commits or finishes`}>
+        <button onClick={send("otherFirst")} disabled={answered} className={secondary} title={`Let ‘${holder.title}’ go first: it keeps this file, and this card waits until it commits or finishes`}>
           Others first
         </button>
       </div>

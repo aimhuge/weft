@@ -60,6 +60,8 @@ function toolLine(tool: Tool) {
 export function pageLabel(url: string) {
   try {
     const u = new URL(url);
+    // A page a worker card saved (blob:sha256:…) has no name of its own to show, only its content hash.
+    if (u.protocol === "blob:") return `page${u.hash}`;
     return `${u.protocol === "file:" ? fileLabel(u.pathname) : siteLabel(u)}${u.hash}`;
   } catch {
     return url;

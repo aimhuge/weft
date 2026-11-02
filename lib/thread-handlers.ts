@@ -51,6 +51,10 @@ export function threadHandlers(card: Card, ctx: ThreadActionsCtx) {
   };
 }
 
+// What an open card's thread panel takes, wherever the card runs: a worker's card (lib/use-worker-board.ts) has send,
+// answer and close, and the rest of these where its host has a verb for them.
+export type ThreadHandlerSet = Pick<ReturnType<typeof threadHandlers>, "onSend" | "onAnswer" | "onClose"> & Partial<ReturnType<typeof threadHandlers>>;
+
 // The board's way in: a hook, so the React compiler lets it take `select` (which writes a ref) during
 // render, where a plain call would be flagged. No card open, no handlers.
 export function useThreadHandlers(card: Card | null, ctx: ThreadActionsCtx) {

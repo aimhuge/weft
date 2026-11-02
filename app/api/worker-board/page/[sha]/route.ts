@@ -1,5 +1,5 @@
 // GET /api/worker-board/page/[sha] — the iframe src for a worker card's page on the desktop board
-// (components/WorkerOpenCard.tsx, lib/worker-board.ts workerPage). The web board's page route, on this Mac's server,
+// (components/WorkerPane.tsx, lib/worker-board.ts workerPage). The web board's page route, on this Mac's server,
 // read as the signed-in account so RLS is the gate.
 //
 // One thing is stricter here. The frame sits in the board window's session, and a page from a worker is untrusted.

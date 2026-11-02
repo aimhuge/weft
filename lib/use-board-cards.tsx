@@ -3,12 +3,12 @@
 import { useCallback, useMemo, type ComponentType } from "react";
 import type { Card, Column } from "./types";
 import type { CardActionsCtx } from "./card-handlers";
-import { cardHandlers } from "./card-handlers";
+import { handlersFor } from "./card-handlers-host";
 import { busyHere } from "./overlap";
 import { api } from "./client";
 import { knownFolders } from "./list-actions";
 import { patchNow } from "./optimistic-cards";
-import { isWorkerCard } from "./worker-project";
+import { hostOf } from "./project-host";
 import type { CardViewProps } from "@/components/CardView";
 import CardRow, { type RowNest } from "@/components/CardRow";
 
@@ -38,45 +38,34 @@ export interface BoardCardsDeps {
 export function useBoardCards(deps: BoardCardsDeps): BoardCardRenderers {
   const { cards, now, selectedId, lastOpenId, unseen, restartRequestedBy, ctx, CardView } = deps;
 
-  // A worker's card opens and that's all: its moves, stars and the rest would reach for a card this Mac doesn't have.
   const shared = useCallback(
     (card: Card) => ({ card, now, selected: card.id === selectedId, lastOpen: card.id === lastOpenId, unseen: unseen.has(card.id), alsoHere: busyHere(cards, card) }),
     [cards, now, selectedId, lastOpenId, unseen],
   );
 
+  // A card's own controls act on its host, this Mac or a worker (lib/card-handlers-host.ts).
   const renderCard = useCallback(
-    (card: Card) =>
-      isWorkerCard(card) ? (
-        <CardView guardName={card.title} readOnly {...shared(card)} onOpen={() => ctx.openCard(card)} />
-      ) : (
-        <CardView guardName={card.title} {...shared(card)} restartRequested={restartRequestedBy === card.id} {...cardHandlers(card, ctx)} />
-      ),
+    (card: Card) => <CardView guardName={card.title} {...shared(card)} restartRequested={restartRequestedBy === card.id} {...handlersFor(card, ctx)} />,
     [CardView, shared, restartRequestedBy, ctx],
   );
 
-  // Every folder a card can move to from the list view's folder picker.
-  const folders = useMemo(() => knownFolders(cards.filter((c) => !isWorkerCard(c))), [cards]);
+  // Every folder a card can move to from the list view's folder picker: this Mac's, for a card that runs here.
+  const folders = useMemo(() => knownFolders(cards.filter((c) => hostOf(c).can("folder"))), [cards]);
 
+  // A card moves to another folder only on this Mac: a remote host refuses a new folder from the network.
   const renderRow = useCallback(
-    (card: Card, column: Column, nest?: RowNest) => isWorkerCard(card) ? (
-      <CardRow column={column} nest={nest} {...shared(card)} onOpen={() => ctx.openCard(card)} />
-    ) : (
+    (card: Card, column: Column, nest?: RowNest) => (
       <CardRow
-        card={card}
         column={column}
         nest={nest}
-        folders={folders}
+        {...shared(card)}
+        folders={hostOf(card).can("folder") ? folders : undefined}
         onMove={(to) => ctx.move(card.id, to)}
-        onFolder={(cwd) => void patchNow(card.id, { cwd }, () => api.setCwd(card.id, cwd)).catch(ctx.notify)}
-        now={now}
-        selected={card.id === selectedId}
-        lastOpen={card.id === lastOpenId}
-        unseen={unseen.has(card.id)}
-        alsoHere={busyHere(cards, card)}
-        {...cardHandlers(card, ctx)}
+        onFolder={hostOf(card).can("folder") ? (cwd) => void patchNow(card.id, { cwd }, () => api.setCwd(card.id, cwd)).catch(ctx.notify) : undefined}
+        {...handlersFor(card, ctx)}
       />
     ),
-    [cards, folders, now, selectedId, lastOpenId, unseen, ctx, shared],
+    [folders, ctx, shared],
   );
 
   return { renderCard, renderRow };

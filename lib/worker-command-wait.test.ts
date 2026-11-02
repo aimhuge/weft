@@ -43,4 +43,21 @@ describe("waitForCommand", () => {
     expect(await done).toEqual(is("done"));
     vi.useRealTimers();
   });
+
+  it("takes its own cadence and limits", async () => {
+    const c = clock();
+    const sleeps: number[] = [];
+    const read = vi.fn(() => Promise.resolve(is("pending")));
+    expect(await waitForCommand(read, { now: c.now, sleep: (ms) => (sleeps.push(ms), c.sleep(ms)), every: 500, unclaimed: 2_000, claimed: 9_000 })).toEqual(is("pending"));
+    expect(sleeps.every((ms) => ms === 500)).toBe(true);
+    expect(read).toHaveBeenCalledTimes(6);
+  });
+
+  it("backs off with a pause per ask", async () => {
+    const c = clock();
+    const sleeps: number[] = [];
+    const read = vi.fn(() => Promise.resolve(is("pending")));
+    await waitForCommand(read, { now: c.now, sleep: (ms) => (sleeps.push(ms), c.sleep(ms)), every: (ask) => 500 * 2 ** ask, unclaimed: 7_000 });
+    expect(sleeps).toEqual([500, 1000, 2000, 4000]);
+  });
 });

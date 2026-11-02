@@ -6,23 +6,19 @@
 // page every couple of seconds. Like the web's, it leaves out what only the machine running the card can do.
 import { useEffect, useRef } from "react";
 import { apiFetch } from "./api-client";
+import type { HostArgs } from "./host-command";
+import { firstNow, otherFirstNow, stopNow, waitNow } from "./optimistic-cards";
 import { applyThreadEvent, type ThreadPage } from "./thread-page";
 import type { Device } from "./simulator-devices";
 import type { PageUpdate, ThreadTransport } from "./thread-transport";
-import type { ThreadItem } from "./types";
 import type { ToolResultSource } from "./use-tool-result";
-import type { WorkerAction } from "./worker-board";
+import { actOnWorker, postWorkerAction } from "./worker-acts";
+import { useShownItems } from "./worker-shown";
 
 export const THREAD_POLL_MS = 2_500;
 
-async function action(body: WorkerAction): Promise<void> {
-  const res = await apiFetch("/api/worker-board", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-  if (res.ok) return;
-  const failed = (await res.json().catch(() => ({}))) as { error?: string };
-  throw new Error(failed.error || `HTTP ${res.status}`);
-}
-
-export const sendWorkerAction = action;
+export const sendWorkerAction = postWorkerAction;
+export { actOnWorker };
 
 export interface QaState {
   devices: Device[];
@@ -74,14 +70,26 @@ function useWorkerLive(cardId: string, onUpdate: (update: PageUpdate) => void) {
   }, [cardId]);
 }
 
-const same = (items: ThreadItem[]) => items;
+// What a worker runs from a board, as host verbs (lib/host-api). Left out on purpose: `shell` and `grantFolder`, which
+// remoteRefusal (lib/host-command.ts) refuses from the network because they widen what the card can touch (a folder
+// grant still rides inside an answer: grantInAnswer), and `listFiles`, which waits for file verbs (project-hosts.md H4).
+const pending = (cardId: string, pendingId: string): HostArgs => ({ id: cardId, pendingId });
 
 export const workerTransport: ThreadTransport = {
   loadPage,
   useLive: (cardId, onUpdate) => useWorkerLive(cardId, onUpdate),
-  useView: same,
-  stop: (cardId) => action({ action: "stop", cardId }),
+  // The items as drawn are the show rail's too: the rail sits outside the thread view (lib/worker-shown.ts).
+  useView: useShownItems,
+  // The tile and the menu stop a worker card with the same verb (lib/card-handlers-host.ts).
+  stop: (cardId) => stopNow(cardId, () => actOnWorker("card.stop", { id: cardId })),
+  editLast: (cardId, text) => actOnWorker("card.message.edit", { id: cardId, text }).then(() => {}),
+  fresh: (cardId, message) => actOnWorker("card.fresh", { id: cardId, message }).then(() => {}),
+  waitPermission: (cardId, pendingId) => waitNow(cardId, pendingId, () => actOnWorker("card.permission.wait", pending(cardId, pendingId))),
+  putFirst: (cardId, pendingId) => firstNow(cardId, pendingId, () => actOnWorker("card.permission.first", pending(cardId, pendingId))),
+  putHolderFirst: (cardId, pendingId) => otherFirstNow(cardId, pendingId, () => actOnWorker("card.permission.otherFirst", pending(cardId, pendingId))),
+  stopTask: (cardId, taskId) => actOnWorker("card.stopTask", { id: cardId, taskId }).then(() => {}),
   grantInAnswer: true,
+  cardEdits: true,
   desktop: false,
 };
 

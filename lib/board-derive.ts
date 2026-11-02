@@ -52,3 +52,15 @@ export function headerCounts(cards: Card[]) {
     waiting: live.filter((c) => c.column === "needs_you").length,
   };
 }
+
+// The card in the frame: this Mac's open card, or a worker's (lib/use-worker-board.ts openWorkerThread).
+export const framedCard = (selected: Card | null, worker: { card: Card } | null) => selected ?? worker?.card ?? null;
+
+// The open card's ☆, tags, Share… and archive, for the card in the frame (this Mac's or a worker's): each a no-op with
+// none open. The functions are the board's own, which act through the card's host (lib/project-host.ts).
+export function openCardMarks(card: Card | null, act: { star: (c: Card) => void; tags: (c: Card) => void; share: (c: Card) => void; archive: (c: Card) => void }) {
+  const on = (fn: (c: Card) => void) => () => {
+    if (card) fn(card);
+  };
+  return { onStar: on(act.star), onTags: on(act.tags), onShare: on(act.share), onArchive: on(act.archive) };
+}

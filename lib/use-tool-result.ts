@@ -15,12 +15,12 @@ import { apiFetch } from "./api-client";
 // provides one that reads cloud_tool_outputs through the visitor's session (components/web-board).
 export type ToolResultSource = (cardId: string, toolId: string) => Promise<string>;
 
-const localSource: ToolResultSource = (cardId, toolId) =>
+export const localToolSource: ToolResultSource = (cardId, toolId) =>
   apiFetch(`/api/cards/${cardId}/thread/tool/${encodeURIComponent(toolId)}`)
     .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`${r.status}`))))
     .then((data: { result: string }) => data.result);
 
-export const ToolResultSourceContext = createContext<ToolResultSource>(localSource);
+export const ToolResultSourceContext = createContext<ToolResultSource>(localToolSource);
 
 export interface ToolResultState {
   fetched: string | undefined;

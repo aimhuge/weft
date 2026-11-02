@@ -30,20 +30,31 @@ function subscribe(listener: () => void) {
 // Scroll the chat and the turn at its top lights up here, and the pane follows it to that turn's page.
 // Hidden under 980 px of window, so the chat keeps its room on a 13" Air (docs/architecture/show-rail.md).
 // card is the open thread (none: no rail); hidden while the New thread dialog takes its place; pageUrl is the pane's page.
-export default function ShowRail({ card, hidden, items, pageUrl }: { card: Card | null | undefined; hidden: boolean; items: ThreadItem[]; pageUrl: string }) {
+// A card on another host (a worker, lib/use-project-host.ts) brings its own page pictures (shots) and its own way to put
+// its pane back on a page (onReopen), since this Mac neither captured its pages nor shows them in the native pane.
+export default function ShowRail({ card, hidden, items, pageUrl, shots: given, onReopen }: {
+  card: Card | null | undefined;
+  hidden: boolean;
+  items: ThreadItem[];
+  pageUrl: string;
+  shots?: Record<string, string>;
+  onReopen?: (url: string) => void;
+}) {
   const now = useNow();
   // The turn on top of the chat, per card, so switching cards starts with none marked.
   const [top, setTop] = useState<{ card?: string; id: string }>();
   const cardId = card?.id;
   const list = useRef<HTMLDivElement>(null);
   const cardVisits = useSyncExternalStore(subscribe, () => visits.get(cardId ?? "") ?? NONE, () => NONE);
-  const shots = usePageShots(cardId, pageUrl, items.length);
+  const captured = usePageShots(given ? undefined : cardId, pageUrl, items.length);
+  const shots = given ?? captured;
   // The page last seen and a page the rail itself reopened, which isn't a new visit.
   const seen = useRef<{ card?: string; url: string }>(undefined);
   const reopened = useRef<string>(undefined);
   const reopen = (url: string) => {
     reopened.current = url;
-    void window.weft?.browser.open(url);
+    if (onReopen) onReopen(url);
+    else void window.weft?.browser.open(url);
   };
   const minis = card && !hidden ? showMinis(items, { live: isLive(card), now, visits: cardVisits }) : [];
   const follow = usePaneFollow(minis, pageUrl, reopen);

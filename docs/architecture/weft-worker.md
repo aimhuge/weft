@@ -285,14 +285,24 @@ store (`lib/worker-project.ts`, `lib/worker-board.ts`, `lib/worker-transport.ts`
 - **The list:** your headless workers' folders (`cloud_workers.folders`) plus the folders of their `cloud_cards`, so a
   project shows with no cards, and a worker too old to report still shows the ones it has cards in. An offline worker's
   projects stay listed. A chip carries the worker's name; a row in More reads `on m1mini` or `on m1mini · offline`.
-- **`cards` stays local.** `Board` keeps its own `cards` for everything that acts, and only what's drawn reads
-  `boardCards`. `ownColumns` keeps worker cards out of Archive all, Resume all and Switch all; `localPath` keeps a
-  worker path out of the terminal, header badges, drawers and the copilot. A worker card draws `readOnly` and opens.
+- **`cards` stays local.** `Board` keeps its own `cards`, and what's drawn reads `boardCards` (`useBoardWorkers`).
+  `ownColumns` keeps worker cards out of Archive all, Resume all and Switch all; `localPath` keeps a worker path out of
+  the terminal, header badges, drawers and the copilot.
+- **A card acts through its host (H3, [project-hosts.md](project-hosts.md#hostfor-and-one-open-card-h3-as-built)).**
+  A worker card's tile is no longer read-only: star, archive, stop, Allow / Deny, Wait / This first / Others first,
+  ▶ continue and Restart, dragging to another column and its right-click menu (trimmed to rename, tags, star, the
+  moves, the modes a worker takes, Run on, New Thread here and archive) each go out as a `host` command
+  (`lib/project-host.ts` `hostFor(cwd).act`) and land on the board at once through `lib/optimistic-cards.ts`, which
+  `useWorkerBoard` now draws its cards through; a refusal reloads them. Not offered: delete, Share…, the agent, the
+  folder, skills, the vault, the dev server, and logging this Mac's CLI in.
 - **Reading:** the account's Supabase session lives on the local server, so the renderer polls `/api/worker-board` every
   5 s (once a minute with no worker), and an open thread re-reads its newest page every 2.5 s. There's no Realtime here.
-- **The thread:** `components/WorkerOpenCard.tsx` is the web board's `ThreadPanel` with `workerTransport`
-  (`desktop: false`), so it offers what weft.zip offers, beside the browser pane. Reply, answer and stop are the same
-  `cloud_commands` rows the web sends.
+- **The thread:** a worker card opens in the board's own workspace (`components/OpenCard.tsx`), like a local one:
+  `ThreadPanel` over `workerTransport` (`desktop: false`, `cardEdits: true`), so its header offers rename, tags, star,
+  archive and the model picker, and its reply box ↑ edit, fresh and the held-edit choices, each a host verb; the show
+  rail projects the items its thread view drew (`lib/worker-shown.ts`), and the pane column is `components/WorkerPane.tsx`
+  (`WebPane` on the card's page, or the page the rail reopens; the native pane under Local Simulator). The editor column
+  says a worker's files aren't there yet. Reply, answer, stop and mode are the same `cloud_commands` rows the web sends.
 - **A new thread:** `POST /api/cards` with a worker path calls `startWorkerThread`, sends a `run` with that folder, makes
   no local card and answers with the worker's name. An offline worker refuses with a message and nothing is sent. A
   reply to an offline worker queues, and the thread says so. There's no Backlog in a worker project.
@@ -318,7 +328,7 @@ blob store (lib/blob-store.ts, mayUpload = workerMayUpload)
   ▼
 card.page and the open_url item carry blob:sha256:<hex>#anchor (lib/worker-publish.ts, lib/card-rows.ts's withUploadedPage)
   ├─▶ web board: WebThreadPanel → WebPane → /api/web-board/<org>/page/<sha>
-  └─▶ desktop board: WorkerOpenCard → WebPane → /api/worker-board/page/<sha>  (5 s poll of the worker's cards)
+  └─▶ desktop board: OpenCard → WorkerPane → WebPane → /api/worker-board/page/<sha>  (5 s poll of the worker's cards)
 ```
 
 - **The tools:** `scripts/weft-worker.ts` sets `WEFT_WORKER=1`. `open_url` then calls `openOnWorker`: a local page uploads

@@ -14,16 +14,20 @@ import type { WorkerThread } from "@/lib/use-worker-board";
 import OpenCard, { CardFrame } from "./OpenCard";
 import { guarded } from "./guarded";
 
+const NO_ITEMS: ThreadItem[] = [];
+
 // Each loads in its own CrashGuard, so a broken piece breaks only its own spot.
 const NewThreadWindow = guarded(() => import("./NewThreadWindow"), { what: "New thread window", inline: true });
-const WorkerOpenCard = guarded(() => import("./WorkerOpenCard"), { what: "worker thread", inline: true });
 
 export interface BoardFrameProps {
   // The New thread form is up; otherwise the open card's thread.
   showNew: boolean;
+  // A card (either kind) or New thread is open, as the board worked it out (components/Board.tsx).
+  framed: boolean;
   // The open card, when there is one.
   selected: Card | null;
-  // The open card when it's a worker's: read from the cloud rows, so it never reaches OpenCard's local handlers.
+  // The open card when it's a worker's: read from the cloud rows, with handlers that act through its host
+  // (lib/project-host.ts), in the same workspace as a local card.
   workerThread?: WorkerThread | null;
   cards: Card[];
   home: string;
@@ -55,7 +59,12 @@ export interface BoardFrameProps {
 }
 
 export default function BoardFrame(props: BoardFrameProps) {
-  const { showNew, selected, cards, home, newCwd, project, restart, onCreate, onCloseNew } = props;
+  const { showNew, selected, workerThread, cards, home, newCwd, project, restart, onCreate, onCloseNew } = props;
+  // One open card, wherever it runs: this Mac's own with the board's handlers, or a worker's with its own.
+  // A worker card's thread view pages itself in through its host, so it starts from nothing of the board's.
+  const open = selected && props.handlers
+    ? { card: selected, handlers: props.handlers, worker: undefined, items: props.items, streaming: props.streaming }
+    : workerThread && { ...workerThread, items: NO_ITEMS, streaming: "" };
   // The folder the New thread form last used, so it opens where the user was.
   const recentCwd = useMemo(
     () => [...cards].sort((a, b) => b.updatedAt - a.updatedAt).find((c) => c.cwd !== home)?.cwd,
@@ -63,7 +72,7 @@ export default function BoardFrame(props: BoardFrameProps) {
   );
 
   return (
-    <CardFrame framed={Boolean(selected) || Boolean(props.workerThread) || showNew} bottom={props.bottom} onBackdrop={props.onBackdrop}>
+    <CardFrame framed={props.framed} bottom={props.bottom} onBackdrop={props.onBackdrop}>
       {showNew ? (
         <NewThreadWindow
           form={{ cards, home, defaultCwd: newCwd ?? project ?? undefined, recentCwd, restart, onCreate, onManageAgents: () => {
@@ -73,19 +82,15 @@ export default function BoardFrame(props: BoardFrameProps) {
           browser={{ desktop: props.desktop, state: props.browser, obscured: props.obscured, width: props.browserWidth, onWidth: props.onBrowserWidth }}
           onClose={onCloseNew}
         />
-      ) : props.workerThread ? (
-        <WorkerOpenCard
-          thread={props.workerThread}
-          browser={{ desktop: props.desktop, state: props.browser, obscured: props.obscured, width: props.browserWidth, onWidth: props.onBrowserWidth }}
-        />
-      ) : selected && props.handlers ? (
+      ) : open ? (
         <OpenCard
-          card={selected}
-          handlers={props.handlers}
-          items={props.items}
-          streaming={props.streaming}
+          card={open.card}
+          handlers={open.handlers}
+          worker={open.worker}
+          items={open.items}
+          streaming={open.streaming}
           resets={planResets(cards)}
-          editTitle={props.renameId === selected.id}
+          editTitle={props.renameId === open.card.id}
           workspace={props.workspace}
           browser={{ desktop: props.desktop, state: props.browser, width: props.browserWidth, onWidth: props.onBrowserWidth, obscured: props.obscured }}
           onStar={props.onStar}
