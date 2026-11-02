@@ -50,7 +50,7 @@ import { useSwitchAll } from "./switch-all-button";
 import { folderName } from "./ProjectBar";
 import { CLOSED_BROWSER, showPage } from "@/lib/board-helpers";
 import { openWorkerThread, useBoardWorkers } from "@/lib/use-worker-board";
-import { localPath, withWorkerProjects } from "@/lib/worker-project";
+import { isWorkerProject, localPath, withWorkerProjects } from "@/lib/worker-project";
 import { projectFolders } from "@/lib/board-folders";
 import { useWorkerNotices } from "@/lib/card-notice";
 import { useThreadHandlers } from "@/lib/thread-handlers";
@@ -363,7 +363,7 @@ export default function Board() {
         <BoardRail
           open={libraryOpen}
           onOpen={setLibraryOpen}
-          ctx={{ project: localProject, folders: railFolders, cards, onOpenUrl: showPage, onOpenCard: openCard, onStartCard: improveQuality, notify }}
+          ctx={{ project: localProject, workerProject: isWorkerProject(project) ? project : null, folders: railFolders, cards, onOpenUrl: showPage, onOpenCard: openCard, onStartCard: improveQuality, notify }}
           filter={railFilter}
           onFilter={setRailFilter}
           onStarCard={toggleStar}

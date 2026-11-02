@@ -29,6 +29,12 @@ export const HOST_VERBS = [
   "files.write",
   "dev.open",
   "dev.stop",
+  // The crons and webhooks a host keeps (lib/host-api/lists.ts): args.id names the item, not a card.
+  "cron.update",
+  "cron.delete",
+  "cron.run",
+  "webhook.update",
+  "webhook.delete",
 ] as const;
 
 /** Every verb a host runs. HOST_API is keyed by these, and it is the allowlist a remote host checks. */
@@ -38,4 +44,11 @@ const VERBS: ReadonlySet<string> = new Set(HOST_VERBS);
 
 export function isHostVerb(verb: string): verb is HostVerb {
   return VERBS.has(verb);
+}
+
+/** The verbs on a host's own crons and webhooks, whose args.id is the item's id there rather than a card's. */
+export type ListVerb = Extract<HostVerb, `cron.${string}` | `webhook.${string}`>;
+
+export function isListVerb(verb: string): verb is ListVerb {
+  return isHostVerb(verb) && (verb.startsWith("cron.") || verb.startsWith("webhook."));
 }

@@ -6,7 +6,8 @@
 import { NEW_CARD_MODES, newCardBody, type CloudCommandRow, type NewCardMode } from "./cloud-commands";
 import { networkStartMode } from "./cloud-new-card-mode";
 import { dispatcher, type KindTable } from "./host/dispatch";
-import type { HostDone } from "./host-command";
+import type { ListVerb } from "@weft/client";
+import type { HostArgs, HostDone } from "./host-command";
 import { createCardCommands } from "./worker-card-commands";
 import { cloneBody, runBody } from "./worker-commands";
 import type { DaemonDeps } from "./worker-daemon";
@@ -78,6 +79,22 @@ function sealedToken(command: CloudCommandRow): Sealed {
   return sealed;
 }
 
+// cron.* and webhook.* from the Mac's ⏰ and 🪝 drawers, on this worker's own crons and webhooks (lib/host-api/lists.ts),
+// past remoteRefusal. A run asked for from the network starts in the mode a new card from it would (workerStartMode:
+// never bypassPermissions, plan as default), whatever mode the thread that made the cron had; it answers the run's card.
+export async function listVerb(engine: Pick<DaemonDeps["engine"], "host">, verb: ListVerb, args: HostArgs): Promise<string | null> {
+  if (verb !== "cron.run") {
+    await engine.host(verb, args);
+    return null;
+  }
+  const { getCron } = await import("./cron-store");
+  const cron = getCron(args.id);
+  if (!cron) throw new Error("No such cron.");
+  const permissionMode = await workerStartMode(cron.permissionMode);
+  const { card } = (await engine.host("cron.run", { id: cron.id, permissionMode })) as { card: Card };
+  return card.id;
+}
+
 export function workerKinds(deps: DaemonDeps, ctx: KindContext): KindTable {
   const { engine, publisher } = deps;
   const github = (read: () => Promise<GithubStatus | null>) => publishGithub(deps, ctx.log, read);
@@ -120,7 +137,7 @@ export function workerKinds(deps: DaemonDeps, ctx: KindContext): KindTable {
     return published(command, await engine.start({ ...args, cwd, permissionMode }));
   }
 
-  const cards = createCardCommands(engine, create);
+  const cards = createCardCommands(engine, create, (verb, args) => listVerb(engine, verb, args));
   return {
     async login(command) {
       await deps.login(sealedToken(command));

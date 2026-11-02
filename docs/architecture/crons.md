@@ -69,9 +69,13 @@ cron a thread makes on a worker is the worker's (its own `crons.json`, fired by 
 started after recovery), and `create_cron` there refuses a folder or source card that isn't the worker's. The worker
 publishes its whole list after every `crons` event (`lib/worker-lists.ts` → `worker_set_lists` → `cloud_worker_lists`,
 owner-only), and the Mac's `GET /api/crons` adds them (`lib/worker-lists-read.ts`) with their `worker://` folder, an id
-`worker:<worker>:<cron>` and `worker` set to its name, so the ⏰ drawer and count include them. The Mac refuses to
-change, delete or run one (that's a thread on the worker), and `list_crons` on a worker lists only the worker's.
-Details: [project-hosts.md](project-hosts.md#board-tools-on-a-worker).
+`worker:<worker>:<cron>` and `worker` set to its name, so the ⏰ drawer and count include them, and a worker project's ⏰
+shows only that worker's. The drawer's switch, Edit, Run now and Delete reach the worker as host verbs (`cron.update`,
+`cron.run`, `cron.delete`; `lib/worker-list-acts.ts`), held to what the drawer changes (never the folder, CLI, mode or
+agent, never a "!" prompt), and a run from the Mac starts in the mode a card from the network may. The other way,
+`list_crons` on a worker lists the Mac's crons too, read-only as `mac:<id>` (`lib/mac-crons.ts` publishes a summary to
+`cloud_mac_crons`), and refuses to change one. Details:
+[project-hosts.md](project-hosts.md#crons-and-webhooks-both-ways-as-built).
 
 ## Crons Weft runs for itself
 

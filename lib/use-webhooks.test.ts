@@ -14,6 +14,7 @@ const api = vi.hoisted(() => ({
 vi.mock("./client", () => ({ api }));
 
 const { POLL_MS, addWebhookAsk, onWebhookAsk, useWebhooks } = await import("./use-webhooks");
+const { WORKER_LIST_SETTLE_MS } = await import("./worker-item-id");
 
 const hook = (over: Partial<Webhook> = {}): Webhook => ({ id: "w1", folder: "/a", name: "stripe", target: "http://localhost:3000/x", createdAt: 0, updatedAt: 0, ...over });
 
@@ -144,6 +145,23 @@ describe("useWebhooks", () => {
     // The refusal asks the server what it has, and the old row is back.
     await waitFor(() => expect(api.webhooks).toHaveBeenCalledTimes(2));
     expect(result.current.hooks[0]?.registered).toBeUndefined();
+  });
+
+  it("reads a worker's webhooks again once it has republished, after a change or a delete", async () => {
+    const id = "worker:w1:h1";
+    api.webhooks.mockResolvedValue({ hooks: [hook({ id })], signedIn: true });
+    const { result } = renderHook(() => useWebhooks(["worker://w1/app"]));
+    await waitFor(() => expect(result.current.loaded).toBe(true));
+    vi.useFakeTimers();
+    const before = api.webhooks.mock.calls.length;
+    api.updateWebhook.mockResolvedValueOnce({ queued: true });
+    await act(() => result.current.update(id, { registered: true }));
+    expect(result.current.hooks[0]?.registered).toBe(true);
+    api.removeWebhook.mockResolvedValueOnce({ ok: true });
+    await act(() => result.current.remove(id));
+    expect(api.webhooks.mock.calls.length).toBe(before);
+    await act(async () => vi.advanceTimersByTimeAsync(WORKER_LIST_SETTLE_MS));
+    expect(api.webhooks.mock.calls.length).toBe(before + 2);
   });
 
   it("lets a failed call throw and leaves the list alone", async () => {

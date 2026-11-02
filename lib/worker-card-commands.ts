@@ -19,9 +19,10 @@ function ownCard(engine: Engine, cardId: string | undefined): Card {
   return card;
 }
 
-export function workerRules(engine: Engine, create?: CardRules["create"]): CardRules {
+export function workerRules(engine: Engine, create?: CardRules["create"], lists?: CardRules["lists"]): CardRules {
   return {
     ...(create ? { create } : {}),
+    ...(lists ? { lists } : {}),
     card: (cardId) => ownCard(engine, cardId),
     verb: (verb, args) => engine.host(verb, args),
     grant: (cardId, directory, scope) => engine.grant(cardId, directory, scope),
@@ -32,9 +33,10 @@ export function workerRules(engine: Engine, create?: CardRules["create"]): CardR
 }
 
 // `create` is the daemon's card.create (lib/worker-kinds.ts): a card in the row's checkout, published before the report.
-export function createCardCommands(engine: Engine, create?: CardRules["create"]) {
+// `lists` runs cron.* and webhook.* on this worker's own crons and webhooks (lib/worker-kinds.ts).
+export function createCardCommands(engine: Engine, create?: CardRules["create"], lists?: CardRules["lists"]) {
   return {
-    ...cardKinds(workerRules(engine, create)),
+    ...cardKinds(workerRules(engine, create, lists)),
     async mode(command: CloudCommandRow): Promise<string> {
       const body = modeBody(command);
       if (!body) throw new Error("That mode can't be set on a worker.");

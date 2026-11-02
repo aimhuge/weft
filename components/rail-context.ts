@@ -5,6 +5,9 @@ import type { Card } from "@/lib/types";
 export interface RailContext {
   // The board's selected project folder, or null for all of them.
   project: string | null;
+  // The selected project when it's on a Weft Worker (its worker:// path; project is then null): ⏰ and 🪝 show that
+  // worker's own crons and webhooks for it.
+  workerProject?: string | null;
   // The folders whose vaults 🔐 shows: every project on the board (its filter starts on project).
   folders: string[];
   cards: Card[];

@@ -110,6 +110,7 @@ describe("runTone", () => {
 describe("cronSummary", () => {
   it("says a fresh thread makes a fresh thread", () => {
     expect(cronSummary(cron())).toBe("every day at 9:00 · fresh thread");
+    expect(cronSummary(cron({ worker: "mini" }))).toBe("every day at 9:00 · fresh thread · on mini");
   });
 
   it("names the source a fork continues", () => {

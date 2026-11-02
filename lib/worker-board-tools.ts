@@ -6,7 +6,8 @@
 //   create_card   a project on this worker starts here; another host's gets a new_card (Mac) or run (worker) command
 //   create_cron   only for this worker's projects: a cron fires where its cards run, and the worker publishes its
 //                 crons for the Mac's ⏰ drawer (lib/worker-lists.ts)
-//   list_crons    this worker's crons, saying so
+//   list_crons    this worker's crons, saying so, then the user's Mac crons read-only (lib/worker-mac-crons.ts)
+//   *_cron        refuse a Mac's cron (mac:<id>): it changes only on the Mac
 //   create_agent  refused: agents live in the user's Settings → Agents, on their Mac
 // The changelog tools stay as they are: the entry lands in the checkout's own CHANGELOG.md after the card's commit
 // (lib/changelog-stamp.ts runs in every runner), which is what the user sees once the worker pushes.
@@ -15,6 +16,7 @@ import { listText, type ListOptions } from "./board-tools-format";
 import { getCard, listCards } from "./store";
 import type { Card, PermissionMode } from "./types";
 import { boardCards, boardLink, BOARD_READ, localFolder, remoteTarget } from "./worker-board-link";
+import { isMacCronId, MAC_CRON_REFUSED, macCronsSection } from "./worker-mac-crons";
 
 type Reply = { content: { type: "text"; text: string }[]; isError?: boolean };
 // A tool definition as lib/board-tools.ts makes them (the SDK's tool()); only the name and handler are read or replaced.
@@ -98,6 +100,8 @@ export async function workerCreateCard(args: NewCardArgs, deps: WorkerBoardDeps)
 export const CRON_ELSEWHERE =
   "A cron fires where its runs work, and this thread is on a Weft Worker, so it can only schedule this worker's own projects. For a project on the user's Mac or another worker, make the cron from a thread there.";
 
+const MAC_CRON_TOOLS = new Set(["update_cron", "delete_cron", "run_cron_now"]);
+
 const withHandler = <T extends NamedTool>(t: T, handler: (args: never, extra: unknown) => Promise<Reply>): T => ({ ...t, handler });
 
 function wrapCron<T extends NamedTool>(t: T, deps: WorkerBoardDeps): T {
@@ -114,9 +118,14 @@ function wrapCron<T extends NamedTool>(t: T, deps: WorkerBoardDeps): T {
   if (t.name === "list_crons") {
     return withHandler(t, async (args: Record<string, unknown>, extra: unknown) => {
         const out = await handler(args, extra);
-        const note = "These are this Weft Worker's crons: they fire here, and the user's ⏰ drawer lists them beside their Mac's. Crons on the Mac aren't listed from a worker.";
-        return { ...out, content: [...out.content, { type: "text" as const, text: note }] };
+        const note = "Those are this Weft Worker's crons: they fire here, and the user's ⏰ drawer lists them beside their Mac's (and can change them).";
+        const text = (s: string) => ({ type: "text" as const, text: s });
+        return { ...out, content: [...out.content, text(note), text(await macCronsSection(boardLink()))] };
     });
+  }
+  // A Mac's cron (mac:<id>, from list_crons) is read-only here: a worker thread is the less-trusted side.
+  if (MAC_CRON_TOOLS.has(t.name)) {
+    return withHandler(t, async (args: Record<string, unknown>, extra: unknown) => (isMacCronId(args.id) ? reply(MAC_CRON_REFUSED, true) : handler(args, extra)));
   }
   return t;
 }

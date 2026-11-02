@@ -22,6 +22,10 @@ vi.mock("@/lib/cron-run", () => ({ runCron }));
 const workerLists = vi.hoisted(() => vi.fn(() => Promise.resolve({ crons: [] as Cron[], webhooks: [] })));
 vi.mock("@/lib/worker-lists-read", async (load) => ({ ...(await load<typeof import("@/lib/worker-lists-read")>()), workerLists }));
 
+// A worker's cron changes on the worker, as a host verb (lib/worker-list-acts.ts).
+const actOnWorkerItem = vi.hoisted(() => vi.fn<(...args: unknown[]) => Promise<{ queued?: true; cardId?: string }>>(() => Promise.resolve({})));
+vi.mock("@/lib/worker-list-acts", () => ({ actOnWorkerItem }));
+
 const route = await import("./crons/route");
 const idRoute = await import("./crons/[id]/route");
 const runRoute = await import("./crons/[id]/run/route");
@@ -95,15 +99,38 @@ describe("GET /api/crons", () => {
     expect(json.crons.map((c) => [c.id, c.worker])).toEqual([["worker:w1:c9", "mini"], ["mac", undefined]]);
   });
 
-  it("refuses to change, delete or run a worker's cron from this Mac", async () => {
+  it("sends a change, a delete or a run of a worker's cron to that worker, never to this Mac's", async () => {
     const id = "worker:w1:c9";
-    for (const res of [await idRoute.PATCH(req(`/crons/${id}`, { method: "PATCH", body: {} }), ctx(id)), await idRoute.DELETE(req(`/crons/${id}`, { method: "DELETE" }), ctx(id)), await runRoute.POST(req(`/crons/${id}/run`, { method: "POST" }), ctx(id))]) {
-      expect(res.status).toBe(400);
-      expect(((await res.json()) as { error: string }).error).toMatch(/lives on a Weft Worker/);
-    }
+    const patch = await idRoute.PATCH(req(`/crons/${id}`, { method: "PATCH", body: { enabled: false } }), ctx(id));
+    expect(await patch.json()).toEqual({});
+    actOnWorkerItem.mockResolvedValueOnce({ queued: true });
+    expect(await (await idRoute.DELETE(req(`/crons/${id}`, { method: "DELETE" }), ctx(id))).json()).toEqual({ ok: true, queued: true });
+    actOnWorkerItem.mockResolvedValueOnce({ cardId: "run-1" });
+    expect(await (await runRoute.POST(req(`/crons/${id}/run`, { method: "POST" }), ctx(id))).json()).toEqual({ cardId: "run-1" });
+    expect(actOnWorkerItem.mock.calls).toEqual([
+      [id, "cron.update", { patch: { enabled: false } }],
+      [id, "cron.delete"],
+      [id, "cron.run"],
+    ]);
     expect(updateCron).not.toHaveBeenCalled();
     expect(deleteCron).not.toHaveBeenCalled();
     expect(runCron).not.toHaveBeenCalled();
+  });
+
+  it("answers the worker's refusal as an error, and needs Weft's own window", async () => {
+    const id = "worker:w1:c9";
+    actOnWorkerItem.mockRejectedValueOnce(new Error("No such cron."));
+    const res = await idRoute.PATCH(req(`/crons/${id}`, { method: "PATCH", body: { enabled: false } }), ctx(id));
+    expect([res.status, await res.json()]).toEqual([400, { error: "No such cron." }]);
+    const old = process.env.WEFT_SHELL_TOKEN;
+    process.env.WEFT_SHELL_TOKEN = "t".repeat(32);
+    try {
+      expect((await idRoute.DELETE(req(`/crons/${id}`, { method: "DELETE" }), ctx(id))).status).toBe(403);
+      expect((await runRoute.POST(req(`/crons/${id}/run`, { method: "POST" }), ctx(id))).status).toBe(403);
+    } finally {
+      if (old === undefined) delete process.env.WEFT_SHELL_TOKEN;
+      else process.env.WEFT_SHELL_TOKEN = old;
+    }
   });
 
   it("rejects a foreign host", async () => {

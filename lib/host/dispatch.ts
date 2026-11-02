@@ -5,7 +5,8 @@
 // rule and the elevated verbs it keeps while a phone is paired, a worker's pasted-file transfer.
 import { answerBody, answerGrant, replyBody, stopBody, type AnswerPayload, type CloudCommandRow, type GrantScope } from "../cloud-commands";
 import type { HostVerb } from "../host-api";
-import { hostResult, readHostCommand, remoteRefusal, textArgOf, verbResult, type HostDone, type HostPayload } from "../host-command";
+import { isListVerb, type ListVerb } from "@weft/client";
+import { hostResult, readHostCommand, remoteRefusal, textArgOf, verbResult, type HostArgs, type HostDone, type HostPayload } from "../host-command";
 import { carriesValue, valueResult, type Carry } from "../host-result";
 import type { Card } from "../types";
 import type { Done } from "./identity";
@@ -43,9 +44,13 @@ export interface CardRules {
   // card.create: makes the card the args name in the row's folder, and resolves with its id once it's published (a
   // worker). Without it the host makes cards through its own new_card kind (a Mac).
   create?(command: CloudCommandRow, args: Record<string, unknown>): Promise<string>;
+  // cron.* and webhook.*: runs one on a cron or webhook this host keeps, past remoteRefusal, and resolves with the card a
+  // run made (or null). Without it the host refuses them from the network (a Mac: its own are changed in its window).
+  lists?(verb: ListVerb, args: HostArgs): Promise<string | null>;
 }
 
 const NO_CREATE = "This host starts new threads through new_card, not card.create.";
+export const NO_LISTS = "This Mac's crons and webhooks change only in its own window (its ⏰ and 🪝 drawers, or a thread there), not from the network.";
 
 // A host verb's answer as an answer kind: the same payload, so the same approval rule and a phone's signature
 // (args.auth) over the same fields. It needs the request's pendingId, as the answer kind does.
@@ -113,6 +118,7 @@ export function cardKinds(rules: CardRules) {
       return { cardId, result: hostResult(cardId) };
     }
     if (body.verb === "card.create") return create(command, body);
+    if (isListVerb(body.verb)) return list(body.verb, body);
     const card = rules.card(body.args.id, command, "reached");
     const refused = remoteRefusal(body) ?? (await rules.elevated?.(body.verb, body.args));
     if (refused) throw new Error(refused);
@@ -130,6 +136,16 @@ export function cardKinds(rules: CardRules) {
     if (refused) throw new Error(refused);
     const cardId = await rules.create(command, await received(command, body.args, textArgOf(body.verb)));
     return { cardId, result: hostResult(cardId) };
+  }
+
+  // A cron or webhook the host keeps: args.id is the item, so there's no card to check, only remoteRefusal's limits. The
+  // row's card_id stays empty (it may name only a card this host published); `result` names a run's card.
+  async function list(verb: ListVerb, body: HostPayload): Promise<HostDone> {
+    if (!rules.lists) throw new Error(NO_LISTS);
+    const refused = remoteRefusal(body);
+    if (refused) throw new Error(refused);
+    const made = await rules.lists(verb, body.args);
+    return { cardId: null, result: hostResult(made ?? "") };
   }
 
   return { reply, answer, stop, host };

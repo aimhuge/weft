@@ -8,6 +8,8 @@
 // board never asks whether a card is a worker's: the worker:// check lives here and in lib/worker-project.ts.
 import { api, call, type NewCardInput } from "./client";
 import { filesApi } from "./client-files";
+import { cronApi } from "./cron-client";
+import type { CronPatch } from "./cron-types";
 import type { FilesSource } from "./files-source";
 import { localRead, type ReadProject } from "./project-reads";
 import { cloudRead } from "./project-snapshot-view";
@@ -18,6 +20,7 @@ import type { HostVerb } from "./host-api/types";
 import type { HostArgs } from "./host-command";
 import { localTransport, type ThreadTransport } from "./thread-transport";
 import type { Backend, Card, QuestionReply } from "./types";
+import type { WebhookPatch } from "./webhook-types";
 import { localToolSource, type ToolResultSource } from "./use-tool-result";
 import type { ActResult } from "./worker-acts";
 import { workerFiles } from "./worker-files";
@@ -34,8 +37,10 @@ import { actOnLine, lineFiles, lineTransport, warmOnLine } from "./line-host";
 // `projectActs` what they start from this Mac's store and server: a re-scout, the commit walk-through and the sprint
 // plan, whose prompts point at the Mac's own routes. `cron` is the header's ⏰, this Mac's crons; `settings` says this
 // Mac's Settings (the backup model) speak for the card. `share` a weft.zip link to the card's cloud rows; `delete` card.delete.
+// `lists` is the ⏰ and 🪝 drawers' changes to a cron or webhook the host keeps (cron.*, webhook.*); `relay` a webhook's
+// public URL and tunnel from the 🪝 drawer, and adding one by hand there, which are this Mac's (a worker's threads do it).
 export type HostFeature =
-  | "files" | "reads" | "projectActs" | "shots" | "pane" | "folder" | "agent" | "shell" | "skills" | "runSkill" | "share" | "delete" | "login" | "vault" | "dev" | "schedule" | "cron" | "settings";
+  | "files" | "reads" | "projectActs" | "shots" | "pane" | "folder" | "agent" | "shell" | "skills" | "runSkill" | "share" | "delete" | "login" | "vault" | "dev" | "schedule" | "cron" | "settings" | "lists" | "relay";
 
 export interface ProjectHost {
   kind: "local" | "cloud";
@@ -92,6 +97,12 @@ const LOCAL: Record<HostVerb, LocalCall> = {
   "files.write": (a) => filesApi.write(a.id, text(a.path), text(a.text), a.baseHash as string | null | undefined),
   "dev.open": (a) => call("POST", `/api/cards/${a.id}/dev`, { action: "open" }),
   "dev.stop": (a) => api.devAction(a.id, "stop"),
+  // The ⏰ and 🪝 drawers' routes (lib/cron-client.ts, lib/client-api.ts); a.id is the cron's or webhook's.
+  "cron.update": (a) => cronApi.update(a.id, a.patch as CronPatch),
+  "cron.delete": (a) => cronApi.remove(a.id),
+  "cron.run": (a) => cronApi.run(a.id),
+  "webhook.update": (a) => api.updateWebhook(a.id, a.patch as WebhookPatch),
+  "webhook.delete": (a) => api.removeWebhook(a.id),
 };
 
 export const localHost: ProjectHost = {
@@ -111,9 +122,10 @@ export const localHost: ProjectHost = {
 
 // What a Worker has today: its cards' own verbs, the thread and its pages, Send later, a skill run as a message, its
 // files through the file verbs and the header's reads through its snapshots (H4). Share… reads the card's cloud rows,
-// which a worker publishes like a Mac's outbox (lib/card-share-worker.ts), and Delete is card.delete. Not this Mac's
+// which a worker publishes like a Mac's outbox (lib/card-share-worker.ts), and Delete is card.delete. Its crons and
+// webhooks change from the Mac's drawers (lists). Not this Mac's
 // pane, vault or CLIs.
-const CLOUD_FEATURES = new Set<HostFeature>(["schedule", "files", "reads", "runSkill", "share", "delete"]);
+const CLOUD_FEATURES = new Set<HostFeature>(["schedule", "files", "reads", "runSkill", "share", "delete", "lists"]);
 
 export const cloudHost: ProjectHost = {
   kind: "cloud",
