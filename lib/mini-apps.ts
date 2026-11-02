@@ -12,6 +12,9 @@ export interface MiniApp {
   name: string;
   url: string;
   addedAt: number;
+  // The page it was saved from when that wasn't its own address: a worker card's blob page (blob:sha256:<hex>), kept
+  // here on this Mac as a file (lib/mini-app-worker.ts), so the pane's Save as app knows that page is this app.
+  source?: string;
   // Its share link as last read from Supabase (lib/app-share.ts), so the Share dialog and My mini apps draw at once.
   share?: AppShareMemo;
 }
@@ -36,6 +39,12 @@ export function cleanAppUrl(raw: unknown): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+// The sha of a page a worker card showed (a blob in the workspace's store, lib/worker-pane.ts), or null for any other
+// address. Saving one as an app brings the page to this Mac first (lib/mini-app-worker.ts).
+export function blobPageSha(raw: unknown): string | null {
+  return typeof raw === "string" ? (/^blob:sha256:([0-9a-f]{64})(#.*)?$/.exec(raw.trim())?.[1] ?? null) : null;
 }
 
 export function cleanAppName(raw: unknown): string | undefined {
@@ -70,7 +79,7 @@ export function appGlyph(name: string): { text: string; emoji: boolean; hue: num
 export function appFor(apps: readonly MiniApp[], url: string | undefined): MiniApp | undefined {
   if (!url) return undefined;
   const bare = (u: string) => u.replace(/#.*$/, "");
-  const exact = apps.find((a) => a.url === url) ?? apps.find((a) => bare(a.url) === bare(url));
+  const exact = apps.find((a) => a.url === url) ?? apps.find((a) => bare(a.url) === bare(url) || (a.source !== undefined && bare(a.source) === bare(url)));
   if (exact) return exact;
   return apps
     .filter((a) => url.startsWith(bare(a.url).replace(/\/?$/, "/")))

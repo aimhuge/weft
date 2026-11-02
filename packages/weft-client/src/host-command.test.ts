@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hostCommand, hostFailure, hostResult, isHostDone, readHostCommand, remoteRefusal, textArgOf, verbResult } from "./host-command";
+import { DEV_LOG_MAX, hostCommand, hostFailure, hostResult, isHostDone, readHostCommand, remoteRefusal, tailBytes, textArgOf, verbResult } from "./host-command";
 
 const target = { orgId: "org-1", device: "worker:w-1", folder: "weft", cardId: "card-1" };
 const read = (payload: unknown) => readHostCommand({ payload });
@@ -111,6 +111,24 @@ describe("results and typed text", () => {
     expect(verbResult("dev.open", "c", { address: "https://weft.zip/t/t1" })).toEqual({ ok: true, cardId: "c", address: "https://weft.zip/t/t1" });
     expect((verbResult("dev.open", "c", { address: `https://weft.zip/t/${"a".repeat(900)}` }) as { address: string }).address).toHaveLength(500);
     expect(verbResult("dev.open", "c", undefined)).toEqual({ ok: true, cardId: "c" });
+  });
+
+  it("carries dev.log's newest lines, held under the byte cap, and nothing when there's none", () => {
+    expect(verbResult("dev.log", "c", { log: "ready on :3000" })).toEqual({ ok: true, cardId: "c", log: "ready on :3000" });
+    const long = (verbResult("dev.log", "c", { log: `old\n${"x".repeat(5000)}end` }) as { log: string }).log;
+    expect(long).toHaveLength(DEV_LOG_MAX);
+    expect(long.endsWith("end")).toBe(true);
+    expect(verbResult("dev.log", "c", { log: 7 })).toEqual({ ok: true, cardId: "c" });
+  });
+});
+
+describe("tailBytes", () => {
+  it("keeps the end of a text inside the byte budget, counting wide characters", () => {
+    expect(tailBytes("short", 10)).toBe("short");
+    const wide = tailBytes(`start${"界".repeat(2000)}`, 100);
+    expect(new TextEncoder().encode(wide).length).toBeLessThanOrEqual(100);
+    expect(wide.endsWith("界")).toBe(true);
+    expect(new TextEncoder().encode(tailBytes("🙂".repeat(50), 9)).length).toBeLessThanOrEqual(9);
   });
 });
 

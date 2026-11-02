@@ -62,6 +62,13 @@ describe("saveApp", () => {
     expect(readApps()).toEqual([saved]);
   });
 
+  it("keeps the page an app was saved from, when it isn't the app's own address", async () => {
+    const { apps } = await load();
+    const saved = apps.saveApp("file:///tmp/index.html", "Page", "blob:sha256:abc");
+    expect(saved.source).toBe("blob:sha256:abc");
+    expect(apps.saveApp("https://example.com").source).toBeUndefined();
+  });
+
   it("returns the existing app unchanged when saving a URL that is already saved without a name", async () => {
     const { apps } = await load();
     const first = apps.saveApp("https://example.com", "First");

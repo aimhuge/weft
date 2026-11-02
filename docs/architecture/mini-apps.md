@@ -31,6 +31,19 @@ A mini app is a page from the browser pane, saved so it is one click away on the
    button so a save shows on the rail at once. Every change goes to the server and then reloads the list from it.
    The list also reloads when the window gets focus, so an app saved elsewhere (a thread calling the route) shows up.
 
+## From a worker card
+
+The pane beside a worker card (`components/WorkerPane.tsx`) has Save as app too, on a page the card wrote: a blob page,
+`blob:sha256:<hex>`, framed through this Mac's server (T5, project-hosts.md#drawers-and-mini-apps-on-a-worker-project-t5-as-built).
+An app is a page this Mac's pane opens, so `POST /api/apps` with that address brings the page home first
+(`lib/mini-app-worker.ts`): it reads the blob with the account's own session (RLS keeps it to your workspace), refuses
+anything but HTML, writes it to `~/.weft/apps/worker-<first 16 of the sha>/index.html` (where a cloud sync pull puts an
+app) and saves it under the name given, else the page's `<title>`, with `source` naming the blob (`MiniApp.source`), so
+`appFor` lights the button on that page. From there it is an ordinary app: the rail opens it on this Mac,
+`cloud_mini_apps` carries it to your other Macs, and Share… serves it at `weft.zip/a/<id>` and the owner's links, on the
+web and the phone. A worker page is one file today, so nothing beside it comes along. The weft.zip board's pane has no
+Save as app: mini apps live on a Mac.
+
 ## Sharing an app
 
 Views are unlimited and links uncounted on every plan; a plan caps the bytes a workspace's open links serve

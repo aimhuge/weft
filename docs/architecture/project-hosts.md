@@ -3,7 +3,8 @@
 Status: **design** (2026-11-01, merged with "one engine, two transports" 2026-11-02). Phase H1 is in progress; H2 (the
 `host` command) is built ([below](#the-host-command-h2-as-built)), and so is H3, `hostFor` and one open card
 ([below](#hostfor-and-one-open-card-h3-as-built)), and H3b, composer parity ([below](#composer-parity-h3b-as-built)), and H5, one host program ([below](#one-host-program-h5-as-built)), and H4, project reads and the editor
-([below](#project-reads-and-the-editor-h4-as-built)). It follows on from [weft-worker.md](weft-worker.md#worker-projects-on-the-desktop-board),
+([below](#project-reads-and-the-editor-h4-as-built)), and T5, the rail's drawers and mini apps
+([below](#drawers-and-mini-apps-on-a-worker-project-t5-as-built)). It follows on from [weft-worker.md](weft-worker.md#worker-projects-on-the-desktop-board),
 where a Worker project shows on the desktop board but most of what a local project gets drops out.
 
 ## The problem
@@ -40,6 +41,7 @@ engine: the daemon runs the same `lib/runner.ts`.
 | Review panel, skills chip | `desktop: true` | none |
 | Show rail, editor | Board's open card | the show rail, in Board's own open card (H3); the editor and file links through `files.*` (H4) |
 | Backlog | Backlog column | the header's count from the worker's snapshot (H4); no Backlog column or planning |
+| Rail drawers, mini apps | the project's folder | 🔐 and the provider drawers through this Mac's checkout of the repo; Services with Log, Restart and Stop; issues as runs; Save as app on its pages (T5) |
 | Streaming | SSE | a 2.5 s poll |
 | weft.zip and the phone | | reply, answer, stop and new card, and since H2 any verb as a `host` command (`cloud-inbox-cards.ts`, the same `runVerb`); the phone still has its own copy of the command shapes |
 
@@ -519,9 +521,60 @@ editor: OpenCard ─ FilesSourceContext = host.files ─┬─ local: filesApi (
   A Mac's inbox runs these verbs only where the web may approve. Snapshot roots are the folder's name, never a worker's
   absolute path.
 - **Not yet.** Live reload of a worker's open file (events over the H6 line); the streak counting a worker's turns; the
-  commit walk-through, sprint plan and re-scout on a worker project; Realtime on `cloud_worker_projects` (the board polls on
-  turn ticks and focus); blob GC for results; the terminal and drawers (vault, dev servers) on a worker project; the
+  sprint plan and re-scout on a worker project (the commit walk-through came in T5); Realtime on `cloud_worker_projects` (the board polls on
+  turn ticks and focus); blob GC for results; the terminal on a worker project (the drawers came in T5); the
   `@weft/client` `HOST_VERBS` list (H9a) must add `files.list`, `files.read` and `files.write` when it lands.
+
+### Drawers and mini apps on a worker project (T5, as built)
+
+```
+rail:  Board ctx.project (a worker's path too) ─ railProjects(project, folders, vaults) (lib/rail-project.ts)
+         ├─ host.can("vault")? the project : repo = twinOf / twinByRepo (lib/worker-twin.ts) ─▶ 🔐 ▲ Supabase Cloudflare BlastCP Slack ✦
+         └─ host = the project itself ─────────────────────────────────────────────────────▶ 🖥 Services, GitHub, 🪝
+Services: WorkerDevServers ─ shownWorkerDev (lib/worker-dev-view.ts) ─ Log / Restart / Stop ─ askWorker("dev.log") / actOnWorker("dev.restart" | "dev.stop")
+GitHub:   /api/github/issues { folder: worker://w/app } ─ runSync ─ syncWorkerIssues (lib/issue-worker.ts) ─ this Mac's gh in the twin ─ sendRun ─▶ `run` on the worker
+apps:     WorkerPane ─ SaveAppButton(blob:sha256:…) ─ POST /api/apps ─ saveWorkerPageApp (lib/mini-app-worker.ts) ─ ~/.weft/apps/worker-<sha>/index.html ─ saveApp(file:…, source)
+badges:   PileBadge ─ fetchPileReview ─ host can't projectActs, can reads ─ workerPilePrompt(snapshot pile) (lib/pile-worker.ts) ─ a card on the worker
+```
+
+- **The twin.** A worker names a project by its folder under the work root, which is the repo's name for a checkout
+  cloned there (and the basename `lib/worker-handoff.ts` sends). `lib/worker-twin.ts` finds this Mac's folder of that
+  name (`twinOf`), else the vault whose `owner/name` label ends in it (`twinByRepo`): the same rule main uses to pick a
+  worker card's vault (`electron/worker-projects.cjs`). Names only: the values stay behind Touch ID in main.
+- **Which drawer reads what** (`lib/rail-project.ts`, gated on `hostFor(project).can("vault")`, which a worker's host
+  answers false): what is per repo (🔐 vault, ▲ Vercel, Supabase, Cloudflare, BlastCP, Slack, ✦ Skills) reads the twin;
+  what is per host (🖥 Services, GitHub's issue sync, 🪝 webhooks) reads the worker project itself. With no twin the
+  per-repo drawers get the worker path, which matches none of this Mac's folders, so they show nothing for it rather than
+  every project. `Board.tsx` now hands the rail the project as it is (`ctx.project`), not `localPath`.
+- **Services** (dev-servers.md#on-a-worker): two more host verbs, `dev.restart` (the run's own command again, through
+  `restartDev`) and `dev.log` (its last 40 lines, key-shaped text hidden by `redactText`, then held under 2,500 UTF-8
+  bytes by `verbResult`'s `tailBytes`, so the row stays under its 4 KB cap). Both refuse a server a thread started in its
+  own shell ("can only stop it"), and neither is elevated: they widen nothing. Locally they mount on `POST
+  /api/cards/:id/dev` as `rerun` and `log` (`restart` stays the review tour's plan). The drawer's worker rows gain Log
+  (read into the row, a second click hides it), Restart (Start once the run ended) beside Stop, and a worker project
+  shows only that worker's checkout (`shownWorkerDev`).
+- **GitHub issues into a worker project** (github-issues.md#on-a-worker): the drawer asks about the worker project in
+  view too (`githubFolders`); its repo is read with this Mac's `gh` in the twin (`workerIssueRepo`, used by
+  `lib/github-status.ts` and the sync). `syncIssues(worker path)` sends each new open issue as a `run` (`sendRun`, now
+  carrying a title and tags, `runCommand`), with the project's validation skill first, recording each in the same
+  `github-issues.json` as it goes (`lib/issue-record.ts`, extracted from `lib/github-issues.ts`), so a repo synced on
+  both hosts makes each card once and a failure part way never sends one twice. Only the Run landing works: Backlog and
+  Needs you need a card made and left unstarted, which a worker refuses until `card.create` lands (WP2, PR #45), so
+  those say so (`WORKER_BACKLOG_LATER`). A card it sent has started, so sync never touches it again, as on a Mac. The
+  project's agent isn't sent: a worker refuses an agent from the network (`remoteRefusal`).
+- **Mini apps from a worker card** (mini-apps.md#from-a-worker-card): the worker card's pane (`components/WorkerPane.tsx`)
+  shows Save as app on a page the card wrote (a `blob:sha256:` page). `POST /api/apps` with that address reads the blob
+  with the account's session (RLS: your workspace), refuses anything but HTML, writes it to
+  `~/.weft/apps/worker-<sha16>/index.html` (where a cloud sync pull puts an app) and saves it with `source` naming the
+  blob, so `appFor` lights the button on that page. From there it's an ordinary app: the rail opens it on this Mac,
+  `cloud_mini_apps` carries it to your other Macs, and Share… serves it at `weft.zip/a/<id>` (the same bytes, already in
+  the store). A page's sibling assets don't come along (a worker page is one file today).
+- **Badges.** H4's snapshot already fed quality, the scout, the pile and Backlog. The pile's commit walk-through now
+  works on a worker project: `fetchPileReview` writes its prompt from the snapshot's pile (`lib/pile-worker.ts`: the
+  counts, plain `git add -- … && git commit -- …` by path, the same never-stash rules) and the card starts on the worker.
+  Re-scout and the sprint plan still say "not on a worker's projects yet".
+- **Not in T5.** 🪝 webhooks and ⏰ crons for a worker project wait on T1 (PR #43, open when T5 was built): the 🪝
+  drawer reads the worker project and so shows none. The worker's own secrets list is T2. No migration.
 
 ## Security
 

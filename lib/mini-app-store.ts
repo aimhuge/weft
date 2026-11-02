@@ -30,8 +30,9 @@ function find(apps: readonly MiniApp[], id: unknown): MiniApp {
   return app;
 }
 
-// A page saved as an app; saving one that's already there renames it.
-export function saveApp(rawUrl: unknown, rawName?: unknown): MiniApp {
+// A page saved as an app; saving one that's already there renames it. `source` is the page it came from when that
+// isn't its own address (a worker card's blob page, lib/mini-app-worker.ts).
+export function saveApp(rawUrl: unknown, rawName?: unknown, source?: string): MiniApp {
   const url = cleanAppUrl(rawUrl);
   if (!url) throw new Error("An app is a web page or a local file (http, https or file).");
   const saved = listApps();
@@ -39,7 +40,7 @@ export function saveApp(rawUrl: unknown, rawName?: unknown): MiniApp {
   const already = saved.find((a) => a.url === url);
   if (already && !named) return already;
   const name = named ?? appNameFrom(undefined, url);
-  const apps = upsertApp(saved, { id: crypto.randomUUID(), name, url, addedAt: Date.now() });
+  const apps = upsertApp(saved, { id: crypto.randomUUID(), name, url, addedAt: Date.now(), ...(source && { source }) });
   writeApps(apps);
   return find(apps, apps.find((a) => a.url === url)?.id);
 }

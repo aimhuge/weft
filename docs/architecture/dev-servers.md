@@ -111,7 +111,13 @@ Built 2026-11-02 (migration `20261102190000_worker_tunnels.sql`, not applied). `
   after your Touch ID on this Mac (tunnels.md#on-a-worker) and answers the address in the command's `result`. It waits
   up to 6 minutes for that, since a person is involved. **Stop** sends `dev.stop`. The pane is the native one, so `/t`
   needs a weft.zip sign-in there once.
-- **Locally** the same verbs mount on `POST /api/cards/:id/dev` as `open` and `stop`.
+- **Log, Restart** (T5, project-hosts.md#drawers-and-mini-apps-on-a-worker-project-t5-as-built): a run Weft started
+  also has Log, which sends `dev.log` and draws the run's last 40 lines in the row (key-shaped text hidden, held under
+  2,500 bytes for the command's `result`; a second click hides it), and Restart (`dev.restart`, the run's own command
+  again; Start once it ended). A server a thread started in its own shell is stop-only, as on the Mac. With a worker
+  project picked, only that worker's checkout shows (`lib/worker-dev-view.ts`); with a project on this Mac, a worker's
+  checkout of the same name.
+- **Locally** the same verbs mount on `POST /api/cards/:id/dev` as `open`, `stop`, `rerun` and `log`.
 - **The vault's env** (H8): `devSecrets` (`lib/secret-run.ts`) gives a worker's run `{}` until the sealed `secret_use`
   lands; the hook is that call in `startDev`.
 

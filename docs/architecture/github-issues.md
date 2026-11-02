@@ -82,6 +82,19 @@ The 5-minute poll keeps running, so a missed event (Weft closed, Realtime reconn
 - The relay ships with every push to `main` (the `weft` Vercel project builds this repo); `SUPABASE_SECRET_KEY` is a
   Supabase secret key (`sb_secret_…`) for Weft Prod, listed in `.env.example`.
 
+## On a worker
+
+A project on a Weft Worker syncs its issues too (T5, project-hosts.md#drawers-and-mini-apps-on-a-worker-project-t5-as-built).
+The GitHub drawer lists the worker project in view beside this Mac's folders, and its switch sends the worker path to
+`/api/github/issues`. `gh` still runs on this Mac: the repo is read in this Mac's checkout of the project, found by its
+folder name (`lib/worker-twin.ts`, `workerIssueRepo` in `lib/issue-worker.ts`), and a worker project with none here says
+to open it on this Mac once. Each new open issue goes to the worker as a `run` command with the issue's title and labels
+(`sendRun`), the validation skill first, and is recorded in the same `github-issues.json` as it goes
+(`lib/issue-record.ts`), so a repo synced on this Mac and on a worker makes each card once. Only the **Run** landing
+works: Backlog and Needs you need an unstarted card, which a worker refuses until `card.create` lands (WP2), so the sync
+says so. A sent card has started, so sync never changes it again. The project's agent isn't sent: a worker refuses an
+agent named from the network.
+
 ## How it works
 
 `lib/github-issues.ts` reads issues through the `gh` CLI (`execFile`, no shell), so it uses your existing

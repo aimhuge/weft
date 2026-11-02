@@ -27,6 +27,9 @@ export const HOST_VERBS = [
   "files.write",
   "dev.open",
   "dev.stop",
+  // T5: the Services drawer's Restart and Log on a worker's dev server.
+  "dev.restart",
+  "dev.log",
 ] as const;
 
 /** Every verb a host runs. HOST_API is keyed by these, and it is the allowlist a remote host checks. */

@@ -83,6 +83,8 @@ const LOCAL: Record<HostVerb, LocalCall> = {
   "files.write": (a) => filesApi.write(a.id, text(a.path), text(a.text), a.baseHash as string | null | undefined),
   "dev.open": (a) => call("POST", `/api/cards/${a.id}/dev`, { action: "open" }),
   "dev.stop": (a) => api.devAction(a.id, "stop"),
+  "dev.restart": (a) => call("POST", `/api/cards/${a.id}/dev`, { action: "rerun" }),
+  "dev.log": (a) => call("POST", `/api/cards/${a.id}/dev`, { action: "log" }),
 };
 
 export const localHost: ProjectHost = {
