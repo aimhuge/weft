@@ -91,6 +91,16 @@ describe("a new card from weft.zip's form", () => {
     expect(control.made.at(-1)).toMatchObject({ permissionMode: "default" });
   });
 
+  it("files a card a Weft Worker sent in Backlog, in default, tagged, whatever it asks for", async () => {
+    control.defaultMode = "bypassPermissions";
+    blobs.set(`org1/${SHA}`, PNG);
+    await run(command({ payload: { prompt: pasted, attachments, permissionMode: "auto", tags: ["x"], fromWorker: "w-1" } as never }));
+    expect(control.made.at(-1)).toMatchObject({ prompt: pasted, permissionMode: "default", start: false, tags: ["x", "from-worker"] });
+    expect(control.startCard).not.toHaveBeenCalled();
+    expect(fs.existsSync(path.join(dataDir, "attachments", NAME))).toBe(false);
+    expect(reports()).toEqual([{ status: "done", card_id: expect.any(String) as string }]);
+  });
+
   it("brings a pasted file over before the card starts, and points its prompt at the copy", async () => {
     blobs.set(`org1/${SHA}`, PNG);
     await run(command({ payload: { prompt: pasted, attachments } as never }));

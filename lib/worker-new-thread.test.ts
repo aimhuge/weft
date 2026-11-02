@@ -9,7 +9,7 @@ const syncOrgId = vi.fn<(client: unknown, uid: string) => Promise<string | null>
 vi.mock("./cloud-sync", () => ({ syncOrgId: (client: unknown, uid: string) => syncOrgId(client, uid) }));
 
 const { startWorkerThread, createArgs } = await import("./worker-new-thread");
-const { FRESH_AFTER_MS, SLOW_OFFLINE_AFTER_MS } = await import("./worker-presence");
+const { ABSENT_OFFLINE_AFTER_MS, SLOW_OFFLINE_AFTER_MS } = await import("./worker-presence");
 
 const NOW = Date.parse("2026-10-29T10:00:00.000Z");
 
@@ -70,7 +70,7 @@ describe("startWorkerThread", () => {
   });
 
   it("asks presence whether the worker is up", async () => {
-    const quiet = workerRow({ last_seen_at: new Date(NOW - FRESH_AFTER_MS - 1).toISOString() });
+    const quiet = workerRow({ last_seen_at: new Date(NOW - ABSENT_OFFLINE_AFTER_MS - 1).toISOString() });
     const gone = { read: vi.fn(() => Promise.resolve({ known: new Set(["w1"]), present: new Map() })) };
     await expect(startWorkerThread({ cwd: "worker://w1/ling", prompt: "go" }, fakeClient({ workers: [quiet] }).client, NOW, undefined, gone)).rejects.toThrow("m1mini is offline");
     expect(gone.read).toHaveBeenCalledWith(expect.any(Function), ["w1"], { owner: "u-1" });

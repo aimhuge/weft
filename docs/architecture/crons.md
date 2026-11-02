@@ -62,6 +62,17 @@ in every thread and the copilot, trusted like `create_card` (`CRON_TOOL_NAMES` i
 `create_cron` forks itself by default. `cron-tools` loads `cron-run` only when a run fires: `cron-run` reaches the
 runner, which builds these tools.
 
+## On a Weft Worker
+
+A cron lives where its runs fire: its cards work in a checkout and a fork resumes a session on that host's disk. So a
+cron a thread makes on a worker is the worker's (its own `crons.json`, fired by the worker's own `startCronClock`,
+started after recovery), and `create_cron` there refuses a folder or source card that isn't the worker's. The worker
+publishes its whole list after every `crons` event (`lib/worker-lists.ts` → `worker_set_lists` → `cloud_worker_lists`,
+owner-only), and the Mac's `GET /api/crons` adds them (`lib/worker-lists-read.ts`) with their `worker://` folder, an id
+`worker:<worker>:<cron>` and `worker` set to its name, so the ⏰ drawer and count include them. The Mac refuses to
+change, delete or run one (that's a thread on the worker), and `list_crons` on a worker lists only the worker's.
+Details: [project-hosts.md](project-hosts.md#board-tools-on-a-worker).
+
 ## Crons Weft runs for itself
 
 Two crons are not a user's scheduled job but Weft's own upkeep, both in `~/.weft/crons.json` and both made
