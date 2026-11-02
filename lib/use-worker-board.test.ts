@@ -303,6 +303,24 @@ describe("workerThreadHandlers", () => {
     const handlers = workerThreadHandlers(card(), ctx);
     handlers.onClose();
     expect(ctx.select).toHaveBeenCalledWith(null);
+    ctx.select.mockClear();
+    handlers.onDeleted();
+    expect(ctx.select).toHaveBeenCalledWith(null);
+  });
+
+  it("deletes the card on its worker with card.delete, closing the thread at once", async () => {
+    workerThreadHandlers(card(), ctx).onDelete();
+    expect(ctx.select).toHaveBeenCalledWith(null);
+    await Promise.resolve();
+    expect(hostAct).toHaveBeenCalledWith("card.delete", { id: "c1" });
+  });
+
+  it("says so when the worker refuses a delete", async () => {
+    const boom = new Error("That thread isn't on this worker.");
+    hostAct.mockRejectedValueOnce(boom);
+    workerThreadHandlers(card(), ctx).onDelete();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(ctx.notify).toHaveBeenCalledWith(boom);
   });
 
   it("changes the mode on its worker with the menu's own verb, drawn at once", async () => {

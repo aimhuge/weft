@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const api = vi.hoisted(() => ({
   stop: vi.fn(),
+  remove: vi.fn(),
   shell: vi.fn(),
   fresh: vi.fn(),
   send: vi.fn(),
@@ -82,6 +83,7 @@ describe("localHost", () => {
 
   it.each([
     ["card.stop", { id: "c1" }, api.stop, ["c1"]],
+    ["card.delete", { id: "c1" }, api.remove, ["c1"]],
     ["card.shell", { id: "c1", command: "ls" }, api.shell, ["c1", "ls"]],
     ["card.shell", { id: "c1" }, api.shell, ["c1", ""]],
     ["card.fresh", { id: "c1", message: "go" }, api.fresh, ["c1", "go"]],
@@ -120,10 +122,10 @@ describe("cloudHost", () => {
     expect(cloudHost.tools).toBe("worker tools");
   });
 
-  it("has none of this Mac's own features, but holds Send later's timer itself", () => {
-    for (const feature of ["files", "shots", "pane", "folder", "agent", "shell", "skills", "share", "delete", "login", "vault", "dev"] as const)
+  it("has none of this Mac's own features, but holds Send later's timer, shares its cloud rows and deletes", () => {
+    for (const feature of ["files", "shots", "pane", "folder", "agent", "shell", "skills", "login", "vault", "dev"] as const)
       expect(cloudHost.can(feature)).toBe(false);
-    expect(cloudHost.can("schedule")).toBe(true);
+    for (const feature of ["schedule", "share", "delete"] as const) expect(cloudHost.can(feature)).toBe(true);
     expect(localHost.can("schedule")).toBe(true);
   });
 
@@ -135,7 +137,10 @@ describe("cloudHost", () => {
   });
 
   it("trims the menu to what a worker backs", () => {
-    expect(cloudHost.menu([{ id: "rename", label: "Rename…" }, { id: "delete", label: "Delete…" }])).toEqual([{ id: "rename", label: "Rename…" }]);
+    expect(cloudHost.menu([{ id: "rename", label: "Rename…" }, { id: "reveal", label: "Reveal" }, { id: "delete", label: "Delete…" }])).toEqual([
+      { id: "rename", label: "Rename…" },
+      { id: "delete", label: "Delete…" },
+    ]);
   });
 });
 

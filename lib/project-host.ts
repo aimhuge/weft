@@ -24,7 +24,8 @@ import { actOnLine, lineTransport } from "./line-host";
 // editor and the thread's file links (H4), `shots` the show rail's page pictures (lib/page-shots.ts), `pane` the native
 // browser pane; `folder`, `agent` and `shell` widen what a card can touch, so a remote host refuses them from the network.
 // `skills` is the skill set chip (which skills a card gets); the "/" list is the transport's listSkills on every host.
-// `schedule` is Send later, which both hosts hold the timer for (card.schedule).
+// `schedule` is Send later, which both hosts hold the timer for (card.schedule); `share` a weft.zip link to the card's
+// cloud rows; `delete` card.delete.
 export type HostFeature = "files" | "shots" | "pane" | "folder" | "agent" | "shell" | "skills" | "share" | "delete" | "login" | "vault" | "dev" | "schedule";
 
 export interface ProjectHost {
@@ -51,6 +52,7 @@ const given = <T extends unknown[]>(...args: T) => {
 const LOCAL: Record<HostVerb, LocalCall> = {
   "card.update": (a) => call("PATCH", `/api/cards/${a.id}`, a.body),
   "card.stop": (a) => api.stop(a.id),
+  "card.delete": (a) => api.remove(a.id),
   "card.shell": (a) => api.shell(a.id, text(a.command)),
   "card.fresh": (a) => api.fresh(a.id, text(a.message)),
   "card.message": (a) => api.send(a.id, text(a.text)),
@@ -82,7 +84,9 @@ export const localHost: ProjectHost = {
 };
 
 // What a Worker has today: its cards' own verbs, the thread and its pages. Not this Mac's files, pane, vault or CLIs.
-const CLOUD_FEATURES = new Set<HostFeature>(["schedule"]);
+// Share… reads the card's cloud rows, which a worker publishes like a Mac's outbox (lib/card-share-worker.ts), and
+// Delete is card.delete.
+const CLOUD_FEATURES = new Set<HostFeature>(["schedule", "share", "delete"]);
 
 export const cloudHost: ProjectHost = {
   kind: "cloud",
