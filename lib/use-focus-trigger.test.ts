@@ -24,6 +24,9 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers();
+  // Two tests pin document.hidden on the document itself; dropping that brings back the real value, so a
+  // hidden window doesn't leak into the tests after them.
+  Reflect.deleteProperty(document, "hidden");
 });
 
 describe("useFocusTrigger", () => {
