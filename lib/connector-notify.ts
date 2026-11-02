@@ -25,7 +25,7 @@ export function connectorMailer(db: Pick<ConnectorDb, "userEmail">, env: Record<
   };
 }
 
-const FOOTER = "\n\nIf this wasn't you, open Weft → Settings → Devices on a Mac you trust, revoke it, and sign out of Weft everywhere (change your password).";
+const FOOTER = "\n\nIf this wasn't you, open Weft → Settings → Devices on a Mac you trust and revoke it, and sign out of Weft everywhere: someone may hold a session of yours.";
 
 // One notice: in the ledger, and by email when there's a mailer. workerId names the worker it's about, if any.
 export async function notice(deps: { db: ConnectorDb; notify?: Notify }, userId: string, o: { subject: string; text: string; workerId?: string | null }): Promise<void> {

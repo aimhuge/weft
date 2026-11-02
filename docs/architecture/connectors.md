@@ -167,9 +167,14 @@ pair a box of its own (the `worker_pair_*` functions are plain RPCs), insert a s
   then signs `weft-connector-endorse-v1` (`POST /api/connectors/signers/endorse`). A session can always take trust
   **away** (Remove: `DELETE /api/connectors/signers?id=`), which ends the grants that key signed, the worker pins it
   signed and the tokens under them; at worst that's a denial of service.
-- **Setup checks for this to hold.** Supabase Auth's **Secure email change** must be on (a session alone can't move the
-  account to an address it controls), and changing the password must sign out the account's other sessions, since that's
-  what the emails tell you to do.
+- **Setup checks for this to hold (done on Weft Prod, 2026-11-02).** Supabase Auth's **Secure email change** is on (a
+  session alone can't move the account to an address it controls, which would also move where the confirm links go),
+  changing the password needs the current password and reauthentication by an emailed code, and the email-changed and
+  password-changed notifications are on. Weft itself has no password flow: you sign in with GitHub or Google (OAuth) or
+  an emailed code, so there's no password change to end other sessions. What ends a stolen session is signing out
+  everywhere (`supabase.auth.signOut({ scope: "global" })`); Weft's Sign out is local only today, so a **Sign out
+  everywhere** action is a follow-up, and until it ships the emails' advice to "sign out everywhere" has no button
+  behind it.
 - **What remains: whoever controls the inbox controls trust.** A stolen session plus the account's email (or a mailbox
   rule forwarding it) confirms a key of the attacker's own. The vouch path doesn't have that weakness, but the first Mac
   has nobody to vouch for it.
@@ -371,7 +376,7 @@ box (a session can register a key; only the inbox or a trusted Mac can make it c
   ptrace or replace `node`, or swap the helper in and back out between two checks. P4/P5 again.
 - **Whoever controls your inbox controls trust.** A new Mac's key counts once the emailed link is opened (or a trusted Mac
   vouches for it). A stolen session that can also read your email can confirm a key of its own; the same email's
-  Revoke link, Remove in Settings and changing your password are the way back.
+  Revoke link, Remove in Settings and signing out everywhere (a follow-up: no button for it yet) are the way back.
 - **No mailer, no new keys.** A weft.zip without `RESEND_API_KEY` refuses to register a Mac key.
 - **A session can still deny service**: remove your keys, turn connectors off, disconnect. It can't turn anything on.
 - **Ask before a protected-branch push is a setting, not yet a gate.** Weft can't see a push's ref without a proxy; the

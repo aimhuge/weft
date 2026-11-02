@@ -11,7 +11,7 @@ const PATH = "/api/connectors/signers/revoke";
 
 export async function GET() {
   await connection();
-  return linkPage("Revoke this Mac key?", "It will approve nothing more, and what it turned on is turned off. Then change your password, which signs Weft out everywhere.", PATH, "Revoke this key");
+  return linkPage("Revoke this Mac key?", "It will approve nothing more, and what it turned on is turned off. Then sign out of Weft everywhere: someone may hold a session of yours.", PATH, "Revoke this key");
 }
 
 export async function POST(req: Request) {
@@ -21,7 +21,7 @@ export async function POST(req: Request) {
   const form = await req.formData().catch(() => null);
   try {
     await revokeByLink(deps, form?.get("id"), form?.get("t"), revokeSigner);
-    return donePage("Mac key revoked", "That key can't approve anything now. Change your Weft password next, which signs out every session.");
+    return donePage("Mac key revoked", "That key can't approve anything now. Next, sign out of Weft everywhere: someone may hold a session of yours.");
   } catch (err) {
     return donePage("Not revoked", (err as Error).message);
   }

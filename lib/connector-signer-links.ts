@@ -58,7 +58,7 @@ export async function mailConfirm(deps: TokenDeps, s: Pick<SignerRow, "id" | "us
     "If this was you, setting up Weft on a Mac, confirm it (the link works once, for 24 hours):",
     l.confirm,
     "",
-    "If it wasn't you, revoke the key (no sign-in needed), then change your password, which signs Weft out everywhere:",
+    "If it wasn't you, revoke the key (no sign-in needed), then sign out of Weft everywhere: someone may hold a session of yours.",
     l.revoke,
     "",
     "Until it's confirmed, or a Mac you already trust vouches for it in Settings → Devices, the key can approve nothing.",
