@@ -7,6 +7,15 @@ import type { ReactNode } from "react";
 import { setBoardMode } from "@/lib/board-prefs";
 import BoardHeader from "./BoardHeader";
 
+// The workers that haven't taken this Mac's passkey change (lib/use-passkey-sync.ts), per test.
+const untaken = vi.hoisted(() => ({ list: [] as string[], on: [] as boolean[] }));
+vi.mock("@/lib/use-passkey-sync", () => ({
+  usePasskeySync: (on: boolean) => {
+    untaken.on.push(on);
+    return untaken.list;
+  },
+}));
+
 type Fn = ReturnType<typeof vi.fn<() => void>>;
 interface FlatProps {
   mac: boolean;
@@ -113,5 +122,23 @@ describe("BoardHeader in Regular mode", () => {
     expect(screen.queryByRole("button", { name: "Share the board" })).toBeNull();
     for (const name of ["Browser", "Settings", "New thread"]) expect(screen.getByRole("button", { name })).toBeInTheDocument();
     document.cookie = "weft-board-mode=; path=/; max-age=0";
+  });
+});
+
+describe("BoardHeader passkey mark", () => {
+  it("marks Settings while a worker hasn't taken this Mac's passkey change, and says so in its title", () => {
+    untaken.list = ["w1", "w2"];
+    renderHeader();
+    expect(screen.getByTestId("passkeys-untaken")).toBeTruthy();
+    expect(screen.getByLabelText("Settings").getAttribute("title")).toMatch(/2 workers haven't taken your passkey change/);
+    untaken.list = [];
+  });
+
+  it("draws no mark when every worker holds it, and keeps it in sync from the desktop board", () => {
+    untaken.on.length = 0;
+    renderHeader();
+    expect(screen.queryByTestId("passkeys-untaken")).toBeNull();
+    // The desktop header keeps them in sync; weft.zip's has no Settings button, so it doesn't.
+    expect(untaken.on.length).toBeGreaterThan(0);
   });
 });

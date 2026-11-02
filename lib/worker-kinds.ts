@@ -5,6 +5,8 @@
 // hands a sealed answer to a card's waiting secret run. Each returns the card it made or touched, or null.
 import { NEW_CARD_MODES, newCardBody, type CloudCommandRow, type NewCardMode } from "./cloud-commands";
 import { networkStartMode } from "./cloud-new-card-mode";
+import { signedAgent } from "./create-widen";
+import { heldMessage } from "./host-endorse";
 import { dispatcher, type KindTable } from "./host/dispatch";
 import type { ListVerb } from "@weft/client";
 import type { HostArgs, HostDone } from "./host-command";
@@ -15,6 +17,7 @@ import { explainClone, type GithubStatus } from "./worker-github";
 import { sentByWorker, WORKER_CARD_MODE } from "./worker-origin";
 import { sealedOf, type Sealed } from "./worker-seal";
 import type { Card, PermissionMode } from "./types";
+import { workerWidenCheck } from "./worker-widen";
 
 const UNKNOWN_KIND = "This worker doesn't know that kind of request. Update it with weft-worker update.";
 // A run that names no mode edits files without asking, and still asks before a command it hasn't been allowed.
@@ -123,9 +126,12 @@ export function workerKinds(deps: DaemonDeps, ctx: KindContext): KindTable {
     const { repo, start, ...fields }: Record<string, unknown> = run ? { ...run } : newCardBody(command);
     if (typeof fields.prompt !== "string" || !fields.prompt) throw new Error("That card has no prompt.");
     if (start === false) throw new Error("A worker has no Backlog yet. Start the thread instead.");
+    // Checked before the files come over: the approval names the prompt as it was sent.
+    const agent = await signedAgent(command, command.folder, deps.widen && workerWidenCheck(deps.widen));
     fields.prompt = await engine.receive(fields.prompt, command.payload);
     const cwd = await deps.checkout(command.folder, typeof repo === "string" ? repo : undefined);
-    return published(command, await engine.start({ ...fields, cwd, permissionMode: await startMode(command, run?.permissionMode ?? fields.permissionMode) }));
+    const permissionMode = await startMode(command, run?.permissionMode ?? fields.permissionMode);
+    return published(command, await engine.start({ ...fields, ...(agent ? { agent } : {}), cwd, permissionMode }));
   }
 
   async function published(command: CloudCommandRow, card: Card): Promise<string> {
@@ -144,7 +150,7 @@ export function workerKinds(deps: DaemonDeps, ctx: KindContext): KindTable {
     return published(command, await engine.start({ ...args, cwd, permissionMode }));
   }
 
-  const cards = createCardCommands(engine, create, (verb, args) => listVerb(engine, verb, args), deps.owner);
+  const cards = createCardCommands(engine, create, (verb, args) => listVerb(engine, verb, args), deps.owner, deps.widen);
   return {
     async login(command) {
       await deps.login(sealedToken(command));
@@ -159,6 +165,17 @@ export function workerKinds(deps: DaemonDeps, ctx: KindContext): KindTable {
     run: startCard,
     new_card: startCard,
     update: () => ctx.askForUpdate(),
+    // A pinned Mac's endorsements of passkeys, so a browser can widen here too (lib/host-signers.ts endorse).
+    async pin(command) {
+      if (!deps.widen) throw new Error("This worker doesn't take passkeys yet. Update it with weft-worker update.");
+      const list: unknown = (command.payload as { endorsements?: unknown } | null)?.endorsements;
+      if (!Array.isArray(list) || !list.length || list.length > 20) throw new Error("That pin carries no endorsements.");
+      let generation = 0;
+      for (const e of list) generation = await deps.widen.signers.endorse(e, deps.widen.host, (deps.widen.now ?? Date.now)());
+      // The receipt the Mac waits on before it stops re-sending (lib/host-endorse.ts heldMessage).
+      const sig = deps.widen.signHeld?.(heldMessage({ worker: deps.widen.host, generation }));
+      return { cardId: "", result: { ok: true, cardId: "", value: { generation, ...(sig ? { sig } : {}) } } };
+    },
     ...cards,
     // A session line's sealed offer (lib/host-line.ts): its verbs run through this table's own `host`, so they pass
     // exactly the checks a `host` command does (CardRules, remoteRefusal).

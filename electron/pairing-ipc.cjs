@@ -95,7 +95,21 @@ function setupPairing({ ipcMain, dataDir, accountClient, isBoard, confirm, safeS
     return signer.sign(message);
   };
   require("./host-pairing-ipc.cjs").registerHostPairing(handle, { db, userId, macDevice, myDevice, confirm, macSignKey, macSign }, workerPins);
+  // Signed widening for a remote host's card (electron/widen-sign.cjs), naming a worker by the name it was pinned under,
+  // and the passkey endorsements for workers (electron/widen-endorse.cjs).
+  require("./widen-sign.cjs").registerWidenSign(handle, { signer, macDevice, confirm, hostName: (id) => workerPins.nameOf(id) });
+  const { registerWidenEndorse, createEndorsed } = require("./widen-endorse.cjs");
+  registerWidenEndorse(handle, {
+    signer,
+    macDevice,
+    confirm,
+    passkeys: () => paired.list(),
+    endorsed: createEndorsed({ dir: dataDir, safeStorage: keychain }),
+    workerName: (id) => workerPins.nameOf(id),
+    workerSignKey: (id) => workerPins.signKeyOf(id),
+  });
 
+  const widenNonces = require("./widen-nonces.cjs").createWidenNonces({ dir: dataDir, safeStorage: keychain });
   const routes = {
     // The key the uploader seals with (lib/sync-seal-upload.ts); { none: true } when this Mac has no grant yet.
     "POST /sync/key": withSodium(async ({ orgId, create }) => (await syncKeys.current(String(orgId), { create: create === true })) ?? { none: true }),
@@ -103,6 +117,9 @@ function setupPairing({ ipcMain, dataDir, accountClient, isBoard, confirm, safeS
     "POST /pairing/verify": withSodium(({ device, message, sig }) => paired.verify({ device: String(device), message: String(message), sig: String(sig) })),
     // Whether a passkey assertion is a pinned browser's (lib/approval-passkey-check.ts); main keeps its counter.
     "POST /pairing/passkey-verify": (b) => paired.verifyPasskey({ device: String(b?.device), credId: String(b?.credId), message: String(b?.message), authenticatorData: String(b?.authenticatorData), clientDataJSON: String(b?.clientDataJSON), signature: String(b?.signature) }),
+    // Spends a signed widening's nonce, once its signature checked out (electron/widen-nonces.cjs): main keeps them, so
+    // a thread can't edit a file back to replay one.
+    "POST /pairing/widen-nonce": (b) => ({ ok: widenNonces.take({ nonce: b?.nonce, issuedAt: b?.issuedAt }) }),
     "POST /pairing/status": () => ({ approvers: paired.approvers(), devices: pairing.list().length, ...paired.settings() }),
   };
   return { pairing, syncKeys, paired, signer, routes };

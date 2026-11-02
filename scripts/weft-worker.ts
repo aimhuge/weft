@@ -150,6 +150,8 @@ async function startCommand() {
   const results = workerResults(config.key, client.storage);
   const publisher = createPublisher(reg, store, console.warn, { blobs, orgId: config.orgId });
   subscribe(publisher.hear);
+  // Signed widening: the pairing Mac's approvals and its endorsed passkeys lift the network's refusals (lib/worker-signing.ts).
+  const { widen, terminal } = (await import("../lib/worker-signing")).workerSigning({ home, workerId: config.workerId, root, listFolders: listProjectFolders, repoPath: paths.repoPath, nameFolder: publisher.nameFolder, signHeld: (await import("../lib/worker-secret-wiring")).pairedSigner(home) });
   // The board tools reach the user's board, not this store (docs/architecture/project-hosts.md#board-tools-on-a-worker):
   // the owner's cards, a card for another host, and this worker's crons and webhooks published for the Mac's drawers.
   const [{ setBoardLink }, { createListsPublisher }, { listCrons }, { listWebhooks, onWebhooksWrite }, { startCronClock }] = await Promise.all([
@@ -170,6 +172,7 @@ async function startCommand() {
   // publisher ships (one projection, one upload), screens need a card of this box's own watching them, and verbs run
   // through the host kind's path (the daemon hands `run` in).
   const lines = createHostLines({
+    terminal,
     unseal: (sealed, purpose) => open(keys, sealed, purpose),
     answerOn: async (topic, sealed) => {
       const channel = await openScreenChannel(client, topic);
@@ -204,6 +207,7 @@ async function startCommand() {
       startWorktreePool();
     },
     line: (sealed, run) => lines.open(sealed, run),
+    widen,
     engine: {
       // A card.create names its id (the board's) and may leave the card in Backlog; a run or new_card starts one.
       start: async (body) => {

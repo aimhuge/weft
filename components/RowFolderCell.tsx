@@ -80,49 +80,49 @@ export function FolderPicker({ anchor, current, folders, onPick, onClose }: { an
 
   return (
     <SheetPopover anchor={anchor} width={340} label="Move to folder" onClose={onClose}>
-      {/* Moving a card points its thread at another folder: only the user does that (docs/architecture/board-view.md). */}
+      {/* Moving a card widens what it can touch: a thread driving the board (board_view) can't pick here. */}
       <div data-human-only className="contents">
-      <PopSearch
-        value={search}
-        placeholder="Type a folder name or path…"
-        onChange={(text) => {
-          setSearch(text);
-          setAt(0);
-        }}
-        onKeyDown={onKey}
-      />
-      <div className="max-h-[300px] overflow-y-auto px-1 pb-1" role="listbox" aria-label="Folders">
-        {shown.map((path, i) => (
-          <div
-            key={path}
-            role="option"
-            aria-selected={i === at}
-            onMouseEnter={() => setAt(i)}
-            onClick={() => onPick(path)}
-            className={`flex cursor-pointer flex-col rounded-md px-2.5 py-1.5 ${i === at ? "bg-accent-soft" : ""}`}
+        <PopSearch
+          value={search}
+          placeholder="Type a folder name or path…"
+          onChange={(text) => {
+            setSearch(text);
+            setAt(0);
+          }}
+          onKeyDown={onKey}
+        />
+        <div className="max-h-[300px] overflow-y-auto px-1 pb-1" role="listbox" aria-label="Folders">
+          {shown.map((path, i) => (
+            <div
+              key={path}
+              role="option"
+              aria-selected={i === at}
+              onMouseEnter={() => setAt(i)}
+              onClick={() => onPick(path)}
+              className={`flex cursor-pointer flex-col rounded-md px-2.5 py-1.5 ${i === at ? "bg-accent-soft" : ""}`}
+            >
+              <span className="flex items-center gap-2 text-[12px] font-medium">
+                {folderName(path)}
+                {path === current && <span className="text-[10px] font-normal text-faint">current</span>}
+              </span>
+              <span className="truncate text-[10.5px] text-faint">{path}</span>
+            </div>
+          ))}
+          {typed && !shown.includes(typed) && (
+            <button onClick={() => onPick(typed)} className="w-full rounded-md px-2.5 py-1.5 text-left hover:bg-sunken">
+              Use <code className="text-accent">{typed}</code>
+            </button>
+          )}
+          {!shown.length && !typed && <div className="px-2 py-3 text-center text-faint">No folder matches “{search}”</div>}
+        </div>
+        {bridge && (
+          <button
+            onClick={() => void bridge.dialog.openFolder().then((picked) => picked && onPick(picked))}
+            className="sheet-pop-foot px-3 py-2 text-left text-[11px] text-accent hover:bg-sunken"
           >
-            <span className="flex items-center gap-2 text-[12px] font-medium">
-              {folderName(path)}
-              {path === current && <span className="text-[10px] font-normal text-faint">current</span>}
-            </span>
-            <span className="truncate text-[10.5px] text-faint">{path}</span>
-          </div>
-        ))}
-        {typed && !shown.includes(typed) && (
-          <button onClick={() => onPick(typed)} className="w-full rounded-md px-2.5 py-1.5 text-left hover:bg-sunken">
-            Use <code className="text-accent">{typed}</code>
+            Choose folder…
           </button>
         )}
-        {!shown.length && !typed && <div className="px-2 py-3 text-center text-faint">No folder matches “{search}”</div>}
-      </div>
-      {bridge && (
-        <button
-          onClick={() => void bridge.dialog.openFolder().then((picked) => picked && onPick(picked))}
-          className="sheet-pop-foot px-3 py-2 text-left text-[11px] text-accent hover:bg-sunken"
-        >
-          Choose folder…
-        </button>
-      )}
       </div>
     </SheetPopover>
   );

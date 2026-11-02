@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import "@xterm/xterm/css/xterm.css";
 import Icon from "./Icon";
+import { terminalBridgeFor, type TerminalBridge } from "@/lib/line-terminal";
 
 // The board's terminal: real shells (electron/terminal.cjs) in a drawer along the bottom of the window,
 // for the commands a thread can't or shouldn't run. Each folder has its own shells, keyed by its path, so
@@ -32,6 +33,8 @@ export default function TerminalDrawer({
   const [panes, setPanesState] = useState<string[]>(() => panesByFolder.get(cwd) ?? [cwd]);
   const [focused, setFocused] = useState(panes[0] ?? cwd);
   const bridge = typeof window === "undefined" ? undefined : window.weft;
+  // A worker project's shells run on the worker, over its session line (lib/line-terminal.ts).
+  const terminal = terminalBridgeFor(cwd, bridge?.terminal);
 
   function setPanes(next: string[]) {
     panesByFolder.set(cwd, next);
@@ -47,7 +50,7 @@ export default function TerminalDrawer({
   }
 
   function closePane(id: string) {
-    bridge?.terminal.kill(id);
+    terminal?.kill(id);
     const rest = panes.filter((p) => p !== id);
     // The last pane closing hides the drawer; reopening starts a fresh shell.
     if (rest.length === 0) {
@@ -100,13 +103,14 @@ export default function TerminalDrawer({
           <Icon name="x" size={13} />
         </button>
       </div>
-      {bridge?.terminal ? (
+      {terminal ? (
         <div className="flex min-h-0 flex-1">
           {panes.map((id, i) => (
             <TerminalPane
               key={id}
               id={id}
               cwd={cwd}
+              terminal={terminal}
               divided={i > 0}
               closable={panes.length > 1}
               onFocus={() => setFocused(id)}
@@ -129,6 +133,7 @@ export default function TerminalDrawer({
 function TerminalPane({
   id,
   cwd,
+  terminal,
   divided,
   closable,
   onFocus,
@@ -137,6 +142,7 @@ function TerminalPane({
 }: {
   id: string;
   cwd: string;
+  terminal: TerminalBridge;
   divided: boolean;
   closable: boolean;
   onFocus: () => void;
@@ -154,8 +160,7 @@ function TerminalPane({
   });
 
   useEffect(() => {
-    const bridge = window.weft;
-    if (!bridge?.terminal || !host.current) return;
+    if (!host.current) return;
     const el = host.current;
     let disposed = false;
     // Read through a call: the async setup below checks it after each await, once cleanup may have run.
@@ -193,20 +198,20 @@ function TerminalPane({
       el.addEventListener("focusin", onFocusIn);
       cleanups.push(() => el.removeEventListener("focusin", onFocusIn));
 
-      cleanups.push(bridge.terminal.onData((sid, data) => sid === id && term.write(data)));
-      cleanups.push(bridge.terminal.onExit((sid, code) => sid === id && setExited(code)));
-      const input = term.onData((data) => bridge.terminal.write(id, data));
+      cleanups.push(terminal.onData((sid, data) => sid === id && term.write(data)));
+      cleanups.push(terminal.onExit((sid, code) => sid === id && setExited(code)));
+      const input = term.onData((data) => terminal.write(id, data));
       cleanups.push(() => input.dispose());
 
       const observer = new ResizeObserver(() => {
         if (!el.offsetWidth || !el.offsetHeight) return;
         fit.fit();
-        bridge.terminal.resize(id, term.cols, term.rows);
+        terminal.resize(id, term.cols, term.rows);
       });
       observer.observe(el);
       cleanups.push(() => observer.disconnect());
 
-      const opened = await bridge.terminal.open(id, cwd, term.cols, term.rows);
+      const opened = await terminal.open(id, cwd, term.cols, term.rows);
       if (isDisposed()) return;
       if (opened.error) setError(opened.error);
       else if (opened.replay) term.write(opened.replay);
@@ -217,10 +222,10 @@ function TerminalPane({
       disposed = true;
       cleanups.forEach((fn) => fn());
     };
-  }, [id, cwd, generation]);
+  }, [id, cwd, terminal, generation]);
 
   function restart() {
-    window.weft?.terminal.kill(id);
+    terminal.kill(id);
     setExited(null);
     setError(null);
     setGeneration((g) => g + 1);

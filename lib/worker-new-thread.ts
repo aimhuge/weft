@@ -2,13 +2,15 @@
 // card.create host command (lib/host-api/card-create.ts) addressed to the worker and the project's folder, under an id
 // picked here so the board can name the card it asked for. POST /api/cards sends it; `start: false` puts the card in
 // the worker's Backlog. Nothing is made on this Mac: the card comes back through the cloud rows (lib/worker-board.ts).
+// A new thread with an agent goes as a run instead, carrying its signed approval (lib/create-widen.ts), which the
+// worker checks over the run's terms; card.create can't carry an agent (remoteRefusal).
 import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { accountClient } from "./account";
 import type { NewCommand } from "./cloud-commands";
 import { hostCommand } from "./host-command";
 import { ATTACHMENTS, insert, myWorkers, requireSession, withAttachments } from "./worker-board";
-import { RUN_MODES, workerDevice } from "./worker-commands";
+import { RUN_MODES, runCommand, workerDevice } from "./worker-commands";
 import { offlineMessage, parseWorkerProject } from "./worker-project";
 import { liveStatus } from "./worker-presence";
 import { presenceWatch, type PresenceWatch } from "./worker-presence-watch";
@@ -26,6 +28,9 @@ export interface WorkerThreadInput {
   branch?: string;
   // false leaves it in the worker's Backlog.
   start?: boolean;
+  // An agent goes only with its signed approval (lib/create-widen.ts); the worker checks both.
+  agent?: string;
+  widen?: unknown;
 }
 
 // The fields a new worker card is made from: never its folder (the row's), agent or read scope, which remoteRefusal
@@ -35,6 +40,17 @@ export function createArgs(body: WorkerThreadInput): Record<string, unknown> {
   const permissionMode = RUN_MODES.find((m) => m === body.permissionMode);
   const all: Record<string, unknown> = { prompt: prompt.trim(), title, backend, model, effort, permissionMode, tags, isolated, branch, start: start !== false };
   return Object.fromEntries(Object.entries(all).filter(([, v]) => v !== undefined && v !== ""));
+}
+
+export const AGENT_BACKLOG = "A thread with an agent starts right away on a worker: start it instead of putting it in Backlog.";
+
+// A started thread with an agent: a run in the project's folder with the agent and its approval, as the board signed it
+// (lib/widen-signer.ts withCreateWiden). The worker makes the card's id, so there's none to name here.
+function agentRun(target: { orgId: string; workerId: string; folder: string }, body: WorkerThreadInput): NewCommand {
+  const row = runCommand(target, body) as NewCommand;
+  // runBody reads these as well; runCommand has no use for them on a Send a run from Settings.
+  const extra = { ...(body.backend ? { backend: body.backend } : {}), ...(body.effort ? { effort: body.effort } : {}), agent: body.agent, widen: body.widen };
+  return { ...row, payload: { ...(row.payload as Record<string, unknown>), ...extra } } as NewCommand;
 }
 
 // It never starts anywhere else: an offline worker refuses here rather than queue a card that would land hours later.
@@ -53,6 +69,12 @@ export async function startWorkerThread(
   if (!worker) throw new Error("That worker isn't one of yours anymore.");
   const seen = await presence.read((fn, args) => client.rpc(fn, args), [worker.id], { owner: who.uid });
   if (liveStatus(worker, seen, now) === "offline") throw new Error(offlineMessage(worker.name));
+  if (body.agent) {
+    if (body.start === false) throw new Error(AGENT_BACKLOG);
+    const row = agentRun({ orgId: who.org, workerId: worker.id, folder: project.folder }, body);
+    const { commandId } = await insert(client, await withAttachments(client, row, body.prompt, dir));
+    return { commandId, worker: worker.name, cardId: "" };
+  }
   const cardId = randomUUID();
   const target = { orgId: who.org, device: workerDevice(worker.id), folder: project.folder, cardId };
   const row = hostCommand(target, "card.create", createArgs(body)) as NewCommand;

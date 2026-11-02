@@ -19,12 +19,15 @@ import type { PageUpdate, ThreadTransport } from "./thread-transport";
 import { actOnWorker, askWorker, type ActResult } from "./worker-acts";
 import { workerFilesVia } from "./worker-files";
 import { useWorkerLive, workerTransportVia } from "./worker-transport";
+import { signedArgs } from "./widen-signer";
 
 const EMPTY: ThreadPage = { items: [], start: 0, total: 0 };
 
 const pastesFiles = (args: HostArgs) => Object.values(args).some((v) => typeof v === "string" && new RegExp(MEDIA_REF.source).test(v));
 
-export async function actOnLine(workerId: string, verb: HostVerb, args: HostArgs): Promise<ActResult> {
+// What the network would refuse goes with a signed approval for exactly that change (lib/widen-signer.ts).
+export async function actOnLine(workerId: string, verb: HostVerb, given: HostArgs): Promise<ActResult> {
+  const args = await signedArgs(workerId, verb, given);
   const line = lineFor(workerId);
   if (!line?.up() || pastesFiles(args)) return actOnWorker(verb, args);
   try {

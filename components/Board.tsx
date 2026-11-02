@@ -50,7 +50,7 @@ import { useSwitchAll } from "./switch-all-button";
 import { folderName } from "./ProjectBar";
 import { CLOSED_BROWSER, showPage } from "@/lib/board-helpers";
 import { openWorkerThread, useBoardWorkers } from "@/lib/use-worker-board";
-import { localPath, withWorkerProjects } from "@/lib/worker-project";
+import { isWorkerProject, localPath, withWorkerProjects } from "@/lib/worker-project";
 import { projectFolders } from "@/lib/board-folders";
 import { useWorkerNotices } from "@/lib/card-notice";
 import { useThreadHandlers } from "@/lib/thread-handlers";
@@ -421,7 +421,7 @@ export default function Board() {
       <BoardBottom
         footer={footer}
         onHelp={() => setShowHelp(true)}
-        terminal={{ open: terminalOpen, cwd: terminalCwd, height: terminalHeight, onHeight: setTerminalHeight, onClose: toggleTerminal, away: terminalAway(workerThread?.worker, project, workers.projects, Boolean(selectedId)) }}
+        terminal={{ open: terminalOpen, cwd: terminalCwd, height: terminalHeight, onHeight: setTerminalHeight, onClose: toggleTerminal, away: terminalAway(workerThread?.worker, project, workers.projects, Boolean(selectedId), isWorkerProject(terminalCwd)) }}
       />
 
       <BoardOverlays

@@ -1012,6 +1012,14 @@ sign-in. Every card on that worker can use the token. **Clone from GitHub** in t
 repo field once you have a worker, so you can clone onto it with no prompt and see the real result on the board.
 A project on a worker shows in the project chips and **More** beside your local ones, marked with the worker's name, even when the worker is offline. Pick it to see its cards on this board, reply to them, answer them or stop them, and start new threads there; nothing runs on your Mac, and an offline worker's new thread says so.
 An outside-folder prompt on a worker's card offers **This card** and **Always**, and Always means every card on that worker.
+
+**Change what a worker card can touch, with Touch ID.** Moving a worker card to another of its projects, giving it another
+agent, letting it skip permission prompts, a "!" shell line, **Read from** on a question, a new thread with an agent and
+the **terminal** on a worker project used to be refused from the network. Now each asks for Touch ID on your Mac, in
+words that say exactly what will change, and the worker runs it only with that approval: once, within two minutes, and
+only from the Mac it was paired with. The terminal opens over the direct line to the worker and closes with it. On
+weft.zip, a paired passkey approves moving a card, changing its agent and a plain shell line; Settings → **Devices** →
+a worker's **Passkeys** lets your passkeys approve there too.
 A worker's card can run a command with your vault's secrets (`mcp__secrets__run`): your Mac asks for Touch ID, naming the command, the secrets and the worker, and the values go to that worker sealed for that one run, never through Supabase in the clear.
 The rest of the vault works from a worker's card too, through your Mac: it lists the names in its project's vault, adds blanks (the user fills them in 🔐 on the Mac), stores a value it generated (sealed to your Mac, stored after Touch ID) and pushes one to Vercel (Touch ID). Its dev server starts with the project's development secrets after a Touch ID on your Mac, asked again at every start and restart; the values reach only the server, and its log shows ‹NAME›. Typing a secret into a page (`fill_field`) stays on your Mac, whose browser pane it types into.
 A worker's card has the mode picker in its thread (Ask me, Accept edits or Auto; YOLO stays local), and when a thread watches a simulator or emulator on the worker, its screen streams to the pane, where you can tap and swipe it from the desktop.

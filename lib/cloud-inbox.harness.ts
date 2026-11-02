@@ -1,6 +1,9 @@
 // Shared by lib/cloud-inbox*.test.ts: a stand-in for the account's Supabase client (the cloud_commands table
 // answers from `db`, the Realtime channel hands its handlers to the test, the session says who is signed in)
 // and the modules the inbox leans on. The test files mount these through vi.mock factories.
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { vi } from "vitest";
 import type { CloudCommandRow } from "./cloud-commands";
 
@@ -162,6 +165,8 @@ export async function hostApiMock(real: () => Promise<typeof import("./host-api"
 }
 
 export const storeMock = {
+  // Where the Mac keeps its widening nonces (lib/cloud-inbox-cards.ts), a folder of this run's own.
+  DATA_DIR: fs.mkdtempSync(path.join(os.tmpdir(), "weft-inbox-")),
   getCard: (id: string) => control.cards.get(id),
   updateCard: (id: string, patch: { readScope?: string[] }) => {
     const card = control.cards.get(id);

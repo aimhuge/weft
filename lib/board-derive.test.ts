@@ -124,4 +124,9 @@ describe("terminalAway", () => {
     expect(terminalAway(undefined, null, projects, false)).toBeNull();
     expect(terminalAway(null, "/r", projects, false)).toBeNull();
   });
+
+  it("says nothing where the drawer opens the worker's own terminal with a signed approval", () => {
+    expect(terminalAway({ name: "m2" }, "/r", projects, true, true)).toBeNull();
+    expect(terminalAway(null, "worker://w1/ling", projects, false, true)).toBeNull();
+  });
 });

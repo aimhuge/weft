@@ -27,10 +27,12 @@ import { workerFiles } from "./worker-files";
 import { actOnWorker, workerToolSource, workerTransport } from "./worker-transport";
 import { parseWorkerProject } from "./worker-project";
 import { actOnLine, lineFiles, lineTransport, warmOnLine } from "./line-host";
+import { canSignWiden } from "./widen-signer";
 
 // This Mac's own features, which another host offers only once it has a verb or a stream for them. `files` is the
 // editor and the thread's file links (H4), `shots` the show rail's page pictures (lib/page-shots.ts), `pane` the native
-// browser pane; `folder`, `agent` and `shell` widen what a card can touch, so a remote host refuses them from the network.
+// browser pane; `folder`, `agent`, `shell` and `terminal` widen what a card can touch, so a remote host takes them only
+// with a signed approval.
 // `skills` is the skill set chip (which skills a card gets); the "/" list is the transport's listSkills on every host.
 // `runSkill` is the header's Skills menu, which sends "/<skill>" as a message (the list from skills.list).
 // `schedule` is Send later, which both hosts hold the timer for (card.schedule). `reads` is the header badges (H4);
@@ -39,8 +41,9 @@ import { actOnLine, lineFiles, lineTransport, warmOnLine } from "./line-host";
 // Mac's Settings (the backup model) speak for the card. `share` a weft.zip link to the card's cloud rows; `delete` card.delete.
 // `lists` is the ⏰ and 🪝 drawers' changes to a cron or webhook the host keeps (cron.*, webhook.*); `relay` a webhook's
 // public URL and tunnel from the 🪝 drawer, and adding one by hand there, which are this Mac's (a worker's threads do it).
+// `terminal` is the terminal drawer, a pty on the host (on a worker, over its session line).
 export type HostFeature =
-  | "files" | "reads" | "projectActs" | "shots" | "pane" | "folder" | "agent" | "shell" | "skills" | "runSkill" | "share" | "delete" | "login" | "vault" | "dev" | "schedule" | "cron" | "settings" | "lists" | "relay";
+  | "files" | "reads" | "projectActs" | "shots" | "pane" | "folder" | "agent" | "shell" | "terminal" | "skills" | "runSkill" | "share" | "delete" | "login" | "vault" | "dev" | "schedule" | "cron" | "settings" | "lists" | "relay";
 
 export interface ProjectHost {
   kind: "local" | "cloud";
@@ -125,19 +128,21 @@ export const localHost: ProjectHost = {
 // What a Worker has today: its cards' own verbs, the thread and its pages, Send later, a skill run as a message, its
 // files through the file verbs and the header's reads through its snapshots (H4). Share… reads the card's cloud rows,
 // which a worker publishes like a Mac's outbox (lib/card-share-worker.ts), and Delete is card.delete. Its crons and
-// webhooks change from the Mac's drawers (lists). Not this Mac's
-// pane, vault or CLIs.
+// webhooks change from the Mac's drawers (lists). Not this Mac's pane, vault or CLIs.
 const CLOUD_FEATURES = new Set<HostFeature>(["schedule", "files", "reads", "runSkill", "share", "delete", "lists"]);
+// What widens a card, which a worker runs only with a signed approval (lib/widen-signer.ts): offered where this Mac can
+// sign one (the desktop app), and the act asks Touch ID first.
+const SIGNED_FEATURES = new Set<HostFeature>(["folder", "agent", "shell", "terminal"]);
 
 export const cloudHost: ProjectHost = {
   kind: "cloud",
   thread: workerTransport,
   tools: workerToolSource,
-  can: (feature) => CLOUD_FEATURES.has(feature),
+  can: (feature) => CLOUD_FEATURES.has(feature) || (SIGNED_FEATURES.has(feature) && canSignWiden()),
   read: cloudRead,
   files: workerFiles,
   act: (verb, args) => actOnWorker(verb, args),
-  menu: remoteMenu,
+  menu: (items) => remoteMenu(items, canSignWiden() ? { agent: true, skip: true } : {}),
   warm: () => {},
 };
 

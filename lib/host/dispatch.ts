@@ -9,7 +9,17 @@ import { isHostLevelVerb, isListVerb, type ListVerb } from "@weft/client";
 import { hostResult, readHostCommand, remoteRefusal, textArgOf, verbResult, type HostArgs, type HostDone, type HostPayload } from "../host-command";
 import { carriesValue, valueResult, type Carry } from "../host-result";
 import type { Card } from "../types";
+import { widenArgsOf, widenChangeOf, withoutWiden, type WidenChange } from "../widen";
+import type { WidenTarget } from "../widen-check";
 import type { Done } from "./identity";
+
+// What a signed widening leaves unsigned: a card.update's body without the fields its approval covered, or null when the
+// approval covers the verb whole (a "!" line, one sent later).
+function unsignedRest({ verb, args }: HostPayload, change: WidenChange): Record<string, unknown> | null {
+  if (verb !== "card.update") return null;
+  const body = Object.fromEntries(Object.entries(args.body as Record<string, unknown>).filter(([key]) => !(key in change)));
+  return { ...withoutWiden(args), body };
+}
 
 export type KindHandler = (command: CloudCommandRow) => Done | Promise<Done>;
 export type KindTable = Record<string, KindHandler>;
@@ -30,6 +40,9 @@ export interface CardRules {
   approve?(command: CloudCommandRow, answer: AnswerPayload, card: Card): Promise<string | null>;
   // Why a verb that grants power can't run from the web here, if it can't (a Mac with a phone paired).
   elevated?(verb: HostVerb, args: Record<string, unknown>): Promise<string | null>;
+  // Why a signed widening can't run here (lib/widen-check.ts), or null when its approval checks out. `refusal` is what
+  // remoteRefusal said, for a command with no approval. Absent, every widening stays refused.
+  widen?(target: WidenTarget, auth: unknown, refusal: string): Promise<string | null>;
   // A verb on the host itself (settings.get / settings.put), from the network. Absent: this host refuses them (a Mac).
   hostVerb?(verb: HostVerb, args: Record<string, unknown>): Promise<unknown>;
   // Whether the command's author is this host's owner. A verb in OWNER_VERBS runs only when it is; a host without the
@@ -121,6 +134,24 @@ export function cardKinds(rules: CardRules) {
     return card.id;
   }
 
+  // What remoteRefusal turns away runs only with a signed approval for exactly that change (args.widen), which also
+  // stands in for the Mac's elevated rule over what it signed, and only that: the rest of the command (another mode in
+  // the same card.update) still passes that rule, so an approval for a new agent can't carry an unsigned mode change.
+  async function allowed(body: HostPayload, card: Card) {
+    const refused = remoteRefusal(body);
+    const change = refused ? widenChangeOf(body) : null;
+    if (refused && change && rules.widen && body.args.widen !== undefined) {
+      const problem = await rules.widen({ card: card.id, verb: body.verb, change, args: widenArgsOf(body.args) }, body.args.widen, refused);
+      if (problem) throw new Error(problem);
+      const rest = unsignedRest(body, change);
+      const why = rest && (await rules.elevated?.(body.verb, rest));
+      if (why) throw new Error(why);
+      return;
+    }
+    const why = refused ?? (await rules.elevated?.(body.verb, body.args));
+    if (why) throw new Error(why);
+  }
+
   // Any verb in lib/host-api, on a card this host runs. Only a command its owner made gets this far, but anyone holding
   // that account's session can insert one, so remoteRefusal turns away what would widen the card.
   async function host(command: CloudCommandRow): Promise<HostDone> {
@@ -134,9 +165,8 @@ export function cardKinds(rules: CardRules) {
     if (isListVerb(body.verb)) return list(body.verb, body);
     const card = rules.card(body.args.id, command, "reached");
     if (OWNER_VERBS.has(body.verb) && !rules.fromOwner?.(command)) throw new Error(NOT_OWNER);
-    const refused = remoteRefusal(body) ?? (await rules.elevated?.(body.verb, body.args));
-    if (refused) throw new Error(refused);
-    const reply = await verb(body.verb, await received(command, { ...body.args, id: card.id }, textArgOf(body.verb)));
+    await allowed(body, card);
+    const reply = await verb(body.verb, await received(command, { ...withoutWiden(body.args), id: card.id }, textArgOf(body.verb)));
     // The card it touched, and for a read verb (skills.list) its answer; the editor's verbs answer with their value,
     // inline or as a blob when it's over the row's cap (lib/host-result.ts).
     const result = carriesValue(body.verb) ? await valueResult(card.id, reply, rules.carry) : verbResult(body.verb, card.id, reply);

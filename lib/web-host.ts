@@ -22,7 +22,8 @@ const refuse = () => Promise.reject(new Error(NO_FILES));
 const noReads: ReadProject = () => Promise.reject(new Error("Project reads aren't on weft.zip yet."));
 const noFiles: FilesSource = { read: refuse, stat: refuse, head: refuse, list: refuse, write: refuse, live: false };
 
-export function webHost(acts: Pick<CloudHostActs, "act">, thread: ThreadTransport, tools: ToolResultSource): ProjectHost {
+// `passkey`: the account has a paired passkey, so a card's agent can change from here, signed on sign.weft.zip.
+export function webHost(acts: Pick<CloudHostActs, "act">, thread: ThreadTransport, tools: ToolResultSource, passkey = false): ProjectHost {
   return {
     kind: "cloud",
     thread,
@@ -35,8 +36,8 @@ export function webHost(acts: Pick<CloudHostActs, "act">, thread: ThreadTranspor
       return acts.act(verb, id, rest);
     },
     // Share… and Delete… are a worker card's on the desktop (a Mac builds the link, its store owns the delete); weft.zip
-    // has neither yet, so its menu is the remote one without them.
-    menu: (items) => remoteMenu(items.filter((item) => !("id" in item) || !NOT_ON_WEB.test(item.id))),
+    // has neither yet, so its menu is the remote one without them, with the agent where a passkey can sign it.
+    menu: (items) => remoteMenu(items.filter((item) => !("id" in item) || !NOT_ON_WEB.test(item.id)), { agent: passkey }),
     // A browser tab holds no session line, so nothing is warmed ahead of a reply (a worker's warm is line-only).
     warm: () => {},
   };

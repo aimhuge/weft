@@ -85,6 +85,7 @@ export default function DevicesSettings() {
                 <div className="truncate text-[13px] text-ink">{d.name}</div>
                 <div className={SUBTLE}>
                   {holdsLine(d)} · {seenLine(d, now)}
+                  {devices.untaken.includes(d.id) && <span className="text-warn" title="This Mac changed which passkeys this worker trusts, and the worker hasn't confirmed it yet: until it does, a passkey you revoked may still approve there. Weft keeps sending it."> · passkeys not updated yet</span>}
                 </div>
                 {d.note && !d.revokedAt && <div className="text-[12.5px] text-warn">{d.note}</div>}
               </div>
@@ -93,6 +94,11 @@ export default function DevicesSettings() {
                   {d.kind === "worker" && devices.canRepin && (
                     <button type="button" className={BUTTON} onClick={() => void devices.repin(d)} aria-label={`Re-pin ${d.name}`} title="Forget the keys this Mac pinned for this worker's secrets, after Touch ID; its next ask pins new ones">
                       Re-pin
+                    </button>
+                  )}
+                  {d.kind === "worker" && devices.canTrustPasskeys && (
+                    <button type="button" className={BUTTON} onClick={() => void devices.trustPasskeys(d)} aria-label={`Passkeys on ${d.name}`} title="Let your paired passkeys approve folder, agent, shell and terminal changes on this worker from the web, after Touch ID">
+                      Passkeys
                     </button>
                   )}
                   {d.kind === "worker" && d.hasSignKey && devices.canRepair && (

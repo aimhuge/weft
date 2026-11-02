@@ -165,6 +165,13 @@ describe("live", () => {
     expect(heard).toHaveBeenCalledTimes(1);
   });
 
+  it("opens one more channel on a live line (the terminal's), and none before it's up", async () => {
+    const early = setup();
+    expect(early.line.channel("terminal")).toBeNull();
+    const { line } = await up();
+    expect(line.channel("terminal")).toBe(last().channels.terminal);
+  });
+
   it("refuses a call before it's up, so the caller takes the relay", async () => {
     const { line } = setup();
     await expect(line.call("card.stop", { id: "c" })).rejects.toBeInstanceOf(LineDown);

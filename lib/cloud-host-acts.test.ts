@@ -91,3 +91,24 @@ describe("cloudHostActs", () => {
     await expect(setup([PENDING]).acts.listSkills("c1")).rejects.toThrow("didn't answer");
   });
 });
+
+describe("a widening from weft.zip", () => {
+  it("goes to be signed with the passkey instead of as a row, and anything else goes as before", async () => {
+    const widen = vi.fn(() => true);
+    const { acts, rows } = setup(undefined, { widen });
+    await expect(acts.act("card.update", "c1", { body: { agent: "builder" } })).resolves.toBeUndefined();
+    expect(widen).toHaveBeenCalledWith({ target: TARGET, verb: "card.update", args: { body: { agent: "builder" } } });
+    await acts.schedule("c1", "!make", 1);
+    expect(rows).toEqual([]);
+    await acts.act("card.update", "c1", { body: { title: "t" } });
+    expect(rows).toHaveLength(1);
+  });
+
+  it("sends it unsigned with no passkey, or when the card can't be addressed", async () => {
+    const { acts, rows } = setup(undefined, { widen: () => false });
+    await acts.act("card.shell", "c1", { command: "ls" });
+    expect(rows).toHaveLength(1);
+    const gone = setup(undefined, { widen: vi.fn(() => true) });
+    await expect(gone.acts.act("card.shell", "gone", { command: "ls" })).rejects.toThrow(/isn't on the board/);
+  });
+});
