@@ -15,6 +15,7 @@ import { recentCrashes } from "./simulator-crashes";
 import { bootedDevice, listDevices } from "./simulator-devices";
 import { simulatorTools } from "./simulator-tools";
 import { SITE } from "./site";
+import { VAULT_TOOLS } from "./worker-vault-wire";
 
 const ERROR_MAX = 1_000;
 const LOCAL = /^(localhost|127\.0\.0\.1|\[::1\]|0\.0\.0\.0)$/i;
@@ -88,12 +89,17 @@ async function take(client: SupabaseClient, row: DeviceCallRow) {
     // A worker card's secret ask goes to Electron main, which re-reads the row itself and asks the user with Touch ID
     // (electron/worker-secret.cjs); it answers queued, denied or missing, never a value. A tunnel or relay asks the user
     // with Touch ID too (lib/device-call-approvals.ts); no QA grant is involved in either.
-    const answer = row.tool === SECRET_ASK_TOOL ? shell("/secrets/worker-ask", { call: row.id }) : APPROVAL_TOOLS.has(row.tool) ? runApproval(client, row) : runDeviceCall(client, row);
+    // A worker card's vault call (list, blanks, set_value, push_to_vercel, a dev server's env) goes to main the same way,
+    // by id only (electron/worker-vault.cjs): names in, names or "queued" out, never a value.
+    const answer = row.tool === SECRET_ASK_TOOL ? shell("/secrets/worker-ask", { call: row.id }) : VAULT_TOOLS.has(row.tool) ? shell("/secrets/worker-vault", { call: row.id }) : APPROVAL_TOOLS.has(row.tool) ? runApproval(client, row) : runDeviceCall(client, row);
     await finish(client, row.id, { status: "done", result: await answer });
   } catch (err) {
     await finish(client, row.id, { status: "failed", error: (err as Error).message.slice(0, ERROR_MAX) });
   }
 }
+
+// A secret ask, a vault call or an approval may wait on a person at this Mac.
+const waitsOnPerson = (tool: string) => tool === SECRET_ASK_TOOL || VAULT_TOOLS.has(tool) || APPROVAL_TOOLS.has(tool);
 
 const state = () => globalSingleton("__weftDeviceCalls", () => ({ draining: false, again: false }));
 
@@ -123,7 +129,7 @@ export async function drainDeviceCalls(client: SupabaseClient, uid: string) {
       if (error) return;
       // A secret ask or an approval waits on a person at this Mac, so it doesn't hold up the device calls behind it.
       for (const row of data) {
-        if (row.tool === SECRET_ASK_TOOL || APPROVAL_TOOLS.has(row.tool)) void take(client, row);
+        if (waitsOnPerson(row.tool)) void take(client, row);
         else await take(client, row);
       }
     } while (nudged());

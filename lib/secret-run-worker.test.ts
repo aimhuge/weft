@@ -14,6 +14,8 @@ vi.mock("@anthropic-ai/claude-agent-sdk", () => ({
 const workerSecretRun = vi.hoisted(() => vi.fn());
 const redactOnWorker = vi.hoisted(() => vi.fn((_card: string, text: string) => Promise.resolve(text.replace("s3cret", "‹K›"))));
 vi.mock("./worker-secret-run", () => ({ onWorker: () => true, workerSecretRun, redactOnWorker }));
+const devEnvOnWorker = vi.hoisted(() => vi.fn());
+vi.mock("./worker-dev-env", () => ({ devEnvOnWorker }));
 const fetchMock = vi.hoisted(() => vi.fn());
 vi.stubGlobal("fetch", fetchMock);
 
@@ -47,6 +49,20 @@ describe("redactStored on a worker", () => {
     sr.markInUse("w2");
     expect(await sr.redactStored("w2", "it is s3cret")).toBe("it is ‹K›");
     expect(redactOnWorker).toHaveBeenCalledWith("w2", "it is s3cret");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("devSecrets on a worker", () => {
+  it("asks the Mac through lib/worker-dev-env.ts, not main, and marks the card as using secrets", async () => {
+    const launch = { bin: "node", args: ["secret-env.cjs"], env: {}, stdin: "{}", names: ["K"] };
+    devEnvOnWorker.mockResolvedValueOnce({ launch });
+    expect(await sr.devSecrets("w3", "pnpm dev", proj, "Fix")).toEqual({ launch });
+    expect(devEnvOnWorker).toHaveBeenCalledWith({ cardId: "w3", thread: "Fix", root: proj, cwd: proj, command: "pnpm dev", argv: ["pnpm", "dev"], env: {}, script: undefined });
+    expect(sr.usesSecrets("w3")).toBe(true);
+    devEnvOnWorker.mockResolvedValueOnce({ note: "Started without vault secrets: not approved on your Mac." });
+    expect(await sr.devSecrets("w4", "pnpm dev", proj)).toEqual({ note: "Started without vault secrets: not approved on your Mac." });
+    expect(sr.usesSecrets("w4")).toBe(false);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });

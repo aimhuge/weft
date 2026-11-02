@@ -58,6 +58,12 @@ Not an account but local tools: the **Simulators** card checks Xcode, an iOS run
 the emulator and an AVD for the `mcp__simulator__*` tools, and shows the command or link that fixes each missing
 one. It never installs anything. Details in docs/architecture/simulators.md.
 
+## On a Weft Worker
+
+A paired worker's row in Settings → Devices has **Google** and **GitHub** toggles: after Touch ID the Mac lends the worker
+short-lived tokens from its own gog and gh sign-ins, sealed to that worker, and the worker's cards run `gog` and `gh`
+through shims that use them ([project-hosts.md](project-hosts.md#the-vault-and-connectors-on-a-worker-t2-as-built)).
+
 ## Next connectors
 
 Same shape each time: a CLI threads can call, a card in Settings for its sign-in, and a short pinned

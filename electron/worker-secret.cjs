@@ -5,9 +5,11 @@
 // the card's own project names, and asks the user with Touch ID in a window that says it's for a worker. On a yes it
 // seals the values to the pinned key for this card, ask and command (electron/worker-seal.cjs) and queues the
 // `secret_use` command. The values leave main only sealed. Asks are taken one at a time, at most one per card.
-const crypto = require("node:crypto");
 const { askOf, vaultFor } = require("./worker-ask.cjs");
-const { seal, secretUseMessage, secretUsePurpose } = require("./worker-seal.cjs");
+const { queueSecretUse, readWorkerAsk, signKeyOf, verifySigned } = require("./worker-ask-row.cjs");
+const { seal, secretUsePurpose } = require("./worker-seal.cjs");
+
+const TOOLS = new Set(["secret_run"]);
 
 // The message a paired worker signs for an ask (lib/secret-use.ts askMessage is the same, checked by a test).
 // boxKey is the worker's seal key, so the signature covers the key main seals to, after a Re-pin too.
@@ -21,25 +23,7 @@ const askMessage = (cardId, boxKey, a) => JSON.stringify(["weft-secret-ask-v2", 
  * @param {ReturnType<typeof askOf>} a
  */
 function verifyAsk(signKey, cardId, boxKey, a) {
-  let ok = false;
-  try {
-    const key = crypto.createPublicKey({ key: Buffer.from(signKey, "base64"), format: "der", type: "spki" });
-    ok = Boolean(a.sig) && crypto.verify(null, Buffer.from(askMessage(cardId, boxKey, a)), key, Buffer.from(String(a.sig), "base64"));
-  } catch {
-    ok = false;
-  }
-  if (!ok) throw new Error("That ask isn't signed by the worker's pinned key.");
-}
-
-// The sign key a worker's asks must be signed with: the pinned one, else the row's (H10 sets it at pairing; it's then
-// pinned with the Allow). Sticky: a pinned sign key that the row no longer shows, or shows changed, is refused. A worker
-// with none was enrolled by token: it can't check this Mac's signature on a secret_use either, so it gets no secrets.
-/** @param {{ signKey?: string }} pin @param {{ name: string, sign_key?: string | null }} worker @returns {string} */
-function signKeyOf(pin, worker) {
-  if (pin.signKey && pin.signKey !== worker.sign_key) throw new Error(`${worker.name}'s signing key changed since this Mac pinned it, so it gets no secrets. Pair it again from Settings → Devices.`);
-  const key = pin.signKey ?? worker.sign_key;
-  if (!key) throw new Error(`${worker.name} was enrolled by token, so it can't take secrets. Pair it from Settings → Devices → Add a worker, then try again.`);
-  return key;
+  verifySigned(signKey, askMessage(cardId, boxKey, a), a.sig);
 }
 
 /**
@@ -56,20 +40,8 @@ function signKeyOf(pin, worker) {
  * }} deps
  */
 function createWorkerSecrets({ vault, ask, describe, accountClient, pins, signer, projectRepos, audit = (entry) => entry, now = Date.now }) {
-  async function read(supabase, uid, callId) {
-    const { data: row } = await supabase.from("device_calls").select("id, org_id, owner_user, worker_id, card_id, tool, args, status").eq("id", String(callId)).maybeSingle();
-    if (!row || row.tool !== "secret_run" || row.owner_user !== uid) throw new Error("That request isn't from one of your workers.");
-    if (row.status !== "claimed") throw new Error("That request was already answered.");
-    const { data: worker } = await supabase.from("cloud_workers").select("id, name, owner_user, public_key, sign_key").eq("id", row.worker_id).maybeSingle();
-    if (!worker || worker.owner_user !== uid) throw new Error("That worker isn't yours.");
-    if (!worker.public_key) throw new Error(`${worker.name} hasn't published its key yet. Update it (weft-worker update), then try again.`);
-    const { data: card } = await supabase.from("cloud_cards").select("folder").eq("card_id", row.card_id).eq("owner_worker", row.worker_id).maybeSingle();
-    if (!card?.folder) throw new Error("That card isn't on that worker.");
-    return { row, worker, folder: String(card.folder) };
-  }
-
   async function answer(account, uid, callId) {
-    const { row, worker, folder } = await read(account.supabase, uid, callId);
+    const { row, worker, folder } = await readWorkerAsk(account.supabase, uid, callId, TOOLS);
     const a = askOf(row.args, now());
     // Read only: a first-seen key is pinned after the user allows, never on a Deny or an error.
     const pin = pins.lookup({ id: worker.id, name: worker.name, publicKey: worker.public_key });
@@ -89,11 +61,7 @@ function createWorkerSecrets({ vault, ask, describe, accountClient, pins, signer
     // Sealed to the pinned key, never straight from the row.
     const sealed = seal(pin.publicKey, plaintext, secretUsePurpose(row.card_id, a.nonce, a.command));
     // Signed with this Mac's device key, so the worker can tell this row from one sealed by anyone with its public key.
-    const key = await signer();
-    const mac = { key: key.publicKey(), sig: key.sign(secretUseMessage(row.card_id, a.nonce, sealed)) };
-    const command = { org_id: row.org_id, kind: "secret_use", target_device: `worker:${worker.id}`, folder: "-", payload: { cardId: row.card_id, nonce: a.nonce, sealed, mac } };
-    const { error } = await account.supabase.from("cloud_commands").insert(command);
-    if (error) throw new Error(`Couldn't send the secrets to ${worker.name}: ${error.message}`);
+    await queueSecretUse(account.supabase, row, worker, signer, a.nonce, sealed);
     return { queued: true, label: ref.label };
   }
 

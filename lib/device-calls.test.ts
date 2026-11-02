@@ -310,6 +310,15 @@ describe("drainDeviceCalls", () => {
     expect(calls.updates.at(-1)?.patch).toMatchObject({ status: "done", result: { queued: true, label: "aimhuge/weft" } });
   });
 
+  it.each(["vault_list", "vault_blank", "vault_set", "vault_push", "dev_env"])("hands a worker card's %s to main by id, without holding up the drain", async (tool) => {
+    shell.mockResolvedValue({ label: "aimhuge/weft", secrets: [] });
+    const { client, calls } = fakeClient({ pending: [row({ tool, args: { names: ["A"] } })] });
+    await drainDeviceCalls(client, "user-1");
+    await vi.waitFor(() => expect(calls.updates.map((u) => u.patch.status)).toEqual(["claimed", "done"]));
+    expect(shell).toHaveBeenCalledWith("/secrets/worker-vault", { call: "call-1" });
+    expect(requireGrant).not.toHaveBeenCalled();
+  });
+
   it("fails a secret ask main refused", async () => {
     shell.mockRejectedValue(new Error("Sign in to Weft on this Mac to approve a worker's secrets."));
     const { client, calls } = fakeClient({ pending: [row({ tool: "secret_run" })] });

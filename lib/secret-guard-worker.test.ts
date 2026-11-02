@@ -39,7 +39,7 @@ afterAll(() => {
 });
 
 describe("a worker's home", () => {
-  it.each(["worker.json", "worker.env", "seal-key.json", "github-credentials", "worker.log", "anything-new"])("refuses %s to every file tool", (name) => {
+  it.each(["worker.json", "worker.env", "seal-key.json", "github-credentials", "worker.log", "anything-new", "connectors.json", "connectors/bin/gh", "mac-keys.json", "sign-key.json"])("refuses %s to every file tool", (name) => {
     const file = path.join(wh, name);
     for (const tool of ["Read", "Edit", "Write"]) expect(verdict(tool, { file_path: file })).toContain("can't be read");
     expect(verdict("Read", { file_path: `~/.weft-worker/${name}` })).toContain("can't be read");
@@ -51,6 +51,8 @@ describe("a worker's home", () => {
 
   it.each([
     "cat ~/.weft-worker/worker.json",
+    "cat ~/.weft-worker/connectors.json",
+    "cat ~/.weft-worker/connectors/bin/gh",
     "cat $HOME/.weft-worker/worker.env",
     'cat "$HOME/.weft-worker/seal-key.json"',
     "cat ${HOME}/.weft-worker/github-credentials",

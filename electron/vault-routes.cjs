@@ -10,21 +10,22 @@ const { auditOutbox, markAuditSynced } = require("./keychain-audit.cjs");
 // overwrite one by accident. Touch ID every time through vault.confirm, never a thread's fill unlock: this is a
 // write, and the prompt says which of the three it is, naming the environment. The one exception is a card whose
 // grant names writes (electron/vault-grants.cjs): the user approved its writes up front. Even then an overwrite asks,
-// since it destroys the value that was there.
-async function fillBlank(vault, folder, name, environment, value, replace = false, card = "") {
+// since it destroys the value that was there. who, for a Weft Worker's card, says so in the prompt (electron/worker-vault.cjs).
+async function fillBlank(vault, folder, name, environment, value, replace = false, card = "", who = "") {
   if (!value) throw new Error(`Give a value for ${name}.`);
   const { label, secrets } = await vault.names(folder);
   const entry = secrets.find((s) => s.name === name && s.environment === environment);
   const action = !entry ? "added" : entry.missing ? "set" : "replaced";
   if (action === "replaced" && !replace) return { filled: true, label };
+  const by = ["a thread", who].filter(Boolean).join(" ");
   const reason = {
-    added: `let a thread add ${name} (${label}, ${environment})`,
-    set: `let a thread set ${name} (${label}, ${environment})`,
-    replaced: `let a thread overwrite the ${environment} value of ${name} (${label}) with a new one`,
+    added: `let ${by} add ${name} (${label}, ${environment})`,
+    set: `let ${by} set ${name} (${label}, ${environment})`,
+    replaced: `let ${by} overwrite the ${environment} value of ${name} (${label}) with a new one`,
   }[action];
   const granted = action !== "replaced" && (await vault.writeGranted?.(card, folder));
   if (!granted && !(await vault.confirm(reason))) return { denied: true, label };
-  await vault.setValue(folder, name, environment, value, { source: granted ? "a thread, under its grant" : "a thread", by: "thread" });
+  await vault.setValue(folder, name, environment, value, { source: granted ? "a thread, under its grant" : by, by: "thread" });
   return action === "set" ? { ok: true, label } : { ok: true, [action]: true, label };
 }
 

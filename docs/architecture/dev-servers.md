@@ -112,8 +112,10 @@ Built 2026-11-02 (migration `20261102190000_worker_tunnels.sql`, not applied). `
   up to 6 minutes for that, since a person is involved. **Stop** sends `dev.stop`. The pane is the native one, so `/t`
   needs a weft.zip sign-in there once.
 - **Locally** the same verbs mount on `POST /api/cards/:id/dev` as `open` and `stop`.
-- **The vault's env** (H8): `devSecrets` (`lib/secret-run.ts`) gives a worker's run `{}` until the sealed `secret_use`
-  lands; the hook is that call in `startDev`.
+- **The vault's env** (T2): `devSecrets` (`lib/secret-run.ts`) asks the owner's Mac through `lib/worker-dev-env.ts`;
+  after one Touch ID (it covers restarts with the same command for 12 hours) the development values arrive sealed and go to
+  `electron/secret-env.cjs` on its stdin, which redacts them from the log
+  ([project-hosts.md](project-hosts.md#the-vault-and-connectors-on-a-worker-t2-as-built)).
 
 ## Stopping one task
 
