@@ -18,6 +18,7 @@ import { sentByWorker, WORKER_CARD_MODE } from "./worker-origin";
 import { sealedOf, type Sealed } from "./worker-seal";
 import type { Card, PermissionMode } from "./types";
 import { workerWidenCheck } from "./worker-widen";
+import { commandClient } from "./turn-client";
 
 const UNKNOWN_KIND = "This worker doesn't know that kind of request. Update it with weft-worker update.";
 // A run that names no mode edits files without asking, and still asks before a command it hasn't been allowed.
@@ -184,7 +185,9 @@ export function workerKinds(deps: DaemonDeps, ctx: KindContext): KindTable {
       const raw: unknown = command.payload;
       const sealed = sealedOf(raw && typeof raw === "object" ? (raw as { sealed?: unknown }).sealed : null);
       if (!sealed) throw new Error("That line carries no sealed offer.");
-      await deps.line(sealed, (payload) => lineVerb(() => cards.host({ ...command, kind: "host", payload } as CloudCommandRow), payload, ctx));
+      // Its verbs carry the line command's sender, over the line (lib/turn-client.ts: a hint for the thread, never a check).
+      const client = { ...commandClient(raw), via: "line" };
+      await deps.line(sealed, (payload) => lineVerb(() => cards.host({ ...command, kind: "host", payload: { ...(payload as Record<string, unknown>), client } } as unknown as CloudCommandRow), payload, ctx));
       return null;
     },
     // The Mac's sealed answer to a card's mcp__secrets__run (lib/worker-secret-asks.ts); an old wiring without it can't open one.

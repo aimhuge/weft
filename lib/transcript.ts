@@ -41,8 +41,8 @@ const NOT_TYPED = new Set([
   "auto-continuation",
 ]);
 
-// Sections the CLI or a hook embeds in otherwise real user text.
-const EMBEDDED = /<(system-reminder|user-prompt-submit-hook)>[\s\S]*?<\/\1>/g;
+// Sections the CLI, a hook or Weft (the <weft-env> block, lib/turn-env.ts) embeds in otherwise real user text.
+const EMBEDDED = /<(system-reminder|user-prompt-submit-hook|weft-env)>[\s\S]*?<\/\1>/g;
 
 // User text that starts like this was added by the CLI.
 const INJECTED =

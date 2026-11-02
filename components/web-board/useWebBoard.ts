@@ -20,6 +20,12 @@ import { applyCommandChange, isCardCommand, type CloudCommandChange, type WebTar
 import { loadWebKeyring, openSyncedCard, openSyncedTool } from "@/lib/web-sync-key";
 import { withAttachmentRefs } from "@/lib/web-upload";
 import { useCloudTransport, webUploadsFor, type CloudBlobs, type ItemBus } from "./useCloudTransport";
+import { ownTimeZone, withClientHint, type ClientHint } from "@weft/client";
+
+const webClientHint = (): ClientHint => {
+  const tz = ownTimeZone();
+  return { app: "web", ...(tz && { tz }) };
+};
 
 // The status of the Realtime channel; the dot beside the title reflects it.
 export type LiveStatus = "connecting" | "live" | "offline";
@@ -212,7 +218,8 @@ export function useWebBoard({ orgId, userId, initialCommands, initialCards, open
     async (plain: NewCommand): Promise<CloudCommandRow | string> => {
       let row: NewCommand;
       try {
-        row = withAttachmentRefs(plain, uploads);
+        // Says it's weft.zip, with this browser's time zone, for the thread's <weft-env> block: a hint, never a check.
+        row = withClientHint(withAttachmentRefs(plain, uploads), webClientHint());
       } catch (err) {
         return (err as Error).message;
       }

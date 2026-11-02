@@ -69,6 +69,16 @@ function answer(table: string, columns: string, opts: FakeOptions): { data: unkn
   }
 }
 
+// The row as a test compares it: without the desktop board's client hint every row this Mac sends a worker carries
+// (lib/worker-board.ts insert, lib/turn-client.ts); `calls` keeps the row as sent.
+function withoutStamp(row: unknown): unknown {
+  const r = row as { payload?: Record<string, unknown> };
+  if (!r.payload || typeof r.payload !== "object" || !("client" in r.payload)) return row;
+  const payload = { ...r.payload };
+  delete payload.client;
+  return { ...r, payload };
+}
+
 // A Supabase client fake that answers the tables the worker board reads. The query chain is recorded so a
 // test can see what was asked for.
 export function fakeClient(opts: FakeOptions = {}) {
@@ -90,7 +100,7 @@ export function fakeClient(opts: FakeOptions = {}) {
       limit: (...args: unknown[]) => (calls.push({ op: "limit", args }), query),
       insert: (row: unknown) => {
         calls.push({ op: "insert", args: [row] });
-        inserted = row;
+        inserted = withoutStamp(row);
         return query;
       },
       maybeSingle: () => {

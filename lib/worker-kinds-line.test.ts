@@ -3,6 +3,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { command, fakeEngine, fakeGithub, fakePublisher, fakeReg } from "./worker-daemon.harness";
 import type { DaemonDeps } from "./worker-daemon";
+import { takeClient } from "./turn-client";
 import { workerKinds } from "./worker-kinds";
 
 const sealed = { v: 1, epk: "a", iv: "b", ct: "c", tag: "d" };
@@ -31,6 +32,13 @@ describe("a verb over a line", () => {
     expect(t.log).toHaveBeenLastCalledWith(expect.stringMatching(/^Weft Worker: line card\.shell on card-1 failed: A shell command only runs/));
     await expect(t.run(null)).rejects.toThrow();
     expect(t.log).toHaveBeenLastCalledWith(expect.stringMatching(/^Weft Worker: line undefined on undefined failed/));
+  });
+
+  it("a message over it is noted as the line command's sender, over the line, for the turn's <weft-env> block", async () => {
+    const t = lineRun(false);
+    await t.kinds.line!(command({ kind: "line", payload: { sealed, client: { app: "desktop", name: "m1", via: "relay" } } as never }));
+    await t.run({ verb: "card.message", args: { id: "card-1", text: "hi" } });
+    expect(takeClient("card-1")).toEqual({ app: "desktop", name: "m1", via: "line" });
   });
 
   it("is refused while the worker updates itself", async () => {

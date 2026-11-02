@@ -82,6 +82,14 @@ describe("projectItem", () => {
     expect(JSON.stringify(out.item)).not.toContain("\\u0000");
   });
 
+  it("never carries a <weft-env> block on a user item, and leaves one without it as it is", async () => {
+    const block = "<weft-env>\nhost: your Mac (m1)\nfrom: weft.zip in a browser\ntime: 10:23 UTC (UTC+00:00)\n</weft-env>\n\n";
+    const out = await projectItem(1, { kind: "user", text: `${block}ship it`, at: 1000 }, host());
+    expect(out.item.item).toMatchObject({ kind: "user", text: "ship it" });
+    const plain = await projectItem(2, { kind: "user", text: "just this", at: 1000 }, host());
+    expect(plain.item.item).toMatchObject({ kind: "user", text: "just this" });
+  });
+
   it("cuts a long tool result out to a redacted output row", async () => {
     const result = `${KEY} `.repeat(TOOL_RESULT_INLINE_MAX);
     const out = await projectItem(0, tool(result), host());

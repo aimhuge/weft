@@ -621,6 +621,15 @@ like "🐞 Compile Error: missing CoverageBadge import"; its emoji becomes the t
 mid-sentence. A title you typed or edited is
 never replaced, and Claude Code's own session title stops overwriting it once Weft has named the card.
 
+### What a thread knows each turn
+
+Every message Weft sends a thread starts with a few lines you don't see in the thread: which machine runs the card
+(your Mac, or a Weft Worker by name, with its OS, Weft's version and commit, and how far behind main it is), where the
+message came from (this board, weft.zip, the phone, a cron, another card, Slack) and the time in your zone and the
+host's. So a thread on a worker stamps a progress page with the real time, and knows its worker needs an update. It's
+about 270 bytes a turn and built in microseconds; where the message came from is the sender's own word, used for the
+thread's information and nothing else (docs/architecture/thread-env.md).
+
 ## Skills and automations
 
 Weft ships its own skills in `plugin/`, a Claude Code plugin named `weft` that every board thread

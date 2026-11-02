@@ -7,6 +7,7 @@
 import { execFile } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { noteUpstream } from "./host-facts";
 
 export const UPDATE_EVERY_MS = 15 * 60_000;
 // A daemon that has run this long and reached the database isn't the crash the wrapper is watching for.
@@ -82,6 +83,8 @@ export function createUpdater({ home, dir, run = runCommand, log = console.log }
     const from = await head();
     await git(["fetch", "origin", BRANCH]);
     const target = (await git(["rev-parse", "FETCH_HEAD"])).trim();
+    // What a thread's <weft-env> block says about this worker's code (lib/host-facts.ts), from this fetch, not one per turn.
+    noteUpstream(target === from ? 0 : Number((await git(["rev-list", "--count", `${from}..${target}`]).catch(() => "")).trim()) || 0);
     if (target === from) return { kind: "current" };
     const bad = whyBad(target);
     if (bad) return { kind: "blocked", note: `Skipping ${short(target)}: ${bad}` };

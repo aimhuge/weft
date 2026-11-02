@@ -6,6 +6,7 @@ import { prebakeBriefs } from "./splice";
 import { startClock } from "./tick-clock";
 import { getCard, listCards, updateCard } from "./store";
 import { COPILOT_ID, type Card } from "./types";
+import { noteClient } from "./turn-client";
 
 export function scheduleMessage(cardId: string, text: string, at: number): Card {
   const card = getCard(cardId);
@@ -40,6 +41,8 @@ export function sendDueMessages(now = Date.now()) {
     }
     const rest = scheduled.filter((m) => m.id !== due.id);
     updateCard(card.id, { scheduled: rest.length ? rest : undefined });
+    // Send later, not a held message or a card's first turn waiting on a limit (which says who made the card).
+    if (card.turns && !due.afterRestart) noteClient(card.id, { app: "scheduled" });
     try {
       sendUserMessage(card.id, due.text);
     } catch (err) {

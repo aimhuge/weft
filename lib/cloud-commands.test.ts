@@ -58,13 +58,19 @@ describe("newCardBody", () => {
       effort: "low",
       tags: ["a", "b"],
       cwd: "/dev/app",
+      client: { app: "remote" },
     });
+  });
+
+  it("carries the sender's hint for the first turn's <weft-env> block, checked", () => {
+    expect(newCardBody({ folder: "/f", payload: { prompt: "p", client: { app: "web", tz: "Asia/Bangkok" } } as never }).client).toEqual({ app: "web", tz: "Asia/Bangkok" });
+    expect(newCardBody({ folder: "/f", payload: { prompt: "p", client: { app: "cron" } } as never }).client).toEqual({ app: "remote" });
   });
 
   it("carries over only what a card is made from, as the types it must be", () => {
     const payload = { prompt: 4, tags: ["a", 7], permissionMode: "bypassPermissions", cwd: "/etc", start: true } as never;
     const body = newCardBody({ folder: "/dev/app", payload });
-    expect(body).toEqual({ prompt: undefined, title: undefined, backend: undefined, model: undefined, effort: undefined, tags: ["a"], cwd: "/dev/app" });
+    expect(body).toEqual({ prompt: undefined, title: undefined, backend: undefined, model: undefined, effort: undefined, tags: ["a"], cwd: "/dev/app", client: { app: "remote" } });
     expect(Object.keys(body)).not.toContain("permissionMode");
     expect(Object.keys(body)).not.toContain("start");
   });

@@ -33,6 +33,13 @@ describe("sendWorkerAction", () => {
     });
   });
 
+  it("says it's from this Mac's desktop board, over the relay: a hint for the thread's <weft-env> block", async () => {
+    const { client, calls } = fakeClient({ cardRow: target });
+    await sendWorkerAction({ action: "reply", cardId: "c1", text: "hello" }, client);
+    const row = calls.find((c) => c.op === "insert")?.args[0] as { payload: { client: unknown } };
+    expect(row.payload.client).toMatchObject({ app: "desktop", via: "relay" });
+  });
+
   it("carries a folder grant on the answer, with no path", async () => {
     const { client, inserted } = fakeClient({ cardRow: target });
     await sendWorkerAction({ action: "answer", cardId: "c1", pendingId: "p1", allow: true, grant: "always" }, client);

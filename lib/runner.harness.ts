@@ -6,6 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import type * as ChildProcess from "node:child_process";
 import { vi } from "vitest";
+import { stripEnvBlock } from "./env-block";
 import { PUKU_SIGN_IN_VARS } from "./puku-dotenv";
 import type { SubagentModel } from "./subagents";
 import type { Card, ThreadItem } from "./types";
@@ -31,6 +32,7 @@ export type Options = Record<string, unknown> & {
 export class FakeQuery {
   options: Options;
   received: string[] = [];
+  raw: string[] = [];
   // The uuid each user message was sent with (the prompt id ↑ rewinds by).
   uuids: (string | undefined)[] = [];
   inputClosed = false;
@@ -51,7 +53,10 @@ export class FakeQuery {
     void (async () => {
       for await (const m of prompt) {
         const c = m.message.content;
-        this.received.push(typeof c === "string" ? c : JSON.stringify(c));
+        const text = typeof c === "string" ? c : JSON.stringify(c);
+        // What tests compare is the message without its <weft-env> block (lib/turn-env.ts); `raw` keeps it.
+        this.raw.push(text);
+        this.received.push(stripEnvBlock(text));
         this.uuids.push(m.uuid);
       }
       this.inputClosed = true;

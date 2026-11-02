@@ -57,8 +57,8 @@ describe("weftSystemPrompt", () => {
 
   it("the copilot gets the browser and copilot prompts, not the thread's", () => {
     const text = prompts.weftSystemPrompt({ backend: "claude", copilot: true });
-    const { WEFT_SOUL_PROMPT, BROWSER_PROMPT, COPILOT_PROMPT, SECRETS_PROMPT, REVIEW_PROMPT } = prompts.WEFT_PINNED_PROMPTS;
-    expect(text).toBe(`${WEFT_SOUL_PROMPT}\n\n${BROWSER_PROMPT}\n\n${COPILOT_PROMPT}`);
+    const { WEFT_SOUL_PROMPT, BROWSER_PROMPT, COPILOT_PROMPT, SECRETS_PROMPT, REVIEW_PROMPT, ENV_PROMPT } = prompts.WEFT_PINNED_PROMPTS;
+    expect(text).toBe(`${WEFT_SOUL_PROMPT}\n\n${BROWSER_PROMPT}\n\n${COPILOT_PROMPT}\n\n${ENV_PROMPT}`);
     for (const part of [DEFAULT_THREAD_PROMPT, SECRETS_PROMPT, REVIEW_PROMPT]) expect(text).not.toContain(part);
   });
 
@@ -73,9 +73,10 @@ describe("weftSystemPrompt", () => {
   });
 
   it("a persona's prompt follows the copilot prompt; Wingman adds none", () => {
-    const { COPILOT_PROMPT } = prompts.WEFT_PINNED_PROMPTS;
+    const { COPILOT_PROMPT, ENV_PROMPT } = prompts.WEFT_PINNED_PROMPTS;
     const founder = prompts.weftSystemPrompt({ backend: "claude", copilot: true, persona: "founder" });
-    expect(founder.endsWith(`${COPILOT_PROMPT}\n\n${PERSONAS.founder.prompt}`)).toBe(true);
+    expect(founder.endsWith(`${COPILOT_PROMPT}\n\n${PERSONAS.founder.prompt}\n\n${ENV_PROMPT}`)).toBe(true);
+    expect(prompts.weftSystemPrompt({ backend: "claude" })).toContain(ENV_PROMPT);
     expect(prompts.weftSystemPrompt({ backend: "claude", copilot: true, persona: "wingman" })).toBe(prompts.weftSystemPrompt({ backend: "claude", copilot: true }));
     expect(prompts.WEFT_PINNED_PROMPTS.COPILOT_PERSONA_PROMPTS).toContain(PERSONAS.captain.prompt);
   });

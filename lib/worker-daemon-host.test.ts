@@ -208,7 +208,7 @@ describe("card.create on a worker", () => {
     d.start.mockResolvedValueOnce({ ...(await d.start({})), id: "new-card-1" });
     await d.daemon.runOne(create({ tags: ["bug"], isolated: true, start: false, backend: "codex", model: "m", effort: "high" }, { attachments: [{ name: "s.png" }] }));
     expect(d.checkout).toHaveBeenCalledWith("weft", undefined);
-    expect(d.start).toHaveBeenLastCalledWith({ id: "new-card-1", prompt: "Fix it (here)", tags: ["bug"], isolated: true, start: false, backend: "codex", model: "m", effort: "high", cwd: "/srv/work/weft", permissionMode: "acceptEdits" });
+    expect(d.start).toHaveBeenLastCalledWith({ id: "new-card-1", prompt: "Fix it (here)", tags: ["bug"], isolated: true, start: false, backend: "codex", model: "m", effort: "high", cwd: "/srv/work/weft", permissionMode: "acceptEdits", client: { app: "remote" } });
     expect(d.nameFolder).toHaveBeenCalledWith("new-card-1", "weft");
     expect(d.flush).toHaveBeenCalled();
     expect(d.report).toHaveBeenLastCalledWith("cmd-1", "done", "new-card-1", null, { ok: true, cardId: "new-card-1" });
@@ -233,5 +233,26 @@ describe("card.create on a worker", () => {
     for (const bad of [{ cwd: "/etc" }, { agent: "x" }, { permissionMode: "bypassPermissions" }]) await d.daemon.runOne(create(bad));
     expect(d.start).not.toHaveBeenCalled();
     expect(d.report).toHaveBeenLastCalledWith("cmd-1", "failed", null, expect.stringMatching(/skip permission/), expect.anything());
+  });
+});
+
+// A new card from weft.zip or the phone, with its sender (lib/turn-client.ts) on the body for the first turn.
+describe("new_card on a worker", () => {
+  it("runs a new_card command too", async () => {
+    const d = makeDeps();
+    await d.daemon.runOne(command({ kind: "new_card", payload: { prompt: "Add dark mode" } as never }));
+    expect(d.checkout).toHaveBeenCalledWith("weft", undefined);
+    expect(d.start).toHaveBeenCalledWith({
+      prompt: "Add dark mode",
+      title: undefined,
+      backend: undefined,
+      model: undefined,
+      effort: undefined,
+      tags: undefined,
+      cwd: "/srv/work/weft",
+      permissionMode: "acceptEdits",
+      client: { app: "remote" },
+    });
+    expect(d.report).toHaveBeenCalledWith("cmd-1", "done", "card-1", null);
   });
 });
