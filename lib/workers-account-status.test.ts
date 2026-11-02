@@ -8,7 +8,7 @@ vi.mock("./cloud-sync", () => ({ syncOrgId: () => Promise.resolve("org-1") }));
 vi.mock("./device-id", () => ({ deviceId: () => "dev-here" }));
 
 const { listWorkers, OFFLINE_AFTER_MS } = await import("./workers-account");
-const { SLOW_OFFLINE_AFTER_MS } = await import("./worker-presence");
+const { ABSENT_OFFLINE_AFTER_MS, SLOW_OFFLINE_AFTER_MS } = await import("./worker-presence");
 
 function fakeClient(rows: unknown[]) {
   const calls: unknown[][] = [];
@@ -34,7 +34,7 @@ describe("listWorkers' status", () => {
     const base = { platform: "linux", arch: "x64", status: "online" as const };
     const { client, calls } = fakeClient([
       { ...base, id: "w-1", owner_user: "u-1", name: "up", last_seen_at: ago(OFFLINE_AFTER_MS + 1) },
-      { ...base, id: "w-2", owner_user: "u-1", name: "gone", last_seen_at: ago(OFFLINE_AFTER_MS + 1) },
+      { ...base, id: "w-2", owner_user: "u-1", name: "gone", last_seen_at: ago(ABSENT_OFFLINE_AFTER_MS + 1) },
       { ...base, id: "w-3", owner_user: "u-2", name: "teammate's", last_seen_at: ago(OFFLINE_AFTER_MS + 1) },
       { ...base, id: "w-4", owner_user: "u-2", name: "teammate's, quiet", last_seen_at: ago(SLOW_OFFLINE_AFTER_MS + 1) },
       { ...base, id: "w-5", owner_user: "u-1", name: "a Mac", last_seen_at: ago(OFFLINE_AFTER_MS + 1), kind: "desktop", device: "dev-1" },

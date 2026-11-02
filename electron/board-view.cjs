@@ -10,6 +10,10 @@ const SECRET_ACTION = "[data-secret-action]";
 // Controls that grant a thread more power (permission answers, folder grants, the mode picker, Settings): a thread
 // clicking or typing there would approve itself, so only the user can (pentest 2026-10-20, P-1).
 const HUMAN_ONLY = "[data-human-only]";
+// A terminal (xterm, components/TerminalDrawer.tsx) is a full shell on the Mac with none of a thread's guards, so it
+// is refused whatever it's marked: the gate for click and type is the marker or an xterm.
+const XTERM = ".xterm, .xterm-helper-textarea";
+const HUMAN_GATE = `${HUMAN_ONLY}, ${XTERM}`;
 const REDACTED = "‹secret›";
 const HIGHLIGHT_ID = "__weft_board_highlight";
 
@@ -49,18 +53,20 @@ const scripts = {
   // receive a trusted click the selector never named (pentest 2026-10-20, P-1). No click happens here;
   // main sends real mouse events so the event is trusted.
   click: (sel) =>
-    `(() => { ${find(sel)} if (el.closest(${q(SECRET_ACTION)})) return { found: true, refused: true }; if (el.closest(${q(HUMAN_ONLY)})) return { found: true, humanOnly: true }; el.scrollIntoView({ block: "nearest" });` +
+    `(() => { ${find(sel)} if (el.closest(${q(SECRET_ACTION)})) return { found: true, refused: true }; if (el.closest(${q(HUMAN_GATE)})) return { found: true, humanOnly: true }; el.scrollIntoView({ block: "nearest" });` +
     ` const r = el.getBoundingClientRect(); const x = r.left + r.width / 2, y = r.top + r.height / 2;` +
     ` const top = document.elementFromPoint(x, y);` +
     ` if (!top || !(top === el || el.contains(top))) return { found: true, covered: true };` +
+    ` if (top.closest(${q(HUMAN_GATE)})) return { found: true, humanOnly: true };` +
     ` return { found: true, x, y }; })()`,
   // Locates a field without focusing it (the trusted-focus path runs in main, so a phantom focus event
   // can't out-think the HUMAN_ONLY gate above). Returns whether the element is an editable field.
   isField: (sel) =>
-    `(() => { ${find(sel)} if (el.closest(${q(HUMAN_ONLY)})) return { found: true, humanOnly: true }; if (!el.matches("input, textarea, [contenteditable]:not([contenteditable='false'])")) return { found: true, refused: true }; return { found: true }; })()`,
-  // Focuses a field and selects what's in it, so the typing that follows replaces it.
+    `(() => { ${find(sel)} if (el.closest(${q(HUMAN_GATE)})) return { found: true, humanOnly: true }; if (!el.matches("input, textarea, [contenteditable]:not([contenteditable='false'])")) return { found: true, refused: true }; return { found: true }; })()`,
+  // Focuses a field and selects what's in it, so the typing that follows replaces it. The typing goes wherever focus
+  // is, so a field that won't take focus (disabled, hidden) is refused rather than typed past into whatever had it.
   focusField: (sel) =>
-    `(() => { ${find(sel)} if (el.closest(${q(HUMAN_ONLY)})) return { found: true, humanOnly: true }; if (!el.matches("input, textarea, [contenteditable]:not([contenteditable='false'])")) return { found: true, refused: true }; el.focus(); if (typeof el.select === "function") el.select(); else document.execCommand("selectAll"); return { found: true }; })()`,
+    `(() => { ${find(sel)} if (el.closest(${q(HUMAN_GATE)})) return { found: true, humanOnly: true }; if (!el.matches("input, textarea, [contenteditable]:not([contenteditable='false'])")) return { found: true, refused: true }; el.focus(); if (document.activeElement !== el) return { found: true, unfocused: true }; if (typeof el.select === "function") el.select(); else document.execCommand("selectAll"); return { found: true }; })()`,
   // The element's visible text with every data-secret value inside the page cut out.
   read: (sel) =>
     `(() => { const el = ${sel ? `(${findExpression(sel)})` : "document.body"}; if (!el) return { found: false };` +
@@ -89,7 +95,7 @@ function createBoardView({ board }) {
   }
 
   function humanOnly(selector) {
-    return new Error(`${selector} answers a permission, grants access or changes settings; only you can do that, so ask the user.`);
+    return new Error(`${selector} answers a permission, grants access, changes settings or is a terminal; only you can do that, so ask the user.`);
   }
 
   function covered(selector) {
@@ -160,6 +166,7 @@ function createBoardView({ board }) {
     if (!r.found) throw miss(sel);
     if (r.humanOnly) throw humanOnly(sel);
     if (r.refused) throw new Error(`${sel} isn't a text field.`);
+    if (r.unfocused) throw new Error(`${sel} won't take focus (disabled or hidden?), so nothing was typed.`);
     await wc.insertText(String(text ?? ""));
     return { typed: sel };
   }
@@ -185,4 +192,4 @@ function boardViewRoutes(view) {
   };
 }
 
-module.exports = { createBoardView, boardViewRoutes, scripts, OPERATIONS, BLANK_SECRETS_CSS, REDACTED, HUMAN_ONLY };
+module.exports = { createBoardView, boardViewRoutes, scripts, OPERATIONS, BLANK_SECRETS_CSS, REDACTED, HUMAN_ONLY, XTERM };

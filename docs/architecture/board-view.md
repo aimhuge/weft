@@ -49,6 +49,16 @@ is over. A minimized or hidden window captures empty, which the tool reports as 
     prompts or loosen its own limits (pentest 2026-10-20, P-1). The gate is the marker in the page plus a
     `data-human-only` hit on the element, and the click itself is a real, trusted mouse event (below), so a
     handler that gates on `event.isTrusted` can't be fooled either.
+  - Also marked: the terminal drawer (`components/TerminalDrawer.tsx`, the drawer and the box xterm draws into) — a full
+    shell on the Mac with none of a thread's Bash, secret or folder guards and no Touch ID; the new-thread dialog's
+    folder, agent and mode row (`components/NewCardDialogControls.tsx`); the list view's folder button and its
+    Move-to-folder picker (`components/RowFolderCell.tsx`); and, on weft.zip's drawn menu
+    (`components/web-board/WebMenu.tsx`), the card menu's `mode:*`, `agent:*`, `switch:*`, vault-grant and folder
+    items (`humanOnlyItem()` in `lib/card-menu.ts`). The desktop's card menu is native, so out of reach already.
+  - Any xterm is refused whatever it's marked (`.xterm`, `.xterm-helper-textarea`, `XTERM` in
+    `electron/board-view.cjs`): a click whose selected element, or whatever its centre hit-tests to, sits in one, and
+    any `type_text` into one. `type_text` also refuses a field that won't take focus (disabled, hidden), since
+    `insertText` types into whatever has focus and that could be a terminal.
 - **A click lands where it was aimed.** The page script returns the element's centre and main sends the mouse event
   at that point, so the click is trusted (an `Element.click()` from `executeJavaScript` is not, and a handler
   gating on `event.isTrusted` would let it through). Before sending, the script hit-tests that point with
@@ -58,7 +68,8 @@ is over. A minimized or hidden window captures empty, which the tool reports as 
   themselves" (`covered()` in `electron/board-view.cjs`).
 
 When you add UI that shows a secret value, mark it `data-secret`; a control that reveals or copies one,
-`data-secret-action`; a control that answers a permission, grants access or changes settings, `data-human-only`.
+`data-secret-action`; a control that answers a permission, grants access, changes settings, widens what a card can
+do (its mode, agent, CLI or folder) or reaches a shell, `data-human-only`.
 
 ## Tests
 

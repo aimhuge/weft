@@ -45,6 +45,20 @@ describe("cardKinds", () => {
     expect(r.card).toHaveBeenLastCalledWith(undefined, expect.anything(), "stopped");
   });
 
+  it("runs dev.open only for the owner's own command, and refuses it on a host that can't tell", async () => {
+    const open = { ...cmd("host", { verb: "dev.open", args: { id: "k1" } }), created_by: "owner" };
+    const mine = rules({ fromOwner: (c) => c.created_by === "owner" });
+    await cardKinds(mine).host(open);
+    expect(mine.verb).toHaveBeenCalledWith("dev.open", { id: "k1" });
+    const other = rules({ fromOwner: (c) => c.created_by === "someone else" });
+    await expect(cardKinds(other).host(open)).rejects.toThrow("Only the owner of this card");
+    expect(other.verb).not.toHaveBeenCalled();
+    const blind = rules();
+    await expect(cardKinds(blind).host(open)).rejects.toThrow("Only the owner of this card");
+    await cardKinds(blind).host(cmd("host", { verb: "dev.stop", args: { id: "k1" } }));
+    expect(blind.verb).toHaveBeenCalledWith("dev.stop", { id: "k1" });
+  });
+
   it("answers the editor's verbs with their value, a large one through the host's carry, and syncs nothing after", async () => {
     const after = vi.fn();
     const r = rules({ verb: vi.fn<CardRules["verb"]>(() => Promise.resolve({ files: ["a.ts"] })), after });
@@ -66,6 +80,27 @@ describe("cardKinds", () => {
     await expect(cardKinds(r).host(cmd("host", { verb: "card.shell", args: { id: "k1", command: "ls" } }))).rejects.toThrow();
     const kept = rules({ elevated: () => Promise.resolve("Not from the web.") });
     await expect(cardKinds(kept).host(cmd("host", { verb: "card.stop", args: { id: "k1" } }))).rejects.toThrow("Not from the web.");
+  });
+
+  it("makes a card through the host's create rule, never the card check, with its prompt's files brought over", async () => {
+    const create = vi.fn<NonNullable<CardRules["create"]>>(() => Promise.resolve("n1"));
+    const r = rules({ create, receive: (text) => Promise.resolve(`${text} (here)`) });
+    const done = await cardKinds(r).host(cmd("host", { verb: "card.create", args: { id: "n1", prompt: "go", start: false } }));
+    expect(done).toEqual({ cardId: "n1", result: { ok: true, cardId: "n1" } });
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ kind: "host" }), { id: "n1", prompt: "go (here)", start: false });
+    expect(r.card).not.toHaveBeenCalled();
+    await expect(cardKinds(r).host(cmd("host", { verb: "card.create", args: { id: "n2", prompt: "go", permissionMode: "bypassPermissions" } }))).rejects.toThrow(/skip permission/);
+    await expect(cardKinds(rules()).host(cmd("host", { verb: "card.create", args: { id: "n3", prompt: "go" } }))).rejects.toThrow(/new_card/);
+    expect(create).toHaveBeenCalledOnce();
+  });
+
+  it("holds a new card to the host's elevated rule too, as an update is", async () => {
+    const create = vi.fn<NonNullable<CardRules["create"]>>(() => Promise.resolve("n1"));
+    const elevated = vi.fn<NonNullable<CardRules["elevated"]>>(() => Promise.resolve("Approve it on the phone."));
+    const args = { id: "n1", prompt: "go", permissionMode: "acceptEdits" };
+    await expect(cardKinds(rules({ create, elevated })).host(cmd("host", { verb: "card.create", args }))).rejects.toThrow("Approve it on the phone.");
+    expect(elevated).toHaveBeenCalledWith("card.create", args);
+    expect(create).not.toHaveBeenCalled();
   });
 
   it("sends a host answer through the answer kind where the host asks for that, and straight to the verb otherwise", async () => {

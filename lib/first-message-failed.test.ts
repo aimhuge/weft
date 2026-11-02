@@ -2,7 +2,7 @@
 // (components/FirstMessageErrorBanner.tsx). Only the open thread uses this; the inline error
 // banner in ThreadView is gated to be the *not-first* case so they don't both render.
 import { describe, expect, it } from "vitest";
-import { firstMessageFailed } from "./first-message-failed";
+import { firstMessageFailed, hostRerunModel } from "./first-message-failed";
 import type { Card, ThreadItem } from "./types";
 
 function card(over: Partial<Card> = {}): Card {
@@ -92,5 +92,20 @@ describe("firstMessageFailed", () => {
     const c = card({ error: "rate limit" });
     const items: ThreadItem[] = [user("hi"), { kind: "tool", name: "Bash", input: {}, at: 2 } as unknown as ThreadItem];
     expect(firstMessageFailed(c, items)).toBe(true);
+  });
+});
+
+describe("hostRerunModel", () => {
+  it("is the card's own CLI's default model", () => {
+    expect(hostRerunModel({ backend: "claude" })).toBe("claude-fable-5-1");
+    expect(hostRerunModel({ backend: "puku", model: "puku-ai-2.7" })).toBe("opus-4.8");
+  });
+
+  it("is the next model when the card already ran on the default", () => {
+    expect(hostRerunModel({ backend: "claude", model: "claude-fable-5-1" })).toBe("claude-opus-5-5");
+  });
+
+  it("stays on a one-model CLI's own pick", () => {
+    expect(hostRerunModel({ backend: "codex", model: "codex-default" })).toBe("codex-default");
   });
 });

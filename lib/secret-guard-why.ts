@@ -7,6 +7,7 @@ import path from "node:path";
 import { DATA_DIR } from "./store";
 import { DATA_SECRET, PROC_ENV, SECRET_FILE, TEMPLATE, inTranscriptDir, placedPath } from "./secret-guard-files";
 import { workerHome } from "./worker-config";
+import { credentialFileRefusal, isCliCredential } from "./secret-guard-credentials";
 
 // The worker's files that hold a key or a token, as opposed to its log and update notes.
 const WORKER_KEYS = /^(worker\.json|worker\.env|seal-key\.json|sign-key\.json|github-credentials)$/i;
@@ -21,6 +22,8 @@ const SECRET = (name: string) =>
   "read or edit `.env.example`, and ask the user to set the value themselves.";
 
 const KINDS: { is: (at: string, clean: string, dataDir: string) => boolean; say: (name: string) => string }[] = [
+  // A glob in the name (`~/.config/gh/*`) is named by its folder.
+  { is: (at) => isCliCredential(at) || isCliCredential(path.dirname(at)), say: credentialFileRefusal },
   {
     is: (_at, clean) => inTranscriptDir(clean),
     say: (name) =>

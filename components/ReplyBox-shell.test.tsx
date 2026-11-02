@@ -48,6 +48,20 @@ describe("ReplyBox ! shell mode", () => {
     expect(onShell).toHaveBeenCalledWith("pwd");
   });
 
+  it("where there's no shell (a worker's card), turns amber and says why, and sends nothing", async () => {
+    const { onSend, box } = setup({ onShell: undefined, noShell: "A shell runs only on this Mac's cards." });
+    await userEvent.type(box, "!ls");
+    expect(screen.getByText("A shell runs only on this Mac's cards.")).toBeInTheDocument();
+    expect(screen.getByText("Shell · repo")).toBeInTheDocument();
+    await userEvent.type(box, "{Enter}");
+    await userEvent.click(screen.getByRole("button", { name: "Run" }));
+    expect(onSend).not.toHaveBeenCalled();
+    expect(box).toHaveValue("!ls");
+    await userEvent.clear(box);
+    await userEvent.type(box, "ls");
+    expect(screen.queryByText("A shell runs only on this Mac's cards.")).toBeNull();
+  });
+
   it("asks for a command after a bare !", async () => {
     const { onShell, box } = setup();
     await userEvent.type(box, "!{Enter}");

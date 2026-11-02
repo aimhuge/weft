@@ -25,6 +25,7 @@ export default function RowFolderCell({ card, alsoHere, folders = [], onFolder }
     <span className="flex min-w-0 items-center gap-1.5 text-[11px]">
       {movable ? (
         <button
+          data-human-only
           title={`${card.cwd}\nClick to move this card to another folder`}
           onClick={(e) => {
             e.stopPropagation();
@@ -79,6 +80,8 @@ export function FolderPicker({ anchor, current, folders, onPick, onClose }: { an
 
   return (
     <SheetPopover anchor={anchor} width={340} label="Move to folder" onClose={onClose}>
+      {/* Moving a card points its thread at another folder: only the user does that (docs/architecture/board-view.md). */}
+      <div data-human-only className="contents">
       <PopSearch
         value={search}
         placeholder="Type a folder name or path…"
@@ -120,6 +123,7 @@ export function FolderPicker({ anchor, current, folders, onPick, onClose }: { an
           Choose folder…
         </button>
       )}
+      </div>
     </SheetPopover>
   );
 }

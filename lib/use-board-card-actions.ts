@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef } from "react";
 import { api } from "./client";
 import { patchNow } from "./optimistic-cards";
-import { hostOf } from "./project-host";
+import { hostOf, sameHostCards } from "./project-host";
 import { addTag } from "./rail-view";
 import type { Card, Column } from "./types";
 import { compareCardOrder, ordersForSlot } from "./card-order";
@@ -68,25 +68,28 @@ export function useBoardCardActions({ cards, remote = NONE, setCards, setDragOve
     [cards, remote, setDragOver, move],
   );
 
-  // A card dropped on a tag in the 🏷 drawer gets that tag.
+  // A card dropped on a tag in the 🏷 drawer gets that tag, on whichever host runs it.
   const tagCard = useCallback(
     (cardId: string, tag: string) => {
-      const card = cards.find((c) => c.id === cardId);
+      const card = cards.find((c) => c.id === cardId) ?? remote.find((c) => c.id === cardId);
       const next = card && addTag(card.tags, tag);
-      if (next) patchNow(cardId, { tags: next }, () => api.mark(cardId, { tags: next })).catch(notify);
+      if (next) patchNow(cardId, { tags: next }, () => hostOf(card).act("card.update", { id: cardId, body: { tags: next } }, () => api.mark(cardId, { tags: next }))).catch(notify);
     },
-    [cards, notify],
+    [cards, remote, notify],
   );
 
   // A backlog card dropped on a sibling. `before` is the indicator side: true for the top
   // half (place before target), false for the bottom (place after). Mirrors the same
   // order calculation as lib/store.ts reorderCard, so optimistic and persisted order match.
+  // A worker's card reorders among that worker's cards, drawn through lib/optimistic-cards.ts and sent as card.update.
   const reorder = useCallback(
     (id: string, target: string, before: boolean) => {
-      const moved = cards.find((c) => c.id === id);
+      const away = remote.find((c) => c.id === id);
+      const pool = away ? sameHostCards([...remote], away) : cards;
+      const moved = pool.find((c) => c.id === id);
       if (!moved) return;
       // Siblings in the same column, sorted by current order with createdAt as a stable tie-breaker.
-      const siblings = cards
+      const siblings = pool
         .filter((c) => c.column === moved.column && c.id !== id)
         .slice()
         .sort(compareCardOrder);
@@ -95,15 +98,20 @@ export function useBoardCardActions({ cards, remote = NONE, setCards, setDragOve
       // The drop slot: top half -> before target; bottom half -> after target.
       const slot = before ? targetIndex : targetIndex + 1;
       const orderChanges = ordersForSlot(siblings, id, slot);
+      // The API's `before` anchor expresses both halves: after a card means before its
+      // next sibling, or append when the target is last.
+      const anchor = siblings[slot]?.id ?? null;
+      if (away) {
+        void patchNow(id, { order: orderChanges.get(id) }, () => hostOf(away).act("card.update", { id, body: { before: anchor } })).catch(notify);
+        return;
+      }
       setCards((cur) => cur.map((c) => {
         const order = orderChanges.get(c.id);
         return order === undefined ? c : { ...c, order };
       }));
-      // The API's `before` anchor expresses both halves: after a card means before its
-      // next sibling, or append when the target is last.
-      api.reorder(id, siblings[slot]?.id ?? null).catch(notify);
+      api.reorder(id, anchor).catch(notify);
     },
-    [cards, setCards, notify],
+    [cards, remote, setCards, notify],
   );
 
   return { ownMoves, move, drop, reorder, tagCard };

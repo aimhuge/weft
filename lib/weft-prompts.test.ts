@@ -16,6 +16,8 @@ let prompts: Prompts;
 let DEFAULT_THREAD_PROMPT: string;
 
 beforeEach(async () => {
+  // A Mac's prompts, whatever WEFT_WORKER the run has (a worker's own checkout sets it); toolPrompts covers a worker's.
+  vi.stubEnv("WEFT_WORKER", "");
   vi.resetModules();
   ({ DEFAULT_THREAD_PROMPT } = await import("./settings"));
   s.threadPrompt = DEFAULT_THREAD_PROMPT;
@@ -163,5 +165,23 @@ describe("promptsBuild", () => {
 
   it("WEFT_SOUL_PROMPT is pinned too", () => {
     expect(Object.keys(prompts.WEFT_PINNED_PROMPTS)).toContain("WEFT_SOUL_PROMPT");
+  });
+});
+
+describe("toolPrompts", () => {
+  it("is every tool group's prompt on a Mac", () => {
+    const { BROWSER_PROMPT, SECRETS_PROMPT } = prompts.WEFT_PINNED_PROMPTS;
+    const parts = prompts.toolPrompts(false);
+    expect(parts).toHaveLength(5);
+    expect(parts.slice(0, 2)).toEqual([BROWSER_PROMPT, SECRETS_PROMPT]);
+  });
+
+  it("on a worker drops the groups that don't work there and says what doesn't, from lib/worker-tools.ts", () => {
+    const parts = prompts.toolPrompts(true);
+    const text = parts.join("\n\n");
+    expect(text).toContain("Weft Worker");
+    expect(text).not.toContain("mcp__secrets__ask_add");
+    expect(text).toContain("mcp__webhooks__add_blank");
+    expect(parts.at(-1)).toMatch(/^On this Weft Worker some of Weft's tools don't work yet/);
   });
 });

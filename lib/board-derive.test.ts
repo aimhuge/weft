@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Card } from "./types";
-import { filterState, footerFor, framedCard, headerCounts, menuProject, openCardMarks, openCardOf, workFolder } from "./board-derive";
+import { filterState, footerFor, framedCard, headerCounts, menuProject, openCardMarks, openCardOf, terminalAway, workFolder } from "./board-derive";
+import type { WorkerProject } from "./worker-project";
 
 const card = (over: Partial<Card>): Card => ({ id: "a", cwd: "/card", backend: "claude", column: "running", ...over }) as Card;
 const latest = { cwd: "/latest", backend: "codex" as const, model: "m" };
@@ -109,3 +110,18 @@ describe("openCardMarks", () => {
   });
 });
 
+
+describe("terminalAway", () => {
+  const projects = [{ path: "worker://w1/ling", workerId: "w1", worker: "m1mini", folder: "ling", status: "online" }] as WorkerProject[];
+  it("names the open worker card's worker, else the chosen worker project's when no card is open", () => {
+    expect(terminalAway({ name: "m2" }, "/r", projects, true)).toBe("m2");
+    expect(terminalAway(null, "worker://w1/ling", projects, false)).toBe("m1mini");
+    expect(terminalAway(null, "worker://w9/x", projects, false)).toBeNull();
+  });
+
+  it("is this Mac's terminal for a local card or project, or none", () => {
+    expect(terminalAway(null, "worker://w1/ling", projects, true)).toBeNull();
+    expect(terminalAway(undefined, null, projects, false)).toBeNull();
+    expect(terminalAway(null, "/r", projects, false)).toBeNull();
+  });
+});

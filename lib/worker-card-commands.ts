@@ -19,8 +19,12 @@ function ownCard(engine: Engine, cardId: string | undefined): Card {
   return card;
 }
 
-export function workerRules(engine: Engine): CardRules {
+export function workerRules(engine: Engine, create?: CardRules["create"], owner?: string): CardRules {
   return {
+    // The worker only claims its owner's commands (worker_pending and worker_claim check created_by); this is the same
+    // rule again at the verb, for the ones that reach the owner's Mac or the internet (OWNER_VERBS).
+    fromOwner: (command) => Boolean(owner) && command.created_by === owner,
+    ...(create ? { create } : {}),
     card: (cardId) => ownCard(engine, cardId),
     verb: (verb, args) => engine.host(verb, args),
     grant: (cardId, directory, scope) => engine.grant(cardId, directory, scope),
@@ -30,9 +34,10 @@ export function workerRules(engine: Engine): CardRules {
   };
 }
 
-export function createCardCommands(engine: Engine) {
+// `create` is the daemon's card.create (lib/worker-kinds.ts): a card in the row's checkout, published before the report.
+export function createCardCommands(engine: Engine, create?: CardRules["create"], owner?: string) {
   return {
-    ...cardKinds(workerRules(engine)),
+    ...cardKinds(workerRules(engine, create, owner)),
     async mode(command: CloudCommandRow): Promise<string> {
       const body = modeBody(command);
       if (!body) throw new Error("That mode can't be set on a worker.");

@@ -5,7 +5,7 @@
 // panel and the live INSERT/UPDATE/DELETE path, without a real network. The pure logic
 // (webCards, applyCardChange, …) has its own coverage in lib/web-board.test.ts; this is the wiring.
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { CloudCommandRow } from "@/lib/cloud-commands";
 import type { CloudThreadItemRow } from "@/lib/cloud-sync-types";
 import { pickModel } from "../model-picker-test-utils";
@@ -22,6 +22,12 @@ async function loadBoard() {
 const user = { id: "u1", email: "ada@b.co", name: "Ada", avatar: null };
 const orgs = [{ id: "o1", slug: "ada", name: "Ada's team" }, { id: "o2", slug: "lab", name: "Lab" }];
 const props = { orgId: "o1", orgSlug: "ada", userId: "u1", user, orgs, initialCommands: [] as CloudCommandRow[], openCardId: null, initialThread: [] as CloudThreadItemRow[], initialBlobUrls: {} };
+
+// The first import pulls in the whole board; on a busy CI shard that cold load alone can pass the
+// default 5s test timeout, so it is paid here, once, with room to spare.
+beforeAll(async () => {
+  await loadBoard();
+}, 60_000);
 
 afterEach(() => {
   resetHarness();

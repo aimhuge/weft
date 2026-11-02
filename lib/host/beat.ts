@@ -59,8 +59,11 @@ export function createBeat(deps: BeatDeps) {
   async function tick(s: WorkerStatus = deps.status()) {
     if (stopped) return;
     if (up && s !== tracked) {
-      presence?.track(s);
       tracked = s;
+      // A track the server refused is tried again on the next tick, and the row keeps its pace meanwhile.
+      void Promise.resolve(presence?.track(s)).then((ok) => {
+        if (ok === false && tracked === s) tracked = null;
+      });
     }
     await queue(async () => {
       if (!stopped && (!up || s !== written || now() - writtenAt >= slow)) await put(s);

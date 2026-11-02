@@ -40,6 +40,15 @@ describe("ThreadCronButton", () => {
     expect(screen.queryByLabelText("Crons")).toBeNull();
   });
 
+  it("leaves it out on a worker's card, whose host has no crons of this Mac's", () => {
+    render(
+      <ThreadTransportContext.Provider value={{ desktop: false, cardEdits: true } as unknown as ThreadTransport}>
+        <ThreadCronButton card={makeCard({ id: "w1", cwd: "worker://w1/ling", sessionId: "s1" })} items={[]} />
+      </ThreadTransportContext.Provider>,
+    );
+    expect(screen.queryByLabelText("Crons")).toBeNull();
+  });
+
   it("leaves it out for the copilot", () => {
     setup(true, [], makeCard({ id: "copilot", role: "copilot" }));
     expect(screen.queryByLabelText("Crons")).toBeNull();

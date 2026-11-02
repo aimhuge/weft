@@ -118,6 +118,11 @@ Built 2026-11-02 (migration `20261102190000_worker_tunnels.sql`, not applied). `
   project picked, only that worker's checkout shows (`lib/worker-dev-view.ts`); with a project on this Mac, a worker's
   checkout of the same name.
 - **Locally** the same verbs mount on `POST /api/cards/:id/dev` as `open`, `stop`, `rerun` and `log`.
+- **Owner only**: `dev.open` is an owner verb (`OWNER_VERBS`, `lib/host/dispatch.ts`): the worker (and a Mac) run it
+  only for a command its owner made, so no other workspace member can raise a Touch ID prompt on the owner's Mac
+  (tunnels.md#on-a-worker). There is no `dev.restart` verb; the Mac's `restart` action on `POST /api/cards/:id/dev`
+  is behind the local token guard.
+- **Locally** the same verbs mount on `POST /api/cards/:id/dev` as `open` and `stop`.
 - **The vault's env** (H8): `devSecrets` (`lib/secret-run.ts`) gives a worker's run `{}` until the sealed `secret_use`
   lands; the hook is that call in `startDev`.
 

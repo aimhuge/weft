@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { MAX_TAG, MAX_TAGS, normalizeTag, normalizeTags, tagCounts, tagHue } from "./tags";
+import { cleanTitle } from "./format";
 
 describe("normalizeTag", () => {
   it("lowercases, drops a leading #, and folds whitespace and commas to single spaces", () => {
@@ -47,5 +48,14 @@ describe("tagHue", () => {
       expect(tagHue(tag)).toBeGreaterThanOrEqual(0);
       expect(tagHue(tag)).toBeLessThan(360);
     }
+  });
+});
+
+describe("control characters", () => {
+  it("leave a tag and a title, which may come off the network (card.create)", () => {
+    expect(normalizeTag("bu\u001b[31mg\u0000")).toBe("bu[31mg");
+    expect(normalizeTag("\u202e\u0007")).toBeUndefined();
+    expect(cleanTitle("Fix\u0000 the\u202e bug\u001b")).toBe("Fix the bug");
+    expect(cleanTitle("Tabs\tand\nlines")).toBe("Tabs and lines");
   });
 });

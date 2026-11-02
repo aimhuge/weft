@@ -4,7 +4,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useEscape } from "@/lib/use-escape";
 import { currentArea, fitWidth, placeMenuBelow } from "@/lib/float-place";
-import { api } from "@/lib/client";
+import { useThreadTransport } from "@/lib/thread-transport";
 import type { SkillInfo } from "@/lib/types";
 import Icon, { Spinner } from "./Icon";
 
@@ -20,12 +20,15 @@ const MENU_HEIGHT = 480;
 
 type Load = { kind: "loading" } | { kind: "error"; error: string } | { kind: "ready"; skills: SkillInfo[] };
 
-// A card's Skills button: lists the skills its thread can run and sends the chosen one as /<skill>.
+// A card's Skills button: lists the skills its thread can run and sends the chosen one as /<skill>. The list is the
+// transport's (lib/thread-transport.ts listSkills): this Mac's folder for its own card, the worker's for a worker's.
 export default function SkillMenu({
+  cardId,
   cwd,
   disabled,
   onRun,
 }: {
+  cardId?: string;
   cwd: string;
   disabled: boolean;
   onRun: (skill: string) => Promise<void>;
@@ -41,6 +44,7 @@ export default function SkillMenu({
   const buttonRef = useRef<HTMLButtonElement>(null);
   const [place, setPlace] = useState<{ left: number; top: number; width: number; maxHeight: number } | null>(null);
   const menuId = useId();
+  const { listSkills } = useThreadTransport();
 
   // Drawn in a portal at fixed window coordinates, so the thread panel's own edges can't clip it: under the button,
   // ending at its right edge, and slid back inside the window (clear of the browser pane) when it won't fit.
@@ -61,8 +65,8 @@ export default function SkillMenu({
   useEffect(() => {
     if (!open) return;
     let ignore = false;
-    api.skills(cwd).then(
-      (r) => !ignore && setLoad({ kind: "ready", skills: r.skills }),
+    (listSkills ? listSkills(cardId, cwd) : Promise.resolve([])).then(
+      (skills) => !ignore && setLoad({ kind: "ready", skills }),
       (err: unknown) => !ignore && setLoad({ kind: "error", error: err instanceof Error ? err.message : String(err) }),
     );
     const onDown = (e: MouseEvent) => {
@@ -74,7 +78,7 @@ export default function SkillMenu({
       ignore = true;
       window.removeEventListener("mousedown", onDown);
     };
-  }, [open, cwd]);
+  }, [open, cardId, cwd, listSkills]);
 
   function toggle() {
     setFilter("");

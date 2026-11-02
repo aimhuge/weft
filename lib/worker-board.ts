@@ -18,16 +18,16 @@ import { hostCommand, textArgOf } from "./host-command";
 import { DATA_DIR } from "./store";
 import type { ThreadPage } from "./thread-page";
 import type { Card, PermissionMode, QuestionReply } from "./types";
-import { inputCommand, modeCommand, runCommand, workerDevice, type BoardInput, type BoardOffer, type ScreenInput } from "./worker-commands";
+import { inputCommand, modeCommand, workerDevice, type BoardInput, type BoardOffer, type ScreenInput } from "./worker-commands";
 import { seal } from "./worker-seal";
 import { RTC_PURPOSE } from "./rtc-signal";
 import { LINE_PURPOSE, type LineOffer } from "./host-line-protocol";
-import { EMPTY_WORKER_BOARD, offlineMessage, parseWorkerProject, workerProjectPath, type WorkerBoard, type WorkerProject, type WorkerProjectStatus } from "./worker-project";
+import { EMPTY_WORKER_BOARD, workerProjectPath, type WorkerBoard, type WorkerProject, type WorkerProjectStatus } from "./worker-project";
 import { liveStatus, type PresenceRead } from "./worker-presence";
 import { presenceWatch, type PresenceWatch } from "./worker-presence-watch";
 
 // Where this Mac's composer saves what you paste (lib/attachments.ts ATTACHMENTS_DIR, without its image tools).
-const ATTACHMENTS = path.join(DATA_DIR, "attachments");
+export const ATTACHMENTS = path.join(DATA_DIR, "attachments");
 
 // The cards a board reads per poll, newest first.
 const CARD_LIMIT = 500;
@@ -66,7 +66,7 @@ export async function requireSession(client: SupabaseClient) {
 }
 
 // Your headless workers. A teammate's won't obey you, and a desktop worker's cards are that Mac's own.
-async function myWorkers(client: SupabaseClient, who: { uid: string; org: string }): Promise<WorkerRow[]> {
+export async function myWorkers(client: SupabaseClient, who: { uid: string; org: string }): Promise<WorkerRow[]> {
   const { data, error } = await client
     .from("cloud_workers")
     .select("id, name, status, last_seen_at")
@@ -181,14 +181,14 @@ async function commandTarget(client: SupabaseClient, cardId: string) {
 
 // The files a message pastes, uploaded to the workspace's blobs as you, for the worker to bring over
 // (lib/attachment-transfer.ts). The row gains them only when there are any, so a text reply's row is as it was.
-async function withAttachments(client: SupabaseClient, row: NewCommand, text: string, dir: string): Promise<NewCommand> {
+export async function withAttachments(client: SupabaseClient, row: NewCommand, text: string, dir: string): Promise<NewCommand> {
   const blobs = createBlobStore({ client });
   const upload = async (file: string) => (await blobs.upload(file, row.org_id))?.slice(BLOB_REF_PREFIX.length) ?? null;
   const attachments = await encodeAttachments(text, dir, upload);
   return attachments.length ? sendable({ ...row, payload: { ...row.payload, attachments } }) : row;
 }
 
-async function insert(client: SupabaseClient, row: NewCommand): Promise<{ commandId: string }> {
+export async function insert(client: SupabaseClient, row: NewCommand): Promise<{ commandId: string }> {
   const { data, error } = await client.from("cloud_commands").insert(row).select("id").single<{ id: string }>();
   if (error) throw new Error(`Couldn't reach your worker: ${error.message}`);
   return { commandId: data.id };
@@ -260,38 +260,4 @@ export async function sendWorkerAction(body: WorkerAction, client: SupabaseClien
   const row = body.action === "reply" ? replyCommand(target, body.text) : answerCommand(target, body);
   if (!row) throw new Error(body.action === "reply" ? "Write a message first." : "Nothing is waiting for an answer.");
   return insert(client, body.action === "reply" ? await withAttachments(client, row, body.text, dir) : row);
-}
-
-export interface WorkerThreadInput {
-  cwd: string;
-  prompt: string;
-  title?: string;
-  backend?: string;
-  model?: string;
-  effort?: string;
-  permissionMode?: string;
-}
-
-// A new thread in a worker project: a run with that folder, or an error that says why not. It never starts anywhere
-// else: an offline worker refuses here rather than queue a run that would land hours later.
-export async function startWorkerThread(
-  body: WorkerThreadInput,
-  client: SupabaseClient = accountClient(),
-  now = Date.now(),
-  dir = ATTACHMENTS,
-  presence: PresenceWatch = presenceWatch(),
-): Promise<{ commandId: string; worker: string }> {
-  const project = parseWorkerProject(body.cwd);
-  if (!project) throw new Error("That isn't a worker project.");
-  const who = await requireSession(client);
-  const worker = (await myWorkers(client, who)).find((w) => w.id === project.workerId);
-  if (!worker) throw new Error("That worker isn't one of yours anymore.");
-  const seen = await presence.read((fn, args) => client.rpc(fn, args), [worker.id], { owner: who.uid });
-  if (liveStatus(worker, seen, now) === "offline") throw new Error(offlineMessage(worker.name));
-  const row = runCommand({ orgId: who.org, workerId: worker.id, folder: project.folder }, body);
-  if (!row) throw new Error("Write a prompt for this thread.");
-  // runBody reads these as well; runCommand has no use for them on a Send a run from Settings.
-  const payload = { ...row.payload, ...(body.title ? { title: body.title } : {}), ...(body.backend ? { backend: body.backend } : {}), ...(body.effort ? { effort: body.effort } : {}) };
-  const { commandId } = await insert(client, await withAttachments(client, sendable({ ...row, payload }), body.prompt, dir));
-  return { commandId, worker: worker.name };
 }
