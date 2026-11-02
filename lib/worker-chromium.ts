@@ -159,8 +159,23 @@ export function findChromium(candidates = chromiumCandidates()): string | null {
 export const NO_CHROMIUM = "This worker has no Chromium for the browser tools. Run `weft-worker update` (install/worker.sh pins one), or set WEFT_CHROMIUM to a Chrome or chrome-headless-shell binary.";
 
 // The flags: headless, nothing that phones home or asks, and no file access across files. A full Chrome takes
-// --headless=new; chrome-headless-shell is headless already and ignores it. Root on Linux needs --no-sandbox.
-export function chromiumArgs(dataDir: string, isRoot = process.getuid?.() === 0) {
+// --headless=new; chrome-headless-shell is headless already and ignores it. Root, or a Linux that blocks user namespaces, needs --no-sandbox.
+// Chrome's sandbox needs unprivileged user namespaces; Ubuntu 24.04 (GitHub's runners included) blocks them with AppArmor, and
+// then Chrome exits at once. Root, or a Linux box that forbids them, runs without the sandbox: the box is the worker's own.
+export function sandboxUnavailable(platform = process.platform, isRoot = process.getuid?.() === 0, read: (file: string) => string | null = readProc): boolean {
+  if (platform !== "linux") return false;
+  return isRoot || read("/proc/sys/kernel/apparmor_restrict_unprivileged_userns") === "1" || read("/proc/sys/kernel/unprivileged_userns_clone") === "0" || read("/proc/sys/user/max_user_namespaces") === "0";
+}
+
+function readProc(file: string): string | null {
+  try {
+    return fs.readFileSync(file, "utf8").trim();
+  } catch {
+    return null;
+  }
+}
+
+export function chromiumArgs(dataDir: string, noSandbox = sandboxUnavailable()) {
   return [
     "--headless=new",
     "--remote-debugging-pipe",
@@ -173,7 +188,7 @@ export function chromiumArgs(dataDir: string, isRoot = process.getuid?.() === 0)
     "--hide-scrollbars",
     "--mute-audio",
     "--window-size=1280,800",
-    ...(isRoot ? ["--no-sandbox"] : []),
+    ...(noSandbox ? ["--no-sandbox"] : []),
     "about:blank",
   ];
 }

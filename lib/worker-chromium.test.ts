@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { PassThrough } from "node:stream";
 import { afterAll, describe, expect, it, vi } from "vitest";
-import { cdpOver, chromiumArgs, chromiumCandidates, findChromium, launchChromium, NO_CHROMIUM, pipeReader, quietly } from "./worker-chromium";
+import { cdpOver, chromiumArgs, chromiumCandidates, findChromium, launchChromium, NO_CHROMIUM, pipeReader, quietly, sandboxUnavailable } from "./worker-chromium";
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "weft-chromium-"));
 afterAll(() => fs.rmSync(tmp, { recursive: true, force: true }));
@@ -130,6 +130,19 @@ describe("chromiumCandidates and findChromium", () => {
     fs.writeFileSync(plain, "");
     expect(findChromium([path.join(tmp, "missing"), plain, tmp, exe])).toBe(exe);
     expect(findChromium([path.join(tmp, "missing")])).toBeNull();
+  });
+});
+
+describe("sandboxUnavailable", () => {
+  const none = () => null;
+  it("is true for root or a Linux that blocks user namespaces, false elsewhere", () => {
+    expect(sandboxUnavailable("linux", true, none)).toBe(true);
+    expect(sandboxUnavailable("linux", false, none)).toBe(false);
+    expect(sandboxUnavailable("linux", false, (f) => (f.endsWith("apparmor_restrict_unprivileged_userns") ? "1" : null))).toBe(true);
+    expect(sandboxUnavailable("linux", false, (f) => (f.endsWith("unprivileged_userns_clone") ? "0" : null))).toBe(true);
+    expect(sandboxUnavailable("linux", false, (f) => (f.endsWith("max_user_namespaces") ? "0" : null))).toBe(true);
+    expect(sandboxUnavailable("darwin", true, none)).toBe(false);
+    expect(typeof sandboxUnavailable()).toBe("boolean");
   });
 });
 

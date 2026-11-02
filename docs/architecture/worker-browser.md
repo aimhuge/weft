@@ -99,7 +99,7 @@ Page.startScreencast (JPEG q70, ≤1280 px, a frame on each repaint, each acked)
 for mac-arm64, mac-x64 or linux64, pinned by the zip's SHA-256 (the release publishes no digest). A failure only skips
 it. `findChromium` (`lib/worker-chromium.ts`) looks in order at `WEFT_CHROMIUM`, that folder, Playwright's cached
 `chromium_headless_shell-*` builds (newest first), then the system's Chrome or Chromium; with none, the tools say how to
-get one. As root on Linux it adds `--no-sandbox`. An enrolled box gets it with `weft-worker update`, which reruns the
+get one. As root on Linux, or where AppArmor/sysctl blocks unprivileged user namespaces (Ubuntu 24.04, GitHub runners), it adds `--no-sandbox`. An enrolled box gets it with `weft-worker update`, which reruns the
 script; an auto-update doesn't.
 
 ## Tested
