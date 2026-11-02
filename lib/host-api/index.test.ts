@@ -47,10 +47,17 @@ vi.mock("@/lib/scheduler", () => ({
   scheduleMessage: vi.fn((id: string) => db.cards.get(id)),
   unscheduleMessage: vi.fn((id: string) => db.cards.get(id)),
 }));
+vi.mock("@/lib/host-settings", () => ({
+  hostSettings: vi.fn(() => ({ maxThreads: 6, keepAliveMinutes: 0, worktreePool: 1, defaultBackend: "claude" })),
+  applyHostSettings: vi.fn(() => ({ maxThreads: 6, keepAliveMinutes: 0, worktreePool: 1, defaultBackend: "claude" })),
+}));
 vi.mock("@/lib/new-card", () => ({
   createCardFromBody: vi.fn((_body: unknown, id: string) => ({ id, title: "t" })),
   startCard: vi.fn(() => ({ started: true })),
 }));
+vi.mock("@/lib/crons", () => ({ updateCron: vi.fn((id: string, patch: object) => ({ id, ...patch })), deleteCron: vi.fn() }));
+vi.mock("@/lib/cron-run", () => ({ runCron: vi.fn(() => Promise.resolve({ id: "run-1" })) }));
+vi.mock("@/lib/webhooks", () => ({ updateWebhook: vi.fn((id: string, patch: object) => ({ id, ...patch })), removeWebhook: vi.fn(() => ({ id: "h1" })) }));
 vi.mock("@/lib/skills", () => ({ listSkills: vi.fn(() => [{ name: "ship", description: "d", source: "project" }]) }));
 vi.mock("@/lib/file-access", () => ({
   listFiles: vi.fn(() => Promise.resolve(["a.ts"])),
@@ -102,12 +109,21 @@ const SAMPLES: Record<HostVerb, { args: unknown; reply: () => unknown }> = {
   "files.write": { args: { id: "c1", path: "a.ts", text: "y", baseHash: "h" }, reply: () => ({ result: { hash: "h2", mtime: 2 } }) },
   "dev.open": { args: { id: "c1" }, reply: () => ({ address: "https://weft.zip/t/t1" }) },
   "dev.stop": { args: { id: "c1" }, reply: () => ({ ok: true }) },
+  "cron.update": { args: { id: "k1", patch: { enabled: false } }, reply: () => ({ cron: { id: "k1", enabled: false } }) },
+  "cron.delete": { args: { id: "k1" }, reply: () => ({ ok: true }) },
+  "cron.run": { args: { id: "k1" }, reply: () => ({ card: { id: "run-1" } }) },
+  "webhook.update": { args: { id: "h1", patch: { registered: true } }, reply: () => ({ hook: { id: "h1", registered: true } }) },
+  "webhook.delete": { args: { id: "h1" }, reply: () => ({ ok: true }) },
   "dev.restart": { args: { id: "c1" }, reply: () => ({ ok: true }) },
   "dev.log": { args: { id: "c1" }, reply: () => ({ log: "ready" }) },
+  "settings.get": { args: undefined, reply: () => ({ settings: { maxThreads: 6, keepAliveMinutes: 0, worktreePool: 1, defaultBackend: "claude" } }) },
+  "settings.put": { args: { patch: { maxThreads: 6 } }, reply: () => ({ settings: { maxThreads: 6, keepAliveMinutes: 0, worktreePool: 1, defaultBackend: "claude" } }) },
 };
 
-// The local route each verb is mounted on.
-const ROUTES: Record<HostVerb, string> = {
+// The local route each card verb is mounted on. The host-level verbs (settings.*) have none: this Mac's own settings are
+// its settings route, and a host takes them from the network only on a worker.
+type CardVerb = Exclude<HostVerb, "settings.get" | "settings.put">;
+const ROUTES: Record<CardVerb, string> = {
   "card.create": "../route.ts",
   "card.update": "route.ts",
   "card.stop": "stop/route.ts",
@@ -133,11 +149,17 @@ const ROUTES: Record<HostVerb, string> = {
   "files.write": "files/route.ts",
   "dev.open": "dev/route.ts",
   "dev.stop": "dev/route.ts",
+  "cron.update": "../../crons/[id]/route.ts",
+  "cron.delete": "../../crons/[id]/route.ts",
+  "cron.run": "../../crons/[id]/run/route.ts",
+  "webhook.update": "../../webhooks/[id]/route.ts",
+  "webhook.delete": "../../webhooks/[id]/route.ts",
   "dev.restart": "dev/route.ts",
   "dev.log": "dev/route.ts",
 };
 
 const verbs = Object.keys(HOST_API) as HostVerb[];
+const cardVerbs = verbs.filter((v): v is CardVerb => !v.startsWith("settings."));
 
 describe("HOST_API", () => {
   it.each(verbs)("runs %s", async (verb) => {
@@ -147,14 +169,20 @@ describe("HOST_API", () => {
 
   it("names the same verbs as the samples and the routes", () => {
     expect(verbs.sort()).toEqual(Object.keys(SAMPLES).sort());
-    expect(verbs.sort()).toEqual(Object.keys(ROUTES).sort());
+    expect(cardVerbs.sort()).toEqual(Object.keys(ROUTES).sort());
+  });
+
+  it("keeps a host's own settings elevated", () => {
+    expect(HOST_API["settings.get"].elevated).toBe(true);
+    expect(HOST_API["settings.put"].elevated).toBe(true);
   });
 
   // The files route's GET (list, read) checks guard() for a read; its PUT (a save) checks elevated().
-  it.each(verbs)("%s is elevated exactly when its route checks elevated() first", (verb) => {
+  it.each(cardVerbs)("%s is elevated exactly when its route checks elevated() first", (verb) => {
     const source = fs.readFileSync(path.join(process.cwd(), "app/api/cards/[id]", ROUTES[verb]), "utf8");
     const write = verb === "files.write" ? source.slice(source.indexOf("export async function PUT")) : source;
-    const first = /const denied = (guard|elevated)\(req[,)]/.exec(write)?.[1];
+    // A cron's or webhook's route gates a worker's with elevated() (a cloud act) and this Mac's own with guard().
+    const first = /const denied = (guard|elevated)\(req[,)]/.exec(write)?.[1] ?? /isWorkerItem\(id\) \? elevated\(req\) : (guard)\(req\)/.exec(write)?.[1];
     expect(first).toBeDefined();
     expect(HOST_API[verb].elevated).toBe(first === "elevated");
   });

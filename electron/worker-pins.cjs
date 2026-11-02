@@ -75,10 +75,14 @@ function createWorkerPins({ dir, safeStorage, now = () => new Date() }) {
       }
     },
 
-    /** The name this Mac pinned a worker under, or null when it hasn't pinned one (or the file won't open). @param {string} id */
+    /**
+     * The name this Mac pinned a worker under, for main's own prompts; null when it hasn't pinned one (or the file won't
+     * open). @param {string} id
+     */
     nameOf(id) {
       try {
-        return read()[id]?.name ?? null;
+        const name = read()[id]?.name;
+        return typeof name === "string" ? name : null;
       } catch {
         return null;
       }
@@ -95,6 +99,11 @@ function createWorkerPins({ dir, safeStorage, now = () => new Date() }) {
       write({ ...pins, [id]: { publicKey, name, pinnedAt: now().toISOString(), ...(kept ? { signKey: kept } : {}) } });
     },
 
+    /** The sign key pinned for a worker at pairing (H10), for its receipts; null when there's none. @param {string} id */
+    signKeyOf(id) {
+      const pinned = read()[id];
+      return typeof pinned?.signKey === "string" ? pinned.signKey : null;
+    },
     /**
      * Re-pin (Settings → Devices, after Touch ID): drops a worker's box key, so its next allowed ask pins the one it has
      * now. Its sign key stays: a paired worker's asks still need its signature, so a stolen `wwk_` key can't re-pin.

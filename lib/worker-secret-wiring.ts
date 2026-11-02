@@ -1,6 +1,8 @@
 // How scripts/weft-worker.ts wires a worker's secret runs (docs/architecture/project-hosts.md#secrets-on-a-worker-h8-the-per-use-seal-as-built):
 // the link a card's mcp__secrets__run asks the Mac through, signed with sign-key.json when the box was paired (H10), the
 // daemon's secret_use handler with the Mac keys it trusts, and what `weft-worker status` shows to compare with the Mac.
+// Since T2 (project-hosts.md#the-vault-on-a-worker-t2-as-built) also the vault link the other secrets
+// tools ask through (lib/worker-vault.ts).
 import { createPrivateKey, sign } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -10,6 +12,7 @@ import { deliverSecretUse } from "./worker-secret-asks";
 import type { SecretLink } from "./worker-secret-run";
 import { macKeysAt } from "./worker-mac-keys";
 import { open, sealFingerprint, type SealKeys } from "./worker-seal";
+import { setVaultLink } from "./worker-vault";
 
 // The pairing's sign key, read only: a token-enrolled box has none, and making one here would sign with a key no Mac pinned.
 export function pairedSigner(home: string): ((message: string) => string) | undefined {
@@ -27,6 +30,7 @@ export function secretWiring(home: string, reg: Pick<Registry, "secretAsk" | "de
   const signer = pairedSigner(home);
   const macs = macKeysAt(home);
   const link: SecretLink = { ask: reg.secretAsk, result: reg.deviceResult, cancel: reg.deviceCancel, boxKey: keys.publicKey, ...(signer ? { sign: signer } : {}) };
+  setVaultLink({ boxKey: keys.publicKey, macKey: () => macs.pinned()[0], ...(signer ? { sign: signer } : {}) });
   return {
     link,
     use: (command: CloudCommandRow) => deliverSecretUse(command, (sealed, purpose) => open(keys, sealed, purpose), macs),

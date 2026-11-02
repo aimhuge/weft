@@ -57,6 +57,25 @@ describe("startWorkerThread", () => {
     });
   });
 
+  it("sends a thread with an agent as a run carrying its signed approval, for the worker to check", async () => {
+    const { client, inserted } = fakeClient({ workers: [online], insertId: "cmd-4" });
+    const body = { cwd: "worker://w1/ling", prompt: " go ", title: "T", backend: "codex", effort: "high", agent: "builder", widen: { kind: "ed25519" }, start: true };
+    expect(await startWorkerThread(body, client, NOW)).toEqual({ commandId: "cmd-4", worker: "m1mini", cardId: "" });
+    expect(inserted()).toEqual({
+      org_id: "org-1",
+      kind: "run",
+      target_device: "worker:w1",
+      folder: "ling",
+      payload: { prompt: "go", title: "T", backend: "codex", effort: "high", agent: "builder", widen: { kind: "ed25519" } },
+    });
+  });
+
+  it("refuses a thread with an agent for the Backlog, and inserts nothing", async () => {
+    const { client, inserted } = fakeClient({ workers: [online] });
+    await expect(startWorkerThread({ cwd: "worker://w1/ling", prompt: "go", agent: "builder", start: false }, client, NOW)).rejects.toThrow("starts right away");
+    expect(inserted()).toBeNull();
+  });
+
   it("leaves out what wasn't given", () => {
     expect(createArgs({ cwd: "x", prompt: "p", model: "", effort: undefined })).toEqual({ prompt: "p", start: true });
   });

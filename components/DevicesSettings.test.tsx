@@ -105,6 +105,27 @@ describe("DevicesSettings", () => {
     expect(repinOutcome("m1mini", { forgotten: false })).toBe("m1mini had no pinned keys on this Mac.");
   });
 
+  it("lets this Mac's passkeys approve on a worker, after main endorses them", async () => {
+    const endorse = vi.fn(() => Promise.resolve(null));
+    (window as unknown as { weft: unknown }).weft = { pairing, hostPairing: hosts, approval: { widen: vi.fn(), endorse } };
+    render(<DevicesSettings />);
+    await userEvent.click(await screen.findByRole("button", { name: "Passkeys on m1mini" }));
+    expect(endorse).toHaveBeenCalledWith({ worker: "w1", revoke: false });
+    expect(await screen.findByText("Not approved, so m1mini trusts no new passkey.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Passkeys on iPhone" })).toBeNull();
+  });
+
+  it("drops the passkeys' outcome once Settings has closed", async () => {
+    let finish: (v: null) => void = () => {};
+    const endorse = vi.fn(() => new Promise<null>((r) => (finish = r)));
+    (window as unknown as { weft: unknown }).weft = { pairing, hostPairing: hosts, approval: { widen: vi.fn(), endorse } };
+    const { unmount } = render(<DevicesSettings />);
+    await userEvent.click(await screen.findByRole("button", { name: "Passkeys on m1mini" }));
+    unmount();
+    finish(null);
+    await waitFor(() => expect(endorse).toHaveBeenCalled());
+  });
+
   it("approves a paired worker's re-pair through main and shows the line for the box", async () => {
     const approveRepair = vi.fn().mockResolvedValueOnce({ denied: true }).mockRejectedValueOnce(new Error("Error invoking remote method 'worker-repair:approve': Error: Paste the whole wph.… line")).mockResolvedValueOnce({ approval: "wra.1.a.b", command: "weft-worker enrol wph.y --re-pair --approval wra.1.a.b", fingerprint: "a1b2 c3d4 e5f6 7890" });
     (window as unknown as { weft: unknown }).weft = { pairing, hostPairing: { ...hosts, approveRepair } };

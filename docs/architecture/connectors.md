@@ -58,6 +58,14 @@ Not an account but local tools: the **Simulators** card checks Xcode, an iOS run
 the emulator and an AVD for the `mcp__simulator__*` tools, and shows the command or link that fixes each missing
 one. It never installs anything. Details in docs/architecture/simulators.md.
 
+## On a Weft Worker
+
+**Not built: lending connectors to a worker needs a process boundary (red team, 2026-11-02).** T2 built Google and
+GitHub toggles on a paired worker's row that lent it tokens from the Mac's gog and gh sign-ins, run through shims; a red
+team found any card on the worker could take the token, and gh's never expires, so it was taken out before it shipped.
+The attacks and what a real fix needs are in
+[project-hosts.md](project-hosts.md#connectors-on-a-worker-not-built-needs-a-process-boundary).
+
 ## Next connectors
 
 Same shape each time: a CLI threads can call, a card in Settings for its sign-in, and a short pinned

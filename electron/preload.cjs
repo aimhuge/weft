@@ -203,6 +203,11 @@ contextBridge.exposeInMainWorld("weft", {
   // The desktop's signed approval (electron/desktop-signer.cjs): Touch ID, then main signs; the key stays in main.
   approval: {
     sign: (request) => ipcRenderer.invoke("approval:sign", request),
+    // Signed widening on a remote host (electron/widen-sign.cjs): Touch ID in main's words, then main signs.
+    widen: (request) => ipcRenderer.invoke("approval:widen", request),
+    endorse: (request) => ipcRenderer.invoke("approval:endorse", request),
+    endorseRefresh: () => ipcRenderer.invoke("approval:endorse-refresh"),
+    endorseConfirm: (request) => ipcRenderer.invoke("approval:endorse-confirm", request),
   },
   // Adding a worker by pairing it (electron/host-pairing-ipc.cjs, docs/architecture/device-registry.md): the install
   // line comes back; the code's secret check and Touch ID stay in main.

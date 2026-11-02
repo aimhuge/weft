@@ -29,3 +29,11 @@ export function hostRow(target: CardTarget, verb: HostVerb, args: Record<string,
   const payload: HostPayload = { verb, args: { ...args, id: target.cardId } };
   return { org_id: target.orgId, kind: "host", target_device: target.device, folder: target.folder, payload };
 }
+
+// Where a verb on a host itself goes: that machine, no folder and no card (settings.get / settings.put).
+export type HostTarget = { orgId: string; device: string };
+
+// A host-level verb's row: args.id is always "", so it can't be addressed to a card.
+export function hostLevelRow(target: HostTarget, verb: HostVerb, args: Record<string, unknown> = {}): HostCommandRow {
+  return { org_id: target.orgId, kind: "host", target_device: target.device, folder: "", payload: { verb, args: { ...args, id: "" } } };
+}

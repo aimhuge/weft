@@ -104,6 +104,25 @@ describe("main", () => {
     expect(exits).toEqual([1, 1, 0]);
   });
 
+  it("on a worker, takes the values from stdin and claims nothing (lib/worker-dev-env.ts)", async () => {
+    const fetchImpl = vi.fn();
+    const stdout = sink();
+    const code = await new Promise<number>((resolve) => {
+      void main({
+        stdin: stdinOf(JSON.stringify({ values: { API_KEY: VALUE }, argv: [process.execPath, server], env: { PORT: "3002" } })),
+        stdout,
+        stderr: sink(),
+        env: { PATH: process.env.PATH },
+        fetchImpl,
+        exit: resolve,
+        onSignal: () => {},
+      });
+    });
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(code).toBe(0);
+    expect(stdout.text()).toBe("key=‹API_KEY› port=3002 token=none\npartial ‹API_KEY›");
+  });
+
   it("exits 1 when the grant can't be claimed", async () => {
     const stderr = sink();
     const exits: number[] = [];

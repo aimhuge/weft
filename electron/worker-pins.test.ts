@@ -56,6 +56,11 @@ describe("createWorkerPins", () => {
     const pins = createWorkerPins({ dir: dir(), safeStorage: store });
     pins.pin("w2", { name: "box", publicKey: KEY_A, signKey: "c2lnbg==" });
     expect(pins.lookup({ id: "w2", name: "box", publicKey: KEY_A })).toMatchObject({ signKey: "c2lnbg==", firstUse: false });
+    // Main's prompts and a pin's receipt read the name and the sign key.
+    expect(pins.nameOf("w2")).toBe("box");
+    expect(pins.signKeyOf("w2")).toBe("c2lnbg==");
+    expect(pins.nameOf("w9")).toBeNull();
+    expect(pins.signKeyOf("w9")).toBeNull();
     expect(pins.forget("w2")).toBe(true);
     expect(pins.forget("w2")).toBe(false);
     expect(pins.lookup({ id: "w2", name: "box", publicKey: KEY_B })).toEqual({ publicKey: KEY_B, signKey: "c2lnbg==", fingerprint: fingerprint(KEY_B), firstUse: true });

@@ -12,6 +12,8 @@
 import type { NewCommand } from "./cloud-commands";
 import type { HostVerb } from "./host-api/types";
 import { hostRow, type CardTarget } from "./host-row";
+import type { WidenAsk } from "./sign-widen";
+import { widenChangeOf } from "./widen";
 import { skillCache } from "./skills-wire";
 import type { SkillInfo } from "./types";
 import type { Queued } from "./optimistic-cards";
@@ -29,6 +31,10 @@ export interface CloudHostInput {
   read: (commandId: string) => Promise<CommandResult>;
   wait?: WaitOptions;
   queuedWait?: WaitOptions;
+  // A change the network runs only with a signed approval (lib/widen.ts) goes here instead: the board opens
+  // sign.weft.zip, which signs it with the passkey and sends the command itself. Absent, it's sent unsigned, and the
+  // host refuses it with its own words.
+  widen?: (ask: WidenAsk) => boolean;
 }
 
 export interface CloudHostActs {
@@ -47,7 +53,14 @@ function outcome(result: CommandResult, fallback: string): CommandResult {
   return result;
 }
 
-export function cloudHostActs({ target, insert, read, wait = ACT_WAIT, queuedWait = QUEUED_WAIT }: CloudHostInput): CloudHostActs {
+export function cloudHostActs({ target, insert, read, wait = ACT_WAIT, queuedWait = QUEUED_WAIT, widen }: CloudHostInput): CloudHostActs {
+  // True when the change went to be signed: the host makes it once the approval arrives, and the board sees it then.
+  function signing(verb: HostVerb, cardId: string, args: Record<string, unknown>): boolean {
+    if (!widen || !widenChangeOf({ verb, args: { ...args, id: cardId } })) return false;
+    const to = target(cardId);
+    return typeof to !== "string" && widen({ target: to, verb, args });
+  }
+
   async function send(verb: HostVerb, cardId: string, args: Record<string, unknown>): Promise<string> {
     const to = target(cardId);
     if (typeof to === "string") throw new Error(to);
@@ -58,6 +71,7 @@ export function cloudHostActs({ target, insert, read, wait = ACT_WAIT, queuedWai
 
   // Sent and followed: undefined once it ran, a rejection if it was refused, `{ queued }` while it waits.
   async function act(verb: HostVerb, cardId: string, args: Record<string, unknown>): Promise<Queued | undefined> {
+    if (signing(verb, cardId, args)) return undefined;
     const id = await send(verb, cardId, args);
     const first = outcome(await waitForCommand(() => read(id), wait), "Your Mac couldn't do that.");
     if (first.status === "done") return undefined;

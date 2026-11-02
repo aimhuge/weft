@@ -22,6 +22,8 @@ const api = vi.hoisted(() => ({
   create: vi.fn(),
   warm: vi.fn(),
   devAction: vi.fn(),
+  updateWebhook: vi.fn(),
+  removeWebhook: vi.fn(),
 }));
 const call = vi.hoisted(() => vi.fn());
 vi.mock("./client", () => ({ api, call }));
@@ -33,6 +35,8 @@ const warmOnLine = vi.hoisted(() => vi.fn());
 vi.mock("./line-host", () => ({ actOnLine, warmOnLine, lineTransport: (workerId: string) => ({ desktop: false, workerId }), lineFiles: (workerId: string) => `line files ${workerId}` }));
 const filesApi = vi.hoisted(() => ({ list: vi.fn(), read: vi.fn(), head: vi.fn(), write: vi.fn(), stat: vi.fn() }));
 vi.mock("./client-files", () => ({ filesApi }));
+const cronApi = vi.hoisted(() => ({ update: vi.fn(), remove: vi.fn(), run: vi.fn() }));
+vi.mock("./cron-client", () => ({ cronApi }));
 vi.mock("./worker-files", () => ({ workerFiles: "worker files" }));
 vi.mock("./project-reads", () => ({ localRead: "local read" }));
 vi.mock("./project-snapshot-view", () => ({ cloudRead: "cloud read" }));
@@ -43,7 +47,7 @@ const { localToolSource } = await import("./use-tool-result");
 
 beforeEach(() => {
   vi.clearAllMocks();
-  for (const fn of [...Object.values(api), ...Object.values(filesApi), call]) fn.mockResolvedValue({ ok: true });
+  for (const fn of [...Object.values(api), ...Object.values(filesApi), ...Object.values(cronApi), call]) fn.mockResolvedValue({ ok: true });
 });
 
 describe("hostFor", () => {
@@ -149,6 +153,11 @@ describe("localHost", () => {
     ["card.create", { id: "n1", prompt: "p", start: false }, api.create, [{ prompt: "p", start: false }]],
     ["dev.open", { id: "c1" }, call, ["POST", "/api/cards/c1/dev", { action: "open" }]],
     ["dev.stop", { id: "c1" }, api.devAction, ["c1", "stop"]],
+    ["cron.update", { id: "k1", patch: { enabled: false } }, cronApi.update, ["k1", { enabled: false }]],
+    ["cron.delete", { id: "k1" }, cronApi.remove, ["k1"]],
+    ["cron.run", { id: "k1" }, cronApi.run, ["k1"]],
+    ["webhook.update", { id: "h1", patch: { registered: true } }, api.updateWebhook, ["h1", { registered: true }]],
+    ["webhook.delete", { id: "h1" }, api.removeWebhook, ["h1"]],
     ["dev.restart", { id: "c1" }, call, ["POST", "/api/cards/c1/dev", { action: "rerun" }]],
     ["dev.log", { id: "c1" }, call, ["POST", "/api/cards/c1/dev", { action: "log" }]],
   ] as const)("%s goes to the route the board has always called", async (verb, args, fn, expected) => {
@@ -192,6 +201,11 @@ describe("cloudHost", () => {
     expect(cloudHost.can("reads")).toBe(true);
   });
 
+  it("changes its crons and webhooks from the Mac's drawers, but makes no relay there", () => {
+    expect([cloudHost.can("lists"), localHost.can("lists")]).toEqual([true, true]);
+    expect([cloudHost.can("relay"), localHost.can("relay")]).toEqual([false, true]);
+  });
+
   it("sends every verb to the worker, never the local call", async () => {
     const local = vi.fn(() => Promise.resolve());
     await cloudHost.act("card.update", { id: "c1", body: { starred: true } }, local);
@@ -204,6 +218,18 @@ describe("cloudHost", () => {
       { id: "rename", label: "Rename…" },
       { id: "delete", label: "Delete…" },
     ]);
+  });
+
+  it("offers the folder, the agent, the shell and the terminal where this Mac can sign a widening, and the menu keeps them", () => {
+    vi.stubGlobal("window", { weft: { approval: { widen: vi.fn() } } });
+    try {
+      for (const feature of ["folder", "agent", "shell", "terminal"] as const) expect(cloudHost.can(feature)).toBe(true);
+      expect(cloudHost.can("vault")).toBe(false);
+      const items = [{ id: "agent:builder", label: "A" }, { id: "mode:bypassPermissions", label: "Y" }];
+      expect(cloudHost.menu(items)).toEqual(items);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
 

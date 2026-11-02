@@ -19,17 +19,25 @@ function folderList(dataDir) {
 }
 
 /**
+ * This Mac's projects with a worker folder's name, each with its vault id: a worker card's vault call
+ * (electron/worker-vault.cjs) acts on the one whose id its remote names, through this Mac's own clone.
  * @param {{ dataDir: string, idFor?: (folder: string) => Promise<{ id: string }> }} deps
- * @returns {(folder: string) => Promise<string[]>} the vault ids of this Mac's projects with that folder name
+ * @returns {(folder: string) => Promise<{ path: string, id: string }[]>}
  */
-function createProjectRepos({ dataDir, idFor = (folder) => vaultIdFor(folder) }) {
+function createProjectFolders({ dataDir, idFor = (folder) => vaultIdFor(folder) }) {
   const folders = () => folderList(dataDir);
   return async (folder) => {
     const name = String(folder).toLowerCase();
     const matches = folders().filter((f) => path.basename(f).toLowerCase() === name);
-    const ids = await Promise.all(matches.map((f) => idFor(f).then((r) => r.id, () => "")));
-    return ids.filter((id) => id.startsWith("github:"));
+    const found = await Promise.all(matches.map((f) => idFor(f).then((r) => ({ path: f, id: r.id }), () => ({ path: f, id: "" }))));
+    return found.filter((m) => m.id.startsWith("github:"));
   };
+}
+
+/** @param {Parameters<typeof createProjectFolders>[0]} deps @returns {(folder: string) => Promise<string[]>} the vault ids alone */
+function createProjectRepos(deps) {
+  const folders = createProjectFolders(deps);
+  return async (folder) => (await folders(folder)).map((m) => m.id);
 }
 
 const DAY_MS = 24 * 3_600_000;
@@ -66,4 +74,4 @@ function createKnownRepos({ dataDir, idFor = (folder) => vaultIdFor(folder), cha
   };
 }
 
-module.exports = { createProjectRepos, createKnownRepos };
+module.exports = { createProjectRepos, createProjectFolders, createKnownRepos };

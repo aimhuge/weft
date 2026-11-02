@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { CloudCommandRow } from "../cloud-commands";
 import type { Card } from "../types";
-import { asAnswer, cardKinds, dispatcher, type CardRules } from "./dispatch";
+import { asAnswer, cardKinds, dispatcher, NO_LISTS, type CardRules } from "./dispatch";
 
 const cmd = (kind: string, payload: unknown) => ({ id: "c1", kind, folder: "/dev/app", payload }) as CloudCommandRow;
 const card = { id: "k1", cwd: "/dev/app", pending: { id: "p1", readScope: { directory: "/data" } } } as unknown as Card;
@@ -120,6 +120,30 @@ describe("cardKinds", () => {
   });
 });
 
+describe("a cron or webhook the host keeps", () => {
+  const update = cmd("host", { verb: "cron.update", args: { id: "cr1", patch: { enabled: false } } });
+
+  it("runs it through the host's lists rule, with no card check, and leaves the row's card empty", async () => {
+    const lists = vi.fn<NonNullable<CardRules["lists"]>>(() => Promise.resolve(null));
+    const r = rules({ lists });
+    expect(await cardKinds(r).host(update)).toEqual({ cardId: null, result: { ok: true, cardId: "" } });
+    expect(lists).toHaveBeenCalledWith("cron.update", { id: "cr1", patch: { enabled: false } });
+    expect(r.card).not.toHaveBeenCalled();
+    lists.mockResolvedValueOnce("run-1");
+    expect(await cardKinds(r).host(cmd("host", { verb: "cron.run", args: { id: "cr1" } }))).toEqual({ cardId: null, result: { ok: true, cardId: "run-1" } });
+  });
+
+  it("refuses what the drawers can't change, and a host without the rule refuses them all", async () => {
+    const lists = vi.fn<NonNullable<CardRules["lists"]>>(() => Promise.resolve(null));
+    const bang = cmd("host", { verb: "cron.update", args: { id: "cr1", patch: { prompt: "!rm -rf /" } } });
+    await expect(cardKinds(rules({ lists })).host(bang)).rejects.toThrow(/shell line/);
+    const target = cmd("host", { verb: "webhook.update", args: { id: "h1", patch: { target: "http://localhost:9/x" } } });
+    await expect(cardKinds(rules({ lists })).host(target)).rejects.toThrow(/can't change a webhook's target/);
+    expect(lists).not.toHaveBeenCalled();
+    await expect(cardKinds(rules()).host(update)).rejects.toThrow(NO_LISTS);
+  });
+});
+
 describe("dispatcher", () => {
   it("runs a known kind after the host's check, and refuses one it doesn't know", async () => {
     const check = vi.fn((c: CloudCommandRow) => Promise.resolve({ ...c, folder: "/checked" }));
@@ -141,5 +165,68 @@ describe("a read verb through the core", () => {
     expect(after).not.toHaveBeenCalled();
     await cardKinds(r).host(cmd("host", { verb: "card.stop", args: { id: "k1" } }));
     expect(after).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("signed widening on the host kind", () => {
+  const host = (args: Record<string, unknown>, verb = "card.update") => cmd("host", { verb, args: { id: "k1", ...args } });
+
+  it("runs a widening only once its approval checks out, without the approval, and skips the elevated rule for what it signed", async () => {
+    // The Mac's rule refuses anything left in a card.update's body, and the shell.
+    const elevated = vi.fn<NonNullable<CardRules["elevated"]>>((verb, args) =>
+      Promise.resolve(verb === "card.shell" || Object.keys((args.body as object | undefined) ?? {}).length ? "phone paired" : null),
+    );
+    const widen = vi.fn<NonNullable<CardRules["widen"]>>(() => Promise.resolve(null));
+    const r = rules({ widen, elevated });
+    await cardKinds(r).host(host({ body: { cwd: "site" }, widen: { kind: "ed25519" } }));
+    expect(widen).toHaveBeenCalledWith({ card: "k1", verb: "card.update", change: { cwd: "site" }, args: { body: { cwd: "site" } } }, { kind: "ed25519" }, expect.stringMatching(/folder/));
+    expect(r.verb).toHaveBeenCalledWith("card.update", { id: "k1", body: { cwd: "site" } });
+    await cardKinds(r).host(host({ command: "ls", widen: {} }, "card.shell"));
+    expect(r.verb).toHaveBeenLastCalledWith("card.shell", { id: "k1", command: "ls" });
+    expect(elevated).not.toHaveBeenCalledWith("card.shell", expect.anything());
+  });
+
+  it("still holds the unsigned rest of a signed card.update to the elevated rule", async () => {
+    const elevated = vi.fn<NonNullable<CardRules["elevated"]>>((_verb, args) =>
+      Promise.resolve((args.body as Record<string, unknown>).permissionMode ? "phone paired" : null),
+    );
+    const r = rules({ widen: () => Promise.resolve(null), elevated });
+    // An approval for the agent can't carry a mode it never signed past the Mac's phone rule.
+    await expect(cardKinds(r).host(host({ body: { agent: "b", permissionMode: "acceptEdits" }, widen: {} }))).rejects.toThrow("phone paired");
+    expect(elevated).toHaveBeenCalledWith("card.update", { id: "k1", body: { permissionMode: "acceptEdits" } });
+    expect(r.verb).not.toHaveBeenCalled();
+    // Skipping prompts, when it's what was signed, is covered by the approval.
+    await cardKinds(r).host(host({ body: { permissionMode: "bypassPermissions", title: "t" }, widen: {} }));
+    expect(elevated).toHaveBeenLastCalledWith("card.update", { id: "k1", body: { title: "t" } });
+  });
+
+  it("refuses one whose approval doesn't check out, and keeps today's refusal without one or without a check", async () => {
+    await expect(cardKinds(rules({ widen: () => Promise.resolve("stale") })).host(host({ body: { agent: "b" }, widen: {} }))).rejects.toThrow("stale");
+    await expect(cardKinds(rules({ widen: () => Promise.resolve(null) })).host(host({ body: { agent: "b" } }))).rejects.toThrow(/agent/);
+    await expect(cardKinds(rules()).host(host({ body: { agent: "b" }, widen: {} }))).rejects.toThrow(/agent/);
+    // The editor's refusals aren't widenings, so no approval lifts them.
+    await expect(cardKinds(rules({ widen: () => Promise.resolve(null) })).host(host({ path: ".git/config", widen: {} }, "files.read"))).rejects.toThrow();
+  });
+});
+
+describe("a verb on the host itself", () => {
+  const settings = { maxThreads: 3, keepAliveMinutes: 0, worktreePool: 1, defaultBackend: "claude" };
+
+  it("runs settings.get with no card check, and reports no card", async () => {
+    const hostVerb = vi.fn<NonNullable<CardRules["hostVerb"]>>(() => Promise.resolve({ settings }));
+    const r = rules({ hostVerb });
+    const done = await cardKinds(r).host(cmd("host", { verb: "settings.get", args: { id: "k1" } }));
+    expect(done).toEqual({ cardId: "", result: { ok: true, cardId: "", settings } });
+    expect(hostVerb).toHaveBeenCalledWith("settings.get", { id: "" });
+    expect(r.card).not.toHaveBeenCalled();
+    expect(r.verb).not.toHaveBeenCalled();
+  });
+
+  it("refuses a setting outside the host's own, and a host that doesn't take them (a Mac)", async () => {
+    const hostVerb = vi.fn<NonNullable<CardRules["hostVerb"]>>(() => Promise.resolve({ settings }));
+    const put = (patch: unknown) => cmd("host", { verb: "settings.put", args: { patch } });
+    await expect(cardKinds(rules({ hostVerb })).host(put({ allowedFolders: ["/"] }))).rejects.toThrow(/can't change allowedFolders/);
+    expect(hostVerb).not.toHaveBeenCalled();
+    await expect(cardKinds(rules()).host(put({ maxThreads: 2 }))).rejects.toThrow("This host takes its settings only from its own window.");
   });
 });

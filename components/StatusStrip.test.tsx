@@ -10,6 +10,10 @@ let plans: PlanLimits | null = null;
 const keys: (string | undefined)[] = [];
 
 vi.mock("./LimitBurndown", () => ({ default: () => null }));
+const published = vi.hoisted(() => ({ samples: [] as unknown[], asked: [] as unknown[][] }));
+vi.mock("@/lib/use-limit-samples", () => ({
+  useLimitSamples: (...args: unknown[]) => (published.asked.push(args), published.samples),
+}));
 vi.mock("@/lib/use-now", () => ({ useNow: () => NOW }));
 vi.mock("@/lib/use-plan-limits", () => ({
   usePlanLimits: (key?: string) => {
@@ -25,6 +29,8 @@ const CLAUDE = { reportedAt: 1, fiveHour: { used: 16 }, sevenDay: { used: 15 } }
 
 afterEach(() => {
   cleanup();
+  published.samples = [];
+  published.asked.length = 0;
   plans = null;
   keys.length = 0;
 });
@@ -99,5 +105,19 @@ describe("StatusStrip", () => {
     expect(keys.at(-1)).toBeUndefined();
     cleanup();
     expect(text(<StatusStrip backend="claude" stats={{ fiveHour: { used: 70 } }} />)).toBe("[claude]5hr:84%7d:85%");
+  });
+
+  it("on a worker's card, charts that worker's published history and shows its newest reading until the card has one", () => {
+    published.samples = [{ at: 1, backend: "claude", kind: "five_hour", used: 40, resetsAt: LATER }];
+    const out = text(<StatusStrip backend="claude" cwd="worker://w1/app" stats={{}} cardLimits />);
+    expect(out).toContain("5hr:60%");
+    expect(published.asked.at(-1)).toEqual(["claude", "w1", false]);
+    cleanup();
+    // The card's own reading wins once it has one.
+    expect(text(<StatusStrip backend="claude" cwd="worker://w1/app" stats={{ fiveHour: { used: 70 } }} cardLimits />)).toContain("5hr:30%");
+    cleanup();
+    // A local card never asks for a worker's.
+    text(<StatusStrip backend="claude" cwd="/dev/app" stats={{ fiveHour: { used: 70 } }} />);
+    expect(published.asked.at(-1)).toEqual(["claude", undefined, true]);
   });
 });

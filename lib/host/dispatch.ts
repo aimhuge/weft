@@ -5,10 +5,21 @@
 // rule and the elevated verbs it keeps while a phone is paired, a worker's pasted-file transfer.
 import { answerBody, answerGrant, replyBody, stopBody, type AnswerPayload, type CloudCommandRow, type GrantScope } from "../cloud-commands";
 import type { HostVerb } from "../host-api";
-import { hostResult, readHostCommand, remoteRefusal, textArgOf, verbResult, type HostDone, type HostPayload } from "../host-command";
+import { isHostLevelVerb, isListVerb, type ListVerb } from "@weft/client";
+import { hostResult, readHostCommand, remoteRefusal, textArgOf, verbResult, type HostArgs, type HostDone, type HostPayload } from "../host-command";
 import { carriesValue, valueResult, type Carry } from "../host-result";
 import type { Card } from "../types";
+import { widenArgsOf, widenChangeOf, withoutWiden, type WidenChange } from "../widen";
+import type { WidenTarget } from "../widen-check";
 import type { Done } from "./identity";
+
+// What a signed widening leaves unsigned: a card.update's body without the fields its approval covered, or null when the
+// approval covers the verb whole (a "!" line, one sent later).
+function unsignedRest({ verb, args }: HostPayload, change: WidenChange): Record<string, unknown> | null {
+  if (verb !== "card.update") return null;
+  const body = Object.fromEntries(Object.entries(args.body as Record<string, unknown>).filter(([key]) => !(key in change)));
+  return { ...withoutWiden(args), body };
+}
 
 export type KindHandler = (command: CloudCommandRow) => Done | Promise<Done>;
 export type KindTable = Record<string, KindHandler>;
@@ -29,6 +40,11 @@ export interface CardRules {
   approve?(command: CloudCommandRow, answer: AnswerPayload, card: Card): Promise<string | null>;
   // Why a verb that grants power can't run from the web here, if it can't (a Mac with a phone paired).
   elevated?(verb: HostVerb, args: Record<string, unknown>): Promise<string | null>;
+  // Why a signed widening can't run here (lib/widen-check.ts), or null when its approval checks out. `refusal` is what
+  // remoteRefusal said, for a command with no approval. Absent, every widening stays refused.
+  widen?(target: WidenTarget, auth: unknown, refusal: string): Promise<string | null>;
+  // A verb on the host itself (settings.get / settings.put), from the network. Absent: this host refuses them (a Mac).
+  hostVerb?(verb: HostVerb, args: Record<string, unknown>): Promise<unknown>;
   // Whether the command's author is this host's owner. A verb in OWNER_VERBS runs only when it is; a host without the
   // rule can't say, so none of those verbs runs there from the network.
   fromOwner?(command: CloudCommandRow): boolean;
@@ -46,6 +62,9 @@ export interface CardRules {
   // card.create: makes the card the args name in the row's folder, and resolves with its id once it's published (a
   // worker). Without it the host makes cards through its own new_card kind (a Mac).
   create?(command: CloudCommandRow, args: Record<string, unknown>): Promise<string>;
+  // cron.* and webhook.*: runs one on a cron or webhook this host keeps, past remoteRefusal, and resolves with the card a
+  // run made (or null). Without it the host refuses them from the network (a Mac: its own are changed in its window).
+  lists?(verb: ListVerb, args: HostArgs): Promise<string | null>;
 }
 
 // Verbs that put something on the internet or prompt the owner's Mac (dev.open: a tunnel and a Touch ID). Only the
@@ -54,6 +73,7 @@ export const OWNER_VERBS: ReadonlySet<HostVerb> = new Set<HostVerb>(["dev.open"]
 const NOT_OWNER = "Only the owner of this card can do that.";
 
 const NO_CREATE = "This host starts new threads through new_card, not card.create.";
+export const NO_LISTS = "This Mac's crons and webhooks change only in its own window (its ⏰ and 🪝 drawers, or a thread there), not from the network.";
 
 // A host verb's answer as an answer kind: the same payload, so the same approval rule and a phone's signature
 // (args.auth) over the same fields. It needs the request's pendingId, as the answer kind does.
@@ -64,7 +84,9 @@ export function asAnswer(command: CloudCommandRow, { args }: HostPayload): Cloud
 }
 
 // Verbs a board runs for their answer, or to warm a CLI: they change no card, so there's nothing to sync after them.
-const READS = new Set<HostVerb>(["skills.list", "files.list", "files.read", "files.write", "card.warm"]);
+const READS = new Set<HostVerb>(["skills.list", "files.list", "files.read", "files.write", "card.warm", "settings.get", "settings.put"]);
+
+const NO_HOST_VERBS = "This host takes its settings only from its own window.";
 
 export function cardKinds(rules: CardRules) {
   async function received(command: CloudCommandRow, args: Record<string, unknown>, field: string | undefined) {
@@ -112,6 +134,24 @@ export function cardKinds(rules: CardRules) {
     return card.id;
   }
 
+  // What remoteRefusal turns away runs only with a signed approval for exactly that change (args.widen), which also
+  // stands in for the Mac's elevated rule over what it signed, and only that: the rest of the command (another mode in
+  // the same card.update) still passes that rule, so an approval for a new agent can't carry an unsigned mode change.
+  async function allowed(body: HostPayload, card: Card) {
+    const refused = remoteRefusal(body);
+    const change = refused ? widenChangeOf(body) : null;
+    if (refused && change && rules.widen && body.args.widen !== undefined) {
+      const problem = await rules.widen({ card: card.id, verb: body.verb, change, args: widenArgsOf(body.args) }, body.args.widen, refused);
+      if (problem) throw new Error(problem);
+      const rest = unsignedRest(body, change);
+      const why = rest && (await rules.elevated?.(body.verb, rest));
+      if (why) throw new Error(why);
+      return;
+    }
+    const why = refused ?? (await rules.elevated?.(body.verb, body.args));
+    if (why) throw new Error(why);
+  }
+
   // Any verb in lib/host-api, on a card this host runs. Only a command its owner made gets this far, but anyone holding
   // that account's session can insert one, so remoteRefusal turns away what would widen the card.
   async function host(command: CloudCommandRow): Promise<HostDone> {
@@ -120,16 +160,26 @@ export function cardKinds(rules: CardRules) {
       const cardId = await answer(asAnswer(command, body));
       return { cardId, result: hostResult(cardId) };
     }
+    if (isHostLevelVerb(body.verb)) return onHost(body);
     if (body.verb === "card.create") return create(command, body);
+    if (isListVerb(body.verb)) return list(body.verb, body);
     const card = rules.card(body.args.id, command, "reached");
     if (OWNER_VERBS.has(body.verb) && !rules.fromOwner?.(command)) throw new Error(NOT_OWNER);
-    const refused = remoteRefusal(body) ?? (await rules.elevated?.(body.verb, body.args));
-    if (refused) throw new Error(refused);
-    const reply = await verb(body.verb, await received(command, { ...body.args, id: card.id }, textArgOf(body.verb)));
+    await allowed(body, card);
+    const reply = await verb(body.verb, await received(command, { ...withoutWiden(body.args), id: card.id }, textArgOf(body.verb)));
     // The card it touched, and for a read verb (skills.list) its answer; the editor's verbs answer with their value,
     // inline or as a blob when it's over the row's cap (lib/host-result.ts).
     const result = carriesValue(body.verb) ? await valueResult(card.id, reply, rules.carry) : verbResult(body.verb, card.id, reply);
     return { cardId: card.id, result };
+  }
+
+  // A verb on the host itself: no card to check, the same refusals, and the cardId left empty (reported as none).
+  async function onHost(body: HostPayload): Promise<HostDone> {
+    if (!rules.hostVerb) throw new Error(NO_HOST_VERBS);
+    const refused = remoteRefusal(body);
+    if (refused) throw new Error(refused);
+    const reply = await rules.hostVerb(body.verb, body.args);
+    return { cardId: "", result: verbResult(body.verb, "", reply) };
   }
 
   // A new card: no card to check yet, so the host's own create rule, behind the same refusals as an update.
@@ -139,6 +189,16 @@ export function cardKinds(rules: CardRules) {
     if (refused) throw new Error(refused);
     const cardId = await rules.create(command, await received(command, body.args, textArgOf(body.verb)));
     return { cardId, result: hostResult(cardId) };
+  }
+
+  // A cron or webhook the host keeps: args.id is the item, so there's no card to check, only remoteRefusal's limits. The
+  // row's card_id stays empty (it may name only a card this host published); `result` names a run's card.
+  async function list(verb: ListVerb, body: HostPayload): Promise<HostDone> {
+    if (!rules.lists) throw new Error(NO_LISTS);
+    const refused = remoteRefusal(body);
+    if (refused) throw new Error(refused);
+    const made = await rules.lists(verb, body.args);
+    return { cardId: null, result: hostResult(made ?? "") };
   }
 
   return { reply, answer, stop, host };

@@ -7,13 +7,15 @@
 //   events    what the publisher ships, as it ships it (lib/worker-publish.ts mirror): one projection and one upload
 //   line      ping → pong; an offer renegotiates the same peer, one at a time and rate-limited (a watched
 //             simulator's track, lib/host-line-screen.ts, or an ICE restart)
-//   terminal  refused, always (TERMINAL_REFUSAL): a pty is a shell, and H2 refuses a shell from the network
+//   terminal  a pty in one project folder, only with a signed approval for it (lib/host-line-terminal.ts); refused
+//             (TERMINAL_REFUSAL) without one, or on a worker that has no terminal deps. It dies with the line.
 //
 // Each fixed label gets one channel per line, and any other label is closed. A line no board has pinged for QUIET_MS is
 // closed: the board went away without saying so.
 import type { HostDone } from "./host-command";
 import { lineScreens, type ScreenDeps } from "./host-line-screen";
-import { LINE_CHANNELS, LINE_PURPOSE, TERMINAL_REFUSAL, readControl, readHostCall, readLineOffer, type HostReply, type LineEvent } from "./host-line-protocol";
+import { terminalChannel, type TerminalDeps } from "./host-line-terminal";
+import { LINE_CHANNELS, LINE_PURPOSE, readControl, readHostCall, readLineOffer, type HostReply, type LineEvent } from "./host-line-protocol";
 import { sealAnswer, type SealedAnswer } from "./rtc-signal";
 import { answerOffer, type Channel, type Channels } from "./worker-rtc";
 import type { Sealed } from "./worker-seal";
@@ -38,6 +40,8 @@ export interface HostLineDeps extends ScreenDeps {
   // What the publisher ships, as it ships it (lib/worker-publish.ts mirror): projected and uploaded once, for the rows.
   hear(listener: (event: LineEvent) => void): () => void;
   answer?: typeof answerOffer;
+  // The terminal's checks and pty (lib/host-line-terminal.ts); absent, every terminal is refused.
+  terminal?: TerminalDeps;
   log?: (msg: string) => void;
   quietMs?: number;
   maxLines?: number;
@@ -116,11 +120,17 @@ export function createHostLines(deps: HostLineDeps) {
     });
   }
 
-  function refuseTerminal(channel: LineChannel) {
-    channel.stateChanged.subscribe((state) => {
-      if (state !== "open") return;
-      send(channel, { t: "refused", message: TERMINAL_REFUSAL });
-      channel.close?.();
+  // One terminal at a time per line; it ends when its channel or the line closes, and then another may open.
+  function terminal(channel: LineChannel, taken: Set<string>, stops: Set<() => void>) {
+    // No terminal here: each one is refused as it opens, and takes no place.
+    if (!deps.terminal) return void terminalChannel(channel, undefined, log);
+    if (taken.has(channel.label)) return channel.close?.();
+    taken.add(channel.label);
+    const stop = terminalChannel(channel, deps.terminal, log);
+    stops.add(stop);
+    closed(channel, () => {
+      stops.delete(stop);
+      taken.delete(channel.label);
     });
   }
 
@@ -144,6 +154,7 @@ export function createHostLines(deps: HostLineDeps) {
     let lastHeard = now();
     const screens = lineScreens(deps);
     const taken = new Set<string>();
+    const terminals = new Set<() => void>();
     const quietMs = deps.quietMs ?? QUIET_MS;
     const quiet = setInterval(() => {
       if (now() - lastHeard > quietMs) line.close();
@@ -152,6 +163,7 @@ export function createHostLines(deps: HostLineDeps) {
       close() {
         if (!lines.delete(line)) return;
         clearInterval(quiet);
+        terminals.forEach((stop) => stop());
         screens.closeAll();
         opened?.close();
       },
@@ -160,7 +172,7 @@ export function createHostLines(deps: HostLineDeps) {
       [LINE_CHANNELS.host]: once(taken, (c) => hostChannel(c, run)),
       [LINE_CHANNELS.events]: once(taken, eventsChannel),
       [LINE_CHANNELS.control]: once(taken, (c) => controlChannel(c, { opened: () => opened, screens, heard: () => (lastHeard = now()) })),
-      [LINE_CHANNELS.terminal]: refuseTerminal,
+      [LINE_CHANNELS.terminal]: (c) => terminal(c, taken, terminals),
       // A screen's input:<device>:<nonce>, or a label nobody handles, which is closed.
       "*": (c) => screens.input(c),
     };

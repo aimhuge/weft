@@ -114,6 +114,21 @@ describe("gameState", () => {
     expect(game.leagues[0]).toBe("Cotton");
   });
 
+  it("counts your workers' cards too, never a card this Mac's log already has", () => {
+    const worker: ActivityEvent[] = [
+      { id: "created:w1", kind: "created", at: NOW - 2 * 60_000, card: "w1", cwd: "worker://w/app" },
+      { id: "done:w1", kind: "done", at: NOW - 60_000, card: "w1", cwd: "worker://w/app", title: "Ship" },
+      // Already in the log, by id and by card: neither counts twice.
+      { id: "c1", kind: "created", at: NOW - DAY, card: "1", cwd: A },
+      { id: "turns:2", kind: "turn", at: NOW, card: "2", cwd: A, turns: 5 },
+    ];
+    const alone = gameState({ cwd: A, now: NOW });
+    const both = gameState({ cwd: A, now: NOW, worker });
+    expect(both.xp - alone.xp).toBe(2 + 10);
+    expect(both.today).toEqual({ cards: 1, turns: 1, done: 1, xp: 1 + 2 + 10 });
+    expect(both.totals.shipped).toBe(alone.totals.shipped + 1);
+  });
+
   it("measures projects once per TTL and logs one quality snapshot a day", () => {
     const full = gameState({ cwd: C, full: true, now: NOW });
     expect(full.projects.map((p) => p.root)).toEqual([C, A, B]);

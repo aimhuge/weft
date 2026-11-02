@@ -49,6 +49,16 @@ describe("registry", () => {
     expect(calls).toEqual([{ fn: "worker_set_github", args: { p_key: key, p_state: "signed_in", p_account: "octocat" } }]);
   });
 
+  it("reads its owner's synced settings and publishes its limits, each with its key", async () => {
+    const { rpc, calls } = fakeRpc({ data: { settings: { pushOnDone: false }, updated_at: "t" } });
+    expect(await registry(rpc, key).accountSettings()).toEqual({ settings: { pushOnDone: false }, updated_at: "t" });
+    await registry(rpc, key).setLimits({ v: 1, s: [] });
+    expect(calls).toEqual([
+      { fn: "worker_account_settings", args: { p_key: key } },
+      { fn: "worker_set_limits", args: { p_key: key, p_limits: { v: 1, s: [] } } },
+    ]);
+  });
+
   it("heartbeats with the status and the key", async () => {
     const { rpc, calls } = fakeRpc();
     await registry(rpc, key).heartbeat("busy");
@@ -168,5 +178,13 @@ describe("registry: the board tools", () => {
       { fn: "worker_new_card", args: { p_key: key, p_target: "mac-1", p_folder: "/Users/me/app", p_payload: { prompt: "go" } } },
       { fn: "worker_set_lists", args: { p_key: key, p_crons: [{ id: "c" }], p_webhooks: [] } },
     ]);
+  });
+
+  it("reads the owner's Macs' crons, an empty answer as none", async () => {
+    const rows = [{ device: "d1", label: "mbp", crons: [{ id: "k1" }], updated_at: "t" }];
+    const { rpc, calls } = fakeRpc({ data: rows });
+    expect(await registry(rpc, key).macCrons()).toEqual(rows);
+    expect(calls).toEqual([{ fn: "worker_mac_crons", args: { p_key: key } }]);
+    expect(await registry(fakeRpc().rpc, key).macCrons()).toEqual([]);
   });
 });

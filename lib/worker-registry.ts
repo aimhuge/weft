@@ -3,8 +3,10 @@
 // checks sha256(key) before it acts. Enrolment trades a one-time token for that key.
 import type { CloudCommandRow } from "./cloud-commands";
 import type { HostResult } from "./host-command";
+import type { PackedLimits } from "./limits-wire";
 import type { WorkerConfig } from "./worker-config";
 import type { GithubState } from "./worker-github";
+import type { SyncedRow } from "./worker-settings-sync";
 
 // supabase-js's rpc, narrowed to what the worker needs, so tests hand in a fake.
 export type Rpc = (fn: string, args: Record<string, unknown>) => PromiseLike<{ data: unknown; error: { message: string } | null }>;
@@ -16,6 +18,14 @@ export interface BoardRow {
   owner_device: string;
   owner_worker: string | null;
   card: unknown;
+  updated_at: string;
+}
+
+// One of the owner's Macs' published crons, as worker_mac_crons returns it (lib/mac-crons.ts writes it).
+export interface MacCronsRow {
+  device: string;
+  label: string;
+  crons: unknown[];
   updated_at: string;
 }
 
@@ -66,6 +76,9 @@ export function registry(rpc: Rpc, key: string) {
     setPublicKey: (publicKey: string) => call<unknown>(rpc, "worker_set_public_key", { p_key: key, p_public_key: publicKey }),
     setGithub: (state: GithubState, account: string | null) => call<unknown>(rpc, "worker_set_github", { p_key: key, p_state: state, p_account: account }),
     setBuild: (build: string, note: string | null) => call<unknown>(rpc, "worker_set_build", { p_key: key, p_build: build, p_note: note }),
+    // The owner's synced settings (lib/worker-settings-sync.ts), and this box's plan-limit history (lib/worker-limits.ts).
+    accountSettings: () => call<SyncedRow | null>(rpc, "worker_account_settings", { p_key: key }),
+    setLimits: (limits: PackedLimits) => call<unknown>(rpc, "worker_set_limits", { p_key: key, p_limits: limits }),
     deviceCall: (device: string, cardId: string, tool: string, args: unknown) => call<string | null>(rpc, "worker_device_call", { p_key: key, p_device: device, p_card: cardId, p_tool: tool, p_args: args }),
     // A card's mcp__secrets__run asking the owner's newest live Mac (lib/worker-secret-run.ts); null when none is up.
     secretAsk: (cardId: string, args: unknown) => call<string | null>(rpc, "worker_secret_ask", { p_key: key, p_card: cardId, p_args: args }),
@@ -93,6 +106,8 @@ export function registry(rpc: Rpc, key: string) {
     newCard: (target: string, folder: string, payload: Record<string, unknown>) =>
       call<string>(rpc, "worker_new_card", { p_key: key, p_target: target, p_folder: folder, p_payload: payload }),
     setLists: (crons: unknown[], webhooks: unknown[]) => call<unknown>(rpc, "worker_set_lists", { p_key: key, p_crons: crons, p_webhooks: webhooks }),
+    // The owner's Macs' crons, read-only, for list_crons (lib/worker-mac-crons.ts, supabase/migrations/*_mac_crons_for_workers.sql).
+    macCrons: async () => (await call<MacCronsRow[] | null>(rpc, "worker_mac_crons", { p_key: key })) ?? [],
   };
 }
 

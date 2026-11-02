@@ -77,4 +77,4 @@ function vaultFor(remote, folder, known) {
   return ref;
 }
 
-module.exports = { askOf, vaultFor, MAX_AHEAD_MS, MAX_WHY, MAX_THREAD };
+module.exports = { askOf, vaultFor, expiryOf, plain, capped, MAX_AHEAD_MS, MAX_WHY, MAX_THREAD, MAX_COMMAND, MAX_SCRIPT };

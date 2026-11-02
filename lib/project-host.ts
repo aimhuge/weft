@@ -8,34 +8,42 @@
 // board never asks whether a card is a worker's: the worker:// check lives here and in lib/worker-project.ts.
 import { api, call, type NewCardInput } from "./client";
 import { filesApi } from "./client-files";
+import { cronApi } from "./cron-client";
+import type { CronPatch } from "./cron-types";
 import type { FilesSource } from "./files-source";
 import { localRead, type ReadProject } from "./project-reads";
 import { cloudRead } from "./project-snapshot-view";
 import { remoteMenu } from "./card-menu-remote";
 import type { MenuItem } from "./card-menu";
 import type { ArgsOf } from "./host-api";
-import type { HostVerb } from "./host-api/types";
+import type { CardVerb as HostVerb } from "@weft/client";
 import type { HostArgs } from "./host-command";
 import { localTransport, type ThreadTransport } from "./thread-transport";
 import type { Backend, Card, QuestionReply } from "./types";
+import type { WebhookPatch } from "./webhook-types";
 import { localToolSource, type ToolResultSource } from "./use-tool-result";
 import type { ActResult } from "./worker-acts";
 import { workerFiles } from "./worker-files";
 import { actOnWorker, workerToolSource, workerTransport } from "./worker-transport";
 import { parseWorkerProject } from "./worker-project";
 import { actOnLine, lineFiles, lineTransport, warmOnLine } from "./line-host";
+import { canSignWiden } from "./widen-signer";
 
 // This Mac's own features, which another host offers only once it has a verb or a stream for them. `files` is the
 // editor and the thread's file links (H4), `shots` the show rail's page pictures (lib/page-shots.ts), `pane` the native
-// browser pane; `folder`, `agent` and `shell` widen what a card can touch, so a remote host refuses them from the network.
+// browser pane; `folder`, `agent`, `shell` and `terminal` widen what a card can touch, so a remote host takes them only
+// with a signed approval.
 // `skills` is the skill set chip (which skills a card gets); the "/" list is the transport's listSkills on every host.
 // `runSkill` is the header's Skills menu, which sends "/<skill>" as a message (the list from skills.list).
 // `schedule` is Send later, which both hosts hold the timer for (card.schedule). `reads` is the header badges (H4);
 // `projectActs` what they start from this Mac's store and server: a re-scout, the commit walk-through and the sprint
 // plan, whose prompts point at the Mac's own routes. `cron` is the header's ⏰, this Mac's crons; `settings` says this
 // Mac's Settings (the backup model) speak for the card. `share` a weft.zip link to the card's cloud rows; `delete` card.delete.
+// `lists` is the ⏰ and 🪝 drawers' changes to a cron or webhook the host keeps (cron.*, webhook.*); `relay` a webhook's
+// public URL and tunnel from the 🪝 drawer, and adding one by hand there, which are this Mac's (a worker's threads do it).
+// `terminal` is the terminal drawer, a pty on the host (on a worker, over its session line).
 export type HostFeature =
-  | "files" | "reads" | "projectActs" | "shots" | "pane" | "folder" | "agent" | "shell" | "skills" | "runSkill" | "share" | "delete" | "login" | "vault" | "dev" | "schedule" | "cron" | "settings";
+  | "files" | "reads" | "projectActs" | "shots" | "pane" | "folder" | "agent" | "shell" | "terminal" | "skills" | "runSkill" | "share" | "delete" | "login" | "vault" | "dev" | "schedule" | "cron" | "settings" | "lists" | "relay";
 
 export interface ProjectHost {
   kind: "local" | "cloud";
@@ -92,6 +100,12 @@ const LOCAL: Record<HostVerb, LocalCall> = {
   "files.write": (a) => filesApi.write(a.id, text(a.path), text(a.text), a.baseHash as string | null | undefined),
   "dev.open": (a) => call("POST", `/api/cards/${a.id}/dev`, { action: "open" }),
   "dev.stop": (a) => api.devAction(a.id, "stop"),
+  // The ⏰ and 🪝 drawers' routes (lib/cron-client.ts, lib/client-api.ts); a.id is the cron's or webhook's.
+  "cron.update": (a) => cronApi.update(a.id, a.patch as CronPatch),
+  "cron.delete": (a) => cronApi.remove(a.id),
+  "cron.run": (a) => cronApi.run(a.id),
+  "webhook.update": (a) => api.updateWebhook(a.id, a.patch as WebhookPatch),
+  "webhook.delete": (a) => api.removeWebhook(a.id),
   "dev.restart": (a) => call("POST", `/api/cards/${a.id}/dev`, { action: "rerun" }),
   "dev.log": (a) => call("POST", `/api/cards/${a.id}/dev`, { action: "log" }),
 };
@@ -113,19 +127,22 @@ export const localHost: ProjectHost = {
 
 // What a Worker has today: its cards' own verbs, the thread and its pages, Send later, a skill run as a message, its
 // files through the file verbs and the header's reads through its snapshots (H4). Share… reads the card's cloud rows,
-// which a worker publishes like a Mac's outbox (lib/card-share-worker.ts), and Delete is card.delete. Not this Mac's
-// pane, vault or CLIs.
-const CLOUD_FEATURES = new Set<HostFeature>(["schedule", "files", "reads", "runSkill", "share", "delete"]);
+// which a worker publishes like a Mac's outbox (lib/card-share-worker.ts), and Delete is card.delete. Its crons and
+// webhooks change from the Mac's drawers (lists). Not this Mac's pane, vault or CLIs.
+const CLOUD_FEATURES = new Set<HostFeature>(["schedule", "files", "reads", "runSkill", "share", "delete", "lists"]);
+// What widens a card, which a worker runs only with a signed approval (lib/widen-signer.ts): offered where this Mac can
+// sign one (the desktop app), and the act asks Touch ID first.
+const SIGNED_FEATURES = new Set<HostFeature>(["folder", "agent", "shell", "terminal"]);
 
 export const cloudHost: ProjectHost = {
   kind: "cloud",
   thread: workerTransport,
   tools: workerToolSource,
-  can: (feature) => CLOUD_FEATURES.has(feature),
+  can: (feature) => CLOUD_FEATURES.has(feature) || (SIGNED_FEATURES.has(feature) && canSignWiden()),
   read: cloudRead,
   files: workerFiles,
   act: (verb, args) => actOnWorker(verb, args),
-  menu: remoteMenu,
+  menu: (items) => remoteMenu(items, canSignWiden() ? { agent: true, skip: true } : {}),
   warm: () => {},
 };
 

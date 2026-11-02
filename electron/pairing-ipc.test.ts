@@ -46,6 +46,11 @@ describe("pairing IPC", () => {
     expect(wired.routes["POST /pairing/status"]()).toEqual({ approvers: 0, devices: 0, seal: false, webApprovals: false });
     expect(await wired.routes["POST /pairing/verify"]({ device: "d", message: "m", sig: "s" })).toMatchObject({ ok: false });
     expect(wired.routes["POST /pairing/passkey-verify"]({ device: "d", credId: "c", message: "m" })).toEqual({ ok: false, reason: "That device isn't paired with this Mac." });
+    // A widening's nonce is spent in main, once (electron/widen-nonces.cjs).
+    const spend = { nonce: "nonce-000000000001", issuedAt: Date.now() + 1000 };
+    expect(wired.routes["POST /pairing/widen-nonce"](spend)).toEqual({ ok: true });
+    expect(wired.routes["POST /pairing/widen-nonce"](spend)).toEqual({ ok: false });
+    expect(wired.routes["POST /pairing/widen-nonce"](null)).toEqual({ ok: false });
   });
 
   it("registers this Mac before making a key, and says so when it can't", async () => {

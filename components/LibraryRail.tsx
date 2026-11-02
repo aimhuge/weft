@@ -13,11 +13,11 @@ import { filterVaults, railBadge } from "@/lib/vault-view";
 import { useVercelDrift } from "@/lib/use-vercel-drift";
 import { driftBadge, shownDrift, vaultKey } from "@/lib/vercel-drift";
 import { useServices } from "@/lib/use-services";
-import { useCrons } from "@/lib/use-crons";
+import { useRailLists } from "@/lib/use-rail-lists";
 import { activeCount, cronsTitle } from "@/lib/crons-view";
 import { filterServices, liveCount, servicesTitle } from "@/lib/services-view";
-import { useWebhooks } from "@/lib/use-webhooks";
 import { githubFolders, railProjects } from "@/lib/rail-project";
+import { isWorkerProject } from "@/lib/worker-project";
 import { blankCount, failingCount, filterWebhooks, webhooksTitle } from "@/lib/webhooks-view";
 import { useVercel } from "@/lib/use-vercel";
 import { vercelTitle, type VercelStatus } from "@/lib/vercel-view";
@@ -125,8 +125,10 @@ export default function SideRail({
   // The vault ⇄ Vercel drift folds into 🔐's dot and title and ▲'s count (lib/vercel-drift.ts); no rows of its own.
   const drift = driftBadge(shownDrift(useVercelDrift(folders, vaultKey(vaults)), project));
   const vaultBadge = { ...railBadge(filterVaults(vaults, project)), vercel: drift.title };
-  const webhooks = useWebhooks(folders, open === "webhooks");
-  const shownHooks = filterWebhooks(webhooks.hooks, host);
+  // 🪝, and ⏰ under 🏷 (its crons counted while they'll run again); a worker project's show that worker's own (lib/use-rail-lists.ts).
+  const { webhooks, hookFolders, hookProject, crons } = useRailLists(isWorkerProject(host) ? host : null, folders, open === "webhooks");
+  const hooksFor = hookProject ?? host;
+  const shownHooks = filterWebhooks(webhooks.hooks, hooksFor);
   const vercel = useVercel(folders, open === "vercel");
   const supabase = useSupabase(folders, open === "supabase");
   const cloudflare = useCloudflare(folders, open === "cloudflare");
@@ -136,8 +138,6 @@ export default function SideRail({
   const services = useServices(open === "services");
   const liveServices = liveCount(filterServices(services.services, host));
   const starred = starredCount(cards);
-  // ⏰ under 🏷: the crons, counted while they'll run again (components/CronsDrawer.tsx).
-  const crons = useCrons();
 
   function pin(next: boolean) {
     setPinned(next);
@@ -181,7 +181,7 @@ export default function SideRail({
   const toolBodies: Record<Tool, React.ReactNode> = {
     crons: <CronsDrawer {...crons} cards={cards} onOpenCard={onOpenCard} notify={notify} />,
     vault: <VaultDrawer {...vault} project={project} notify={notify} />,
-    webhooks: <WebhooksDrawer {...webhooks} project={host} folders={folders} notify={notify} />,
+    webhooks: <WebhooksDrawer {...webhooks} project={hooksFor} folders={hookFolders} notify={notify} />,
     vercel: <VercelDrawer {...vercel} project={project} onOpenUrl={onOpenUrl} notify={notify} />,
     supabase: <SupabaseDrawer {...supabase} project={project} cards={cards} onOpenCard={onOpenCard} onStart={onStartCard} onOpenUrl={onOpenUrl} notify={notify} />,
     cloudflare: <CloudflareDrawer {...cloudflare} project={project} onOpenUrl={onOpenUrl} notify={notify} />,

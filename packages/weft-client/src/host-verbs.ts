@@ -27,8 +27,17 @@ export const HOST_VERBS = [
   "files.list",
   "files.read",
   "files.write",
+  // A host's own settings (./host-settings.ts), for no card: elevated, and only HOST_SETTINGS.
+  "settings.get",
+  "settings.put",
   "dev.open",
   "dev.stop",
+  // The crons and webhooks a host keeps (lib/host-api/lists.ts): args.id names the item, not a card.
+  "cron.update",
+  "cron.delete",
+  "cron.run",
+  "webhook.update",
+  "webhook.delete",
   // T5: the Services drawer's Restart and Log on a worker's dev server.
   "dev.restart",
   "dev.log",
@@ -41,4 +50,22 @@ const VERBS: ReadonlySet<string> = new Set(HOST_VERBS);
 
 export function isHostVerb(verb: string): verb is HostVerb {
   return VERBS.has(verb);
+}
+
+// The verbs that act on the host itself rather than a card: their row names no card, and a host runs them only when
+// its CardRules say it takes them from the network (a worker does; a Mac's settings stay in its own window).
+export type HostLevelVerb = "settings.get" | "settings.put";
+/** The verbs that act on a card: every one but the host-level ones. */
+export type CardVerb = Exclude<HostVerb, HostLevelVerb>;
+const HOST_LEVEL: ReadonlySet<string> = new Set<HostLevelVerb>(["settings.get", "settings.put"]);
+
+export function isHostLevelVerb(verb: string): boolean {
+  return HOST_LEVEL.has(verb);
+}
+
+/** The verbs on a host's own crons and webhooks, whose args.id is the item's id there rather than a card's. */
+export type ListVerb = Extract<HostVerb, `cron.${string}` | `webhook.${string}`>;
+
+export function isListVerb(verb: string): verb is ListVerb {
+  return isHostVerb(verb) && (verb.startsWith("cron.") || verb.startsWith("webhook."));
 }

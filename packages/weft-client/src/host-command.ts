@@ -7,7 +7,9 @@ import { isBang } from "./bang";
 import type { SkillInfo } from "./card";
 import { hostRow, type CardTarget, type HostCommandRow, type HostPayload } from "./host-row";
 import { readRefusal, writeRefusal } from "./file-policy";
-import { isHostVerb, type HostVerb } from "./host-verbs";
+import { foreignSetting, type HostSettings } from "./host-settings";
+import { isHostLevelVerb, isHostVerb, isListVerb, type HostVerb } from "./host-verbs";
+import { listRefusal } from "./list-policy";
 import { fitSkills, type SkillsOnWire } from "./skills-wire";
 
 // What a host writes to `result`. Never the card or its thread: those travel sealed (cloud_cards, the outbox), and
@@ -15,8 +17,11 @@ import { fitSkills, type SkillsOnWire } from "./skills-wire";
 // (RESULTS below), kept small enough for the column's 4 KB cap.
 // A verb that answers with a value too big for that (the editor's files.*) adds it as `value` when it's small, else
 // `blob`, the sha of its JSON in the workspace's blob store (lib/host-result.ts). address: dev.open's private /t/<id>
-// address for the card's dev server. log: dev.log's last lines of it.
-export type HostResult = ({ ok: true; cardId: string; value?: unknown; blob?: string; address?: string; log?: string } & Partial<SkillsOnWire>) | { ok: false; error: string };
+// address for the card's dev server. log: dev.log's last lines of it. A host-level verb (settings.get / settings.put)
+// touched no card: its cardId is "".
+export type HostResult =
+  | ({ ok: true; cardId: string; value?: unknown; blob?: string; address?: string; log?: string } & Partial<SkillsOnWire> & { settings?: HostSettings })
+  | { ok: false; error: string };
 
 const isObject = (v: unknown): v is Record<string, unknown> => Boolean(v) && typeof v === "object" && !Array.isArray(v);
 
@@ -34,6 +39,8 @@ export function readHostCommand(command: { payload: unknown }): HostPayload {
   if (typeof p.verb !== "string" || !p.verb) throw new Error("That request names no verb.");
   if (!isHostVerb(p.verb)) throw new Error(`This host doesn't run ${p.verb.slice(0, 60)}. Update it to the newest Weft.`);
   const args = isObject(p.args) ? p.args : {};
+  // A verb on the host itself names no card; its id is "" whatever the row says, so it can't reach one.
+  if (isHostLevelVerb(p.verb)) return { verb: p.verb, args: { ...args, id: "" } };
   if (typeof args.id !== "string" || !args.id) throw new Error("That request names no card.");
   if (p.verb === "card.update" && !isObject(args.body)) throw new Error("That update has no changes.");
   return { verb: p.verb, args: { ...args, id: args.id } };
@@ -51,6 +58,11 @@ const SHELL_REFUSED = "A shell command only runs from Weft's own window, not fro
 
 export function remoteRefusal({ verb, args }: HostPayload): string | null {
   if (verb === "card.shell") return SHELL_REFUSED;
+  // Only a host's own settings come from the network: never its folders, modes or guards.
+  const foreign = verb === "settings.put" ? foreignSetting(args.patch) : null;
+  if (foreign) return `A request from the web can't change ${foreign.slice(0, 40)}. Do it in Weft's own window on that machine.`;
+  // A cron or webhook the host keeps: only what the Mac's drawers change (./list-policy.ts).
+  if (isListVerb(verb)) return listRefusal(verb, args);
   // A scheduled message is sent as a reply when its time comes, never run, but a "!" one would read as a command
   // waiting to run, so the network can't leave one on a card at all.
   if (verb === "card.schedule" && typeof args.text === "string" && isBang(args.text)) return SHELL_REFUSED;
@@ -75,7 +87,8 @@ function cardFieldsRefusal(verb: HostPayload["verb"], args: HostPayload["args"])
 
 // A host command's outcome on the host that ran it: the card it touched, and what goes in the row's `result`.
 export interface HostDone {
-  cardId: string;
+  // Null for a verb on a cron or webhook (cron.*, webhook.*): the row's card_id names only a card the host published.
+  cardId: string | null;
   result: HostResult;
 }
 
@@ -85,8 +98,14 @@ export const isHostDone = (done: unknown): done is HostDone => Boolean(done) && 
 export const hostResult = (cardId: string): HostResult => ({ ok: true, cardId });
 
 // The verbs a board runs for their answer, and the part of it that goes in `result`.
-const RESULTS: Partial<Record<HostVerb, (reply: unknown) => SkillsOnWire | { address?: string } | { log?: string }>> = {
+const settingsOf = (reply: unknown) => {
+  const settings = (reply as { settings?: HostSettings } | undefined)?.settings;
+  return settings ? { settings } : {};
+};
+const RESULTS: Partial<Record<HostVerb, (reply: unknown) => Partial<SkillsOnWire> & { settings?: HostSettings } & { address?: string } & { log?: string }>> = {
   "skills.list": (reply) => fitSkills((reply as { skills?: SkillInfo[] } | undefined)?.skills ?? []),
+  "settings.get": settingsOf,
+  "settings.put": settingsOf,
   "dev.open": (reply) => {
     const address = (reply as { address?: unknown } | undefined)?.address;
     return typeof address === "string" ? { address: address.slice(0, 500) } : {};

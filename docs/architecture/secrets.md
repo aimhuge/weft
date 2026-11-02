@@ -370,8 +370,18 @@ names only, which Electron main re-reads with its own session, holds to the work
 (`electron/worker-pins.cjs`), approves with Touch ID in a window that shows the command first and names the worker
 (Allow once, no Always), and answers with a `secret_use` command sealed to that worker for that card, ask nonce and exact
 command. The worker runs it with `electron/secret-exec.cjs`, the same spawn and redaction as here, and keeps the values
-in memory only. A dev server's env and `fill_field` on a worker aren't built yet. The design, guarantees and limits are
-in [project-hosts.md](project-hosts.md#secrets-on-a-worker-h8-the-per-use-seal-as-built).
+in memory only. The design, guarantees and limits are in
+[project-hosts.md](project-hosts.md#secrets-on-a-worker-h8-the-per-use-seal-as-built).
+
+Since T2 the rest of the tools work there too, each a device call signed by the worker's pairing key that main re-reads
+and answers from the vault the card's own repo names, through this Mac's clone of it (`electron/worker-vault.cjs`):
+`list` (names), `add_blank` and `ask_add` (blanks made here; the user fills them in 🔐 on the Mac), `set_value` (the value
+sealed to this Mac's device key, stored after the usual Touch ID, which names the worker) and `push_to_vercel` (Touch ID,
+from this Mac's linked clone). A worker card's dev server gets the development set after a Touch ID at every start and
+restart, with no standing grant on a worker (`electron/worker-dev-env.cjs`), sealed to the worker and handed to
+`electron/secret-env.cjs` on its stdin. `fill_field` and `request_access` stay the Mac's: the pane and the grants are
+here. Lending the Mac's gog and gh sign-ins to a worker is not built: it needs a process boundary on the worker. The design, guarantees and limits are in
+[project-hosts.md](project-hosts.md#the-vault-on-a-worker-t2-as-built).
 
 ## Which card a vault request is for
 

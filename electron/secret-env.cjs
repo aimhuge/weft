@@ -56,9 +56,12 @@ function lineRedactor(redact, out) {
  * }} [options]
  */
 async function main({ stdin = process.stdin, stdout = process.stdout, stderr = process.stderr, env = process.env, fetchImpl = fetch, spawnImpl = spawn, exit = process.exit, onSignal = (sig, fn) => process.on(sig, fn) } = {}) {
+  const io = { stdout, stderr, env, spawnImpl, exit, onSignal };
   let request;
   try {
     request = await readStdin(stdin);
+    // A Weft Worker's daemon hands the values straight in (lib/worker-dev-env.ts): they came to it sealed from the Mac.
+    if (handedIn(request)) return runWith(request, io);
     const res = await fetchImpl(`${request.url}/secrets/claim`, {
       method: "POST",
       headers: { authorization: `Bearer ${request.token}`, "content-type": "application/json" },
@@ -72,6 +75,14 @@ async function main({ stdin = process.stdin, stdout = process.stdout, stderr = p
     exit(1);
     return;
   }
+  runWith(request, io);
+}
+
+// Values a Weft Worker's daemon handed in, with no grant to claim.
+const handedIn = (request) => !request.grant && Boolean(request.values) && typeof request.values === "object";
+
+// Runs the command with the values in its env only, its output redacted line by line.
+function runWith(request, { stdout, stderr, env, spawnImpl, exit, onSignal }) {
   const redact = redactor(Object.entries(request.values).map(([name, value]) => ({ name, value })));
   const out = lineRedactor(redact, stdout);
   const errOut = lineRedactor(redact, stderr);

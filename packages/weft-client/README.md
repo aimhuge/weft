@@ -12,7 +12,9 @@ Code that runs the same in React Native (Hermes), a browser and Node, with no I/
   `Backend`, `PermissionMode`.
 - **Host verbs**: `HOST_VERBS` / `HostVerb` / `isHostVerb` (lib/host-api's `HOST_API` is keyed by exactly these),
   the arg shapes and body pickers (`CardPatch`, `messageCall`, `permissionCall`, `widens`), and the `host` command's
-  row builder and readers (`hostCommand`, `readHostCommand`, `remoteRefusal`, `hostResult`).
+  row builder and readers (`hostCommand`, `readHostCommand`, `remoteRefusal`, `hostResult`). The verbs on a host
+  itself (`isHostLevelVerb`, `hostLevelRow`, `CardVerb` for the rest) and the settings lists that may travel to a worker
+  (`ACCOUNT_SETTINGS`, `HOST_SETTINGS`, `pickSettings`, `foreignSetting`).
 - **View models**: `extractStatus` (the BOARD STATUS line), `paneFromUrl` / `paneFor` / `screenPage` (the pane as
   the thread tells it), `showMinis` / `followUrl` (the show rail), `clip` / `timeAgo` / `shortToolName`.
 - **Approval messages**: `approvalMessage`, `signApproval`, `verifyApproval`, `readApprovalAuth`, given the caller's

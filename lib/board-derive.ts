@@ -33,8 +33,11 @@ export function workFolder(selected: Card | null, project: string | null, latest
 }
 
 // The worker the terminal would have to reach, by name: the open worker card's, else (no card open) the chosen worker
-// project's. The terminal is this Mac's shell, so on either it says it isn't there rather than open one somewhere else.
-export function terminalAway(openWorker: { name: string } | null | undefined, project: string | null, projects: readonly WorkerProject[], cardOpen: boolean): string | null {
+// project's. Without a signer the terminal is this Mac's shell, so on either it says it isn't there rather than open one
+// somewhere else; `signed` (the drawer's folder is that worker project, lib/board-folders.ts) opens the worker's own over
+// its line with a Touch ID approval (lib/line-terminal.ts), so there's nothing to say.
+export function terminalAway(openWorker: { name: string } | null | undefined, project: string | null, projects: readonly WorkerProject[], cardOpen: boolean, signed = false): string | null {
+  if (signed) return null;
   if (openWorker) return openWorker.name;
   if (cardOpen || !project) return null;
   return projects.find((p) => p.path === project)?.worker ?? null;

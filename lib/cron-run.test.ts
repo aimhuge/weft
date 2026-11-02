@@ -196,6 +196,11 @@ describe("runCron", () => {
     expect(card.cwd).toBe(cron.cwd);
   });
 
+  it("starts a run in the mode it's handed instead, for one asked for from the network", async () => {
+    const cron = createCron({ prompt: "p", expr: "0 9 * * *", backend: "claude", permissionMode: "auto" }, NOW);
+    expect((await runCron(cron.id, NOW, "default")).permissionMode).toBe("default");
+  });
+
   it("stacks the run under the source thread", async () => {
     card("source");
     const cron = createCron({ prompt: "p", expr: "0 9 * * *", cardId: "source", mode: "fresh" }, NOW);

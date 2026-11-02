@@ -12,7 +12,8 @@ const TerminalDrawer = guarded(() => import("./TerminalDrawer"), { what: "termin
 export interface BoardBottomProps {
   footer: ReturnType<typeof footerFor>;
   onHelp: () => void;
-  // `away` names the worker the open card or project is on: the terminal is this Mac's shell, so it says so instead.
+  // `away` names the worker the open card or project is on where this Mac can't sign for its terminal: the drawer is
+  // this Mac's shell, so it says so instead (lib/board-derive.ts terminalAway).
   terminal: { open: boolean; cwd: string; height: number; onHeight: (height: number) => void; onClose: () => void; away?: string | null };
 }
 

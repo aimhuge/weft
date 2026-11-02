@@ -1,10 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { apiFetch } from "@/lib/api-client";
 import { formatReset } from "@/lib/format";
-import { limitsChart, shareLeft, type DaySlot, type LimitSample, type LimitsChart, type Mark, type Slot } from "@/lib/limit-chart";
+import { limitsChart, shareLeft, type DaySlot, type LimitsChart, type Mark, type Slot } from "@/lib/limit-chart";
 import { BACKEND_LABELS, type Backend, type CardStats, type LimitWindow } from "@/lib/types";
+import { useLimitSamples } from "@/lib/use-limit-samples";
 import { useNow } from "@/lib/use-now";
 
 // The plan limits across the week, in the status strip's hover over 5hr / 7d. One plot, two axes: the
@@ -24,24 +23,6 @@ const MARK_STYLE: Record<Mark["kind"], { stroke: string; width: number; opacity:
   week: { stroke: "var(--ok)", width: 5, opacity: 1 },
   hit: { stroke: "var(--danger)", width: 2.5, opacity: 1 },
 };
-
-// The CLI's own limit history. Each CLI has its own plan (lib/plan-pools.ts): Claude Code reads
-// Anthropic's account windows, puku-cli reads Puku's, so the plot asks for the CLI's own readings and
-// another CLI's history never lands in it.
-function useSamples(backend: Backend) {
-  const [samples, setSamples] = useState<LimitSample[]>([]);
-  useEffect(() => {
-    let live = true;
-    apiFetch(`/api/limits?backend=${backend}`)
-      .then((res) => (res.ok ? res.json() : { samples: [] }))
-      .then((body: { samples?: LimitSample[] }) => live && setSamples(body.samples ?? []))
-      .catch(() => {});
-    return () => {
-      live = false;
-    };
-  }, [backend]);
-  return samples;
-}
 
 type Scale = { x: (t: number) => number; y: (left: number) => number };
 
@@ -187,16 +168,18 @@ function Key({ color, width = 2, height = 10, opacity = 1, label }: { color: str
   );
 }
 
-// A plan: `stats` holds its latest windows (lib/plan-limits.ts), the history is the CLI's own.
-export default function LimitBurndown({ backend = "claude", stats }: { backend?: Backend; stats: CardStats }) {
-  const samples = useSamples(backend);
+// A plan: `stats` holds its latest windows (lib/plan-limits.ts), the history is the CLI's own. Each CLI has its own
+// plan (lib/plan-pools.ts), so the plot asks for that CLI's readings only; on a worker card (`worker`), the ones that
+// worker published, since its CLI runs on its own sign-in (lib/use-limit-samples.ts).
+export default function LimitBurndown({ backend = "claude", stats, worker }: { backend?: Backend; stats: CardStats; worker?: string }) {
+  const samples = useLimitSamples(backend, worker);
   const now = useNow();
   if (!now) return null;
   const chart = limitsChart(samples, stats, now, backend);
   return (
     <div className="flex flex-col gap-1.5 font-sans">
       <div className="flex justify-between gap-3 text-[11.5px]">
-        <span className="text-faint">{`${BACKEND_LABELS[backend]}'s plan`}</span>
+        <span className="text-faint">{`${BACKEND_LABELS[backend]}'s plan`}{worker && " on the worker"}</span>
         <Summary name="5-hour" window={stats.fiveHour} tone="text-ok" now={now} />
         <Summary name="Weekly" window={stats.sevenDay} tone="text-danger" now={now} />
       </div>
