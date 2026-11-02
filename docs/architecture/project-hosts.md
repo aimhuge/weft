@@ -191,6 +191,21 @@ later move into the host, its key sealed to the host and opened only behind a si
 - **One device registry:** worker enrolment tokens, `desktop` heartbeat rows and the phone and browser QR pairing become
   one pairing flow; enrolling a worker is pairing a host.
 
+## Cost and speed
+
+Live traffic is what grows with use, so it leaves Supabase; the sealed history stays as the record and the offline copy.
+
+- **Polling, before the line exists.** The board re-reads an open worker thread's newest 50 full items every 2.5 s
+  (`workerThreadPage`, `THREAD_PAGE_SIZE`) and every worker card's full row every 5 s (`workerBoard`). It asks for what's
+  new instead (`seq` after the last one it has, `updated_at` after the last read), polls at 2.5 s only while a card runs,
+  30 s when idle, and not while the window is hidden.
+- **The route shows.** A worker's chip reads "direct · 4 ms" or "relay · 600 ms", so a fallback is visible.
+- **On the line (H6):** one line per host shared by every card, opened when a worker project is selected; long tool
+  outputs fetched on demand, mirrored only compressed and under a cap; items gzipped before sealing; the mirror batched
+  while the line carries the live view; video on an RTP track with adaptive bitrate instead of a fixed 8 Mbps.
+- **Small, later:** heartbeats as Realtime Presence rather than a row write every 20 s; finished `cloud_commands` rows
+  expire after a day; WebP for the fallback screen frames.
+
 ## Phases
 
 Each ships on its own.
@@ -206,8 +221,14 @@ Each ships on its own.
    file verbs with results.
 5. **H5 one host program.** The inbox, heartbeat and publish merged across the Mac and the daemon; one card schema; the
    `(host, repo)` address.
-6. **H6 the WebRTC line for everything live.** `host`, `events` and `terminal` channels on `lib/worker-rtc.ts`, a TURN
-   relay, the browser's screencast; weft.zip and the phone get the line once offers can be sealed off the desktop.
+6. **H6 the WebRTC line for everything live.** In order: video moves from 16 KB chunks on a reliable, ordered
+   DataChannel (`lib/use-rtc-screen.ts`) to an RTP track that drops late frames, so it can't delay a click; the line
+   opens while a board shows the worker's project, not only during a watch; `host` (verbs and results) and `events`
+   (thread and project changes, streaming text) channels replace the 2.5 s poll; Supabase leaves the hot path (the
+   first sealed offer, then a history and offline mirror written beside the line, with reconnects over the line itself);
+   a signed Bonjour/mDNS hint lets a board on the same LAN offer straight to the host; the browser and the phone seal
+   their own offers (libsodium), so weft.zip and the phone open lines too; and a TURN relay beside the STUN server
+   covers networks that block direct connections. Plus the line's cost and speed work in [Cost and speed](#cost-and-speed).
 7. **H7 passkey approvals.** One signed-approval path for weft.zip, the desktop and the phone.
 8. **H8 secrets on a Worker.** The per-use seal first, then the vault in the host behind H7.
 9. **H9 `@weft/client`** for the phone: the transports, verbs and view models as one package.
