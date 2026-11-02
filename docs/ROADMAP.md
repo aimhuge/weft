@@ -306,6 +306,7 @@ Tags: `Now` is being built this session; `P1` is next and high value; `P2` is cl
 - `P2` **Device pairing** — pair a phone with a QR code and a device token, since the API only accepts localhost today.
 - `P3` **Chat bridge** — answer permissions and send replies through a messaging app.
 - `P3` **Headless server mode** — run the board without Electron on an always-on machine and open it from any browser.
+- `Now` **Browser tools on a worker** — a worker card drives a headless Chromium on the box with every `mcp__browser__*` tool but `fill_field`, through the pane's own CDP code, with the file guard on every request, and the pane shows it live (screencast JPEGs on Realtime and the session line, clicks and keys back). Built and tested against a real Chromium. Next: run it on m1mini and Linux, paste and wheel from the pane, an H.264 track where the box can encode (docs/architecture/worker-browser.md).
 - `Now` **Fast worker simulator stream** — H.264 from idb_companion over WebRTC with a live gesture and keyboard stream, desktop board first; 198 ms median on m1mini's LAN. Next: measure off the LAN, weft.zip and phones, a TURN relay, Android.
 - `Done` **Worker simulator controls in the pane** — Start simulator on React Native and Expo cards, a device menu, Resume
   after the watch runs out, a "streaming from" badge, and a WebRTC quality menu (docs/architecture/weft-worker.md#the-live-screen).

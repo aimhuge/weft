@@ -40,21 +40,36 @@ export function ownPageCall(toolName: string, input: Record<string, unknown>, sp
 
 const titleOf = (file: string) => /<title[^>]*>([^<]*)<\/title>/i.exec(fs.readFileSync(file, "utf8").slice(0, 4096))?.[1]?.trim() ?? "";
 
-const noServers = "A dev server on a worker can't reach the boards yet. Write what you want to show as an HTML page and open that.";
 const refused = (url: string) => `Can't show ${url}: a worker only sends web files (HTML, images, video, fonts) from its show folder or the project's checkout, and never from a dot folder. Move the page to one of those, as an absolute path.`;
 
-export async function openOnWorker(cardId: string | undefined, url: string): Promise<string> {
-  const pane = paneFromUrl(url);
-  if (pane?.kind === "site") {
-    notePage(cardId, pane.url);
-    return `Opened ${pane.url}`;
+export type BrowseFn = (cardId: string, url: string) => Promise<{ url: string; title: string }>;
+// The worker's own browser (lib/worker-browser-routes.ts), loaded on first use: a desktop never needs it.
+const browseOnWorker: BrowseFn = async (cardId, url) => (await import("./worker-browser-routes")).workerShell("/browser/open", { key: cardId, url }) as Promise<{ url: string; title: string }>;
+
+// A public site or this box's own dev server opens in the worker's browser, which streams to the pane live. A site still
+// shows as itself when the browser can't start; a dev server can't show any other way.
+async function openLive(cardId: string | undefined, url: string, local: boolean, browse: BrowseFn) {
+  try {
+    const page = await browse(cardId ?? "", url);
+    return `Opened ${page.url} — ${page.title || "page"}. It's live in the pane on the user's board, from this worker's browser.`;
+  } catch (err) {
+    if (local) throw err;
+    notePage(cardId, url);
+    return `Opened ${url}`;
   }
-  if (pane?.kind === "local" && !/^(file:|\/)/i.test(pane.url)) throw new Error(noServers);
+}
+
+export async function openOnWorker(cardId: string | undefined, url: string, browse: BrowseFn = browseOnWorker): Promise<string> {
+  const pane = paneFromUrl(url);
+  if (pane?.kind === "site") return openLive(cardId, pane.url, false, browse);
+  if (pane?.kind === "local" && !/^(file:|\/)/i.test(pane.url)) return openLive(cardId, pane.url, true, browse);
   const found = resolvePage(url.trim());
   if (!found) throw new Error(refused(url));
   if (!upload) throw new Error("This worker can't upload pages yet. Update it with weft-worker update.");
   const ref = await upload(found.local);
   if (!ref) throw new Error(refused(url));
   notePage(cardId, url.trim());
+  // The same page in the worker's browser too, so read_page, snapshot and click act on what the pane shows.
+  await browse(cardId ?? "", found.local).catch(() => {});
   return `Opened ${url.trim()} — ${titleOf(found.local) || "page"}. It's in the pane on the user's board.`;
 }

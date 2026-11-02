@@ -21,6 +21,9 @@ vi.mock("./site-notes-live", () => ({ siteNotesForUrl: siteNotes }));
 // The card's current page on its synced row (lib/card-page.ts).
 const notePage = vi.hoisted(() => vi.fn());
 vi.mock("./card-page", () => ({ notePage }));
+// The worker's own browser (lib/worker-browser-routes.ts), for a card on a Weft Worker.
+const workerShell = vi.hoisted(() => vi.fn());
+vi.mock("./worker-browser-routes", () => ({ workerShell }));
 const bt = await import("./browser-tools");
 
 const fetchMock = vi.fn();
@@ -283,20 +286,23 @@ describe("on a Weft Worker", () => {
   const server = () => bt.browserMcpServer(() => "c1") as unknown as { tools: Array<{ name: string; handler: Handler }> };
   const openUrl = () => server().tools.find((t) => t.name === "open_url");
 
-  it("opens through the worker's upload, not the shell", async () => {
+  it("opens a site in the worker's own browser, not the shell", async () => {
     vi.stubEnv("WEFT_WORKER", "1");
     fetchMock.mockClear();
+    workerShell.mockResolvedValueOnce({ url: "https://example.com/", title: "Example" });
     const res = await openUrl()?.handler({ url: "https://example.com" });
-    expect(res?.content[0]?.text).toBe("Opened https://example.com");
+    expect(res?.content[0]?.text).toContain("Opened https://example.com/ — Example. It's live in the pane");
+    expect(workerShell).toHaveBeenCalledWith("/browser/open", { key: "c1", url: "https://example.com" });
     expect(fetchMock).not.toHaveBeenCalled();
     vi.stubEnv("WEFT_WORKER", "");
   });
 
   it("gives an error the agent can read", async () => {
     vi.stubEnv("WEFT_WORKER", "1");
+    workerShell.mockRejectedValueOnce(new Error("This worker has no Chromium"));
     const res = await openUrl()?.handler({ url: "http://localhost:3000" });
     expect(res?.isError).toBe(true);
-    expect(res?.content[0]?.text).toMatch(/dev server/);
+    expect(res?.content[0]?.text).toMatch(/no Chromium/);
     vi.stubEnv("WEFT_WORKER", "");
   });
 
