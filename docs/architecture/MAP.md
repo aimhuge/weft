@@ -503,7 +503,9 @@ When a new doc lands in this folder, add it here on the same change.
   over `public.device_registry`, Revoke by kind (`revokeRoute`: a phone or browser this Mac pinned through `weft.pairing.revoke`,
   the rest through `device_revoke`). `lib/host-pairing.ts` + `lib/worker-pair.ts` (the box: `weft-worker enrol wph.…`) and
   `electron/host-pairing.cjs` + `electron/host-pairing-ipc.cjs` (main: open, check, Touch ID, confirm; IPC `weft.hostPairing.*`,
-  registered by `electron/pairing-ipc.cjs`) enrol a worker by pairing it; `electron/device-beat.cjs` `linkHost` names the Mac's
+  registered by `electron/pairing-ipc.cjs`) enrol a worker by pairing it; `lib/worker-repair.ts` (the box's check) +
+  `electron/worker-repair.cjs` (main signs after Touch ID) + `components/WorkerRepair.tsx` (Devices → Re-pair) move an enrolled
+  worker to another Mac only on its trusted Mac's signature (docs/architecture/project-hosts.md#re-pairing-a-worker); `electron/device-beat.cjs` `linkHost` names the Mac's
   device id on its key row (docs/architecture/device-registry.md).
 - `lib/sync-seal.ts` + `lib/sodium.ts` + `lib/approval-sig.ts` + `lib/pairing-link.ts`: the isomorphic half (Mac server, web, phone):
   sealed envelopes with org/card/slot bound in, the signed approval message, the pairing link and claim. `lib/sync-seal-upload.ts`

@@ -101,6 +101,8 @@ Settings → Devices → **Add a worker** runs the phone's steps for a box:
   pairing's owner, while they're still in the workspace.
 - `install/worker.sh` is unchanged apart from its help line: it passes whatever it's given to `weft-worker enrol`,
   which pairs for a `wph.` code (`lib/worker-pair.ts`) and trades a `wet_` token as before (`lib/worker-registry.ts`).
+- An enrolled box pairs again only on an approval its trusted Mac signs: Settings → Devices → **Re-pair**
+  (`worker-repair:approve`, [project-hosts.md](project-hosts.md#re-pairing-a-worker)).
 - IPC `host-pairing:start|check|cancel` is registered by `electron/pairing-ipc.cjs` on the same board-only handler as
   phone pairing (`electron/host-pairing-ipc.cjs`), sharing its view of this Mac and its Touch ID.
 

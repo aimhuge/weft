@@ -279,6 +279,27 @@ A deny beats an ask, so the prompt never shows and a grant buys nothing here.
   in `~/.config/gh/hosts.yml` and answers `gh auth token` and `git credential fill`. The real fix for both is a process
   boundary between the daemon and its cards.
 
+### Re-pairing and a lost Mac
+
+A paired worker takes secrets and signed settings from one Mac, the one whose key came in its pairing code
+(`mac-keys.json`). To move it to another Mac, or to pair it again into another workspace, that Mac approves the move:
+Settings → Devices → the worker → **Re-pair**, paste the new Mac's `wph.…` code, Touch ID, and run the line it shows in
+a terminal on the box (`weft-worker enrol wph.… --re-pair --approval wra.…`). The approval lasts 30 minutes and is
+good for that worker and that code only ([project-hosts.md](project-hosts.md#re-pairing-a-worker)).
+
+**A lost Mac, or a box that trusts none** (enrolled by token, or after `weft-worker forget-macs`): no Mac can approve,
+so wipe the box's enrolment and enrol it fresh. In a terminal on the box:
+
+```sh
+rm ~/.weft-worker/worker.json ~/.weft-worker/mac-keys.json
+weft-worker enrol <the wph.… code from the new Mac>
+weft-worker restart
+```
+
+Then **Revoke** the old worker row in Settings → Devices. `work/` and its checkouts stay. The secret guard refuses those
+two paths to threads by name. A passkey-confirmed re-pair at weft.zip, with a code shown on the box's console, would
+spare the wipe; it isn't built.
+
 ### Worker projects on the desktop board
 
 A project that lives only on a worker shows on the desktop board with its cards, and nothing is copied into the local

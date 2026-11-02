@@ -26,7 +26,11 @@ export interface HostPairingBridge {
   cancel(id: string): Promise<void>;
   // Re-pin: forget the keys main pinned for a worker's secrets, after Touch ID (electron/worker-pins.cjs).
   forgetPin?: (id: string, name: string) => Promise<{ forgotten?: boolean; denied?: boolean }>;
+  // Approve re-pair: Touch ID, then main signs the box's move to the Mac in the code (electron/worker-repair.cjs).
+  approveRepair?: (id: string, name: string, code: string) => Promise<RepairResult>;
 }
+
+export type RepairResult = { denied: true } | { approval: string; command: string; fingerprint: string };
 
 export function repinOutcome(name: string, r: { forgotten?: boolean; denied?: boolean }): string {
   if (r.denied) return "Not re-pinned.";
@@ -136,6 +140,7 @@ export function useDevices({ pairing, hosts }: Bridges = bridgesHere()) {
     note,
     canAddWorker: Boolean(hosts),
     canRepin: Boolean(hosts?.forgetPin),
+    canRepair: Boolean(hosts?.approveRepair),
     revoke,
     repin,
     addWorker: () =>

@@ -80,10 +80,39 @@ describe("DevicesSettings", () => {
     expect(repinOutcome("m1mini", { forgotten: false })).toBe("m1mini had no pinned keys on this Mac.");
   });
 
+  it("approves a paired worker's re-pair through main and shows the line for the box", async () => {
+    const approveRepair = vi.fn().mockResolvedValueOnce({ denied: true }).mockRejectedValueOnce(new Error("Error invoking remote method 'worker-repair:approve': Error: Paste the whole wph.… line")).mockResolvedValueOnce({ approval: "wra.1.a.b", command: "weft-worker enrol wph.y --re-pair --approval wra.1.a.b", fingerprint: "a1b2 c3d4 e5f6 7890" });
+    (window as unknown as { weft: unknown }).weft = { pairing, hostPairing: { ...hosts, approveRepair } };
+    render(<DevicesSettings />);
+    await userEvent.click(await screen.findByRole("button", { name: "Re-pair m1mini" }));
+    expect(screen.queryByRole("button", { name: "Re-pair iPhone" })).toBeNull();
+    const approve = screen.getByRole("button", { name: "Approve" });
+    expect(approve).toBeDisabled();
+    await userEvent.type(screen.getByRole("textbox", { name: "New pairing code for m1mini" }), "wph.y");
+    await userEvent.click(approve);
+    expect(approveRepair).toHaveBeenCalledWith("w1", "m1mini", "wph.y");
+    expect(await screen.findByText("Not approved.")).toBeInTheDocument();
+    await userEvent.click(approve);
+    expect(await screen.findByText("Paste the whole wph.… line")).toBeInTheDocument();
+    await userEvent.click(approve);
+    expect(await screen.findByText("weft-worker enrol wph.y --re-pair --approval wra.1.a.b")).toBeInTheDocument();
+    expect(screen.getByText(/Approved for the Mac a1b2 c3d4 e5f6 7890/)).toBeInTheDocument();
+    const writeText = vi.fn(() => Promise.resolve());
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    await userEvent.click(screen.getByRole("button", { name: "Copy" }));
+    expect(writeText).toHaveBeenCalledWith("weft-worker enrol wph.y --re-pair --approval wra.1.a.b");
+    await userEvent.click(screen.getByRole("button", { name: "Done" }));
+    expect(screen.queryByText(/Approved for the Mac/)).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Re-pair m1mini" }));
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("textbox")).toBeNull();
+  });
+
   it("offers no Re-pin without main's bridge for it", async () => {
     render(<DevicesSettings />);
     await screen.findByText("m1mini");
     expect(screen.queryByRole("button", { name: "Re-pin m1mini" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Re-pair m1mini" })).toBeNull();
   });
 
   it("shows why a revoke or a read failed", async () => {

@@ -23,13 +23,28 @@ describe("registerHostPairing", () => {
       myDevice: () => Promise.resolve({ publicKey: "mac-key" }),
       confirm: () => Promise.resolve(true),
     });
-    expect([...handlers.keys()]).toEqual(["host-pairing:start", "host-pairing:check", "host-pairing:cancel", "worker-pins:forget"]);
+    expect([...handlers.keys()]).toEqual(["host-pairing:start", "host-pairing:check", "host-pairing:cancel", "worker-pins:forget", "worker-repair:approve"]);
     expect(await handlers.get("worker-pins:forget")!("w1", "m1mini")).toEqual({ forgotten: false });
     expect(await handlers.get("host-pairing:start")!(ORG)).toMatchObject({ id: PID });
     expect(rpc).toHaveBeenCalledWith("worker_pair_open", { p_org: ORG, p_mac_device: "mac-id", p_mac_key: "mac-key" });
     expect(await handlers.get("host-pairing:check")!("nope")).toEqual({ status: "expired" });
     await expect(handlers.get("host-pairing:cancel")!("nope")).resolves.toBeUndefined();
     await expect(handlers.get("host-pairing:start")!(null)).rejects.toThrow();
+  });
+});
+
+describe("Approve re-pair", () => {
+  it("signs a worker's move with this Mac's key after Touch ID, and only when main has a signer", async () => {
+    const handlers = new Map<string, (...args: unknown[]) => unknown>();
+    const deps = { db: () => ({}), userId: () => "u1", macDevice: () => "mac-id", myDevice: () => Promise.resolve({ publicKey: "k" }), confirm: () => Promise.resolve(false) };
+    registerHostPairing((channel, fn) => handlers.set(channel, fn), deps);
+    await expect(handlers.get("worker-repair:approve")!("w", "m1mini", "wph.x")).rejects.toThrow(/no approval key/);
+    const macSign = vi.fn(() => Promise.resolve("sig"));
+    registerHostPairing((channel, fn) => handlers.set(channel, fn), { ...deps, macSignKey: () => Promise.resolve("A".repeat(43) + "="), macSign });
+    const code = `wph.${PID}.${ORG}.${"s".repeat(43)}.${"B".repeat(43)}`;
+    expect(await handlers.get("worker-repair:approve")!("99999999-8888-4777-8666-555555555555", "m1mini", code)).toEqual({ denied: true });
+    expect(macSign).not.toHaveBeenCalled();
+    await expect(handlers.get("worker-repair:approve")!(undefined, undefined, undefined)).rejects.toThrow(/isn't a worker/);
   });
 });
 
