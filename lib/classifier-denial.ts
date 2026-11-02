@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
-import type { HookCallback, HookCallbackMatcher, Options, SDKMessage, SDKPermissionDenial } from "@anthropic-ai/claude-agent-sdk";
+import type { HookCallback, Options, PermissionResult, SDKMessage, SDKPermissionDenial } from "@anthropic-ai/claude-agent-sdk";
 import { shortToolName, summarizeInput } from "./format";
 import { hooks, safeUpdate, type Pending, type Session } from "./runner-state";
 import { pendingView } from "./runner-pending";
+import { backToAuto, retried, stepOut, untilBackInAuto } from "./retry-window";
 import { appendThread, replaceThreadItem } from "./store";
 import type { Column } from "./types";
 
@@ -12,11 +13,10 @@ import type { Column } from "./types";
 // calls it can't decide on go there), but it reports each one as a system/permission_denied message.
 // Weft notes those during the turn and, when the turn ends, asks about each on the card in Needs you:
 // "Allow once and retry" grants that exact call once and sends the thread a message to retry it; "Keep denied"
-// leaves it denied (docs/architecture/thread-guards.md). The grant answers the retry from a PreToolUse allow, which
-// skips the classifier, or from canUseTool. But auto mode marks some calls classifier-only: then hook allows and
-// allow rules don't count, and a classifier that gives no verdict ("it skipped this action") denies them with no
-// prompt fallback. So for the retry the live CLI steps out of auto mode into default, where the call reaches
-// canUseTool (lib/guards/ask.ts) and the grant allows it; it steps back once the grant is used or the turn ends.
+// leaves it denied (docs/architecture/thread-guards.md). The grant answers the retry from a PreToolUse allow. In auto
+// mode the CLI sends some hook allows on to the classifier anyway (an MCP tool's), so the granted call's own hook
+// steps the live CLI out of auto mode for just that call (lib/retry-window.ts); the session never sits in default
+// mode, where every path outside the cwd asks, while other calls and background subagents run.
 
 export interface ClassifierDenial {
   toolUseId: string;
@@ -51,7 +51,7 @@ export function askAboutDenials(cardId: string, session: Session, denials: SDKPe
   session.denials = undefined;
   // A grant the last retry didn't use is spent: it was for that turn only.
   session.retryGrants = undefined;
-  backToAuto(session);
+  void backToAuto(session);
   if (!ask) return false;
   const seen = new Set<string>();
   for (const d of noted) {
@@ -85,7 +85,6 @@ function denialPrompt(cardId: string, session: Session, d: ClassifierDenial, inp
         safeUpdate(cardId, { column, pending: null, lastLine: `Kept denied: ${title}` });
         return;
       }
-      stepOutOfAuto(session);
       try {
         hooks.send(cardId, retryMessage(granted.map((key) => key.slice(0, key.indexOf("\n")))));
       } catch (err) {
@@ -107,23 +106,17 @@ export function takeGrant(session: Session, toolName: string, input: unknown): b
   const at = session.retryGrants?.indexOf(callKey(toolName, input)) ?? -1;
   if (at === -1) return false;
   session.retryGrants?.splice(at, 1);
-  if (!session.retryGrants?.length) backToAuto(session);
   return true;
 }
 
-// The live CLI leaves auto mode for the retry, so a classifier-only call asks canUseTool instead of being denied.
-// The card's own mode (spec.permissionMode) stays as it was.
-function stepOutOfAuto(session: Session) {
-  if (session.spec.permissionMode !== "auto" || !session.query) return;
-  session.retryOutOfAuto = true;
-  void session.query.setPermissionMode("default").catch(() => {});
-}
-
-// Back to the card's mode (auto, or whatever you switched it to meanwhile).
-function backToAuto(session: Session) {
-  if (!session.retryOutOfAuto) return;
-  session.retryOutOfAuto = undefined;
-  void session.query?.setPermissionMode(session.spec.permissionMode).catch(() => {});
+// What canUseTool (lib/guards/ask.ts) answers for a call while the CLI is out of auto mode, or null when it isn't
+// its to answer. The granted call is allowed (an ask rule can still send it there); any other call that got
+// decided in default mode, its hook having run just before the window opened, is turned back to be run again in
+// auto mode instead of asking you about something auto mode may well have allowed.
+export function outOfAutoAnswer(session: Session, toolName: string, input: Record<string, unknown>, toolUseId: string): PermissionResult | null {
+  if (takeGrant(session, toolName, input) || session.retryWindow?.ids.has(toolUseId)) return { behavior: "allow", updatedInput: input };
+  if (!session.retryWindow) return null;
+  return { behavior: "deny", message: "Weft stepped out of auto mode for a moment to let a call you allowed through, so this call wasn't checked. Run it again now." };
 }
 
 // A new message from the user moves on from the prompts: they replied instead of clicking.
@@ -135,17 +128,35 @@ export function dropDenialPrompts(cardId: string, session: Session) {
   });
 }
 
-// The PreToolUse hook that lets a granted retry through before the classifier sees it. Deny hooks still win.
-// Out of auto mode it stays out of the way, so the retry reaches canUseTool and the grant is used there.
+// The PreToolUse hook that lets a granted retry through. Deny hooks still win. In auto mode it first steps the CLI
+// out for that call, so the allow counts; every other call waits here until the CLI is back in auto mode. The
+// PostToolUse hooks close the window once the granted call has run.
 type Guarded = Pick<Options, "env" | "hooks">;
 
 export function withRetryGrant(guarded: Guarded, session: Session): Guarded {
-  const allow: HookCallback = (input) => {
-    if (input.hook_event_name !== "PreToolUse" || session.retryOutOfAuto || !takeGrant(session, input.tool_name, input.tool_input)) return Promise.resolve({});
-    return Promise.resolve({
+  const allow: HookCallback = async (input) => {
+    if (input.hook_event_name !== "PreToolUse") return {};
+    if (!takeGrant(session, input.tool_name, input.tool_input)) {
+      await untilBackInAuto(session);
+      return {};
+    }
+    await stepOut(session, input.tool_use_id);
+    return {
       hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "allow", permissionDecisionReason: "Allowed once in Weft after auto mode blocked it" },
-    });
+    };
   };
-  const matcher: HookCallbackMatcher = { hooks: [allow] };
-  return { ...guarded, hooks: { ...guarded.hooks, PreToolUse: [...(guarded.hooks?.PreToolUse ?? []), matcher] } };
+  const ran: HookCallback = (input) => {
+    if (input.hook_event_name === "PostToolUse" || input.hook_event_name === "PostToolUseFailure") retried(session, input.tool_use_id);
+    return Promise.resolve({});
+  };
+  const h = guarded.hooks;
+  return {
+    ...guarded,
+    hooks: {
+      ...h,
+      PreToolUse: [...(h?.PreToolUse ?? []), { hooks: [allow] }],
+      PostToolUse: [...(h?.PostToolUse ?? []), { hooks: [ran] }],
+      PostToolUseFailure: [...(h?.PostToolUseFailure ?? []), { hooks: [ran] }],
+    },
+  };
 }

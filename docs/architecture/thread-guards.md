@@ -107,15 +107,22 @@ What the CLI does send is a `system`/`permission_denied` message (`decision_reas
   **Keep denied**. Once the last of them is answered, an allowed call becomes a one-time grant (keyed by tool name plus
   its input with sorted keys) and Weft sends the thread "retry exactly that call"; with nothing allowed the card goes back
   to the column the turn ended in.
-- `withRetryGrant` adds a PreToolUse hook that answers `allow` for the granted call, which skips the classifier, and
-  uses the grant up. `canUseTool` checks the grant too, in case the retry asks instead. A deny hook (the secret guard, say)
-  still wins, and a grant the retry turn didn't use is dropped when that turn ends.
-- Auto mode marks some calls **classifier-only**: hook allows and allow rules don't count for them, and when the
-  classifier gives no verdict ("it skipped this action", a hard failure) the CLI denies them with no prompt fallback,
-  so the PreToolUse allow alone let the retry be blocked again. So before the retry message goes out, the live CLI
-  steps out of auto mode into `default` (`query.setPermissionMode`; the card's saved mode stays `auto`), the hook
-  stands aside (`session.retryOutOfAuto`), and the retry reaches `canUseTool`, where the grant allows it. The CLI goes
-  back to the card's mode once the last grant is used, or when the retry turn ends.
+- `withRetryGrant` adds a PreToolUse hook that answers `allow` for the granted call and uses the grant up. A deny hook
+  (the secret guard, say) still wins, and a grant the retry turn didn't use is dropped when that turn ends.
+- In auto mode a hook's allow doesn't always count: the CLI sends an MCP tool's hook allow on to the classifier anyway
+  ("Hook approved tool use …, but auto mode requires classifier adjudication"), so the allow alone let the retry be
+  blocked again. So the granted call's own hook steps the live CLI out of auto mode first (`lib/retry-window.ts`:
+  `stepOut` awaits `query.setPermissionMode("default")`; the card's saved mode stays `auto`), and in default mode the
+  allow counts. The window closes, back to the card's mode, as soon as that call's PostToolUse or PostToolUseFailure
+  hook reports it ran, after `WINDOW_MS` (3 s) if it never does, or when the turn ends.
+- Only the granted call is decided in default mode. Every other call's PreToolUse hook, a background subagent's too,
+  waits for the window to close (`untilBackInAuto`), so the classifier decides it as usual. Before, the whole session
+  stepped out when you clicked **Allow once and retry** and stayed out until the retry used the grant: parallel
+  subagents asked about every path outside the cwd (worktrees in `/tmp`, say) on a card whose picker said Auto, and a
+  retry that never came, or came with other input, left the session in default for good.
+- `canUseTool` (`outOfAutoAnswer`, from `lib/guards/ask.ts`) allows the granted call if an ask rule still sends it
+  there, and turns back any other call caught in the window (its hook ran just before the window opened) with "run it
+  again", rather than asking you about something auto mode may well have allowed.
 - A reply instead of a click (`sendMessage`) drops the prompts and marks them denied in the thread.
 
 The mode's hint in `MODE_OPTIONS` (`lib/types-card.ts`) says this: "A classifier approves or blocks; Weft asks you about blocks".

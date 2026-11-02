@@ -11,7 +11,7 @@ vi.mock("./store", () => ({ appendThread, replaceThreadItem }));
 vi.mock("./runner-state", () => ({ safeUpdate, hooks: { send: sendMessage } }));
 vi.mock("./runner-pending", () => ({ pendingView: (p: { id: string; title: string; why?: unknown }) => ({ id: p.id, title: p.title, why: p.why }) }));
 
-const { askAboutDenials, callKey, dropDenialPrompts, noteDenial, retryMessage, takeGrant, withRetryGrant } = await import("./classifier-denial");
+const { askAboutDenials, callKey, dropDenialPrompts, noteDenial, outOfAutoAnswer, retryMessage, takeGrant, withRetryGrant } = await import("./classifier-denial");
 
 const MIGRATE = "mcp__supabase__apply_migration";
 const input = { name: "add_x", query: "create table x ()" };
@@ -159,9 +159,9 @@ describe("answering the prompt", () => {
   });
 });
 
-describe("a classifier-only retry in auto mode", () => {
-  // Auto mode denies a classifier-only call the classifier gave no verdict on, whatever a hook says, and never asks
-  // canUseTool: so the retry runs with the live CLI in default mode, and the grant answers it from canUseTool.
+describe("a retry in auto mode", () => {
+  // In auto mode the CLI sends an MCP tool's hook allow on to the classifier, so the granted call's own hook steps
+  // the live CLI out of auto mode for just that call (lib/retry-window.ts); the rest of the session stays in auto.
   function live(mode = "auto") {
     const setPermissionMode = vi.fn(() => Promise.resolve());
     const s = session();
@@ -172,65 +172,92 @@ describe("a classifier-only retry in auto mode", () => {
     s.pending.shift()!.resolve({ behavior: "allow", updatedInput: input });
     return { s, setPermissionMode };
   }
+  const opts = (s: Session) => withRetryGrant({ env: {} }, s).hooks ?? {};
+  const signal = { signal: new AbortController().signal };
+  const pre = (s: Session, tool_name: string, tool_input: unknown, tool_use_id: string) =>
+    nth(nth(opts(s).PreToolUse ?? [], 0).hooks, 0)({ hook_event_name: "PreToolUse", tool_name, tool_input, tool_use_id } as HookInput, undefined, signal);
+  const post = (s: Session, hook_event_name: "PostToolUse" | "PostToolUseFailure", tool_use_id: string) =>
+    nth(nth(opts(s)[hook_event_name] ?? [], 0).hooks, 0)({ hook_event_name, tool_use_id } as HookInput, undefined, signal);
 
-  it("steps the CLI out of auto mode before the retry is sent, keeping the card's own mode", () => {
+  it("stays in auto mode when you allow the call: the retry is sent, the session doesn't step out", () => {
     const { s, setPermissionMode } = live();
+    expect(sendMessage).toHaveBeenCalledWith("c1", retryMessage([MIGRATE]));
+    expect(setPermissionMode).not.toHaveBeenCalled();
+    expect(s.retryWindow).toBeUndefined();
+  });
+
+  it("steps out for the granted call only, allows it, and goes back to auto once it has run", async () => {
+    const { s, setPermissionMode } = live();
+    expect(await pre(s, MIGRATE, input, "r1")).toMatchObject({ hookSpecificOutput: { permissionDecision: "allow" } });
     expect(setPermissionMode).toHaveBeenCalledWith("default");
-    expect(setPermissionMode.mock.invocationCallOrder[0]).toBeLessThan(sendMessage.mock.invocationCallOrder[0] ?? 0);
-    expect(s.retryOutOfAuto).toBe(true);
     expect(s.spec.permissionMode).toBe("auto");
+    await post(s, "PostToolUse", "r1");
+    await vi.waitFor(() => expect(setPermissionMode).toHaveBeenLastCalledWith("auto"));
+    expect(s.retryWindow).toBeUndefined();
   });
 
-  it("goes back to auto once the grant answers the retry", () => {
+  it("holds every other call, a subagent's too, until the CLI is back in auto mode", async () => {
     const { s, setPermissionMode } = live();
-    expect(takeGrant(s, MIGRATE, input)).toBe(true);
+    await pre(s, MIGRATE, input, "r1");
+    let decided = false;
+    const other = pre(s, "Bash", { command: "ls /tmp/weft-x" }, "o1").then((r) => ((decided = true), r));
+    await Promise.resolve();
+    expect(decided).toBe(false);
+    await post(s, "PostToolUseFailure", "r1");
+    expect(await other).toEqual({});
     expect(setPermissionMode).toHaveBeenLastCalledWith("auto");
-    expect(s.retryOutOfAuto).toBeUndefined();
   });
 
-  it("waits for every granted call before going back", () => {
-    const { s, setPermissionMode } = live();
-    s.retryGrants = [callKey(MIGRATE, input), callKey("Bash", { command: "ls" })];
-    takeGrant(s, MIGRATE, input);
-    expect(setPermissionMode).toHaveBeenCalledTimes(1);
-    takeGrant(s, "Bash", { command: "ls" });
-    expect(setPermissionMode).toHaveBeenLastCalledWith("auto");
-  });
-
-  it("goes back when the retry turn ends without using the grant, to the mode you switched to meanwhile", () => {
-    const { s, setPermissionMode } = live();
-    s.spec.permissionMode = "acceptEdits";
-    askAboutDenials("c1", s, [], "review");
-    expect(setPermissionMode).toHaveBeenLastCalledWith("acceptEdits");
-    expect(s.retryOutOfAuto).toBeUndefined();
-  });
-
-  it("leaves the PreToolUse hook out of it, so the grant is kept for canUseTool", async () => {
+  it("lets a call through at once when no retry is open", async () => {
     const { s } = live();
-    const hook = nth(nth(withRetryGrant({ env: {} }, s).hooks?.PreToolUse ?? [], 0).hooks, 0);
-    const ev = { hook_event_name: "PreToolUse", tool_name: MIGRATE, tool_input: input } as HookInput;
-    expect(await hook(ev, undefined, { signal: new AbortController().signal })).toEqual({});
+    expect(await pre(s, "Bash", { command: "ls" }, "o1")).toEqual({});
     expect(s.retryGrants).toEqual([callKey(MIGRATE, input)]);
   });
 
-  it("doesn't touch a card in another mode, or one with no live CLI", () => {
-    const { s, setPermissionMode } = live("default");
-    expect(setPermissionMode).not.toHaveBeenCalled();
-    expect(s.retryOutOfAuto).toBeUndefined();
-    const idle = session();
-    idle.spec = { permissionMode: "auto" } as Session["spec"];
-    noteDenial(idle, denied());
-    askAboutDenials("c1", idle, [{ tool_name: MIGRATE, tool_use_id: "tu1", tool_input: input }], "review");
-    idle.pending.shift()!.resolve({ behavior: "allow", updatedInput: input });
-    expect(idle.retryOutOfAuto).toBeUndefined();
+  it("goes back when the retry turn ends, to the mode you switched to meanwhile", async () => {
+    const { s, setPermissionMode } = live();
+    await pre(s, MIGRATE, input, "r1");
+    s.spec.permissionMode = "acceptEdits";
+    askAboutDenials("c1", s, [], "review");
+    await vi.waitFor(() => expect(setPermissionMode).toHaveBeenLastCalledWith("acceptEdits"));
   });
 
-  it("ignores a refused mode change", async () => {
-    const { s, setPermissionMode } = live();
-    setPermissionMode.mockReturnValueOnce(Promise.reject(new Error("closed")));
-    takeGrant(s, MIGRATE, input);
-    await Promise.resolve();
-    expect(s.retryOutOfAuto).toBeUndefined();
+  it("allows the granted call without a mode change in another mode, or with no live CLI", async () => {
+    const { s, setPermissionMode } = live("default");
+    expect(await pre(s, MIGRATE, input, "r1")).toMatchObject({ hookSpecificOutput: { permissionDecision: "allow" } });
+    expect(setPermissionMode).not.toHaveBeenCalled();
+    const idle = session();
+    idle.spec = { permissionMode: "auto" } as Session["spec"];
+    idle.retryGrants = [callKey(MIGRATE, input)];
+    expect(await pre(idle, MIGRATE, input, "r1")).toMatchObject({ hookSpecificOutput: { permissionDecision: "allow" } });
+    expect(idle.retryWindow).toBeUndefined();
+  });
+
+  it("leaves other events alone", async () => {
+    const { s } = live();
+    const hook = nth(nth(opts(s).PreToolUse ?? [], 0).hooks, 0);
+    expect(await hook({ hook_event_name: "PostToolUse" } as HookInput, undefined, signal)).toEqual({});
+    expect(await nth(nth(opts(s).PostToolUse ?? [], 0).hooks, 0)({ hook_event_name: "PreToolUse" } as HookInput, undefined, signal)).toEqual({});
+  });
+});
+
+describe("outOfAutoAnswer", () => {
+  it("allows a granted call, or the one the window is open for, and turns back any other caught in it", async () => {
+    const s = session();
+    expect(outOfAutoAnswer(s, "Bash", { command: "ls" }, "o1")).toBeNull();
+    s.retryGrants = [callKey(MIGRATE, input)];
+    expect(outOfAutoAnswer(s, MIGRATE, input, "r1")).toEqual({ behavior: "allow", updatedInput: input });
+    const setPermissionMode = vi.fn(() => Promise.resolve());
+    s.spec = { permissionMode: "auto" } as Session["spec"];
+    s.query = { setPermissionMode } as unknown as Session["query"];
+    s.retryGrants = [callKey(MIGRATE, input)];
+    await withRetryGrant({ env: {} }, s).hooks?.PreToolUse?.[0]?.hooks[0]?.(
+      { hook_event_name: "PreToolUse", tool_name: MIGRATE, tool_input: input, tool_use_id: "r1" } as HookInput, undefined, { signal: new AbortController().signal });
+    expect(outOfAutoAnswer(s, MIGRATE, input, "r1")).toEqual({ behavior: "allow", updatedInput: input });
+    const other = outOfAutoAnswer(s, "Bash", { command: "ls" }, "o1");
+    expect(other?.behavior).toBe("deny");
+    expect(other && "message" in other ? other.message : "").toMatch(/Run it again/);
+    askAboutDenials("c1", s, [], "review");
   });
 });
 
@@ -271,22 +298,23 @@ function nth<T>(arr: readonly T[], i: number): T {
 
 describe("withRetryGrant", () => {
   const hookCall = (s: Session, ev: Partial<HookInput>) => {
-    const opts = withRetryGrant({ env: {}, hooks: { PreToolUse: [{ hooks: [] }] } }, s);
+    const opts = withRetryGrant({ env: {}, hooks: { PreToolUse: [{ hooks: [] }], PostToolUse: [{ hooks: [] }], PostToolUseFailure: [{ hooks: [] }] } }, s);
+    expect(opts.hooks?.PostToolUse).toHaveLength(2);
+    expect(opts.hooks?.PostToolUseFailure).toHaveLength(2);
     const matchers = opts.hooks?.PreToolUse ?? [];
     expect(matchers).toHaveLength(2);
     return nth(nth(matchers, 1).hooks, 0)(ev as HookInput, undefined, { signal: new AbortController().signal });
   };
 
-  it("allows a granted call before the classifier sees it, once", async () => {
+  it("allows a granted call, once", async () => {
     const s = session();
     s.retryGrants = [callKey(MIGRATE, input)];
-    const ev = { hook_event_name: "PreToolUse", tool_name: MIGRATE, tool_input: input } as const;
+    const ev = { hook_event_name: "PreToolUse", tool_name: MIGRATE, tool_input: input, tool_use_id: "r1" } as const;
     expect(await hookCall(s, ev)).toMatchObject({ hookSpecificOutput: { permissionDecision: "allow" } });
     expect(await hookCall(s, ev)).toEqual({});
   });
 
-  it("leaves other events alone, and works with no hooks to add to", async () => {
-    expect(await hookCall(session(), { hook_event_name: "PostToolUse" })).toEqual({});
+  it("works with no hooks to add to", () => {
     expect(withRetryGrant({ env: {} }, session()).hooks?.PreToolUse).toHaveLength(1);
   });
 });
