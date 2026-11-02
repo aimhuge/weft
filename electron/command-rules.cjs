@@ -9,6 +9,9 @@ const META = new Set(["|", "&", ";", "<", ">", "(", ")", "`", "$", "\n", "\r"]);
 // Control (Cc), format (Cf: zero-width and bidi controls) and line or paragraph separators.
 const UNSAFE = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u;
 
+// Variables that make a program load code the approval doesn't show (lib/secret-command.ts LOADER_VAR, the same list).
+const LOADER_VAR = /^(NODE_OPTIONS|LD_[A-Z_]+|DYLD_[A-Z_]+|BASH_ENV|ENV|PYTHONSTARTUP|PERL5OPT|RUBYOPT)$/;
+
 const SHELLS = new Set("sh bash zsh dash ksh fish csh tcsh eval exec source . osascript".split(" "));
 const WRAPPERS = new Set("env sudo doas xargs nohup time command builtin nice watch script parallel timeout stdbuf caffeinate".split(" "));
 const DUMPS = new Set("printenv export set declare".split(" "));
@@ -174,6 +177,7 @@ function checkCommand(command, names = []) {
   while (all.length && ASSIGNMENT.test(all[0])) {
     const [, key, value] = /** @type {RegExpExecArray} */ (ASSIGNMENT.exec(/** @type {string} */ (all.shift())));
     if (names.includes(key)) throw new Error(`${key} comes from the vault; the command can't set it.`);
+    if (LOADER_VAR.test(key)) throw new Error(`${key} makes the program load code the approval doesn't show.`);
     env[key] = value;
   }
   const [first, ...args] = all;
@@ -183,4 +187,4 @@ function checkCommand(command, names = []) {
   return { argv: all, env };
 }
 
-module.exports = { checkCommand, hasUnsafe, words, shellSyntax };
+module.exports = { checkCommand, hasUnsafe, words, shellSyntax, LOADER_VAR };

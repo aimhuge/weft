@@ -7,7 +7,8 @@ import { newSealKeys, open, type Sealed } from "./worker-seal";
 
 const keys = newSealKeys();
 const signer = macSigner();
-let macs = memoryMacs();
+// The Mac this box was paired with: its key came in the pairing code (lib/worker-mac-keys.ts trustPairingMac).
+let macs = memoryMacs([signer.key]);
 const opener = (sealed: Sealed, purpose: string) => open(keys, sealed, purpose);
 const NOW = 1_000_000;
 let n = 0;
@@ -23,7 +24,7 @@ function row(over: Record<string, unknown> = {}, purpose?: string, payload: Reco
 }
 
 beforeEach(() => {
-  macs = memoryMacs();
+  macs = memoryMacs([signer.key]);
   nonce = String(++n).padStart(64, "0");
   ask = openAsk(nonce, { cardId: "c1", command: "npm run job", names: ["B", "A"], environment: "development", expiresAt: NOW + 60_000 });
 });
@@ -39,25 +40,29 @@ describe("openAsk", () => {
 });
 
 describe("deliverSecretUse", () => {
-  it("takes only a row signed by a Mac it trusts, and trusts the first Mac whose row it delivers", async () => {
+  it("takes only a row signed by the Mac it was paired with", () => {
     const unsigned = row();
     delete (unsigned.payload as { mac?: unknown }).mac;
     expect(() => deliverSecretUse(unsigned, opener, macs, NOW)).toThrow("That secret use isn't signed by a Mac.");
     const forged = row();
     forged.payload.mac = { key: signer.key, sig: signer.sign("something else") };
     expect(() => deliverSecretUse(forged, opener, macs, NOW)).toThrow("That secret use's Mac signature doesn't check out.");
-    expect(macs.keys).toEqual([]);
-    expect(deliverSecretUse(row(), opener, macs, NOW)).toBe("c1");
-    await expect(ask.values).resolves.toEqual({ A: "va", B: "vb" });
-    expect(macs.keys).toEqual([signer.key]);
   });
 
-  it("refuses a row from a Mac other than the one it trusts, and keeps the one it has", () => {
-    macs = memoryMacs([macSigner().key]);
-    expect(() => deliverSecretUse(row(), opener, macs, NOW)).toThrow("signed by a Mac this worker doesn't trust");
-    const trusted = memoryMacs([signer.key]);
-    expect(deliverSecretUse(row(), opener, trusted, NOW)).toBe("c1");
-    expect(trusted.keys).toEqual([signer.key]);
+  it("refuses a row a session sealed and signed with its own key, even before the real answer, and keeps the ask open", async () => {
+    // Anyone with the owner's session can read the nonce and the worker's public key, seal values and sign the row.
+    const session = macSigner();
+    const sealed = cjs.seal(keys.publicKey, JSON.stringify(plain()), secretUsePurpose("c1", nonce, "npm run job"));
+    const forged = { payload: { cardId: "c1", nonce, sealed, mac: session.mac("c1", nonce, sealed) } };
+    expect(() => deliverSecretUse(forged, opener, macs, NOW)).toThrow("That secret use is signed by a Mac this worker wasn't paired with.");
+    expect(macs.keys).toEqual([signer.key]);
+    // The real Mac's answer still lands.
+    expect(deliverSecretUse(row(), opener, macs, NOW)).toBe("c1");
+    await expect(ask.values).resolves.toEqual({ A: "va", B: "vb" });
+  });
+
+  it("takes no secrets on a box that trusts no Mac (enrolled by token)", () => {
+    expect(() => deliverSecretUse(row(), opener, memoryMacs(), NOW)).toThrow("This worker trusts no Mac for secrets: it was enrolled by token.");
   });
 
   it("hands the values to the waiting ask once, and a replay finds nothing", async () => {

@@ -3,7 +3,8 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { macSigner } from "./mac-signer.harness";
-import { macKeysAt, macSigned } from "./worker-mac-keys";
+import { pairCode } from "./host-pairing";
+import { macKeysAt, macSigned, trustPairingMac } from "./worker-mac-keys";
 
 describe("macKeysAt", () => {
   it("keeps the Macs a worker trusts in mac-keys.json, mode 600, and forgets them", () => {
@@ -38,5 +39,17 @@ describe("macSigned", () => {
     expect(macSigned(Buffer.from("short").toString("base64"), "hello", sig)).toBe(false);
     expect(macSigned(mac.key, "hello", "not base64 at all !!")).toBe(false);
     expect(macSigned(mac.key, "hello", undefined as unknown as string)).toBe(false);
+  });
+});
+
+describe("trustPairingMac", () => {
+  it("trusts the Mac key a pairing code carries, and nothing from a code without one", () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), "weft-mac-keys-"));
+    const mac = macSigner();
+    const base = { id: "11111111-2222-4333-8444-555555555555", orgId: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee", secret: "s".repeat(43) };
+    expect(trustPairingMac(home, pairCode(base))).toBe(false);
+    expect(macKeysAt(home).pinned()).toEqual([]);
+    expect(trustPairingMac(home, pairCode({ ...base, macKey: mac.key }))).toBe(true);
+    expect(macKeysAt(home).pinned()).toEqual([mac.key]);
   });
 });

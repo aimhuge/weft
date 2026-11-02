@@ -5,7 +5,7 @@
 //   weft-worker login                           sign Claude Code in for the daemon (claude setup-token)
 //   weft-worker start                           run the daemon (what the service runs)
 //   weft-worker status                          say whether this box is enrolled, with its key's fingerprint
-//   weft-worker forget-macs                     take secrets from a new Mac (lib/worker-mac-keys.ts)
+//   weft-worker forget-macs                     stop taking secrets from the paired Mac (lib/worker-mac-keys.ts)
 //   weft-worker check                           load the whole engine and exit (lib/worker-update.ts trusts a commit by this)
 //
 // The worker keeps its own store (WEFT_DATA under ~/.weft-worker), so a desktop Weft on the same Mac is untouched.
@@ -49,6 +49,8 @@ async function enrolCommand(token: string | undefined) {
     ? await pairWorker(token, { name, platform: process.platform, arch: process.arch, boxKey: workerSealKeys(home, newSealKeys).publicKey, sign: workerSignKeys(home, newSignKeys) }, { rpc, say: console.log })
     : await enrol(rpc, token, { name, platform: process.platform, arch: process.arch });
   writeWorkerConfig(home, config);
+  // The Mac that showed the code: the one whose signed secret_use rows this box will take (lib/worker-mac-keys.ts).
+  if (isPairCode(token)) (await import("../lib/worker-mac-keys")).trustPairingMac(home, token);
   console.log(`Enrolled ${config.name} as ${config.device}. Start it with: weft-worker start`);
 }
 
@@ -245,10 +247,10 @@ async function statusCommand() {
   if (config) for (const line of (await import("../lib/worker-secret-wiring")).keyStatus(home)) console.log(line);
 }
 
-// After moving to a new Mac: forget the Mac keys this box takes secrets from, so the next answer pins the new one.
+// Stop taking secrets from any Mac until the box is paired again (Settings → Devices → Add a worker).
 async function forgetMacsCommand() {
   (await import("../lib/worker-secret-wiring")).forgetMacs(home);
-  console.log("Forgot the Macs this worker took secrets from. The next Mac to answer a secret ask is trusted.");
+  console.log("Forgot the Mac this worker took secrets from. Pair it again from Settings → Devices to use secrets on it.");
 }
 
 const [command, arg] = process.argv.slice(2);

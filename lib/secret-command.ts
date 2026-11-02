@@ -22,6 +22,10 @@ export function hasUnsafeText(text: string, lines = false): boolean {
   return UNSAFE.test(lines ? text.replace(/\n/g, "") : text);
 }
 
+// Variables that make a program load code the approval doesn't show: a preload library, Node's --require, a shell's
+// startup file. Neither the command line nor a vault name may set one (electron/command-rules.cjs holds the same list).
+export const LOADER_VAR = /^(NODE_OPTIONS|LD_[A-Z_]+|DYLD_[A-Z_]+|BASH_ENV|ENV|PYTHONSTARTUP|PERL5OPT|RUBYOPT)$/;
+
 const SHELLS = new Set("sh bash zsh dash ksh fish csh tcsh eval exec source . osascript".split(" "));
 // Run another command: what they run wouldn't be the command the user approved.
 const WRAPPERS = new Set("env sudo doas xargs nohup time command builtin nice watch script parallel timeout stdbuf caffeinate".split(" "));
@@ -151,6 +155,7 @@ export function checkCommand(command: string, names: string[] = []): CheckedComm
   while (words.length && ASSIGNMENT.test(words[0] as string)) {
     const [, key, value] = ASSIGNMENT.exec(words.shift() as string) as RegExpExecArray;
     if (names.includes(key as string)) throw new Error(`${key} comes from the vault; don't set it on the command line.`);
+    if (LOADER_VAR.test(key as string)) throw new Error(`${key} makes the program load code the approval doesn't show, so it can't be set here.`);
     env[key as string] = value as string;
   }
   const [first, ...args] = words;
@@ -166,6 +171,8 @@ export function checkNames(names: string[]): string[] {
   if (!unique.length) throw new Error("Name at least one secret to put in the command's env.");
   const bad = unique.find((n) => !NAME.test(n));
   if (bad !== undefined) throw new Error(`${bad || "A blank name"} isn't a variable name.`);
+  const loader = unique.find((n) => LOADER_VAR.test(n));
+  if (loader !== undefined) throw new Error(`${loader} makes the program load code the approval doesn't show, so a vault value can't go in it.`);
   return unique;
 }
 

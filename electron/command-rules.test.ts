@@ -2,7 +2,7 @@
 // and split a command into the same argv.
 import { describe, expect, it } from "vitest";
 import { checkCommand as libCheck } from "../lib/secret-command";
-import { checkCommand, hasUnsafe, shellSyntax, words } from "./command-rules.cjs";
+import { checkCommand, hasUnsafe, LOADER_VAR, shellSyntax, words } from "./command-rules.cjs";
 
 const COMMANDS = [
   "npm run job",
@@ -60,6 +60,11 @@ const COMMANDS = [
   "git -C sub status",
   "git -C sub -c alias.x=!sh x",
   "git commit -c HEAD",
+  "NODE_OPTIONS=--require=./x.js node job.js",
+  "LD_PRELOAD=/tmp/x.so node job.js",
+  "DYLD_INSERT_LIBRARIES=/tmp/x.dylib node job.js",
+  "BASH_ENV=x npm run job",
+  "NODE_ENV=production node job.js",
 ];
 
 describe("checkCommand (main's port)", () => {
@@ -77,6 +82,12 @@ describe("checkCommand (main's port)", () => {
       main = "refused";
     }
     expect(main).toEqual(lib);
+  });
+
+  it("holds the same loader variables as lib", async () => {
+    const lib = await import("../lib/secret-command");
+    expect(LOADER_VAR.source).toBe(lib.LOADER_VAR.source);
+    expect(() => checkCommand("LD_PRELOAD=x node a")).toThrow("load code the approval doesn't show");
   });
 
   it("says why it refuses", () => {

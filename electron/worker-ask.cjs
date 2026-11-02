@@ -2,7 +2,7 @@
 // network, so nothing in it is trusted: each field is checked and capped, the command is checked again with the same
 // refusals the asking side used (electron/command-rules.cjs), and the command, script and folder may hold no control,
 // format or bidi characters, so the window shows exactly what will run.
-const { checkCommand, hasUnsafe } = require("./command-rules.cjs");
+const { checkCommand, hasUnsafe, LOADER_VAR } = require("./command-rules.cjs");
 const { parseRemote } = require("./vault-id.cjs");
 
 const ENVIRONMENTS = ["development", "preview", "production"];
@@ -48,6 +48,7 @@ function askOf(raw, now) {
   const nonce = typeof a.nonce === "string" && NONCE.test(a.nonce) ? a.nonce : null;
   if (!nonce || !command || !isNames(a.names) || !environment || !remote) throw new Error("That secret ask isn't one Weft makes.");
   const names = /** @type {string[]} */ (a.names);
+  if (names.some((n) => LOADER_VAR.test(n))) throw new Error("That secret ask puts a value in a variable that loads code (NODE_OPTIONS, LD_*, DYLD_*).");
   checkCommand(command, names);
   return {
     nonce,

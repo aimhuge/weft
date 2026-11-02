@@ -35,10 +35,11 @@ describe("secretWiring", () => {
     expect(secretWiring(broken, reg, newSealKeys()).link.sign).toBeUndefined();
   });
 
-  it("opens a signed secret_use with this box's seal key and trusts the Mac that sent it", async () => {
+  it("opens a secret_use signed by the paired Mac with this box's seal key", async () => {
     const h = home();
     const keys = newSealKeys();
     const mac = macSigner();
+    fs.writeFileSync(path.join(h, "mac-keys.json"), JSON.stringify([mac.key]));
     const nonce = "a".repeat(64);
     const ask = openAsk(nonce, { cardId: "wire-1", command: "npm run job", names: ["A"], environment: "development", expiresAt: Date.now() + 60_000 });
     const plain = { v: 1, card: "wire-1", nonce, command: "npm run job", names: ["A"], environment: "development", expiresAt: Date.now() + 60_000, values: { A: "x" } };
@@ -46,7 +47,6 @@ describe("secretWiring", () => {
     const { use } = secretWiring(h, reg, keys);
     expect(use({ payload: { cardId: "wire-1", nonce, sealed, mac: mac.mac("wire-1", nonce, sealed) } } as never)).toBe("wire-1");
     await expect(ask.values).resolves.toEqual({ A: "x" });
-    expect(JSON.parse(fs.readFileSync(path.join(h, "mac-keys.json"), "utf8"))).toEqual([mac.key]);
     forgetMacs(h);
     expect(fs.existsSync(path.join(h, "mac-keys.json"))).toBe(false);
   });
@@ -61,15 +61,13 @@ describe("keyStatus", () => {
     expect(keyStatus(h)).toEqual([
       `Box key fingerprint: ${sealFingerprint(keys.publicKey)} (your Mac shows the same when it asks for secrets)`,
       "Secret asks are signed with this box's pairing key.",
-      "Takes secrets from 1 Mac (weft-worker forget-macs to reset).",
+      "Takes secrets from the Mac it was paired with (weft-worker forget-macs to stop).",
     ]);
-    fs.writeFileSync(path.join(h, "mac-keys.json"), JSON.stringify(["k1", "k2"]));
-    expect(keyStatus(h)[2]).toBe("Takes secrets from 2 Macs (weft-worker forget-macs to reset).");
   });
 
   it("says when there's no key yet, no pairing, and no Mac", () => {
     const h = home();
-    expect(keyStatus(h)).toEqual(["No box key yet: it's made when the worker first starts.", "Secret asks aren't signed (enrolled by token, not paired).", "Takes secrets from the first Mac that answers an ask."]);
+    expect(keyStatus(h)).toEqual(["No box key yet: it's made when the worker first starts.", "Secret asks aren't signed (enrolled by token, not paired).", "Takes no secrets: enrolled by token. Pair it from Settings → Devices → Add a worker to use secrets."]);
     fs.writeFileSync(path.join(h, "seal-key.json"), JSON.stringify({ publicKey: 5 }));
     expect(keyStatus(h)[0]).toBe("Secret asks aren't signed (enrolled by token, not paired).");
   });

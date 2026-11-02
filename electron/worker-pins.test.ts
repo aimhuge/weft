@@ -27,10 +27,15 @@ describe("createWorkerPins", () => {
     expect(createWorkerPins({ dir: d, safeStorage: store }).lookup({ id: "w1", name: "m1mini", publicKey: KEY_A }).firstUse).toBe(false);
   });
 
-  it("keeps a paired worker's sign key with its box key", () => {
+  it("keeps a paired worker's sign key with its box key, through a Re-pin and the next pin", () => {
     const pins = createWorkerPins({ dir: dir(), safeStorage: store });
     pins.pin("w2", { name: "box", publicKey: KEY_A, signKey: "c2lnbg==" });
     expect(pins.lookup({ id: "w2", name: "box", publicKey: KEY_A })).toMatchObject({ signKey: "c2lnbg==", firstUse: false });
+    expect(pins.forget("w2")).toBe(true);
+    expect(pins.forget("w2")).toBe(false);
+    expect(pins.lookup({ id: "w2", name: "box", publicKey: KEY_B })).toEqual({ publicKey: KEY_B, signKey: "c2lnbg==", fingerprint: fingerprint(KEY_B), firstUse: true });
+    pins.pin("w2", { name: "box", publicKey: KEY_B });
+    expect(pins.lookup({ id: "w2", name: "box", publicKey: KEY_B })).toMatchObject({ signKey: "c2lnbg==", firstUse: false });
   });
 
   it("forgets a pin, so a re-pinned worker is pinned afresh", () => {

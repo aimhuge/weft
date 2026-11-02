@@ -86,6 +86,25 @@ describe("adding a worker by pairing", () => {
     expect(code.expiresAt).toBe(1_000 + TTL_MS);
   });
 
+  it("puts this Mac's approval key in the code, for the box to trust (and only then)", async () => {
+    const macKey = Buffer.alloc(32, 9).toString("base64");
+    const db = fakeDb();
+    const hosts = createHostPairing({ db: () => db.db, userId: () => "u1", macDevice: () => "mac-id", myDevice: () => Promise.resolve({ publicKey: "mac-key" }), confirm: () => Promise.resolve(true), macSignKey: () => Promise.resolve(macKey) });
+    const { code } = await hosts.start(ORG);
+    expect(parsePairCode(code)).toMatchObject({ id: PID, orgId: ORG, macKey });
+  });
+
+  it("takes the worker back when its keys can't be pinned, rather than leave it unpinned", async () => {
+    const { hosts, rows, rpcs } = setup();
+    pinWorker.mockImplementationOnce(() => {
+      throw new Error("keychain locked");
+    });
+    const { code, id } = await hosts.start(ORG);
+    claimAs(code, rows);
+    expect(await hosts.check(id)).toEqual({ status: "failed", error: "The worker's keys couldn't be pinned on this Mac, so it wasn't added: keychain locked" });
+    expect(rpcs.at(-1)).toEqual({ fn: "device_revoke", args: { p_id: "worker-1" } });
+  });
+
   it("checks the claim, asks Touch ID with the check code, and confirms the keys it checked", async () => {
     const { hosts, rows, rpcs, ask } = setup();
     const { code, id } = await hosts.start(ORG);

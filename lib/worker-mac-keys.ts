@@ -1,11 +1,14 @@
-// The Macs a Weft Worker takes secret_use answers from (docs/architecture/project-hosts.md#secrets-on-a-worker-h8-the-per-use-seal-as-built).
+// The Mac a Weft Worker takes secret_use answers from (docs/architecture/project-hosts.md#secrets-on-a-worker-h8-the-per-use-seal-as-built).
 // A secret_use is sealed to the worker's public key, which anyone can read, so the sealing alone doesn't say the owner's
-// Mac sent it: main also signs it with its device key (electron/desktop-signer.cjs). The worker trusts the first Mac key
-// that answers an ask it opened (trust on first use, kept in mac-keys.json beside seal-key.json, sealed from threads by
-// lib/secret-guard-files.ts) and only that key after; `weft-worker forget-macs` clears it for a new Mac.
+// Mac sent it: main also signs it with its approval key (electron/desktop-signer.cjs). The worker trusts only the key
+// that came in the pairing code (trustPairingMac), which the user carried from the Mac's screen to the box by hand: never
+// one off the network, so a session of the owner's can't race the real Touch ID with a key of its own. Kept in
+// mac-keys.json beside seal-key.json, sealed from threads by lib/secret-guard-files.ts. A token-enrolled box has none
+// and takes no secrets until it's paired.
 import { verify, createPublicKey } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { parsePairCode } from "./host-pairing";
 
 export interface MacKeys {
   pinned(): string[];
@@ -45,4 +48,12 @@ export function macSigned(key: string, message: string, sig: string): boolean {
   } catch {
     return false;
   }
+}
+
+// At enrolment by pairing: trust the Mac key the code carries. An older code without one leaves the box taking no secrets.
+export function trustPairingMac(home: string, code: string): boolean {
+  const key = parsePairCode(code)?.macKey;
+  if (!key) return false;
+  macKeysAt(home).pin(key);
+  return true;
 }

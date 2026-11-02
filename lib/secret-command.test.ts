@@ -48,6 +48,14 @@ describe("checkCommand", () => {
     expect(checkCommand("git --no-pager log").argv[1]).toBe("--no-pager");
   });
 
+  it("refuses variables that load code, on the command line and as vault names", () => {
+    for (const bad of ["NODE_OPTIONS=--require=x node a", "LD_PRELOAD=/x.so node a", "DYLD_INSERT_LIBRARIES=/x node a", "PERL5OPT=-Mx perl a"]) {
+      expect(() => checkCommand(bad)).toThrow(/load code the approval doesn't show/);
+    }
+    expect(checkCommand("NODE_ENV=production node a").env).toEqual({ NODE_ENV: "production" });
+    expect(() => checkNames(["DATABASE_URL", "NODE_OPTIONS"])).toThrow("NODE_OPTIONS makes the program load code the approval doesn't show, so a vault value can't go in it.");
+  });
+
   it("refuses control, format and bidi characters, so the approval shows what runs", () => {
     for (const bad of ["npm run job\u202e", "npm\u200brun job", "npm\trun job", "npm run\u2028job"]) {
       expect(() => checkCommand(bad)).toThrow(/control or invisible characters/);

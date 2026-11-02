@@ -16,8 +16,12 @@ const NOW = 1_000_000;
 const NONCE = "b".repeat(64);
 const keys = newSealKeys();
 const ask = (over: Record<string, unknown> = {}) => ({ nonce: NONCE, command: "npm run job", names: ["TOKEN"], environment: "production", remote: "git@github.com:Aimhuge/Weft.git", expiresAt: NOW + 60_000, cwd: "app", script: "job: node job.js", why: "Ship", thread: "Deploy", ...over });
-const callRow = (over: Record<string, unknown> = {}) => ({ id: "call-1", org_id: "org-1", owner_user: "u1", worker_id: "w1", card_id: "card-1", tool: "secret_run", args: ask(), status: "claimed", ...over });
-const workerRow = (over: Record<string, unknown> = {}) => ({ id: "w1", name: "m1mini", owner_user: "u1", public_key: keys.publicKey, ...over });
+// The worker's sign key from pairing (H10): its asks carry a signature by it over askMessage.
+const workerSign = crypto.generateKeyPairSync("ed25519");
+const SIGN_KEY = workerSign.publicKey.export({ format: "der", type: "spki" }).toString("base64");
+const signed = (a: ReturnType<typeof ask>, card = "card-1") => ({ ...a, sig: crypto.sign(null, Buffer.from(askMessage(card, a)), workerSign.privateKey).toString("base64") });
+const callRow = (over: Record<string, unknown> = {}) => ({ id: "call-1", org_id: "org-1", owner_user: "u1", worker_id: "w1", card_id: "card-1", tool: "secret_run", args: signed(ask()), status: "claimed", ...over });
+const workerRow = (over: Record<string, unknown> = {}) => ({ id: "w1", name: "m1mini", owner_user: "u1", public_key: keys.publicKey, sign_key: SIGN_KEY, ...over });
 const plainStore = () => ({ encryptString: (s: string) => Buffer.from(s), decryptString: (b: Buffer) => b.toString() });
 
 type Pins = ReturnType<typeof createWorkerPins>;
@@ -101,17 +105,35 @@ describe("answer", () => {
     expect(s.pins.lookup({ id: "w1", name: "m1mini", publicKey: keys.publicKey }).firstUse).toBe(true);
   });
 
-  it("requires a paired worker's ask to be signed by the sign key pinned at pairing", async () => {
-    const sign = crypto.generateKeyPairSync("ed25519");
-    const signKey = sign.publicKey.export({ format: "der", type: "spki" }).toString("base64");
+  it("requires every ask to be signed by the worker's sign key, and pins it with the Allow", async () => {
+    const unsigned = setup({ call: callRow({ args: ask() }) });
+    await expect(unsigned.ws.answer("call-1")).rejects.toThrow("That ask isn't signed by the worker's pinned key.");
+    const other = crypto.generateKeyPairSync("ed25519");
+    const forged = { ...ask(), sig: crypto.sign(null, Buffer.from(askMessage("card-1", ask())), other.privateKey).toString("base64") };
+    await expect(setup({ call: callRow({ args: forged }) }).ws.answer("call-1")).rejects.toThrow("isn't signed by the worker's pinned key");
     const s = setup();
-    s.pins.pin("w1", { name: "m1mini", publicKey: keys.publicKey, signKey });
-    await expect(s.ws.answer("call-1")).rejects.toThrow("That ask isn't signed by the worker's pinned key.");
-    expect(s.asked).not.toHaveBeenCalled();
-    const a = ask();
-    const sig = crypto.sign(null, Buffer.from(askMessage("card-1", a)), sign.privateKey).toString("base64");
-    const signed = setup({ call: callRow({ args: { ...a, sig } }), pins: s.pins });
-    expect(await signed.ws.answer("call-1")).toMatchObject({ queued: true });
+    await s.ws.answer("call-1");
+    expect(s.pins.lookup({ id: "w1", name: "m1mini", publicKey: keys.publicKey })).toMatchObject({ signKey: SIGN_KEY, firstUse: false });
+    expect(unsigned.asked).not.toHaveBeenCalled();
+  });
+
+  it("refuses a token-enrolled worker, and a sign key that changed or went from the row", async () => {
+    await expect(setup({ worker: workerRow({ sign_key: null }) }).ws.answer("call-1")).rejects.toThrow("m1mini was enrolled by token, so it can't take secrets.");
+    const s = setup();
+    s.pins.pin("w1", { name: "m1mini", publicKey: keys.publicKey, signKey: SIGN_KEY });
+    await expect(setup({ worker: workerRow({ sign_key: null }), pins: s.pins }).ws.answer("call-1")).rejects.toThrow("m1mini's signing key changed since this Mac pinned it");
+    await expect(setup({ worker: workerRow({ sign_key: "b3RoZXI=" }), pins: s.pins }).ws.answer("call-1")).rejects.toThrow("signing key changed");
+  });
+
+  it("keeps the sign key through a Re-pin, so the next pin still needs the worker's signature", async () => {
+    const s = setup();
+    s.pins.pin("w1", { name: "m1mini", publicKey: keys.publicKey, signKey: SIGN_KEY });
+    expect(s.pins.forget("w1")).toBe(true);
+    const fresh = newSealKeys();
+    const repinned = setup({ worker: workerRow({ public_key: fresh.publicKey }), pins: s.pins });
+    await expect(setup({ worker: workerRow({ public_key: fresh.publicKey }), pins: s.pins, call: callRow({ args: ask() }) }).ws.answer("call-1")).rejects.toThrow("isn't signed");
+    expect(await repinned.ws.answer("call-1")).toMatchObject({ queued: true });
+    expect(s.pins.lookup({ id: "w1", name: "m1mini", publicKey: fresh.publicKey })).toMatchObject({ signKey: SIGN_KEY, firstUse: false });
   });
 
   it("answers the missing names without asking", async () => {
@@ -182,7 +204,7 @@ describe("answer", () => {
   });
 
   it("uses Date.now and a no-op audit by default", async () => {
-    const fake = fakeSupabase({ call: callRow({ args: ask({ expiresAt: Date.now() + 60_000 }) }) });
+    const fake = fakeSupabase({ call: callRow({ args: signed(ask({ expiresAt: Date.now() + 60_000 })) }) });
     const s = setup();
     const ws = createWorkerSecrets({ vault: s.vault, ask: () => Promise.resolve(null), describe: describeRun, accountClient: () => ({ supabase: fake.supabase, getClaims: () => ({ sub: "u1" }) }), pins: s.pins, signer, projectRepos: s.projectRepos });
     expect(await ws.answer("call-1")).toEqual({ denied: true, label: "Aimhuge/Weft" });
@@ -192,16 +214,11 @@ describe("answer", () => {
 describe("verifyAsk", () => {
   const a = { nonce: NONCE, command: "npm run job", names: ["TOKEN"], environment: "production", remote: "r", cwd: ".", script: undefined, why: undefined, thread: undefined, expiresAt: NOW, sig: undefined as string | undefined };
 
-  it("lets an ask through while the worker has no sign key (H10)", () => {
-    expect(() => verifyAsk({}, "card-1", a)).not.toThrow();
-  });
-
-  it("checks a signed ask against the pinned sign key once there is one", () => {
-    const { publicKey, privateKey } = crypto.generateKeyPairSync("ed25519");
-    const signKey = publicKey.export({ format: "der", type: "spki" }).toString("base64");
-    const sig = crypto.sign(null, Buffer.from(askMessage("card-1", a)), privateKey).toString("base64");
-    expect(() => verifyAsk({ signKey }, "card-1", { ...a, sig })).not.toThrow();
-    expect(() => verifyAsk({ signKey }, "card-2", { ...a, sig })).toThrow("isn't signed by the worker's pinned key");
-    expect(() => verifyAsk({ signKey }, "card-1", a)).toThrow("isn't signed");
+  it("checks the ask's signature against the sign key, and refuses an unsigned or unreadable one", () => {
+    const sig = crypto.sign(null, Buffer.from(askMessage("card-1", a)), workerSign.privateKey).toString("base64");
+    expect(() => verifyAsk(SIGN_KEY, "card-1", { ...a, sig })).not.toThrow();
+    expect(() => verifyAsk(SIGN_KEY, "card-2", { ...a, sig })).toThrow("isn't signed by the worker's pinned key");
+    expect(() => verifyAsk(SIGN_KEY, "card-1", a)).toThrow("isn't signed");
+    expect(() => verifyAsk("bm90IGEga2V5", "card-1", { ...a, sig })).toThrow("isn't signed");
   });
 });

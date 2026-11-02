@@ -44,14 +44,14 @@ export function openAsk(nonce: string, ask: Omit<Ask, "resolve" | "reject">): Op
 
 export const openAsks = () => asks().size;
 
-// The key of the Mac that signed the row, when this worker trusts it (lib/worker-mac-keys.ts): a pinned key, or, before
-// any is pinned, the key it names (pinned once the whole delivery checks out). Throws otherwise.
-function signingMac(body: NonNullable<ReturnType<typeof secretUseBody>>, macs: MacKeys): string {
-  if (!body.mac) throw new Error("That secret use isn't signed by a Mac.");
+// The row must be signed by the Mac this box was paired with (lib/worker-mac-keys.ts): no key off the network is ever
+// trusted, so a session that seals and signs its own row before the real Touch ID gets nothing. Throws otherwise.
+function checkMac(body: NonNullable<ReturnType<typeof secretUseBody>>, macs: MacKeys): void {
   const trusted = macs.pinned();
-  if (trusted.length && !trusted.includes(body.mac.key)) throw new Error("That secret use is signed by a Mac this worker doesn't trust. If you moved to a new Mac, run weft-worker forget-macs on the box.");
+  if (!trusted.length) throw new Error("This worker trusts no Mac for secrets: it was enrolled by token. Pair it from Settings → Devices → Add a worker to use secrets on it.");
+  if (!body.mac) throw new Error("That secret use isn't signed by a Mac.");
+  if (!trusted.includes(body.mac.key)) throw new Error("That secret use is signed by a Mac this worker wasn't paired with.");
   if (!macSigned(body.mac.key, secretUseMessage(body.cardId, body.nonce, body.sealed), body.mac.sig)) throw new Error("That secret use's Mac signature doesn't check out.");
-  return body.mac.key;
 }
 
 // The values a row carries, once it opens under this ask's purpose and repeats it exactly before the expiry; throws why not.
@@ -75,7 +75,7 @@ function openChecked(body: NonNullable<ReturnType<typeof secretUseBody>>, ask: A
 export function deliverSecretUse(command: Pick<CloudCommandRow, "payload">, open: (sealed: Sealed, purpose: string) => string, macs: MacKeys, now = Date.now()): string {
   const body = secretUseBody(command);
   if (!body) throw new Error("That secret use is empty.");
-  const mac = signingMac(body, macs);
+  checkMac(body, macs);
   const ask = asks().get(body.nonce);
   if (!ask) throw new Error("That secret use answers no open ask: it was already used, it expired, or it was never asked for.");
   if (ask.cardId !== body.cardId) throw new Error("That secret use is for another card.");
@@ -86,7 +86,6 @@ export function deliverSecretUse(command: Pick<CloudCommandRow, "payload">, open
   }
   const values = openChecked(body, ask, open, now);
   asks().delete(body.nonce);
-  if (!macs.pinned().length) macs.pin(mac);
   ask.resolve(values);
   return ask.cardId;
 }

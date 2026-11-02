@@ -34,7 +34,7 @@ export function secretWiring(home: string, reg: Pick<Registry, "secretAsk" | "de
 }
 
 // `weft-worker status`'s lines about the keys: the box key's fingerprint (the Mac's approval window and Re-pin show the
-// same), whether asks are signed, and how many Macs it takes secrets from. Reads only; makes no key.
+// same), whether asks are signed, and whether it takes secrets from a paired Mac. Reads only; makes no key.
 export function keyStatus(home: string): string[] {
   const lines: string[] = [];
   try {
@@ -45,7 +45,7 @@ export function keyStatus(home: string): string[] {
   }
   lines.push(pairedSigner(home) ? "Secret asks are signed with this box's pairing key." : "Secret asks aren't signed (enrolled by token, not paired).");
   const macs = macKeysAt(home).pinned().length;
-  lines.push(macs ? `Takes secrets from ${macs} Mac${macs === 1 ? "" : "s"} (weft-worker forget-macs to reset).` : "Takes secrets from the first Mac that answers an ask.");
+  lines.push(macs ? `Takes secrets from the Mac it was paired with (weft-worker forget-macs to stop).` : "Takes no secrets: enrolled by token. Pair it from Settings → Devices → Add a worker to use secrets.");
   return lines;
 }
 

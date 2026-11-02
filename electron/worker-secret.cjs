@@ -13,16 +13,31 @@ const { seal, secretUseMessage, secretUsePurpose } = require("./worker-seal.cjs"
 const askMessage = (cardId, a) => JSON.stringify(["weft-secret-ask", cardId, a.nonce, a.command, a.names, a.environment, a.remote, a.cwd, a.script ?? null, a.expiresAt]);
 
 /**
- * Whether the ask came from the worker itself. A worker paired through Settings → Devices (H10) is pinned at pairing
- * with its Ed25519 sign key (electron/host-pairing.cjs), and every ask from it must carry a signature by that key over
- * askMessage (lib/worker-secret-run.ts signs it); an unsigned one is refused. A token-enrolled worker has no sign key.
- * @param {{ signKey?: string }} pin @param {string} cardId @param {ReturnType<typeof askOf>} a
+ * Whether the ask came from the worker itself: signed by its Ed25519 sign key from pairing (H10, pinned at pairing by
+ * electron/host-pairing.cjs) over askMessage, which lib/worker-secret-wiring.ts signs from sign-key.json. Always
+ * required: an unsigned or wrongly signed ask is refused.
+ * @param {string} signKey DER SPKI, base64 @param {string} cardId @param {ReturnType<typeof askOf>} a
  */
-function verifyAsk(pin, cardId, a) {
-  if (!pin.signKey) return;
-  const key = crypto.createPublicKey({ key: Buffer.from(pin.signKey, "base64"), format: "der", type: "spki" });
-  const ok = Boolean(a.sig) && crypto.verify(null, Buffer.from(askMessage(cardId, a)), key, Buffer.from(String(a.sig), "base64"));
+function verifyAsk(signKey, cardId, a) {
+  let ok = false;
+  try {
+    const key = crypto.createPublicKey({ key: Buffer.from(signKey, "base64"), format: "der", type: "spki" });
+    ok = Boolean(a.sig) && crypto.verify(null, Buffer.from(askMessage(cardId, a)), key, Buffer.from(String(a.sig), "base64"));
+  } catch {
+    ok = false;
+  }
   if (!ok) throw new Error("That ask isn't signed by the worker's pinned key.");
+}
+
+// The sign key a worker's asks must be signed with: the pinned one, else the row's (H10 sets it at pairing; it's then
+// pinned with the Allow). Sticky: a pinned sign key that the row no longer shows, or shows changed, is refused. A worker
+// with none was enrolled by token: it can't check this Mac's signature on a secret_use either, so it gets no secrets.
+/** @param {{ signKey?: string }} pin @param {{ name: string, sign_key?: string | null }} worker @returns {string} */
+function signKeyOf(pin, worker) {
+  if (pin.signKey && pin.signKey !== worker.sign_key) throw new Error(`${worker.name}'s signing key changed since this Mac pinned it, so it gets no secrets. Pair it again from Settings → Devices.`);
+  const key = pin.signKey ?? worker.sign_key;
+  if (!key) throw new Error(`${worker.name} was enrolled by token, so it can't take secrets. Pair it from Settings → Devices → Add a worker, then try again.`);
+  return key;
 }
 
 /**
@@ -31,7 +46,7 @@ function verifyAsk(pin, cardId, a) {
  *   ask: (request: { message: string, detail: string, reason: string, view: Record<string, unknown> }) => Promise<string | null>,
  *   describe: typeof import("./secret-run.cjs").describe,
  *   accountClient: () => { supabase: any, getClaims: () => Record<string, unknown> | null } | null | undefined,
- *   pins: { lookup: (worker: { id: string, name: string, publicKey: string }) => { publicKey: string, fingerprint: string, firstUse: boolean, signKey?: string }, pin: (id: string, keys: { name: string, publicKey: string }) => void },
+ *   pins: { lookup: (worker: { id: string, name: string, publicKey: string }) => { publicKey: string, fingerprint: string, firstUse: boolean, signKey?: string }, pin: (id: string, keys: { name: string, publicKey: string, signKey?: string }) => void },
  *   signer: () => Promise<{ publicKey: () => string, sign: (message: string) => string }>,
  *   projectRepos: (folder: string) => Promise<string[]>,
  *   audit?: (entry: Record<string, unknown>) => unknown,
@@ -43,7 +58,7 @@ function createWorkerSecrets({ vault, ask, describe, accountClient, pins, signer
     const { data: row } = await supabase.from("device_calls").select("id, org_id, owner_user, worker_id, card_id, tool, args, status").eq("id", String(callId)).maybeSingle();
     if (!row || row.tool !== "secret_run" || row.owner_user !== uid) throw new Error("That request isn't from one of your workers.");
     if (row.status !== "claimed") throw new Error("That request was already answered.");
-    const { data: worker } = await supabase.from("cloud_workers").select("id, name, owner_user, public_key").eq("id", row.worker_id).maybeSingle();
+    const { data: worker } = await supabase.from("cloud_workers").select("id, name, owner_user, public_key, sign_key").eq("id", row.worker_id).maybeSingle();
     if (!worker || worker.owner_user !== uid) throw new Error("That worker isn't yours.");
     if (!worker.public_key) throw new Error(`${worker.name} hasn't published its key yet. Update it (weft-worker update), then try again.`);
     const { data: card } = await supabase.from("cloud_cards").select("folder").eq("card_id", row.card_id).eq("owner_worker", row.worker_id).maybeSingle();
@@ -56,7 +71,8 @@ function createWorkerSecrets({ vault, ask, describe, accountClient, pins, signer
     const a = askOf(row.args, now());
     // Read only: a first-seen key is pinned after the user allows, never on a Deny or an error.
     const pin = pins.lookup({ id: worker.id, name: worker.name, publicKey: worker.public_key });
-    verifyAsk(pin, row.card_id, a);
+    const signKey = signKeyOf(pin, worker);
+    verifyAsk(signKey, row.card_id, a);
     const ref = vaultFor(a.remote, folder, await projectRepos(folder));
     const { values, missing } = await vault.valuesForVault(ref, a.names, a.environment, false);
     if (missing.length) return { missing, label: ref.label };
@@ -66,7 +82,7 @@ function createWorkerSecrets({ vault, ask, describe, accountClient, pins, signer
     audit({ kind: "vault", action: "worker run", by: "thread", card: row.card_id, thread: a.thread, detail: a.why, command: a.command, names: a.names, environment: a.environment, vault: ref.label, worker: worker.name, via: allowed ? "once" : undefined, outcome: allowed ? "ok" : "denied" });
     if (!allowed) return { denied: true, label: ref.label };
     if (now() > a.expiresAt) throw new Error("The ask expired while it waited for you. The thread can ask again.");
-    if (pin.firstUse) pins.pin(worker.id, { name: worker.name, publicKey: pin.publicKey });
+    if (pin.firstUse || !pin.signKey) pins.pin(worker.id, { name: worker.name, publicKey: pin.publicKey, signKey });
     const plaintext = JSON.stringify({ v: 1, card: row.card_id, nonce: a.nonce, command: a.command, names: a.names, environment: a.environment, expiresAt: a.expiresAt, values });
     // Sealed to the pinned key, never straight from the row.
     const sealed = seal(pin.publicKey, plaintext, secretUsePurpose(row.card_id, a.nonce, a.command));

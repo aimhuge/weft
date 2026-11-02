@@ -10,7 +10,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 /**
- * @typedef {{ publicKey: string, name: string, pinnedAt: string, signKey?: string }} WorkerPin
+ * @typedef {{ publicKey?: string, name: string, pinnedAt: string, signKey?: string }} WorkerPin
  * signKey is the worker's Ed25519 key from pairing, once H10 gives workers one (see verifyAsk in electron/worker-secret.cjs).
  */
 
@@ -53,7 +53,8 @@ function createWorkerPins({ dir, safeStorage, now = () => new Date() }) {
      */
     lookup({ id, name, publicKey }) {
       const pinned = read()[id];
-      if (!pinned) return { publicKey, fingerprint: fingerprint(publicKey), firstUse: true };
+      // Re-pinned: the box key goes, the sign key stays, so the next pin still needs the worker's signature.
+      if (!pinned?.publicKey) return { publicKey, ...(pinned?.signKey ? { signKey: pinned.signKey } : {}), fingerprint: fingerprint(publicKey), firstUse: true };
       if (pinned.publicKey !== publicKey) {
         throw new Error(`${name}'s key changed since this Mac pinned it (${fingerprint(pinned.publicKey)}, now ${fingerprint(publicKey)}), so it gets no secrets. If you reset the worker, re-enrol it or use Re-pin in Settings → Devices; if you didn't, someone may hold its key.`);
       }
@@ -66,14 +67,22 @@ function createWorkerPins({ dir, safeStorage, now = () => new Date() }) {
      * @param {string} id @param {{ name: string, publicKey: string, signKey?: string }} keys
      */
     pin(id, { name, publicKey, signKey }) {
-      write({ ...read(), [id]: { publicKey, name, pinnedAt: now().toISOString(), ...(signKey ? { signKey } : {}) } });
+      const pins = read();
+      const kept = signKey ?? pins[id]?.signKey;
+      write({ ...pins, [id]: { publicKey, name, pinnedAt: now().toISOString(), ...(kept ? { signKey: kept } : {}) } });
     },
 
-    /** Drops a worker's pin (Settings → Devices → Re-pin, after Touch ID), so its next ask pins afresh. @param {string} id */
+    /**
+     * Re-pin (Settings → Devices, after Touch ID): drops a worker's box key, so its next allowed ask pins the one it has
+     * now. Its sign key stays: a paired worker's asks still need its signature, so a stolen `wwk_` key can't re-pin.
+     * @param {string} id
+     */
     forget(id) {
       const pins = read();
-      if (!pins[id]) return false;
-      delete pins[id];
+      const pinned = pins[id];
+      if (!pinned?.publicKey) return false;
+      if (pinned.signKey) pins[id] = { name: pinned.name, signKey: pinned.signKey, pinnedAt: pinned.pinnedAt };
+      else delete pins[id];
       write(pins);
       return true;
     },

@@ -34,6 +34,10 @@ describe("askOf", () => {
     expect(() => askOf(raw, NOW)).toThrow("That secret ask isn't one Weft makes.");
   });
 
+  it("refuses a vault value in a variable that loads code", () => {
+    expect(() => askOf(ask({ names: ["TOKEN", "LD_PRELOAD"] }), NOW)).toThrow("puts a value in a variable that loads code");
+  });
+
   it("re-checks the command with main's own rules", () => {
     expect(() => askOf(ask({ command: "sh -c 'cat .env'" }), NOW)).toThrow("runs a script the user can't see");
     expect(() => askOf(ask({ command: "TOKEN=x npm run job" }), NOW)).toThrow("TOKEN comes from the vault");

@@ -321,15 +321,20 @@ worker:      claim secret_use ─ deliverSecretUse: the ask for that nonce, same
   another. A worker added by pairing (H10, Settings → Devices) is pinned at `worker_pair_confirm`, under that Touch ID,
   with the box key and the Ed25519 sign key main just checked (`electron/host-pairing.cjs` `pinWorker`); every ask from
   it must then carry a signature by that key over `askMessage` (`lib/secret-use.ts`, signed from `sign-key.json` by
-  `lib/worker-secret-wiring.ts`), and an unsigned one is refused. A token-enrolled worker is pinned on its first ask, and
-  only after the user allows it (a Deny or an error pins nothing); that window says "first seen now", and
-  `weft-worker status` prints the same fingerprint to compare. **Re-pin** on a worker in Settings → Devices forgets the pin
-  after Touch ID (`worker-pins:forget`), for a box reset on purpose. A file that won't open refuses every worker.
+  `lib/worker-secret-wiring.ts`), and an unsigned one is refused. The requirement is sticky: main reads
+  `cloud_workers.sign_key`, pins it with the Allow if it wasn't pinned yet, and refuses a row whose sign key went or
+  changed. A pin that can't be written at pairing fails the pairing and revokes the new worker. A worker with no sign
+  key was enrolled by token and gets no secrets: pair it. **Re-pin** in Settings → Devices (after Touch ID,
+  `worker-pins:forget`) drops the box key only; the sign key stays, so the next pin still needs the worker's signature.
+  `weft-worker status` prints the box key's fingerprint, the one the window shows. A file that won't open refuses every
+  worker.
 - **The worker checks it's the Mac.** Sealing needs only the worker's public key, so main also signs each `secret_use`
   with this Mac's device key (`electron/desktop-signer.cjs`) over the card, the nonce and the sealed bytes
-  (`secretUseMessage`). The worker takes a row only when that signature checks against a Mac key it trusts
-  (`lib/worker-mac-keys.ts`, `mac-keys.json` in its home, sealed from threads): the first Mac whose row answered an ask it
-  opened is trusted from then on, and `weft-worker forget-macs` resets that for a new Mac.
+  (`secretUseMessage`). The worker takes a row only when that signature checks against the Mac key that came in the
+  pairing code (`wph.<id>.<org>.<secret>.<mac key>`, carried from the Mac's screen to the box by hand;
+  `lib/worker-mac-keys.ts` `trustPairingMac`, kept in `mac-keys.json`, sealed from threads). No key off the network is
+  ever trusted, so a session of the owner's that seals and signs its own row before the real Touch ID gets nothing. A
+  token-enrolled box trusts no Mac and takes no secrets; `weft-worker forget-macs` stops a paired one.
 - **The window** (`electron/approval-worker.cjs`) puts the full command and script first, with anything outside plain
   ASCII marked and named; then the folder, "the Weft Worker m1mini, not this Mac", the full git remote, the worker's key
   fingerprint ("first seen now" on the first ask) and, plainly, that the command and any code it runs on the worker get
@@ -354,11 +359,11 @@ worker:      claim secret_use ─ deliverSecretUse: the ask for that nonce, same
   lives in main, in the sealed row until it finishes, and in the worker daemon's memory. A row replayed, late, for
   another card or another command, or naming other secrets, opens nothing or is refused. Values leave the Mac only after
   Touch ID, per run, in a window naming the command, the names, the card and the worker.
-- **Its limits.** A token-enrolled worker is trust on first use: a key swapped before this Mac's first Allow is the one it
-  pins, unless the user compares the window's fingerprint with `weft-worker status`. Pair workers (H10) to close that. The
-  worker trusts the first Mac that answers it the same way: the pairing could hand it the Mac's key instead (the code
-  carries no key yet; follow-up). With two Macs signed in, the newest beat gets the ask, and a worker that trusts the
-  other Mac refuses its answer until `forget-macs`. The command runs with the
+- **Its limits.** Secrets need a paired worker; token-enrolled ones are refused on both sides. A worker trusts only the Mac
+  that paired it: with two Macs signed in, the newest beat gets the ask, and the other Mac's answer is refused (route asks
+  to the pairing Mac: follow-up). A worker paired before this change has no Mac key, so it must be paired again.
+  Variables that load code (`NODE_OPTIONS`, `LD_*`, `DYLD_*`, `BASH_ENV`, `ENV`, `PYTHONSTARTUP`, `PERL5OPT`, `RUBYOPT`)
+  are refused on the command line and as vault names, on both sides. The command runs with the
   worker's privileges, so a script that writes a value to a file leaves it there, as on the Mac. With two Macs signed
   in, the newest beat gets the ask.
 - **Not yet.** A dev server's env on a worker (the vault's whole development set held for the server's life: the same ask
