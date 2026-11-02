@@ -15,7 +15,8 @@ import path from "node:path";
 import { createClient } from "@supabase/supabase-js";
 import { SUPABASE_KEY, SUPABASE_URL } from "../lib/supabase-project";
 import { readWorkerConfig, workerDataDir, workerHome, workerSealKeys, workRoot, writeWorkerConfig, writeWorkerEnv } from "../lib/worker-config";
-import { workerBlobClient, workerMayUpload } from "../lib/worker-blobs";
+import { MAX_TRAVEL_BYTES, attachmentsOf, receiveAttachments } from "../lib/attachment-transfer";
+import { workerBlobClient, workerBlobReader, workerMayUpload } from "../lib/worker-blobs";
 import { enrol, registry, type Rpc } from "../lib/worker-registry";
 import { RTC_PURPOSE } from "../lib/rtc-signal";
 import { CLAUDE_TOKEN, GITHUB_PURPOSE, LOGIN_PURPOSE, newSealKeys, open } from "../lib/worker-seal";
@@ -91,8 +92,11 @@ async function startCommand() {
   await reg.setPublicKey(keys.publicKey).catch((err: unknown) => console.log(`Weft Worker: publishing its key: ${(err as Error).message}`));
   let restart: () => void = () => process.exit(0);
   const root = workRoot(home);
-  // Pages go up through the key-checked route, and only from the show folder and the checkouts (lib/worker-blobs.ts).
-  const blobs = createBlobStore({ client: workerBlobClient(config.key, client.storage), mayUpload: (file) => workerMayUpload(file, [SHOW_DIR, root]) });
+  // Pages go up through the key-checked route, and only from the show folder, the checkouts and the files pasted into
+  // its cards (lib/worker-blobs.ts), so a thread's pasted picture shows on weft.zip too.
+  const attachments = path.join(store.DATA_DIR, "attachments");
+  const blobs = createBlobStore({ client: workerBlobClient(config.key, client.storage), mayUpload: (file) => workerMayUpload(file, [SHOW_DIR, root, attachments]) });
+  const readBlob = workerBlobReader(config.key, MAX_TRAVEL_BYTES);
   setPageUpload((file) => blobs.uploadPage(file, config.orgId));
   setScreenChannel((topic) => openScreenChannel(client, topic));
   setDeviceLink(deviceLink(reg, config.key));
@@ -111,6 +115,7 @@ async function startCommand() {
         return isMobileApp(card.cwd) ? store.updateCard(card.id, { mobileApp: true }) : card;
       },
       reply: (id, text) => runner.sendUserMessage(id, text),
+      receive: (text, payload) => receiveAttachments(text, attachmentsOf(payload), attachments, readBlob),
       answer: (id, allow, answers, pendingId) => pending.answerPermission(id, allow, answers, pendingId),
       grant: folderGrant.applyFolderGrant,
       stop: (id) => runner.stop(id),

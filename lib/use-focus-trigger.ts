@@ -24,7 +24,9 @@ export function useFocusTrigger(
   // The callback is kept in a ref so a caller passing an inline function doesn't re-listen on every
   // render: the listener is added once, when the app mounts.
   const handler = useRef(onWelcomeBack);
-  handler.current = onWelcomeBack;
+  useEffect(() => {
+    handler.current = onWelcomeBack;
+  });
 
   useEffect(() => {
     if (!target) return;

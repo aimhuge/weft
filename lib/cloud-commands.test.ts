@@ -97,7 +97,7 @@ describe("commandText", () => {
   it("is a new card's prompt or a reply's text", () => {
     expect(commandText({ kind: "new_card", payload: { prompt: "Add dark mode" } })).toBe("Add dark mode");
     expect(commandText({ kind: "reply", payload: { cardId: "c1", text: "go" } })).toBe("go");
-    expect(commandText({ kind: "new_card", payload: {} as never })).toBe("");
+    expect(commandText({ kind: "new_card", payload: {} })).toBe("");
   });
 });
 
@@ -231,7 +231,7 @@ describe("stopBody", () => {
   });
 
   it("is null when the card is missing or the wrong type, or the payload isn't an object", () => {
-    expect(stopBody({ payload: {} as never })).toBeNull();
+    expect(stopBody({ payload: {} })).toBeNull();
     expect(stopBody({ payload: { cardId: 4 } as never })).toBeNull();
     expect(stopBody({ payload: null as never })).toBeNull();
   });

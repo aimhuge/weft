@@ -1,6 +1,7 @@
 // How a Weft Worker's pages reach weft-blobs. Two halves: what may go up at all (workerMayUpload), and a stand-in for
 // the Supabase client the blob store takes (workerBlobClient), which uploads through the key-checked route
-// app/api/worker-blob instead of as a member, so lib/blob-store.ts runs on a worker unchanged.
+// app/api/worker-blob instead of as a member, so lib/blob-store.ts runs on a worker unchanged. A file pasted on a Mac
+// into a worker card comes back down the same route (workerBlobReader).
 //
 // A Mac uploads anything under home that isn't a known secret. A worker can't use that rule: ~/.weft-worker/worker.json
 // holds its key, worker.env its Claude token and github-credentials its GitHub token, and none of those names looks
@@ -62,7 +63,25 @@ export function workerBlobClient(key: string, storage: SignedStorage, site = SIT
     if (!res.ok || !got.path || !got.token) return { error: { message: got.error || `worker-blob: HTTP ${res.status}` } };
     return storage.from(BLOB_BUCKET).uploadToSignedUrl(got.path, got.token, body, { contentType: opts.contentType });
   };
-  // A worker never reads blobs back, so download stays out.
+  // Pages only go up, so download stays out; a pasted file comes down through workerBlobReader.
   const bucket = { upload, download: () => Promise.resolve({ data: null, error: { message: "A worker doesn't read blobs." } }) };
   return { storage: { from: () => bucket } } as unknown as SupabaseClient;
+}
+
+// The other way: a file pasted on your Mac into a worker card's message (lib/attachment-transfer.ts). The route signs
+// a download only for a sha an open command to this worker carries. Null when it won't, or the bytes don't come;
+// a body the server says is over `max` isn't read at all.
+export function workerBlobReader(key: string, max: number, site = SITE, fetcher: typeof fetch = fetch): (sha: string) => Promise<Buffer | null> {
+  return async (sha) => {
+    const res = await fetcher(`${site}/api/worker-blob`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
+      body: JSON.stringify({ sha, read: true }),
+    });
+    const got = (await res.json().catch(() => ({}))) as { url?: string };
+    if (!res.ok || !got.url) return null;
+    const file = await fetcher(got.url);
+    if (!file.ok || Number(file.headers.get("content-length") ?? 0) > max) return null;
+    return Buffer.from(await file.arrayBuffer());
+  };
 }

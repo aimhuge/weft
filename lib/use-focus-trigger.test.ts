@@ -32,7 +32,7 @@ describe("useFocusTrigger", () => {
     const onWelcomeBack = vi.fn();
     renderHook(() => useFocusTrigger(onWelcomeBack, { storage: store }));
 
-    act(() => window.dispatchEvent(new Event("focus")));
+    act(() => void window.dispatchEvent(new Event("focus")));
     expect(onWelcomeBack).toHaveBeenCalledTimes(1);
   });
 
@@ -41,7 +41,7 @@ describe("useFocusTrigger", () => {
     const onWelcomeBack = vi.fn();
     renderHook(() => useFocusTrigger(onWelcomeBack, { storage: store }));
 
-    act(() => window.dispatchEvent(new Event("focus")));
+    act(() => void window.dispatchEvent(new Event("focus")));
     expect(onWelcomeBack).not.toHaveBeenCalled();
   });
 
@@ -50,10 +50,10 @@ describe("useFocusTrigger", () => {
     const onWelcomeBack = vi.fn();
     renderHook(() => useFocusTrigger(onWelcomeBack, { storage: store }));
 
-    act(() => window.dispatchEvent(new Event("focus")));
+    act(() => void window.dispatchEvent(new Event("focus")));
     // Alt-tab away and back a minute later: the absence already ended, so nothing fires again.
     vi.setSystemTime(new Date(Date.now() + 60_000));
-    act(() => window.dispatchEvent(new Event("focus")));
+    act(() => void window.dispatchEvent(new Event("focus")));
     expect(onWelcomeBack).toHaveBeenCalledTimes(1);
   });
 
@@ -62,7 +62,7 @@ describe("useFocusTrigger", () => {
     const onWelcomeBack = vi.fn();
     renderHook(() => useFocusTrigger(onWelcomeBack, { storage: store }));
 
-    act(() => window.dispatchEvent(new Event("focus")));
+    act(() => void window.dispatchEvent(new Event("focus")));
     expect(onWelcomeBack).not.toHaveBeenCalled();
   });
 
@@ -73,7 +73,7 @@ describe("useFocusTrigger", () => {
 
     // The window was hidden and is visible again.
     Object.defineProperty(document, "hidden", { configurable: true, value: false });
-    act(() => document.dispatchEvent(new Event("visibilitychange")));
+    act(() => void document.dispatchEvent(new Event("visibilitychange")));
     expect(onWelcomeBack).toHaveBeenCalledTimes(1);
   });
 
@@ -83,7 +83,7 @@ describe("useFocusTrigger", () => {
     renderHook(() => useFocusTrigger(onWelcomeBack, { storage: store }));
 
     Object.defineProperty(document, "hidden", { configurable: true, value: true });
-    act(() => document.dispatchEvent(new Event("visibilitychange")));
+    act(() => void document.dispatchEvent(new Event("visibilitychange")));
     expect(onWelcomeBack).not.toHaveBeenCalled();
   });
 
@@ -91,7 +91,7 @@ describe("useFocusTrigger", () => {
     const onWelcomeBack = vi.fn();
     renderHook(() => useFocusTrigger(onWelcomeBack));
 
-    act(() => window.dispatchEvent(new Event("focus")));
+    act(() => void window.dispatchEvent(new Event("focus")));
     expect(onWelcomeBack).not.toHaveBeenCalled();
   });
 
@@ -104,7 +104,7 @@ describe("useFocusTrigger", () => {
     });
     rerender({ cb: second });
 
-    act(() => window.dispatchEvent(new Event("focus")));
+    act(() => void window.dispatchEvent(new Event("focus")));
     expect(first).not.toHaveBeenCalled();
     expect(second).toHaveBeenCalledTimes(1);
   });
@@ -115,7 +115,7 @@ describe("useFocusTrigger", () => {
     const { unmount } = renderHook(() => useFocusTrigger(onWelcomeBack, { storage: store }));
     unmount();
 
-    act(() => window.dispatchEvent(new Event("focus")));
+    act(() => void window.dispatchEvent(new Event("focus")));
     expect(onWelcomeBack).not.toHaveBeenCalled();
   });
 });
