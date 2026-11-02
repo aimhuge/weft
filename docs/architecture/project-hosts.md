@@ -208,11 +208,12 @@ keeps the offline queue and history. A board talking to a worker on its LAN then
 
 A view owns one thing: **approval**. Today Touch ID is `promptTouchID` in Electron main, which approves but signs
 nothing, and only the phone signs (Ed25519 after Face ID, mobile-security.md). The browser's paired key sits in
-IndexedDB and can't sign. **Passkeys** close that: weft.zip and the desktop sign each approval with a WebAuthn key in the
-Secure Enclave, bound to `weft.zip`, which the host pins through the existing pairing flow (the QR secret plus a Touch ID
-on the Mac). The approval binds the host, card, pending request, tool, an input hash, a nonce and an expiry, and the host
-checks it on one verify path for every view. The weak spot is a script injected into weft.zip, so the board gets a strict
-CSP, and the riskiest asks (a vault value, skipping permissions) stay native on the phone or the Mac.
+localStorage and can't sign. **Passkeys** close that: a WebAuthn key in the Secure Enclave, bound to `sign.weft.zip`, a
+host of its own that serves only the pairing and approve pages under a strict CSP, so a script injected into weft.zip
+can't reach it. The host pins it through its own pairing session (the link's secret opens only on sign.weft.zip, plus a
+Touch ID on the Mac). The approval binds the host, card, folder, pending request, tool, the whole input and the time,
+and the host checks it on one verify path. The riskiest asks (a vault value, skipping permissions, an agent's config, a
+folder grant) stay native on the phone or the Mac.
 
 Secrets on a Worker start as the per-use seal above (`secret_use`). With signed approvals in place, the vault itself can
 later move into the host, its key sealed to the host and opened only behind a signed approval.
@@ -280,7 +281,14 @@ Each ships on its own.
    a signed Bonjour/mDNS hint lets a board on the same LAN offer straight to the host; the browser and the phone seal
    their own offers (libsodium), so weft.zip and the phone open lines too; and a TURN relay beside the STUN server
    covers networks that block direct connections. Plus the line's cost and speed work in [Cost and speed](#cost-and-speed).
-7. **H7 passkey approvals.** One signed-approval path for weft.zip, the desktop and the phone.
+7. **H7 passkey approvals** (built 2026-11-02, not live: [mobile-security.md](mobile-security.md#4-passkey-approvals-h7)).
+   Passkeys live on their own origin, **sign.weft.zip**, so an XSS on weft.zip can neither pin a key nor make the user
+   sign something they didn't see: that host serves only two static pages under a strict CSP, a passkey pairs there
+   through its own pairing session, and the weft.zip board opens `sign.weft.zip/approve` in a new tab, which reads the
+   ask itself, shows all of it and sends the signed answer. The Mac rebuilds the message from its own names and main
+   checks it (origin and rp id sign.weft.zip only, the counter kept). Grants, vault, skip-permission and agent-config
+   asks stay on the phone or the Mac. Waiting on the domain, DNS, the Supabase redirect URL and the migration. Still
+   open: the desktop board signing with a passkey instead of `promptTouchID`, so every view has one verify path.
 8. **H8 secrets on a Worker.** The per-use seal first, then the vault in the host behind H7.
 9. **H9 `@weft/client`** for the phone: the transports, verbs and view models as one package.
 10. **H10 one device registry** and one pairing flow.

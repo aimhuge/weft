@@ -111,6 +111,11 @@ describe("folder grants on an answer", () => {
     expect(answerCommand(to, { pendingId: "p1", allow: false, grant: "always" })?.payload).toEqual({ cardId: "c", pendingId: "p1", allow: false });
   });
 
+  it("carries a browser's passkey signature", () => {
+    const auth = { kind: "webauthn" as const, device: "b", credId: "c", issuedAt: 1, authenticatorData: "a", clientDataJSON: "j", signature: "s" };
+    expect(answerCommand(to, { pendingId: "p1", allow: true, auth })?.payload).toEqual({ cardId: "c", pendingId: "p1", allow: true, auth });
+  });
+
   it("reads back only a known scope, on an Allow, and never a path", () => {
     expect(body({ cardId: "c", pendingId: "p1", allow: true, grant: "card", directory: "/" })).toEqual({ cardId: "c", pendingId: "p1", allow: true, grant: "card" });
     expect(body({ cardId: "c", pendingId: "p1", allow: true, grant: "everything" })?.grant).toBeUndefined();

@@ -13,9 +13,23 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { appLinkTarget } from "@/lib/app-routes";
 import { isWebEnabled } from "@/lib/home";
+import { SIGN_HEADERS, signCsp, signHosts, signRoute } from "@/lib/sign-origin";
 import { SUPABASE_KEY, SUPABASE_URL } from "@/lib/supabase-project";
 
+// sign.weft.zip serves only its passkey pages, under their own CSP; their files are a 404 on every other host
+// (lib/sign-origin.ts). Decided before anything else, and with no session work: that host has no cookies of weft.zip's.
+function signResponse(request: NextRequest): NextResponse | null {
+  const route = signRoute(request.headers.get("host"), request.nextUrl.pathname, signHosts(process.env));
+  if (!route) return null;
+  const response = "rewrite" in route ? NextResponse.rewrite(new URL(route.rewrite, request.url)) : new NextResponse("Not found", { status: 404 });
+  response.headers.set("Content-Security-Policy", signCsp());
+  for (const [key, value] of Object.entries(SIGN_HEADERS)) response.headers.set(key, value);
+  return response;
+}
+
 export async function proxy(request: NextRequest) {
+  const signed = signResponse(request);
+  if (signed) return signed;
   // isWebEnabled(), not isDeployed(): WEFT_WEB=1 turns the weft.zip routes on for a local
   // server too, and those routes read the cookie session. Gating the refresh on the
   // deployed-only check would let a local visitor's expired access token bounce them
@@ -78,6 +92,12 @@ export const config = {
     // makes `config` unparseable and the proxy throws on every request.
     "/@:username/apps/:slug",
     "/:org/apps/:slug",
+    // sign.weft.zip (and its dev host): every path, so anything but its pages is a 404 (lib/sign-origin.ts). And its
+    // files under /sign, refused on every other host.
+    // Next anchors a host value as a regex (^…$), so the dots are escaped; a trailing dot is the same host.
+    { source: "/:path*", has: [{ type: "host", value: "sign\\.weft\\.zip\\.?" }] },
+    { source: "/:path*", has: [{ type: "host", value: "sign\\.localhost\\.?" }] },
+    "/sign/:path*",
     "/@:username/threads/:slug",
   ],
 };

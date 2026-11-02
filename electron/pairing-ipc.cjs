@@ -10,9 +10,9 @@ const { registeredDevice } = require("./device-key.cjs");
 
 /**
  * @param {{ ipcMain: any, dataDir: string, accountClient: () => any, isBoard: (sender: unknown) => boolean,
- *   confirm: (reason: string) => Promise<boolean>, safeStorage?: () => any, crypto?: () => any }} deps
+ *   confirm: (reason: string) => Promise<boolean>, safeStorage?: () => any, crypto?: () => any, devOrigin?: string | null }} deps
  */
-function setupPairing({ ipcMain, dataDir, accountClient, isBoard, confirm, safeStorage, crypto }) {
+function setupPairing({ ipcMain, dataDir, accountClient, isBoard, confirm, safeStorage, crypto, devOrigin = null }) {
   const keychain = safeStorage ?? (() => require("./keychain-audit.cjs").keychainFor("vault key"));
   const vaultCrypto = crypto ?? (() => require("./vault-crypto.cjs"));
   const ready = async () => {
@@ -30,7 +30,7 @@ function setupPairing({ ipcMain, dataDir, accountClient, isBoard, confirm, safeS
   }
   const macDevice = () => fs.readFileSync(path.join(dataDir, "device-id"), "utf8").trim();
 
-  const paired = createPairedDevices({ dir: dataDir, safeStorage: keychain, sodium: () => sodium });
+  const paired = createPairedDevices({ dir: dataDir, safeStorage: keychain, sodium: () => sodium, devOrigin });
   const syncKeys = createSyncKeys({ dir: dataDir, safeStorage: keychain, crypto: vaultCrypto, db, myDevice });
   const userId = () => String(accountClient().getClaims()?.sub ?? "");
   const pairing = createPairing({ db, userId, sodium: () => sodium, macDevice, myDevice, paired, syncKeys, confirm });
@@ -44,7 +44,7 @@ function setupPairing({ ipcMain, dataDir, accountClient, isBoard, confirm, safeS
       if (!isBoard(event.sender)) throw new Error("Pairing only answers the board window.");
       return withSodium(fn)(...args);
     });
-  handle("pairing:start", (orgId) => pairing.start(String(orgId ?? "")));
+  handle("pairing:start", (orgId, opts) => pairing.start(String(orgId ?? ""), { passkey: opts?.passkey === true }));
   handle("pairing:check", (id) => pairing.check(String(id)));
   handle("pairing:cancel", (id) => pairing.cancel(String(id)));
   handle("pairing:list", () => pairing.list());
@@ -62,6 +62,8 @@ function setupPairing({ ipcMain, dataDir, accountClient, isBoard, confirm, safeS
     "POST /sync/key": withSodium(async ({ orgId, create }) => (await syncKeys.current(String(orgId), { create: create === true })) ?? { none: true }),
     // Whether an answer's signature is a paired phone's (lib/approval-check.ts). The key never leaves main.
     "POST /pairing/verify": withSodium(({ device, message, sig }) => paired.verify({ device: String(device), message: String(message), sig: String(sig) })),
+    // Whether a passkey assertion is a pinned browser's (lib/approval-passkey-check.ts); main keeps its counter.
+    "POST /pairing/passkey-verify": (b) => paired.verifyPasskey({ device: String(b?.device), credId: String(b?.credId), message: String(b?.message), authenticatorData: String(b?.authenticatorData), clientDataJSON: String(b?.clientDataJSON), signature: String(b?.signature) }),
     "POST /pairing/status": () => ({ approvers: paired.approvers(), devices: pairing.list().length, ...paired.settings() }),
   };
   return { pairing, syncKeys, paired, routes };

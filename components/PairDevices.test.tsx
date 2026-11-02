@@ -53,6 +53,25 @@ describe("PairDevices", () => {
     expect(screen.queryByRole("img", { name: "Pairing QR code" })).toBeNull();
   });
 
+  it("makes a passkey code with a link to sign.weft.zip and no QR", async () => {
+    bridge.start.mockResolvedValueOnce({ id: "code-2", link: "https://sign.weft.zip/pair#v=1&p=x", expiresAt: 1_000_000 + 125_000, passkey: true });
+    const writeText = vi.fn(() => Promise.resolve());
+    Object.assign(navigator, { clipboard: { writeText, readText: () => Promise.resolve("") } });
+    render(<PairDevices />);
+    await userEvent.click(await screen.findByRole("button", { name: "Pair a passkey" }));
+    expect(bridge.start).toHaveBeenCalledWith(undefined, { passkey: true });
+    expect(await screen.findByText(/makes a passkey on sign\.weft\.zip/)).toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: "Pairing QR code" })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Copy link" }));
+    expect(writeText).toHaveBeenCalledWith("https://sign.weft.zip/pair#v=1&p=x");
+    const openExternal = vi.fn();
+    (window as unknown as { weft: Record<string, unknown> }).weft.openExternal = openExternal;
+    await userEvent.click(screen.getByRole("button", { name: "Open in browser" }));
+    expect(openExternal).toHaveBeenCalledWith("https://sign.weft.zip/pair#v=1&p=x");
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(bridge.cancel).toHaveBeenCalledWith("code-2");
+  });
+
   it("cancels an open code", async () => {
     render(<PairDevices />);
     await userEvent.click(await screen.findByRole("button", { name: "Pair a phone" }));

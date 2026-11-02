@@ -6,6 +6,8 @@
 // gets a phone its pushes, pairing gets it the workspace key and lets it approve with Face ID.
 import qrcode from "qrcode-generator";
 import { useMemo } from "react";
+import { openExternal } from "@/lib/auth/desktop";
+import { copyBriefly } from "@/lib/clipboard-briefly";
 import { usePairing } from "@/lib/use-pairing";
 import { useNow } from "@/lib/use-now";
 import { Spinner } from "./Icon";
@@ -47,7 +49,25 @@ export default function PairDevices() {
   return (
     <section data-settings-card className={CARD} onMouseDown={(e) => e.stopPropagation()}>
       <h4 className={SECTION_TITLE}>Pair a phone</h4>
-      {code ? (
+      {code?.passkey ? (
+        <div className="flex min-w-0 flex-col gap-2">
+          <p className="text-[13px] text-ink">Open this in the browser you use for weft.zip. It makes a passkey on sign.weft.zip and shows a code; your Mac asks for Touch ID with that code, so confirm only if they match.</p>
+          <p className={`flex items-center gap-2 ${SUBTLE}`}>
+            <Spinner size={11} /> Waiting for the browser · {Math.floor(left / 60)}:{String(left % 60).padStart(2, "0")} left
+          </p>
+          <div className="mt-1 flex gap-2">
+            <button type="button" className={BUTTON} onClick={() => openExternal(code.link)}>
+              Open in browser
+            </button>
+            <button type="button" className={BUTTON} title="Cleared from the clipboard after a minute" onClick={() => void copyBriefly(code.link)}>
+              Copy link
+            </button>
+            <button type="button" className={BUTTON} onClick={() => void p.cancel()}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : code ? (
         <div className="flex gap-4">
           <QrCode text={code.link} />
           <div className="flex min-w-0 flex-col gap-2">
@@ -72,9 +92,14 @@ export default function PairDevices() {
       ) : (
         <div className="flex items-center justify-between gap-3">
           <p className={SUBTLE}>A paired phone answers permissions with Face ID and reads sealed threads. Nothing else can approve once one is paired.</p>
-          <button type="button" className={`shrink-0 ${BUTTON}`} onClick={() => void p.start()}>
-            Pair a phone
-          </button>
+          <div className="flex shrink-0 gap-2">
+            <button type="button" className={BUTTON} onClick={() => void p.start()}>
+              Pair a phone
+            </button>
+            <button type="button" className={BUTTON} title="Approve tool runs from weft.zip with Touch ID: a passkey on sign.weft.zip" onClick={() => void p.start(true)}>
+              Pair a passkey
+            </button>
+          </div>
         </div>
       )}
       {p.note && <p className="mt-3 text-[12.5px] text-ink">{p.note}</p>}

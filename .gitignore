@@ -73,3 +73,6 @@ build/
 # puku-cli subagents' settings and worktrees, and pages threads write into the project by mistake
 .puku-cli/
 .weft/show/
+
+# sign.weft.zip's bundle, built from sign/main.ts by scripts/build-sign.mjs before next build
+/public/sign/app.js

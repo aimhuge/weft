@@ -313,5 +313,5 @@ export function useWebBoard({ orgId, userId, initialCommands, initialCards, open
   // The cards as CardView draws them: a thumb ref becomes its signed URL once it has one.
   const shown = useMemo(() => withThumbUrls(withAnswers(cards, answers, commands), blobUrls), [cards, answers, commands, blobUrls]);
 
-  return { cards: shown, commands, activeCardId, blobs, transport, live, openCard, closeCard, toolOutput, startCard, sendReply, answer, dropCommand };
+  return { client, cards: shown, commands, activeCardId, blobs, transport, live, openCard, closeCard, toolOutput, startCard, sendReply, answer, dropCommand };
 }

@@ -192,7 +192,7 @@ contextBridge.exposeInMainWorld("weft", {
   // Pairing a phone or browser (electron/pairing-ipc.cjs, docs/architecture/mobile-security.md): the pairing link
   // and the paired list come back; the code's secret check, the keys and Touch ID stay in main.
   pairing: {
-    start: (orgId) => ipcRenderer.invoke("pairing:start", orgId),
+    start: (orgId, opts) => ipcRenderer.invoke("pairing:start", orgId, opts),
     check: (id) => ipcRenderer.invoke("pairing:check", id),
     cancel: (id) => ipcRenderer.invoke("pairing:cancel", id),
     list: () => ipcRenderer.invoke("pairing:list"),
