@@ -3,7 +3,7 @@
 // Settings → Devices (components/DevicesSettings.tsx, docs/architecture/device-registry.md): every device of yours from
 // the one registry through /api/devices, Revoke for any kind, and Add a worker, which pairs a box over
 // window.weft.hostPairing the way a phone pairs (the code's secret, the claim check and Touch ID stay in main).
-import { syncPasskeys } from "./passkey-sync";
+import { runPasskeySync, usePasskeySync } from "./use-passkey-sync";
 import { canSignWiden, endorsePasskeys } from "./widen-signer";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch } from "./api-client";
@@ -64,9 +64,9 @@ interface Bridges {
 
 export const bridgesHere = (): Bridges => (typeof window === "undefined" ? {} : { pairing: pairingBridge(), hosts: hostPairingBridge() });
 
-// Main signs the whole set of paired passkeys for a worker after Touch ID; syncPasskeys sends it as a `pin` command and
+// Main signs the whole set of paired passkeys for a worker after Touch ID; lib/passkey-sync.ts sends it as a `pin` command and
 // waits for the worker's signed receipt (lib/passkey-sync.ts).
-export async function sendPasskeys(workerId: string, name: string, sync: () => Promise<string[]> = syncPasskeys): Promise<string> {
+export async function sendPasskeys(workerId: string, name: string, sync: () => Promise<string[]> = runPasskeySync): Promise<string> {
   const endorsements = await endorsePasskeys(workerId);
   if (!endorsements) return `Not approved, so ${name} trusts no new passkey.`;
   if (!endorsements.length) return "No passkey is paired with this Mac yet: pair one in Settings → Sync first.";
@@ -130,26 +130,8 @@ export function useDevices({ pairing, hosts }: Bridges = bridgesHere()) {
   }, [act, code, hosts, reload]);
 
   // The workers that don't hold this Mac's latest passkey set yet: a revoke there hasn't landed, so they still trust it.
-  const [untaken, setUntaken] = useState<string[]>([]);
-  const syncing = useRef(false);
-  const resync = useCallback(async () => {
-    if (syncing.current || !canSignWiden()) return;
-    syncing.current = true;
-    try {
-      const left = await syncPasskeys();
-      if (live.current) setUntaken(left);
-    } finally {
-      syncing.current = false;
-    }
-  }, []);
-  useEffect(() => {
-    const first = setTimeout(() => void resync(), 0);
-    const timer = setInterval(() => void resync(), RELOAD_MS);
-    return () => {
-      clearTimeout(first);
-      clearInterval(timer);
-    };
-  }, [resync]);
+  // The board keeps syncing them too (lib/use-passkey-sync.ts); this page just shares its list.
+  const untaken = usePasskeySync();
 
   const revoke = (device: DeviceView) =>
     act(async () => {
@@ -157,7 +139,7 @@ export function useDevices({ pairing, hosts }: Bridges = bridgesHere()) {
       if (revokeRoute(device, pinned) === "pairing") {
         await pairing?.revoke(device.id);
         // Every worker that trusted it gets the set without it, until each confirms (lib/passkey-sync.ts).
-        await resync();
+        await runPasskeySync();
       }
       else await readJson(await apiFetch(`/api/devices?id=${encodeURIComponent(device.id)}`, { method: "DELETE" }));
       await reload();
@@ -172,11 +154,7 @@ export function useDevices({ pairing, hosts }: Bridges = bridgesHere()) {
   // Lets this Mac's paired passkeys approve folder, agent, shell and terminal changes on a worker (lib/worker-pin.ts).
   const trustPasskeys = (device: DeviceView) =>
     act(async () => {
-      const note = await sendPasskeys(device.id, device.name, async () => {
-        const left = await syncPasskeys();
-        if (live.current) setUntaken(left);
-        return left;
-      });
+      const note = await sendPasskeys(device.id, device.name, () => runPasskeySync());
       if (live.current) setNote(note);
     });
 

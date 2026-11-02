@@ -709,13 +709,16 @@ pins, so each refusal lifts when, and only when, the command carries a fresh app
   older endorsement read off an earlier `pin` row is refused (`ENDORSE_OLD`); the set it holds, sent again, is held.
   The pin's result is a **receipt**: the generation it holds, signed with the worker's pairing sign key (`sign-key.json`,
   `heldMessage`). Main remembers, per worker, the exact passkeys (device, credential, key) it endorsed, the signed set
-  and whether a receipt confirmed it (`vault/endorsed-workers.json`, sealed). `lib/passkey-sync.ts` (on Settings →
-  Devices, every 15 s, and after Passkeys or a revoke) asks main for every unconfirmed set (`approval:endorse-refresh`,
+  and whether a receipt confirmed it (`vault/endorsed-workers.json`, sealed). `lib/passkey-sync.ts` (from the desktop
+  board's header every 30 s, one timer per window, `lib/use-passkey-sync.ts`, and at once after Passkeys or a revoke) asks main for every unconfirmed set (`approval:endorse-refresh`,
   which first narrows each to the passkeys still paired here, exactly, without Touch ID), sends it as a `pin`, waits for
   the receipt and hands it to main, which checks it against the sign key it pinned for that worker
   (`approval:endorse-confirm`, `worker-pins.cjs` `signKeyOf`). A pin row a stolen session deletes, one a stolen worker
-  key claims and drops, or one an offline worker hasn't taken leaves the set pending: it's sent again (one row at a time
-  per worker), and the worker's row says "passkeys not updated yet". A device id paired again with a new credential
+  key claims and drops, or one an offline worker hasn't taken leaves the set pending: it's sent again. A row still on
+  its way is read once per sync rather than sent again, until it's gone or unreadable, failed, or older than
+  `PIN_STALE_MS` (a minute), and then a fresh one goes (a second row for a held set is harmless). Until every worker
+  confirms, the header's Settings button carries a warn dot and the worker's row in Settings → Devices says
+  "passkeys not updated yet". A device id paired again with a new credential
   isn't in a narrowing; adding passkeys asks Touch ID. `approval:endorse {revoke: true}` is an empty set, no Touch ID.
   Not built: a worker refusing passkey approvals while its generation is behind the Mac's latest, which needs a
   channel the Mac publishes to that the worker trusts.

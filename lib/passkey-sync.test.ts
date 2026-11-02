@@ -7,7 +7,7 @@ vi.mock("./widen-signer", () => ({ refreshEndorsements: vi.fn(), confirmEndorsem
 const apiFetch = vi.hoisted(() => vi.fn());
 vi.mock("./api-client", () => ({ apiFetch }));
 
-const { forgetSentPins, passkeySyncDeps, syncPasskeys } = await import("./passkey-sync");
+const { forgetSentPins, passkeySyncDeps, PIN_STALE_MS, syncPasskeys } = await import("./passkey-sync");
 
 const NOW_WAIT = { every: 0, unclaimed: -1, claimed: -1, sleep: () => Promise.resolve() };
 
@@ -44,6 +44,31 @@ describe("syncPasskeys", () => {
     gone.status.mockRejectedValue(new Error("That command is gone."));
     expect(await syncPasskeys(gone)).toEqual(["w1"]);
     expect(failed.post).toHaveBeenCalledTimes(1);
+  });
+
+  it("sends again when the row it's waiting on is gone, failed or sat on its way past PIN_STALE_MS", async () => {
+    let clock = 1_000;
+    const d = { ...deps([]), now: () => clock };
+    expect(await syncPasskeys(d)).toEqual(["w1"]);
+    expect(d.post).toHaveBeenCalledTimes(1);
+    // A stolen session deleted the row: reading it fails, so a fresh one goes.
+    d.status.mockRejectedValueOnce(new Error("That command is gone."));
+    expect(await syncPasskeys(d)).toEqual(["w1"]);
+    expect(d.post).toHaveBeenCalledTimes(2);
+    // Claimed and never reported (a stolen worker key): read once while fresh, then sent afresh.
+    d.status.mockResolvedValue({ status: "claimed", error: null });
+    await syncPasskeys(d);
+    expect(d.post).toHaveBeenCalledTimes(2);
+    clock += PIN_STALE_MS + 1;
+    await syncPasskeys(d);
+    expect(d.post).toHaveBeenCalledTimes(3);
+    // A row that failed, or a receipt main refuses, is sent again too; a receipt main takes ends it.
+    d.status.mockResolvedValueOnce({ status: "failed", error: "x" });
+    await syncPasskeys(d);
+    expect(d.post).toHaveBeenCalledTimes(4);
+    d.status.mockResolvedValueOnce({ status: "done", error: null, result: { value: { generation: 5 } } });
+    expect(await syncPasskeys(d)).toEqual([]);
+    expect(d.post).toHaveBeenCalledTimes(4);
   });
 
   it("checks a pin still on its way instead of sending another, until the generation changes", async () => {

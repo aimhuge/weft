@@ -16,6 +16,7 @@ export interface PasskeySyncDeps {
   status(commandId: string): Promise<CommandResult>;
   confirm(worker: string, receipt: unknown): Promise<boolean>;
   wait?: WaitOptions;
+  now?: () => number;
 }
 
 // A pin is small and the worker takes it at once when it's up; one that isn't up is asked again on the next sync.
@@ -35,20 +36,34 @@ export const passkeySyncDeps: PasskeySyncDeps = {
   confirm: confirmEndorsement,
 };
 
-// The pin last sent to each worker, for the generation it carried: while it's still on its way, it's checked again
-// rather than sent again, so an offline worker doesn't collect a row per sync.
-const sent = new Map<string, { commandId: string; generation: number | undefined }>();
+// A pin left on its way longer than this is sent afresh: a row a stolen worker key claims and never reports on, or one
+// set back to claimed, mustn't hold the revoke up. A second row for the same set is harmless: the worker holds it.
+export const PIN_STALE_MS = 60_000;
 
-async function settle(worker: string, pending: Refreshed, deps: PasskeySyncDeps): Promise<boolean> {
-  const last = sent.get(worker);
-  const commandId = last && last.generation === pending.generation ? last.commandId : await deps.post(worker, pending.endorsements);
-  sent.set(worker, { commandId, generation: pending.generation });
-  const done = await waitForCommand(() => deps.status(commandId), deps.wait ?? PIN_WAIT);
-  // Still on its way: keep it, and ask about it next time.
-  if (done.status === "pending" || done.status === "claimed") return false;
+// The pin last sent to each worker, for the generation it carried and when: while it's still on its way and fresh, the
+// next sync reads it once instead of sending another, so an offline worker doesn't collect a row per sync.
+const sent = new Map<string, { commandId: string; generation: number | undefined; at: number }>();
+
+// What came of a pin: its receipt checked by main (true), still on its way (null), or nothing (false: send again).
+async function outcome(worker: string, done: CommandResult, deps: PasskeySyncDeps): Promise<boolean | null> {
+  if (done.status === "pending" || done.status === "claimed") return null;
   sent.delete(worker);
   const receipt = (done.result as { value?: unknown } | null | undefined)?.value;
   return done.status === "done" && (await deps.confirm(worker, receipt));
+}
+
+async function settle(worker: string, pending: Refreshed, deps: PasskeySyncDeps): Promise<boolean> {
+  const now = (deps.now ?? Date.now)();
+  const last = sent.get(worker);
+  if (last && last.generation === pending.generation && now - last.at <= PIN_STALE_MS) {
+    // One read: a row that's gone (deleted by a stolen session) or can't be read is sent again, below.
+    const read = await deps.status(last.commandId).catch(() => null);
+    const came = read ? await outcome(worker, read, deps) : false;
+    if (came !== false) return came === true;
+  }
+  const commandId = await deps.post(worker, pending.endorsements);
+  sent.set(worker, { commandId, generation: pending.generation, at: now });
+  return (await outcome(worker, await waitForCommand(() => deps.status(commandId), deps.wait ?? PIN_WAIT), deps)) === true;
 }
 
 // The workers that don't hold this Mac's latest set for them yet. Each is tried; one that fails stays listed.
