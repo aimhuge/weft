@@ -30,6 +30,8 @@ export const mockState = {
   queries: [] as Array<{ table: string; filters: Array<[string, unknown]> }>,
   // What the board wrote: the row of each insert, the filters of each delete.
   inserts: [] as Array<{ table: string; row: Record<string, unknown> }>,
+  // The client hint each command row carried (payload.client), kept apart so a row compares as the command it is.
+  hints: [] as unknown[],
   deletes: [] as Array<{ table: string; filters: Array<[string, unknown]> }>,
   // What went up to the blob store: its path and type.
   uploads: [] as Array<{ path: string; contentType?: string }>,
@@ -47,6 +49,15 @@ function threadRows(filters: Array<[string, unknown]>, limit: number): CloudThre
     .slice(0, limit);
 }
 
+function withoutHint(row: Record<string, unknown>): Record<string, unknown> {
+  const payload = row.payload as Record<string, unknown> | undefined;
+  if (!payload || typeof payload !== "object" || !("client" in payload)) return row;
+  mockState.hints.push(payload.client);
+  const rest = { ...payload };
+  delete rest.client;
+  return { ...row, payload: rest };
+}
+
 // A chainable stand-in for the query builder: every filter returns it, and awaiting it answers.
 function query(table: string) {
   const filters: Array<[string, unknown]> = [];
@@ -60,7 +71,7 @@ function query(table: string) {
     in: (k: string, v: unknown) => (filters.push([`${k} in`, v]), builder),
     insert: (row: Record<string, unknown>) => {
       inserted = row;
-      mockState.inserts.push({ table, row });
+      mockState.inserts.push({ table, row: withoutHint(row) });
       return builder;
     },
     delete: () => {
@@ -198,6 +209,7 @@ export function resetHarness() {
   db.deleteError = null;
   db.command = { status: "done", error: null };
   mockState.inserts.length = 0;
+  mockState.hints.length = 0;
   mockState.deletes.length = 0;
   mockState.uploads.length = 0;
 }

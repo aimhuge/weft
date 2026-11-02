@@ -22,6 +22,7 @@ import { holdForSlot, releaseSlots, waitingForSlot } from "./thread-slots";
 import { appendThread, foldThread, getCard, getThread, updateCard } from "./store";
 import { takeTaskNote } from "./task-ledger";
 import { takeBreakNote } from "./crash-blame";
+import { turnEnv } from "./turn-env";
 import { dropDenialPrompts } from "./classifier-denial";
 import type { Card, PermissionMode } from "./types";
 import { awaitingWorktree, workDir } from "./work-dir";
@@ -118,9 +119,10 @@ export function sendMessage(cardId: string, text: string, { echo = true, cli = t
   session.turnSeq = (session.turnSeq ?? 0) + 1;
   // puku doesn't run .claude/skills as slash commands, so a /skill message goes as the skill's instructions.
   const forCli = card.backend === "puku" ? skillInvocation(cli, card.cwd, { weft: false }) : cli;
-  // Ahead of it, a note about subagents its CLI lost since the last message (lib/tasks.ts taskNote), and about the time
-  // it broke Weft (lib/crash-blame.ts).
-  session.inbox.push(`${session.preamble ?? ""}${takeTaskNote(cardId)}${takeBreakNote(cardId)}${forCli}`, promptId);
+  // Ahead of it (after a puku session's own context), the <weft-env> block (host, sender, time: lib/turn-env.ts), a note about subagents its CLI lost since
+  // the last message (lib/tasks.ts taskNote), and about the time it broke Weft (lib/crash-blame.ts).
+  const env = turnEnv(cardId, forCli);
+  session.inbox.push(`${session.preamble ?? ""}${env}${takeTaskNote(cardId)}${takeBreakNote(cardId)}${forCli}`, promptId);
   keepSessionId(cardId, session);
   session.preamble = undefined;
   if (!session.spec.copilot) showStarter(cardId, card.title, text).catch(() => {});

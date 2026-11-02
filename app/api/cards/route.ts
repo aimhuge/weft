@@ -5,6 +5,8 @@ import { elevated, fail, guard } from "@/lib/guard";
 import { projectRoot } from "@/lib/repos";
 import { createCardFromBody, startCard } from "@/lib/new-card";
 import { listProjects } from "@/lib/settings";
+import { deskClient } from "@/lib/turn-env";
+import { warmHostFacts } from "@/lib/host-facts";
 import { deleteCard, getCard, listCards } from "@/lib/store";
 import type { Card } from "@/lib/types";
 import { startWorkerThread, type WorkerThreadInput } from "@/lib/worker-new-thread";
@@ -16,6 +18,8 @@ export async function GET(req: Request) {
   if (denied) return denied;
   await connection();
   prewarm();
+  // The <weft-env> block's commit and behind count, read once in the background (lib/host-facts.ts).
+  void warmHostFacts();
   // The copilot is a thread too, but it has its own window.
   const cards = listCards().filter((c) => c.role !== "copilot");
   // Worktree folders -> their main repo, so the project bar folds them into it.
@@ -55,7 +59,8 @@ export async function POST(req: Request) {
       const { worker, cardId } = await startWorkerThread({ ...(body as unknown as WorkerThreadInput), start: body.start === true, signStart: fromBoard });
       return Response.json({ card: null, start: { started: false, worker, cardId } });
     }
-    const card = createCardFromBody(body);
+    // Who asked, for its first turn's <weft-env> block; set here, whatever the body said (lib/turn-client.ts).
+    const card = createCardFromBody({ ...body, client: deskClient(elevated(req) === null) });
     // A card whose model or CLI is at its limit waits for the window instead of failing its first
     // turn (lib/start-gate.ts); the answer says when its first message goes out.
     const start = body.start ? await begin(card) : { started: false };

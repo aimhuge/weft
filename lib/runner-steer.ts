@@ -5,6 +5,7 @@
 import { randomUUID } from "node:crypto";
 import type { Session } from "./runner-state";
 import { appendThread } from "./store";
+import { turnEnv } from "./turn-env";
 
 export function canSteer(session: Session | undefined): session is Session {
   if (!session?.busy || session.stopping || session.spec.copilot) return false;
@@ -16,7 +17,8 @@ export function canSteer(session: Session | undefined): session is Session {
 // cli is what the CLI gets: the text, with what your "!" commands printed since your last message (lib/shell.ts).
 export function steer(cardId: string, session: Session, text: string, cli = text) {
   const uuid = randomUUID();
-  session.inbox.push(cli, uuid);
+  // The <weft-env> block goes with it too: it may land long after the turn began (lib/turn-env.ts).
+  session.inbox.push(`${turnEnv(cardId, cli)}${cli}`, uuid);
   (session.steered ??= new Set()).add(uuid);
   appendThread(cardId, { kind: "user", text, at: Date.now(), midTurn: true });
 }

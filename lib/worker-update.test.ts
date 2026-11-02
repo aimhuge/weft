@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { hostFacts, resetHostFacts } from "./host-facts";
 import { createUpdater, runCommand, updatesOn, type Run } from "./worker-update";
 
 const ROLLBACK = path.join(process.cwd(), "install", "worker-rollback.sh");
@@ -99,6 +100,21 @@ describe("the updater", () => {
     expect(await up.tick(() => false)).toEqual({ restart: false, note: null, held: target.slice(0, 7) });
     expect(git(dir, "rev-parse", "HEAD")).toBe(before);
     expect(calls).toEqual([]);
+  });
+
+  it("tells the threads' <weft-env> block how far behind main it is, from the fetch it just made", async () => {
+    resetHostFacts();
+    const { up } = updater();
+    await up.tick(() => false);
+    expect(hostFacts({ WEFT_WORKER: "1" }, dir, 0)).toMatchObject({ behind: 0 });
+    commit("a.txt", "new");
+    commit("b.txt", "newer");
+    await up.tick(() => false);
+    expect(hostFacts({ WEFT_WORKER: "1" }, dir, 0)).toMatchObject({ behind: 2 });
+    // A count git can't give (a shallow history, say) is no count, not a failed update.
+    const run: Run = (cmd, args, opts) => (args[0] === "rev-list" ? Promise.reject(new Error("shallow")) : runCommand(cmd, args, opts));
+    await createUpdater({ home, dir, run, log: vi.fn() }).tick(() => false);
+    expect(hostFacts({ WEFT_WORKER: "1" }, dir, 0)).toMatchObject({ behind: 0 });
   });
 
   it("goes back and skips a commit that doesn't load", async () => {

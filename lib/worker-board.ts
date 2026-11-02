@@ -25,6 +25,8 @@ import { LINE_PURPOSE, type LineOffer } from "./host-line-protocol";
 import { EMPTY_WORKER_BOARD, workerProjectPath, type WorkerBoard, type WorkerProject, type WorkerProjectStatus } from "./worker-project";
 import { liveStatus, type PresenceRead } from "./worker-presence";
 import { presenceWatch, type PresenceWatch } from "./worker-presence-watch";
+import { macHint } from "./host-facts";
+import { withClientHint } from "@weft/client";
 
 // Where this Mac's composer saves what you paste (lib/attachments.ts ATTACHMENTS_DIR, without its image tools).
 export const ATTACHMENTS = path.join(DATA_DIR, "attachments");
@@ -188,8 +190,10 @@ export async function withAttachments(client: SupabaseClient, row: NewCommand, t
   return attachments.length ? sendable({ ...row, payload: { ...row.payload, attachments } }) : row;
 }
 
+// Every row this Mac sends a worker says it's from this Mac's desktop board: a hint for the thread's <weft-env> block
+// (lib/turn-client.ts), never a check.
 export async function insert(client: SupabaseClient, row: NewCommand): Promise<{ commandId: string }> {
-  const { data, error } = await client.from("cloud_commands").insert(row).select("id").single<{ id: string }>();
+  const { data, error } = await client.from("cloud_commands").insert(withClientHint(row, macHint())).select("id").single<{ id: string }>();
   if (error) throw new Error(`Couldn't reach your worker: ${error.message}`);
   return { commandId: data.id };
 }

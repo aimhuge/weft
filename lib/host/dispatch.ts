@@ -12,6 +12,7 @@ import type { Card } from "../types";
 import { widenArgsOf, widenChangeOf, withoutWiden, type WidenChange } from "../widen";
 import type { WidenTarget } from "../widen-check";
 import type { Done } from "./identity";
+import { commandClient, noteClient } from "../turn-client";
 
 // What a signed widening leaves unsigned: a card.update's body without the fields its approval covered, or null when the
 // approval covers the verb whole (a "!" line, one sent later).
@@ -83,6 +84,9 @@ export function asAnswer(command: CloudCommandRow, { args }: HostPayload): Cloud
   return { ...command, kind: "answer", payload };
 }
 
+// Verbs that send the card a turn, so the row's sender is noted for it.
+const TURN_VERBS = new Set<HostVerb>(["card.message", "card.message.edit", "card.restart", "card.fresh"]);
+
 // Verbs a board runs for their answer, or to warm a CLI: they change no card, so there's nothing to sync after them.
 const READS = new Set<HostVerb>(["skills.list", "files.list", "files.read", "files.write", "card.warm", "settings.get", "settings.put"]);
 
@@ -105,6 +109,7 @@ export function cardKinds(rules: CardRules) {
     const body = replyBody(command);
     if (!body) throw new Error("That reply is empty.");
     const card = rules.card(body.cardId, command, "answered");
+    noteClient(card.id, commandClient(command.payload));
     await verb("card.message", await received(command, { id: card.id, text: body.text }, "text"));
     return card.id;
   }
@@ -166,6 +171,8 @@ export function cardKinds(rules: CardRules) {
     const card = rules.card(body.args.id, command, "reached");
     if (OWNER_VERBS.has(body.verb) && !rules.fromOwner?.(command)) throw new Error(NOT_OWNER);
     await allowed(body, card);
+    // Who sent a turn, for its <weft-env> block: the row's hint, never a check (lib/turn-client.ts).
+    if (TURN_VERBS.has(body.verb)) noteClient(card.id, commandClient(command.payload));
     const reply = await verb(body.verb, await received(command, { ...withoutWiden(body.args), id: card.id }, textArgOf(body.verb)));
     // The card it touched, and for a read verb (skills.list) its answer; the editor's verbs answer with their value,
     // inline or as a blob when it's over the row's cap (lib/host-result.ts).
@@ -187,7 +194,8 @@ export function cardKinds(rules: CardRules) {
     if (!rules.create) throw new Error(NO_CREATE);
     const refused = remoteRefusal(body) ?? (await rules.elevated?.(body.verb, body.args));
     if (refused) throw new Error(refused);
-    const cardId = await rules.create(command, await received(command, body.args, textArgOf(body.verb)));
+    const args = { ...body.args, client: commandClient(command.payload) };
+    const cardId = await rules.create(command, await received(command, args, textArgOf(body.verb)));
     return { cardId, result: hostResult(cardId) };
   }
 

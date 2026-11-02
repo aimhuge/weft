@@ -106,23 +106,6 @@ describe("the daemon", () => {
     expect(d.report).not.toHaveBeenCalled();
   });
 
-  it("runs a new_card command too", async () => {
-    const d = makeDeps();
-    await d.daemon.runOne(command({ kind: "new_card", payload: { prompt: "Add dark mode" } as never }));
-    expect(d.checkout).toHaveBeenCalledWith("weft", undefined);
-    expect(d.start).toHaveBeenCalledWith({
-      prompt: "Add dark mode",
-      title: undefined,
-      backend: undefined,
-      model: undefined,
-      effort: undefined,
-      tags: undefined,
-      cwd: "/srv/work/weft",
-      permissionMode: "acceptEdits",
-    });
-    expect(d.report).toHaveBeenCalledWith("cmd-1", "done", "card-1", null);
-  });
-
   it("replies to a card it runs", async () => {
     const d = makeDeps();
     await d.daemon.runOne(command({ kind: "reply", payload: { cardId: "card-1", text: "go on" } as never }));

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { CloudCommandRow } from "../cloud-commands";
 import type { Card } from "../types";
+import { takeClient } from "../turn-client";
 import { asAnswer, cardKinds, dispatcher, NO_LISTS, type CardRules } from "./dispatch";
 
 const cmd = (kind: string, payload: unknown) => ({ id: "c1", kind, folder: "/dev/app", payload }) as CloudCommandRow;
@@ -22,6 +23,18 @@ describe("cardKinds", () => {
     expect(await cardKinds(r).reply(cmd("reply", { cardId: "k1", text: "go" }))).toBe("k1");
     expect(r.verb).toHaveBeenCalledWith("card.message", { id: "k1", text: "go (here)" });
     await expect(cardKinds(r).reply(cmd("reply", {}))).rejects.toThrow("That reply is empty.");
+  });
+
+  it("notes a turn's sender for its <weft-env> block: the row's hint, or 'remote'; a verb that sends no turn notes nothing", async () => {
+    const r = rules();
+    await cardKinds(r).reply(cmd("reply", { cardId: "k1", text: "go", client: { app: "web", tz: "UTC" } }));
+    expect(takeClient("k1")).toEqual({ app: "web", tz: "UTC" });
+    await cardKinds(r).host(cmd("host", { verb: "card.message", args: { id: "k1", text: "go" }, client: { app: "desktop", name: "m1", via: "line" } }));
+    expect(takeClient("k1")).toEqual({ app: "desktop", name: "m1", via: "line" });
+    await cardKinds(r).host(cmd("host", { verb: "card.message", args: { id: "k1", text: "go" } }));
+    expect(takeClient("k1")).toEqual({ app: "remote" });
+    await cardKinds(r).host(cmd("host", { verb: "card.stop", args: { id: "k1" }, client: { app: "web" } }));
+    expect(takeClient("k1")).toBeUndefined();
   });
 
   it("answers through the approval rule, grants after the answer, and carries a question reply where asked", async () => {
@@ -87,7 +100,7 @@ describe("cardKinds", () => {
     const r = rules({ create, receive: (text) => Promise.resolve(`${text} (here)`) });
     const done = await cardKinds(r).host(cmd("host", { verb: "card.create", args: { id: "n1", prompt: "go", start: false } }));
     expect(done).toEqual({ cardId: "n1", result: { ok: true, cardId: "n1" } });
-    expect(create).toHaveBeenCalledWith(expect.objectContaining({ kind: "host" }), { id: "n1", prompt: "go (here)", start: false });
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ kind: "host" }), { id: "n1", prompt: "go (here)", start: false, client: { app: "remote" } });
     expect(r.card).not.toHaveBeenCalled();
     await expect(cardKinds(r).host(cmd("host", { verb: "card.create", args: { id: "n2", prompt: "go", permissionMode: "bypassPermissions" } }))).rejects.toThrow(/skip permission/);
     await expect(cardKinds(rules()).host(cmd("host", { verb: "card.create", args: { id: "n3", prompt: "go" } }))).rejects.toThrow(/new_card/);

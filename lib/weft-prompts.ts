@@ -11,6 +11,7 @@ import { DEVSERVERS_PROMPT } from "./devserver-tools";
 import { GOG_PROMPT } from "./gog";
 import { RESTART_PROMPT } from "./env";
 import { REVIEW_PROMPT } from "./review";
+import { ENV_PROMPT } from "./env-block";
 import { SECRETS_PROMPT } from "./secret-tools";
 import { SIMULATOR_PROMPT } from "./simulator-tools";
 import { DEFAULT_THREAD_PROMPT, threadPrompt } from "./settings";
@@ -41,6 +42,7 @@ export const WEFT_PINNED_PROMPTS = {
   RESTART_PROMPT,
   DEFAULT_THREAD_PROMPT,
   REVIEW_PROMPT,
+  ENV_PROMPT,
   SUBAGENT_PROMPT: DELEGATE,
   SUBAGENT_CHOOSE_PROMPT: CHOOSE,
 } as const;
@@ -83,8 +85,8 @@ export function weftSystemPrompt(spec: PromptSpec): string {
   const cached = built.get(key);
   if (cached !== undefined) return cached;
   const parts = spec.copilot
-    ? [WEFT_SOUL_PROMPT, BROWSER_PROMPT, COPILOT_PROMPT, personaOf(spec.persona).prompt].filter(Boolean)
-    : [agentOf(spec.agent, listAgents()).soul, ...toolPrompts(), SIMULATOR_PROMPT, decisionsPrompt(spec.backend), RESTART_PROMPT, subagentPrompt(subagentModelFor(), spec.backend), threadPrompt(), REVIEW_PROMPT, spec.project ? ISOLATED_PROMPT : ""].filter(Boolean);
+    ? [WEFT_SOUL_PROMPT, BROWSER_PROMPT, COPILOT_PROMPT, personaOf(spec.persona).prompt, ENV_PROMPT].filter(Boolean)
+    : [agentOf(spec.agent, listAgents()).soul, ...toolPrompts(), SIMULATOR_PROMPT, decisionsPrompt(spec.backend), RESTART_PROMPT, subagentPrompt(subagentModelFor(), spec.backend), threadPrompt(), REVIEW_PROMPT, ENV_PROMPT, spec.project ? ISOLATED_PROMPT : ""].filter(Boolean);
   // A settings change makes a new key; the old prompts are of no further use.
   if (built.size >= 8) built.clear();
   const text = parts.join("\n\n");

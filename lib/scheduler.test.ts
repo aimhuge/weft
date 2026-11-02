@@ -13,6 +13,8 @@ vi.mock("./store", () => ({
   updateCard: (id: string, patch: Partial<Card>) => Object.assign(cards.get(id)!, patch),
 }));
 vi.mock("./splice", () => ({ prebakeBriefs }));
+const noteClient = vi.fn();
+vi.mock("./turn-client", () => ({ noteClient: (...a: unknown[]) => void noteClient(...a) }));
 vi.mock("./restart-when-idle", () => ({ restartArmed: () => restartArmed }));
 const freeSlots = vi.fn();
 vi.mock("./runner", () => ({
@@ -76,6 +78,15 @@ describe("sendDueMessages", () => {
     sendDueMessages(NOW);
     expect(sent).toEqual([["a", "first"]]);
     expect(cards.get("a")!.scheduled!.map((m) => m.id)).toEqual(["2", "3"]);
+  });
+
+  it("says a Send later message is the user's scheduled one, not a first turn's or a restart's held message", () => {
+    noteClient.mockClear();
+    card("a", { turns: 2, scheduled: [{ id: "1", text: "later", at: NOW - 1 }] });
+    card("b", { scheduled: [{ id: "1", text: "first turn", at: NOW - 1 }] });
+    card("c", { turns: 2, scheduled: [{ id: "1", text: "held", at: NOW - 1, afterRestart: true }] });
+    sendDueMessages(NOW);
+    expect(noteClient.mock.calls).toEqual([["a", { app: "scheduled" }]]);
   });
 
   it("leaves a card with nothing scheduled alone", () => {

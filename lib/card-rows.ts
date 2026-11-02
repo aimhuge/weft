@@ -13,6 +13,7 @@ import { redactValue } from "./cloud-sync-redact";
 import { scrub, splitToolResult } from "./cloud-sync-rows";
 import type { BlobStore, CloudCardRow } from "./cloud-sync-types";
 import { redactText } from "./share-redact";
+import { stripEnvBlock } from "./env-block";
 import type { Card, ThreadItem } from "./types";
 
 export interface RowHost {
@@ -78,8 +79,15 @@ export async function projectCard(card: Card, host: RowHost): Promise<CardProjec
   return scrub({ ...up, card: redacted, page: up.page && redactValue({ page: up.page }).page });
 }
 
+// A user item never holds the <weft-env> block (the runner adds it only to what the CLI gets, lib/turn-env.ts), but a
+// thread read back from a transcript could: the rows, and so weft.zip and share links, never carry it.
+function withoutEnv(item: ThreadItem): ThreadItem {
+  return item.kind === "user" && item.text.includes("<weft-env>") ? { ...item, text: stripEnvBlock(item.text) } : item;
+}
+
 // One thread item's projection, with its long tool result cut out to the output row.
-export async function projectItem(seq: number, live: ThreadItem, host: RowHost): Promise<ItemProjection> {
+export async function projectItem(seq: number, given: ThreadItem, host: RowHost): Promise<ItemProjection> {
+  const live = withoutEnv(given);
   const blobs = host.blobs;
   const rewritten = blobs ? await guarded(host, "a file", live, () => blobs.rewriteItem(live, host.orgId)) : live;
   const { item, output } = splitToolResult(rewritten);

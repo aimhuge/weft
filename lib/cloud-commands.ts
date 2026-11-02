@@ -12,6 +12,7 @@ import type { PasskeyAuth } from "./approval-passkey";
 import { readQuestionReply } from "./question-reply";
 import type { QuestionReply } from "./types-thread";
 import type { Backend, Effort, PendingPermission } from "./types";
+import { commandClient } from "./turn-client";
 
 export type CloudCommandStatus = "pending" | "claimed" | "done" | "failed";
 
@@ -233,6 +234,8 @@ export function newCardBody(command: Pick<CloudCommandRow, "folder" | "payload">
     ...(isNewCardMode(p.permissionMode) ? { permissionMode: p.permissionMode } : {}),
     ...(p.start === false ? { start: false } : {}),
     cwd: command.folder,
+    // Who asked, for the first turn's <weft-env> block (lib/turn-client.ts): a hint, never a check.
+    client: commandClient(raw),
   };
 }
 

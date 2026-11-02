@@ -87,7 +87,7 @@ describe("handleInbound", () => {
   it("starts a card for a slash command", async () => {
     const result = await inbound.handleInbound({ kind: "command", text: "/weft fix the login bug", channel: "C1", user: "U1" });
     expect(result).toEqual({ kind: "started", cardId: "card-1" });
-    expect(newCard.createCardFromBody).toHaveBeenCalledWith({ prompt: "/weft fix the login bug", cwd: "/dev/app", tags: ["slack"] });
+    expect(newCard.createCardFromBody).toHaveBeenCalledWith({ prompt: "/weft fix the login bug", cwd: "/dev/app", tags: ["slack"], client: { app: "webhook", name: "Slack" } });
     expect(newCard.startCard).toHaveBeenCalled();
     expect(posted.calls).toHaveLength(1);
   });
@@ -135,13 +135,13 @@ describe("handleInbound", () => {
   it("starts the card in the project mapped to the channel it came from", async () => {
     fake.settings.links = [{ folder: "/dev/mapped", channel: "C7", channelName: "mapped" }];
     await inbound.handleInbound({ kind: "command", text: "/weft fix it", channel: "C7", user: "U1" });
-    expect(newCard.createCardFromBody).toHaveBeenCalledWith({ prompt: "/weft fix it", cwd: "/dev/mapped", tags: ["slack"] });
+    expect(newCard.createCardFromBody).toHaveBeenCalledWith({ prompt: "/weft fix it", cwd: "/dev/mapped", tags: ["slack"], client: { app: "webhook", name: "Slack" } });
   });
 
   it("starts the card in the default project when the channel has none of its own", async () => {
     fake.settings.links = [{ folder: "/dev/mapped", channel: "C7", channelName: "mapped" }];
     await inbound.handleInbound({ kind: "command", text: "/weft fix it", channel: "C1", user: "U1" });
-    expect(newCard.createCardFromBody).toHaveBeenCalledWith({ prompt: "/weft fix it", cwd: "/dev/app", tags: ["slack"] });
+    expect(newCard.createCardFromBody).toHaveBeenCalledWith({ prompt: "/weft fix it", cwd: "/dev/app", tags: ["slack"], client: { app: "webhook", name: "Slack" } });
   });
 
   it("says so when neither a mapped nor a default project is picked", async () => {

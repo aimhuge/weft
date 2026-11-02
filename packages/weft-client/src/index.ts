@@ -3,6 +3,7 @@
 // Next, Node built-ins or the app's lib/; tsconfig.json beside this file checks that.
 export { COLUMNS, MODES, type Backend, type Column, type PermissionMode, type SkillInfo } from "./card";
 export { bangCommand, isBang } from "./bang";
+export { cleanTz, ownTimeZone, readClientHint, withClientHint, type ClientApp, type ClientHint } from "./client-hint";
 export { BLOB_REF_PREFIX, type BlobRef } from "./blob-ref";
 export { clip, shortToolName, timeAgo } from "./text";
 export { extractStatus, type BoardStatus, type StatusColumn } from "./status";

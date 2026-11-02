@@ -45,6 +45,8 @@ describe("the web reply box", () => {
       table: "cloud_commands",
       row: { org_id: "o1", kind: "reply", target_device: "mac-1", folder: "/Users/me/dev/app", payload: { cardId: "c1", text: "ship it" } },
     });
+    // It says it's weft.zip, with this browser's zone: a hint for the thread's <weft-env> block, never a check.
+    expect(mockState.hints).toEqual([{ app: "web", tz: Intl.DateTimeFormat().resolvedOptions().timeZone }]);
     await waitFor(() => expect(box).toHaveValue(""));
     expect(within(dialog).getByText(/Waiting for your Mac/)).toBeInTheDocument();
   });

@@ -14,6 +14,7 @@ import { createCard } from "./store";
 import { rememberTags } from "./tag-store";
 import { normalizeTags } from "./tags";
 import { MODES, type Backend, type Card, type Effort, type PermissionMode } from "./types";
+import { asTurnClient, noteClient } from "./turn-client";
 
 // Making a card from a request body: POST /api/cards (the New thread dialog) and the cloud inbox (a card
 // started on the weft.zip board, lib/cloud-inbox.ts) both go through here, so a card reads the same either way.
@@ -85,6 +86,8 @@ export function createCardFromBody(body: Record<string, unknown>, id?: string): 
     ...isolationFromBody(body),
   }, ...(id === undefined ? [] : [id]));
   touchProject(cwd);
+  // Who asked for it, for its first turn's <weft-env> block (lib/turn-client.ts): a hint the entry point set.
+  noteClient(card.id, asTurnClient(body.client));
   return card;
 }
 
