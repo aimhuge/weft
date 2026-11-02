@@ -17,11 +17,22 @@ describe("workerCliVerdict", () => {
     "bash -c 'weft-worker enrol x'",
     "echo ok && weft-worker forget-macs",
     "env FOO=1 weft-worker enrol x",
+    // A terminal of its own, or a wrapper: the re-pair needs a signature now, but these stay refused.
+    "script -q /dev/null weft-worker enrol x --re-pair",
+    "script -q -c 'weft-worker enrol x --re-pair' /dev/null",
+    "unbuffer weft-worker enrol x",
+    "expect -c 'spawn weft-worker enrol x; interact'",
+    "timeout 60 weft-worker forget-macs",
+    "stdbuf -o0 weft-worker forget-macs",
+    "caffeinate -i ~/.weft-worker/bin/weft-worker start",
+    `python3 -c 'import pty; pty.spawn(["weft-worker", "enrol", "x"])'`,
+    `python3 -c 'import pty; pty.spawn(["/x/bin/node", "y", "${CODE}"])'`,
+    "xargs weft-worker enrol < codes",
   ])("refuses %s", (command) => {
     expect(workerCliVerdict(command, "/tmp")).toMatch(/a thread can't run weft-worker/);
   });
 
-  it.each(["cat scripts/weft-worker.ts", "git diff scripts/weft-worker.ts install/worker.sh", "pnpm test lib/worker-pair.test.ts", "grep -n enrol scripts/weft-worker.ts", `echo ${CODE}`, "node scripts/other.ts"])("lets %s through", (command) => {
+  it.each(["cat scripts/weft-worker.ts", "git diff scripts/weft-worker.ts install/worker.sh", "pnpm test lib/worker-pair.test.ts", "grep -n enrol scripts/weft-worker.ts", `echo ${CODE}`, "node scripts/other.ts", "node ~/.weft-worker/work/app/server.js", "timeout 5 pnpm test", "python3 ~/.weft-worker/work/x/run.py"])("lets %s through", (command) => {
     expect(workerCliVerdict(command, "/tmp")).toBeNull();
   });
 

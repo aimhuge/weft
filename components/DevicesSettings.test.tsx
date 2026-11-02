@@ -90,7 +90,7 @@ describe("DevicesSettings", () => {
     expect(approve).toBeDisabled();
     await userEvent.type(screen.getByRole("textbox", { name: "New pairing code for m1mini" }), "wph.y");
     await userEvent.click(approve);
-    expect(approveRepair).toHaveBeenCalledWith("w1", "m1mini", "wph.y");
+    expect(approveRepair).toHaveBeenCalledWith("w1", "wph.y");
     expect(await screen.findByText("Not approved.")).toBeInTheDocument();
     await userEvent.click(approve);
     expect(await screen.findByText("Paste the whole wph.… line")).toBeInTheDocument();

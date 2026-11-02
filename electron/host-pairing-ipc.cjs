@@ -24,10 +24,16 @@ function registerHostPairing(handle, deps, pins = undefined) {
   });
   // Approve re-pair (Settings → Devices): Touch ID, then this Mac signs the swap to the Mac in the pasted code
   // (electron/worker-repair.cjs). Without the signer (no approval key wired) there's nothing to sign with.
-  handle("worker-repair:approve", async (id, name, code) => {
+  // The worker is read from main's own session, as one of this user's; a code naming this Mac must be one it opened.
+  const worker = async (id) => {
+    const r = await deps.db().from("device_registry").select("id, kind, name, owner_user").eq("id", id).maybeSingle();
+    const row = r?.data;
+    return row && row.kind === "worker" && row.owner_user === deps.userId() ? { name: String(row.name ?? "") } : null;
+  };
+  handle("worker-repair:approve", async (id, code) => {
     if (!deps.macSignKey || !deps.macSign) throw new Error("This Mac has no approval key to sign a re-pair with.");
-    const repair = createWorkerRepair({ confirm: deps.confirm, sign: deps.macSign, publicKey: deps.macSignKey });
-    return repair.approve(String(id ?? ""), String(name ?? ""), String(code ?? ""));
+    const repair = createWorkerRepair({ confirm: deps.confirm, sign: deps.macSign, publicKey: deps.macSignKey, worker, openedHere: hosts.opened });
+    return repair.approve(String(id ?? ""), String(code ?? ""));
   });
   return hosts;
 }

@@ -34,26 +34,32 @@ function parseCode(text) {
 
 /**
  * @param {{ confirm: (reason: string) => Promise<boolean>, sign: (message: string) => Promise<string>,
- *   publicKey: () => Promise<string>, now?: () => number, nonce?: () => string }} deps
- * sign and publicKey are this Mac's approval key (electron/desktop-signer.cjs), base64.
+ *   publicKey: () => Promise<string>, worker: (id: string) => Promise<{ name: string } | null>,
+ *   openedHere: (pairingId: string) => boolean, now?: () => number, nonce?: () => string }} deps
+ * sign and publicKey are this Mac's approval key (electron/desktop-signer.cjs), base64. worker reads the worker from
+ * main's own session (one of yours, or null), so the prompt names the worker the signature is for, never the
+ * renderer's word for it. openedHere says whether this Mac made that pairing code (electron/host-pairing.cjs).
  */
-function createWorkerRepair({ confirm, sign, publicKey, now = Date.now, nonce = () => crypto.randomBytes(16).toString("hex") }) {
+function createWorkerRepair({ confirm, sign, publicKey, worker: readWorker, openedHere, now = Date.now, nonce = () => crypto.randomBytes(16).toString("hex") }) {
   /**
    * @param {string} worker the worker's id (its Devices row)
-   * @param {string} name the worker's name, for the prompt
    * @param {string} codeText the new wph.… code, from the Mac the box will trust next
    * @returns {Promise<{ denied: true } | { approval: string, command: string, fingerprint: string }>}
    */
-  async function approve(worker, name, codeText) {
-    if (!UUID.test(String(worker))) throw new Error("That isn't a worker of yours.");
-    const label = SAFE_NAME.test(String(name)) ? String(name) : "this worker";
+  async function approve(worker, codeText) {
+    const row = UUID.test(String(worker)) ? await readWorker(String(worker)) : null;
+    if (!row) throw new Error("That isn't a worker of yours.");
+    const label = SAFE_NAME.test(String(row.name)) ? String(row.name) : "this worker";
     const code = parseCode(codeText);
     if (!code) throw new Error("Paste the whole wph.… line the new Mac shows under Settings → Devices → Add a worker.");
     const fingerprint = macFingerprint(code.macKey);
     const same = code.macKey === (await publicKey());
+    // This Mac's key is public, so anyone can put it in a code of their own workspace: a code naming this Mac must be
+    // one this Mac opened, or the box would follow it into someone else's workspace.
+    if (same && !openedHere(code.id)) throw new Error("That code names this Mac but wasn't made on it. Make it here with Add a worker, then paste it.");
     // The fingerprint first, so a long name can't push it out of the prompt.
     const reason = same
-      ? `let the worker ${label} pair again with this Mac (${fingerprint}), into the workspace in the code`
+      ? `let the worker ${label} pair again with this Mac (${fingerprint}), with the code this Mac just made`
       : `let the worker ${label} stop trusting this Mac and trust the Mac ${fingerprint} instead, with its secrets and settings`;
     if (!(await confirm(reason))) return { denied: true };
     const issuedAt = now();

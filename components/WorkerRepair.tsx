@@ -19,7 +19,7 @@ export function WorkerRepair({ device, onClose }: { device: Pick<DeviceView, "id
     setBusy(true);
     setError(null);
     try {
-      const r = await hostPairingBridge()?.approveRepair?.(device.id, device.name, code);
+      const r = await hostPairingBridge()?.approveRepair?.(device.id, code);
       if (r) setResult(r);
     } catch (err) {
       setError(err instanceof Error ? err.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, "") : String(err));

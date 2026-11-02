@@ -262,7 +262,7 @@ A deny beats an ask, so the prompt never shows and a grant buys nothing here.
 | `worker.log`, `update-bad`, `update-trial`, `rollback.sh`, anything new | refused: the log is the daemon's raw stdout and stderr with no redaction pass, so whatever any process printed (an SDK error echoing a request, a CLI's debug output) lands there; `update-bad` keeps the first line of git and pnpm errors, which can carry a credentialed remote URL; `rollback.sh` is a copy of `install/worker-rollback.sh`, readable in the clone |
 | `data/`, as on a Mac | refused, save `data/show` and `data/apps` |
 | `work/` (or `WEFT_WORKER_ROOT`) | open: it's where cards run |
-| `weft/`, the clone of Weft | open: a public repo, and `/weft:done` runs `commit.sh` from the plugin inside it |
+| `weft/`, the clone of Weft | read and run: a public repo, and `/weft:done` runs `commit.sh` from the plugin inside it. Never changed by a thread: it's the code the daemon and `weft-worker` run, so an edit could turn off the re-pair check (`lib/worker-clone-guard.ts`, 2026-11-02) |
 
 - **A path is judged by where it lands.** Relative paths start from the card's cwd (`fromCwd`, from the hook's own input),
   not the daemon's, and a `cd` on the line moves them. Symlinks are followed, since a checkout is a repo somebody else

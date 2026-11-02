@@ -43,7 +43,10 @@ function AddWorker({ devices }: { devices: ReturnType<typeof useDevices> }) {
     );
   return (
     <div className="mt-3 flex w-full flex-col gap-2">
-      <p className="text-[13px] text-ink">Run this on the box. When it prints a code, Touch ID here will name the same one.</p>
+      <p className="text-[13px] text-ink">
+        Run this on the box. When it prints a code, Touch ID here will name the same one.
+        {code.fingerprint && <span className="text-muted"> Moving a paired worker here? Its old Mac&apos;s Re-pair will name this Mac as {code.fingerprint}.</span>}
+      </p>
       <code className="block select-all break-all rounded-md bg-sunken px-2 py-1 font-mono text-[12px] text-ink">{code.command}</code>
       <div className="flex items-center gap-2">
         <span className={`flex items-center gap-2 ${SUBTLE}`}>

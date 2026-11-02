@@ -213,7 +213,7 @@ contextBridge.exposeInMainWorld("weft", {
     // Re-pin: main forgets the worker's pinned keys after Touch ID (electron/worker-pins.cjs).
     forgetPin: (id, name) => ipcRenderer.invoke("worker-pins:forget", id, name),
     // Approve re-pair: main asks Touch ID and signs the swap with this Mac's key (electron/worker-repair.cjs).
-    approveRepair: (id, name, code) => ipcRenderer.invoke("worker-repair:approve", id, name, code),
+    approveRepair: (id, code) => ipcRenderer.invoke("worker-repair:approve", id, code),
   },
   // Goose (electron/goose-ipc.cjs): a provider key per provider, sealed in the Keychain. The board sends a key
   // once and never reads one back — the runner's Goose subprocess gets it in its env (electron/goose-env.cjs).

@@ -18,14 +18,18 @@ function setup() {
   const newMac = macSigner();
   const code = pairCode({ ...base, macKey: newMac.key });
   const confirm = vi.fn((reason: string) => Promise.resolve(reason.length > 0));
-  const repair = createWorkerRepair({ confirm, sign: (m: string) => Promise.resolve(oldMac.sign(m)), publicKey: () => Promise.resolve(oldMac.key), now: () => NOW, nonce: () => "ab".repeat(16) });
+  const workers: Record<string, { name: string }> = { [WORKER]: { name: "m1mini" } };
+  const worker = vi.fn((id: string) => Promise.resolve(workers[id] ?? null));
+  const openedHere = vi.fn((id: string) => id === base.id);
+  const deps = { confirm, sign: (m: string) => Promise.resolve(oldMac.sign(m)), publicKey: () => Promise.resolve(oldMac.key), worker, openedHere };
+  const repair = createWorkerRepair({ ...deps, now: () => NOW, nonce: () => "ab".repeat(16) });
   const check = (approval: string | undefined, over: Partial<Parameters<typeof repairRefusal>[0]> = {}) =>
     repairRefusal({ pinned: [oldMac.key], worker: WORKER, code, approval, now: NOW, ...over });
-  return { oldMac, newMac, code, confirm, repair, check };
+  return { oldMac, newMac, code, confirm, repair, check, deps, workers, openedHere };
 }
 
 async function approved(s: ReturnType<typeof setup>, worker = WORKER, code = s.code) {
-  const r = await s.repair.approve(worker, "m1mini", code);
+  const r = await s.repair.approve(worker, code);
   if ("denied" in r) throw new Error("denied");
   return r;
 }
@@ -81,29 +85,40 @@ describe("re-pair approval", () => {
     const s = setup();
     s.confirm.mockResolvedValueOnce(false);
     const sign = vi.fn();
-    const repair = createWorkerRepair({ confirm: s.confirm, sign, publicKey: () => Promise.resolve(s.oldMac.key) });
-    expect(await repair.approve(WORKER, "m1mini", s.code)).toEqual({ denied: true });
+    const repair = createWorkerRepair({ ...s.deps, sign });
+    expect(await repair.approve(WORKER, s.code)).toEqual({ denied: true });
     expect(sign).not.toHaveBeenCalled();
   });
 
-  it("names the same Mac plainly, and keeps an odd name and a bad code or worker out of the prompt", async () => {
+  it("names the same Mac plainly, but only for a code this Mac opened", async () => {
     const s = setup();
     const same = pairCode({ ...base, macKey: s.oldMac.key });
     const r = await approved(s, WORKER, same);
-    expect(s.confirm).toHaveBeenLastCalledWith(`let the worker m1mini pair again with this Mac (${macFingerprint(s.oldMac.key)}), into the workspace in the code`);
+    expect(s.confirm).toHaveBeenLastCalledWith(`let the worker m1mini pair again with this Mac (${macFingerprint(s.oldMac.key)}), with the code this Mac just made`);
     expect(s.check(r.approval, { code: same })).toBeNull();
-    await s.repair.approve(WORKER, 'm1mini" and approve everything', s.code);
+    // This Mac's key is public: someone else's workspace can put it in a code of theirs.
+    const theirs = pairCode({ ...base, id: "11111111-2222-4333-8444-777777777777", macKey: s.oldMac.key });
+    s.confirm.mockClear();
+    await expect(s.repair.approve(WORKER, theirs)).rejects.toThrow(/wasn't made on it/);
+    expect(s.confirm).not.toHaveBeenCalled();
+  });
+
+  it("names the worker from main's own read, and refuses one that isn't yours or a bad code", async () => {
+    const s = setup();
+    s.workers[WORKER] = { name: 'm1mini" and approve everything' };
+    await s.repair.approve(WORKER, s.code);
     expect(s.confirm.mock.lastCall?.[0]).toMatch(/^let the worker this worker stop trusting/);
-    await expect(s.repair.approve("w1", "m1mini", s.code)).rejects.toThrow(/isn't a worker/);
-    await expect(s.repair.approve(WORKER, "m1mini", pairCode(base))).rejects.toThrow(/whole wph/);
-    await expect(s.repair.approve(WORKER, "m1mini", `${s.code}.x`)).rejects.toThrow(/whole wph/);
-    await expect(s.repair.approve(WORKER, "m1mini", "wet_token")).rejects.toThrow(/whole wph/);
+    await expect(s.repair.approve(OTHER_WORKER, s.code)).rejects.toThrow(/isn't a worker of yours/);
+    await expect(s.repair.approve("w1", s.code)).rejects.toThrow(/isn't a worker/);
+    await expect(s.repair.approve(WORKER, pairCode(base))).rejects.toThrow(/whole wph/);
+    await expect(s.repair.approve(WORKER, `${s.code}.x`)).rejects.toThrow(/whole wph/);
+    await expect(s.repair.approve(WORKER, "wet_token")).rejects.toThrow(/whole wph/);
   });
 
   it("makes a fresh nonce for each approval by default", async () => {
     const s = setup();
-    const repair = createWorkerRepair({ confirm: s.confirm, sign: (m: string) => Promise.resolve(s.oldMac.sign(m)), publicKey: () => Promise.resolve(s.oldMac.key) });
-    const [a, b] = await Promise.all([repair.approve(WORKER, "m1mini", s.code), repair.approve(WORKER, "m1mini", s.code)]);
+    const repair = createWorkerRepair(s.deps);
+    const [a, b] = await Promise.all([repair.approve(WORKER, s.code), repair.approve(WORKER, s.code)]);
     expect("approval" in a && "approval" in b && parseRepairLine(a.approval)!.nonce !== parseRepairLine(b.approval)!.nonce).toBe(true);
   });
 

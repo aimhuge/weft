@@ -533,17 +533,31 @@ Settings → Devices → m1mini → Re-pair
   pairing id is single-use on the server, so a replayed approval can't do anything new; once the swap lands, the old
   key verifies nothing. The TTY check stays as a speed bump. A fresh box enrols as before.
 - **The Mac** (`electron/worker-repair.cjs`, IPC `worker-repair:approve` on the board-only handler in
-  `electron/host-pairing-ipc.cjs`, `weft.hostPairing.approveRepair`) parses the code itself, asks Touch ID with the new
-  Mac's fingerprint first (the name only if it passes `SAFE_NAME`), then signs with its approval key
-  (`electron/desktop-signer.cjs`), which never leaves main. Re-pair shows on paired workers in Settings → Devices
-  (`components/WorkerRepair.tsx`). `lib/worker-repair.test.ts` proves main's message and fingerprint are the box's.
+  `electron/host-pairing-ipc.cjs`, `weft.hostPairing.approveRepair`) takes only the worker's id and the code. It reads
+  the worker from `device_registry` through its own session (a worker, owned by the signed-in user) and names it from
+  there, never from the renderer. It parses the code itself and asks Touch ID with the new Mac's fingerprint first (the
+  name only if it passes `SAFE_NAME`), then signs with its approval key (`electron/desktop-signer.cjs`), which never
+  leaves main. This Mac's key is public, so anyone could put it in a pairing code of their own workspace: a code naming
+  this Mac must be one this Mac opened and still has open (`createHostPairing().opened`). Add a worker shows this Mac's
+  fingerprint, so a user moving a worker here can match it against the old Mac's prompt. Re-pair shows on paired
+  workers in Settings → Devices (`components/WorkerRepair.tsx`). `lib/worker-repair.test.ts` proves main's message and
+  fingerprint are the box's.
+- **A damaged `worker.json`** doesn't drop the check: a box with a `mac-keys.json` counts as enrolled.
+- **The code that checks is guarded too.** `weft-worker` runs from the worker's own clone (`~/.weft-worker/weft`) through
+  jiti, so editing `lib/worker-repair.ts` there would turn the check off. `lib/worker-clone-guard.ts` keeps that clone
+  readable but unchangeable from a thread: Edit, Write and NotebookEdit are refused (`lib/secret-guard-tool.ts`), and so
+  is Bash that writes into it (`sed -i`, `perl -pi`, `cp`/`mv`/`tee`/`rm` and the like, a `>` redirect, `git` run in it).
+  Only the updater changes it. The CLI guard (`lib/worker-cli-guard.ts`) also sees `weft-worker` behind the wrappers
+  that give it a terminal or run it for you (`script`, `expect`, `unbuffer`, `timeout`, `stdbuf`, `caffeinate`, `xargs`,
+  `python -c` with `pty.spawn`, and others), even named inside a string.
 - **Why by hand, not a request the box posts.** A request the box posts can be posted by a thread too, putting
   unrequested Touch ID prompts on the Mac until one is approved by habit. Carried by hand, nothing reaches the Mac unless
   the user pastes it there. It needs no table and no migration either.
-- **Its limit.** Threads on a worker run as the same OS user as the daemon. This closes the command line, every pty
-  wrapper and `--re-pair` itself. A program a thread writes can still rewrite `mac-keys.json` and `worker.json` directly,
-  as it can read them (weft-worker.md, "the same limits as the data dir"). The secret guard refuses those paths by name.
-  The full fix is the process boundary between the daemon and its cards.
+- **Its limit.** Threads on a worker run as the same OS user as the daemon, and the guards read names on the command line.
+  A program a thread writes and runs, one that builds a path at run time, can still rewrite `mac-keys.json`,
+  `worker.json` or the clone directly (weft-worker.md, "the same limits as the data dir"). The approval holds against
+  every path the guards can see: the command line, its wrappers, the tools and the clone. The full fix is the process
+  boundary between the daemon and its cards.
 
 ### Project reads and the editor (H4, as built)
 
