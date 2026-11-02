@@ -1,8 +1,8 @@
 // Your drag of a card to another column, the card.update step that runs the column's automations.
-import { firstMessage, messagesForMove, doneOverrides } from "@/lib/automations";
-import { archiveWhenIdle, isBusy, queueMessages, sendMessage } from "@/lib/runner";
-import { updateCard } from "@/lib/store";
-import { COLUMNS, type Card, type Column } from "@/lib/types";
+import { firstMessage, messagesForMove, doneOverrides } from "../automations";
+import { archiveWhenIdle, isBusy, queueMessages, sendMessage } from "../runner";
+import { updateCard } from "../store";
+import { COLUMNS, type Card, type Column } from "../types";
 
 // Running and Needs you follow the thread's live state, so they can't be set by hand.
 const MANUAL: Column[] = ["backlog", "review", "done"];

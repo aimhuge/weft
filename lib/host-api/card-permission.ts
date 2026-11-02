@@ -1,8 +1,8 @@
 // The answers to a card's permission prompt or question: allow or deny (with a question's answers), Wait,
 // This first and Others first.
-import { putFirst, putHolderFirst } from "@/lib/precedence";
-import { readQuestionReply } from "@/lib/question-reply";
-import { answerPermission, waitPermission } from "@/lib/runner";
+import { putFirst, putHolderFirst } from "../precedence";
+import { readQuestionReply } from "../question-reply";
+import { answerPermission, waitPermission } from "../runner";
 import type { AnswerArgs, Pending } from "./calls";
 import { OK, settle, type Ok } from "./types";
 

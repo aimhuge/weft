@@ -1,4 +1,4 @@
-import { stopTask } from "@/lib/task-stop";
+import { stopTask } from "../task-stop";
 import { OK, type Ok } from "./types";
 
 // The task strip's Stop: ends one subagent or background command of the thread.

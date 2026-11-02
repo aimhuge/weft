@@ -114,6 +114,8 @@ export const control = {
   allowed: [] as string[],
   stopped: [] as string[],
   stop: vi.fn<(cardId: string) => Promise<void>>(),
+  // Every host verb the inbox ran (hostApiMock).
+  verbs: [] as { verb: string; args: Record<string, unknown> }[],
 };
 
 export const accountMock = { accountClient: () => control.account() };
@@ -136,6 +138,23 @@ export const runnerMock = {
     return control.stop(cardId);
   },
 };
+// lib/host-api with its verbs handed to the runner mocks above, as the real handlers would (reply, answer, stop);
+// any other verb is only recorded in control.verbs.
+export async function hostApiMock(real: () => Promise<typeof import("./host-api")>) {
+  const { readQuestionReply } = await import("./question-reply");
+  return {
+    ...(await real()),
+    runVerb: async (verb: string, args: Record<string, unknown>) => {
+      control.verbs.push({ verb, args });
+      const a = args as { id: string; text: string; allow?: boolean; answers?: Record<string, string>; pendingId?: string };
+      if (verb === "card.message") runnerMock.sendUserMessage(a.id, a.text);
+      else if (verb === "card.permission.answer") runnerMock.answerPermission(a.id, a.allow === true, a.answers, a.pendingId, readQuestionReply(args));
+      else if (verb === "card.stop") await runnerMock.stop(a.id);
+      return { ok: true };
+    },
+  };
+}
+
 export const storeMock = {
   getCard: (id: string) => control.cards.get(id),
   updateCard: (id: string, patch: { readScope?: string[] }) => {
@@ -181,6 +200,7 @@ export function resetInbox() {
   control.answered.length = 0;
   control.allowed.length = 0;
   control.stopped.length = 0;
+  control.verbs.length = 0;
   vi.clearAllMocks();
 }
 

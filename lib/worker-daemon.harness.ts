@@ -8,7 +8,9 @@ import type { Recovered } from "./worker-recover";
 import type { Registry } from "./worker-registry";
 import type { Sealed } from "./worker-seal";
 import type { Card } from "./types";
+import type { CardMode } from "./worker-commands";
 import type { CloudCommandRow } from "./cloud-commands";
+import type { HostResult } from "./host-command";
 
 export const card = (over: Partial<Card> = {}): Card =>
   ({
@@ -49,17 +51,27 @@ export function fakeEngine(cards: Record<string, Card> = { "card-1": card() }) {
   const holding = vi.fn<Engine["holding"]>(() => []);
   const recover = vi.fn<() => Recovered>(() => ({ cut: [], stopped: [] }));
   const resume = vi.fn<() => void>();
-  const setMode = vi.fn<Engine["setMode"]>();
+  const setMode = vi.fn<(cardId: string, mode: CardMode) => void>();
   const input = vi.fn<Engine["input"]>(() => Promise.resolve());
   const receive = vi.fn<Engine["receive"]>((text) => Promise.resolve(text));
   const setQa = vi.fn<Engine["setQa"]>();
-  const engine: Engine = { start, reply, receive, answer, grant, stop, setMode, input, setQa, getCard, live, holding, recover, resume };
-  return { engine, start, reply, receive, answer, grant, stop, setMode, input, setQa, getCard, live, holding, recover, resume };
+  // The host verbs the old kinds alias, handed to the spies the tests read (reply, answer, stop, setMode); any other
+  // verb only records its call.
+  const host = vi.fn<Engine["host"]>(async (verb, args) => {
+    const a = args as { id: string; text: string; allow: boolean; answers?: Record<string, string>; pendingId: string; body?: { permissionMode?: CardMode } };
+    if (verb === "card.message") reply(a.id, a.text);
+    else if (verb === "card.permission.answer") answer(a.id, a.allow, a.answers, a.pendingId);
+    else if (verb === "card.stop") await stop(a.id);
+    else if (verb === "card.update" && a.body?.permissionMode) setMode(a.id, a.body.permissionMode);
+    return { ok: true };
+  });
+  const engine: Engine = { start, host, receive, grant, input, setQa, getCard, live, holding, recover, resume };
+  return { engine, start, host, reply, receive, answer, grant, stop, setMode, input, setQa, getCard, live, holding, recover, resume };
 }
 
 export function fakeReg() {
   const claim = vi.fn<(id: string) => Promise<boolean>>(() => Promise.resolve(true));
-  const report = vi.fn<(id: string, status: "done" | "failed", cardId: string | null, error: string | null) => Promise<void>>(
+  const report = vi.fn<(id: string, status: "done" | "failed", cardId: string | null, error: string | null, result?: HostResult) => Promise<void>>(
     () => Promise.resolve(),
   );
   const heartbeat = vi.fn<(status: "online" | "busy" | "offline") => Promise<void>>(() => Promise.resolve());

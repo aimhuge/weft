@@ -1,7 +1,8 @@
 // The host API: one handler per verb, each a plain function of its args, mounted by every host. The desktop's
-// Next server mounts it now (the routes under app/api/cards/[id]/ are thin wrappers over runVerb); the worker
-// daemon and the cloud inbox mount it next, through one generic `host` command whose verb is looked up in
-// HOST_API, so the table is also their allowlist. `elevated` on a handler is the guard() / elevated() split of
+// Next server mounts it (the routes under app/api/cards/[id]/ are thin wrappers over runVerb), and so do the worker
+// daemon and the cloud inbox, through one generic `host` command whose verb is looked up in HOST_API
+// (lib/host-command.ts), so the table is also their allowlist. Imports here are relative: the daemon runs under
+// jiti, which doesn't read the `@/` alias. `elevated` on a handler is the guard() / elevated() split of
 // lib/guard.ts, read from one place by every host. See docs/architecture/project-hosts.md.
 //
 // Each handler's module loads on its first call, so a route pulls in only the code its own verbs run.

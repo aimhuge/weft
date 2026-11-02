@@ -29,8 +29,12 @@ One worker per box, no worker picker on the board. The first box is a Mac mini (
 - **Enrolment:** `worker_enrol_token(org)` (a signed-in member, valid for an hour, once) → `worker_enrol(token, …)`
   returns the worker id and its key, written to `~/.weft-worker/worker.json` at mode 600.
 - **Commands:** `run` (`lib/worker-commands.ts`: a prompt, an optional git URL, a mode from default / acceptEdits /
-  auto / plan, never bypass), `mode` and `input` ([The live screen](#the-live-screen)), `clone` and the two sign-ins, `login` and `github_login`, and the web's `new_card`, `reply`,
-  `answer` and `stop` (`lib/worker-daemon.ts`). It hears a
+  auto / plan, never bypass), `mode` and `input` ([The live screen](#the-live-screen)), `clone` and the two sign-ins, `login` and `github_login`, the web's `new_card`, `reply`,
+  `answer` and `stop` (`lib/worker-daemon.ts`), and `host`: any verb of `lib/host-api` on a card it runs, `{ verb, args }`,
+  with `{ ok, cardId }` or `{ ok: false, error }` written to `cloud_commands.result` through `worker_report`'s `p_result`
+  ([project-hosts.md](project-hosts.md#transports)). `reply`, `answer`, `stop` and `mode` run as `card.message`,
+  `card.permission.answer`, `card.stop` and `card.update` (`lib/worker-card-commands.ts`, the `Engine`'s one `host`
+  method, bound to `runVerb` in `scripts/weft-worker.ts`); the folder grant and `CARD_MODES` stay checks there. It hears a
   [wake-up](#wake-ups) and reads `worker_pending` at once, with a poll as the backstop, because without a session
   Realtime's row filters show it nothing. It claims with `worker_claim`, which only matches a pending row, and
   heartbeats every 20 s.
@@ -640,7 +644,8 @@ Minimally, and in a way that keeps the web board working against a plain Mac unc
 ```
 
 The `run` kind carries a `Spec`-shaped payload (backend, model, repo and path, permission mode, skills, agent,
-read scope) plus the project identity. `reply`, `answer` and `stop` are reused verbatim.
+read scope) plus the project identity. `reply`, `answer` and `stop` are reused verbatim. Since H2 every card action
+also has the generic `host` kind ([project-hosts.md](project-hosts.md#transports)), and those three run as its verbs.
 
 The worker writes to the same tables the Mac writes to: `cloud_thread_items` for the thread, `cloud_tool_outputs`
 for cut tool results, `cloud_cards` for card state. Because `handle()` is the shared translator, the items are the

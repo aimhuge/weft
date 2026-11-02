@@ -5,7 +5,7 @@ import { readWorkerBoard, sendWorkerAction, workerThreadPage, workerToolOutput, 
 
 // Your Weft Workers' projects on the desktop board (lib/worker-board.ts): GET lists them with their cards, GET ?card=
 // reads a page of that card's thread (before= walks back), GET ?card=&tool= reads a full tool result, and POST sends
-// a reply, an answer, a stop, a mode or a tap as a cloud_commands row. A new thread goes through POST /api/cards like any other.
+// a reply, an answer, a stop, a mode, a tap or any host verb as a cloud_commands row. A new thread goes through POST /api/cards like any other.
 
 export async function GET(req: Request) {
   const denied = guard(req, { write: false });
@@ -27,6 +27,8 @@ export async function GET(req: Request) {
   }
 }
 
+const ELEVATED = new Set<WorkerAction["action"]>(["answer", "mode", "input", "qa", "host"]);
+
 export async function POST(req: Request) {
   const denied = guard(req);
   if (denied) return denied;
@@ -34,8 +36,9 @@ export async function POST(req: Request) {
     const body = (await req.json()) as WorkerAction;
     // An answer can allow a call or grant a folder, so it takes Weft's own window, like the local permission route:
     // a thread's curl must not approve its own prompt on a worker. A mode widens what a thread may do, and input drives
-    // the device, so they take it too, and Local Simulator runs a worker's build on this Mac.
-    const loose = body.action === "answer" || body.action === "mode" || body.action === "input" || body.action === "qa" ? elevated(req) : null;
+    // the device, so they take it too, and Local Simulator runs a worker's build on this Mac. A host verb can be any of
+    // those, so it always takes it: a cloud act is elevated by construction (docs/architecture/project-hosts.md).
+    const loose = ELEVATED.has(body.action) ? elevated(req) : null;
     if (loose) return loose;
     return Response.json(await sendWorkerAction(body));
   } catch (err) {

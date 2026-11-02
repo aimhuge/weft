@@ -1,11 +1,9 @@
 // A reply to the card: sent, ↑ edited, or restarted.
-import { sendToCopilot } from "@/lib/copilot";
-import { restartTurn } from "@/lib/restart";
-import { editLastMessage, sendUserMessage } from "@/lib/runner";
-import { getCard } from "@/lib/store";
-import { COPILOT_ID, type Card } from "@/lib/types";
+import { restartTurn } from "../restart";
+import { editLastMessage, sendUserMessage } from "../runner";
+import { getCard } from "../store";
+import { COPILOT_ID, type Card } from "../types";
 import type { MessageArgs } from "./calls";
-import { settle } from "./types";
 
 type CardReply = { card: Card | undefined };
 
@@ -14,13 +12,12 @@ function written(text: string | undefined): string {
   return text.trim();
 }
 
-export function sendMessageVerb({ id, text }: MessageArgs): Promise<CardReply> {
-  return settle(() => {
-    const message = written(text);
-    if (id === COPILOT_ID) sendToCopilot(message);
-    else sendUserMessage(id, message);
-    return { card: getCard(id) };
-  });
+// The copilot loads only when it is the one written to: it lives on the desktop, and a worker's daemon can't load it.
+export async function sendMessageVerb({ id, text }: MessageArgs): Promise<CardReply> {
+  const message = written(text);
+  if (id === COPILOT_ID) (await import("../copilot")).sendToCopilot(message);
+  else sendUserMessage(id, message);
+  return { card: getCard(id) };
 }
 
 // ↑ in the reply box: replaces your last message and the turn it started.

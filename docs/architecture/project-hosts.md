@@ -1,6 +1,7 @@
 # Project hosts: one code path for local and Worker projects
 
-Status: **design** (2026-11-01, merged with "one engine, two transports" 2026-11-02). Phase H1 is in progress. It follows on from [weft-worker.md](weft-worker.md#worker-projects-on-the-desktop-board),
+Status: **design** (2026-11-01, merged with "one engine, two transports" 2026-11-02). Phase H1 is in progress; H2 (the
+`host` command) is built ([below](#the-host-command-h2-as-built)). It follows on from [weft-worker.md](weft-worker.md#worker-projects-on-the-desktop-board),
 where a Worker project shows on the desktop board but most of what a local project gets drops out.
 
 ## The problem
@@ -34,7 +35,7 @@ engine: the daemon runs the same `lib/runner.ts`.
 | Show rail, editor | Board's open card | none: `WorkerOpenCard` is a separate layout |
 | Backlog | Backlog column | none |
 | Streaming | SSE | a 2.5 s poll |
-| weft.zip and the phone | | reply, answer, stop and new card only, through `cloud-inbox.ts` (a third dispatch) and the phone's own copy of the command shapes |
+| weft.zip and the phone | | reply, answer, stop and new card, and since H2 any verb as a `host` command (`cloud-inbox-cards.ts`, the same `runVerb`); the phone still has its own copy of the command shapes |
 
 
 ## The idea: a project has a host
@@ -115,6 +116,40 @@ Whether it's also a separate process is an implementation detail left for later 
 - **A direct channel later, for the screen and the terminal.** A pty or H.264 doesn't belong on Postgres rows.
   `tunnels.md` already opens a private address to a dev server; the same gate gives a worker's terminal a WebSocket.
   Until then, the terminal on a Worker is the one feature that says "not yet".
+
+### The `host` command (H2, as built)
+
+```
+board ── POST /api/worker-board {action:"host", cardId, verb, args} (elevated) ── hostCommand ──▶ cloud_commands
+                                                                 kind='host', payload {verb, args:{id, …}}
+worker daemon: claim ─▶ readHostCommand ─▶ ownCard ─▶ remoteRefusal ─▶ engine.host = runVerb ─▶ worker_report(…, p_result)
+Mac inbox:     claim ─▶ readHostCommand ─▶ macCard ─▶ approval rule  ─▶ runVerb               ─▶ update {status, result}
+```
+
+- **The row.** `lib/host-command.ts`: `hostCommand(target, verb, args)` builds it (null for a verb `isHostVerb` doesn't know;
+  `args.id` is always the target card), `readHostCommand` reads it back and throws "That request names no verb.", "This host
+  doesn't run X. Update it to the newest Weft." or "That request names no card.". A `card.message`, `card.message.edit` or
+  `card.fresh` carries its pasted files as `attachments`, like a reply (`textArgOf`).
+- **`result`** (`supabase/migrations/20261102094800_host_command.sql`) is `{ ok: true, cardId }` or `{ ok: false, error }`,
+  written beside `status` and `error`. Never the card: `cloud_cards` is sealed and `result` is plain jsonb, so the card
+  itself still travels through the publisher or the outbox. A worker writes it through `worker_report`'s new `p_result`
+  (default null, so a worker that predates it still reports); a Mac through its own session (`result` joined the update grant).
+- **Old kinds are aliases.** `reply` → `card.message`, `answer` → `card.permission.answer`, `stop` → `card.stop`, and on a
+  worker `mode` → `card.update { permissionMode }`, in `lib/worker-card-commands.ts` and `lib/cloud-inbox-cards.ts`. The wire
+  is unchanged and so is every error message; what only one host adds stays a check in front of the verb: the folder grant
+  on an answer, `CARD_MODES` and the Codex rule on a worker's `mode`, the Mac's folder, copilot and approval checks.
+- **Policy.** Only a command the worker's owner created is ever pending or claimable for it (`worker_pending`,
+  `worker_claim`), but anyone holding that account's session can insert one, so the database doesn't make a row trusted.
+  Both hosts therefore refuse, from the network, whatever widens what a card can touch (`remoteRefusal`): `card.shell`, and
+  a `card.update` that moves the card's folder (`cwd`), changes its agent or read scope, or skips permission prompts. Those
+  stay with Weft's own window, behind `elevated()`. The Mac also keeps its phone rule: a host `card.permission.answer` is
+  checked as an `answer` (a signature in `args.auth`), and any other verb `needsElevation` names is refused while a phone
+  is paired and the web may not approve, since the phone can't sign one yet. `result` is capped at 4 KB by a check
+  constraint. Found by a security review before H2 shipped.
+- **Desktop-only.** None of the 14 card verbs needs the desktop; the copilot does, so `card.message` loads `lib/copilot`
+  only for it, and both hosts refuse the copilot before the verb ("That thread isn't on this worker."). `lib/host-api` imports
+  relatively, because the daemon runs under jiti, which doesn't read the `@/` alias.
+- **Not yet:** the board's UI for it (H3), the inbox as an attachment receiver, the web composer as a sender.
 
 ## Security
 
@@ -212,8 +247,9 @@ Each ships on its own.
 
 1. **H1 card verbs into `host-api`.** The card routes become thin wrappers over `lib/host-api`, behaviour unchanged
    (in progress).
-2. **H2 the `host` command.** `kind = 'host'` with `{ verb, args }` and a `result` column; the daemon and `cloud-inbox.ts`
-   run `runVerb`, and `reply`, `answer`, `stop`, `mode` and `new_card` become aliases. **Attachments travel:** built ahead of
+2. **H2 the `host` command** (built 2026-11-02, [as built](#the-host-command-h2-as-built)). `kind = 'host'` with `{ verb, args }`
+   and a `result` column; the daemon and `cloud-inbox.ts` run `runVerb`, and `reply`, `answer`, `stop` and `mode` are aliases
+   (`new_card` waits for a `card.create` verb). **Attachments travel:** built ahead of
    H2 for the worker's kinds (`lib/attachment-transfer.ts`: `encodeAttachments` for a sender, `attachmentsOf` +
    `receiveAttachments` for a host, [weft-worker.md](weft-worker.md#worker-projects-on-the-desktop-board)); `host`
    calls the same two. Still open: sealing the blobs, `cloud-inbox.ts` as a receiver, the web composer as a sender.

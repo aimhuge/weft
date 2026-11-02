@@ -88,6 +88,14 @@ describe("registry", () => {
     ]);
   });
 
+  it("reports a host command's result as p_result", async () => {
+    const { rpc, calls } = fakeRpc();
+    await registry(rpc, key).report("cmd-1", "done", "card-1", null, { ok: true, cardId: "card-1" });
+    expect(calls).toEqual([
+      { fn: "worker_report", args: { p_key: key, p_command: "cmd-1", p_status: "done", p_card: "card-1", p_error: null, p_result: { ok: true, cardId: "card-1" } } },
+    ]);
+  });
+
   it("puts a card", async () => {
     const { rpc, calls } = fakeRpc();
     await registry(rpc, key).putCard("card-1", "weft", { id: "card-1" });

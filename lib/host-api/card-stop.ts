@@ -1,4 +1,4 @@
-import { stop } from "@/lib/runner";
+import { stop } from "../runner";
 import { OK, type Ok } from "./types";
 
 export async function stopCard({ id }: { id: string }): Promise<Ok> {

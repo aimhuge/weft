@@ -14,6 +14,7 @@ import { answerCommand, replyCommand, stopCommand, type GrantScope, type NewComm
 import { syncOrgId } from "./cloud-sync";
 import { BLOB_REF_PREFIX, THREAD_PAGE_SIZE } from "./cloud-sync-types";
 import { pageFromRows } from "./cloud-thread-page";
+import { hostCommand, textArgOf, type HostPayload } from "./host-command";
 import { DATA_DIR } from "./store";
 import type { ThreadPage } from "./thread-page";
 import type { Card, PermissionMode, QuestionReply } from "./types";
@@ -164,7 +165,9 @@ export type WorkerAction =
   | { action: "stop"; cardId: string }
   | { action: "mode"; cardId: string; mode: PermissionMode }
   | { action: "input"; cardId: string; input: BoardInput }
-  | { action: "qa"; cardId: string; device: string | null };
+  | { action: "qa"; cardId: string; device: string | null }
+  // Any verb in lib/host-api (lib/host-command.ts), for the board to reach every verb a worker runs.
+  | { action: "host"; cardId: string; verb: string; args?: Record<string, unknown> };
 
 // A WebRTC offer goes out sealed to the worker's published key: only that worker can answer it, and the answer comes
 // back under the board's one-time key, so the board knows who it reached (weft-worker.md#the-fast-path).
@@ -182,11 +185,22 @@ async function qaCommand(client: SupabaseClient, target: Awaited<ReturnType<type
   return switchQa(cardId, device, { ...target, workerName: data?.name ?? "your worker" });
 }
 
+// A host verb's row, with the files its typed text pastes, as a reply's (lib/attachment-transfer.ts).
+async function hostRow(client: SupabaseClient, target: Awaited<ReturnType<typeof commandTarget>>, body: Extract<WorkerAction, { action: "host" }>, dir: string) {
+  const row = hostCommand(target, body.verb, body.args);
+  if (!row) throw new Error(`A worker doesn't run ${body.verb}.`);
+  const { verb, args } = row.payload as HostPayload;
+  const field = textArgOf(verb);
+  const typed = field ? args[field] : undefined;
+  return typeof typed === "string" ? withAttachments(client, row, typed, dir) : row;
+}
+
 // A reply, an answer or a Stop from the desktop: the same rows the web board sends. A command for an offline worker
 // waits in the queue until it's back, and the thread says so.
 export async function sendWorkerAction(body: WorkerAction, client: SupabaseClient = accountClient(), dir = ATTACHMENTS): Promise<{ commandId: string }> {
   const target = await commandTarget(client, body.cardId);
   if (body.action === "qa") return insert(client, await qaCommand(client, target, body.cardId, body.device));
+  if (body.action === "host") return insert(client, await hostRow(client, target, body, dir));
   if (body.action === "stop") return insert(client, stopCommand(target));
   if (body.action === "mode" || body.action === "input") {
     const row = body.action === "mode" ? modeCommand(target, body.mode) : inputCommand(target, await inputFor(client, target.workerId, body.input));

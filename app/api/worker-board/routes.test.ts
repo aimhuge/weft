@@ -111,7 +111,11 @@ describe("POST /worker-board", () => {
     expect(board.sendWorkerAction).toHaveBeenCalledWith({ action: "reply", cardId: "c1", text: "hello" });
   });
 
-  it.each([{ action: "mode", cardId: "c1", mode: "auto" }, { action: "input", cardId: "c1", input: { kind: "tap", device: "d", x: 0, y: 0 } }])("takes $action only from Weft's own window", async (body) => {
+  it.each([
+    { action: "mode", cardId: "c1", mode: "auto" },
+    { action: "input", cardId: "c1", input: { kind: "tap", device: "d", x: 0, y: 0 } },
+    { action: "host", cardId: "c1", verb: "card.message", args: { text: "hi" } },
+  ])("takes $action only from Weft's own window", async (body) => {
     guard.elevated = Response.json({ error: "Needs the launch token" }, { status: 403 });
     const res = await route.POST(post(body));
     expect(res.status).toBe(403);
