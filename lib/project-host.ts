@@ -17,12 +17,14 @@ import type { Backend, Card, QuestionReply } from "./types";
 import { localToolSource, type ToolResultSource } from "./use-tool-result";
 import type { ActResult } from "./worker-acts";
 import { actOnWorker, workerToolSource, workerTransport } from "./worker-transport";
-import { isWorkerProject } from "./worker-project";
+import { isWorkerProject, parseWorkerProject } from "./worker-project";
 
 // This Mac's own features, which another host offers only once it has a verb or a stream for them. `files` is the
 // editor and the thread's file links (H4), `shots` the show rail's page pictures (lib/page-shots.ts), `pane` the native
 // browser pane; `folder`, `agent` and `shell` widen what a card can touch, so a remote host refuses them from the network.
-export type HostFeature = "files" | "shots" | "pane" | "folder" | "agent" | "shell" | "skills" | "share" | "delete" | "login" | "vault" | "dev";
+// `skills` is the skill set chip (which skills a card gets); the "/" list is the transport's listSkills on every host.
+// `schedule` is Send later, which both hosts hold the timer for (card.schedule).
+export type HostFeature = "files" | "shots" | "pane" | "folder" | "agent" | "shell" | "skills" | "share" | "delete" | "login" | "vault" | "dev" | "schedule";
 
 export interface ProjectHost {
   kind: "local" | "cloud";
@@ -61,6 +63,9 @@ const LOCAL: Record<HostVerb, LocalCall> = {
   "card.switchBackend": (a) => api.switchBackend(a.id, a.backend as Backend, ...given(a.replay as boolean | undefined, a.model as string | undefined)),
   "card.rerunModel": (a) => api.rerunModel(a.id, text(a.model)),
   "card.stopTask": (a) => api.stopTask(a.id, text(a.taskId)),
+  "card.schedule": (a) => api.schedule(a.id, text(a.text), Number(a.at)),
+  "card.unschedule": (a) => api.unschedule(a.id, text(a.messageId)),
+  "skills.list": (a) => call("GET", `/api/skills?card=${encodeURIComponent(a.id)}`),
 };
 
 export const localHost: ProjectHost = {
@@ -76,7 +81,7 @@ export const localHost: ProjectHost = {
 };
 
 // What a Worker has today: its cards' own verbs, the thread and its pages. Not this Mac's files, pane, vault or CLIs.
-const CLOUD_FEATURES = new Set<HostFeature>([]);
+const CLOUD_FEATURES = new Set<HostFeature>(["schedule"]);
 
 export const cloudHost: ProjectHost = {
   kind: "cloud",
@@ -93,3 +98,11 @@ export function hostFor(project: string | null | undefined): ProjectHost {
 }
 
 export const hostOf = (card: Pick<Card, "cwd">) => hostFor(card.cwd);
+
+// The cards whose plan readings say when the card's own CLI plan resets (Send later's default times, lib/schedule.ts):
+// on this Mac every card, as always; on a worker only that worker's, which run on its own sign-in, not this Mac's.
+export function sameHostCards(cards: Card[], card: Pick<Card, "cwd">): Card[] {
+  const worker = parseWorkerProject(card.cwd)?.workerId;
+  if (!worker) return cards;
+  return cards.filter((c) => parseWorkerProject(c.cwd)?.workerId === worker);
+}

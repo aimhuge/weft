@@ -1,16 +1,20 @@
 import { connection } from "next/server";
-import { fail, guard } from "@/lib/guard";
+import { guard } from "@/lib/guard";
+import { hostFail, runVerb } from "@/lib/host-api";
 import { listSkills } from "@/lib/skills";
 
-// The skills a thread can run: Weft's own, yours in ~/.claude/skills, and with ?cwd= that folder's.
+// The skills a thread can run: Weft's own, yours in ~/.claude/skills, and with ?cwd= that folder's. With ?card=, the
+// card's own folder's, as the skills.list verb (lib/host-api) a worker runs for its cards.
 export async function GET(req: Request) {
   const denied = guard(req, { write: false });
   if (denied) return denied;
   await connection();
   try {
-    const cwd = new URL(req.url).searchParams.get("cwd") || undefined;
-    return Response.json({ skills: listSkills(cwd) });
+    const params = new URL(req.url).searchParams;
+    const card = params.get("card");
+    if (card) return Response.json(await runVerb("skills.list", { id: card }));
+    return Response.json({ skills: listSkills(params.get("cwd") || undefined) });
   } catch (err) {
-    return fail(err);
+    return hostFail(err);
   }
 }

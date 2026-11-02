@@ -60,11 +60,12 @@ function afterRestartIsAfterTurn(card: Card) {
 
 // Once per server process. How often the server looks for scheduled messages whose time has come.
 // A Mac that slept past one sends it on the first check after waking; a Weft that was closed, on
-// the first after starting.
-export function startScheduler() {
+// the first after starting. A Weft Worker's daemon runs it too, for Send later on its cards, without
+// the briefs: baking one is a model call, which a worker leaves until a card asks for Send fresh.
+export function startScheduler({ briefs = true }: { briefs?: boolean } = {}) {
   // The first check looks only for due messages; the briefs are baked after that, on the interval.
   startClock("schedule", () => {
     sendDueMessages();
-    prebakeBriefs();
+    if (briefs) prebakeBriefs();
   }, { first: () => sendDueMessages() });
 }

@@ -187,4 +187,14 @@ describe("startScheduler", () => {
     // Each tick also writes the briefs of cards whose cache is about to lapse (lib/splice.ts).
     expect(prebakeBriefs).toHaveBeenCalledTimes(1);
   });
+
+  it("leaves the briefs out on a worker, and still sends what's due", () => {
+    vi.useFakeTimers({ now: NOW });
+    vi.mocked(prebakeBriefs).mockClear();
+    card("a", { scheduled: [{ id: "1", text: "soon", at: NOW + 10_000 }] });
+    startScheduler({ briefs: false });
+    vi.advanceTimersByTime(15_000);
+    expect(sent).toEqual([["a", "soon"]]);
+    expect(prebakeBriefs).not.toHaveBeenCalled();
+  });
 });

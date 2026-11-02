@@ -78,9 +78,11 @@ function Plan({ backend, reading, named }: { backend: Backend; reading: Pick<Car
 // The plan limits: the open card's CLI's plan, or every CLI's when no card is open. Each CLI has its own
 // plan (lib/plan-pools.ts), so a card reads the windows of the CLI it actually runs on; they come from the
 // limits log (lib/use-plan-limits.ts), and where that isn't there (the web board), the card's own last
-// reading stands in.
-function Plans({ backend, stats }: { backend?: Backend; stats?: CardStats }) {
-  const plans = usePlanLimits(limitKey(stats));
+// reading stands in. A card on another machine (`own`: a worker's) always reads its own: that machine's CLI
+// reported it, on that machine's sign-in, and this Mac's log would show the wrong plan.
+function Plans({ backend, stats, own }: { backend?: Backend; stats?: CardStats; own?: boolean }) {
+  const logged = usePlanLimits(own ? undefined : limitKey(stats));
+  const plans = own ? null : logged;
   const shown: [Backend, Pick<CardStats, "fiveHour" | "sevenDay"> | undefined][] = plans
     ? backend
       ? [[backend, plans[backend]]]
@@ -155,6 +157,7 @@ export default function StatusStrip({
   stats,
   cwd,
   backend,
+  cardLimits = false,
   className = "",
 }: {
   // The open card's numbers; leave out when no card is open.
@@ -162,6 +165,8 @@ export default function StatusStrip({
   cwd?: string;
   // Which CLI the thread runs on (or the New thread dialog will start), whose plan the strip shows.
   backend?: Backend;
+  // The plan limits are the card's own reading, from the machine that runs it, not this Mac's limits log.
+  cardLimits?: boolean;
   className?: string;
 }) {
   return (
@@ -183,7 +188,7 @@ export default function StatusStrip({
             tok:{formatTokens(stats.tokens)}
           </Tip>
         )}
-        <Plans backend={backend} stats={stats} />
+        <Plans backend={backend} stats={stats} own={cardLimits} />
       </div>
     </div>
   );

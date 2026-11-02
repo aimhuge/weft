@@ -1,30 +1,28 @@
-import { fail, guard } from "@/lib/guard";
-import { scheduleMessage, unscheduleMessage } from "@/lib/scheduler";
+import { guard } from "@/lib/guard";
+import { hostFail, runVerb } from "@/lib/host-api";
 
-// Queue a message to send at a set time: { text, at } with at in unix ms.
+// Queue a message to send at a set time: { text, at } with at in unix ms. The card.schedule verb (lib/host-api).
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const denied = guard(req);
   if (denied) return denied;
   const { id } = await params;
   try {
     const { text, at } = (await req.json()) as { text?: string; at?: number };
-    if (!text?.trim()) throw new Error("Write a message first.");
-    return Response.json({ card: scheduleMessage(id, text.trim(), Number(at)) });
+    return Response.json(await runVerb("card.schedule", { id, text, at }));
   } catch (err) {
-    return fail(err);
+    return hostFail(err);
   }
 }
 
-// Take a scheduled message back: { messageId }.
+// Take a scheduled message back: { messageId }. The card.unschedule verb.
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const denied = guard(req);
   if (denied) return denied;
   const { id } = await params;
   try {
     const { messageId } = (await req.json()) as { messageId?: string };
-    if (!messageId) throw new Error("Which message?");
-    return Response.json({ card: unscheduleMessage(id, messageId) });
+    return Response.json(await runVerb("card.unschedule", { id, messageId }));
   } catch (err) {
-    return fail(err);
+    return hostFail(err);
   }
 }

@@ -3,31 +3,26 @@
 // feature. The board builds the row (hostCommand), the host reads it back (readHostCommand) and runs it with runVerb,
 // then writes what came of it to the row's `result` (hostResult). The verb is looked up in HOST_API, so the table is
 // the allowlist: a row can't name a verb the host doesn't have.
+import { isBang } from "./bang";
 import type { CloudCommandRow, NewCommand } from "./cloud-commands";
 import { isHostVerb, type HostVerb } from "./host-api";
+import { hostRow, type CardTarget, type HostPayload } from "./host-row";
+import { fitSkills, type SkillsOnWire } from "./skills-wire";
+import type { SkillInfo } from "./types";
 
-// args always name the card the verb acts on; the rest is the verb's own (lib/host-api/calls.ts).
-export type HostArgs = Record<string, unknown> & { id: string };
-
-export interface HostPayload {
-  verb: HostVerb;
-  args: HostArgs;
-}
+export type { CardTarget, HostArgs, HostPayload } from "./host-row";
 
 // What a host writes to `result`. Never the card or its thread: those travel sealed (cloud_cards, the outbox), and
-// the row is plain jsonb, so it says only whether the verb ran and which card it touched.
-export type HostResult = { ok: true; cardId: string } | { ok: false; error: string };
-
-type CardTarget = { orgId: string; device: string; folder: string; cardId: string };
+// the row is plain jsonb, so it says whether the verb ran and which card it touched, plus what a read verb answers
+// (RESULTS below), kept small enough for the column's 4 KB cap.
+export type HostResult = ({ ok: true; cardId: string } & Partial<SkillsOnWire>) | { ok: false; error: string };
 
 const isObject = (v: unknown): v is Record<string, unknown> => Boolean(v) && typeof v === "object" && !Array.isArray(v);
 
 // The row a board inserts to run one verb on the host a card runs on. args.id is always the target's card, so a row
 // can't be addressed to one card and act on another. Null for a verb no host runs.
 export function hostCommand(target: CardTarget, verb: string, args: Record<string, unknown> = {}): NewCommand | null {
-  if (!isHostVerb(verb)) return null;
-  const payload: HostPayload = { verb, args: { ...args, id: target.cardId } };
-  return { org_id: target.orgId, kind: "host", target_device: target.device, folder: target.folder, payload };
+  return isHostVerb(verb) ? hostRow(target, verb, args) : null;
 }
 
 // A host command as a host reads it off the network: a verb it runs and args that name a card, or an error that says
@@ -51,8 +46,13 @@ export function readHostCommand(command: Pick<CloudCommandRow, "payload">): Host
 // or a wider read scope only come from Weft's own window, where the local routes check elevated().
 const WIDENING_FIELDS = ["cwd", "agent", "readScope"] as const;
 
+const SHELL_REFUSED = "A shell command only runs from Weft's own window, not from the web.";
+
 export function remoteRefusal({ verb, args }: HostPayload): string | null {
-  if (verb === "card.shell") return "A shell command only runs from Weft's own window, not from the web.";
+  if (verb === "card.shell") return SHELL_REFUSED;
+  // A scheduled message is sent as a reply when its time comes, never run, but a "!" one would read as a command
+  // waiting to run, so the network can't leave one on a card at all.
+  if (verb === "card.schedule" && typeof args.text === "string" && isBang(args.text)) return SHELL_REFUSED;
   const body = verb === "card.update" ? (args.body as Record<string, unknown> | undefined) : undefined;
   if (!body) return null;
   if (body.permissionMode === "bypassPermissions") return "A request from the web can't skip permission prompts. Pick that mode on the Mac.";
@@ -70,10 +70,21 @@ export const isHostDone = (done: unknown): done is HostDone => Boolean(done) && 
 
 // What a verb's reply comes to in `result`: the card it touched, never the card itself.
 export const hostResult = (cardId: string): HostResult => ({ ok: true, cardId });
+
+// The verbs a board runs for their answer, and the part of it that goes in `result`.
+const RESULTS: Partial<Record<HostVerb, (reply: unknown) => SkillsOnWire>> = {
+  "skills.list": (reply) => fitSkills((reply as { skills?: SkillInfo[] } | undefined)?.skills ?? []),
+};
+
+// `result` for a verb that ran: the card, and for a read verb its answer.
+export function verbResult(verb: HostVerb, cardId: string, reply: unknown): HostResult {
+  const answer = RESULTS[verb];
+  return answer ? { ...hostResult(cardId), ...answer(reply) } : hostResult(cardId);
+}
 export const hostFailure = (error: string): HostResult => ({ ok: false, error });
 
 // The verbs whose text a person typed, and so may paste files (lib/attachment-transfer.ts): the arg that holds it.
-const TEXT_ARGS: Partial<Record<HostVerb, string>> = { "card.message": "text", "card.message.edit": "text", "card.fresh": "message" };
+const TEXT_ARGS: Partial<Record<HostVerb, string>> = { "card.message": "text", "card.message.edit": "text", "card.fresh": "message", "card.schedule": "text" };
 
 export function textArgOf(verb: HostVerb): string | undefined {
   return TEXT_ARGS[verb];

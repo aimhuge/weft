@@ -9,14 +9,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const fetchMock = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>();
 vi.mock("./api-client", () => ({ apiFetch: (url: string, init?: RequestInit) => fetchMock(url, init) }));
 
-const { ACT_WAIT, actOnWorker, postWorkerAction, useWorkerQueued } = await import("./worker-acts");
+const { ACT_WAIT, actOnWorker, askWorker, postWorkerAction, useWorkerQueued } = await import("./worker-acts");
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 const posts = () => fetchMock.mock.calls.filter(([, init]) => init?.method === "POST").map(([, init]) => JSON.parse(init!.body as string) as unknown);
 const reads = () => fetchMock.mock.calls.filter(([url]) => url.startsWith("/api/workers?command=")).length;
 
 // The worker's answers to each read of the command, in turn; the last one repeats.
-function worker(...statuses: { status: string; error?: string | null }[]) {
+function worker(...statuses: { status: string; error?: string | null; result?: unknown }[]) {
   fetchMock.mockImplementation((url) => {
     if (!url.startsWith("/api/workers")) return Promise.resolve(json({ commandId: "cmd-1" }));
     const next = statuses.length > 1 ? statuses.shift()! : statuses[0]!;
@@ -125,6 +125,32 @@ describe("actOnWorker", () => {
     worker({ status: "done" });
     await Promise.all([actOnWorker("card.update", { id: "c8", body: { starred: true } }), actOnWorker("card.update", { id: "c8", body: { starred: false } })]);
     expect(posts()).toHaveLength(2);
+  });
+});
+
+describe("askWorker", () => {
+  it("runs a read verb and answers with what the worker wrote to the row", async () => {
+    worker({ status: "claimed" }, { status: "done", result: { ok: true, cardId: "c1", skills: [] } });
+    await expect(askWorker("skills.list", { id: "c1" })).resolves.toEqual({ ok: true, cardId: "c1", skills: [] });
+    expect(posts()).toEqual([{ action: "host", cardId: "c1", verb: "skills.list", args: { id: "c1" } }]);
+  });
+
+  it("rejects with the worker's refusal", async () => {
+    worker({ status: "failed", error: "No such card." });
+    await expect(askWorker("skills.list", { id: "c1" })).rejects.toThrow("No such card.");
+  });
+
+  it("gives up on a worker that doesn't answer, rather than queue a read", async () => {
+    vi.useFakeTimers();
+    worker({ status: "pending" });
+    const asked = expect(askWorker("skills.list", { id: "c1" })).rejects.toThrow("Your worker didn't answer.");
+    await vi.advanceTimersByTimeAsync(ACT_WAIT.unclaimed + 4_000);
+    await asked;
+  });
+
+  it("fails a send that made no command", async () => {
+    fetchMock.mockResolvedValueOnce(json({}));
+    await expect(askWorker("skills.list", { id: "c1" })).rejects.toThrow("Your worker didn't take that.");
   });
 });
 

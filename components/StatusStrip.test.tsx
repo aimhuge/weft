@@ -92,4 +92,12 @@ describe("StatusStrip", () => {
     render(<StatusStrip />);
     expect(keys.at(-1)).toBeUndefined();
   });
+
+  it("shows a worker card's own reading, never this Mac's limits log, and doesn't ask the log to reload", () => {
+    plans = { claude: CLAUDE };
+    expect(text(<StatusStrip backend="claude" stats={{ fiveHour: { used: 70 } }} cardLimits />)).toBe("[claude]5hr:30%");
+    expect(keys.at(-1)).toBeUndefined();
+    cleanup();
+    expect(text(<StatusStrip backend="claude" stats={{ fiveHour: { used: 70 } }} />)).toBe("[claude]5hr:84%7d:85%");
+  });
 });

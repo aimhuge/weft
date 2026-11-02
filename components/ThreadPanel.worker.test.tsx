@@ -11,7 +11,7 @@ import { workerTransport } from "@/lib/worker-transport";
 import { makeCard } from "./test-utils";
 import ThreadPanel from "./ThreadPanel";
 
-const api = vi.hoisted(() => ({ skills: vi.fn(() => Promise.resolve({ skills: [] })), switchBackend: vi.fn() }));
+const api = vi.hoisted(() => ({ skills: vi.fn(() => Promise.resolve({ skills: [] })), switchBackend: vi.fn(), schedule: vi.fn() }));
 vi.mock("@/lib/client", () => ({ api }));
 vi.mock("./Composer", () => import("./composer-mock"));
 vi.mock("@/lib/use-events", () => ({ useBoardEvents: () => {} }));
@@ -21,17 +21,18 @@ vi.mock("@/lib/api-client", () => ({ API_HEADERS: {}, apiFetch: (url: string, in
 const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
 const card = makeCard({ cwd: "worker://w1/ling", backend: "claude", model: "claude-opus-5-5", tags: [] });
 
-function renderWorkerPanel() {
+function renderWorkerPanel(shown = card) {
   const handlers = { onSend: vi.fn(() => Promise.resolve()), onAnswer: vi.fn(), onRename: vi.fn(), onMode: vi.fn(), onClose: vi.fn(), onStar: vi.fn(), onTags: vi.fn(), onArchive: vi.fn() };
   render(
     <ThreadTransportContext.Provider value={workerTransport}>
-      <ThreadPanel card={card} items={[]} streaming="" {...handlers} />
+      <ThreadPanel card={shown} items={[]} streaming="" {...handlers} />
     </ThreadTransportContext.Provider>,
   );
   return handlers;
 }
 
 beforeEach(() => {
+  localStorage.clear();
   fetchMock.mockReset();
   fetchMock.mockImplementation((url) => {
     if (url.startsWith("/api/workers")) return Promise.resolve(json({ status: "done", error: null }));
@@ -81,5 +82,19 @@ describe("a worker card's header", () => {
     const posted = fetchMock.mock.calls.filter(([url, init]) => url === "/api/worker-board" && init?.method === "POST").map(([, init]) => JSON.parse(init!.body as string) as unknown);
     expect(posted).toEqual([{ action: "host", cardId: "c1", verb: "card.switchBackend", args: { id: "c1", backend: "puku", replay: false, model: "puku-ai-2.7" } }]);
     expect(api.switchBackend).not.toHaveBeenCalled();
+  });
+});
+
+describe("a worker card's reply box", () => {
+  it("offers Send later, and schedules on the worker that holds the timer, not this Mac", async () => {
+    // A card with a session: one without starts fresh, which has no Send later (lib/reply-mode.ts).
+    renderWorkerPanel({ ...card, sessionId: "s-1" });
+    await userEvent.type(screen.getByRole("textbox", { name: "Message" }), "Run the nightly");
+    await userEvent.click(screen.getByRole("button", { name: "More ways to send" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: /Send later/ }));
+    await userEvent.click(screen.getByRole("button", { name: /In 1 hour/ }));
+    const posted = fetchMock.mock.calls.filter(([url, init]) => url === "/api/worker-board" && init?.method === "POST").map(([, init]) => JSON.parse(init!.body as string) as { verb: string; args: { text: string; at: number } });
+    expect(posted).toEqual([{ action: "host", cardId: "c1", verb: "card.schedule", args: { id: "c1", text: "Run the nightly", at: expect.any(Number) as number } }]);
+    expect(api.schedule).not.toHaveBeenCalled();
   });
 });

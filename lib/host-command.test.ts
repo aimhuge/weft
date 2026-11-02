@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CloudCommandRow } from "./cloud-commands";
-import { hostCommand, hostFailure, hostResult, isHostDone, readHostCommand, remoteRefusal, textArgOf } from "./host-command";
+import { hostCommand, hostFailure, hostResult, isHostDone, readHostCommand, remoteRefusal, textArgOf, verbResult } from "./host-command";
 
 const target = { orgId: "org-1", device: "worker:w-1", folder: "weft", cardId: "card-1" };
 const read = (payload: unknown) => readHostCommand({ payload } as Pick<CloudCommandRow, "payload">);
@@ -65,6 +65,18 @@ describe("remoteRefusal", () => {
     expect(remoteRefusal({ verb: "card.update", args: { id: "c" } })).toBeNull();
     expect(remoteRefusal({ verb: "card.stop", args: { id: "c" } })).toBeNull();
   });
+
+  it("lets Send later and the skills list through, but never a scheduled \"!\" command", () => {
+    expect(remoteRefusal({ verb: "card.schedule", args: { id: "c", text: "ship it", at: 1 } })).toBeNull();
+    expect(remoteRefusal({ verb: "card.schedule", args: { id: "c", at: 1 } })).toBeNull();
+    expect(remoteRefusal({ verb: "card.unschedule", args: { id: "c", messageId: "m" } })).toBeNull();
+    expect(remoteRefusal({ verb: "skills.list", args: { id: "c" } })).toBeNull();
+    for (const text of ["!rm -rf ~", "  !ls", "\\!ls"]) {
+      expect(remoteRefusal({ verb: "card.schedule", args: { id: "c", text, at: 1 } })).toMatch(/shell command only runs from Weft's own window/);
+    }
+    // A pasted picture starts with "![", which is a message, not a command.
+    expect(remoteRefusal({ verb: "card.schedule", args: { id: "c", text: "![shot](/a.png)", at: 1 } })).toBeNull();
+  });
 });
 
 describe("results and typed text", () => {
@@ -80,6 +92,17 @@ describe("results and typed text", () => {
     expect(textArgOf("card.message")).toBe("text");
     expect(textArgOf("card.message.edit")).toBe("text");
     expect(textArgOf("card.fresh")).toBe("message");
+    expect(textArgOf("card.schedule")).toBe("text");
     expect(textArgOf("card.stop")).toBeUndefined();
+  });
+
+  it("adds a read verb's answer to the result, fitted to the column, and nothing for the rest", () => {
+    expect(verbResult("card.stop", "c", { ok: true })).toEqual({ ok: true, cardId: "c" });
+    expect(verbResult("skills.list", "c", { skills: [{ name: "ship", description: "Ship it", source: "project" }] })).toEqual({
+      ok: true,
+      cardId: "c",
+      skills: [["ship", "Ship it", "project"]],
+    });
+    expect(verbResult("skills.list", "c", undefined)).toEqual({ ok: true, cardId: "c", skills: [] });
   });
 });

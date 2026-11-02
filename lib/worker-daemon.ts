@@ -65,6 +65,9 @@ export interface DaemonDeps {
   presence?: (hooks: PresenceHooks) => Presence;
   // Joins the topic a push to main pings (lib/worker-wake.ts listenForPushes).
   listenForPushes?: (hooks: WakeHooks) => () => void;
+  // Runs once recovery has settled (published, resumed, or failed): the timed work that may start a turn, like Send
+  // later's scheduler, so a message that fell due while the worker was down can't race a card about to be resumed.
+  onRecovered?: () => void;
   // Calls back when a card changes, so a held update can go the moment the last one ends.
   onCardChange?: (listener: () => void) => () => void;
   // Keeps this box on the newest Weft (lib/worker-update.ts). Absent when it's switched off, or not the worker's clone.
@@ -296,7 +299,10 @@ export function createDaemon(deps: DaemonDeps) {
 
   // Starts the loops; the returned stop says the worker is offline on the way out.
   function start(): () => Promise<void> {
-    recovering = recover().finally(() => (recovering = null));
+    recovering = recover().finally(() => {
+      recovering = null;
+      deps.onRecovered?.();
+    });
     beat.start();
     void poll();
     void publishGithub(deps.github.status);

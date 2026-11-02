@@ -111,7 +111,8 @@ export function ThreadReply({ card, show, live, placeholder, question, schedulin
   const { shell } = transport;
   const { fresh } = transport;
   const pilot = card.role === "copilot";
-  const status = pilot ? <BackendPicker card={card} up /> : <StatusStrip stats={card.stats} cwd={card.cwd} backend={card.backend} />;
+  // Off this Mac (a worker's card, weft.zip) the plan limits are the card's own, from the CLI that runs it there.
+  const status = pilot ? <BackendPicker card={card} up /> : <StatusStrip stats={card.stats} cwd={card.cwd} backend={card.backend} cardLimits={!transport.desktop} />;
   if (!show) return <div className="shrink-0 border-t border-line px-4 py-1.5">{status}</div>;
   return (
     <ReplyBox key={card.id} question={question} cardId={card.id} cwd={card.cwd} live={live} placeholder={placeholder} suggestion={card.suggestion}

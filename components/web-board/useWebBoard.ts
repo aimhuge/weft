@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createBrowserClient } from "@supabase/ssr";
 import type { RealtimeChannel, SupabaseClient } from "@supabase/supabase-js";
-import { answerCommand, newCardCommand, replyCommand, stopCommand, type CloudCommandRow, type GrantScope, type NewCardForm, type NewCommand } from "@/lib/cloud-commands";
+import { answerCommand, newCardCommand, replyCommand, type CloudCommandRow, type GrantScope, type NewCardForm, type NewCommand } from "@/lib/cloud-commands";
 import { BLOB_BUCKET, type CloudCardRow, type CloudThreadItemRow } from "@/lib/cloud-sync-types";
 import type { CloudItemChange } from "@/lib/cloud-thread-page";
 import { SUPABASE_KEY, SUPABASE_URL } from "@/lib/supabase-project";
@@ -244,10 +244,10 @@ export function useWebBoard({ orgId, userId, initialCommands, initialCards, open
   useEffect(() => {
     latest.current = cards;
   });
-  const stopRow = useCallback(
-    (cardId: string): NewCommand | string => {
+  const target = useCallback(
+    (cardId: string) => {
       const row = latest.current.find((c) => c.card_id === cardId);
-      return row ? stopCommand({ orgId, device: row.owner_device, folder: row.folder, cardId }) : "That thread isn't on the board anymore.";
+      return row ? { orgId, device: row.owner_device, folder: row.folder, cardId } : "That thread isn't on the board anymore.";
     },
     [orgId],
   );
@@ -255,7 +255,7 @@ export function useWebBoard({ orgId, userId, initialCommands, initialCards, open
     const sentRow = await sendCommand(row);
     return typeof sentRow === "string" ? sentRow : null;
   }, [sendCommand]);
-  const transport = useCloudTransport({ client, orgId, bus, stopCommand: stopRow, sendCommand: send });
+  const transport = useCloudTransport({ client, orgId, bus, target, sendCommand });
 
   // Answers the card's waiting permission request or question on the Mac that runs it, as if clicked there. Resolves
   // like startCard; how it went shows under the reply box.

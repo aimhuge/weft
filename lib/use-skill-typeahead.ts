@@ -2,11 +2,13 @@
 
 // The Composer's "/" typeahead: tracks the slash query at the cursor, fetches the folder's skills
 // the first time the query opens, and exposes the active row, the suggestions, and the dismiss state.
+// The skills come from the thread's transport (lib/thread-transport.ts listSkills), so a worker card's list is its
+// worker's, for the card's checkout there; outside a thread the transport is this Mac's.
 import { useEffect, useState } from "react";
 import { useEditorState, type Editor } from "@tiptap/react";
-import { api } from "./client";
 import { slashAtCursor, type SlashQuery } from "./composer-slash";
 import { rankSkills } from "./skill-rank";
+import { useThreadTransport } from "./thread-transport";
 import type { SkillInfo } from "./types";
 
 export interface UseSkillTypeahead {
@@ -19,7 +21,8 @@ export interface UseSkillTypeahead {
   typeaheadOpen: boolean;
 }
 
-export function useSkillTypeahead(editor: Editor | null, cwd: string | undefined): UseSkillTypeahead {
+export function useSkillTypeahead(editor: Editor | null, cwd: string | undefined, cardId?: string): UseSkillTypeahead {
+  const { listSkills } = useThreadTransport();
   // The current slash query, watched through TipTap's useEditorState so we don't rerender on every keystroke.
   const query = useEditorState({
     editor,
@@ -33,16 +36,16 @@ export function useSkillTypeahead(editor: Editor | null, cwd: string | undefined
 
   const wantsSkills = query !== null;
   useEffect(() => {
-    if (!wantsSkills) return;
+    if (!wantsSkills || !listSkills) return;
     let ignore = false;
-    api.skills(cwd).then(
-      (r) => !ignore && setSkills(r.skills),
+    listSkills(cardId, cwd).then(
+      (list) => !ignore && setSkills(list),
       () => {},
     );
     return () => {
       ignore = true;
     };
-  }, [wantsSkills, cwd]);
+  }, [wantsSkills, cwd, cardId, listSkills]);
 
   // Clear dismissal when the slash query goes away.
   if (!query && dismissedAt !== null) setDismissedAt(null);

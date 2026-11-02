@@ -205,7 +205,7 @@ export function WebBoard({ orgId, orgSlug, userId, user, orgs, initialCommands, 
             seed={active.card_id === openCardId ? seed : []}
             shown={shown}
             readOnly={!canReply(active, userId)}
-            footer={<WebReplyStatus card={active.card} canReply={canReply(active, userId)} replies={cardReplies(board.commands, active.card_id)} onDrop={(id) => void board.dropCommand(id)} />}
+            footer={<WebReplyStatus canReply={canReply(active, userId)} replies={cardReplies(board.commands, active.card_id)} onDrop={(id) => void board.dropCommand(id)} />}
             onClose={board.closeCard}
             onSend={async (text) => {
               const failed = await board.sendReply(active, text);

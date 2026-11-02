@@ -5,16 +5,16 @@ import StarterKit from "@tiptap/starter-kit";
 import { Placeholder } from "@tiptap/extensions";
 import { Markdown } from "@tiptap/markdown";
 import { forwardRef, useEffect, useRef, useState, type ReactNode } from "react";
-import { api } from "@/lib/client";
 import { mediaMarkdown } from "@/lib/media";
 import { LOOKS_LIKE_MARKDOWN } from "@/lib/composer-slash";
 import { useComposerHandle, type ComposerHandle } from "@/lib/composer-handle";
 import { useSkillTypeahead } from "@/lib/use-skill-typeahead";
+import { useThreadTransport } from "@/lib/thread-transport";
 import { useComposerKeys } from "@/lib/use-composer-keys";
 import { useDictation } from "@/lib/use-dictation";
 import { useHandedFiles } from "@/lib/use-file-drop";
 import { removeFromEditor, SecretBars, useComposerSecrets } from "./SecretPaste";
-import { Media, insertFiles } from "./MediaNode";
+import { Media, NO_UPLOAD, insertFiles } from "./MediaNode";
 import SkillTypeahead from "./SkillTypeahead";
 import ComposerFormatBar from "./ComposerFormatBar";
 import ComposerBottomBar from "./ComposerBottomBar";
@@ -49,11 +49,13 @@ const Composer = forwardRef<
     className?: string;
     // The folder the thread works in; typing "/" suggests the skills available there.
     cwd?: string;
+    // The card a reply box writes to, whose host lists those skills (lib/thread-transport.ts listSkills).
+    cardId?: string;
     // Files dropped elsewhere for this composer (a card id, or "new"; lib/file-drop.ts) land here.
     dropTarget?: string;
   }
 >(function Composer(
-  { initial = "", placeholder, autoFocus, variant, onSubmit, onSubmitAlt, onChange, actions, header, sizeClass, className = "", cwd, dropTarget },
+  { initial = "", placeholder, autoFocus, variant, onSubmit, onSubmitAlt, onChange, actions, header, sizeClass, className = "", cwd, cardId, dropTarget },
   ref,
 ) {
   const [source, setSource] = useState<string | null>(null);
@@ -68,10 +70,14 @@ const Composer = forwardRef<
   const onSubmitAltRef = useRef(onSubmitAlt);
   const onChangeRef = useRef(onChange);
   const placeholderRef = useRef(placeholder);
+  // Pasted files go where the card's host keeps them (lib/thread-transport.ts upload).
+  const { upload } = useThreadTransport();
+  const uploadRef = useRef(upload);
   useEffect(() => {
     onSubmitRef.current = onSubmit;
     onSubmitAltRef.current = onSubmitAlt;
     onChangeRef.current = onChange;
+    uploadRef.current = upload;
   });
 
   const editor = useEditor({
@@ -103,7 +109,7 @@ const Composer = forwardRef<
         // Copying a picture gives the file plus a scrap of HTML or alt text; copying from a
         // spreadsheet gives a picture of the cells plus the text, and the text is what's wanted.
         if (files.length && (!text.trim() || (html.includes("<img") && text.length < 300))) {
-          if (editorRef.current) insertFiles(editorRef.current, files);
+          if (editorRef.current) insertFiles(editorRef.current, files, uploadRef.current);
           return true;
         }
         if (!html && text && LOOKS_LIKE_MARKDOWN.test(text) && !editorRef.current?.isActive("codeBlock")) {
@@ -120,7 +126,7 @@ const Composer = forwardRef<
           left: event.clientX,
           top: event.clientY,
         })?.pos;
-        insertFiles(editorRef.current, files, pos);
+        insertFiles(editorRef.current, files, uploadRef.current, pos);
         return true;
       },
     },
@@ -134,7 +140,7 @@ const Composer = forwardRef<
   }, [editor]);
 
   // Typing "/" offers the skills for this folder; they load the first time it's needed.
-  const typeahead = useSkillTypeahead(editor, cwd);
+  const typeahead = useSkillTypeahead(editor, cwd, cardId);
   const { query: slash, suggestions, active: activeSkill, setActive: setActiveSkill, typeaheadOpen } = typeahead;
 
   function pickSkill(skill: { name: string }) {
@@ -189,7 +195,8 @@ const Composer = forwardRef<
   async function uploadIntoSource(files: File[]) {
     for (const file of files) {
       try {
-        const saved = await api.uploadAttachment(file, file.name || "pasted-image.png");
+        if (!upload) throw new Error(NO_UPLOAD);
+        const saved = await upload(file, file.name || "pasted-image.png");
         insertIntoSource(`${mediaMarkdown(file.name || saved.name, saved.path)}\n`);
       } catch (err) {
         window.alert(err instanceof Error ? err.message : String(err));
@@ -213,7 +220,7 @@ const Composer = forwardRef<
 
   // Files dropped on this composer's card, thread or the empty board go in at the cursor.
   useHandedFiles(editor && !editor.isDestroyed ? dropTarget : undefined, (files) =>
-    source !== null ? void uploadIntoSource(files) : editor && insertFiles(editor, files),
+    source !== null ? void uploadIntoSource(files) : editor && insertFiles(editor, files, upload),
   );
 
   return (
@@ -230,7 +237,7 @@ const Composer = forwardRef<
         if (e.defaultPrevented || !files.length) return;
         e.preventDefault();
         if (source !== null) void uploadIntoSource(files);
-        else if (editor) insertFiles(editor, files);
+        else if (editor) insertFiles(editor, files, upload);
       }}
       className={`composer relative flex min-h-0 flex-col rounded-lg border bg-canvas transition-colors focus-within:border-accent ${
         dragging ? "border-accent bg-accent-soft" : "border-line-strong"

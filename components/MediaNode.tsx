@@ -3,7 +3,7 @@
 import { Node, NodeViewWrapper, ReactNodeViewRenderer, type Editor, type NodeViewProps } from "@tiptap/react";
 import { NodeSelection } from "@tiptap/pm/state";
 import { useSyncExternalStore } from "react";
-import { api } from "@/lib/client";
+import type { ThreadTransport } from "@/lib/thread-transport";
 import { mediaKind, mediaMarkdown, mediaUrl, type MediaKind } from "@/lib/media";
 import { finishUpload, onUploadChange, setUpload, uploadOf, type Upload } from "@/lib/media-uploads";
 import Icon, { Spinner } from "./Icon";
@@ -34,15 +34,18 @@ function nameOf(file: File, kind: MediaKind) {
   return `${kind === "video" ? "pasted-video" : kind === "audio" ? "pasted-audio" : "pasted-image"}.${ext}`;
 }
 
-// Inserts a node for each file (at pos, or the cursor) and uploads them.
-export function insertFiles(editor: Editor, files: File[], pos?: number) {
+type Uploader = ThreadTransport["upload"];
+// Where the board has nowhere to keep a file (weft.zip, until it can send one to the Mac): the node says so.
+export const NO_UPLOAD = "Files can't be attached here yet. Attach them in Weft on the Mac.";
+
+// Inserts a node for each file (at pos, or the cursor) and uploads them through the thread's transport (`upload`).
+export function insertFiles(editor: Editor, files: File[], upload: Uploader, pos?: number) {
   const nodes = files.map((file) => {
     const id = crypto.randomUUID();
     const kind = kindOfFile(file);
     const name = nameOf(file, kind);
     setUpload(id, { preview: kind === "file" ? undefined : URL.createObjectURL(file), progress: 0 });
-    api
-      .uploadAttachment(file, name, (progress) => setUpload(id, { progress }))
+    (upload ? upload(file, name, (progress) => setUpload(id, { progress })) : Promise.reject(new Error(NO_UPLOAD)))
       .then((saved) => {
         if (!editor.isDestroyed) {
           editor.state.doc.descendants((node, at) => {

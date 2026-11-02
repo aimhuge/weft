@@ -117,11 +117,12 @@ describe("the web reply box", () => {
     expect(mockState.deletes).toEqual([{ table: "cloud_commands", filters: [["id", "r1"]] }]);
   });
 
-  it("lets a failed reply be dismissed, and shows what waits for the turn's end", async () => {
+  it("lets a failed reply be dismissed, and draws what waits on the card in the reply box, as the desktop does", async () => {
     const dialog = await board({ initialCommands: [reply({ status: "failed", error: "That thread isn't on this Mac anymore." })], card: { scheduled: [{ id: "s1", text: "and then lint", at: 1, afterTurn: true }, { id: "s2", text: "later", at: 9 }] } });
     expect(within(dialog).getByText(/isn't on this Mac/)).toBeInTheDocument();
+    // The reply box's own rows, each once: the one held for the turn and the timed one, both its to take back.
     expect(within(dialog).getByText("and then lint")).toBeInTheDocument();
-    expect(within(dialog).queryByText("later")).toBeNull();
+    expect(within(dialog).getByText("later")).toBeInTheDocument();
     fireEvent.click(within(dialog).getByRole("button", { name: "Dismiss" }));
     await waitFor(() => expect(within(dialog).queryByText(/isn't on this Mac/)).toBeNull());
   });

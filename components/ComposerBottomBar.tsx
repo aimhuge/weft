@@ -3,6 +3,7 @@
 // on the right. The hidden file input lives here too, so its ref is the same the bar's click opens.
 import { type ReactNode, type RefObject } from "react";
 import { useDictation } from "@/lib/use-dictation";
+import { useThreadTransport } from "@/lib/thread-transport";
 import type { Editor } from "@tiptap/react";
 import { insertFiles } from "./MediaNode";
 import ComposerMicButton from "./ComposerMicButton";
@@ -62,6 +63,7 @@ export default function ComposerBottomBar({
   uploadIntoSource: (files: File[]) => Promise<void>;
   actions?: ReactNode;
 }) {
+  const { upload } = useThreadTransport();
   return (
     <>
       <div className="flex shrink-0 items-center gap-0.5 px-1.5 pb-1.5 pt-0.5">
@@ -107,7 +109,7 @@ export default function ComposerBottomBar({
           e.target.value = "";
           if (!files.length) return;
           if (source !== null) void uploadIntoSource(files);
-          else if (editor) insertFiles(editor, files);
+          else if (editor) insertFiles(editor, files, upload);
         }}
       />
     </>

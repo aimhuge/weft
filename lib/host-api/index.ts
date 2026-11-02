@@ -40,6 +40,11 @@ export const HOST_API = {
   "card.switchBackend": { elevated: false, run: lazy(() => import("./card-cli"), "switchBackendVerb") },
   "card.rerunModel": { elevated: false, run: lazy(() => import("./card-cli"), "rerunModelVerb") },
   "card.stopTask": { elevated: false, run: lazy(() => import("./card-task"), "stopTaskVerb") },
+  // Send later: a reply that waits on the host for its time, so it widens nothing a reply doesn't.
+  "card.schedule": { elevated: false, run: lazy(() => import("./card-schedule"), "scheduleVerb") },
+  "card.unschedule": { elevated: false, run: lazy(() => import("./card-schedule"), "unscheduleVerb") },
+  // A read: the skills the card's folder has on that host, for the "/" typeahead.
+  "skills.list": { elevated: false, run: lazy(() => import("./skills-list"), "skillsListVerb") },
 } satisfies Record<HostVerb, Handler>;
 
 type Table = typeof HOST_API;
