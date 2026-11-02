@@ -6,6 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import type * as ChildProcess from "node:child_process";
 import { vi } from "vitest";
+import { PUKU_SIGN_IN_VARS } from "./puku-dotenv";
 import type { SubagentModel } from "./subagents";
 import type { Card, ThreadItem } from "./types";
 
@@ -286,6 +287,9 @@ export function resetHarness(h: Harness) {
   h.execFails = false;
   h.loginFails = false;
   for (const key of GLOBALS) Reflect.deleteProperty(globalThis, key);
+  // The runner reads these from process.env, so a run on a Weft Worker, or with a Puku key set, would see
+  // other options: pin them unset, and tests spell out the env a puku thread gets (backendEnv("puku", {})).
+  for (const name of ["WEFT_WORKER", "PUKU_CLI_ENV_FILE", ...PUKU_SIGN_IN_VARS]) vi.stubEnv(name, undefined);
   return fs.mkdtempSync(path.join(os.tmpdir(), "weft-runner-"));
 }
 

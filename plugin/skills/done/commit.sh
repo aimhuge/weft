@@ -39,7 +39,7 @@ held_blob() {
 NOTES="$(git rev-parse --absolute-git-dir 2>/dev/null)/weft-held"
 PREFIX="$(git rev-parse --show-prefix 2>/dev/null)"
 if [ -d "$NOTES" ] && [ $# -gt 0 ]; then
-  TEMP_INDEX=$(mktemp -t weft-index)
+  TEMP_INDEX=$(mktemp "${TMPDIR:-/tmp}/weft-index.XXXXXX")
   rm -f "$TEMP_INDEX"
   GIT_INDEX_FILE="$TEMP_INDEX" git read-tree HEAD
   HELD=0

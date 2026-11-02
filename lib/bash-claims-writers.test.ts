@@ -9,6 +9,7 @@ import type { Card } from "./types";
 const cards = new Map<string, Card>();
 
 vi.mock("./store", () => ({
+  DATA_DIR: "/weft-data",
   getCard: (id: string) => cards.get(id),
   listCards: () => [...cards.values()],
   updateCard: vi.fn((id: string, patch: Partial<Card>) => {

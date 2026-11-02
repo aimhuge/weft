@@ -6,6 +6,9 @@ import type { VaultBridge, VaultOverview, VaultSecret } from "@/lib/vault-view";
 import "./test-utils";
 import VaultDrawer from "./VaultDrawer";
 
+// The recovery menu reads the router; these tests don't mount an app router.
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
+
 // Changing a secret's environments in the 🔐 drawer: moving it, or spreading a blank, from its ✎ / Fill in form.
 const overviewWith = (secret: VaultSecret): VaultOverview => ({
   unlocked: false,

@@ -22,7 +22,7 @@ describe("BrowserPane and the floating copilot", () => {
   const setBounds = vi.fn();
   beforeEach(() => {
     setBounds.mockClear();
-    (window as unknown as { weft: unknown }).weft = { browser: { setBounds } };
+    (window as unknown as { weft: unknown }).weft = { browser: { setBounds }, onMenu: () => () => {} };
     vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
     vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({ left: 800, top: 100, width: 400, height: 600 } as DOMRect);
   });
@@ -70,7 +70,7 @@ describe("BrowserPane and an open menu", () => {
   const setBounds = vi.fn();
   beforeEach(() => {
     setBounds.mockClear();
-    (window as unknown as { weft: unknown }).weft = { browser: { setBounds } };
+    (window as unknown as { weft: unknown }).weft = { browser: { setBounds }, onMenu: () => () => {} };
     vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
     vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({ left: 800, top: 100, width: 400, height: 600 } as DOMRect);
   });
@@ -130,7 +130,7 @@ describe("BrowserPane with its zoom menu", () => {
   const setBounds = vi.fn();
   beforeEach(() => {
     setBounds.mockClear();
-    (window as unknown as { weft: unknown }).weft = { browser: { setBounds, zoom: vi.fn() } };
+    (window as unknown as { weft: unknown }).weft = { browser: { setBounds, zoom: vi.fn() }, onMenu: () => () => {} };
     vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
     // The page's placeholder fills the pane; the zoom menu hangs off the toolbar on its right.
     // jsdom has no layout, so each is given a size.

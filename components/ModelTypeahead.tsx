@@ -56,6 +56,9 @@ export default function ModelTypeahead({
   const field = useRef<HTMLDivElement>(null);
   const list = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLInputElement>(null);
+  // The frame show() focuses the field on. A pick or close before it runs cancels it, or a click elsewhere in
+  // that frame (into the message box, say) would have its focus taken back and its typing land in this field.
+  const focusFrame = useRef(0);
   // The ids the field and the group headings point at. Built from useId, not the label: a label has
   // spaces, and an id with spaces reads as several ids to aria-controls and aria-labelledby.
   const listId = useId();
@@ -96,6 +99,10 @@ export default function ModelTypeahead({
     };
   }, [open, filtered.length]);
 
+  useEffect(() => {
+    if (!open) cancelAnimationFrame(focusFrame.current);
+  }, [open]);
+
   // A click outside closes the list.
   useEffect(() => {
     if (!open) return;
@@ -116,11 +123,12 @@ export default function ModelTypeahead({
     setActive(0);
     setOpen(true);
     // The field takes the focus so the user can type straight away.
-    requestAnimationFrame(() => input.current?.focus());
+    focusFrame.current = requestAnimationFrame(() => input.current?.focus());
   }, []);
 
   const pick = useCallback(
     (next: string) => {
+      cancelAnimationFrame(focusFrame.current);
       onChange(next);
       setOpen(false);
       setQuery("");

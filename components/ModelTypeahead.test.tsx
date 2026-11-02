@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { modelGroups } from "@/lib/model-options";
 import ModelTypeahead from "./ModelTypeahead";
 import "./test-utils";
@@ -14,6 +14,30 @@ import "./test-utils";
 const groups = modelGroups();
 
 describe("ModelTypeahead", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("doesn't take the focus back from where you went after a quick pick", () => {
+    // Opening focuses the field a frame later. A pick and a click into the message box inside that frame
+    // used to have the frame pull the focus back, so what you typed next went into the model field (CI caught it).
+    const frames: FrameRequestCallback[] = [];
+    vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => frames.push(cb));
+    vi.stubGlobal("cancelAnimationFrame", (id: number) => {
+      frames[id - 1] = () => {};
+    });
+    render(
+      <>
+        <ModelTypeahead value="" groups={groups} onChange={() => {}} label="Model" />
+        <textarea aria-label="Message" />
+      </>,
+    );
+    fireEvent.focus(screen.getByRole("combobox", { name: "Model" }));
+    fireEvent.click(screen.getByRole("option", { name: /Fable 5\.1/ }));
+    const box = screen.getByRole("textbox", { name: "Message" });
+    box.focus();
+    for (const frame of frames) frame(0);
+    expect(document.activeElement).toBe(box);
+  });
+
   it("opens the list and picks a model, closing the list", async () => {
     const onChange = vi.fn();
     render(<ModelTypeahead value="" groups={groups} onChange={onChange} label="Model" />);

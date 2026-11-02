@@ -250,7 +250,7 @@ describe("blobBytes", () => {
   });
 
   it("has nothing when the blob is missing", async () => {
-    const service = { storage: { from: vi.fn(() => ({ download: vi.fn(() => Promise.resolve({ data: null })) })) } } as unknown as SupabaseClient;
+    const service = { storage: { from: vi.fn(() => ({ download: vi.fn(() => Promise.resolve({ data: null, error: new Error("Object not found") })) })) } } as unknown as SupabaseClient;
     expect(await blobBytes(service, "o1", "abc")).toBeNull();
   });
 });

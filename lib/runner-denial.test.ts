@@ -79,7 +79,12 @@ describe("a classifier denial", () => {
     const grant = nth(nth(hooks, -1).hooks, 0);
     const call = { hook_event_name: "PreToolUse", tool_name: MIGRATE, tool_input: input } as HookInput;
     const signal = new AbortController().signal;
-    expect(await grant(call, "tu2", { signal })).toMatchObject({ hookSpecificOutput: { permissionDecision: "allow" } });
+    // The live CLI leaves auto mode for the retry, so the hook steps aside and canUseTool spends the grant.
+    expect(q.setPermissionMode).toHaveBeenLastCalledWith("default");
+    expect(await grant(call, "tu2", { signal })).toEqual({});
+    expect(await q.options.canUseTool(MIGRATE, input, { signal, toolUseID: "tu2" })).toEqual({ behavior: "allow", updatedInput: input });
+    // Spent: the CLI goes back to auto, and the same call isn't let through again.
+    expect(q.setPermissionMode).toHaveBeenLastCalledWith("auto");
     expect(await grant(call, "tu3", { signal })).toEqual({});
   });
 

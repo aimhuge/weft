@@ -6,6 +6,9 @@ import type { VaultBridge, VaultOverview, VaultSecret } from "@/lib/vault-view";
 import "./test-utils";
 import VaultDrawer from "./VaultDrawer";
 
+// The recovery menu reads the router; these tests don't mount an app router.
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
+
 // The 🔐 drawer's search box: narrows the shown vaults to the secrets that match.
 const secret = (name: string, environment: VaultSecret["environment"] = "development"): VaultSecret => ({ name, environment, missing: false, tail: "1111", updatedAt: "" });
 
