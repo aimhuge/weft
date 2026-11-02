@@ -46,6 +46,12 @@ describe("syncWorkerIssues", () => {
     expect(d.remember.mock.calls).toEqual([["acme/app", [2]], ["acme/app", [4]]]);
   });
 
+  it("keeps an issue's title to one card title's length", async () => {
+    const d = deps([issue(2, { title: "x".repeat(5000) })]);
+    await syncWorkerIssues(PROJECT, d);
+    expect((d.send.mock.calls[0]?.[0] as { title: string }).title).toHaveLength(200);
+  });
+
   it("puts the project's validation skill first in the prompt", async () => {
     const d = deps([issue(2)], { workflow: () => ({ landing: "run" as const, skill: "triage" }) });
     await syncWorkerIssues(PROJECT, d);
@@ -70,6 +76,16 @@ describe("workerIssueRepo", () => {
   it("reads the repo in the twin, and names the project when there's none", async () => {
     expect(await workerIssueRepo(PROJECT, ["/x/app"], () => Promise.resolve("acme/app"))).toEqual({ repo: "acme/app", twin: "/x/app" });
     await expect(workerIssueRepo("/not/a/worker", [], () => Promise.resolve(""))).rejects.toThrow("no checkout of worker");
+  });
+
+  it("takes several twins of one repo, and refuses twins of different repos rather than guess", async () => {
+    const repos: Record<string, string> = { "/a/app": "acme/app", "/b/app": "ACME/app", "/c/app": "evil/app" };
+    const repoOf = (f: string) => (repos[f] ? Promise.resolve(repos[f]) : Promise.reject(new Error("no remote")));
+    expect(await workerIssueRepo(PROJECT, ["/a/app", "/b/app", "/a/app"], repoOf)).toEqual({ repo: "acme/app", twin: "/a/app" });
+    expect(await workerIssueRepo(PROJECT, ["/a/app", "/gone/app"], repoOf)).toEqual({ repo: "acme/app", twin: "/a/app" });
+    await expect(workerIssueRepo(PROJECT, ["/a/app", "/c/app"], repoOf)).rejects.toThrow("more than one app: acme/app and evil/app");
+    expect(await workerIssueRepo(PROJECT, ["/gone/app", "/a/app"], repoOf)).toEqual({ repo: "acme/app", twin: "/a/app" });
+    await expect(workerIssueRepo(PROJECT, ["/gone/app"], repoOf)).rejects.toThrow("no remote");
   });
 });
 

@@ -9,7 +9,7 @@ const runs = vi.hoisted(() => new Map<string, { log: string }>());
 const getCard = vi.hoisted(() => vi.fn((id: string) => (id === "c1" ? { id, cwd: "/work/weft" } : undefined)));
 
 vi.mock("../devserver-list", () => ({ listDev }));
-vi.mock("../devserver", () => ({ stopDev, restartDev, runs }));
+vi.mock("../devserver", () => ({ stopDev, restartDev, runs, LOG_LIMIT: 100 }));
 vi.mock("../tunnels", () => ({ openTunnel }));
 vi.mock("../store", () => ({ getCard }));
 
@@ -67,5 +67,10 @@ describe("dev.log", () => {
     expect(log).not.toContain("line 5\n");
     expect(log).not.toContain("a".repeat(90));
     await expect(devLogVerb({ id: "c2" })).rejects.toThrow("No such card.");
+  });
+
+  it("drops the cut-off first line of a log at its cap, which may be the tail of a key", async () => {
+    runs.set("c1", { log: `${"t".repeat(60)}\nready on :3000\n${"x".repeat(40)}` });
+    expect((await devLogVerb({ id: "c1" })).log).toBe(`ready on :3000\n${"x".repeat(40)}`);
   });
 });

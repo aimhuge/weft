@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { twinByRepo, twinOf } from "./worker-twin";
+import { twinByRepo, twinOf, twinsOf } from "./worker-twin";
 import { workerProjectPath } from "./worker-project";
 
 const project = workerProjectPath("w1", "Weft");
@@ -13,6 +13,13 @@ describe("twinOf", () => {
     expect(twinOf(project, ["/Users/me/dev/ling", "/"])).toBeNull();
     expect(twinOf(null, ["/Users/me/dev/weft"])).toBeNull();
     expect(twinOf("/Users/me/dev/weft", ["/Users/me/dev/weft"])).toBeNull();
+  });
+});
+
+describe("twinsOf", () => {
+  it("lists every namesake once, in order, so a caller can tell one repo from two", () => {
+    expect(twinsOf(project, ["/a/weft", "/b/ling", "/c/Weft", "/a/weft"])).toEqual(["/a/weft", "/c/Weft"]);
+    expect(twinsOf(null, ["/a/weft"])).toEqual([]);
   });
 });
 

@@ -3,7 +3,7 @@
 // Touch ID on their Mac (lib/tunnel-worker.ts). On the Mac the same verb opens a Mac tunnel. `dev.stop` ends the run,
 // `dev.restart` starts it again with the same command, and `dev.log` reads its last lines (T5).
 import { listDev } from "../devserver-list";
-import { restartDev, runs, stopDev } from "../devserver";
+import { LOG_LIMIT, restartDev, runs, stopDev } from "../devserver";
 import { redactText } from "../share-redact";
 import { openTunnel } from "../tunnels";
 import { OK, requireCard, settle, type Ok } from "./types";
@@ -42,6 +42,12 @@ export async function devRestartVerb({ id }: { id: string }): Promise<Ok> {
 // The newest lines of the run's output, key-shaped text hidden: it leaves the host in a command's result.
 export const DEV_LOG_LINES = 40;
 
+// A log at its cap was cut mid-line, so its first line is a fragment: half a key no pattern knows. It's dropped.
 export function devLogVerb({ id }: { id: string }): Promise<{ log: string }> {
-  return settle(() => ({ log: redactText(weftRun(id).log.trim().split("\n").slice(-DEV_LOG_LINES).join("\n")) }));
+  return settle(() => {
+    const log = weftRun(id).log;
+    const lines = log.split("\n");
+    if (log.length >= LOG_LIMIT) lines.shift();
+    return { log: redactText(lines.join("\n").trim().split("\n").slice(-DEV_LOG_LINES).join("\n")) };
+  });
 }

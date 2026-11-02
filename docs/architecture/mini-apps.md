@@ -37,11 +37,13 @@ The pane beside a worker card (`components/WorkerPane.tsx`) has Save as app too,
 `blob:sha256:<hex>`, framed through this Mac's server (T5, project-hosts.md#drawers-and-mini-apps-on-a-worker-project-t5-as-built).
 An app is a page this Mac's pane opens, so `POST /api/apps` with that address brings the page home first
 (`lib/mini-app-worker.ts`): it reads the blob with the account's own session (RLS keeps it to your workspace), refuses
-anything but HTML, writes it to `~/.weft/apps/worker-<first 16 of the sha>/index.html` (where a cloud sync pull puts an
+anything but HTML, a page over 5 MB, and bytes that don't hash to the address (nothing checks a sha on upload), writes it to `~/.weft/apps/worker-<first 16 of the sha>/index.html` (where a cloud sync pull puts an
 app) and saves it under the name given, else the page's `<title>`, with `source` naming the blob (`MiniApp.source`), so
 `appFor` lights the button on that page. From there it is an ordinary app: the rail opens it on this Mac,
 `cloud_mini_apps` carries it to your other Macs, and Share… serves it at `weft.zip/a/<id>` and the owner's links, on the
-web and the phone. A worker page is one file today, so nothing beside it comes along. The weft.zip board's pane has no
+web and the phone. A worker page is one file today, so nothing beside it comes along. Once saved it is a `file:` page
+in the pane, out of the blob route's CSP sandbox: like a thread's `~/.weft/show` page it gets `window.weft`, which stays
+inert without a `weft-app.json` and Touch ID, but `liveData` (`/api/infra/live`) answers it. The weft.zip board's pane has no
 Save as app: mini apps live on a Mac.
 
 ## Sharing an app

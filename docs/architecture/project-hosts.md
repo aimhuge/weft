@@ -541,13 +541,16 @@ badges:   PileBadge ─ fetchPileReview ─ host can't projectActs, can reads �
   cloned there (and the basename `lib/worker-handoff.ts` sends). `lib/worker-twin.ts` finds this Mac's folder of that
   name (`twinOf`), else the vault whose `owner/name` label ends in it (`twinByRepo`): the same rule main uses to pick a
   worker card's vault (`electron/worker-projects.cjs`). Names only: the values stay behind Touch ID in main.
+  A name is a guess, so what acts on the repo checks it: the issue sync reads every namesake's remote (`twinsOf`) and
+  refuses when they name different repos. The drawers still show the first namesake; the worker doesn't publish its
+  remote yet, so a lone Mac folder of the same name but another repo can't be told apart.
 - **Which drawer reads what** (`lib/rail-project.ts`, gated on `hostFor(project).can("vault")`, which a worker's host
   answers false): what is per repo (🔐 vault, ▲ Vercel, Supabase, Cloudflare, BlastCP, Slack, ✦ Skills) reads the twin;
   what is per host (🖥 Services, GitHub's issue sync, 🪝 webhooks) reads the worker project itself. With no twin the
   per-repo drawers get the worker path, which matches none of this Mac's folders, so they show nothing for it rather than
   every project. `Board.tsx` now hands the rail the project as it is (`ctx.project`), not `localPath`.
 - **Services** (dev-servers.md#on-a-worker): two more host verbs, `dev.restart` (the run's own command again, through
-  `restartDev`) and `dev.log` (its last 40 lines, key-shaped text hidden by `redactText`, then held under 2,500 UTF-8
+  `restartDev`) and `dev.log` (its last 40 lines, key-shaped text hidden by `redactText`, a first line cut by the log's 4,000-character cap dropped, then held under 2,500 UTF-8
   bytes by `verbResult`'s `tailBytes`, so the row stays under its 4 KB cap). Both refuse a server a thread started in its
   own shell ("can only stop it"), and neither is elevated: they widen nothing. Locally they mount on `POST
   /api/cards/:id/dev` as `rerun` and `log` (`restart` stays the review tour's plan). The drawer's worker rows gain Log
@@ -564,7 +567,8 @@ badges:   PileBadge ─ fetchPileReview ─ host can't projectActs, can reads �
   project's agent isn't sent: a worker refuses an agent from the network (`remoteRefusal`).
 - **Mini apps from a worker card** (mini-apps.md#from-a-worker-card): the worker card's pane (`components/WorkerPane.tsx`)
   shows Save as app on a page the card wrote (a `blob:sha256:` page). `POST /api/apps` with that address reads the blob
-  with the account's session (RLS: your workspace), refuses anything but HTML, writes it to
+  with the account's session (RLS: your workspace), refuses anything but HTML, over 5 MB or whose bytes don't hash to the
+  address, writes it to
   `~/.weft/apps/worker-<sha16>/index.html` (where a cloud sync pull puts an app) and saves it with `source` naming the
   blob, so `appFor` lights the button on that page. From there it's an ordinary app: the rail opens it on this Mac,
   `cloud_mini_apps` carries it to your other Macs, and Share… serves it at `weft.zip/a/<id>` (the same bytes, already in

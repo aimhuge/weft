@@ -16,10 +16,13 @@ import { knownIssues, rememberIssues } from "./issue-record";
 import { issueWorkflow, listProjects, workerFolders } from "./settings";
 import { normalizeTags } from "./tags";
 import { parseWorkerProject } from "./worker-project";
-import { twinOf } from "./worker-twin";
+import { twinsOf } from "./worker-twin";
 
 export const WORKER_BACKLOG_LATER =
   "A worker project's issue cards can't wait in Backlog or Needs you yet: a worker starts every card it makes. Set this project's issues to Run to start each one on the worker.";
+
+// An issue's title is anyone's words: it names the card, and a card's title is one line.
+const MAX_ISSUE_TITLE = 200;
 
 interface Issue {
   number: number;
@@ -47,12 +50,21 @@ export function issueProject(raw: unknown, local: (raw: unknown) => string): str
   return parseWorkerProject(text) ? text : local(raw);
 }
 
-// The repo a worker project is, read through its twin on this Mac.
+// The repo a worker project is, read through its twin on this Mac. The twin is found by name, so when this Mac has
+// several folders of that name they must all be the same repo: otherwise one repo's issues would start cards in
+// another's checkout on the worker.
 export async function workerIssueRepo(project: string, folders: string[], repoOf: (folder: string) => Promise<string>): Promise<{ repo: string; twin: string }> {
-  const twin = twinOf(project, folders);
+  const twins = twinsOf(project, folders);
   const name = parseWorkerProject(project)?.folder ?? path.basename(project);
+  const [twin] = twins;
   if (!twin) throw new Error(`This Mac has no checkout of ${name}, so it can't tell which GitHub repo it is. Open that project on this Mac once.`);
-  return { repo: await repoOf(twin), twin };
+  const found = (await Promise.all(twins.map((t) => repoOf(t).then((repo) => ({ repo, twin: t }), () => null)))).filter((f) => f !== null);
+  const [first] = found;
+  // None has a GitHub remote: the first one's own error says why.
+  if (!first) return { repo: await repoOf(twin), twin };
+  const other = found.find((f) => f.repo.toLowerCase() !== first.repo.toLowerCase());
+  if (other) throw new Error(`This Mac has more than one ${name}: ${first.repo} and ${other.repo}, so it can't tell which repo the worker's ${name} is. Rename one, or remove the one that isn't it from the board.`);
+  return first;
 }
 
 // Sends a card to the worker for each open issue it hasn't had one for, one at a time, recording each as it goes so a
@@ -73,7 +85,7 @@ export async function syncWorkerIssues<I extends Issue>(project: string, deps: W
   for (const issue of fresh.values()) {
     const prompt = [deps.issuePrompt(repo, issue), validationMessage(workflow.skill)].filter(Boolean).join("\n\n");
     const tags = normalizeTags((issue.labels ?? []).map((l) => l.name));
-    await deps.send({ workerId: worker.workerId, folder: worker.folder, prompt, title: issue.title.trim() || `${repo}#${issue.number}`, tags });
+    await deps.send({ workerId: worker.workerId, folder: worker.folder, prompt, title: issue.title.trim().slice(0, MAX_ISSUE_TITLE) || `${repo}#${issue.number}`, tags });
     deps.remember(repo, [issue.number]);
     added++;
   }

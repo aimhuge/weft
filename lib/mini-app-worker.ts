@@ -5,6 +5,7 @@
 // (lib/app-cloud.ts pullOne). From there it is an app like any other: the rail opens it, cloud_mini_apps carries it
 // to your other Macs, and Share… serves it at weft.zip/a/<id> (lib/app-share.ts), uploading the same bytes, which
 // are already in the store under the same sha.
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -23,6 +24,9 @@ async function readWorkerPage(sha: string): Promise<PageBytes | null> {
   return readBlob(client, who.org, sha, { r2: null });
 }
 
+// A worker page is one HTML file; anything bigger than this isn't one a card wrote for a pane.
+export const MAX_WORKER_PAGE_BYTES = 5 * 1024 * 1024;
+
 const titleOf = (html: string) => /<title[^>]*>([^<]*)<\/title>/i.exec(html.slice(0, 8192))?.[1]?.trim();
 
 export async function saveWorkerPageApp(page: unknown, name: unknown, read: ReadPage = readWorkerPage, home = DATA_DIR): Promise<MiniApp> {
@@ -31,7 +35,12 @@ export async function saveWorkerPageApp(page: unknown, name: unknown, read: Read
   const got = await read(sha);
   if (!got) throw new Error("That page isn't in your workspace's store anymore.");
   if (!got.type.startsWith("text/html")) throw new Error("Only a web page can be an app: this is a file.");
-  const html = new TextDecoder().decode(got.bytes);
+  const bytes = got.bytes instanceof Uint8Array ? got.bytes : new Uint8Array(got.bytes);
+  if (bytes.byteLength > MAX_WORKER_PAGE_BYTES) throw new Error("That page is too big to keep as an app (over 5 MB).");
+  // The store is content-addressed but nothing checks a sha on upload, so the bytes must be the page that was shown:
+  // anything else under that name was put there by someone else in the workspace.
+  if (createHash("sha256").update(bytes).digest("hex") !== sha) throw new Error("That page's bytes don't match its address, so it wasn't saved.");
+  const html = new TextDecoder().decode(bytes);
   const file = path.join(home, "apps", `worker-${sha.slice(0, 16)}`, "index.html");
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, html);

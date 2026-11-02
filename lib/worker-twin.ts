@@ -7,12 +7,18 @@ import { parseWorkerProject } from "./worker-project";
 
 const baseName = (folder: string) => folder.split("/").filter(Boolean).pop()?.toLowerCase() ?? "";
 
-// The first candidate on this Mac with the worker project's folder name, or null (a project, or not a worker's).
-export function twinOf(project: string | null | undefined, candidates: readonly string[]): string | null {
+// Every candidate on this Mac with the worker project's folder name, in order (none for a project not a worker's).
+export function twinsOf(project: string | null | undefined, candidates: readonly string[]): string[] {
   const worker = project ? parseWorkerProject(project) : null;
-  if (!worker) return null;
+  if (!worker) return [];
   const name = worker.folder.toLowerCase();
-  return candidates.find((c) => !parseWorkerProject(c) && baseName(c) === name) ?? null;
+  return [...new Set(candidates.filter((c) => !parseWorkerProject(c) && baseName(c) === name))];
+}
+
+// The first of them, or null. A name is a guess: two checkouts of different repos may share one, so what acts on the
+// repo (the issue sync, lib/issue-worker.ts) checks every twin names the same one.
+export function twinOf(project: string | null | undefined, candidates: readonly string[]): string | null {
+  return twinsOf(project, candidates)[0] ?? null;
 }
 
 // The same, through a vault's label when no folder matched: "owner/name" names the repo the vault is for.
