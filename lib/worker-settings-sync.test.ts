@@ -13,9 +13,11 @@ function setup(rows: (SyncedRow | null | Error)[], changed: string[] = ["pushOnD
   });
   const apply = vi.fn(() => changed);
   const log = vi.fn();
+  const refuse = vi.fn((row: SyncedRow) => (row.signature === "bad" ? "the row's signature isn't your Mac's" : null));
+  const accepted = vi.fn();
   let now = 0;
-  const sync = createSettingsSync({ read, apply, log, everyMs: 60_000, gapMs: 15_000, now: () => now });
-  return { sync, read, apply, log, tick: (ms: number) => (now += ms) };
+  const sync = createSettingsSync({ read, refuse, apply, accepted, log, everyMs: 60_000, gapMs: 15_000, now: () => now });
+  return { sync, read, apply, accepted, log, tick: (ms: number) => (now += ms) };
 }
 
 describe("createSettingsSync", () => {
@@ -28,6 +30,20 @@ describe("createSettingsSync", () => {
     expect(apply).toHaveBeenCalledTimes(2);
     expect(apply).toHaveBeenLastCalledWith({ pushOnDone: true });
     expect(log).toHaveBeenCalledWith("Weft Worker: your settings changed: pushOnDone");
+  });
+
+  it("applies nothing of a refused row, says so once, and remembers only what it applied", async () => {
+    const bad = { settings: { threadPrompt: "x" }, signature: "bad", updated_at: "t1" };
+    const good = { settings: { pushOnDone: true }, signature: "ok", updated_at: "t2" };
+    const { sync, apply, accepted, log } = setup([bad, bad, good]);
+    await sync.sync();
+    await sync.sync();
+    expect(apply).not.toHaveBeenCalled();
+    expect(log).toHaveBeenCalledTimes(1);
+    expect(log).toHaveBeenCalledWith("Weft Worker: not taking your synced settings: the row's signature isn't your Mac's.");
+    await sync.sync();
+    expect(apply).toHaveBeenCalledWith({ pushOnDone: true });
+    expect(accepted).toHaveBeenCalledWith(good);
   });
 
   it("says nothing when nothing changed, and leaves settings alone when the owner has none", async () => {

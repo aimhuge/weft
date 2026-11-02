@@ -4,6 +4,9 @@
 --    effort, push on done, the subagent model, the thread instructions, the backup model). Your Mac writes its own row;
 --    each of your workers reads it with its key (worker_account_settings) and mirrors it into its settings.json. The
 --    keys are an allowlist here too, so a row can never carry allowed folders, a permission mode or a guard to a worker.
+--    Any session of yours can write the row, so it carries your Mac's signature (version, signature: Ed25519 by the
+--    Mac's device key over the user, the version and the settings' digest, lib/account-settings-sig.ts), and a worker
+--    applies only a row the Mac it was paired with signed, at a version newer than the one it has.
 -- 2. cloud_workers.limits: the worker's plan-limit history (its CLI's 5-hour and weekly readings, packed by
 --    lib/limits-wire.ts), written by the worker (worker_set_limits), read by your workspace like the rest of its row.
 
@@ -11,6 +14,8 @@
 create table if not exists public.account_settings (
   user_id    uuid primary key default auth.uid() references auth.users (id) on delete cascade,
   settings   jsonb not null default '{}'::jsonb check (jsonb_typeof(settings) = 'object' and pg_column_size(settings) <= 40000),
+  version    bigint check (version is null or version > 0),
+  signature  text check (signature is null or length(signature) <= 200),
   updated_at timestamptz not null default now()
 );
 
@@ -37,7 +42,8 @@ as $$ select array['automations', 'pushOnDone', 'doneModel', 'doneEffort', 'suba
 
 revoke all on function private.account_setting_keys() from public, anon, authenticated;
 
--- A worker's read of its owner's settings: the allowlisted keys and when they last changed. Null when the owner has none.
+-- A worker's read of its owner's settings: the allowlisted keys, whose they are, the Mac's version and signature, and when
+-- they last changed. Null when the owner has none. The worker checks the signature itself; nothing here vouches for it.
 create or replace function public.worker_account_settings(p_key text)
 returns jsonb
 language plpgsql
@@ -55,6 +61,9 @@ begin
   end if;
   return jsonb_build_object(
     'settings', coalesce((select jsonb_object_agg(key, value) from jsonb_each(saved.settings) where key = any (private.account_setting_keys())), '{}'::jsonb),
+    'user_id', saved.user_id,
+    'version', saved.version,
+    'signature', saved.signature,
     'updated_at', saved.updated_at
   );
 end;

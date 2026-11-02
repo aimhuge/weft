@@ -12,6 +12,7 @@ const { gooseRoutes } = require("./goose-ipc.cjs");
 const { appSecretsRoutes } = require("./app-secrets-push.cjs");
 const { slackRoutes } = require("./slack.cjs");
 const { touchIdPrompt } = require("./touch-id.cjs");
+const { desktopSignerFor, settingsSignRoutes } = require("./settings-sign.cjs");
 
 // The pairing routes, looked up when called: pairing is set up after the pane (it needs the account client).
 const PAIRING_ROUTES = ["POST /sync/key", "POST /pairing/verify", "POST /pairing/passkey-verify", "POST /pairing/status"];
@@ -106,6 +107,8 @@ function paneRoutes({ dataDir, app, dialog, systemPreferences = require("electro
     ...snapshotRoutes(sharedSnapshot),
     // The server asks main to post to Slack, and how the socket is doing (electron/slack.cjs).
     ...slackRoutes(slackApi),
+    // Your account's settings for your workers, signed with this Mac's device key on each push (electron/settings-sign.cjs).
+    ...settingsSignRoutes(desktopSignerFor(dataDir)),
     // mcp__board_view__*: threads see and drive the board itself, secrets redacted (electron/board-view.cjs).
     ...boardViewRoutes(createBoardView({ board })),
   };

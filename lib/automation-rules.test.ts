@@ -19,5 +19,6 @@ describe("readAutomations", () => {
     expect(() => readAutomations([{ on: "done", skill: "" }])).toThrow(/Pick a skill/);
     expect(() => readAutomations([{ on: "prompt-matches", skill: "deploy" }])).toThrow(/Enter a pattern/);
     expect(() => readAutomations([{ on: "prompt-matches", skill: "deploy", pattern: "(" }])).toThrow(/isn't a valid pattern/);
+    expect(() => readAutomations([{ on: "prompt-matches", skill: "deploy", pattern: "a".repeat(301) }])).toThrow(/under 300 characters/);
   });
 });

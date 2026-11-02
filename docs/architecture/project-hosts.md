@@ -338,6 +338,21 @@ board     StatusStrip on a worker card ─ /api/limits?worker= ─ workerLimitSa
   no overlay. Chosen over a read at each turn's start because that would put a round trip on the start-a-card path: the
   sync reads at start, every minute and on each command (`nudge`, at most every 15 s, never awaited), so a turn starts on
   what was mirrored last, at most a minute old.
+- **Signed by your Mac.** Any session of yours can write the row (weft.zip, the phone, a stolen one), and the thread
+  instructions and automations shape every card on a worker, so the Mac signs each push and a worker applies only what
+  the Mac it was paired with signed. `pushAccountSettings` asks main (`POST /account-settings/sign`,
+  `electron/settings-sign.cjs`) to sign `weft-account-settings-v1 / user / version / sha256(canonical settings)` with this
+  Mac's device key (`electron/desktop-signer.cjs`, no Touch ID: every Save pushes, and the message is domain-separated and
+  built by main from checked fields, so it can't stand for an approval or a `secret_use`). The row keeps `version` (only
+  grows) and `signature`; nothing it can't sign is pushed. The worker (`lib/account-settings-sig.ts` `settingsRefusal`,
+  wired in `lib/worker-host-services.ts`) checks the signature against `mac-keys.json`, the Mac key the pairing code
+  carried (H8's `lib/worker-mac-keys.ts`), and refuses a version at or below the last it applied (kept in
+  `account-settings-version` in its home, sealed from threads), logging the refusal once and keeping what it had. A
+  token-enrolled worker trusts no Mac, so it takes no synced settings until it's paired; a second Mac of yours that isn't
+  the paired one pushes rows the worker refuses until the paired Mac saves again.
+- **Patterns can't hang it.** A "prompt matches" rule's pattern is capped at 300 characters and tested in a `vm` context
+  with a 50 ms timeout (`lib/safe-pattern.ts`), so a catastrophic one (`(a+)+$`) from a synced row never matches instead of
+  holding the daemon.
 - **Host verbs with no card.** `settings.get` and `settings.put` are `HOST_API` verbs (`lib/host-api/settings.ts`,
   `elevated: true`) that name no card: `isHostLevelVerb` in `@weft/client`, a row built by `hostLevelRow` (`folder` and
   `args.id` empty), read by `readHostCommand` with `id: ""` whatever the row says, run by the `host` kind's `onHost` branch
@@ -350,15 +365,15 @@ board     StatusStrip on a worker card ─ /api/limits?worker= ─ workerLimitSa
   workers), its four settings loaded from it, Save on worker sends only what changed. Drawn only when you have a worker.
   Phone, Away, Dictation, Shortcuts, Sound and Laptop stay this Mac's.
 - **Limits.** The daemon starts `startLimitPoll` (`lib/worker-host-services.ts` → `lib/worker-limits.ts`), so the worker's
-  history fills between turns and its parked cards resume on its own resets, and publishes the history (newest 1,000
-  samples, packed by `lib/limits-wire.ts`) to `cloud_workers.limits` a minute in and every 5 minutes when it grew. Per worker,
+  history fills between turns and its parked cards resume on its own resets, and publishes the history (newest 750
+  samples, packed by `lib/limits-wire.ts` to fit the row's 64 KB check) to `cloud_workers.limits` a minute in and every 5 minutes when it grew. Per worker,
   not in H4's per-folder snapshot, because a plan is per CLI sign-in, which is per box. A worker card's strip charts it
   (`/api/limits?worker=`, `lib/use-limit-samples.ts`), and shows its newest reading until the card reports its own.
 - **The game.** `/api/game` adds your workers' cards (`lib/worker-activity.ts`): each backfilled like a card the log never
   saw (made, its turns on its last active day, Done), read at most every 5 minutes and never holding the game up more than
   3 s. Not written to this Mac's activity log. `mergeWorkerEvents` drops any event whose id or card the log already has.
-- **Migration.** `supabase/migrations/20261102180000_host_settings.sql`: `account_settings` (RLS own row, 40 KB),
-  `worker_account_settings`, `cloud_workers.limits`/`limits_at` and `worker_set_limits`. Until it's applied the push and the
+- **Migration.** `supabase/migrations/20261102180000_host_settings.sql`: `account_settings` (RLS own row, 40 KB,
+  `version` and `signature`), `worker_account_settings`, `cloud_workers.limits`/`limits_at` and `worker_set_limits`. Until it's applied the push and the
   sync say nothing and change nothing, and a worker's limits don't show.
 - **Not yet.** A Run on Worker card and its worker card are two cards, so a handed-off card's local record still counts as
   made; Agents (souls) per worker project; Goose's provider on a worker; the model pickers' "at its cap" marks from a

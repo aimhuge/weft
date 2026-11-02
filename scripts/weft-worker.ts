@@ -150,7 +150,7 @@ async function startCommand() {
     log: console.log,
   });
   // Your account's settings mirrored in, and this box's plan limits polled and published (lib/worker-host-services.ts).
-  const services = startHostServices(reg, console.log);
+  const services = startHostServices(reg, console.log, home);
   const daemon = createDaemon({
     reg,
     publisher,

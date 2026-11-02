@@ -6,7 +6,15 @@ vi.mock("./account", () => ({ accountClient: () => { throw new Error("no default
 const snapshot = { pushOnDone: false, threadPrompt: "" };
 vi.mock("./host-settings", () => ({ accountSettings: vi.fn(() => ({ ...snapshot })) }));
 
-const { forgetPushedSettings, pushAccountSettings, startAccountSettingsPush } = await import("./account-settings");
+vi.mock("./browser-shell", () => ({ shell: vi.fn(() => Promise.reject(new Error("The browser pane only exists in the desktop app"))) }));
+
+const { forgetPushedSettings, pushAccountSettings: push, startAccountSettingsPush } = await import("./account-settings");
+const { accountSettingsMessage, settingsDigest } = await import("./account-settings-sig");
+const shell = (await import("./browser-shell")).shell;
+
+// Main signs over the message lib/account-settings-sig.ts builds; here a fake that says what it was asked.
+const sign = vi.fn((body: { userId: string; version: number; digest: string }) => Promise.resolve({ signature: `sig:${accountSettingsMessage(body.userId, body.version, body.digest)}` }));
+const pushAccountSettings = (c?: SupabaseClient) => push(c, sign);
 
 function client({ user = "u-1", error = null, throws = false }: { user?: string | null; error?: { message: string } | null; throws?: boolean } = {}) {
   const upsert = vi.fn(() => Promise.resolve({ error }));
@@ -27,11 +35,24 @@ describe("pushAccountSettings", () => {
   it("writes your own row, then sends nothing again until a setting changes", async () => {
     const { c, upsert } = client();
     expect(await pushAccountSettings(c)).toBe(true);
-    expect(upsert).toHaveBeenCalledWith(expect.objectContaining({ user_id: "u-1", settings: { pushOnDone: false, threadPrompt: "" } }));
+    const settings = { pushOnDone: false, threadPrompt: "" };
+    expect(upsert).toHaveBeenCalledWith(expect.objectContaining({ user_id: "u-1", settings }));
+    const { version, signature } = (upsert.mock.calls[0] as unknown as [{ version: number; signature: string }])[0];
+    expect(signature).toBe(`sig:${accountSettingsMessage("u-1", version, settingsDigest(settings))}`);
     expect(await pushAccountSettings(c)).toBe(false);
     snapshot.pushOnDone = true;
     expect(await pushAccountSettings(c)).toBe(true);
     expect(upsert).toHaveBeenCalledTimes(2);
+    const versions = (upsert.mock.calls as unknown as [{ version: number }][]).map(([row]) => row.version);
+    expect(versions[1]).toBeGreaterThan(versions[0] as number);
+  });
+
+  it("pushes nothing it couldn't sign: outside the desktop app, or main gave no signature", async () => {
+    const { c, upsert } = client();
+    expect(await push(c)).toBe(false);
+    expect(shell).toHaveBeenCalledWith("/account-settings/sign", expect.objectContaining({ userId: "u-1", digest: expect.stringMatching(/^[0-9a-f]{64}$/) as unknown }));
+    expect(await push(c, () => Promise.resolve({}))).toBe(false);
+    expect(upsert).not.toHaveBeenCalled();
   });
 
   it("writes again for someone else signed in, though nothing changed", async () => {
@@ -69,6 +90,6 @@ describe("startAccountSettingsPush", () => {
 
 describe("the default client", () => {
   it("is the account's, and one that can't be made pushes nothing", async () => {
-    expect(await pushAccountSettings()).toBe(false);
+    expect(await push()).toBe(false);
   });
 });
