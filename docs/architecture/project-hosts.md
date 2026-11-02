@@ -1,6 +1,6 @@
 # Project hosts: one code path for local and Worker projects
 
-Status: **design** (2026-11-01). Nothing here is built. It follows on from [weft-worker.md](weft-worker.md#worker-projects-on-the-desktop-board),
+Status: **design** (2026-11-01, merged with "one engine, two transports" 2026-11-02). Phase H1 is in progress. It follows on from [weft-worker.md](weft-worker.md#worker-projects-on-the-desktop-board),
 where a Worker project shows on the desktop board but most of what a local project gets drops out.
 
 ## The problem
@@ -14,7 +14,28 @@ There are two code paths, and every new feature lands on the local one only.
 The goal: **full parity**, and ideally **the local project is a worker too**, so the board has one way to reach any
 project.
 
-<!-- GAP-TABLE -->
+## What drops out on a Worker today
+
+Read in the source (2026-11-02). Each gap is a missing command kind and a missing handler on the board, not a missing
+engine: the daemon runs the same `lib/runner.ts`.
+
+| Feature | Local | On a Worker card |
+| --- | --- | --- |
+| Permission mode | PATCH `permissionMode` | default/acceptEdits/auto through the `mode` command; no `plan` mid-card |
+| Model, CLI, effort on an open card | `switch-backend`, `rerun-model` | a badge only |
+| Agent | PATCH `agent` | none |
+| Rename, tags, star, archive, move, delete | PATCH, `CardActions` | none: the tile is `readOnly` |
+| ↑ edit, Restart, Fresh | `messages`, `fresh` | none |
+| "!" shell | `shell` | none |
+| Wait, Me first, Others first | `permission` | none |
+| Stop a subagent task | `tasks/[taskId]/stop` | none |
+| Attachments in a reply | `/api/attachments` | none: a reply is text, so a pasted screenshot arrives as a path to a file the worker doesn't have |
+| Send later, review panel, skills chip | `desktop: true` | none |
+| Show rail, editor | Board's open card | none: `WorkerOpenCard` is a separate layout |
+| Backlog | Backlog column | none |
+| Streaming | SSE | a 2.5 s poll |
+| weft.zip and the phone | | reply, answer, stop and new card only, through `cloud-inbox.ts` (a third dispatch) and the phone's own copy of the command shapes |
+
 
 ## The idea: a project has a host
 
@@ -111,7 +132,109 @@ Whether it's also a separate process is an implementation detail left for later 
 - **Snapshots are workspace-readable,** like `cloud_cards`. Quality, pile counts and the streak are fine there; file
   names in the pile are as visible as they are in a card's thread today. Nothing secret goes in one.
 
-<!-- PHASES -->
+## Card verbs
+
+The card's own actions are verbs in `host-api` like any other: `card.update` (the PATCH body: title, tags, star,
+archive, mode, agent, folder, read scope, column), `card.stop`, `card.shell`, `card.fresh`, the `messages` and
+`permission` variants, `card.switchBackend`, `card.rerunModel`, `card.stopTask`. The validation the PATCH route held
+privately (`validatePermissionMode`, `setMarks`, `setAgent`, `moveCard`) moves into the handlers, so a worker refuses
+what the Mac refuses. `cloud-inbox.ts` on the Mac and the phone's commands go through the same table, so weft.zip and
+the phone get every verb too.
+
+## Views
+
+The desktop board and weft.zip are one React DOM app (Electron on your Mac, a browser on weft.zip). The open card's
+fork, `WebThreadPanel`/`WebPane` beside `ThreadPanel`/`BrowserPane`, plus `WorkerOpenCard`, merges into Board's own:
+the thread, the pane and the show rail, fed by `hostFor(project).thread`, wherever the card runs. The show rail is
+already a projection of the thread's items (`showMinis`); its page pictures come from the pane that shows the page.
+
+Under the board and the phone sits **`@weft/client`**, plain TypeScript: the transports, the verb types and the view
+models (board grouping, thread paging, `paneFor`, `showMinis`, the pending ask, the status line). The board draws it
+with DOM components and `~/dev/weft-mobile` with React Native ones, so the two can only disagree on looks.
+
+## Host services
+
+The editor (files), the terminal (a pty), the browser the agent drives, dev servers and tunnels, and simulators act on
+the host's own files and processes, so they're host services every host offers and every view reaches through
+`ProjectHost`. They arrive natively on the Mac and as streams elsewhere. `host.can(name)` shrinks to real hardware limits
+(iOS simulators need a Mac host).
+
+## Routes: the WebRTC line
+
+`CloudHost` has two routes. The **direct** one is the WebRTC line already built for the simulator
+([weft-worker.md#the-fast-path](weft-worker.md#the-fast-path)): `lib/worker-rtc.ts`, one peer connection with named
+channels, signaling sealed to the worker's key with both DTLS fingerprints inside, 198 ms gesture-to-frame at 29 fps on
+m1mini's LAN. It gains `host` (verbs and their results), `events` (thread and project changes) and `terminal` channels,
+and stays open while a board shows the worker's project rather than only during a watch. The **relay** is
+`cloud_commands` plus the snapshot rows, used when no line forms (offline, a blocking network, before TURN), and it
+keeps the offline queue and history. A board talking to a worker on its LAN then gets local speed and live streaming.
+
+## Approvals and secrets
+
+A view owns one thing: **approval**. Today Touch ID is `promptTouchID` in Electron main, which approves but signs
+nothing, and only the phone signs (Ed25519 after Face ID, mobile-security.md). The browser's paired key sits in
+IndexedDB and can't sign. **Passkeys** close that: weft.zip and the desktop sign each approval with a WebAuthn key in the
+Secure Enclave, bound to `weft.zip`, which the host pins through the existing pairing flow (the QR secret plus a Touch ID
+on the Mac). The approval binds the host, card, pending request, tool, an input hash, a nonce and an expiry, and the host
+checks it on one verify path for every view. The weak spot is a script injected into weft.zip, so the board gets a strict
+CSP, and the riskiest asks (a vault value, skipping permissions) stay native on the phone or the Mac.
+
+Secrets on a Worker start as the per-use seal above (`secret_use`). With signed approvals in place, the vault itself can
+later move into the host, its key sealed to the host and opened only behind a signed approval.
+
+## Devices and records
+
+- **One address:** every project is `(host, repo)`, with this Mac one host among others, so `worker://` paths and
+  `localPath` gates live only inside `hostFor`.
+- **One card schema:** the cloud row is a sealed projection of the host's `Card`, made by one function, not
+  `cloud-sync-rows` and `worker-publish` side by side.
+- **One device registry:** worker enrolment tokens, `desktop` heartbeat rows and the phone and browser QR pairing become
+  one pairing flow; enrolling a worker is pairing a host.
+
+## Cost and speed
+
+Live traffic is what grows with use, so it leaves Supabase; the sealed history stays as the record and the offline copy.
+
+- **Polling, before the line exists.** The board re-reads an open worker thread's newest 50 full items every 2.5 s
+  (`workerThreadPage`, `THREAD_PAGE_SIZE`) and every worker card's full row every 5 s (`workerBoard`). It asks for what's
+  new instead (`seq` after the last one it has, `updated_at` after the last read), polls at 2.5 s only while a card runs,
+  30 s when idle, and not while the window is hidden.
+- **The route shows.** A worker's chip reads "direct · 4 ms" or "relay · 600 ms", so a fallback is visible.
+- **On the line (H6):** one line per host shared by every card, opened when a worker project is selected; long tool
+  outputs fetched on demand, mirrored only compressed and under a cap; items gzipped before sealing; the mirror batched
+  while the line carries the live view; video on an RTP track with adaptive bitrate instead of a fixed 8 Mbps.
+- **Small, later:** heartbeats as Realtime Presence rather than a row write every 20 s; finished `cloud_commands` rows
+  expire after a day; WebP for the fallback screen frames.
+
+## Phases
+
+Each ships on its own.
+
+1. **H1 card verbs into `host-api`.** The card routes become thin wrappers over `lib/host-api`, behaviour unchanged
+   (in progress).
+2. **H2 the `host` command.** `kind = 'host'` with `{ verb, args }` and a `result` column; the daemon and `cloud-inbox.ts`
+   run `runVerb`, and `reply`, `answer`, `stop`, `mode` and `new_card` become aliases. **Attachments travel:** a reply's
+   files go up as sealed blobs and the host saves them before the turn (pulled forward on its own card).
+3. **H3 `hostFor` and one open card.** `ProjectHost`, `LocalHost`, `CloudHost`; worker tiles lose `readOnly`; the open
+   card merges, so worker cards get the show rail, the pickers, the menus and ↑ edit.
+4. **H4 project reads.** Snapshot rows (`worker_put_project`) for quality, pile, streak and Backlog; the editor through
+   file verbs with results.
+5. **H5 one host program.** The inbox, heartbeat and publish merged across the Mac and the daemon; one card schema; the
+   `(host, repo)` address.
+6. **H6 the WebRTC line for everything live.** In order: video moves from 16 KB chunks on a reliable, ordered
+   DataChannel (`lib/use-rtc-screen.ts`) to an RTP track that drops late frames, so it can't delay a click; the line
+   opens while a board shows the worker's project, not only during a watch; `host` (verbs and results) and `events`
+   (thread and project changes, streaming text) channels replace the 2.5 s poll; Supabase leaves the hot path (the
+   first sealed offer, then a history and offline mirror written beside the line, with reconnects over the line itself);
+   a signed Bonjour/mDNS hint lets a board on the same LAN offer straight to the host; the browser and the phone seal
+   their own offers (libsodium), so weft.zip and the phone open lines too; and a TURN relay beside the STUN server
+   covers networks that block direct connections. Plus the line's cost and speed work in [Cost and speed](#cost-and-speed).
+7. **H7 passkey approvals.** One signed-approval path for weft.zip, the desktop and the phone.
+8. **H8 secrets on a Worker.** The per-use seal first, then the vault in the host behind H7.
+9. **H9 `@weft/client`** for the phone: the transports, verbs and view models as one package.
+10. **H10 one device registry** and one pairing flow.
+11. **Later: the process split.** Daemon and cards as separate processes on both hosts, behind the same interface.
+
 
 ## Risks
 

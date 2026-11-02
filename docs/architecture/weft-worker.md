@@ -511,6 +511,12 @@ itself in Settings → Sync → Workers beside the headless ones (`supabase/migr
 Not yet: leases and reclaim, the worker picker and chip (phase 2), shared claims (phase 3), MCP and the vault on the
 host (phase 4), worktrees per card, and streaming deltas to the web.
 
+### One code path with local projects
+
+How a Worker project gets everything a local one has (one handler layer, `hostFor`, one open card, the WebRTC line for
+everything live, passkey approvals, one device registry) is designed in [project-hosts.md](project-hosts.md), with its
+gap table and phases.
+
 The one-sentence version: **Weft already has a remote control plane, but not a remote compute plane.** The web
 board already commands a Mac across the network through `cloud_commands`; the CLI, though, always spawns on the
 board's own machine. A worker is a second implementation of the executor behind that same command bus. The board,

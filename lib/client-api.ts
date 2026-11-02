@@ -309,6 +309,9 @@ export const api = {
   // Pin or hide a project in the bar (its right-click menu, components/project-menu-handler.ts).
   markProject: (path: string, marks: { pinned?: boolean; hidden?: boolean }) =>
     call<{ projects: Project[] }>("PATCH", "/api/projects", { path, ...marks }),
+  // Add a folder to a project, or take one off: its threads work there as in the project (lib/project-folders.ts).
+  setProjectFolder: (path: string, folder: string, on: boolean) =>
+    call<{ projects: Project[] }>("PATCH", "/api/projects", { path, folder, on }),
   loginStatus: () => call<{ status: Record<Backend, CliStatus>; runs: LoginView[] }>("GET", "/api/login"),
   login: (backend: Backend, action: "start" | "input" | "cancel" | "terminal", text?: string, signal?: AbortSignal) =>
     call<{ login: LoginView | null }>("POST", "/api/login", { backend, action, text }, signal),

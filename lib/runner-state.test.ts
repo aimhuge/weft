@@ -11,6 +11,7 @@ process.env.WEFT_DATA = dir;
 afterAll(() => fs.rmSync(dir, { recursive: true, force: true }));
 
 import { specFor } from "./runner-state";
+import { setProjectFolder } from "./project-folders";
 import { setGooseModelId } from "./settings";
 import { setProjectOff } from "./skill-sets";
 
@@ -34,6 +35,14 @@ describe("specFor", () => {
     const spec = specFor(card);
     expect(spec.readScope).toEqual(["/Users/dev/deckcp"]);
     expect(spec.cwd).toBe("/Users/dev/weft");
+  });
+
+  it("adds the folders added to the card's project to its read scope", () => {
+    setProjectFolder("/Users/dev/app", "/Users/dev/api", true);
+    const card: Card = { id: "c1", title: "T", prompt: "", cwd: "/Users/dev/app", backend: "claude", permissionMode: "default", column: "backlog", createdAt: 0, updatedAt: 0, readScope: ["/Users/dev/deckcp"] };
+    expect(specFor(card).readScope).toEqual(["/Users/dev/deckcp", "/Users/dev/api"]);
+    setProjectFolder("/Users/dev/app", "/Users/dev/api", false);
+    expect(specFor(card).readScope).toEqual(["/Users/dev/deckcp"]);
   });
 
   it("carries the copilot's persona, and no other card's", () => {

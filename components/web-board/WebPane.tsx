@@ -17,18 +17,18 @@ const NAV = "rounded-md p-1.5 text-muted disabled:opacity-30";
 const SANDBOX = "allow-scripts allow-popups allow-forms";
 const BOARD_SANDBOX = "allow-scripts";
 
-// What the toolbar's address field reads for each kind of page. A saved page shows its label and a
-// public site its host: the address bar is for a visitor, not a file path.
-function address(pane: SharePane | null): string {
+// Where a saved page is framed from: weft.zip's route, or this Mac's own server on the desktop board.
+function pageSrc(orgId: string | null, pane: { ref: string; hash: string }): string {
+  const sha = pane.ref.replace(/^blob:sha256:/, "");
+  return orgId ? `/api/web-board/${orgId}/page/${sha}${pane.hash}` : `/api/worker-board/page/${sha}${pane.hash}`;
+}
+
+// What the toolbar's address field reads: the real url, like any address bar. A saved page shows the proxied url
+// it's framed from, a site its own url, and a page that never left its machine its label.
+function address(orgId: string | null, pane: SharePane | null): string {
   if (!pane) return "";
-  if (pane.kind === "blob") return pane.label;
-  if (pane.kind === "site") {
-    try {
-      return new URL(pane.url).host || pane.url;
-    } catch {
-      return pane.url;
-    }
-  }
+  if (pane.kind === "blob") return typeof window === "undefined" ? pageSrc(orgId, pane) : new URL(pageSrc(orgId, pane), window.location.origin).href;
+  if (pane.kind === "site") return pane.url;
   return pane.label;
 }
 
@@ -77,9 +77,7 @@ function StartSimulator({ onScreenInput, big }: { onScreenInput: ScreenInputFn; 
 function PaneBody({ orgId, pane, thumbUrl, onScreenInput, source }: { orgId: string | null; pane: SharePane | null; thumbUrl?: string; onScreenInput?: ScreenInputFn; source?: string }) {
   if (pane?.kind === "screen") return <WorkerScreen pane={pane} onInput={onScreenInput} source={source} />;
   if (pane?.kind === "blob") {
-    const sha = pane.ref.replace(/^blob:sha256:/, "");
-    const src = orgId ? `/api/web-board/${orgId}/page/${sha}${pane.hash}` : `/api/worker-board/page/${sha}${pane.hash}`;
-    return <iframe title="Card page" src={src} sandbox={orgId ? SANDBOX : BOARD_SANDBOX} className="size-full border-0 bg-white" />;
+    return <iframe title="Card page" src={pageSrc(orgId, pane)} sandbox={orgId ? SANDBOX : BOARD_SANDBOX} className="size-full border-0 bg-white" />;
   }
   if (pane?.kind === "site" && !orgId) return <Snapshot note="This card opened a public site. Open ↗ shows it." />;
   if (pane?.kind === "site") return <iframe title="Card page" src={pane.url} sandbox={SANDBOX} className="size-full border-0 bg-white" />;
@@ -108,7 +106,7 @@ export function WebPane({ orgId, pane, thumbUrl, onClose, onScreenInput, actions
         </button>
         <input
           readOnly
-          value={address(pane)}
+          value={address(orgId, pane)}
           placeholder="No page open"
           aria-label="Page address"
           className="mx-1 min-w-0 flex-1 rounded-md border border-line bg-canvas px-2.5 py-1 font-mono text-[12px] text-ink outline-none placeholder:font-sans placeholder:text-faint"

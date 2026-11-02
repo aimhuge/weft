@@ -1,0 +1,63 @@
+// The host API: one handler per verb, each a plain function of its args, mounted by every host. The desktop's
+// Next server mounts it now (the routes under app/api/cards/[id]/ are thin wrappers over runVerb); the worker
+// daemon and the cloud inbox mount it next, through one generic `host` command whose verb is looked up in
+// HOST_API, so the table is also their allowlist. `elevated` on a handler is the guard() / elevated() split of
+// lib/guard.ts, read from one place by every host. See docs/architecture/project-hosts.md.
+//
+// Each handler's module loads on its first call, so a route pulls in only the code its own verbs run.
+import { widens, type CardUpdateArgs } from "./calls";
+import type { Handler, HostVerb } from "./types";
+
+export { NotFound, requireCard, type Handler, type HostVerb } from "./types";
+export { hostFail } from "./http";
+export { messageCall, permissionCall, type CardPatch, type MessageBody, type PermissionBody } from "./calls";
+
+type Fn = (args: never) => Promise<unknown>;
+
+/** A handler's run that loads its module the first time it is called. */
+function lazy<M, K extends keyof M>(load: () => Promise<M>, name: K): M[K] {
+  return (async (args: never) => ((await load())[name] as Fn)(args)) as M[K];
+}
+
+export const HOST_API = {
+  "card.update": {
+    elevated: false,
+    // A mode change or a read grant widens what the thread may do, so only those need Weft's own window.
+    elevatedFor: ({ body }: CardUpdateArgs) => widens(body),
+    run: lazy(() => import("./card-update"), "updateCardVerb"),
+  },
+  "card.stop": { elevated: false, run: lazy(() => import("./card-stop"), "stopCard") },
+  "card.shell": { elevated: true, run: lazy(() => import("./card-shell"), "shellCommand") },
+  "card.fresh": { elevated: false, run: lazy(() => import("./card-fresh"), "sendFreshVerb") },
+  "card.message": { elevated: false, run: lazy(() => import("./card-messages"), "sendMessageVerb") },
+  "card.message.edit": { elevated: false, run: lazy(() => import("./card-messages"), "editMessageVerb") },
+  "card.restart": { elevated: false, run: lazy(() => import("./card-messages"), "restartVerb") },
+  "card.permission.answer": { elevated: true, run: lazy(() => import("./card-permission"), "answerVerb") },
+  "card.permission.wait": { elevated: true, run: lazy(() => import("./card-permission"), "waitVerb") },
+  "card.permission.first": { elevated: true, run: lazy(() => import("./card-permission"), "putFirstVerb") },
+  "card.permission.otherFirst": { elevated: true, run: lazy(() => import("./card-permission"), "putOtherFirstVerb") },
+  "card.switchBackend": { elevated: false, run: lazy(() => import("./card-cli"), "switchBackendVerb") },
+  "card.rerunModel": { elevated: false, run: lazy(() => import("./card-cli"), "rerunModelVerb") },
+  "card.stopTask": { elevated: false, run: lazy(() => import("./card-task"), "stopTaskVerb") },
+} satisfies Record<HostVerb, Handler>;
+
+type Table = typeof HOST_API;
+export type ArgsOf<V extends HostVerb> = Parameters<Table[V]["run"]>[0];
+export type ResultOf<V extends HostVerb> = Awaited<ReturnType<Table[V]["run"]>>;
+
+export function isHostVerb(verb: string): verb is HostVerb {
+  return Object.hasOwn(HOST_API, verb);
+}
+
+/** Whether a call needs elevated() on the local host: the verb grants power, or grants it for these args. */
+export function needsElevation<V extends HostVerb>(verb: V, args: ArgsOf<V>): boolean {
+  const handler = HOST_API[verb] as Handler<ArgsOf<V>>;
+  return handler.elevated || Boolean(handler.elevatedFor?.(args));
+}
+
+/** Runs one verb; a name that isn't in HOST_API is refused, which is what makes the table an allowlist. */
+export async function runVerb<V extends HostVerb>(verb: V, args: ArgsOf<V>): Promise<ResultOf<V>> {
+  if (!isHostVerb(verb)) throw new Error(`Unknown host verb: ${String(verb)}`);
+  const handler = HOST_API[verb] as Handler<ArgsOf<V>, ResultOf<V>>;
+  return handler.run(args);
+}

@@ -12,7 +12,7 @@ const item = (id: string, s: Partial<ProjectMenuState> = {}) =>
 describe("projectMenu", () => {
   it("offers every action, named for the project, with keys", () => {
     expect(ids({})).toEqual([
-      "new", "reveal", "editor", "terminal", "github", "copy-path", "secrets", "services", "changelog", "sync", "run-here", "run-worker", "pin", "hide", "archive-done", "stop-running",
+      "new", "reveal", "editor", "terminal", "github", "copy-path", "add-folder", "secrets", "services", "changelog", "sync", "run-here", "run-worker", "pin", "hide", "archive-done", "stop-running",
     ]);
     expect(item("new")).toEqual({ id: "new", label: "New Thread in weft", accelerator: "N" });
   });
@@ -62,5 +62,10 @@ describe("projectMenu", () => {
   it("greys out Run on Worker without an account, unless the project already runs there", () => {
     expect(item("run-worker", { syncable: false })).toMatchObject({ enabled: false });
     expect(item("run-worker", { syncable: false, onWorker: true })).toMatchObject({ enabled: true });
+  });
+
+  it("offers Add Folder…, and a Remove item for each folder already added", () => {
+    expect(item("add-folder")).toEqual({ id: "add-folder", label: "Add Folder…", accelerator: "O" });
+    expect(item("remove-folder:/Users/me/api", { folders: ["/Users/me/api"] })).toEqual({ id: "remove-folder:/Users/me/api", label: "Remove api", detail: "/Users/me/api" });
   });
 });

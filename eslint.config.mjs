@@ -45,8 +45,6 @@ const COMPLEX = {
   "lib/import.ts": 36,
   "components/CardView.tsx": 32,
   "components/MediaNode.tsx": 25,
-  // Brackets escaped: a glob reads [id] as a character class.
-  "app/api/cards/\\[id\\]/route.ts": 24,
   "components/Composer.tsx": 24,
   "lib/copilot-digest.ts": 22,
   "components/ReplyBox.tsx": 21,

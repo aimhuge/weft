@@ -38,6 +38,18 @@ describe("WebPane", () => {
     expect(screen.getByText("This page only exists on the machine running this card.")).toBeTruthy();
   });
 
+  it("shows the proxied url a saved page is framed from, and a site's own url", () => {
+    const { unmount } = render(<WebPane orgId={null} pane={blob} />);
+    const field = () => screen.getByLabelText<HTMLInputElement>("Page address");
+    expect(field().value).toBe(`${window.location.origin}/api/worker-board/page/${SHA}#step-2`);
+    unmount();
+    const web = render(<WebPane orgId="org" pane={blob} />);
+    expect(field().value).toBe(`${window.location.origin}/api/web-board/org/page/${SHA}#step-2`);
+    web.unmount();
+    render(<WebPane orgId="org" pane={site} />);
+    expect(field().value).toBe(site.url);
+  });
+
   it("says when nothing's open", () => {
     render(<WebPane orgId="org" pane={null} />);
     expect(screen.getByText("No page open in this card's browser pane.")).toBeTruthy();

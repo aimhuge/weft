@@ -10,9 +10,11 @@ vi.mock("@/lib/settings", () => ({
   removeProject: vi.fn(),
   markProject: vi.fn(),
 }));
+vi.mock("@/lib/project-folders", () => ({ setProjectFolder: vi.fn() }));
 
 const projectsRoute = await import("./projects/route");
 const settings = await import("@/lib/settings");
+const folders = await import("@/lib/project-folders");
 
 // A write route: the guard checks the host and the x-weft-token header before the handler sees the request.
 const WRITE = { host: "localhost:3457", "x-weft-token": "1", "content-type": "application/json" };
@@ -32,6 +34,14 @@ describe("PATCH /projects", () => {
     expect(settings.markProject).toHaveBeenCalledWith("/p", { pinned: true });
     await projectsRoute.PATCH(req({ path: "/p", hidden: false }));
     expect(settings.markProject).toHaveBeenLastCalledWith("/p", { hidden: false });
+  });
+
+  it("adds a folder to the project, resolved, or takes one off as sent", async () => {
+    const dir = (await import("node:os")).tmpdir();
+    await projectsRoute.PATCH(req({ path: "/p", folder: dir }));
+    expect(folders.setProjectFolder).toHaveBeenLastCalledWith("/p", (await import("@/lib/folders")).resolveFolder(dir), true);
+    await projectsRoute.PATCH(req({ path: "/p", folder: "/gone", on: false }));
+    expect(folders.setProjectFolder).toHaveBeenLastCalledWith("/p", "/gone", false);
   });
 
   it("400s a missing folder", async () => {

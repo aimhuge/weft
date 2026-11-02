@@ -74,19 +74,36 @@ export function projectMenuHandler(deps: ProjectMenuDeps) {
       syncable: !status.signedOut && !status.noWorkspace,
       syncStatus: projectSyncLine(path, status, folders, Date.now()).text,
       onWorker,
+      folders: project?.folders,
     });
     const picked = (await shell.popupMenu(menu)) as ProjectAction | null;
     if (!picked) return false;
     const actions = projectActions(path, name, { ...deps, shell, done, live, syncFolders: folders, syncStatus: status });
-    Promise.resolve(actions[picked]()).catch(deps.notify);
+    const run = isRemoveFolder(picked) ? () => removeFolder(path, name, picked.slice("remove-folder:".length), deps) : actions[picked];
+    Promise.resolve(run()).catch(deps.notify);
     return true;
   };
+}
+
+// "Add Folder…": picks a folder in the shell's dialog and adds it to the project, so its threads work there too.
+async function addFolder(path: string, name: string, c: ActionContext) {
+  const folder = await c.shell.dialog.openFolder();
+  if (!folder) return;
+  await api.setProjectFolder(path, folder, true);
+  c.toast(`Threads in ${name} can now work in ${folderName(folder)} too. Running threads get it on their next start.`);
+}
+
+const isRemoveFolder = (id: ProjectAction): id is `remove-folder:${string}` => id.startsWith("remove-folder:");
+
+async function removeFolder(path: string, name: string, folder: string, deps: ProjectMenuDeps) {
+  await api.setProjectFolder(path, folder, false);
+  deps.toast(`${folderName(folder)} is no longer part of ${name}.`);
 }
 
 type ActionContext = ProjectMenuDeps & { shell: NonNullable<typeof window.weft>; done: Card[]; live: Card[] };
 
 // Each item's action, by id. A table rather than a switch, so no one function grows past the complexity cap.
-function projectActions(path: string, name: string, c: ActionContext): Record<ProjectAction, () => unknown> {
+function projectActions(path: string, name: string, c: ActionContext): Record<Exclude<ProjectAction, `remove-folder:${string}`>, () => unknown> {
   const openIn = async (target: "editor" | "terminal") => {
     const app = await c.shell.openIn?.(path, target);
     c.toast(app ? `Opened ${name} in ${app}.` : `No ${target === "editor" ? "code editor" : "terminal app"} found in Applications.`);
@@ -132,6 +149,7 @@ function projectActions(path: string, name: string, c: ActionContext): Record<Pr
       c.toast(`${name} is hidden from the bar until it's used again. "More" still lists it.`);
     },
     show: () => mark({ hidden: false }),
+    "add-folder": () => addFolder(path, name, c),
     "archive-done": () => c.archive(c.done),
     "stop-running": async () => {
       await Promise.all(c.live.map((card) => stopNow(card.id)));

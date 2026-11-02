@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { editedPath } from "./overlap";
+import { projectFolders } from "./project-folders";
 import { allowedFolders } from "./settings";
 import { SHOW_DIR } from "./show-dir";
 import { DATA_DIR, getCard } from "./store";
@@ -134,8 +135,11 @@ export function outsideFolder(toolName: string, input: Record<string, unknown>, 
   return undefined;
 }
 
-// What the user has granted a card: its read scope and the folders allowed for every card.
-const grantedFor = (cardId: string | undefined) => [...(getCard(cardId ?? "")?.readScope ?? []), ...allowedFolders()];
+// What the user has granted a card: its read scope, the folders added to its project and the folders allowed for every card.
+const grantedFor = (cardId: string | undefined) => {
+  const card = getCard(cardId ?? "");
+  return [...(card?.readScope ?? []), ...(card ? projectFolders(card.cwd) : []), ...allowedFolders()];
+};
 
 // A read-only tool call whose every path lies in a folder the user granted: allowed with no CLI prompt.
 export function grantedRead(toolName: string, input: Record<string, unknown>, cwd: string, cardId: string | undefined): boolean {

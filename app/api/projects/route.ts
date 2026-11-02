@@ -2,6 +2,7 @@ import { connection } from "next/server";
 import { resolveFolder } from "@/lib/folders";
 import { asText } from "@/lib/format";
 import { fail, guard } from "@/lib/guard";
+import { setProjectFolder } from "@/lib/project-folders";
 import { listProjects, markProject, removeProject, touchProject } from "@/lib/settings";
 
 export async function GET(req: Request) {
@@ -41,6 +42,7 @@ export async function DELETE(req: Request) {
 }
 
 // Pins or hides a project in the bar, from its right-click menu (lib/project-menu.ts). Only the marks sent change.
+// With a folder, adds it to the project (on: true) or takes it off (lib/project-folders.ts).
 export async function PATCH(req: Request) {
   const denied = guard(req);
   if (denied) return denied;
@@ -52,6 +54,10 @@ export async function PATCH(req: Request) {
     if (typeof body.pinned === "boolean") marks.pinned = body.pinned;
     if (typeof body.hidden === "boolean") marks.hidden = body.hidden;
     markProject(path, marks);
+    if (asText(body.folder).trim()) {
+      const on = body.on !== false;
+      setProjectFolder(path, on ? resolveFolder(body.folder) : asText(body.folder), on);
+    }
     return Response.json({ projects: listProjects() });
   } catch (err) {
     return fail(err);
