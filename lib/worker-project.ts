@@ -24,6 +24,12 @@ export interface WorkerBoard {
   projects: WorkerProject[];
   // Each with its cwd set to its project's path, so the board's own grouping files it there.
   cards: Card[];
+  // The newest card change this read saw: the next read's `since`. `delta` marks a read of the changed cards only
+  // (lib/worker-board-merge.ts lays it over the last whole read).
+  asOf?: string;
+  delta?: boolean;
+  // On a delta: cards that were deleted, turned copilot or lost their folder since, for the merge to drop.
+  removed?: string[];
 }
 
 export const EMPTY_WORKER_BOARD: WorkerBoard = { signedIn: false, projects: [], cards: [] };
@@ -47,7 +53,8 @@ export function parseWorkerProject(path: string): { workerId: string; folder: st
 export const localPath = <T extends string | null | undefined>(path: T): T | null => (isWorkerProject(path) ? null : path);
 
 // The line a project shows under its name: where it lives.
-export const workerLabel = (w: ProjectWorker) => (w.status === "offline" ? `on ${w.name} · offline` : `on ${w.name}`);
+// `route` is how the board reaches it now, "relay · 600 ms" (lib/worker-route.ts).
+export const workerLabel = (w: ProjectWorker, route?: string | null) => (w.status === "offline" ? `on ${w.name} · offline` : `on ${w.name}${route ? ` · ${route}` : ""}`);
 
 export const offlineMessage = (worker: string) => `${worker} is offline, so this didn't start. Nothing ran on this Mac; try again once it's back.`;
 

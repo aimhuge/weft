@@ -48,6 +48,24 @@ describe("mergePage", () => {
   });
 });
 
+describe("mergePage gaps", () => {
+  it("takes the page when it starts past the end of the window", () => {
+    const prev = page({ items: [item("one")], start: 0, total: 1 });
+    const next = page({ items: [item("x"), item("y")], start: 60, total: 62 });
+    expect(mergePage(prev, next)).toBe(next);
+  });
+
+  it("lays on a page that starts right at the end of the window", () => {
+    const prev = page({ items: [item("one")], start: 0, total: 1 });
+    expect(mergePage(prev, page({ items: [item("two")], start: 1, total: 2 })).total).toBe(2);
+  });
+
+  it("keeps the window when the answer has nothing new", () => {
+    const prev = page({ items: [item("one")], start: 0, total: 1 });
+    expect(mergePage(prev, page({ start: 1, total: 1 }))).toEqual(prev);
+  });
+});
+
 describe("loadPage", () => {
   it("reads the newest page of a card's thread", async () => {
     fetchMock.mockResolvedValueOnce(json({ items: [item("hi")], start: 0, total: 1 }));
@@ -114,6 +132,16 @@ describe("useLive", () => {
     expect(fetchMock).toHaveBeenCalledWith("/api/worker-board?card=c1", undefined);
     expect(onUpdate).toHaveBeenCalled();
     unmount();
+  });
+
+  it("asks only for the items past the last one it has from the second read on", async () => {
+    vi.useFakeTimers();
+    fetchMock.mockResolvedValue(json({ items: [item("a"), item("b"), item("c")], start: 0, total: 3 }));
+    renderHook(() => workerTransport.useLive("c9", vi.fn(), vi.fn()));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(THREAD_POLL_MS * 2);
+    });
+    expect(fetchMock.mock.calls.map((c) => c[0])).toEqual(["/api/worker-board?card=c9", "/api/worker-board?card=c9&after=1"]);
   });
 
   it("lays the page it reads over what's loaded", async () => {

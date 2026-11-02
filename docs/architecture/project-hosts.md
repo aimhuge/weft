@@ -335,11 +335,14 @@ later move into the host, its key sealed to the host and opened only behind a si
 
 Live traffic is what grows with use, so it leaves Supabase; the sealed history stays as the record and the offline copy.
 
-- **Polling, before the line exists.** The board re-reads an open worker thread's newest 50 full items every 2.5 s
-  (`workerThreadPage`, `THREAD_PAGE_SIZE`) and every worker card's full row every 5 s (`workerBoard`). It asks for what's
-  new instead (`seq` after the last one it has, `updated_at` after the last read), polls at 2.5 s only while a card runs,
-  30 s when idle, and not while the window is hidden.
-- **The route shows.** A worker's chip reads "direct · 4 ms" or "relay · 600 ms", so a fallback is visible.
+- **Polling, before the line exists (built).** An open worker thread asks for `after=<seq>`: only items past the last one
+  it has (a running card re-asks its last item, which can change in place), with the thread's total even when nothing is new, so
+  a rewind shows; a gap wider than a page replaces the window (`workerThreadPage`, `mergePage`, `lib/worker-poll.ts`). It polls at
+  2.5 s while the card runs or needs you, 30 s when idle, not while `document.hidden`, and once at once on return. The board list
+  asks `since=<asOf>` and merges only the changed cards (`readWorkerBoard`, `lib/worker-board-merge.ts`), with a whole read
+  every 5 minutes as a safety net: a changed read also names the cards deleted, turned copilot or left without a folder (`removed`), and one that fills the 500-card limit is sent as a whole read. A running thread reads its whole page every 10th poll and after each whole board read, one more read follows when it goes idle, and a reply wakes it to 2.5 s at once. One idle open thread went from about 77 MB an hour to about 4 KB.
+- **The route shows (built).** A worker chip's tooltip reads "on m1mini · relay · 612 ms", the last poll's or command's
+  round trip (`lib/worker-route.ts`), per worker. H6 calls `setWorkerRoute(workerId, "direct", ms)` and the label follows; a fresh direct note outranks relay reads.
 - **On the line (H6):** one line per host shared by every card, opened when a worker project is selected; long tool
   outputs fetched on demand, mirrored only compressed and under a cap; items gzipped before sealing; the mirror batched
   while the line carries the live view; video on an RTP track with adaptive bitrate instead of a fixed 8 Mbps (built,

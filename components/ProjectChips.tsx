@@ -3,7 +3,8 @@
 // in view. Right-clicking a chip opens its menu (components/project-menu-handler.ts).
 import { type RefObject } from "react";
 import { chipProjects, folderName, shortPath, statusLabel } from "@/lib/project-bar";
-import { workerLabel } from "@/lib/worker-project";
+import { parseWorkerProject, workerLabel } from "@/lib/worker-project";
+import { routeLabel, useWorkerRoutes } from "@/lib/worker-route";
 import Icon from "./Icon";
 import ProjectStatusDot from "./ProjectStatusDot";
 import type { ProjectSummary } from "@/lib/board-view";
@@ -35,6 +36,8 @@ export default function ProjectChips({
   onProjectMenu?: (path: string, e: React.MouseEvent) => void;
 }) {
   const chips = chipProjects(projects, selected, RECENT_CHIPS);
+  // "relay · 600 ms" in a worker chip's tooltip, per worker; H6 sets "direct · 4 ms" (lib/worker-route.ts).
+  const routes = useWorkerRoutes();
 
   return (
     <div ref={chipsRef} className="flex min-w-0 items-center gap-1.5 overflow-x-auto [scrollbar-width:thin]">
@@ -55,7 +58,7 @@ export default function ProjectChips({
             onClick={() => onSelect(project.path)}
             onContextMenu={onProjectMenu && ((e) => onProjectMenu(project.path, e))}
             aria-pressed={on}
-            title={`${project.worker ? workerLabel(project.worker) : shortPath(project.path, home)}${stepHint}`}
+            title={`${project.worker ? workerLabel(project.worker, routeLabel(routes.get(parseWorkerProject(project.path)?.workerId ?? ""))) : shortPath(project.path, home)}${stepHint}`}
             className={`${CHIP} ${on ? CHIP_ON : CHIP_OFF} ${project.worker?.status === "offline" ? "opacity-60" : ""}`}
           >
             <ProjectStatusDot project={project} />

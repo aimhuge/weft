@@ -4,7 +4,8 @@ import { qaState } from "@/lib/qa-switch";
 import { readWorkerBoard, sendWorkerAction, workerThreadPage, workerToolOutput, type WorkerAction } from "@/lib/worker-board";
 
 // Your Weft Workers' projects on the desktop board (lib/worker-board.ts): GET lists them with their cards, GET ?card=
-// reads a page of that card's thread (before= walks back), GET ?card=&tool= reads a full tool result, and POST sends
+// reads a page of that card's thread (before= walks back, after= sends only the items past that seq), since= only the
+// cards changed after it, GET ?card=&tool= reads a full tool result, and POST sends
 // a reply, an answer, a stop, a mode, a tap or any host verb as a cloud_commands row. A new thread goes through POST /api/cards like any other.
 
 export async function GET(req: Request) {
@@ -16,11 +17,14 @@ export async function GET(req: Request) {
   try {
     // What the Local Simulator switch shows: this Mac's own devices, and whether this card is approved here.
     if (params.has("devices")) return Response.json(await qaState(card));
-    if (!card) return Response.json(await readWorkerBoard());
+    const sinceParam = params.get("since");
+    const since = sinceParam && Number.isFinite(Date.parse(sinceParam)) ? sinceParam : undefined;
+    if (!card) return Response.json(await readWorkerBoard(undefined, undefined, undefined, since));
     const tool = params.get("tool");
     if (tool) return Response.json({ result: await workerToolOutput(card, tool) });
     const before = params.get("before");
-    const page = await workerThreadPage(card, before === null ? undefined : Number(before));
+    const after = Number(params.get("after") ?? Number.NaN);
+    const page = await workerThreadPage(card, before === null ? undefined : Number(before), undefined, Number.isInteger(after) ? after : undefined);
     return page ? Response.json(page) : Response.json({ error: "That thread can't be read." }, { status: 502 });
   } catch (err) {
     return fail(err, 502);
