@@ -24,11 +24,12 @@ const row = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
-function fakeClient(opts: { user?: string | null; data?: unknown; error?: { message: string } | null; rpc?: { data: unknown; error: { message: string } | null } } = {}) {
+function fakeClient(opts: { user?: string | null; data?: unknown; error?: { message: string } | null; notes?: unknown; rpc?: { data: unknown; error: { message: string } | null } } = {}) {
   const calls: unknown[][] = [];
   const query = {
     select: (...a: unknown[]) => (calls.push(["select", ...a]), query),
     eq: (...a: unknown[]) => (calls.push(["eq", ...a]), Promise.resolve({ data: "data" in opts ? opts.data : [], error: opts.error ?? null })),
+    in: (...a: unknown[]) => (calls.push(["in", ...a]), Promise.resolve({ data: opts.notes ?? null, error: opts.notes ? null : { message: "denied" } })),
   };
   const client = {
     auth: { getSession: () => Promise.resolve({ data: { session: opts.user === null ? null : { user: { id: opts.user ?? "u1" } } } }) },
@@ -89,6 +90,24 @@ describe("listDevices", () => {
     expect(calls[0]).toEqual(["from", "device_registry"]);
     expect(String(calls[1]![1])).not.toContain("*");
     expect(calls[2]).toEqual(["eq", "owner_user", "u1"]);
+  });
+
+  it("puts each worker's own note on its row, and only a worker's", async () => {
+    const notes = [{ id: "w1", update_note: "Browser runs without sandbox: it runs as root." }, { id: "w2", update_note: null }];
+    const { client, calls } = fakeClient({ data: [row(), row({ id: "w1", kind: "worker" }), row({ id: "w2", kind: "worker" })], notes });
+    const { devices } = await listDevices(client, "here-id");
+    expect(calls).toContainEqual(["from", "cloud_workers"]);
+    expect(calls).toContainEqual(["in", "id", ["w1", "w2"]]);
+    expect(devices.map((d) => d.note)).toEqual([null, "Browser runs without sandbox: it runs as root.", null]);
+    expect(deviceView(row(), "x", "a note").note).toBeNull();
+  });
+
+  it("leaves the notes off when they can't be read, and doesn't ask with no workers", async () => {
+    const { client } = fakeClient({ data: [row({ id: "w1", kind: "worker" })] });
+    expect((await listDevices(client)).devices[0]!.note).toBeNull();
+    const macs = fakeClient({ data: [row()] });
+    await listDevices(macs.client);
+    expect(macs.calls).not.toContainEqual(["from", "cloud_workers"]);
   });
 
   it("is empty when signed out", async () => {
