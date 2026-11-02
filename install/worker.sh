@@ -218,6 +218,15 @@ chmod 755 "$BIN_DIR/weft-worker"
 # ── 3. enrolment ────────────────────────────────────────────────────────────
 if [ -f "$HOME_DIR/worker.json" ]; then
   say "Already enrolled ($("$BIN_DIR/weft-worker" status))"
+  # A code passed to an enrolled box used to vanish here while Settings → Devices waited on it for good.
+  if [ -n "$TOKEN" ]; then
+    if [ -f "$HOME_DIR/mac-keys.json" ]; then
+      say "Didn't use that code: this box is paired with a Mac already. To move it, approve the re-pair on that Mac (Settings → Devices → this worker → Re-pair) and run the line it shows"
+    else
+      say "Didn't use that code: this box was enrolled by token and trusts no Mac, so none can approve a re-pair. To pair it, wipe its enrolment and run this again:"
+      say "  rm $HOME_DIR/worker.json && curl -fsSL https://weft.zip/worker.sh | sh -s -- $TOKEN"
+    fi
+  fi
 elif [ -n "$TOKEN" ]; then
   say "Enrolling"
   "$BIN_DIR/weft-worker" enrol "$TOKEN"
