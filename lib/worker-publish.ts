@@ -1,7 +1,8 @@
 // A Weft Worker's outbox: it hears the engine's bus (the same card and thread events a Mac's outbox hears,
-// lib/cloud-sync.ts) and ships the cards and their items through the worker_* functions. The rows are built the way
-// the Mac builds them: scrubbed for Postgres (scrub), redacted (redactValue), long tool results cut out to
-// cloud_tool_outputs (splitToolResult), so the web board draws a worker's card exactly like a Mac's.
+// lib/cloud-sync.ts) and ships the cards and their items through the worker_* functions. The rows are the same
+// projection the Mac's flush sends (lib/card-rows.ts: redacted, scrubbed, long tool results cut out to
+// cloud_tool_outputs), so the web board draws a worker's card exactly like a Mac's. The worker's own choices are its
+// RowHost: no thumbs (no pane), and a failed upload is logged and keeps the path.
 //
 // Kept in memory, not in a file: a worker that restarts mid-turn has lost the turn anyway, and the next event on a
 // card re-sends it. With `pages`, a page or image a card names goes up as a blob first (lib/worker-blobs.ts), the way
@@ -9,10 +10,7 @@
 // can't go up stays a path. A failed upload never holds back the thread.
 import path from "node:path";
 import type { BlobStoreBundle } from "./blob-store";
-import { withUploadedPage } from "./cloud-sync-cards";
-import { scrub, splitToolResult } from "./cloud-sync-rows";
-import { redactValue } from "./cloud-sync-redact";
-import type { CloudCardRow } from "./cloud-sync-types";
+import { lastPerKey, projectCard, projectItem, publishes, type RowHost } from "./card-rows";
 import type { Card, ThreadItem } from "./types";
 import type { BoardEvent } from "./types-card";
 import type { ItemRow, OutputRow, Registry } from "./worker-registry";
@@ -40,6 +38,14 @@ export function createPublisher(reg: Pick<Registry, "putCard" | "putItems">, sou
   // The folder name a card's command named ("weft"), so the web board shows the project, not the worker's path.
   const folders = new Map<string, string>();
   let flushing: Promise<void> | null = null;
+  // The worker's side of each difference between the hosts (lib/card-rows.ts).
+  const host: RowHost = {
+    orgId: pages?.orgId ?? "",
+    blobs: pages?.blobs,
+    thumbs: false,
+    copilot: false,
+    onBlobError: (err, what) => log(`Weft Worker: couldn't upload ${what}: ${err.message}`),
+  };
 
   const mark = (id: string) => {
     let d = dirty.get(id);
@@ -49,7 +55,7 @@ export function createPublisher(reg: Pick<Registry, "putCard" | "putItems">, sou
 
   function hear(event: BoardEvent) {
     if (event.type === "card") {
-      if (event.card.role !== "copilot") mark(event.card.id).card = true;
+      if (publishes(event.card, host)) mark(event.card.id).card = true;
     } else if (event.type === "card_deleted") {
       mark(event.id).deleted = true;
     } else if (event.type === "thread") {
@@ -61,43 +67,26 @@ export function createPublisher(reg: Pick<Registry, "putCard" | "putItems">, sou
 
   const folderOf = (card: Card) => folders.get(card.id) ?? path.basename(card.cwd);
 
-  async function cardToSend(card: Card): Promise<Card> {
-    if (!pages) return card;
-    try {
-      return (await withUploadedPage({ card } as CloudCardRow, pages.blobs, pages.orgId)).card;
-    } catch (err) {
-      log(`Weft Worker: couldn't upload ${card.id}'s page: ${(err as Error).message}`);
-      return card;
-    }
-  }
-
-  async function itemToSend(item: ThreadItem): Promise<ThreadItem> {
-    if (!pages) return item;
-    try {
-      return await pages.blobs.rewriteItem(item, pages.orgId);
-    } catch (err) {
-      log(`Weft Worker: couldn't upload a file: ${(err as Error).message}`);
-      return item;
-    }
-  }
-
   async function ship(id: string, d: Dirty) {
     const card = source.getCard(id);
     if (d.deleted) return reg.putCard(id, folders.get(id) ?? "", {}, true);
-    if (!card) return;
+    // The copilot's thread events used to ship its card and items even though its card events didn't.
+    if (!card || !publishes(card, host)) return;
     // Every flush sends the card first: an item can only land on a card row that exists.
-    await reg.putCard(id, folderOf(card), scrub(redactValue(await cardToSend(card))), false);
+    await reg.putCard(id, folderOf(card), (await projectCard(card, host)).card, false);
     const thread = source.getThread(id);
     const items: ItemRow[] = [];
     const outputs: OutputRow[] = [];
     for (const seq of [...d.seqs].sort((a, b) => a - b)) {
       const live = thread[seq];
       if (!live) continue;
-      const { item, output } = splitToolResult(await itemToSend(live));
-      items.push(scrub({ seq, kind: item.kind, item: redactValue(item), at: new Date(live.at).toISOString() }));
-      if (output) outputs.push(scrub({ ...output, result: redactValue(output.result) }));
+      const { item, output } = await projectItem(seq, live, host);
+      items.push(item);
+      if (output) outputs.push(output);
     }
-    if (items.length || outputs.length || d.fromSeq !== null) await reg.putItems(id, items, outputs, d.fromSeq);
+    // worker_put_items is one INSERT ... ON CONFLICT, which refuses a batch naming one tool id twice (Codex's "item_1").
+    const unique = lastPerKey(outputs, (o) => o.tool_id);
+    if (items.length || unique.length || d.fromSeq !== null) await reg.putItems(id, items, unique, d.fromSeq);
   }
 
   async function drain() {

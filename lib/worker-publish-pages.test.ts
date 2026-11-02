@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import * as cards from "./cloud-sync-cards";
+import * as cards from "./card-rows-blobs";
 import { createPublisher, type PublishedPages, type PublishSource } from "./worker-publish";
 import type { Card, ThreadItem } from "./types";
 import type { BoardEvent } from "./types-card";

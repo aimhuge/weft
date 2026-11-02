@@ -10,7 +10,8 @@ const DATA = fs.mkdtempSync(path.join(os.tmpdir(), "weft-sync-cards-"));
 vi.mock("./store", () => ({ getCard: (id: string) => cards.get(id), DATA_DIR: DATA }));
 vi.mock("./device-id", () => ({ deviceId: () => "dev1" }));
 
-const { cardRows, withUploadedPage, withUploadedThumbs } = await import("./cloud-sync-cards");
+const { cardRows } = await import("./cloud-sync-cards");
+const { withUploadedPage, withUploadedThumbs } = await import("./card-rows-blobs");
 
 const REF = `blob:sha256:${"a".repeat(64)}`;
 const upload = vi.fn((file: string) => Promise.resolve(fs.existsSync(file) ? (REF as `blob:sha256:${string}`) : null));

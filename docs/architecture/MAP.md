@@ -670,14 +670,17 @@ When a new doc lands in this folder, add it here on the same change.
 - `lib/custom-theme.ts` + `lib/custom-themes.ts` + `app/api/themes` + `lib/use-custom-themes.ts` + `components/ThemeDescriber.tsx`:
   themes you prompted up (or built around a picture you uploaded), painted by a card into `~/.weft/themes/<id>/` and applied from a second cookie (docs/architecture/themes.md#prompted-themes).
 - `lib/store.ts`: storage in `~/.weft` (board.json, threads/, attachments/); board.json is written atomically by `lib/atomic-write.ts` (temp file, fsync, rename). `lib/attachments.ts` saves every PNG, JPEG and GIF as WebP (uploads, tool screenshots, pane thumbnails; transcript reads add one beside the original); `scripts/webp-backfill.mjs` converts the old ones (docs/architecture/threads-and-sessions.md).
-- `lib/cloud-sync.ts` + `lib/cloud-outbox.ts` + `lib/cloud-sync-start.ts` + `lib/cloud-sync-cards.ts` + `lib/cloud-sync-upload.ts` + `lib/blob-store.ts` + `lib/blob-paths.ts` + `lib/blob-page-assets.ts` + `lib/blob-page-sign.ts` + `lib/device-id.ts` + `lib/cloud-sync-types.ts`:
+- `lib/cloud-sync.ts` + `lib/cloud-outbox.ts` + `lib/cloud-sync-start.ts` + `lib/cloud-sync-cards.ts` + `lib/card-rows.ts` + `lib/card-rows-blobs.ts` + `lib/cloud-sync-upload.ts` + `lib/blob-store.ts` + `lib/blob-paths.ts` + `lib/blob-page-assets.ts` + `lib/blob-page-sign.ts` + `lib/device-id.ts` + `lib/cloud-sync-types.ts`:
   server-side cards, opt-in per folder (settings `syncFolders`): an outbox in `~/.weft/sync-outbox.jsonl` uploads cards, thread items
   and long tool outputs to Supabase (`supabase/migrations/20261015155756_card_sync.sql`), images and pages by content hash.
   `lib/card-page.ts` keeps each card's current pane page and a count on the card (`notePage`, from `open_url` and Weft's own
-  `openInPane`, so `lib/show.ts`'s starter and update pages count), and `withUploadedPage` in `lib/cloud-sync-cards.ts` puts it on
+  `openInPane`, so `lib/show.ts`'s starter and update pages count), and `withUploadedPage` in `lib/card-rows-blobs.ts` puts it on
   the row as `page` / `page_thumb` / `pages` (`20261029104011_cloud_cards_page.sql`) for the phone feed (cloud-sync.md#the-cards-page).
   An uploaded HTML page takes its local images, videos, stylesheets and CSS `url()`s with it as blob refs (`lib/blob-page-assets.ts`,
   `uploadPage`), and the routes that serve it sign those refs (`lib/blob-page-sign.ts`), so its images load on weft.zip and the phone.
+  One card schema (H5a): `lib/card-rows.ts` `projectCard` / `projectItem` build the rows for both a Mac's flush and a Weft
+  Worker's publisher (`lib/worker-publish.ts`), the per-host differences as `RowHost` fields (`thumbs`, `onBlobError`,
+  `copilot`); golden snapshots of both paths in `lib/card-rows.golden.test.ts` (cloud-sync.md).
   `lib/cloud-sync-repos.ts` keeps the switch per GitHub repo too (`cloud_sync_repos`), so your other Macs turn sync on for their own clone.
   Phone push (docs/architecture/mobile.md#push): `supabase/migrations/20261029104224_push_devices.sql` (`push_devices`, `register_push_device`, the `cloud_cards` trigger with its debounce),
   `supabase/functions/push-card/` (the Edge Function; `message.ts` builds the Expo payload), and `lib/push-devices.ts` + `app/api/push-devices` + `lib/use-push-devices.ts` + `components/PhoneSettings.tsx` (Settings → Sync → Phones).

@@ -1,5 +1,5 @@
 // Card thumbnails on the weft.zip board. The outbox uploads a card's pane capture as a blob and puts its
-// ref in the row's `card.thumb` (lib/cloud-sync-cards.ts); the board resolves those refs to signed URLs
+// ref in the row's `card.thumb` (lib/card-rows-blobs.ts); the board resolves those refs to signed URLs
 // alongside the thread's (lib/web-board.ts), and CardView draws the URL like any other thumb.
 import { isBlobRef, type CloudCardRow } from "./cloud-sync-types";
 

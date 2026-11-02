@@ -55,9 +55,18 @@ is the contract between the parts:
   after redaction so a URL's token isn't masked. Signed URLs rather than a cookie route per asset: the page is sent with a CSP
   sandbox, so it runs in an opaque origin and its image requests carry no session cookie. A share signs whatever refs the
   owner's page names; those are blobs of the owner's own workspace, which the owner chose to share.
-- `lib/cloud-sync-cards.ts`: builds the `cloud_cards` rows, uploading each card's pane capture (`thumb`, an
-  `/api/attachments/…` file) as a blob and putting the ref in the uploaded copy only; the web board resolves it with
-  the thread's refs (`lib/web-board-thumbs.ts`).
+- `lib/card-rows.ts`: **one card schema** for both hosts (project-hosts.md H5a). `projectCard` and `projectItem` turn a
+  host's `Card` and its thread items into what the rows carry: blobs up (`lib/card-rows-blobs.ts`), long tool results cut
+  out (`splitToolResult`), redacted, scrubbed. The Mac's flush and a Weft Worker's publisher (`lib/worker-publish.ts`)
+  both call it; each adds its own identity (`owner_device`, `folder`), transport and sealer. Where the hosts differ, a
+  `RowHost` field says so: `thumbs` (a Mac uploads its pane capture and fills `page_thumb`; a worker has no pane),
+  `onBlobError` (a Mac's failed upload fails the flush, which backs off; a worker logs and keeps the path) and `copilot`
+  (a Mac syncs it like any card in a synced folder; a worker never publishes it). The `page` column is the redacted
+  card's page (before H5a a Mac's column was taken before redaction, so a key in a page URL reached it plain).
+  Golden snapshots of both paths' rows: `lib/card-rows.golden.test.ts`.
+- `lib/cloud-sync-cards.ts`: the Mac's `cloud_cards` rows: each card's projection under this Mac's identity
+  (`macRowHost`). The pane capture (`thumb`, an `/api/attachments/…` file) goes up as a blob with the ref in the
+  uploaded copy only; the web board resolves it with the thread's refs (`lib/web-board-thumbs.ts`).
 - `lib/thread-page.ts` + `app/api/cards/[id]/thread`: the reader side's shape, already used locally. `?before=&limit=`
   pages from the newest item back; a tool result over 2 KB (`TOOL_RESULT_INLINE_MAX`) is left out with
   `resultBytes`, and `/thread/tool/[toolId]` (or `cloud_tool_outputs` remotely) serves it when the row opens
@@ -262,7 +271,7 @@ Where it comes from: `lib/card-page.ts` `notePage()` sets `card.page` and bumps 
 a page, both from the agent's `mcp__browser__open_url` and from Weft's own `openInPane()` (`lib/browser-tools.ts`). That
 covers the pages `lib/show.ts` writes: the starter page a turn opens on a blank pane, and the update page Haiku writes after
 a turn that showed nothing. Those two are not thread items, so before this column a phone saw a blank card for such a turn.
-`withUploadedPage()` in `lib/cloud-sync-cards.ts` builds the columns at flush time, after the thumbnail upload, so `page_thumb`
+`withUploadedPage()` in `lib/card-rows-blobs.ts` builds the columns at flush time, after the thumbnail upload, so `page_thumb`
 is already a ref. A card change (and `notePage` is one) flushes at once.
 
 The swipe-through history is still the thread: each `mcp__browser__open_url` item's `summary` (and a `user` item's `page`),

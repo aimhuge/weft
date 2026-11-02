@@ -39,7 +39,9 @@ One worker per box, no worker picker on the board. The first box is a Mac mini (
   Realtime's row filters show it nothing. It claims with `worker_claim`, which only matches a pending row, and
   heartbeats every 20 s.
 - **Publishing:** `lib/worker-publish.ts` hears the engine's bus and ships cards and items through `worker_put_card`
-  and `worker_put_items`, built like the Mac's rows (`lib/cloud-sync-rows.ts` scrub and splitToolResult, redaction).
+  and `worker_put_items`. The rows are the Mac's projection (`lib/card-rows.ts`, one card schema: blobs, splitToolResult,
+  redaction, scrub), with the worker's `RowHost`: no thumbs, a failed upload logged and kept as a path, the copilot never
+  published (its thread events used to ship it), and one output per tool id in a batch (`worker_put_items` refused two).
   It keeps its queue in memory ([after a restart](#after-a-restart) re-sends what a dead daemon lost), and sends pages and images up as blobs first.
 - **Repos:** a command's folder is a project name under the work root, `~/.weft-worker/work/<folder>`
   (`WEFT_WORKER_ROOT` overrides it), not `~/work`: a Mac often has a `~/work` of its own. A missing folder is cloned
@@ -272,7 +274,7 @@ blob store (lib/blob-store.ts, mayUpload = workerMayUpload)
   │ ◀── signed upload URL for <org>/<sha>
   │ PUT to Supabase Storage directly               a Vercel function can't take a 50 MB body
   ▼
-card.page and the open_url item carry blob:sha256:<hex>#anchor (lib/worker-publish.ts, the Mac's withUploadedPage)
+card.page and the open_url item carry blob:sha256:<hex>#anchor (lib/worker-publish.ts, lib/card-rows.ts's withUploadedPage)
   ├─▶ web board: WebThreadPanel → WebPane → /api/web-board/<org>/page/<sha>
   └─▶ desktop board: WorkerOpenCard → WebPane → /api/worker-board/page/<sha>  (5 s poll of the worker's cards)
 ```
