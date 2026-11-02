@@ -67,50 +67,60 @@ async function enrolCommand(token: string | undefined) {
   console.log(`Enrolled ${config.name} as ${config.device}. Start it with: weft-worker start`);
 }
 
-// The store first, on its own: the engine's modules import each other in a circle, and one that loads before
-// lib/store.ts has set DATA_DIR reads it as undefined.
+// One module at a time, never side by side in a Promise.all: jiti's async import caches a module as it starts and
+// hands that half-run module to any import that asks for it meanwhile, so two branches reaching the same module
+// (lib/skills.ts, say) gave the second one undefined exports (PLUGIN_DIR in lib/puku-dotenv.ts). In turn they load
+// like plain require(). The store goes first, so DATA_DIR is set before any module reads it.
+// scripts/check-worker-engine.mjs loads this function as written, in CI on every PR.
 async function loadEngine() {
   const store = await import("../lib/store");
-  const parts = await Promise.all([
-    import("../lib/card-starter"),
+  const parts = await inTurn([
+    () => import("../lib/card-starter"),
     // Reached through lib/host-api's handlers now, still loaded here so `check` proves they load.
-    import("../lib/runner"),
-    import("../lib/runner-pending"),
-    import("../lib/bus"),
-    import("../lib/worker-daemon"),
-    import("../lib/worker-publish"),
-    import("../lib/worker-paths"),
-    import("../lib/worker-github"),
-    import("../lib/folder-grant"),
-    import("../lib/blob-store"),
-    import("../lib/show-dir"),
-    import("../lib/worker-pane"),
-    import("../lib/runner-state"),
-    import("../lib/worker-recover"),
-    import("../lib/resume"),
-    import("../lib/worker-screen"),
-    import("../lib/simulator-input"),
-    import("../lib/worker-fast-screen"),
-    import("../lib/worker-device"),
-    import("../lib/worker-device-link"),
-    import("../lib/mobile-app"),
-    import("../lib/host-api"),
-    import("../lib/scheduler"),
-    import("../lib/host-line"),
-    import("../lib/project-snapshot"),
-    import("../lib/worker-projects"),
-    import("../lib/worker-folders"),
-    import("../lib/worker-secret-run"),
-    import("../lib/worker-secret-wiring"),
-    import("../lib/worker-host-services"),
+    () => import("../lib/runner"),
+    () => import("../lib/runner-pending"),
+    () => import("../lib/bus"),
+    () => import("../lib/worker-daemon"),
+    () => import("../lib/worker-publish"),
+    () => import("../lib/worker-paths"),
+    () => import("../lib/worker-github"),
+    () => import("../lib/folder-grant"),
+    () => import("../lib/blob-store"),
+    () => import("../lib/show-dir"),
+    () => import("../lib/worker-pane"),
+    () => import("../lib/runner-state"),
+    () => import("../lib/worker-recover"),
+    () => import("../lib/resume"),
+    () => import("../lib/worker-screen"),
+    () => import("../lib/simulator-input"),
+    () => import("../lib/worker-fast-screen"),
+    () => import("../lib/worker-device"),
+    () => import("../lib/worker-device-link"),
+    () => import("../lib/mobile-app"),
+    () => import("../lib/host-api"),
+    () => import("../lib/scheduler"),
+    () => import("../lib/host-line"),
+    () => import("../lib/project-snapshot"),
+    () => import("../lib/worker-projects"),
+    () => import("../lib/worker-folders"),
+    () => import("../lib/worker-secret-run"),
+    () => import("../lib/worker-secret-wiring"),
+    () => import("../lib/worker-host-services"),
     // Loaded again in start, as the board tools' side (lib/worker-board-link.ts); here so `check` proves they load.
-    import("../lib/worker-board-link"),
-    import("../lib/worker-lists"),
-    import("../lib/cron-run"),
-    import("../lib/worktree-pool"),
-    import("../lib/worker-browser-screen"),
-  ]);
+    () => import("../lib/worker-board-link"),
+    () => import("../lib/worker-lists"),
+    () => import("../lib/cron-run"),
+    () => import("../lib/worktree-pool"),
+    () => import("../lib/worker-browser-screen"),
+  ] as const);
   return { store, parts };
+}
+
+// Each loader's module, one after another (see loadEngine), typed as the tuple Promise.all would give.
+async function inTurn<T extends readonly (() => Promise<unknown>)[]>(loaders: T): Promise<{ -readonly [K in keyof T]: Awaited<ReturnType<T[K]>> }> {
+  const out: unknown[] = [];
+  for (const load of loaders) out.push(await load());
+  return out as { -readonly [K in keyof T]: Awaited<ReturnType<T[K]>> };
 }
 
 async function checkCommand() {
@@ -156,13 +166,13 @@ async function startCommand() {
   const { widen, terminal } = (await import("../lib/worker-signing")).workerSigning({ home, workerId: config.workerId, root, listFolders: listProjectFolders, repoPath: paths.repoPath, nameFolder: publisher.nameFolder, signHeld: (await import("../lib/worker-secret-wiring")).pairedSigner(home) });
   // The board tools reach the user's board, not this store (docs/architecture/project-hosts.md#board-tools-on-a-worker):
   // the owner's cards, a card for another host, and this worker's crons and webhooks published for the Mac's drawers.
-  const [{ setBoardLink }, { createListsPublisher }, { listCrons }, { listWebhooks, onWebhooksWrite }, { startCronClock }] = await Promise.all([
-    import("../lib/worker-board-link"),
-    import("../lib/worker-lists"),
-    import("../lib/cron-store"),
-    import("../lib/webhooks"),
-    import("../lib/cron-run"),
-  ]);
+  const [{ setBoardLink }, { createListsPublisher }, { listCrons }, { listWebhooks, onWebhooksWrite }, { startCronClock }] = await inTurn([
+    () => import("../lib/worker-board-link"),
+    () => import("../lib/worker-lists"),
+    () => import("../lib/cron-store"),
+    () => import("../lib/webhooks"),
+    () => import("../lib/cron-run"),
+  ] as const);
   const boardLink = { workerId: config.workerId, root, cards: reg.boardCards, newCard: reg.newCard, setLists: reg.setLists, macCrons: reg.macCrons };
   setBoardLink(boardLink);
   const lists = createListsPublisher(boardLink, { crons: listCrons, webhooks: () => listWebhooks() });

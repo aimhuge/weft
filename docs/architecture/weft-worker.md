@@ -101,6 +101,12 @@ exit 0 ──▶ launchd or systemd starts the new code
 up 60 s and a heartbeat landed ──▶ update-trial deleted
 ```
 
+- **CI loads the engine first:** `pnpm run check:worker-engine` (`scripts/check-worker-engine.mjs`, in CI's typecheck
+  job) runs the CLI's own import block and `loadEngine()` through jiti, as `check` does, so a commit a worker would put
+  in update-bad fails its PR instead. It caught two on 2026-11-02 (d83e363): libsodium-wrappers 0.7.16's ESM build
+  imports a file it doesn't ship, and jiti takes the `import` condition (fixed by `patches/libsodium-wrappers@0.7.16.patch`,
+  which points that condition at the CommonJS build); and `loadEngine()`'s `Promise.all` raced jiti's async imports, which
+  hand a half-run module to a second importer (PLUGIN_DIR undefined in `lib/puku-dotenv.ts`), so it loads one at a time now.
 - **What counts as busy:** `engine.live`, the runner's real sessions (`busyCards`), for both the update and the row's
   `busy` status. A card waiting on a permission is mid-turn, so it holds the update too, and a forgotten question holds
   it until someone answers. An idle card's CLI does get cut, and resumes from its saved session on the next message, as after a sign-in.

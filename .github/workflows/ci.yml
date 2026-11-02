@@ -60,6 +60,9 @@ jobs:
           restore-keys: |
             tsc-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
       - run: pnpm run typecheck
+      # Loads the Weft Worker's engine as the daemon does (jiti, the CLI's own loadEngine()): a commit that can't, a
+      # worker refuses to update to, so it fails here first (scripts/check-worker-engine.mjs).
+      - run: pnpm run check:worker-engine
 
   # The suite split six ways with vitest --shard through the same runner (so its memory gate and RSS
   # watchdog still apply to each shard). Every test file lands in exactly one shard.
