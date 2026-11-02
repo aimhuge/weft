@@ -227,6 +227,20 @@ describe("WebhooksDrawer", () => {
     expect(screen.getByText("stripe")).toBeInTheDocument();
   });
 
+  it("shows a worker project's own webhooks to mark registered or remove, but no relay, tunnel or Add of this Mac's", async () => {
+    const folder = "worker://w1/app";
+    const { update } = setup([hook({ id: "worker:w1:h1", folder, worker: "mini" }), hook({ id: "worker:w1:h2", folder, name: "resend", worker: "mini", url: "https://weft.zip/hook/r" })], { project: folder, folders: [folder] });
+    expect(screen.queryByRole("button", { name: /Add$/ })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /^stripe/ }));
+    expect(screen.queryByRole("button", { name: "Get a public URL" })).not.toBeInTheDocument();
+    expect(screen.getByText("A thread on its worker gets it a public URL.")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Mark registered" }));
+    expect(update).toHaveBeenCalledWith("worker:w1:h1", { registered: true });
+    await userEvent.click(screen.getByRole("button", { name: /^resend/ }));
+    expect(screen.getByText("https://weft.zip/hook/r")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Stop relay" })).not.toBeInTheDocument();
+  });
+
   it("serves an ask that names no webhook once loaded", () => {
     setup([hook()]);
     act(() => addWebhookAsk(vi.fn()));

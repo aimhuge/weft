@@ -785,6 +785,10 @@ worker thread ── mcp__board__* (lib/board-tools.ts) ── onWorker? ── 
    *_cron       ── this worker's own crons.json, fired by its own cron clock ┐
    webhooks     ── this worker's own webhooks.json                            ├─ worker_set_lists ─▶ cloud_worker_lists
                                                                              ┘     └─ Mac: GET /api/crons, /api/webhooks merge them
+   list_crons   ── + worker_mac_crons(key) ◀── cloud_mac_crons ◀── each Mac's summary (lib/mac-crons.ts), read-only (mac:<id>)
+Mac ⏰ / 🪝 drawer ── PATCH, DELETE, Run now on worker:<id>:<item> (elevated) ── actOnWorkerItem ── host row
+                     cron.update · cron.delete · cron.run · webhook.update · webhook.delete ──▶ the worker's daemon
+                     dispatch: no card check, remoteRefusal (list-policy), lists rule (a run narrowed by workerStartMode)
    create_agent ── refused (agents live in Settings → Agents on the Mac)
 every Weft tool ── WORKER_TOOLS (lib/worker-tools.ts): prompt says what doesn't work; WORKER_TOOL_GATE denies it with why
 ```
@@ -825,12 +829,13 @@ webhook" in a board nobody sees. Now the tools that write the board reach the us
   256 KB cap; folders as project names, no fork session). The Mac's `GET /api/crons` adds them
   (`lib/worker-lists-read.ts`, read at most every 15 s, signed-out or table-less reads as none) with
   `worker://<id>/<name>` folders, ids `worker:<id>:<cron>` and `worker` set to the worker's name, so the ⏰ drawer lists
-  them. Changing one from the Mac is refused ("lives on a Weft Worker: change it from a thread on that worker"); a
-  `cron.*` host verb would lift that. Mac crons aren't listed from a worker.
+  them. The drawer changes one through a host verb to that worker ([below](#crons-and-webhooks-both-ways-as-built)), and a
+  worker thread's `list_crons` lists the Mac's read-only.
 - **Webhooks the same way.** A webhook's target is the worker's own dev server, so its registry stays on the worker;
   `lib/webhooks.ts` tells `onWebhooksWrite` listeners after each write, the worker republishes, and `GET /api/webhooks`
-  adds the worker's for the folders asked (or all), so the 🪝 drawer and its count show them. PATCH and DELETE on the Mac
-  refuse a worker's. `add_blank` no longer hides a vault blank it couldn't add: the reply names the secret and why.
+  adds the worker's for the folders asked (or all), so the 🪝 drawer and its count show them. Mark registered and Remove
+  on the Mac reach the worker as host verbs (below). `add_blank` no longer hides a vault blank it couldn't add: the reply
+  names the secret and why.
 - **Changelog.** `changelog_*` keep writing the worker's `changelog.jsonl`, which is only a journal: the stamp hooks
   (`lib/changelog-stamp.ts`, in every runner) write and commit the entries into the checkout's own `CHANGELOG.md` after
   the card's commit, as on a Mac, and the user sees them when the worker pushes.
@@ -843,8 +848,49 @@ webhook" in a board nobody sees. Now the tools that write the board reach the us
   all hear it before the tool runs. Landing a tool on workers is flipping its entry to `true`.
 - **Migration** `supabase/migrations/20261102210000_worker_board_tools.sql`: `worker_board_cards`, `worker_new_card`,
   `cloud_worker_lists` and `worker_set_lists`. Not applied yet.
-- **Not yet:** list and change Mac crons from a worker; edit a worker's cron or webhook from the Mac's drawer; an agent on
-  a card sent to another host; `read_thread` and the copilot's tools (the copilot never runs on a worker).
+- **Not yet:** an agent on a card sent to another host; `read_thread` and the copilot's tools (the copilot never runs on a
+  worker). Changing a Mac's cron from a worker is refused by design (below).
+
+### Crons and webhooks both ways (as built)
+
+Built 2026-11-02 (migration `supabase/migrations/20261102270000_mac_crons_for_workers.sql`, applied).
+
+- **Mac to worker: five list verbs.** `cron.update`, `cron.delete`, `cron.run`, `webhook.update` and `webhook.delete`
+  (`lib/host-api/lists.ts`, in `HOST_API` and `HOST_VERBS`; `isListVerb` in `@weft/client`). `args.id` is the item's own
+  id on its host, not a card. The drawers' routes (`app/api/crons/[id]`, `…/run`, `app/api/webhooks/[id]`) take a
+  `worker:<id>:<item>` id behind `elevated()`, as every cloud act is, and `actOnWorkerItem` (`lib/worker-list-acts.ts`)
+  checks the worker is one of the owner's headless workers, inserts the `host` row (folder `-`), waits up to 8 s for a
+  claim and 30 s to finish, and answers `{}`, `{ queued: true }` or the worker's refusal as the error. The routes answer
+  with no cron or webhook: `useCrons` and `useWebhooks` keep the drawn change and read again after
+  `WORKER_LIST_SETTLE_MS` (`lib/worker-item-id.ts`), once the worker has republished; the Mac's 15 s cache is forgotten
+  then too (`forgetWorkerListsSoon`). A worker's webhook deleted from the Mac also loses its relay row (the owner's),
+  taken down with the Mac's session after the worker confirms (`deleteWorkerWebhook`), held to rows whose `worker_id` is
+  that worker, since the relay id comes from the worker's own published list.
+- **On the worker.** `cardKinds.host` sends a list verb past the card check to `CardRules.lists`; a host without that
+  rule refuses them (`NO_LISTS`), so a Mac's inbox never changes its own crons or webhooks from the network.
+  `remoteRefusal` runs `listRefusal` (`packages/weft-client/src/list-policy.ts`): a cron patch may only name `name`,
+  `prompt`, `expr`, `mode` (fork or fresh), `enabled`, `startsAt` and `endsAt`, each with its JSON type, and a webhook
+  patch only `name`, `events`, `hint` and `registered`, never `target`, `provider` or `secret`; a run or delete carries
+  nothing but its id. A cron prompt starting with "!" is a shell line, so it's refused outright: a signed approval for it
+  waits on C (PR #49). `listVerb` (`lib/worker-kinds.ts`) runs a cron now in `workerStartMode(cron.permissionMode)`, the
+  mode a new card from the network gets (plan as default, bypassPermissions refused), through `runCron`'s new `mode`;
+  the row's `card_id` stays empty (it may name only a card the worker published) and `result.cardId` names the run. A
+  `cron.update` that re-words the prompt is new work on every later fire, so the worker narrows the cron's own mode by
+  the same rule (a bypassPermissions cron drops to `default`) before the scheduler fires the new words.
+- **Worker to Mac: read-only.** Each Mac publishes a summary of its own crons (`lib/mac-crons.ts`, started from the
+  prewarm in `lib/copilot.ts`): id, name, schedule, fork or fresh, on or off, next run and the project's name, plus the
+  prompt only when it's 120 characters or fewer; never the path, the source card, the fork's session or the runs. It
+  upserts `cloud_mac_crons` (owner-only RLS) 2 s after any `crons` event and every 10 minutes, and signed out writes
+  nothing. `worker_mac_crons(key)` hands the worker its owner's rows, rebuilding each entry from those fields alone.
+  `list_crons` on a worker appends them as `mac:<id>` lines with the Mac's name (`lib/worker-mac-crons.ts`, through
+  `BoardLink.macCrons`), and `update_cron`, `delete_cron` and `run_cron_now` refuse a `mac:` id with why: a worker thread
+  is the less-trusted side (a box's key, a prompt that can be injected), so a Mac's cron changes only on the Mac.
+- **The drawers on a worker project.** `RailContext.workerProject` (the selected worker:// project, from `Board.tsx`)
+  makes ⏰ and 🪝 show that worker's own (`lib/use-rail-lists.ts`). `ProjectHost.can` gains `lists` (both hosts) and
+  `relay` (this Mac only): ⏰'s switch, Run now, Edit and Delete check `lists`; 🪝's Add, tunnels, Get a public URL and
+  Stop relay check `relay`, so a worker's webhook shows its URL (made by a thread there, `lib/relay-worker.ts`) with Mark
+  registered and Remove. A cron row names the worker it fires on (`cronSummary`).
+
 ### Drawers and mini apps on a worker project (T5, as built)
 
 ```

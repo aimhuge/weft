@@ -7,7 +7,8 @@ import { isBang } from "./bang";
 import type { SkillInfo } from "./card";
 import { hostRow, type CardTarget, type HostCommandRow, type HostPayload } from "./host-row";
 import { readRefusal, writeRefusal } from "./file-policy";
-import { isHostVerb, type HostVerb } from "./host-verbs";
+import { isHostVerb, isListVerb, type HostVerb } from "./host-verbs";
+import { listRefusal } from "./list-policy";
 import { fitSkills, type SkillsOnWire } from "./skills-wire";
 
 // What a host writes to `result`. Never the card or its thread: those travel sealed (cloud_cards, the outbox), and
@@ -51,6 +52,8 @@ const SHELL_REFUSED = "A shell command only runs from Weft's own window, not fro
 
 export function remoteRefusal({ verb, args }: HostPayload): string | null {
   if (verb === "card.shell") return SHELL_REFUSED;
+  // A cron or webhook the host keeps: only what the Mac's drawers change (./list-policy.ts).
+  if (isListVerb(verb)) return listRefusal(verb, args);
   // A scheduled message is sent as a reply when its time comes, never run, but a "!" one would read as a command
   // waiting to run, so the network can't leave one on a card at all.
   if (verb === "card.schedule" && typeof args.text === "string" && isBang(args.text)) return SHELL_REFUSED;
@@ -75,7 +78,8 @@ function cardFieldsRefusal(verb: HostPayload["verb"], args: HostPayload["args"])
 
 // A host command's outcome on the host that ran it: the card it touched, and what goes in the row's `result`.
 export interface HostDone {
-  cardId: string;
+  // Null for a verb on a cron or webhook (cron.*, webhook.*): the row's card_id names only a card the host published.
+  cardId: string | null;
   result: HostResult;
 }
 

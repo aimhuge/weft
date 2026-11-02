@@ -49,7 +49,11 @@ Worker, the app closed), instead of dropping it silently.
 `list`, `add_blank` and `mark_registered` work there. `lib/webhooks.ts` tells `onWebhooksWrite` listeners after every
 write; the worker republishes its webhooks with its crons (`lib/worker-lists.ts`, `cloud_worker_lists`, owner-only), and
 the Mac's `GET /api/webhooks` adds them for the folders asked (`worker://<id>/<name>`, ids `worker:<id>:<hook>`,
-`worker` set to its name), so 🪝 lists and counts them. The Mac's PATCH and DELETE refuse a worker's webhook. `relay`,
+`worker` set to its name), so 🪝 lists and counts them, and a worker project's 🪝 shows that worker's. Mark registered and
+Remove reach the worker as `webhook.update` and `webhook.delete` host verbs (`lib/worker-list-acts.ts`; a delete also
+takes its relay row down); a change from the Mac may name only `name`, `events`, `hint` and `registered`, never the
+target, provider or secret, and its relay comes from a thread there, so the drawer shows the URL without Get a public URL
+or Stop relay ([project-hosts.md](project-hosts.md#crons-and-webhooks-both-ways-as-built)). `relay`,
 `tunnel`, `close_tunnel` and `ask_add` don't work on a worker yet: `lib/worker-tools.ts` says why in the prompt and its
 gate answers a call with it ([project-hosts.md](project-hosts.md#board-tools-on-a-worker)).
 
