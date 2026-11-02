@@ -36,6 +36,24 @@ function seededDb() {
   return db;
 }
 
+// The two values generate hands the server that depend on the key: the public half and the sealed
+// vault key. Neither can carry the words: each decodes to exactly the size its crypto makes (a
+// 32-byte public key; a 32-byte vault key sealed to it, plus libsodium's 48 bytes of seal), too
+// small for 24 words, and neither holds the seed the words spell.
+//
+// A whole-word scan of these values, or of a row around them, proves less and fails at random:
+// base64 can spell a short word between its "+" and "/", and the rows' fixed text ("action",
+// "name", "reason", "vault") is on the 2048-word list, so one run in about twenty drew a word the
+// row already had.
+function expectOpaque(value: unknown, bytes: number, seed: Buffer) {
+  expect(value).toMatch(/^[A-Za-z0-9+/]+={0,2}$/);
+  const decoded = Buffer.from(value as string, "base64");
+  expect(decoded).toHaveLength(bytes);
+  expect(decoded.includes(seed)).toBe(false);
+}
+const PUBLIC_KEY_BYTES = 32;
+const SEALED_KEY_BYTES = 32 + 48;
+
 describe("the words", () => {
   it("are 24 of them, from the 2048-word list", () => {
     const words = wordsFor(sodium.randomBytes(32), "", "v1");
@@ -136,12 +154,23 @@ describe("generate", () => {
   it("never writes the words anywhere", async () => {
     const db = seededDb();
     const made = await generate({ vault: sharedVault(), accountClient: account(db), sodium });
-    const written = JSON.stringify({ devices: db.tables.devices, grants: db.tables.vault_grants, events: db.tables.vault_events });
-    // Whole words, not substrings: "cover" is a recovery word, and "recover"/"recovery" in a row's
-    // action would trip a naive substring check without ever holding the word.
-    for (const word of made.words) {
-      expect(new RegExp(`\\b${word}\\b`, "i").test(written)).toBe(false);
-    }
+    const seed = seedFor(made.words, "", "v1");
+
+    // Every row, field by field. Each field is a fixed value the words can't reach, except the
+    // public key and the sealed box, which are opaque crypto of a fixed size.
+    const at = "2026-10-27T00:00:00.000Z";
+    expect(db.tables.devices).toEqual([
+      { id: made.deviceId, user_id: null, name: "recovery", public_key: made.publicKey, fingerprint: "recovery", platform: "darwin", last_seen_at: at, revoked_at: null },
+    ]);
+    const wrapped: unknown = db.tables.vault_grants[0]?.wrapped_key;
+    expect(db.tables.vault_grants).toEqual([
+      { id: "row-2", vault_id: "v1", device_id: made.deviceId, key_version: 1, wrapped_key: wrapped, granted_by: "u1", granted_at: at },
+    ]);
+    expect(db.tables.vault_events).toEqual([
+      { id: "row-3", vault_id: "v1", actor_user_id: "u1", actor_email: null, device_id: made.deviceId, action: "vault.recovery_shown", metadata: { reason: null }, created_at: at },
+    ]);
+    expectOpaque(made.publicKey, PUBLIC_KEY_BYTES, seed);
+    expectOpaque(wrapped, SEALED_KEY_BYTES, seed);
   });
 
   it("sends only ciphertext to the server: the public key and the sealed box", async () => {
@@ -164,8 +193,10 @@ describe("generate", () => {
     expect(call.args.p_public_key).toBe(made.publicKey);
     // The sealed box is not the vault key, and the words are not in the call at all.
     expect(call.args.p_wrapped_key).not.toBe(vault.key);
-    const sent = JSON.stringify(call.args);
-    for (const word of made.words) expect(new RegExp(`\\b${word}\\b`, "i").test(sent)).toBe(false);
+    expect(call.args).toEqual({ p_vault_id: "v1", p_public_key: made.publicKey, p_wrapped_key: call.args.p_wrapped_key, p_key_version: 1 });
+    const seed = seedFor(made.words, "", "v1");
+    expectOpaque(call.args.p_public_key, PUBLIC_KEY_BYTES, seed);
+    expectOpaque(call.args.p_wrapped_key, SEALED_KEY_BYTES, seed);
   });
 
   it("refuses without a vault or a key", async () => {
