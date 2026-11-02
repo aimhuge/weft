@@ -53,13 +53,35 @@ describe("GET /worker-board", () => {
     const res = await route.GET(get("/worker-board?card=c1"));
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ items: [], start: 0, total: 0 });
-    expect(board.workerThreadPage).toHaveBeenCalledWith("c1", undefined);
+    expect(board.workerThreadPage).toHaveBeenCalledWith("c1", undefined, undefined, undefined);
   });
 
   it("walks back through a thread with before", async () => {
     board.workerThreadPage.mockResolvedValueOnce({ items: [], start: 0, total: 0 });
     await route.GET(get("/worker-board?card=c1&before=5"));
-    expect(board.workerThreadPage).toHaveBeenCalledWith("c1", 5);
+    expect(board.workerThreadPage).toHaveBeenCalledWith("c1", 5, undefined, undefined);
+  });
+
+  it("sends only the items past after", async () => {
+    board.workerThreadPage.mockResolvedValueOnce({ items: [], start: 8, total: 8 });
+    await route.GET(get("/worker-board?card=c1&after=7"));
+    expect(board.workerThreadPage).toHaveBeenCalledWith("c1", undefined, undefined, 7);
+  });
+
+  it("ignores an after that isn't a whole number", async () => {
+    board.workerThreadPage.mockResolvedValueOnce({ items: [], start: 0, total: 0 });
+    await route.GET(get("/worker-board?card=c1&after=soon"));
+    expect(board.workerThreadPage).toHaveBeenCalledWith("c1", undefined, undefined, undefined);
+  });
+
+  it("reads only the cards changed since a time", async () => {
+    await route.GET(get("/worker-board?since=2026-11-02T10:00:00.000Z"));
+    expect(board.readWorkerBoard).toHaveBeenCalledWith(undefined, undefined, undefined, "2026-11-02T10:00:00.000Z");
+  });
+
+  it("ignores a since that isn't a time", async () => {
+    await route.GET(get("/worker-board?since=yesterday"));
+    expect(board.readWorkerBoard).toHaveBeenCalledWith(undefined, undefined, undefined, undefined);
   });
 
   it("says the thread can't be read when there's no page", async () => {

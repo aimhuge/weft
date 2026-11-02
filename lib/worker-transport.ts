@@ -15,9 +15,10 @@ import type { PageUpdate, ThreadTransport } from "./thread-transport";
 import { skillCache } from "./skills-wire";
 import type { ToolResultSource } from "./use-tool-result";
 import { actOnWorker, askWorker, postWorkerAction } from "./worker-acts";
+import { startThreadPoll } from "./worker-poll";
 import { useShownItems } from "./worker-shown";
 
-export const THREAD_POLL_MS = 2_500;
+export { THREAD_POLL_MS } from "./worker-poll";
 
 export const sendWorkerAction = postWorkerAction;
 export { actOnWorker };
@@ -35,9 +36,11 @@ export async function readQa(cardId: string): Promise<QaState> {
   return (await res.json()) as QaState;
 }
 
-async function loadPage(cardId: string, before?: number): Promise<ThreadPage | null> {
+async function loadPage(cardId: string, before?: number, after?: number): Promise<ThreadPage | null> {
   const params = new URLSearchParams({ card: cardId });
   if (before !== undefined) params.set("before", String(before));
+  // Only the items past this seq (lib/worker-poll.ts); the answer's total still says how long the thread is.
+  if (after !== undefined) params.set("after", String(after));
   try {
     const res = await apiFetch(`/api/worker-board?${params.toString()}`);
     return res.ok ? ((await res.json()) as ThreadPage) : null;
@@ -46,9 +49,10 @@ async function loadPage(cardId: string, before?: number): Promise<ThreadPage | n
   }
 }
 
-// The newest page laid over what's loaded. A thread that got shorter was rewound on the worker: the page replaces it.
+// The newest page laid over what's loaded. A thread that got shorter was rewound on the worker: the page replaces it,
+// and so does one that starts past the end of the window (more arrived between polls than a page holds).
 export function mergePage(prev: ThreadPage, page: ThreadPage): ThreadPage {
-  if (page.total < prev.total) return page;
+  if (page.total < prev.total || (page.items.length && page.start > prev.start + prev.items.length)) return page;
   return page.items.reduce((next, item, i) => applyThreadEvent(next, { index: page.start + i, item }), prev);
 }
 
@@ -57,19 +61,10 @@ function useWorkerLive(cardId: string, onUpdate: (update: PageUpdate) => void) {
   useEffect(() => {
     update.current = onUpdate;
   });
-  useEffect(() => {
-    let inFlight = false;
-    const timer = setInterval(() => {
-      if (inFlight) return;
-      inFlight = true;
-      void loadPage(cardId)
-        .then((page) => {
-          if (page) update.current((prev) => mergePage(prev, page));
-        })
-        .finally(() => (inFlight = false));
-    }, THREAD_POLL_MS);
-    return () => clearInterval(timer);
-  }, [cardId]);
+  useEffect(
+    () => startThreadPoll({ cardId, fetchPage: (after) => loadPage(cardId, undefined, after), apply: (page) => update.current((prev) => mergePage(prev, page)) }),
+    [cardId],
+  );
 }
 
 // The "/" list of a worker's card, as its worker finds it for the card's checkout (kept a few minutes per card).

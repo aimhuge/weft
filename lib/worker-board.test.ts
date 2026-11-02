@@ -63,6 +63,63 @@ describe("readWorkerBoard", () => {
     expect(calls).toContainEqual({ op: "neq", args: ["kind", "desktop"] });
   });
 
+  it("reads only the cards changed since the last read, a little before it", async () => {
+    const { client, calls } = fakeClient({
+      workers: [workerRow({ last_seen_at: new Date(NOW).toISOString() })],
+      cards: [cardRow({ updated_at: "2026-11-02T10:00:05.000Z" }), cardRow({ card_id: "c2", updated_at: "2026-11-02T10:00:09.000Z" }), cardRow({ card_id: "c3" })],
+    });
+    const board = await readWorkerBoard(client, NOW, { read: () => Promise.resolve({ known: new Set<string>(), present: new Map() }) }, "2026-11-02T10:00:00.000Z");
+    expect(calls).toContainEqual({ op: "gt", args: ["updated_at", "2026-11-02T09:59:58.000Z"] });
+    expect(board.delta).toBe(true);
+    expect(board.asOf).toBe("2026-11-02T10:00:09.000Z");
+  });
+
+  it("names the cards a changed read says are gone: deleted, copilot, or without a folder", async () => {
+    const copilot = { id: "cp", title: "x", prompt: "", cwd: "", backend: "claude", permissionMode: "default", column: "review", role: "copilot", createdAt: 0, updatedAt: 0 };
+    const { client, calls } = fakeClient({
+      workers: [workerRow()],
+      cards: [
+        cardRow({ card_id: "live", updated_at: "2026-11-02T10:00:05.000Z" }),
+        cardRow({ card_id: "dead", deleted: true, updated_at: "2026-11-02T10:00:06.000Z" }),
+        cardRow({ card_id: "cp", card: copilot, updated_at: "2026-11-02T10:00:07.000Z" }),
+        cardRow({ card_id: "nofolder", folder: "", updated_at: "2026-11-02T10:00:08.000Z" }),
+      ],
+    });
+    const board = await readWorkerBoard(client, NOW, { read: () => Promise.resolve({ known: new Set<string>(), present: new Map() }) }, "2026-11-02T10:00:00.000Z");
+    expect(calls).not.toContainEqual({ op: "eq", args: ["deleted", false] });
+    expect(board.removed).toEqual(["dead", "cp", "nofolder"]);
+    expect(board.cards.map((c) => c.id)).toEqual(["c1"]);
+  });
+
+  it("sends a changed read that fills the card limit as a whole read", async () => {
+    const rows = Array.from({ length: 500 }, (_, i) => cardRow({ card_id: `c${i}`, updated_at: "2026-11-02T10:00:05.000Z" }));
+    const { client } = fakeClient({ workers: [workerRow()], cards: rows });
+    const board = await readWorkerBoard(client, NOW, { read: () => Promise.resolve({ known: new Set<string>(), present: new Map() }) }, "2026-11-02T10:00:00.000Z");
+    expect(board.delta).toBeUndefined();
+    expect(board.removed).toBeUndefined();
+    expect(board.asOf).toBe("2026-11-02T10:00:05.000Z");
+  });
+
+  it("keeps the same since when nothing changed", async () => {
+    const { client } = fakeClient({ workers: [workerRow()], cards: [] });
+    const board = await readWorkerBoard(client, NOW, { read: () => Promise.resolve({ known: new Set<string>(), present: new Map() }) }, "2026-11-02T10:00:00.000Z");
+    expect(board).toMatchObject({ delta: true, asOf: "2026-11-02T10:00:00.000Z", cards: [] });
+  });
+
+  it("reads whole when since isn't a time", async () => {
+    const { client, calls } = fakeClient({ workers: [workerRow()], cards: [cardRow({ updated_at: "2026-11-02T10:00:05.000Z" })] });
+    const board = await readWorkerBoard(client, NOW, { read: () => Promise.resolve({ known: new Set<string>(), present: new Map() }) }, "yesterday");
+    expect(calls.some((c) => c.op === "gt")).toBe(false);
+    expect(board.delta).toBeUndefined();
+    expect(board.asOf).toBe("2026-11-02T10:00:05.000Z");
+  });
+
+  it("has no asOf for a whole read with no cards", async () => {
+    const { client } = fakeClient({ workers: [workerRow()], cards: [] });
+    const board = await readWorkerBoard(client, NOW, { read: () => Promise.resolve({ known: new Set<string>(), present: new Map() }) });
+    expect("asOf" in board).toBe(false);
+  });
+
   it("has no folders for a worker whose database hasn't got the column yet", async () => {
     const { client } = fakeClient({
       workers: [workerRow({ last_seen_at: new Date(NOW).toISOString() })],
@@ -182,6 +239,29 @@ describe("workerThreadPage", () => {
   it("refuses when signed out", async () => {
     const { client } = fakeClient({ user: null });
     await expect(workerThreadPage("c1", undefined, client)).rejects.toThrow("Sign in to Weft to reach your worker.");
+  });
+
+  it("asks only for items past after", async () => {
+    const { client, calls } = fakeClient({ items: [{ card_id: "c1", seq: 5, item: { kind: "user", text: "new" } }] });
+    const page = await workerThreadPage("c1", undefined, client, 4);
+    expect(calls).toContainEqual({ op: "gt", args: ["seq", 4] });
+    expect(page).toEqual({ items: [{ kind: "user", text: "new" }], start: 5, total: 6 });
+  });
+
+  it("answers an after with nothing new by the thread's total alone", async () => {
+    const { client, calls } = fakeClient({ items: [], head: [{ seq: 6 }] });
+    expect(await workerThreadPage("c1", undefined, client, 6)).toEqual({ items: [], start: 7, total: 7 });
+    expect(calls).toContainEqual({ op: "select", args: ["cloud_thread_items", "seq"] });
+  });
+
+  it("answers an after on an empty thread with a total of 0", async () => {
+    const { client } = fakeClient({ items: [], head: [] });
+    expect(await workerThreadPage("c1", undefined, client, 3)).toEqual({ items: [], start: 4, total: 0 });
+  });
+
+  it("has no page when the total can't be read", async () => {
+    const { client } = fakeClient({ items: [], headError: { message: "boom" } });
+    expect(await workerThreadPage("c1", undefined, client, 3)).toBeNull();
   });
 
   it("uses the account client by default", async () => {

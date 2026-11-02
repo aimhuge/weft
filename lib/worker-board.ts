@@ -44,6 +44,8 @@ interface CardRow {
   owner_worker: string;
   folder: string;
   card: Card;
+  updated_at?: string;
+  deleted?: boolean;
 }
 
 const sendable = (row: unknown) => row as NewCommand;
@@ -94,29 +96,60 @@ export function boardFrom(workers: WorkerRow[], folders: Map<string, string[]>, 
   return { projects, cards: live.map((r) => ({ ...r.card, cwd: workerProjectPath(r.owner_worker, r.folder) })) };
 }
 
-// Your workers' projects, each listed even offline, and their cards.
-export async function readWorkerBoard(client: SupabaseClient = accountClient(), now = Date.now(), presence: PresenceWatch = presenceWatch()): Promise<WorkerBoard> {
+// A changed-cards read starts this far before its `since`, so a row committed a moment late isn't missed.
+export const SINCE_OVERLAP_MS = 2_000;
+
+// Your workers' projects, each listed even offline, and their cards. With `since` (the last read's `asOf`) only the cards
+// changed after it come back, marked `delta`; the board merges them, drops the `removed` ones, and reads whole every few minutes as a safety net.
+export async function readWorkerBoard(client: SupabaseClient = accountClient(), now = Date.now(), presence: PresenceWatch = presenceWatch(), since?: string): Promise<WorkerBoard> {
   const who = await session(client);
   if (!who) return EMPTY_WORKER_BOARD;
   const workers = await myWorkers(client, who);
   if (!workers.length) return { ...EMPTY_WORKER_BOARD, signedIn: true };
   const ids = workers.map((w) => w.id);
+  const from = since && Number.isFinite(Date.parse(since)) ? new Date(Date.parse(since) - SINCE_OVERLAP_MS).toISOString() : null;
   const [seen, folders, cards] = await Promise.all([
     presence.read((fn, args) => client.rpc(fn, args), ids, { owner: who.uid, all: true }),
     reportedFolders(client, ids),
-    client.from("cloud_cards").select("card_id, owner_device, owner_worker, folder, card").eq("org_id", who.org).eq("deleted", false).in("owner_worker", ids).order("updated_at", { ascending: false }).limit(CARD_LIMIT),
+    changedCards(client, who.org, ids, from),
   ]);
   if (cards.error) throw new Error(`Couldn't read your worker's threads: ${cards.error.message}`);
-  return { signedIn: true, ...boardFrom(workers, folders, cards.data, now, seen) };
+  const rows = cards.data as CardRow[];
+  const { asOf, delta, removed } = readMarks(rows, from, since);
+  const board = boardFrom(workers, folders, rows.filter((r) => !r.deleted), now, seen);
+  return { signedIn: true, ...board, ...(asOf ? { asOf } : {}), ...(delta ? { delta: true, removed } : {}) };
+}
+
+// The newest CARD_LIMIT card rows. A changed-cards read (`from`) also takes the deleted rows, to tell the board which are gone.
+function changedCards(client: SupabaseClient, org: string, ids: string[], from: string | null) {
+  const query = client.from("cloud_cards").select("card_id, owner_device, owner_worker, folder, card, updated_at, deleted").eq("org_id", org).in("owner_worker", ids);
+  return (from ? query.gt("updated_at", from) : query.eq("deleted", false)).order("updated_at", { ascending: false }).limit(CARD_LIMIT);
+}
+
+// What a read tells the next one: its newest stamp, whether it is a changed-cards read, and the cards that are gone.
+function readMarks(rows: CardRow[], from: string | null, since: string | undefined) {
+  const stamps = rows.flatMap((r) => (r.updated_at ? [Date.parse(r.updated_at)] : [])).filter(Number.isFinite);
+  const asOf = stamps.length ? new Date(Math.max(...stamps)).toISOString() : from ? since : undefined;
+  // A changed read that fills the limit is the newest CARD_LIMIT cards, which is what a whole read holds: it is sent as one.
+  const delta = from !== null && rows.length < CARD_LIMIT;
+  const removed = delta ? rows.filter((r) => r.deleted || r.card.role === "copilot" || !r.folder).map((r) => r.card_id) : [];
+  return { asOf, delta, removed };
 }
 
 // One page of a worker card's thread, the page the web board's transport reads. Null when it can't be read.
-export async function workerThreadPage(cardId: string, before: number | undefined, client: SupabaseClient = accountClient()): Promise<ThreadPage | null> {
+// With `after`, only the items with a seq past it (the poll's delta, lib/worker-poll.ts); when none is, an empty page that
+// still carries the thread's total, so a rewound thread shows.
+export async function workerThreadPage(cardId: string, before: number | undefined, client: SupabaseClient = accountClient(), after?: number): Promise<ThreadPage | null> {
   const who = await requireSession(client);
   let query = client.from("cloud_thread_items").select("card_id, seq, item").eq("org_id", who.org).eq("card_id", cardId);
   if (before !== undefined) query = query.lt("seq", before);
+  if (after !== undefined) query = query.gt("seq", after);
   const { data, error } = await query.order("seq", { ascending: false }).limit(THREAD_PAGE_SIZE);
-  return error ? null : pageFromRows(cardId, data);
+  if (error) return null;
+  if (after === undefined || data.length) return pageFromRows(cardId, data);
+  const head = await client.from("cloud_thread_items").select("seq").eq("org_id", who.org).eq("card_id", cardId).order("seq", { ascending: false }).limit(1);
+  if (head.error) return null;
+  return { items: [], start: after + 1, total: head.data.length ? (head.data[0] as { seq: number }).seq + 1 : 0 };
 }
 
 // The full result of a tool call whose result was cut out of its item.

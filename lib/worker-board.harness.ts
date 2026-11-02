@@ -22,6 +22,9 @@ export interface FakeOptions {
   workersError?: { message: string } | null;
   cardsError?: { message: string } | null;
   itemsError?: { message: string } | null;
+  // The newest item's seq, which an empty `after` read asks for.
+  head?: unknown[] | null;
+  headError?: { message: string } | null;
   toolError?: { message: string } | null;
   insertId?: string;
   insertError?: { message: string } | null;
@@ -53,6 +56,7 @@ function answer(table: string, columns: string, opts: FakeOptions): { data: unkn
       return rows(or(opts.cards, []), err(opts.cardsError));
     }
     case "cloud_thread_items":
+      if (columns === "seq") return rows(or(opts.head, []), err(opts.headError));
       return rows(or(opts.items, []), err(opts.itemsError));
     case "cloud_tool_outputs":
       return rows(opts.toolOutput ?? null, err(opts.toolError));
@@ -78,6 +82,7 @@ export function fakeClient(opts: FakeOptions = {}) {
       eq: (...args: unknown[]) => (calls.push({ op: "eq", args }), query),
       neq: (...args: unknown[]) => (calls.push({ op: "neq", args }), query),
       in: (...args: unknown[]) => (calls.push({ op: "in", args }), query),
+      gt: (...args: unknown[]) => (calls.push({ op: "gt", args }), query),
       lt: (...args: unknown[]) => (calls.push({ op: "lt", args }), query),
       order: (...args: unknown[]) => (calls.push({ op: "order", args }), query),
       limit: (...args: unknown[]) => (calls.push({ op: "limit", args }), query),

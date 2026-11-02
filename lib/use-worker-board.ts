@@ -8,17 +8,21 @@ import { EMPTY_WORKER_BOARD, type WorkerBoard } from "./worker-project";
 import type { GrantScope } from "./cloud-commands";
 import { applyIntents, onOptimistic, overlayAll, patchNow } from "./optimistic-cards";
 import { hostOf } from "./project-host";
+import { mergeBoard, FULL_READ_EVERY_MS } from "./worker-board-merge";
+import { clearActiveCards, markWholeRead, setActiveCards } from "./worker-poll";
 import { sendWorkerAction } from "./worker-transport";
 
-// Your workers' projects and cards on the desktop board, read through the local server every few seconds. They stay
+// Your workers' projects and cards on the desktop board, read through the local server every few seconds (only the cards changed since the last read, a whole read every
+// FULL_READ_EVERY_MS). They stay
 // in this hook's state, never in the board's cards or the local store. With no worker of yours it looks once a
 // minute, so a signed-out or worker-less Mac does next to nothing.
 export const BOARD_POLL_MS = 5_000;
 export const IDLE_POLL_MS = 60_000;
 
-async function load(): Promise<WorkerBoard | null> {
+// With `since`, only the cards changed after it (lib/worker-board-merge.ts).
+async function load(since?: string): Promise<WorkerBoard | null> {
   try {
-    const res = await apiFetch("/api/worker-board");
+    const res = await apiFetch(since ? `/api/worker-board?${new URLSearchParams({ since }).toString()}` : "/api/worker-board");
     return res.ok ? ((await res.json()) as WorkerBoard) : null;
   } catch {
     return null;
@@ -34,30 +38,44 @@ export function useWorkerBoard(): WorkerBoard {
     let alive = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let projects = 0;
+    // The last read before the cards were drawn, what a changed-cards read lays over; null forces a whole read.
+    let raw: WorkerBoard | null = null;
+    let wholeAt = 0;
     // A reload while a read is out starts a newer read: only the newest one draws and sets the next timer, so two
     // polling loops never run side by side.
     let latest = 0;
     const tick = async () => {
       const mine = ++latest;
       clearTimeout(timer);
-      const next = await load();
+      const since = raw?.asOf && Date.now() - wholeAt < FULL_READ_EVERY_MS ? raw.asOf : undefined;
+      const next = await load(since);
       if (!alive || mine !== latest) return;
       // A failed read keeps what's drawn, so a blip doesn't empty the projects.
       if (next) {
-        projects = next.projects.length;
-        setBoard({ ...next, cards: overlayAll(next.cards) });
+        if (!next.delta) {
+          wholeAt = Date.now();
+          markWholeRead();
+        }
+        raw = mergeBoard(raw ?? EMPTY_WORKER_BOARD, next);
+        projects = raw.projects.length;
+        setActiveCards(raw.cards);
+        setBoard({ ...raw, cards: overlayAll(raw.cards) });
       }
       timer = setTimeout(() => void tick(), projects ? BOARD_POLL_MS : IDLE_POLL_MS);
     };
     // A refused change reads the cards again; any other redraws them with what's still open.
     const off = onOptimistic((update) => {
-      if (update.kind === "reload") void tick();
+      if (update.kind === "reload") {
+        raw = null;
+        void tick();
+      }
       else setBoard((b) => ({ ...b, cards: applyIntents(b.cards) }));
     });
     void tick();
     return () => {
       alive = false;
       clearTimeout(timer);
+      clearActiveCards();
       off();
     };
   }, []);

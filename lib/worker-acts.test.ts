@@ -38,6 +38,20 @@ describe("postWorkerAction", () => {
   });
 });
 
+describe("postWorkerAction's route note", () => {
+  it("notes the round trip of a command the server took, and not one it refused", async () => {
+    const { getWorkerRoute, resetWorkerRoute } = await import("./worker-route");
+    resetWorkerRoute();
+    fetchMock.mockResolvedValueOnce(json({ commandId: "x" }, 400));
+    await postWorkerAction({ action: "stop", cardId: "c1" }).catch(() => {});
+    expect(getWorkerRoute("?")).toBeNull();
+    fetchMock.mockResolvedValueOnce(json({ commandId: "x" }));
+    await postWorkerAction({ action: "stop", cardId: "c1" });
+    expect(getWorkerRoute("?")?.via).toBe("relay");
+    resetWorkerRoute();
+  });
+});
+
 describe("actOnWorker", () => {
   it("sends the verb as a host command and follows it until the worker ran it", async () => {
     worker({ status: "done" });

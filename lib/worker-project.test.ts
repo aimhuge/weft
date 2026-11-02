@@ -68,6 +68,8 @@ describe("workerLabel", () => {
     expect(workerLabel({ name: "m1mini", status: "online" })).toBe("on m1mini");
     expect(workerLabel({ name: "m1mini", status: "busy" })).toBe("on m1mini");
     expect(workerLabel({ name: "m1mini", status: "offline" })).toBe("on m1mini · offline");
+    expect(workerLabel({ name: "m1mini", status: "online" }, "relay · 600 ms")).toBe("on m1mini · relay · 600 ms");
+    expect(workerLabel({ name: "m1mini", status: "offline" }, "relay · 600 ms")).toBe("on m1mini · offline");
   });
 });
 
