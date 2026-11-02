@@ -64,6 +64,9 @@ export const HOST_API = {
   // A card's dev server: a private address for it (a tunnel, after the owner's Touch ID on their Mac), or its end.
   "dev.open": { elevated: false, run: lazy(() => import("./dev-servers"), "devOpenVerb") },
   "dev.stop": { elevated: false, run: lazy(() => import("./dev-servers"), "devStopVerb") },
+  // The same command again, and its last lines: neither widens what the card can touch.
+  "dev.restart": { elevated: false, run: lazy(() => import("./dev-servers"), "devRestartVerb") },
+  "dev.log": { elevated: false, run: lazy(() => import("./dev-servers"), "devLogVerb") },
 } satisfies Record<HostVerb, Handler>;
 
 type Table = typeof HOST_API;

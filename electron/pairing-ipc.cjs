@@ -89,7 +89,12 @@ function setupPairing({ ipcMain, dataDir, accountClient, isBoard, confirm, safeS
     sodium ??= await ready();
     return signer.publicKey();
   };
-  require("./host-pairing-ipc.cjs").registerHostPairing(handle, { db, userId, macDevice, myDevice, confirm, macSignKey }, workerPins);
+  // And it signs a worker's re-pair to another Mac, after Touch ID (electron/worker-repair.cjs).
+  const macSign = async (message) => {
+    sodium ??= await ready();
+    return signer.sign(message);
+  };
+  require("./host-pairing-ipc.cjs").registerHostPairing(handle, { db, userId, macDevice, myDevice, confirm, macSignKey, macSign }, workerPins);
   // A worker's connectors (Settings → Devices → Connectors): turning one on or loosening it takes Touch ID; main's session writes.
   require("./connector-grants.cjs").registerConnectorGrants(handle, { db, userId, confirm });
 

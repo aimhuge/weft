@@ -16,7 +16,11 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 }
 
 // start: run the plan's dev command unless its url already answers; stop: end the server Weft started (dev.stop);
-// open: a private address for the card's server, after Touch ID (dev.open, lib/host-api/dev-servers.ts).
+// open: a private address for the card's server, after Touch ID (dev.open, lib/host-api/dev-servers.ts); rerun: the
+// run's own command again (dev.restart); log: its last lines (dev.log). restart is the review tour's plan, started anew.
+// The actions that are a dev.* host verb as they are, mounted for this Mac's own cards.
+const DEV_VERBS: Partial<Record<string, "dev.open" | "dev.restart" | "dev.log">> = { open: "dev.open", rerun: "dev.restart", log: "dev.log" };
+
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const denied = guard(req);
   if (denied) return denied;
@@ -25,7 +29,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!card) return fail("No such card.", 404);
   const { action } = (await req.json().catch(() => ({}))) as { action?: string };
   const plan = card.review;
-  if (action === "open") return runVerb("dev.open", { id }).then((r) => Response.json(r), (err: unknown) => hostFail(err));
+  const verb = DEV_VERBS[action ?? ""];
+  if (verb) return runVerb(verb, { id }).then((r) => Response.json(r), (err: unknown) => hostFail(err));
   if (action === "stop") await runVerb("dev.stop", { id });
   else if (action === "start" || action === "restart") {
     if (!plan?.dev) return fail("The review tour has no dev command.");

@@ -212,6 +212,8 @@ contextBridge.exposeInMainWorld("weft", {
     cancel: (id) => ipcRenderer.invoke("host-pairing:cancel", id),
     // Re-pin: main forgets the worker's pinned keys after Touch ID (electron/worker-pins.cjs).
     forgetPin: (id, name) => ipcRenderer.invoke("worker-pins:forget", id, name),
+    // Approve re-pair: main asks Touch ID and signs the swap with this Mac's key (electron/worker-repair.cjs).
+    approveRepair: (id, code) => ipcRenderer.invoke("worker-repair:approve", id, code),
   },
   // A worker's connectors (electron/connector-grants.cjs): on, settings and Allows, each loosening behind Touch ID in main.
   connectors: {

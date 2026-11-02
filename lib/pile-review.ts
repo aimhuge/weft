@@ -2,11 +2,18 @@
 // counter and the Review column's "Review all" button both start as a card. Rejects when there is nothing
 // uncommitted to walk through.
 import { apiFetch } from "./api-client";
+import { workerPilePrompt } from "./pile-worker";
 import { hostFor } from "./project-host";
 
 export async function fetchPileReview(cwd: string) {
-  // The walk-through's prompt is written from this Mac's store and points at its commit script and server.
-  if (!hostFor(cwd).can("projectActs")) throw new Error("The commit walk-through isn't on a worker's projects yet. Ask a card there to commit.");
+  // This Mac's prompt is written from its store and points at its commit script and server. A host that can't take
+  // those but publishes its reads (a worker) gets one from its snapshot's pile, for a card there (lib/pile-worker.ts).
+  const host = hostFor(cwd);
+  if (!host.can("projectActs")) {
+    const pile = host.can("reads") ? await host.read("pile", cwd) : null;
+    if (!pile) throw new Error("Nothing uncommitted to walk through.");
+    return workerPilePrompt(pile);
+  }
   const r = await apiFetch(`/api/pile?cwd=${encodeURIComponent(cwd)}&prompt=1`);
   // A restarting dev server answers with an HTML page; treat that as no prompt rather than a SyntaxError.
   const d = (await r.json().catch(() => ({}))) as { prompt?: string; title?: string; error?: string };

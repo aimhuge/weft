@@ -7,9 +7,11 @@ import type { DeviceKind, DeviceView } from "@/lib/device-registry";
 import { timeAgo } from "@/lib/format";
 import { useDevices } from "@/lib/use-devices";
 import { useNow } from "@/lib/use-now";
+import { useState } from "react";
 import { useWorkerConnectors } from "@/lib/use-worker-connectors";
 import WorkerConnectors from "./WorkerConnectors";
 import { Spinner } from "./Icon";
+import { WorkerRepair } from "./WorkerRepair";
 import { SettingsCard, SettingsSectionHeader } from "./SettingsLayout";
 
 const SUBTLE = "text-[12.5px] text-muted";
@@ -43,7 +45,10 @@ function AddWorker({ devices }: { devices: ReturnType<typeof useDevices> }) {
     );
   return (
     <div className="mt-3 flex w-full flex-col gap-2">
-      <p className="text-[13px] text-ink">Run this on the box. When it prints a code, Touch ID here will name the same one.</p>
+      <p className="text-[13px] text-ink">
+        Run this on the box. When it prints a code, Touch ID here will name the same one.
+        {code.fingerprint && <span className="text-muted"> Moving a paired worker here? Its old Mac&apos;s Re-pair will name this Mac as {code.fingerprint}.</span>}
+      </p>
       <code className="block select-all break-all rounded-md bg-sunken px-2 py-1 font-mono text-[12px] text-ink">{code.command}</code>
       <div className="flex items-center gap-2">
         <span className={`flex items-center gap-2 ${SUBTLE}`}>
@@ -64,6 +69,7 @@ export default function DevicesSettings() {
   const devices = useDevices();
   const connectors = useWorkerConnectors();
   const now = useNow();
+  const [repairing, setRepairing] = useState<string | null>(null);
   const list = devices.view?.devices ?? [];
   return (
     <SettingsCard>
@@ -77,12 +83,13 @@ export default function DevicesSettings() {
       {list.length > 0 && (
         <ul className="mt-4 flex flex-col gap-3 border-t border-line pt-4">
           {list.map((d) => (
-            <li key={d.id} className={`flex items-center justify-between gap-3 ${d.revokedAt ? "opacity-60" : ""}`}>
+            <li key={d.id} className={`flex flex-wrap items-center justify-between gap-x-3 ${d.revokedAt ? "opacity-60" : ""}`}>
               <div className="min-w-0">
                 <div className="truncate text-[13px] text-ink">{d.name}</div>
                 <div className={SUBTLE}>
                   {holdsLine(d)} · {seenLine(d, now)}
                 </div>
+                {d.note && !d.revokedAt && <div className="text-[12.5px] text-warn">{d.note}</div>}
               </div>
               {!d.revokedAt && (
                 <div className="flex shrink-0 items-center gap-2">
@@ -92,11 +99,17 @@ export default function DevicesSettings() {
                       Re-pin
                     </button>
                   )}
+                  {d.kind === "worker" && d.hasSignKey && devices.canRepair && (
+                    <button type="button" className={BUTTON} onClick={() => setRepairing(repairing === d.id ? null : d.id)} aria-label={`Re-pair ${d.name}`} title="Let this worker trust another Mac instead of this one: paste that Mac's code, Touch ID, and run the line it shows on the box">
+                      Re-pair
+                    </button>
+                  )}
                   <button type="button" className={BUTTON} onClick={() => void devices.revoke(d)} aria-label={`Revoke ${d.name}`}>
                     Revoke
                   </button>
                 </div>
               )}
+              {repairing === d.id && <WorkerRepair device={d} onClose={() => setRepairing(null)} />}
             </li>
           ))}
         </ul>

@@ -75,6 +75,18 @@ worker ─▶ gate + cloudflared ─▶ worker_tunnel_open(key, id, quick URL, s
   and the folder and worker name are cleaned before they reach the prompt. A row that's already the Mac's own, or another
   worker's, is refused. The Mac makes the row as the owner (so `/t/<id>` is owner-only as ever) and stamps
   `approved_target` and `approved_until`.
+- **Who can ask** (no migration): a teammate can't reach a worker's commands at all (`cloud_commands` inserts need
+  `private.owns_device`, which for `worker:<id>` means owning the worker, and `worker_pending`/`worker_claim` take only
+  `created_by = owner_user`). The same rule is kept at the verb as defence in depth: `dev.open` is in `OWNER_VERBS`
+  (`lib/host/dispatch.ts`), so a host runs it only when `CardRules.fromOwner(command)` says the command's author is its
+  owner (the worker is given `ownerUser` through `DaemonDeps.owner`, the Mac compares to the signed-in uid), and a host
+  with no such rule refuses it. The Mac refuses an approval too (`requireOwn`, `lib/device-call-approvals.ts`) unless the
+  worker and the card are the signed-in account's and the card is that worker's.
+- **Prompt limits** (in memory on the Mac, `limited()`): per worker, one Touch ID prompt at a time (a second ask fails at
+  once), and after a no the worker waits `DENY_COOLDOWN_MS` (2 min) before it can prompt again. A restart of Weft clears them.
+- **Which worker** the prompt names: `electron/worker-label.cjs` uses the name this Mac pinned (`electron/worker-pins.cjs`),
+  which a worker key can't rewrite; a worker not yet pinned shows its row's name as "(name not verified)". Both the tunnel
+  and the relay-seal prompts say "on <name>".
 - **Writes** (`worker_tunnel_open`, `worker_tunnel_close`, key-checked): open puts a URL and secret on a row only while
   `worker_id` is this worker's and `approved_until` hasn't passed, and only a `https://*.trycloudflare.com` URL and a
   64-hex secret, so a stolen worker key can't approve itself or point the address at a site of its choosing. It can,

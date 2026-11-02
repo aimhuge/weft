@@ -57,6 +57,13 @@ vi.mock("./issue-run", () => ({
   }),
 }));
 
+// A worker project's sync (lib/issue-worker.ts has its own file): here, only that runSync hands it over with gh's calls.
+const onWorker = vi.hoisted(() => ({
+  syncWorkerIssues: vi.fn<(project: string, deps: unknown) => Promise<unknown>>(() => Promise.resolve({ repo: "acme/app", counts: { added: 3, updated: 0, archived: 0 } })),
+  workerIssueDeps: vi.fn(() => ({ folders: () => [] })),
+}));
+vi.mock("./issue-worker", () => onWorker);
+
 vi.mock("./tag-store", () => ({
   createTag: vi.fn((name: string) => {
     if (name === "bug") throw new Error("There's already a tag “bug”.");
@@ -269,6 +276,19 @@ describe("opting in, status and the poll", () => {
     gi.disableIssueSync(FOLDER);
     expect(gi.issueSyncStatus()).toEqual({});
     warn.mockRestore();
+  });
+
+  it("syncs a worker project's issues onto the worker, keeping its status like a folder's", async () => {
+    expect(await gi.syncIssues("worker://w1/app")).toEqual({ added: 3, updated: 0, archived: 0 });
+    const [project, deps] = onWorker.syncWorkerIssues.mock.calls[0]!;
+    expect(project).toBe("worker://w1/app");
+    expect(deps).toMatchObject({ repoOf: gi.repoOf, fetchIssues: gi.fetchIssues, issuePrompt: gi.issuePrompt });
+    gi.enableIssueSync("worker://w1/app");
+    expect(gi.issueSyncStatus()["worker://w1/app"]).toMatchObject({ repo: "acme/app", counts: { added: 3 } });
+    onWorker.syncWorkerIssues.mockRejectedValueOnce(new Error("no checkout"));
+    await expect(gi.syncIssues("worker://w1/app")).rejects.toThrow("no checkout");
+    expect(gi.issueSyncStatus()["worker://w1/app"]!.error).toBe("no checkout");
+    gi.disableIssueSync("worker://w1/app");
   });
 
   it("startIssueSync syncs shortly after start and then every 5 minutes, once per process", async () => {

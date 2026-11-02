@@ -1,4 +1,4 @@
-// POST /api/cards/:id/dev with action open or stop: the dev.open and dev.stop verbs, mounted for this Mac's own cards.
+// POST /api/cards/:id/dev with action open, stop, rerun or log: the dev.* verbs, mounted for this Mac's own cards.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const verbs = vi.hoisted(() => ({ calls: [] as unknown[][], answer: (): Promise<unknown> => Promise.resolve({}) }));
@@ -39,5 +39,13 @@ describe("POST /cards/:id/dev", () => {
     verbs.answer = () => Promise.resolve({ ok: true });
     expect((await post("c1", { action: "stop" })).status).toBe(200);
     expect(verbs.calls).toEqual([["dev.stop", { id: "c1" }]]);
+  });
+
+  it("rerun runs dev.restart and log answers dev.log's lines", async () => {
+    verbs.answer = () => Promise.resolve({ ok: true });
+    expect(await (await post("c1", { action: "rerun" })).json()).toEqual({ ok: true });
+    verbs.answer = () => Promise.resolve({ log: "ready" });
+    expect(await (await post("c1", { action: "log" })).json()).toEqual({ log: "ready" });
+    expect(verbs.calls).toEqual([["dev.restart", { id: "c1" }], ["dev.log", { id: "c1" }]]);
   });
 });

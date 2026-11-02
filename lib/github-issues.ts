@@ -7,9 +7,12 @@ import { globalSingleton } from "./global-singleton";
 import { landingColumn, landingRuns } from "./issue-landing";
 import { startIssueCard } from "./issue-run";
 import { defaultPermissionMode, issueFolders, issueWorkflow, setIssueSync } from "./settings";
-import { addCards, DATA_DIR, listCards, updateCard } from "./store";
+import { importedIssues, saveImportedIssues } from "./issue-record";
+import { syncWorkerIssues, workerIssueDeps } from "./issue-worker";
+import { addCards, listCards, updateCard } from "./store";
 import { createTag } from "./tag-store";
 import { normalizeTags } from "./tags";
+import { parseWorkerProject } from "./worker-project";
 import type { Card, CardIssue } from "./types";
 
 // GitHub issues feed the board: a project folder's open issues become Backlog cards, through the gh
@@ -60,22 +63,6 @@ const g = globalSingleton("__weftIssueSync", () => ({
   inflight: new Map<string, Promise<SyncCounts>>(),
   status: new Map<string, SyncStatus>(),
 }));
-
-// The issues each repo has had a card made for, so a card you deleted doesn't come back.
-const IMPORTED_FILE = path.join(DATA_DIR, "github-issues.json");
-
-function imported(): Record<string, number[]> {
-  try {
-    return (JSON.parse(fs.readFileSync(IMPORTED_FILE, "utf8")) as { imported?: Record<string, number[]> }).imported ?? {};
-  } catch {
-    return {};
-  }
-}
-
-function saveImported(map: Record<string, number[]>) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-  fs.writeFileSync(IMPORTED_FILE, JSON.stringify({ imported: map }, null, 2));
-}
 
 // What went wrong with gh, in words the user can act on.
 export function ghError(err: unknown, folder: string): string {
@@ -215,7 +202,7 @@ export function applyIssues(folder: string, repo: string, issues: GhIssue[]): Sy
   for (const card of listCards()) {
     if (card.issue && card.issue.repo.toLowerCase() === key) byNumber.set(card.issue.number, card as Card & { issue: CardIssue });
   }
-  const record = imported();
+  const record = importedIssues();
   const known = new Set(record[key] ?? []);
   const fresh: Card[] = [];
   const now = Date.now();
@@ -239,7 +226,7 @@ export function applyIssues(folder: string, repo: string, issues: GhIssue[]): Sy
     addCards(fresh);
     counts.added = fresh.length;
     record[key] = [...known, ...fresh.flatMap((c) => (c.issue ? [c.issue.number] : []))];
-    saveImported(record);
+    saveImportedIssues(record);
     const workflow = issueWorkflow(folder);
     if (landingRuns(workflow.landing)) startIssueCards(fresh, workflow.skill);
   }
@@ -260,12 +247,21 @@ function startIssueCards(cards: Card[], skill?: string) {
   }
 }
 
+// A worker project's issues become cards on the worker, through this Mac's gh (lib/issue-worker.ts).
+async function syncOnWorker(project: string) {
+  return syncWorkerIssues(project, { ...workerIssueDeps(), repoOf, fetchIssues, issuePrompt });
+}
+
 async function runSync(folder: string): Promise<SyncCounts> {
   let repo: string | undefined;
   try {
-    if (!fs.existsSync(folder)) throw new Error(`${folder} isn't there anymore.`);
-    repo = await repoOf(folder);
-    const counts = applyIssues(folder, repo, await fetchIssues(repo, folder));
+    let counts: SyncCounts;
+    if (parseWorkerProject(folder)) ({ repo, counts } = await syncOnWorker(folder));
+    else {
+      if (!fs.existsSync(folder)) throw new Error(`${folder} isn't there anymore.`);
+      repo = await repoOf(folder);
+      counts = applyIssues(folder, repo, await fetchIssues(repo, folder));
+    }
     g.status.set(folder, { at: Date.now(), repo, counts });
     return counts;
   } catch (err) {

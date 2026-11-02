@@ -30,7 +30,7 @@ export function createLiveData(opts: {
 
 export function registerLiveData(
   ipcMain: { handle: (channel: string, fn: (event: unknown, ...args: unknown[]) => unknown) => void },
-  opts: { liveData: LiveData; owns: OwnsPane },
+  opts: { liveData: LiveData; owns: OwnsPane; dataDir?: string },
 ): void;
 
 export function setupLiveData(opts: {
@@ -38,6 +38,7 @@ export function setupLiveData(opts: {
   serverUrl: string | (() => string);
   token: string | (() => string);
   owns: OwnsPane;
+  dataDir?: string;
   fetch?: typeof fetch;
 }): LiveData;
 

@@ -25,6 +25,12 @@ vi.mock("./github-issues", () => issues);
 const hooks = vi.hoisted(() => ({ hookedRepos: vi.fn(() => Promise.resolve({ signedIn: true, repos: [] as string[] })) }));
 vi.mock("./github-hooks", () => hooks);
 
+const twins = vi.hoisted(() => ({
+  workerIssueDeps: () => ({ folders: () => ["/Users/me/dev/app"] }),
+  workerIssueRepo: vi.fn((_project: string, folders: string[], repoOf: (f: string) => Promise<string>) => repoOf(folders[0]!).then((repo) => ({ repo, twin: folders[0] }))),
+}));
+vi.mock("./issue-worker", () => twins);
+
 const { clearGithubRepos, githubAccount, githubStatus, MISS_TTL, REPO_TTL } = await import("./github-status");
 
 const HERE = os.tmpdir();
@@ -62,6 +68,12 @@ describe("githubStatus", () => {
       { folder: HERE, repo: `acme/${HERE.split("/").pop()}`, error: null, syncing: true, last: { at: 5, repo: "acme/x", counts: { added: 1, updated: 0, archived: 0 } }, instant: false, workflow: { landing: "backlog" } },
       { folder: GONE, repo: null, error: "folder isn't there anymore.", syncing: false, last: null, instant: false, workflow: { landing: "backlog" } },
     ]);
+  });
+
+  it("reads a worker project's repo through this Mac's checkout of it", async () => {
+    const status = await githubStatus(["worker://w1/app"]);
+    expect(status.folders[0]).toMatchObject({ folder: "worker://w1/app", repo: "acme/app", error: null });
+    expect(twins.workerIssueRepo).toHaveBeenCalledWith("worker://w1/app", ["/Users/me/dev/app"], issues.repoOf);
   });
 
   it("keeps a repo for REPO_TTL and a miss for MISS_TTL", async () => {

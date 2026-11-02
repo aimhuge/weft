@@ -262,7 +262,7 @@ A deny beats an ask, so the prompt never shows and a grant buys nothing here.
 | `worker.log`, `update-bad`, `update-trial`, `rollback.sh`, anything new | refused: the log is the daemon's raw stdout and stderr with no redaction pass, so whatever any process printed (an SDK error echoing a request, a CLI's debug output) lands there; `update-bad` keeps the first line of git and pnpm errors, which can carry a credentialed remote URL; `rollback.sh` is a copy of `install/worker-rollback.sh`, readable in the clone |
 | `data/`, as on a Mac | refused, save `data/show` and `data/apps` |
 | `work/` (or `WEFT_WORKER_ROOT`) | open: it's where cards run |
-| `weft/`, the clone of Weft | open: a public repo, and `/weft:done` runs `commit.sh` from the plugin inside it |
+| `weft/`, the clone of Weft | read and run: a public repo, and `/weft:done` runs `commit.sh` from the plugin inside it. Never changed by a thread: it's the code the daemon and `weft-worker` run, so an edit could turn off the re-pair check (`lib/worker-clone-guard.ts`, 2026-11-02) |
 
 - **A path is judged by where it lands.** Relative paths start from the card's cwd (`fromCwd`, from the hook's own input),
   not the daemon's, and a `cd` on the line moves them. Symlinks are followed, since a checkout is a repo somebody else
@@ -281,6 +281,27 @@ A deny beats an ask, so the prompt never shows and a grant buys nothing here.
 - **GitHub through the connector** (P1, [connectors.md](connectors.md#connectors-on-a-worker-github-p1-as-built)): a paired
   worker's cards get short user tokens minted on weft.zip through `~/.weft-worker/connector.sock`, held in the daemon's
   memory, never on disk. The socket sits in the sealed home, but the helper reaches it by its path, which no tool call names.
+
+### Re-pairing and a lost Mac
+
+A paired worker takes secrets and signed settings from one Mac, the one whose key came in its pairing code
+(`mac-keys.json`). To move it to another Mac, or to pair it again into another workspace, that Mac approves the move:
+Settings → Devices → the worker → **Re-pair**, paste the new Mac's `wph.…` code, Touch ID, and run the line it shows in
+a terminal on the box (`weft-worker enrol wph.… --re-pair --approval wra.…`). The approval lasts 30 minutes and is
+good for that worker and that code only ([project-hosts.md](project-hosts.md#re-pairing-a-worker)).
+
+**A lost Mac, or a box that trusts none** (enrolled by token, or after `weft-worker forget-macs`): no Mac can approve,
+so wipe the box's enrolment and enrol it fresh. In a terminal on the box:
+
+```sh
+rm ~/.weft-worker/worker.json ~/.weft-worker/mac-keys.json
+weft-worker enrol <the wph.… code from the new Mac>
+weft-worker restart
+```
+
+Then **Revoke** the old worker row in Settings → Devices. `work/` and its checkouts stay. The secret guard refuses those
+two paths to threads by name. A passkey-confirmed re-pair at weft.zip, with a code shown on the box's console, would
+spare the wipe; it isn't built.
 
 ### Worker projects on the desktop board
 

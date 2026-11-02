@@ -32,6 +32,7 @@ const DEVICE = { id: "udid-1", name: "iPhone 17", platform: "ios", state: "boote
 const row = (over: Partial<DeviceCallRow> = {}): DeviceCallRow => ({
   id: "call-1",
   worker_id: "worker-1",
+  owner_user: "user-1",
   card_id: "card-1",
   tool: "tap",
   args: { element: "Login" },

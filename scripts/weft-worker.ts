@@ -2,7 +2,8 @@
 // Weft with jiti (install/worker.sh sets up the `weft-worker` wrapper and the launchd or systemd service):
 //
 //   weft-worker enrol <token> [--name <name>]   pair with your Mac (a wph.… code) or trade a one-time token (wet_…);
-//                                               an enrolled box needs --re-pair, typed at a terminal on it
+//                                               an enrolled box needs --re-pair --approval wra.…, signed by the Mac
+//                                               it trusts now (lib/worker-repair.ts)
 //   weft-worker login                           sign Claude Code in for the daemon (claude setup-token)
 //   weft-worker start                           run the daemon (what the service runs)
 //   weft-worker status                          say whether this box is enrolled, with its key's fingerprint
@@ -27,6 +28,7 @@ import { CLAUDE_TOKEN, GITHUB_PURPOSE, LOGIN_PURPOSE, newSealKeys, open } from "
 import { createUpdater, updatesOn } from "../lib/worker-update";
 import { listenForPushes, listenForWakes } from "../lib/worker-wake";
 import { joinPresence } from "../lib/worker-presence";
+import { browserSandboxNote } from "../lib/worker-chromium";
 
 const home = workerHome();
 // Before the engine is imported: lib/store.ts reads WEFT_DATA once, at import.
@@ -44,7 +46,14 @@ function flag(name: string): string | undefined {
 
 async function enrolCommand(token: string | undefined) {
   if (!token) throw new Error("Usage: weft-worker enrol <token> [--name <name>]. Get the token in Weft → Settings → Sync → Workers.");
-  const refused = (await import("../lib/worker-mac-keys")).enrolRefusal(Boolean(readWorkerConfig(home)), process.argv.includes("--re-pair"), process.stdin.isTTY && process.stdout.isTTY);
+  const { enrolRefusal, macKeysAt } = await import("../lib/worker-mac-keys");
+  const enrolled = readWorkerConfig(home);
+  // An enrolled box swaps its Mac only on an approval that Mac signed; a fresh one enrols as it always has. A box that
+  // trusts a Mac counts as enrolled even when worker.json won't read, so a damaged file can't drop the check.
+  const trusts = fs.existsSync(path.join(home, "mac-keys.json"));
+  const refused =
+    enrolRefusal(Boolean(enrolled) || trusts, process.argv.includes("--re-pair"), process.stdin.isTTY && process.stdout.isTTY) ??
+    (enrolled || trusts ? (await import("../lib/worker-repair")).repairRefusal({ pinned: macKeysAt(home).pinned(), worker: enrolled?.workerId ?? "", code: token, approval: flag("approval"), now: Date.now() }) : null);
   if (refused) throw new Error(refused);
   const name = flag("name") || os.hostname().replace(/\.local$/, "");
   // A pairing code (wph.…, Settings → Devices) pairs the box with your Mac; a token (wet_…) is the older one-time trade.
@@ -176,6 +185,7 @@ async function startCommand() {
   });
   const daemon = createDaemon({
     reg,
+    owner: config.ownerUser,
     publisher,
     listen: (hooks) => listenForWakes(client, config.key, hooks, console.log),
     listenForPushes: (hooks) => listenForPushes(client, hooks, console.log),
@@ -217,6 +227,8 @@ async function startCommand() {
       resume: resumeInterrupted,
     },
     update: updatesOn(home, process.cwd()) ? { ...createUpdater({ home, dir: process.cwd() }), restart: () => restart() } : undefined,
+    // "Browser runs without sandbox", on the worker's row, where Linux won't let its Chromium sandbox itself.
+    browserNote: browserSandboxNote(),
     async checkout(folder, repo) {
       const dir = paths.repoPath(root, folder);
       if ((await paths.materialise(dir, repo)) === "cloned") console.log(`Weft Worker: cloned ${repo} into ${dir}`);
