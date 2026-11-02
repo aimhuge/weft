@@ -1,119 +1,99 @@
-// The Mac's side of the cloud commands that act on a card it runs (lib/cloud-inbox.ts claims and reports them):
-// reply, answer, stop and host. All four run lib/host-api's verbs through runVerb, the same handlers as the
-// desktop's own routes: reply is card.message, answer card.permission.answer, stop card.stop, and host any verb.
-// The old kinds stay on the wire for the phone and weft.zip; what the Mac adds to a verb from the web is here, as
-// checks: the card must be in the command's synced folder and not the copilot, an answer passes the approval rule
-// (lib/approval-check.ts), and so does every other verb that grants power.
+// The Mac's kind table (lib/cloud-inbox.ts claims and reports what it runs): new_card, and the card kinds reply,
+// answer, stop and host, which are lib/host-api's verbs underneath, run through the shared table in
+// lib/host/dispatch.ts with the same runVerb as the desktop's own routes. What the Mac adds is its CardRules: the card
+// must be in the command's synced folder and not the copilot, an answer passes the approval rule
+// (lib/approval-check.ts), and so does every other verb that grants power. The change syncs at once after each.
+import path from "node:path";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { approvalProblem } from "./approval-check";
 import { shell } from "./browser-shell";
-import { answerBody, answerGrant, replyBody, stopBody, type AnswerPayload, type CloudCommandRow } from "./cloud-commands";
-import { syncNow } from "./cloud-sync";
+import { startFeatureCard } from "./card-starter";
+import { newCardBody, type CloudCommandRow } from "./cloud-commands";
+import { syncNow, syncOrgId } from "./cloud-sync";
 import { deviceId } from "./device-id";
 import { applyFolderGrant } from "./folder-grant";
+import { cardKinds, dispatcher, type CardRules } from "./host/dispatch";
 import { needsElevation, runVerb, type HostVerb } from "./host-api";
-import { hostResult, readHostCommand, remoteRefusal, verbResult, type HostDone, type HostPayload } from "./host-command";
+import { syncFolders } from "./settings";
 import { getCard } from "./store";
 import { pairingStatus } from "./sync-security";
-import type { Card } from "./types";
 
 // Why a verb that grants power can't run from the web: a phone is paired, and only it approves. The phone can't sign
 // a host verb yet, so until it can, these stay on the Mac (or Settings → Sync lets the web approve).
 export const ELEVATED_REFUSED = "That needs this Mac while a phone is paired: run it here. (Settings → Sync can let the web approve.)";
 
-// The card a command acts on: in the command's folder (so a command can't reach a thread outside a synced folder), and
-// not the copilot.
-function macCard(cardId: string, folder: string, copilot: string): Card {
-  const card = getCard(cardId);
-  if (!card || card.cwd !== folder) throw new Error("That thread isn't on this Mac anymore.");
-  if (card.role === "copilot") throw new Error(copilot);
-  return card;
+const UNKNOWN_KIND = "This version of Weft doesn't know that kind of request. Update the desktop app.";
+
+const macRules: CardRules = {
+  // In the command's folder (so a command can't reach a thread outside a synced folder), and not the copilot. A stop
+  // that names no card never gets here (emptyStop).
+  card(cardId, command, use) {
+    const card = getCard(cardId as string);
+    if (!card || card.cwd !== command.folder) throw new Error("That thread isn't on this Mac anymore.");
+    if (card.role === "copilot") throw new Error(`The copilot can't be ${use} from the web.`);
+    return card;
+  },
+  verb: (verb, args) => runVerb(verb, args as never),
+  grant: applyFolderGrant,
+  // A signed answer must be a paired phone's (or a paired browser's passkey), and an unsigned Allow on a permission
+  // request waits for the phone once one is paired.
+  async approve(command, answer, card) {
+    const pairing = await pairingStatus();
+    return approvalProblem(command, answer, card.pending, {
+      verify: async (body) => (await shell("/pairing/verify", body)) as { ok: boolean; reason?: string },
+      approvers: () => Promise.resolve(pairing.approvers),
+      webApprovals: pairing.webApprovals,
+      now: Date.now(),
+      // A browser's passkey: the message is rebuilt from this Mac's own device id and workspace (the inbox has already
+      // refused a command whose org isn't the one this Mac syncs to), and main checks it against the pin.
+      passkey: {
+        self: { orgId: command.org_id, macDevice: deviceId(), folder: card.cwd },
+        verify: async (body) => (await shell("/pairing/passkey-verify", body)) as { ok: boolean; reason?: string },
+      },
+    });
+  },
+  // Any other verb that grants power (the shell, Wait, This first, a mode or a read grant) goes through only while the
+  // web may approve: no phone paired, or Settings → Sync says so.
+  async elevated(verb: HostVerb, args) {
+    if (!needsElevation(verb, args as never)) return null;
+    const pairing = await pairingStatus();
+    return pairing.approvers > 0 && !pairing.webApprovals ? ELEVATED_REFUSED : null;
+  },
+  // The change is in the outbox already; this sends it now rather than on the next tick.
+  after: () => syncNow(),
+  answerAsKind: true,
+  questionReplies: true,
+  emptyStop: "That stop is missing the card.",
+};
+
+// The synced folder a new card names: its path, or a project name that matches exactly one synced folder's name.
+export function syncFolderFor(name: string): string | null {
+  const folders = syncFolders();
+  if (folders.includes(name)) return name;
+  const named = folders.filter((f) => path.basename(f) === name);
+  return named.length === 1 ? (named[0] ?? null) : null;
 }
 
-// A reply goes to the card the way the reply box sends one: now, or after the turn that's running (the card shows it
-// queued).
-export async function replyFromCommand(command: CloudCommandRow): Promise<string> {
-  const reply = replyBody(command);
-  if (!reply) throw new Error("That reply is empty.");
-  const card = macCard(reply.cardId, command.folder, "The copilot can't be answered from the web.");
-  await runVerb("card.message", { id: card.id, text: reply.text });
-  // The message is in the outbox already; this sends it now rather than on the next tick.
+async function newCard(command: CloudCommandRow): Promise<string> {
+  const card = await startFeatureCard(newCardBody(command));
+  // The card and its first items are already in the outbox; send them now so the board sees it start.
   syncNow();
   return card.id;
 }
 
-// An answer goes to the card's pending permission request or question. The answer verb throws when the request isn't
-// waiting any more, which the inbox turns into a failed report. It also has to pass the approval rule: a signed answer
-// must be a paired phone's (or a paired browser's passkey), and an unsigned Allow on a permission request waits for the phone once one is paired.
-export async function answerFromCommand(command: CloudCommandRow): Promise<string> {
-  const answer = answerBody(command);
-  if (!answer) throw new Error("That answer is empty.");
-  const card = macCard(answer.cardId, command.folder, "The copilot can't be answered from the web.");
-  const pairing = await pairingStatus();
-  const problem = await approvalProblem(command, answer, card.pending, {
-    verify: async (body) => (await shell("/pairing/verify", body)) as { ok: boolean; reason?: string },
-    approvers: () => Promise.resolve(pairing.approvers),
-    webApprovals: pairing.webApprovals,
-    now: Date.now(),
-    // A browser's passkey: the message is rebuilt from this Mac's own device id and workspace (the inbox has already
-    // refused a command whose org isn't the one this Mac syncs to), and main checks it against the pin.
-    passkey: {
-      self: { orgId: command.org_id, macDevice: deviceId(), folder: card.cwd },
-      verify: async (body) => (await shell("/pairing/passkey-verify", body)) as { ok: boolean; reason?: string },
-    },
-  });
-  if (problem) throw new Error(problem);
-  // Read before the answer clears the request; written after it, so one that has gone leaves no grant behind.
-  const grant = answerGrant(answer, card.pending);
-  const { reply } = answer;
-  await runVerb("card.permission.answer", { id: card.id, allow: answer.allow, answers: answer.answers, pendingId: answer.pendingId, annotations: reply?.annotations, chat: reply?.chat });
-  if (grant) applyFolderGrant(card.id, grant.directory, grant.scope);
-  // Settling an answer already updates the card; sync so the web board sees the new state.
-  syncNow();
-  return card.id;
+// Every kind runs only for a command made by the account signed in here, in a folder switched on in Settings → Sync,
+// for the workspace this Mac syncs to. A new card may name its folder by project name (a run sent to this Mac as a
+// worker); the rest name the path.
+function macCheck(client: SupabaseClient, uid: string) {
+  return async (command: CloudCommandRow): Promise<CloudCommandRow> => {
+    if (command.created_by !== uid) throw new Error("That request wasn't made by the account signed in on this Mac.");
+    const folder = command.kind === "new_card" ? syncFolderFor(command.folder) : syncFolders().includes(command.folder) ? command.folder : null;
+    if (!folder) throw new Error(`${command.folder} isn't switched on in Settings → Sync on this Mac.`);
+    const org = await syncOrgId(client, uid);
+    if (org !== command.org_id) throw new Error("That workspace isn't the one this Mac syncs its cards to.");
+    return { ...command, folder };
+  };
 }
 
-// A stop ends the card's running turn.
-export async function stopFromCommand(command: CloudCommandRow): Promise<string> {
-  const body = stopBody(command);
-  if (!body) throw new Error("That stop is missing the card.");
-  const card = macCard(body.cardId, command.folder, "The copilot can't be stopped from the web.");
-  await runVerb("card.stop", { id: card.id });
-  // stop() ends the turn; sync so the web board sees the card back in needs_you / idle.
-  syncNow();
-  return card.id;
-}
-
-// A host verb's answer is an answer: the same payload the answer kind carries, so it takes the same approval rule and
-// a phone's signature (args.auth) over the same fields. It needs the request's pendingId, as the answer kind does.
-function asAnswer(command: CloudCommandRow, { args }: HostPayload): CloudCommandRow {
-  const { id, pendingId, allow, answers, annotations, chat, auth } = args;
-  const payload = { cardId: id, pendingId, allow, answers, reply: { annotations, chat }, auth } as AnswerPayload;
-  return { ...command, kind: "answer", payload };
-}
-
-// Any other verb that grants power (the shell, Wait, This first, a mode or a read grant) goes through only while the
-// web may approve: no phone paired, or Settings → Sync says so.
-async function elevatedProblem(verb: HostVerb, args: Record<string, unknown>): Promise<string | null> {
-  if (!needsElevation(verb, args as never)) return null;
-  const pairing = await pairingStatus();
-  return pairing.approvers > 0 && !pairing.webApprovals ? ELEVATED_REFUSED : null;
-}
-
-const READS = new Set<HostVerb>(["skills.list"]);
-
-// Any verb in lib/host-api, on a card in a synced folder. The author check (created_by) is the inbox's, as for every
-// kind; a host command adds no second one.
-export async function hostFromCommand(command: CloudCommandRow): Promise<HostDone> {
-  const body = readHostCommand(command);
-  if (body.verb === "card.permission.answer") {
-    const cardId = await answerFromCommand(asAnswer(command, body));
-    return { cardId, result: hostResult(cardId) };
-  }
-  const card = macCard(body.args.id, command.folder, "The copilot can't be reached from the web.");
-  const refused = remoteRefusal(body) ?? (await elevatedProblem(body.verb, body.args));
-  if (refused) throw new Error(refused);
-  const reply = await runVerb(body.verb, { ...body.args, id: card.id });
-  // A read changes no card, so there's nothing to sync.
-  if (!READS.has(body.verb)) syncNow();
-  return { cardId: card.id, result: verbResult(body.verb, card.id, reply) };
-}
+// The Mac's dispatch for one signed-in account.
+export const macDispatch = (client: SupabaseClient, uid: string) => dispatcher({ new_card: newCard, ...cardKinds(macRules) }, UNKNOWN_KIND, macCheck(client, uid));

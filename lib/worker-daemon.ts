@@ -5,21 +5,26 @@
 //
 // It has no session, so Realtime's row filters would show it nothing. A trigger pings it instead (lib/worker-wake.ts)
 // and it asks at once. It still polls: every 30 s to catch a missed ping, and every 3 s while the socket is down.
-import { newCardBody, type CloudCommandRow, type GrantScope } from "./cloud-commands";
+//
+// The inbox, the poll backstop and the beat are the host core's (lib/host/), shared with the Mac's lib/cloud-inbox.ts:
+// this file is the worker's identity (its key: worker_claim and worker_report, lib/host/identity.ts), its kind table
+// (lib/worker-kinds.ts), and what only a worker does: recover after a restart, keep itself updated, show its GitHub.
+import type { CloudCommandRow, GrantScope } from "./cloud-commands";
 import type { Card } from "./types";
 import type { HostVerb } from "./host-api";
-import { hostFailure, isHostDone, type HostDone } from "./host-command";
-import { createCardCommands } from "./worker-card-commands";
-import { cloneBody, runBody, type ScreenInput } from "./worker-commands";
-import { explainClone, type GithubStatus } from "./worker-github";
+import { createBeat } from "./host/beat";
+import { keyLine } from "./host/identity";
+import { createInbox, startPolling, type Connection } from "./host/inbox";
+import type { ScreenInput } from "./worker-commands";
+import type { GithubStatus } from "./worker-github";
+import { publishGithub, workerDispatch } from "./worker-kinds";
 import type { Publisher } from "./worker-publish";
-import { sealedOf, type Sealed } from "./worker-seal";
+import type { Sealed } from "./worker-seal";
 import { HEALTHY_AFTER_MS } from "./worker-update";
 import { createUpdateLoop, type Holder } from "./worker-update-loop";
 import type { Registry, WorkerStatus } from "./worker-registry";
 import type { Tick } from "./worker-update";
 import type { WakeHooks } from "./worker-wake";
-import { createBeat } from "./worker-beat";
 import type { Presence, PresenceHooks } from "./worker-presence";
 import type { Recovered } from "./worker-recover";
 
@@ -85,64 +90,20 @@ export interface DaemonDeps {
   healthyMs?: number;
 }
 
-const ERROR_MAX = 300;
 const FAST_POLL_MS = 3_000;
 // A missed ping costs at most this long. It's the backstop, not the way commands normally arrive.
 const SLOW_POLL_MS = 30_000;
 // An expired token shows on the worker's row within the hour, or at once when a clone trips over it.
 const GITHUB_CHECK_MS = 60 * 60_000;
-// A run that names no mode edits files without asking, and still asks before a command it hasn't been allowed.
-const DEFAULT_MODE = "acceptEdits";
+// Run beside the queue: a clone can take minutes, and a tap shouldn't wait behind a card that's starting (the person
+// who made it is watching the screen).
+const ASIDE = new Set(["clone", "input", "qa"]);
 
 export function createDaemon(deps: DaemonDeps) {
   const log = deps.log ?? ((msg: string) => console.log(msg));
   const { reg, engine, publisher } = deps;
-  const cardCommands = createCardCommands(engine);
   let updates: ReturnType<typeof createUpdateLoop> | null = null;
-
-  // Puts the sign-in on the worker's row. Null when GitHub couldn't say: the row keeps what it last showed.
-  async function publishGithub(read: () => Promise<GithubStatus | null>): Promise<GithubStatus | null> {
-    try {
-      const status = await read();
-      if (status) await reg.setGithub(status.state, status.account);
-      return status;
-    } catch (err) {
-      log(`Weft Worker: GitHub sign-in: ${(err as Error).message}`);
-      return null;
-    }
-  }
-
-  function sealedToken(command: CloudCommandRow): Sealed {
-    const raw: unknown = command.payload;
-    const sealed = sealedOf(raw && typeof raw === "object" ? (raw as { token?: unknown }).token : null);
-    if (!sealed) throw new Error("That sign-in carries no sealed token.");
-    return sealed;
-  }
-
-  async function cloneRepo(command: CloudCommandRow) {
-    const repo = cloneBody(command);
-    if (!repo) throw new Error("That clone names no repo.");
-    try {
-      await deps.clone(command.folder, repo);
-    } catch (err) {
-      throw new Error(explainClone(err, repo, await publishGithub(deps.github.status)), { cause: err });
-    }
-  }
-
-  async function startCard(command: CloudCommandRow): Promise<string> {
-    const run = command.kind === "run" ? runBody(command) : null;
-    if (command.kind === "run" && !run) throw new Error("That run has no prompt.");
-    const { repo, ...fields }: Record<string, unknown> = run ? { ...run } : newCardBody(command);
-    if (typeof fields.prompt !== "string" || !fields.prompt) throw new Error("That card has no prompt.");
-    fields.prompt = await engine.receive(fields.prompt, command.payload);
-    const cwd = await deps.checkout(command.folder, typeof repo === "string" ? repo : undefined);
-    const card = await engine.start({ ...fields, cwd, permissionMode: run?.permissionMode ?? DEFAULT_MODE });
-    publisher.nameFolder(card.id, command.folder);
-    publisher.track(card.id);
-    // The report names the card, and the database only takes a card this worker has published.
-    await publisher.flush();
-    return card.id;
-  }
+  const github = (read: () => Promise<GithubStatus | null>) => publishGithub(deps, log, read);
 
   // Not awaited: this pass counts as busy, so the check holds until the pass has reported this command.
   function askForUpdate(): null {
@@ -151,52 +112,22 @@ export function createDaemon(deps: DaemonDeps) {
     return null;
   }
 
-  async function act(command: CloudCommandRow): Promise<string | null | HostDone> {
-    const kind: string = command.kind;
-    if (kind === "login") {
-      await deps.login(sealedToken(command));
-      return null;
-    }
-    if (kind === "github_login") {
-      const status = await deps.github.login(sealedToken(command));
-      await publishGithub(() => Promise.resolve(status));
-      return null;
-    }
-    if (kind === "clone") {
-      await cloneRepo(command);
-      return null;
-    }
-    if (kind === "run" || kind === "new_card") return startCard(command);
-    if (kind === "update") return askForUpdate();
-    if (Object.hasOwn(cardCommands, kind)) return cardCommands[kind as keyof typeof cardCommands](command);
-    throw new Error("This worker doesn't know that kind of request. Update it with weft-worker update.");
-  }
-
-  // Claims one command and says how it went. A claimed command is never retried: a card that was made must not be
-  // made twice.
-  async function runOne(command: CloudCommandRow) {
-    if (!(await reg.claim(command.id))) return;
-    log(`Weft Worker: ${command.kind} in ${command.folder}`);
-    try {
-      const done = await act(command);
-      if (isHostDone(done)) await reg.report(command.id, "done", done.cardId, null, done.result);
-      else await reg.report(command.id, "done", done, null);
-    } catch (err) {
-      const message = (err as Error).message.slice(0, ERROR_MAX);
-      log(`Weft Worker: ${command.kind} failed: ${message}`);
-      // A host command's result says it failed too, so a board waiting on `result` reads one place.
-      const failed = command.kind === "host" ? reg.report(command.id, "failed", null, message, hostFailure(message)) : reg.report(command.id, "failed", null, message);
-      await failed.catch(() => {});
-    }
-  }
-
-  let cloning = 0;
-  async function cloneOne(command: CloudCommandRow) {
-    cloning += 1;
-    await runOne(command).catch((err: unknown) => log(`Weft Worker: ${(err as Error).message}`));
-    cloning -= 1;
-    updates?.changed();
-  }
+  const conn: Connection = { line: keyLine(reg), dispatch: workerDispatch(deps, { log, askForUpdate }) };
+  let recovering: Promise<void> | null = null;
+  const inbox = createInbox({
+    // Commands wait for recovery: a reply queued while the worker was down must not land on a card about to resume.
+    connect: () => (recovering ? recovering.then(() => conn) : conn),
+    aside: (command) => ASIDE.has(command.kind),
+    // The clone is changing under the daemon: commands wait in the queue for the code that will run them.
+    paused: () => updates?.updating() ?? false,
+    after: () => updates?.changed(),
+    claimed: (command) => log(`Weft Worker: ${command.kind} in ${command.folder}`),
+    failed: (command, error) => log(`Weft Worker: ${command.kind} failed: ${error}`),
+    log: (msg) => log(`Weft Worker: ${msg}`),
+  });
+  const poll = () => inbox.poll();
+  // Claims one command and says how it went.
+  const runOne = (command: CloudCommandRow) => inbox.run(conn, command);
 
   // Tells the cloud what became of the cards the last daemon died on, then carries on the ones it can. Publishing comes
   // first so a turn that can't start still shows as stopped. Commands wait for this: a reply queued while the worker was
@@ -212,42 +143,6 @@ export function createDaemon(deps: DaemonDeps) {
     } catch (err) {
       log(`Weft Worker: recovering cards: ${(err as Error).message}`);
     }
-  }
-
-  let recovering: Promise<void> | null = null;
-
-  // One read of the queue. A clone can take minutes, and a reply or a Stop for a running card shouldn't wait behind it.
-  async function pass() {
-    if (recovering) await recovering;
-    try {
-      for (const command of await reg.pending()) {
-        // A tap shouldn't wait behind a card that's starting, and the person who made it is watching the screen.
-        if (command.kind === "clone" || command.kind === "input" || command.kind === "qa") void cloneOne(command);
-        else await runOne(command);
-      }
-    } catch (err) {
-      log(`Weft Worker: ${(err as Error).message}`);
-    }
-  }
-
-  let polling = false;
-  let askAgain = false;
-  async function poll() {
-    // The clone is changing under the daemon: commands wait in the queue for the code that will run them.
-    if (updates?.updating()) return;
-    // A ping during a pass may name a command that pass already missed, and starting a card can take minutes.
-    if (polling) {
-      askAgain = true;
-      return;
-    }
-    polling = true;
-    await pass();
-    polling = false;
-    if (askAgain) {
-      askAgain = false;
-      await poll();
-    }
-    updates?.changed();
   }
 
   const status = (): WorkerStatus => (engine.live() ? "busy" : "online");
@@ -280,7 +175,7 @@ export function createDaemon(deps: DaemonDeps) {
     }
   }
 
-  const idle = () => !polling && cloning === 0 && !engine.live();
+  const idle = () => inbox.idle() && !engine.live();
 
   updates = deps.update
     ? createUpdateLoop({
@@ -305,38 +200,20 @@ export function createDaemon(deps: DaemonDeps) {
     });
     beat.start();
     void poll();
-    void publishGithub(deps.github.status);
+    void github(deps.github.status);
     if (deps.update) void showBuild(null);
     // Fast until the socket joins, and whenever it's down. A worker with no socket keeps the fast poll for good.
-    const fast = deps.pollMs ?? FAST_POLL_MS;
-    let every = fast;
-    let pollTimer = setInterval(() => void poll(), every);
-    const pace = (ms: number) => {
-      if (ms === every) return;
-      every = ms;
-      clearInterval(pollTimer);
-      pollTimer = setInterval(() => void poll(), ms);
-    };
-    const leave = deps.listen?.({
-      ping: () => void poll(),
-      // Pings sent while it was down are gone, so ask once now.
-      up() {
-        pace(deps.slowPollMs ?? SLOW_POLL_MS);
-        void poll();
-      },
-      down: () => pace(fast),
-    });
-    const githubTimer = setInterval(() => void publishGithub(deps.github.status), deps.githubMs ?? GITHUB_CHECK_MS);
+    const stopPolling = startPolling(() => void poll(), { fastMs: deps.pollMs ?? FAST_POLL_MS, slowMs: deps.slowPollMs ?? SLOW_POLL_MS, listen: deps.listen });
+    const githubTimer = setInterval(() => void github(deps.github.status), deps.githubMs ?? GITHUB_CHECK_MS);
     updates?.start();
     const leavePushes = updates && deps.listenForPushes?.(updates);
     const leaveCards = updates && deps.onCardChange?.(updates.changed);
     const flushTimer = setInterval(() => void publisher.flush(), 1_000);
     return async () => {
-      leave?.();
+      stopPolling();
       leavePushes?.();
       leaveCards?.();
       updates?.stop();
-      clearInterval(pollTimer);
       clearInterval(githubTimer);
       clearInterval(flushTimer);
       await publisher.flush();

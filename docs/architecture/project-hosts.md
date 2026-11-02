@@ -2,7 +2,7 @@
 
 Status: **design** (2026-11-01, merged with "one engine, two transports" 2026-11-02). Phase H1 is in progress; H2 (the
 `host` command) is built ([below](#the-host-command-h2-as-built)), and so is H3, `hostFor` and one open card
-([below](#hostfor-and-one-open-card-h3-as-built)), and H3b, composer parity ([below](#composer-parity-h3b-as-built)). It follows on from [weft-worker.md](weft-worker.md#worker-projects-on-the-desktop-board),
+([below](#hostfor-and-one-open-card-h3-as-built)), and H3b, composer parity ([below](#composer-parity-h3b-as-built)), and H5, one host program ([below](#one-host-program-h5-as-built)). It follows on from [weft-worker.md](weft-worker.md#worker-projects-on-the-desktop-board),
 where a Worker project shows on the desktop board but most of what a local project gets drops out.
 
 ## The problem
@@ -249,6 +249,37 @@ host (Mac inbox / worker daemon): runVerb ─▶ verbResult(verb, cardId, reply)
   which the worker's CLI reported, instead of this Mac's limits log. Follow-up: the model pickers' "at its cap" marks
   (`useLimitedModels`) are still this Mac's on a worker card, and a worker could publish its whole limits log.
 
+### One host program (H5, as built)
+
+```
+                    lib/host/inbox.ts  createInbox: connect ─▶ pending ─▶ claim ─▶ dispatch ─▶ report   (single-flight, aside kinds)
+                                       startPolling: fast until a wake-up socket joins, slow while it's up
+                    lib/host/identity.ts  CommandLine: sessionLine (a Mac) │ keyLine (a worker)
+                    lib/host/dispatch.ts  cardKinds(CardRules): reply, answer, stop, host ─▶ runVerb; dispatcher(table, unknown, check)
+                    lib/host/beat.ts      createBeat: presence when there is one, the row otherwise
+                    lib/host/address.ts   ProjectAddress { host: local | worker id, repo } ⇄ the board's path
+Mac  lib/cloud-inbox.ts: session identity, postgres_changes wake-up, 30 s check, beat ticked per check; kinds in lib/cloud-inbox-cards.ts
+Worker lib/worker-daemon.ts: key identity, Broadcast wake-up, 3 s / 30 s poll, 20 s beat; kinds in lib/worker-kinds.ts + lib/worker-card-commands.ts
+```
+
+- **One loop.** A pass asks who the host is (`connect`: a Mac reads the signed-in account afresh, so a sign-out between the
+  read and the run runs nothing; a worker waits for recovery and has its key at hand, so it reads the queue in the same
+  tick), claims each pending row, runs it through the host's table and reports. A claimed row is never retried. A
+  wake-up during a pass asks for one more pass, after a failed one too. A worker's `clone`, `input` and `qa` run aside.
+- **One table for the card kinds.** `host` and its aliases are written once; what differs is `CardRules` data: the card
+  check (a Mac's synced folder and per-kind copilot line; a worker's own cards), `approve` (the phone-signature rule) and
+  `elevated` (verbs kept on the Mac while a phone is paired), `answerAsKind` (a Mac sends a host answer through the
+  answer kind), `questionReplies`, `emptyStop`, `receive` (a worker brings pasted files over), `after` (a Mac syncs now).
+  A worker's `mode` (`CARD_MODES`, the Codex rule), `input`, `qa`, `run`, `login`, `github_login`, `clone` and `update`
+  stay its own kinds; a Mac's `new_card` and its author, folder and workspace checks stay its own.
+- **Claim and report.** A Mac claims with a conditional update under its session (an error is a claim it didn't get) and
+  reports through the update-own grant (a failed report only warns). A worker uses `worker_claim` (a failure throws, and
+  the pass logs it) and `worker_report`, with `p_result` only when there is one.
+- **The beat.** `createBeat` serves both: a worker starts it (20 s, presence, `offline` on the way out); a Mac only ticks it
+  from the inbox's check, with no presence and no `offline`, as before.
+- **The address.** `lib/worker-project.ts`'s `workerProjectPath` and `parseWorkerProject` read and write through
+  `ProjectAddress`; the wire stays `worker://<id>/<folder>`.
+
 ## Security
 
 - **`lib/guard.ts` stays the local gate.** `/api/host/*` is behind `guard()`, and verbs that grant power (answer,
@@ -367,9 +398,10 @@ Each ships on its own.
    list, Send later and the limits meter from the card's host, and ↑ edit, Fresh, Send later and "/" on weft.zip.
 4. **H4 project reads.** Snapshot rows (`worker_put_project`) for quality, pile, streak and Backlog; the editor through
    file verbs with results.
-5. **H5 one host program.** The inbox, heartbeat and publish merged across the Mac and the daemon; one card schema; the
-   `(host, repo)` address. **H5a one publish path** is built ([Devices and records](#devices-and-records)); the inbox,
-   the heartbeat and the address are still two.
+5. **H5 one host program** (built 2026-11-02, [as built](#one-host-program-h5-as-built)). The inbox, heartbeat and
+   publish merged across the Mac and the daemon; one card schema; the `(host, repo)` address. **H5a one publish path**
+   ([Devices and records](#devices-and-records)), then the inbox, the beat and `ProjectAddress` in `lib/host/`. Leases
+   are still to come: they need a column, and this phase changed no behaviour.
 6. **H6 the WebRTC line for everything live.** In order: video moves from 16 KB chunks on a reliable, ordered
    DataChannel (`lib/use-rtc-screen.ts`) to an RTP track that drops late frames, so it can't delay a click (**H6a, built
    2026-11-02:** an H.264 track negotiated in the sealed offer, the channel kept as the fallback, the rate moved on receiver

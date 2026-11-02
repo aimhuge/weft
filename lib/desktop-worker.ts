@@ -1,21 +1,23 @@
 // The desktop as a headed worker (docs/architecture/weft-worker.md#the-desktop-as-a-headed-worker): while this Mac
 // listens for the web board's commands (lib/cloud-inbox.ts), it beats into public.cloud_workers so Settings → Sync →
-// Workers lists it beside the headless workers. The beat rides the inbox's 30 s check; a Mac that sleeps, signs out or
-// stops syncing simply stops beating and reads as offline a minute later.
+// Workers lists it beside the headless workers. The beat is the host core's (lib/host/beat.ts), ticked by the inbox's
+// 30 s check; a Mac that sleeps, signs out or stops syncing simply stops beating and reads as offline a minute later.
 import os from "node:os";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { syncOrgId } from "./cloud-sync";
 import { deviceId } from "./device-id";
 import { sessions } from "./runner-state";
+import type { WorkerStatus } from "./worker-registry";
 
 // The Mac's name as the list shows it: its host name without the .local suffix.
 export const desktopName = (host = os.hostname()) => host.replace(/\.local$/i, "").slice(0, 80) || "This Mac";
 
-const busy = () => [...sessions.values()].some((s) => s.busy);
+// Busy while any thread runs.
+export const desktopStatus = (): WorkerStatus => ([...sessions.values()].some((s) => s.busy) ? "busy" : "online");
 
 // One beat. Never throws: a database without desktop_worker_beat yet, or a dropped network, only means this Mac
 // doesn't show in the list this time.
-export async function beatDesktopWorker(client: SupabaseClient, uid: string): Promise<void> {
+export async function beatDesktopWorker(client: SupabaseClient, uid: string, status: WorkerStatus = desktopStatus()): Promise<void> {
   try {
     const org = await syncOrgId(client, uid);
     if (!org) return;
@@ -25,7 +27,7 @@ export async function beatDesktopWorker(client: SupabaseClient, uid: string): Pr
       p_name: desktopName(),
       p_platform: process.platform,
       p_arch: process.arch,
-      p_status: busy() ? "busy" : "online",
+      p_status: status,
     });
     if (error) console.warn(`Desktop worker: ${error.message}`);
   } catch (err) {

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createBeat, SLOW_BEAT_MS, type BeatDeps } from "./worker-beat";
-import type { PresenceHooks } from "./worker-presence";
-import type { WorkerStatus } from "./worker-registry";
+import { createBeat, SLOW_BEAT_MS, type BeatDeps } from "./beat";
+import type { PresenceHooks } from "../worker-presence";
+import type { WorkerStatus } from "../worker-registry";
 
 afterEach(() => vi.useRealTimers());
 
