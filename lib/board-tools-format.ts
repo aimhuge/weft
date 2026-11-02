@@ -99,3 +99,23 @@ export function readThreadText(cardId: string, last?: number): string {
 }
 
 export const LIST_LIMIT = 40;
+
+export interface ListOptions {
+  column?: Card["column"];
+  include_done?: boolean;
+  limit?: number;
+}
+
+// list_cards' answer for a set of cards: the open ones (or all), newest first, with notes on what was left out. The
+// cards are this Mac's store, or on a worker the user's board (lib/worker-board-tools.ts).
+export function listText(cards: Card[], { column, include_done = false, limit = LIST_LIMIT }: ListOptions): string {
+  const all = cards.filter((c) => c.role !== "copilot" && (!column || c.column === column));
+  const shown = all.filter((c) => include_done || (c.column !== "done" && !c.archived)).sort((a, b) => b.updatedAt - a.updatedAt);
+  const hidden = all.length - shown.length;
+  const notes = [
+    shown.length > limit && `${shown.length - limit} more not shown; raise limit or pass column.`,
+    hidden > 0 && `${hidden} done or archived left out; pass include_done=true to list them.`,
+  ].filter(Boolean);
+  if (!shown.length) notes.unshift(`No ${hidden ? "open " : ""}cards${column ? ` in ${column}` : ""}.`);
+  return [...shown.slice(0, limit).map(cardLine), ...notes].join("\n");
+}

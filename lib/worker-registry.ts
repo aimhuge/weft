@@ -9,6 +9,16 @@ import type { GithubState } from "./worker-github";
 // supabase-js's rpc, narrowed to what the worker needs, so tests hand in a fake.
 export type Rpc = (fn: string, args: Record<string, unknown>) => PromiseLike<{ data: unknown; error: { message: string } | null }>;
 
+// One of the owner's synced cards, as worker_board_cards returns it: this worker's, another's, or a Mac's.
+export interface BoardRow {
+  card_id: string;
+  folder: string;
+  owner_device: string;
+  owner_worker: string | null;
+  card: unknown;
+  updated_at: string;
+}
+
 export type WorkerStatus = "online" | "busy" | "offline";
 
 export interface ItemRow {
@@ -78,6 +88,11 @@ export function registry(rpc: Rpc, key: string) {
     putProject: (folder: string, snapshot: unknown) => call<unknown>(rpc, "worker_put_project", { p_key: key, p_folder: folder, p_snapshot: snapshot }),
     putItems: (cardId: string, items: ItemRow[], outputs: OutputRow[], fromSeq: number | null) =>
       call<unknown>(rpc, "worker_put_items", { p_key: key, p_card_id: cardId, p_items: items, p_outputs: outputs, p_from_seq: fromSeq }),
+    // The board tools on a worker (lib/worker-board-link.ts, supabase/migrations/*_worker_board_tools.sql).
+    boardCards: async (limit: number) => (await call<BoardRow[] | null>(rpc, "worker_board_cards", { p_key: key, p_limit: limit })) ?? [],
+    newCard: (target: string, folder: string, payload: Record<string, unknown>) =>
+      call<string>(rpc, "worker_new_card", { p_key: key, p_target: target, p_folder: folder, p_payload: payload }),
+    setLists: (crons: unknown[], webhooks: unknown[]) => call<unknown>(rpc, "worker_set_lists", { p_key: key, p_crons: crons, p_webhooks: webhooks }),
   };
 }
 
