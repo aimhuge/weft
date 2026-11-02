@@ -4,6 +4,7 @@
 // from the one registry, each with the keys it holds and a Revoke that works whatever its kind. Add a worker pairs a box
 // the way a phone pairs: run the line on it, then confirm with Touch ID here when the codes match.
 import type { DeviceKind, DeviceView } from "@/lib/device-registry";
+import { newestVersion, versionText } from "@/lib/device-version";
 import { timeAgo } from "@/lib/format";
 import { useDevices } from "@/lib/use-devices";
 import { useNow } from "@/lib/use-now";
@@ -28,7 +29,13 @@ function holdsLine(d: DeviceView): string {
   return parts.join(" · ");
 }
 
-function seenLine(d: DeviceView, now: number): string {
+// The status, then the Weft version and commit it runs when it reports one.
+function seenLine(d: DeviceView, now: number, newest: string | null): string {
+  const v = versionText(d.build, newest);
+  return v ? `${statusLine(d, now)} · ${v}` : statusLine(d, now);
+}
+
+function statusLine(d: DeviceView, now: number): string {
   if (d.revokedAt) return `Revoked ${timeAgo(Date.parse(d.revokedAt), now)}`;
   if (d.status === "online" || d.status === "busy") return d.status === "busy" ? "Busy" : "Online";
   return d.lastSeenAt ? `Seen ${timeAgo(Date.parse(d.lastSeenAt), now)}` : "Never seen";
@@ -98,6 +105,7 @@ export default function DevicesSettings() {
   const now = useNow();
   const [repairing, setRepairing] = useState<string | null>(null);
   const list = devices.view?.devices ?? [];
+  const newest = newestVersion(list.filter((d) => !d.revokedAt).map((d) => d.build));
   return (
     <SettingsCard>
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -114,7 +122,7 @@ export default function DevicesSettings() {
               <div className="min-w-0">
                 <div className="truncate text-[13px] text-ink">{d.name}</div>
                 <div className={SUBTLE}>
-                  {holdsLine(d)} · {seenLine(d, now)}
+                  {holdsLine(d)} · {seenLine(d, now, newest)}
                   {devices.untaken.includes(d.id) && <span className="text-warn" title="This Mac changed which passkeys this worker trusts, and the worker hasn't confirmed it yet: until it does, a passkey you revoked may still approve there. Weft keeps sending it."> · passkeys not updated yet</span>}
                 </div>
                 {d.note && !d.revokedAt && <div className="text-[12.5px] text-warn">{d.note}</div>}

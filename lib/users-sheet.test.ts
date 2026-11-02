@@ -14,6 +14,7 @@ function user(overrides: Partial<AdminUserRow> = {}): AdminUserRow {
     createdAt: "2026-10-26T09:00:00.000Z",
     lastSignInAt: null,
     lastSeenAt: "2026-10-26T11:00:00.000Z",
+    devices: [],
     ...overrides,
   };
 }
@@ -22,6 +23,14 @@ function user(overrides: Partial<AdminUserRow> = {}): AdminUserRow {
 function column(key: UserKey) {
   return columnOf(USERS_SHEET, key);
 }
+
+describe("the Version column", () => {
+  it("lists each account's device versions", () => {
+    const col = column("version");
+    expect(col?.values(user({ devices: [{ kind: "mac", name: "A", build: "0.7.0+abc1234", channel: "release" }] }), NOW)).toEqual(["Mac 0.7.0 (abc1234)"]);
+    expect(col?.values(user({ devices: [] }), NOW)).toEqual([BLANK]);
+  });
+});
 
 describe("msOf", () => {
   it("reads a time as milliseconds since the epoch", () => {
@@ -42,8 +51,8 @@ describe("the Users sheet's columns", () => {
   const seenColumn = column("seen");
 
   it("names the columns it has", () => {
-    expect(USERS_SHEET.columns.map((c) => c.key)).toEqual(["user", "provider", "joined", "seen", "id"]);
-    expect(USERS_SHEET.columns.map((c) => c.label)).toEqual(["User", "Provider", "Joined", "Last seen", "ID"]);
+    expect(USERS_SHEET.columns.map((c) => c.key)).toEqual(["user", "provider", "version", "joined", "seen", "id"]);
+    expect(USERS_SHEET.columns.map((c) => c.label)).toEqual(["User", "Provider", "Version", "Joined", "Last seen", "ID"]);
     expect(columnOf(USERS_SHEET, undefined)).toBeUndefined();
   });
 

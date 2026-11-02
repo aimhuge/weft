@@ -1,6 +1,17 @@
 import type { NextConfig } from "next";
+import { execFileSync } from "node:child_process";
 import path from "node:path";
 import pkg from "./package.json";
+
+// The short commit this build is made from, so a Mac can report which build it runs (lib/app-version-sync.ts). Empty
+// when there's no git checkout to read.
+const commit = (() => {
+  try {
+    return execFileSync("git", ["rev-parse", "--short=7", "HEAD"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+  } catch {
+    return "";
+  }
+})();
 
 const nextConfig: NextConfig = {
   // NEXT_PUBLIC_SITE_URL is where @aimhuge/teams points invite links (its siteOrigin()); it's inlined at build.
@@ -10,6 +21,7 @@ const nextConfig: NextConfig = {
   // GitHub secrets at release time (.github/workflows/release.yml).
   env: {
     NEXT_PUBLIC_APP_VERSION: pkg.version,
+    NEXT_PUBLIC_APP_COMMIT: commit,
     NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL || "https://weft.zip",
     ...(process.env.WEFT_GOOGLE_CLIENT_ID ? { WEFT_GOOGLE_CLIENT_ID: process.env.WEFT_GOOGLE_CLIENT_ID } : {}),
     ...(process.env.WEFT_GOOGLE_CLIENT_SECRET ? { WEFT_GOOGLE_CLIENT_SECRET: process.env.WEFT_GOOGLE_CLIENT_SECRET } : {}),

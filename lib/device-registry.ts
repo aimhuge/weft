@@ -29,6 +29,9 @@ export interface DeviceView {
   // A worker's standing warning from its own row (cloud_workers.update_note): an update it's holding, or its browser
   // running without its sandbox (lib/worker-chromium-sandbox.ts). Null for anything else.
   note: string | null;
+  // The build it runs, "0.7.0+abc1234" (lib/device-version.ts): a worker's own, a Mac's from its daily report. Null for a
+  // phone, a browser, or a Mac on a Weft older than this report.
+  build: string | null;
   // The Mac you're reading the list on.
   here: boolean;
 }
@@ -53,11 +56,12 @@ interface Row {
   status: DeviceView["status"];
   last_seen_at: string | null;
   revoked_at: string | null;
+  build: string | null;
 }
 
 const KINDS: readonly string[] = ["mac", "worker", "phone", "browser"];
 // Named, so a key's value can't slip into the list by a new column.
-const COLUMNS = "id, kind, name, platform, owner_user, org_id, box_key, sign_key, passkey_key, fingerprint, host, status, last_seen_at, revoked_at";
+const COLUMNS = "id, kind, name, platform, owner_user, org_id, box_key, sign_key, passkey_key, fingerprint, host, status, last_seen_at, revoked_at, build";
 // Live first, then by kind, then by name.
 const ORDER: Record<DeviceKind, number> = { mac: 0, worker: 1, phone: 2, browser: 3 };
 
@@ -79,6 +83,7 @@ export function deviceView(r: Row, here: string, note: string | null = null): De
     lastSeenAt: r.last_seen_at,
     revokedAt: r.revoked_at,
     note: kind === "worker" ? note : null,
+    build: r.build ?? null,
     here: kind === "mac" && r.host === here,
   };
 }

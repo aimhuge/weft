@@ -106,6 +106,18 @@ Settings → Devices → **Add a worker** runs the phone's steps for a box:
 - IPC `host-pairing:start|check|cancel` is registered by `electron/pairing-ipc.cjs` on the same board-only handler as
   phone pairing (`electron/host-pairing-ipc.cjs`), sharing its view of this Mac and its Touch ID.
 
+## Versions
+
+Settings → Devices shows the Weft version and commit each device runs in its existing subtitle ("Worker · paired · Busy · 0.7.0 (d9b7166)"), and marks one older than the newest version across your devices ("0.6.6 (abc1234, older)"). No "N behind main": that needs GitHub, so it isn't computed.
+
+- A **worker** publishes `cloud_workers.build` ("0.6.6+abc1234") through `worker_set_build`.
+- A **Mac** writes the same string, plus `build_channel` (release or dev), on its own heartbeat row once a day through `desktop_set_build`, from `lib/app-version-sync.ts` beside `app_version_submit` (which now takes the commit too). The commit is `NEXT_PUBLIC_APP_COMMIT`, read from git by `next.config.ts` at build time; empty when there is no checkout.
+- `device_registry` carries `build` and `build_channel`; `lib/device-version.ts` parses and formats them.
+- **Phones and browsers** report nothing, so they show no version.
+- The admin Users page (`/admin/users`) has a Version column (each account's devices, filterable) and the distribution across all accounts per version and channel in its subtitle, from `admin_device_versions` (service role).
+
+Migration `20261102290000_device_versions.sql`.
+
 ## Left on the old paths, and why
 
 - **`worker_enrol_token` / `worker_enrol`** stay: Settings → Sync → Workers still offers a token, and installs already

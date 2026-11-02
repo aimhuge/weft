@@ -1,9 +1,10 @@
 // The superadmin Users page as a sheet (@aimhuge/sheet, its SheetTable): every weft.zip account, with
 // the search on the User column (name and email), filters on provider, when they joined and when they were last seen,
 // and the two dates flipping newest ↔ oldest on a click. Pure.
+import { versionsOf, type DeviceBuild } from "./device-version";
 import { BLANK, TIME_ORDER, timeBucket, type SheetSpec, type SheetStateOf } from "@aimhuge/sheet";
 
-export type UserKey = "user" | "provider" | "joined" | "seen" | "id";
+export type UserKey = "user" | "provider" | "version" | "joined" | "seen" | "id";
 
 // One weft.zip account, as the Users admin page's route returns it. The type lives here, with the
 // sheet that reads it, so lib doesn't reach up into the route.
@@ -18,6 +19,8 @@ export interface AdminUserRow {
   // The latest of a token refresh, a sign-in and synced card work (admin_users_last_seen); the sign-in alone until
   // supabase/migrations/20261025181950_user_active_days.sql is applied.
   lastSeenAt: string | null;
+  // The build each of their Macs and workers runs (admin_device_versions; empty until 20261102290000_device_versions.sql is applied).
+  devices: DeviceBuild[];
 }
 
 // A time an account carries, as ms, or null when it has none.
@@ -46,6 +49,15 @@ export const USERS_SHEET: SheetSpec<AdminUserRow, UserKey> = {
   columns: [
     { key: "user", label: "User", values: (u) => [u.name ?? u.email ?? BLANK] },
     { key: "provider", label: "Provider", filter: true, values: (u) => [u.provider ?? BLANK] },
+    {
+      key: "version",
+      label: "Version",
+      filter: true,
+      values: (u) => {
+        const v = versionsOf(u.devices);
+        return v.length ? v : [BLANK];
+      },
+    },
     {
       key: "joined",
       label: "Joined",

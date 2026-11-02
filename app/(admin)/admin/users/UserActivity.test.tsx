@@ -22,6 +22,7 @@ const USER: AdminUserRow = {
   createdAt: "2026-10-01T00:00:00Z",
   lastSignInAt: "2026-10-16T00:00:00Z",
   lastSeenAt: new Date().toISOString(),
+  devices: [],
 };
 
 const ANSWER = {
