@@ -14,12 +14,14 @@ async function readWorkerAsk(supabase, uid, callId, tools) {
   const { data: row } = await supabase.from("device_calls").select("id, org_id, owner_user, worker_id, card_id, tool, args, status").eq("id", String(callId)).maybeSingle();
   if (!row || !tools.has(row.tool) || row.owner_user !== uid) throw new Error("That request isn't from one of your workers.");
   if (row.status !== "claimed") throw new Error("That request was already answered.");
-  const { data: worker } = await supabase.from("cloud_workers").select("id, name, owner_user, public_key, sign_key").eq("id", row.worker_id).maybeSingle();
+  const { data: worker } = await supabase.from("cloud_workers").select("id, name, owner_user, public_key, sign_key, revoked_at").eq("id", row.worker_id).maybeSingle();
   if (!worker || worker.owner_user !== uid) throw new Error("That worker isn't yours.");
+  // An ask made before a revoke and answered after it gets nothing (a dev grant would otherwise seal without asking).
+  if (worker.revoked_at) throw new Error(`${worker.name} was revoked.`);
   if (!worker.public_key) throw new Error(`${worker.name} hasn't published its key yet. Update it (weft-worker update), then try again.`);
-  const { data: card } = await supabase.from("cloud_cards").select("folder").eq("card_id", row.card_id).eq("owner_worker", row.worker_id).maybeSingle();
+  const { data: card } = await supabase.from("cloud_cards").select("folder, title:card->>title").eq("card_id", row.card_id).eq("owner_worker", row.worker_id).maybeSingle();
   if (!card?.folder) throw new Error("That card isn't on that worker.");
-  return { row, worker, folder: String(card.folder) };
+  return { row, worker, folder: String(card.folder), title: shown(card.title) };
 }
 
 // The sign key a worker's asks must be signed with: the pinned one, else the row's (H10 sets it at pairing; it's then
@@ -59,6 +61,10 @@ async function queueSecretUse(supabase, row, worker, signer, nonce, sealed, extr
   const { error } = await supabase.from("cloud_commands").insert(command);
   if (error) throw new Error(`Couldn't send the secrets to ${worker.name}: ${error.message}`);
 }
+
+// A card's title as the worker published it, made safe to show in a prompt: no control, format or bidi characters, short.
+/** @param {unknown} v */
+const shown = (v) => (typeof v === "string" ? v.replace(/[\p{C}]/gu, "").trim().slice(0, 80) : "");
 
 /** The signed-in account in main, or a throw that says to sign in. */
 function signedIn(accountClient) {

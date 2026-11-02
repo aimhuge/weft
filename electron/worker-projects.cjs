@@ -37,4 +37,30 @@ function createProjectRepos(deps) {
   return async (folder) => (await folders(folder)).map((m) => m.id);
 }
 
-module.exports = { createProjectRepos, createProjectFolders };
+/**
+ * Which project each worker card belongs to, pinned by main the first time the card reaches the vault
+ * (electron/worker-vault.cjs). A card's folder on cloud_cards is the worker's word, rewritable with its `wwk_` key, so a
+ * card whose folder later changes is refused rather than followed to another project's vault. Kept in ~/.weft/vault,
+ * which threads can't read or edit.
+ * @param {{ dataDir: string }} deps
+ * @returns {(workerId: string, cardId: string, folder: string) => void} throws when the card's folder changed
+ */
+function createCardFolderPins({ dataDir }) {
+  const file = path.join(dataDir, "vault", "worker-card-folders.json");
+  return (workerId, cardId, folder) => {
+    let pins = {};
+    try {
+      pins = JSON.parse(fs.readFileSync(file, "utf8")) ?? {};
+    } catch {
+      pins = {};
+    }
+    const key = `${workerId}\n${cardId}`;
+    const was = pins[key];
+    if (typeof was === "string" && was !== folder) throw new Error(`That card was in ${was} when it first reached the vault, and says ${folder} now, so this Mac won't answer it. Start a new card in ${folder}.`);
+    if (was === folder) return;
+    fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+    fs.writeFileSync(file, JSON.stringify({ ...pins, [key]: folder }), { mode: 0o600 });
+  };
+}
+
+module.exports = { createProjectRepos, createProjectFolders, createCardFolderPins };

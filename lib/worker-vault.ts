@@ -1,4 +1,4 @@
-// A worker card's vault calls that carry names (docs/architecture/project-hosts.md#the-vault-and-connectors-on-a-worker-t2-as-built):
+// A worker card's vault calls that carry names (docs/architecture/project-hosts.md#the-vault-on-a-worker-t2-as-built):
 // mcp__secrets__list, add_blank, ask_add, set_value and push_to_vercel. The vault is on the owner's Mac, so each one is a
 // device call to it (worker_mac_ask, lib/worker-mac-ask.ts), signed with this box's pairing key over vaultAskMessage. The
 // Mac re-reads the row, checks the signature against the key it pinned and answers from the vault the card's own git

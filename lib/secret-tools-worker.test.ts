@@ -1,4 +1,4 @@
-// The vault's tools on a Weft Worker (docs/architecture/project-hosts.md#the-vault-and-connectors-on-a-worker-t2-as-built):
+// The vault's tools on a Weft Worker (docs/architecture/project-hosts.md#the-vault-on-a-worker-t2-as-built):
 // list, add_blank, ask_add, set_value and push_to_vercel ask the owner's Mac through lib/worker-vault.ts; fill_field
 // and request_access say why they're the Mac's own. Nothing reaches the control server, which a worker doesn't have.
 import { beforeEach, describe, expect, it, vi } from "vitest";

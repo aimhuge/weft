@@ -1,11 +1,11 @@
--- The vault and connectors on a Weft Worker, T2 (docs/architecture/project-hosts.md#the-vault-and-connectors-on-a-worker-t2-as-built).
+-- The vault and connectors on a Weft Worker, T2 (docs/architecture/project-hosts.md#the-vault-on-a-worker-t2-as-built).
 --
 -- A worker card's mcp__secrets__list, add_blank, ask_add, set_value, push_to_vercel and its dev server's env ask the
 -- owner's Mac through worker_mac_ask, as tunnels and relays do: each is a device call the Mac's Electron main re-reads
 -- with its own session and answers only when it's signed by the worker's pinned pairing key. Values never travel here
 -- in the clear: set_value's arrives sealed to the Mac, a dev server's goes back as a sealed `secret_use`.
--- Connectors (gog, gh) lent to a worker in Settings → Devices travel as a `connector` command: a short-lived token
--- sealed to the worker's box key and signed by the Mac. Finished ones keep no sealed bytes, and stale ones are failed.
+-- A set_value's sealed value is blanked once it's answered, and commands carrying sealed secrets are read only by the
+-- member who made them.
 
 -- 1. The new device-call tools, beside every one allowed before (20261102190000_worker_tunnels.sql).
 alter table public.device_calls drop constraint device_calls_tool_check;
@@ -84,48 +84,41 @@ $$;
 
 revoke all on function private.device_calls_approval_origin() from public, anon, authenticated;
 
--- 3. The `connector` kind, beside every kind allowed before (20261102170000_secret_use.sql, H6's `line`).
+-- 3. The command kinds, restated exactly as they're live (20261102200000_signed_widening.sql added C's `pin`), so this
+-- migration drops no kind whichever order the two run in. T2 adds none: lending connector tokens to a worker isn't
+-- built (project-hosts.md, "Connectors on a worker: not built").
 alter table public.cloud_commands drop constraint cloud_commands_kind_check;
 alter table public.cloud_commands add constraint cloud_commands_kind_check
-  check (kind in ('new_card', 'reply', 'answer', 'stop', 'run', 'login', 'clone', 'github_login', 'mode', 'input', 'qa', 'update', 'host', 'line', 'secret_use', 'connector'));
+  check (kind in ('new_card', 'reply', 'answer', 'stop', 'run', 'login', 'clone', 'github_login', 'mode', 'input', 'qa', 'update', 'host', 'line', 'secret_use', 'pin'));
 
--- 4. A finished connector command keeps no sealed bytes either, like a secret_use: a seal-key.json stolen later can't
--- open an old token from a backup.
-create or replace function private.blank_secret_use()
+-- 4. A command that carries sealed secrets (a secret_use's values, a Claude or GitHub sign-in) is read only by the member
+-- who made it; the rest of the workspace still sees every other kind (the web board's "waiting for your Mac"). The
+-- worker reads its commands through its key-checked functions, never this policy.
+drop policy if exists "cloud_commands: read as member" on public.cloud_commands;
+create policy "cloud_commands: read as member" on public.cloud_commands
+  for select to authenticated
+  using (
+    private.is_org_member(org_id)
+    and (kind not in ('secret_use', 'login', 'github_login') or (select auth.uid()) = created_by)
+  );
+
+-- 5. A set_value's device call keeps no sealed value once it's answered: the bytes are sealed to the Mac's key, and a key
+-- stolen later shouldn't open old values from a backup. The Mac reads args only while the call is claimed.
+create or replace function private.blank_vault_set()
 returns trigger
 language plpgsql
 set search_path = ''
 as $$
 begin
-  if new.kind in ('secret_use', 'connector') and new.status in ('done', 'failed') then
-    new.payload := '{}'::jsonb;
+  if new.tool = 'vault_set' and new.status in ('done', 'failed') then
+    new.args := '{}'::jsonb;
   end if;
   return new;
 end;
 $$;
 
--- 5. One nobody took is failed (so blanked): a secret_use after 10 minutes, as before; a connector token after an hour,
--- by which time the Mac has sent a newer one (every 40 minutes for Google) and Google's has run out.
-create or replace function private.sweep_secret_use()
-returns integer
-language plpgsql
-security definer
-set search_path = ''
-as $$
-declare
-  gone integer;
-  more integer;
-begin
-  update public.cloud_commands
-    set status = 'failed', error = 'expired before the worker took it', updated_at = now()
-    where kind = 'secret_use' and status = 'pending' and created_at < now() - interval '10 minutes';
-  get diagnostics gone = row_count;
-  update public.cloud_commands
-    set status = 'failed', error = 'expired before the worker took it', updated_at = now()
-    where kind = 'connector' and status = 'pending' and created_at < now() - interval '1 hour';
-  get diagnostics more = row_count;
-  return gone + more;
-end;
-$$;
+revoke all on function private.blank_vault_set() from public, anon, authenticated;
 
-revoke all on function private.sweep_secret_use() from public, anon, authenticated;
+drop trigger if exists device_calls_blank_vault_set on public.device_calls;
+create trigger device_calls_blank_vault_set before update on public.device_calls
+  for each row execute function private.blank_vault_set();

@@ -60,9 +60,11 @@ one. It never installs anything. Details in docs/architecture/simulators.md.
 
 ## On a Weft Worker
 
-A paired worker's row in Settings → Devices has **Google** and **GitHub** toggles: after Touch ID the Mac lends the worker
-short-lived tokens from its own gog and gh sign-ins, sealed to that worker, and the worker's cards run `gog` and `gh`
-through shims that use them ([project-hosts.md](project-hosts.md#the-vault-and-connectors-on-a-worker-t2-as-built)).
+**Not built: lending connectors to a worker needs a process boundary (red team, 2026-11-02).** T2 built Google and
+GitHub toggles on a paired worker's row that lent it tokens from the Mac's gog and gh sign-ins, run through shims; a red
+team found any card on the worker could take the token, and gh's never expires, so it was taken out before it shipped.
+The attacks and what a real fix needs are in
+[project-hosts.md](project-hosts.md#connectors-on-a-worker-not-built-needs-a-process-boundary).
 
 ## Next connectors
 

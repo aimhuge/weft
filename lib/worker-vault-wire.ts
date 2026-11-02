@@ -1,4 +1,4 @@
-// The wire of a worker card's vault calls (docs/architecture/project-hosts.md#the-vault-and-connectors-on-a-worker-t2-as-built).
+// The wire of a worker card's vault calls (docs/architecture/project-hosts.md#the-vault-on-a-worker-t2-as-built).
 // A worker card's mcp__secrets__list, add_blank, ask_add, set_value and push_to_vercel, and its dev server's env, ask the
 // owner's Mac with a device call (worker_mac_ask, one of VAULT_TOOLS). Each ask is signed by the worker's pairing key over
 // vaultAskMessage, which names the card, the box key the Mac seals to, the tool and every field the Mac acts on, so a

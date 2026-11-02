@@ -2,11 +2,9 @@
 // components/DevicesSettings.test.tsx.
 import { describe, expect, it } from "vitest";
 import { bridgesHere } from "./use-devices";
-import { connectorsBridge } from "./use-worker-connectors";
 
 describe("bridgesHere", () => {
   it("finds none without a window", () => {
     expect(bridgesHere()).toEqual({});
-    expect(connectorsBridge()).toBeUndefined();
   });
 });

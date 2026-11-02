@@ -21,15 +21,4 @@ describe("secret_use", () => {
     expect(old.report).toHaveBeenLastCalledWith("cmd-1", "failed", null, expect.stringContaining("doesn't know that kind"));
   });
 
-  it("hands a connector token to deps.connector (lib/worker-connectors.ts), or fails it on a wiring without one", async () => {
-    const connector = vi.fn(() => null);
-    const d = makeDeps({ connector });
-    const lent = command({ kind: "connector", folder: "-", payload: { op: "token", connector: "gh" } as never });
-    await d.daemon.runOne(lent);
-    expect(connector).toHaveBeenCalledWith(lent);
-    expect(d.report).toHaveBeenCalledWith("cmd-1", "done", null, null);
-    const old = makeDeps();
-    await old.daemon.runOne(lent);
-    expect(old.report).toHaveBeenLastCalledWith("cmd-1", "failed", null, expect.stringContaining("doesn't know that kind"));
-  });
 });

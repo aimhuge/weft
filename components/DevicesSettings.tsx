@@ -7,9 +7,7 @@ import type { DeviceKind, DeviceView } from "@/lib/device-registry";
 import { timeAgo } from "@/lib/format";
 import { useDevices } from "@/lib/use-devices";
 import { useNow } from "@/lib/use-now";
-import { useWorkerConnectors } from "@/lib/use-worker-connectors";
 import { Spinner } from "./Icon";
-import WorkerConnectors from "./WorkerConnectors";
 import { SettingsCard, SettingsSectionHeader } from "./SettingsLayout";
 
 const SUBTLE = "text-[12.5px] text-muted";
@@ -62,7 +60,6 @@ function AddWorker({ devices }: { devices: ReturnType<typeof useDevices> }) {
 
 export default function DevicesSettings() {
   const devices = useDevices();
-  const connectors = useWorkerConnectors();
   const now = useNow();
   const list = devices.view?.devices ?? [];
   return (
@@ -74,7 +71,6 @@ export default function DevicesSettings() {
       {devices.view && !devices.view.signedIn && <p className={`mt-3 ${SUBTLE}`}>Sign in to Weft to see your devices.</p>}
       {devices.note && <p className="mt-3 text-[12.5px] text-ink">{devices.note}</p>}
       {devices.error && <p className="mt-3 text-[12.5px] text-danger">{devices.error}</p>}
-      {connectors.note && <p className="mt-3 text-[12.5px] text-ink">{connectors.note}</p>}
       {list.length > 0 && (
         <ul className="mt-4 flex flex-col gap-3 border-t border-line pt-4">
           {list.map((d) => (
@@ -86,8 +82,7 @@ export default function DevicesSettings() {
                 </div>
               </div>
               {!d.revokedAt && (
-                <div className="flex shrink-0 items-center gap-2">
-                  {d.kind === "worker" && <WorkerConnectors device={d} connectors={connectors} />}
+                <div className="flex shrink-0 gap-2">
                   {d.kind === "worker" && devices.canRepin && (
                     <button type="button" className={BUTTON} onClick={() => void devices.repin(d)} aria-label={`Re-pin ${d.name}`} title="Forget the keys this Mac pinned for this worker's secrets, after Touch ID; its next ask pins new ones">
                       Re-pin

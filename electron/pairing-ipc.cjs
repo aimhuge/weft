@@ -90,12 +90,6 @@ function setupPairing({ ipcMain, dataDir, accountClient, isBoard, confirm, safeS
     return signer.publicKey();
   };
   require("./host-pairing-ipc.cjs").registerHostPairing(handle, { db, userId, macDevice, myDevice, confirm, macSignKey }, workerPins);
-  // Connectors (gog, gh) lent to a paired worker, sealed to its pinned key and signed with this Mac's (electron/worker-connectors.cjs).
-  const signerReady = async () => {
-    sodium ??= await ready();
-    return signer;
-  };
-  require("./worker-connectors-ipc.cjs").registerWorkerConnectors(handle, { dir: dataDir, safeStorage: keychain, db, userId, pins: workerPins, signer: signerReady, mint: require("./connector-mint.cjs").createMint(), confirm });
 
   const routes = {
     // The key the uploader seals with (lib/sync-seal-upload.ts); { none: true } when this Mac has no grant yet.

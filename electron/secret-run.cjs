@@ -34,7 +34,9 @@ function describeWorker({ kind, command, cwd, script, names, environment, label,
   const key = fingerprint ? `${worker}'s key: ${fingerprint}${firstUse ? " (first seen now: this Mac pins it)" : " (pinned)"}` : null;
   const dev = kind === "dev";
   // A dev server's approval stands for its restarts (electron/worker-dev-env.cjs), so the window says how long.
-  const sealedFor = dev ? `They're sealed to that worker for this server, and Allow covers its restarts with the same command for ${DEV_GRANT_HOURS} hours. Its log shows ‹NAME› in their place.` : "They're sealed to that worker for this one run, and the thread's output shows ‹NAME› in their place.";
+  const sealedFor = dev
+    ? `They're sealed to that worker for this server. Allow covers its restarts with the same command for up to ${DEV_GRANT_HOURS} hours, until the card gets a new message, and that includes any change to the code in this project in between: whatever the server runs gets the values. Any process on ${worker} can read a running server's env. Its log shows ‹NAME› in their place.`
+    : "They're sealed to that worker for this one run, and the thread's output shows ‹NAME› in their place.";
   const detail = [`Command: ${command}`, script ? `Runs:\n${script}` : null, `In: ${cwd} on the Weft Worker ${worker}, not this Mac`, remote ? `Repo: ${remote}` : null, `Secrets (${environment}) from ${label}: ${names.join(", ")}`, key, `The command and any code it runs on ${worker} get these values. ${sealedFor}`, thread ? `Card: ${thread}` : null, why ? `The thread says why: ${why}` : null].filter(Boolean).join("\n\n");
   return {
     message: dev ? `Start a dev server on the worker ${worker} with ${label}'s ${environment} secrets?` : `A card on the worker ${worker} wants to run a command with secrets from ${label}.`,
@@ -232,7 +234,7 @@ function setupSecretRun({ vault, dataDir, window, accountClient = () => null, ve
   const worker = createWorkerSecrets({ vault, ask, describe, accountClient, pins, signer, projectRepos: projects.createProjectRepos({ dataDir }), audit });
   // A worker card's list, blanks, set_value, push_to_vercel and dev server env (electron/worker-vault.cjs).
   const devEnv = require("./worker-dev-env.cjs").createWorkerDevEnv({ vault, ask, describe, pins, signer, audit });
-  const workerVault = require("./worker-vault.cjs").createWorkerVault({ vault, vercelEnv, accountClient, pins, signer, projectFolders: projects.createProjectFolders({ dataDir }), devEnv, audit });
+  const workerVault = require("./worker-vault.cjs").createWorkerVault({ vault, vercelEnv, accountClient, pins, signer, projectFolders: projects.createProjectFolders({ dataDir }), devEnv, cardFolder: projects.createCardFolderPins({ dataDir }), audit });
   return { ...createSecretRun({ vault, rules, spawn, audit, ask }), workerAsk: worker.answer, workerVault: workerVault.answer, devEnv };
 }
 

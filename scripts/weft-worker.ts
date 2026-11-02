@@ -127,9 +127,8 @@ async function startCommand() {
   browserScreen.setBrowserScreenChannel((topic) => openScreenChannel(client, topic));
   setDeviceLink(deviceLink(reg, config.key));
   // A card's mcp__secrets__run asks the owner's Mac, and the answer comes back sealed to this box (lib/worker-secret-run.ts).
-  // The other secrets tools ask it too (lib/worker-vault.ts), and the connector shims go first on the cards' PATH.
-  const secrets = secretWiring(home, reg, keys, process.env.PATH ?? "");
-  process.env.PATH = secrets.shimmed;
+  // The other secrets tools ask it too (lib/worker-vault.ts).
+  const secrets = secretWiring(home, reg, keys);
   setSecretLink(secrets.link);
   subscribe(forgetOnTurnEnd);
   setFastScreen(openFastScreen, (sealed) => open(keys, sealed, RTC_PURPOSE));
@@ -204,7 +203,6 @@ async function startCommand() {
       if ((await paths.cloneProject(dir, repo)) === "cloned") console.log(`Weft Worker: cloned ${repo} into ${dir}`);
     },
     secretUse: secrets.use,
-    connector: secrets.connector,
     // No restart: git asks its credential helper afresh each time.
     github: { login: (sealed) => github.signInGithub(home, open(keys, sealed, GITHUB_PURPOSE)), status: () => github.githubStatus() },
     // A sign-in from the desktop: save the token where the wrapper loads it, then restart (the service brings the

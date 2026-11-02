@@ -114,7 +114,7 @@ export interface QaPayload {
 
 // "host" carries any verb in lib/host-api (lib/host-command.ts); reply, answer, stop and mode run as its verbs too.
 // "line" is a sealed WebRTC offer that opens a worker's session line (lib/host-line.ts).
-export type CloudCommandKind = "new_card" | "reply" | "answer" | "stop" | "run" | "login" | "github_login" | "clone" | "mode" | "input" | "qa" | "update" | "host" | "line" | "secret_use" | "connector";
+export type CloudCommandKind = "new_card" | "reply" | "answer" | "stop" | "run" | "login" | "github_login" | "clone" | "mode" | "input" | "qa" | "update" | "host" | "line" | "secret_use";
 
 // public.cloud_commands.
 export interface CloudCommandRow {

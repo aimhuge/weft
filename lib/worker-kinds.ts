@@ -2,8 +2,7 @@
 // (and a web `new_card`) makes a card in the project's checkout and starts its thread; `login` and `github_login` open a
 // sealed sign-in; `clone` puts a repo in a folder; `update` asks for the update check; and the card kinds
 // (lib/worker-card-commands.ts) act on a card it runs; `line` opens a session line (lib/host-line.ts); `secret_use`
-// hands a sealed answer to a card's waiting secret run; `connector` keeps a token the Mac lent. Each returns the card it
-// made or touched, or null.
+// hands a sealed answer to a card's waiting secret run. Each returns the card it made or touched, or null.
 import { NEW_CARD_MODES, newCardBody, type CloudCommandRow, type NewCardMode } from "./cloud-commands";
 import { networkStartMode } from "./cloud-new-card-mode";
 import { dispatcher, type KindTable } from "./host/dispatch";
@@ -143,8 +142,6 @@ export function workerKinds(deps: DaemonDeps, ctx: KindContext): KindTable {
     },
     // The Mac's sealed answer to a card's mcp__secrets__run (lib/worker-secret-asks.ts); an old wiring without it can't open one.
     ...(deps.secretUse ? { secret_use: deps.secretUse } : {}),
-    // A connector token (gog, gh) the paired Mac lent this box, or its forget (lib/worker-connectors.ts).
-    ...(deps.connector ? { connector: deps.connector } : {}),
   };
 }
 

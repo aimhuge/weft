@@ -1,4 +1,4 @@
-// Main's copy of lib/worker-vault-wire.ts (a worker card's vault asks, docs/architecture/project-hosts.md#the-vault-and-connectors-on-a-worker-t2-as-built):
+// Main's copy of lib/worker-vault-wire.ts (a worker card's vault asks, docs/architecture/project-hosts.md#the-vault-on-a-worker-t2-as-built):
 // the tools, the message a paired worker signs and the dev env's seal purpose. Held to the TS side by a test.
 const crypto = require("node:crypto");
 
@@ -9,7 +9,7 @@ const VAULT_PUSH = "vault_push";
 const DEV_ENV = "dev_env";
 const VAULT_TOOLS = new Set([VAULT_LIST, VAULT_BLANK, VAULT_SET, VAULT_PUSH, DEV_ENV]);
 // How long a worker's dev server approval covers its restarts (electron/worker-dev-env.cjs, the window's words).
-const DEV_GRANT_HOURS = 12;
+const DEV_GRANT_HOURS = 2;
 
 /** @param {string} cardId @param {string} boxKey @param {string} tool @param {Record<string, any>} a */
 function vaultAskMessage(cardId, boxKey, tool, a) {

@@ -378,11 +378,10 @@ and answers from the vault the card's own repo names, through this Mac's clone o
 `list` (names), `add_blank` and `ask_add` (blanks made here; the user fills them in 🔐 on the Mac), `set_value` (the value
 sealed to this Mac's device key, stored after the usual Touch ID, which names the worker) and `push_to_vercel` (Touch ID,
 from this Mac's linked clone). A worker card's dev server gets the development set after one Touch ID that covers its
-restarts with the same command for 12 hours (`electron/worker-dev-env.cjs`), sealed to the worker and handed to
+restarts with the same command for up to 2 hours, until the card gets a new message (`electron/worker-dev-env.cjs`), sealed to the worker and handed to
 `electron/secret-env.cjs` on its stdin. `fill_field` and `request_access` stay the Mac's: the pane and the grants are
-here. Settings → Devices can also lend a paired worker the Mac's gog and gh sign-ins as short-lived sealed tokens
-(`electron/worker-connectors.cjs`). The design, guarantees and limits are in
-[project-hosts.md](project-hosts.md#the-vault-and-connectors-on-a-worker-t2-as-built).
+here. Lending the Mac's gog and gh sign-ins to a worker is not built: it needs a process boundary on the worker. The design, guarantees and limits are in
+[project-hosts.md](project-hosts.md#the-vault-on-a-worker-t2-as-built).
 
 ## Which card a vault request is for
 

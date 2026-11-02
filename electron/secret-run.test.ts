@@ -238,7 +238,9 @@ describe("helpers", () => {
   it("describes a worker's dev server as a start whose Allow covers its restarts", () => {
     const dev = describeRun({ kind: "dev", command: "pnpm dev", cwd: ".", names: ["K"], environment: "development", label: "o/r", thread: "Fix", worker: "m1mini" });
     expect(dev.message).toBe("Start a dev server on the worker m1mini with o/r's development secrets?");
-    expect(dev.detail).toContain("Allow covers its restarts with the same command for 12 hours");
+    expect(dev.detail).toContain("Allow covers its restarts with the same command for up to 2 hours, until the card gets a new message");
+    expect(dev.detail).toContain("any change to the code in this project");
+    expect(dev.detail).toContain("Any process on");
     expect(dev.reason).toBe('start "pnpm dev" with K (o/r) for "Fix" on the worker m1mini');
   });
 

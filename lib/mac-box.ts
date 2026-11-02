@@ -1,4 +1,4 @@
-// set_value from a Weft Worker (docs/architecture/project-hosts.md#the-vault-and-connectors-on-a-worker-t2-as-built): the
+// set_value from a Weft Worker (docs/architecture/project-hosts.md#the-vault-on-a-worker-t2-as-built): the
 // value a thread generated travels to the owner's Mac sealed to that Mac's key, so Supabase and the device_calls row
 // only ever hold sealed bytes. The worker trusts one Mac key, the Ed25519 one its pairing code carried
 // (lib/worker-mac-keys.ts); libsodium turns it into the X25519 key a sealed box needs, and main opens it with the

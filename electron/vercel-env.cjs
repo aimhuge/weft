@@ -60,7 +60,7 @@ function createVercelEnv({ vercel, vault, onDrift, linked = (folder) => Boolean(
       if (!NAME.test(name)) throw new Error(`${name || "A blank name"} isn't a variable name.`);
       if (!ENVIRONMENTS.includes(environment)) throw new Error(`Unknown environment: ${environment}`);
       const { project } = await vercel.envList(folder);
-      const r = await vault.sendValue(folder, name, environment, (label) => `push ${name} (${label}, ${environment}) to Vercel project ${project}${who ? ` ${who}` : ""}`, (value) => vercel.envSet(folder, name, environment, value), card);
+      const r = await vault.sendValue(folder, name, environment, (label) => `${who ? `let a thread ${who} ` : ""}push ${name} (${label}, ${environment}) to Vercel project ${project}${who && environment === "production" ? ". This is the PRODUCTION value" : ""}`, (value) => vercel.envSet(folder, name, environment, value), card);
       void cache.listed(folder).catch(() => null);
       return r;
     },

@@ -113,9 +113,9 @@ Built 2026-11-02 (migration `20261102190000_worker_tunnels.sql`, not applied). `
   needs a weft.zip sign-in there once.
 - **Locally** the same verbs mount on `POST /api/cards/:id/dev` as `open` and `stop`.
 - **The vault's env** (T2): `devSecrets` (`lib/secret-run.ts`) asks the owner's Mac through `lib/worker-dev-env.ts`;
-  after one Touch ID (it covers restarts with the same command for 12 hours) the development values arrive sealed and go to
+  after one Touch ID (it covers restarts with the same command for up to 2 hours, until the card gets a new message) the development values arrive sealed and go to
   `electron/secret-env.cjs` on its stdin, which redacts them from the log
-  ([project-hosts.md](project-hosts.md#the-vault-and-connectors-on-a-worker-t2-as-built)).
+  ([project-hosts.md](project-hosts.md#the-vault-on-a-worker-t2-as-built)).
 
 ## Stopping one task
 
