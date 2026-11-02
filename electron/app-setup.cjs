@@ -79,6 +79,7 @@ function setupApps({ ipcMain, vault, ownsPane, isBoard, dataDir, supabaseReadLin
     serverUrl: () => server()?.url ?? "",
     token: () => server()?.token ?? "",
     owns: ownsPane,
+    dataDir,
     fetch: fetchImpl,
   });
 

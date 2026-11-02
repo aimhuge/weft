@@ -17,6 +17,7 @@ lib/worker-browser-routes.ts   the same routes and answers as electron/browser-p
 lib/worker-browser-page.ts     a webContents-shaped adapter over one page's flattened CDP session
 lib/worker-browser.ts          one Chromium, a browser context per card, the file guard, idle shutdown
 lib/worker-chromium.ts         find, launch (--remote-debugging-pipe), and the pipe's CDP framing
+lib/worker-chromium-sandbox.ts whether Linux lets it keep its sandbox, and why not
 ```
 
 ## The tools
@@ -97,10 +98,45 @@ Page.startScreencast (JPEG q70, ≤1280 px, a frame on each repaint, each acked)
 
 `install/worker.sh` downloads Chrome for Testing's `chrome-headless-shell` 156.0.8078.80 into `~/.weft/tools/chromium`
 for mac-arm64, mac-x64 or linux64, pinned by the zip's SHA-256 (the release publishes no digest). A failure only skips
-it. `findChromium` (`lib/worker-chromium.ts`) looks in order at `WEFT_CHROMIUM`, that folder, Playwright's cached
-`chromium_headless_shell-*` builds (newest first), then the system's Chrome or Chromium; with none, the tools say how to
-get one. As root on Linux, or where AppArmor/sysctl blocks unprivileged user namespaces (Ubuntu 24.04, GitHub runners), it adds `--no-sandbox`. An enrolled box gets it with `weft-worker update`, which reruns the
-script; an auto-update doesn't.
+it. `findChromium` (`lib/worker-chromium.ts`) looks in order at `WEFT_CHROMIUM`, on Linux the root-owned copy below,
+that folder, Playwright's cached `chromium_headless_shell-*` builds (newest first), then the system's Chrome or Chromium;
+with none, the tools say how to get one. An enrolled box gets it with `weft-worker update`, which reruns the script; an
+auto-update doesn't.
+
+## The sandbox
+
+A page is a public site as often as the card's own dev server, so a renderer exploit is the threat that matters: with
+Chromium's sandbox it lands in a process with no file system and no syscalls worth having; without it, it runs as the
+worker, next to `worker.json` and the seal key. On macOS the sandbox always works. On Linux it needs unprivileged user
+namespaces, and Ubuntu 23.10+ (24.04 and GitHub's runners included) gives them only to a binary an AppArmor profile
+names (`kernel.apparmor_restrict_unprivileged_userns=1`); Ubuntu ships such a profile for Google Chrome, none for ours.
+
+```
+install/worker.sh, on a Linux with the restriction, not as root, once per Chromium version (sudo):
+  ~/.weft/tools/chromium  ──cp, chown root──▶  /opt/weft/chromium/chrome-headless-shell
+  /etc/apparmor.d/weft-chromium:  profile weft-chromium /opt/weft/chromium/chrome-headless-shell flags=(unconfined) { userns, }
+  apparmor_parser -r  (a profile it refuses is removed again)
+lib/worker-chromium-sandbox.ts sandboxGap(bin), at each launch:
+  not Linux                                     → sandboxed
+  root                                          → --no-sandbox  (Chromium won't sandbox as root)
+  userns off (unprivileged_userns_clone=0, max_user_namespaces=0) → --no-sandbox
+  AppArmor restriction, and bin isn't (a link to) the copy our profile names → --no-sandbox
+  otherwise                                     → sandboxed
+```
+
+- **Why this way.** The options, safest first: (1) an AppArmor profile, the way Ubuntu does it for Chrome: the browser
+  keeps its whole sandbox and nothing else changes. (2) the setuid `chrome-sandbox` helper: chrome-headless-shell
+  156.0.8078.80 for linux64 doesn't ship one (its zip has the binary, its `.so`s and `.pak`s only). (3) a separate
+  user for Chromium: more moving parts (a user, a profile dir it owns, the pipe across users) for what (1) gives with a
+  file. So (1), with (4) when it can't be had.
+- **Why a root-owned copy.** The profile attaches by path. Pointing it at `~/.weft/tools/chromium` would let anything
+  the worker runs, a thread's Bash included, put its own binary there and get the user namespaces Ubuntu means to
+  withhold. `/opt/weft/chromium` is root's, so the only binary the profile covers is the pinned one.
+- **When it can't** (root, user namespaces off, no sudo, a box without AppArmor 4): Chromium runs with `--no-sandbox`
+  as before, the log says why at each launch, and the daemon puts `Browser runs without sandbox: <why>.` on its row
+  (`browserNote`, sent with the build line through `worker_set_build`'s note, beside any update note). Settings → Devices
+  shows a worker's note under its name, read from its own `cloud_workers` row (`lib/device-registry.ts`); Settings →
+  Sync → Workers already showed it.
 
 ## Tested
 
@@ -115,7 +151,9 @@ and the pinned 156.0.8078.80 (mac-arm64). The rest is unit tests over a fake CDP
 
 ## Next
 
-- Run it on m1mini and a Linux box, and watch it from Electron's board over a real session line.
+- Run it on m1mini and a Linux box, and watch it from Electron's board over a real session line; on Ubuntu 24.04, confirm the
+  profile loads (`sudo aa-status | grep weft-chromium`) and the renderers run in their own user namespace
+  (`ls -l /proc/<renderer pid>/ns/user` differs from the worker's).
 - Paste and wheel from the pane (the board sends neither yet), and a cursor on the canvas.
 - An H.264 track where the box has an encoder, for smoother video than JPEG.
 - `upload_file`, tabs, and iframes in the snapshot, as on the desktop.

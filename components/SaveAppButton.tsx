@@ -1,14 +1,15 @@
 "use client";
 
-import { appFor, appNameFrom, cleanAppUrl } from "@/lib/mini-apps";
+import { appFor, appNameFrom, blobPageSha, cleanAppUrl } from "@/lib/mini-apps";
 import { appActions, useMiniApps } from "@/lib/use-mini-apps";
 
 // The browser pane's Save as app: the page it shows joins the left rail below Services (components/AppsRail.tsx),
-// named after its title. Lit when the page already is an app; clicking it then takes it out again.
+// named after its title. Lit when the page already is an app; clicking it then takes it out again. A worker card's page
+// (a blob, components/WorkerPane.tsx) saves too: the server brings it home first (lib/mini-app-worker.ts).
 export default function SaveAppButton({ url, title, notify }: { url: string; title: string; notify?: (err: unknown) => void }) {
   const apps = useMiniApps();
   const app = appFor(apps, url);
-  const savable = Boolean(cleanAppUrl(url));
+  const savable = Boolean(cleanAppUrl(url) ?? blobPageSha(url));
   const onError = notify ?? ((err: unknown) => console.error(err));
   return (
     <button

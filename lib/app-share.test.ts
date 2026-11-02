@@ -330,3 +330,17 @@ describe("setAppShare", () => {
     client.from = real;
   });
 });
+describe("appPage on a worker card's page", () => {
+  it("shares it as the one page it is, never as a folder with a manifest's powers", async () => {
+    const dir = path.join(process.env.WEFT_DATA ?? os.tmpdir(), "apps", "worker-0123456789abcdef");
+    fs.mkdirSync(dir, { recursive: true });
+    try {
+      fs.writeFileSync(path.join(dir, "index.html"), "<h1>hi</h1>");
+      fs.writeFileSync(path.join(dir, "weft-app.json"), JSON.stringify({ name: "x", secrets: { K: { hosts: ["api.x.com"] } } }));
+      const { appPage } = await import("./app-share");
+      expect(appPage(`file://${dir}/index.html`).kind).not.toBe("folder");
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});

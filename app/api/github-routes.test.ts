@@ -81,6 +81,12 @@ describe("POST /api/github/issues", () => {
     expect(lib.enableIssueSync).not.toHaveBeenCalled();
   });
 
+  it("takes a worker project's path as it is: its issues become cards on the worker", async () => {
+    const res = await route.POST(send("POST", { folder: "worker://w1/app" }));
+    expect(await res.json()).toEqual({ folder: "worker://w1/app", added: 2, updated: 1, archived: 0 });
+    expect(lib.syncIssues).toHaveBeenCalledWith("worker://w1/app");
+  });
+
   it("refuses a missing folder and a write without the header", async () => {
     expect((await route.POST(send("POST", { folder: "/no/such/folder" }))).status).toBe(400);
     expect((await route.POST(send("POST", { folder: FOLDER }, READ))).status).toBe(403);

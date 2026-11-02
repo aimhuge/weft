@@ -3,7 +3,8 @@
 Status: **design** (2026-11-01, merged with "one engine, two transports" 2026-11-02). Phase H1 is in progress; H2 (the
 `host` command) is built ([below](#the-host-command-h2-as-built)), and so is H3, `hostFor` and one open card
 ([below](#hostfor-and-one-open-card-h3-as-built)), and H3b, composer parity ([below](#composer-parity-h3b-as-built)), and H5, one host program ([below](#one-host-program-h5-as-built)), and H4, project reads and the editor
-([below](#project-reads-and-the-editor-h4-as-built)) and the board tools on a worker ([below](#board-tools-on-a-worker)). It follows on from [weft-worker.md](weft-worker.md#worker-projects-on-the-desktop-board),
+([below](#project-reads-and-the-editor-h4-as-built)), the board tools on a worker ([below](#board-tools-on-a-worker)), and T5, the rail's drawers and mini apps
+([below](#drawers-and-mini-apps-on-a-worker-project-t5-as-built)). It follows on from [weft-worker.md](weft-worker.md#worker-projects-on-the-desktop-board),
 where a Worker project shows on the desktop board but most of what a local project gets drops out.
 
 ## The problem
@@ -46,6 +47,7 @@ engine: the daemon runs the same `lib/runner.ts`.
 | New thread, Backlog | POST `/api/cards` | the header's count from the worker's snapshot (H4); `card.create` (tags, CLI, model, effort, mode, Isolated; `start: false` is the worker's Backlog), Backlog reorder as `card.update { before }` (board parity) |
 | Isolated | the warm worktree pool | the daemon's own pool (`startWorktreePool` after recovery), a reflink or plain copy of `node_modules` on Linux; lands on Done as on the Mac (board parity) |
 | Notifications, dock badge | `board-live` announce, chimes | the same `noticeCard` per read (`useWorkerNotices`); the badge counts every card on the board (board parity) |
+| Rail drawers, mini apps | the project's folder | 🔐 and the provider drawers through this Mac's checkout of the repo; Services with Log, Restart and Stop; issues as runs; Save as app on its pages (T5) |
 | Streaming | SSE | a 2.5 s poll |
 | weft.zip and the phone | | reply, answer, stop and new card, and since H2 any verb as a `host` command (`cloud-inbox-cards.ts`, the same `runVerb`); the phone still has its own copy of the command shapes |
 
@@ -462,8 +464,8 @@ worker:      claim secret_use ─ deliverSecretUse: the ask for that nonce, same
   `lib/worker-mac-keys.ts` `trustPairingMac`, kept in `mac-keys.json`, sealed from threads). No key off the network is
   ever trusted, so a session of the owner's that seals and signs its own row before the real Touch ID gets nothing. A
   token-enrolled box trusts no Mac and takes no secrets; `weft-worker forget-macs` stops a paired one. Enrolling
-  replaces the trusted Mac (never adds one), and an enrolled box enrols again only with `--re-pair` typed at a terminal
-  on it. Threads can't run any of this: `lib/worker-cli-guard.ts` refuses `weft-worker`, the daemon's script, the
+  replaces the trusted Mac (never adds one), and an enrolled box enrols again only on an approval the Mac it trusts
+  now signed ([Re-pairing a worker](#re-pairing-a-worker)). Threads can't run any of this: `lib/worker-cli-guard.ts` refuses `weft-worker`, the daemon's script, the
   installer and a pairing code handed to a runner, in every thread's guard set. The ask's signature also names the box
   key (`askMessage`), so after a Re-pin main seals only to the key the worker itself signed for.
 - **The window** (`electron/approval-worker.cjs`) puts the full command and script first, with anything outside plain
@@ -501,6 +503,65 @@ worker:      claim secret_use ─ deliverSecretUse: the ask for that nonce, same
   with `kind: "dev"` and a long-lived redacting launcher), `fill_field` (the pane is the Mac's), missing names made into
   blanks from the worker (it says to add them on the Mac), and the vault on the host itself, its key sealed to the worker
   and opened behind a signed approval (after H7).
+
+### Re-pairing a worker (as built, 2026-11-02)
+
+Pairing chooses the Mac a box takes secret answers, signed settings and signed widenings from, so moving an enrolled box
+to another Mac is the most powerful thing its command line does. It used to need only `--re-pair` at a terminal
+(`enrolRefusal`'s TTY check), and a thread fakes a terminal with any pty (`script`, `expect`, `unbuffer`, Python's
+`pty.spawn`, or a program it writes). Now the Mac the box trusts signs the move:
+
+```
+old Mac (key K, in the box's mac-keys.json)            worker box
+Settings → Devices → m1mini → Re-pair
+  paste the new Mac's wph.… code (carries K')
+  Touch ID: "let the worker m1mini stop trusting this
+    Mac and trust the Mac a1b2 c3d4 e5f6 7890 instead"
+  sign with K: weft-repair-v1 \n worker \n K' \n pairing
+    \n org \n issuedAt \n nonce
+  shows: weft-worker enrol wph.… --re-pair --approval wra.<issuedAt>.<nonce>.<sig>
+                                         ─ by hand ─▶  repairRefusal: the sig checks against K, for this
+                                                       worker id, K', the code's pairing and workspace,
+                                                       under 30 min old → pairWorker (the new Mac's own
+                                                       claim check and Touch ID) → trustPairingMac(K')
+```
+
+- **The box** (`lib/worker-repair.ts` `repairRefusal`, called by `scripts/weft-worker.ts` before anything else runs)
+  refuses an enrolled box's enrol unless the code is a `wph.` code carrying a Mac key and the `--approval` line verifies
+  against a key in `mac-keys.json` over this worker's id (`worker.json`), the new key, the code's pairing id and
+  workspace, and a time within 30 minutes (two minutes' skew). A token can't re-enrol an enrolled box, and a box that
+  trusts no Mac (enrolled by token, or after `forget-macs`) has no one to approve, so both are wiped first
+  ([weft-worker.md](weft-worker.md#re-pairing-and-a-lost-mac)). The new Mac can't approve its own arrival, and the
+  pairing id is single-use on the server, so a replayed approval can't do anything new; once the swap lands, the old
+  key verifies nothing. The TTY check stays as a speed bump. A fresh box enrols as before.
+- **The Mac** (`electron/worker-repair.cjs`, IPC `worker-repair:approve` on the board-only handler in
+  `electron/host-pairing-ipc.cjs`, `weft.hostPairing.approveRepair`) takes only the worker's id and the code. It reads
+  the worker from `device_registry` through its own session (a worker, owned by the signed-in user) and names it from
+  there, never from the renderer. It parses the code itself and asks Touch ID with the new Mac's fingerprint first (the
+  name only if it passes `SAFE_NAME`), then signs with its approval key (`electron/desktop-signer.cjs`), which never
+  leaves main. This Mac's key is public, so anyone could put it in a pairing code of their own workspace: a code naming
+  this Mac must be one this Mac opened and still has open (`createHostPairing().opened`). Add a worker shows this Mac's
+  fingerprint, so a user moving a worker here can match it against the old Mac's prompt. Re-pair shows on paired
+  workers in Settings → Devices (`components/WorkerRepair.tsx`). `lib/worker-repair.test.ts` proves main's message and
+  fingerprint are the box's.
+- **A damaged `worker.json`** doesn't drop the check: a box with a `mac-keys.json` counts as enrolled.
+- **The code that checks is guarded too.** `weft-worker` runs from the worker's own clone (`~/.weft-worker/weft`) through
+  jiti, so editing `lib/worker-repair.ts` there would turn the check off. `lib/worker-clone-guard.ts` keeps that clone
+  readable but unchangeable from a thread: Edit, Write and NotebookEdit are refused (`lib/secret-guard-tool.ts`), and so
+  is Bash that writes into it (`sed -i`, `perl -pi`, `cp`/`mv`/`tee`/`rm` and the like, `tar -C`, `unzip -d`, `curl -o`,
+  `patch` run in it, a `>` redirect from any folder a `cd` reaches, `git` run in it or pointed at it).
+  Only the updater changes it. The CLI guard (`lib/worker-cli-guard.ts`) also sees `weft-worker` behind the wrappers
+  that give it a terminal or run it for you (`script`, `expect`, `unbuffer`, `timeout`, `stdbuf`, `caffeinate`, `xargs`,
+  `python -c` with `pty.spawn`, and others), even named inside a string.
+- **Why by hand, not a request the box posts.** A request the box posts can be posted by a thread too, putting
+  unrequested Touch ID prompts on the Mac until one is approved by habit. Carried by hand, nothing reaches the Mac unless
+  the user pastes it there. It needs no table and no migration either.
+- **Its limit: the guards are speed bumps, the signature is the check.** Threads on a worker run as the same OS user as
+  the daemon, and the guards read names on the command line. A thread can still copy the clone out (`cp -R`, reading is
+  open), edit the copy's check away and run it with `node` under another name. It can also write and run a program that
+  rewrites `mac-keys.json` or `worker.json` directly (weft-worker.md, "the same limits as the data dir"). The guards make
+  the obvious routes fail loudly; none of them can stop the same user. The fix is a process boundary: the daemon as its
+  own OS user that owns `worker.json`, `mac-keys.json` and the clone, with cards run as another.
 
 ### Project reads and the editor (H4, as built)
 
@@ -569,7 +630,7 @@ editor: OpenCard ─ FilesSourceContext = host.files ─┬─ local: filesApi (
   absolute path.
 - **Not yet.** Live reload of a worker's open file (events over the H6 line); the streak counting a worker's turns; the
   Realtime on `cloud_worker_projects` (the board polls on
-  turn ticks and focus); blob GC for results; the terminal and drawers (vault, dev servers) on a worker project; the
+  turn ticks and focus); blob GC for results; the terminal on a worker project (the drawers came in T5); the
   `@weft/client` `HOST_VERBS` list (H9a) must add `files.list`, `files.read` and `files.write` when it lands.
 
 ### Re-scout and sprint planning on a worker (T6)
@@ -657,6 +718,60 @@ webhook" in a board nobody sees. Now the tools that write the board reach the us
   `cloud_worker_lists` and `worker_set_lists`. Not applied yet.
 - **Not yet:** list and change Mac crons from a worker; edit a worker's cron or webhook from the Mac's drawer; an agent on
   a card sent to another host; `read_thread` and the copilot's tools (the copilot never runs on a worker).
+### Drawers and mini apps on a worker project (T5, as built)
+
+```
+rail:  Board ctx.project (a worker's path too) ─ railProjects(project, folders, vaults) (lib/rail-project.ts)
+         ├─ host.can("vault")? the project : repo = twinOf / twinByRepo (lib/worker-twin.ts) ─▶ 🔐 ▲ Supabase Cloudflare BlastCP Slack ✦
+         └─ host = the project itself ─────────────────────────────────────────────────────▶ 🖥 Services, GitHub, 🪝
+Services: WorkerDevServers ─ shownWorkerDev (lib/worker-dev-view.ts) ─ Log / Restart / Stop ─ askWorker("dev.log") / actOnWorker("dev.restart" | "dev.stop")
+GitHub:   /api/github/issues { folder: worker://w/app } ─ runSync ─ syncWorkerIssues (lib/issue-worker.ts) ─ this Mac's gh in the twin ─ sendRun ─▶ `run` on the worker
+apps:     WorkerPane ─ SaveAppButton(blob:sha256:…) ─ POST /api/apps ─ saveWorkerPageApp (lib/mini-app-worker.ts) ─ ~/.weft/apps/worker-<sha>/index.html ─ saveApp(file:…, source)
+badges:   PileBadge ─ fetchPileReview ─ host can't projectActs, can reads ─ workerPilePrompt(snapshot pile) (lib/pile-worker.ts) ─ a card on the worker
+```
+
+- **The twin.** A worker names a project by its folder under the work root, which is the repo's name for a checkout
+  cloned there (and the basename `lib/worker-handoff.ts` sends). `lib/worker-twin.ts` finds this Mac's folder of that
+  name (`twinOf`), else the vault whose `owner/name` label ends in it (`twinByRepo`): the same rule main uses to pick a
+  worker card's vault (`electron/worker-projects.cjs`). Names only: the values stay behind Touch ID in main.
+  A name is a guess, so what acts on the repo checks it: the issue sync reads every namesake's remote (`twinsOf`) and
+  refuses when they name different repos. The drawers still show the first namesake; the worker doesn't publish its
+  remote yet, so a lone Mac folder of the same name but another repo can't be told apart.
+- **Which drawer reads what** (`lib/rail-project.ts`, gated on `hostFor(project).can("vault")`, which a worker's host
+  answers false): what is per repo (🔐 vault, ▲ Vercel, Supabase, Cloudflare, BlastCP, Slack, ✦ Skills) reads the twin;
+  what is per host (🖥 Services, GitHub's issue sync, 🪝 webhooks) reads the worker project itself. With no twin the
+  per-repo drawers get the worker path, which matches none of this Mac's folders, so they show nothing for it rather than
+  every project. `Board.tsx` now hands the rail the project as it is (`ctx.project`), not `localPath`.
+- **Services** (dev-servers.md#on-a-worker): two more host verbs, `dev.restart` (the run's own command again, through
+  `restartDev`) and `dev.log` (its last 40 lines, key-shaped text hidden by `redactText`, a first line cut by the log's 4,000-character cap dropped, then held under 2,500 UTF-8
+  bytes by `verbResult`'s `tailBytes`, so the row stays under its 4 KB cap). Both refuse a server a thread started in its
+  own shell ("can only stop it"), and neither is elevated: they widen nothing. Locally they mount on `POST
+  /api/cards/:id/dev` as `rerun` and `log` (`restart` stays the review tour's plan). The drawer's worker rows gain Log
+  (read into the row, a second click hides it), Restart (Start once the run ended) beside Stop, and a worker project
+  shows only that worker's checkout (`shownWorkerDev`).
+- **GitHub issues into a worker project** (github-issues.md#on-a-worker): the drawer asks about the worker project in
+  view too (`githubFolders`); its repo is read with this Mac's `gh` in the twin (`workerIssueRepo`, used by
+  `lib/github-status.ts` and the sync). `syncIssues(worker path)` sends each new open issue as a `run` (`sendRun`, now
+  carrying a title and tags, `runCommand`), with the project's validation skill first, recording each in the same
+  `github-issues.json` as it goes (`lib/issue-record.ts`, extracted from `lib/github-issues.ts`), so a repo synced on
+  both hosts makes each card once and a failure part way never sends one twice. Only the Run landing works: Backlog and
+  Needs you need a card made and left unstarted, which a worker refuses until `card.create` lands (WP2, PR #45), so
+  those say so (`WORKER_BACKLOG_LATER`). A card it sent has started, so sync never touches it again, as on a Mac. The
+  project's agent isn't sent: a worker refuses an agent from the network (`remoteRefusal`).
+- **Mini apps from a worker card** (mini-apps.md#from-a-worker-card): the worker card's pane (`components/WorkerPane.tsx`)
+  shows Save as app on a page the card wrote (a `blob:sha256:` page). `POST /api/apps` with that address reads the blob
+  with the account's session (RLS: your workspace), refuses anything but HTML, over 5 MB or whose bytes don't hash to the
+  address, writes it to
+  `~/.weft/apps/worker-<sha16>/index.html` (where a cloud sync pull puts an app) and saves it with `source` naming the
+  blob, so `appFor` lights the button on that page. From there it's an ordinary app: the rail opens it on this Mac,
+  `cloud_mini_apps` carries it to your other Macs, and Share… serves it at `weft.zip/a/<id>` (the same bytes, already in
+  the store). A page's sibling assets don't come along (a worker page is one file today).
+- **Badges.** H4's snapshot already fed quality, the scout, the pile and Backlog. The pile's commit walk-through now
+  works on a worker project: `fetchPileReview` writes its prompt from the snapshot's pile (`lib/pile-worker.ts`: the
+  counts, plain `git add -- … && git commit -- …` by path, the same never-stash rules) and the card starts on the worker.
+  Re-scout and the sprint plan still say "not on a worker's projects yet".
+- **Not in T5.** 🪝 webhooks and ⏰ crons for a worker project wait on T1 (PR #43, open when T5 was built): the 🪝
+  drawer reads the worker project and so shows none. The worker's own secrets list is T2. No migration.
 
 ## Security
 

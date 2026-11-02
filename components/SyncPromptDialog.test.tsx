@@ -133,11 +133,16 @@ describe("SyncPromptDialog", () => {
     setup();
     await screen.findByRole("dialog");
     api.cloudSync.mockClear();
-    window.dispatchEvent(new Event("focus"));
-    await waitFor(() => expect(api.cloudSync).toHaveBeenCalledTimes(1));
+    // The focus listener is added by an effect that can land a tick after the dialog shows, so a focus
+    // fired right away may miss it: fire again until the status has been read.
+    await waitFor(() => {
+      window.dispatchEvent(new Event("focus"));
+      expect(api.cloudSync).toHaveBeenCalled();
+    });
+    api.cloudSync.mockClear();
     api.cloudSync.mockRejectedValueOnce(new Error("offline"));
     window.dispatchEvent(new Event("focus"));
-    await waitFor(() => expect(api.cloudSync).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(api.cloudSync).toHaveBeenCalledTimes(1));
     expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
 });

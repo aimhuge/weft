@@ -363,7 +363,7 @@ export default function Board() {
         <BoardRail
           open={libraryOpen}
           onOpen={setLibraryOpen}
-          ctx={{ project: localProject, folders: railFolders, cards, onOpenUrl: showPage, onOpenCard: openCard, onStartCard: improveQuality, notify }}
+          ctx={{ project, folders: railFolders, cards, onOpenUrl: showPage, onOpenCard: openCard, onStartCard: improveQuality, notify }}
           filter={railFilter}
           onFilter={setRailFilter}
           onStarCard={toggleStar}

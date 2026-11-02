@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { DEV_OPEN_WAIT, openWorkerDev, stopWorkerDev } from "./worker-dev-acts";
+import { DEV_OPEN_WAIT, openWorkerDev, restartWorkerDev, stopWorkerDev, workerDevLog } from "./worker-dev-acts";
 
 vi.mock("./worker-acts", () => ({ ACT_WAIT: { every: () => 1, unclaimed: 10, claimed: 30 }, askWorker: vi.fn(), actOnWorker: vi.fn() }));
 
@@ -28,11 +28,25 @@ describe("worker dev acts", () => {
     expect(act).toHaveBeenCalledWith("dev.stop", { id: "c1" });
   });
 
+  it("restarts the card's run, and reads its log", async () => {
+    const act = vi.fn(() => Promise.resolve(undefined));
+    await restartWorkerDev("c1", act);
+    expect(act).toHaveBeenCalledWith("dev.restart", { id: "c1" });
+    const ask = vi.fn(() => Promise.resolve({ ok: true, cardId: "c1", log: "ready on :3000" }));
+    expect(await workerDevLog("c1", ask as never)).toBe("ready on :3000");
+    expect(ask).toHaveBeenCalledWith("dev.log", { id: "c1" });
+    expect(await workerDevLog("c1", () => Promise.resolve({ log: " " }))).toBe("Nothing logged yet.");
+    expect(await workerDevLog("c1", () => Promise.resolve(null))).toBe("Nothing logged yet.");
+  });
+
   it("uses the real acts by default", async () => {
     const acts = await import("./worker-acts");
     vi.mocked(acts.askWorker).mockResolvedValue({ address: ADDRESS });
     expect(await openWorkerDev("c1")).toBe(ADDRESS);
     await stopWorkerDev("c1");
-    expect(acts.actOnWorker).toHaveBeenCalled();
+    await restartWorkerDev("c1");
+    expect(acts.actOnWorker).toHaveBeenCalledTimes(2);
+    vi.mocked(acts.askWorker).mockResolvedValue({ log: "up" });
+    expect(await workerDevLog("c1")).toBe("up");
   });
 });
