@@ -215,10 +215,14 @@ contextBridge.exposeInMainWorld("weft", {
     // Approve re-pair: main asks Touch ID and signs the swap with this Mac's key (electron/worker-repair.cjs).
     approveRepair: (id, code) => ipcRenderer.invoke("worker-repair:approve", id, code),
   },
-  // A worker's connectors (electron/connector-grants.cjs): on, settings and Allows, each loosening behind Touch ID in main.
+  // A worker's connectors (electron/connector-grants.cjs): on, settings, Allows and vouching for another Mac, each behind
+  // Touch ID in main and signed by this Mac's approval key; the Mac keys of yours and whether each is trusted yet.
   connectors: {
     set: (workerId, workerName, connector, settings) => ipcRenderer.invoke("connectors:set", workerId, workerName, connector, settings),
     allow: (grantId, workerName, kind, subject, label) => ipcRenderer.invoke("connectors:allow", grantId, workerName, kind, subject, label),
+    signers: () => ipcRenderer.invoke("connectors:signers"),
+    trust: (key, name) => ipcRenderer.invoke("connectors:trust", key, name),
+    forgetSigner: (id) => ipcRenderer.invoke("connectors:forget-signer", id),
   },
   // Goose (electron/goose-ipc.cjs): a provider key per provider, sealed in the Keychain. The board sends a key
   // once and never reads one back — the runner's Goose subprocess gets it in its env (electron/goose-env.cjs).

@@ -1,35 +1,13 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { describe, expect, it } from "vitest";
 import { supabaseConnectorDb } from "./connector-db";
+import { fail, fakeSupabase as fake, ok, type R } from "./connector-db.harness";
 
-type R = { data: unknown; error: { message: string; code?: string } | null; count?: number | null };
-const ok = (data: unknown, count?: number | null): R => ({ data, error: null, count });
-const fail = (message: string, code?: string): R => ({ data: null, error: { message, code } });
+const fakeSupabase = (...responses: R[]) => {
+  const { client, calls } = fake(...responses);
+  return { db: supabaseConnectorDb(client), calls };
+};
 
-const BUILDERS = ["select", "insert", "update", "upsert", "delete", "eq", "gte", "in", "or", "limit"];
-
-// A supabase-js stand-in: every builder records itself and returns the chain; awaiting it (or maybeSingle/single)
-// answers the next queued response.
-function fakeSupabase(...responses: R[]) {
-  const calls: { table: string; ops: unknown[][] }[] = [];
-  const from = (table: string) => {
-    const rec = { table, ops: [] as unknown[][] };
-    calls.push(rec);
-    const next = () => Promise.resolve(responses.shift() ?? ok(null));
-    const q: Record<string, unknown> = {};
-    for (const name of BUILDERS) {
-      q[name] = (...args: unknown[]) => {
-        rec.ops.push([name, ...args]);
-        return q;
-      };
-    }
-    q.maybeSingle = () => (rec.ops.push(["maybeSingle"]), next());
-    q.single = () => (rec.ops.push(["single"]), next());
-    q.then = (res: (r: R) => unknown, rej: (e: unknown) => unknown) => next().then(res, rej);
-    return q;
-  };
-  return { db: supabaseConnectorDb({ from } as unknown as SupabaseClient), calls };
-}
+const GRANT_COLS = "id, user_id, worker_id, connector, scope, approval, lifetime, asks, signer_id, sig, nonce, issued_at, epoch, expires_at, last_used_at";
 
 describe("supabaseConnectorDb: reads", () => {
   it("reads a headless worker by key hash or id", async () => {
@@ -45,53 +23,73 @@ describe("supabaseConnectorDb: reads", () => {
     await expect(db.grant("u1", "w1", "github")).rejects.toThrow("Reading the grant: permission denied");
   });
 
-  it("reads a grant, the Allow, the pinned card and the chain", async () => {
-    const { db, calls } = fakeSupabase(ok({ id: "g1" }), ok([{ id: 1 }]), ok(null), ok({ user_id: "u1", folder: "r", repo: "o/r" }), ok({ user_id: "u1" }));
+  it("reads a grant by its owner and worker, or by id, with its signature and epoch", async () => {
+    const { db, calls } = fakeSupabase(ok({ id: "g1" }), ok({ id: "g2" }));
     expect(await db.grant("u1", "w1", "github")).toEqual({ id: "g1" });
-    expect(await db.hasAllow("g1", "card", "c1")).toBe(true);
-    expect(await db.hasAllow("g1", "card", "c2")).toBe(false);
-    expect(await db.pinnedCard("w1", "c1")).toEqual({ user_id: "u1", folder: "r", repo: "o/r" });
-    expect(await db.tokens("u1")).toEqual({ user_id: "u1" });
-    expect(calls.map((c) => c.table)).toEqual(["connector_grants", "connector_allows", "connector_allows", "connector_cards", "connector_github_tokens"]);
-    expect(calls[0]!.ops.slice(1, 4)).toEqual([["eq", "user_id", "u1"], ["eq", "worker_id", "w1"], ["eq", "connector", "github"]]);
-    expect(calls[1]!.ops).toContainEqual(["limit", 1]);
+    expect(await db.grantById("g2")).toEqual({ id: "g2" });
+    expect(calls[0]!.ops).toEqual([["select", GRANT_COLS], ["eq", "user_id", "u1"], ["eq", "worker_id", "w1"], ["eq", "connector", "github"], ["maybeSingle"]]);
+    expect(calls[1]!.ops.slice(1)).toEqual([["eq", "id", "g2"], ["maybeSingle"]]);
   });
 
-  it("reads only owner-created start commands for the worker's card", async () => {
+  it("reads expired grants in a batch, and a signer's grants", async () => {
+    const { db, calls } = fakeSupabase(ok([{ id: "g1" }]), ok(null), ok([{ id: "g2" }]), ok(null));
+    expect(await db.expiredGrants("t")).toEqual([{ id: "g1" }]);
+    expect(await db.expiredGrants("t")).toEqual([]);
+    expect(await db.grantsBySigner("s1")).toEqual([{ id: "g2" }]);
+    expect(await db.grantsBySigner("s1")).toEqual([]);
+    expect(calls[0]!.ops.slice(1)).toEqual([["lt", "expires_at", "t"], ["limit", 500]]);
+    expect(calls[2]!.ops.slice(1)).toEqual([["eq", "signer_id", "s1"]]);
+  });
+
+  it("reads an Allow with its signature, the pinned card and the chain", async () => {
+    const { db, calls } = fakeSupabase(ok({ grant_id: "g1" }), ok({ user_id: "u1", folder: "r", repo: "o/r" }), ok({ user_id: "u1" }));
+    expect(await db.allow("g1", "card", "c1")).toEqual({ grant_id: "g1" });
+    expect(await db.pinnedCard("w1", "c1")).toEqual({ user_id: "u1", folder: "r", repo: "o/r" });
+    expect(await db.tokens("u1")).toEqual({ user_id: "u1" });
+    expect(calls.map((c) => c.table)).toEqual(["connector_allows", "connector_cards", "connector_github_tokens"]);
+    expect(calls[0]!.ops).toEqual([["select", "grant_id, kind, subject, signer_id, sig, nonce, issued_at"], ["eq", "grant_id", "g1"], ["eq", "kind", "card"], ["eq", "subject", "c1"], ["maybeSingle"]]);
+  });
+
+  it("reads owner-created starts: a card.create by its own card id, a run or new_card by the reported one", async () => {
     const { db, calls } = fakeSupabase(ok([{ kind: "run" }]), ok(null));
     expect(await db.starts("w1", "c1", "u1")).toEqual([{ kind: "run" }]);
     expect(await db.starts("w1", "c1", "u1")).toEqual([]);
     expect(calls[0]).toEqual({
       table: "cloud_commands",
-      ops: [["select", "kind, folder, payload, created_by"], ["eq", "target_device", "worker:w1"], ["eq", "card_id", "c1"], ["eq", "created_by", "u1"], ["in", "kind", ["new_card", "run", "host"]]],
+      ops: [["select", "kind, folder, payload, created_by"], ["eq", "target_device", "worker:w1"], ["eq", "created_by", "u1"], ["or", "and(kind.eq.host,payload->args->>id.eq.c1),and(kind.in.(new_card,run),card_id.eq.c1)"]],
     });
   });
 
-  it("reads a card's state from the cloud board", async () => {
+  it("reads this worker's card's state from the cloud board", async () => {
     const { db, calls } = fakeSupabase(ok({ deleted: false, col: "done" }), ok(null));
-    expect(await db.cardState("org1", "c1")).toEqual({ deleted: false, column: "done" });
-    expect(await db.cardState("org1", "c2")).toBeNull();
-    expect(calls[0]!.ops[0]).toEqual(["select", "deleted, col:card->>column"]);
+    expect(await db.cardState("org1", "w1", "c1")).toEqual({ deleted: false, column: "done" });
+    expect(await db.cardState("org1", "w1", "c2")).toBeNull();
+    expect(calls[0]!.ops).toEqual([["select", "deleted, col:card->>column"], ["eq", "org_id", "org1"], ["eq", "owner_worker", "w1"], ["eq", "card_id", "c1"], ["maybeSingle"]]);
   });
 
-  it("counts mints since a time, or only the user tokens minted", async () => {
-    const { db, calls } = fakeSupabase(ok(null, 3), ok(null, null), fail("x"));
-    expect(await db.mintsSince("w1", "t")).toBe(3);
-    expect(await db.mintsSince("w1", "t", "user")).toBe(0);
-    await expect(db.mintsSince("w1", "t")).rejects.toThrow("Counting mints: x");
-    expect(calls[0]!.ops).toEqual([["select", "id", { count: "exact", head: true }], ["eq", "worker_id", "w1"], ["gte", "at", "t"]]);
-    expect(calls[1]!.ops.slice(3)).toEqual([["eq", "token_kind", "user"], ["eq", "outcome", "minted"]]);
+  it("says whether a worker was handed a user token, by its issue time", async () => {
+    const { db, calls } = fakeSupabase(ok([{ id: 1 }]), ok(null));
+    expect(await db.handedUser("w1", "t")).toBe(true);
+    expect(await db.handedUser("w1", "t")).toBe(false);
+    expect(calls[0]!.ops).toEqual([["select", "id"], ["eq", "worker_id", "w1"], ["eq", "outcome", "minted"], ["eq", "token_kind", "user"], ["eq", "token_issued_at", "t"], ["limit", 1]]);
   });
 
-  it("reads one live token or the live tokens by worker or user", async () => {
+  it("reads pending disconnects", async () => {
+    const { db, calls } = fakeSupabase(ok([{ user_id: "u1" }]), ok(null));
+    expect(await db.pendingDisconnects()).toEqual([{ user_id: "u1" }]);
+    expect(await db.pendingDisconnects()).toEqual([]);
+    expect(calls[0]!.ops.slice(1)).toEqual([["not", "disconnect_pending_at", "is", null], ["limit", 500]]);
+  });
+
+  it("reads one live token or the live tokens by worker, user or all", async () => {
     const { db, calls } = fakeSupabase(ok({ id: "l1" }), ok([{ id: "l1" }]), ok([{ id: "l2" }]), ok(null));
     expect(await db.liveToken("w1", "card:c1")).toEqual({ id: "l1" });
     expect(await db.liveTokens({ workerId: "w1" })).toEqual([{ id: "l1" }]);
     expect(await db.liveTokens({ userId: "u1" })).toEqual([{ id: "l2" }]);
     expect(await db.liveTokens({})).toEqual([]);
-    expect(calls[1]!.ops.slice(1)).toEqual([["eq", "worker_id", "w1"]]);
-    expect(calls[2]!.ops.slice(1)).toEqual([["eq", "user_id", "u1"]]);
-    expect(calls[3]!.ops).toHaveLength(1);
+    expect(calls[1]!.ops.slice(1)).toEqual([["eq", "worker_id", "w1"], ["limit", 500]]);
+    expect(calls[2]!.ops.slice(1)).toEqual([["eq", "user_id", "u1"], ["limit", 500]]);
+    expect(calls[3]!.ops).toHaveLength(2);
   });
 });
 
@@ -112,15 +110,25 @@ describe("supabaseConnectorDb: writes", () => {
     expect(calls[0]!.ops).toEqual([["upsert", { worker_id: "w1", card_id: "c1", user_id: "u1", folder: "r", repo: "o/r" }, { onConflict: "worker_id,card_id", ignoreDuplicates: true }]]);
   });
 
-  it("logs a mint, says replay on a duplicate nonce and throws on another error", async () => {
-    const { db, calls } = fakeSupabase(ok({ id: 7 }), fail("duplicate key", "23505"), fail("down"), ok(null));
+  it("admits a request through connector_mint_admit: an id, a replay or a limit", async () => {
+    const { db, calls } = fakeSupabase(ok(7), ok(-1), ok(-2), fail("down"));
     const row = { user_id: "u1", worker_id: "w1", grant_id: null, connector: "github", card_id: "c", repo: "o/r", outcome: "refused" as const, reason: "in progress", token_kind: null, nonce: "n" };
-    expect(await db.logMint(row)).toBe(7);
-    expect(await db.logMint(row)).toBe("replay");
-    await expect(db.logMint(row)).rejects.toThrow("Logging the request: down");
+    const limits = { workerMinute: 1, workerHour: 2, userMinute: 3, userHour: 4 };
+    expect(await db.admitMint(row, limits)).toBe(7);
+    expect(await db.admitMint(row, limits)).toBe("replay");
+    expect(await db.admitMint(row, limits)).toBe("limited");
+    await expect(db.admitMint(row, limits)).rejects.toThrow("Logging the request: down");
+    expect(calls[0]).toEqual({ table: "rpc:connector_mint_admit", ops: [[{ p_row: row, p_worker_minute: 1, p_worker_hour: 2, p_user_minute: 3, p_user_hour: 4 }]] });
+  });
+
+  it("logs a ledger row and finishes one", async () => {
+    const { db, calls } = fakeSupabase(ok(null), ok(null), fail("x"));
+    const row = { user_id: "u1", worker_id: null, grant_id: null, connector: "github", card_id: null, repo: null, outcome: "notice" as const, reason: "r", token_kind: null, nonce: null };
+    await db.logMint(row);
     await db.finishMint(7, { outcome: "minted" });
-    expect(calls[0]!.ops).toEqual([["insert", row], ["select", "id"], ["single"]]);
-    expect(calls[3]!.ops).toEqual([["update", { outcome: "minted" }], ["eq", "id", 7]]);
+    await expect(db.logMint(row)).rejects.toThrow("Logging: x");
+    expect(calls[0]!.ops).toEqual([["insert", row]]);
+    expect(calls[1]!.ops).toEqual([["update", { outcome: "minted" }], ["eq", "id", 7]]);
   });
 
   it("saves, deletes and claims the user's chain", async () => {

@@ -3,7 +3,8 @@
 // A worker's Connectors menu in Settings → Devices (docs/architecture/connectors.md#connectors-on-a-worker-github-p1-as-built):
 // one small badge on the worker's row ("GitHub ✓" when on) that opens the settings in place, so the list grows no rows.
 // Connect GitHub (once, on weft.zip, in the browser pane), turn it on for this worker (Touch ID in main), and choose
-// Scope, Approval, Lifetime and which actions ask; projects or cards waiting for an Allow, and when it was last used.
+// Scope, Approval, Lifetime and which actions ask; projects or cards waiting for an Allow, and when it was last used;
+// and the Mac keys still waiting to be trusted to approve (docs/architecture/connectors.md#who-may-say-yes-the-chain-of-trust).
 import { useState } from "react";
 import { APPROVAL_LABEL, APPROVALS, ASK_LABEL, ASKS, DEFAULT_SETTINGS, LIFETIME_LABEL, LIFETIMES, SCOPE_LABEL, SCOPES, type GrantSettings } from "@/lib/connector-grant";
 import { timeAgo } from "@/lib/format";
@@ -65,6 +66,36 @@ function Settings({ c, g, workerId, name, now }: { c: Connectors; g: WorkerConne
   );
 }
 
+// The Mac keys that may approve connectors: this Mac's while it waits out its day, and any other still waiting, which a
+// trusted Mac can vouch for (Touch ID) or remove. Nothing shows once every key is trusted.
+function Macs({ c, now }: { c: Connectors; now: number }) {
+  const keys = c.macs;
+  if (!keys) return null;
+  const mine = keys.signers.find((k) => k.key === keys.mine);
+  const mineTrusted = Boolean(mine?.trusted);
+  const waiting = keys.signers.filter((k) => !k.trusted && k.key !== keys.mine);
+  return (
+    <>
+      {mine && !mine.trusted && <p className={`mt-1 ${SUBTLE}`}>This Mac can approve connectors from {new Date(mine.trustedFrom).toLocaleString()}, a day after it first asked (you were emailed), or now if a trusted Mac vouches for it.</p>}
+      {waiting.map((k) => (
+        <div key={k.id} className="mt-1 flex items-center gap-2 text-[12px] text-ink">
+          <span className="min-w-0 truncate">
+            Mac {k.name}, added {timeAgo(Date.parse(k.addedAt), now)}, waiting
+          </span>
+          {mineTrusted && (
+            <button type="button" className={BUTTON} disabled={!c.canChange} onClick={() => void c.trust(k)}>
+              Trust
+            </button>
+          )}
+          <button type="button" className={BUTTON} disabled={!c.canChange} onClick={() => void c.forgetMac(k)}>
+            Remove
+          </button>
+        </div>
+      ))}
+    </>
+  );
+}
+
 // The menu's first line: GitHub's account, and Connect, Turn on or Turn off.
 function Header({ c, workerId, name, on }: { c: Connectors; workerId: string; name: string; on: boolean }) {
   const github = c.view?.github;
@@ -99,6 +130,7 @@ export default function WorkerConnectors({ c, workerId, name, now }: { c: Connec
       {open && (
         <div role="dialog" aria-label={`Connectors on ${name}`} className="absolute right-0 z-20 mt-1 w-[26rem] max-w-[90vw] rounded-lg border border-line bg-panel p-3 shadow-lg">
           <Header c={c} workerId={workerId} name={name} on={on} />
+          <Macs c={c} now={now} />
           {grant && <Settings c={c} g={grant} workerId={workerId} name={name} now={now} />}
           {c.note && <p className="mt-2 text-[12px] text-ink">{c.note}</p>}
           {c.error && <p className="mt-2 text-[12px] text-danger">{c.error}</p>}

@@ -85,8 +85,9 @@ export async function scopedToken(cfg: AppConfig, token: string, repo: string, f
   return { token: body.token, expiresAt: typeof body.expires_at === "string" ? body.expires_at : null };
 }
 
-// Deletes one token ("token") or the whole authorization ("grant"). True on GitHub's 204, and on 404 for a token
-// GitHub no longer knows (already dead); false when GitHub couldn't be asked or said anything else (422 included).
+// Deletes one token ("token") or the whole authorization ("grant"). True only on GitHub's 204. A 404 isn't proof: GitHub
+// answers it for a token it doesn't know, and also for one sent with the wrong app or a token that was already
+// replaced, so it reads as unconfirmed (false), as does no answer or anything else (422 included).
 export async function deleteAppToken(cfg: AppConfig, token: string, what: "token" | "grant" = "token", fetcher: Fetch = fetch): Promise<boolean> {
   try {
     const res = await fetcher(`${API}/applications/${cfg.clientId}/${what}`, {
@@ -94,7 +95,7 @@ export async function deleteAppToken(cfg: AppConfig, token: string, what: "token
       headers: { ...API_HEADERS, authorization: basic(cfg), "content-type": "application/json" },
       body: JSON.stringify({ access_token: token }),
     });
-    return res.status === 204 || res.status === 404;
+    return res.status === 204;
   } catch {
     return false;
   }

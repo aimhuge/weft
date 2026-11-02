@@ -4,6 +4,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fakeClient, workerRow } from "./worker-board.harness";
 
 vi.mock("./account", () => ({ accountClient: () => { throw new Error("no default client in tests"); } }));
+// This Mac knows no project by the worker's folder name unless a test says so.
+vi.mock("./worker-folder-repo", () => ({ repoForWorkerFolder: () => null }));
 
 const syncOrgId = vi.fn<(client: unknown, uid: string) => Promise<string | null>>();
 vi.mock("./cloud-sync", () => ({ syncOrgId: (client: unknown, uid: string) => syncOrgId(client, uid) }));
@@ -34,6 +36,14 @@ describe("startWorkerThread", () => {
       folder: "ling",
       payload: { verb: "card.create", args: { id: got.cardId, prompt: "Add dark mode", start: true } },
     });
+  });
+
+  it("names the repo this Mac knows the folder as, for the GitHub connector", async () => {
+    const { client, inserted } = fakeClient({ workers: [online] });
+    const repoOf = vi.fn(() => "ada/ling");
+    await startWorkerThread({ cwd: "worker://w1/ling", prompt: "go" }, client, NOW, undefined, undefined, repoOf);
+    expect(repoOf).toHaveBeenCalledWith("ling");
+    expect(inserted()).toMatchObject({ kind: "host", payload: { verb: "card.create", repo: "ada/ling" } });
   });
 
   it("carries the title, CLI, model, effort, mode, tags and isolation, and start: false for Backlog", async () => {

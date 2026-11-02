@@ -3,11 +3,12 @@
 // through; and the setup every CLI session's env is given (lib/connector-env.ts). A token-enrolled box has no pairing
 // key, so it gets none of this, and its cards keep using `github_login` as before.
 import { execFileSync } from "node:child_process";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
+import fs from "node:fs";
 import path from "node:path";
 import { connectorClient } from "./connector-client";
 import { setConnectorSetup } from "./connector-env";
-import { startConnectorSocket } from "./connector-socket";
+import { startConnectorSocket, type SocketDeps } from "./connector-socket";
 import { SITE } from "./site";
 
 export interface WorkerConnectorDeps {
@@ -21,6 +22,9 @@ export interface WorkerConnectorDeps {
   log: (line: string) => void;
   site?: string;
   run?: (cmd: string, args: string[]) => string;
+  read?: (file: string) => Buffer;
+  // Who's asking on the socket (lib/connector-peer.ts by default).
+  peer?: Pick<SocketDeps, "peerOf" | "descends">;
 }
 
 const runSync = (cmd: string, args: string[]) => execFileSync(cmd, args, { encoding: "utf8", timeout: 5_000, stdio: ["ignore", "pipe", "ignore"] });
@@ -32,6 +36,20 @@ const lines = (run: NonNullable<WorkerConnectorDeps["run"]>, cmd: string, args: 
     return [];
   }
 };
+
+// Every card's git runs the helper and every card's gh the wrapper, so a card that rewrote either would see the next
+// card's token. Their hashes at start, checked again on every ask: a changed file answers nothing until a restart.
+export function integrity(files: string[], read: (file: string) => Buffer = fs.readFileSync): () => boolean {
+  const digest = (file: string) => {
+    try {
+      return createHash("sha256").update(read(file)).digest("hex");
+    } catch {
+      return null;
+    }
+  };
+  const kept = files.map(digest);
+  return () => files.every((file, i) => kept[i] !== null && kept[i] === digest(file));
+}
 
 export function startWorkerConnectors(deps: WorkerConnectorDeps): { close: () => void } | null {
   if (!deps.sign) {
@@ -46,8 +64,10 @@ export function startWorkerConnectors(deps: WorkerConnectorDeps): { close: () =>
   const boxHelpers = lines(run, "git", ["config", "--global", "--get-all", "credential.https://github.com.helper"]);
   const client = connectorClient({ site: deps.site ?? SITE, key: deps.key, workerId: deps.workerId, sign: deps.sign, nonce: () => randomBytes(32).toString("hex"), fetch, now: Date.now });
   const socket = path.join(deps.home, "connector.sock");
-  setConnectorSetup({ socket, node: process.execPath, helper: path.join(deps.weftDir, "scripts", "weft-connector-helper.cjs"), binDir, boxHelpers });
-  const server = startConnectorSocket({ socket, client, cwdOf: deps.cwdOf, gh: { path: gh, searchPath }, log: deps.log });
+  const helper = path.join(deps.weftDir, "scripts", "weft-connector-helper.cjs");
+  const intact = integrity([helper, path.join(binDir, "gh")], deps.read);
+  setConnectorSetup({ socket, node: process.execPath, helper, binDir, boxHelpers });
+  const server = startConnectorSocket({ socket, client, cwdOf: deps.cwdOf, gh: { path: gh, searchPath }, log: deps.log, intact, ...deps.peer });
   return {
     close: () => {
       server.close();

@@ -13,8 +13,26 @@ describe("connectorKey", () => {
     expect(connectorKey({ WEFT_CONNECTOR_TOKEN_KEY: "ab" })).toBeNull();
     expect(connectorKey({ WEFT_CONNECTOR_TOKEN_KEY: "zz".repeat(32) })).toBeNull();
   });
+  it("keeps retired keys by id for opening, never the current one", () => {
+    const old = "cd".repeat(32);
+    const k = connectorKey({ WEFT_CONNECTOR_TOKEN_KEY: HEX, WEFT_CONNECTOR_TOKEN_KEY_ID: "v2", WEFT_CONNECTOR_TOKEN_KEYS_OLD: ` v1:${old}, v2:${old}, bad, v0:zz ` });
+    expect(k).toEqual({ id: "v2", key: Buffer.from(HEX, "hex"), old: { v1: Buffer.from(old, "hex") } });
+    expect(connectorKey({ WEFT_CONNECTOR_TOKEN_KEY: HEX, WEFT_CONNECTOR_TOKEN_KEYS_OLD: "junk" })).toEqual({ id: "v1", key: Buffer.from(HEX, "hex") });
+  });
+
   it("reads process.env by default", () => {
     expect(connectorKey() === null || connectorKey()?.key.length === 32).toBe(true);
+  });
+});
+
+describe("a key rotation", () => {
+  it("opens what an old key sealed and seals only with the new one", () => {
+    const v1 = { id: "v1", key: Buffer.alloc(32, 1) };
+    const sealed = sealToken("ghr_x", "refresh:u1", v1);
+    const now = { id: "v2", key: Buffer.alloc(32, 2), old: { v1: v1.key } };
+    expect(openToken(sealed, "refresh:u1", now)).toBe("ghr_x");
+    expect(sealToken("ghr_y", "refresh:u1", now).startsWith("v2.")).toBe(true);
+    expect(openToken(sealed, "refresh:u1", { id: "v2", key: now.key })).toBeNull();
   });
 });
 

@@ -5,7 +5,8 @@
 // Both ask the worker daemon's socket (lib/connector-socket.ts) for the card's token, by the capability in the card's
 // env. git gets it on stdout, the way every credential helper answers, so it's in no environment. gh gets it as GH_TOKEN
 // in one gh process whose env is built from scratch: no NODE_OPTIONS, GIT_*, PAGER, BROWSER, EDITOR or anything else of
-// the card's, a PATH and the real gh named by the daemon, and a fresh empty config folder (no aliases or extensions).
+// the card's, a PATH and the real gh named by the daemon, and a fresh empty folder for gh's config, data, state and
+// cache (GH_CONFIG_DIR, GH_DATA_DIR and the XDG ones), so no alias or extension of the card's runs.
 // Nothing is written to disk but that empty folder, removed when gh exits.
 const net = require("node:net");
 const fs = require("node:fs");
@@ -99,6 +100,12 @@ function ghEnv(env, got, configDir) {
     GH_TOKEN: got.token,
     GH_HOST: "github.com",
     GH_CONFIG_DIR: configDir,
+    // gh finds extensions and their state under these: all in the empty folder, so no extension the card installed runs.
+    GH_DATA_DIR: configDir,
+    XDG_CONFIG_HOME: configDir,
+    XDG_DATA_HOME: configDir,
+    XDG_STATE_HOME: configDir,
+    XDG_CACHE_HOME: configDir,
     GH_PROMPT_DISABLED: "1",
     GH_NO_UPDATE_NOTIFIER: "1",
     GH_SPINNER_DISABLED: "1",

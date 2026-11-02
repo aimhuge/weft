@@ -1,10 +1,12 @@
 // Shared fakes for the connector minter's tests (lib/connector-*.test.ts): an in-memory ConnectorDb with the same
-// rules the Supabase queries keep (a nonce logs once per worker, a refresh claim holds until its time, counts by time),
-// a fake GitHub that routes by method and URL, and a sealing key.
+// rules the Supabase queries keep (a nonce logs once per worker, the rate limits count by time, a refresh claim holds
+// until its time, a signed grant lands only at its epoch), a fake GitHub that routes by method and URL, and a sealing
+// key. The Mac keys and signed rows are lib/connector-trust.harness.ts's.
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { mintMessage, type MintRequest } from "./connector-grant";
 import { sealToken, type ConnectorKey } from "./connector-crypto";
-import type { ConnectorDb, GrantRow, LiveToken, MintLog, PinnedCard, StartRow, TokenRow, WorkerRow } from "./connector-db";
+import type { AllowRow, ConnectorDb, GrantRow, LiveToken, MintLog, PinnedCard, StartRow, TokenRow, WorkerRow } from "./connector-db";
+import type { SignerRow, WorkerPin } from "./connector-db-trust";
 import { bound, type TokenDeps } from "./connector-tokens";
 import type { AppConfig } from "./github-app";
 
@@ -12,6 +14,14 @@ export const NOW = Date.parse("2026-11-02T12:00:00.000Z");
 export const KEY: ConnectorKey = { id: "v1", key: Buffer.alloc(32, 7) };
 export const CFG: AppConfig = { clientId: "Iv1.abc", clientSecret: "shh" };
 export const iso = (ms: number) => new Date(ms).toISOString();
+
+// A clock that moves on by `step` ms every time it's read, as a real one does between a request's steps.
+export function ticking(start = NOW, step = 1_000) {
+  let t = start - step;
+  const clock = () => (t += step);
+  clock.set = (ms: number) => void (t = ms - step);
+  return clock;
+}
 
 export interface StoredStart extends StartRow {
   worker_id: string;
@@ -30,68 +40,111 @@ export type StoredTokens = TokenRow & { refreshing_until: string | null };
 export interface FakeState {
   workers: (WorkerRow & { key_hash: string })[];
   grants: GrantRow[];
-  allows: { grant_id: string; kind: string; subject: string }[];
+  allows: (AllowRow & { user_id: string })[];
   starts: StoredStart[];
   pinned: Map<string, PinnedCard>;
-  cards: Map<string, { deleted: boolean; column: string | null }>;
+  cards: Map<string, { deleted: boolean; column: string | null; owner_worker?: string }>;
   mints: StoredMint[];
   tokens: Map<string, StoredTokens>;
   live: StoredLive[];
+  signers: SignerRow[];
+  pins: WorkerPin[];
+  nonces: { user_id: string; nonce: string; at: string }[];
+  emails: Map<string, string>;
 }
 
-export function fakeDb(clock: () => number = () => NOW): { db: ConnectorDb; state: FakeState } {
-  const state: FakeState = { workers: [], grants: [], allows: [], starts: [], pinned: new Map(), cards: new Map(), mints: [], tokens: new Map(), live: [] };
-  const strip = (w: WorkerRow & { key_hash: string }): WorkerRow => ({ id: w.id, org_id: w.org_id, owner_user: w.owner_user, name: w.name, sign_key: w.sign_key, revoked_at: w.revoked_at });
-  const done = <T>(v: T) => Promise.resolve(v);
-  let nextId = 1;
-  const db: ConnectorDb = {
-    workerByKeyHash: (hash) => {
-      const w = state.workers.find((x) => x.key_hash === hash);
-      return done(w ? strip(w) : null);
+const done = <T>(v: T) => Promise.resolve(v);
+
+function trustDb(state: FakeState, clock: () => number, nextId: () => number): Pick<ConnectorDb, "signerById" | "signerByKey" | "signers" | "saveSigner" | "trustSigner" | "revokeSigner" | "workerPin" | "savePin" | "takeNonce" | "dropNoncesBefore" | "writeGrant" | "saveAllow" | "userEmail"> {
+  return {
+    signerById: (id) => done(state.signers.find((s) => s.id === id) ?? null),
+    signerByKey: (userId, key) => done(state.signers.find((s) => s.user_id === userId && s.sign_key === key) ?? null),
+    signers: (userId) => done(state.signers.filter((s) => s.user_id === userId)),
+    saveSigner: (row) => {
+      state.signers = state.signers.filter((s) => !(s.user_id === row.user_id && s.sign_key === row.sign_key));
+      const stored: SignerRow = { id: `s${nextId()}`, endorsed_by: null, ...row, device: row.device ?? null, added_at: iso(clock()), revoked_at: null };
+      state.signers.push(stored);
+      return done(stored);
     },
-    workerById: (id) => {
-      const w = state.workers.find((x) => x.id === id);
-      return done(w ? strip(w) : null);
-    },
-    grant: (userId, workerId, connector) => done(state.grants.find((g) => g.user_id === userId && g.worker_id === workerId && g.connector === connector) ?? null),
-    touchGrant: (id, at) => {
-      for (const g of state.grants) if (g.id === id) g.last_used_at = at;
+    trustSigner: (id, at, by) => {
+      for (const s of state.signers) if (s.id === id) Object.assign(s, { trusted_from: at, endorsed_by: by });
       return done(undefined);
     },
-    deleteGrants: (userId, connector, workerId) => {
-      const gone = state.grants.filter((g) => g.user_id === userId && g.connector === connector && (!workerId || g.worker_id === workerId));
-      state.grants = state.grants.filter((g) => !gone.includes(g));
-      return done(gone.length);
-    },
-    hasAllow: (grantId, kind, subject) => done(state.allows.some((a) => a.grant_id === grantId && a.kind === kind && a.subject === subject)),
-    starts: (workerId, cardId, userId) =>
-      done(state.starts.filter((s) => s.worker_id === workerId && s.card_id === cardId && s.created_by === userId && ["new_card", "run", "host"].includes(s.kind))),
-    pinnedCard: (workerId, cardId) => done(state.pinned.get(`${workerId}/${cardId}`) ?? null),
-    pinCard: (workerId, cardId, card) => {
-      if (!state.pinned.has(`${workerId}/${cardId}`)) state.pinned.set(`${workerId}/${cardId}`, card);
+    revokeSigner: (id, at) => {
+      for (const s of state.signers) if (s.id === id) s.revoked_at = at;
       return done(undefined);
     },
-    cardState: (orgId, cardId) => done(state.cards.get(`${orgId}/${cardId}`) ?? null),
-    mintsSince: (workerId, since, kind) =>
-      done(state.mints.filter((m) => m.worker_id === workerId && m.at >= since && (!kind || (m.token_kind === kind && m.outcome === "minted"))).length),
-    logMint: (row) => {
+    workerPin: (workerId) => done(state.pins.find((p) => p.worker_id === workerId) ?? null),
+    savePin: (pin) => {
+      state.pins = [...state.pins.filter((p) => p.worker_id !== pin.worker_id), pin];
+      return done(undefined);
+    },
+    takeNonce: (userId, nonce) => {
+      if (state.nonces.some((n) => n.user_id === userId && n.nonce === nonce)) return done(false);
+      state.nonces.push({ user_id: userId, nonce, at: iso(clock()) });
+      return done(true);
+    },
+    dropNoncesBefore: (at) => {
+      state.nonces = state.nonces.filter((n) => n.at >= at);
+      return done(undefined);
+    },
+    writeGrant: (row, prevEpoch) => {
+      const at = state.grants.findIndex((g) => g.user_id === row.user_id && g.worker_id === row.worker_id && g.connector === row.connector);
+      const was = state.grants[at] ?? null;
+      if ((was?.epoch ?? 0) !== prevEpoch) return done(false);
+      const expires = row.lifetime === "revoked" ? null : iso(clock() + (row.lifetime === "8h" ? 8 : 24) * 3_600_000);
+      const next: GrantRow = { id: was?.id ?? `g${nextId()}`, last_used_at: was?.last_used_at ?? null, expires_at: was && was.lifetime === row.lifetime ? was.expires_at : expires, ...row };
+      if (at < 0) state.grants.push(next);
+      else state.grants[at] = next;
+      return done(true);
+    },
+    saveAllow: (row) => {
+      state.allows = [...state.allows.filter((a) => !(a.grant_id === row.grant_id && a.kind === row.kind && a.subject === row.subject)), row];
+      return done(undefined);
+    },
+    userEmail: (userId) => done(state.emails.get(userId) ?? null),
+  };
+}
+
+function mintDb(state: FakeState, clock: () => number, nextId: () => number): Pick<ConnectorDb, "admitMint" | "handedUser" | "logMint" | "finishMint"> {
+  const counted = (m: StoredMint, since: number) => m.outcome !== "notice" && Date.parse(m.at) > since;
+  return {
+    admitMint: (row, l) => {
       if (row.nonce && state.mints.some((m) => m.worker_id === row.worker_id && m.nonce === row.nonce)) return done("replay" as const);
-      const id = nextId++;
-      state.mints.push({ ...row, id, at: iso(clock()) });
+      const now = clock();
+      const byWorker = (ms: number) => state.mints.filter((m) => m.worker_id === row.worker_id && counted(m, now - ms)).length;
+      const byUser = (ms: number) => state.mints.filter((m) => m.user_id === row.user_id && counted(m, now - ms)).length;
+      if (byWorker(60_000) >= l.workerMinute || byWorker(3_600_000) >= l.workerHour || byUser(60_000) >= l.userMinute || byUser(3_600_000) >= l.userHour) return done("limited" as const);
+      const id = nextId();
+      state.mints.push({ ...row, id, at: iso(now) });
       return done(id);
+    },
+    handedUser: (workerId, issuedAt) =>
+      done(state.mints.some((m) => m.worker_id === workerId && m.outcome === "minted" && m.token_kind === "user" && m.token_issued_at && Date.parse(m.token_issued_at) === Date.parse(issuedAt))),
+    logMint: (row) => {
+      state.mints.push({ ...row, id: nextId(), at: iso(clock()) });
+      return done(undefined);
     },
     finishMint: (id, patch) => {
       const m = state.mints.find((x) => x.id === id);
       if (m) Object.assign(m, patch);
       return done(undefined);
     },
+  };
+}
+
+function tokenDb(state: FakeState, nextId: () => number): Pick<ConnectorDb, "tokens" | "pendingDisconnects" | "saveTokens" | "deleteTokens" | "claimRefresh" | "liveToken" | "saveLiveToken" | "liveTokens" | "dropLiveTokens"> {
+  const strip = (row: StoredTokens): TokenRow => {
+    const copy: Partial<StoredTokens> = { ...row };
+    delete copy.refreshing_until;
+    return copy as TokenRow;
+  };
+  return {
     tokens: (userId) => {
       const row = state.tokens.get(userId);
-      if (!row) return done(null);
-      const copy: Partial<StoredTokens> = { ...row };
-      delete copy.refreshing_until;
-      return done(copy as TokenRow);
+      return done(row ? strip(row) : null);
     },
+    pendingDisconnects: () => done([...state.tokens.values()].filter((r) => r.disconnect_pending_at).map(strip)),
     saveTokens: (row) => {
       const was = state.tokens.get(row.user_id);
       state.tokens.set(row.user_id, { refreshing_until: null, ...was, ...row } as StoredTokens);
@@ -110,7 +163,7 @@ export function fakeDb(clock: () => number = () => NOW): { db: ConnectorDb; stat
     liveToken: (workerId, subject) => done(state.live.find((l) => l.worker_id === workerId && l.subject === subject) ?? null),
     saveLiveToken: (row) => {
       const at = state.live.findIndex((l) => l.worker_id === row.worker_id && l.subject === row.subject);
-      const stored: StoredLive = { id: `live-${nextId++}`, ...row };
+      const stored: StoredLive = { id: `live-${nextId()}`, ...row };
       if (at >= 0) state.live[at] = stored;
       else state.live.push(stored);
       return done(undefined);
@@ -119,6 +172,51 @@ export function fakeDb(clock: () => number = () => NOW): { db: ConnectorDb; stat
     dropLiveTokens: (ids) => {
       state.live = state.live.filter((l) => !ids.includes(l.id));
       return done(undefined);
+    },
+  };
+}
+
+export function fakeDb(clock: () => number = () => NOW): { db: ConnectorDb; state: FakeState } {
+  const state: FakeState = { workers: [], grants: [], allows: [], starts: [], pinned: new Map(), cards: new Map(), mints: [], tokens: new Map(), live: [], signers: [], pins: [], nonces: [], emails: new Map() };
+  const strip = (w: WorkerRow & { key_hash: string }): WorkerRow => ({ id: w.id, org_id: w.org_id, owner_user: w.owner_user, name: w.name, sign_key: w.sign_key, revoked_at: w.revoked_at });
+  let n = 1;
+  const nextId = () => n++;
+  const db: ConnectorDb = {
+    ...trustDb(state, clock, nextId),
+    ...mintDb(state, clock, nextId),
+    ...tokenDb(state, nextId),
+    workerByKeyHash: (hash) => {
+      const w = state.workers.find((x) => x.key_hash === hash);
+      return done(w ? strip(w) : null);
+    },
+    workerById: (id) => {
+      const w = state.workers.find((x) => x.id === id);
+      return done(w ? strip(w) : null);
+    },
+    grant: (userId, workerId, connector) => done(state.grants.find((g) => g.user_id === userId && g.worker_id === workerId && g.connector === connector) ?? null),
+    grantById: (id) => done(state.grants.find((g) => g.id === id) ?? null),
+    expiredGrants: (now) => done(state.grants.filter((g) => g.expires_at && g.expires_at < now)),
+    grantsBySigner: (signerId) => done(state.grants.filter((g) => g.signer_id === signerId)),
+    touchGrant: (id, at) => {
+      for (const g of state.grants) if (g.id === id) g.last_used_at = at;
+      return done(undefined);
+    },
+    deleteGrants: (userId, connector, workerId) => {
+      const gone = state.grants.filter((g) => g.user_id === userId && g.connector === connector && (!workerId || g.worker_id === workerId));
+      state.grants = state.grants.filter((g) => !gone.includes(g));
+      return done(gone.length);
+    },
+    allow: (grantId, kind, subject) => done(state.allows.find((a) => a.grant_id === grantId && a.kind === kind && a.subject === subject) ?? null),
+    starts: (workerId, cardId, userId) =>
+      done(state.starts.filter((s) => s.worker_id === workerId && s.card_id === cardId && s.created_by === userId && ["new_card", "run", "host"].includes(s.kind))),
+    pinnedCard: (workerId, cardId) => done(state.pinned.get(`${workerId}/${cardId}`) ?? null),
+    pinCard: (workerId, cardId, card) => {
+      if (!state.pinned.has(`${workerId}/${cardId}`)) state.pinned.set(`${workerId}/${cardId}`, card);
+      return done(undefined);
+    },
+    cardState: (orgId, workerId, cardId) => {
+      const c = state.cards.get(`${orgId}/${cardId}`);
+      return done(c && (c.owner_worker ?? workerId) === workerId ? { deleted: c.deleted, column: c.column } : null);
     },
   };
   return { db, state };
@@ -174,6 +272,7 @@ export function storeTokens(state: FakeState, userId: string, o: { access?: stri
     access_sealed: access === null ? null : sealToken(access, bound.access(userId), KEY),
     access_issued_at: issuedAt === null ? null : iso(issuedAt),
     access_expires_at: issuedAt === null ? null : iso(issuedAt + 8 * 3_600_000),
+    disconnect_pending_at: null,
     refreshing_until: null,
   });
 }
@@ -187,8 +286,4 @@ export function pairedWorker(state: FakeState, o: Partial<WorkerRow> = {}) {
   state.workers.push({ ...worker, key_hash: createHash("sha256").update(key).digest("hex") });
   const signed = (body: Omit<MintRequest, "workerId">, workerId = worker.id) => ({ ...body, sig: sign(null, Buffer.from(mintMessage({ ...body, workerId })), privateKey).toString("base64") });
   return { worker, key, auth: `Bearer ${key}`, signed };
-}
-
-export function grantRow(o: Partial<GrantRow> = {}): GrantRow {
-  return { id: "g1", user_id: "u1", worker_id: "w1", connector: "github", scope: "installed", approval: "worker", lifetime: "revoked", asks: ["protected_push"], expires_at: null, last_used_at: null, ...o };
 }

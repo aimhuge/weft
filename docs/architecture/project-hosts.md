@@ -568,29 +568,35 @@ Settings → Devices → m1mini → Re-pair
 Built 2026-11-02, migration `20261102280000_worker_github_mint.sql` not applied; the full account is in
 [connectors.md](connectors.md#connectors-on-a-worker-github-p1-as-built). T2 (PR #56) built lending the Mac's gh and gog
 sign-ins to a worker and took it out after a red team: any card could read a token that never expired. P1 is the design
-note's layer 1, **off-box minting**: nothing long-lived reaches the box.
+note's layer 1, **off-box minting**: nothing long-lived reaches the box. Its own red team (PR #62) found the first cut
+trusted weft.zip's rows, which any session of yours can write; it now trusts only signatures by a Mac's approval key.
 
 - **Who holds what.** weft.zip holds the Weft GitHub App's client secret and your GitHub refresh token, sealed in a table
   only the service role reads. The worker holds its `wwk_` key and its pairing sign key, as before. A card gets a user
-  access token (8 hours by GitHub's clock, handed out for 1 hour and rotated after), never a refresh token or the Mac's
-  `gh` token.
-- **The grant** is a `connector_grants` row per (you, worker, connector), made in main with your own session after one
-  Touch ID per worker ("let the worker m1mini use GitHub as you, with Weft"), with Scope, Approval, Lifetime and which
-  actions ask. No prompt per card or per interval by default.
+  access token (8 hours by GitHub's clock, handed out for 1 hour and rotated after), narrowed to the card's repo by
+  default, never a refresh token or the Mac's `gh` token.
+- **Who may say yes** ([the chain of trust](connectors.md#who-may-say-yes-the-chain-of-trust)). Each Mac registers its desktop
+  approval key (H7's `electron/desktop-signer.cjs`) as a signer on weft.zip; a key is trusted a day after it's registered
+  (you're emailed) or at once when a trusted Mac vouches for it under Touch ID. Pairing a worker signs the keys main just
+  pinned. Turning a connector on, any change to it and an Allow take Touch ID, then main signs exactly what's written;
+  weft.zip writes it only with a good signature (no session can write those tables) and the mint checks it again.
 - **The mint** (`app/api/connectors/github/mint`, `lib/connector-mint.ts`) reuses H8/H10's signing: the request is signed
-  by the sign key `worker_pair_confirm` set under your Touch ID, so the `wwk_` key alone mints nothing. It reuses T2's
-  card-origin rule: only a card whose `new_card`, `run` or `card.create` command you created for that worker, pinned on
-  first use, never a reply or an H6-line verb. Then the repo (the one the card's start named), the card not Done or
-  deleted, the approval's Allow, a nonce once, and a rate limit; every answer goes in a ledger you can read.
+  by the sign key `worker_pair_confirm` set, and a trusted Mac must have vouched for that key. Then a grant signed by a
+  trusted Mac, a card you started from the desktop board (T2's card-origin rule, never a reply, an H6-line verb or a card
+  another worker sent), the repo that start named from the Mac's own checkout, this worker's card not Done or deleted,
+  a signed Allow when the approval asks one, a nonce once and the rate limits in one database step; it re-reads the grant
+  after getting the token and answers only if it's unchanged. Every answer goes in a ledger you can read.
 - **On the box**, a card's git credential helper and gh wrapper ask the daemon over `~/.weft-worker/connector.sock` by a
-  per-session capability; the daemon holds tokens in memory only and finds the repo from the card's checkout. gh runs
-  with an env built from scratch (no `NODE_OPTIONS`, `GIT_*`, `PAGER`, `BROWSER`, `EDITOR`).
+  per-CLI-process capability, which the socket answers only for a process under that CLI (peer pid from lsof or ss) and
+  drops when the CLI exits; the helper's hash must be what the daemon started with. gh runs with an env built from
+  scratch and empty config, data and XDG folders.
 - **Revocation** works with the box offline: Turn off or Revoke deletes the grant (a trigger does it on `device_revoke`
-  too), then weft.zip deletes narrowed tokens at GitHub and refreshes the shared user token, which ends the old one, and
-  the row shows what GitHub confirmed.
-- **What it doesn't close:** a card can still copy the token it's handed, and can take the worker's key to ask for more
-  while the grant lives; that's the accepted layer-1 trade-off, and the on-box helper (P4 on a Mac, P5 on Linux) is what
-  closes it. A red-team pass against T2's route list is due before it ships.
+  too), then weft.zip deletes narrowed tokens at GitHub and, if this worker holds the current user token, refreshes it under
+  the refresh claim (which ends it, per GitHub); only a 204 counts as confirmed, unconfirmed rows stay for an hourly sweep,
+  which also ends what expired grants left behind.
+- **What it doesn't close:** a card can still copy the token it's handed, and with the worker's own key files can ask for
+  more while the grant lives (per-card scope is then advisory); a session can't turn anything on but can still turn things
+  off. The on-box helper (P4 on a Mac, P5 on Linux) is what closes the first two. A second red-team pass is due.
 
 ### Project reads and the editor (H4, as built)
 

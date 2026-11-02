@@ -30,7 +30,8 @@ export interface GrantSettings {
   asks: Ask[];
 }
 
-export const DEFAULT_SETTINGS: GrantSettings = { scope: "installed", approval: "worker", lifetime: "revoked", asks: ["protected_push"] };
+// "This project's repo" by default: a token narrowed to the card's one repo costs no prompt more than a wide one.
+export const DEFAULT_SETTINGS: GrantSettings = { scope: "project", approval: "worker", lifetime: "revoked", asks: ["protected_push"] };
 
 export const LIFETIME_MS: Record<Lifetime, number | null> = { revoked: null, "24h": 24 * 3_600_000, "8h": 8 * 3_600_000 };
 

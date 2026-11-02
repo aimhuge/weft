@@ -91,7 +91,7 @@ describe("ghEnv", () => {
   it("keeps only the allowlisted vars, with the daemon's PATH and a fresh config folder", () => {
     const env = { HOME: "/h", USER: "u", LANG: "C", TERM: "xterm", PATH: "/evil", NODE_OPTIONS: "--require x", NODE_PATH: "/x", GIT_DIR: "/g", GIT_SSH_COMMAND: "x", PAGER: "x", BROWSER: "x", EDITOR: "x", GH_BROWSER: "x", GH_TOKEN: "old", GH_HOST: "evil", GH_CONFIG_DIR: "/c", WEFT_CONNECTOR_CAP: "c", COLUMNS: 80 };
     const out = ghEnv(env, { token: "ghu_t", path: "/opt:/usr/bin" }, "/tmp/cfg");
-    expect(out).toEqual({ HOME: "/h", USER: "u", LANG: "C", TERM: "xterm", PATH: "/opt:/usr/bin", GH_TOKEN: "ghu_t", GH_HOST: "github.com", GH_CONFIG_DIR: "/tmp/cfg", GH_PROMPT_DISABLED: "1", GH_NO_UPDATE_NOTIFIER: "1", GH_SPINNER_DISABLED: "1", GH_PAGER: "cat", GIT_TERMINAL_PROMPT: "0" });
+    expect(out).toEqual({ HOME: "/h", USER: "u", LANG: "C", TERM: "xterm", PATH: "/opt:/usr/bin", GH_TOKEN: "ghu_t", GH_HOST: "github.com", GH_CONFIG_DIR: "/tmp/cfg", GH_DATA_DIR: "/tmp/cfg", XDG_CONFIG_HOME: "/tmp/cfg", XDG_DATA_HOME: "/tmp/cfg", XDG_STATE_HOME: "/tmp/cfg", XDG_CACHE_HOME: "/tmp/cfg", GH_PROMPT_DISABLED: "1", GH_NO_UPDATE_NOTIFIER: "1", GH_SPINNER_DISABLED: "1", GH_PAGER: "cat", GIT_TERMINAL_PROMPT: "0" });
     expect(ghEnv({}, { token: "t" }, "/c").PATH).toBe("/usr/bin:/bin");
   });
 });

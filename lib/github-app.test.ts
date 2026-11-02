@@ -88,10 +88,10 @@ describe("scopedToken", () => {
 });
 
 describe("deleteAppToken", () => {
-  it("is true on 204 and 404, for a token or the grant", async () => {
+  it("is true only on 204, for a token or the grant: a 404 proves nothing", async () => {
     const gh = fakeGithub({ "DELETE /applications/Iv1.abc/token": noContent, "DELETE /applications/Iv1.abc/grant": () => json({}, 404) });
     expect(await deleteAppToken(CFG, "t", "token", gh.fetch)).toBe(true);
-    expect(await deleteAppToken(CFG, "t", "grant", gh.fetch)).toBe(true);
+    expect(await deleteAppToken(CFG, "t", "grant", gh.fetch)).toBe(false);
     expect(gh.calls[0]!.body).toEqual({ access_token: "t" });
   });
   it("is false on 422 or a network failure", async () => {

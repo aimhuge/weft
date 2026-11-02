@@ -2,19 +2,21 @@
 // asks for a GitHub token for one of its cards; this decides from the database, never the worker's word, and answers
 // a token with its handed-out expiry, or a refusal. Every answer goes in the ledger (connector_mints).
 //
-//   key + signature (lib/connector-auth.ts) ─ rate limit ─ nonce once ─ the grant: on, inside its lifetime
-//   ─ you started the card (an owner-created start command, pinned the first time) ─ the repo is the card's project
-//   ─ the card isn't Done or deleted ─ the approval's Allow, when it asks one ─ a token (lib/connector-tokens.ts)
+//   key + signature (lib/connector-auth.ts) ─ a trusted Mac vouched for this pairing (lib/connector-trust.ts)
+//   ─ nonce once and the rate limits, in one DB step ─ the grant: on, inside its lifetime, signed by a trusted Mac
+//   ─ you started the card, from a Mac that named its repo ─ the repo is the card's ─ the card (this worker's) isn't
+//   Done or deleted ─ the approval's signed Allow, when it asks one ─ a token (lib/connector-tokens.ts), logged
+//   ─ the grant re-read: still there at the epoch checked, else no answer
 import "server-only";
 import { allowSubject, isLive, settingsOf } from "./connector-grant";
-import type { ConnectorDb, GrantRow, MintLog, PinnedCard, StartRow, WorkerRow } from "./connector-db";
+import type { ConnectorDb, GrantRow, MintLimits, MintLog, PinnedCard, StartRow, WorkerRow } from "./connector-db";
 import { parseMint, signedWorker, type SignedMint } from "./connector-auth";
 import { handedExpiry, MintError, narrowToken, userToken, type Handed, type TokenDeps } from "./connector-tokens";
+import { allowProblem, grantProblem, pinProblem } from "./connector-trust";
 
 // Per worker: enough for every card's git and gh to ask a few times a minute (the daemon caches tokens), not enough to
-// hammer GitHub's refresh endpoint with a stolen key.
-export const PER_MINUTE = 30;
-export const PER_HOUR = 300;
+// hammer GitHub's refresh endpoint with a stolen key. Per user, across all their workers, a cap on top.
+export const LIMITS: MintLimits = { workerMinute: 30, workerHour: 300, userMinute: 60, userHour: 600 };
 
 export interface MintAnswer {
   status: number;
@@ -22,20 +24,26 @@ export interface MintAnswer {
 }
 
 // The commands that start a card on a worker: a run, the web's new_card, the board's card.create verb. A reply or a
-// verb sent over the H6 line makes no such row, so it can't stand in for one.
-const startsCard = (r: StartRow) => r.kind !== "host" || (r.payload as { verb?: unknown } | null)?.verb === "card.create";
+// verb sent over the H6 line makes no such row, so it can't stand in for one; nor can a card another worker sent
+// (worker_new_card stamps it fromWorker, lib/worker-origin.ts).
+const startsCard = (r: StartRow) => {
+  const p = (r.payload ?? {}) as { verb?: unknown; fromWorker?: unknown };
+  return !p.fromWorker && (r.kind !== "host" || p.verb === "card.create");
+};
 
-// The repo a run's git URL names (https://github.com/<owner>/<name>.git), or null.
+// The repo a start names: a run's git URL (https://github.com/<owner>/<name>.git) or the owner/name the desktop board
+// put on a card.create from the project's own origin (lib/worker-folder-repo.ts). Null for anything else.
 export function repoOfUrl(url: unknown): string | null {
-  const m = typeof url === "string" ? /^https:\/\/github\.com\/([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+?)(?:\.git)?\/?$/.exec(url) : null;
+  if (typeof url !== "string") return null;
+  const m = /^(?:https:\/\/github\.com\/)?([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+?)(?:\.git)?\/?$/.exec(url);
   return m?.[1] ?? null;
 }
 
 const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 
 // The card's project, pinned the first time a mint checks it (start commands expire after a day): the folder and repo
-// its owner-created start named. A start that named no repo URL pins the asked repo when its name is the folder's
-// (a worker's folder is the repo's name, lib/worker-commands.ts).
+// its owner-created start named. A start that named no repo (one made on weft.zip, which can't see the project's
+// origin) gets nothing: the worker would otherwise pick the owner of the repo it's narrowed to.
 async function cardProject(db: ConnectorDb, worker: WorkerRow, req: SignedMint): Promise<PinnedCard> {
   const pinned = await db.pinnedCard(worker.id, req.cardId);
   if (pinned) {
@@ -44,9 +52,9 @@ async function cardProject(db: ConnectorDb, worker: WorkerRow, req: SignedMint):
   }
   const started = (await db.starts(worker.id, req.cardId, worker.owner_user)).filter((r) => r.created_by === worker.owner_user && startsCard(r));
   const start = started[0];
-  if (!start) throw new MintError(403, "Connectors only work in a card you started on this worker (from the board or weft.zip). Start a new card for this project.");
-  const repo = repoOfUrl((start.payload as { repo?: unknown } | null)?.repo) ?? (same(req.repo.slice(req.repo.indexOf("/") + 1), start.folder) ? req.repo : null);
-  if (!repo) throw new MintError(403, `That card was started in ${start.folder}, not ${req.repo}.`);
+  if (!start) throw new MintError(403, "Connectors only work in a card you started on this worker from the board. Start a new card for this project.");
+  const repo = repoOfUrl((start.payload as { repo?: unknown } | null)?.repo);
+  if (!repo) throw new MintError(403, "That card's start didn't name its GitHub repo. Start it from the desktop board, which reads the project's origin.");
   const card = { user_id: worker.owner_user, folder: start.folder, repo };
   await db.pinCard(worker.id, req.cardId, card);
   return card;
@@ -56,20 +64,27 @@ async function checkGrant(db: ConnectorDb, worker: WorkerRow, req: SignedMint, n
   const grant = await db.grant(worker.owner_user, worker.id, req.connector);
   if (!grant) throw new MintError(403, `GitHub isn't turned on for ${worker.name}. Turn it on in Weft → Settings → Devices → ${worker.name} → Connectors.`);
   if (!isLive(grant.expires_at, now)) throw new MintError(403, `${worker.name}'s GitHub access ended (its lifetime ran out). Turn it on again in Settings → Devices.`);
+  const problem = await grantProblem(db, grant, now);
+  if (problem) throw new MintError(403, `${problem} Turn GitHub on for ${worker.name} again from a trusted Mac.`);
   return grant;
 }
 
-async function decide(deps: TokenDeps, worker: WorkerRow, req: SignedMint, grant: GrantRow): Promise<{ handed: Handed; kind: "user" | "scoped" }> {
+async function checkAllow(db: ConnectorDb, worker: WorkerRow, grant: GrantRow, allow: { kind: "project" | "card"; subject: string }, now: number) {
+  const row = await db.allow(grant.id, allow.kind, allow.subject);
+  if (!row || (await allowProblem(db, row, worker.owner_user, now))) {
+    throw new MintError(403, `GitHub on ${worker.name} asks per ${allow.kind}: allow this ${allow.kind} in Weft → Settings → Devices → ${worker.name} → Connectors.`, "needs_allow");
+  }
+}
+
+async function decide(deps: TokenDeps, worker: WorkerRow, req: SignedMint, grant: GrantRow, now: number): Promise<{ handed: Handed; kind: "user" | "scoped" }> {
   const { db } = deps;
   const project = await cardProject(db, worker, req);
   if (!same(project.repo, req.repo)) throw new MintError(403, `That card's project is ${project.repo}, not ${req.repo}.`);
-  const state = await db.cardState(worker.org_id, req.cardId);
+  const state = await db.cardState(worker.org_id, worker.id, req.cardId);
   if (state?.deleted || state?.column === "done") throw new MintError(403, "That card is Done or deleted, so it gets no token.");
   const settings = settingsOf(grant);
   const allow = allowSubject(settings.approval, { id: req.cardId, repo: project.repo });
-  if (allow && !(await db.hasAllow(grant.id, allow.kind, allow.subject))) {
-    throw new MintError(403, `GitHub on ${worker.name} asks per ${allow.kind}: allow this ${allow.kind} in Weft → Settings → Devices → ${worker.name} → Connectors.`, "needs_allow");
-  }
+  if (allow) await checkAllow(db, worker, grant, allow, now);
   if (settings.scope === "installed") return { handed: await userToken(deps, worker.owner_user), kind: "user" };
   const subject = settings.scope === "project" ? `project:${project.repo.toLowerCase()}` : `card:${req.cardId}`;
   return { handed: await narrowToken(deps, { userId: worker.owner_user, workerId: worker.id, subject, repo: project.repo }), kind: "scoped" };
@@ -80,32 +95,38 @@ const refusal = (err: unknown): MintAnswer => {
   return { status: 502, body: { error: `Couldn't mint: ${(err as Error).message}` } };
 };
 
+// The worker, checked: its key, its signature, and a trusted Mac's word for its pairing.
+async function admitted(deps: TokenDeps, authorization: string | null, raw: unknown, now: number): Promise<{ req: SignedMint; worker: WorkerRow }> {
+  const req = parseMint(raw);
+  const worker = await signedWorker(deps.db, authorization, req, now);
+  const pin = await pinProblem(deps.db, worker, now);
+  if (pin) throw new MintError(403, pin);
+  return { req, worker };
+}
+
 export async function mint(deps: TokenDeps, authorization: string | null, raw: unknown): Promise<MintAnswer> {
   const { db } = deps;
   const now = deps.now();
   let req: SignedMint;
   let worker: WorkerRow;
+  let id: number | "replay" | "limited";
   try {
-    req = parseMint(raw);
-    worker = await signedWorker(db, authorization, req, now);
-    if ((await db.mintsSince(worker.id, new Date(now - 60_000).toISOString())) >= PER_MINUTE || (await db.mintsSince(worker.id, new Date(now - 3_600_000).toISOString())) >= PER_HOUR) {
-      throw new MintError(429, "Too many token requests from this worker. Wait a minute.");
-    }
-  } catch (err) {
-    return refusal(err);
-  }
-  const entry: MintLog = { user_id: worker.owner_user, worker_id: worker.id, grant_id: null, connector: req.connector, card_id: req.cardId, repo: req.repo, outcome: "refused", reason: "in progress", token_kind: null, nonce: req.nonce };
-  let id: number | "replay";
-  try {
-    id = await db.logMint(entry);
+    ({ req, worker } = await admitted(deps, authorization, raw, now));
+    const entry: MintLog = { user_id: worker.owner_user, worker_id: worker.id, grant_id: null, connector: req.connector, card_id: req.cardId, repo: req.repo, outcome: "refused", reason: "in progress", token_kind: null, nonce: req.nonce };
+    id = await db.admitMint(entry, LIMITS);
   } catch (err) {
     return refusal(err);
   }
   if (id === "replay") return { status: 401, body: { error: "That request was answered already." } };
+  if (id === "limited") return { status: 429, body: { error: "Too many token requests from this worker. Wait a minute." } };
   try {
     const grant = await checkGrant(db, worker, req, now);
-    const { handed, kind } = await decide(deps, worker, req, grant);
-    await Promise.all([db.touchGrant(grant.id, new Date(now).toISOString()), db.finishMint(id, { grant_id: grant.id, outcome: "minted", reason: null, token_kind: kind })]);
+    const { handed, kind } = await decide(deps, worker, req, grant, now);
+    // Logged before the grant is read again, so a revoke that deletes the grant after this read finds it in the ledger.
+    await db.finishMint(id, { grant_id: grant.id, outcome: "minted", reason: null, token_kind: kind, token_issued_at: kind === "user" ? new Date(handed.issuedAt).toISOString() : null });
+    const still = await db.grant(worker.owner_user, worker.id, req.connector);
+    if (!still || still.id !== grant.id || still.epoch !== grant.epoch || !isLive(still.expires_at, deps.now())) throw new MintError(409, `GitHub on ${worker.name} was turned off or changed while this was asked. Ask again.`);
+    await db.touchGrant(grant.id, new Date(now).toISOString());
     return { status: 200, body: { token: handed.token, expiresAt: handedExpiry(handed.issuedAt), login: handed.login, kind, asks: settingsOf(grant).asks } };
   } catch (err) {
     const outcome = err instanceof MintError ? err.outcome : "refused";

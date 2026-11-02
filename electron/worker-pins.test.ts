@@ -27,6 +27,20 @@ describe("createWorkerPins", () => {
     expect(createWorkerPins({ dir: d, safeStorage: store }).lookup({ id: "w1", name: "m1mini", publicKey: KEY_A }).firstUse).toBe(false);
   });
 
+  it("gives the keys it pinned exactly, for vouching on weft.zip", () => {
+    const d = dir();
+    const pins = createWorkerPins({ dir: d, safeStorage: store });
+    expect(pins.pinned("w1")).toBeNull();
+    pins.pin("w1", { name: "m1mini", publicKey: KEY_A, signKey: "c2lnbg==" });
+    expect(pins.pinned("w1")).toEqual({ publicKey: KEY_A, signKey: "c2lnbg==" });
+    pins.pin("w2", { name: "box", publicKey: KEY_B });
+    expect(pins.pinned("w2")).toEqual({ publicKey: KEY_B });
+    pins.forget("w1");
+    expect(pins.pinned("w1")).toEqual({ signKey: "c2lnbg==" });
+    fs.writeFileSync(path.join(d, "vault", "worker-pins.json"), "garbage");
+    expect(pins.pinned("w1")).toBeNull();
+  });
+
   it("gives the name it pinned, and null for an unpinned worker or a file that won't open", () => {
     const d = dir();
     const pins = createWorkerPins({ dir: d, safeStorage: store });

@@ -3,19 +3,22 @@
 // and tested on its own; these check the gates, the cookie and what each route answers.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MintError } from "@/lib/connector-tokens";
+import { newConnect } from "@/lib/connector-connect";
+import { KEY } from "@/lib/connector.harness";
 
 vi.mock("next/server", () => ({ connection: async () => {} }));
 const jar = vi.hoisted(() => ({ value: undefined as string | undefined, get: vi.fn(), set: vi.fn<(name: string, value: string, opts: unknown) => void>(), delete: vi.fn() }));
 vi.mock("next/headers", () => ({ cookies: () => Promise.resolve(jar) }));
 
 const deps = vi.hoisted(() => ({ current: null as object | null }));
+const db = vi.hoisted(() => ({ tokens: vi.fn() }));
 vi.mock("@/lib/connector-deps", () => ({ connectorDeps: () => deps.current, NOT_SET_UP: { error: "GitHub connectors aren't set up on this server yet." } }));
 
 const session = vi.hoisted(() => ({ bearerUser: vi.fn(), webUser: vi.fn() }));
 vi.mock("@/lib/web-session", () => session);
 
-const lib = vi.hoisted(() => ({ connectStatus: vi.fn(), finishConnect: vi.fn(), disconnect: vi.fn(), revokeWorker: vi.fn(), mint: vi.fn() }));
-vi.mock("@/lib/connector-connect", async (real) => ({ ...(await real<object>()), connectStatus: lib.connectStatus, finishConnect: lib.finishConnect }));
+const lib = vi.hoisted(() => ({ connectStatus: vi.fn(), finishConnect: vi.fn(), endPrevious: vi.fn(), disconnect: vi.fn(), revokeWorker: vi.fn(), mint: vi.fn() }));
+vi.mock("@/lib/connector-connect", async (real) => ({ ...(await real<object>()), connectStatus: lib.connectStatus, finishConnect: lib.finishConnect, endPrevious: lib.endPrevious }));
 vi.mock("@/lib/connector-revoke", () => ({ disconnect: lib.disconnect, revokeWorker: lib.revokeWorker }));
 vi.mock("@/lib/connector-mint", () => ({ mint: lib.mint }));
 
@@ -34,7 +37,8 @@ const page = async (res: Response) => ({ status: res.status, text: await res.tex
 
 beforeEach(() => {
   vi.clearAllMocks();
-  deps.current = { cfg: { clientId: "Iv1.abc", clientSecret: "s" } };
+  db.tokens.mockResolvedValue({ github_login: "ada", disconnect_pending_at: null });
+  deps.current = { cfg: { clientId: "Iv1.abc", clientSecret: "s" }, key: KEY, db };
   session.bearerUser.mockResolvedValue(USER);
   session.webUser.mockResolvedValue(USER);
   jar.value = undefined;
@@ -138,44 +142,75 @@ describe("POST /api/connectors/github/mint", () => {
   });
 });
 
-describe("GET /api/connectors/github/start", () => {
+describe("/api/connectors/github/start", () => {
+  const sameSite = (url = `${BASE}/start`, host = "weft.zip") => new Request(url, { method: "POST", headers: { host, "sec-fetch-site": "same-origin" } });
+
   it("says so on a server that isn't set up", async () => {
     deps.current = null;
-    const res = await page(await start.GET(bearer("/start")));
-    expect(res.status).toBe(200);
-    expect(res.text).toContain("Not set up yet");
+    expect((await page(await start.GET(bearer("/start")))).text).toContain("Not set up yet");
+    expect((await page(await start.POST(sameSite()))).text).toContain("Not set up yet");
   });
 
   it("sends a signed-out visitor to /login and back", async () => {
     session.webUser.mockResolvedValue(null);
-    const res = await start.GET(bearer("/start"));
-    expect(res.status).toBe(303);
-    expect(res.headers.get("location")).toBe(`https://weft.zip/login?next=${encodeURIComponent("/api/connectors/github/start")}`);
+    for (const res of [await start.GET(bearer("/start")), await start.POST(sameSite())]) {
+      expect(res.status).toBe(303);
+      expect(res.headers.get("location")).toBe(`https://weft.zip/login?next=${encodeURIComponent("/api/connectors/github/start")}`);
+    }
     expect(jar.set).not.toHaveBeenCalled();
   });
 
-  it("keeps the flow in a short httpOnly cookie and goes to GitHub's consent page", async () => {
-    const res = await start.GET(bearer("/start"));
+  it("GET shows one button, naming the connection it would end", async () => {
+    const res = await page(await start.GET(bearer("/start")));
+    expect(res.text).toContain('<form method="post" action="/api/connectors/github/start">');
+    expect(res.text).toContain("@ada");
+    db.tokens.mockResolvedValueOnce({ github_login: "ada", disconnect_pending_at: "t" });
+    expect((await page(await start.GET(bearer("/start")))).text).not.toContain("@ada");
+    db.tokens.mockRejectedValueOnce(new Error("down"));
+    expect((await page(await start.GET(bearer("/start")))).status).toBe(200);
+  });
+
+  it("POST refuses a request from anywhere but this origin", async () => {
+    const res = await page(await start.POST(new Request(`${BASE}/start`, { method: "POST", headers: { host: "weft.zip", "sec-fetch-site": "cross-site" } })));
+    expect(res.text).toContain("Not started");
+    expect(lib.endPrevious).not.toHaveBeenCalled();
+    expect(jar.set).not.toHaveBeenCalled();
+  });
+
+  it("POST ends the connection before, keeps the flow in a short __Host- cookie and goes to GitHub's consent page", async () => {
+    lib.endPrevious.mockResolvedValue(42);
+    const res = await start.POST(sameSite());
     expect(res.status).toBe(303);
     const to = new URL(res.headers.get("location") ?? "");
     expect(to.origin + to.pathname).toBe("https://github.com/login/oauth/authorize");
     expect(to.searchParams.get("client_id")).toBe("Iv1.abc");
     expect(to.searchParams.get("redirect_uri")).toBe("https://weft.zip/api/connectors/github/callback");
     const [name, cookie, opts] = jar.set.mock.calls[0]!;
-    expect(name).toBe("weft_github_connect");
-    expect(cookie).toMatch(new RegExp(`^u1\\.${to.searchParams.get("state")}\\.`));
-    expect(opts).toEqual({ httpOnly: true, secure: true, sameSite: "lax", path: "/api/connectors/github", maxAge: 600 });
+    expect(name).toBe("__Host-weft_github_connect");
+    expect(cookie).toMatch(new RegExp(`^u1\\.${to.searchParams.get("state")}\\.[^.]+\\.42\\.`));
+    expect(opts).toEqual({ httpOnly: true, secure: true, sameSite: "lax", path: "/", maxAge: 600 });
   });
 
-  it("drops secure on a plain-http origin (a local server)", async () => {
-    await start.GET(new Request("http://localhost:3000/api/connectors/github/start", { headers: { host: "localhost:3000" } }));
+  it("POST drops secure and __Host- on a plain-http origin (a local server)", async () => {
+    await start.POST(sameSite("http://localhost:3000/api/connectors/github/start", "localhost:3000"));
+    expect(jar.set.mock.calls[0]!.slice(0, 1)).toEqual(["weft_github_connect"]);
     expect(jar.set.mock.calls[0]![2]).toMatchObject({ secure: false });
+  });
+
+  it("POST says why when the old connection can't be ended", async () => {
+    lib.endPrevious.mockRejectedValue(new Error("db down"));
+    expect((await page(await start.POST(sameSite()))).text).toContain("db down");
+    expect(jar.set).not.toHaveBeenCalled();
   });
 });
 
 describe("GET /api/connectors/github/callback", () => {
   const back = (q: string) => new Request(`${BASE}/callback?${q}`, { headers: { host: "weft.zip" } });
-  const kept = () => (jar.value = "u1.st8.verif");
+  const kept = (previous: number | null = null, user = "u1") => {
+    const flow = newConnect(user, KEY, previous);
+    jar.value = flow.cookie;
+    return flow.state;
+  };
 
   it("says so on a server that isn't set up", async () => {
     deps.current = null;
@@ -183,39 +218,42 @@ describe("GET /api/connectors/github/callback", () => {
   });
 
   it("always clears the cookie, and wants you signed in", async () => {
-    kept();
+    const state = kept();
     session.webUser.mockResolvedValue(null);
-    expect((await page(await callback.GET(back("code=c&state=st8")))).text).toContain("Sign in first");
-    expect(jar.delete).toHaveBeenCalledWith({ name: "weft_github_connect", path: "/api/connectors/github" });
+    expect((await page(await callback.GET(back(`code=c&state=${state}`)))).text).toContain("Sign in first");
+    expect(jar.delete).toHaveBeenCalledWith({ name: "__Host-weft_github_connect", path: "/" });
     expect(lib.finishConnect).not.toHaveBeenCalled();
   });
 
   it("says GitHub didn't authorize when it sends an error back", async () => {
-    kept();
-    expect((await page(await callback.GET(back("error=access_denied&state=st8")))).text).toContain("GitHub didn&#39;t authorize the Weft app");
+    const state = kept();
+    expect((await page(await callback.GET(back(`error=access_denied&state=${state}`)))).text).toContain("GitHub didn&#39;t authorize the Weft app");
   });
 
   it("refuses a state or cookie that isn't this visitor's own, or no code", async () => {
-    for (const [cookie, q] of [[undefined, "code=c&state=st8"], ["u1.other.verif", "code=c&state=st8"], ["u2.st8.verif", "code=c&state=st8"], ["u1.st8.verif", "state=st8"]] as const) {
+    const state = kept();
+    const mine = jar.value;
+    for (const [cookie, q] of [[undefined, `code=c&state=${state}`], [mine, "code=c&state=other"], [newConnect("u2", KEY, null).cookie, `code=c&state=${state}`], [mine, `state=${state}`]] as const) {
       jar.value = cookie;
       expect((await page(await callback.GET(back(q)))).text).toContain("didn&#39;t come from your own Connect GitHub");
     }
     expect(lib.finishConnect).not.toHaveBeenCalled();
   });
 
-  it("trades the code with the kept verifier and names who you are on GitHub", async () => {
-    kept();
+  it("trades the code with the kept verifier and the account before, and names who you are on GitHub", async () => {
+    const state = kept(42);
+    const verifier = jar.value!.split(".")[2];
     lib.finishConnect.mockResolvedValue("ada");
-    const res = await page(await callback.GET(back("code=c0de&state=st8")));
+    const res = await page(await callback.GET(back(`code=c0de&state=${state}`)));
     expect(res.text).toContain("GitHub connected");
     expect(res.text).toContain("@ada");
-    expect(lib.finishConnect).toHaveBeenCalledWith(deps.current, "u1", { code: "c0de", verifier: "verif", redirectUri: "https://weft.zip/api/connectors/github/callback" });
+    expect(lib.finishConnect).toHaveBeenCalledWith(deps.current, "u1", { code: "c0de", verifier, redirectUri: "https://weft.zip/api/connectors/github/callback", previous: 42 });
   });
 
   it("says why when the trade fails", async () => {
-    kept();
+    const state = kept();
     lib.finishConnect.mockRejectedValue(new Error("GitHub refused the code: bad_verification_code"));
-    const res = await page(await callback.GET(back("code=c0de&state=st8")));
+    const res = await page(await callback.GET(back(`code=c0de&state=${state}`)));
     expect(res.text).toContain("Not connected");
     expect(res.text).toContain("GitHub refused the code: bad_verification_code");
   });

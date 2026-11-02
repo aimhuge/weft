@@ -11,10 +11,27 @@ import type { GrantSettings } from "./connector-grant";
 import type { ConnectorsView, PendingAllow } from "./connector-view";
 import { openInPane } from "./open-in-pane";
 
-export interface ConnectorsBridge {
-  set(workerId: string, workerName: string, connector: "github", settings: GrantSettings): Promise<{ ok?: boolean; denied?: boolean }>;
-  allow(grantId: string, workerName: string, kind: PendingAllow["kind"], subject: string, label: string): Promise<{ ok?: boolean; denied?: boolean }>;
+// A Mac key of yours that may approve connectors (lib/connector-signers.ts SignerView).
+export interface MacKey {
+  id: string;
+  key: string;
+  name: string;
+  addedAt: string;
+  trustedFrom: string;
+  trusted: boolean;
 }
+
+export interface ConnectorsBridge {
+  set(workerId: string, workerName: string, connector: "github", settings: GrantSettings): Promise<{ ok?: boolean; denied?: boolean; waitingUntil?: string | null }>;
+  allow(grantId: string, workerName: string, kind: PendingAllow["kind"], subject: string, label: string): Promise<{ ok?: boolean; denied?: boolean }>;
+  signers?(): Promise<{ mine: string; signers: MacKey[] }>;
+  trust?(key: string, name: string): Promise<{ ok?: boolean; denied?: boolean }>;
+  forgetSigner?(id: string): Promise<unknown>;
+}
+
+// What a grant written by a key still waiting out its day says.
+export const waitingNote = (until: string | null | undefined) =>
+  until ? ` It works from ${new Date(until).toLocaleString()}, when this Mac's key is trusted, or sooner if a trusted Mac vouches for it.` : "";
 
 export const connectorsBridge = (): ConnectorsBridge | undefined =>
   typeof window === "undefined" ? undefined : (window as unknown as { weft?: { connectors?: ConnectorsBridge } }).weft?.connectors;
@@ -31,20 +48,27 @@ export function useWorkerConnectors(bridge: ConnectorsBridge | undefined = conne
   const [view, setView] = useState<ConnectorsView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  const [macs, setMacs] = useState<{ mine: string; signers: MacKey[] } | null>(null);
   const live = useRef(true);
 
-  const reload = useCallback(async () => {
+  // The view every 30 seconds; the Mac keys only on the first read and after a change, since each read is a call to weft.zip.
+  const reload = useCallback(async (withMacs = false) => {
     try {
       const next = await readJson<ConnectorsView>(await apiFetch("/api/devices/connectors"));
       if (live.current) setView(next);
+      // This Mac's key and the others, from main (which registers this one the first time).
+      if (withMacs && next.signedIn && bridge?.signers) {
+        const keys = await bridge.signers().catch(() => null);
+        if (live.current && keys) setMacs(keys);
+      }
     } catch (err) {
       if (live.current) setError((err as Error).message);
     }
-  }, []);
+  }, [bridge]);
 
   useEffect(() => {
     live.current = true;
-    const first = setTimeout(() => void reload(), 0);
+    const first = setTimeout(() => void reload(true), 0);
     const timer = setInterval(() => void reload(), RELOAD_MS);
     return () => {
       live.current = false;
@@ -59,7 +83,7 @@ export function useWorkerConnectors(bridge: ConnectorsBridge | undefined = conne
       try {
         const said = await fn();
         if (live.current) setNote(said);
-        await reload();
+        await reload(true);
       } catch (err) {
         if (live.current) setError((err as Error).message);
       }
@@ -73,6 +97,7 @@ export function useWorkerConnectors(bridge: ConnectorsBridge | undefined = conne
     view,
     error,
     note,
+    macs,
     canChange: Boolean(bridge),
     reload,
     connect: () => {
@@ -82,7 +107,19 @@ export function useWorkerConnectors(bridge: ConnectorsBridge | undefined = conne
     set: (workerId: string, workerName: string, settings: GrantSettings) =>
       act(async () => {
         if (!bridge) throw new Error("Turn connectors on from Weft's own window.");
-        return denied(await bridge.set(workerId, workerName, "github", settings), "that");
+        const r = await bridge.set(workerId, workerName, "github", settings);
+        return denied(r, "that") ?? (r.waitingUntil ? `${workerName}: saved.${waitingNote(r.waitingUntil)}` : null);
+      }),
+    trust: (mac: MacKey) =>
+      act(async () => {
+        if (!bridge?.trust) throw new Error("Vouch for a Mac from Weft's own window.");
+        return denied(await bridge.trust(mac.key, mac.name), "vouching for a Mac") ?? `${mac.name} can approve connectors now.`;
+      }),
+    forgetMac: (mac: MacKey) =>
+      act(async () => {
+        if (!bridge?.forgetSigner) throw new Error("Remove a Mac key from Weft's own window.");
+        await bridge.forgetSigner(mac.id);
+        return `${mac.name} can't approve connectors anymore; the grants it made are off.`;
       }),
     allow: (workerName: string, grantId: string, p: PendingAllow) =>
       act(async () => {

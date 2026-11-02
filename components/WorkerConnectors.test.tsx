@@ -33,6 +33,9 @@ function stub(view: Partial<ConnectorsView> | null, over: Partial<Connectors> = 
     allow: vi.fn(() => Promise.resolve()),
     off: vi.fn(() => Promise.resolve()),
     disconnect: vi.fn(() => Promise.resolve()),
+    macs: null,
+    trust: vi.fn(() => Promise.resolve()),
+    forgetMac: vi.fn(() => Promise.resolve()),
     ...over,
   };
 }
@@ -86,7 +89,7 @@ describe("WorkerConnectors", () => {
   });
 
   it("when on: Turn off, the choices, Ask before, and when it was last used", async () => {
-    const c = stub({ workers: { w1: grant({ lastUsedAt: "2026-11-02T11:55:00Z", lastRepo: "ada/app", expiresAt: "2026-11-03T12:00:00Z" }) } }, { note: "Saved.", error: "Nope." });
+    const c = stub({ workers: { w1: grant({ settings: { ...DEFAULT_SETTINGS, scope: "installed" }, lastUsedAt: "2026-11-02T11:55:00Z", lastRepo: "ada/app", expiresAt: "2026-11-03T12:00:00Z" }) } }, { note: "Saved.", error: "Nope." });
     show(c);
     await open();
     await userEvent.click(screen.getByRole("button", { name: "Turn off" }));
@@ -104,8 +107,8 @@ describe("WorkerConnectors", () => {
     show(c);
     await open();
     const put = (patch: Partial<GrantSettings>) => expect(c.set).toHaveBeenLastCalledWith("w1", "m1mini", { ...DEFAULT_SETTINGS, ...patch });
-    await userEvent.click(screen.getByRole("button", { name: "This project's repo" }));
-    put({ scope: "project" });
+    await userEvent.click(screen.getByRole("button", { name: "All installed repos" }));
+    put({ scope: "installed" });
     await userEvent.click(screen.getByRole("button", { name: "Per card" }));
     put({ approval: "card" });
     await userEvent.click(screen.getByRole("button", { name: "8 hours" }));
@@ -141,6 +144,25 @@ describe("WorkerConnectors", () => {
     expect(screen.getByText("Waiting: card Fix the login")).toBeInTheDocument();
     await userEvent.click(screen.getAllByRole("button", { name: "Allow" })[0]!);
     expect(c.allow).toHaveBeenCalledWith("m1mini", "g1", p);
+  });
+
+  it("says when this Mac's key starts to count, and offers to trust or remove another waiting Mac", async () => {
+    const mac = (id: string, trusted: boolean) => ({ id, key: `k${id}`, name: `Mac ${id}`, addedAt: "2026-11-02T10:00:00Z", trustedFrom: "2026-11-03T10:00:00Z", trusted });
+    const waiting = stub({}, { macs: { mine: "k1", signers: [mac("1", false), mac("2", false)] } });
+    const { rerender } = show(waiting);
+    await open();
+    expect(screen.getByText(/This Mac can approve connectors from /)).toBeInTheDocument();
+    expect(screen.getByText("Mac Mac 2, added 2h ago, waiting")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Trust" })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Remove" }));
+    expect(waiting.forgetMac).toHaveBeenCalledWith(mac("2", false));
+    const trusted = stub({}, { macs: { mine: "k1", signers: [mac("1", true), mac("2", false)] } });
+    rerender(<WorkerConnectors c={trusted} workerId="w1" name="m1mini" now={NOW} />);
+    expect(screen.queryByText(/This Mac can approve connectors from /)).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Trust" }));
+    expect(trusted.trust).toHaveBeenCalledWith(mac("2", false));
+    rerender(<WorkerConnectors c={stub({}, { macs: { mine: "k9", signers: [] } })} workerId="w1" name="m1mini" now={NOW} />);
+    expect(screen.queryByText(/approve connectors/)).toBeNull();
   });
 
   it("disables every change outside Weft's own window", async () => {

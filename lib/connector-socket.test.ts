@@ -6,7 +6,7 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { setConnectorSetup, withConnectorEnv } from "./connector-env";
+import { bindCap, setConnectorSetup, withConnectorEnv } from "./connector-env";
 import { answer, repoOfRemote, startConnectorSocket, type SocketDeps } from "./connector-socket";
 
 afterEach(() => setConnectorSetup(null));
@@ -19,14 +19,22 @@ function deps(over: Partial<SocketDeps> = {}): SocketDeps {
     repoOf: () => Promise.resolve("owner/repo"),
     gh: { path: "/usr/bin/gh", searchPath: "/usr/bin:/bin" },
     log: vi.fn(),
+    peerOf: () => Promise.resolve(4242),
+    descends: (pid, cli) => Promise.resolve(pid === 4242 && cli === CLI_PID),
     ...over,
   };
 }
 
-// A capability for card c1, as a session's env would carry it.
-function capFor(card: string | null = "c1") {
+const CLI_PID = 777;
+// A stand-in for the accepted connection; the peer checks are stubbed in deps().
+const CONN = {} as net.Socket;
+
+// A capability for card c1, as a running session's env would carry it (bound to its CLI's pid unless `bound` is false).
+function capFor(card: string | null = "c1", bound = true) {
   setConnectorSetup({ socket: "/s", node: "/n", helper: "/h", binDir: "/b", boxHelpers: [] });
-  return withConnectorEnv({}, () => card ?? undefined).WEFT_CONNECTOR_CAP;
+  const env = withConnectorEnv({}, () => card ?? undefined);
+  if (bound) bindCap(env, CLI_PID);
+  return env.WEFT_CONNECTOR_CAP;
 }
 
 describe("repoOfRemote", () => {
@@ -50,32 +58,50 @@ describe("answer", () => {
     expect((await answer(deps(), JSON.stringify({ cap: capFor(null), op: "get" }))).error).toMatch(/isn't a card's session/);
   });
 
+  it("answers a capability only to a process under the CLI it was handed to", async () => {
+    const line = (cap: string | undefined) => JSON.stringify({ cap, op: "get" });
+    const other = /belongs to another session/;
+    expect((await answer(deps(), line(capFor("c1", false)), CONN)).error).toMatch(other);
+    expect((await answer(deps(), line(capFor()))).error).toMatch(other);
+    expect((await answer(deps({ peerOf: () => Promise.resolve(null) }), line(capFor()), CONN)).error).toMatch(other);
+    expect((await answer(deps({ peerOf: () => Promise.resolve(9) }), line(capFor()), CONN)).error).toMatch(other);
+    expect((await answer(deps({ peerOf: () => Promise.resolve(process.pid), descends: undefined }), line(capFor()), CONN)).error).toMatch(other);
+    expect((await answer(deps(), line(capFor()), CONN)).token).toBe("ghu_t");
+  });
+
+  it("answers nothing once the helper or gh wrapper changed on disk", async () => {
+    const d = deps({ intact: () => false });
+    expect((await answer(d, JSON.stringify({ cap: capFor(), op: "get" }), CONN)).error).toMatch(/changed since it started/);
+    expect(d.log).toHaveBeenCalledWith(expect.stringContaining("changed on disk"));
+    expect((await answer(deps({ intact: () => true }), JSON.stringify({ cap: capFor(), op: "get" }), CONN)).token).toBe("ghu_t");
+  });
+
   it("forgets the card's token on erase", async () => {
     const d = deps();
-    expect(await answer(d, JSON.stringify({ cap: capFor(), op: "erase" }))).toEqual({ ok: true });
+    expect(await answer(d, JSON.stringify({ cap: capFor(), op: "erase" }), CONN)).toEqual({ ok: true });
     expect(d.client.forget).toHaveBeenCalledWith("c1");
   });
 
   it("asks for get or erase", async () => {
-    expect(await answer(deps(), JSON.stringify({ cap: capFor(), op: "store" }))).toEqual({ error: "Ask for get or erase." });
+    expect(await answer(deps(), JSON.stringify({ cap: capFor(), op: "store" }), CONN)).toEqual({ error: "Ask for get or erase." });
   });
 
   it("needs the card's checkout and its github.com origin", async () => {
     const repoOf = vi.fn(() => Promise.resolve("o/r"));
-    expect((await answer(deps({ cwdOf: () => undefined, repoOf }), JSON.stringify({ cap: capFor(), op: "get" }))).error).toMatch(/no github.com origin/);
+    expect((await answer(deps({ cwdOf: () => undefined, repoOf }), JSON.stringify({ cap: capFor(), op: "get" }), CONN)).error).toMatch(/no github.com origin/);
     expect(repoOf).not.toHaveBeenCalled();
-    expect((await answer(deps({ repoOf: () => Promise.resolve(null) }), JSON.stringify({ cap: capFor(), op: "get" }))).error).toMatch(/no github.com origin/);
+    expect((await answer(deps({ repoOf: () => Promise.resolve(null) }), JSON.stringify({ cap: capFor(), op: "get" }), CONN)).error).toMatch(/no github.com origin/);
   });
 
   it("hands back the token with the real gh and its PATH", async () => {
     const d = deps();
-    expect(await answer(d, JSON.stringify({ cap: capFor(), op: "get" }))).toEqual({ token: "ghu_t", login: "alex", expiresAt: "2026-11-02T12:00:00.000Z", asks: ["protected_push"], gh: "/usr/bin/gh", path: "/usr/bin:/bin" });
+    expect(await answer(d, JSON.stringify({ cap: capFor(), op: "get" }), CONN)).toEqual({ token: "ghu_t", login: "alex", expiresAt: "2026-11-02T12:00:00.000Z", asks: ["protected_push"], gh: "/usr/bin/gh", path: "/usr/bin:/bin" });
     expect(d.client.get).toHaveBeenCalledWith("c1", "owner/repo");
   });
 
   it("passes the client's refusal on and logs it", async () => {
     const d = deps({ client: { get: vi.fn(async () => Promise.reject(new Error("Not allowed."))), forget: vi.fn() } });
-    expect(await answer(d, JSON.stringify({ cap: capFor("abcdefghijkl"), op: "get" }))).toEqual({ error: "Not allowed." });
+    expect(await answer(d, JSON.stringify({ cap: capFor("abcdefghijkl"), op: "get" }), CONN)).toEqual({ error: "Not allowed." });
     expect(d.log).toHaveBeenCalledWith("Weft Worker: GitHub token for card abcdefgh refused: Not allowed.");
   });
 });
@@ -151,6 +177,16 @@ describe("startConnectorSocket", () => {
     await new Promise((r) => setTimeout(r, 20));
     release();
     await new Promise((r) => setTimeout(r, 20));
+    s.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("reads the peer from the OS by default, and refuses this process asking for a session's token", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "wcs-"));
+    const socket = path.join(dir, "c.sock");
+    const s = startConnectorSocket(deps({ socket, peerOf: undefined, descends: undefined }));
+    await listening(socket);
+    expect((JSON.parse(await talk(socket, `${JSON.stringify({ cap: capFor(), op: "get" })}\n`)) as { error: string }).error).toMatch(/belongs to another session/);
     s.close();
     fs.rmSync(dir, { recursive: true, force: true });
   });

@@ -8,7 +8,8 @@
 import "server-only";
 import { reusable, ROTATE_MS } from "./connector-grant";
 import { openToken, sealToken, type ConnectorKey } from "./connector-crypto";
-import type { ConnectorDb } from "./connector-db";
+import { randomUUID } from "node:crypto";
+import type { ConnectorDb, LiveToken } from "./connector-db";
 import { deleteAppToken, refreshTokens, scopedToken, type AppConfig, type Fetch } from "./github-app";
 
 export interface TokenDeps {
@@ -18,6 +19,8 @@ export interface TokenDeps {
   fetch: Fetch;
   now: () => number;
   sleep?: (ms: number) => Promise<void>;
+  // Tells you about a new grant, worker or Mac key (lib/connector-notify.ts): an email where weft.zip can send one.
+  notify?: (userId: string, subject: string, text: string) => Promise<void>;
 }
 
 export interface Handed {
@@ -37,24 +40,25 @@ export class MintError extends Error {
   }
 }
 
-const CLAIM_MS = 30_000;
-const WAIT_STEPS = 10;
+export const CLAIM_MS = 30_000;
+export const WAIT_STEPS = 10;
+export const pause = (deps: TokenDeps) => (deps.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms))))(500);
 
 export const bound = { refresh: (user: string) => `refresh:${user}`, access: (user: string) => `access:${user}`, live: (worker: string, subject: string) => `live:${worker}:${subject}` };
 
 // The user's current access token, refreshed first when it's too old to hand out.
 export async function userToken(deps: TokenDeps, userId: string): Promise<Handed> {
-  const sleep = deps.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)));
   for (let step = 0; step <= WAIT_STEPS; step++) {
     const row = await deps.db.tokens(userId);
     if (!row) throw new MintError(403, "GitHub isn't connected. Connect it in Weft → Settings → Devices.");
+    if (row.disconnect_pending_at) throw new MintError(403, "GitHub is being disconnected. Connect it again in Weft → Settings → Devices.");
     const issued = row.access_issued_at ? Date.parse(row.access_issued_at) : 0;
     const access = openToken(row.access_sealed, bound.access(userId), deps.key);
     if (access && reusable(issued, deps.now())) return { token: access, issuedAt: issued, login: row.github_login };
     const now = deps.now();
     if (await deps.db.claimRefresh(userId, new Date(now).toISOString(), new Date(now + CLAIM_MS).toISOString())) return refreshNow(deps, userId, row.refresh_sealed, row.github_login);
     // Another mint is refreshing: its new token is what this one hands out too.
-    await sleep(500);
+    await pause(deps);
   }
   throw new MintError(503, "GitHub's token is being refreshed. Try again in a moment.");
 }
@@ -107,10 +111,22 @@ export async function narrowToken(deps: TokenDeps, o: { userId: string; workerId
   } catch (err) {
     throw new MintError(502, (err as Error).message);
   }
+  // The one it replaces ends first: deleted at GitHub, or kept as retired for the sweep to delete when GitHub didn't
+  // confirm, so overwriting its row never loses track of a token that may still work.
+  if (live && kept) await retire(deps, { userId: o.userId, workerId: o.workerId, live, token: kept });
   const issuedAt = deps.now();
   await deps.db.saveLiveToken({ user_id: o.userId, worker_id: o.workerId, subject: o.subject, repo: o.repo, token_sealed: sealToken(narrowed.token, seal, deps.key), issued_at: new Date(issuedAt).toISOString(), expires_at: narrowed.expiresAt });
-  if (kept) await deleteAppToken(deps.cfg, kept, "token", deps.fetch);
   return { token: narrowed.token, issuedAt, login: parent.login };
+}
+
+export const RETIRED = "retired:";
+
+// A narrowed token taken out of use: deleted at GitHub (confirmed by its 204), or else moved to a retired row.
+export async function retire(deps: TokenDeps, o: { userId: string; workerId: string; live: LiveToken; token: string }): Promise<boolean> {
+  if (await deleteAppToken(deps.cfg, o.token, "token", deps.fetch)) return true;
+  const subject = `${RETIRED}${randomUUID()}`;
+  await deps.db.saveLiveToken({ user_id: o.userId, worker_id: o.workerId, subject, repo: o.live.repo, token_sealed: sealToken(o.token, bound.live(o.workerId, subject), deps.key), issued_at: o.live.issued_at, expires_at: o.live.expires_at });
+  return false;
 }
 
 export const handedExpiry = (issuedAt: number) => new Date(issuedAt + ROTATE_MS).toISOString();

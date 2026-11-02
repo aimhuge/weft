@@ -15,6 +15,11 @@ describe("connectorDeps", () => {
     expect(typeof d?.db.tokens).toBe("function");
   });
 
+  it("adds the mailer for notices when RESEND_API_KEY is set", () => {
+    expect(connectorDeps(ENV)?.notify).toBeUndefined();
+    expect(typeof connectorDeps({ ...ENV, RESEND_API_KEY: "re_x" })?.notify).toBe("function");
+  });
+
   it("is null when any piece is missing", () => {
     for (const name of Object.keys(ENV)) expect(connectorDeps({ ...ENV, [name]: undefined })).toBeNull();
   });

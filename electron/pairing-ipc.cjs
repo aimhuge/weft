@@ -94,9 +94,14 @@ function setupPairing({ ipcMain, dataDir, accountClient, isBoard, confirm, safeS
     sodium ??= await ready();
     return signer.sign(message);
   };
-  require("./host-pairing-ipc.cjs").registerHostPairing(handle, { db, userId, macDevice, myDevice, confirm, macSignKey, macSign }, workerPins);
-  // A worker's connectors (Settings → Devices → Connectors): turning one on or loosening it takes Touch ID; main's session writes.
-  require("./connector-grants.cjs").registerConnectorGrants(handle, { db, userId, confirm });
+  // A worker's connectors (Settings → Devices → Connectors): every change takes Touch ID, then this Mac's approval key
+  // signs it for weft.zip (electron/connector-grants.cjs), which writes it only with a good signature.
+  const grants = require("./connector-grants.cjs");
+  const call = grants.weftZip({ db, site: process.env.WEFT_CONNECTOR_URL || "https://weft.zip" });
+  const connectorSigner = grants.registerConnectorGrants(handle, { db, userId, confirm, sign: macSign, signKey: macSignKey, pins: workerPins, call, device: () => { try { return macDevice(); } catch { return ""; } } });
+  // Pairing vouches for the new worker on weft.zip under the same Touch ID, from the keys it just pinned.
+  const vouchWorker = (id) => connectorSigner.vouch(id);
+  require("./host-pairing-ipc.cjs").registerHostPairing(handle, { db, userId, macDevice, myDevice, confirm, macSignKey, macSign, vouchWorker }, workerPins);
 
   const routes = {
     // The key the uploader seals with (lib/sync-seal-upload.ts); { none: true } when this Mac has no grant yet.

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { HOLD_MARGIN_MS, ROTATE_MS } from "./connector-grant";
 import { openToken, sealToken } from "./connector-crypto";
 import { CFG, deps, fakeDb, fakeGithub, iso, json, KEY, noContent, NOW, pair, storeTokens, type FakeState } from "./connector.harness";
-import { bound, handedExpiry, MintError, narrowToken, refreshNow, userToken } from "./connector-tokens";
+import { bound, handedExpiry, MintError, narrowToken, refreshNow, RETIRED, userToken } from "./connector-tokens";
 
 const REFRESH = "POST /login/oauth/access_token";
 const SCOPED = `POST /applications/${CFG.clientId}/token/scoped`;
@@ -23,6 +23,13 @@ describe("userToken", () => {
   it("refuses a user who never connected GitHub", async () => {
     const { db } = fakeDb();
     expect(await refusal(userToken(deps(db, fakeGithub({}).fetch), "u1"))).toMatchObject({ status: 403, message: expect.stringContaining("isn't connected") as string });
+  });
+
+  it("refuses while a disconnect waits on GitHub", async () => {
+    const { db, state } = fakeDb();
+    storeTokens(state, "u1");
+    state.tokens.get("u1")!.disconnect_pending_at = iso(NOW);
+    expect(await refusal(userToken(deps(db, fakeGithub({}).fetch), "u1"))).toMatchObject({ status: 403, message: expect.stringContaining("being disconnected") as string });
   });
 
   it("hands out the current token while it's young enough, without asking GitHub", async () => {
@@ -144,6 +151,25 @@ describe("narrowToken", () => {
     const { db, gh } = setup({ issuedAt: STALE });
     expect((await narrowToken(deps(db, gh.fetch), o)).token).toBe("ghu_narrow");
     expect(gh.called("DELETE", "/token")[0]!.body).toEqual({ access_token: "ghu_kept" });
+  });
+
+  it("deletes the old token before its row is overwritten", async () => {
+    const { db, state, gh } = setup({ issuedAt: STALE });
+    const seen: number[] = [];
+    const watched = { ...db, saveLiveToken: (row: Parameters<typeof db.saveLiveToken>[0]) => (seen.push(gh.called("DELETE", "/token").length), db.saveLiveToken(row)) };
+    await narrowToken(deps(watched, gh.fetch), o);
+    expect(seen).toEqual([1]);
+    expect(state.live.map((l) => l.subject)).toEqual([o.subject]);
+  });
+
+  it("keeps a replaced token GitHub didn't confirm deleted as retired, for the sweep", async () => {
+    const { db, state } = setup({ issuedAt: STALE });
+    const gh = fakeGithub({ [SCOPED]: () => json({ token: "ghu_narrow", expires_at: null }), [DELETE]: () => json({}, 404) });
+    expect((await narrowToken(deps(db, gh.fetch), o)).token).toBe("ghu_narrow");
+    const retired = state.live.find((l) => l.subject.startsWith(RETIRED))!;
+    expect(retired).toMatchObject({ repo: "o/r", issued_at: iso(STALE) });
+    expect(openToken(retired.token_sealed, bound.live("w1", retired.subject), KEY)).toBe("ghu_kept");
+    expect(state.live.find((l) => l.subject === o.subject)).toBeTruthy();
   });
 
   it("replaces a live token made before its parent was refreshed", async () => {

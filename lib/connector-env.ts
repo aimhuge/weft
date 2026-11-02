@@ -1,6 +1,10 @@
 // How a worker card's git and gh find the daemon's connector socket (docs/architecture/connectors.md#connectors-on-a-worker-github-p1-as-built).
-// Each CLI session gets a random capability in its env when it starts (a warm spare too, before it has a card): the
+// Each CLI process gets a random capability in its env when it starts (a warm spare too, before it has a card): the
 // socket maps it back to the session's card at the moment of asking, so a spare that becomes a card asks as that card.
+// The capability is bound to the CLI's pid once it's spawned (lib/cli-process.ts) and dropped when that process exits,
+// and the socket answers it only for a peer process descended from that pid (lib/connector-peer.ts): a capability read
+// out of another process's environment (`ps eww`, /proc/<pid>/environ) is worth nothing outside its own session.
+// Codex starts a CLI per turn, so its capabilities are per turn; Claude Code's last as long as its process.
 // Git gets Weft's credential helper first for https://github.com (the box's own helpers after it, so a pasted
 // `github_login` token still works when GitHub isn't turned on), and gh is the wrapper in scripts/worker-bin. No token is
 // ever in this env: only the socket's path and the capability.
@@ -18,7 +22,12 @@ export interface ConnectorSetup {
   boxHelpers: string[];
 }
 
-const caps = new Map<string, () => string | undefined>();
+interface Cap {
+  card: () => string | undefined;
+  pid?: number;
+}
+
+const caps = new Map<string, Cap>();
 export const MAX_CAPS = 2_000;
 let setup: ConnectorSetup | null = null;
 
@@ -28,7 +37,23 @@ export function setConnectorSetup(next: ConnectorSetup | null) {
 }
 
 // The card a capability belongs to now, or undefined (unknown, or a spare with no card yet).
-export const cardForCap = (cap: unknown) => (typeof cap === "string" ? caps.get(cap)?.() : undefined);
+export const cardForCap = (cap: unknown) => (typeof cap === "string" ? caps.get(cap)?.card() : undefined);
+
+// The CLI process a capability was handed to, once it's running; undefined before (or for an unknown one).
+export const pidForCap = (cap: unknown) => (typeof cap === "string" ? caps.get(cap)?.pid : undefined);
+
+// The CLI was spawned with this env: its capability now answers only that process tree, until dropCap.
+export function bindCap(env: Record<string, string | undefined> | undefined, pid: number | undefined) {
+  const cap = env?.WEFT_CONNECTOR_CAP;
+  const held = cap ? caps.get(cap) : undefined;
+  if (held && pid && held.pid === undefined) held.pid = pid;
+}
+
+// The CLI exited: its capability is gone.
+export function dropCap(env: Record<string, string | undefined> | undefined) {
+  const cap = env?.WEFT_CONNECTOR_CAP;
+  if (cap) caps.delete(cap);
+}
 
 const KEY = "credential.https://github.com.helper";
 const quote = (s: string) => `"${s.replace(/(["\\$`])/g, "\\$1")}"`;
@@ -40,7 +65,7 @@ export const helperCommand = (s: Pick<ConnectorSetup, "node" | "helper">) => `!/
 export function withConnectorEnv(env: Record<string, string | undefined>, cardId: () => string | undefined): Record<string, string | undefined> {
   if (!setup) return env;
   const cap = randomBytes(24).toString("hex");
-  caps.set(cap, cardId);
+  caps.set(cap, { card: cardId });
   // Sessions come and go for days: the oldest capability goes first, long after its session ended.
   if (caps.size > MAX_CAPS) caps.delete(caps.keys().next().value as string);
   const base = Number(env.GIT_CONFIG_COUNT) || 0;

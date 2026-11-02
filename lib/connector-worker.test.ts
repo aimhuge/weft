@@ -6,8 +6,8 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { setConnectorSetup, withConnectorEnv } from "./connector-env";
-import { startWorkerConnectors, type WorkerConnectorDeps } from "./connector-worker";
+import { bindCap, setConnectorSetup, withConnectorEnv } from "./connector-env";
+import { integrity, startWorkerConnectors, type WorkerConnectorDeps } from "./connector-worker";
 
 const homes: string[] = [];
 afterEach(() => {
@@ -20,6 +20,28 @@ function base(over: Partial<WorkerConnectorDeps> = {}): WorkerConnectorDeps {
   homes.push(home);
   return { home, workerId: "w1", key: "wwk_k", sign: (m) => `s${m.length}`, weftDir: "/weft", cwdOf: () => undefined, log: vi.fn(), site: "https://weft.test", ...over };
 }
+
+// A Weft clone with the helper and the gh wrapper in it.
+function clone() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "wcw-weft-"));
+  homes.push(dir);
+  fs.mkdirSync(path.join(dir, "scripts", "worker-bin"), { recursive: true });
+  fs.writeFileSync(path.join(dir, "scripts", "weft-connector-helper.cjs"), "// helper\n");
+  fs.writeFileSync(path.join(dir, "scripts", "worker-bin", "gh"), "#!/bin/sh\n");
+  return dir;
+}
+
+describe("integrity", () => {
+  it("holds while the files are the ones hashed at start, and fails for a changed or missing one", () => {
+    const dir = clone();
+    const helper = path.join(dir, "scripts", "weft-connector-helper.cjs");
+    const intact = integrity([helper, path.join(dir, "scripts", "worker-bin", "gh")]);
+    expect(intact()).toBe(true);
+    fs.writeFileSync(helper, "// steal tokens\n");
+    expect(intact()).toBe(false);
+    expect(integrity([path.join(dir, "missing")])()).toBe(false);
+  });
+});
 
 describe("startWorkerConnectors", () => {
   it("starts nothing on a box enrolled by token", () => {
@@ -70,11 +92,13 @@ describe("startWorkerConnectors", () => {
     execFileSync("/usr/bin/git", ["-C", repo, "remote", "add", "origin", "https://github.com/o/r"]);
     let started: ReturnType<typeof startWorkerConnectors> = null;
     try {
-      started = startWorkerConnectors({ ...d, cwdOf: () => repo });
+      started = startWorkerConnectors({ ...d, weftDir: clone(), cwdOf: () => repo, peer: { peerOf: () => Promise.resolve(process.pid), descends: (pid, cli) => Promise.resolve(pid === cli) } });
     } finally {
       process.env.PATH = PATH;
     }
-    const cap = withConnectorEnv({}, () => "card").WEFT_CONNECTOR_CAP;
+    const env = withConnectorEnv({}, () => "card");
+    bindCap(env, process.pid);
+    const cap = env.WEFT_CONNECTOR_CAP;
     const socket = path.join(d.home, "connector.sock");
     await vi.waitFor(() => expect(fs.existsSync(socket)).toBe(true));
     const reply = await new Promise<string>((resolve) => {

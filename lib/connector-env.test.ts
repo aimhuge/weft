@@ -2,7 +2,7 @@
 // git's helper list, and nothing at all on a box with no connector.
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { MAX_CAPS, cardForCap, helperCommand, setConnectorSetup, withConnectorEnv, type ConnectorSetup } from "./connector-env";
+import { MAX_CAPS, bindCap, cardForCap, dropCap, helperCommand, pidForCap, setConnectorSetup, withConnectorEnv, type ConnectorSetup } from "./connector-env";
 
 const KEY = "credential.https://github.com.helper";
 const SETUP: ConnectorSetup = { socket: "/h/connector.sock", node: "/usr/bin/node", helper: "/w/scripts/weft-connector-helper.cjs", binDir: "/w/scripts/worker-bin", boxHelpers: ["!gh auth git-credential", "store"] };
@@ -65,6 +65,34 @@ describe("cardForCap", () => {
     const last = withConnectorEnv({}, () => "last").WEFT_CONNECTOR_CAP;
     expect(cardForCap(first)).toBeUndefined();
     expect(cardForCap(last)).toBe("last");
+  });
+});
+
+describe("bindCap and dropCap", () => {
+  it("binds a capability to its CLI's pid once, and drops it when the CLI ends", () => {
+    setConnectorSetup(SETUP);
+    const env = withConnectorEnv({}, () => "c1");
+    expect(pidForCap(env.WEFT_CONNECTOR_CAP)).toBeUndefined();
+    bindCap(env, 100);
+    bindCap(env, 200);
+    expect(pidForCap(env.WEFT_CONNECTOR_CAP)).toBe(100);
+    dropCap(env);
+    expect(cardForCap(env.WEFT_CONNECTOR_CAP)).toBeUndefined();
+    expect(pidForCap(env.WEFT_CONNECTOR_CAP)).toBeUndefined();
+    expect(pidForCap(5)).toBeUndefined();
+  });
+
+  it("does nothing for an env with no capability, an unknown one or no pid", () => {
+    setConnectorSetup(SETUP);
+    const env = withConnectorEnv({}, () => "c1");
+    bindCap(undefined, 1);
+    bindCap({}, 1);
+    bindCap({ WEFT_CONNECTOR_CAP: "nope" }, 1);
+    bindCap(env, undefined);
+    expect(pidForCap(env.WEFT_CONNECTOR_CAP)).toBeUndefined();
+    dropCap(undefined);
+    dropCap({});
+    expect(cardForCap(env.WEFT_CONNECTOR_CAP)).toBe("c1");
   });
 });
 

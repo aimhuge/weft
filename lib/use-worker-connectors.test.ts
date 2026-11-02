@@ -12,7 +12,7 @@ vi.mock("./api-client", () => ({ apiFetch }));
 const openInPane = vi.hoisted(() => vi.fn());
 vi.mock("./open-in-pane", () => ({ openInPane }));
 
-const { connectorsBridge, useWorkerConnectors } = await import("./use-worker-connectors");
+const { connectorsBridge, useWorkerConnectors, waitingNote } = await import("./use-worker-connectors");
 
 const VIEW: ConnectorsView = { signedIn: true, github: { connected: true, login: "ada" }, connectUrl: "https://weft.zip/api/connectors/github/start", workers: {} };
 const json = (body: unknown, status = 200) => Promise.resolve(new Response(JSON.stringify(body), { status }));
@@ -155,6 +155,53 @@ describe("changes", () => {
     apiFetch.mockImplementationOnce(() => json({ grants: 1, authorization: "unconfirmed" }));
     await act(() => result.current.disconnect());
     expect(result.current.note).toMatch(/GitHub didn't confirm, so remove Weft at github.com\/settings\/apps\/authorizations/);
+  });
+
+  it("says when a change made with a key still waiting starts to work", async () => {
+    const { result } = await loaded();
+    bridge.set.mockResolvedValueOnce({ ok: true, waitingUntil: "2026-11-03T10:00:00Z" });
+    await act(() => result.current.set("w1", "m1mini", DEFAULT_SETTINGS));
+    expect(result.current.note).toBe(`m1mini: saved.${waitingNote("2026-11-03T10:00:00Z")}`);
+    expect(waitingNote(null)).toBe("");
+    expect(waitingNote("2026-11-03T10:00:00Z")).toMatch(/^ It works from .+, when this Mac's key is trusted/);
+  });
+
+  it("reads the Mac keys from main once signed in, and trusts or removes one", async () => {
+    const mac = { id: "s2", key: "k2", name: "Studio", addedAt: "t", trustedFrom: "t", trusted: false };
+    const keys = { mine: "k1", signers: [mac] };
+    const full = { ...bridge, signers: vi.fn(() => Promise.resolve(keys)), trust: vi.fn(() => Promise.resolve({ ok: true })), forgetSigner: vi.fn(() => Promise.resolve({})) };
+    const { result } = renderHook(() => useWorkerConnectors(full));
+    await waitFor(() => expect(result.current.macs).toEqual(keys));
+    await act(() => result.current.trust(mac));
+    expect(full.trust).toHaveBeenCalledWith("k2", "Studio");
+    expect(result.current.note).toBe("Studio can approve connectors now.");
+    full.trust.mockResolvedValueOnce({ denied: true } as never);
+    await act(() => result.current.trust(mac));
+    expect(result.current.note).toBe("Not changed: vouching for a Mac needs Touch ID.");
+    await act(() => result.current.forgetMac(mac));
+    expect(full.forgetSigner).toHaveBeenCalledWith("s2");
+    expect(result.current.note).toMatch(/^Studio can't approve connectors anymore/);
+  });
+
+  it("keeps the Mac keys it had when main can't list them, and asks nothing signed out", async () => {
+    const failing = { ...bridge, signers: vi.fn(() => Promise.reject(new Error("offline"))) };
+    const { result } = renderHook(() => useWorkerConnectors(failing));
+    await waitFor(() => expect(result.current.view).toEqual(VIEW));
+    expect(result.current.macs).toBeNull();
+    apiFetch.mockImplementation(() => json({ ...VIEW, signedIn: false }));
+    const out = { ...bridge, signers: vi.fn(() => Promise.resolve({ mine: "k", signers: [] })) };
+    const signedOut = renderHook(() => useWorkerConnectors(out));
+    await waitFor(() => expect(signedOut.result.current.view?.signedIn).toBe(false));
+    expect(out.signers).not.toHaveBeenCalled();
+  });
+
+  it("refuses vouching for or removing a Mac outside Weft's own window", async () => {
+    const mac = { id: "s2", key: "k2", name: "Studio", addedAt: "t", trustedFrom: "t", trusted: false };
+    const { result } = await loaded({});
+    await act(() => result.current.trust(mac));
+    expect(result.current.error).toBe("Vouch for a Mac from Weft's own window.");
+    await act(() => result.current.forgetMac(mac));
+    expect(result.current.error).toBe("Remove a Mac key from Weft's own window.");
   });
 
   it("keeps no note or error from a change that lands after it closed", async () => {
