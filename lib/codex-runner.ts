@@ -15,6 +15,7 @@ import { openGuards } from "./guards/turn";
 import { BRIDGE_TOKEN_ENV, codexMcpArgs, openBridge } from "./mcp-bridge";
 import { weftMcpServers } from "./weft-mcp";
 import { CODEX_DEFAULT_MODEL } from "./new-thread";
+import { withConnectorEnv } from "./connector-env";
 import { cliEnv } from "./env";
 import { handle } from "./runner-turn";
 import { getCard, getThread, replaceThreadItem, updateCard } from "./store";
@@ -234,7 +235,7 @@ export async function driveCodex(session: Session, executable: string) {
     // Weft's guards, through Codex's own hooks (lib/guards/codex.ts). Without them the turn doesn't start.
     const guards = openGuards(session, "codex");
     const attachments = writeImages(input.images);
-    const env = cliEnv();
+    const env = withConnectorEnv(cliEnv(), () => session.cardId ?? undefined) as NodeJS.ProcessEnv;
     delete env.CLAUDE_CODE_ENTRYPOINT;
     // Weft's tools for this turn, over HTTP; the server's own port says where (PORT is stripped from the CLI's env).
     const servers = () => weftMcpServers(session.spec, () => session.cardId ?? undefined);

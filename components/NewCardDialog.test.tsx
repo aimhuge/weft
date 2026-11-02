@@ -57,6 +57,15 @@ describe("NewCardDialog", () => {
     expect(screen.getByText("Restart requested")).toBeInTheDocument();
   });
 
+  it("is the user's alone on a worker project, so board_view can't type into it or press Create", () => {
+    const { box } = setup();
+    expect(box.closest("[data-human-only]")?.tagName).not.toBe("ASIDE");
+    cleanup();
+    const worker = setup({ defaultCwd: "worker://w1/ling" });
+    expect(worker.box.closest("aside")).toHaveAttribute("data-human-only");
+    expect(screen.getByRole("button", { name: /Start/ }).closest("[data-human-only]")).not.toBeNull();
+  });
+
   it("needs a prompt before it starts", async () => {
     const { onCreate } = setup();
     await userEvent.click(screen.getByRole("button", { name: "Start now" }));

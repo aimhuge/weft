@@ -278,6 +278,9 @@ A deny beats an ask, so the prompt never shows and a grant buys nothing here.
   environment, so `node -e` can name it (only a whole-environment dump is refused), and a GitHub sign-in made through `gh` sits
   in `~/.config/gh/hosts.yml` and answers `gh auth token` and `git credential fill`. The real fix for both is a process
   boundary between the daemon and its cards.
+- **GitHub through the connector** (P1, [connectors.md](connectors.md#connectors-on-a-worker-github-p1-as-built)): a paired
+  worker's cards get short user tokens minted on weft.zip through `~/.weft-worker/connector.sock`, held in the daemon's
+  memory, never on disk. The socket sits in the sealed home, but the helper reaches it by its path, which no tool call names.
 
 ### Re-pairing and a lost Mac
 

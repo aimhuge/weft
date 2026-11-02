@@ -9,6 +9,7 @@ import { onElicitation } from "./elicitation";
 import { spawnCli, withStderr } from "./cli-process";
 import { withRetryGrant } from "./classifier-denial";
 import { askAboutCall } from "./guards/ask";
+import { withConnectorEnv } from "./connector-env";
 import { guardedCli } from "./env";
 import { isNotLoggedInError, isRateLimitError } from "./login";
 import { isLostSessionError, resumeLostSession } from "./lost-session";
@@ -197,7 +198,8 @@ function queryOptions(session: Session, executable: string | undefined): Options
     forkSession: spec.sessionId ? spec.forkSession : undefined,
     resumeSessionAt: spec.sessionId ? spec.resumeAt : undefined,
     ...withRetryGrant(guarded, session),
-    env: { ...threadEnv(spec, guarded.env, subagents), ...backendEnv(spec.backend), ...trial?.env },
+    // On a worker, the connector socket and this session's capability for its git and gh (lib/connector-env.ts).
+    env: withConnectorEnv({ ...threadEnv(spec, guarded.env, subagents), ...backendEnv(spec.backend), ...trial?.env }, cardId),
     settings: withSkillSettings(trial?.settings, spec.skillsOff),
     abortController: session.abort,
     includePartialMessages: true,

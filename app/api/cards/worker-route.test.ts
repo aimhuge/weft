@@ -3,9 +3,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next/server", () => ({ connection: async () => {} }));
+const window = vi.hoisted(() => ({ own: true }));
 vi.mock("@/lib/guard", () => ({
   guard: () => null,
-  elevated: () => null,
+  elevated: () => (window.own ? null : Response.json({ error: "This change needs Weft's own window" }, { status: 403 })),
   fail: (err: Error, status = 400) => Response.json({ error: err.message }, { status }),
 }));
 const engine = vi.hoisted(() => ({
@@ -41,7 +42,7 @@ describe("POST /cards in a worker project", () => {
   it("starts the thread on the worker and makes no card here", async () => {
     const res = await cardsRoute.POST(post({ cwd: "worker://w1/ling", prompt: "go", start: true }));
     expect(await res.json()).toEqual({ card: null, start: { started: false, worker: "m1mini", cardId: "n1" } });
-    expect(workerBoard.startWorkerThread).toHaveBeenCalledWith({ cwd: "worker://w1/ling", prompt: "go", start: true });
+    expect(workerBoard.startWorkerThread).toHaveBeenCalledWith({ cwd: "worker://w1/ling", prompt: "go", start: true, signStart: true });
     expect(engine.createCardFromBody).not.toHaveBeenCalled();
     expect(engine.startCard).not.toHaveBeenCalled();
   });
@@ -49,7 +50,14 @@ describe("POST /cards in a worker project", () => {
   it("puts the card in the worker's Backlog when there's no start", async () => {
     const res = await cardsRoute.POST(post({ cwd: "worker://w1/ling", prompt: "go", tags: ["ui"], isolated: true }));
     expect(res.status).toBe(200);
-    expect(workerBoard.startWorkerThread).toHaveBeenCalledWith({ cwd: "worker://w1/ling", prompt: "go", tags: ["ui"], isolated: true, start: false });
+    expect(workerBoard.startWorkerThread).toHaveBeenCalledWith({ cwd: "worker://w1/ling", prompt: "go", tags: ["ui"], isolated: true, start: false, signStart: true });
+  });
+
+  it("never gets a thread's request a signed start for the GitHub connector", async () => {
+    window.own = false;
+    await cardsRoute.POST(post({ cwd: "worker://w1/ling", prompt: "go" }));
+    window.own = true;
+    expect(workerBoard.startWorkerThread).toHaveBeenLastCalledWith({ cwd: "worker://w1/ling", prompt: "go", start: false, signStart: false });
     expect(engine.createCardFromBody).not.toHaveBeenCalled();
   });
 

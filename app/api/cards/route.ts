@@ -50,7 +50,9 @@ export async function POST(req: Request) {
     // A worker project has no folder here: a new thread goes to the worker as card.create (started, or into its
     // Backlog) or says why it can't, and no card is made on this Mac. It comes back through the cloud rows.
     if (isWorkerProject(body.cwd as string | undefined)) {
-      const { worker, cardId } = await startWorkerThread({ ...(body as unknown as WorkerThreadInput), start: body.start === true });
+      // Only Weft's own window gets the start signed for the GitHub connector, never a thread's curl (lib/worker-folder-repo.ts).
+      const fromBoard = elevated(req) === null;
+      const { worker, cardId } = await startWorkerThread({ ...(body as unknown as WorkerThreadInput), start: body.start === true, signStart: fromBoard });
       return Response.json({ card: null, start: { started: false, worker, cardId } });
     }
     const card = createCardFromBody(body);

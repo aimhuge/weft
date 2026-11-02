@@ -94,7 +94,17 @@ function setupPairing({ ipcMain, dataDir, accountClient, isBoard, confirm, safeS
     sodium ??= await ready();
     return signer.sign(message);
   };
-  require("./host-pairing-ipc.cjs").registerHostPairing(handle, { db, userId, macDevice, myDevice, confirm, macSignKey, macSign }, workerPins);
+  // A worker's connectors (Settings → Devices → Connectors): every change takes Touch ID, then this Mac's approval key
+  // signs it for weft.zip (electron/connector-grants.cjs), which writes it only with a good signature.
+  const grants = require("./connector-grants.cjs");
+  const call = grants.weftZip({ db, site: process.env.WEFT_CONNECTOR_URL || "https://weft.zip" });
+  const knownRepos = require("./worker-projects.cjs").createKnownRepos({ dataDir });
+  const connectorSigner = grants.registerConnectorGrants(handle, { db, userId, confirm, sign: macSign, signKey: macSignKey, pins: workerPins, call, knownRepos, device: () => { try { return macDevice(); } catch { return ""; } } });
+  // Pairing vouches for the new worker on weft.zip under the same Touch ID, from the keys it just pinned.
+  const vouchWorker = (id) => connectorSigner.vouch(id);
+  require("./host-pairing-ipc.cjs").registerHostPairing(handle, { db, userId, macDevice, myDevice, confirm, macSignKey, macSign, vouchWorker }, workerPins);
+  const projectRepos = require("./worker-projects.cjs").createProjectRepos({ dataDir });
+  const signStart = require("./connector-start.cjs").createStartSigner({ userId, sign: macSign, signKey: macSignKey, projectRepos });
   // Signed widening for a remote host's card (electron/widen-sign.cjs), naming a worker by the name it was pinned under,
   // and the passkey endorsements for workers (electron/widen-endorse.cjs).
   require("./widen-sign.cjs").registerWidenSign(handle, { signer, macDevice, confirm, hostName: (id) => workerPins.nameOf(id) });
@@ -121,6 +131,8 @@ function setupPairing({ ipcMain, dataDir, accountClient, isBoard, confirm, safeS
     // a thread can't edit a file back to replay one.
     "POST /pairing/widen-nonce": (b) => ({ ok: widenNonces.take({ nonce: b?.nonce, issuedAt: b?.issuedAt }) }),
     "POST /pairing/status": () => ({ approvers: paired.approvers(), devices: pairing.list().length, ...paired.settings() }),
+    // A worker card's start, signed for the GitHub connector when this Mac knows its folder as that repo (electron/connector-start.cjs).
+    "POST /connectors/sign-start": withSodium(signStart),
   };
   return { pairing, syncKeys, paired, signer, routes };
 }

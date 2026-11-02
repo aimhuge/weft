@@ -116,9 +116,30 @@ async function workerNotes(client: SupabaseClient, ids: string[]): Promise<Map<s
 // Revokes one of your devices, whatever its kind, and says which kind it was. A worker's key stops working at once;
 // a Mac's or a phone's grants go. A phone or browser this Mac pinned is revoked through main instead
 // (components/DevicesSettings.tsx), which also unpins it and rotates the workspace key.
-export async function revokeDevice(id: string, client: SupabaseClient = accountClient()): Promise<{ kind: DeviceKind }> {
+//
+// A worker's connector grants go with it (a trigger in 20261102280000_worker_github_mint.sql), and then weft.zip ends
+// the GitHub tokens it could hold (lib/connector-remote.ts). That second step is best effort: the grant is already
+// gone, so nothing more is minted, and the note says when GitHub didn't confirm.
+export async function revokeDevice(id: string, client: SupabaseClient = accountClient(), revokeConnectors: RevokeConnectors = defaultRevokeConnectors): Promise<{ kind: DeviceKind; note?: string }> {
   if (!(await uid(client))) throw new Error("Sign in to Weft to revoke a device.");
   const { data, error } = (await client.rpc("device_revoke", { p_id: id })) as { data: unknown; error: { message: string } | null };
   if (error) throw new Error(`Couldn't revoke that device: ${error.message}`);
-  return { kind: data as DeviceKind };
+  const kind = data as DeviceKind;
+  if (kind !== "worker") return { kind };
+  // Only a worker that was ever handed a token has any to end.
+  const { data: minted } = await client.from("connector_mints").select("id").eq("worker_id", id).eq("outcome", "minted").limit(1);
+  if (!minted?.length) return { kind };
+  try {
+    return { kind, note: await revokeConnectors(id, client) };
+  } catch (err) {
+    return { kind, note: `Its GitHub tokens weren't confirmed revoked (${(err as Error).message}); they end within 8 hours.` };
+  }
 }
+
+export type RevokeConnectors = (workerId: string, client: SupabaseClient) => Promise<string>;
+
+const defaultRevokeConnectors: RevokeConnectors = async (workerId, client) => {
+  const { remoteRevoke, revokeNote } = await import("./connector-remote");
+  const session = (await client.auth.getSession()) as Parameters<typeof remoteRevoke>[1]["session"];
+  return revokeNote(await remoteRevoke(workerId, { session, fetchFn: fetch, env: process.env }));
+};

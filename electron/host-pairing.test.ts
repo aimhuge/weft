@@ -119,6 +119,19 @@ describe("adding a worker by pairing", () => {
     expect(await hosts.check(id)).toEqual({ status: "expired" });
   });
 
+  it("vouches for the new worker on weft.zip after pinning it, and pairs it even when that fails", async () => {
+    const db = fakeDb();
+    const vouch = vi.fn(() => Promise.reject(new Error("offline")));
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const hosts = createHostPairing({ db: () => db.db, userId: () => "u1", macDevice: () => "mac-id", myDevice: () => Promise.resolve({ publicKey: "mac-key" }), confirm: () => Promise.resolve(true), pinWorker, vouchWorker: vouch });
+    const { code, id } = await hosts.start(ORG);
+    claimAs(code, db.rows);
+    expect(await hosts.check(id)).toMatchObject({ status: "paired" });
+    expect(vouch).toHaveBeenCalledWith("worker-1");
+    expect(warn).toHaveBeenCalledWith("Couldn't vouch for the worker on weft.zip: offline");
+    warn.mockRestore();
+  });
+
   it("refuses a claim made without the code, and cancels it", async () => {
     const { hosts, rows, rpcs, updates, ask } = setup();
     const { code, id } = await hosts.start(ORG);

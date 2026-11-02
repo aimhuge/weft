@@ -8,6 +8,8 @@ import { timeAgo } from "@/lib/format";
 import { useDevices } from "@/lib/use-devices";
 import { useNow } from "@/lib/use-now";
 import { useState } from "react";
+import { useWorkerConnectors } from "@/lib/use-worker-connectors";
+import WorkerConnectors from "./WorkerConnectors";
 import { Spinner } from "./Icon";
 import { WorkerRepair } from "./WorkerRepair";
 import { SettingsCard, SettingsSectionHeader } from "./SettingsLayout";
@@ -63,8 +65,36 @@ function AddWorker({ devices }: { devices: ReturnType<typeof useDevices> }) {
   );
 }
 
+// A live device's buttons: a worker's connectors, re-pin, passkeys and re-pair, and Revoke for every kind.
+function DeviceActions({ d, devices, connectors, now, onRepair }: { d: DeviceView; devices: ReturnType<typeof useDevices>; connectors: ReturnType<typeof useWorkerConnectors>; now: number; onRepair: () => void }) {
+  return (
+    <div className="flex shrink-0 items-center gap-2">
+      {d.kind === "worker" && d.hasSignKey && <WorkerConnectors c={connectors} workerId={d.id} name={d.name} now={now} />}
+      {d.kind === "worker" && devices.canRepin && (
+        <button type="button" className={BUTTON} onClick={() => void devices.repin(d)} aria-label={`Re-pin ${d.name}`} title="Forget the keys this Mac pinned for this worker's secrets, after Touch ID; its next ask pins new ones">
+          Re-pin
+        </button>
+      )}
+      {d.kind === "worker" && devices.canTrustPasskeys && (
+        <button type="button" className={BUTTON} onClick={() => void devices.trustPasskeys(d)} aria-label={`Passkeys on ${d.name}`} title="Let your paired passkeys approve folder, agent, shell and terminal changes on this worker from the web, after Touch ID">
+          Passkeys
+        </button>
+      )}
+      {d.kind === "worker" && d.hasSignKey && devices.canRepair && (
+        <button type="button" className={BUTTON} onClick={onRepair} aria-label={`Re-pair ${d.name}`} title="Let this worker trust another Mac instead of this one: paste that Mac's code, Touch ID, and run the line it shows on the box">
+          Re-pair
+        </button>
+      )}
+      <button type="button" className={BUTTON} onClick={() => void devices.revoke(d)} aria-label={`Revoke ${d.name}`}>
+        Revoke
+      </button>
+    </div>
+  );
+}
+
 export default function DevicesSettings() {
   const devices = useDevices();
+  const connectors = useWorkerConnectors();
   const now = useNow();
   const [repairing, setRepairing] = useState<string | null>(null);
   const list = devices.view?.devices ?? [];
@@ -89,28 +119,7 @@ export default function DevicesSettings() {
                 </div>
                 {d.note && !d.revokedAt && <div className="text-[12.5px] text-warn">{d.note}</div>}
               </div>
-              {!d.revokedAt && (
-                <div className="flex shrink-0 gap-2">
-                  {d.kind === "worker" && devices.canRepin && (
-                    <button type="button" className={BUTTON} onClick={() => void devices.repin(d)} aria-label={`Re-pin ${d.name}`} title="Forget the keys this Mac pinned for this worker's secrets, after Touch ID; its next ask pins new ones">
-                      Re-pin
-                    </button>
-                  )}
-                  {d.kind === "worker" && devices.canTrustPasskeys && (
-                    <button type="button" className={BUTTON} onClick={() => void devices.trustPasskeys(d)} aria-label={`Passkeys on ${d.name}`} title="Let your paired passkeys approve folder, agent, shell and terminal changes on this worker from the web, after Touch ID">
-                      Passkeys
-                    </button>
-                  )}
-                  {d.kind === "worker" && d.hasSignKey && devices.canRepair && (
-                    <button type="button" className={BUTTON} onClick={() => setRepairing(repairing === d.id ? null : d.id)} aria-label={`Re-pair ${d.name}`} title="Let this worker trust another Mac instead of this one: paste that Mac's code, Touch ID, and run the line it shows on the box">
-                      Re-pair
-                    </button>
-                  )}
-                  <button type="button" className={BUTTON} onClick={() => void devices.revoke(d)} aria-label={`Revoke ${d.name}`}>
-                    Revoke
-                  </button>
-                </div>
-              )}
+              {!d.revokedAt && <DeviceActions d={d} devices={devices} connectors={connectors} now={now} onRepair={() => setRepairing(repairing === d.id ? null : d.id)} />}
               {repairing === d.id && <WorkerRepair device={d} onClose={() => setRepairing(null)} />}
             </li>
           ))}

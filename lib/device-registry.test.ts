@@ -3,6 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("./account", () => ({ accountClient: () => ({ marker: "default" }) }));
 vi.mock("./device-id", () => ({ deviceId: () => "here-id" }));
+const remote = vi.hoisted(() => ({ remoteRevoke: vi.fn(), revokeNote: vi.fn(() => "GitHub off") }));
+vi.mock("./connector-remote", () => remote);
 
 const { deviceView, listDevices, revokeDevice, sortDevices } = await import("./device-registry");
 
@@ -24,16 +26,22 @@ const row = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
-function fakeClient(opts: { user?: string | null; data?: unknown; error?: { message: string } | null; notes?: unknown; rpc?: { data: unknown; error: { message: string } | null } } = {}) {
+function fakeClient(opts: { user?: string | null; data?: unknown; error?: { message: string } | null; notes?: unknown; rpc?: { data: unknown; error: { message: string } | null }; minted?: unknown } = {}) {
   const calls: unknown[][] = [];
   const query = {
     select: (...a: unknown[]) => (calls.push(["select", ...a]), query),
     eq: (...a: unknown[]) => (calls.push(["eq", ...a]), Promise.resolve({ data: "data" in opts ? opts.data : [], error: opts.error ?? null })),
     in: (...a: unknown[]) => (calls.push(["in", ...a]), Promise.resolve({ data: opts.notes ?? null, error: opts.notes ? null : { message: "denied" } })),
   };
+  // connector_mints: select("id").eq(worker).eq(outcome).limit(1), the worker's minted ledger rows.
+  const mints = {
+    select: (...a: unknown[]) => (calls.push(["mints.select", ...a]), mints),
+    eq: (...a: unknown[]) => (calls.push(["mints.eq", ...a]), mints),
+    limit: (n: number) => (calls.push(["mints.limit", n]), Promise.resolve({ data: "minted" in opts ? opts.minted : [], error: null })),
+  };
   const client = {
     auth: { getSession: () => Promise.resolve({ data: { session: opts.user === null ? null : { user: { id: opts.user ?? "u1" } } } }) },
-    from: (t: string) => (calls.push(["from", t]), query),
+    from: (t: string) => (calls.push(["from", t]), t === "connector_mints" ? mints : query),
     rpc: (fn: string, args: unknown) => (calls.push(["rpc", fn, args]), Promise.resolve(opts.rpc ?? { data: "worker", error: null })),
   };
   return { client: client as unknown as SupabaseClient, calls };
@@ -148,5 +156,46 @@ describe("revokeDevice", () => {
 
   it("defaults to the account client", async () => {
     await expect(revokeDevice("x")).rejects.toThrow();
+  });
+
+  it("asks GitHub about nothing for a worker that was never handed a token", async () => {
+    const revokeConnectors = vi.fn();
+    const { client, calls } = fakeClient({ minted: null });
+    expect(await revokeDevice("w1", client, revokeConnectors)).toEqual({ kind: "worker" });
+    expect(calls).toContainEqual(["mints.eq", "worker_id", "w1"]);
+    expect(calls).toContainEqual(["mints.eq", "outcome", "minted"]);
+    expect(revokeConnectors).not.toHaveBeenCalled();
+  });
+
+  it("leaves the connector ledger alone for a Mac or a phone", async () => {
+    const revokeConnectors = vi.fn();
+    const { client, calls } = fakeClient({ rpc: { data: "phone", error: null }, minted: [{ id: "m1" }] });
+    expect(await revokeDevice("p1", client, revokeConnectors)).toEqual({ kind: "phone" });
+    expect(calls.some((c) => c[0] === "mints.select")).toBe(false);
+    expect(revokeConnectors).not.toHaveBeenCalled();
+  });
+
+  it("ends a worker's GitHub tokens and passes on what GitHub confirmed", async () => {
+    const revokeConnectors = vi.fn(() => Promise.resolve("GitHub off · 2 tokens revoked ✓"));
+    const { client } = fakeClient({ minted: [{ id: "m1" }] });
+    expect(await revokeDevice("w1", client, revokeConnectors)).toEqual({ kind: "worker", note: "GitHub off · 2 tokens revoked ✓" });
+    expect(revokeConnectors).toHaveBeenCalledWith("w1", client);
+  });
+
+  it("by default has weft.zip revoke them with your session, and words the answer", async () => {
+    remote.remoteRevoke.mockResolvedValue({ grants: 1, tokensRevoked: 0, unconfirmed: [], userToken: "revoked" });
+    const { client } = fakeClient({ minted: [{ id: "m1" }] });
+    expect(await revokeDevice("w1", client)).toEqual({ kind: "worker", note: "GitHub off" });
+    expect(remote.remoteRevoke).toHaveBeenCalledWith("w1", expect.objectContaining({ session: { data: { session: { user: { id: "u1" } } } }, fetchFn: fetch }));
+    expect(remote.revokeNote).toHaveBeenCalledWith({ grants: 1, tokensRevoked: 0, unconfirmed: [], userToken: "revoked" });
+  });
+
+  it("still revokes when weft.zip can't end the tokens, and says they weren't confirmed", async () => {
+    const revokeConnectors = vi.fn(() => Promise.reject(new Error("Couldn't reach weft.zip.")));
+    const { client } = fakeClient({ minted: [{ id: "m1" }] });
+    expect(await revokeDevice("w1", client, revokeConnectors)).toEqual({
+      kind: "worker",
+      note: "Its GitHub tokens weren't confirmed revoked (Couldn't reach weft.zip.); they end within 8 hours.",
+    });
   });
 });
