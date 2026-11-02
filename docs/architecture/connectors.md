@@ -154,7 +154,8 @@ pair a box of its own (the `worker_pair_*` functions are plain RPCs), insert a s
   change's Touch ID (turning a connector on, an Allow, vouching, pairing a worker), never because Settings opened.
 - **Chosen: an emailed one-time link, or a vouch from a trusted Mac.** A session can register a key of its own, so a new
   key is **untrusted until someone opens the link mailed to the account's own address**: a one-time confirm link (good for
-  24 hours, sent again on a later registration after 10 minutes, at most 4 emails in all) and a revoke link, which
+  24 hours, sent again on a later registration after 10 minutes, at most 4 emails per key and 5 confirm emails per
+  account a day, past which a new key is refused for the day) and a revoke link, which
   weft.zip keeps only as sha256; every revoke link ever mailed for the key keeps working (`lib/connector-signer-links.ts`).
   The id and token ride in the link's **fragment**, which browsers never send, so they stay out of server and Vercel
   logs; the page's one hash-allowed script copies them into its form. There's no path by time alone, and with no mailer (`RESEND_API_KEY` unset) a key
@@ -188,11 +189,15 @@ pair a box of its own (the `worker_pair_*` functions are plain RPCs), insert a s
   row was made within 5 minutes of signing (a replayed row is late), and pins the card to that signature
   (`connector_cards.start_sig`, unique: one signature pins one card). Every later mint re-checks the start's signer is
   still trusted; a card seen Done or deleted has its pin **closed** for good, and the worker never makes a card under an
-  id it has had before (`lib/host-api/card-ids.ts`, a list kept in its data folder).
+  id it has had before (`lib/host-api/card-ids.ts`, a list kept in its data folder). On a worker project the New thread
+  dialog is marked `data-human-only`, so the copilot's `board_view` tools can't type its prompt or press Create.
 - **The grant names its repos.** When you turn GitHub on (or change it), main reads the GitHub repos this Mac has
-  checkouts of (`createKnownRepos`), names them in the Touch ID prompt, and signs them into the grant. The mint refuses a
+  checkouts of (`createKnownRepos`), names **every one** in the Touch ID prompt, marking any whose checkout's git config
+  changed in the last day "(origin changed today)", and signs them into the grant. A grant covers at most 20 repos:
+  with more checkouts main refuses to sign and says so, rather than ask a yes nobody could read. The mint refuses a
   card in any repo the grant doesn't list, so rewriting a checkout's origin later (a thread could) can't widen it; covering
-  a new repo means turning GitHub on again from the Mac with that checkout (more repos counts as looser).
+  a new repo means turning GitHub on again from the Mac with that checkout (more repos counts as looser). An origin a
+  thread rewrote just before the grant is the case the "changed today" flag is there for.
 - **Workers are vouched for the same way.** Pairing (`electron/host-pairing.cjs`) pins the box key and sign key it just
   checked under Touch ID, then signs them for weft.zip (`vouchWorker`); turning a connector on vouches again from that
   local pin, never from the row. A worker this Mac didn't pair (or paired before this change, with no sign key pinned)
@@ -384,8 +389,8 @@ box (a session can register a key; only the inbox or a trusted Mac can make it c
   Deleting a repo needs no ask: the app has no Administration permission, so no token Weft hands out can do it.
 - **Only the desktop board's new threads get GitHub tokens**, in repos the grant names: a card started on weft.zip (which
   can't read the project's origin), by a thread through the board's route, a `run` from Settings → Workers or a card
-  another worker sent carries no start a Mac signed. A local thread can't get a start signed, but anything that can
-  click in Weft's own window can.
+  another worker sent carries no start a Mac signed. A local thread can't get a start signed, not even through the
+  board_view tools (the dialog is human-only on a worker project); only someone at Weft's own window can.
 - **One chain per user**: turning GitHub off for one worker rotates the shared user token when that worker held it, so
   another worker's next git call fetches a fresh one (its held copy is refused once, then `erase` and a new ask).
 - **Not verified live**: PostgREST's handling of the `->>` filter inside `or=` for the start lookup, lsof/ss output on every

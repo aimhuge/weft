@@ -42,7 +42,7 @@ function setup(o: { uid?: string | null; yes?: boolean; read?: { data?: unknown;
     macName: () => "Ada's Mac\n",
     device: () => "dev-1",
     now: () => 1_000,
-    knownRepos: () => Promise.resolve(o.repos ?? ["ada/app", "ada/web"]),
+    knownRepos: () => Promise.resolve((o.repos ?? ["ada/app", "ada/web"]).map((repo) => ({ repo, recent: repo.endsWith("!") })).map((k) => ({ repo: k.repo.replace("!", ""), recent: k.recent }))),
   };
   const signer = registerConnectorGrants((ch: string, fn: (...args: never[]) => unknown) => void handlers.set(ch, fn as Fn), deps as never);
   const h = (ch: string) => handlers.get(ch)!;
@@ -103,10 +103,19 @@ describe("connectors:set", () => {
     expect(s.confirm).toHaveBeenCalledWith("give cards on the worker box more GitHub access (installed repos, approval card, lifetime 8h, for ada/app, ada/web)");
     const more = setup({ read: { data: { ...STRICT, repos: ["ada/app"] } }, repos: ["ada/app", "b/1", "b/2", "b/3"] });
     await more.h("connectors:set")("w1", "box", "github", STRICT);
-    expect(more.confirm).toHaveBeenCalledWith("give cards on the worker box more GitHub access (card repos, approval card, lifetime 8h, for ada/app, b/1, b/2 and 1 more)");
+    expect(more.confirm).toHaveBeenCalledWith("give cards on the worker box more GitHub access (card repos, approval card, lifetime 8h, for ada/app, b/1, b/2, b/3)");
     const none = setup({ repos: [] });
     await none.h("connectors:set")("w1", "box", "github", STRICT);
     expect(none.confirm.mock.calls[0]![0]).toContain("for no repos (this Mac has no GitHub checkouts)");
+  });
+
+  it("names every repo it signs, flags an origin changed today, and refuses more than MAX_REPOS", async () => {
+    const s = setup({ repos: ["ada/app", "evil/x!"] });
+    await s.h("connectors:set")("w1", "box", "github", {});
+    expect(s.confirm.mock.calls[0]![0]).toContain("for ada/app, evil/x (origin changed today)");
+    const many = setup({ repos: Array.from({ length: grants.MAX_REPOS + 1 }, (_, i) => `a/r${i}`) });
+    await expect(many.h("connectors:set")("w1", "box", "github", {})).rejects.toThrow(`a grant covers at most ${grants.MAX_REPOS}`);
+    expect(many.confirm).not.toHaveBeenCalled();
   });
 
   it("refuses to vouch for a worker this Mac didn't pair, and throws on a read error", async () => {

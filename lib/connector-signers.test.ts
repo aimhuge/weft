@@ -4,6 +4,7 @@ import { deps, fakeDb, fakeGithub, iso, NOW, noContent, pairedWorker, storeToken
 import { DAY, macKey, signedGrant, trustedMac, vouch } from "./connector-trust.harness";
 import { endorseSigner, listSigners, MAX_SENDS, MAX_SIGNERS, registerSigner, revokeSigner } from "./connector-signers";
 import { keyFingerprint } from "./connector-trust";
+import { MAILS_PER_DAY } from "./connector-signer-links";
 
 function setup() {
   const clock = ticking();
@@ -92,6 +93,21 @@ describe("registerSigner", () => {
     await registerSigner(d, "u1", { key: mac.key, name: "M", issuedAt: NOW, sig: mac.sign(signerMessage({ userId: "u1", key: mac.key, name: "M", issuedAt: NOW })) }, META);
     expect(notify).toHaveBeenCalledTimes(1);
     expect(mac.signer).toMatchObject({ confirm_sends: 1, revoke_hashes: [expect.any(String)] });
+  });
+
+  it("mails an account at most MAILS_PER_DAY confirm emails a day: a new key is refused past that, a resend skipped", async () => {
+    const { d, state, notify, clock } = setup();
+    for (let i = 0; i < MAILS_PER_DAY; i++) await registerSigner(d, "u1", offer(undefined, { issuedAt: clock() }).body, META);
+    expect(notify).toHaveBeenCalledTimes(MAILS_PER_DAY);
+    await expect(registerSigner(d, "u1", offer(undefined, { issuedAt: clock() }).body, META)).rejects.toMatchObject({ status: 429 });
+    expect(state.signers).toHaveLength(MAILS_PER_DAY);
+    const k = macKey();
+    state.signers.push({ id: "pending", user_id: "u1", sign_key: k.key, name: "M", device: null, added_at: iso(NOW), trusted_from: null, endorsed_by: null, revoked_at: null });
+    await registerSigner(d, "u1", offer(k, { issuedAt: clock() }).body, META);
+    expect(notify).toHaveBeenCalledTimes(MAILS_PER_DAY);
+    clock.set(NOW + 25 * 3_600_000);
+    await registerSigner(d, "u1", offer(undefined, { issuedAt: clock() }).body, META);
+    expect(notify).toHaveBeenCalledTimes(MAILS_PER_DAY + 1);
   });
 
   it("lets a pending key's link go again later when a resend can't be mailed", async () => {

@@ -44,9 +44,18 @@ export const links = (id: string, confirm: string, revoke: string, site = connec
   revoke: `${site}/api/connectors/signers/revoke#id=${encodeURIComponent(id)}&t=${encodeURIComponent(revoke)}`,
 });
 
-// The confirm email, in fixed words. Throws when it can't be sent, so the caller can say so.
+// At most this many confirm emails per account a day, whatever keys they're for: a stolen session can't flood the inbox.
+export const MAILS_PER_DAY = 5;
+export const MAIL_REASON = "confirm email sent";
+
+// Whether the account may get another confirm email today.
+export const mayMail = async (deps: TokenDeps, userId: string, now: number) =>
+  (await deps.db.noticesSince(userId, MAIL_REASON, new Date(now - 24 * 3_600_000).toISOString())) < MAILS_PER_DAY;
+
+// The confirm email, in fixed words, counted in the ledger. Throws when it can't be sent, so the caller can say so.
 export async function mailConfirm(deps: TokenDeps, s: Pick<SignerRow, "id" | "user_id" | "sign_key">, tokens: { confirm: string; revoke: string }, meta: RequestMeta, now: number): Promise<void> {
   if (!deps.notify) throw new MintError(503, "This weft.zip can't send email (RESEND_API_KEY isn't set), so a new Mac key can't be confirmed. It stays untrusted.");
+  await deps.db.logMint({ user_id: s.user_id, worker_id: null, grant_id: null, connector: "github", card_id: null, repo: null, outcome: "notice", reason: MAIL_REASON, token_kind: null, nonce: null });
   const l = links(s.id, tokens.confirm, tokens.revoke, deps.site);
   const text = [
     "A Mac key was added to your Weft account to approve connectors (GitHub on your workers).",

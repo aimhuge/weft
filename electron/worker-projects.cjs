@@ -32,16 +32,37 @@ function createProjectRepos({ dataDir, idFor = (folder) => vaultIdFor(folder) })
   };
 }
 
+const DAY_MS = 24 * 3_600_000;
+
+// When a checkout's git config (where its origin lives) last changed, or 0 when it can't be read.
+const configTime = (folder) => {
+  try {
+    return fs.statSync(path.join(folder, ".git", "config")).mtimeMs;
+  } catch {
+    return 0;
+  }
+};
+
 /**
  * Every GitHub repo this Mac has a checkout of (its projects and worker folders), as lowercase owner/name, sorted: the
- * list a connector grant covers (electron/connector-grants.cjs), read when the grant is signed.
- * @param {{ dataDir: string, idFor?: (folder: string) => Promise<{ id: string }> }} deps
- * @returns {() => Promise<string[]>}
+ * list a connector grant covers (electron/connector-grants.cjs), read when the grant is signed. `recent` marks a repo
+ * whose checkout's git config changed in the last day, so the Touch ID prompt can flag an origin a thread may have
+ * just rewritten.
+ * @param {{ dataDir: string, idFor?: (folder: string) => Promise<{ id: string }>, changedAt?: (folder: string) => number, now?: () => number }} deps
+ * @returns {() => Promise<{ repo: string, recent: boolean }[]>}
  */
-function createKnownRepos({ dataDir, idFor = (folder) => vaultIdFor(folder) }) {
+function createKnownRepos({ dataDir, idFor = (folder) => vaultIdFor(folder), changedAt = configTime, now = Date.now }) {
   return async () => {
-    const ids = await Promise.all(folderList(dataDir).map((f) => idFor(f).then((r) => r.id, () => "")));
-    return [...new Set(ids.filter((id) => id.startsWith("github:")).map((id) => id.slice(7)))].sort();
+    const folders = folderList(dataDir);
+    const ids = await Promise.all(folders.map((f) => idFor(f).then((r) => r.id, () => "")));
+    const repos = new Map();
+    ids.forEach((id, i) => {
+      if (!id.startsWith("github:")) return;
+      const at = changedAt(folders[i]);
+      const recent = at > 0 && now() - at < DAY_MS;
+      repos.set(id.slice(7), Boolean(repos.get(id.slice(7))) || recent);
+    });
+    return [...repos.keys()].sort().map((repo) => ({ repo, recent: repos.get(repo) }));
   };
 }
 

@@ -126,6 +126,14 @@ describe("supabaseConnectorDb: writes", () => {
     expect(calls[0]).toEqual({ table: "rpc:connector_mint_admit", ops: [[{ p_row: row, p_worker_minute: 1, p_worker_hour: 2, p_user_minute: 3, p_user_hour: 4 }]] });
   });
 
+  it("counts a user's notices with one reason since a time", async () => {
+    const { db, calls } = fakeSupabase(ok(null, 3), ok(null, null), fail("x"));
+    expect(await db.noticesSince("u1", "r", "t")).toBe(3);
+    expect(await db.noticesSince("u1", "r", "t")).toBe(0);
+    await expect(db.noticesSince("u1", "r", "t")).rejects.toThrow("Counting notices: x");
+    expect(calls[0]!.ops).toEqual([["select", "id", { count: "exact", head: true }], ["eq", "user_id", "u1"], ["eq", "outcome", "notice"], ["eq", "reason", "r"], ["gte", "at", "t"]]);
+  });
+
   it("logs a ledger row and finishes one", async () => {
     const { db, calls } = fakeSupabase(ok(null), ok(null), fail("x"));
     const row = { user_id: "u1", worker_id: null, grant_id: null, connector: "github", card_id: null, repo: null, outcome: "notice" as const, reason: "r", token_kind: null, nonce: null };

@@ -115,7 +115,7 @@ function trustDb(state: FakeState, clock: () => number, nextId: () => number): P
   };
 }
 
-function mintDb(state: FakeState, clock: () => number, nextId: () => number): Pick<ConnectorDb, "admitMint" | "handedUser" | "logMint" | "finishMint"> {
+function mintDb(state: FakeState, clock: () => number, nextId: () => number): Pick<ConnectorDb, "admitMint" | "handedUser" | "logMint" | "finishMint" | "noticesSince"> {
   const counted = (m: StoredMint, since: number) => m.outcome !== "notice" && Date.parse(m.at) > since;
   return {
     admitMint: (row, l) => {
@@ -130,6 +130,7 @@ function mintDb(state: FakeState, clock: () => number, nextId: () => number): Pi
     },
     handedUser: (workerId, issuedAt) =>
       done(state.mints.some((m) => m.worker_id === workerId && m.outcome === "minted" && m.token_kind === "user" && m.token_issued_at && Date.parse(m.token_issued_at) === Date.parse(issuedAt))),
+    noticesSince: (userId, reason, since) => done(state.mints.filter((m) => m.user_id === userId && m.outcome === "notice" && m.reason === reason && m.at >= since).length),
     logMint: (row) => {
       state.mints.push({ ...row, id: nextId(), at: iso(clock()) });
       return done(undefined);

@@ -129,6 +129,8 @@ export interface ConnectorDb extends TrustDb {
   // Whether the worker was handed the user access token issued at `issuedAt`.
   handedUser(workerId: string, issuedAt: string): Promise<boolean>;
   logMint(row: MintLog): Promise<void>;
+  // How many ledger notices with this reason the user got since a time (the confirm emails, for their daily cap).
+  noticesSince(userId: string, reason: string, since: string): Promise<number>;
   finishMint(id: number, patch: Partial<MintLog>): Promise<void>;
   tokens(userId: string): Promise<TokenRow | null>;
   pendingDisconnects(): Promise<TokenRow[]>;
@@ -219,6 +221,11 @@ export function supabaseConnectorDb(db: SupabaseClient): ConnectorDb {
     async handedUser(workerId, issuedAt) {
       const q = t("connector_mints").select("id").eq("worker_id", workerId).eq("outcome", "minted").eq("token_kind", "user").eq("token_issued_at", issuedAt).limit(1);
       return (must<unknown[] | null>(await q, "Reading the ledger") ?? []).length > 0;
+    },
+    async noticesSince(userId, reason, since) {
+      const r = await t("connector_mints").select("id", { count: "exact", head: true }).eq("user_id", userId).eq("outcome", "notice").eq("reason", reason).gte("at", since);
+      must(r, "Counting notices");
+      return r.count ?? 0;
     },
     async logMint(row) {
       must(await t("connector_mints").insert(row), "Logging");

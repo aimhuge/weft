@@ -44,19 +44,22 @@ function looser(was, next) {
 const clean = (s, max) => String(s ?? "").replace(/[^\x20-\x7e]/g, "?").slice(0, max);
 const fingerprint = (key) => crypto.createHash("sha256").update(String(key)).digest("hex").slice(0, 16).replace(/(.{4})(?!$)/g, "$1 ");
 
-// The repos a grant covers, for the prompt: the first three by name, then how many more.
-function repoList(repos) {
-  if (!repos.length) return "no repos (this Mac has no GitHub checkouts)";
-  const shown = repos.slice(0, 3).map((r) => clean(r, 80)).join(", ");
-  return repos.length > 3 ? `${shown} and ${repos.length - 3} more` : shown;
+// A grant names at most this many repos, each in the Touch ID prompt: more wouldn't be read before a yes.
+const MAX_REPOS = 20;
+
+// The repos a grant covers, every one by name for the prompt, flagging one whose checkout's origin changed today.
+function repoList(known) {
+  if (!known.length) return "no repos (this Mac has no GitHub checkouts)";
+  return known.map((k) => `${clean(k.repo, 100)}${k.recent ? " (origin changed today)" : ""}`).join(", ");
 }
 
 // Whether the change covers a repo the grant didn't.
 const moreRepos = (was, repos) => repos.some((r) => !(Array.isArray(was?.repos) ? was.repos : []).includes(r));
 
 // What the Touch ID prompt says for a change: turning on, giving cards more, or making it stricter.
-function changeReason(was, next, repos, name, connector) {
-  const covers = `for ${repoList(repos)}`;
+function changeReason(was, next, known, name, connector) {
+  const repos = known.map((k) => k.repo);
+  const covers = `for ${repoList(known)}`;
   if (!was) return `let the worker ${name} use ${CONNECTOR_NAMES[connector]}, for cards you start on it, ${covers}`;
   const what = `${next.scope} repos, approval ${next.approval}, lifetime ${next.lifetime}, ${covers}`;
   if (looser(settingsOf(was), next) || moreRepos(was, repos)) return `give cards on the worker ${name} more ${SHORT_NAMES[connector]} access (${what})`;
@@ -119,7 +122,7 @@ function createConnectorSigner({ userId, sign, signKey, pins, call, macName = ()
 
 /**
  * @param {(channel: string, fn: (...args: any[]) => unknown) => void} handle the board-only IPC handler
- * @param {Parameters<typeof createConnectorSigner>[0] & { confirm: (reason: string) => Promise<boolean>, knownRepos?: () => Promise<string[]> }} deps
+ * @param {Parameters<typeof createConnectorSigner>[0] & { confirm: (reason: string) => Promise<boolean>, knownRepos?: () => Promise<{ repo: string, recent: boolean }[]> }} deps
  */
 function registerConnectorGrants(handle, deps) {
   const { db, userId, confirm, sign, call, now = Date.now, knownRepos = async () => [] } = deps;
@@ -136,8 +139,10 @@ function registerConnectorGrants(handle, deps) {
     const { data: was, error } = await db().from("connector_grants").select("scope, approval, lifetime, asks, repos, epoch").eq("user_id", uid).eq("worker_id", worker).eq("connector", connector).maybeSingle();
     if (error) throw new Error(`Couldn't read the grant: ${error.message}`);
     // The repos this Mac has checkouts of, read now and named in the prompt: the grant covers these and no others.
-    const repos = await knownRepos();
-    if (!(await confirm(changeReason(was, next, repos, clean(workerName || worker, 60), connector)))) return { denied: true };
+    const known = await knownRepos();
+    if (known.length > MAX_REPOS) throw new Error(`This Mac has ${known.length} GitHub checkouts, and a grant covers at most ${MAX_REPOS}, each named before Touch ID. Remove projects you don't need on this worker from Weft, then try again.`);
+    const repos = known.map((k) => k.repo);
+    if (!(await confirm(changeReason(was, next, known, clean(workerName || worker, 60), connector)))) return { denied: true };
     const { key } = await signer.register();
     await signer.vouch(worker);
     const statement = { userId: uid, workerId: worker, connector, settings: next, repos, nonce: nonce(), issuedAt: now(), prevEpoch: Number(was?.epoch ?? 0) };
@@ -188,4 +193,4 @@ function registerConnectorGrants(handle, deps) {
   return signer;
 }
 
-module.exports = { registerConnectorGrants, createConnectorSigner, weftZip, settingsOf, looser, fingerprint, SCOPES, APPROVALS, LIFETIMES, ASKS };
+module.exports = { registerConnectorGrants, createConnectorSigner, weftZip, settingsOf, looser, fingerprint, MAX_REPOS, SCOPES, APPROVALS, LIFETIMES, ASKS };

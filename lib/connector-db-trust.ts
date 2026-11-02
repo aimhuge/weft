@@ -99,6 +99,7 @@ export interface Q extends PromiseLike<R> {
   upsert(row: object, options?: object): Q;
   delete(): Q;
   eq(column: string, value: unknown): Q;
+  gte(column: string, value: unknown): Q;
   lt(column: string, value: unknown): Q;
   not(column: string, op: string, value: unknown): Q;
   in(column: string, values: unknown[]): Q;

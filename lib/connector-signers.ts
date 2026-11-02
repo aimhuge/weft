@@ -12,7 +12,7 @@ import { MintError, type TokenDeps } from "./connector-tokens";
 import { fresh, isTrusted, keyFingerprint, verifyRaw } from "./connector-trust";
 import { notice } from "./connector-notify";
 import { revokeWorker } from "./connector-revoke";
-import { CONFIRM_MS, mailConfirm, newToken, RESEND_MS, tokenHash, type RequestMeta } from "./connector-signer-links";
+import { CONFIRM_MS, mailConfirm, mayMail, newToken, RESEND_MS, tokenHash, type RequestMeta } from "./connector-signer-links";
 
 // At most this many live keys per account, so a session can't flood the list a user reviews.
 export const MAX_SIGNERS = 10;
@@ -58,7 +58,7 @@ const confirmFields = (confirm: string, now: number) => ({ confirm_hash: tokenHa
 async function resend(deps: TokenDeps, s: SignerRow, meta: RequestMeta, now: number) {
   if (s.confirm_sent_at && now - Date.parse(s.confirm_sent_at) < RESEND_MS) return;
   const sends = s.confirm_sends ?? 0;
-  if (sends >= MAX_SENDS) return;
+  if (sends >= MAX_SENDS || !(await mayMail(deps, s.user_id, now))) return;
   const confirm = newToken();
   const revoke = newToken();
   await deps.db.setConfirm(s.id, { ...confirmFields(confirm, now), confirm_sends: sends + 1, revoke_hashes: [...(s.revoke_hashes ?? []), tokenHash(revoke)] });
@@ -77,6 +77,7 @@ export async function registerSigner(deps: TokenDeps, userId: string, raw: unkno
     if (!isTrusted(was, now)) await resend(deps, was, meta, now);
     return viewOf(was, now);
   }
+  if (!(await mayMail(deps, userId, now))) throw new MintError(429, "Too many new Mac keys for this account today. Try again tomorrow, or vouch for this Mac from one you already trust.");
   const live = (await deps.db.signers(userId)).filter((s) => !s.revoked_at);
   if (live.length >= MAX_SIGNERS) throw new MintError(409, `You have ${MAX_SIGNERS} Mac keys already. Remove one in Settings → Devices first.`);
   const confirm = newToken();
