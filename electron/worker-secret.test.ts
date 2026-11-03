@@ -8,6 +8,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { describe as describeRun } from "./secret-run.cjs";
 import { askMessage, createWorkerSecrets, verifyAsk } from "./worker-secret.cjs";
 import { createWorkerPins } from "./worker-pins.cjs";
+import { createKeptRecord, sha } from "./worker-kept.cjs";
 import { secretUseMessage, secretUsePurpose } from "../lib/secret-use";
 import { macSigned } from "../lib/worker-mac-keys";
 import { newSealKeys, open } from "../lib/worker-seal";
@@ -49,8 +50,8 @@ function fakeSupabase({ call = callRow(), worker = workerRow(), card = { folder:
   return { supabase, inserted };
 }
 
-type Setup = Db & { answer?: string | null; values?: Record<string, string>; missing?: string[]; sub?: unknown; signedIn?: boolean; pins?: Pins; known?: string[] };
-function setup({ answer = "once", values = { TOKEN: "s3cret" }, missing = [], sub = "u1", signedIn = true, pins, known = ["github:aimhuge/weft"], ...db }: Setup = {}) {
+type Setup = Db & { answer?: string | null; values?: Record<string, string>; missing?: string[]; sub?: unknown; signedIn?: boolean; pins?: Pins; known?: string[]; kept?: ReturnType<typeof createKeptRecord> };
+function setup({ answer = "once", values = { TOKEN: "s3cret" }, missing = [], sub = "u1", signedIn = true, pins, known = ["github:aimhuge/weft"], kept, ...db }: Setup = {}) {
   const fake = fakeSupabase(db);
   const vault = { valuesForVault: vi.fn<(ref: { id: string; label: string }, names: string[], env: string, use: false) => Promise<{ values: Record<string, string>; missing: string[] }>>(() => Promise.resolve({ values, missing })) };
   const asked = vi.fn<(request: { message: string; detail: string; reason: string; view: Record<string, unknown> }) => Promise<string | null>>(() => Promise.resolve(answer));
@@ -58,7 +59,7 @@ function setup({ answer = "once", values = { TOKEN: "s3cret" }, missing = [], su
   const pinned: Pins = pins ?? createWorkerPins({ dir: fs.mkdtempSync(path.join(os.tmpdir(), "weft-pins-")), safeStorage: plainStore });
   const account = { supabase: fake.supabase, getClaims: () => ({ sub }) };
   const projectRepos = vi.fn<(folder: string) => Promise<string[]>>(() => Promise.resolve(known));
-  const ws = createWorkerSecrets({ vault, ask: asked, describe: describeRun, accountClient: () => (signedIn ? account : null), pins: pinned, signer, projectRepos, audit, now: () => NOW });
+  const ws = createWorkerSecrets({ vault, ask: asked, describe: describeRun, accountClient: () => (signedIn ? account : null), pins: pinned, signer, projectRepos, audit, kept, now: () => NOW });
   return { ...fake, vault, asked, audit, ws, pins: pinned, projectRepos };
 }
 
@@ -224,5 +225,32 @@ describe("verifyAsk", () => {
     expect(() => verifyAsk(SIGN_KEY, "card-2", keys.publicKey, { ...a, sig })).toThrow("isn't signed by the worker's pinned key");
     expect(() => verifyAsk(SIGN_KEY, "card-1", keys.publicKey, a)).toThrow("isn't signed");
     expect(() => verifyAsk("bm90IGEga2V5", "card-1", keys.publicKey, { ...a, sig })).toThrow("isn't signed");
+  });
+});
+
+describe("answer, with values this Mac keeps on the worker", () => {
+  it("leaves out a value the worker claims at the version this Mac sent, unchanged, and sends the rest", async () => {
+    const kept = createKeptRecord({ dir: fs.mkdtempSync(path.join(os.tmpdir(), "weft-kept-")), safeStorage: plainStore });
+    kept.write({ w1: { seq: 9, keeps: { "github:aimhuge/weft": { label: "Aimhuge/Weft", envs: { development: { TOKEN: { version: 9, sha: sha("s3cret") }, OTHER: { version: 9, sha: sha("old") } } } } } } });
+    const a = ask({ environment: "development", names: ["TOKEN", "OTHER", "NEW"] });
+    const s = setup({ kept, values: { TOKEN: "s3cret", OTHER: "changed", NEW: "n" }, call: callRow({ args: { ...signed(a), kept: { TOKEN: 9, OTHER: 9, NEW: 9 } } }) });
+    expect(await s.ws.answer("call-1")).toEqual({ queued: true, label: "Aimhuge/Weft" });
+    const sent = s.inserted[0] as { payload: { sealed: never } };
+    const opened = JSON.parse(open(keys, sent.payload.sealed, secretUsePurpose("card-1", NONCE, "npm run job"))) as Record<string, unknown>;
+    expect(opened.values).toEqual({ OTHER: "changed", NEW: "n" });
+    expect(opened.kept).toEqual({ TOKEN: 9 });
+    expect(JSON.stringify(sent)).not.toContain("s3cret");
+  });
+
+  it("sends every value when the worker claims another version, or nothing", async () => {
+    const kept = createKeptRecord({ dir: fs.mkdtempSync(path.join(os.tmpdir(), "weft-kept-")), safeStorage: plainStore });
+    kept.write({ w1: { seq: 9, keeps: { "github:aimhuge/weft": { label: "x", envs: { production: { TOKEN: { version: 9, sha: sha("s3cret") } } } } } } });
+    for (const claim of [{ TOKEN: 8 }, undefined]) {
+      const s = setup({ kept, call: callRow({ args: { ...signed(ask()), ...(claim ? { kept: claim } : {}) } }) });
+      await s.ws.answer("call-1");
+      const opened = JSON.parse(open(keys, (s.inserted[0] as { payload: { sealed: never } }).payload.sealed, secretUsePurpose("card-1", NONCE, "npm run job"))) as Record<string, unknown>;
+      expect(opened.values).toEqual({ TOKEN: "s3cret" });
+      expect(opened.kept).toBeUndefined();
+    }
   });
 });

@@ -93,6 +93,23 @@ describe("pairing IPC", () => {
   });
 });
 
+describe("Keep on this worker's wiring", () => {
+  it("answers the board's calls and watches the vault it's handed", async () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "weft-pair-keep-"));
+    const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>();
+    const ipcMain = { handle: (channel: string, fn: (event: unknown, ...args: unknown[]) => unknown) => handlers.set(channel, fn) };
+    const board = { id: "board" };
+    const setValue = vi.fn<(folder: string, name: string, environment: string, value: string) => Promise<{ saved: boolean }>>(() => Promise.resolve({ saved: true }));
+    const vault = { setValue, remove: vi.fn(() => Promise.resolve({})), valuesFor: vi.fn(() => Promise.resolve({ id: "github:o/r", label: "o/r", values: {} })) };
+    setupPairing({ ipcMain, dataDir, accountClient: () => ({ supabase: fakeDb(), getClaims: () => ({ sub: "u1" }) }), isBoard: (s: unknown) => s === board, confirm: vi.fn(), safeStorage: plainStorage, crypto: () => vaultCrypto, vault });
+    expect(await handlers.get("worker-keep:list")!({ sender: board }, "w1")).toEqual({ kept: [], repos: [], environments: ["development", "preview"] });
+    await expect(Promise.resolve(handlers.get("worker-keep:wipe")!({ sender: { id: "pane" } }, "w1"))).rejects.toThrow(/board window/);
+    expect(vault.setValue).not.toBe(setValue);
+    expect(await vault.setValue("/p", "A", "development", "v")).toEqual({ saved: true });
+    expect(setValue).toHaveBeenCalled();
+  });
+});
+
 describe("passkey heads and reconciling", () => {
   it("publishes a worker's head into its log with each set, and reconciles before a refresh", async () => {
     const { call, db, dataDir } = setup();

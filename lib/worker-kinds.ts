@@ -2,7 +2,8 @@
 // (and a web `new_card`) makes a card in the project's checkout and starts its thread; `login` and `github_login` open a
 // sealed sign-in; `clone` puts a repo in a folder; `update` asks for the update check; and the card kinds
 // (lib/worker-card-commands.ts) act on a card it runs; `line` opens a session line (lib/host-line.ts); `secret_use`
-// hands a sealed answer to a card's waiting secret run. Each returns the card it made or touched, or null.
+// hands a sealed answer to a card's waiting secret run; `vault_keep` stores what the paired Mac keeps here. Each returns
+// the card it made or touched, or null.
 import { NEW_CARD_MODES, newCardBody, type CloudCommandRow, type NewCardMode } from "./cloud-commands";
 import { networkStartMode } from "./cloud-new-card-mode";
 import { projectAgent } from "./agent-store";
@@ -121,6 +122,12 @@ export async function listVerb(engine: Pick<DaemonDeps["engine"], "host" | "getC
   return card.id;
 }
 
+// A vault_keep's outcome as the Mac reads it off the row: the seq the worker now holds and how many values it keeps.
+const keepKind = (keep: NonNullable<DaemonDeps["keep"]>) => (command: CloudCommandRow) => {
+  const value = keep(command);
+  return Promise.resolve({ cardId: "", result: { ok: true as const, cardId: "", value } });
+};
+
 // The kind table, and the line kind's own path for an offer that came over the LAN (lib/worker-lan.ts): the same `line`
 // with the sealed answer handed to `answerOn` instead of the board's Broadcast topic.
 export function workerTable(deps: DaemonDeps, ctx: KindContext) {
@@ -219,6 +226,8 @@ export function workerTable(deps: DaemonDeps, ctx: KindContext) {
     line: (command) => openLine(command),
     // The Mac's sealed answer to a card's mcp__secrets__run (lib/worker-secret-asks.ts); an old wiring without it can't open one.
     ...(deps.secretUse ? { secret_use: deps.secretUse } : {}),
+    // The paired Mac's signed "Keep on this worker" (lib/worker-kept-vault.ts): values sealed to this box, or a wipe.
+    ...(deps.keep ? { vault_keep: keepKind(deps.keep) } : {}),
   };
   return { kinds, dispatch: dispatcher(kinds, UNKNOWN_KIND), openLine };
 }

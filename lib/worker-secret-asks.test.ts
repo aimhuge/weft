@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as cjs from "../electron/worker-seal.cjs";
 import { macSigner, memoryMacs } from "./mac-signer.harness";
 import { secretUsePurpose } from "./secret-use";
@@ -118,5 +118,47 @@ describe("deliverSecretUse", () => {
   it("drop closes the ask", () => {
     ask.drop();
     expect(() => deliverSecretUse(row(), opener, macs, NOW)).toThrow(/never asked for/);
+  });
+});
+
+describe("deliverSecretUse with values kept on this box", () => {
+  const keptAsk = (id: string) => openAsk(id, { cardId: "k1", command: "npm run job", names: ["A", "B"], environment: "development", expiresAt: NOW + 60_000, repo: "github:o/r" });
+  const keptRow = (id: string, over: Record<string, unknown> = {}) => {
+    const p = { ...plain({ card: "k1", nonce: id, values: { B: "vb" }, kept: { A: 4 } }), ...over };
+    const sealed = cjs.seal(keys.publicKey, JSON.stringify(p), secretUsePurpose("k1", id, "npm run job"));
+    return { payload: { cardId: "k1", nonce: id, sealed, mac: signer.mac("k1", id, sealed) } };
+  };
+
+  it("opens the names the Mac said to take from here, at the versions it named, beside the values it sent", async () => {
+    const id = "1".repeat(64);
+    const waiting = keptAsk(id);
+    const keptOpen = vi.fn(() => ({ A: "kept-a" }));
+    expect(deliverSecretUse(keptRow(id), opener, macs, NOW, keptOpen)).toBe("k1");
+    expect(keptOpen).toHaveBeenCalledWith("github:o/r", "development", { A: 4 });
+    await expect(waiting.values).resolves.toEqual({ A: "kept-a", B: "vb" });
+  });
+
+  it("refuses a use that names a secret twice, or doesn't cover the names, and leaves the ask open", () => {
+    const id = "2".repeat(64);
+    const waiting = keptAsk(id);
+    expect(() => deliverSecretUse(keptRow(id, { values: { A: "va", B: "vb" } }), opener, macs, NOW, () => ({}))).toThrow("That secret use names a secret twice.");
+    expect(() => deliverSecretUse(keptRow(id, { kept: { C: 1 } }), opener, macs, NOW, () => ({}))).toThrow("doesn't carry the values it names");
+    expect(() => deliverSecretUse(keptRow(id, { kept: { A: 0 } }), opener, macs, NOW, () => ({}))).toThrow("That secret use is for another ask.");
+    waiting.drop();
+  });
+
+  it("fails the waiting tool at once when the kept copy can't be opened, or there's none here", async () => {
+    const id = "3".repeat(64);
+    const waiting = keptAsk(id);
+    expect(() => deliverSecretUse(keptRow(id), opener, macs, NOW)).toThrow("it keeps none here");
+    await expect(waiting.values).rejects.toThrow("it keeps none here");
+    const id2 = "4".repeat(64);
+    const second = keptAsk(id2);
+    const broken = () => {
+      throw new Error("This worker's kept copy of A won't open.");
+    };
+    expect(() => deliverSecretUse(keptRow(id2), opener, macs, NOW, broken)).toThrow("won't open");
+    await expect(second.values).rejects.toThrow("won't open");
+    expect(() => deliverSecretUse(keptRow(id2), opener, macs, NOW, broken)).toThrow(/never asked for/);
   });
 });

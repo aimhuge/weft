@@ -225,6 +225,13 @@ contextBridge.exposeInMainWorld("weft", {
     dropKeys: (id) => ipcRenderer.invoke("worker-keys:drop", id),
     keyStatus: () => ipcRenderer.invoke("worker-keys:status"),
   },
+  // "Keep on this worker" (electron/worker-keep.cjs): names only come back; keeping asks Touch ID in main.
+  workerKeep: {
+    list: (worker) => ipcRenderer.invoke("worker-keep:list", worker),
+    keep: (request) => ipcRenderer.invoke("worker-keep:keep", request),
+    stop: (request) => ipcRenderer.invoke("worker-keep:stop", request),
+    wipe: (worker) => ipcRenderer.invoke("worker-keep:wipe", worker),
+  },
   // A worker's connectors (electron/connector-grants.cjs): on, settings, Allows and vouching for another Mac, each behind
   // Touch ID in main and signed by this Mac's approval key; the Mac keys of yours and whether each is trusted yet.
   connectors: {

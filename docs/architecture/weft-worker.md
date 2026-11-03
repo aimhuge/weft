@@ -282,7 +282,13 @@ expiry, and the board that asked waited on a result that would never come. Now a
 ### What's sealed on a worker
 
 Vault values for a card's `mcp__secrets__run` reach a worker sealed to its `seal-key.json` for one run and stay in the
-daemon's memory, never on this disk ([project-hosts.md, H8](project-hosts.md#secrets-on-a-worker-h8-the-per-use-seal-as-built)).
+daemon's memory, never on this disk ([project-hosts.md, H8](project-hosts.md#secrets-on-a-worker-h8-the-per-use-seal-as-built)),
+unless the user turned on **Keep on this worker** for a project's development or preview set (Settings → Devices → the
+worker → Secrets; [secrets.md](secrets.md#kept-on-a-worker)). Then `kept-vault.json` in the home holds those values
+sealed to the same box key, written only from a `vault_keep` the pairing Mac signed (`lib/worker-kept-vault.ts`), opened
+only for a Mac-signed `secret_use` that names the value's version, and deleted on a signed wipe, when the worker's key
+stops working (revoked), on a pairing to another Mac and by `weft-worker forget-macs`. `weft-worker status` says when it
+keeps any. It sits beside `seal-key.json`, so code a card runs as the same user can open it: see the threat there.
 
 The secret guard seals the worker's home as it seals the data dir (`reachesWorkerHome`, `lib/secret-guard-files.ts`), in
 every permission mode. The folder gate can't do this job: it asks, and **Always** would grant all of `~/.weft-worker` to
@@ -293,7 +299,7 @@ A deny beats an ask, so the prompt never shows and a grant buys nothing here.
 | Under `~/.weft-worker` | A thread |
 | --- | --- |
 | the home itself, listed: `ls ~/.weft-worker`, `ls -la`, the LS tool (not `-R`, not a glob of it) | open: names only, so a thread can find the folders below (2026-11-02) |
-| `worker.json`, `worker.env`, `seal-key.json`, `github-credentials` | refused: the worker's key, its Claude token, its private seal key, its GitHub token |
+| `worker.json`, `worker.env`, `seal-key.json`, `github-credentials`, `kept-vault.json` | refused: the worker's key, its Claude token, its private seal key, its GitHub token, the values a Mac kept here |
 | `worker.log`, `update-bad`, `update-trial`, `rollback.sh`, anything new | refused: the log is the daemon's raw stdout and stderr with no redaction pass, so whatever any process printed (an SDK error echoing a request, a CLI's debug output) lands there; `update-bad` keeps the first line of git and pnpm errors, which can carry a credentialed remote URL; `rollback.sh` is a copy of `install/worker-rollback.sh`, readable in the clone |
 | `data/`, as on a Mac | refused, save `data/show` and `data/apps` |
 | `work/` (or `WEFT_WORKER_ROOT`) | open: it's where cards run |

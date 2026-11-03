@@ -383,6 +383,48 @@ restart, with no standing grant on a worker (`electron/worker-dev-env.cjs`), sea
 here. Lending the Mac's gog and gh sign-ins to a worker is not built: it needs a process boundary on the worker. The design, guarantees and limits are in
 [project-hosts.md](project-hosts.md#the-vault-on-a-worker-t2-as-built).
 
+### Kept on a worker
+
+Built 2026-11-03 (H8's last step), with `supabase/migrations/20261103130000_worker_vault_keep.sql` (not applied). Off unless
+the user turns it on, per worker, project and environment: Settings → Devices → a paired worker → **Secrets**.
+
+```
+Mac   Settings → Devices → Secrets (components/WorkerKeep.tsx, lib/use-worker-keep.ts) ─ tick the warning ─ Keep
+main  electron/worker-keep.cjs keep: the worker row with its own session (yours, not revoked) ─ the box key it PINNED
+      (refused if the row's key differs) ─ vault.valuesFor(this Mac's checkout, development|preview), no NODE_OPTIONS/DYLD_*
+      ─ Touch ID ("keep N development secrets of o/r on the worker m1mini. Any code a thread runs there can read them")
+      ─ each value seal(box key, keptPurpose(worker, repo, env, name, version)) ─ sign keepMessage with the device key
+      ─ cloud_commands kind vault_keep ─ record name → {version, sha256} in ~/.weft/vault/worker-kept.json (safeStorage)
+worker lib/worker-kept-vault.ts apply: the Mac key from the pairing code ─ signature ─ its own worker id ─ seq above the
+      last one ─ a put no more than 10 min off ─ stores the sealed bytes as they came in kept-vault.json (600, its home)
+use   a run or dev server ask carries kept: {NAME: version} (outside the signature: it can only narrow) ─ main asks
+      Touch ID exactly as before ─ splitKept: a name whose claimed version and sha256 match its record is named, not
+      carried ─ the sealed, Mac-signed secret_use says kept: {NAME: version} ─ the worker opens its own copy at exactly
+      that version (lib/worker-secret-asks.ts); anything else travels sealed per use, as before
+```
+
+- **Each use still needs this Mac.** Keeping saves the value's trip, not the approval: every run and every dev-server
+  start still asks Touch ID here, and the worker opens a kept value only for a `secret_use` this Mac sealed and signed
+  after that Touch ID, naming that name and version. A passkey can't approve a use (vault asks stay on the phone or the
+  Mac, [mobile-security.md](mobile-security.md)). A name the worker doesn't keep, keeps at another version, or that changed
+  here since (its sha256 differs), travels per use: the fallback is today's per-use seal.
+- **Taking back.** Stop (one project and environment), Wipe all, and a value set or removed here (`watchVault` wraps
+  `vault.setValue` and `vault.remove`) are signed and sent without Touch ID, since they only narrow. A changed value is
+  deleted from the worker at once and goes again on the next Keep, after Touch ID: no value reaches a worker without a
+  Touch ID naming it. Revoking a worker in Settings → Devices sends Wipe first; the worker also deletes the file itself
+  when its heartbeat gets "unknown worker key" (a revoke replaces its key hash), pairing to another Mac deletes it
+  (`trustPairingMac`), and so does `weft-worker forget-macs`. A file another Mac wrote reads as empty.
+- **Never production.** Development and preview only, refused on both sides; production values travel per use.
+- **The threat, honestly.** Every card on a worker runs as the same OS user as the daemon, and `seal-key.json` sits beside
+  `kept-vault.json` in its home. The path guards (`lib/secret-guard-files.ts`) stop a thread's tools, not code a thread
+  runs (`node -e`, a script, a dependency's postinstall): that code can read both files and open every kept value,
+  without any Touch ID ([project-hosts.md](project-hosts.md#connectors-on-a-worker-not-built-needs-a-process-boundary)
+  lists the same ways in for tokens). So a kept value is as safe as the least trusted code any card on that worker runs,
+  for as long as it's kept. Sealing at rest buys only this: a copy of `kept-vault.json` alone (a backup, a synced folder,
+  a disk image without the home's key) opens nothing, and the Supabase row is blanked once taken. Revocation can't reach
+  a box that never comes back online; a stolen box keeps what was kept on it. That is why it's off by default, behind a
+  warning the user ticks, and never offered for production.
+
 ## Which card a vault request is for
 
 A thread's grant, its unlocks and its audit line all hang off one card id, so that id has to be the
