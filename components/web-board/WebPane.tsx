@@ -12,6 +12,7 @@ import type { SharePane } from "@/lib/share-types";
 import type { BoardInput } from "@/lib/worker-commands";
 import Icon from "../Icon";
 import { HostChip, type LocalSimulator } from "./HostChip";
+import { useSealedPage } from "./useSealedPage";
 import { WorkerScreen } from "./WorkerScreen";
 
 const NAV = "rounded-md p-1.5 text-muted disabled:opacity-30";
@@ -69,8 +70,18 @@ function StartSimulator({ onScreenInput }: { onScreenInput: ScreenInputFn }) {
   );
 }
 
+// A page sealed with the workspace key, opened in this browser (useSealedPage), under the route's own sandbox.
+function SealedFrame({ page }: { page: Exclude<ReturnType<typeof useSealedPage>, null> }) {
+  if (page === "checking") return <div className="size-full bg-white" />;
+  if (page.kind === "locked") return <Snapshot note="🔒 Sealed — pair this browser to read it." />;
+  if (page.kind === "html") return <iframe title="Card page" srcDoc={page.html} sandbox={SANDBOX} className="size-full border-0 bg-white" />;
+  return <iframe title="Card page" src={page.url} sandbox={SANDBOX} className="size-full border-0 bg-white" />;
+}
+
 function PaneBody({ orgId, pane, thumbUrl, onScreenInput, source, workerId }: { orgId: string | null; pane: SharePane | null; thumbUrl?: string; onScreenInput?: ScreenInputFn; source?: string; workerId?: string }) {
+  const sealed = useSealedPage(orgId, pane);
   if (pane?.kind === "screen") return <WorkerScreen pane={pane} onInput={onScreenInput} source={source} workerId={workerId} />;
+  if (sealed) return <SealedFrame page={sealed} />;
   if (pane?.kind === "blob") {
     return <iframe title="Card page" src={pageSrc(orgId, pane)} sandbox={orgId ? SANDBOX : BOARD_SANDBOX} className="size-full border-0 bg-white" />;
   }

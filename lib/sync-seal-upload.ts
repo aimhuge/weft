@@ -2,12 +2,13 @@
 // (kept in main, lib/sync-security.ts) is on and main holds the workspace key (POST /sync/key), rows go up sealed;
 // otherwise as they were. A card with a share link stays plain, since /s/… reads it on the server with no key. The key
 // is asked for once a minute.
+import { blobSealer } from "./blob-seal";
 import { shell } from "./browser-shell";
-import type { CloudCardRow, CloudThreadItemRow, CloudToolOutputRow } from "./cloud-sync-types";
+import type { BlobSeal, CloudCardRow, CloudThreadItemRow, CloudToolOutputRow } from "./cloud-sync-types";
 import { globalSingleton } from "./global-singleton";
 import { sodium, type Sodium } from "./sodium";
 import { pairingStatus } from "./sync-security";
-import { sealCardRow, sealItemRow, sealToolRow, type SyncKey } from "./sync-seal";
+import { sealCardRow, sealItemRow, sealToolRow, type SyncKey, type SyncKeyring } from "./sync-seal";
 import { getCard } from "./store";
 
 const KEY_TTL_MS = 60_000;
@@ -16,6 +17,8 @@ export interface Sealer {
   card(row: CloudCardRow): CloudCardRow;
   item(row: CloudThreadItemRow): CloudThreadItemRow;
   tool(row: CloudToolOutputRow): CloudToolOutputRow;
+  // How the files a card's rows name go up (lib/blob-seal.ts): sealed, or null (plain) for a shared card.
+  blob(cardId: string): BlobSeal | null;
 }
 
 const cache = () => globalSingleton("__weftSyncKey", () => new Map<string, { key: SyncKey | null; at: number }>());
@@ -38,7 +41,9 @@ async function keyFor(orgId: string, now: number): Promise<SyncKey | null> {
 const shared = (cardId: string) => Boolean(getCard(cardId)?.share?.id);
 
 export function makeSealer(s: Sodium, key: SyncKey, isShared: (cardId: string) => boolean = shared): Sealer {
+  const blob = blobSealer(s, key);
   return {
+    blob: (cardId) => (isShared(cardId) ? null : blob),
     card: (row) => (isShared(row.card_id) ? row : sealCardRow(s, row, key)),
     item: (row) => (isShared(row.card_id) ? row : sealItemRow(s, row, key)),
     tool: (row) => (isShared(row.card_id) ? row : sealToolRow(s, row, key)),
@@ -50,6 +55,13 @@ export async function sealerFor(orgId: string, now = Date.now()): Promise<Sealer
   if (!(await pairingStatus()).seal) return null;
   const key = await keyFor(orgId, now);
   return key ? makeSealer(await sodium(), key) : null;
+}
+
+// The keys this Mac opens a sealed blob with (one a browser sealed, lib/web-upload.ts): main's current version, asked
+// for only once something sealed arrives. Empty when main holds none.
+export async function macKeyring(orgId: string, now = Date.now()): Promise<SyncKeyring> {
+  const key = await keyFor(orgId, now);
+  return new Map(key ? [[key.version, key.key]] : []);
 }
 
 export const forgetSyncKey = () => cache().clear();

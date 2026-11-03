@@ -544,6 +544,12 @@ When a new doc lands in this folder, add it here on the same change.
   seals rows in `lib/cloud-sync-upload.ts` when the switch is on; `lib/approval-check.ts` is `lib/cloud-inbox.ts`'s rule for answers;
   `lib/web-sync-key.ts` opens rows on the web board (`components/web-board/useWebBoard.ts`, `lib/cloud-thread-page.ts`) and pairs a
   browser (`app/pair`, `components/web-board/PairBrowser.tsx`). Settings card: `components/PairDevices.tsx` (`lib/use-pairing.ts`).
+  Sealed blobs (docs/architecture/mobile-security.md#sealed-blobs): `lib/blob-seal.ts` (seal/open under `blobAad`, the opened
+  bytes held to the ref's sha, `withBlobSeal` for a store view) used by `lib/blob-store.ts` (an optional `seal` on every upload),
+  `Sealer.blob` in `lib/sync-seal-upload.ts` per card in `lib/cloud-sync-cards.ts` and `lib/cloud-sync-upload.ts`, a paired
+  browser's held uploads in `lib/web-upload.ts` (`webBlobSeal` in `lib/web-sync-key.ts`), opened by `lib/cloud-inbox-receive.ts`
+  (`macKeyring`), on the web by `lib/web-blob-open.ts` (pictures in `useWebBoard`, pages through `components/web-board/useSealedPage.ts`
+  in `WebPane`, the page route's `?sealed=1`), and drawn as the 🔒 stand-in by the page route and `lib/share-page-serve.ts`.
 - `lib/passkey-verify.ts` (+ main's copy `electron/passkey-verify.cjs`) + `lib/approval-passkey.ts` + `lib/passkey-phone-only.ts` +
   `lib/approval-passkey-check.ts` + `lib/web-passkey.ts` + `lib/web-passkey-approval.ts` + `lib/sign-origin.ts` + `lib/sign-approve.ts` +
   `lib/sign-sheet.ts` + `lib/passkey-display.ts`: passkey approvals (H7, docs/architecture/mobile-security.md#4-passkey-approvals-h7), on
