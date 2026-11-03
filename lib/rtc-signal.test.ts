@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { hidUsage } from "./hid-keys";
-import { liveEvent, newAnswerKey, openAnswer, sealAnswer } from "./rtc-signal";
+import { liveEvent, newAnswerKey, openAnswer, PASTE_MAX, pasteEvent, sealAnswer } from "./rtc-signal";
 
 describe("the answer", () => {
   it("opens with the key the offer carried", async () => {
@@ -36,5 +36,20 @@ describe("hidUsage", () => {
     expect(hidUsage("Enter")).toBe(40);
     expect(hidUsage("ShiftLeft")).toBe(225);
     expect(hidUsage("F13")).toBeNull();
+  });
+});
+
+describe("a paste", () => {
+  it("goes as text, cut to the cap, and nothing when empty", () => {
+    expect(pasteEvent("hi")).toEqual({ t: "text", text: "hi" });
+    expect(pasteEvent("x".repeat(PASTE_MAX + 5))).toEqual({ t: "text", text: "x".repeat(PASTE_MAX) });
+    expect(pasteEvent("")).toBeNull();
+  });
+
+  it("is read back only as non-empty text under the cap", () => {
+    expect(liveEvent('{"t":"text","text":"a b"}')).toEqual({ t: "text", text: "a b" });
+    expect(liveEvent('{"t":"text","text":""}')).toBeNull();
+    expect(liveEvent('{"t":"text","text":3}')).toBeNull();
+    expect(liveEvent(JSON.stringify({ t: "text", text: "x".repeat(PASTE_MAX + 1) }))).toBeNull();
   });
 });

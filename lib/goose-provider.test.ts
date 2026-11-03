@@ -6,6 +6,7 @@ import {
   PUKU_GOOSE,
   configuredProviders,
   gooseBridge,
+  gooseEndpointEnv,
   gooseEnvFor,
   gooseModelFor,
   keyForgottenText,
@@ -185,5 +186,16 @@ describe("replacesSystemPrompt", () => {
     expect(replacesSystemPrompt()).toBe(false);
     expect(replacesSystemPrompt("https://api.anthropic.com", "claude-sonnet-4")).toBe(false);
     expect(replacesSystemPrompt("https://notpuku.sh.example.com")).toBe(false);
+  });
+});
+
+describe("gooseEndpointEnv", () => {
+  it("names the endpoint's own variable, without a key", () => {
+    expect(gooseEndpointEnv("custom", " https://x ")).toEqual({ GOOSE_PROVIDER__HOST: "https://x" });
+    expect(gooseEndpointEnv("litellm", "http://proxy:4000")).toEqual({ LITELLM_HOST: "http://proxy:4000" });
+    expect(gooseEndpointEnv("anthropic", "https://gw")).toEqual({ ANTHROPIC_HOST: "https://gw" });
+    expect(gooseEndpointEnv("openai", "https://gw")).toEqual({});
+    expect(gooseEndpointEnv("anthropic")).toEqual({});
+    expect(gooseEndpointEnv("nope", "https://gw")).toEqual({});
   });
 });

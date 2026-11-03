@@ -607,7 +607,7 @@ daemon ◀─ claim ◀─ cloud_commands kind=input ◀─ POST /api/worker-boa
 
 ### The fast path
 
-A watched iOS simulator also gets H.264 and live input over WebRTC, beside the JPEGs, which never stop. WebRTC finds a direct
+A watched iOS simulator or Android emulator also gets H.264 and live input over WebRTC, beside the JPEGs, which never stop. WebRTC finds a direct
 route on a LAN or through NAT with no open port, so home and away are one path. Anything that goes wrong leaves the pane on
 the JPEGs.
 
@@ -643,7 +643,14 @@ board ─ sealed offer, elevated input command ─▶ daemon ─ encrypted answe
   `card.page` only gains `fast=1`, which says the watch takes offers.
 - **Gesture and keyboard.** `down`, `move` and `up` are sent as they happen, as fractions of the screen, and a gesture holds one
   hid stream from press to release. Keys go as HID usages (`lib/hid-keys.ts`), down and up. With no line open, a finished tap or
-  swipe takes the command path. Paste isn't built.
+  swipe takes the command path.
+- **Paste.** ⌘V on the focused screen sends the clipboard's plain text as one `{ t: "text" }` event on the input channel
+  (`pasteEvent`, `lib/rtc-signal.ts`). Only the `paste` event does it, so the board never reads the clipboard on its own,
+  and only over an open line: with none, a paste does nothing. It's cut to `PASTE_MAX` (2,000 characters) on the board, and a
+  worker drops a longer one. The device types it: on iOS each character becomes its US-keyboard HID presses, Shift
+  included (`lib/hid-text.ts`, idb's `text`), as `idb ui text` does it; on Android it's `input text` lines, a newline as
+  Enter and a tab as Tab (`textLines`, `lib/adb-input.ts`); the worker's browser takes it whole with CDP's
+  `Input.insertText`. A character no US key types (accents, emoji) is dropped on a device; the browser keeps it.
 - **Video on an RTP track (H6a).** The board's offer carries a receive-only video m-line limited to H.264 in packetization-mode 1,
   High first, then Constrained Baseline (`offerVideoTrack`, `setCodecPreferences`, jitter buffer target 0). The worker is
   configured for those two codecs only, and `takeVideo` turns the m-line to `sendonly` before answering, so it's all inside
@@ -676,8 +683,23 @@ board ─ sealed offer, elevated input command ─▶ daemon ─ encrypted answe
 - **Not yet:** weft.zip and phones stay on JPEGs, since sealing an offer runs on the desktop's local server. The screen's own
   line has no TURN; on a network that blocks direct connections it rides the session line, which takes TURN when this
   Mac holds a Cloudflare TURN key (`lib/rtc-ice.ts`), or stays on JPEGs.
-- **Android** has no idb, so an emulator stays on JPEGs and `adb`. `adb exec-out screenrecord --output-format=h264` is the likely
-  next step, not built because no box here has adb to measure it on.
+- **Android** (`lib/adb-screen.ts`, built 2026-11-03, not yet run on a device). The emulator's video is `adb exec-out
+  screenrecord --output-format=h264 --bit-rate=<rate> --time-limit=180 -`: raw Annex B on stdout, cut into access units by
+  `lib/h264-units.ts` (a new frame starts at an AUD, SEI, SPS or PPS after a slice, or at a slice whose first_mb_in_slice is
+  0; a 12 ms lull ends the last one, since screenrecord writes nothing on a still screen; an IDR without its SPS and PPS
+  gets the last ones seen). Those frames go into the same `rtpVideo` track and `videoChannel` idb feeds, so the board
+  can't tell them apart, and the JPEGs keep running underneath as the fallback. screenrecord stops itself at 3 minutes,
+  so `rollingVideo` starts the next one at 170 s and switches at its first frame (a key frame), stopping the old one: no
+  gap. A recording that ends early is followed at once; one that sends nothing (screenrecord refused) ends the stream,
+  and the pane stays on JPEGs. A PLI or a new bitrate restarts screenrecord, as it restarts idb. Quality is bitrate alone
+  (2, 8 or 20 Mbps, low at half size), since screenrecord takes no frame rate. Input is one `adb shell` held open for the
+  watch, fed `input` lines built from numbers and quoted text only (`lib/adb-input.ts`): a quick still press is `input
+  tap`, any other gesture one `input swipe` over the time it took (a long press is a swipe that didn't move; the path
+  between isn't replayed); a key that types something is `input text`, Enter, Escape, Backspace, Tab and the arrows are
+  `input keyevent`, Shift is held across presses. The size is `wm size` (the override when set), in pixels, the units
+  `input` takes. **Needs a device check:** that screenrecord's frames decode in the board's `<video>` (profile and level
+  as the emulator's encoder picks them), the switch at 170 s shows no stall, the 12 ms lull doesn't split a large IDR
+  on a slow pipe, and how far gesture-to-frame latency lags iOS.
 - **Install:** `install/worker.sh` puts idb_companion 1.1.8 in `~/.weft/tools/idb-companion`, pinned by hash, on a Mac with
   Xcode. A failure only skips it, and `lib/idb-companion.ts` also finds it on PATH. idb's GitHub release publishes no digest, so
   the hash is of the file as downloaded. An auto-update runs `pnpm install` but not that script, so an enrolled box needs
@@ -711,6 +733,38 @@ set out:
 5. **A dev server to point at.** `mcp__devservers` needs the desktop too, so a worker needs its own start, stop and status.
 6. **The pane.** `/t/<id>` needs a weft.zip session. A sandboxed frame has no cookie and the board window must not frame it,
    so the first version is Open ↗ in the toolbar. `openOnWorker` would then trade a localhost URL for the card's `/t/<id>`.
+
+### Goose on a worker
+
+Goose's provider and endpoint say where a Goose card's traffic goes, so they never sync and are never a plain host
+setting (`packages/weft-client/src/host-settings.ts`). Settings → Threads → On a worker shows them for a worker that
+reports them (`components/WorkerGooseFields.tsx`), and Save on worker sends them in the same `settings.put` as the host
+settings, signed (built 2026-11-03):
+
+- **Signed by the Mac, after Touch ID.** `workerSettings` (`lib/worker-host-settings.ts`) asks main to sign a widening
+  over exactly the patch: verb `settings.put`, card `""`, change `{ goose: { gooseProviderId?, gooseBaseUrl? } }`, args
+  the whole patch (`signWiden`, `electron/widen-sign.cjs`, whose Touch ID prompt reads "point Goose at the provider … and
+  the endpoint …, for the settings on the worker …", and names any host setting riding with it). Without the desktop app
+  there's no signer: the fields show greyed and Save doesn't send them.
+- **Checked on the worker.** `remoteRefusal` still refuses the Goose fields unsigned (they're foreign to `HOST_SETTINGS`).
+  `signedGoose` in `lib/host/dispatch.ts` lifts that only for a `widen` that `widenProblem` accepts against the worker's
+  own id, its nonce book and the Mac key it pinned at pairing (`lib/host-signers.ts`); the rest of the patch must then
+  pass `remoteRefusal` on its own, so an approval can't carry `allowedFolders`. **A passkey can't sign it**
+  (`PASSKEY_NO_GOOSE`, `lib/widen-check.ts`), even where the web may approve a "!" line. A Mac has no `goose` rule, so it
+  refuses them from the network as before.
+- **Saved.** `applyGooseSettings` (`lib/host-goose-settings.ts`) checks both fields first: a provider in the catalog or
+  `""`, an endpoint that's `""` or an http(s) URL of at most 500 characters with no user or password in it. Then it
+  saves. `settings.get` reads them back with the host settings.
+- **The endpoint reaches Goose.** A worker has no Electron main to grant a key, so Goose starts as the plain binary;
+  `gooseEndpointEnv` (`lib/goose-provider.ts`) still sets the endpoint's own variable (`ANTHROPIC_HOST`, `LITELLM_HOST`,
+  `AZURE_OPENAI_ENDPOINT`, `GOOSE_PROVIDER__HOST`), as it now does on a Mac where Goose holds its own key.
+- **The key doesn't travel, and isn't wired yet.** There's no path for a Goose provider's key to a worker. The vault on
+  a worker (H8's per-use seal, `lib/worker-secret-run.ts`) seals project-vault names for one `mcp__secrets__run` command,
+  not the Keychain key Electron main keeps for Goose, and a key in `worker.env` doesn't reach Goose either: `cliEnv`
+  drops every secret-named variable from a CLI's env, `GOOSE_DISABLE_KEYRING` is set and `GOOSE_PATH_ROOT` points Goose's
+  own config at the card's state folder. So today a Goose card on a worker runs only against a provider that needs no key
+  (Ollama, a keyless LiteLLM or custom endpoint). Missing: a per-turn Goose key grant from the Mac, sealed to the worker's
+  seal key like `secret_use`, after Touch ID.
 
 ### Cloning onto a worker
 

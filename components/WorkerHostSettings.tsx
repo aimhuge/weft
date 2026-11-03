@@ -4,7 +4,8 @@
 // how many threads it runs at once, how long it keeps a CLI open, its worktree pool and its default CLI. Pick a worker,
 // its settings load from it (settings.get), and Save sends the changes (settings.put). Automations, /weft:done's model,
 // the thread instructions and the rest of your account's settings sync to it from this Mac's own; its folders, modes
-// and guards are only ever set on that machine.
+// and guards are only ever set on that machine. Goose's provider and endpoint are the exception: they go signed, after
+// Touch ID (components/WorkerGooseFields.tsx).
 import { useEffect, useState } from "react";
 import type { HostSettings } from "@weft/client";
 import { BACKENDS } from "@/lib/new-thread";
@@ -13,6 +14,7 @@ import { useWorkers } from "@/lib/use-workers";
 import { workerSettings } from "@/lib/worker-host-settings";
 import { SELECT_CLASS } from "./ModelSelect";
 import { SettingsCard, SettingsSectionHeader } from "./SettingsLayout";
+import WorkerGooseFields from "./WorkerGooseFields";
 import { BUTTON_PRIMARY_SMALL } from "./button-styles";
 
 const POOL = [0, 1, 2, 3];
@@ -93,6 +95,7 @@ function HostFields({ form, set }: { form: HostSettings; set: ReturnType<typeof 
       <Field label="Keep conversations open" value={form.keepAliveMinutes} options={withValue(KEEP_ALIVE.map((o) => o.minutes), form.keepAliveMinutes).map((m) => ({ value: m, label: KEEP_ALIVE.find((o) => o.minutes === m)?.label ?? `${m} minutes` }))} onChange={(v) => set("keepAliveMinutes", Number(v))} />
       <Field label="Ready worktrees per repo" value={form.worktreePool} options={POOL.map((n) => ({ value: n, label: n ? String(n) : "Off" }))} onChange={(v) => set("worktreePool", Number(v))} />
       <Field label="Default CLI" value={form.defaultBackend} options={BACKENDS.map((b) => ({ value: b.id, label: b.label }))} onChange={(v) => set("defaultBackend", v)} />
+      <WorkerGooseFields form={form} set={set} />
     </>
   );
 }

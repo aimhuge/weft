@@ -8,6 +8,7 @@
 // lib/approval-passkey.ts); the host rebuilds this message from its own names and checks it against its pins.
 // lib/widen.ts re-exports it; the host's check is lib/widen-check.ts.
 import { isBang } from "./bang";
+import { gooseFieldsOf } from "./host-settings";
 import type { HostPayload } from "./host-row";
 
 export const WIDEN_MESSAGE_V = "weft-widen-v1";
@@ -33,6 +34,9 @@ export interface WidenChange {
   terminal?: string;
   // A new thread with an agent (run / new_card): the agent, the folder it starts in and its first message.
   create?: { agent: string; folder: string; prompt: string };
+  // settings.put on a worker: Goose's provider and endpoint (gooseProviderId, gooseBaseUrl), where a Goose card's
+  // traffic goes. Only the desktop's Touch ID key signs it; a passkey can't (lib/widen-check.ts).
+  goose?: Record<string, unknown>;
 }
 
 // The verb a widening names in its message: a host verb, or the terminal and new-thread actions that aren't verbs, which
@@ -53,6 +57,10 @@ function updateChange(body: Record<string, unknown>): WidenChange {
 export function widenChangeOf({ verb, args }: { verb: string; args: Record<string, unknown> }): WidenChange | null {
   if (verb === "card.shell") return { shell: typeof args.command === "string" ? args.command : "" };
   if (verb === "card.schedule") return typeof args.text === "string" && isBang(args.text) ? { schedule: args.text } : null;
+  if (verb === "settings.put") {
+    const goose = gooseFieldsOf(args.patch);
+    return goose ? { goose } : null;
+  }
   if (verb !== "card.update" || !args.body || typeof args.body !== "object") return null;
   const change = updateChange(args.body as Record<string, unknown>);
   return Object.keys(change).length ? change : null;
@@ -161,5 +169,15 @@ export function widenLabel(change: WidenChange): string {
   if (change.schedule !== undefined) parts.push(`schedule the shell line ${cut(change.schedule)}`);
   if (change.terminal !== undefined) parts.push(`open a terminal in ${cut(change.terminal, 60)}`);
   if (change.create) parts.push(`start a thread with the agent ${cut(change.create.agent, 60)} in ${cut(change.create.folder, 60)}`);
+  if (change.goose) parts.push(gooseWords(change.goose));
   return parts.join(", ") || "change nothing";
+}
+
+// A Goose change in words: the provider and the endpoint it sets ("" reads as its default).
+function gooseWords(goose: Record<string, unknown>): string {
+  const said = (v: unknown, none: string) => (typeof v === "string" && v ? cut(v) : none);
+  const parts: string[] = [];
+  if (goose.gooseProviderId !== undefined) parts.push(`the provider ${said(goose.gooseProviderId, "Goose's own")}`);
+  if (goose.gooseBaseUrl !== undefined) parts.push(`the endpoint ${said(goose.gooseBaseUrl, "none")}`);
+  return `point Goose at ${parts.join(" and ")}`;
 }
