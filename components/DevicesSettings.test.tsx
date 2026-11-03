@@ -55,7 +55,7 @@ describe("DevicesSettings", () => {
     render(<DevicesSettings />);
     expect(await screen.findByText("m1mini")).toBeInTheDocument();
     expect(screen.getByText("Mac · reads sealed threads · this Mac · Online")).toBeInTheDocument();
-    expect(screen.getByText("Worker · paired · Seen 5m ago")).toBeInTheDocument();
+    expect(screen.getByText("Worker · paired · Seen 5m ago · Threads in the clear")).toBeInTheDocument();
     expect(screen.getByText("Phone · approves with Face ID · Seen 5m ago")).toBeInTheDocument();
     expect(screen.getByText("Phone · reads sealed threads · Never seen")).toBeInTheDocument();
     expect(screen.getByText("Browser · reads sealed threads · Revoked 2h ago")).toBeInTheDocument();
@@ -70,7 +70,7 @@ describe("DevicesSettings", () => {
     );
     render(<DevicesSettings />);
     expect(await screen.findByText("Mac · reads sealed threads · this Mac · Online · 0.7.0 (15388b1)")).toBeInTheDocument();
-    expect(screen.getByText("Worker · paired · Online · 0.6.6 (abc1234, older)")).toBeInTheDocument();
+    expect(screen.getByText("Worker · paired · Online · 0.6.6 (abc1234, older) · Threads in the clear")).toBeInTheDocument();
   });
 
   it("revokes a phone this Mac pinned through main, and anything else through the registry", async () => {
@@ -112,7 +112,30 @@ describe("DevicesSettings", () => {
     expect(screen.queryByRole("button", { name: "Re-pin iPhone" })).toBeNull();
     expect(repinOutcome("m1mini", { denied: true })).toBe("Not re-pinned.");
     expect(repinOutcome("m1mini", { forgotten: false })).toBe("m1mini had no pinned keys on this Mac.");
+    expect(repinOutcome("m1mini", { forgotten: true, keysError: "offline" })).toBe("Forgot m1mini's pinned keys, but its workspace key grant couldn't be dropped: offline");
   });
+
+  it("seals a paired worker's threads through main, and says which key it holds", async () => {
+    let status = { sealOn: true, workers: {} as Record<string, { version: number; latest: number }> };
+    const grantKey = vi.fn(() => {
+      status = { sealOn: true, workers: { w1: { version: 3, latest: 3 } } };
+      return Promise.resolve({ version: 3 });
+    });
+    // The first read fails (signed out in main): the list still draws, in the clear.
+    const keyStatus = vi.fn(() => Promise.resolve(status)).mockRejectedValueOnce(new Error("out"));
+    const dropKeys = vi.fn(() => Promise.resolve({ dropped: true }));
+    (window as unknown as { weft: unknown }).weft = { pairing, hostPairing: { ...hosts, grantKey, keyStatus, dropKeys } };
+    render(<DevicesSettings />);
+    await userEvent.click(await screen.findByRole("button", { name: "Seal m1mini's threads" }));
+    expect(grantKey).toHaveBeenCalledWith("w1");
+    expect(await screen.findByText("m1mini now holds key v3: it seals what it publishes from now on.")).toBeInTheDocument();
+    expect(await screen.findByText("Worker · paired · Seen 5m ago · Threads sealed (key v3)")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Seal m1mini's threads" })).toBeNull();
+    // Revoking the worker drops its grants in main too, which rotates the key.
+    await userEvent.click(screen.getByRole("button", { name: "Revoke m1mini" }));
+    await waitFor(() => expect(dropKeys).toHaveBeenCalledWith("w1"));
+  });
+
 
   it("lets this Mac's passkeys approve on a worker, after main endorses them", async () => {
     const endorse = vi.fn(() => Promise.resolve(null));

@@ -42,7 +42,14 @@ function setupPairing({ ipcMain, dataDir, accountClient, isBoard, confirm, safeS
   // Codes live in memory, so none is open at start: a marker left by a crash goes.
   const markOpen = pairingOpenMarker(dataDir);
   markOpen(0);
-  const pairing = createPairing({ db, userId, sodium: () => sodium, macDevice, myDevice, paired, syncKeys, confirm, markOpen });
+  // A rotation (a phone revoked) grants the workers this Mac sealed for the new version too (electron/worker-key-grants.cjs).
+  let afterRotate = async (_orgId, _version) => {};
+  const rotating = { ...syncKeys, rotate: async (orgId, keep) => {
+    const version = await syncKeys.rotate(orgId, keep);
+    await afterRotate(orgId, version).catch(() => {});
+    return version;
+  } };
+  const pairing = createPairing({ db, userId, sodium: () => sodium, macDevice, myDevice, paired, syncKeys: rotating, confirm, markOpen });
   const withSodium = (fn) => async (...args) => {
     sodium ??= await ready();
     return fn(...args);
@@ -102,7 +109,13 @@ function setupPairing({ ipcMain, dataDir, accountClient, isBoard, confirm, safeS
   const connectorSigner = grants.registerConnectorGrants(handle, { db, userId, confirm, sign: macSign, signKey: macSignKey, pins: workerPins, call, knownRepos, device: () => { try { return macDevice(); } catch { return ""; } } });
   // Pairing vouches for the new worker on weft.zip under the same Touch ID, from the keys it just pinned.
   const vouchWorker = (id) => connectorSigner.vouch(id);
-  require("./host-pairing-ipc.cjs").registerHostPairing(handle, { db, userId, macDevice, myDevice, confirm, macSignKey, macSign, vouchWorker }, workerPins);
+  // Seal… on a worker: its key grants, signed by this Mac's approval key; Re-pin and Revoke drop them and rotate.
+  const { createWorkerKeyGrants, registerWorkerKeyGrants } = require("./worker-key-grants.cjs");
+  const keepFor = (orgId) => paired.list().filter((d) => d.orgId === orgId).map((d) => ({ id: d.id, boxKey: d.boxKey }));
+  const workerKeys = createWorkerKeyGrants({ dir: dataDir, safeStorage: keychain, db, userId, macDevice, sign: macSign, pins: workerPins, syncKeys, confirm, sealOn: () => paired.settings().seal === true, keepFor });
+  afterRotate = (orgId, version) => workerKeys.regrant(orgId, version);
+  registerWorkerKeyGrants(handle, workerKeys);
+  require("./host-pairing-ipc.cjs").registerHostPairing(handle, { db, userId, macDevice, myDevice, confirm, macSignKey, macSign, vouchWorker, dropKeys: workerKeys.drop }, workerPins);
   const projectRepos = require("./worker-projects.cjs").createProjectRepos({ dataDir });
   const signStart = require("./connector-start.cjs").createStartSigner({ userId, sign: macSign, signKey: macSignKey, projectRepos });
   // Signed widening for a remote host's card (electron/widen-sign.cjs), naming a worker by the name it was pinned under,
@@ -123,6 +136,9 @@ function setupPairing({ ipcMain, dataDir, accountClient, isBoard, confirm, safeS
   const routes = {
     // The key the uploader seals with (lib/sync-seal-upload.ts); { none: true } when this Mac has no grant yet.
     "POST /sync/key": withSodium(async ({ orgId, create }) => (await syncKeys.current(String(orgId), { create: create === true })) ?? { none: true }),
+    // Every version this Mac holds, for opening a worker's sealed rows on its own server (lib/worker-board-open.ts):
+    // a worker seals with the newest version it was granted, which may be older than this Mac's current one.
+    "POST /sync/keyring": withSodium(async ({ orgId }) => ({ keys: [...(await syncKeys.keyring(String(orgId)))].map(([version, key]) => ({ version, key })) })),
     // Whether an answer's signature is a paired phone's (lib/approval-check.ts). The key never leaves main.
     "POST /pairing/verify": withSodium(({ device, message, sig }) => paired.verify({ device: String(device), message: String(message), sig: String(sig) })),
     // Whether a passkey assertion is a pinned browser's (lib/approval-passkey-check.ts); main keeps its counter.
@@ -134,7 +150,7 @@ function setupPairing({ ipcMain, dataDir, accountClient, isBoard, confirm, safeS
     // A worker card's start, signed for the GitHub connector when this Mac knows its folder as that repo (electron/connector-start.cjs).
     "POST /connectors/sign-start": withSodium(signStart),
   };
-  return { pairing, syncKeys, paired, signer, routes };
+  return { pairing, syncKeys, paired, signer, routes, workerKeys };
 }
 
 module.exports = { setupPairing };
