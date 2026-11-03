@@ -11,7 +11,7 @@ import { createBlobStore } from "./blob-store";
 import { switchQa } from "./qa-switch";
 import { answerCommand, replyCommand, stopCommand, type GrantScope, type NewCommand } from "./cloud-commands";
 import { syncOrgId } from "./cloud-sync";
-import { BLOB_REF_PREFIX, THREAD_PAGE_SIZE } from "./cloud-sync-types";
+import { BLOB_REF_PREFIX, THREAD_PAGE_SIZE, type BlobSeal } from "./cloud-sync-types";
 import { pageFromRows } from "./cloud-thread-page";
 import { hostCommand, textArgOf } from "./host-command";
 import { DATA_DIR } from "./store";
@@ -23,7 +23,7 @@ import { RTC_PURPOSE } from "./rtc-signal";
 import { LINE_PURPOSE, type LineOffer } from "./host-line-protocol";
 import { EMPTY_WORKER_BOARD, workerProjectPath, type WorkerBoard, type WorkerProject, type WorkerProjectStatus } from "./worker-project";
 import { liveStatus, type PresenceRead } from "./worker-presence";
-import { openCardRows, openedBlob, openItemRows, openOutput, openPageAssets } from "./worker-board-open";
+import { cardBlobSeal, openCardRows, openedBlob, openItemRows, openOutput, openPageAssets } from "./worker-board-open";
 import { SEALED_PAGE_HTML } from "./blob-seal";
 import { presenceWatch, type PresenceWatch } from "./worker-presence-watch";
 import { macHint } from "./host-facts";
@@ -188,10 +188,15 @@ async function commandTarget(client: SupabaseClient, cardId: string) {
 }
 
 // The files a message pastes, uploaded to the workspace's blobs as you, for the worker to bring over
-// (lib/attachment-transfer.ts). The row gains them only when there are any, so a text reply's row is as it was.
-export async function withAttachments(client: SupabaseClient, row: NewCommand, text: string, dir: string): Promise<NewCommand> {
+// (lib/attachment-transfer.ts). The row gains them only when there are any, so a text reply's row is as it was. For a
+// card, they go up sealed when its row came sealed (lib/worker-board-open.ts cardBlobSeal), asked once there's a file.
+export async function withAttachments(client: SupabaseClient, row: NewCommand, text: string, dir: string, cardId?: string): Promise<NewCommand> {
   const blobs = createBlobStore({ client });
-  const upload = async (file: string) => (await blobs.upload(file, row.org_id))?.slice(BLOB_REF_PREFIX.length) ?? null;
+  let seal: Promise<BlobSeal | null> | null = null;
+  const upload = async (file: string) => {
+    seal ??= cardId ? cardBlobSeal(client, row.org_id, cardId) : Promise.resolve(null);
+    return (await blobs.upload(file, row.org_id, (await seal) ?? undefined))?.slice(BLOB_REF_PREFIX.length) ?? null;
+  };
   const attachments = await encodeAttachments(text, dir, upload);
   return attachments.length ? sendable({ ...row, payload: { ...row.payload, attachments } }) : row;
 }
@@ -252,7 +257,7 @@ async function hostRow(client: SupabaseClient, target: Awaited<ReturnType<typeof
   const { verb, args } = row.payload;
   const field = textArgOf(verb);
   const typed = field ? args[field] : undefined;
-  return typeof typed === "string" ? withAttachments(client, row, typed, dir) : row;
+  return typeof typed === "string" ? withAttachments(client, row, typed, dir, target.cardId) : row;
 }
 
 // A reply, an answer or a Stop from the desktop: the same rows the web board sends. A command for an offline worker
@@ -269,5 +274,5 @@ export async function sendWorkerAction(body: WorkerAction, client: SupabaseClien
   }
   const row = body.action === "reply" ? replyCommand(target, body.text) : answerCommand(target, body);
   if (!row) throw new Error(body.action === "reply" ? "Write a message first." : "Nothing is waiting for an answer.");
-  return insert(client, body.action === "reply" ? await withAttachments(client, row, body.text, dir) : row);
+  return insert(client, body.action === "reply" ? await withAttachments(client, row, body.text, dir, target.cardId) : row);
 }
