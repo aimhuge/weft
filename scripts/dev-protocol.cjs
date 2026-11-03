@@ -137,6 +137,8 @@ function register() {
 }
 
 function main() {
+  // Windows and Linux register weft:// from Electron main itself (electron/protocol-client.cjs).
+  if (process.platform !== "darwin") return;
   ensureElectron();
   warnIfProtected();
   ensureWrapper();

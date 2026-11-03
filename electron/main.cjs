@@ -35,7 +35,7 @@ const { registerTerminal } = require("./terminal.cjs");
 const { followThemeChoice } = require("./theme-source.cjs");
 const { loadWindowState, trackWindowState } = require("./window-state.cjs");
 const { createAccountLink } = require("./account-link.cjs");
-const { argvLink } = require("./argv-link.cjs");
+const { launchLinks, listenForLinks, registerProtocolClient } = require("./protocol-client.cjs");
 const { createMenuPopup } = require("./main-menu-popup.cjs");
 const { createNewThreadLink } = require("./new-thread-link.cjs");
 const { createAccountClient } = require("./account-client.cjs");
@@ -60,8 +60,9 @@ let appView;
 let copilotWin;
 let server;
 let quitting = false;
-// weft:// links that arrive before the board is ready.
-const pendingLinks = [];
+// weft:// links that arrive before the board is ready; on Windows and Linux a link that launched
+// Weft comes in its own argv.
+const pendingLinks = launchLinks(process.argv, PROTOCOL);
 const timer = createStartupTimer({
   version: app.getVersion(),
   mode: app.isPackaged ? "packaged" : process.env.WEFT_PROD ? "prod" : "dev",
@@ -103,20 +104,8 @@ const accountLink = createAccountLink({ getServer: () => server, showMain, warn:
 const primary = app.requestSingleInstanceLock();
 if (!primary) app.quit();
 
-app.on("second-instance", (_event, argv) => {
-  showMain();
-  // weft:// links may arrive as a raw arg (the wrapper passes them through) or as `--weft-link=…`
-  // when the wrapper wants to be explicit. macOS's open-url event covers the running case; this
-  // handler covers the second-instance path on every platform.
-  const link = argvLink(argv, PROTOCOL);
-  if (link) handleLink(link);
-});
-
-// macOS delivers weft:// links here, possibly before the app is ready.
-app.on("open-url", (event, url) => {
-  event.preventDefault();
-  handleLink(url);
-});
+// weft:// links from a second launch (Windows, Linux) or macOS open-url (electron/protocol-client.cjs).
+listenForLinks({ app, protocol: PROTOCOL, showMain, handleLink });
 
 function background() {
   return nativeTheme.shouldUseDarkColors ? "#131312" : "#f4f3ef";
@@ -413,7 +402,7 @@ app.whenReady().then(async () => {
   timer.mark("ready");
   await followThemeChoice(session.defaultSession.cookies, nativeTheme);
   registerAboutBridge({ tagline: TAGLINE, dataDir, getServer: () => server });
-  if (app.isPackaged) app.setAsDefaultProtocolClient(PROTOCOL);
+  registerProtocolClient({ app, protocol: PROTOCOL });
   menus.buildMenu();
   menus.setupDock();
   createMainWindow();

@@ -22,7 +22,9 @@ lives in `electron/server.cjs`.
   routing any `weft://` argument through `handleLink()`.
 - `app.on("open-url", …)` is the macOS deep-link entry; in packaged builds the
   `weft` scheme is registered with `app.setAsDefaultProtocolClient("weft")`
-  (`build.protocols` in `package.json`).
+  (`build.protocols` in `package.json`); unpackaged on Windows and Linux too, with the dev
+  Electron and the project folder (`electron/protocol-client.cjs`, which also holds the
+  `second-instance` and `open-url` listeners).
 - `createMainWindow()` builds a hidden `BaseWindow` with `titleBarStyle:
   "hiddenInset"`, mounts a `WebContentsView` (`appView`) as its child, and reveals
   the window on `did-finish-load`. On macOS, `win.on("close", …)` hides instead of
