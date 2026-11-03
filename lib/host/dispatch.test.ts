@@ -242,4 +242,41 @@ describe("a verb on the host itself", () => {
     expect(hostVerb).not.toHaveBeenCalled();
     await expect(cardKinds(rules()).host(put({ maxThreads: 2 }))).rejects.toThrow("This host takes its settings only from its own window.");
   });
+
+  describe("Goose's provider, signed", () => {
+    const put = (patch: unknown, widen?: unknown) => cmd("host", { verb: "settings.put", args: { patch, ...(widen ? { widen } : {}) } });
+    const setup = (problem: string | null = null) => {
+      const hostVerb = vi.fn<NonNullable<CardRules["hostVerb"]>>(() => Promise.resolve({ settings }));
+      const goose = vi.fn<NonNullable<CardRules["goose"]>>(() => {});
+      const widen = vi.fn<NonNullable<CardRules["widen"]>>(() => Promise.resolve(problem));
+      return { hostVerb, goose, widen, kinds: cardKinds(rules({ hostVerb, goose, widen })) };
+    };
+
+    it("saves the Goose pair after its approval checks out over exactly that change, and the rest as host settings", async () => {
+      const s = setup();
+      const done = await s.kinds.host(put({ maxThreads: 2, gooseProviderId: "openai", gooseBaseUrl: "" }, { kind: "ed25519" }));
+      expect(s.widen).toHaveBeenCalledWith(
+        { card: "", verb: "settings.put", change: { goose: { gooseProviderId: "openai", gooseBaseUrl: "" } }, args: { patch: { maxThreads: 2, gooseProviderId: "openai", gooseBaseUrl: "" } } },
+        { kind: "ed25519" },
+        expect.stringMatching(/can't change gooseProviderId/),
+      );
+      expect(s.goose).toHaveBeenCalledWith({ gooseProviderId: "openai", gooseBaseUrl: "" });
+      expect(s.hostVerb).toHaveBeenCalledWith("settings.put", { id: "", patch: { maxThreads: 2 } });
+      expect(done.result).toEqual({ ok: true, cardId: "", settings });
+    });
+
+    it("refuses it unsigned, with a bad approval, on a host without the Goose rule, or with another foreign field beside it", async () => {
+      const unsigned = setup();
+      await expect(unsigned.kinds.host(put({ gooseProviderId: "openai" }))).rejects.toThrow(/can't change gooseProviderId/);
+      const bad = setup("That approval's signature doesn't check out.");
+      await expect(bad.kinds.host(put({ gooseProviderId: "openai" }, { kind: "ed25519" }))).rejects.toThrow("doesn't check out");
+      expect(bad.goose).not.toHaveBeenCalled();
+      const hostVerb = vi.fn<NonNullable<CardRules["hostVerb"]>>(() => Promise.resolve({ settings }));
+      await expect(cardKinds(rules({ hostVerb, widen: () => Promise.resolve(null) })).host(put({ gooseProviderId: "openai" }, { kind: "ed25519" }))).rejects.toThrow(/can't change gooseProviderId/);
+      const extra = setup();
+      await expect(extra.kinds.host(put({ gooseProviderId: "openai", allowedFolders: ["/"] }, { kind: "ed25519" }))).rejects.toThrow(/can't change allowedFolders/);
+      expect(extra.goose).not.toHaveBeenCalled();
+      expect(extra.hostVerb).not.toHaveBeenCalled();
+    });
+  });
 });

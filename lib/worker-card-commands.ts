@@ -7,6 +7,7 @@
 // input and qa are the worker's own kinds: mode is card.update's permissionMode within CARD_MODES (never
 // bypassPermissions), and leaves a Codex session in its sandbox mode.
 import type { CloudCommandRow } from "./cloud-commands";
+import { applyGooseSettings } from "./host-goose-settings";
 import { cardKinds, type CardRules } from "./host/dispatch";
 import type { Card } from "./types";
 import type { Engine } from "./worker-daemon";
@@ -39,6 +40,8 @@ export function workerRules(engine: Engine, create?: CardRules["create"], lists?
     widen: widen && workerWidenCheck(widen),
     // A worker's own settings, edited from your Mac's Settings (only HOST_SETTINGS; remoteRefusal and the verb check).
     hostVerb: (verb, args) => engine.host(verb, args),
+    // Goose's provider and endpoint, only once a signed widening from the pairing Mac checked out (lib/host/dispatch.ts).
+    ...(widen ? { goose: applyGooseSettings } : {}),
     grant: (cardId, directory, scope) => engine.grant(cardId, directory, scope),
     receive: (text, payload) => engine.receive(text, payload),
     // The editor's files.* results over the row's 4 KB go up as blobs (lib/host-result.ts).

@@ -18,7 +18,7 @@ const onDisk = () => JSON.parse(fs.readFileSync(path.join(settingsDir.path, "set
 describe("host settings", () => {
   it("reads the four a worker carries", async () => {
     const { host } = await loadHost();
-    expect(host.hostSettings()).toEqual({ maxThreads: 6, keepAliveMinutes: 0, worktreePool: 1, defaultBackend: "claude" });
+    expect(host.hostSettings()).toEqual({ maxThreads: 6, keepAliveMinutes: 0, worktreePool: 1, defaultBackend: "claude", gooseProviderId: "", gooseBaseUrl: "" });
   });
 
   it("saves a patch of them once every field checks out", async () => {
@@ -28,6 +28,8 @@ describe("host settings", () => {
       keepAliveMinutes: 60,
       worktreePool: 0,
       defaultBackend: "puku",
+      gooseProviderId: "",
+      gooseBaseUrl: "",
     });
     expect(settings.maxThreads()).toBe(3);
     expect(host.applyHostSettings(undefined)).toMatchObject({ maxThreads: 3 });
