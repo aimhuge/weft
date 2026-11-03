@@ -45,7 +45,7 @@ describe("useCloudTransport", () => {
     const rows: NewCommand[] = [];
     const sendCommand = vi.fn((row: NewCommand) => (rows.push(row), Promise.resolve({ id: `cmd-${rows.length}` })));
     const target = (cardId: string) => ({ orgId: "o1", device: "mac-1", folder: "/f", cardId });
-    const uploads = { upload: vi.fn(), refsFor: () => [] };
+    const uploads = { upload: vi.fn(), refsFor: () => [], send: vi.fn() };
     const bus = { subscribe: () => () => {} };
     const tools = vi.fn();
     const { result } = renderHook(() => useCloudTransport({ client: client() as never, orgId: "o1", bus, target, sendCommand, uploads, tools }));

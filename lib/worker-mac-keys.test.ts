@@ -29,6 +29,38 @@ describe("macKeysAt", () => {
   });
 });
 
+describe("macKeysAt: a revoked Mac", () => {
+  it("keeps a revoked key out of pinned() for good, across forget and a pairing again, but still holds it", () => {
+    const home = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "weft-mac-keys-")), "home");
+    const macs = macKeysAt(home);
+    macs.revoke(["x"]);
+    macs.pin("a");
+    macs.pin("b");
+    macs.revoke(["a"]);
+    macs.revoke(["a"]);
+    expect(macs.pinned()).toEqual(["b"]);
+    expect(macs.held()).toEqual(["a", "b"]);
+    expect(macs.revoked()).toEqual(["x", "a"]);
+    expect(fs.statSync(path.join(home, "mac-revoked.json")).mode & 0o777).toBe(0o600);
+    macs.forget();
+    macs.pin("a");
+    expect(macKeysAt(home).pinned()).toEqual([]);
+  });
+
+  it("trusts no Mac when the revoked list won't read, and doesn't write over it", () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), "weft-mac-keys-"));
+    macKeysAt(home).pin("a");
+    fs.writeFileSync(path.join(home, "mac-revoked.json"), "{");
+    const macs = macKeysAt(home);
+    expect(macs.pinned()).toEqual([]);
+    expect(macs.revoked()).toEqual([]);
+    macs.revoke(["b"]);
+    expect(fs.readFileSync(path.join(home, "mac-revoked.json"), "utf8")).toBe("{");
+    fs.writeFileSync(path.join(home, "mac-revoked.json"), "{}");
+    expect(macs.pinned()).toEqual([]);
+  });
+});
+
 describe("macSigned", () => {
   it("checks a libsodium-style signature against a raw Ed25519 key", () => {
     const mac = macSigner();

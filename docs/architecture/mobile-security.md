@@ -78,6 +78,10 @@ vault's (`workspace_keys`, `workspace_key_grants`) so the 🔐 drawer and the De
   `workspace_key_grants`, set `devices.revoked_at`, then **rotate** the workspace key: a new version, wrapped to the
   Mac and every device still pinned. Rows already sealed stay under the old version (the revoked device may have read
   them); everything after is under the new one. A trigger keeps `revoked_at` from being cleared again.
+- **Revoked somewhere else** (another Mac, or Settings → Devices' `device_revoke`): the Mac that pinned the device reads
+  `revoked_at` for its pins at most once a minute (`electron/pairing.cjs` `reconcile`, run before each passkey sync) and
+  does the same unpin, grant drop and rotation; the same sync narrows every worker's passkey set
+  ([device-registry.md](device-registry.md#revoked-on-one-device-untrusted-on-all)). A row it can't see unpins nothing.
 - Each Mac pairs on its own: a phone paired with the MacBook isn't trusted by the Mac mini until it's paired there
   too. A second Mac on the same workspace finds a key it has no grant for and uploads plain rows (`POST /sync/key` says
   `none`); Mac-to-Mac pairing is under Gaps.
@@ -101,7 +105,7 @@ move a sealed item onto another card or seq and have it open: `weft-sync-v1\n<or
 | `cloud_thread_items` | `item` (the whole ThreadItem) | `org_id`, `card_id`, `seq`, `kind`, `at` |
 | `cloud_cards` | `card.title`, `prompt`, `lastLine`, `error`, `suggestion`, `remaining`, `touchedFiles`, `claims` → `card.sealed` | ids, `column`, `status`, `emoji`, `stage`, `tags`, timestamps, `folder`, `page` refs |
 | `cloud_tool_outputs` | `result` (the envelope as JSON text) | `tool_id`, `bytes` |
-| `weft-blobs` pages | the file's bytes (`nonce ‖ ciphertext`), designed here, wired in a follow-up card | the `blob:sha256:` ref (hash of the plaintext) |
+| `weft-blobs` objects | the bytes of every attachment, page, page asset and pane capture a sealed row names ([Sealed blobs](#sealed-blobs)) | the `blob:sha256:` ref (hash of the plaintext), the content type, the size |
 
 - A sealed card's `title` reads `"🔒"` in the row, so a feed or a push that can't open it still draws something.
 - **Gradual.** Readers take both: `openItem` / `openCard` / `openToolResult` return a plain value unchanged and a
@@ -116,6 +120,109 @@ move a sealed item onto another card or seq and have it open: `weft-sync-v1\n<or
 - The web board opens rows in the browser (`lib/web-sync-key.ts` holds the browser's unwrapped keys in memory, read from
   its grants on load). The server render and the first client render both draw the 🔒 stand-ins; once the keys are in,
   `useWebBoard` reopens the cards and reloads the open thread, so hydration never disagrees.
+
+## Sealed blobs
+
+Status: **built for a Mac and the web board** (2026-11-03); a worker's are [designed below](#sealing-on-a-weft-worker-design).
+`lib/blob-seal.ts` on `lib/sync-seal.ts`'s `sealBytes` / `openBytes`.
+
+A row that names a file names it by `blob:sha256:<hex>`, the hash of the plaintext, and the file sits in `weft-blobs` at
+`<org>/<sha>`. When the row goes up sealed, the file goes up sealed too, with the same workspace key:
+
+```
+"wsb1" ‖ key version (u32, big-endian) ‖ 24-byte nonce ‖ XChaCha20-Poly1305(bytes, aad = "weft-blob-v1\n<org>\n<sha>")
+```
+
+- **The ref doesn't change.** Content addressing, dedup, every ref-walker (`collectBlobRefs`, `signPageAssets`, the show
+  rail) and the R2 mirror work as before; only the bytes in the bucket are ciphertext. The content type stays the file's,
+  so a reader that opens the bytes knows what it has; the type and the size are what the bucket learns.
+- **Bound to where it sits.** The associated data names the org and the sha, so a server that moves a sealed object to
+  another org or path gets bytes that won't open. Every reader also hashes what it opened and refuses it unless it is
+  the ref's sha (`openBlob`), so a key holder can't put other content under a ref either.
+- **Versioned.** Bytes without the `wsb1` magic are a plain blob from before sealing and pass through unchanged; a plain
+  file that happens to start with the magic still opens, because its own hash is the ref's.
+- **Who seals.** The Mac's outbox, through the blob store's `seal` argument (`createBlobStore` `upload` / `uploadPage` /
+  `rewriteItem`), with `Sealer.blob(cardId)` (`lib/sync-seal-upload.ts`): the same switch, key and share rule as the rows,
+  so a card with a share link keeps its files plain for `/s/…`. Each card gets its own view of the store
+  (`withBlobSeal`) in `lib/cloud-sync-cards.ts` (thumbs, pages, tour pages) and `lib/cloud-sync-upload.ts` (what an item
+  names). A **paired browser** (`lib/web-upload.ts`) holds a pasted file until its message goes, then seals it when the
+  card it goes to came sealed with a key version this browser holds (`webBlobSeal`, which remembers each card's version
+  as it draws the row), since that card's host provably holds the key; a worker's card, an unsealed or shared one and a
+  new thread get it plain. A browser with no key puts at once, plain, as before.
+- **Who opens.** A Mac receiving a pasted file (`lib/cloud-inbox-receive.ts`) opens it with main's current key
+  (`macKeyring`, asked for only when something sealed arrives), and says which version it lacks when it can't. On
+  weft.zip a paired browser opens pictures and thumbs itself (`lib/web-blob-open.ts` `openSealedUrls`: each signed URL is
+  fetched and a sealed one becomes an object URL; one that can't be fetched or opened keeps its URL and draws broken, as a
+  sealed row draws 🔒), and pages through `components/web-board/useSealedPage.ts`: the page route hands a sealed page over
+  as stored (`?sealed=1`), the browser opens it and each `blob:sha256:` asset it names into a `data:` URL, and the pane
+  frames it with `srcdoc` under the route's own sandbox (`allow-scripts allow-popups allow-forms`, no same-origin), so
+  the page still runs in an opaque origin. The pane shows nothing while it looks, so ciphertext never flashes.
+- **Servers draw the stand-in.** The web board's page route without `?sealed=1` and a share page (`lib/share-page-serve.ts`)
+  serve the 🔒 page (`SEALED_PAGE_HTML`) for sealed bytes: they hold no key.
+- **Write-once.** The bucket has no update policy, so the first upload of a sha wins. A file already up plain stays plain
+  when a sealed row names it later (like old rows), and one that went up sealed stays sealed when a share link or a
+  published mini app names the same bytes later: those draw the 🔒 stand-in until the page changes (a new sha).
+
+## Sealing on a Weft Worker (design)
+
+Status: **designed, not built** (2026-11-03). Today a worker holds no workspace key: it publishes its card, item and tool
+rows and its pages plain, and a Mac or browser sends a worker's card its files plain. This is how it closes, in two
+steps, each reusing a piece already built and trusted (the pairing pins and the Mac's device key from H8 and H10).
+
+### Step A: a key grant to the worker
+
+```
+Settings → Devices → the worker → Seal this worker's threads        (IPC from the board window only, like pairing)
+main:   the worker's pinned box key (electron/worker-pins.cjs) ─ Touch ID "Give m1mini the key to your sealed threads"
+        ─ for each version main holds: sealed = seal(key, box, purpose "workspace-key:<org>:<worker>:<version>")
+          (lib/worker-seal.ts's X25519 + HKDF + AES-256-GCM, electron/worker-seal.cjs)
+        ─ sig = Mac device key (electron/desktop-signer.cjs) over
+          "weft-worker-key-v1\n<org>\n<worker>\n<version>\n<box key>\n<sha256(sealed) hex>"
+        ─ insert worker_key_grants { org_id, worker_id, version, sealed, mac_device, sig }   (RLS: the worker's owner)
+worker: worker_key_grants(p_key) RPC (sha256(wwk_) → its own rows) ─ check sig against the Mac key in mac-keys.json
+        (trustPairingMac; never a key off the network) ─ the box key named is its own ─ open under the purpose
+        ─ hold the ring in memory only; read again at start and on a `key_grant` ping
+```
+
+- **Never readable by weft.zip.** The server stores a box sealed to a key it can't open, and the signature means a
+  server (or the owner's stolen session) can't plant a key of its own choosing: a planted key would let it read
+  everything the worker seals after. A worker enrolled by token trusts no Mac, so it never takes a grant; it stays plain.
+- **Rotation and revocation.** `syncKeys.rotate(org, keep)` gains the granted workers (main keeps which ones it granted,
+  sealed beside `worker-pins.json`), so a rotation grants them the new version under the same Touch ID. Revoking a worker
+  (or Re-pin dropping its box key) deletes its grants and rotates, as revoking a phone does. A grant is offered only while
+  **Seal synced threads** is on, and pairing a worker (H10) can offer it under its own Touch ID.
+- **Settings → Devices** says which state a worker is in: "Threads sealed (key v3)", or "Threads in the clear · Seal…"
+  (no grant, or a grant for an older version only), so a worker without a key keeps working, plainly labelled.
+
+**Migration (proposed, additive):** `worker_key_grants (org_id uuid, worker_id uuid references cloud_workers on delete
+cascade, version int, sealed text, mac_device text, sig text, created_at timestamptz, primary key (worker_id, version))`
+with RLS insert/select/delete for the worker's `owner_user` who is an org member, a `security definer`
+`worker_key_grants(p_key text)` RPC keyed by `key_hash` that returns only that worker's rows and nothing for a revoked
+worker, and a trigger that deletes a worker's grants when `cloud_workers.revoked_at` is set.
+
+### Step B: the worker seals and opens
+
+- **Opens.** The worker's attachment download (`workerBlobReader` through `app/api/worker-blob` read mode) runs the bytes
+  through `openBlob` with its ring before `receiveAttachments` checks the sha, as `macReceive` does. With step A in, the
+  Mac's `withAttachments` (`lib/worker-board.ts`) and a paired browser's `webBlobSeal` seal for a worker's card too: the
+  Mac when the worker's grant covers its current version, the browser when the card's row came sealed (which only a
+  worker with the key can write).
+- **Seals its rows like a Mac's outbox.** The publisher (`lib/worker-publish.ts`) takes a `Sealer` built by
+  `makeSealer(s, key, isShared)` from the worker's newest granted version, and hands `Sealer.blob(cardId)` to its blob
+  store through `withBlobSeal`, exactly as `lib/cloud-sync-upload.ts` does; `worker_put_card` / `worker_put_items` take
+  the sealed jsonb unchanged, so weft.zip's server sees ciphertext. A card with a share link stays plain.
+- **Boards open them.** The web board already opens any row sealed with the workspace key (`openSyncedCard`,
+  `openSyncedItem`) and any sealed blob (`lib/web-blob-open.ts`). The desktop board reads a worker's rows on this Mac's
+  own server (`lib/worker-board-reads.ts`, `lib/worker-board.ts` `workerPage`), which opens them with main's keyring;
+  ⌘F on a worker card (`lib/worker-thread-reads.ts`) reads the rows in batches, opens and matches them with
+  `searchCloudThread`, as weft.zip does for a Mac's, instead of matching in SQL.
+
+**Threat model.** In scope: weft.zip's server, its database and backups, Weft's operators, a stolen account session, and
+anyone holding the worker's `wwk_` key without its box. With A and B, none of them reads a worker's sealed thread, its
+pages or the files sent to it, plants a workspace key on the worker, or gets a grant for a box they control (the grant
+goes only to the box key main pinned under Touch ID). Out of scope, as for a Mac: the worker box itself (whoever runs
+code there reads its memory, and its cards run with its privileges), and a key the Mac granted before a revoke for
+rows sealed under that version.
 
 ## 3. Signed approvals
 
@@ -403,11 +510,11 @@ pending request and its name from the registry, so a worker card's Allow from th
 
 ## Gaps
 
-- Page blobs are designed (bytes `nonce ‖ ciphertext`, AAD `weft-blob-v1\n<org>\n<sha>`) but not wired: the blob store
-  and the page route are being reworked by the R2 and pane-images cards. The web would fetch the bytes and frame them
-  through a `blob:` URL instead of the page route.
-- A Weft Worker seals nothing: it holds no workspace key, so its rows and pages stay plain even with sealing on
-  ([Pages from a worker](weft-worker.md#pages-from-a-worker)).
+- A Weft Worker seals nothing yet: it holds no workspace key, so its rows and pages stay plain even with sealing on, and a
+  file a Mac or a browser sends a worker's card goes up plain ([Sealing on a Weft Worker](#sealing-on-a-weft-worker-design)).
+- Sealed blobs: the phone app (weft-mobile) opens them only once it adopts `openBlob`; until then a phone draws a sealed
+  picture broken. A sealed file is write-once under its sha (see [Sealed blobs](#sealed-blobs)), and a sealed page's
+  `#anchor` is lost in `srcdoc`.
 - Each Mac pins its own phones; a second Mac needs its own pairing, and has no way yet to get the workspace key (it
   uploads plain rows meanwhile).
 - A browser's box and signing keys sit in localStorage, readable by any script on weft.zip; that's why only a passkey

@@ -57,6 +57,16 @@ describe("cardRows", () => {
     expect(row?.card.thumb).toBe(REF);
     expect(local.thumb).toBe("/api/attachments/pane-abc.jpg");
   });
+
+  it("seals a card's capture when sealFor gives its card a seal", async () => {
+    const file = attachment("pane-def.jpg");
+    card("a", { thumb: "/api/attachments/pane-def.jpg" });
+    card("b", { thumb: "/api/attachments/pane-def.jpg" });
+    const seal = () => new Uint8Array();
+    await cardRows(blobs, "o1", [{ op: "card", cardId: "a", at: 1 }, { op: "card", cardId: "b", at: 1 }], 1, (id) => (id === "a" ? seal : null));
+    expect(upload).toHaveBeenCalledWith(file, "o1", seal);
+    expect(upload).toHaveBeenCalledWith(file, "o1");
+  });
 });
 
 describe("withUploadedThumbs", () => {

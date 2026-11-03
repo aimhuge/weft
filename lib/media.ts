@@ -2,7 +2,8 @@
 // where it was pasted as Markdown image syntax: ![name](/Users/me/.weft/attachments/shot-1a2b3c4d.png).
 // These helpers are shared by the server and the board UI, so nothing here touches the file system.
 
-export type MediaKind = "image" | "video" | "audio" | "file";
+import type { MediaKind } from "@weft/client";
+export type { MediaKind };
 
 // Images the Claude API accepts as image blocks.
 export const IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "gif", "webp"]);

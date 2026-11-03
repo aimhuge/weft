@@ -5,7 +5,8 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { hintChecks, readHintTxt } from "./lan-hint";
-import { WORKER, workerKeys } from "./lan-hint.harness";
+import { macKey, WORKER, workerKeys } from "./lan-hint.harness";
+import { seal } from "./worker-seal";
 
 const made = vi.hoisted(() => ({ sockets: [] as { respond: { mock: { calls: unknown[][] } }; destroy: () => void }[] }));
 vi.mock("multicast-dns", () => ({
@@ -63,6 +64,25 @@ describe("startWorkerLanSafely", () => {
     fs.writeFileSync(path.join(home, "mac-keys.json"), JSON.stringify(["mac"]));
     const stop = await startWorkerLanSafely({ ...base(), log, env: {} });
     expect(log).toHaveBeenLastCalledWith(expect.stringContaining("offering lines on the LAN"));
+    await stop();
+  });
+
+  it("refuses an offer signed by a Mac key the box has since marked revoked (mac-revoked.json), from the next offer on", async () => {
+    const mac = macKey();
+    fs.writeFileSync(path.join(home, "mac-keys.json"), JSON.stringify([mac.raw]));
+    fs.writeFileSync(path.join(home, "mac-revoked.json"), JSON.stringify([]));
+    const log = vi.fn();
+    const open = vi.fn(() => Promise.resolve({ iv: "aXY=", ct: "Y3Q=" }));
+    const stop = await startWorkerLanSafely({ ...base(), open, log, env: {} });
+    const port = Number(/port (\d+)/.exec(String(log.mock.calls.at(-1)?.[0]))?.[1]);
+    const post = () => {
+      const sealed = seal(w.box.publicKey, "{}", "rtc-line");
+      return fetch(`http://127.0.0.1:${port}/line`, { method: "POST", body: JSON.stringify({ v: 1, workerId: WORKER, sealed, mac: mac.stamp(WORKER, sealed, Date.now()) }) });
+    };
+    expect((await post()).status).toBe(200);
+    fs.writeFileSync(path.join(home, "mac-revoked.json"), JSON.stringify([mac.raw]));
+    expect((await post()).status).toBe(403);
+    expect(open).toHaveBeenCalledTimes(1);
     await stop();
   });
 

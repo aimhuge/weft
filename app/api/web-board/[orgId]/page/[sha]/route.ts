@@ -6,12 +6,16 @@
 // Sent with the share viewer's sandbox (app/api/s/[id]/page/[sha]): the page's scripts run in an opaque origin and
 // can't read weft.zip's cookies. An HTML page's images come as `blob:sha256:` refs; they're signed as the visitor
 // (lib/blob-page-sign.ts), since the sandboxed page's own requests carry no session cookie.
+// A sealed blob (lib/blob-seal.ts) can't be read here, the server holds no key: `?sealed=1` hands its bytes over as
+// stored, for a paired browser to open (lib/web-blob-open.ts), and without it the page reads as the 🔒 stand-in.
 import { NO_STORE } from "@/lib/app-share-reply";
 import { signPageAssets } from "@/lib/blob-page-sign";
 import { mirroredShas } from "@/lib/blob-urls";
 import { readBlob } from "@/lib/blob-read";
 import { r2Config } from "@/lib/r2";
 import { queueMirror } from "@/lib/r2-queue";
+import { SEALED_PAGE_HTML } from "@/lib/blob-seal";
+import { isSealedBytes } from "@/lib/sync-seal";
 import { requestSession } from "@/lib/web-session";
 
 const SHA_RE = /^[0-9a-f]{64}$/;
@@ -34,6 +38,10 @@ export async function GET(req: Request, ctx: { params: Promise<{ orgId: string; 
   if (!got) return new Response("Not found", { status: 404, headers: NO_STORE });
   if (r2 && got.from === "supabase") queueMirror(orgId)(sha);
   const type = got.type || "application/octet-stream";
+  if (isSealedBytes(new Uint8Array(got.bytes))) {
+    if (new URL(req.url).searchParams.get("sealed") === "1") return new Response(got.bytes, { status: 200, headers: { ...HEADERS, "Content-Type": type } });
+    return new Response(SEALED_PAGE_HTML, { status: 200, headers: { ...HEADERS, "Content-Type": "text/html; charset=utf-8" } });
+  }
   const body = type.startsWith("text/html") ? await signPageAssets(supabase, orgId, new TextDecoder().decode(got.bytes)) : got.bytes;
   return new Response(body, { status: 200, headers: { ...HEADERS, "Content-Type": type } });
 }

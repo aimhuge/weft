@@ -11,6 +11,7 @@ import type { Registry } from "./worker-registry";
 import { deliverSecretUse } from "./worker-secret-asks";
 import type { SecretLink } from "./worker-secret-run";
 import { macKeysAt } from "./worker-mac-keys";
+import { macFingerprint } from "./worker-repair";
 import { open, sealFingerprint, type SealKeys } from "./worker-seal";
 import { setVaultLink } from "./worker-vault";
 
@@ -48,8 +49,12 @@ export function keyStatus(home: string): string[] {
     lines.push("No box key yet: it's made when the worker first starts.");
   }
   lines.push(pairedSigner(home) ? "Secret asks are signed with this box's pairing key." : "Secret asks aren't signed (enrolled by token, not paired).");
-  const macs = macKeysAt(home).pinned().length;
-  lines.push(macs ? `Takes secrets from the Mac it was paired with (weft-worker forget-macs to stop).` : "Takes no secrets: enrolled by token. Pair it from Settings → Devices → Add a worker to use secrets.");
+  const macs = macKeysAt(home);
+  const trusted = macs.pinned();
+  const revoked = macs.held().filter((k) => !trusted.includes(k));
+  if (trusted.length) lines.push(`Takes secrets from the Mac it was paired with, key ${trusted.map(macFingerprint).join(", ")} (weft-worker forget-macs to stop).`);
+  else if (revoked.length) lines.push(`Takes no secrets: the Mac it was paired with (key ${revoked.map(macFingerprint).join(", ")}) was revoked. Wipe it and enrol it afresh from another Mac.`);
+  else lines.push("Takes no secrets: enrolled by token. Pair it from Settings → Devices → Add a worker to use secrets.");
   return lines;
 }
 

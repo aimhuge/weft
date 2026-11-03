@@ -8,6 +8,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as grpc from "@grpc/grpc-js";
 import * as loader from "@grpc/proto-loader";
+import { hidPresses, SHIFT_USAGE } from "./hid-text";
 import { dropIdb, setIdb, type IdbSession } from "./idb-session";
 import { DEFAULT_QUALITY, type ScreenQuality } from "./rtc-signal";
 import { findBin, TOOLS_DIR } from "./simulator-exec";
@@ -63,6 +64,11 @@ export function screenPoints(res: Described | undefined) {
   return { width: Math.round(s.width / s.density), height: Math.round(s.height / s.density) };
 }
 
+const keyPress = (keycode: number, down: boolean) => ({ press: { action: { key: { keycode } }, direction: down ? "DOWN" : "UP" } });
+// One character's presses: its key down and up, inside Shift when it needs it.
+const typed = (usage: number, shift: boolean) =>
+  shift ? [keyPress(SHIFT_USAGE, true), keyPress(usage, true), keyPress(usage, false), keyPress(SHIFT_USAGE, false)] : [keyPress(usage, true), keyPress(usage, false)];
+
 const touch = (point: { x: number; y: number }, direction: "DOWN" | "UP"): Touch => ({ press: { action: { touch: { point } }, direction } });
 
 function hid(client: IdbClient, events: unknown[]) {
@@ -113,7 +119,8 @@ export function sessionOver(client: IdbClient, size: IdbSession["size"], close: 
         gesture = null;
       }
     },
-    key: (keycode, down) => keys.write({ press: { action: { key: { keycode } }, direction: down ? "DOWN" : "UP" } }),
+    key: (keycode, down) => keys.write(keyPress(keycode, down)),
+    text: (text) => hidPresses(text).forEach(({ usage, shift }) => typed(usage, shift).forEach((e) => keys.write(e))),
     tap: (x, y) => hid(client, [touch({ x, y }, "DOWN"), touch({ x, y }, "UP")]),
     swipe: (start, end, ms) => hid(client, [{ swipe: { start, end, duration: ms / 1000, delta: 0 } }]),
     video: (onFrame, onEnd, quality = DEFAULT_QUALITY, bitrate) => video(client, px, quality, onFrame, onEnd, bitrate),

@@ -217,3 +217,12 @@ describe("evenScale", () => {
     expect(evenScale(1320, 2868, 1)).toBeCloseTo(1, 4);
   });
 });
+
+describe("a paste on the simulator", () => {
+  it("types each character as its key, inside Shift when it needs it, and drops what no key types", () => {
+    const { client, writes } = fakeClient();
+    const key = (keycode: number, down: boolean) => ({ press: { action: { key: { keycode } }, direction: down ? "DOWN" : "UP" } });
+    sessionOver(client, { width: 1, height: 1 }, vi.fn()).text("aB✓");
+    expect(writes).toEqual([key(4, true), key(4, false), key(225, true), key(5, true), key(5, false), key(225, false)]);
+  });
+});

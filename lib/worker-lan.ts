@@ -27,7 +27,8 @@ const BODY_MS = 10_000;
 
 export interface LanServerDeps {
   workerId: string;
-  // The Mac keys this box pinned from its pairing code; none, and every offer is refused.
+  // The Mac keys this box trusts now: pinned from its pairing code, less any marked revoked (lib/worker-mac-keys.ts
+  // pinned(), read on every offer, so a revocation counts from the next one); none, and every offer is refused.
   macKeys: () => string[];
   nonces: NonceBook;
   // Opens the line from the sealed offer and resolves with its sealed answer (lib/worker-daemon.ts lanLine).
