@@ -329,7 +329,7 @@ A paired worker takes secrets and signed settings from one Mac, the one whose ke
 (`mac-keys.json`). To move it to another Mac, or to pair it again into another workspace, that Mac approves the move:
 Settings → Devices → the worker → **Re-pair**, paste the new Mac's `wph.…` code, Touch ID, and run the line it shows in
 a terminal on the box (`weft-worker enrol wph.… --re-pair --approval wra.…`). The approval lasts 30 minutes and is
-good for that worker and that code only ([project-hosts.md](project-hosts.md#re-pairing-a-worker)).
+good for that worker and that code only ([project-hosts.md](project-hosts.md#re-pairing-a-worker-as-built-2026-11-02)).
 
 **A lost Mac, or a box that trusts none** (enrolled by token, after `weft-worker forget-macs`, or once its Mac was
 revoked: the daemon checks every minute and stops trusting a revoked pairing Mac for good,
@@ -442,7 +442,7 @@ store (`lib/worker-project.ts`, `lib/worker-board.ts`, `lib/worker-transport.ts`
   archive and the model picker, and its reply box ↑ edit, fresh and the held-edit choices, each a host verb; the show
   rail projects the items its thread view drew (`lib/worker-shown.ts`), and the pane column is `components/WorkerPane.tsx`
   (in the desktop app, this Mac's native pane on a page the card wrote or a site, as on a local card,
-  [below](#the-native-pane-on-a-worker-card); `WebPane` on the live screen, a page only the worker has, and off the
+  [below](#pages-from-a-worker); `WebPane` on the live screen, a page only the worker has, and off the
   desktop app; the native pane under Local Simulator). The editor column
   says a worker's files aren't there yet. Reply, answer, stop and mode are the same `cloud_commands` rows the web sends.
 - **A new thread:** `POST /api/cards` with a worker path calls `startWorkerThread`, sends a `run` with that folder, makes
@@ -525,7 +525,7 @@ card.page and the open_url item carry blob:sha256:<hex>#anchor (lib/worker-publi
   session. A worker's page is untrusted, so `app/api/worker-board/page/[sha]` sends a CSP with no `http:` source (the page
   can't fetch, load or post anything to 127.0.0.1), and the iframe is `sandbox="allow-scripts"` with no popups or forms. A
   public site is never framed there: its CSP isn't ours, so the pane says so and offers Open ↗. (In the desktop app both
-  now load in the native pane instead, [above](#the-native-pane-on-a-worker-card); this frame is what's left off it.)
+  now load in the native pane instead, [above](#pages-from-a-worker); this frame is what's left off it.)
 - **The launch token stays out of frames** (`electron/api-token.cjs`). `attachApiToken` used to put it on every request
   from the board window's session, so a page could navigate its own frame to a local GET with it attached. It now skips
   a frame's navigation (`resourceType` `subFrame`) and anything a frame asks for (`details.frame.parent`, or the
