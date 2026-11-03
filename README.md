@@ -1042,6 +1042,11 @@ An outside-folder prompt on a worker's card offers **This card** and **Always**,
 **Allow on a worker's card asks for Touch ID.** Your Mac signs each Allow with its own key, in words that name the
 command and the worker, and the worker runs it only with that signature (or a passkey your Mac let approve there): an
 Allow from anywhere else, or from a Mac too old to sign, is refused with a message saying so, and the request keeps waiting.
+A paired phone can approve there too: Settings → **Devices** → a worker's **Passkeys** (one Touch ID) lets your paired
+phones' Face ID Allow count on that worker, and unpairing a phone takes it back.
+**The riskiest Allows on your Mac ask for Touch ID.** An Allow on a request that reaches a vault secret, skips permission
+prompts or writes an agent's settings is signed by your Mac after Touch ID before it runs, and the copilot can't give one
+for you. Every other Allow is still one click.
 
 **Change what a worker card can touch, with Touch ID.** Moving a worker card to another of its projects, giving it another
 agent, letting it skip permission prompts, a "!" shell line, **Read from** on a question, a new thread with an agent and

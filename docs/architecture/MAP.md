@@ -519,7 +519,11 @@ When a new doc lands in this folder, add it here on the same change.
   `weft.approval.sign` finds the request on main's own server (this Mac's card, or a worker card's row through `GET /api/worker-board?ask=`, `lib/worker-ask-read.ts`), asks
   Touch ID in main's words, then signs the phone's message over that host's own names, and `/pairing/verify` (a Mac) or `lib/worker-approve.ts` (a worker) checks it. The board
   calls it for every Allow on a worker card (`lib/answer-signer.ts`, from `lib/card-handlers-host.ts` and `lib/use-worker-board.ts`): mobile-security.md, "The desktop signs
-  too". `electron/pairing-open.cjs` marks an open code for the clipboard guard.
+  too". On this Mac's own card it signs an Allow on a phone-only ask (`localSignedAnswer`, from `lib/card-handlers.ts`, `lib/thread-handlers.ts` and the copilot's lane and
+  window) over the workspace "local", and `POST /api/cards/<id>/permission` checks it (`lib/local-approve.ts`, `signedProblem` in `lib/approval-check.ts`); the copilot's
+  `answer_permission` refuses one (mobile-security.md, "A local card's Allow"). `electron/widen-endorse.cjs` also endorses this Mac's paired phones to a worker
+  (`weft-endorse-v3`, `lib/host-endorse.ts`), whose `lib/host-signers.ts` `verifyAnswer` takes their signed Allow (mobile-security.md, "Phones on a worker").
+  `electron/pairing-open.cjs` marks an open code for the clipboard guard.
 - The LAN path to a worker (docs/architecture/weft-worker.md#the-lan-path): the worker advertises `_weft._tcp` with a TXT
   signed by its paired sign key (`lib/worker-lan-start.ts`, `advertise` in `lib/lan-mdns.ts`, the bytes in `lib/lan-hint.ts`)
   and takes a sealed line offer on its port only when this Mac's device key signed it (`lib/worker-lan.ts`, `lib/lan-rate.ts`,

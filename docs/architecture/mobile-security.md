@@ -490,8 +490,10 @@ out), plus the grant, and for a worker card the worker's pinned name. So a board
 a request that runs something else. It answers `{ device, issuedAt, sig, publicKey }`, or null when Touch ID is refused.
 **The message's host and workspace are main's read too** (`findRequest`), never the renderer's:
 
-- **This Mac's card** (`GET /api/cards`): host = this Mac's `lib/device-id.ts` id, workspace = the one the board names
-  (required here). Nothing on the board calls this yet: a local card's Allow is unchanged.
+- **This Mac's card** (`GET /api/cards`, plus the copilot's from `GET /api/copilot`): host = this Mac's `lib/device-id.ts`
+  id, workspace = `"local"` (`LOCAL_ORG`), whatever the board names, so a local signature never checks out as a network
+  answer, which the inbox rebuilds with the command's real workspace. The board asks for it only on a phone-only ask
+  ([A local card's Allow](#a-local-cards-allow-built-2026-11-03)).
 - **A worker card** (`GET /api/worker-board?ask=<card>`, `lib/worker-ask-read.ts`): the card's `cloud_cards` row as the
   worker published it, read fresh with the account's session, only for a card one of your workers owns
   (`owner_worker` set, `owner_user` you, not deleted). Host = the row's `owner_device`, which must be exactly
@@ -514,8 +516,9 @@ the same `approvalProblem` a Mac runs, with
 - the message rebuilt from the worker's own names: its config's workspace and `worker:<its id>`, never the row's
   `org_id` or `target_device`; for a passkey, the folder name its row carries (`lib/worker-publish.ts` `folderOf`);
 - approvers = the pairing Mac's key (`mac-keys.json`, pinned from the pairing code, `lib/worker-mac-keys.ts`) and the
-  passkeys that Mac endorsed (`passkeys.json`, the `pin` kind): `HostSigners.approvers`. An Ed25519 signature checks
-  against the pinned Mac key only; a paired phone's key isn't pinned on a worker, so a phone can't approve there yet;
+  passkeys and phones that Mac endorsed (`passkeys.json`, the `pin` kind): `HostSigners.approvers`. An Ed25519 signature
+  checks against an endorsed phone's key when its `device` names one, else the pinned Mac key
+  (`HostSigners.verifyAnswer`; [Phones on a worker](#phones-on-a-worker-h10-built-2026-11-03));
 - no web switch: a worker has no "approve from the web" setting, since a `settings.put` from the network could turn it on.
 
 `answerAsKind` is now on for a worker too, so a host `card.permission.answer` (the tile, the session line) goes through
@@ -536,9 +539,9 @@ and verifies on the worker):
   words in Touch ID are the published row's, so a server that rewrote a row under the same id could show other words,
   the same trust the phone has. A passkey's message binds the whole input.
 
-**Rollout.** The worker refuses an unsigned Allow while it pins a Mac or a passkey, with `WORKER_UNSIGNED` ("This worker
+**Rollout.** The worker refuses an unsigned Allow while it pins a Mac, a passkey or a phone, with `WORKER_UNSIGNED` ("This worker
 takes an Allow only with your approval: give it in Weft on your Mac (Touch ID; update Weft if it doesn't ask), or with a
-passkey this worker trusts. The request is still waiting."). That error comes back as the failed command, which every
+passkey or phone this worker trusts. The request is still waiting."). That error comes back as the failed command, which every
 board shows (the optimistic answer is taken back and the message appears), and the request stays waiting, so the card
 isn't stuck: an updated Mac, a trusted passkey, or Deny answers it. A token-enrolled box (no Mac key, no passkeys) takes
 an unsigned Allow as before, like a Mac with nothing paired. A worker wired without a workspace signs nothing valid
@@ -546,8 +549,62 @@ an unsigned Allow as before, like a Mac with nothing paired. A worker wired with
 row's `owner_device` and `folder`, which are the names the worker rebuilds with); without one, its unsigned Allow is
 refused with the message above, and phone-only asks need the Mac.
 
-**Still open.** A local card's Allow stays unsigned (`card.permission.answer` on this Mac runs no `approvalProblem`);
-pinning phones on a worker (H10, one device registry).
+### Phones on a worker (H10, built 2026-11-03)
+
+A worker trusts nothing off the network, so a phone's key reaches it the way a passkey's does: **endorsed by the pairing
+Mac** in the same signed set (`electron/widen-endorse.cjs`, `lib/host-endorse.ts`). Settings → Devices → a worker's
+**Passkeys** now names this Mac's paired phones too (`kind: "phone"` in the sealed `paired-devices.json`, each one's
+Ed25519 `signKey` as the Mac pinned it at pairing), after one Touch ID: "let your paired phone approve Allows on the
+worker m1mini (7f3e…)".
+
+- **The message.** A set with phones is `weft-endorse-v3`: canonical JSON of `{v, worker, passkeys, phones:
+  [{device, signKey}] sorted by device, generation, issuedAt}`. A set with none is **v2 byte for byte**, with no `phones`
+  field, so a worker from before phones keeps taking every set that names none (`electron/widen-endorse-phones.test.ts`
+  holds main's bytes to the worker's). Stripping the phones from a v3 set or adding some to a v2 one changes the message,
+  so the signature fails.
+- **The worker** (`lib/host-signers.ts`) keeps them in `passkeys.json` beside the passkeys (`phones: [{device, signKey,
+  by}]`), under the same rules: newer generation only, a set that adds a phone within 10 minutes, a narrowing at any age,
+  the held receipt. `verifyAnswer` takes a signature by an endorsed phone (by the `device` its auth names) and only while
+  the set held isn't behind the Mac's newest **head** (`lib/passkey-head.ts`), exactly as a passkey; any other device id
+  goes to the pairing Mac's key. Phones count in `approvers()`.
+- **Answers only.** `lib/worker-approve.ts` uses `verifyAnswer`; a widening, a setting, a secret use, a key grant and a
+  re-pair still check `verify`, the pairing Mac's key alone. A phone signs the same `approvalMessage` it signs for a Mac,
+  over the row's `org_id` and `owner_device` (`worker:<id>`), which are the names the worker rebuilds with, and inserts an
+  `answer` command for that worker (the phone app's side: **Phone side**, step 7).
+- **Revoking.** Unpairing the phone here (or `device_revoke` anywhere, through `reconcile`) narrows every worker's set
+  on the next refresh, without Touch ID; until the worker confirms, its head is ahead of its set and it refuses every phone
+  and passkey approval there. A set that narrows to no phones goes back to v2.
+- **Rollout.** Nothing changes until Passkeys is pressed again: sets endorsed before this name no phones and stay v2. A
+  worker too old to read v3 refuses the set ("isn't the pairing Mac's"); main keeps sending it and Settings → Devices shows
+  "passkeys not updated yet", and since the head is ahead the old worker also refuses passkeys meanwhile (fail closed). A
+  worker updates itself from main when idle, which ends that. The Mac's own Touch ID Allow is unaffected throughout.
+
+### A local card's Allow (built 2026-11-03)
+
+The desktop board's Allow on its own card goes to `POST /api/cards/<id>/permission`, which already takes only the launch
+token Electron puts on the board window's requests (`lib/guard.ts` `elevated`), and the board view's tools refuse its
+permission controls (`data-human-only`). What signing adds is the one verify path and Touch ID where the stakes are the
+doc's own "riskiest asks", without a prompt on every Allow (an Allow is the board's most frequent click):
+
+- **Signed on phone-only asks.** An Allow on a request `phoneOnly` names (a vault tool, skipping permissions, writing an
+  agent's config: `lib/passkey-phone-only.ts` `phoneOnlyAllow`) asks main to sign first (`lib/answer-signer.ts`
+  `localSignedAnswer`, from the tile `lib/card-handlers.ts`, the thread `lib/thread-handlers.ts` and the copilot's lane
+  and window), with Touch ID in main's own words, as for a worker card. A refused Touch ID sends nothing.
+- **Checked on the route** (`lib/local-approve.ts` `localApprovalProblem`): such an Allow without a signature is refused
+  (403, `LOCAL_UNSIGNED`: "Allowing that takes Touch ID…"); any signature the body carries, on any answer, is checked by
+  `lib/approval-check.ts` `signedProblem` (the same function the inbox runs for a phone) over this Mac's id, the
+  workspace `"local"`, the card, the waiting request's id, the decision and answers, then main's `POST /pairing/verify`,
+  which takes this Mac's own key (or a phone it paired). A passkey's auth is refused here. A plain Allow, a Deny, a
+  question's answers and a form go through unsigned, as before.
+- **The copilot** can't Allow one for you: its `answer_permission` tool refuses a phone-only Allow
+  (`COPILOT_PHONE_ONLY` in `lib/board-tools.ts`); Deny is still its to give.
+- **Threats.** A board-side script (it holds the token, not Touch ID) or a prompt-injected copilot can no longer allow a
+  skip-permissions or agent-config command; a renderer that lies about the request gets main's prompt over the real one.
+  A plain Allow stays as trusted as the board window, as before. `phoneOnly` is best-effort matching (see the passkey
+  section); the secrets tools themselves ask Touch ID per use and skip the permission prompt anyway.
+- **Rollout.** The board and the server are the same build, so there's no version skew. A Mac without Touch ID gets
+  main's confirm dialog (`electron/touch-id.cjs`). In a plain browser (`pnpm dev` without Electron) there's no signer, so
+  a phone-only Allow is refused with the message above.
 
 ### Values kept on a worker (H8, 2026-11-03)
 
@@ -579,7 +636,8 @@ use: no passkey, phone or web approval can start, widen or use one, since an `mc
 - `lib/approval-sig.ts` — the signed message, sign (for tests and the phone's copy) and verify.
 - `lib/pairing-link.ts` — the QR link, its parsing, the claim string and its proof.
 - `lib/approval-check.ts` — the inbox's rule above; `lib/worker-approve.ts` — a worker's, over its own names and pins.
-- `lib/answer-signer.ts` — the desktop board's signed Allow on a worker card; `electron/approval-sign.cjs` — what main
+- `lib/answer-signer.ts` — the desktop board's signed Allow on a worker card, and on a local card's phone-only ask;
+  `lib/local-approve.ts` — the local route's check of it; `electron/approval-sign.cjs` — what main
   reads and signs (`findRequest`, `registerApprovalSign`); `lib/worker-ask-read.ts` — the worker card's row main reads.
 - `lib/passkey-verify.ts` — the WebAuthn assertion check (isomorphic Web Crypto); `lib/passkey.harness.ts` builds real
   test vectors.
@@ -620,6 +678,9 @@ use: no passkey, phone or web approval can start, widen or use one, since an `mc
    Re-read on every launch: a rotate adds a version.
 5. Open sealed rows with the same AAD; show the stand-in for a version it has no grant for.
 6. On Allow: Face ID → read the signing key → sign `approvalMessage` → insert the `answer` command with `auth`.
+7. On a worker card (`owner_worker` set): the same, with `orgId` = the row's `org_id` and the host = its `owner_device`
+   (`worker:<id>`), the `answer` command targeting that device. It checks out once the Mac endorsed the phone for that
+   worker (Settings → Devices → Passkeys); until then the worker says how to approve.
 
 ## Gaps
 
@@ -633,9 +694,10 @@ use: no passkey, phone or web approval can start, widen or use one, since an `mc
   uploads plain rows meanwhile).
 - A browser's box and signing keys sit in localStorage, readable by any script on weft.zip; that's why only a passkey
   on sign.weft.zip approves. weft.zip itself still runs inline script (a nonce CSP isn't possible with PPR).
-- The desktop board signs an Allow on a worker card ([Answers on a worker](#answers-on-a-worker-built-2026-11-03)), but
-  a card on this Mac still approves with `promptTouchID` in Electron main, which signs nothing there; a worker doesn't
-  pin a paired phone yet, so a phone can't approve a worker card.
+- The desktop board signs an Allow on a worker card ([Answers on a worker](#answers-on-a-worker-built-2026-11-03)) and a
+  local card's phone-only Allow ([A local card's Allow](#a-local-cards-allow-built-2026-11-03)); a plain local Allow is
+  trusted on the board window's launch token alone. A phone approves on a worker only once the Mac endorsed it there,
+  and the phone app doesn't sign for worker cards yet (Phone side, step 7).
 - A passkey can't sign an answer's elevated host verbs (`ELEVATED_REFUSED`); it signs a card's new folder, agent and a plain "!" line as a signed widening (project-hosts.md#signed-widening-as-built), never skipping prompts or a grant, and a browser paired before H7 has no
   passkey: it re-pairs to get one. The pairing doesn't check an attestation, so the Mac trusts that the key came from an
   authenticator on the strength of the QR secret and its own Touch ID.

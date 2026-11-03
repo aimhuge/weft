@@ -392,9 +392,10 @@ the user revoked from another Mac could still approve. The wipe needs a real she
 
 What would make it fit, if it's wanted later:
 
-1. **Approver.** A *phone* (the trusted tier) rather than a browser passkey, which means a worker pins a phone's Ed25519
-   key the way it pins passkeys: endorsed by the pairing Mac in the same `weft-endorse` set, with the same heads
-   (`lib/passkey-head.ts`), so revoking the phone anywhere stops it.
+1. **Approver.** A *phone* (the trusted tier) rather than a browser passkey. A worker now pins a phone's Ed25519 key the
+   way it pins passkeys, endorsed by the pairing Mac in the same set (`weft-endorse-v3`), with the same heads
+   (`lib/passkey-head.ts`), so revoking the phone anywhere stops it (built for Allows only: mobile-security.md, "Phones on
+   a worker"); a re-pair would add its own message and check.
 2. **Request.** On the box, `weft-worker enrol wph.… --re-pair --remote` (terminal only, as today) inserts a
    `worker_repair_requests` row with its key (worker id, the new code's pairing and workspace, the new Mac key, a random
    12-character console code shown only on the box; the row stores its hash) and polls it.
