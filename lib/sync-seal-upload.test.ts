@@ -89,5 +89,9 @@ describe("macKeyring", () => {
     expect((await macKeyring("o", 0)).size).toBe(0);
     expect(await sealerFor("o", 1)).not.toBeNull();
     expect(shellMock).toHaveBeenLastCalledWith("/sync/key", { orgId: "o", create: true });
+    forgetSyncKey();
+    shellMock.mockResolvedValueOnce({ none: true }).mockResolvedValueOnce({ version: 1, key });
+    expect(await sealerFor("o", 0)).toBeNull();
+    expect(await macKeyring("o", 1)).toEqual(new Map([[1, key]]));
   });
 });

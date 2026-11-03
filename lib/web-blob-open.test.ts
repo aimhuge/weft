@@ -78,6 +78,7 @@ describe("openSealedPage", () => {
       if (sha === shaOf(page)) return Promise.resolve(ok(sealed(page), "text/plain"));
       if (sha === shaOf(a)) return Promise.resolve(ok(sealed(a), "image/png; x=1"));
       if (sha === shaOf(b)) return Promise.resolve(ok(b, ""));
+      if (sha === missing) return Promise.resolve(ok(blobSealer(s, { version: 9, key: key.key })(ORG, missing, enc("x")), ""));
       return Promise.resolve(bySha[sha] ?? new Response("", { status: 404 }));
     });
     const got = await openSealedPage(ORG, shaOf(page), { s, ring, fetchImpl });
