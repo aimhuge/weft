@@ -142,7 +142,7 @@ describe("card changes off a session line", () => {
   it("draws them on the board as they arrive", async () => {
     fetchMock.mockResolvedValue(json(board({ projects: [project()], cards: [card()] })));
     let emit: (e: unknown) => void = () => {};
-    retainLine("w1", () => ({ onRoute: () => () => {}, onEvent: (fn: (e: unknown) => void) => ((emit = fn), () => {}), close: vi.fn() }) as never);
+    retainLine("w1", () => ({ up: () => false, onRoute: () => () => {}, onEvent: (fn: (e: unknown) => void) => ((emit = fn), () => {}), close: vi.fn() }) as never);
     const { result } = renderHook(() => useWorkerBoard());
     await vi.waitFor(() => expect(result.current.cards).toHaveLength(1));
     act(() => emit({ t: "card", card: card({ title: "Live", cwd: "/w/ling" }) }));

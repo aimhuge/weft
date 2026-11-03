@@ -32,9 +32,9 @@ function client({ user = { id: "u1" }, data = null, error = null, mirrored = fal
 
 const R2_ENV = { R2_ACCOUNT_ID: "0123456789abcdef0123456789abcdef", R2_ACCESS_KEY_ID: "k", R2_SECRET_ACCESS_KEY: "s" };
 
-async function get(orgId = ORG, sha = SHA) {
+async function get(orgId = ORG, sha = SHA, query = "") {
   const { GET } = await import("./route");
-  return GET(new Request(`http://localhost/api/web-board/${orgId}/page/${sha}`), { params: Promise.resolve({ orgId, sha }) });
+  return GET(new Request(`http://localhost/api/web-board/${orgId}/page/${sha}${query}`), { params: Promise.resolve({ orgId, sha }) });
 }
 
 beforeEach(() => {
@@ -80,6 +80,19 @@ describe("GET /api/web-board/[orgId]/page/[sha]", () => {
     expect(await (await get()).text()).toBe(`<img src="https://sb/signed-b">`);
     client({ data: new Blob([ref], { type: "text/plain" }) });
     expect(await (await get()).text()).toBe(ref);
+  });
+
+  it("draws a sealed page's stand-in, and hands its bytes as stored to a browser that asks to open them", async () => {
+    const sealed = new Uint8Array([0x77, 0x73, 0x62, 0x31, 0, 0, 0, 1, 9, 9]);
+    client({ data: new Blob([sealed], { type: "text/plain" }) });
+    const standIn = await get();
+    expect(standIn.headers.get("Content-Type")).toBe("text/html; charset=utf-8");
+    expect(standIn.headers.get("Content-Security-Policy")).toBe("sandbox allow-scripts allow-popups allow-forms");
+    expect(await standIn.text()).toContain("Sealed");
+    client({ data: new Blob([sealed], { type: "image/png" }) });
+    const raw = await get(ORG, SHA, "?sealed=1");
+    expect(raw.headers.get("Content-Type")).toBe("image/png");
+    expect(new Uint8Array(await raw.arrayBuffer())).toEqual(sealed);
   });
 
   it("passes a blob with no type as bytes", async () => {

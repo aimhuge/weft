@@ -7,6 +7,8 @@ import * as cjs from "../electron/worker-seal.cjs";
 import { macSigner } from "./mac-signer.harness";
 import { secretUsePurpose } from "./secret-use";
 import { keepMessage, keptPurpose } from "./worker-keep-wire";
+import { macKeysAt } from "./worker-mac-keys";
+import { macFingerprint } from "./worker-repair";
 import { openAsk } from "./worker-secret-asks";
 import { forgetMacs, keyStatus, secretWiring } from "./worker-secret-wiring";
 import { newSealKeys, sealFingerprint } from "./worker-seal";
@@ -91,8 +93,11 @@ describe("keyStatus", () => {
     expect(keyStatus(h)).toEqual([
       `Box key fingerprint: ${sealFingerprint(keys.publicKey)} (your Mac shows the same when it asks for secrets)`,
       "Secret asks are signed with this box's pairing key.",
-      "Takes secrets from the Mac it was paired with (weft-worker forget-macs to stop).",
+      `Takes secrets from the Mac it was paired with, key ${macFingerprint("k1")} (weft-worker forget-macs to stop).`,
     ]);
+    // Revoked: named, and no longer trusted.
+    macKeysAt(h).revoke(["k1"]);
+    expect(keyStatus(h)[2]).toBe(`Takes no secrets: the Mac it was paired with (key ${macFingerprint("k1")}) was revoked. Wipe it and enrol it afresh from another Mac.`);
   });
 
   it("says when there's no key yet, no pairing, and no Mac", () => {

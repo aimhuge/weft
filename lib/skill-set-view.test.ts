@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { groupRows, skillsOffCount, skillsOnCount, withToggled } from "./skill-set-view";
+import { groupRows, hostSkillView, skillsOffCount, skillsOnCount, withToggled } from "./skill-set-view";
 import type { SkillSetRow } from "./types";
 
 // Build a row. Default fills are skipped for small spots.
@@ -191,5 +191,25 @@ describe("withToggled", () => {
   it("returns a new array, not the original", () => {
     const rows: SkillSetRow[] = [skill("a", "user", "")];
     expect(withToggled(rows, "a", false, false)).not.toBe(rows);
+  });
+});
+
+describe("hostSkillView", () => {
+  const skills = [
+    { name: "ship", description: "Ship it", source: "weft" as const },
+    { name: "lint", description: "", source: "project" as const },
+    { name: "mine", description: "", source: "user" as const },
+  ];
+
+  it("is every skill the host lists, on unless the card turned it off, marked where the card changed it", () => {
+    const view = hostSkillView(skills, { skillsOn: ["mine"], skillsOff: ["lint"] });
+    expect(view.seeded).toBe(true);
+    expect(view.rows.map((r) => [r.name, r.on, r.inProject, r.changedHere])).toEqual([
+      ["ship", true, true, false],
+      ["lint", false, true, true],
+      ["mine", true, false, true],
+    ]);
+    expect(view.rows[0]).toMatchObject({ kind: "skill", description: "Ship it", source: "weft" });
+    expect(hostSkillView(skills, {}).rows.every((r) => r.on && !r.changedHere)).toBe(true);
   });
 });

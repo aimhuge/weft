@@ -61,7 +61,10 @@ describe("the migration's allowlist", () => {
   // The worker's read drops any key not on it before the digest is checked, so a key the Mac signs but the database
   // drops would fail every row's signature: the two lists stay the same.
   it("is ACCOUNT_SETTINGS", () => {
-    const sql = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/20261102180000_host_settings.sql"), "utf8");
+    // The newest migration that defines it is the one the database has.
+    const dir = path.join(process.cwd(), "supabase/migrations");
+    const defining = fs.readdirSync(dir).filter((f) => f.endsWith(".sql") && fs.readFileSync(path.join(dir, f), "utf8").includes("function private.account_setting_keys()"));
+    const sql = fs.readFileSync(path.join(dir, defining.sort().at(-1) ?? ""), "utf8");
     const list = /account_setting_keys\(\)[\s\S]*?array\[([^\]]*)\]/.exec(sql)?.[1] ?? "";
     expect(list.split(",").map((k) => k.trim().replace(/'/g, ""))).toEqual([...ACCOUNT_SETTINGS]);
   });

@@ -128,7 +128,7 @@ describe("golden rows", () => {
   it("a Mac's flush hands the sealer the finished rows", async () => {
     const seen: unknown[] = [];
     const mark = (slot: string) => (row: object) => (seen.push([slot, row]), { ...row, sealed: slot });
-    const sealer = () => Promise.resolve({ card: mark("card"), item: mark("item"), tool: mark("tool") } as never);
+    const sealer = () => Promise.resolve({ card: mark("card"), item: mark("item"), tool: mark("tool"), blob: () => null } as never);
     const sent = await macRows(sealer);
     expect(seen).toMatchSnapshot();
     expect(Object.values(sent).flat().every((row) => (row as { sealed?: string }).sealed)).toBe(true);

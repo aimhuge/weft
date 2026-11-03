@@ -1,4 +1,5 @@
 import type { PermissionResult } from "@anthropic-ai/claude-agent-sdk";
+import { pendingView } from "@weft/client";
 import { safeUpdate, sessions, type Pending } from "./runner-state";
 import { elicitationContent } from "./elicitation";
 import { replaceThreadItem } from "./store";
@@ -81,6 +82,5 @@ function permissionResult(p: Pending, allow: boolean, answers?: Record<string, s
   return allow ? { behavior: "allow", updatedInput: p.input } : { behavior: "deny", message: "The user denied this in Weft." };
 }
 
-export function pendingView(p: Pending) {
-  return { id: p.id, toolName: p.toolName, title: p.title, input: p.input, questions: p.questions, readScope: p.readScope, previewUrl: p.previewUrl, edit: p.edit, why: p.why, waiting: p.waiting, elicitation: p.elicitation };
-}
+// The board's view of a request the runner holds lives in @weft/client.
+export { pendingView } from "@weft/client";

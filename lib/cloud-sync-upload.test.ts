@@ -101,6 +101,20 @@ describe("scrub", () => {
 });
 
 describe("uploadPending", () => {
+  it("hands each card's blob seal to the uploads its card and items make, and none to a card that has none", async () => {
+    addCard("c1", [{ text: "a" }]);
+    addCard("c2", [{ text: "b" }]);
+    const seal = vi.fn(() => new Uint8Array());
+    const seen: [string, unknown][] = [];
+    const watching: BlobStore = { ...blobs, rewriteItem: (item, _org, s) => (seen.push([item.kind === "assistant" ? item.text : "", s]), Promise.resolve(item)) };
+    const same = <T,>(row: T) => row;
+    const sealer = () => Promise.resolve({ card: same, item: same, tool: same, blob: (id: string) => (id === "c1" ? seal : null) });
+    const { uploadPending } = await import("./cloud-sync-upload");
+    const pending: OutboxEntry[] = [{ op: "card", cardId: "c1", at: 1 }, { op: "card", cardId: "c2", at: 1 }, ...itemEntries("c1", 1), ...itemEntries("c2", 1)];
+    await uploadPending({ blobs: watching, now: () => 5000, sealer }, fakeClient().client, "o1", pending, () => {});
+    expect(seen).toEqual([["a", seal], ["b", undefined]]);
+  });
+
   it("sends a NUL-bearing item and card without the NUL, instead of failing the whole batch", async () => {
     addCard("c1", [{ text: "ran ls\u0000 done" }]);
     cards.get("c1")!.title = "bad\u0000title";

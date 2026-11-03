@@ -20,7 +20,9 @@ const POLL_MS = 1_000;
 // An ask nobody has claimed by then: no Mac is listening.
 const CLAIM_MS = 30_000;
 
-const NO_MAC = "No Mac with Weft open is signed in to this worker's account, so nothing can approve the secrets. Open Weft on your Mac and try again.";
+// Secret runs go only to the Mac this worker is paired with (worker_secret_ask, *_worker_pairing_mac.sql): another Mac's
+// answer would be refused here, so the ask isn't handed to one.
+const NO_MAC = "No Mac with Weft open is answering for this worker: secrets come only from the Mac it's paired with (weft-worker status shows which), so open Weft on that Mac, signed in to this worker's account, and try again.";
 const TOO_LONG = "Nobody approved the secrets on the Mac within 5 minutes. Ask the user, then try again.";
 
 export interface SecretLink {

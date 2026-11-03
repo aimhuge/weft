@@ -7,7 +7,7 @@ import { pairCode } from "./host-pairing";
 import { macSigner, memoryMacs } from "./mac-signer.harness";
 import { keepMessage, keptPurpose, type Keep } from "./worker-keep-wire";
 import { keptVaultAt, wipeWhenRevoked } from "./worker-kept-vault";
-import { KEPT_FILE, trustPairingMac } from "./worker-mac-keys";
+import { KEPT_FILE, macKeysAt, trustPairingMac } from "./worker-mac-keys";
 import { newSealKeys, open, type Sealed } from "./worker-seal";
 
 const keys = newSealKeys();
@@ -125,6 +125,22 @@ describe("apply", () => {
     kv.apply(put(6));
     kv.wipe();
     expect(fs.existsSync(file)).toBe(false);
+  });
+});
+
+describe("a revoked pairing Mac", () => {
+  it("can't keep anything here, its copy reads as nothing and is deleted (lib/worker-mac-revocation.ts)", () => {
+    fs.writeFileSync(path.join(home, "mac-keys.json"), JSON.stringify([signer.key]));
+    const disk = macKeysAt(home);
+    const kv = keptVaultAt(home, "w1", disk, () => NOW);
+    kv.apply(put(5));
+    expect(kv.count()).toBe(2);
+    disk.revoke([signer.key]);
+    expect(fs.existsSync(path.join(home, KEPT_FILE))).toBe(false);
+    expect(() => kv.apply(put(6))).toThrow("trusts no Mac");
+    // Revoking it again changes nothing and deletes nothing more.
+    disk.revoke([signer.key]);
+    expect(kv.index(REPO, "development")).toEqual({});
   });
 });
 

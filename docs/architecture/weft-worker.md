@@ -331,18 +331,81 @@ Settings → Devices → the worker → **Re-pair**, paste the new Mac's `wph.�
 a terminal on the box (`weft-worker enrol wph.… --re-pair --approval wra.…`). The approval lasts 30 minutes and is
 good for that worker and that code only ([project-hosts.md](project-hosts.md#re-pairing-a-worker)).
 
-**A lost Mac, or a box that trusts none** (enrolled by token, or after `weft-worker forget-macs`): no Mac can approve,
-so wipe the box's enrolment and enrol it fresh. In a terminal on the box:
+**A lost Mac, or a box that trusts none** (enrolled by token, after `weft-worker forget-macs`, or once its Mac was
+revoked: the daemon checks every minute and stops trusting a revoked pairing Mac for good,
+[device-registry.md](device-registry.md#revoked-on-one-device-untrusted-on-all)): no Mac can approve, so wipe the box's
+enrolment and enrol it fresh. In a terminal on the box:
 
 ```sh
-rm ~/.weft-worker/worker.json ~/.weft-worker/mac-keys.json
+rm ~/.weft-worker/worker.json ~/.weft-worker/mac-keys.json ~/.weft-worker/passkeys.json
 weft-worker enrol <the wph.… code from the new Mac>
 weft-worker restart
 ```
 
-Then **Revoke** the old worker row in Settings → Devices. `work/` and its checkouts stay. The secret guard refuses those
-two paths to threads by name. A passkey-confirmed re-pair at weft.zip, with a code shown on the box's console, would
-spare the wipe; it isn't built.
+Then **Revoke** the old worker row in Settings → Devices. `work/` and its checkouts stay. `passkeys.json` goes too: the
+passkeys in it were endorsed by the old Mac, and the new one endorses its own. `mac-revoked.json` stays, so a revoked Mac
+is never trusted on this box again. The secret guard refuses these paths to threads.
+
+`weft-worker status` names the Mac it takes secrets from by its key's fingerprint, or says that Mac was revoked. With
+two Macs signed in, the worker's secret and vault asks go only to the one it's paired with (`cloud_workers.paired_mac`,
+[device-registry.md](device-registry.md#the-pairing-mac)); when that Mac is away the card hears so, rather than the ask
+going to a Mac whose answer the box would refuse.
+
+#### Passkey heads: a worker never approves with an outdated set
+
+Built 2026-11-03 with `supabase/migrations/20261103080100_worker_passkey_heads.sql` (not applied). The pairing Mac sends
+a worker its passkey set as a `pin` command, re-sent until the worker's signed receipt; but until a revoke's pin landed,
+the worker still took the revoked passkey, and a session that deleted the pin rows could hold that off.
+
+- **The channel.** Whenever main signs a worker's set (`electron/widen-endorse.cjs`: Passkeys, a revoke, a narrowing
+  after an unpair or a reconcile) it also signs a **head**, `weft-endorse-head-v1` over {worker, generation, issuedAt},
+  with the same approval key, and inserts it in `worker_passkey_heads` before the set goes out; once a day it signs the
+  current one again. A failed insert is tried again on the next refresh (in 5 minutes for the same set, at once for a
+  newer one).
+- **Why it can't be held back.** The table is insert-only for clients (no update or delete grant; only a 30-day prune by
+  the database's own clock), so a stolen session can add rows but never remove or change the real head. The worker reads
+  every head for itself (`worker_passkey_heads(key)`, at most 501), keeps those its *trusted* Mac key signed for it
+  (`lib/passkey-head.ts` `newestHead`: junk, another worker's, another Mac's or a revoked Mac's are skipped) and takes the
+  highest generation, so an old head inserted again changes nothing. A read with more rows than it can check (a flood) is
+  a refusal, so junk can't push the real head out of sight; it remembers the highest head it has seen in
+  `passkeys.json` (`seen`), so the prune never lowers the bar.
+- **The rule.** Before a passkey assertion counts (`lib/host-signers.ts` `verifyPasskey`), the worker reads the heads; it
+  refuses while the set it holds is older than the newest ("it holds set N, your Mac signed M"), and refuses when it can't
+  read them. The Mac's own signature (Touch ID) doesn't depend on it.
+- **Limits.** Fail-closed by design: until the migration is applied, or while Supabase can't be reached, a worker takes no
+  passkey approvals (the Mac's own still work). A flood of junk rows (owner's session only) stops passkey approvals until
+  it ages out. Withholding the Mac's insert itself would need control of the Mac's network.
+
+#### A passkey-approved re-pair: designed, not built
+
+Asked for: re-pair at weft.zip with a passkey, confirmed by a code shown on the box's console, so a lost Mac doesn't
+cost a wipe. **Not built, because it doesn't fit the existing approval ladder safely.** A browser passkey is
+deliberately the lowest approver: it may not approve a vault secret, skipping permissions or a folder grant ("That one
+needs your phone or this Mac", `lib/passkey-phone-only.ts`, `PASSKEY_TOO_WIDE` in `lib/widen-check.ts`). A re-pair
+chooses the Mac the box takes *every* secret from, which is strictly more than any of those. Letting a passkey do it
+would make the passkey the weakest link for all secrets on the box: whoever holds a browser session and a synced passkey
+(an unlocked laptop, a passkey shared through a password manager) could move the box to a Mac of theirs. And the case it
+is for, a lost Mac, is exactly when the worker can't learn of a newer passkey set (only that Mac signs one), so a passkey
+the user revoked from another Mac could still approve. The wipe needs a real shell on the box, which a thread can't fake
+(the secret guard refuses those paths), so it stays the recovery.
+
+What would make it fit, if it's wanted later:
+
+1. **Approver.** A *phone* (the trusted tier) rather than a browser passkey, which means a worker pins a phone's Ed25519
+   key the way it pins passkeys: endorsed by the pairing Mac in the same `weft-endorse` set, with the same heads
+   (`lib/passkey-head.ts`), so revoking the phone anywhere stops it.
+2. **Request.** On the box, `weft-worker enrol wph.… --re-pair --remote` (terminal only, as today) inserts a
+   `worker_repair_requests` row with its key (worker id, the new code's pairing and workspace, the new Mac key, a random
+   12-character console code shown only on the box; the row stores its hash) and polls it.
+3. **Approval.** The phone (or sign.weft.zip, if the phone tier is ever opened to passkeys) asks for the console code,
+   typed by hand, never in a link, so an approval can't be for a request the person didn't start at the box. It reads the
+   request itself, shows the worker's name, the new Mac's fingerprint and the workspace, and signs
+   `weft-repair-remote-v1` over {worker, newMacKey, pairingId, orgId, codeHash, issuedAt, nonce}. 30-minute lifetime, one
+   use, as `wra.` lines.
+4. **Box check.** The approval counts only if the signer is in its pinned set *and* that set is not behind the newest
+   head (`latestHead`), then `trustPairingMac` replaces the Mac as today.
+5. **Notice.** Every remote re-pair emails the account, as a new connector signer does (`connector_signers`), with a
+   link to revoke the worker.
 
 ### Worker projects on the desktop board
 
@@ -388,7 +451,10 @@ store (`lib/worker-project.ts`, `lib/worker-board.ts`, `lib/worker-transport.ts`
 - **Folder reports:** `worker_set_folders` and `lib/worker-folders.ts` exist, but the daemon doesn't call them yet, so
   until it does a project needs a card to show.
 - **Not yet:** attachments on a new thread, Run on Worker's local record cards still sit on the local project, and
-  sealed rows (a worker publishes in the clear today).
+  sealed rows: a worker publishes its rows and pages in the clear, and files reach it plain, until it holds the workspace
+  key. The grant (sealed to its pinned box key and signed by the pairing Mac after Touch ID) and the worker's own sealing
+  are designed in [mobile-security.md](mobile-security.md#sealing-on-a-weft-worker-design); a Mac's and a browser's files
+  are sealed already ([Sealed blobs](mobile-security.md#sealed-blobs)), so a sealed card's pasted file only goes plain to a worker.
 
 ### Pages from a worker
 
@@ -731,6 +797,12 @@ Backlog) to `cloud_worker_projects` through `worker_put_project` (`lib/worker-pr
 `scripts/weft-worker.ts`: every 5 minutes, 20 s after a card change, never mid-turn), and answers the editor's
 `files.*` verbs, putting a result over the row's 4 KB in the blob store through `Engine.carry`
 ([project-hosts.md](project-hosts.md#project-reads-and-the-editor-h4-as-built)).
+
+A worker card's thread header has the ⏰ and the ✦ skill set chip too: the ⏰ makes a cron on the worker with
+`cron.create` (args.id the card; the worker narrows its mode, crons.md#on-a-weft-worker), and the chip lists the worker's
+own skills and sets one with `card.update { skill }` (skills.md). Your agents from Settings → Agents, and each worker
+project's default agent, sync to the worker with your signed account settings (agents.md#on-a-weft-worker), so an agent
+you made exists there, and a new thread there that names none starts as the project's default.
 
 The one-sentence version: **Weft already has a remote control plane, but not a remote compute plane.** The web
 board already commands a Mac across the network through `cloud_commands`; the CLI, though, always spawns on the

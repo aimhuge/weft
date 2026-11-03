@@ -56,14 +56,8 @@ export function openCardOf(cards: Card[], copilot: Card | null, id: string | nul
   return cards.find((c) => c.id === id) ?? (copilot?.id === id ? copilot : null);
 }
 
-// The header's Running and Needs you counts; archived cards are hidden from the board, so not counted.
-export function headerCounts(cards: Card[]) {
-  const live = cards.filter((c) => !c.archived);
-  return {
-    running: live.filter((c) => c.column === "running").length,
-    waiting: live.filter((c) => c.column === "needs_you").length,
-  };
-}
+// The header's Running and Needs you counts live with the grouping, in @weft/client.
+export { headerCounts } from "@weft/client";
 
 // The card in the frame: this Mac's open card, or a worker's (lib/use-worker-board.ts openWorkerThread).
 export const framedCard = (selected: Card | null, worker: { card: Card } | null) => selected ?? worker?.card ?? null;

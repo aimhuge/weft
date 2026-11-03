@@ -37,13 +37,14 @@ describe("startHostServices", () => {
   it("applies a row your paired Mac signed, starts the limit poll, and stops both", async () => {
     vi.useFakeTimers();
     const dir = home([mac.key]);
-    const reg = { accountSettings: vi.fn(() => Promise.resolve(row(7))), setLimits: vi.fn(() => Promise.resolve()) };
+    const reg = { accountSettings: vi.fn(() => Promise.resolve(row(7))), setLimits: vi.fn(() => Promise.resolve()), macState: vi.fn(() => Promise.resolve({ mac: null, revoked: false })) };
     const services = startHostServices(reg, vi.fn(), dir);
     await vi.advanceTimersByTimeAsync(0);
     expect(reg.accountSettings).toHaveBeenCalledTimes(1);
     expect(host.applyAccountSettings).toHaveBeenCalledWith({ pushOnDone: false });
     expect(settingsVersionAt(dir).read()).toBe(7);
     expect(poll.startLimitPoll).toHaveBeenCalledTimes(1);
+    expect(reg.macState).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(60_000);
     expect(reg.setLimits).toHaveBeenCalledWith({ v: 1, s: [[1, "claude", 5, 5, 0]], m: [["claude-opus-5-5", 1, 1_800_000_000]] });
     services.nudge();
@@ -58,11 +59,11 @@ describe("startHostServices", () => {
     const dir = home([mac.key]);
     settingsVersionAt(dir).write(9);
     for (const given of [row(10, { threadPrompt: "x" }, macSigner()), row(9)]) {
-      const services = startHostServices({ accountSettings: () => Promise.resolve(given), setLimits: () => Promise.resolve() }, log, dir);
+      const services = startHostServices({ accountSettings: () => Promise.resolve(given), setLimits: () => Promise.resolve(), macState: () => Promise.resolve({ mac: null, revoked: false }) }, log, dir);
       await new Promise((r) => setTimeout(r, 0));
       services.stop();
     }
-    const services = startHostServices({ accountSettings: () => Promise.resolve(row(11)), setLimits: () => Promise.resolve() }, log, home());
+    const services = startHostServices({ accountSettings: () => Promise.resolve(row(11)), setLimits: () => Promise.resolve(), macState: () => Promise.resolve({ mac: null, revoked: false }) }, log, home());
     await new Promise((r) => setTimeout(r, 0));
     services.stop();
     expect(host.applyAccountSettings).not.toHaveBeenCalled();

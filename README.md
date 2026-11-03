@@ -955,8 +955,9 @@ turn ends, or **Send now** to stop it first), a permission request or question t
 open card's header, Wait / This first / Others first on a held edit, ⌘F over the whole thread and the show rail beside the pane.
 A picture or PDF you paste into the reply box goes up to your workspace and down to the machine that runs the card. New thread
 takes the CLI, model, effort, mode, tags and Backlog too (and Plan first on a worker). A teammate's card stays read-only. Thread text goes up unencrypted unless you
-turn on **Seal synced threads** in Settings → Sync → Pair a phone: then thread items, card titles and prompts, and long tool
-output are encrypted with a workspace key that only your Mac and the devices you pair hold. **Pair a phone** shows a QR code
+turn on **Seal synced threads** in Settings → Sync → Pair a phone: then thread items, card titles and prompts, long tool
+output and the files they name (pasted pictures, the pane's pages and captures) are encrypted with a workspace key that only
+your Mac and the devices you pair hold; a paired browser opens them itself and seals what you paste into a sealed card. **Pair a phone** shows a QR code
 for the Weft phone app (or a link to open in another browser); your Mac checks the claim and asks for Touch ID, and once a
 phone is paired an **Allow** has to come from it, signed after Face ID, so a stolen sign-in can't run tools on your Mac.
 More in [docs/architecture/mobile-security.md](docs/architecture/mobile-security.md). Separately, a long thread opens on its newest 50 items
@@ -1015,6 +1016,11 @@ claims the code, prints a check code, and joins once you confirm the same code w
 also lists every Mac, worker, phone and browser of yours, the keys each holds, and **Revoke** for any of them.
 **Re-pair** on a paired worker moves it to another Mac: paste that Mac's code, approve with Touch ID, and run the line it
 shows on the box. A worker never switches Macs without the one it trusts signing off.
+With two Macs signed in, a worker asks for secrets and the vault only from the Mac it's paired with, and says so when
+that Mac is closed. Revoke a phone, browser or Mac on any of your Macs and it stops being trusted everywhere: the Mac that
+paired a phone or browser unpins it within a minute, its passkeys leave every worker's set, and a worker whose Mac was
+revoked takes nothing from that Mac again. A worker also refuses a passkey approval until it holds your Mac's latest
+passkey set, which your Mac publishes where a stolen session can't take it back.
 **Sign in to Claude** on its row signs its Claude Code in with one click: Weft opens Claude's approval page in a
 window beside the button, and the token it gets back is sealed to the worker's own key, so Supabase never holds it
 in the clear (or run `weft-worker login` on the box). **Sign in to GitHub** beside it does the same for private repos:
@@ -1041,6 +1047,7 @@ A thread on a worker works on your real board: `list_cards` lists your cards fro
 A new thread in a worker project keeps everything the dialog picked: tags, CLI, model, effort, mode and **Isolated** (a worktree from the worker's own pool, landed on Done). **Add to Backlog** puts it in the worker's Backlog, where you can reorder it. A worker's cards chime, notify and count on the dock badge like yours, and the header counts, ⌘K, Archive all Done, Resume all, Switch all and the 🏷 drawer include them. A worker project's right-click menu pins, hides, archives its Done cards and stops its running ones.
 A worker's card shows its pages in the browser pane too, on this board and on weft.zip: it writes a page, opens it, and Weft uploads it with its images. Only web files from the card's project and show folder can leave the box. In the desktop app those pages, and the sites a worker's card opens, load in the same browser pane a local card uses, with its address bar, tabs, zoom, find and Save as app; the page keeps the worker's sandbox, so it can't reach Weft or follow a weft:// link.
 Your Mac's automations, /weft:done's model and effort, push on done, the subagent and backup models and the thread instructions sync to your workers, so a worker card behaves as you set it up here. Settings → **Threads** → **On a worker** sets a worker's own threads at once, keep-alive, worktree pool and default CLI; its folders and modes are only ever set on that machine. A worker card's 5hr and 7d chart is the worker's own week, and work on your workers counts toward your streak and XP.
+A worker card's thread header has the ⏰ and the ✦ too: a cron made there fires on the worker (never in a mode that skips prompts), and the ✦ lists the worker's own skills and turns them on or off for that card. The agents you made in Settings → **Agents** sync to your workers with your settings, and Settings → Agents lists your workers' projects so each can have a default agent: the New thread dialog starts on it, and a thread a worker's own thread starts there takes it too.
 The left rail works on a worker's project too. 🔐 shows the vault of its repo on your Mac (found by the project's name), and Vercel, Supabase, Cloudflare, BlastCP, Slack and Skills read that same checkout. 🖥 Services shows that worker's dev servers with **Log** (its last lines), **Restart** and **Stop**. GitHub's issue sync works for it: each new issue starts as a card on the worker (set the project's issues to **Run**; Backlog waits on the worker making unstarted cards). **Save as app** on a page a worker card wrote brings the page to your Mac as a mini app, which opens on the rail, reaches your other Macs and shares at `weft.zip/a/<id>`. The uncommitted pile's walk-through starts a card on the worker.
 A worker's card can browse like a local one: it opens a site or the worker's own dev server in a headless browser on the box, reads it, clicks, types, scrolls and checks its console, and you watch that browser live in the pane and can click it yourself. It can't open the worker's own secret files.
 A worker updates itself: when Weft has a new commit and no card is running there, it installs it, tests that it loads and restarts, and goes back on its own if the new code is bad. A push to main reaches it in seconds. Its row in Settings shows what it runs, which cards are holding an update, and **Update now** to ask by hand.
