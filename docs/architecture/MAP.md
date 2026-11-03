@@ -96,9 +96,14 @@ When a new doc lands in this folder, add it here on the same change.
 - `packages/weft-client` (`@weft/client`, a pnpm workspace package; its README says what belongs there): the platform-free
   client core the board, weft.zip and the phone share (project-hosts.md#views, H9). It holds the thread-item and card-basic
   types, the host verb names and arg shapes, the `host` command's builder and readers, the BOARD STATUS parser, `paneFor` /
-  `paneFromUrl`, `showMinis` and the signed-approval message; the old `lib/` paths (`lib/status.ts`, `lib/show-rail.ts`,
-  `lib/host-command.ts`, `lib/host-api/calls.ts`, `lib/types-thread.ts`, `lib/edit-preview-types.ts`, `lib/approval-sig.ts`)
-  re-export it. Next compiles it (`transpilePackages`); `pnpm typecheck` also checks it alone with no DOM or Node types.
+  `paneFromUrl`, `showMinis` and the signed-approval message; thread paging (`thread-page.ts`, `cloud-thread-page.ts` with
+  the opener passed in), board grouping (`board-group.ts`, over a structural `BoardCard`), the cloud command shapes,
+  builders and readers (`cloud-commands.ts`; the Mac's `newCardBody` and `answerGrant` stay in `lib/cloud-commands.ts`),
+  the pending ask (`pending.ts`: `PendingPermission`, `pendingView`; `pending-sends.ts`), thread find (`thread-find.ts`)
+  and the transport's shape (`transport.ts`: `ThreadTransport`, `PageUpdate`, `mergePage`; the transports and their
+  hooks stay in `lib/*-transport.ts`). The old `lib/` paths (`lib/status.ts`, `lib/show-rail.ts`, `lib/host-command.ts`,
+  `lib/host-api/calls.ts`, `lib/types-thread.ts`, `lib/edit-preview-types.ts`, `lib/approval-sig.ts`, `lib/thread-page.ts`,
+  `lib/board-view.ts`, `lib/cloud-commands.ts`, `lib/pending-sends.ts`, `lib/thread-find.ts` and the rest) re-export it. Next compiles it (`transpilePackages`); `pnpm typecheck` also checks it alone with no DOM or Node types.
 - `electron/main.cjs`: shell; starts Next, windows, tray, dock, `weft://` links, global hotkey;
   `electron/startup-screen.cjs` runs the start screen and shows why the board didn't load (Retry, Logs, Quit);
   `electron/startup-timer.cjs` times every launch into `~/.weft/startup.jsonl` (`node electron/startup-timer.cjs` lists them).
