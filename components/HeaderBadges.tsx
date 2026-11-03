@@ -1,6 +1,7 @@
 "use client";
 
 import { hostFor } from "@/lib/project-host";
+import { useSnapshotVersion, useWorkerProjectEvents } from "@/lib/project-snapshot-view";
 import type { Card } from "@/lib/types";
 import { useRegularMode } from "@/lib/use-regular-mode";
 import { localPath } from "@/lib/worker-project";
@@ -36,8 +37,11 @@ export default function HeaderBadges({
   notify: (err: unknown) => void;
   toast: (text: string) => void;
 }) {
+  useWorkerProjectEvents();
+  // A worker project's badges read again when its worker writes a new snapshot (0 for a local project).
+  const fresh = useSnapshotVersion(cwd);
   const running = cards.filter((c) => c.column === "running" && !c.archived).length;
-  const turnTick = `${running}:${cards.reduce((n, c) => n + (c.turns ?? 0), 0)}`;
+  const turnTick = `${running}:${cards.reduce((n, c) => n + (c.turns ?? 0), 0)}:${fresh}`;
   const done = cards.filter((c) => c.column === "done").length;
   const waiting = cards.filter((c) => c.column === "backlog" && !c.archived).length;
   const begin = (cwd: string, prompt: string, title: string) => void start(cwd, prompt, title).catch(notify);

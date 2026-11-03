@@ -9,7 +9,7 @@ const by = (created_by: string) => ({ created_by }) as CloudCommandRow;
 
 describe("workerRules fromOwner", () => {
   it("is true only for a command the worker's owner made", () => {
-    const rules = workerRules({} as Engine, undefined, undefined, "owner-1");
+    const rules = workerRules({} as Engine, { owner: "owner-1" });
     expect(rules.fromOwner?.(by("owner-1"))).toBe(true);
     expect(rules.fromOwner?.(by("teammate"))).toBe(false);
   });
@@ -23,6 +23,6 @@ describe("workerRules fromOwner", () => {
 describe("workerRules goose", () => {
   it("takes Goose's provider only on a worker that checks signed widenings", () => {
     expect(workerRules({} as Engine).goose).toBeUndefined();
-    expect(workerRules({} as Engine, undefined, undefined, "o", {} as WorkerWiden).goose).toBe(applyGooseSettings);
+    expect(workerRules({} as Engine, { owner: "o", widen: {} as WorkerWiden }).goose).toBe(applyGooseSettings);
   });
 });

@@ -35,6 +35,8 @@ A mini app is a page from the browser pane, saved so it is one click away on the
 
 The pane beside a worker card (`components/WorkerPane.tsx`) has Save as app too, on a page the card wrote: a blob page,
 `blob:sha256:<hex>`, framed through this Mac's server (T5, project-hosts.md#drawers-and-mini-apps-on-a-worker-project-t5-as-built).
+In the desktop app that page is in the native pane, whose own Save as app gets the blob ref back from the proxied address
+(`savedPageUrl`, `lib/worker-native-page.ts`; weft-worker.md#the-native-pane-on-a-worker-card).
 An app is a page this Mac's pane opens, so `POST /api/apps` with that address brings the page home first
 (`lib/mini-app-worker.ts`): it reads the blob with the account's own session (RLS keeps it to your workspace), refuses
 anything but HTML, a page over 5 MB, and bytes that don't hash to the address (nothing checks a sha on upload), writes it to `~/.weft/apps/worker-<first 16 of the sha>/index.html` (where a cloud sync pull puts an

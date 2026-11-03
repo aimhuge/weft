@@ -167,6 +167,8 @@ export function createDaemon(deps: DaemonDeps) {
   const beat = createBeat({
     heartbeat: reg.heartbeat,
     status,
+    // Keeps the leases of the commands it's running (lib/host/lease.ts).
+    renew: () => inbox.renew(conn.line),
     after(landed) {
       if (!landed) return;
       if (Date.now() - startedAt >= (deps.healthyMs ?? HEALTHY_AFTER_MS)) deps.update?.healthy();

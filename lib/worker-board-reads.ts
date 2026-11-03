@@ -1,7 +1,7 @@
 // What the desktop board reads from a Weft Worker beyond its cards (docs/architecture/project-hosts.md, H4), through
 // this Mac's server, where the account's session lives: a project's snapshot for the header badges (the row the
-// worker publishes, with its age and the worker's status, so a stale one says so), and a host verb's value (the editor's
-// files.*) that went to the blob store because it was too big for its command's row.
+// worker publishes, with its age and the worker's status, so a stale one says so; heard live after the first read), and
+// a host verb's value (the editor's files.*) that went to the blob store because it was too big for its command's row.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { accountClient } from "./account";
 import { readBlob } from "./blob-read";
@@ -9,6 +9,7 @@ import { resultValue } from "./host-result";
 import type { ProjectSnapshot } from "./project-reads";
 import type { SnapshotView } from "./project-snapshot-view";
 import { requireSession } from "./worker-board";
+import { watchWorkerProjects } from "./worker-project-live";
 import { liveStatus } from "./worker-presence";
 import { parseWorkerProject, type WorkerProjectStatus } from "./worker-project";
 
@@ -24,6 +25,12 @@ export async function workerProjectSnapshot(project: string, client: SupabaseCli
   const where = parseWorkerProject(project);
   if (!where) throw new Error("That isn't a worker project.");
   const who = await requireSession(client);
+  // From now on a new snapshot of any of the workspace's projects reaches the board at once (lib/worker-project-live.ts).
+  try {
+    watchWorkerProjects(client, who.org);
+  } catch {
+    // No Realtime on this client: the badges read on their own, as before.
+  }
   const [worker, row] = await Promise.all([
     client.from("cloud_workers").select("id, name, status, last_seen_at").eq("org_id", who.org).eq("id", where.workerId).maybeSingle<WorkerRow>(),
     client

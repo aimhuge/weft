@@ -41,7 +41,7 @@ export {
 } from "./host-calls";
 export { hostLevelRow, hostRow, type CardTarget, type HostArgs, type HostCommandRow, type HostPayload, type HostTarget } from "./host-row";
 export { DEV_LOG_MAX, hostCommand, hostFailure, hostResult, isHostDone, readHostCommand, remoteRefusal, tailBytes, textArgOf, verbResult, type HostDone, type HostResult } from "./host-command";
-export { listRefusal, CRON_PATCH_FIELDS, HOOK_PATCH_FIELDS } from "./list-policy";
+export { listRefusal, cronCreateRefusal, CRON_CREATE_FIELDS, CRON_PATCH_FIELDS, HOOK_PATCH_FIELDS } from "./list-policy";
 export { fitSkills, jsonbBytes, readSkills, skillCache, SKILLS_BUDGET, SKILLS_FRESH_MS, type SkillCache, type SkillsOnWire } from "./skills-wire";
 export { b64, unb64, type Sodium } from "./sodium-like";
 export {

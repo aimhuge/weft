@@ -14,7 +14,8 @@
 // goes) ride a settings.put only with a signed widening from the pairing Mac's Touch ID key (./widen.ts `goose`), which
 // the worker checks against the key it pinned. A passkey can't sign one (lib/widen-check.ts).
 
-export const ACCOUNT_SETTINGS = ["automations", "pushOnDone", "doneModel", "doneEffort", "subagentModel", "threadPrompt", "backupModel"] as const;
+// `agents` is your agents (Settings → Agents) and each worker project's default (lib/agent-sync.ts).
+export const ACCOUNT_SETTINGS = ["automations", "pushOnDone", "doneModel", "doneEffort", "subagentModel", "threadPrompt", "backupModel", "agents"] as const;
 export type AccountSetting = (typeof ACCOUNT_SETTINGS)[number];
 
 export const HOST_SETTINGS = ["maxThreads", "keepAliveMinutes", "worktreePool", "defaultBackend"] as const;

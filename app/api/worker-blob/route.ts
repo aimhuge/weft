@@ -14,6 +14,7 @@
 import { createHash } from "node:crypto";
 import { NO_STORE } from "@/lib/app-share-reply";
 import { BLOB_BUCKET } from "@/lib/cloud-sync-types";
+import { RESULTS, sweepResults } from "@/lib/host-result-sweep";
 import { serviceClient } from "@/lib/web-session";
 import { workerDevice } from "@/lib/worker-commands";
 
@@ -34,7 +35,7 @@ export async function POST(req: Request) {
   const hash = createHash("sha256").update(key).digest("hex");
   const { data: worker } = await service.from("cloud_workers").select("id, org_id").eq("key_hash", hash).eq("kind", "headless").maybeSingle<{ id: string; org_id: string }>();
   if (!worker) return reply({ error: "That key isn't a worker's." }, 401);
-  if (sweep === true) return sweepResults(service, worker.org_id);
+  if (sweep === true) return sweepWorkspace(service, worker.org_id);
   // A host verb's result (lib/host-result.ts) goes under results/, which the R2 mirror skips and the sweep empties.
   const objectPath = result === true ? `${worker.org_id}/${RESULTS}/${String(sha)}` : `${worker.org_id}/${String(sha)}`;
   if (read === true) return signRead(service, worker, objectPath, String(sha));
@@ -46,22 +47,14 @@ export async function POST(req: Request) {
 
 type Service = NonNullable<ReturnType<typeof serviceClient>>;
 
-// The folder a worker's verb results go in, and how long one lives: long enough for the board that asked to read it.
-const RESULTS = "results";
-const RESULT_TTL_MS = 24 * 60 * 60_000;
-
-// `sweep: true`: removes this workspace's results over a day old, oldest first, up to 1,000 a call. Any worker of the
+// `sweep: true`: removes this workspace's results over a day old (lib/host-result-sweep.ts). Any worker of the
 // workspace may ask; it removes only what the TTL says is dead.
-async function sweepResults(service: Service, orgId: string, now = Date.now()) {
-  const folder = `${orgId}/${RESULTS}`;
-  const { data, error } = await service.storage.from(BLOB_BUCKET).list(folder, { limit: 1000, sortBy: { column: "created_at", order: "asc" } });
-  if (error) return reply({ error: error.message }, 502);
-  const dead = data.filter((o) => o.created_at && now - Date.parse(o.created_at) > RESULT_TTL_MS).map((o) => `${folder}/${o.name}`);
-  if (dead.length) {
-    const { error: removeError } = await service.storage.from(BLOB_BUCKET).remove(dead);
-    if (removeError) return reply({ error: removeError.message }, 502);
+async function sweepWorkspace(service: Service, orgId: string) {
+  try {
+    return reply({ removed: await sweepResults(service, orgId) });
+  } catch (err) {
+    return reply({ error: (err as Error).message }, 502);
   }
-  return reply({ removed: dead.length });
 }
 
 // A download only for a blob an open command to this worker carries, so a key can't read the workspace's other blobs.

@@ -22,7 +22,7 @@ always starts with Builder's shipped soul.
   built-in's edit is saved over it; the skills stay unless the edit names them), `deleteAgent` (yours only; its cards and
   project defaults go back to Builder), `resetAgent` (GitHub's text, or the shipped one when GitHub can't be reached or has
   the same; the skills you picked stay), `projectAgent` / `setProjectAgent`, `agentSkillsOff` / `setAgentSkill`,
-  `savedAgentsHash`.
+  `savedAgentsHash`; for a worker, `savedAgents`, `workerProjectAgents`, `mirrorAgents` and `onAgentsSaved` ([below](#on-a-weft-worker)).
 - `app/api/agents/route.ts` (GET `{ agents, projects }`, POST a new one, PUT `{ cwd, agent }` a project's default),
   `app/api/agents/[id]/route.ts` (PATCH, DELETE), `app/api/agents/[id]/reset/route.ts` (POST). Every write needs Weft's own
   window (`elevated`): a soul is a system prompt, so a thread's curl can't write one.
@@ -56,6 +56,27 @@ start again on the new text; `refreshAgents()` updates every picker in the windo
 
 Switch on a card → `PATCH { agent }` → refused mid-turn, a no-op for the agent it has → `updateCard(agent)` → `endSession`
 ends the CLI, keeping `sessionId` → the next message opens a new CLI that resumes the same conversation under the new soul.
+
+## On a Weft Worker
+
+A thread's agent travels by its id (`lib/create-widen.ts` `signedAgent`), so the agents you made and edited, and each
+worker project's default, go to your workers with your account settings: `agents` in `ACCOUNT_SETTINGS`
+(`packages/weft-client/src/host-settings.ts`), built by `lib/agent-sync.ts` `agentsSnapshot` (your saved agents, each in
+one shape, up to `SNAPSHOT_MAX_CHARS` of text, and the `worker://` defaults; this Mac's own folders stay here). It is
+signed by this Mac's device key like the thread instructions beside it (lib/account-settings.ts), pushed again whenever
+`agents.json` is written (`onAgentsSaved`), and sent again without the agents if the database refuses the row's size. A
+worker mirrors it only from the Mac it was paired with (`lib/worker-settings-sync.ts`), each agent and default checked
+again (`readAgentsSnapshot`), and `mirrorAgents` replaces the worker's saved agents and `worker://` defaults with it.
+
+- A worker project's default is set in Settings → Agents, whose list adds your workers' projects
+  (`lib/use-worker-projects-once.ts`, "folder · worker"); `setProjectAgent` keeps a `worker://` path that names a folder.
+- The New thread dialog starts on that default and signs it like any agent pick (Touch ID, `withCreateWiden`).
+- A new thread on the worker that names no agent (a thread's `create_card`, `card.create`) starts as the project's
+  default there (`lib/worker-kinds.ts` `defaultAgent`), the same rule `lib/new-card.ts` has on this Mac; a worker that
+  trusts no Mac (enrolled by token) takes no synced settings, so it has none.
+- `supabase/migrations/20261103120000_account_setting_agents.sql` adds `agents` to the database's allowlist and raises
+  the row's cap to 400 KB. It has to be applied before a Mac that sends `agents` ships: the worker's read drops keys not on
+  the list before it checks the signature.
 
 ## Patterns
 

@@ -2,8 +2,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next/server", () => ({ connection: async () => {} }));
-const { mirrorPending, serviceClient } = vi.hoisted(() => ({ mirrorPending: vi.fn(), serviceClient: vi.fn() }));
+const { mirrorPending, serviceClient, sweepAllResults } = vi.hoisted(() => ({ mirrorPending: vi.fn(), serviceClient: vi.fn(), sweepAllResults: vi.fn() }));
 vi.mock("@/lib/r2-mirror", () => ({ mirrorPending }));
+vi.mock("@/lib/host-result-sweep", () => ({ sweepAllResults }));
 vi.mock("@/lib/web-session", () => ({ serviceClient }));
 
 const { GET } = await import("./route");
@@ -18,6 +19,7 @@ beforeEach(() => {
   vi.stubEnv("R2_SECRET_ACCESS_KEY", "secret");
   serviceClient.mockReturnValue({ service: true });
   mirrorPending.mockResolvedValue({ copied: 3, bytes: 30, failed: [], more: false });
+  sweepAllResults.mockResolvedValue({ orgs: 2, removed: 4, failed: [] });
 });
 
 describe("GET /api/cron/r2-mirror", () => {
@@ -39,7 +41,8 @@ describe("GET /api/cron/r2-mirror", () => {
 
   it("runs the mirror and answers its counts", async () => {
     const res = await GET(req("Bearer cron"));
-    expect(await res.json()).toEqual({ copied: 3, bytes: 30, failed: 0, more: false });
+    expect(await res.json()).toEqual({ copied: 3, bytes: 30, failed: 0, more: false, results: 4 });
+    expect(sweepAllResults).toHaveBeenCalledWith({ service: true });
     expect(mirrorPending).toHaveBeenCalledWith({ service: true }, expect.objectContaining({ accountId: "acc", bucket: "weft-blobs" }));
   });
 
@@ -55,6 +58,21 @@ describe("GET /api/cron/r2-mirror", () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     mirrorPending.mockRejectedValue(new Error("blob_mirror_pending: permission denied"));
     expect((await GET(req("Bearer cron"))).status).toBe(502);
+    error.mockRestore();
+  });
+
+  it("sweeps host results even without R2, and a failed sweep never stops the mirror", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.stubEnv("WEFT_BLOBS_R2", "off");
+    expect((await GET(req("Bearer cron"))).status).toBe(503);
+    expect(sweepAllResults).toHaveBeenCalledTimes(1);
+    vi.stubEnv("WEFT_BLOBS_R2", "");
+    sweepAllResults.mockResolvedValue({ orgs: 1, removed: 0, failed: ["org-1: list failed"] });
+    expect(((await (await GET(req("Bearer cron"))).json()) as { copied: number }).copied).toBe(3);
+    expect(error).toHaveBeenCalledWith(expect.stringContaining("list failed"));
+    sweepAllResults.mockRejectedValue(new Error("no workers table"));
+    expect(((await (await GET(req("Bearer cron"))).json()) as { results: number }).results).toBe(0);
+    expect(error).toHaveBeenCalledWith(expect.stringContaining("no workers table"));
     error.mockRestore();
   });
 });
