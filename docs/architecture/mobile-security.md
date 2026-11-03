@@ -159,6 +159,67 @@ A row that names a file names it by `blob:sha256:<hex>`, the hash of the plainte
   when a sealed row names it later (like old rows), and one that went up sealed stays sealed when a share link or a
   published mini app names the same bytes later: those draw the 🔒 stand-in until the page changes (a new sha).
 
+## Sealing on a Weft Worker (design)
+
+Status: **designed, not built** (2026-11-03). Today a worker holds no workspace key: it publishes its card, item and tool
+rows and its pages plain, and a Mac or browser sends a worker's card its files plain. This is how it closes, in two
+steps, each reusing a piece already built and trusted (the pairing pins and the Mac's device key from H8 and H10).
+
+### Step A: a key grant to the worker
+
+```
+Settings → Devices → the worker → Seal this worker's threads        (IPC from the board window only, like pairing)
+main:   the worker's pinned box key (electron/worker-pins.cjs) ─ Touch ID "Give m1mini the key to your sealed threads"
+        ─ for each version main holds: sealed = seal(key, box, purpose "workspace-key:<org>:<worker>:<version>")
+          (lib/worker-seal.ts's X25519 + HKDF + AES-256-GCM, electron/worker-seal.cjs)
+        ─ sig = Mac device key (electron/desktop-signer.cjs) over
+          "weft-worker-key-v1\n<org>\n<worker>\n<version>\n<box key>\n<sha256(sealed) hex>"
+        ─ insert worker_key_grants { org_id, worker_id, version, sealed, mac_device, sig }   (RLS: the worker's owner)
+worker: worker_key_grants(p_key) RPC (sha256(wwk_) → its own rows) ─ check sig against the Mac key in mac-keys.json
+        (trustPairingMac; never a key off the network) ─ the box key named is its own ─ open under the purpose
+        ─ hold the ring in memory only; read again at start and on a `key_grant` ping
+```
+
+- **Never readable by weft.zip.** The server stores a box sealed to a key it can't open, and the signature means a
+  server (or the owner's stolen session) can't plant a key of its own choosing: a planted key would let it read
+  everything the worker seals after. A worker enrolled by token trusts no Mac, so it never takes a grant; it stays plain.
+- **Rotation and revocation.** `syncKeys.rotate(org, keep)` gains the granted workers (main keeps which ones it granted,
+  sealed beside `worker-pins.json`), so a rotation grants them the new version under the same Touch ID. Revoking a worker
+  (or Re-pin dropping its box key) deletes its grants and rotates, as revoking a phone does. A grant is offered only while
+  **Seal synced threads** is on, and pairing a worker (H10) can offer it under its own Touch ID.
+- **Settings → Devices** says which state a worker is in: "Threads sealed (key v3)", or "Threads in the clear · Seal…"
+  (no grant, or a grant for an older version only), so a worker without a key keeps working, plainly labelled.
+
+**Migration (proposed, additive):** `worker_key_grants (org_id uuid, worker_id uuid references cloud_workers on delete
+cascade, version int, sealed text, mac_device text, sig text, created_at timestamptz, primary key (worker_id, version))`
+with RLS insert/select/delete for the worker's `owner_user` who is an org member, a `security definer`
+`worker_key_grants(p_key text)` RPC keyed by `key_hash` that returns only that worker's rows and nothing for a revoked
+worker, and a trigger that deletes a worker's grants when `cloud_workers.revoked_at` is set.
+
+### Step B: the worker seals and opens
+
+- **Opens.** The worker's attachment download (`workerBlobReader` through `app/api/worker-blob` read mode) runs the bytes
+  through `openBlob` with its ring before `receiveAttachments` checks the sha, as `macReceive` does. With step A in, the
+  Mac's `withAttachments` (`lib/worker-board.ts`) and a paired browser's `webBlobSeal` seal for a worker's card too: the
+  Mac when the worker's grant covers its current version, the browser when the card's row came sealed (which only a
+  worker with the key can write).
+- **Seals its rows like a Mac's outbox.** The publisher (`lib/worker-publish.ts`) takes a `Sealer` built by
+  `makeSealer(s, key, isShared)` from the worker's newest granted version, and hands `Sealer.blob(cardId)` to its blob
+  store through `withBlobSeal`, exactly as `lib/cloud-sync-upload.ts` does; `worker_put_card` / `worker_put_items` take
+  the sealed jsonb unchanged, so weft.zip's server sees ciphertext. A card with a share link stays plain.
+- **Boards open them.** The web board already opens any row sealed with the workspace key (`openSyncedCard`,
+  `openSyncedItem`) and any sealed blob (`lib/web-blob-open.ts`). The desktop board reads a worker's rows on this Mac's
+  own server (`lib/worker-board-reads.ts`, `lib/worker-board.ts` `workerPage`), which opens them with main's keyring;
+  ⌘F on a worker card (`lib/worker-thread-reads.ts`) reads the rows in batches, opens and matches them with
+  `searchCloudThread`, as weft.zip does for a Mac's, instead of matching in SQL.
+
+**Threat model.** In scope: weft.zip's server, its database and backups, Weft's operators, a stolen account session, and
+anyone holding the worker's `wwk_` key without its box. With A and B, none of them reads a worker's sealed thread, its
+pages or the files sent to it, plants a workspace key on the worker, or gets a grant for a box they control (the grant
+goes only to the box key main pinned under Touch ID). Out of scope, as for a Mac: the worker box itself (whoever runs
+code there reads its memory, and its cards run with its privileges), and a key the Mac granted before a revoke for
+rows sealed under that version.
+
 ## 3. Signed approvals
 
 The answer command (`kind: "answer"`, `lib/cloud-commands.ts`, built by the card "📱 Answer questions & permissions
