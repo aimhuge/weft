@@ -44,7 +44,7 @@ row was a missing command kind and a missing handler on the board, not a missing
 | Send later | `desktop: true` | `card.schedule` / `card.unschedule`, the worker's daemon holding the timer (H3b) |
 | "/" skills list | `/api/skills?cwd=` | `skills.list`, the worker's own list for the card's checkout (H3b) |
 | Plan limits meter, "at its cap" | this Mac's limits log | the card's own reading and the worker's burndown (H3b, WP3); the model pickers' caps from the `m` caps the worker publishes in `cloud_workers.limits` (`/api/limits/plans?worker=`, `useLimitedModels(cwd)`, PR #75) |
-| Settings | this Mac's settings.json | account settings synced from the Mac, host settings per worker in Settings → Threads (WP3); Goose's provider as a `settings.put` signed by the pairing Mac (PR #81) |
+| Settings | this Mac's settings.json | account settings synced from the Mac, host settings per worker in Settings → Threads (WP3); Goose's provider as a `settings.put` signed by the pairing Mac (PR #81), its key per turn from the Mac after Touch ID (PR #93) |
 | Streaks and XP | this Mac's activity log | the worker's cards count too (WP3); a Run on Worker card's local record is marked `handedOff` and left out (`lib/activity.ts` `withoutHandedOff`, PR #75) |
 | Show rail, pane, editor | Board's open card | the show rail (H3); the card's uploaded pages and sites in the native `BrowserPane` (PR #78, `WebPane` kept for the live screen); the editor and file links through `files.*` (H4), reloading when the file changes on the worker (`files.watch`, PR #86) |
 | Review tour | `desktop: true` | the tour and the no-tour panel (card data), each step's page in the card's pane column (`lib/pane-open.ts`); no dev server step |
@@ -464,7 +464,7 @@ board     StatusStrip on a worker card ─ /api/limits?worker= ─ workerLimitSa
   out of streaks, XP and made totals (`lib/activity.ts` `withoutHandedOff`, PR #75); agents and worker-project defaults
   sync as the signed `agents` setting (PR #79, migration `20261103120000_account_setting_agents.sql`); Goose's provider
   as a signed `settings.put` (PR #81); the "at its cap" marks from the worker's caps (PR #75). Goose's provider key per
-  turn from the Mac is built and landing (PR #93).
+  turn from the Mac (PR #93).
 
 ### One host program (H5, as built)
 
@@ -1479,8 +1479,13 @@ applied on production.
   only the value's trip is saved. A kept value is readable by any code a card on that worker runs.
 - **weft.zip seals its own offers** (PR #89, migration `20261103150000_line_row_shape.sql`) and **TURN on weft.zip**
   (PR #91): [H6](#the-session-line-h6-as-built).
+- **Goose's key on a worker** (PR #93, migration `20261103160000_goose_key_ask.sql`;
+  [weft-worker.md](weft-worker.md#goose-on-a-worker)). Each Goose turn on a paired worker asks the
+  paired Mac through a signed `goose_key` ask; main answers only for the provider and endpoint it last signed for that
+  worker, after Touch ID, with a Mac-signed `secret_use` (`use: "goose"`) sealed to the pinned box key. The key goes into
+  that one Goose process's env, redacted, never kept (`lib/worker-goose-key.ts`, `electron/worker-goose-key.cjs`).
 
-**Built, landing** (open PRs, their migrations already applied):
+**Built, landing** (open PRs):
 
 - **Signed Allow on worker cards** (PR #80, H7's follow-up). The desktop's Allow on a worker card is signed by main
   after Touch ID over the worker's own names (`lib/answer-signer.ts`, `electron/approval-sign.cjs` reading
@@ -1488,10 +1493,6 @@ applied on production.
   (`lib/worker-approve.ts`, `answerAsKind` on), with a clear refusal for older Macs. Roll-out: update the Mac before
   its workers, or Allows on worker cards are refused and the request stays waiting.
 - **This Mac's board tools reach worker cards** (PR #83): [Board tools on a worker](#board-tools-on-a-worker).
-- **Goose's key on a worker** (PR #93; its migration `20261103160000` is already applied on production and enters the repo with the PR). Each Goose turn on a paired worker asks the
-  paired Mac through a signed `goose_key` ask; main answers only for the provider and endpoint it last signed for that
-  worker, after Touch ID, with a Mac-signed `secret_use` (`use: "goose"`) sealed to the pinned box key. The key goes into
-  that one Goose process's env, redacted, never kept (`lib/worker-goose-key.ts`, `electron/worker-goose-key.cjs`).
 
 ## Still open
 
@@ -1543,7 +1544,7 @@ Each ships on its own. Status as of 2026-11-03.
 8. **H8 secrets on a Worker** (built). The per-use seal (2026-11-02,
    [as built](#secrets-on-a-worker-h8-the-per-use-seal-as-built)), T2's list, blanks, `set_value`, `push_to_vercel` and a
    dev server's env (2026-11-02, [as built](#the-vault-on-a-worker-t2-as-built)), and values kept on a worker (2026-11-03,
-   PR #88, [secrets.md](secrets.md#kept-on-a-worker)). Goose's key per turn is landing (PR #93). Lending gog and gh is
+   PR #88, [secrets.md](secrets.md#kept-on-a-worker)), and Goose's key per turn from the Mac (PR #93). Lending gog and gh is
    not planned.
 9. **H9 `@weft/client`** for the phone (two passes built). The first (2026-11-02): `packages/weft-client`, plain
    TypeScript (no DOM, React, Next or Node; its own tsconfig and an ESLint rule check that), with the thread-item types,

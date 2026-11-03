@@ -29,7 +29,8 @@ export interface DevEnvRequest {
 
 const RUNNER = () => fileURLToPath(new URL("../electron/secret-env.cjs", import.meta.url));
 
-function within<T>(promise: Promise<T>, ms: number, why: string): Promise<T> {
+// Rejects with why once ms pass, if promise hasn't settled (lib/worker-goose-key.ts waits on its sealed answer the same way).
+export function within<T>(promise: Promise<T>, ms: number, why: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const late = new Promise<never>((_, fail) => (timer = setTimeout(() => fail(new Error(why)), ms)));
   return Promise.race([promise, late]).finally(() => clearTimeout(timer));

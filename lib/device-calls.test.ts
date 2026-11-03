@@ -320,6 +320,15 @@ describe("drainDeviceCalls", () => {
     expect(requireGrant).not.toHaveBeenCalled();
   });
 
+  it("hands a worker's Goose key ask to main by id, without holding up the drain", async () => {
+    shell.mockResolvedValue({ queued: true, label: "Anthropic" });
+    const { client, calls } = fakeClient({ pending: [row({ tool: "goose_key", args: { providerId: "anthropic" } })] });
+    await drainDeviceCalls(client, "user-1");
+    await vi.waitFor(() => expect(calls.updates.map((u) => u.patch.status)).toEqual(["claimed", "done"]));
+    expect(shell).toHaveBeenCalledWith("/secrets/worker-goose-key", { call: "call-1" });
+    expect(requireGrant).not.toHaveBeenCalled();
+  });
+
   it("fails a secret ask main refused", async () => {
     shell.mockRejectedValue(new Error("Sign in to Weft on this Mac to approve a worker's secrets."));
     const { client, calls } = fakeClient({ pending: [row({ tool: "secret_run" })] });
