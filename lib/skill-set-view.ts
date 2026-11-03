@@ -1,4 +1,4 @@
-import type { SkillSetRow } from "./types";
+import type { Card, SkillInfo, SkillSetRow, SkillSetView } from "./types";
 import { matchesQuery } from "./text-filter";
 
 // How the Skills drawer and a card's ✦ menu lay out a skill set (lib/skill-set-actions.ts skillSetView).
@@ -44,4 +44,17 @@ export function withToggled(rows: SkillSetRow[], name: string, on: boolean, forC
     const inProject = forCard ? r.inProject : on;
     return { ...r, on, inProject, changedHere: forCard && on !== inProject };
   });
+}
+
+// A card's set on a host that isn't this Mac (a Weft Worker), from the skills that host lists for the card (skills.list)
+// and the card's own changes: its project's default there isn't read, so a skill is on unless the card turned it off,
+// and a skill the card turned on was off in its project.
+export function hostSkillView(skills: readonly SkillInfo[], card: Pick<Card, "skillsOn" | "skillsOff">): SkillSetView {
+  const on = new Set(card.skillsOn ?? []);
+  const off = new Set(card.skillsOff ?? []);
+  const rows = skills.map((s): SkillSetRow => {
+    const inProject = !on.has(s.name);
+    return { kind: "skill", name: s.name, description: s.description, source: s.source, inProject, on: on.has(s.name) || !off.has(s.name), changedHere: on.has(s.name) || off.has(s.name) };
+  });
+  return { seeded: true, rows };
 }

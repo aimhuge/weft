@@ -372,7 +372,9 @@ store (`lib/worker-project.ts`, `lib/worker-board.ts`, `lib/worker-transport.ts`
   `ThreadPanel` over `workerTransport` (`desktop: false`, `cardEdits: true`), so its header offers rename, tags, star,
   archive and the model picker, and its reply box ↑ edit, fresh and the held-edit choices, each a host verb; the show
   rail projects the items its thread view drew (`lib/worker-shown.ts`), and the pane column is `components/WorkerPane.tsx`
-  (`WebPane` on the card's page, or the page the rail reopens; the native pane under Local Simulator). The editor column
+  (in the desktop app, this Mac's native pane on a page the card wrote or a site, as on a local card,
+  [below](#the-native-pane-on-a-worker-card); `WebPane` on the live screen, a page only the worker has, and off the
+  desktop app; the native pane under Local Simulator). The editor column
   says a worker's files aren't there yet. Reply, answer, stop and mode are the same `cloud_commands` rows the web sends.
 - **A new thread:** `POST /api/cards` with a worker path calls `startWorkerThread`, sends a `run` with that folder, makes
   no local card and answers with the worker's name. An offline worker refuses with a message and nothing is sent. A
@@ -402,7 +404,8 @@ blob store (lib/blob-store.ts, mayUpload = workerMayUpload)
   ▼
 card.page and the open_url item carry blob:sha256:<hex>#anchor (lib/worker-publish.ts, lib/card-rows.ts's withUploadedPage)
   ├─▶ web board: WebThreadPanel → WebPane → /api/web-board/<org>/page/<sha>
-  └─▶ desktop board: OpenCard → WorkerPane → WebPane → /api/worker-board/page/<sha>  (5 s poll of the worker's cards)
+  └─▶ desktop board: OpenCard → WorkerPane → native pane (pane partition) → /api/worker-board/page/<sha>  (5 s poll of the worker's cards)
+                     (WebPane's iframe on the same route off the desktop app)
 ```
 
 - **The tools:** `scripts/weft-worker.ts` sets `WEFT_WORKER=1`. `open_url` then calls `openOnWorker`: a local page uploads
@@ -447,7 +450,8 @@ card.page and the open_url item carry blob:sha256:<hex>#anchor (lib/worker-publi
 - **Sandboxing.** The web board is unchanged. The desktop board is stricter, because its frame sits in the board window's
   session. A worker's page is untrusted, so `app/api/worker-board/page/[sha]` sends a CSP with no `http:` source (the page
   can't fetch, load or post anything to 127.0.0.1), and the iframe is `sandbox="allow-scripts"` with no popups or forms. A
-  public site is never framed there: its CSP isn't ours, so the pane says so and offers Open ↗.
+  public site is never framed there: its CSP isn't ours, so the pane says so and offers Open ↗. (In the desktop app both
+  now load in the native pane instead, [above](#the-native-pane-on-a-worker-card); this frame is what's left off it.)
 - **The launch token stays out of frames** (`electron/api-token.cjs`). `attachApiToken` used to put it on every request
   from the board window's session, so a page could navigate its own frame to a local GET with it attached. It now skips
   a frame's navigation (`resourceType` `subFrame`) and anything a frame asks for (`details.frame.parent`, or the
@@ -457,6 +461,27 @@ card.page and the open_url item carry blob:sha256:<hex>#anchor (lib/worker-publi
   frames need nothing: the intros and the welcome loop are static files in `public/`, the print sheet is a `srcdoc` used
   only on the web, and the share views' frames aren't in the board window. Checked in real Electron 44: the board's fetch
   carried the token, the page loaded on `1`, and a sandboxed frame's self-navigation to `/api/settings` arrived with none.
+- **The native pane on a worker card** (2026-11-03). In the desktop app, `WorkerPane` loads a page the card wrote, and a
+  site, in this Mac's native pane, so it has the address bar, tabs, zoom, find, Save as app and the browser tools a local
+  card's pages have (`lib/worker-native-page.ts`). A blob opens as `http://<this Mac's server>/api/worker-board/page/<sha>#anchor`
+  under the card's key, when the card's page changes (a new one, the show rail, the review tour) and not when the card is
+  only reopened on it; a site opens as it is (the pane's own session, so the board-session rule above doesn't apply). The
+  live screen, a page only the worker has and no page stay `WebPane`, and so does weft.zip. Save as app maps the proxied
+  address back to its `blob:sha256:` ref (`savedPageUrl`), so the page still comes home through `lib/mini-app-worker.ts`.
+  What lets it load, and what it doesn't gain:
+  - `electron/self-url.cjs` stops treating exactly `/api/worker-board/page/<64 hex>` as "Weft itself" (`WORKER_PAGE`); any
+    other path on the server still is, so the pane still refuses the board and every other route.
+  - `attachPaneAttachments` (`electron/api-token.cjs`) gives the pane's session the plain read value `1` on a GET of that
+    path, as the board's frame gets it, and nothing else under the route. The pane partition never carries the launch
+    token, so the page can't reach a token-only route, and `1` is what any local process may already send.
+  - The route's CSP comes along: `sandbox allow-scripts` gives the page an opaque origin and no popups or forms, and no
+    `http:` source keeps it off 127.0.0.1, in the pane as in the frame. The pane's preload exposes `window.weft` to `file:`
+    pages only, so the page gets no data bridge.
+  - `weft://` links from a worker page are dropped (`isWorkerPageUrl` in `electron/browser-pane.cjs`): its sandboxed frame
+    could never follow one, so it can't open a card, the copilot or a pre-filled New thread either. (`reply` and `commit`
+    already needed a file page under `~/.weft`.)
+  - The pane's control server is unchanged and token-guarded; a worker card's thread runs on the worker, whose browser
+    tools drive the worker's own browser, not this pane.
 - **`worker_put_card`** fills `cloud_cards.page` and `pages` from the card
   (`supabase/migrations/20261030143806_worker_card_page.sql`), so a phone feed reads a worker's card from its row.
   `page_thumb` stays null: a worker has no pane to capture.
@@ -703,6 +728,12 @@ Backlog) to `cloud_worker_projects` through `worker_put_project` (`lib/worker-pr
 `scripts/weft-worker.ts`: every 5 minutes, 20 s after a card change, never mid-turn), and answers the editor's
 `files.*` verbs, putting a result over the row's 4 KB in the blob store through `Engine.carry`
 ([project-hosts.md](project-hosts.md#project-reads-and-the-editor-h4-as-built)).
+
+A worker card's thread header has the ⏰ and the ✦ skill set chip too: the ⏰ makes a cron on the worker with
+`cron.create` (args.id the card; the worker narrows its mode, crons.md#on-a-weft-worker), and the chip lists the worker's
+own skills and sets one with `card.update { skill }` (skills.md). Your agents from Settings → Agents, and each worker
+project's default agent, sync to the worker with your signed account settings (agents.md#on-a-weft-worker), so an agent
+you made exists there, and a new thread there that names none starts as the project's default.
 
 The one-sentence version: **Weft already has a remote control plane, but not a remote compute plane.** The web
 board already commands a Mac across the network through `cloud_commands`; the CLI, though, always spawns on the

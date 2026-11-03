@@ -1,12 +1,33 @@
 // A card's dev server, from the board's Services drawer (docs/architecture/dev-servers.md#on-a-worker). On a worker the
 // board can't reach its localhost, so `dev.open` gives the server a private /t/<id> address: a tunnel, after the owner's
 // Touch ID on their Mac (lib/tunnel-worker.ts). On the Mac the same verb opens a Mac tunnel. `dev.stop` ends the run,
-// `dev.restart` starts it again with the same command, and `dev.log` reads its last lines (T5).
+// `dev.restart` starts it again with the same command, and `dev.log` reads its last lines (T5). `dev.start` runs the
+// review tour's dev command (its plan, card.review) and `dev.status` says whether the server answers: the review tour's
+// Start and Restart, and its status line.
 import { listDev } from "../devserver-list";
-import { LOG_LIMIT, restartDev, runs, stopDev } from "../devserver";
+import { devStatus, LOG_LIMIT, reachable, restartDev, runs, startDev, stopDev } from "../devserver";
 import { redactText } from "../share-redact";
 import { openTunnel } from "../tunnels";
+import type { DevServerStatus } from "../types";
+import { workDir } from "../work-dir";
 import { OK, requireCard, settle, type Ok } from "./types";
+
+type Status = { status: DevServerStatus };
+
+export async function devStatusVerb({ id }: { id: string }): Promise<Status> {
+  return { status: await devStatus(id, requireCard(id).review?.url) };
+}
+
+// The plan's dev command, unless its url already answers; `restart` stops Weft's run first and starts it anew.
+export async function devStartVerb({ id, restart }: { id: string; restart?: boolean }): Promise<Status> {
+  const card = requireCard(id);
+  const plan = card.review;
+  if (!plan?.dev) throw new Error("The review tour has no dev command.");
+  if (restart === true) stopDev(id);
+  else if (plan.url && (await reachable(plan.url))) return { status: await devStatus(id, plan.url) };
+  const { url } = await startDev(id, plan.dev, workDir(card), card.title, plan.url);
+  return { status: await devStatus(id, url) };
+}
 
 export async function devOpenVerb({ id }: { id: string }): Promise<{ address: string }> {
   const card = requireCard(id);

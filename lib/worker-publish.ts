@@ -19,6 +19,8 @@ import type { ItemRow, OutputRow, Registry } from "./worker-registry";
 export interface PublishSource {
   getCard(id: string): Card | undefined;
   getThread(id: string): ThreadItem[];
+  // Every card on this host, for a line's snapshot (card.list); without it the snapshot is the cards shipped so far.
+  listCards?(): Card[];
 }
 
 interface Dirty {
@@ -133,6 +135,14 @@ export function createPublisher(reg: Pick<Registry, "putCard" | "putItems">, sou
     mirror(fn: (event: LineEvent) => void) {
       mirrors.add(fn);
       return () => void mirrors.delete(fn);
+    },
+    // card.list over a line (lib/worker-reads.ts): every card this worker publishes, projected as its next flush would
+    // send it, with the folder its row names. Nothing is marked or sent.
+    async snapshot(): Promise<{ card: Card; folder: string }[]> {
+      const cards = source.listCards?.() ?? [...shipped].flatMap((id) => source.getCard(id) ?? []);
+      const out: { card: Card; folder: string }[] = [];
+      for (const card of cards.filter((c) => publishes(c, host))) out.push({ card: (await projectCard(card, host)).card, folder: folderOf(card) });
+      return out;
     },
     nameFolder: (cardId: string, folder: string) => void folders.set(cardId, folder),
     // Marks a card so the next flush sends its row, for a card whose row may be out of date but whose items aren't.

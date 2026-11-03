@@ -49,3 +49,28 @@ export function listRefusal(verb: ListVerb, args: Record<string, unknown>): stri
   }
   return verb === "webhook.update" ? patchRefusal("webhook", HOOK_PATCH_FIELDS, args.patch) : null;
 }
+
+// What a cron made from a card (cron.create) may carry from the network: what the ⏰ popover sends. Its folder, CLI,
+// model, effort, mode and agent are the card's own, read on the host, never the row's; the host narrows the mode
+// (lib/worker-kinds.ts listVerb).
+export const CRON_CREATE_FIELDS: Readonly<Record<string, Kind>> = {
+  prompt: "string",
+  expr: "string",
+  name: "string",
+  mode: "string",
+  fromMessage: "string",
+  enabled: "boolean",
+  startsAt: "number",
+  endsAt: "number",
+  runNow: "boolean",
+};
+
+/** Why a host refuses a cron.create from the network, or null when it may run. args.id is the card. */
+export function cronCreateRefusal(args: Record<string, unknown>): string | null {
+  const input = Object.fromEntries(Object.entries(args).filter(([key]) => key !== "id"));
+  const refused = patchRefusal("cron", CRON_CREATE_FIELDS, input);
+  if (refused) return refused;
+  if (typeof input.prompt !== "string" || typeof input.expr !== "string") return "A cron needs a prompt and a schedule.";
+  if (isBang(input.prompt)) return BANG_CRON;
+  return input.mode !== undefined && !CRON_MODES.has(input.mode as string) ? "A cron's runs are fork or fresh." : null;
+}
