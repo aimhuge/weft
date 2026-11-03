@@ -5,7 +5,7 @@ const { WebContentsView, dialog, systemPreferences } = require("electron");
 const fs = require("node:fs");
 const http = require("node:http");
 const path = require("node:path");
-const { isSelfUrl } = require("./self-url.cjs");
+const { isSelfUrl, isWorkerPageUrl } = require("./self-url.cjs");
 const { createPaneSecrets } = require("./pane-secrets.cjs");
 const { secretRunRoutes } = require("./secret-run.cjs");
 const { typeText } = require("./pane-actions.cjs");
@@ -133,8 +133,10 @@ function createBrowserPane({ getWindow, getAppView, token, onContents, pages, on
     // Pop-ups and target=_blank links open in a new tab of the same card instead of new windows.
     // Links get where they came from: the card whose pane holds the page, and the page's own URL.
     const from = () => ({ card: key === BOARD ? null : key, page: wc.getURL() });
+    // A worker card's page follows none: its frame on the board never could (electron/self-url.cjs).
+    const link = (url) => isWorkerPageUrl(wc.getURL(), getAppView()?.webContents.getURL()) || onLink?.(url, from());
     wc.setWindowOpenHandler(({ url }) => {
-      if (/^weft:/i.test(url)) onLink?.(url, from());
+      if (/^weft:/i.test(url)) link(url);
       else {
         const tab = addTab(key);
         if (key === active) sendState();
@@ -146,7 +148,7 @@ function createBrowserPane({ getWindow, getAppView, token, onContents, pages, on
     wc.on("will-navigate", (e, url) => {
       if (!/^weft:/i.test(url)) return;
       e.preventDefault();
-      onLink?.(url, from());
+      link(url);
     });
     for (const event of ["did-navigate", "did-navigate-in-page", "page-title-updated", "did-start-loading", "did-stop-loading"]) {
       wc.on(event, () => {

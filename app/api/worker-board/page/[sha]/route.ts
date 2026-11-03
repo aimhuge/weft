@@ -1,5 +1,7 @@
-// GET /api/worker-board/page/[sha] — the iframe src for a worker card's page on the desktop board
-// (components/WorkerPane.tsx, lib/worker-board.ts workerPage). The web board's page route, on this Mac's server,
+// GET /api/worker-board/page/[sha] — a worker card's page on the desktop board: the native pane's address in the
+// desktop app (lib/worker-native-page.ts), else WebPane's iframe src (components/WorkerPane.tsx, lib/worker-board.ts
+// workerPage). In the pane the CSP below is the page's own sandbox, and the pane's session gets the same plain read
+// value for this path alone (electron/api-token.cjs). The web board's page route, on this Mac's server,
 // read as the signed-in account so RLS is the gate.
 //
 // One thing is stricter here. The frame sits in the board window's session, and a page from a worker is untrusted.
