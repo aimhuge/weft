@@ -9,7 +9,7 @@ import { connection } from "next/server";
 import { notFound } from "next/navigation";
 import { isWebEnabled } from "@/lib/home";
 import { shareIdBySlug } from "@/lib/share-access";
-import { threadMetadataBySlug } from "@/lib/share-meta";
+import { GENERIC_THREAD_METADATA, threadMetadataBySlug } from "@/lib/share-meta";
 import { serviceClient } from "@/lib/web-session";
 import { NotDeployed, SharedCardPage } from "@/components/share-view/SharedCardPage";
 import { SharedCardSkeleton } from "@/components/web-states/Skeletons";
@@ -18,6 +18,13 @@ type Params = Promise<{ username: string; slug: string }>;
 
 // The link preview (lib/share-meta.ts): a public link's title, first ask and card, else the generic one.
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
+  // Without the web side the page is the static NotDeployed notice, so the metadata stays static too: awaiting
+  // params there leaves a prerendered page with runtime metadata, which `next build` refuses (the 0.7.1 dmg build).
+  if (!isWebEnabled()) return GENERIC_THREAD_METADATA;
+  return linkPreview(params);
+}
+
+async function linkPreview(params: Params): Promise<Metadata> {
   "use cache";
   cacheLife("minutes");
   const { username, slug } = await params;

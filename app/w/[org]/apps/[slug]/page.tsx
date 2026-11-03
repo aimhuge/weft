@@ -9,13 +9,20 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { cacheLife } from "next/cache";
-import { appMetadataBySlug } from "@/lib/app-share-meta";
+import { GENERIC_APP_METADATA, appMetadataBySlug } from "@/lib/app-share-meta";
 import { isWebEnabled } from "@/lib/home";
 import { SharedAppPageBody } from "@/app/u/[username]/apps/[slug]/shared-app-body";
 import { SharedAppSkeleton } from "@/components/web-states/Skeletons";
 
 // The link preview, as /@<user>/apps/<slug> reads it (lib/app-share-meta.ts).
 export async function generateMetadata({ params }: { params: Promise<{ org: string; slug: string }> }): Promise<Metadata> {
+  // Without the web side the page is the static NotDeployed notice, so the metadata stays static too: awaiting
+  // params there leaves a prerendered page with runtime metadata, which `next build` refuses (the 0.7.1 dmg build).
+  if (!isWebEnabled()) return GENERIC_APP_METADATA;
+  return linkPreview(params);
+}
+
+async function linkPreview(params: Promise<{ org: string; slug: string }>): Promise<Metadata> {
   "use cache";
   cacheLife("minutes");
   const { org, slug } = await params;

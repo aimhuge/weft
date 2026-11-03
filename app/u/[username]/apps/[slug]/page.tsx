@@ -11,7 +11,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { cacheLife } from "next/cache";
-import { appMetadataBySlug } from "@/lib/app-share-meta";
+import { GENERIC_APP_METADATA, appMetadataBySlug } from "@/lib/app-share-meta";
 import { isWebEnabled } from "@/lib/home";
 import { SharedAppPageBody } from "./shared-app-body";
 import { SharedAppSkeleton } from "@/components/web-states/Skeletons";
@@ -19,6 +19,13 @@ import { SharedAppSkeleton } from "@/components/web-states/Skeletons";
 // The link preview (lib/app-share-meta.ts): a public link's title, description and card, else the generic one.
 // "use cache" on params alone, so it reads no cookie and the shell still prerenders (lib/prerender-check.ts).
 export async function generateMetadata({ params }: { params: Promise<{ username: string; slug: string }> }): Promise<Metadata> {
+  // Without the web side the page is the static NotDeployed notice, so the metadata stays static too: awaiting
+  // params there leaves a prerendered page with runtime metadata, which `next build` refuses (the 0.7.1 dmg build).
+  if (!isWebEnabled()) return GENERIC_APP_METADATA;
+  return linkPreview(params);
+}
+
+async function linkPreview(params: Promise<{ username: string; slug: string }>): Promise<Metadata> {
   "use cache";
   cacheLife("minutes");
   const { username, slug } = await params;
