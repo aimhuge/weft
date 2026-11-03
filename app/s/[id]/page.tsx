@@ -9,13 +9,20 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { cacheLife } from "next/cache";
 import { isWebEnabled } from "@/lib/home";
-import { threadMetadataById } from "@/lib/share-meta";
+import { GENERIC_THREAD_METADATA, threadMetadataById } from "@/lib/share-meta";
 import { NotDeployed, SharedCardPage } from "@/components/share-view/SharedCardPage";
 import { SharedCardSkeleton } from "@/components/web-states/Skeletons";
 
 // The link preview (lib/share-meta.ts), on params alone: reading the gate's cookie here would break the
 // prerendered shell, and a preview never depends on who is looking.
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  // Without the web side the page is the static NotDeployed notice, so the metadata stays static too: awaiting
+  // params there leaves a prerendered page with runtime metadata, which `next build` refuses (the 0.7.1 dmg build).
+  if (!isWebEnabled()) return GENERIC_THREAD_METADATA;
+  return linkPreview(params);
+}
+
+async function linkPreview(params: Promise<{ id: string }>): Promise<Metadata> {
   "use cache";
   cacheLife("minutes");
   const { id } = await params;

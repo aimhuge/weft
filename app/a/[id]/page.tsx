@@ -15,7 +15,7 @@ import { connection } from "next/server";
 import { notFound, redirect } from "next/navigation";
 import { ShareGateForm } from "@aimhuge/share/client";
 import { appShareAccess } from "@/lib/app-share-access";
-import { appMetadataById } from "@/lib/app-share-meta";
+import { GENERIC_APP_METADATA, appMetadataById } from "@/lib/app-share-meta";
 import { versionedFrameSrc } from "@/lib/app-share-frame";
 import { appPublicUrl } from "@/lib/app-share-types";
 import { isWebEnabled } from "@/lib/home";
@@ -28,6 +28,13 @@ import { SharedAppSkeleton } from "@/components/web-states/Skeletons";
 // The link preview (lib/app-share-meta.ts), on params alone: reading the gate's cookie here would break the
 // prerendered shell, and a preview never depends on who is looking.
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  // Without the web side the page is the static NotDeployed notice, so the metadata stays static too: awaiting
+  // params there leaves a prerendered page with runtime metadata, which `next build` refuses (the 0.7.1 dmg build).
+  if (!isWebEnabled()) return GENERIC_APP_METADATA;
+  return linkPreview(params);
+}
+
+async function linkPreview(params: Promise<{ id: string }>): Promise<Metadata> {
   "use cache";
   cacheLife("minutes");
   const { id } = await params;
