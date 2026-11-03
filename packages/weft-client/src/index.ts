@@ -13,7 +13,20 @@ export { paneFor, paneFromUrl, screenPage, screenTopic, SCREEN_EVENT, type Scree
 export { followUrl, pageLabel, plain, showMinis, turnId, type Dot, type Mini, type Visit } from "./show-rail";
 export { HOST_VERBS, isHostLevelVerb, isHostVerb, isListVerb, type CardVerb, type HostLevelVerb, type HostVerb, type ListVerb } from "./host-verbs";
 export { readRefusal, writeRefusal } from "./file-policy";
-export { ACCOUNT_SETTINGS, HOST_SETTINGS, foreignSetting, pickSettings, type AccountSetting, type HostSetting, type HostSettings } from "./host-settings";
+export {
+  ACCOUNT_SETTINGS,
+  GOOSE_SETTINGS,
+  HOST_SETTINGS,
+  foreignSetting,
+  gooseFieldsOf,
+  pickSettings,
+  withoutGoose,
+  type AccountSetting,
+  type GooseSetting,
+  type GooseSettings,
+  type HostSetting,
+  type HostSettings,
+} from "./host-settings";
 export {
   messageCall,
   permissionCall,

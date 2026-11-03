@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Device } from "./simulator-devices";
 
 const idb = vi.hoisted(() => ({ openIdb: vi.fn() }));
+const adb = vi.hoisted(() => ({ openAdbScreen: vi.fn() }));
+vi.mock("./adb-screen", () => adb);
 const rtc = vi.hoisted(() => ({ answerOffer: vi.fn() }));
 const rtp = vi.hoisted(() => ({ takeVideo: vi.fn(), rtpVideo: vi.fn() }));
 vi.mock("./idb-companion", () => idb);
@@ -11,7 +13,7 @@ vi.mock("./rtp-video", () => rtp);
 const { isKeyFrame, openFastScreen } = await import("./worker-fast-screen");
 
 const ios: Device = { id: "u", name: "iPhone", platform: "ios", state: "booted" };
-const session = () => ({ size: { width: 1, height: 2 }, video: vi.fn(), touch: vi.fn(), key: vi.fn(), close: vi.fn() });
+const session = () => ({ size: { width: 1, height: 2 }, video: vi.fn(), touch: vi.fn(), key: vi.fn(), text: vi.fn(), close: vi.fn() });
 
 beforeEach(() => vi.clearAllMocks());
 
@@ -23,9 +25,13 @@ describe("isKeyFrame", () => {
 });
 
 describe("openFastScreen", () => {
-  it("leaves Android on the JPEG path", async () => {
-    await expect(openFastScreen({ ...ios, platform: "android" })).resolves.toBeNull();
+  it("opens an emulator through adb, and leaves a box without adb on the JPEG path", async () => {
+    adb.openAdbScreen.mockResolvedValueOnce(null);
+    await expect(openFastScreen({ ...ios, id: "emulator-5554", platform: "android" })).resolves.toBeNull();
+    expect(adb.openAdbScreen).toHaveBeenCalledWith("emulator-5554");
     expect(idb.openIdb).not.toHaveBeenCalled();
+    adb.openAdbScreen.mockResolvedValueOnce(session());
+    await expect(openFastScreen({ ...ios, platform: "android" })).resolves.toMatchObject({ size: { width: 1, height: 2 } });
   });
 
   it("leaves a box with no companion on the JPEG path", async () => {
@@ -126,5 +132,11 @@ describe("on a session line", () => {
     fast?.input?.({ onMessage: { subscribe: (fn: (raw: string) => void) => (heard = fn) } } as never);
     heard(JSON.stringify({ t: "down", x: 0.5, y: 0.5 }));
     expect(s.touch).toHaveBeenCalledWith("down", 0.5, 1);
+    heard(JSON.stringify({ t: "key", code: 4, down: true }));
+    expect(s.key).toHaveBeenCalledWith(4, true);
+    heard(JSON.stringify({ t: "text", text: "pasted" }));
+    expect(s.text).toHaveBeenCalledWith("pasted");
+    heard("nonsense");
+    expect(s.touch).toHaveBeenCalledTimes(1);
   });
 });

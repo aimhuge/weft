@@ -22,7 +22,7 @@ import { gooseLaunch } from "./goose-launch";
 import { openGooseMcp } from "./goose-mcp";
 import { openGooseGuards } from "./guards/goose";
 import { addToReply, flushReply, lastReply, resetReply } from "./goose-reply";
-import { replacesSystemPrompt } from "./goose-provider";
+import { gooseEndpointEnv, replacesSystemPrompt } from "./goose-provider";
 import { progressPaths } from "./goose-progress-paths";
 import { writeRecipe } from "./goose-recipe-store";
 import { gooseHasSession, gooseStateRoot } from "./goose-state";
@@ -360,6 +360,13 @@ async function runGooseTurn(session: Session, executable: string, prompt: string
   }
 }
 
+// The launch helper's env over the turn's; with no grant (a worker, or Goose holding its own key) the endpoint the
+// settings name still applies.
+function childEnvOf(session: Session, env: Record<string, string>, granted: Record<string, string> | undefined): Record<string, string> {
+  if (granted) return { ...env, ...granted };
+  return { ...env, ...gooseEndpointEnv(session.spec.provider ?? "", session.spec.gooseBaseUrl ?? "") };
+}
+
 /** Starts the turn's `goose run`, reads its events, and fails the turn if it ends without a `complete`. */
 async function runGooseProcess(session: Session, executable: string, prompt: string) {
   // The recipe is written before Goose is started, from the same plan and prompt the argv is built
@@ -376,7 +383,7 @@ async function runGooseProcess(session: Session, executable: string, prompt: str
   const launch = session.spec.provider ? await gooseLaunch(session.spec.provider, [executable, ...argv], env, session.spec.cwd, session.spec.gooseBaseUrl ?? "") : undefined;
   const command = launch ? launch.bin : executable;
   const args = launch ? launch.args : argv;
-  const childEnv: Record<string, string> = launch ? { ...env, ...launch.env } : env;
+  const childEnv = childEnvOf(session, env, launch?.env);
   const proc = spawnCli({ command, args, cwd: session.spec.cwd, env: childEnv, signal: session.abort.signal }, stderr);
   session.process = proc;
   proc.stdin.on("error", () => {});

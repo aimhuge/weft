@@ -158,6 +158,11 @@ export async function liveInput(l: Live, page: BrowserPage, event: LiveEvent) {
     if (key) await page.send("Input.dispatchKeyEvent", key);
     return;
   }
+  // A paste goes in as typed text, into whatever has focus.
+  if (event.t === "text") {
+    await page.send("Input.insertText", { text: event.text });
+    return;
+  }
   const p = at(l, event.x, event.y);
   if (event.t === "move") await mouse(page, "mouseMoved", p, { buttons: 1, button: "left" });
   else await mouse(page, event.t === "down" ? "mousePressed" : "mouseReleased", p, { button: "left", clickCount: 1 });
