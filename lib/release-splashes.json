@@ -33,5 +33,12 @@
       "Sign in to Weft on first launch, so your profile, Project Sync and share links are ready",
       "The New thread dialog picks the model and the agent together, so a thread starts in your voice"
     ]
+  },
+  "0.7.1": {
+    "lines": [
+      "Dictate in any app: press ⌥' anywhere on your Mac, and Weft types what you say where you're typing",
+      "A Weft Worker's cards now work like your Mac's: their pages in the pane, the live simulator, the browser and the vault",
+      "A shared thread gets your own address and a link preview, and can hide the chat to share it as a mini app"
+    ]
   }
 }
