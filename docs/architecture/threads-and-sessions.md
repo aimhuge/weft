@@ -578,7 +578,17 @@ copilot: `list_cards`, `read_thread`, `create_card`, `move_card`, `stop_card` ar
 through `canUseTool` -> `askUser`; `describeBoardTool()` makes the prompt readable
 ("Start "Weft desktop app"", "Reply to "…": …", "Allow Bash on "…""). The
 `start`, `stop`, `answer`, `isBusy` actions are passed in as `BoardActions` to
-`boardMcpServer()` to avoid a circular import.
+`boardMcpServer()` to avoid a circular import (`BoardActions` lives in `lib/board-tools-copilot.ts`, with the tools on one
+card).
+
+The copilot's tools see the user's Weft Workers' cards too. `lib/board-tools-hosts.ts` merges the workers' board into
+`list_cards` and finds a card on either host (this Mac's store first, with no network); a worker card's `read_thread`
+walks its synced pages back, and `set_tags`, `start_card`, `send_message`, `move_card`, `stop_card` and
+`answer_permission` send it the verb the board's `hostOf(card).act` sends (`card.update` with only `tags` or `column`,
+`card.message`, `card.stop`, `card.permission.answer`), through `lib/worker-board-reach.ts` (the account's
+`sendWorkerAction` host row, waited on up to 8 s for a claim). A worker that hasn't taken it yet reads as queued; its
+refusal is the tool's error. `create_card` into a `worker://` project starts it there through `startWorkerThread`,
+always in `default` mode and never with an agent (only Weft's own window signs one). On a worker the reach is none.
 
 The copilot's CLI also gets `browserMcpServer()`, so it shares the same `mcp__browser__*`
 tools as every other thread.
