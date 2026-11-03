@@ -2,14 +2,14 @@
 // listed on the row whose text pastes them.
 import { describe, expect, it, vi } from "vitest";
 import type { NewCommand } from "./cloud-commands";
-import { travelName, webUploads, withAttachmentRefs } from "./web-upload";
+import { rowCard, travelName, webUploads, withAttachmentRefs, withAttachments } from "./web-upload";
 
 const SHA = "ab".repeat(32);
 const blob = (bytes: number, type = "image/png") => new Blob([new Uint8Array(bytes)], { type });
 
 function setup(problem: string | null = null) {
-  const put = vi.fn<(sha: string, bytes: ArrayBuffer, mime: string) => Promise<string | null>>(() => Promise.resolve(problem));
-  const uploads = webUploads({ put, digest: () => Promise.resolve(SHA), preview: () => "blob:preview" });
+  const put = vi.fn<(sha: string, bytes: ArrayBuffer | Uint8Array, mime: string) => Promise<string | null>>(() => Promise.resolve(problem));
+  const uploads = webUploads({ orgId: "o", put, digest: () => Promise.resolve(SHA), preview: () => "blob:preview" });
   return { put, uploads };
 }
 
@@ -51,7 +51,7 @@ describe("webUploads", () => {
 
   it("refuses more files in one message than a host takes", async () => {
     const shas = Array.from({ length: 21 }, (_, i) => i.toString(16).padStart(64, "0"));
-    const uploads = webUploads({ put: () => Promise.resolve(null), digest: () => Promise.resolve(shas.shift()!), preview: () => "" });
+    const uploads = webUploads({ orgId: "o", put: () => Promise.resolve(null), digest: () => Promise.resolve(shas.shift()!), preview: () => "" });
     let text = "";
     for (let i = 0; i < 21; i++) text += `![x](${(await uploads.upload(blob(1), `f${i}.png`)).path}) `;
     expect(() => uploads.refsFor(text)).toThrow("up to 20 files");
@@ -60,7 +60,7 @@ describe("webUploads", () => {
   it("uses the browser's own digest and object URLs by default", async () => {
     const created = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:x");
     const put = vi.fn(() => Promise.resolve(null));
-    const got = await webUploads({ put }).upload(blob(0), "e.png");
+    const got = await webUploads({ orgId: "o", put }).upload(blob(0), "e.png");
     expect(got.name).toBe("e-e3b0c442.png");
     expect(got.url).toBe("blob:x");
     created.mockRestore();
@@ -82,5 +82,64 @@ describe("withAttachmentRefs", () => {
     expect(withAttachmentRefs(plain, refs)).toBe(plain);
     const none = row({ cardId: "c" });
     expect(withAttachmentRefs(none, refs)).toBe(none);
+  });
+});
+
+describe("held files (a browser that holds a workspace key)", () => {
+  const held = (problem: string | null = null) => {
+    const put = vi.fn<(sha: string, bytes: ArrayBuffer | Uint8Array, mime: string) => Promise<string | null>>(() => Promise.resolve(problem));
+    return { put, uploads: webUploads({ orgId: "o", put, holds: () => true, digest: () => Promise.resolve(SHA), preview: () => "" }) };
+  };
+  const ref = { name: "a-abababab.png", sha: SHA, mime: "image/png" };
+
+  it("waits for the message, then puts each file once, sealed with the card's seal", async () => {
+    const { put, uploads } = held();
+    await uploads.upload(blob(2), "a.png");
+    expect(put).not.toHaveBeenCalled();
+    const seal = vi.fn((org: string, sha: string, bytes: Uint8Array) => new Uint8Array([org.length, sha.length, bytes.length]));
+    await uploads.send([ref], seal);
+    expect(seal).toHaveBeenCalledWith("o", SHA, new Uint8Array(2));
+    expect(put).toHaveBeenCalledWith(SHA, new Uint8Array([1, 64, 2]), "image/png");
+    await uploads.send([ref], null);
+    expect(put).toHaveBeenCalledTimes(1);
+  });
+
+  it("puts plain without a seal, and says why one couldn't go", async () => {
+    const { put, uploads } = held();
+    await uploads.upload(blob(1), "a.png");
+    await uploads.send([ref, { ...ref, sha: "cd".repeat(32) }], null);
+    expect(put).toHaveBeenCalledWith(SHA, expect.any(ArrayBuffer), "image/png");
+    const failing = held("denied");
+    await failing.uploads.upload(blob(1), "a.png");
+    await expect(failing.uploads.send([ref], null)).rejects.toThrow("Couldn't upload a-abababab.png: denied");
+  });
+});
+
+describe("withAttachments", () => {
+  const row = (payload: object): NewCommand => ({ org_id: "o", kind: "reply", target_device: "d", folder: "f", payload: payload as NewCommand["payload"] });
+  const ref = { name: "a-1.png", sha: SHA, mime: "image/png" };
+
+  it("lists the files and sends them with the seal for the row's card", async () => {
+    const send = vi.fn(() => Promise.resolve());
+    const seal = () => new Uint8Array();
+    const sealFor = vi.fn(() => seal);
+    const got = await withAttachments(row({ cardId: "c1", text: "![a](x)" }), { refsFor: () => [ref], send }, sealFor);
+    expect(got.payload).toMatchObject({ attachments: [ref] });
+    expect(sealFor).toHaveBeenCalledWith("c1");
+    expect(send).toHaveBeenCalledWith([ref], seal);
+  });
+
+  it("sends nothing for a row that pastes nothing", async () => {
+    const send = vi.fn(() => Promise.resolve());
+    const plain = row({ text: "hi" });
+    expect(await withAttachments(plain, { refsFor: () => [], send }, () => null)).toBe(plain);
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it("finds the card on a reply, a host verb, or none", () => {
+    expect(rowCard(row({ cardId: "c1" }))).toBe("c1");
+    expect(rowCard(row({ verb: "card.fresh", args: { id: "c2" } }))).toBe("c2");
+    expect(rowCard(row({ verb: "settings.get", args: { id: "" } }))).toBeNull();
+    expect(rowCard(row({ prompt: "new" }))).toBeNull();
   });
 });

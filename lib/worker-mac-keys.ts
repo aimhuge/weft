@@ -15,24 +15,55 @@ export interface MacKeys {
   pin(key: string): void;
 }
 
+// A JSON list of strings in the worker's home: [] when the file is missing; null when it's there but won't read.
+function readKeys(file: string): string[] | null {
+  let text: string;
+  try {
+    text = fs.readFileSync(file, "utf8");
+  } catch {
+    return [];
+  }
+  try {
+    const keys: unknown = JSON.parse(text);
+    return Array.isArray(keys) ? keys.filter((k): k is string => typeof k === "string") : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeKeys(home: string, file: string, keys: string[]) {
+  fs.mkdirSync(home, { recursive: true, mode: 0o700 });
+  fs.writeFileSync(file, `${JSON.stringify(keys)}\n`, { mode: 0o600 });
+}
+
 // A file of base64 Ed25519 public keys (libsodium's raw 32 bytes). One that won't parse trusts no Mac.
-export function macKeysAt(home: string): MacKeys & { forget(): void } {
+// `pinned()` is the Macs it trusts now: a key marked revoked (mac-revoked.json, written when the database says the pairing
+// Mac was revoked: lib/worker-mac-revocation.ts) stays out for good, and a revoked list that won't read trusts none.
+// `held()` is every key pinned, revoked or not, for counting who could approve (a revoked Mac mustn't lower the bar).
+export function macKeysAt(home: string): MacKeys & { forget(): void; held(): string[]; revoked(): string[]; revoke(keys: string[]): void } {
   const file = path.join(home, "mac-keys.json");
-  const read = (): string[] => {
-    try {
-      const keys: unknown = JSON.parse(fs.readFileSync(file, "utf8"));
-      return Array.isArray(keys) ? keys.filter((k): k is string => typeof k === "string") : [];
-    } catch {
-      return [];
-    }
-  };
+  const revokedFile = path.join(home, "mac-revoked.json");
+  const read = () => readKeys(file) ?? [];
+  const revoked = () => readKeys(revokedFile);
   return {
-    pinned: read,
+    pinned() {
+      const out = revoked();
+      return out ? read().filter((k) => !out.includes(k)) : [];
+    },
+    held: read,
+    revoked: () => revoked() ?? [],
     pin(key) {
       const keys = read();
       if (keys.includes(key)) return;
-      fs.mkdirSync(home, { recursive: true, mode: 0o700 });
-      fs.writeFileSync(file, `${JSON.stringify([...keys, key])}\n`, { mode: 0o600 });
+      writeKeys(home, file, [...keys, key]);
+    },
+    // Kept across forget() and a re-pair: a revoked Mac's key is never trusted on this box again.
+    revoke(keys) {
+      const was = revoked();
+      // A list that won't read already trusts no Mac: writing over it would trust the rest again.
+      if (!was) return;
+      const next = [...new Set([...was, ...keys])];
+      if (next.length !== was.length) writeKeys(home, revokedFile, next);
     },
     forget: () => fs.rmSync(file, { force: true }),
   };

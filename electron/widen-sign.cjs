@@ -8,8 +8,10 @@
 const crypto = require("node:crypto");
 
 const WIDEN_V = "weft-widen-v1";
-const VERBS = new Set(["card.update", "card.shell", "card.schedule", "terminal.open", "card.create"]);
-const CHANGE_KEYS = new Set(["cwd", "agent", "permissionMode", "readScope", "shell", "schedule", "terminal", "create"]);
+const VERBS = new Set(["card.update", "card.shell", "card.schedule", "terminal.open", "card.create", "settings.put"]);
+const CHANGE_KEYS = new Set(["cwd", "agent", "permissionMode", "readScope", "shell", "schedule", "terminal", "create", "goose"]);
+// A worker's Goose provider and endpoint (settings.put): where a Goose card's traffic goes.
+const GOOSE_KEYS = ["gooseProviderId", "gooseBaseUrl"];
 const ID = /^[A-Za-z0-9_:.-]{1,200}$/;
 // Bidi overrides and isolates: a host refuses them too (lib/widen-check.ts), and they could make the prompt lie.
 const BIDI = /[\u202a-\u202e\u2066-\u2069]/;
@@ -64,7 +66,19 @@ function changeProblem(change) {
     if (why) return why;
   }
   if (change.permissionMode !== undefined && change.permissionMode !== "bypassPermissions") return "That isn't a mode main signs.";
+  if (change.goose !== undefined) return gooseProblem(change.goose);
   return change.create === undefined ? null : createProblem(change.create);
+}
+
+// Goose's provider and endpoint, each shown whole; "" clears one, so it may be empty.
+function gooseProblem(g) {
+  if (!plain(g) || !Object.keys(g).length || Object.keys(g).some((k) => !GOOSE_KEYS.includes(k))) return "That Goose change isn't one main signs.";
+  for (const key of GOOSE_KEYS) {
+    if (g[key] === undefined || g[key] === "") continue;
+    const why = shownProblem(g[key], 120);
+    if (why) return why;
+  }
+  return Object.values(g).every((v) => typeof v === "string") ? null : "That change isn't text main can show.";
 }
 
 // A new thread: its agent and folder shown, its first message signed as sent.
@@ -91,7 +105,17 @@ function changeWords(change) {
   if (change.schedule !== undefined) parts.push(`schedule the shell line ${oneLine(change.schedule, 160)}`);
   if (change.terminal !== undefined) parts.push(`open a full shell (a terminal) in ${oneLine(change.terminal, 60)}`);
   if (change.create) parts.push(`start a thread with the agent ${oneLine(change.create.agent, 60)} in ${oneLine(change.create.folder, 60)}`);
+  if (change.goose) parts.push(gooseWords(change.goose));
   return parts.join(", ");
+}
+
+// Main's copy of @weft/client's gooseWords: the provider and endpoint, "" read as the default.
+function gooseWords(g) {
+  const said = (v, none) => (v ? oneLine(v, 120) : none);
+  const parts = [];
+  if (g.gooseProviderId !== undefined) parts.push(`the provider ${said(g.gooseProviderId, "Goose's own")}`);
+  if (g.gooseBaseUrl !== undefined) parts.push(`the endpoint ${said(g.gooseBaseUrl, "none")}`);
+  return `point Goose at ${parts.join(" and ")}`;
 }
 
 const TERM_WORDS = { permissionMode: "mode", backend: "CLI", model: "model", repo: "repo", effort: "effort", title: "title" };
@@ -99,6 +123,11 @@ const TERM_WORDS = { permissionMode: "mode", backend: "CLI", model: "model", rep
 // What else the signed command carries, in words: a card.update's other fields, a "!" line's send-at time, a new
 // thread's first message (cut, with its length) and its mode, CLI, model and repo.
 function argsWords(verb, change, args) {
+  if (verb === "settings.put") {
+    const patch = plain(args.patch) ? args.patch : {};
+    const others = Object.keys(patch).filter((k) => !GOOSE_KEYS.includes(k));
+    return others.length ? ` (and its ${others.map((k) => `${oneLine(k, 30)} ${oneLine(canonical(patch[k]), 40)}`).join(", ")} with it)` : "";
+  }
   if (verb === "card.update") {
     const body = plain(args.body) ? args.body : {};
     const others = Object.keys(body).filter((k) => !(k in change));
@@ -121,7 +150,7 @@ function argsWords(verb, change, args) {
 function widenPrompt(req, self, hostName = () => null) {
   const name = req.host === self ? null : hostName(req.host);
   const where = req.host === self ? "this Mac" : name ? `the worker ${oneLine(name, 60)} (${req.host.slice(0, 8)})` : `the host ${req.host}`;
-  const which = req.card ? `card ${req.card.slice(0, 8)}` : "a new card";
+  const which = req.verb === "settings.put" ? "the settings" : req.card ? `card ${req.card.slice(0, 8)}` : "a new card";
   return `${changeWords(req.change)}${argsWords(req.verb, req.change, req.args ?? {})}, for ${which} on ${where}`;
 }
 

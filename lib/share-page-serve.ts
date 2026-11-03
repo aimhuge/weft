@@ -6,6 +6,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { NO_STORE } from "./app-share-reply";
 import { signPageAssets } from "./blob-page-sign";
 import { readBlob } from "./blob-read";
+import { SEALED_PAGE_HTML } from "./blob-seal";
+import { isSealedBytes } from "./sync-seal";
 import { queueMirror } from "./r2-queue";
 import { isTextType, pageContentType } from "./share-page";
 import { redactPageText } from "./share-redact";
@@ -73,6 +75,8 @@ async function downloadBlob(service: SupabaseClient, orgId: string, sha: string)
 export async function serveBlobPage(service: SupabaseClient, orgId: string, sha: string, opts: { signAssets?: boolean } = {}): Promise<Response> {
   const got = await downloadBlob(service, orgId, sha);
   if (!got) return new Response("Not found", { status: 404, headers: NO_STORE });
+  // A page sealed before its card was shared (lib/blob-seal.ts): the server can't open it, so the 🔒 stand-in.
+  if (isSealedBytes(new Uint8Array(got.bytes))) return new Response(SEALED_PAGE_HTML, { status: 200, headers: { ...HEADERS, "Content-Type": "text/html; charset=utf-8" } });
   // Storage answers HTML as text/plain, so the type comes from the file (lib/share-page.ts), not the header. Anything
   // that isn't text (an image, a PDF) passes through as bytes.
   const bytes = got.bytes;

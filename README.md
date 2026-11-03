@@ -955,8 +955,9 @@ turn ends, or **Send now** to stop it first), a permission request or question t
 open card's header, Wait / This first / Others first on a held edit, ⌘F over the whole thread and the show rail beside the pane.
 A picture or PDF you paste into the reply box goes up to your workspace and down to the machine that runs the card. New thread
 takes the CLI, model, effort, mode, tags and Backlog too (and Plan first on a worker). A teammate's card stays read-only. Thread text goes up unencrypted unless you
-turn on **Seal synced threads** in Settings → Sync → Pair a phone: then thread items, card titles and prompts, and long tool
-output are encrypted with a workspace key that only your Mac and the devices you pair hold. **Pair a phone** shows a QR code
+turn on **Seal synced threads** in Settings → Sync → Pair a phone: then thread items, card titles and prompts, long tool
+output and the files they name (pasted pictures, the pane's pages and captures) are encrypted with a workspace key that only
+your Mac and the devices you pair hold; a paired browser opens them itself and seals what you paste into a sealed card. **Pair a phone** shows a QR code
 for the Weft phone app (or a link to open in another browser); your Mac checks the claim and asks for Touch ID, and once a
 phone is paired an **Allow** has to come from it, signed after Face ID, so a stolen sign-in can't run tools on your Mac.
 More in [docs/architecture/mobile-security.md](docs/architecture/mobile-security.md). Separately, a long thread opens on its newest 50 items
@@ -992,7 +993,12 @@ once), and drop phones that uninstalled the app. Settings → Sync → **Phones*
 **A worker's simulator in the pane.** A worker streams its simulator to the card's pane, marked "streaming from" the worker.
 On the desktop board you can drive it without asking the thread: **📱 Start simulator** on a React Native or Expo card, a device
 menu to switch simulators, **Resume** when the 10 minutes run out, and a Low / Medium / High quality menu for the WebRTC video
-(15, 30 or 60 fps; Medium is full size).
+(15, 30 or 60 fps; Medium is full size). An Android emulator gets the same live video, from `screenrecord`, and ⌘V on the
+live screen types your clipboard's text on the device (docs/architecture/weft-worker.md#the-fast-path).
+
+**Goose on a worker.** Settings → Threads → On a worker sets a worker's Goose provider and endpoint. They say where a Goose
+card's traffic goes, so Save asks Touch ID and the worker checks the Mac's signature; the provider's key doesn't travel
+yet (docs/architecture/weft-worker.md#goose-on-a-worker).
 
 **Local Simulator** (was Manual QA). Testing a worker's app by hand? The **host chip** at the top right of the card's pane, beside Share, names
 where the card runs ("m1mini", "m1mini + simulator" while one streams, "this Mac + simulator" in Local Simulator mode). Its menu starts the
@@ -1015,6 +1021,11 @@ claims the code, prints a check code, and joins once you confirm the same code w
 also lists every Mac, worker, phone and browser of yours, the keys each holds, and **Revoke** for any of them.
 **Re-pair** on a paired worker moves it to another Mac: paste that Mac's code, approve with Touch ID, and run the line it
 shows on the box. A worker never switches Macs without the one it trusts signing off.
+With two Macs signed in, a worker asks for secrets and the vault only from the Mac it's paired with, and says so when
+that Mac is closed. Revoke a phone, browser or Mac on any of your Macs and it stops being trusted everywhere: the Mac that
+paired a phone or browser unpins it within a minute, its passkeys leave every worker's set, and a worker whose Mac was
+revoked takes nothing from that Mac again. A worker also refuses a passkey approval until it holds your Mac's latest
+passkey set, which your Mac publishes where a stolen session can't take it back.
 **Sign in to Claude** on its row signs its Claude Code in with one click: Weft opens Claude's approval page in a
 window beside the button, and the token it gets back is sealed to the worker's own key, so Supabase never holds it
 in the clear (or run `weft-worker login` on the box). **Sign in to GitHub** beside it does the same for private repos:

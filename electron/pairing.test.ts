@@ -10,7 +10,7 @@ import { makeClaim, parsePairingLink } from "../lib/pairing-link";
 import { b64, sodium as loadSodium, type Sodium } from "../lib/sodium";
 import { openItem, sealItemRow } from "../lib/sync-seal";
 import { createPairedDevices } from "./paired-devices.cjs";
-import { createPairing, TTL_MS } from "./pairing.cjs";
+import { createPairing, RECONCILE_MS, TTL_MS } from "./pairing.cjs";
 import { checkClaim, verifySignature } from "./pairing-crypto.cjs";
 import { createSyncKeys } from "./sync-keys.cjs";
 import { fakeDb, fakeSafeStorage } from "./pairing.harness";
@@ -153,6 +153,47 @@ describe("revoking", () => {
     expect(db.tables.devices.find((d) => d.id === device.id)!.revoked_at).toBeTruthy();
     expect((await syncKeys.current(ORG))?.version).toBe(2);
     expect(await pairing.revoke(device.id)).toEqual({ ok: false });
+  });
+});
+
+describe("reconciling with the registry", () => {
+  it("unpins a device revoked from another Mac, drops its grants and rotates, once a minute at most", async () => {
+    const { db, pairing, paired, syncKeys, clock } = setup();
+    expect(await pairing.reconcile()).toEqual([]);
+    const code = await pairing.start(ORG);
+    phone(code.link, db);
+    const { device } = (await pairing.check(code.id)) as { device: { id: string } };
+    clock.t += RECONCILE_MS;
+    expect(await pairing.reconcile()).toEqual([]);
+    expect(paired.list()).toHaveLength(1);
+    // Revoked elsewhere (device_revoke): the row says so; this Mac still pins it.
+    db.tables.devices.find((d) => d.id === device.id)!.revoked_at = "then";
+    expect(await pairing.reconcile()).toEqual([]);
+    clock.t += RECONCILE_MS;
+    expect(await pairing.reconcile()).toEqual([device.id]);
+    expect(paired.list()).toHaveLength(0);
+    expect(db.tables.workspace_key_grants.some((g) => g.device_id === device.id)).toBe(false);
+    expect((await syncKeys.current(ORG))?.version).toBe(2);
+  });
+
+  it("unpins nothing for a row it can't see", async () => {
+    const { db, pairing, paired } = setup();
+    const code = await pairing.start(ORG);
+    phone(code.link, db);
+    await pairing.check(code.id);
+    db.tables.devices = db.tables.devices.filter((d) => d.kind !== "phone");
+    expect(await pairing.reconcile()).toEqual([]);
+    expect(paired.list()).toHaveLength(1);
+  });
+
+  it("throws when the registry can't be read", async () => {
+    const { db, pairing } = setup();
+    const code = await pairing.start(ORG);
+    phone(code.link, db);
+    await pairing.check(code.id);
+    const from = db.from;
+    db.from = ((name: string) => (name === "devices" ? { select: () => ({ in: () => Promise.resolve({ data: null, error: { message: "offline" } }) }) } : from(name))) as typeof db.from;
+    await expect(pairing.reconcile()).rejects.toThrow(/offline/);
   });
 });
 

@@ -3,6 +3,7 @@
 // outbox) as it lands, so a big backlog makes progress and one bad batch can't hold the rest back.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { replaceOutboxHead } from "./cloud-outbox";
+import { withBlobSeal } from "./blob-seal";
 import { cardRows, macRowHost } from "./cloud-sync-cards";
 import { check, isRowError, upsert } from "./cloud-sync-send";
 import { lastPerKey, projectItem, publishes } from "./card-rows";
@@ -43,7 +44,7 @@ export async function uploadPending(
 ): Promise<Skipped | null> {
   const seal = await (ctx.sealer ?? sealerFor)(orgId);
   const sealed = seal ? { ...ctx, seal } : ctx;
-  const cards = (await cardRows(ctx.blobs, orgId, pending, ctx.now())).map((row) => seal?.card(row) ?? row);
+  const cards = (await cardRows(ctx.blobs, orgId, pending, ctx.now(), (id) => seal?.blob(id) ?? null)).map((row) => seal?.card(row) ?? row);
   for (let i = 0; i < cards.length; i += ITEM_CHUNK) await putCards(client, cards.slice(i, i + ITEM_CHUNK));
   for (const entry of pending) {
     // The row keeps the card json it last uploaded; a card that never synced matches no row.
@@ -101,13 +102,13 @@ async function shipItems(ctx: ShipCtx, client: SupabaseClient, orgId: string, it
 
 // Tool outputs first, then the items that point at them, each in one upsert. Returns the items shipped. Each row is the
 // item's projection (lib/card-rows.ts: redacted and scrubbed), then sealed: the server never sees what redaction would
-// have hidden either way.
+// have hidden either way. The files an item names go up sealed too, when its row does (Sealer.blob).
 async function putItems(ctx: ShipCtx, client: SupabaseClient, orgId: string, entries: ItemEntry[]): Promise<number> {
-  const host = macRowHost(orgId, ctx.blobs);
   const items: CloudThreadItemRow[] = [];
   const outputs: CloudToolOutputRow[] = [];
   for (const entry of entries) {
     const card = getCard(entry.cardId);
+    const host = macRowHost(orgId, withBlobSeal(ctx.blobs, ctx.seal?.blob(entry.cardId) ?? null));
     if (!card || !publishes(card, host)) continue;
     const live = getThread(entry.cardId)[entry.seq];
     if (!live) continue;
