@@ -14,7 +14,7 @@ import type { CloneJob } from "./clone-progress-types";
 import type { CloudSyncStatus } from "./cloud-sync-view";
 import type { CardShareState, CardShareUpdate } from "./share-types";
 import type { GithubStatus } from "./github-view";
-import type { MediaKind } from "./media";
+import type { UploadedAttachment } from "@weft/client";
 import type { BillingClientView } from "./client-bridge";
 import type { CheckoutAnswer, UpgradeInterval, UpgradePlan } from "./billing/upgrade";
 import type { CopilotPersona } from "./copilot-personas";
@@ -76,13 +76,8 @@ export type SkillSetWhere = { cwd: string } | { card: string } | { agent: string
 // What Settings → Agents sends to make or edit one.
 export type AgentDraft = Pick<AgentInfo, "name" | "emoji" | "tagline" | "soul">;
 
-export interface UploadedAttachment {
-  name: string;
-  path: string;
-  url: string;
-  kind: MediaKind;
-  bytes: number;
-}
+// A saved upload's answer is @weft/client's, so a transport can name it.
+export type { UploadedAttachment };
 
 // How long an upload waits for the server's reply once its bytes are sent.
 export const UPLOAD_REPLY_MS = 60_000;

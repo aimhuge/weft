@@ -1,7 +1,7 @@
 // @weft/client: Weft's client core in plain TypeScript, for the desktop board, weft.zip and the phone app alike
 // (docs/architecture/project-hosts.md#views, README.md beside this file). Nothing here may import the DOM, React,
 // Next, Node built-ins or the app's lib/; tsconfig.json beside this file checks that.
-export { COLUMNS, MODES, type Backend, type Column, type PermissionMode, type SkillInfo } from "./card";
+export { COLUMNS, MODES, type Backend, type Column, type Effort, type PermissionMode, type SkillInfo } from "./card";
 export { bangCommand, isBang } from "./bang";
 export { cleanTz, ownTimeZone, readClientHint, withClientHint, type ClientApp, type ClientHint } from "./client-hint";
 export { BLOB_REF_PREFIX, type BlobRef } from "./blob-ref";
@@ -61,3 +61,83 @@ export {
   type WidenFields,
   type WidenVerb,
 } from "./widen";
+export {
+  applyThreadEvent,
+  findToolResult,
+  mergeOlderPage,
+  pageThread,
+  trimToolResult,
+  THREAD_PAGE_SIZE,
+  TOOL_RESULT_INLINE_MAX,
+  type PageOptions,
+  type ThreadPage,
+} from "./thread-page";
+export { cutAt, pageFromItemRows, pageUpdateWith, type CloudItemChange, type CloudItemRow, type IsItem, type OpenItem } from "./cloud-thread-page";
+export {
+  activeAt,
+  backlogSorter,
+  cardLooksLikeError,
+  cardLooksLikeSessionLimit,
+  groupByColumn,
+  headerCounts,
+  listGroups,
+  listRows,
+  NO_REVIEW_FILTER,
+  reviewFilterCounts,
+  reviewKeeps,
+  shownColumn,
+  SORTERS,
+  summarizeProjects,
+  topMatches,
+  type BoardCard,
+  type BoardProject,
+  type BoardView,
+  type FilterMatch,
+  type ListGroup,
+  type ListRow,
+  type ProjectSummary,
+  type ProjectWorker,
+  type ReviewFilter,
+  type ReviewFilterKey,
+  type SortKey,
+  type WorkerProjectStatus,
+} from "./board-group";
+export { readQuestionReply } from "./question-reply";
+export type { Sealed } from "./sealed";
+export type { PasskeyAuth } from "./passkey-auth";
+export {
+  answerBody,
+  answerCommand,
+  commandText,
+  isNewCardMode,
+  isOpenCommand,
+  NEW_CARD_MODES,
+  newCardCommand,
+  replyBody,
+  replyCommand,
+  stopBody,
+  stopCommand,
+  type AnswerPayload,
+  type ClonePayload,
+  type CloudCommandKind,
+  type CloudCommandRow,
+  type CloudCommandStatus,
+  type InputPayload,
+  type LinePayload,
+  type LoginPayload,
+  type ModePayload,
+  type NewCardForm,
+  type NewCardMode,
+  type NewCardPayload,
+  type NewCommand,
+  type PinPayload,
+  type QaPayload,
+  type ReplyPayload,
+  type StopPayload,
+  type UpdatePayload,
+} from "./cloud-commands";
+export { pendingView, type PendingPermission, type PromptReason } from "./pending";
+export { pendingItem, unsent, type PendingSend } from "./pending-sends";
+export { findableText, findCount, matchThread, plainMarkdown, spotAt, totalHits, type FindMatch, type FindSpot } from "./thread-find";
+export type { MediaKind, UploadedAttachment } from "./attachment";
+export { mergePage, SHELL_ELSEWHERE, type PageUpdate, type ThreadTransport } from "./transport";

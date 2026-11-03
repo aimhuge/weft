@@ -5,7 +5,8 @@ import type { Automation, Backend, PermissionMode } from "./types-card";
 export type { Backend, PermissionMode, Automation };
 export { BACKEND_LABELS, MODES, MODE_OPTIONS, permissionOptions, toPermissionMode } from "./types-card";
 
-export type Effort = "low" | "medium" | "high" | "xhigh" | "max";
+import type { Effort } from "@weft/client";
+export type { Effort };
 
 // Where a project's GitHub issue cards land when the importer makes them (lib/issue-landing.ts):
 // "backlog" (cold, waiting for you), "needs_you" (parked, so they stand out) or "run" (the thread
