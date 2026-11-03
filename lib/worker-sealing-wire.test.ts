@@ -45,4 +45,23 @@ describe("startWorkerSealing", () => {
     expect(wired.ring.ring().size).toBe(0);
     wired.stop();
   });
+
+  it("refuses a grant from a pairing Mac that was revoked since, and then holds rather than going plain", async () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), "weft-sealing-wire-"));
+    const kit = grantKit();
+    const macs = macKeysAt(home);
+    macs.pin(kit.mac.key);
+    const log = vi.fn();
+    const rpc = vi.fn(() => Promise.resolve({ data: [kit.make(1)], error: null }));
+    const wired = await startWorkerSealing({ home, config: { workerId: WORKER, orgId: ORG, key: "k" }, rpc, keys: kit.keys, isShared: () => false, readBlob: () => Promise.resolve(null), log });
+    expect(wired.ring.current()?.version).toBe(1);
+    // lib/worker-mac-revocation.ts marks it in mac-revoked.json: pinned() leaves it out, so its signature counts for nothing.
+    macs.revoke([kit.mac.key]);
+    expect(macs.held()).toEqual([kit.mac.key]);
+    await wired.ring.refresh();
+    expect(wired.ring.current()).toBeNull();
+    expect(wired.sealer()).toBe("hold");
+    expect(log).toHaveBeenCalledWith(expect.stringMatching(/refused a key grant \(v1\): this box trusts no Mac/));
+    wired.stop();
+  });
 });
