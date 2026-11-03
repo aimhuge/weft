@@ -49,18 +49,20 @@ afterEach(async () => {
 });
 
 describe("the CLI's working directories", () => {
-  it("gives a worker's session the show folder, beside the card's own grants", async () => {
+  // The scratch folders are the show folder and the temp dirs (lib/show-dir.ts, 2026-11-02).
+  it("gives a worker's session the show folder and temp dirs, beside the card's own grants", async () => {
     vi.stubEnv("WEFT_WORKER", "1");
-    const { SHOW_DIR } = await import("./show-dir");
+    const { SHOW_DIR, scratchDirs } = await import("./show-dir");
     addCard({ id: "c1", readScope: ["/Users/zzz-outside"] });
     const q = await send("c1");
-    expect(q.options.additionalDirectories).toEqual(["/Users/zzz-outside", SHOW_DIR]);
+    expect(q.options.additionalDirectories).toEqual(["/Users/zzz-outside", ...scratchDirs()]);
+    expect((q.options.additionalDirectories as string[])[1]).toBe(SHOW_DIR);
   });
 
   it("gives a desktop session the show folder too", async () => {
-    const { SHOW_DIR } = await import("./show-dir");
+    const { scratchDirs } = await import("./show-dir");
     addCard({ id: "c1", readScope: ["/Users/zzz-outside"] });
-    expect((await send("c1")).options.additionalDirectories).toEqual(["/Users/zzz-outside", SHOW_DIR]);
+    expect((await send("c1")).options.additionalDirectories).toEqual(["/Users/zzz-outside", ...scratchDirs()]);
   });
 });
 

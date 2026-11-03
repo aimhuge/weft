@@ -51,6 +51,7 @@ describe("sessionDirs", () => {
 describe("scratchDirs", () => {
   it("names /tmp and the system tmpdir as written and resolved, once each", () => {
     expect(scratchDirs().filter((d) => !d.includes("weft-show-dir-"))).toEqual(temps);
-    expect(scratchDirs()).toContain("/private/tmp");
+    // On macOS /tmp is a link to /private/tmp; on Linux (CI) it's a real folder, so there's no second form.
+    if (fs.realpathSync("/tmp") === "/private/tmp") expect(scratchDirs()).toContain("/private/tmp");
   });
 });
