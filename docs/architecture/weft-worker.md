@@ -34,7 +34,8 @@ One worker per box, no worker picker on the board. The first box is a Mac mini (
   with `{ ok, cardId }` or `{ ok: false, error }` written to `cloud_commands.result` through `worker_report`'s `p_result`
   ([project-hosts.md](project-hosts.md#transports)). `reply`, `answer`, `stop` and `mode` run as `card.message`,
   `card.permission.answer`, `card.stop` and `card.update` (`lib/worker-card-commands.ts`, the `Engine`'s one `host`
-  method, bound to `runVerb` in `scripts/weft-worker.ts`); the folder grant and `CARD_MODES` stay checks there. It hears a
+  method, bound to `runVerb` in `scripts/weft-worker.ts`); the folder grant, `CARD_MODES` and the signed-Allow rule
+(`lib/worker-approve.ts`, which a host `card.permission.answer` goes through too) stay checks there. It hears a
   [wake-up](#wake-ups) and reads `worker_pending` at once, with a poll as the backstop, because without a session
   Realtime's row filters show it nothing. It claims with `worker_claim`, which only matches a pending row, and says it's
   up through [Realtime Presence](#liveness), writing its row every 5 minutes.
@@ -896,7 +897,9 @@ so it can buy only what the prompt on screen asked for, the way `RUN_MODES` leav
 are in [the folder gate](thread-guards.md). A worker on an older build ignores the scope and treats the answer as Allow
 once. **Taking one back:** Settings → Security lists this Mac's folders only, so a worker's Always stays until
 `allowedFolders` is edited in that worker's own settings file. Workers obey only their owner's commands
-(`worker_pending`) and have no paired phone, so an answer on a worker isn't signed. If grants move to Supabase as below,
+(`worker_pending`), and an Allow (with its grant) must be signed by the pairing Mac's desktop key or a passkey it
+endorsed there (`lib/worker-approve.ts`, [mobile-security.md](mobile-security.md#answers-on-a-worker-built-2026-11-03)),
+once the worker pins either; the desktop board signs every Allow on a worker card after Touch ID. If grants move to Supabase as below,
 keep both rules: the folder comes from the machine's own pending request, never from a client, and Always stays per
 worker.
 

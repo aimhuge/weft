@@ -505,8 +505,10 @@ When a new doc lands in this folder, add it here on the same change.
   `workspace_key_grants`. Revoke unpins, drops its grants, marks it revoked and rotates. Board IPC `weft.pairing.*` only; the server
   reads `POST /sync/key`, `/pairing/verify`, `/pairing/status`. The two Settings → Sync switches live in the same sealed file.
   `electron/desktop-signer.cjs` + `electron/approval-sign.cjs`: this Mac's own Ed25519 approval key (sealed in `~/.weft/vault/desktop-sign-key.json`); board IPC
-  `weft.approval.sign` finds the request on main's own server, asks Touch ID in main's words, then signs the phone's message, and `/pairing/verify` checks it like a phone's (not yet
-  called by the board: mobile-security.md, "The desktop signs too"). `electron/pairing-open.cjs` marks an open code for the clipboard guard.
+  `weft.approval.sign` finds the request on main's own server (this Mac's card, or a worker card's row through `GET /api/worker-board?ask=`, `lib/worker-ask-read.ts`), asks
+  Touch ID in main's words, then signs the phone's message over that host's own names, and `/pairing/verify` (a Mac) or `lib/worker-approve.ts` (a worker) checks it. The board
+  calls it for every Allow on a worker card (`lib/answer-signer.ts`, from `lib/card-handlers-host.ts` and `lib/use-worker-board.ts`): mobile-security.md, "The desktop signs
+  too". `electron/pairing-open.cjs` marks an open code for the clipboard guard.
 - GitHub on a worker (P1, docs/architecture/connectors.md#connectors-on-a-worker-github-p1-as-built): on weft.zip,
   `app/api/connectors/github/{start,callback,mint,revoke,grant,allow}`, `app/api/connectors/github` (status, disconnect),
   `app/api/connectors/{pin,signers,signers/endorse,signers/confirm,signers/revoke}` and the daily `app/api/cron/connectors` over
@@ -541,7 +543,8 @@ When a new doc lands in this folder, add it here on the same change.
   device id on its key row (docs/architecture/device-registry.md).
 - `lib/sync-seal.ts` + `lib/sodium.ts` + `lib/approval-sig.ts` + `lib/pairing-link.ts`: the isomorphic half (Mac server, web, phone):
   sealed envelopes with org/card/slot bound in, the signed approval message, the pairing link and claim. `lib/sync-seal-upload.ts`
-  seals rows in `lib/cloud-sync-upload.ts` when the switch is on; `lib/approval-check.ts` is `lib/cloud-inbox.ts`'s rule for answers;
+  seals rows in `lib/cloud-sync-upload.ts` when the switch is on; `lib/approval-check.ts` is `lib/cloud-inbox.ts`'s rule for answers, and a worker's
+  through `lib/worker-approve.ts` (the pairing Mac's key and its endorsed passkeys, `HostSigners.approvers`);
   `lib/web-sync-key.ts` opens rows on the web board (`components/web-board/useWebBoard.ts`, `lib/cloud-thread-page.ts`) and pairs a
   browser (`app/pair`, `components/web-board/PairBrowser.tsx`). Settings card: `components/PairDevices.tsx` (`lib/use-pairing.ts`).
 - `lib/passkey-verify.ts` (+ main's copy `electron/passkey-verify.cjs`) + `lib/approval-passkey.ts` + `lib/passkey-phone-only.ts` +

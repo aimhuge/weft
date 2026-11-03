@@ -1023,6 +1023,9 @@ sign-in. Every card on that worker can use the token. **Clone from GitHub** in t
 repo field once you have a worker, so you can clone onto it with no prompt and see the real result on the board.
 A project on a worker shows in the project chips and **More** beside your local ones, marked with the worker's name, even when the worker is offline. Pick it to see its cards on this board, reply to them, answer them or stop them, and start new threads there; nothing runs on your Mac, and an offline worker's new thread says so.
 An outside-folder prompt on a worker's card offers **This card** and **Always**, and Always means every card on that worker.
+**Allow on a worker's card asks for Touch ID.** Your Mac signs each Allow with its own key, in words that name the
+command and the worker, and the worker runs it only with that signature (or a passkey your Mac let approve there): an
+Allow from anywhere else, or from a Mac too old to sign, is refused with a message saying so, and the request keeps waiting.
 
 **Change what a worker card can touch, with Touch ID.** Moving a worker card to another of its projects, giving it another
 agent, letting it skip permission prompts, a "!" shell line, **Read from** on a question, a new thread with an agent and
