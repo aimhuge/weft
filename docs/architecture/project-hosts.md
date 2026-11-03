@@ -32,7 +32,7 @@ row was a missing command kind and a missing handler on the board, not a missing
 | --- | --- | --- |
 | Permission mode | PATCH `permissionMode` | default/acceptEdits/auto through the `mode` command; YOLO where the desktop app signs it (`transport.signsSkip`, through `actOnLine`'s [signed widening](#signed-widening-as-built), PR #74); no `plan` mid-card |
 | Model, CLI, effort on an open card | `switch-backend`, `rerun-model` | the model picker and the first-message banner's rerun, as `card.switchBackend` / `card.rerunModel` (H3); on the desktop the rerun takes your synced `backupModel`, on weft.zip the CLI's default (PR #75) |
-| Agent | PATCH `agent` | `card.update` with a signed approval ([Signed widening](#signed-widening-as-built)); your custom agents and worker-project defaults travel as the signed `agents` account setting, so a new thread there gets its project's default and Settings → Agents lists worker projects (PR #79) |
+| Agent | PATCH `agent` | `card.update` with a signed approval ([Signed widening](#signed-widening-as-built)); your custom agents and worker-project defaults travel as the signed `agents` account setting, so a new thread there gets its project's default and Settings → Agents lists worker projects (PR #79); a board tool's `create_card` to another host runs as that default ([Agents across hosts](#agents-across-hosts)) |
 | Rename, tags, star, archive, move, delete | PATCH, DELETE, `CardActions` | as `card.update` (H3), and `card.delete` (2026-11-02) |
 | Share… | `card-share`, `ShareCardDialog` | the same dialog over the rows the worker published (`lib/card-share-worker.ts`, 2026-11-02; sharing.md) |
 | ↑ edit, Restart, Fresh | `messages`, `fresh` | as host verbs (H3) |
@@ -57,7 +57,7 @@ row was a missing command kind and a missing handler on the board, not a missing
 | Notifications, dock badge | `board-live` announce, chimes | the same `noticeCard` per read (`useWorkerNotices`); the badge counts every card on the board (board parity) |
 | Rail drawers, mini apps | the project's folder | 🔐 and the provider drawers through this Mac's checkout of the repo; Services with Log, Restart and Stop; issues as runs; Save as app on its pages (T5) |
 | Streaming | SSE | over the session line, reply text typing out from `delta` events (H6, PR #86); a 2.5 s poll on the relay |
-| Secrets | the 🔐 vault in main | `mcp__secrets__run`, the other secrets tools and a dev server's env through the Mac's Touch ID (H8, T2), optionally kept on the worker (PR #88); `fill_field` stays the Mac's |
+| Secrets | the 🔐 vault in main | `mcp__secrets__run`, the other secrets tools and a dev server's env through the Mac's Touch ID (H8, T2), optionally kept on the worker (PR #88); `fill_field` stays the Mac's, by design ([secrets.md](secrets.md#fill_field-on-a-weft-worker-not-planned)) |
 | weft.zip and the phone | | any verb as a `host` command (H2); weft.zip opens its own session line to your worker cards, through TURN (PRs #89, #91); the phone still sends rows, not lines |
 
 ## The idea: a project has a host
@@ -952,7 +952,8 @@ webhook" in a board nobody sees. Now the tools that write the board reach the us
   `worker_new_card`, which inserts a `new_card` (a Mac the owner has synced cards from) or `run` (another worker of the
   owner's, headless and not revoked, same workspace) as the owner, so the target's inbox applies its usual checks: a
   Mac's synced folder, a worker's work root. `start: false` travels in the payload (`NewCardPayload.start`,
-  `newCardBody`, `runBody`). An agent isn't carried to another host yet; the reply says so.
+  `newCardBody`, `runBody`). No agent travels: the target starts it as that project's default
+  ([Agents across hosts](#agents-across-hosts)).
 - **A worker's card never runs unasked elsewhere.** A worker key belongs to a box, and a thread's prompt can be injected,
   so `worker_new_card` treats both as untrusted: it rebuilds the payload from `prompt`, `title`, `tags` and
   `start: false` alone (no mode, agent, model, repo or attachments) and stamps it `fromWorker: <id>`, which only the
@@ -989,14 +990,41 @@ webhook" in a board nobody sees. Now the tools that write the board reach the us
   all hear it before the tool runs. Landing a tool on workers is flipping its entry to `true`.
 - **Migration** `supabase/migrations/20261102210000_worker_board_tools.sql`: `worker_board_cards`, `worker_new_card`,
   `cloud_worker_lists` and `worker_set_lists`. Applied.
-- **Not yet:** an agent on a card sent to another host. Changing a Mac's cron from a worker is refused by design (below).
+- **Changing a Mac's cron from a worker** is refused by design (below).
 - **The other way, built and landing (PR #83).** This Mac's board tools reach worker cards: `list_cards` merges the
   workers' boards and `read_thread` reads a worker thread from its synced pages (`lib/board-tools-hosts.ts`,
   `lib/worker-board-reach.ts`); `create_card` on a `worker://` project (or a name only a worker has) starts it there
-  through `startWorkerThread`, always in `default`, an agent refused until a thread can carry a signed approval; the
+  through `startWorkerThread`, always in `default`, as the project's default agent ([below](#agents-across-hosts)); the
   copilot's tags, start, reply, move, stop and answer on worker cards go as `card.update` / `card.message` /
   `card.stop` / `card.permission.answer` rows (`lib/board-tools-copilot.ts`), queued when the worker is offline. Once
   PR #80 lands, an Allow from the copilot is refused unsigned, by design.
+
+### Agents across hosts
+
+Built 2026-11-03. Choosing an agent for a card on another host is a [signed widening](#signed-widening-as-built) only
+Weft's own window signs, and a thread's tool can't, so `create_card` to another host never carries one. It doesn't need
+to: every host already starts a card that names none as its project's default, and since PR #79 a worker project's
+default is a Mac-signed account setting the worker mirrors (`lib/agent-sync.ts`). So the tools send no agent and say
+which one runs it; a named agent passes only when it is that default, and any other is refused before anything is sent
+(`lib/host-agent.ts`).
+
+```
+create_card(folder, agent?)              the default the target uses           check, before sending
+Mac ──▶ worker://<id>/<f>   card.create  worker-kinds defaultAgent (signed)     Mac's projectAgent(worker path) ?? builder
+worker ──▶ worker://<id2>/<f>  run       worker-kinds defaultAgent (signed)     the mirrored projectAgent(path) ?? builder
+worker ──▶ a Mac folder     new_card     new-card.ts marksFromBody: projectAgent  unknown on a worker: any named agent refused
+```
+
+- **Mac → worker** (`createWorkerCard`, `lib/board-tools-hosts.ts`): the Mac is where worker-project defaults are set,
+  so its own `projectAgent(worker://…)` is what the worker will use. The reply ends "It runs as Copywriter (copywriter),
+  that project's default agent."
+- **Worker → worker** (`workerCreateCard`, `lib/worker-board-tools.ts`): the sending worker reads the target project's
+  default from the same signed setting it mirrors. A worker that trusts no Mac starts every card as Builder.
+- **Worker → Mac**: a Mac folder's default stays on the Mac (`workerProjectAgents` mirrors worker projects only), so a
+  worker can't check a name: any named agent is refused (`MAC_AGENT_UNKNOWN`), and without one the card lands in
+  Backlog with the Mac project's default (`createCardFromBody`), for the user to change before starting it.
+- **Threat.** Nothing widens: the agent a card runs as is one the user picked in Settings → Agents, signed where it
+  crosses to a worker, and `worker_new_card` still strips `agent` from a worker's payload in the database.
 
 ### Crons and webhooks both ways (as built)
 
@@ -1493,6 +1521,8 @@ applied on production.
   (`lib/worker-approve.ts`, `answerAsKind` on), with a clear refusal for older Macs. Roll-out: update the Mac before
   its workers, or Allows on worker cards are refused and the request stays waiting.
 - **This Mac's board tools reach worker cards** (PR #83): [Board tools on a worker](#board-tools-on-a-worker).
+- **Agents across hosts** (this change, on top of PR #83): a card a board tool sends to another host runs as that
+  project's default agent; another named agent is refused with why ([Agents across hosts](#agents-across-hosts)).
 
 ## Still open
 
@@ -1502,12 +1532,15 @@ Plainly, as of 2026-11-03:
 - **Passkey re-pair at weft.zip.** Designed only
   ([weft-worker.md](weft-worker.md#a-passkey-approved-re-pair-designed-not-built)): it needs a phone approver and a
   console code.
-- **The phone app wiring `openLine`**, so the phone opens session lines as weft.zip now does.
 - **Sealing files pasted into a brand-new worker thread** (no row yet to take the seal version from).
 - **Connectors.** Lending the Mac's gog and gh sign-ins to a worker is not planned: it would need a process boundary,
   and the process split is dropped ([Connectors](#connectors-on-a-worker-not-planned)).
-- **Smaller gaps.** An agent on a card sent to another host; `fill_field` on a worker's browser; the in-thread `ask_add`
-  input on a worker card; the streak counting a worker's turns; a sealed tool output matching ⌘F.
+- **The phone app wiring `openLine`** lives in its own repo, `aimhuge/weft-mobile` (`~/dev/weft-mobile`, [mobile.md](mobile.md)).
+- **Smaller gaps.** The in-thread `ask_add` input on a worker card; the streak counting a worker's turns; a sealed tool
+  output matching ⌘F.
+- **Not planned: `fill_field` on a worker's browser.** Cards on a worker run as the daemon's OS user, so a value the Mac
+  seals to the worker for typing can be opened by any code a card there runs, breaking fill_field's promise that the
+  thread never sees it ([secrets.md](secrets.md#fill_field-on-a-weft-worker-not-planned)).
 - **Checked by hand, not yet done.** The LAN path on a real LAN; Electron against a real worker through TURN; Android's
   H.264 live screen on a device (decode and the switch before 3 minutes); the hand checks listed on PRs #78, #81, #86,
   #87, #88, #89 and #92; `CLOUDFLARE_TURN_KEY_ID` / `CLOUDFLARE_TURN_KEY_API_TOKEN` on Vercel production for weft.zip's TURN.
