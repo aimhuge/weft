@@ -112,6 +112,8 @@ async function loadEngine() {
     () => import("../lib/cron-run"),
     () => import("../lib/worktree-pool"),
     () => import("../lib/worker-browser-screen"),
+    // Loaded again in start, for the LAN path; here so `check` proves multicast-dns is installed.
+    () => import("../lib/worker-lan-start"),
   ] as const);
   return { store, parts };
 }
@@ -224,7 +226,7 @@ async function startCommand() {
       void lists.flush();
       startWorktreePool();
     },
-    line: (sealed, run) => lines.open(sealed, run),
+    line: (sealed, run, answerOn) => lines.open(sealed, run, answerOn),
     widen,
     engine: {
       // A card.create names its id (the board's) and may leave the card in Backlog; a run or new_card starts one.
@@ -298,13 +300,15 @@ async function startCommand() {
   // Tunnels, the relay and dev servers reach the boards through the owner's Mac (lib/worker-reach.ts).
   const { startWorkerReach } = await import("../lib/worker-reach");
   const stopReach = startWorkerReach(reg, console.log);
+  // A board on the same LAN offers lines straight here, found by a signed mDNS hint (lib/worker-lan-start.ts).
+  const stopLan = await (await import("../lib/worker-lan-start")).startWorkerLanSafely({ home, workerId: config.workerId, boxKey: keys.publicKey, sign: pairedSigner(home), open: daemon.lanLine, log: console.log });
   console.log(`Weft Worker ${config.name} (${config.device}) is running. Work root ${root}.`);
   const quit = () => {
     stopProjects();
     clearInterval(sweepTimer);
     connectors?.close();
     services.stop();
-    void Promise.all([stop(), stopReach()]).finally(() => process.exit(0));
+    void Promise.all([stop(), stopReach(), stopLan()]).finally(() => process.exit(0));
   };
   restart = quit;
   process.on("SIGTERM", quit);
