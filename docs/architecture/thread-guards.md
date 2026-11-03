@@ -177,7 +177,11 @@ symlinks, a file not created yet by its nearest folder). A path only named in pr
 message, a PR's `--title` or `--body`, a sentence `echo` prints, a heredoc written to a page (`proseOf` in
 `lib/shell-text.ts`, the same words the secret guard skips). A `$(cat ~/x)` folded into a message still reaches `~/x`,
 so its own paths stay. Before this, a marketing card stalled on "Outside the project: use ~/.weftn", which was
-`~/.weft\n` inside a quoted string.
+`~/.weft\n` inside a quoted string. A path with a glob in it (`* ? [ {`: a Bash token, or a Glob
+tool's absolute pattern) is expanded with `fs.globSync` (walk capped at 5,000 entries, 300 matches) and each match is
+checked: the first one outside is the one asked about, granting its real project (`~/dev/*weft*/node_modules` from
+the weft project asks about `~/dev/weft-build`, not a literal `~/dev/*weft*` that granting would never match). A glob
+with no matches stands for its fixed start, the folder before the first glob character.
 
 - **Never asked about**: the project (an isolated card's worktree, for it), `card.readScope`, `settings.allowedFolders`, Weft's data folder (`~/.weft`, but not `~/.weft/worktrees`: another card's worktree asks like any other folder),
   the card's own memory folder (`~/.claude/projects/<project>/memory`, `memoryDir`; nothing else in `~/.claude`), temp
