@@ -8,6 +8,7 @@
 const { askOf, vaultFor } = require("./worker-ask.cjs");
 const { queueSecretUse, readWorkerAsk, signKeyOf, verifySigned } = require("./worker-ask-row.cjs");
 const { seal, secretUsePurpose } = require("./worker-seal.cjs");
+const { splitKept, withKept } = require("./worker-kept.cjs");
 
 const TOOLS = new Set(["secret_run"]);
 
@@ -36,10 +37,11 @@ function verifyAsk(signKey, cardId, boxKey, a) {
  *   signer: () => Promise<{ publicKey: () => string, sign: (message: string) => string }>,
  *   projectRepos: (folder: string) => Promise<string[]>,
  *   audit?: (entry: Record<string, unknown>) => unknown,
+ *   kept?: ReturnType<typeof import("./worker-kept.cjs").createKeptRecord>,
  *   now?: () => number,
  * }} deps
  */
-function createWorkerSecrets({ vault, ask, describe, accountClient, pins, signer, projectRepos, audit = (entry) => entry, now = Date.now }) {
+function createWorkerSecrets({ vault, ask, describe, accountClient, pins, signer, projectRepos, audit = (entry) => entry, kept, now = Date.now }) {
   async function answer(account, uid, callId) {
     const { row, worker, folder } = await readWorkerAsk(account.supabase, uid, callId, TOOLS);
     const a = askOf(row.args, now());
@@ -57,7 +59,10 @@ function createWorkerSecrets({ vault, ask, describe, accountClient, pins, signer
     if (!allowed) return { denied: true, label: ref.label };
     if (now() > a.expiresAt) throw new Error("The ask expired while it waited for you. The thread can ask again.");
     if (pin.firstUse || !pin.signKey) pins.pin(worker.id, { name: worker.name, publicKey: pin.publicKey, signKey });
-    const plaintext = JSON.stringify({ v: 1, card: row.card_id, nonce: a.nonce, command: a.command, names: a.names, environment: a.environment, expiresAt: a.expiresAt, values });
+    // A value this Mac kept on the worker, unchanged since, isn't carried again: the sealed answer names its version and
+    // the worker opens its own copy (electron/worker-kept.cjs). The approval above is the same either way.
+    const split = kept ? splitKept(kept, worker.id, ref.id, a.environment, values, row.args?.kept) : { values, kept: {} };
+    const plaintext = JSON.stringify(withKept({ v: 1, card: row.card_id, nonce: a.nonce, command: a.command, names: a.names, environment: a.environment, expiresAt: a.expiresAt }, split));
     // Sealed to the pinned key, never straight from the row.
     const sealed = seal(pin.publicKey, plaintext, secretUsePurpose(row.card_id, a.nonce, a.command));
     // Signed with this Mac's device key, so the worker can tell this row from one sealed by anyone with its public key.

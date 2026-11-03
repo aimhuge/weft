@@ -14,9 +14,9 @@ const { readSignRequest, serverCards, signPrompt, waitingRequest } = require("./
 /**
  * @param {{ ipcMain: any, dataDir: string, accountClient: () => any, isBoard: (sender: unknown) => boolean,
  *   confirm: (reason: string) => Promise<boolean>, safeStorage?: () => any, crypto?: () => any, devOrigin?: string | null,
- *   getServer?: () => { url: string } | undefined, cards?: () => Promise<any[]> }} deps
+ *   getServer?: () => { url: string } | undefined, cards?: () => Promise<any[]>, vault?: any }} deps
  */
-function setupPairing({ ipcMain, dataDir, accountClient, isBoard, confirm, safeStorage, crypto, devOrigin = null, getServer = () => undefined, cards }) {
+function setupPairing({ ipcMain, dataDir, accountClient, isBoard, confirm, safeStorage, crypto, devOrigin = null, getServer = () => undefined, cards, vault }) {
   const boardCards = cards ?? serverCards(getServer);
   const keychain = safeStorage ?? (() => require("./keychain-audit.cjs").keychainFor("vault key"));
   const vaultCrypto = crypto ?? (() => require("./vault-crypto.cjs"));
@@ -125,6 +125,17 @@ function setupPairing({ ipcMain, dataDir, accountClient, isBoard, confirm, safeS
     },
     reconcile: () => pairing.reconcile(),
   });
+
+  // "Keep on this worker" (electron/worker-keep.cjs): a project's development or preview secrets sealed to a paired
+  // worker after Touch ID, and taken back without it, every command signed with this Mac's key.
+  if (vault) {
+    const keep = require("./worker-keep.cjs");
+    const record = require("./worker-kept.cjs").createKeptRecord({ dir: dataDir, safeStorage: keychain });
+    const repoFolders = require("./worker-projects.cjs").createRepoFolders({ dataDir });
+    const keeper = keep.createWorkerKeep({ record, pins: workerPins, signer, db, userId, vault, repoFolders, confirm, audit: require("./keychain-audit.cjs").audit });
+    keep.watchVault(vault, withSodium((repo, name, environment) => keeper.changed(repo, name, environment)));
+    keep.registerWorkerKeep(handle, keeper);
+  }
 
   const widenNonces = require("./widen-nonces.cjs").createWidenNonces({ dir: dataDir, safeStorage: keychain });
   const routes = {

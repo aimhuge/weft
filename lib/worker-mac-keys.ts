@@ -10,6 +10,11 @@ import fs from "node:fs";
 import path from "node:path";
 import { parsePairCode } from "./host-pairing";
 
+// The values a paired Mac keeps on this box (lib/worker-kept-vault.ts), sealed to its box key. They belong to the Mac
+// that sent them: pairing to another Mac, or forgetting the Mac, deletes the file.
+export const KEPT_FILE = "kept-vault.json";
+export const wipeKept = (home: string) => fs.rmSync(path.join(home, KEPT_FILE), { force: true });
+
 export interface MacKeys {
   pinned(): string[];
   pin(key: string): void;
@@ -86,6 +91,8 @@ export function macSigned(key: string, message: string, sig: string): boolean {
 export function trustPairingMac(home: string, code: string): boolean {
   const key = parsePairCode(code)?.macKey;
   const macs = macKeysAt(home);
+  // Values another Mac kept here never outlive the move: only the same Mac, paired again, keeps them.
+  if (!key || macs.pinned()[0] !== key) wipeKept(home);
   macs.forget();
   if (!key) return false;
   macs.pin(key);

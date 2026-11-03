@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import * as cjs from "../electron/worker-seal.cjs";
 import { macSigner, memoryMacs } from "./mac-signer.harness";
 import { devEnvOnWorker } from "./worker-dev-env";
@@ -101,5 +101,55 @@ describe("devEnvOnWorker's defaults", () => {
     const r = await devEnvOnWorker(req("d6"), d);
     expect(String(asked[0]?.nonce)).toMatch(/^[0-9a-f]{64}$/);
     expect(r.launch?.args[0]).toMatch(/electron\/secret-env\.cjs$/);
+  });
+});
+
+describe("devEnvOnWorker and values kept here", () => {
+  it("claims the development values this box keeps, outside the signature, and opens them when the Mac names them", async () => {
+    const { d, asked, nonce } = deps(() => {
+      const plain = { v: 1, card: "dk1", nonce, command: "pnpm dev", names: ["API_KEY", "DB"], environment: "development", expiresAt: Date.now() + 60_000, values: { DB: "db-url-1" }, kept: { API_KEY: 9 } };
+      const sealed: Sealed = cjs.seal(keys.publicKey, JSON.stringify(plain), devEnvPurpose("dk1", nonce, "pnpm dev"));
+      setTimeout(() => deliverSecretUse({ payload: { cardId: "dk1", nonce, sealed, mac: mac.mac("dk1", nonce, sealed), use: "dev" } as never }, (s, purpose) => open(keys, s, purpose), macs, Date.now(), (repo, env, want): Record<string, string> => (repo === "github:o/r" && env === "development" && want.API_KEY === 9 ? { API_KEY: "kept-key" } : {})), 0);
+      return { queued: true };
+    });
+    d.link = { ...(d.link as NonNullable<VaultDeps["link"]>), kept: (repo, env): Record<string, number> => (repo === "github:o/r" && env === "development" ? { API_KEY: 9 } : {}) };
+    const r = await devEnvOnWorker(req("dk1"), d);
+    expect((JSON.parse(String(r.launch?.stdin)) as { values: unknown }).values).toEqual({ DB: "db-url-1", API_KEY: "kept-key" });
+    const { tool, sig, thread, kept, ...signed } = asked[0] ?? {};
+    expect(kept).toEqual({ API_KEY: 9 });
+    expect(crypto.verify(null, Buffer.from(vaultAskMessage("dk1", keys.publicKey, String(tool), signed as never)), pair.publicKey, Buffer.from(String(sig), "base64"))).toBe(true);
+    expect(thread).toBe("Fix");
+  });
+
+  it("claims nothing for a remote that isn't GitHub's, or with no link", async () => {
+    const { d, asked } = deps(() => ({ denied: true }));
+    d.remote = () => Promise.resolve(null);
+    await devEnvOnWorker(req("dk2"), d);
+    expect(asked).toEqual([]);
+    const noGit = deps(() => ({ denied: true }));
+    delete noGit.d.remote;
+    expect((await devEnvOnWorker({ ...req("dk6"), root: "/nonexistent-weft-root" }, noGit.d)).note).toContain("no git remote");
+    const gitlab = deps(() => ({ denied: true }));
+    const keptGitlab = vi.fn(() => ({}));
+    gitlab.d.link = { ...(gitlab.d.link as NonNullable<VaultDeps["link"]>), kept: keptGitlab };
+    gitlab.d.remote = () => Promise.resolve("git@gitlab.com:o/r.git");
+    await devEnvOnWorker(req("dk5"), gitlab.d);
+    expect(keptGitlab).not.toHaveBeenCalled();
+    const other = deps(() => ({ denied: true }));
+    other.d.link = null;
+    expect((await devEnvOnWorker(req("dk3"), other.d)).note).toContain("Started without vault secrets");
+  });
+});
+
+describe("devEnvOnWorker's own link", () => {
+  it("reads the claim from the link the wiring set when none is handed in", async () => {
+    const { setVaultLink } = await import("./worker-vault");
+    const kept = vi.fn(() => ({}));
+    setVaultLink({ sign, boxKey: keys.publicKey, macKey: () => mac.key, kept });
+    const { d } = deps(() => ({ denied: true }));
+    delete d.link;
+    await devEnvOnWorker(req("dk4"), d);
+    expect(kept).toHaveBeenCalledWith("github:o/r", "development", undefined);
+    setVaultLink(null);
   });
 });

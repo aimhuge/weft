@@ -236,9 +236,11 @@ function setupSecretRun({ vault, dataDir, window, accountClient = () => null, ve
     return require("./desktop-signer.cjs").createDesktopSigner({ dir: dataDir, safeStorage: () => keychainFor("vault key"), sodium: () => sodium });
   };
   const projects = require("./worker-projects.cjs");
-  const worker = createWorkerSecrets({ vault, ask, describe, accountClient, pins, signer, projectRepos: projects.createProjectRepos({ dataDir }), audit });
+  // What this Mac keeps on its workers (electron/worker-kept.cjs): a use names a kept value's version, not the value.
+  const kept = require("./worker-kept.cjs").createKeptRecord({ dir: dataDir, safeStorage: () => keychainFor("vault key") });
+  const worker = createWorkerSecrets({ vault, ask, describe, accountClient, pins, signer, projectRepos: projects.createProjectRepos({ dataDir }), audit, kept });
   // A worker card's list, blanks, set_value, push_to_vercel and dev server env (electron/worker-vault.cjs).
-  const devEnv = require("./worker-dev-env.cjs").createWorkerDevEnv({ vault, ask, describe, pins, signer, audit });
+  const devEnv = require("./worker-dev-env.cjs").createWorkerDevEnv({ vault, ask, describe, pins, signer, audit, kept });
   const workerVault = require("./worker-vault.cjs").createWorkerVault({ vault, vercelEnv, accountClient, pins, signer, projectFolders: projects.createProjectFolders({ dataDir }), devEnv, ...vaultGuards(dataDir), audit });
   return { ...createSecretRun({ vault, rules, spawn, audit, ask }), workerAsk: worker.answer, workerVault: workerVault.answer, devEnv };
 }

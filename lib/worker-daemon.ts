@@ -72,6 +72,8 @@ export interface DaemonDeps {
   github: { login: (sealed: Sealed) => Promise<GithubStatus>; status: () => Promise<GithubStatus | null> };
   // Opens a sealed `secret_use` and hands its values to the card's waiting mcp__secrets__run (lib/worker-secret-asks.ts).
   secretUse?: (command: CloudCommandRow) => string;
+  // Stores, deletes or wipes what the paired Mac keeps on this box from a Mac-signed vault_keep (lib/worker-kept-vault.ts).
+  keep?: (command: CloudCommandRow) => { seq: number; kept: number };
   // Joins the worker's wake-up socket (lib/worker-wake.ts); the returned function leaves it.
   listen?: (hooks: WakeHooks) => () => void;
   // Joins the worker's presence topic (lib/worker-presence.ts), so the row is written every few minutes, not every 20 s.

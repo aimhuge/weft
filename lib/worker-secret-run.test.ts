@@ -246,3 +246,21 @@ describe("onWorker and redactOnWorker", () => {
     expect(await redactOnWorker("never", "plain")).toBe("plain");
   });
 });
+
+describe("keeping on the worker", () => {
+  it("claims what this box keeps of the names, outside the signature, and takes nothing when it keeps nothing", async () => {
+    const { link, asked } = mac([{ status: "done", result: { denied: true }, error: null }]);
+    const kept = vi.fn(() => ({ TOKEN: 7 }));
+    await workerSecretRun(request(), deps({ ...link, kept, sign: (m) => `sig:${m}` }));
+    expect(kept).toHaveBeenCalledWith("github:aimhuge/weft", "development", ["TOKEN"]);
+    expect(asked[0]?.kept).toEqual({ TOKEN: 7 });
+    expect(asked[0]?.sig).toBe(`sig:${askMessage(card, "", asked[0] as SecretAsk)}`);
+    const none = mac([{ status: "done", result: { denied: true }, error: null }]);
+    await workerSecretRun(request(), deps({ ...none.link, kept: () => ({}) }));
+    expect(none.asked[0]?.kept).toBeUndefined();
+    const elsewhere = mac([{ status: "done", result: { denied: true }, error: null }]);
+    const notGithub = vi.fn(() => ({ TOKEN: 1 }));
+    await workerSecretRun(request(), deps({ ...elsewhere.link, kept: notGithub }, { remote: () => Promise.resolve("git@gitlab.com:o/r.git") }));
+    expect(notGithub).not.toHaveBeenCalled();
+  });
+});
