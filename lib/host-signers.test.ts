@@ -194,7 +194,7 @@ describe("endorseMessage", () => {
 describe("readEndorsement", () => {
   it("takes only a whole one", async () => {
     const { raw } = await endorsed();
-    expect(readEndorsement(raw)).toEqual(raw);
+    expect(readEndorsement(raw)).toEqual({ ...raw, phones: [] });
     const key = raw.passkeys[0];
     for (const bad of [null, "x", { ...raw, worker: "a b" }, { ...raw, passkeys: [{ ...key, publicKey: "a b" }] }, { ...raw, passkeys: "no" }, { ...raw, generation: "1" }, { ...raw, issuedAt: Infinity }, { ...raw, mac: 1 }, { ...raw, passkeys: Array(51).fill(key) }, { ...raw, passkeys: [null] }]) {
       expect(readEndorsement(bad)).toBeNull();

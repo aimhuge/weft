@@ -22,7 +22,7 @@ describe("sendPasskeys", () => {
     endorse.mockResolvedValueOnce(null);
     expect(await sendPasskeys("w1", "m1mini", sync)).toMatch(/Not approved/);
     endorse.mockResolvedValueOnce([]);
-    expect(await sendPasskeys("w1", "m1mini", sync)).toMatch(/No passkey is paired/);
+    expect(await sendPasskeys("w1", "m1mini", sync)).toMatch(/No passkey or phone is paired/);
     expect(sync).not.toHaveBeenCalled();
   });
 });

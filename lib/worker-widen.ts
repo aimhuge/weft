@@ -13,7 +13,7 @@ import type { NonceBook } from "./widen-nonces";
 export interface WorkerWiden {
   // This worker's id: the host a widening's message names.
   host: string;
-  signers: Pick<HostSigners, "verify" | "verifyPasskey" | "endorse"> & Partial<Pick<HostSigners, "approvers">>;
+  signers: Pick<HostSigners, "verify" | "verifyPasskey" | "endorse"> & Partial<Pick<HostSigners, "approvers" | "verifyAnswer">>;
   nonces: NonceBook;
   // The project folders under its work root (lib/worker-folders.ts), and the checkout one names (lib/worker-paths.ts).
   projects(): string[];

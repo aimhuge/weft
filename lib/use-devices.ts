@@ -95,16 +95,24 @@ interface Bridges {
 
 export const bridgesHere = (): Bridges => (typeof window === "undefined" ? {} : { pairing: pairingBridge(), hosts: hostPairingBridge() });
 
-// Main signs the whole set of paired passkeys for a worker after Touch ID; lib/passkey-sync.ts sends it as a `pin` command and
-// waits for the worker's signed receipt (lib/passkey-sync.ts).
+// Main signs the whole set of paired passkeys (and phones) for a worker after Touch ID; lib/passkey-sync.ts sends it as a
+// `pin` command and waits for the worker's signed receipt.
 export async function sendPasskeys(workerId: string, name: string, sync: () => Promise<string[]> = runPasskeySync): Promise<string> {
   const endorsements = await endorsePasskeys(workerId);
   if (!endorsements) return `Not approved, so ${name} trusts no new passkey.`;
-  if (!endorsements.length) return "No passkey is paired with this Mac yet: pair one in Settings → Sync first.";
-  const count = (endorsements[0] as { passkeys?: unknown[] } | undefined)?.passkeys?.length ?? 0;
-  const which = count === 1 ? "your passkey" : `your ${count} passkeys`;
+  if (!endorsements.length) return "No passkey or phone is paired with this Mac yet: pair one in Settings → Sync first.";
+  const which = endorsedWhich(endorsements[0] as { passkeys?: unknown[]; phones?: unknown[] } | undefined);
   if ((await sync()).includes(workerId)) return `Sent: ${name} will let ${which} approve changes there once it takes it.`;
   return `${name} now lets ${which} approve changes there.`;
+}
+
+// "your passkey", "your 2 passkeys and your phone": what one endorsement names.
+function endorsedWhich(e: { passkeys?: unknown[]; phones?: unknown[] } | undefined): string {
+  const say = (count: number, one: string) => (count === 1 ? `your ${one}` : `your ${count} ${one}s`);
+  const passkeys = e?.passkeys?.length ?? 0;
+  const phones = e?.phones?.length ?? 0;
+  const parts = [...(passkeys || !phones ? [say(passkeys, "passkey")] : []), ...(phones ? [say(phones, "phone")] : [])];
+  return parts.join(" and ");
 }
 
 // A ref read through a call, so a check after an await isn't narrowed by one before it.

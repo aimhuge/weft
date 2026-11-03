@@ -111,6 +111,13 @@ describe("workerApprove: unsigned answers", () => {
     const blind = workerApprove({ ...w, signers: { verify: w.signers.verify, verifyPasskey: w.signers.verifyPasskey, endorse: w.signers.endorse } });
     expect(await blind(row(undefined), answer, card)).toBe(WORKER_UNSIGNED);
   });
+
+  it("checks a signature with the Mac's verify when the signers have no answer check of their own (an older wiring)", async () => {
+    const mac = macSigner();
+    const { w } = setup([mac.key]);
+    const old = workerApprove({ ...w, signers: { verify: w.signers.verify, verifyPasskey: w.signers.verifyPasskey, endorse: w.signers.endorse, approvers: w.signers.approvers } });
+    expect(await old(row(await macAuth(mac)), answer, card)).toBeNull();
+  });
 });
 
 describe("workerApprove: a passkey the Mac endorsed (sign.weft.zip's Allow)", () => {
