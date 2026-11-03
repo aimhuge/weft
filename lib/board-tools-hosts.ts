@@ -7,10 +7,12 @@
 //   create_card    a worker:// folder (or a project name only a worker has) starts the thread there, in default mode
 //   card verbs     a worker card's message, stop, answer, move and tags go to its worker as host verbs
 //
-// Nothing here widens a worker card: a new one asks before edits and commands whatever mode the thread is in, an agent
-// needs the signed approval only Weft's own window can make, and a move or tags change carries no mode, folder or agent.
+// Nothing here widens a worker card: a new one asks before edits and commands whatever mode the thread is in, it runs as
+// that project's default agent (any other needs the signed approval only Weft's own window can make, lib/host-agent.ts),
+// and a move or tags change carries no mode, folder or agent.
 import { describeCard, listText, readThreadText, threadText, type ListOptions } from "./board-tools-format";
 import { resolveFolder } from "./folders";
+import { agentElsewhereRefusal, defaultAgentNote } from "./host-agent";
 import { getCard, listCards } from "./store";
 import type { Backend, Card, ThreadItem } from "./types";
 import type { WorkerReach } from "./worker-board-reach";
@@ -21,9 +23,6 @@ import type { CardVerb } from "@weft/client";
 export const WORKER_READ_MS = 8_000;
 // The most of a worker card's thread read_thread walks back for.
 export const WORKER_THREAD_MAX = 300;
-
-export const WORKER_AGENT_REFUSED =
-  "An agent on a Weft Worker's card needs a signed approval, which only Weft's own window can make (it asks for Touch ID), and a thread's tool can't. Leave agent out to start it with that project's default agent, or ask the user to pick the agent in New thread on that worker project.";
 
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
@@ -132,9 +131,11 @@ export interface WorkerCardInput {
 }
 
 // create_card into a worker project: card.create on that worker, in default mode whatever the asking thread runs in, so
-// a board tool never hands a worker card more than asking before edits and commands.
+// a board tool never hands a worker card more than asking before edits and commands. It carries no agent: the worker
+// starts it as the project's default from your signed settings, so a named agent passes only when it is that one.
 export async function createWorkerCard(input: WorkerCardInput, reach: WorkerReach): Promise<string> {
-  if (input.agent) throw new Error(WORKER_AGENT_REFUSED);
+  const refused = agentElsewhereRefusal(input.agent, input.folder);
+  if (refused) throw new Error(refused);
   const { cardId, worker } = await reach.start({
     cwd: input.folder,
     prompt: input.prompt,
@@ -145,5 +146,6 @@ export async function createWorkerCard(input: WorkerCardInput, reach: WorkerReac
     start: input.start !== false,
   });
   const where = `on ${worker} (${input.folder}), in default mode: it asks before edits and commands`;
-  return input.start === false ? `Created ${cardId} in Backlog ${where}.` : `Created and started ${cardId} ${where}.`;
+  const made = input.start === false ? `Created ${cardId} in Backlog ${where}.` : `Created and started ${cardId} ${where}.`;
+  return made + defaultAgentNote(input.folder);
 }
