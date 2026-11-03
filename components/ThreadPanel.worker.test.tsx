@@ -69,13 +69,17 @@ describe("a worker card's header", () => {
     expect(screen.getByRole("button", { name: /Switch model/ })).toBeInTheDocument();
   });
 
-  it("leaves out what only this Mac has (the skill set chip, crons, the editor), and delete and Share… when the board gives none", () => {
+  it("leaves out the editor, and delete and Share… when the board gives none", () => {
     renderWorkerPanel();
     expect(screen.queryByRole("button", { name: "Delete card" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Share" })).toBeNull();
     expect(screen.queryByRole("button", { name: /editor/i })).toBeNull();
-    expect(screen.queryByTitle("Skills this thread gets")).toBeNull();
-    expect(screen.queryByLabelText("Crons")).toBeNull();
+  });
+
+  it("offers the skill set chip and the ⏰, which act on the worker (cron.create, card.update { skill })", async () => {
+    renderWorkerPanel();
+    expect(await screen.findByLabelText("Crons")).toBeInTheDocument();
+    expect(await screen.findByTitle("Skills this thread gets")).toBeInTheDocument();
   });
 
   it("offers the Skills menu, which sends /<skill> as a message", () => {

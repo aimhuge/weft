@@ -22,6 +22,7 @@ const api = vi.hoisted(() => ({
   create: vi.fn(),
   warm: vi.fn(),
   devAction: vi.fn(),
+  devStatus: vi.fn(),
   updateWebhook: vi.fn(),
   removeWebhook: vi.fn(),
 }));
@@ -35,7 +36,7 @@ const warmOnLine = vi.hoisted(() => vi.fn());
 vi.mock("./line-host", () => ({ actOnLine, warmOnLine, lineTransport: (workerId: string) => ({ desktop: false, workerId }), lineFiles: (workerId: string) => `line files ${workerId}` }));
 const filesApi = vi.hoisted(() => ({ list: vi.fn(), read: vi.fn(), head: vi.fn(), write: vi.fn(), stat: vi.fn() }));
 vi.mock("./client-files", () => ({ filesApi }));
-const cronApi = vi.hoisted(() => ({ update: vi.fn(), remove: vi.fn(), run: vi.fn() }));
+const cronApi = vi.hoisted(() => ({ create: vi.fn(), update: vi.fn(), remove: vi.fn(), run: vi.fn() }));
 vi.mock("./cron-client", () => ({ cronApi }));
 vi.mock("./worker-files", () => ({ workerFiles: "worker files" }));
 vi.mock("./project-reads", () => ({ localRead: "local read" }));
@@ -153,6 +154,7 @@ describe("localHost", () => {
     ["card.create", { id: "n1", prompt: "p", start: false }, api.create, [{ prompt: "p", start: false }]],
     ["dev.open", { id: "c1" }, call, ["POST", "/api/cards/c1/dev", { action: "open" }]],
     ["dev.stop", { id: "c1" }, api.devAction, ["c1", "stop"]],
+    ["cron.create", { id: "c1", prompt: "p", expr: "0 9 * * *" }, cronApi.create, [{ prompt: "p", expr: "0 9 * * *", cardId: "c1" }]],
     ["cron.update", { id: "k1", patch: { enabled: false } }, cronApi.update, ["k1", { enabled: false }]],
     ["cron.delete", { id: "k1" }, cronApi.remove, ["k1"]],
     ["cron.run", { id: "k1" }, cronApi.run, ["k1"]],
@@ -160,6 +162,13 @@ describe("localHost", () => {
     ["webhook.delete", { id: "h1" }, api.removeWebhook, ["h1"]],
     ["dev.restart", { id: "c1" }, call, ["POST", "/api/cards/c1/dev", { action: "rerun" }]],
     ["dev.log", { id: "c1" }, call, ["POST", "/api/cards/c1/dev", { action: "log" }]],
+    ["dev.start", { id: "c1" }, api.devAction, ["c1", "start"]],
+    ["dev.start", { id: "c1", restart: true }, api.devAction, ["c1", "restart"]],
+    ["dev.status", { id: "c1" }, api.devStatus, ["c1"]],
+    ["thread.page", { id: "c1" }, call, ["GET", "/api/cards/c1/thread?"]],
+    ["thread.page", { id: "c1", before: 40, limit: 20, extra: "x" }, call, ["GET", "/api/cards/c1/thread?before=40&limit=20"]],
+    ["thread.search", { id: "c1", q: "a b" }, call, ["GET", "/api/cards/c1/thread/search?q=a%20b"]],
+    ["thread.tool", { id: "c1", toolId: "t/1" }, call, ["GET", "/api/cards/c1/thread/tool/t%2F1"]],
   ] as const)("%s goes to the route the board has always called", async (verb, args, fn, expected) => {
     const run = localHost.act as (verb: string, args: unknown) => Promise<void>;
     await run(verb, args);
@@ -189,10 +198,10 @@ describe("cloudHost", () => {
     expect(cloudHost.files).toBe("worker files");
   });
 
-  it("has Send later, the files and the header reads (H4), a skill as a message, shares its cloud rows and deletes, and none of this Mac's other features", () => {
-    for (const feature of ["projectActs", "shots", "pane", "folder", "agent", "shell", "skills", "login", "vault", "dev", "cron", "settings"] as const)
+  it("has Send later, the files and the header reads (H4), a skill as a message, its crons and skill set, shares its cloud rows and deletes, and none of this Mac's other features", () => {
+    for (const feature of ["projectActs", "shots", "pane", "folder", "agent", "shell", "login", "vault", "dev", "settings"] as const)
       expect(cloudHost.can(feature)).toBe(false);
-    for (const feature of ["schedule", "runSkill"] as const) {
+    for (const feature of ["schedule", "runSkill", "cron", "skills"] as const) {
       expect(cloudHost.can(feature)).toBe(true);
       expect(localHost.can(feature)).toBe(true);
     }
@@ -260,7 +269,9 @@ describe("cardCan", () => {
   it("is the card's host's answer where the panel reaches that host", () => {
     expect(cardCan(mac, desktop, "cron")).toBe(true);
     expect(cardCan(worker, workerPanel, "runSkill")).toBe(true);
-    expect(cardCan(worker, workerPanel, "skills")).toBe(false);
+    expect(cardCan(worker, workerPanel, "skills")).toBe(true);
+    expect(cardCan(worker, workerPanel, "cron")).toBe(true);
+    expect(cardCan(worker, workerPanel, "pane")).toBe(false);
   });
 
   it("is never on weft.zip, whose panel reaches no host's card controls", () => {

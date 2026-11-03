@@ -4,7 +4,7 @@
 // (lib/session-line.ts, held through lib/session-lines.ts), but the browser seals the offer itself, since a tab has no
 // Mac server to do it. It reads the worker's published key and inserts the `line` row with the visitor's own session
 // (@weft/client lineOpener), so RLS lets only the worker's owner open one (private.owns_device), in exactly the row's
-// shape (supabase/migrations/20261103120000_line_row_shape.sql). The answer comes back on the board's own Broadcast
+// shape (supabase/migrations/20261103150000_line_row_shape.sql). The answer comes back on the board's own Broadcast
 // topic as on the desktop (lib/line-answer.ts). No TURN here yet: a tab can't mint Cloudflare credentials (/api/rtc-ice
 // is this Mac's), so a line forms where STUN gets through and the board stays on the relay where it doesn't.
 //

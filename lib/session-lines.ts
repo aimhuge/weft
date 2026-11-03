@@ -14,7 +14,7 @@ import { setWorkerRoute } from "./worker-route";
 
 export const LINGER_MS = 30_000;
 
-type Entry = { line: SessionLine; users: number; linger?: ReturnType<typeof setTimeout> };
+type Entry = { line: SessionLine; users: number; linger?: ReturnType<typeof setTimeout>; direct?: boolean };
 const lines = new Map<string, Entry>();
 const listeners = new Set<() => void>();
 const changed = () => listeners.forEach((fn) => fn());
@@ -24,6 +24,15 @@ const heard = new Set<(workerId: string, event: LineEvent) => void>();
 export function onLineEvents(fn: (workerId: string, event: LineEvent) => void) {
   heard.add(fn);
   return () => void heard.delete(fn);
+}
+
+const flips = new Set<(workerId: string, direct: boolean) => void>();
+
+// A worker's line coming up (its route turned direct) or going down: the board's card list takes a snapshot over it, or
+// goes back to polling fast (lib/use-worker-board.ts).
+export function onLineFlips(fn: (workerId: string, direct: boolean) => void) {
+  flips.add(fn);
+  return () => void flips.delete(fn);
 }
 
 async function ice() {
@@ -52,6 +61,11 @@ export function retainLine(workerId: string, make: MakeLine = realLine): () => v
     fresh.line.onRoute(() => {
       const route = fresh.line.route();
       if (route.kind === "direct" && route.ms !== null) setWorkerRoute(workerId, "direct", route.ms);
+      const direct = route.kind === "direct";
+      if (direct !== Boolean(fresh.direct)) {
+        fresh.direct = direct;
+        flips.forEach((fn) => fn(workerId, direct));
+      }
       changed();
     });
     fresh.line.onEvent((event) => heard.forEach((fn) => fn(workerId, event)));

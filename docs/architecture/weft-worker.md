@@ -607,7 +607,7 @@ board ─ sealed offer, elevated input command ─▶ daemon ─ encrypted answe
   worker card holds its worker's **session line** (`lib/web-lines.ts`, `useWebLine` in `components/web-board/useWebHost.ts`):
   the tab reads `cloud_workers.public_key`, seals the offer (`lineOpener`) and inserts the `line` row with its own session,
   which only the worker's owner may do (`private.owns_device`), in exactly the server's shape
-  (`20261103120000_line_row_shape.sql`, not yet applied). Over it go the card's verbs (`lib/cloud-host-acts.ts`, never a
+  (`20261103150000_line_row_shape.sql`, not yet applied). Over it go the card's verbs (`lib/cloud-host-acts.ts`, never a
   widening or pasted files), its thread's events beside Realtime (`lib/line-thread.ts`) and the watched screen as an H.264
   track. The phone gets the same opener with its own RTCPeerConnection (`openLine`, `packages/weft-client/src/line-open.ts`).
 - **Not yet:** the phone app wiring the opener; TURN for weft.zip (a tab can't mint Cloudflare credentials, `/api/rtc-ice` is
@@ -736,6 +736,12 @@ Backlog) to `cloud_worker_projects` through `worker_put_project` (`lib/worker-pr
 `scripts/weft-worker.ts`: every 5 minutes, 20 s after a card change, never mid-turn), and answers the editor's
 `files.*` verbs, putting a result over the row's 4 KB in the blob store through `Engine.carry`
 ([project-hosts.md](project-hosts.md#project-reads-and-the-editor-h4-as-built)).
+
+A worker card's thread header has the ⏰ and the ✦ skill set chip too: the ⏰ makes a cron on the worker with
+`cron.create` (args.id the card; the worker narrows its mode, crons.md#on-a-weft-worker), and the chip lists the worker's
+own skills and sets one with `card.update { skill }` (skills.md). Your agents from Settings → Agents, and each worker
+project's default agent, sync to the worker with your signed account settings (agents.md#on-a-weft-worker), so an agent
+you made exists there, and a new thread there that names none starts as the project's default.
 
 The one-sentence version: **Weft already has a remote control plane, but not a remote compute plane.** The web
 board already commands a Mac across the network through `cloud_commands`; the CLI, though, always spawns on the

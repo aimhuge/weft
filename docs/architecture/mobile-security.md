@@ -135,7 +135,7 @@ into `openLine`. `lib/worker-seal-client.test.ts` opens a browser-sealed and a n
   approval, which weft.zip never sends down a line (`lib/cloud-host-acts.ts` signs it on sign.weft.zip and sends a row); the
   terminal channel still needs the Mac's Touch ID key.
 - **Who may open one:** only the worker's owner, by the insert policy that already gated the row
-  (`private.owns_device`); `20261103120000_line_row_shape.sql` (not yet applied) now holds a `line` row to the server's shape,
+  (`private.owns_device`); `20261103150000_line_row_shape.sql` (not yet applied) now holds a `line` row to the server's shape,
   since a browser builds it: a worker device, no folder, a payload of `sealed` (and the client hint) only, under 32 KB.
 - **Which key it trusts:** `cloud_workers.public_key` as the visitor's session reads it, the same read the desktop's server
   makes. A key swapped in that row would get a line answered by whoever holds its private half, so such a line can do no more

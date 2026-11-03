@@ -65,6 +65,7 @@ describe("account settings", () => {
       subagentModel: "choose",
       threadPrompt: "",
       backupModel: "",
+      agents: { saved: [], projects: {} },
     });
     settings.setThreadPrompt("be brief");
     expect(host.accountSettings().threadPrompt).toBe("be brief");
@@ -116,5 +117,21 @@ describe("account settings", () => {
     expect(settings.automations()).toEqual([{ id: "default-done", on: "done", skill: "weft:done" }]);
     expect(host.applyAccountSettings({ threadPrompt: "x".repeat(32_001) })).toEqual([]);
     expect(host.applyAccountSettings(null)).toEqual([]);
+  });
+});
+
+describe("your agents on a worker", () => {
+  const soul = { id: "a-1", name: "Reviewer", emoji: "🔍", tagline: "Reviews", soul: "You review." };
+
+  it("mirrors your Mac's agents and worker-project defaults, and the same again changes nothing", async () => {
+    const { host } = await loadHost();
+    const agents = await import("./agent-store");
+    const snapshot = { saved: [soul], projects: { "worker://w-1/weft": "a-1" } };
+    expect(host.applyAccountSettings({ agents: snapshot })).toEqual(["agents"]);
+    expect(agents.listAgents().find((a) => a.id === "a-1")?.soul).toBe("You review.");
+    expect(agents.projectAgent("worker://w-1/weft")).toBe("a-1");
+    expect(host.accountSettings().agents).toEqual(snapshot);
+    expect(host.applyAccountSettings({ agents: snapshot })).toEqual([]);
+    expect(host.applyAccountSettings({ agents: "all of them" })).toEqual([]);
   });
 });

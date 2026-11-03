@@ -110,6 +110,37 @@ describe("each project's default", () => {
     expect(() => store.setProjectAgent("/dev/app", "a-none")).toThrow("No such agent.");
     expect(() => store.setProjectAgent("", "copywriter")).toThrow("Which project?");
   });
+
+  it("keeps a worker project's default, and refuses a worker path that names no folder", () => {
+    store.setProjectAgent("worker://w-1/weft", "copywriter");
+    store.setProjectAgent("/dev/app", "copywriter");
+    expect(store.projectAgent("worker://w-1/weft")).toBe("copywriter");
+    expect(store.workerProjectAgents()).toEqual({ "worker://w-1/weft": "copywriter" });
+    expect(() => store.setProjectAgent("worker://w-1", "copywriter")).toThrow("That isn't a worker project.");
+  });
+});
+
+describe("mirrored to a worker", () => {
+  it("replaces the saved agents and the worker-project defaults, keeping the folders of this host", () => {
+    store.createAgent(reviewer);
+    store.setProjectAgent("/srv/work/app", "copywriter");
+    store.setProjectAgent("worker://w-1/old", "copywriter");
+    const mine = { id: "a-mac", name: "Mac's", emoji: "🍎", tagline: "", soul: "From the Mac." };
+    store.mirrorAgents([mine], { "worker://w-1/weft": "a-mac" });
+    expect(store.savedAgents()).toEqual([mine]);
+    expect(store.projectAgents()).toEqual({ "/srv/work/app": "copywriter", "worker://w-1/weft": "a-mac" });
+  });
+
+  it("tells its listeners after every write, until they leave", () => {
+    const heard = vi.fn();
+    const leave = store.onAgentsSaved(heard);
+    store.createAgent(reviewer);
+    store.setProjectAgent("/dev/app", "copywriter");
+    expect(heard).toHaveBeenCalledTimes(2);
+    leave();
+    store.setProjectAgent("/dev/app", null);
+    expect(heard).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe("an agent's skills", () => {

@@ -2,7 +2,7 @@
 // weft.zip and the phone have no Mac server to seal for them, so they read the worker's published key with their own
 // session, seal the offer to it here (seal.ts, byte for byte as lib/worker-board.ts openWorkerLine) and insert the `line`
 // row themselves. The database lets only the worker's owner insert it (private.owns_device), and only in this shape
-// (supabase/migrations/20261103120000_line_row_shape.sql). The line itself grants nothing: each verb over it passes the
+// (supabase/migrations/20261103150000_line_row_shape.sql). The line itself grants nothing: each verb over it passes the
 // worker's `host` checks (remoteRefusal, CardRules), and a widening still needs its own signed approval.
 import { sealTo, type Sealed, type SealCrypto } from "./seal";
 

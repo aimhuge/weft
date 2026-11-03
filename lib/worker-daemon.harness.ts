@@ -87,8 +87,10 @@ export function fakePublisher() {
   const track = vi.fn();
   const touch = vi.fn();
   const flush = vi.fn(() => Promise.resolve());
-  const publisher = { nameFolder, track, touch, flush, hear: vi.fn() } as unknown as Publisher;
-  return { publisher, nameFolder, track, touch, flush };
+  // card.list over a line: what the publisher projects (lib/worker-reads.ts).
+  const snapshot = vi.fn<Publisher["snapshot"]>(() => Promise.resolve([{ card: card(), folder: "weft" }]));
+  const publisher = { nameFolder, track, touch, flush, snapshot, hear: vi.fn() } as unknown as Publisher;
+  return { publisher, nameFolder, track, touch, flush, snapshot };
 }
 
 export const fakeGithub = () => ({

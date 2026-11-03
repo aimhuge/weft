@@ -2,7 +2,7 @@
 // The thread header's ⏰: shown on the Mac for a thread you can put on a cron, anchored on the thread's
 // last message, and left out for the copilot and on weft.zip.
 
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ThreadItem } from "@/lib/types";
 import { ThreadTransportContext, type ThreadTransport } from "@/lib/thread-transport";
@@ -10,8 +10,15 @@ import ThreadCronButton from "./ThreadCronButton";
 import { makeCard } from "./test-utils";
 import "./test-utils";
 
+const crons = vi.hoisted(() => ({ create: vi.fn(() => Promise.resolve({})), later: vi.fn() }));
 vi.mock("@/lib/use-crons", () => ({
-  useCrons: () => ({ crons: [], error: null, create: vi.fn(), update: vi.fn(), remove: vi.fn(), run: vi.fn() }),
+  useCrons: () => ({ crons: [], error: null, create: crons.create, later: crons.later, update: vi.fn(), remove: vi.fn(), run: vi.fn() }),
+}));
+// The card's host: the real cardCan, and an act the test reads.
+const act = vi.hoisted(() => vi.fn((_verb: string, _args: unknown, local?: () => Promise<unknown>) => (local ? local() : Promise.resolve(undefined))));
+vi.mock("@/lib/project-host", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/project-host")>()),
+  hostOf: () => ({ act }),
 }));
 
 afterEach(cleanup);
@@ -40,13 +47,21 @@ describe("ThreadCronButton", () => {
     expect(screen.queryByLabelText("Crons")).toBeNull();
   });
 
-  it("leaves it out on a worker's card, whose host has no crons of this Mac's", () => {
+  it("shows it on a worker's card, and makes the cron on that host as cron.create, then reads the list again", async () => {
     render(
       <ThreadTransportContext.Provider value={{ desktop: false, cardEdits: true } as unknown as ThreadTransport}>
-        <ThreadCronButton card={makeCard({ id: "w1", cwd: "worker://w1/ling", sessionId: "s1" })} items={[]} />
+        <ThreadCronButton card={makeCard({ id: "w1", cwd: "worker://w1/ling", prompt: "tidy the repo" })} items={[]} />
       </ThreadTransportContext.Provider>,
     );
-    expect(screen.queryByLabelText("Crons")).toBeNull();
+    fireEventClick();
+    fireEvent.click(screen.getByRole("button", { name: "Create cron" }));
+    await waitFor(() => expect(crons.later).toHaveBeenCalled());
+    const [verb, args] = act.mock.calls[0] as unknown as [string, Record<string, unknown>];
+    expect(verb).toBe("cron.create");
+    expect(args).toMatchObject({ id: "w1", prompt: "tidy the repo", mode: "fresh" });
+    expect(Object.values(args)).not.toContain(undefined);
+    // The local create is the host's to call: this Mac's host calls it, a worker's doesn't.
+    expect(crons.create).toHaveBeenCalled();
   });
 
   it("leaves it out for the copilot", () => {
