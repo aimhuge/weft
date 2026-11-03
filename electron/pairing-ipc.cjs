@@ -120,7 +120,9 @@ function setupPairing({ ipcMain, dataDir, accountClient, isBoard, confirm, safeS
   const signStart = require("./connector-start.cjs").createStartSigner({ userId, sign: macSign, signKey: macSignKey, projectRepos });
   // Signed widening for a remote host's card (electron/widen-sign.cjs), naming a worker by the name it was pinned under,
   // and the passkey endorsements for workers (electron/widen-endorse.cjs).
-  require("./widen-sign.cjs").registerWidenSign(handle, { signer, macDevice, confirm, hostName: (id) => workerPins.nameOf(id) });
+  // A worker's Goose provider and endpoint, once signed, are the only ones its Goose key goes to (electron/worker-goose-key.cjs).
+  const gooseSet = require("./worker-goose-set.cjs").createGooseSetRecord({ dir: dataDir, safeStorage: keychain });
+  require("./widen-sign.cjs").registerWidenSign(handle, { signer, macDevice, confirm, hostName: (id) => workerPins.nameOf(id), onGoose: (host, goose) => gooseSet.set(host, goose) });
   const { registerWidenEndorse, createEndorsed } = require("./widen-endorse.cjs");
   registerWidenEndorse(handle, {
     signer,

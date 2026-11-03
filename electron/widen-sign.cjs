@@ -157,9 +157,9 @@ function widenPrompt(req, self, hostName = () => null) {
 /**
  * @param {(channel: string, fn: (...args: any[]) => unknown) => void} handle the board-only IPC handler
  * @param {{ signer: { sign: (m: string) => string }, macDevice: () => string, confirm: (reason: string) => Promise<boolean>,
- *   hostName?: (id: string) => string | null, now?: () => number }} deps
+ *   hostName?: (id: string) => string | null, onGoose?: (host: string, goose: Record<string, string>) => void, now?: () => number }} deps
  */
-function registerWidenSign(handle, { signer, macDevice, confirm, hostName, now = Date.now }) {
+function registerWidenSign(handle, { signer, macDevice, confirm, hostName, onGoose = () => {}, now = Date.now }) {
   // A widening, after Touch ID in main's words. Null when Touch ID is refused.
   handle("approval:widen", async (raw) => {
     const req = readWidenRequest(raw);
@@ -168,7 +168,10 @@ function registerWidenSign(handle, { signer, macDevice, confirm, hostName, now =
     if (!(await confirm(widenPrompt(req, device, hostName)))) return null;
     const issuedAt = now();
     const nonce = crypto.randomBytes(18).toString("base64url");
-    return { kind: "ed25519", device, issuedAt, nonce, sig: signer.sign(widenMessage({ ...req, nonce, issuedAt })) };
+    const sig = signer.sign(widenMessage({ ...req, nonce, issuedAt }));
+    // The provider and endpoint a worker's Goose key may go to (electron/worker-goose-set.cjs), once Touch ID passed.
+    if (req.verb === "settings.put" && req.change.goose) onGoose(req.host, req.change.goose);
+    return { kind: "ed25519", device, issuedAt, nonce, sig };
   });
 }
 

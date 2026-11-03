@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 import { fakeDb } from "./pairing.harness";
 import { setupPairing } from "./pairing-ipc.cjs";
 import vaultCrypto from "./vault-crypto.cjs";
+import { createGooseSetRecord } from "./worker-goose-set.cjs";
 
 const plainStorage = () => ({ isEncryptionAvailable: () => true, encryptString: (s: string) => Buffer.from(s), decryptString: (b: Buffer) => b.toString() });
 
@@ -125,5 +126,15 @@ describe("passkey heads and reconciling", () => {
     const from = db.from;
     db.from = ((name: string) => (name === "worker_passkey_heads" ? { insert: () => Promise.resolve({ data: null, error: { message: "no such table" } }) } : from(name))) as typeof db.from;
     expect(await call("approval:endorse", { worker: "w1", revoke: true })).toHaveLength(1);
+  });
+});
+
+describe("a worker's Goose settings", () => {
+  it("remembers the provider and endpoint this Mac signed for a worker, for its Goose key asks", async () => {
+    const { call, dataDir } = setup();
+    fs.writeFileSync(path.join(dataDir, "device-id"), "d".repeat(64));
+    const goose = { gooseProviderId: "anthropic", gooseBaseUrl: "https://gw" };
+    expect(await call("approval:widen", { host: "w1", card: "", verb: "settings.put", change: { goose }, args: { patch: goose } })).toMatchObject({ kind: "ed25519" });
+    expect(createGooseSetRecord({ dir: dataDir, safeStorage: plainStorage }).of("w1")).toEqual({ providerId: "anthropic", baseUrl: "https://gw" });
   });
 });

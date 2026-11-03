@@ -181,7 +181,7 @@ function runApproval({ dialog, systemPreferences, window, askWindow = undefined 
 // server proves which card a request is for and main believes only that (electron/card-token.cjs).
 // A request that proves nothing has no card, so it runs for nobody.
 /**
- * @param {() => (ReturnType<typeof createSecretRun> & { workerAsk?: (call: string) => Promise<unknown>, workerVault?: (call: string) => Promise<unknown> }) | undefined} get
+ * @param {() => (ReturnType<typeof createSecretRun> & { workerAsk?: (call: string) => Promise<unknown>, workerVault?: (call: string) => Promise<unknown>, workerGooseKey?: (call: string) => Promise<unknown> }) | undefined} get
  * @param {(body: Record<string, unknown>, route: string) => string} [cardFor]
  */
 function secretRunRoutes(get, cardFor = () => "") {
@@ -207,6 +207,12 @@ function secretRunRoutes(get, cardFor = () => "") {
       if (!r.workerVault) throw new Error("This Mac can't answer a worker's vault calls yet.");
       return r.workerVault(String(body.call ?? ""));
     },
+    // A worker's Goose turn asking for this Mac's provider key, by id only too (electron/worker-goose-key.cjs).
+    "POST /secrets/worker-goose-key": (body) => {
+      const r = runner();
+      if (!r.workerGooseKey) throw new Error("This Mac can't answer a worker's Goose key asks yet.");
+      return r.workerGooseKey(String(body.call ?? ""));
+    },
   };
 }
 
@@ -216,6 +222,12 @@ function secretRunRoutes(get, cardFor = () => "") {
 function vaultGuards(dataDir) {
   const guards = require("./worker-vault-guards.cjs");
   return { nonces: guards.createAskNonces({ dir: dataDir, safeStorage: () => require("./keychain-audit.cjs").keychainFor("worker ask nonces") }), cardOrigin: guards.createCardOrigins({ dataDir }) };
+}
+
+// A Goose provider's key as main keeps it (electron/goose-token.cjs), read only when a worker's ask has checked out.
+function gooseKeyReader(dataDir, keychainFor) {
+  const { gooseTokenFile, readGooseProvider } = require("./goose-token.cjs");
+  return (providerId) => readGooseProvider(keychainFor("Goose provider keys"), gooseTokenFile(dataDir), providerId);
 }
 
 function setupSecretRun({ vault, dataDir, window, accountClient = () => null, vercelEnv = () => null }) {
@@ -241,8 +253,11 @@ function setupSecretRun({ vault, dataDir, window, accountClient = () => null, ve
   const worker = createWorkerSecrets({ vault, ask, describe, accountClient, pins, signer, projectRepos: projects.createProjectRepos({ dataDir }), audit, kept });
   // A worker card's list, blanks, set_value, push_to_vercel and dev server env (electron/worker-vault.cjs).
   const devEnv = require("./worker-dev-env.cjs").createWorkerDevEnv({ vault, ask, describe, pins, signer, audit, kept });
-  const workerVault = require("./worker-vault.cjs").createWorkerVault({ vault, vercelEnv, accountClient, pins, signer, projectFolders: projects.createProjectFolders({ dataDir }), devEnv, ...vaultGuards(dataDir), audit });
-  return { ...createSecretRun({ vault, rules, spawn, audit, ask }), workerAsk: worker.answer, workerVault: workerVault.answer, devEnv };
+  const guards = vaultGuards(dataDir);
+  const workerVault = require("./worker-vault.cjs").createWorkerVault({ vault, vercelEnv, accountClient, pins, signer, projectFolders: projects.createProjectFolders({ dataDir }), devEnv, ...guards, audit });
+  // A worker's Goose turn: this Mac's provider key, only for the provider and endpoint it last set there (electron/worker-goose-key.cjs).
+  const gooseKey = require("./worker-goose-key.cjs").createWorkerGooseKey({ accountClient, pins, signer, confirm: (reason) => vault.confirm(reason), readKey: gooseKeyReader(dataDir, keychainFor), lastSet: require("./worker-goose-set.cjs").createGooseSetRecord({ dir: dataDir, safeStorage: () => keychainFor("vault key") }), ...guards, audit });
+  return { ...createSecretRun({ vault, rules, spawn, audit, ask }), workerAsk: worker.answer, workerVault: workerVault.answer, workerGooseKey: gooseKey.answer, devEnv };
 }
 
 module.exports = { setupSecretRun, createSecretRun, runApproval, secretRunRoutes, describe, baseEnv, REPLY_CHARS, KEEP_CHARS, GRANT_MS, KILL_GRACE_MS };
