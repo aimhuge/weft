@@ -13,11 +13,13 @@
 import { createContext, useContext, useEffect, useMemo, useRef } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { stopCommand, type NewCommand } from "@/lib/cloud-commands";
-import { cloudHostActs, type CardTarget, type CloudHostActs } from "@/lib/cloud-host-acts";
+import { cloudHostActs, workerOfTarget, type CardTarget, type CloudHostActs } from "@/lib/cloud-host-acts";
 import { BLOB_BUCKET, THREAD_PAGE_SIZE, type CloudThreadItemRow } from "@/lib/cloud-sync-types";
 import { pageFromRows, pageUpdateFor, type CloudItemChange } from "@/lib/cloud-thread-page";
 import { SEARCH_BATCH, searchCloudThread } from "@/lib/cloud-thread-search";
+import { useLineThread } from "@/lib/line-thread";
 import { firstNow, otherFirstNow, stopNow, waitNow } from "@/lib/optimistic-cards";
+import { lineFor } from "@/lib/session-lines";
 import type { ProjectHost } from "@/lib/project-host";
 import type { PageUpdate, ThreadTransport } from "@/lib/thread-transport";
 import type { ToolResultSource } from "@/lib/use-tool-result";
@@ -138,7 +140,8 @@ export function useCloudTransport({ client, orgId, bus, target, sendCommand, upl
   // A widening goes to sign.weft.zip to be signed with the passkey, when there is one (lib/sign-widen.ts).
   const hasPasskey = useHasPasskey(client);
   return useMemo(() => {
-    const acts = cloudHostActs({ target, insert: sendCommand, read: (id) => readCommand(client, id), widen: hasPasskey ? openWidenWindow : undefined });
+    // A worker card's verbs go on the worker's session line while this board holds one that's up (lib/web-lines.ts).
+    const acts = cloudHostActs({ target, insert: sendCommand, read: (id) => readCommand(client, id), widen: hasPasskey ? openWidenWindow : undefined, line: lineFor });
     const transport: ThreadTransport = {
       async loadPage(cardId, before) {
         let query = client.from("cloud_thread_items").select("card_id, seq, item").eq("org_id", orgId).eq("card_id", cardId);
@@ -148,6 +151,8 @@ export function useCloudTransport({ client, orgId, bus, target, sendCommand, upl
       },
       useLive(cardId, onUpdate, onReconnect) {
         useCloudLive(bus, cardId, onUpdate, onReconnect);
+        // A worker's line pushes the same items as they're made, ahead of Realtime; both land by index.
+        useLineThread(workerOfTarget(target(cardId)), cardId, onUpdate);
       },
       useView: useCloudView,
       searchThread: (cardId, query) => searchCloudThread(cardId, query, rowsAfter(client, orgId, cardId)),

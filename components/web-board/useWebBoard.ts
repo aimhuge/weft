@@ -20,12 +20,8 @@ import { applyCommandChange, isCardCommand, type CloudCommandChange, type WebTar
 import { loadWebKeyring, openSyncedCard, openSyncedTool } from "@/lib/web-sync-key";
 import { withAttachmentRefs } from "@/lib/web-upload";
 import { useCloudTransport, webUploadsFor, type CloudBlobs, type ItemBus } from "./useCloudTransport";
-import { ownTimeZone, withClientHint, type ClientHint } from "@weft/client";
-
-const webClientHint = (): ClientHint => {
-  const tz = ownTimeZone();
-  return { app: "web", ...(tz && { tz }) };
-};
+import { webClientHint, webLines } from "@/lib/web-lines";
+import { withClientHint } from "@weft/client";
 
 // The status of the Realtime channel; the dot beside the title reflects it.
 export type LiveStatus = "connecting" | "live" | "offline";
@@ -218,7 +214,6 @@ export function useWebBoard({ orgId, userId, initialCommands, initialCards, open
     async (plain: NewCommand): Promise<CloudCommandRow | string> => {
       let row: NewCommand;
       try {
-        // Says it's weft.zip, with this browser's time zone, for the thread's <weft-env> block: a hint, never a check.
         row = withClientHint(withAttachmentRefs(plain, uploads), webClientHint());
       } catch (err) {
         return (err as Error).message;
@@ -331,5 +326,8 @@ export function useWebBoard({ orgId, userId, initialCommands, initialCards, open
   // The cards as CardView draws them: a thumb ref becomes its signed URL once it has one.
   const shown = useMemo(() => withThumbUrls(withAnswers(cards, answers, commands), blobUrls), [cards, answers, commands, blobUrls]);
 
-  return { client, cards: shown, commands, activeCardId, blobs, transport, host, live, send, openCard, closeCard, toolOutput, startCard, sendReply, answer, dropCommand };
+  // How this tab opens a worker's session line: it seals the offer itself (lib/web-lines.ts).
+  const lines = useMemo(() => webLines(client, orgId), [client, orgId]);
+
+  return { client, cards: shown, commands, activeCardId, blobs, transport, host, live, send, openCard, closeCard, toolOutput, startCard, sendReply, answer, dropCommand, lines };
 }

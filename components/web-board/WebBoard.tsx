@@ -40,7 +40,7 @@ import { WebReplyStatus } from "./WebReplyStatus";
 import { CloudBlobContext } from "./useCloudTransport";
 import { WebThreadPanel } from "./WebThreadPanel";
 import { useSignWindow } from "./useSignWindow";
-import { useHostForEveryCard, useOptimisticCards } from "./useWebHost";
+import { useHostForEveryCard, useOptimisticCards, useWebLine } from "./useWebHost";
 import { useWebCards } from "./useWebCards";
 
 export interface WebBoardProps {
@@ -103,6 +103,8 @@ export function WebBoard({ orgId, orgSlug, userId, user, orgs, initialCommands, 
   const active = board.activeCardId ? rows.get(board.activeCardId) : undefined;
   const activeCard = active && (cards.find((c) => c.id === active.card_id) ?? active.card);
   useNewThreadKey(!active && !composing, () => setComposing(true));
+  // Your own worker card holds its worker's session line while it's open.
+  const lineWorker = useWebLine(board.lines, active, userId);
 
   // A tile's Allow or Deny goes as the open thread's does: signed on sign.weft.zip while a passkey is paired.
   const answerTile = (card: Card, allow: boolean) => {
@@ -236,6 +238,7 @@ export function WebBoard({ orgId, orgSlug, userId, user, orgs, initialCommands, 
             edits={canReply(active, userId) ? web.editsFor(activeCard) : undefined}
             editTitle={web.renameId === active.card_id}
             onScreenInput={canReply(active, userId) ? screenInput : undefined}
+            workerId={lineWorker}
             seed={active.card_id === openCardId ? seed : []}
             shown={shown}
             readOnly={!canReply(active, userId)}

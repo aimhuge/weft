@@ -101,6 +101,10 @@ describe("replies", () => {
     expect(boardCommands([commandRow(), ...admin]).map((c) => c.id)).toEqual(["cmd-1"]);
   });
 
+  it("leave a session line's sealed offer off the board's strip", () => {
+    expect(boardCommands([commandRow(), commandRow({ id: "l1", kind: "line", folder: "", payload: {} as never })]).map((c) => c.id)).toEqual(["cmd-1"]);
+  });
+
   it("show a host verb's typed text above its card's box only once it failed", () => {
     const host = (over: Partial<CloudCommandRow>, args: Record<string, unknown>) => commandRow({ kind: "host", payload: { verb: "card.schedule", args: { id: "c1", ...args } }, ...over });
     const failed = host({ id: "h1", status: "failed", error: "That time has already passed." }, { text: "run it" });
