@@ -7,6 +7,7 @@
 // works the same, and the worker keeps what it last mirrored.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { accountClient } from "./account";
+import { onAgentsSaved } from "./agent-store";
 import { settingsDigest } from "./account-settings-sig";
 import { shell } from "./browser-shell";
 import { accountSettings } from "./host-settings";
@@ -31,17 +32,26 @@ export async function pushAccountSettings(given?: SupabaseClient, sign: Settings
     const settings = JSON.parse(JSON.stringify(accountSettings())) as Record<string, unknown>;
     const text = `${uid}:${JSON.stringify(settings)}`;
     if (text === pushed) return false;
-    const version = Math.max(Date.now(), lastVersion + 1);
-    const { signature } = await sign({ userId: uid, version, digest: settingsDigest(settings) });
-    if (typeof signature !== "string" || !signature) return false;
-    const { error } = await client.from("account_settings").upsert({ user_id: uid, settings, version, signature, updated_at: new Date().toISOString() });
-    if (error) return false;
+    // A row the database refuses (agents over its size cap) goes again without the agents, so the rest still syncs.
+    const rest = Object.fromEntries(Object.entries(settings).filter(([key]) => key !== "agents"));
+    const sent = (await upsertSigned(client, uid, settings, sign)) || ("agents" in settings && (await upsertSigned(client, uid, rest, sign)));
+    if (!sent) return false;
     pushed = text;
-    lastVersion = version;
     return true;
   } catch {
     return false;
   }
+}
+
+// One signed row, at a version newer than any before it. False when it wasn't signed or the database refused it.
+async function upsertSigned(client: SupabaseClient, uid: string, settings: Record<string, unknown>, sign: SettingsSigner): Promise<boolean> {
+  const version = Math.max(Date.now(), lastVersion + 1);
+  const { signature } = await sign({ userId: uid, version, digest: settingsDigest(settings) });
+  if (typeof signature !== "string" || !signature) return false;
+  const { error } = await client.from("account_settings").upsert({ user_id: uid, settings, version, signature, updated_at: new Date().toISOString() });
+  if (error) return false;
+  lastVersion = version;
+  return true;
 }
 
 /** Forgets what was pushed (tests, and a sign-in as someone else). */
@@ -51,9 +61,14 @@ export function forgetPushedSettings() {
 
 const FIRST_PUSH_MS = 20_000;
 
-// Server start: one push once the account has had time to load, so a worker sees settings saved before this feature.
-export function startAccountSettingsPush(push: () => Promise<unknown> = pushAccountSettings): () => void {
+// Server start: one push once the account has had time to load, so a worker sees settings saved before this feature,
+// and one whenever Settings → Agents saves (your agents travel with your settings, lib/agent-sync.ts).
+export function startAccountSettingsPush(push: () => Promise<unknown> = pushAccountSettings, watch: (fn: () => void) => () => void = onAgentsSaved): () => void {
   const timer = setTimeout(() => void push(), FIRST_PUSH_MS);
   timer.unref();
-  return () => clearTimeout(timer);
+  const unwatch = watch(() => void push());
+  return () => {
+    clearTimeout(timer);
+    unwatch();
+  };
 }

@@ -9,17 +9,20 @@
 import { isHostVerb } from "@weft/client";
 import { widens, type CardUpdateArgs } from "./calls";
 import type { CreateArgs } from "./card-create";
-import type { Handler, HostVerb } from "./types";
+import type { Handler, HostCtx, HostVerb } from "./types";
 
-export { NotFound, requireCard, type Handler, type HostVerb } from "./types";
+export { NotFound, requireCard, type Handler, type HostCtx, type HostVerb } from "./types";
 export { hostFail } from "./http";
 export { messageCall, permissionCall, type CardPatch, type MessageBody, type PermissionBody } from "./calls";
 
-type Fn = (args: never) => Promise<unknown>;
+type Fn = (args: never, ctx?: HostCtx) => Promise<unknown>;
 
 /** A handler's run that loads its module the first time it is called. */
 function lazy<M, K extends keyof M>(load: () => Promise<M>, name: K): M[K] {
-  return (async (args: never) => ((await load())[name] as Fn)(args)) as M[K];
+  return (async (args: never, ctx?: HostCtx) => {
+    const run = (await load())[name] as Fn;
+    return ctx ? run(args, ctx) : run(args);
+  }) as M[K];
 }
 
 // `idempotent: true` marks a pure read, safe to run twice: a host requeues one whose claim's lease ran out (a host that
@@ -72,6 +75,8 @@ export const HOST_API = {
   // A card's dev server: a private address for it (a tunnel, after the owner's Touch ID on their Mac), or its end.
   "dev.open": { elevated: false, run: lazy(() => import("./dev-servers"), "devOpenVerb") },
   "dev.stop": { elevated: false, run: lazy(() => import("./dev-servers"), "devStopVerb") },
+  // A cron made from the card args.id names (the ⏰ popover): it runs as the card does, so it widens nothing.
+  "cron.create": { elevated: false, run: lazy(() => import("./cron-create"), "cronCreateVerb") },
   // The crons and webhooks this host keeps (the Mac's drawers reach a worker's). args.id is the item, not a card.
   "cron.update": { elevated: false, run: lazy(() => import("./lists"), "cronUpdateVerb") },
   "cron.delete": { elevated: false, run: lazy(() => import("./lists"), "cronDeleteVerb") },
@@ -81,6 +86,14 @@ export const HOST_API = {
   // The same command again, and its last lines: neither widens what the card can touch.
   "dev.restart": { elevated: false, run: lazy(() => import("./dev-servers"), "devRestartVerb") },
   "dev.log": { elevated: false, idempotent: true, run: lazy(() => import("./dev-servers"), "devLogVerb") },
+  // The review tour's Start / Restart (its plan's dev command) and its status: as the dev route always guarded them.
+  "dev.start": { elevated: false, run: lazy(() => import("./dev-servers"), "devStartVerb") },
+  "dev.status": { elevated: false, run: lazy(() => import("./dev-servers"), "devStatusVerb") },
+  // Reads: the host's cards (a worker answers with what it publishes, lib/worker-reads.ts) and one card's thread.
+  "card.list": { elevated: false, run: lazy(() => import("./card-list"), "listCardsVerb") },
+  "thread.page": { elevated: false, run: lazy(() => import("./thread"), "threadPageVerb") },
+  "thread.search": { elevated: false, run: lazy(() => import("./thread"), "threadSearchVerb") },
+  "thread.tool": { elevated: false, run: lazy(() => import("./thread"), "threadToolVerb") },
 } satisfies Record<HostVerb, Handler>;
 
 type Table = typeof HOST_API;
@@ -96,9 +109,10 @@ export function needsElevation<V extends HostVerb>(verb: V, args: ArgsOf<V>): bo
   return handler.elevated || Boolean(handler.elevatedFor?.(args));
 }
 
-/** Runs one verb; a name that isn't in HOST_API is refused, which is what makes the table an allowlist. */
-export async function runVerb<V extends HostVerb>(verb: V, args: ArgsOf<V>): Promise<ResultOf<V>> {
+/** Runs one verb; a name that isn't in HOST_API is refused, which is what makes the table an allowlist. `ctx` says who
+ * calls (HostCtx): only this host's own routes pass `{ local: true }`. */
+export async function runVerb<V extends HostVerb>(verb: V, args: ArgsOf<V>, ctx?: HostCtx): Promise<ResultOf<V>> {
   if (!isHostVerb(verb)) throw new Error(`Unknown host verb: ${String(verb)}`);
   const handler = HOST_API[verb] as Handler<ArgsOf<V>, ResultOf<V>>;
-  return handler.run(args);
+  return ctx ? handler.run(args, ctx) : handler.run(args);
 }

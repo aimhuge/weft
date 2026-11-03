@@ -2,7 +2,8 @@
 // list path, past remoteRefusal, and a run from the network narrowed to the mode a new card from it would get.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Cron } from "./cron-types";
-import { command, fakeEngine, fakeGithub, fakePublisher, fakeReg } from "./worker-daemon.harness";
+import type { Card } from "./types";
+import { card, command, fakeEngine, fakeGithub, fakePublisher, fakeReg } from "./worker-daemon.harness";
 import type { DaemonDeps } from "./worker-daemon";
 
 const crons = vi.hoisted(() => new Map<string, Partial<Cron>>());
@@ -10,8 +11,8 @@ vi.mock("./cron-store", () => ({ getCron: (id: string) => crons.get(id) }));
 
 const { listVerb, workerKinds } = await import("./worker-kinds");
 
-function kinds() {
-  const eng = fakeEngine();
+function kinds(cards?: Record<string, Card>) {
+  const eng = fakeEngine(cards);
   eng.host.mockImplementation((verb) => Promise.resolve(verb === "cron.run" ? { card: { id: "run-1" } } : { ok: true }));
   const deps = { reg: fakeReg().reg, engine: eng.engine, publisher: fakePublisher().publisher, checkout: vi.fn(), login: vi.fn(), clone: vi.fn(), github: fakeGithub() } as unknown as DaemonDeps;
   return { kinds: workerKinds(deps, { log: vi.fn(), askForUpdate: () => null }), host: eng.host };
@@ -61,8 +62,32 @@ describe("a worker's crons and webhooks from the Mac", () => {
     await expect(t.kinds.host!(host("cron.update", { id: "k2", patch: { prompt: "x" }, permissionMode: "bypassPermissions" }))).rejects.toThrow(/carries more than the cron/);
   });
 
+  it("makes a cron from one of its cards in the mode a card from the network may start in, naming the card", async () => {
+    const t = kinds();
+    const args = { id: "card-1", prompt: "tidy up", expr: "0 9 * * *", mode: "fresh" };
+    expect(await t.kinds.host!(host("cron.create", args))).toEqual({ cardId: "card-1", result: { ok: true, cardId: "card-1" } });
+    expect(t.host).toHaveBeenLastCalledWith("cron.create", { ...args, permissionMode: "acceptEdits" });
+  });
+
+  it("drops a card that skips prompts to default for its cron, and refuses a card it doesn't run or a smuggled mode", async () => {
+    const t = kinds({ "card-1": card({ permissionMode: "bypassPermissions" }) });
+    await t.kinds.host!(host("cron.create", { id: "card-1", prompt: "p", expr: "0 9 * * *" }));
+    expect(t.host).toHaveBeenLastCalledWith("cron.create", { id: "card-1", prompt: "p", expr: "0 9 * * *", permissionMode: "default" });
+    t.host.mockClear();
+    await expect(t.kinds.host!(host("cron.create", { id: "elsewhere", prompt: "p", expr: "0 9 * * *" }))).rejects.toThrow("That thread isn't on this worker.");
+    await expect(t.kinds.host!(host("cron.create", { id: "card-1", prompt: "p", expr: "0 9 * * *", cwd: "/" }))).rejects.toThrow(/can't change a cron's cwd/);
+    expect(t.host).not.toHaveBeenCalled();
+    await expect(listVerb({ host: t.host, getCard: () => undefined }, "cron.create", { id: "gone" })).rejects.toThrow("That thread isn't on this worker.");
+  });
+
+  it("sets a card's skill through card.update, which the network may send", async () => {
+    const t = kinds();
+    expect(await t.kinds.host!(host("card.update", { id: "card-1", body: { skill: { name: "ship", on: false } } }))).toEqual({ cardId: "card-1", result: { ok: true, cardId: "card-1" } });
+    expect(t.host).toHaveBeenLastCalledWith("card.update", { id: "card-1", body: { skill: { name: "ship", on: false } } });
+  });
+
   it("is a plain function of the engine", async () => {
     const t = kinds();
-    expect(await listVerb({ host: t.host }, "webhook.update", { id: "h1", patch: { registered: true } })).toBeNull();
+    expect(await listVerb({ host: t.host, getCard: () => undefined }, "webhook.update", { id: "h1", patch: { registered: true } })).toBeNull();
   });
 });

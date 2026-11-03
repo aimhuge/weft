@@ -30,6 +30,10 @@ vi.mock("@/lib/agent-store", () => ({ listAgents: vi.fn(() => [{ id: "builder" }
 vi.mock("@/lib/card-repoint", () => ({ repointCard: vi.fn(() => Promise.resolve()) }));
 vi.mock("@/lib/folders", () => ({ resolveFolder: vi.fn((raw: string) => `/resolved${raw}`) }));
 vi.mock("@/lib/tag-store", () => ({ rememberTags: vi.fn() }));
+vi.mock("@/lib/skill-set-actions", () => ({
+  isSkillName: (name: unknown) => typeof name === "string" && /^[\w.@:-]+$/.test(name),
+  setCardSkill: vi.fn(() => Promise.resolve(undefined)),
+}));
 
 const runner = await import("@/lib/runner");
 const store = await import("@/lib/store");
@@ -56,6 +60,19 @@ beforeEach(() => {
 describe("card.update", () => {
   it("refuses a card that isn't there with NotFound", async () => {
     await expect(update({})).rejects.toBeInstanceOf(NotFound);
+  });
+
+  it("turns one skill on or off for the card alone, as the host's skill set has it", async () => {
+    const { setCardSkill } = await import("@/lib/skill-set-actions");
+    addCard();
+    await update({ skill: { name: "ship", on: false } });
+    expect(setCardSkill).toHaveBeenCalledWith("c1", "ship", false);
+    await expect(update({ skill: { name: "../etc", on: true } })).rejects.toThrow("That skill change names no skill.");
+    await expect(update({ skill: { name: "ship" } })).rejects.toThrow("That skill change names no skill.");
+    await expect(update({ skill: "ship" })).rejects.toThrow("That skill change names no skill.");
+    addCard({ id: "pilot", role: "copilot" });
+    await expect(update({ skill: { name: "ship", on: true } }, "pilot")).rejects.toThrow("The copilot's skills aren't set per card.");
+    expect(setCardSkill).toHaveBeenCalledTimes(1);
   });
 
   it("returns the card, and leaves it alone for an empty body", async () => {

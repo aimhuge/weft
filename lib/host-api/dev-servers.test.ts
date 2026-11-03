@@ -6,18 +6,59 @@ const openTunnel = vi.hoisted(() => vi.fn(() => Promise.resolve({ address: "http
 const stopDev = vi.hoisted(() => vi.fn());
 const restartDev = vi.hoisted(() => vi.fn(() => Promise.resolve()));
 const runs = vi.hoisted(() => new Map<string, { log: string }>());
-const getCard = vi.hoisted(() => vi.fn((id: string) => (id === "c1" ? { id, cwd: "/work/weft" } : undefined)));
+const review = vi.hoisted(() => ({ plan: undefined as { dev?: string; url?: string } | undefined }));
+const getCard = vi.hoisted(() => vi.fn((id: string) => (id === "c1" ? { id, cwd: "/work/weft", title: "T", review: review.plan } : undefined)));
+const devStatus = vi.hoisted(() => vi.fn((_id: string, url?: string) => Promise.resolve({ state: url ? "running" : "stopped", url })));
+const reachable = vi.hoisted(() => vi.fn(() => Promise.resolve(false)));
+const startDev = vi.hoisted(() => vi.fn(() => Promise.resolve({ url: "http://localhost:4000" })));
 
 vi.mock("../devserver-list", () => ({ listDev }));
-vi.mock("../devserver", () => ({ stopDev, restartDev, runs, LOG_LIMIT: 100 }));
+vi.mock("../devserver", () => ({ stopDev, restartDev, runs, LOG_LIMIT: 100, devStatus, reachable, startDev }));
 vi.mock("../tunnels", () => ({ openTunnel }));
 vi.mock("../store", () => ({ getCard }));
 
-const { devLogVerb, devOpenVerb, devRestartVerb, devStopVerb, DEV_LOG_LINES } = await import("./dev-servers");
+const { devLogVerb, devOpenVerb, devRestartVerb, devStartVerb, devStatusVerb, devStopVerb, DEV_LOG_LINES } = await import("./dev-servers");
 
 beforeEach(() => {
   vi.clearAllMocks();
   runs.clear();
+  review.plan = undefined;
+});
+
+describe("dev.status", () => {
+  it("probes the review tour's url, and 404s a card that isn't here", async () => {
+    review.plan = { dev: "pnpm dev", url: "http://localhost:3000" };
+    expect(await devStatusVerb({ id: "c1" })).toEqual({ status: { state: "running", url: "http://localhost:3000" } });
+    review.plan = undefined;
+    expect(devStatus).toHaveBeenLastCalledWith("c1", "http://localhost:3000");
+    await devStatusVerb({ id: "c1" });
+    expect(devStatus).toHaveBeenLastCalledWith("c1", undefined);
+    await expect(devStatusVerb({ id: "ghost" })).rejects.toThrow("No such card.");
+  });
+});
+
+describe("dev.start", () => {
+  it("refuses a card whose review tour has no dev command", async () => {
+    await expect(devStartVerb({ id: "c1" })).rejects.toThrow("no dev command");
+    expect(startDev).not.toHaveBeenCalled();
+  });
+
+  it("answers a url that already answers without starting another", async () => {
+    review.plan = { dev: "pnpm dev", url: "http://localhost:3000" };
+    reachable.mockResolvedValueOnce(true);
+    expect(await devStartVerb({ id: "c1" })).toEqual({ status: { state: "running", url: "http://localhost:3000" } });
+    expect(startDev).not.toHaveBeenCalled();
+  });
+
+  it("starts the plan's command in the card's folder, and restart stops Weft's run first", async () => {
+    review.plan = { dev: "pnpm dev", url: "http://localhost:3000" };
+    expect(await devStartVerb({ id: "c1" })).toEqual({ status: { state: "running", url: "http://localhost:4000" } });
+    expect(startDev).toHaveBeenCalledWith("c1", "pnpm dev", "/work/weft", "T", "http://localhost:3000");
+    expect(stopDev).not.toHaveBeenCalled();
+    await devStartVerb({ id: "c1", restart: true });
+    expect(stopDev).toHaveBeenCalledWith("c1");
+    expect(reachable).toHaveBeenCalledOnce();
+  });
 });
 
 describe("dev.open", () => {

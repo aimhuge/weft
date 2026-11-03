@@ -12,8 +12,12 @@ vi.mock("@/lib/store", () => ({
   updateCard: vi.fn((id: string, patch: Partial<Card>) => Object.assign(db.cards.get(id)!, patch)),
   reorderCard: vi.fn(),
   deleteCard: vi.fn((id: string) => db.cards.delete(id)),
+  listCards: vi.fn(() => [...db.cards.values()]),
+  getThread: vi.fn(() => [{ kind: "tool", id: "t1", name: "Bash", input: {}, result: "out", at: 1 }]),
 }));
-vi.mock("@/lib/settings", () => ({ dismissSession: vi.fn() }));
+vi.mock("@/lib/settings", () => ({ dismissSession: vi.fn(), listProjects: vi.fn(() => []) }));
+vi.mock("@/lib/repos", () => ({ projectRoot: vi.fn((cwd: string) => cwd) }));
+vi.mock("@/lib/import", () => ({ loadTranscript: vi.fn(() => Promise.resolve()) }));
 vi.mock("./card-ids", () => ({ cardIds: () => ({ used: () => false, remember: () => undefined }) }));
 vi.mock("@/lib/worktree-pool", () => ({ dropWorktree: vi.fn(() => Promise.resolve()) }));
 vi.mock("@/lib/runner", () => ({
@@ -55,7 +59,11 @@ vi.mock("@/lib/new-card", () => ({
   createCardFromBody: vi.fn((_body: unknown, id: string) => ({ id, title: "t" })),
   startCard: vi.fn(() => ({ started: true })),
 }));
-vi.mock("@/lib/crons", () => ({ updateCron: vi.fn((id: string, patch: object) => ({ id, ...patch })), deleteCron: vi.fn() }));
+vi.mock("@/lib/crons", () => ({
+  updateCron: vi.fn((id: string, patch: object) => ({ id, ...patch })),
+  deleteCron: vi.fn(),
+  createCron: vi.fn((input: object) => ({ id: "k2", ...input })),
+}));
 vi.mock("@/lib/cron-run", () => ({ runCron: vi.fn(() => Promise.resolve({ id: "run-1" })) }));
 vi.mock("@/lib/webhooks", () => ({ updateWebhook: vi.fn((id: string, patch: object) => ({ id, ...patch })), removeWebhook: vi.fn(() => ({ id: "h1" })) }));
 vi.mock("@/lib/skills", () => ({ listSkills: vi.fn(() => [{ name: "ship", description: "d", source: "project" }]) }));
@@ -66,7 +74,15 @@ vi.mock("@/lib/file-access", () => ({
   safePath: vi.fn(() => Promise.resolve({ abs: "/repo/a.ts", rel: "a.ts" })),
   writeFile: vi.fn(() => Promise.resolve({ result: { hash: "h2", mtime: 2 } })),
 }));
-vi.mock("@/lib/devserver", () => ({ LOG_LIMIT: 200_000, stopDev: vi.fn(), restartDev: vi.fn(() => Promise.resolve()), runs: new Map([["c1", { log: "ready\n" }]]) }));
+vi.mock("@/lib/devserver", () => ({
+  LOG_LIMIT: 200_000,
+  stopDev: vi.fn(),
+  restartDev: vi.fn(() => Promise.resolve()),
+  runs: new Map([["c1", { log: "ready\n" }]]),
+  devStatus: vi.fn(() => Promise.resolve({ state: "stopped" })),
+  reachable: vi.fn(() => Promise.resolve(false)),
+  startDev: vi.fn(() => Promise.resolve({})),
+}));
 vi.mock("@/lib/devserver-list", () => ({ listDev: vi.fn(() => Promise.resolve([{ cardId: "c1", url: "http://localhost:3000/" }])) }));
 vi.mock("@/lib/tunnels", () => ({ openTunnel: vi.fn(() => Promise.resolve({ address: "https://weft.zip/t/t1" })) }));
 
@@ -77,7 +93,7 @@ type HostVerb = keyof typeof HOST_API;
 
 beforeEach(() => {
   db.cards.clear();
-  db.cards.set("c1", { id: "c1", title: "t", column: "review", cwd: "/repo" } as Card);
+  db.cards.set("c1", { id: "c1", title: "t", column: "review", cwd: "/repo", review: { dev: "pnpm dev" } } as Card);
   vi.clearAllMocks();
 });
 
@@ -111,6 +127,7 @@ const SAMPLES: Record<HostVerb, { args: unknown; reply: () => unknown }> = {
   "files.unwatch": { args: { id: "c1", path: "a.ts" }, reply: () => ({ path: "a.ts" }) },
   "dev.open": { args: { id: "c1" }, reply: () => ({ address: "https://weft.zip/t/t1" }) },
   "dev.stop": { args: { id: "c1" }, reply: () => ({ ok: true }) },
+  "cron.create": { args: { id: "c1", prompt: "p", expr: "0 9 * * *" }, reply: () => ({ cron: { id: "k2", prompt: "p", expr: "0 9 * * *", cardId: "c1", by: "you" } }) },
   "cron.update": { args: { id: "k1", patch: { enabled: false } }, reply: () => ({ cron: { id: "k1", enabled: false } }) },
   "cron.delete": { args: { id: "k1" }, reply: () => ({ ok: true }) },
   "cron.run": { args: { id: "k1" }, reply: () => ({ card: { id: "run-1" } }) },
@@ -118,6 +135,12 @@ const SAMPLES: Record<HostVerb, { args: unknown; reply: () => unknown }> = {
   "webhook.delete": { args: { id: "h1" }, reply: () => ({ ok: true }) },
   "dev.restart": { args: { id: "c1" }, reply: () => ({ ok: true }) },
   "dev.log": { args: { id: "c1" }, reply: () => ({ log: "ready" }) },
+  "dev.start": { args: { id: "c1" }, reply: () => ({ status: { state: "stopped" } }) },
+  "dev.status": { args: { id: "c1" }, reply: () => ({ status: { state: "stopped" } }) },
+  "card.list": { args: undefined, reply: () => ({ cards: [db.cards.get("c1")], roots: {} }) },
+  "thread.page": { args: { id: "c1" }, reply: () => ({ items: [{ kind: "tool", id: "t1", name: "Bash", input: {}, result: "out", at: 1 }], start: 0, total: 1 }) },
+  "thread.search": { args: { id: "c1", q: "nothing" }, reply: () => ({ matches: [] }) },
+  "thread.tool": { args: { id: "c1", toolId: "t1" }, reply: () => ({ result: "out" }) },
   "settings.get": { args: undefined, reply: () => ({ settings: { maxThreads: 6, keepAliveMinutes: 0, worktreePool: 1, defaultBackend: "claude" } }) },
   "settings.put": { args: { patch: { maxThreads: 6 } }, reply: () => ({ settings: { maxThreads: 6, keepAliveMinutes: 0, worktreePool: 1, defaultBackend: "claude" } }) },
 };
@@ -153,6 +176,7 @@ const ROUTES: Record<CardVerb, string> = {
   "files.unwatch": "files/route.ts",
   "dev.open": "dev/route.ts",
   "dev.stop": "dev/route.ts",
+  "cron.create": "../../crons/route.ts",
   "cron.update": "../../crons/[id]/route.ts",
   "cron.delete": "../../crons/[id]/route.ts",
   "cron.run": "../../crons/[id]/run/route.ts",
@@ -160,6 +184,12 @@ const ROUTES: Record<CardVerb, string> = {
   "webhook.delete": "../../webhooks/[id]/route.ts",
   "dev.restart": "dev/route.ts",
   "dev.log": "dev/route.ts",
+  "dev.start": "dev/route.ts",
+  "dev.status": "dev/route.ts",
+  "card.list": "../route.ts",
+  "thread.page": "thread/route.ts",
+  "thread.search": "thread/search/route.ts",
+  "thread.tool": "thread/tool/[toolId]/route.ts",
 };
 
 const verbs = Object.keys(HOST_API) as HostVerb[];
@@ -189,6 +219,13 @@ describe("HOST_API", () => {
     const first = /const denied = (guard|elevated)\(req[,)]/.exec(write)?.[1] ?? /isWorkerItem\(id\) \? elevated\(req\) : (guard)\(req\)/.exec(write)?.[1];
     expect(first).toBeDefined();
     expect(HOST_API[verb].elevated).toBe(first === "elevated");
+  });
+
+  it("hands a local caller's ctx to the handler, and none otherwise", async () => {
+    const { createCardFromBody } = await import("@/lib/new-card");
+    const local = await runVerb("card.create", { id: "", prompt: "hi", start: false }, { local: true });
+    expect(local.start).toEqual({ started: false });
+    expect(createCardFromBody).toHaveBeenLastCalledWith({ prompt: "hi" });
   });
 
   it("refuses a verb that isn't in the table", async () => {

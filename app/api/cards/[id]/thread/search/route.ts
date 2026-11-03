@@ -1,14 +1,12 @@
-import { fail, guard } from "@/lib/guard";
-import { getCard, getThread } from "@/lib/store";
-import { matchThread } from "@/lib/thread-find";
+import { guard } from "@/lib/guard";
+import { hostFail, runVerb } from "@/lib/host-api";
 
-// Find in a thread: which items hold ?q=, over the whole stored thread and every long tool result the
-// board leaves out of what it loads (lib/thread-find.ts).
+// Find in a thread: which items hold ?q=, over the whole stored thread and every long tool result the board leaves out
+// of what it loads: the thread.search verb (lib/host-api/thread.ts).
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const denied = guard(req, { write: false });
   if (denied) return denied;
   const { id } = await params;
-  if (!getCard(id)) return fail("No such card.", 404);
-  const query = new URL(req.url).searchParams.get("q") ?? "";
-  return Response.json({ matches: matchThread(getThread(id), query) });
+  const q = new URL(req.url).searchParams.get("q") ?? "";
+  return runVerb("thread.search", { id, q }).then((r) => Response.json(r), (err: unknown) => hostFail(err));
 }
