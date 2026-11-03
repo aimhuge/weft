@@ -3,6 +3,7 @@
 // verb through lib/project-host.ts and drawn at once (lib/optimistic-cards.ts), so the tile works the same. The board
 // asks handlersFor and never whether a card is a worker's.
 import type React from "react";
+import { signedAnswer } from "./answer-signer";
 import type { ResumeHow } from "./card-resume";
 import { cardHandlers, type CardActionsCtx } from "./card-handlers";
 import { answerNow, firstNow, otherFirstNow, patchNow, removeNow, stopNow, waitNow } from "./optimistic-cards";
@@ -15,9 +16,13 @@ export function remoteCardHandlers(card: Card, ctx: CardActionsCtx): ReturnType<
   const id = card.id;
   return {
     onOpen: () => ctx.openCard(card),
+    // An Allow carries this Mac's signature, after Touch ID, before it's drawn (lib/answer-signer.ts).
     onAnswer: (allow: boolean) => {
       const pendingId = card.pending?.id;
-      if (pendingId) void answerNow(id, pendingId, allow, () => host.act("card.permission.answer", { id, allow, pendingId })).catch(ctx.notify);
+      if (!pendingId) return;
+      void signedAnswer(card, allow)
+        .then((auth) => answerNow(id, pendingId, allow, () => host.act("card.permission.answer", { id, allow, pendingId, ...(auth ? { auth } : {}) })))
+        .catch(ctx.notify);
     },
     onStop: () => void stopNow(id, () => host.act("card.stop", { id })).catch(ctx.notify),
     // ▶ sends "continue" into its session and Restart its last message again, as on this Mac (lib/resume-actions.ts).

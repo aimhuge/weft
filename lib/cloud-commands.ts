@@ -199,7 +199,7 @@ export function replyCommand(target: { orgId: string; device: string; folder: st
 // folder the card runs in; null when the request is missing the pendingId it has to carry.
 export function answerCommand(
   target: { orgId: string; device: string; folder: string; cardId: string },
-  body: { pendingId: string; allow: boolean; answers?: Record<string, string>; reply?: QuestionReply; grant?: GrantScope; auth?: PasskeyAuth },
+  body: { pendingId: string; allow: boolean; answers?: Record<string, string>; reply?: QuestionReply; grant?: GrantScope; auth?: ApprovalAuth | PasskeyAuth },
 ): NewCommand | null {
   if (!body.pendingId) return null;
   const payload: AnswerPayload = { cardId: target.cardId, pendingId: body.pendingId, allow: body.allow };

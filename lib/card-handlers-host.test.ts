@@ -79,6 +79,29 @@ describe("remoteCardHandlers", () => {
     expect(act).toHaveBeenCalledWith("card.permission.answer", { id: "c1", allow: true, pendingId: "p1" });
   });
 
+  it("signs an Allow with Touch ID first, and sends nothing when it's refused", async () => {
+    const sign = vi.fn(() => Promise.resolve({ device: "mac-1", issuedAt: 5, sig: "c2ln", publicKey: "k" }));
+    vi.stubGlobal("window", { weft: { approval: { sign } } });
+    const pending = { id: "p1", toolName: "Bash", input: {} } as unknown as Card["pending"];
+    remoteCardHandlers(card({ pending }), ctx()).onAnswer(true);
+    await flush();
+    expect(sign).toHaveBeenCalledWith({ cardId: "c1", pendingId: "p1", allow: true });
+    expect(act).toHaveBeenCalledWith("card.permission.answer", { id: "c1", allow: true, pendingId: "p1", auth: { device: "mac-1", issuedAt: 5, sig: "c2ln" } });
+    // A Deny needs none.
+    remoteCardHandlers(card({ pending }), ctx()).onAnswer(false);
+    await flush();
+    expect(sign).toHaveBeenCalledTimes(1);
+    expect(act).toHaveBeenLastCalledWith("card.permission.answer", { id: "c1", allow: false, pendingId: "p1" });
+    act.mockClear();
+    sign.mockResolvedValueOnce(null as never);
+    const c = ctx();
+    remoteCardHandlers(card({ pending }), c).onAnswer(true);
+    await flush();
+    expect(act).not.toHaveBeenCalled();
+    expect(c.notify).toHaveBeenCalledWith(new Error("Not approved, so nothing changed."));
+    vi.unstubAllGlobals();
+  });
+
   it("answers nothing when nothing waits", () => {
     remoteCardHandlers(card(), ctx()).onAnswer(true);
     expect(act).not.toHaveBeenCalled();

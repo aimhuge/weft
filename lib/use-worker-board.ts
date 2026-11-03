@@ -10,6 +10,7 @@ import type { GrantScope } from "./cloud-commands";
 import { applyIntents, onOptimistic, overlayAll, patchNow } from "./optimistic-cards";
 import { hostOf } from "./project-host";
 import { removeOnHost } from "./card-handlers-host";
+import { signedAnswer } from "./answer-signer";
 import { mergeBoard, FULL_READ_EVERY_MS } from "./worker-board-merge";
 import { clearActiveCards, markWholeRead, setActiveCards } from "./worker-poll";
 import { sendWorkerAction } from "./worker-transport";
@@ -139,7 +140,10 @@ export function workerThreadHandlers(card: Card, ctx: ThreadCtx) {
     onAnswer: (allow: boolean, answers?: Record<string, string>, reply?: QuestionReply, grant?: GrantScope) => {
       const pendingId = card.pending?.id;
       if (!pendingId) return Promise.resolve();
-      return sendWorkerAction({ action: "answer", cardId: card.id, pendingId, allow, answers, reply, grant }).then(() => {}, (err: unknown) => {
+      // An Allow carries this Mac's signature, after Touch ID (lib/answer-signer.ts); a refusal sends nothing.
+      return signedAnswer(card, allow, { answers, grant })
+        .then((auth) => sendWorkerAction({ action: "answer", cardId: card.id, pendingId, allow, answers, reply, grant, ...(auth ? { auth } : {}) }))
+        .then(() => {}, (err: unknown) => {
         ctx.notify(err);
         throw err;
       });

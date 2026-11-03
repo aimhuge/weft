@@ -29,6 +29,8 @@ vi.mock("@/lib/worker-board-reads", () => reads);
 const pin = vi.hoisted(() => ({ pinWorkerPasskeys: vi.fn(() => Promise.resolve({ commandId: "cmd-pin" })) }));
 vi.mock("@/lib/worker-pin", () => pin);
 vi.mock("@/lib/worker-thread-reads", () => reads);
+const asks = vi.hoisted(() => ({ readWorkerAsk: vi.fn(() => Promise.resolve({ orgId: "o", device: "worker:w", workerId: "w", card: { id: "c1", title: "T", pending: null } })) }));
+vi.mock("@/lib/worker-ask-read", () => asks);
 
 const route = await import("./route");
 
@@ -43,6 +45,14 @@ beforeEach(() => {
   board.sendWorkerAction.mockResolvedValue({ commandId: "cmd-1" });
   board.workerThreadPage.mockResolvedValue(null);
   board.workerToolOutput.mockResolvedValue("the whole thing");
+});
+
+describe("GET /worker-board?ask=", () => {
+  it("reads a worker card's row for main to sign over", async () => {
+    const res = await route.GET(get("/worker-board?ask=c1"));
+    expect(await res.json()).toEqual({ ask: { orgId: "o", device: "worker:w", workerId: "w", card: { id: "c1", title: "T", pending: null } } });
+    expect(asks.readWorkerAsk).toHaveBeenCalledWith("c1");
+  });
 });
 
 describe("GET /worker-board thread reads", () => {

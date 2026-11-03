@@ -5,6 +5,7 @@
 import path from "node:path";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { accountClient } from "./account";
+import { readApprovalAuth, type ApprovalAuth } from "./approval-sig";
 import { encodeAttachments } from "./attachment-transfer";
 import { signPageAssets } from "./blob-page-sign";
 import { readBlob } from "./blob-read";
@@ -200,7 +201,8 @@ export async function insert(client: SupabaseClient, row: NewCommand): Promise<{
 
 export type WorkerAction =
   | { action: "reply"; cardId: string; text: string }
-  | { action: "answer"; cardId: string; pendingId: string; allow: boolean; answers?: Record<string, string>; reply?: QuestionReply; grant?: GrantScope }
+  // `auth`: this Mac's desktop signature over an Allow (lib/answer-signer.ts), which the worker checks (lib/worker-approve.ts).
+  | { action: "answer"; cardId: string; pendingId: string; allow: boolean; answers?: Record<string, string>; reply?: QuestionReply; grant?: GrantScope; auth?: ApprovalAuth }
   | { action: "stop"; cardId: string }
   | { action: "mode"; cardId: string; mode: PermissionMode }
   | { action: "input"; cardId: string; input: BoardInput }
@@ -249,6 +251,10 @@ async function hostRow(client: SupabaseClient, target: Awaited<ReturnType<typeof
   return typeof typed === "string" ? withAttachments(client, row, typed, dir) : row;
 }
 
+// An answer's row, with this Mac's signature only in the shape a worker reads (lib/approval-sig.ts readApprovalAuth).
+const answerRow = (target: Parameters<typeof answerCommand>[0], body: Extract<WorkerAction, { action: "answer" }>) =>
+  answerCommand(target, { ...body, auth: readApprovalAuth(body.auth) ?? undefined });
+
 // A reply, an answer or a Stop from the desktop: the same rows the web board sends. A command for an offline worker
 // waits in the queue until it's back, and the thread says so.
 export async function sendWorkerAction(body: WorkerAction, client: SupabaseClient = accountClient(), dir = ATTACHMENTS): Promise<{ commandId: string }> {
@@ -261,7 +267,7 @@ export async function sendWorkerAction(body: WorkerAction, client: SupabaseClien
     if (!row) throw new Error(body.action === "mode" ? "A worker doesn't run in that mode." : "That tap can't be sent.");
     return insert(client, row);
   }
-  const row = body.action === "reply" ? replyCommand(target, body.text) : answerCommand(target, body);
+  const row = body.action === "reply" ? replyCommand(target, body.text) : answerRow(target, body);
   if (!row) throw new Error(body.action === "reply" ? "Write a message first." : "Nothing is waiting for an answer.");
   return insert(client, body.action === "reply" ? await withAttachments(client, row, body.text, dir) : row);
 }
