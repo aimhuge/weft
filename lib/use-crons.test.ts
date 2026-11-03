@@ -170,6 +170,20 @@ describe("useCrons", () => {
     expect(cronApi.run).toHaveBeenCalledWith("c1");
   });
 
+  it("reads the list again once a worker has republished it, after a cron made there", async () => {
+    cronApi.list.mockResolvedValue([]);
+    const { result } = renderHook(() => useCrons());
+    vi.useFakeTimers();
+    try {
+      act(() => result.current.later());
+      expect(cronApi.list).not.toHaveBeenCalled();
+      await act(async () => vi.advanceTimersByTimeAsync(WORKER_LIST_SETTLE_MS));
+      expect(cronApi.list).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("reads a worker's crons again once it has republished, after a change, a delete or a run", async () => {
     const w = cron({ id: "worker:w1:k1", worker: "mini" });
     cronApi.list.mockResolvedValue([w]);

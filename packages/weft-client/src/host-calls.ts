@@ -21,6 +21,9 @@ export type CardPatch = {
   // The backlog's drop-onto-card gesture: place this card before `before` (a sibling id)
   // in the card's own column, or at the end when null.
   before?: string | null;
+  // The ✦ chip: one skill or plugin { name, on } for this card alone, the host working out the smallest change from
+  // its own project set (lib/skill-set-actions.ts setCardSkill).
+  skill?: unknown;
 };
 
 export type CardUpdateArgs = { id: string; body: CardPatch };

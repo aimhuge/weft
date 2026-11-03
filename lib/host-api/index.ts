@@ -69,6 +69,8 @@ export const HOST_API = {
   // A card's dev server: a private address for it (a tunnel, after the owner's Touch ID on their Mac), or its end.
   "dev.open": { elevated: false, run: lazy(() => import("./dev-servers"), "devOpenVerb") },
   "dev.stop": { elevated: false, run: lazy(() => import("./dev-servers"), "devStopVerb") },
+  // A cron made from the card args.id names (the ⏰ popover): it runs as the card does, so it widens nothing.
+  "cron.create": { elevated: false, run: lazy(() => import("./cron-create"), "cronCreateVerb") },
   // The crons and webhooks this host keeps (the Mac's drawers reach a worker's). args.id is the item, not a card.
   "cron.update": { elevated: false, run: lazy(() => import("./lists"), "cronUpdateVerb") },
   "cron.delete": { elevated: false, run: lazy(() => import("./lists"), "cronDeleteVerb") },
