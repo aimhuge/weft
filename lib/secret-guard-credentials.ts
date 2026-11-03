@@ -123,7 +123,7 @@ const CREDENTIAL_FILES = [
   ".local/share/com.vercel.cli/auth.json",
   "Library/Application Support/gogcli/credentials.json",
   "Library/Application Support/gogcli/keyring",
-].map((f) => path.join(os.homedir(), f));
+].map((f) => path.join(/*turbopackIgnore: true*/ os.homedir(), f));
 
 // Whether an absolute path is (or a glob reaches) a CLI's credential file.
 export function isCliCredential(at: string, glob?: RegExp): boolean {

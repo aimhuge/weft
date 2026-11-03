@@ -12,7 +12,7 @@ import { worktreeAt } from "./worktrees";
 // lines the way the restart guard does: chained, after `cd`, inside sh -c, and with `git -C dir`. A scratch
 // clone under the temp folder is no card's, so it's left alone.
 
-const SCRATCH = [os.tmpdir(), "/tmp", "/private/tmp"].map((d) => path.resolve(d));
+const SCRATCH = [os.tmpdir(), "/tmp", "/private/tmp"].map((d) => path.resolve(/*turbopackIgnore: true*/ d));
 
 // git's own options that take a value (`git -C dir`, `git -c key=value`).
 const GIT_VALUED = new Set(["-C", "-c", "--git-dir", "--work-tree", "--namespace", "--config-env"]);

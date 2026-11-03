@@ -14,7 +14,7 @@ export function roadmapItems(root: string): string[] {
   for (const rel of ROADMAPS) {
     let text: string;
     try {
-      text = fs.readFileSync(join(root, rel), "utf8");
+      text = fs.readFileSync(/*turbopackIgnore: true*/ join(/*turbopackIgnore: true*/ root, rel), "utf8");
     } catch {
       continue;
     }

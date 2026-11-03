@@ -223,15 +223,15 @@ function imageData(file: string): { data: Buffer; mediaType: ImageMediaType } | 
     let source = file;
     if (fs.statSync(file).size > MAX_IMAGE_BYTES) {
       source = previewPath(file);
-      if (!fs.existsSync(source)) {
+      if (!fs.existsSync(/*turbopackIgnore: true*/ source)) {
         execFileSync("/usr/bin/sips", ["-Z", "2560", "-s", "format", "jpeg", "-s", "formatOptions", "85", file, "--out", source], {
           stdio: "ignore",
           timeout: 20_000,
         });
       }
-      if (fs.statSync(source).size > MAX_IMAGE_BYTES) return null;
+      if (fs.statSync(/*turbopackIgnore: true*/ source).size > MAX_IMAGE_BYTES) return null;
     }
-    const data = fs.readFileSync(source);
+    const data = fs.readFileSync(/*turbopackIgnore: true*/ source);
     const mediaType = sniff(data);
     return mediaType ? { data, mediaType } : null;
   } catch {
@@ -246,7 +246,7 @@ export function messageContent(text: string): Content {
   const blocks: Exclude<Content, string> = [];
   let last = 0;
   for (const match of text.matchAll(MEDIA_REF)) {
-    const file = path.resolve(match[2] ?? match[3] ?? "");
+    const file = path.resolve(/*turbopackIgnore: true*/ match[2] ?? match[3] ?? "");
     if (path.dirname(file) !== ATTACHMENTS_DIR || !IMAGE_EXTENSIONS.has(extensionOf(file))) continue;
     const image = imageData(file);
     if (!image) continue;

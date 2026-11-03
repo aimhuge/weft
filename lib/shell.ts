@@ -55,7 +55,7 @@ export function runShell(cardId: string, command: string): number {
   let ended = false;
 
   // Its own process group, so the timeout stops what it started too (a pipeline, a dev server).
-  const proc = spawn(process.env.SHELL || "/bin/zsh", ["-c", command], {
+  const proc = spawn(/*turbopackIgnore: true*/ process.env.SHELL || "/bin/zsh", ["-c", command], {
     cwd,
     env: { ...cliEnv(), TERM: "dumb", NO_COLOR: "1", GIT_PAGER: "cat", PAGER: "cat" },
     stdio: ["ignore", "pipe", "pipe"],

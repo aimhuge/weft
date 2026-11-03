@@ -55,7 +55,7 @@ const escape = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": 
 
 // The splash screen's art (electron/splash.html), reused so a new card opens on the same scene.
 export const ASSETS = process.env.WEFT_ASSETS_DIR ?? path.join(process.cwd(), "electron", "assets");
-const asset = (name: string) => encodeURI(`file://${path.join(ASSETS, name)}`);
+const asset = (name: string) => encodeURI(`file://${path.join(/*turbopackIgnore: true*/ ASSETS, name)}`);
 
 // Shown the moment a turn starts on a card whose pane is blank, before any model has written anything:
 // a dimmed, slowly drifting scene behind the card's title, your ask (pasted images as thumbnails) and a
@@ -98,7 +98,7 @@ setInterval(tick, 1000);
 // The scenes a working card can get: electron/assets/backdrop-*.jpg, plus the splash's own.
 function backdrops() {
   try {
-    const extra = fs.readdirSync(ASSETS).filter((f) => /^backdrop-.+\.(jpe?g|png|webp)$/i.test(f)).sort();
+    const extra = fs.readdirSync(/*turbopackIgnore: true*/ ASSETS).filter((f) => /^backdrop-.+\.(jpe?g|png|webp)$/i.test(f)).sort();
     return ["splash-speeder.jpg", ...extra];
   } catch {
     return ["splash-speeder.jpg"];

@@ -11,7 +11,7 @@ export const MAX_IDS = 100_000;
 export function cardIds(file = path.join(DATA_DIR, "card-create-ids.json")) {
   const read = (): string[] => {
     try {
-      const ids: unknown = JSON.parse(fs.readFileSync(file, "utf8"));
+      const ids: unknown = JSON.parse(fs.readFileSync(/*turbopackIgnore: true*/ file, "utf8"));
       return Array.isArray(ids) ? ids.filter((x): x is string => typeof x === "string") : [];
     } catch {
       return [];

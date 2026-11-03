@@ -56,7 +56,7 @@ export const statusOf = (entry: ChangelogEntry): EntryStatus =>
 export function readEvents(file = changelogFile()): ChangelogEvent[] {
   let text: string;
   try {
-    text = fs.readFileSync(file, "utf8");
+    text = fs.readFileSync(/*turbopackIgnore: true*/ file, "utf8");
   } catch {
     return [];
   }

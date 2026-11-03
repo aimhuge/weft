@@ -167,7 +167,7 @@ function realPlace(file: string, depth = 0): string {
     } catch {
       // Not there at all: fall through to its folder.
     }
-    return path.join(realPlace(parent, depth + 1), path.basename(file));
+    return path.join(/*turbopackIgnore: true*/ realPlace(parent, depth + 1), path.basename(file));
   }
 }
 

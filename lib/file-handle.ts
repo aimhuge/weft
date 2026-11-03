@@ -33,7 +33,7 @@ export async function openInside(abs: string, root: string, escaped: () => Error
   try {
     const real = (await handlePath(fh.fd)) ?? (await fsp.realpath(abs));
     if (!within(root, real)) throw escaped();
-    const [held, named] = await Promise.all([fh.stat(), fsp.stat(real)]);
+    const [held, named] = await Promise.all([fh.stat(), fsp.stat(/*turbopackIgnore: true*/ real)]);
     if (held.dev !== named.dev || held.ino !== named.ino) throw escaped();
     return fh;
   } catch (err) {

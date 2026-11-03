@@ -114,7 +114,7 @@ export const SERVER_EXIT_FILE = () => path.join(DATA_DIR, "server-exit.json");
 export function consumeServerExit(file = SERVER_EXIT_FILE()): Card | undefined {
   let at: unknown;
   try {
-    at = (JSON.parse(fs.readFileSync(file, "utf8")) as { at?: unknown }).at;
+    at = (JSON.parse(fs.readFileSync(/*turbopackIgnore: true*/ file, "utf8")) as { at?: unknown }).at;
     fs.rmSync(file, { force: true });
   } catch {
     return undefined;

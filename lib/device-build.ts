@@ -46,8 +46,8 @@ export function checkTree(root: string) {
 }
 
 export function sweepBuilds(dir = buildsDir(), now = Date.now()) {
-  if (!fs.existsSync(dir)) return;
-  for (const name of fs.readdirSync(dir)) {
+  if (!fs.existsSync(/*turbopackIgnore: true*/ dir)) return;
+  for (const name of fs.readdirSync(/*turbopackIgnore: true*/ dir)) {
     const file = path.join(dir, name);
     if (now - fs.statSync(file).mtimeMs > KEEP_MS) fs.rmSync(file, { recursive: true, force: true });
   }
