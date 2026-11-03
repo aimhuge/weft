@@ -222,7 +222,9 @@ When a new doc lands in this folder, add it here on the same change.
   (docs/architecture/crons.md). A worker's own crons fire on the worker and are listed on the Mac through
   `lib/worker-lists.ts` / `lib/worker-lists-read.ts`, changed from the Mac's drawer through `lib/worker-list-acts.ts`, and
   the Mac's are listed read-only on a worker through `lib/mac-crons.ts` / `lib/worker-mac-crons.ts`
-  (project-hosts.md#crons-and-webhooks-both-ways-as-built).
+  (project-hosts.md#crons-and-webhooks-both-ways-as-built). A worker card's thread header ⏰ (`components/ThreadCronButton.tsx`)
+  makes one there with the `cron.create` verb (`lib/host-api/cron-create.ts`, held by `cronCreateRefusal` in
+  `packages/weft-client/src/list-policy.ts`, its mode narrowed by `listVerb` in `lib/worker-kinds.ts`).
 - `lib/thread-slots.ts` (+ `maxThreads()` in `lib/settings.ts`, `holdSend` in `lib/runner.ts`, `freeSlots` from the turn end and `lib/scheduler.ts`):
   the cap on threads running at once; docs/architecture/threads-and-sessions.md#cap-on-running-threads.
 - `lib/shell.ts` + `lib/bang.ts` + `app/api/cards/[id]/shell`: `!` in a reply box runs a shell command in the card's folder; its
@@ -368,6 +370,7 @@ When a new doc lands in this folder, add it here on the same change.
   `lib/skill-library.ts` + `lib/skill-usage.ts` + `lib/skill-sets.ts` + `lib/skill-set-actions.ts` + `app/api/skills/set` + `components/SkillsDrawer.tsx` + `components/SkillsChip.tsx`:
   skill sets, a thread gets only its project's skills (an off-list per folder seeded from what its transcripts ran, plus the card's own
   changes), as Claude Code `skillOverrides`/`enabledPlugins` settings when its CLI starts and a filtered skill index for puku and Codex (docs/architecture/skills.md).
+  `lib/use-card-skill-set.ts`: the ✦ chip on a worker's card, the worker's own skills (`skills.list`, `hostSkillView`) and `card.update { skill }`.
   `lib/skill-registry.ts` + `lib/skill-cache.ts` + `lib/skill-install.ts` + `lib/skill-scan*.ts` + `lib/skill-license.ts` + `lib/skill-review*.ts` +
   `app/api/skills/{search,remote,review,scan}` + `components/SkillSearchResults.tsx` + `components/SkillScanPill.tsx`: a ✦ filter also searches skills.sh;
   a hit is kept by hash in `~/.weft/skill-registry`, scanned statically (code, prompt injection, telemetry, license) and by a Sonnet review shown in the
@@ -684,7 +687,11 @@ When a new doc lands in this folder, add it here on the same change.
   `weftSystemPrompt` opens with that soul and `offFor` adds its skills off. `components/SettingsAgentsPage.tsx` +
   `components/AgentEditor.tsx` (Settings → Agents), `lib/use-agents.ts` for the board's pickers: the New thread dialog
   (`AgentSelect`, with Manage agents…), the card menu (`PATCH { agent }` ends the CLI; the next turn resumes under the new
-  soul) and the emoji in `CardFooterMeta` (docs/architecture/agents.md).
+  soul) and the emoji in `CardFooterMeta` (docs/architecture/agents.md). `lib/agent-sync.ts`: your agents and each worker
+  project's default go to your workers as the signed `agents` account setting (mirrored by `lib/host-settings.ts`,
+  pushed on every save through `onAgentsSaved` in `lib/account-settings.ts`, the default filled on the worker by
+  `lib/worker-kinds.ts`; Settings → Agents lists worker projects through `lib/use-worker-projects-once.ts`;
+  `supabase/migrations/20261103120000_account_setting_agents.sql`).
 - `lib/workspace-layout.ts` + `components/CardWorkspace.tsx` + `components/EditorColumn.tsx` + `lib/file-access.ts` + `app/api/cards/[id]/files` + `lib/open-file.ts`: the open card's four columns and the editor column (CodeMirror, TipTap markdown, Changes vs. HEAD); any file path in the thread opens it (docs/architecture/editor.md). The layout is remembered in localStorage, but opening a card reopens the `pane` column: a thread always comes up with the browser pane, never beside an empty slot.
 - `lib/browser-tools.ts`: `mcp__browser__*` tools every thread gets; `lib/browser-act-tools.ts` the ones that act on the page
   (snapshot with refs, click, hover, type_text, press_key, select_option, scroll, wait_for, set_viewport, console_logs,
