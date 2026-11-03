@@ -13,7 +13,7 @@ import type { NonceBook } from "./widen-nonces";
 export interface WorkerWiden {
   // This worker's id: the host a widening's message names.
   host: string;
-  signers: Pick<HostSigners, "verify" | "verifyPasskey" | "endorse">;
+  signers: Pick<HostSigners, "verify" | "verifyPasskey" | "endorse"> & Partial<Pick<HostSigners, "approvers">>;
   nonces: NonceBook;
   // The project folders under its work root (lib/worker-folders.ts), and the checkout one names (lib/worker-paths.ts).
   projects(): string[];
@@ -23,6 +23,10 @@ export interface WorkerWiden {
   nameFolder(cardId: string, folder: string): void;
   // Signs with the pairing's sign key (sign-key.json), for a pin's receipt; absent on a token-enrolled box.
   signHeld?: (message: string) => string;
+  // The workspace this worker publishes to (its config's orgId) and the folder name a card's row carries
+  // (lib/worker-publish.ts folderOf): the names a signed answer is rebuilt from (lib/worker-approve.ts).
+  orgId?: string;
+  folderOf?: (card: Card) => string;
   now?: () => number;
 }
 

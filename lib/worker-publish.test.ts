@@ -81,6 +81,9 @@ describe("the publisher", () => {
     p.hear({ type: "card", card: card() });
     await p.flush();
     expect(putCard).toHaveBeenCalledWith("card-1", "acme", expect.anything(), false);
+    // The same name a signed answer is rebuilt with (lib/worker-approve.ts).
+    expect(p.folderOf(card({ id: "card-1" }))).toBe("acme");
+    expect(p.folderOf(card({ id: "card-2", cwd: "/srv/work/other" }))).toBe("other");
   });
 
   it("falls back to the card's own folder when none was named", async () => {

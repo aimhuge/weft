@@ -6,6 +6,7 @@ import { createHostSigners } from "./host-signers";
 import { passkeyOrigins } from "./passkey-verify";
 import { sharedNonceBook } from "./widen-nonces";
 import type { TerminalDeps } from "./host-line-terminal";
+import type { Card } from "./types";
 import { spawnPty } from "./worker-pty";
 import { terminalAllow, type WorkerWiden } from "./worker-widen";
 
@@ -16,6 +17,9 @@ export interface WorkerWidenOptions {
   listFolders: (root: string) => string[];
   repoPath: (root: string, folder: string) => string;
   nameFolder: (cardId: string, folder: string) => void;
+  // The workspace and a card's published folder name, for a signed answer (lib/worker-approve.ts).
+  orgId?: string;
+  folderOf?: (card: Card) => string;
   signHeld?: (message: string) => string;
   env?: { NODE_ENV?: string; WEFT_PASSKEY_DEV_ORIGIN?: string };
 }
@@ -29,6 +33,8 @@ export function workerWidenFor(o: WorkerWidenOptions): WorkerWiden {
     root: o.root,
     projectPath: (folder) => o.repoPath(o.root, folder),
     nameFolder: o.nameFolder,
+    ...(o.orgId !== undefined ? { orgId: o.orgId } : {}),
+    ...(o.folderOf ? { folderOf: o.folderOf } : {}),
     ...(o.signHeld ? { signHeld: o.signHeld } : {}),
   };
 }

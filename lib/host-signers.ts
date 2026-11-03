@@ -99,7 +99,11 @@ export function createHostSigners(home: string, origins: readonly PasskeyOrigin[
     return e.generation;
   }
 
-  return { read, verify, verifyPasskey, endorse, file };
+  // How many keys can approve an answer here: the pinned Mac's and the passkeys it endorsed (lib/worker-approve.ts). None
+  // (a token-enrolled box), and an unsigned Allow still runs, as on a Mac with nothing paired.
+  const approvers = () => macs.pinned().length + read().length;
+
+  return { read, verify, verifyPasskey, endorse, approvers, file };
 }
 
 export type HostSigners = ReturnType<typeof createHostSigners>;

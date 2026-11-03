@@ -17,6 +17,10 @@ describe("workerWidenFor", () => {
     expect(fs.existsSync(path.join(home, "widen-nonces.json"))).toBe(true);
     expect((await w.signers.verify({ device: "d", message: "m", sig: "s" })).ok).toBe(false);
     expect(workerWidenFor({ home, workerId: "w1", root: "/w", listFolders: () => [], repoPath: () => "", nameFolder }).root).toBe("/w");
+    expect(w.orgId).toBeUndefined();
+    // The names a signed answer is rebuilt from, when the daemon passes them.
+    const folderOf = vi.fn();
+    expect(workerWidenFor({ home, workerId: "w1", root: "/w", listFolders: () => [], repoPath: () => "", nameFolder, orgId: "org-1", folderOf })).toMatchObject({ orgId: "org-1", folderOf });
   });
 
   it("hands the line a terminal that checks the same approvals", async () => {

@@ -19,6 +19,8 @@ export interface ApprovalDeps {
   now: number;
   // The passkey half: this Mac's own names and main's check. Absent, a passkey answer is refused.
   passkey?: PasskeyDeps;
+  // What an unsigned Allow is refused with, when this host words it its own way (a worker: lib/worker-approve.ts).
+  unsigned?: string;
 }
 
 export const UNSIGNED_REFUSED = "Approve this on your paired phone: an Allow from the web needs Face ID there. (Settings → Sync can let the web approve.)";
@@ -56,5 +58,5 @@ export async function approvalProblem(
   const isPermission = !pending?.questions?.length && !pending?.elicitation;
   if (!answer.allow || !isPermission) return null;
   if (deps.webApprovals) return null;
-  return (await deps.approvers()) > 0 ? UNSIGNED_REFUSED : null;
+  return (await deps.approvers()) > 0 ? (deps.unsigned ?? UNSIGNED_REFUSED) : null;
 }

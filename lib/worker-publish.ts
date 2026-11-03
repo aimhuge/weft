@@ -135,6 +135,8 @@ export function createPublisher(reg: Pick<Registry, "putCard" | "putItems">, sou
       return () => void mirrors.delete(fn);
     },
     nameFolder: (cardId: string, folder: string) => void folders.set(cardId, folder),
+    // The folder name a card's row carries: what a passkey's approval names it by (lib/worker-approve.ts).
+    folderOf,
     // Marks a card so the next flush sends its row, for a card whose row may be out of date but whose items aren't.
     touch: (cardId: string) => void (mark(cardId).card = true),
     // Marks a card so the next flush sends it whole (the card row, then every item it has).

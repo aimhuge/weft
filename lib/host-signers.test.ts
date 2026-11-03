@@ -42,6 +42,18 @@ describe("createHostSigners: the pairing Mac", () => {
   });
 });
 
+describe("createHostSigners: approvers", () => {
+  it("counts the pinned Mac and the passkeys it endorsed, and none on a token-enrolled box", async () => {
+    expect(createHostSigners(home(), ORIGINS, memoryMacs()).approvers()).toBe(0);
+    const mac = macSigner();
+    const s = createHostSigners(home(), ORIGINS, memoryMacs([mac.key]));
+    expect(s.approvers()).toBe(1);
+    const { raw } = await endorsed(mac);
+    await s.endorse(raw, "w1", NOW);
+    expect(s.approvers()).toBe(2);
+  });
+});
+
 describe("createHostSigners: passkeys the Mac endorsed", () => {
   it("pins the endorsed set, checks an assertion and keeps its counter, and drops a passkey a newer set leaves out", async () => {
     const mac = macSigner();
