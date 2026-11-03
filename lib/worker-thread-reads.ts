@@ -2,10 +2,11 @@
 // workerThreadPage), through app/api/worker-board as the signed-in account, so RLS decides:
 //
 // - workerThreadSearch: ⌘F over the whole thread (lib/thread-find.ts), not just the loaded window. The card's
-//   cloud_thread_items rows are read in pages and matched here, as app/api/cards/[id]/thread/search does over the local
-//   store. A sealed row (lib/sync-seal.ts) has no key on this server and is drawn as its 🔒 stand-in, so it matches
-//   nothing. A long tool result cut out of its item is paged from cloud_tool_outputs and put back in its item before
-//   matching, so a hit inside it lands on that item's index, as it does on a local card; a sealed one stays out.
+//   cloud_thread_items rows are read in batches, opened and matched here, as weft.zip does for a Mac's thread
+//   (lib/cloud-thread-search.ts): a worker holding a key grant seals its rows (lib/sync-seal.ts), and this Mac's main
+//   holds the key (lib/worker-board-open.ts), so a sealed row is opened before matching; one that won't open is its 🔒
+//   stand-in and matches nothing. A long tool result cut out of its item is paged from cloud_tool_outputs, opened, and
+//   put back in its item before matching, so a hit inside it lands on that item's index, as it does on a local card.
 // - workerBlobUrls: the URLs a thread's pictures load from. A synced item names an image by its blob ref
 //   (`blob:sha256:<hex>`), which no <img> can load, so the thread view asks for them signed, the way the web board
 //   signs its own (lib/blob-urls.ts resolveBlobUrls), and draws them with lib/worker-blob-view.ts.
@@ -14,7 +15,8 @@ import { accountClient } from "./account";
 import { resolveBlobUrls } from "./blob-urls";
 import { isBlobRef } from "./cloud-sync-types";
 import { syncOrgId } from "./cloud-sync";
-import { isSealed } from "./sync-seal";
+import { isSealed, SEALED_TEXT } from "./sync-seal";
+import { openItemRows, openOutput, openPictureUrls } from "./worker-board-open";
 import { matchThread, type FindMatch } from "./thread-find";
 import type { ThreadItem } from "./types";
 
@@ -31,14 +33,14 @@ async function accountOrg(client: SupabaseClient): Promise<string | null> {
   return uid ? syncOrgId(client, uid) : null;
 }
 
-// A row's item as find reads it: a sealed one (no key here) or one that isn't an item reads as a hole.
+// A row's item as find reads it: one still sealed, the 🔒 stand-in of one that wouldn't open, or one that isn't an item
+// reads as a hole.
 function findable(item: unknown): ThreadItem | null {
   if (isSealed(item)) return null;
+  if ((item as { text?: unknown } | null)?.text === SEALED_TEXT) return null;
   return typeof item === "object" && item !== null && "kind" in item ? (item as ThreadItem) : null;
 }
 
-// A sealed output's result is its sealed JSON (lib/sync-seal.ts sealToolResult): no key here, so it's left out.
-const SEALED_OUTPUT = '{"$sealed":1';
 
 // Puts the full results of a card's cut tool calls back in their items, read in pages. False when they can't be read.
 async function fillCutResults(client: SupabaseClient, org: string, cardId: string, items: (ThreadItem | null)[]): Promise<boolean> {
@@ -53,7 +55,10 @@ async function fillCutResults(client: SupabaseClient, org: string, cardId: strin
     const rows = data as { tool_id: string; result: string }[];
     for (const row of rows) {
       const found = cut.get(row.tool_id);
-      if (found && !row.result.startsWith(SEALED_OUTPUT)) items[found[0]] = { ...found[1], result: row.result };
+      if (!found) continue;
+      const result = await openOutput(org, cardId, row.tool_id, row.result);
+      // One that won't open here (or only looks sealed) stays out.
+      if (result !== SEALED_TEXT && !result.startsWith('{"$sealed":1')) items[found[0]] = { ...found[1], result };
     }
     if (rows.length < SEARCH_PAGE) break;
   }
@@ -67,9 +72,9 @@ export async function workerThreadSearch(cardId: string, query: string, client: 
   if (!org) return null;
   const items: (ThreadItem | null)[] = [];
   for (let from = 0; from < SEARCH_MAX; from += SEARCH_PAGE) {
-    const { data, error } = await client.from("cloud_thread_items").select("seq, item").eq("org_id", org).eq("card_id", cardId).order("seq", { ascending: true }).range(from, from + SEARCH_PAGE - 1);
+    const { data, error } = await client.from("cloud_thread_items").select("seq, item, at").eq("org_id", org).eq("card_id", cardId).order("seq", { ascending: true }).range(from, from + SEARCH_PAGE - 1);
     if (error) return null;
-    const rows = data as { seq: number; item: unknown }[];
+    const rows = await openItemRows(org, (data as { seq: number; item: unknown; at?: string }[]).map((r) => ({ ...r, card_id: cardId })));
     for (const row of rows) items[row.seq] = findable(row.item);
     if (rows.length < SEARCH_PAGE) break;
   }
@@ -82,5 +87,6 @@ export async function workerBlobUrls(refs: readonly string[], client: SupabaseCl
   const wanted = [...new Set(refs.filter(isBlobRef))].slice(0, BLOB_REFS_MAX);
   if (!wanted.length) return {};
   const org = await accountOrg(client);
-  return org ? resolveBlobUrls(client, org, wanted) : {};
+  // A sealed picture opens here into a data: URL (lib/worker-board-open.ts); a plain one keeps its signed URL.
+  return org ? openPictureUrls(client, org, await resolveBlobUrls(client, org, wanted)) : {};
 }

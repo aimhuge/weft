@@ -8,15 +8,14 @@
 //   line      both ways       ping/pong (the heartbeat and the chip's ms), offer/answer (renegotiation over the line)
 //   terminal  board → worker  { t: "open", folder, cols, rows, widen } then input/resize; worker → board opened/data/exit/refused.
 //             Only with a signed approval for that folder (lib/host-line-terminal.ts); without one, TERMINAL_REFUSAL.
+import type { IceServer, LineOffer } from "@weft/client";
 import type { HostResult } from "./host-command";
 import type { ScreenQuality } from "./rtc-signal";
 import type { Card, ThreadItem } from "./types";
 
-export const LINE_CHANNELS = { host: "host", events: "events", control: "line", terminal: "terminal" } as const;
-// The sealed offer's purpose: a screen offer (RTC_PURPOSE) can't be replayed as a line, or the other way round.
-export const LINE_PURPOSE = "rtc-line";
-export const lineTopic = (token: string) => `worker-line:${token}`;
-
+// The channel labels, the sealed offer's purpose and shape, and its topic are @weft/client's, so the phone and weft.zip
+// open the same line (packages/weft-client/src/line-offer.ts).
+export { LINE_CHANNELS, LINE_PURPOSE, lineTopic, type IceServer, type LineOffer } from "@weft/client";
 export const TERMINAL_REFUSAL =
   "A terminal on a worker opens only with your approval: Touch ID in Weft on your Mac, the Mac this worker was paired with (weft-worker enrol <code> --re-pair on the box).";
 
@@ -29,23 +28,6 @@ export type TerminalOut = { t: "opened" } | { t: "data"; data: string } | { t: "
 
 // A terminal's size: whole cells, within what a screen could show.
 const cells = (v: unknown, max: number): v is number => typeof v === "number" && Number.isInteger(v) && v > 0 && v <= max;
-
-// A STUN or TURN server, as RTCPeerConnection and werift take it.
-export interface IceServer {
-  urls: string | string[];
-  username?: string;
-  credential?: string;
-}
-
-// The sealed answer comes back on this topic as the screen's does (rtc-signal.ts ANSWER_EVENT).
-// What the board seals to the worker's key: its offer, the one-time key the answer comes back under, the topic it
-// listens on, and the ICE servers both sides use (TURN credentials are minted per board, lib/rtc-ice.ts).
-export interface LineOffer {
-  sdp: string;
-  key: string;
-  topic: string;
-  ice: IceServer[];
-}
 
 export interface HostCall {
   id: number;

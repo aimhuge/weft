@@ -6,7 +6,7 @@
 import type { DeviceKind, DeviceView } from "@/lib/device-registry";
 import { newestVersion, versionText } from "@/lib/device-version";
 import { timeAgo } from "@/lib/format";
-import { useDevices } from "@/lib/use-devices";
+import { sealLine, useDevices } from "@/lib/use-devices";
 import { useNow } from "@/lib/use-now";
 import { useState } from "react";
 import { useWorkerConnectors } from "@/lib/use-worker-connectors";
@@ -74,6 +74,26 @@ function AddWorker({ devices }: { devices: ReturnType<typeof useDevices> }) {
   );
 }
 
+// Whether a worker's threads go up sealed (docs/architecture/mobile-security.md#sealing-on-a-weft-worker): "Threads sealed
+// (key v3)", or "Threads in the clear · Seal…" for a paired one, folded into the line under its name.
+function WorkerSeal({ d, devices }: { d: DeviceView; devices: ReturnType<typeof useDevices> }) {
+  const line = sealLine(devices.keys, d.id);
+  return (
+    <>
+      {" · "}
+      {line.text}
+      {!line.sealed && d.hasSignKey && devices.canSeal && (
+        <>
+          {" · "}
+          <button type="button" className="text-ink underline-offset-2 hover:underline" onClick={() => void devices.seal(d)} aria-label={`Seal ${d.name}'s threads`} title="Give this worker the key to your sealed threads, after Touch ID, so weft.zip only ever holds its threads, pages and files as ciphertext">
+            Seal…
+          </button>
+        </>
+      )}
+    </>
+  );
+}
+
 // A live device's buttons: a worker's connectors, kept secrets, re-pin, passkeys and re-pair, and Revoke for every kind.
 function DeviceActions({ d, devices, connectors, now, onRepair, onKeep }: { d: DeviceView; devices: ReturnType<typeof useDevices>; connectors: ReturnType<typeof useWorkerConnectors>; now: number; onRepair: () => void; onKeep: () => void }) {
   return (
@@ -131,6 +151,7 @@ export default function DevicesSettings() {
                 <div className="truncate text-[13px] text-ink">{d.name}</div>
                 <div className={SUBTLE}>
                   {holdsLine(d)} · {seenLine(d, now, newest)}
+                  {d.kind === "worker" && !d.revokedAt && <WorkerSeal d={d} devices={devices} />}
                   {devices.untaken.includes(d.id) && <span className="text-warn" title="This Mac changed which passkeys this worker trusts, and the worker hasn't confirmed it yet: until it does, a passkey you revoked may still approve there. Weft keeps sending it."> · passkeys not updated yet</span>}
                 </div>
                 {d.note && !d.revokedAt && <div className="text-[12.5px] text-warn">{d.note}</div>}

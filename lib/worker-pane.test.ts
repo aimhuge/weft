@@ -72,7 +72,7 @@ describe("ownPageCall", () => {
 describe("openOnWorker", () => {
   it("uploads a page before it answers, and notes it on the card", async () => {
     const said = await openOnWorker("c1", `file://${page}#step-2`, browse);
-    expect(upload).toHaveBeenCalledWith(page);
+    expect(upload).toHaveBeenCalledWith(page, "c1");
     expect(notePage).toHaveBeenCalledWith("c1", `file://${page}#step-2`);
     expect(said).toContain("The plan");
     expect(said).toContain("in the pane");
