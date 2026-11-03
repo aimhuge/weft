@@ -30,7 +30,6 @@ const OVERSIZE = {
   "components/NewCardDialog.tsx": 331,
   "lib/hotkeys.test.ts": 322,
   "lib/web-board.test.ts": 431,
-  "lib/board-tools.ts": 316,
   "lib/login.ts": 297,
   "lib/repos.test.ts": 307,
   "components/RepoPicker.tsx": 304,

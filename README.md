@@ -1372,7 +1372,9 @@ Nothing runs on your Mac. `pnpm resend -- create|verify|webhook` sets up the Res
   the CLI the card runs on.
 - `lib/board-tools.ts` gives the copilot its board tools, and every board thread a small `board`
   server with just `list_cards` and `create_card` (a card made this way records its `parentId`; `list_cards` prints
-  one line per open card, newest first, and lists done and archived ones only with `include_done`); `lib/copilot.ts` keeps its thread, which
+  one line per open card, newest first, and lists done and archived ones only with `include_done`). Your Weft Workers' cards
+  are on that board too: `list_cards` lists them, `read_thread` reads them, `create_card` into a `worker://` project starts
+  the thread on that worker, and the copilot's acts on one go to its worker (`lib/board-tools-hosts.ts`); `lib/copilot.ts` keeps its thread, which
   has the fixed id `copilot` and is left off the board.
 - `plugin/` is Weft's own skills, loaded into every board thread with the SDK's `plugins` option;
   `lib/skills.ts` lists them with yours and a project's. `lib/automations.ts` turns the Settings
