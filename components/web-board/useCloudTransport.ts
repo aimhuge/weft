@@ -25,6 +25,7 @@ import type { PageUpdate, ThreadTransport } from "@/lib/thread-transport";
 import type { ToolResultSource } from "@/lib/use-tool-result";
 import { webHost } from "@/lib/web-host";
 import { webUploads, type WebUploads } from "@/lib/web-upload";
+import { webKeyring } from "@/lib/web-sync-key";
 import type { ThreadItem } from "@/lib/types";
 import type { CommandResult } from "@/lib/worker-command-wait";
 import { collectBlobRefs, rewriteBlobRefs } from "@/lib/web-board";
@@ -59,9 +60,12 @@ export interface CloudTransportInput {
   tools: ToolResultSource;
 }
 
-// The visitor's pasted files, up to the workspace's blobs as them; one already there counts as uploaded.
+// The visitor's pasted files, up to the workspace's blobs as them; one already there counts as uploaded. A browser that
+// holds a workspace key keeps each until its message goes, to seal it for a sealed card (lib/web-upload.ts).
 export function webUploadsFor(client: SupabaseClient, orgId: string): WebUploads {
   return webUploads({
+    orgId,
+    holds: () => webKeyring().size > 0,
     put: async (sha, bytes, mime) => {
       const { error } = await client.storage.from(BLOB_BUCKET).upload(`${orgId}/${sha}`, bytes, { contentType: mime, upsert: false });
       return !error || /exists|duplicate/i.test(error.message) ? null : error.message;

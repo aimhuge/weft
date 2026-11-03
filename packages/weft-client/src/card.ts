@@ -13,6 +13,9 @@ export type Column = (typeof COLUMNS)[number]["id"];
 
 export type Backend = "claude" | "puku" | "codex" | "goose";
 
+// How hard a thread's model thinks, where its CLI offers the choice.
+export type Effort = "low" | "medium" | "high" | "xhigh" | "max";
+
 // bypassPermissions is "YOLO": every tool runs without asking.
 export type PermissionMode = "default" | "acceptEdits" | "auto" | "bypassPermissions";
 export const MODES: PermissionMode[] = ["default", "acceptEdits", "auto", "bypassPermissions"];

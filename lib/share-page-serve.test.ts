@@ -39,6 +39,14 @@ describe("serveBlobPage", () => {
     expect(await res.text()).toBe(html);
   });
 
+  it("draws the 🔒 stand-in for a page sealed before its card was shared", async () => {
+    const sealed = new Uint8Array([0x77, 0x73, 0x62, 0x31, 0, 0, 0, 1, 7, 7]);
+    const res = await serveBlobPage(serviceWith({ data: new Blob([sealed], { type: "text/plain" }), error: null }), "org-1", "a".repeat(64));
+    expect(res.headers.get("content-type")).toBe("text/html; charset=utf-8");
+    expect(res.headers.get("content-security-policy")).toBe("sandbox allow-scripts allow-popups allow-forms");
+    expect(await res.text()).toContain("Sealed");
+  });
+
   it("signs a pane page's asset refs only when asked, and only for HTML", async () => {
     const html = `<!doctype html><img src="blob:sha256:x">`;
     const signed = await serveBlobPage(serviceWith({ data: new Blob([html], { type: "text/plain" }), error: null }), "org-1", "a".repeat(64), { signAssets: true });

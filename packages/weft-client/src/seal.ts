@@ -8,15 +8,10 @@
 // X25519 is libsodium's (crypto_scalarmult, what node's diffieHellman computes for x25519); HKDF and AES-GCM are Web
 // Crypto's, since libsodium's WebAssembly build has no AES-GCM. Both come in from the caller: libsodium-wrappers and
 // globalThis.crypto.subtle in a browser, react-native-libsodium and a subtle polyfill on the phone.
+import type { Sealed } from "./sealed";
 import type { Sodium } from "./sodium-like";
 
-export interface Sealed {
-  v: 1;
-  epk: string;
-  iv: string;
-  ct: string;
-  tag: string;
-}
+export type { Sealed };
 
 export interface SealSodium extends Pick<Sodium, "base64_variants" | "to_base64" | "from_base64" | "from_string"> {
   to_string(input: Uint8Array): string;

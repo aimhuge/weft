@@ -17,6 +17,15 @@ Code that runs the same in React Native (Hermes), a browser and Node, with no I/
   (`ACCOUNT_SETTINGS`, `HOST_SETTINGS`, `pickSettings`, `foreignSetting`).
 - **View models**: `extractStatus` (the BOARD STATUS line), `paneFromUrl` / `paneFor` / `screenPage` (the pane as
   the thread tells it), `showMinis` / `followUrl` (the show rail), `clip` / `timeAgo` / `shortToolName`.
+- **Threads and boards**: thread paging (`pageThread`, `applyThreadEvent`, `mergeOlderPage`, and `pageFromItemRows` /
+  `pageUpdateWith` for synced rows, given the caller's opener), find (`matchThread`, `spotAt`), the pending ask
+  (`PendingPermission`, `pendingView`) and pending sends (`unsent`), and board grouping (`groupByColumn`, `SORTERS`,
+  `listGroups`, `summarizeProjects`, `headerCounts`, typed over a structural `BoardCard`).
+- **Cloud commands**: the `cloud_commands` row shapes, the builders a board inserts (`newCardCommand`, given the
+  caller's model-to-CLI lookup, `replyCommand`, `answerCommand`, `stopCommand`) and the readers (`replyBody`,
+  `answerBody`, `stopBody`, `commandText`).
+- **The transport's shape**: `ThreadTransport` and `PageUpdate` (its `useLive` / `useView` are hooks in each app, plain
+  function types here) and `mergePage` for a polling transport.
 - **Approval messages**: `approvalMessage`, `signApproval`, `verifyApproval`, `readApprovalAuth`, given the caller's
   libsodium as a `Sodium` (libsodium-wrappers on the Mac and the web, react-native-libsodium on the phone).
 
@@ -34,8 +43,8 @@ Code that runs the same in React Native (Hermes), a browser and Node, with no I/
 - No `console` and no timers (`setTimeout`, `setInterval`): the tsconfig's `types: []` leaves them undeclared on
   purpose, since logging and scheduling belong to the platform edge. Take a callback or a clock argument instead.
 - No imports from the app (`@/`, `lib/`): move the piece in, and leave a re-export at its old `lib/` path.
-- No handlers, stores, network clients or timers: a host's handlers stay in `lib/host-api`, the transports in
-  `lib/*-transport.ts` until they are split into a pure core and a platform edge.
+- No handlers, stores, network clients or timers: a host's handlers stay in `lib/host-api`, the transports themselves
+  (their fetches, Supabase reads and React hooks) in `lib/*-transport.ts`; only their shape lives here.
 
 ## Working on it
 

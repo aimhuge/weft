@@ -6,6 +6,7 @@ import { endorseMessage, ENDORSE_MAX_AGE_MS, ENDORSE_OLD, readEndorsement, type 
 import { createHostSigners, NO_MAC } from "./host-signers";
 import { macSigner, memoryMacs } from "./mac-signer.harness";
 import { makePasskey } from "./passkey.harness";
+import { headMessage, HEADS_UNREAD } from "./passkey-head";
 import { PASSKEY_ORIGIN, PASSKEY_RP_ID } from "./passkey-verify";
 
 const ORIGINS = [{ origin: PASSKEY_ORIGIN, rpId: PASSKEY_RP_ID }];
@@ -113,6 +114,48 @@ describe("createHostSigners: passkeys the Mac endorsed", () => {
     expect(createHostSigners(h, ORIGINS, memoryMacs()).read()).toEqual([]);
     fs.writeFileSync(path.join(h, "passkeys.json"), JSON.stringify([{ device: "d" }]));
     expect(createHostSigners(h, ORIGINS, memoryMacs()).read()).toEqual([{ device: "d" }]);
+  });
+});
+
+describe("createHostSigners: passkeys behind the Mac's latest head", () => {
+  const head = (mac: ReturnType<typeof macSigner>, generation: number, worker = "w1") => {
+    const h = { worker, generation, issuedAt: NOW };
+    return { ...h, sig: mac.sign(headMessage(h)) };
+  };
+
+  it("refuses a passkey while the set held is older than the newest head the pairing Mac signed, and takes it once current", async () => {
+    const mac = macSigner();
+    const h = home();
+    let rows: unknown[] = [head(mac, 1)];
+    const s = createHostSigners(h, ORIGINS, memoryMacs([mac.key]), { worker: "w1", heads: () => Promise.resolve(rows) });
+    const { pk, key, raw } = await endorsed(mac);
+    await s.endorse(raw, "w1", NOW);
+    const body = async () => ({ device: key.device, credId: key.credId, message: "hello", ...(await pk.sign("hello")) });
+    expect(await s.verifyPasskey(await body())).toEqual({ ok: true });
+    // The Mac revoked it (generation 2), and the pin row never came: the head alone stops the passkey.
+    rows = [head(mac, 2), head(mac, 1), head(macSigner(), 50), { worker: "w1", generation: 70, issuedAt: NOW, sig: "junk" }];
+    expect((await s.verifyPasskey(await body())).reason).toMatch(/holds set 1, your Mac signed 2/);
+    // A session puts the old head back on top, or the log is pruned: the worker remembers the highest it saw.
+    rows = [head(mac, 1)];
+    expect((await s.verifyPasskey(await body())).reason).toMatch(/holds set 1, your Mac signed 2/);
+    rows = [];
+    expect((await createHostSigners(h, ORIGINS, memoryMacs([mac.key]), { worker: "w1", heads: () => Promise.resolve(rows) }).verifyPasskey(await body())).ok).toBe(false);
+    // The set that keeps it, at generation 2, lands: current again, and the remembered head survives the write.
+    await s.endorse(endorsement(mac, [key], 2), "w1", NOW);
+    expect(await s.verifyPasskey(await body())).toEqual({ ok: true });
+    expect((JSON.parse(fs.readFileSync(s.file, "utf8")) as { seen: number }).seen).toBe(2);
+  });
+
+  it("refuses a passkey when the log can't be read, and checks nothing without a log", async () => {
+    const mac = macSigner();
+    const { pk, key, raw } = await endorsed(mac);
+    const down = createHostSigners(home(), ORIGINS, memoryMacs([mac.key]), { worker: "w1", heads: () => Promise.reject(new Error("offline")) });
+    await down.endorse(raw, "w1", NOW);
+    const body = { device: key.device, credId: key.credId, message: "hello", ...(await pk.sign("hello")) };
+    expect(await down.verifyPasskey(body)).toEqual({ ok: false, reason: HEADS_UNREAD });
+    const none = createHostSigners(home(), ORIGINS, memoryMacs([mac.key]));
+    await none.endorse(raw, "w1", NOW);
+    expect(await none.verifyPasskey(body)).toEqual({ ok: true });
   });
 });
 

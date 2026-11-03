@@ -197,4 +197,16 @@ describe("registry: the board tools", () => {
     expect(calls).toEqual([{ fn: "worker_mac_crons", args: { p_key: key } }]);
     expect(await registry(fakeRpc().rpc, key).macCrons()).toEqual([]);
   });
+
+  it("reads its pairing Mac's state and its passkey heads, an empty answer as none", async () => {
+    const { rpc, calls } = fakeRpc({ data: { mac: "m", revoked: false } });
+    expect(await registry(rpc, key).macState()).toEqual({ mac: "m", revoked: false });
+    const heads = fakeRpc({ data: [{ worker: "w" }] });
+    expect(await registry(heads.rpc, key).passkeyHeads()).toEqual([{ worker: "w" }]);
+    expect(await registry(fakeRpc().rpc, key).passkeyHeads()).toEqual([]);
+    expect([...calls, ...heads.calls]).toEqual([
+      { fn: "worker_mac_state", args: { p_key: key } },
+      { fn: "worker_passkey_heads", args: { p_key: key } },
+    ]);
+  });
 });

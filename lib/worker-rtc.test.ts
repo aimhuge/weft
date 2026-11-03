@@ -131,7 +131,7 @@ describe("a real line", () => {
     const touch = vi.fn();
     const big = Buffer.alloc(70_000, 7);
     big.set([0, 0, 1, 0x65]);
-    const idb = { size: { width: 400, height: 800 }, touch, key: vi.fn(), video: (onFrame: (f: Buffer) => void) => (setTimeout(() => onFrame(big), 200), () => {}) };
+    const idb = { size: { width: 400, height: 800 }, touch, key: vi.fn(), text: vi.fn(), video: (onFrame: (f: Buffer) => void) => (setTimeout(() => onFrame(big), 200), () => {}) };
     const worker = await answerOffer(board.localDescription?.sdp ?? "", { video: (c) => videoChannel(idb, c), input: (c) => inputChannel(idb, c) });
 
     const key = newAnswerKey();
@@ -198,7 +198,7 @@ describe("the channels", () => {
     const msg = events();
     const touch = vi.fn();
     const key = vi.fn();
-    inputChannel({ size: { width: 100, height: 200 }, touch, key }, { onMessage: msg } as never);
+    inputChannel({ size: { width: 100, height: 200 }, touch, key, text: vi.fn() }, { onMessage: msg } as never);
     msg.emit('{"t":"move","x":0.5,"y":0.5}');
     msg.emit(Buffer.from('{"t":"key","code":4,"down":true}'));
     msg.emit('{"t":"move","x":9,"y":0}');

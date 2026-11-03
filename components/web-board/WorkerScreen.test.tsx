@@ -140,4 +140,26 @@ describe("WorkerScreen", () => {
     render(<WorkerScreen pane={pane(later(), { fast: true })} workerId="w1" />);
     expect(line.args[0]).toBeUndefined();
   });
+
+  it("types a paste on the device over the live line, cut to the cap, and leaves it alone with no line open", () => {
+    line.live = true;
+    line.send.mockClear();
+    line.send.mockReturnValueOnce(true);
+    const onInput = vi.fn(() => Promise.resolve());
+    const { container } = render(<WorkerScreen pane={pane(later(), { fast: true })} onInput={onInput} workerId="w1" />);
+    const video = container.querySelector("video") as HTMLVideoElement;
+    const pasted = (text: string) => {
+      const event = new Event("paste", { bubbles: true, cancelable: true });
+      Object.assign(event, { clipboardData: { getData: (type: string) => (type === "text/plain" ? text : "") } });
+      fireEvent(video, event);
+      return event;
+    };
+    expect(pasted("x".repeat(2_100)).defaultPrevented).toBe(true);
+    expect(line.send).toHaveBeenCalledWith({ t: "text", text: "x".repeat(2_000) });
+    expect(pasted("hi").defaultPrevented).toBe(false);
+    expect(pasted("").defaultPrevented).toBe(false);
+    expect(line.send).toHaveBeenCalledTimes(2);
+    expect(onInput).not.toHaveBeenCalled();
+    line.live = false;
+  });
 });

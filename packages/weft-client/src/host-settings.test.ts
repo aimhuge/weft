@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ACCOUNT_SETTINGS, foreignSetting, HOST_SETTINGS, pickSettings } from "./host-settings";
+import { ACCOUNT_SETTINGS, foreignSetting, GOOSE_SETTINGS, gooseFieldsOf, HOST_SETTINGS, pickSettings, withoutGoose } from "./host-settings";
 
 // What may travel to a worker: two lists that never overlap, and never a folder, a mode or a guard.
 const NEVER = ["allowedFolders", "defaultPermissionMode", "syncFolders", "workerFolders", "issueFolders", "issueLandings", "gooseBaseUrl", "gooseProviderId", "projects"];
@@ -31,5 +31,25 @@ describe("foreignSetting", () => {
     expect(foreignSetting({ maxThreads: 2, allowedFolders: ["/"] })).toBe("allowedFolders");
     expect(foreignSetting(undefined)).toBeNull();
     expect(foreignSetting("x")).toBeNull();
+  });
+});
+
+describe("the Goose pair", () => {
+  it("is neither an account nor a host setting, so an unsigned put still names it foreign", () => {
+    for (const field of GOOSE_SETTINGS) {
+      expect(foreignSetting({ [field]: "x" })).toBe(field);
+      expect((HOST_SETTINGS as readonly string[]).includes(field)).toBe(false);
+    }
+  });
+
+  it("gooseFieldsOf picks the pair a patch names, or null", () => {
+    expect(gooseFieldsOf({ maxThreads: 2, gooseProviderId: "openai", gooseBaseUrl: "" })).toEqual({ gooseProviderId: "openai", gooseBaseUrl: "" });
+    expect(gooseFieldsOf({ maxThreads: 2 })).toBeNull();
+    expect(gooseFieldsOf(undefined)).toBeNull();
+  });
+
+  it("withoutGoose leaves the rest of a patch, and a non-object as it came", () => {
+    expect(withoutGoose({ maxThreads: 2, gooseProviderId: "openai", allowedFolders: ["/"] })).toEqual({ maxThreads: 2, allowedFolders: ["/"] });
+    expect(withoutGoose(null)).toBeNull();
   });
 });

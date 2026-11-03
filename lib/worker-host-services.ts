@@ -11,6 +11,7 @@ import { readSamples } from "./limit-history";
 import { startLimitPoll } from "./limit-poll";
 import { modelLimits } from "./model-limit";
 import { macKeysAt } from "./worker-mac-keys";
+import { startMacRevocationWatch } from "./worker-mac-revocation";
 import { startWorkerLimits } from "./worker-limits";
 import type { Registry } from "./worker-registry";
 import { createSettingsSync } from "./worker-settings-sync";
@@ -35,7 +36,7 @@ export function settingsVersionAt(home: string) {
   };
 }
 
-export function startHostServices(reg: Pick<Registry, "accountSettings" | "setLimits">, log: (msg: string) => void, home: string) {
+export function startHostServices(reg: Pick<Registry, "accountSettings" | "setLimits" | "macState">, log: (msg: string) => void, home: string) {
   const macs = macKeysAt(home);
   const version = settingsVersionAt(home);
   const settings = createSettingsSync({
@@ -46,11 +47,14 @@ export function startHostServices(reg: Pick<Registry, "accountSettings" | "setLi
     log,
   });
   const stopSettings = settings.start();
+  // A pairing Mac revoked anywhere stops being trusted here (lib/worker-mac-revocation.ts).
+  const stopRevocation = startMacRevocationWatch({ read: () => reg.macState(), macs, log });
   const limits = startWorkerLimits({ poll: startLimitPoll, read: () => readSamples(), models: () => modelLimits(), setLimits: (packed) => reg.setLimits(packed), log });
   return {
     nudge: settings.nudge,
     stop() {
       stopSettings();
+      stopRevocation();
       limits.stop();
     },
   };

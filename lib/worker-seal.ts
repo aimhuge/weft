@@ -7,7 +7,9 @@
 import crypto from "node:crypto";
 import type { Sealed } from "@weft/client";
 
-export { sealedOf, type Sealed } from "@weft/client";
+// The sealed shape lives in @weft/client, for the commands that carry one; sealedOf reads it off the network.
+export { sealedOf } from "@weft/client";
+export type { Sealed };
 
 export interface SealKeys {
   publicKey: string;

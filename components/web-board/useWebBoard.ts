@@ -17,8 +17,9 @@ import { applyCardChange, batchBlobRefs, blobPath, buildBlobUrlMap } from "@/lib
 import { cardThumbRefs, withThumbUrls } from "@/lib/web-board-thumbs";
 import { dropAnswer, withAnswers, type WebAnswer } from "@/lib/web-answers";
 import { applyCommandChange, isCardCommand, type CloudCommandChange, type WebTarget } from "@/lib/web-commands";
-import { loadWebKeyring, openSyncedCard, openSyncedTool } from "@/lib/web-sync-key";
-import { withAttachmentRefs } from "@/lib/web-upload";
+import { openSealedUrls } from "@/lib/web-blob-open";
+import { loadWebKeyring, openSyncedCard, openSyncedTool, webBlobSeal, webKeyring, webSodium } from "@/lib/web-sync-key";
+import { withAttachments } from "@/lib/web-upload";
 import { useCloudTransport, webUploadsFor, type CloudBlobs, type ItemBus } from "./useCloudTransport";
 import { webClientHint, webLines } from "@/lib/web-lines";
 import { withClientHint } from "@weft/client";
@@ -80,6 +81,12 @@ async function serverUrls(orgId: string, refs: readonly string[]): Promise<Recor
   }
 }
 
+// The map with its sealed blobs opened in this browser (lib/web-blob-open.ts), once it holds a workspace key.
+function openedUrls(orgId: string, map: Record<string, string>): Promise<Record<string, string>> {
+  const s = webSodium();
+  return s && webKeyring().size ? openSealedUrls(map, orgId, { s, ring: webKeyring() }) : Promise.resolve(map);
+}
+
 // The open thread's share of the channel: its item changes and reconnects (useCloudTransport's useLive listens).
 function useItemBus() {
   const [listeners] = useState(() => new Set<Parameters<ItemBus["subscribe"]>[0]>());
@@ -113,18 +120,21 @@ export function useWebBoard({ orgId, userId, initialCommands, initialCards, open
   const [client] = useState<SupabaseClient>(() => createBrowserClient(SUPABASE_URL, SUPABASE_KEY));
   // Refs already asked for, so one that never resolves isn't asked for again on every change.
   const asked = useRef(new Set(Object.keys(initialBlobUrls)));
+  const firstUrls = useRef(initialBlobUrls);
   // Commands this tab sent: only these open their card when done, not one sent from another tab.
   const sent = useRef(new Set<string>());
   // The card a command made, to open once its row has synced back (the command is "done" a moment before that).
   const openWhenSeen = useRef<string | null>(null);
 
   // A browser paired from Settings → Sync opens sealed rows (lib/web-sync-key.ts): once its key is in, reopen the
-  // cards already drawn and reload the open thread, which the first render drew as 🔒 like the server did.
+  // cards already drawn and reload the open thread, which the first render drew as 🔒 like the server did, and open
+  // the sealed pictures among the URLs the server signed.
   useEffect(() => {
     void loadWebKeyring(client, orgId, userId).then((opened) => {
       if (!opened) return;
       setCards((prev) => prev.map(openSyncedCard));
       emit("reconnect");
+      void openedUrls(orgId, firstUrls.current).then((map) => setBlobUrls((prev) => ({ ...prev, ...map })));
     });
   }, [client, orgId, userId, emit]);
 
@@ -173,7 +183,7 @@ export function useWebBoard({ orgId, userId, initialCommands, initialCards, open
       const missing = refs.filter((r) => !asked.current.has(r));
       if (!missing.length) return;
       for (const r of missing) asked.current.add(r);
-      void signedUrls(client, orgId, missing).then((map) => {
+      void signedUrls(client, orgId, missing).then((signed) => openedUrls(orgId, signed)).then((map) => {
         if (Object.keys(map).length) setBlobUrls((prev) => ({ ...prev, ...map }));
       });
     },
@@ -208,13 +218,13 @@ export function useWebBoard({ orgId, userId, initialCommands, initialCards, open
   // Files pasted in a composer here, up in the workspace's blobs until a row names them (lib/web-upload.ts).
   const [uploads] = useState(() => webUploadsFor(client, orgId));
 
-  // Puts a command in for a Mac (lib/cloud-inbox.ts runs it), listing the files its text pastes. Resolves to the row,
-  // or why it couldn't be sent.
+  // Puts a command in for a Mac (lib/cloud-inbox.ts runs it), listing the files its text pastes (sealed for a sealed
+  // card, lib/web-upload.ts). Resolves to the row, or why it couldn't be sent.
   const sendCommand = useCallback(
     async (plain: NewCommand): Promise<CloudCommandRow | string> => {
       let row: NewCommand;
       try {
-        row = withClientHint(withAttachmentRefs(plain, uploads), webClientHint());
+        row = withClientHint(await withAttachments(plain, uploads, webBlobSeal), webClientHint());
       } catch (err) {
         return (err as Error).message;
       }
