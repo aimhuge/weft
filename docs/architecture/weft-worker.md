@@ -445,10 +445,14 @@ store (`lib/worker-project.ts`, `lib/worker-board.ts`, `lib/worker-transport.ts`
 - **Folder reports:** `worker_set_folders` and `lib/worker-folders.ts` exist, but the daemon doesn't call them yet, so
   until it does a project needs a card to show.
 - **Not yet:** attachments on a new thread, Run on Worker's local record cards still sit on the local project, and
-  sealed rows: a worker publishes its rows and pages in the clear, and files reach it plain, until it holds the workspace
-  key. The grant (sealed to its pinned box key and signed by the pairing Mac after Touch ID) and the worker's own sealing
-  are designed in [mobile-security.md](mobile-security.md#sealing-on-a-weft-worker-design); a Mac's and a browser's files
-  are sealed already ([Sealed blobs](mobile-security.md#sealed-blobs)), so a sealed card's pasted file only goes plain to a worker.
+  files a Mac or a browser pastes into a worker card still go up plain (the worker opens sealed ones already).
+- **Sealed threads:** Settings → Devices → the worker → Seal… grants a paired worker the workspace key, sealed to the box key
+  the Mac pinned and signed by the Mac's approval key after Touch ID (`electron/worker-key-grants.cjs`). The worker checks it
+  against the Mac in `mac-keys.json`, holds the key in memory only (`lib/worker-keyring.ts`, read at start, on a `key_grant`
+  ping and every 10 minutes), and from then on publishes its card, items, tool outputs, pages and their files sealed, as a
+  Mac's outbox does; both boards open them. Once it has sealed, `seal-floor.json` in its home makes a worker with no key hold
+  its rows back rather than publish plain. Re-pin and Revoke drop its grants and rotate the key. A token-enrolled worker
+  trusts no Mac and stays plain. See [mobile-security.md](mobile-security.md#sealing-on-a-weft-worker).
 
 ### Pages from a worker
 
