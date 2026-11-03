@@ -9,6 +9,7 @@
 // The inbox, the poll backstop and the beat are the host core's (lib/host/), shared with the Mac's lib/cloud-inbox.ts:
 // this file is the worker's identity (its key: worker_claim and worker_report, lib/host/identity.ts), its kind table
 // (lib/worker-kinds.ts), and what only a worker does: recover after a restart, keep itself updated, show its GitHub.
+import { randomUUID } from "node:crypto";
 import type { CloudCommandRow, GrantScope } from "./cloud-commands";
 import type { Card } from "./types";
 import type { HostVerb } from "./host-api";
@@ -18,9 +19,10 @@ import { keyLine } from "./host/identity";
 import { createInbox, startPolling, type Connection } from "./host/inbox";
 import type { ScreenInput } from "./worker-commands";
 import type { GithubStatus } from "./worker-github";
-import { publishGithub, workerDispatch } from "./worker-kinds";
+import { publishGithub, workerTable } from "./worker-kinds";
 import type { Publisher } from "./worker-publish";
 import type { Sealed } from "./worker-seal";
+import type { SealedAnswer } from "./rtc-signal";
 import { HEALTHY_AFTER_MS } from "./worker-update";
 import { createUpdateLoop, type Holder } from "./worker-update-loop";
 import type { Registry, WorkerStatus } from "./worker-registry";
@@ -85,7 +87,8 @@ export interface DaemonDeps {
   onRecovered?: () => void;
   // Opens a session line from a sealed offer (lib/host-line.ts). `run` is the host command's own path (lib/host/dispatch.ts
   // via lib/worker-kinds.ts), so a verb over the line passes exactly the checks it would over the relay.
-  line?: (sealed: Sealed, run: (payload: unknown) => Promise<HostDone>) => Promise<void>;
+  // `answerOn` takes the sealed answer when the offer came over the LAN (lib/worker-lan.ts), not on a row.
+  line?: (sealed: Sealed, run: (payload: unknown) => Promise<HostDone>, answerOn?: (topic: string, answer: SealedAnswer) => Promise<unknown>) => Promise<void>;
   // Signed widening (lib/worker-widen.ts): its pins, nonces and project folders. Absent, every widening stays refused.
   widen?: WorkerWiden;
   // Calls back when a card changes, so a held update can go the moment the last one ends.
@@ -117,6 +120,19 @@ const GITHUB_CHECK_MS = 60 * 60_000;
 // who made it is watching the screen).
 const ASIDE = new Set(["clone", "input", "qa", "line"]);
 
+// A line offered over the LAN port (lib/worker-lan.ts), which checked it came from the Mac this box was paired with: the
+// `line` kind as a row of the owner's would run it, its sealed answer handed back for the port's reply.
+export function lanLine(open: ReturnType<typeof workerTable>["openLine"], owner: string | undefined, sealed: Sealed): Promise<SealedAnswer> {
+  const at = new Date().toISOString();
+  const command: CloudCommandRow = { id: `lan-${randomUUID()}`, org_id: "", created_by: owner ?? "", kind: "line", target_device: "", folder: "", payload: { sealed }, status: "claimed", card_id: null, error: null, created_at: at, updated_at: at };
+  return new Promise((resolve, reject) => {
+    open(command, (_topic, answer) => {
+      resolve(answer);
+      return Promise.resolve();
+    }).then(() => reject(new Error("The line closed before it answered.")), reject);
+  });
+}
+
 export function createDaemon(deps: DaemonDeps) {
   const log = deps.log ?? ((msg: string) => console.log(msg));
   const { reg, engine, publisher } = deps;
@@ -130,7 +146,8 @@ export function createDaemon(deps: DaemonDeps) {
     return null;
   }
 
-  const conn: Connection = { line: keyLine(reg), dispatch: workerDispatch(deps, { log, askForUpdate, updating: () => updates?.updating() ?? false }) };
+  const table = workerTable(deps, { log, askForUpdate, updating: () => updates?.updating() ?? false });
+  const conn: Connection = { line: keyLine(reg), dispatch: table.dispatch };
   let recovering: Promise<void> | null = null;
   const inbox = createInbox({
     // Commands wait for recovery: a reply queued while the worker was down must not land on a card about to resume.
@@ -242,5 +259,5 @@ export function createDaemon(deps: DaemonDeps) {
     };
   }
 
-  return { start, poll, runOne, checkForUpdate: () => updates?.check() };
+  return { start, poll, runOne, checkForUpdate: () => updates?.check(), lanLine: (sealed: Sealed) => lanLine(table.openLine, deps.owner, sealed) };
 }
