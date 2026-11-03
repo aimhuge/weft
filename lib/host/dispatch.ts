@@ -65,7 +65,8 @@ export interface CardRules {
   create?(command: CloudCommandRow, args: Record<string, unknown>): Promise<string>;
   // cron.* and webhook.*: runs one on a cron or webhook this host keeps, past remoteRefusal, and resolves with the card a
   // run made (or null). Without it the host refuses them from the network (a Mac: its own are changed in its window).
-  lists?(verb: ListVerb, args: HostArgs): Promise<string | null>;
+  // cron.create comes here too, once its card checked out: a cron made from the network, whose mode the host narrows.
+  lists?(verb: ListVerb | "cron.create", args: HostArgs): Promise<string | null>;
 }
 
 // Verbs that put something on the internet or prompt the owner's Mac (dev.open: a tunnel and a Touch ID). Only the
@@ -171,6 +172,7 @@ export function cardKinds(rules: CardRules) {
     const card = rules.card(body.args.id, command, "reached");
     if (OWNER_VERBS.has(body.verb) && !rules.fromOwner?.(command)) throw new Error(NOT_OWNER);
     await allowed(body, card);
+    if (body.verb === "cron.create") return cronFrom(card, body);
     // Who sent a turn, for its <weft-env> block: the row's hint, never a check (lib/turn-client.ts).
     if (TURN_VERBS.has(body.verb)) noteClient(card.id, commandClient(command.payload));
     const reply = await verb(body.verb, await received(command, { ...withoutWiden(body.args), id: card.id }, textArgOf(body.verb)));
@@ -207,6 +209,13 @@ export function cardKinds(rules: CardRules) {
     if (refused) throw new Error(refused);
     const made = await rules.lists(verb, body.args);
     return { cardId: null, result: hostResult(made ?? "") };
+  }
+
+  // A cron made from a card this host runs (the ⏰ popover): the host's own list rule, which narrows its mode.
+  async function cronFrom(card: Card, body: HostPayload): Promise<HostDone> {
+    if (!rules.lists) throw new Error(NO_LISTS);
+    await rules.lists("cron.create", { ...withoutWiden(body.args), id: card.id });
+    return { cardId: card.id, result: hostResult(card.id) };
   }
 
   return { reply, answer, stop, host };
