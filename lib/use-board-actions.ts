@@ -10,7 +10,8 @@ import { lastFolder } from "./board-helpers";
 import { onOpenCardRequest } from "./open-card";
 import { backendFor, cardModel } from "./new-thread";
 import { hostOf } from "./project-host";
-import { localPath } from "./worker-project";
+import { isWorkerProject, localPath } from "./worker-project";
+import { dropPending, drawPending, matchByPrompt, pendingCard } from "./worker-pending-cards";
 import type { Card } from "./types";
 
 export interface BoardActions {
@@ -42,6 +43,23 @@ export interface BoardActionsDeps {
 
 // POST /api/cards answers no card for a worker's project: the run went to the worker, and its card comes back later.
 const madeHere = (reply: { card: Card | null }) => reply.card?.id;
+
+// A worker project's new card, drawn on the board now under an id picked here; the worker's own card takes its place
+// (lib/worker-pending-cards.ts), and a refusal takes it off again.
+async function createCard(input: NewCardInput) {
+  if (!isWorkerProject(input.cwd)) return api.create(input);
+  const id = crypto.randomUUID();
+  // A started thread with an agent goes as a run, and the worker names its card.
+  drawPending(pendingCard(id, input, "your worker"), Boolean(input.agent && input.start));
+  try {
+    const reply = await api.create({ ...input, cardId: id } as NewCardInput);
+    if (reply.start?.cardId !== id) matchByPrompt(id);
+    return reply;
+  } catch (err) {
+    dropPending(id);
+    throw err;
+  }
+}
 
 export function useBoardActions({
   selected,
@@ -76,7 +94,7 @@ export function useBoardActions({
   useEffect(() => onOpenCardRequest((id) => select(id)), [select]);
 
   const create = useCallback(async (input: NewCardInput) => {
-    const { start } = await api.create(input);
+    const { start } = await createCard(input);
     if (start?.worker) onSentToWorker?.(start.worker);
   }, [onSentToWorker]);
 
@@ -87,7 +105,7 @@ export function useBoardActions({
       // The card's model is the id the CLI takes, so a Goose pick loses its "goose:" prefix; the
       // card's backend says it runs on Goose.
       // A worker project's card goes to the worker as a run, so there's no card here to open yet.
-      const reply = await api.create({ title, prompt, cwd, backend, model: cardModel(model), start: true });
+      const reply = await createCard({ title, prompt, cwd, backend, model: cardModel(model), start: true });
       if (reply.start?.worker) onSentToWorker?.(reply.start.worker);
       return madeHere(reply);
     },

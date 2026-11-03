@@ -16,6 +16,7 @@ import { sendWorkerAction } from "./worker-transport";
 import { onLineEvents, onLineFlips } from "./session-lines";
 import type { LineEvent } from "./host-line-protocol";
 import { allOnLines, lineUp, readSnapshot, withSnapshot } from "./worker-board-line";
+import { pendingSnapshot, settlePending, subscribePending, withPending } from "./worker-pending-cards";
 
 // A card change off a worker's session line, laid over the cards read last: the card keeps the board's worker:// path,
 // and one the board hasn't read yet waits for the next read, which knows its project.
@@ -61,6 +62,7 @@ export function useWorkerBoard(): WorkerBoard {
     let latest = 0;
     const draw = (next: WorkerBoard) => {
       raw = next;
+      settlePending(next.cards);
       setActiveCards(next.cards);
       setBoard({ ...next, cards: overlayAll(next.cards) });
     };
@@ -105,7 +107,10 @@ export function useWorkerBoard(): WorkerBoard {
       if (event.t !== "card" && event.t !== "card_deleted") return;
       // A card the board hasn't read yet: the snapshot knows its project, where the event only has the worker's path.
       if (event.t === "card" && raw && !raw.cards.some((c) => c.id === event.card.id)) void snapshot(workerId);
-      if (raw) raw = { ...raw, cards: withLineEvent(raw.cards, event) };
+      if (raw) {
+        raw = { ...raw, cards: withLineEvent(raw.cards, event) };
+        settlePending(raw.cards);
+      }
       setBoard((b) => ({ ...b, cards: overlayAll(withLineEvent(b.cards, event)) }));
     });
     void tick();
@@ -123,11 +128,17 @@ export function useWorkerBoard(): WorkerBoard {
 }
 
 // The board's cards with your workers' beside them: `cards` stays this Mac's own, and what's drawn reads boardCards.
-// Each worker project carries this board's pin and hide for it (lib/worker-project-marks.ts).
+// Each worker project carries this board's pin and hide for it (lib/worker-project-marks.ts), and a new thread on its way
+// to a worker is drawn among them (lib/worker-pending-cards.ts).
+const NO_PENDING: Card[] = [];
 export function useBoardWorkers(cards: Card[]) {
   const read = useWorkerBoard();
   const marks = useSyncExternalStore(subscribeWorkerMarks, workerMarksSnapshot, () => "{}");
-  const workers = useMemo(() => withMarks(read, readWorkerMarks(marks)), [read, marks]);
+  const pending = useSyncExternalStore(subscribePending, pendingSnapshot, () => NO_PENDING);
+  const workers = useMemo(() => {
+    const marked = withMarks(read, readWorkerMarks(marks));
+    return pending.length ? { ...marked, cards: withPending(marked.cards, pending) } : marked;
+  }, [read, marks, pending]);
   const boardCards = useMemo(() => [...cards, ...workers.cards], [cards, workers.cards]);
   return { workers, boardCards };
 }

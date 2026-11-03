@@ -24,6 +24,15 @@ beforeEach(() => {
 describe("startWorkerThread", () => {
   const online = workerRow({ last_seen_at: new Date(NOW).toISOString() });
 
+  it("takes the id the board picked, so it can draw the card first, and a malformed one gets a fresh id", async () => {
+    const { client, inserted } = fakeClient({ workers: [online], insertId: "cmd-3" });
+    const picked = "0b6c2a6e-3f1d-4c3e-9a51-6a1f0e2d9c11";
+    expect((await startWorkerThread({ cwd: "worker://w1/ling", prompt: "go", cardId: picked }, client, NOW)).cardId).toBe(picked);
+    expect(inserted()).toMatchObject({ payload: { args: { id: picked } } });
+    const got = await startWorkerThread({ cwd: "worker://w1/ling", prompt: "go", cardId: "../etc" }, fakeClient({ workers: [online] }).client, NOW);
+    expect(got.cardId).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
   it("builds a card.create for the worker, in the project's folder, under the id it answers with", async () => {
     const { client, inserted } = fakeClient({ workers: [online], insertId: "cmd-3" });
     const got = await startWorkerThread({ cwd: "worker://w1/ling", prompt: " Add dark mode " }, client, NOW);

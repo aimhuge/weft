@@ -34,7 +34,13 @@ export interface WorkerThreadInput {
   // An agent goes only with its signed approval (lib/create-widen.ts); the worker checks both.
   agent?: string;
   widen?: unknown;
+  // The id the board picked, so it can draw the card before the worker makes it (lib/worker-pending-cards.ts). The
+  // worker still refuses one it has had before (lib/host-api/card-create.ts claimId).
+  cardId?: string;
 }
+
+// A uuid's shape, as the board's randomUUID gives; anything else gets a fresh one here.
+const BOARD_ID = /^[0-9a-zA-Z-]{8,64}$/;
 
 // The fields a new worker card is made from: never its folder (the row's), agent or read scope, which remoteRefusal
 // would turn away, nor a mode that skips prompts (only RUN_MODES), and only what was given.
@@ -79,7 +85,7 @@ export async function startWorkerThread(
     const { commandId } = await insert(client, await withAttachments(client, row, body.prompt, dir, undefined, worker.id));
     return { commandId, worker: worker.name, cardId: "" };
   }
-  const cardId = randomUUID();
+  const cardId = typeof body.cardId === "string" && BOARD_ID.test(body.cardId) ? body.cardId : randomUUID();
   const target = { orgId: who.org, device: workerDevice(worker.id), folder: project.folder, cardId };
   const built = hostCommand(target, "card.create", createArgs(body)) as NewCommand;
   // The repo this Mac knows the folder as, and main's signature over the start, for the GitHub connector's mint
