@@ -262,10 +262,16 @@ when the row's key changed). They can delete grants or stall the ping: denial of
 Out of scope, as for a Mac: the worker box itself (whoever runs code there reads its memory, and its cards run with its
 privileges), and a key the Mac granted before a revoke for rows sealed under that version.
 
-**Not yet.** Files a Mac or a browser sends a worker's card still go up plain (`withAttachments` in `lib/worker-board.ts`,
-`webBlobSeal`); the worker opens sealed ones already, so turning those on is the follow-up. Pairing a worker doesn't offer
-Seal under its own Touch ID yet. A worker keeps sealing with the newest version it was granted, so if a regrant after a
-rotation fails it seals under the older version until Seal… is pressed again (Devices shows it "in the clear").
+- **Files sent to it go sealed.** A file this Mac pastes into a worker card (`withAttachments` in `lib/worker-board.ts`)
+  goes up sealed with the version that card's row came sealed with, when main holds it (`cardBlobSeal` in
+  `lib/worker-board-open.ts`, read only once there's a file): only a worker holding that version can have sealed the row, so
+  it opens the file. A paired browser does the same through `webBlobSeal`, which already keys on the card's own row. A card
+  that came plain (no grant, a share link), and a new thread, which has no row yet, send their files plain.
+- **Offered at pairing.** When Add a worker pairs a box while your Mac seals, Settings → Devices offers Seal… for it at
+  once, under its own Touch ID (`lib/use-devices.ts`); declining leaves it in the clear with Seal… on its line.
+
+**Not yet.** A worker keeps sealing with the newest version it was granted, so if a regrant after a rotation fails it seals
+under the older version until Seal… is pressed again (Devices shows it "in the clear").
 
 ## 3. Signed approvals
 
@@ -553,9 +559,9 @@ pending request and its name from the registry, so a worker card's Allow from th
 
 ## Gaps
 
-- A Weft Worker seals only once you press Seal… for it (Settings → Devices); until then its rows and pages stay plain. A
-  file a Mac or a browser sends a worker's card still goes up plain, though the worker opens sealed ones
-  ([Sealing on a Weft Worker](#sealing-on-a-weft-worker), "Not yet").
+- A Weft Worker seals only once it holds a grant (Seal… in Settings → Devices, or offered at pairing); until then its rows,
+  pages and the files sent to it stay plain, and a new thread's pasted file goes plain even to a sealed worker
+  ([Sealing on a Weft Worker](#sealing-on-a-weft-worker)).
 - Sealed blobs: the phone app (weft-mobile) opens them only once it adopts `openBlob`; until then a phone draws a sealed
   picture broken. A sealed file is write-once under its sha (see [Sealed blobs](#sealed-blobs)), and a sealed page's
   `#anchor` is lost in `srcdoc`.

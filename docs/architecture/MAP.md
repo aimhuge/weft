@@ -578,7 +578,8 @@ When a new doc lands in this folder, add it here on the same change.
   holds the ring and its seal floor in `lib/worker-keyring.ts`, wires it in `lib/worker-sealing-wire.ts` (the `key_grant` ping is
   `lib/worker-wake.ts` `listenForKeyGrants`), seals with `lib/worker-sealing.ts` + `lib/worker-seal-rows.ts` in `lib/worker-publish.ts`
   and `lib/worker-pane.ts`, and opens pasted files with `openingReader`; the desktop board opens a worker's rows, pages and pictures
-  in `lib/worker-board-open.ts` (main's `POST /sync/keyring`) from `lib/worker-board.ts` and `lib/worker-thread-reads.ts`. Migration
+  in `lib/worker-board-open.ts` (main's `POST /sync/keyring`) from `lib/worker-board.ts` and `lib/worker-thread-reads.ts`, and seals
+  what it pastes into a sealed worker card (`cardBlobSeal`, `withAttachments`); Add a worker offers Seal… at pairing. Migration
   `supabase/migrations/20261103090000_worker_key_grants.sql`.
 - `lib/passkey-verify.ts` (+ main's copy `electron/passkey-verify.cjs`) + `lib/approval-passkey.ts` + `lib/passkey-phone-only.ts` +
   `lib/approval-passkey-check.ts` + `lib/web-passkey.ts` + `lib/web-passkey-approval.ts` + `lib/sign-origin.ts` + `lib/sign-approve.ts` +

@@ -1,6 +1,9 @@
 // A worker holding a key grant seals what it publishes; the desktop board opens it on this Mac's own server with main's
 // keys (lib/worker-board-open.ts), and draws the 🔒 stand-ins for what main holds no key for.
 import crypto from "node:crypto";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { cardRow, fakeClient, workerRow } from "./worker-board.harness";
 
@@ -10,11 +13,11 @@ const shell = vi.fn<(route: string, body: unknown) => Promise<unknown>>();
 vi.mock("./browser-shell", () => ({ shell: (route: string, body: unknown) => shell(route, body) }));
 vi.mock("./blob-urls", () => ({ resolveBlobUrls: (_c: unknown, _o: string, refs: string[]) => Promise.resolve(Object.fromEntries(refs.map((r) => [r, `https://sb.test/${r.slice(-4)}`]))) }));
 
-const { readWorkerBoard, workerPage, workerThreadPage, workerToolOutput } = await import("./worker-board");
-const { forgetMacRing, macRing, MAX_INLINE_BYTES, openCardRows, openItemRows, openOutput, openPageAssets, openPictureUrls } = await import("./worker-board-open");
+const { readWorkerBoard, sendWorkerAction, workerPage, workerThreadPage, workerToolOutput } = await import("./worker-board");
+const { cardBlobSeal, forgetMacRing, macRing, MAX_INLINE_BYTES, openCardRows, openItemRows, openOutput, openPageAssets, openPictureUrls } = await import("./worker-board-open");
 const { sodium } = await import("./sodium");
 const { aadFor, blobAad, sealBytes, sealCardRow, sealJson, SEALED_TEXT } = await import("./sync-seal");
-const { SEALED_PAGE_HTML } = await import("./blob-seal");
+const { openBlob, SEALED_PAGE_HTML } = await import("./blob-seal");
 
 const KEY = { version: 2, key: Buffer.alloc(32, 9).toString("base64") };
 const sha = (b: Uint8Array) => crypto.createHash("sha256").update(b).digest("hex");
@@ -114,5 +117,35 @@ describe("openPictureUrls", () => {
     const urls = Object.fromEntries(pics.map((p) => [`blob:sha256:${sha(p)}`, "signed"]));
     const out = await openPictureUrls(client, "org-1", urls);
     expect(Object.values(out).every((u) => u.startsWith("data:application/octet-stream;base64,"))).toBe(true);
+  });
+});
+
+describe("a file this Mac pastes into a worker card", () => {
+  const target = { owner_device: "worker:w1", owner_worker: "w1", folder: "ling", owner_user: "u-1" };
+  const pasted = () => {
+    const dir = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "seal-paste-")), "attachments");
+    fs.mkdirSync(dir);
+    fs.writeFileSync(path.join(dir, "shot-1a2b.png"), "a screenshot");
+    return { dir, text: `look ![shot](${path.join(dir, "shot-1a2b.png")})` };
+  };
+
+  it("goes up sealed with the version the card's row came sealed with, so the worker that sealed it opens it", async () => {
+    const s = await sodium();
+    const { dir, text } = pasted();
+    const { client, uploads } = fakeClient({ cardRow: { ...target, sealed: 2 } });
+    await sendWorkerAction({ action: "reply", cardId: "c1", text }, client, dir);
+    const body = new Uint8Array(uploads[0]!.body as Buffer);
+    const sha = crypto.createHash("sha256").update("a screenshot").digest("hex");
+    expect((await openBlob(s, body, new Map([[2, KEY.key]]), "org-1", sha))?.sealed).toBe(true);
+  });
+
+  it("goes up plain for a card that came plain, or sealed with a version this Mac doesn't hold", async () => {
+    const { dir, text } = pasted();
+    for (const sealed of [undefined, 5]) {
+      const { client, uploads } = fakeClient({ cardRow: { ...target, sealed } });
+      await sendWorkerAction({ action: "reply", cardId: "c1", text }, client, dir);
+      expect(String(uploads[0]!.body)).toBe("a screenshot");
+    }
+    expect(await cardBlobSeal(fakeClient({ cardRow: null }).client, "org-1", "c1")).toBeNull();
   });
 });
