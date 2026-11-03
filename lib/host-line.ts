@@ -161,8 +161,9 @@ export function createHostLines(deps: HostLineDeps) {
     };
   }
 
-// Opens a line from a sealed offer. Only this worker can open it, and the answer goes back under the board's key.
-  async function open(sealed: Sealed, run: RunHost): Promise<void> {
+// Opens a line from a sealed offer. Only this worker can open it, and the answer goes back under the board's key: on
+  // its Broadcast topic, or to `answerOn` when the offer came another way (the LAN port's reply, lib/worker-lan.ts).
+  async function open(sealed: Sealed, run: RunHost, answerOn?: HostLineDeps["answerOn"]): Promise<void> {
     const offer = readLineOffer(deps.unseal(sealed, LINE_PURPOSE));
     if (!offer) throw new Error("That line's offer is incomplete.");
     let opened: Opened | null = null;
@@ -204,7 +205,8 @@ export function createHostLines(deps: HostLineDeps) {
         return;
       }
       opened.onClosed(() => line.close());
-      await deps.answerOn(offer.topic, await sealAnswer(offer.key, opened.answer));
+      const answer = await sealAnswer(offer.key, opened.answer);
+      await (answerOn ? answerOn(offer.topic, answer) : deps.answerOn(offer.topic, answer));
       log(`Weft Worker: a board opened a line (${lines.size} open)`);
     } catch (err) {
       line.close();

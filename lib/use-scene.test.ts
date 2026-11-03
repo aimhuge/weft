@@ -1,9 +1,14 @@
 // @vitest-environment happy-dom
-import { act, renderHook, waitFor } from "@testing-library/react";
+import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { currentSceneFromDOM, settingsBackdrop, useScene, useSettingsBackdrop } from "./use-scene";
 
+// Vitest runs without globals, so Testing Library's automatic cleanup never registers: unmount every hook
+// first. A hook left mounted keeps its MutationObserver, and the resets below would make it set state
+// outside act. React then schedules that render on its own (performWorkUntilDeadline), and on a loaded
+// CI box it can run after the file's DOM environment is gone: "ReferenceError: window is not defined".
 afterEach(() => {
+  cleanup();
   document.documentElement.dataset.scene = "";
   document.documentElement.dataset.theme = "";
   document.documentElement.removeAttribute("style");
