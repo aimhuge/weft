@@ -2,7 +2,6 @@
 // whole result where its item was trimmed (thread.tool). The routes under app/api/cards/[id]/thread run them for this
 // Mac's board. A worker runs them for a card it runs, reached over its session line or a `host` row, and answers in the
 // projection it publishes (lib/worker-reads.ts): redacted as the rows are, never more than its cloud rows hold.
-import { loadTranscript } from "../import";
 import { getThread } from "../store";
 import { matchThread, type FindMatch } from "../thread-find";
 import { findToolResult, pageThread, trimToolResult, type ThreadPage } from "../thread-page";
@@ -19,6 +18,8 @@ const whole = (v: unknown): number | undefined => (typeof v === "number" && Numb
 export async function threadPageVerb({ id, before, limit }: PageArgs): Promise<ThreadPage> {
   const card = requireCard(id);
   try {
+    // Loaded here only: the transcript importer pulls in the store's data folder and more, which search and tool never need.
+    const { loadTranscript } = await import("../import");
     await loadTranscript(card);
   } catch (err) {
     console.error("Couldn't read the session transcript:", err);
