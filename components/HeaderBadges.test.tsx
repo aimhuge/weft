@@ -2,7 +2,7 @@
 // The header's badges (components/HeaderBadges.tsx): on a worker's project they read its snapshot and show its age,
 // while the streak and the sync ask stay on this Mac's folders.
 import type { ReactNode } from "react";
-import { render } from "@testing-library/react";
+import { act, render } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import "./test-utils";
 
@@ -16,6 +16,9 @@ vi.mock("./guarded", () => ({
     },
 }));
 vi.mock("@/lib/use-regular-mode", () => ({ useRegularMode: () => false }));
+// The board's event stream, as the header hears it: `hear` hands it an event.
+const heard = vi.hoisted(() => ({ fn: null as ((event: unknown) => void) | null }));
+vi.mock("@/lib/use-events", () => ({ useBoardEvents: (fn: (event: unknown) => void) => void (heard.fn = fn) }));
 
 const { default: HeaderBadges } = await import("./HeaderBadges");
 
@@ -38,5 +41,16 @@ describe("HeaderBadges", () => {
     setup("/Users/me/dev/weft");
     expect(seen.has("snapshot age")).toBe(false);
     expect(seen.get("streak badge")).toMatchObject({ cwd: "/Users/me/dev/weft" });
+  });
+
+  it("reads a worker project's badges again when its worker writes a new snapshot", () => {
+    setup("worker://w1/ling");
+    const before = seen.get("pile badge")?.refresh;
+    act(() => heard.fn?.({ type: "worker_project", project: "worker://w1/other" }));
+    expect(seen.get("pile badge")?.refresh).toBe(before);
+    act(() => heard.fn?.({ type: "worker_project", project: "worker://w1/ling" }));
+    expect(seen.get("pile badge")?.refresh).not.toBe(before);
+    expect(seen.get("snapshot age")?.refresh).toBe(seen.get("pile badge")?.refresh);
+    act(() => heard.fn?.({ type: "crons" }));
   });
 });
