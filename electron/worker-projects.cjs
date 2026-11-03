@@ -74,4 +74,20 @@ function createKnownRepos({ dataDir, idFor = (folder) => vaultIdFor(folder), cha
   };
 }
 
-module.exports = { createProjectRepos, createProjectFolders, createKnownRepos };
+/**
+ * Every GitHub repo this Mac has a checkout of, once each, with its vault label and one checkout's path: the projects
+ * "Keep on this worker" offers (electron/worker-keep.cjs), whose values it reads through that checkout's vault.
+ * @param {{ dataDir: string, idFor?: (folder: string) => Promise<{ id: string, label: string }> }} deps
+ * @returns {() => Promise<{ id: string, label: string, path: string }[]>}
+ */
+function createRepoFolders({ dataDir, idFor = (folder) => vaultIdFor(folder) }) {
+  return async () => {
+    const folders = folderList(dataDir);
+    const refs = await Promise.all(folders.map((f) => idFor(f).then((r) => ({ id: r.id, label: r.label, path: f }), () => null)));
+    const byId = new Map();
+    for (const r of refs) if (r?.id.startsWith("github:") && !byId.has(r.id)) byId.set(r.id, r);
+    return [...byId.values()].sort((a, b) => (a.id < b.id ? -1 : 1));
+  };
+}
+
+module.exports = { createProjectRepos, createProjectFolders, createKnownRepos, createRepoFolders };

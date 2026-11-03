@@ -9,6 +9,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch } from "./api-client";
 import type { DeviceView, DevicesView } from "./device-registry";
 import { pairingBridge, type PairingBridge } from "./use-pairing";
+import { workerKeepBridge } from "./use-worker-keep";
 
 export const POLL_MS = 2_000;
 const RELOAD_MS = 15_000;
@@ -185,6 +186,9 @@ export function useDevices({ pairing, hosts }: Bridges = bridgesHere()) {
         // Every worker that trusted it gets the set without it, until each confirms (lib/passkey-sync.ts).
         await runPasskeySync();
       } else {
+        // What this Mac kept on a worker goes first: a signed wipe while its key still works (and the worker wipes itself
+        // once its heartbeat finds the key revoked, lib/worker-kept-vault.ts). Best effort: the revoke goes ahead regardless.
+        if (device.kind === "worker") await workerKeepBridge()?.wipe(device.id).catch(() => null);
         // A worker's answer can carry what GitHub confirmed about the tokens it held (lib/device-registry.ts).
         const r = await readJson<{ note?: string }>(await apiFetch(`/api/devices?id=${encodeURIComponent(device.id)}`, { method: "DELETE" }));
         // A worker's key grants go with it (the database drops them); main rotates so it never had what's sealed next.

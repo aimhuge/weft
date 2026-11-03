@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { createKnownRepos, createProjectRepos } from "./worker-projects.cjs";
+import { createKnownRepos, createProjectRepos, createRepoFolders } from "./worker-projects.cjs";
 
 function dataDir(settings: unknown) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "weft-worker-projects-"));
@@ -53,5 +53,18 @@ describe("createKnownRepos", () => {
     fs.writeFileSync(path.join(repo, ".git", "config"), '[remote "origin"]\n\turl = https://github.com/Ada/Fresh.git\n');
     const idFor = () => Promise.resolve({ id: "github:ada/fresh" });
     expect(await createKnownRepos({ dataDir: dataDir({ projects: [{ path: repo }, { path: "/no/git" }] }), idFor })()).toEqual([{ repo: "ada/fresh", recent: true }]);
+  });
+});
+
+describe("createRepoFolders", () => {
+  it("lists each GitHub repo once, with its label and one checkout, sorted", async () => {
+    const labelled = (folder: string) => idFor(folder).then((r) => ({ ...r, label: r.id.replace(/^github:/, "") }));
+    const repos = createRepoFolders({ dataDir: dataDir({ projects: [{ path: "/d/other" }, { path: "/a/weft" }, { path: "/c/weft" }], workerFolders: ["/e/weft", "/a/weft", "/b/Weft"] }), idFor: labelled });
+    expect(await repos()).toEqual([
+      { id: "github:aimhuge/weft", label: "aimhuge/weft", path: "/a/weft" },
+      { id: "github:fork/weft", label: "fork/weft", path: "/b/Weft" },
+      { id: "github:x/other", label: "x/other", path: "/d/other" },
+    ]);
+    expect(await createRepoFolders({ dataDir: dataDir(undefined) })()).toEqual([]);
   });
 });

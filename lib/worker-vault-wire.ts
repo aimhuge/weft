@@ -32,10 +32,13 @@ export interface VaultAsk {
   why?: string;
   // The worker's signature over vaultAskMessage, base64.
   sig?: string;
+  // A dev server's ask: the versions this box keeps (lib/worker-kept-vault.ts), outside the signature, since it can only
+  // narrow what the Mac sends (lib/secret-use.ts SecretAsk.kept).
+  kept?: Record<string, number>;
 }
 
 // What the worker signs. Every field main reads to act is in it, in a fixed order; thread and why are only shown.
-export function vaultAskMessage(cardId: string, boxKey: string, tool: string, a: Omit<VaultAsk, "sig" | "thread" | "why">): string {
+export function vaultAskMessage(cardId: string, boxKey: string, tool: string, a: Omit<VaultAsk, "sig" | "thread" | "why" | "kept">): string {
   return JSON.stringify(["weft-vault-ask-v1", cardId, boxKey, tool, a.nonce, a.expiresAt, a.remote, a.environment ?? null, a.names ?? null, a.name ?? null, a.hint ?? null, a.replace === true, a.sealed ?? null, a.command ?? null, a.cwd ?? null, a.script ?? null]);
 }
 

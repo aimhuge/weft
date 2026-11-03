@@ -496,6 +496,15 @@ the board, so likely the phone-only asks (`lib/passkey-phone-only.ts`), folder g
 (2) A worker host pins the Mac's `publicKey` when it pairs (H10, one device registry), and main reads that worker's
 pending request and its name from the registry, so a worker card's Allow from the desktop is signed for it and verifies there. Until then a remote host can't check a desktop signature.
 
+### Values kept on a worker (H8, 2026-11-03)
+
+"Keep on this worker" ([secrets.md](secrets.md#kept-on-a-worker)) follows this doc's rule that the vault and its grants
+stay on the Mac or the phone. The desktop's device key signs each `vault_keep` (the values sealed to the worker's box
+key, after Touch ID on the Mac), and the worker checks it against the Mac key its pairing code carried, never one off the
+network. A kept value still opens only for a `secret_use` this Mac sealed and signed after its own Touch ID for that
+use: no passkey, phone or web approval can start, widen or use one, since an `mcp__secrets__*` ask is phone-only
+(`lib/passkey-phone-only.ts`) and the worker trusts only the pairing Mac's signature for a secret use.
+
 ## Tables (`supabase/migrations/*_mobile_security.sql`)## Tables (`supabase/migrations/*_mobile_security.sql`)
 
 - `devices`: `kind text` (`desktop` default, `phone`, `browser`), `sign_key text` (Ed25519 public, phones only),

@@ -18,6 +18,8 @@ export interface VaultLink {
   boxKey: string;
   // The Mac this box was paired with (mac-keys.json): set_value's value is sealed to it.
   macKey: () => string | undefined;
+  // The versions this box keeps for a vault (lib/worker-kept-vault.ts index), for a dev server's claim.
+  kept?: (repo: string, environment: string, names?: string[]) => Record<string, number>;
 }
 
 export interface VaultDeps {
@@ -36,6 +38,8 @@ export function setVaultLink(next: VaultLink | null) {
   current = next;
 }
 
+export const vaultLink = () => current;
+
 export const UNPAIRED = "This worker was enrolled by token, so your Mac won't answer its vault asks. Pair it from Settings → Devices → Add a worker.";
 const NO_MAC = "This worker trusts no Mac to seal a value to. Pair it from Settings → Devices → Add a worker.";
 
@@ -52,8 +56,9 @@ export async function askVault(cardId: string | undefined, root: string, tool: s
   if (!link.sign) throw new Error(UNPAIRED);
   const remote = await deps.remote(root);
   if (!remote) throw new Error("This project has no git remote on the worker, so no vault on your Mac matches it.");
-  const ask = { ...fields, nonce: nonce ?? deps.nonce(), expiresAt: deps.now() + ASK_MS, remote };
-  return deps.ask(cardId, tool, { ...ask, sig: link.sign(vaultAskMessage(cardId, link.boxKey, tool, ask)) });
+  const { kept, ...signed } = fields;
+  const ask = { ...signed, nonce: nonce ?? deps.nonce(), expiresAt: deps.now() + ASK_MS, remote };
+  return deps.ask(cardId, tool, { ...ask, sig: link.sign(vaultAskMessage(cardId, link.boxKey, tool, ask)), ...(kept && { kept }) });
 }
 
 export interface Listed {
