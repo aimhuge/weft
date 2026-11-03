@@ -27,6 +27,9 @@ export const HOST_VERBS = [
   "files.list",
   "files.read",
   "files.write",
+  // Live reload over a session line: the line watches a file a read may open, and drops it.
+  "files.watch",
+  "files.unwatch",
   // A host's own settings (./host-settings.ts), for no card: elevated, and only HOST_SETTINGS.
   "settings.get",
   "settings.put",
