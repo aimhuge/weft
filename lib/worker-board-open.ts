@@ -5,12 +5,12 @@
 // minute and only while something sealed comes by. Rows open with lib/sync-seal.ts, files with lib/blob-seal.ts openBlob
 // (which also checks the bytes hash to their ref). What won't open draws its 🔒 stand-in, as on weft.zip.
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { openBlob } from "./blob-seal";
+import { blobSealer, openBlob } from "./blob-seal";
 import { pageBlobRefs, signPageRefs } from "./blob-page-sign";
 import { readBlob, restoreHtmlType } from "./blob-read";
 import { resolveBlobUrls } from "./blob-urls";
 import { shell } from "./browser-shell";
-import { BLOB_REF_PREFIX } from "./cloud-sync-types";
+import { BLOB_REF_PREFIX, type BlobSeal } from "./cloud-sync-types";
 import { globalSingleton } from "./global-singleton";
 import { sodium, type Sodium } from "./sodium";
 import { isSealed, isSealedBytes, openCard, openItem, openToolResult, type SyncKeyring } from "./sync-seal";
@@ -135,4 +135,15 @@ export async function openPictureUrls(client: SupabaseClient, orgId: string, url
     }),
   );
   return out;
+}
+
+// How a file this Mac pastes into a worker card goes up: sealed with the version that card's row came sealed with, when
+// main holds it, since only a worker holding that version (a grant this Mac signed) can have sealed the row, so it opens
+// the file too (lib/worker-sealing.ts openingReader); plain for a card that came plain (no grant, shared) or one it can't read.
+export async function cardBlobSeal(client: SupabaseClient, orgId: string, cardId: string): Promise<BlobSeal | null> {
+  const { data } = await client.from("cloud_cards").select("sealed:card->sealed->v").eq("org_id", orgId).eq("card_id", cardId).maybeSingle<{ sealed: unknown }>();
+  const version = data?.sealed;
+  if (typeof version !== "number") return null;
+  const key = (await macRing(orgId)).get(version);
+  return key ? blobSealer(await sodium(), { version, key }) : null;
 }

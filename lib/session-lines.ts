@@ -114,6 +114,9 @@ function subscribe(fn: () => void) {
   return () => void listeners.delete(fn);
 }
 
+// Any line held, let go, or changing route (each pong included): an open file's watch re-asks on a line that came up.
+export const onLinesChange = subscribe;
+
 export function useLineRoute(workerId: string | null | undefined): LineRoute | null {
   // The server has no lines, so the same read is its snapshot too.
   const read = () => lineFor(workerId)?.route() ?? null;

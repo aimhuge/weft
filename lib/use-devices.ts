@@ -22,7 +22,7 @@ export interface WorkerCode {
   fingerprint?: string;
 }
 
-type WorkerCheck = { status: "open" | "paired" | "cancelled" | "expired" | "failed"; error?: string; worker?: { name: string; code: string } };
+type WorkerCheck = { status: "open" | "paired" | "cancelled" | "expired" | "failed"; error?: string; worker?: { id?: string; name: string; code: string } };
 
 export interface HostPairingBridge {
   start(orgId?: string): Promise<WorkerCode>;
@@ -106,6 +106,9 @@ export async function sendPasskeys(workerId: string, name: string, sync: () => P
   return `${name} now lets ${which} approve changes there.`;
 }
 
+// A ref read through a call, so a check after an await isn't narrowed by one before it.
+const isLive = (ref: { current: boolean }) => ref.current;
+
 export function useDevices({ pairing, hosts }: Bridges = bridgesHere()) {
   const [view, setView] = useState<DevicesView | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -156,7 +159,15 @@ export function useDevices({ pairing, hosts }: Bridges = bridgesHere()) {
         if (r.status === "open" || !live.current) return;
         setCode(null);
         setNote(workerOutcome(r));
-        if (r.status === "paired") await reload();
+        if (r.status !== "paired") return;
+        // While your Mac seals, offer the new worker the key at once, under its own Touch ID (electron/worker-key-grants.cjs).
+        const w = r.worker;
+        if (w?.id && hosts.grantKey && (await hosts.keyStatus?.())?.sealOn) {
+          const sealed = await hosts.grantKey(w.id).catch((err: unknown) => ({ error: err instanceof Error ? err.message : String(err) }));
+          // Read again: the Touch ID took a while, and Settings may have closed meanwhile.
+          if (isLive(live)) setNote(`${workerOutcome(r)} ${"error" in sealed ? `Not sealed: ${sealed.error}` : sealOutcome(w.name, sealed)}`);
+        }
+        await reload();
       });
     }, POLL_MS);
     return () => clearInterval(timer);

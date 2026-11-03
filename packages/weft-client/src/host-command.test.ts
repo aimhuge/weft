@@ -149,6 +149,9 @@ describe("remoteRefusal for the editor's verbs", () => {
     expect(remoteRefusal({ verb: "files.write", args: { id: "c1", text: "x" } })).toBe("That names no file.");
     expect(remoteRefusal({ verb: "files.read", args: { id: "c1", path: "src/a.ts" } })).toBeNull();
     expect(remoteRefusal({ verb: "files.list", args: { id: "c1" } })).toBeNull();
+    expect(remoteRefusal({ verb: "files.watch", args: { id: "c1", path: ".ssh/id_rsa" } })).toContain("holds credentials");
+    expect(remoteRefusal({ verb: "files.watch", args: { id: "c1" } })).toBe("That names no file.");
+    expect(remoteRefusal({ verb: "files.unwatch", args: { id: "c1", path: "src/a.ts" } })).toBeNull();
   });
 });
 
