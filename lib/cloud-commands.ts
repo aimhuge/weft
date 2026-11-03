@@ -3,15 +3,21 @@
 // (`replyCommand` → `replyBody`), answer a thread's pending permission or question (`answerCommand` → `answerBody`),
 // and stop a card's running turn (`stopCommand` → `stopBody`). The web builds the row, the Mac (lib/cloud-inbox.ts)
 // reads the payload back; all four live here so the two sides can't drift.
-import { GRANT_SCOPES, type GrantScope } from "@weft/client";
+import {
+  GRANT_SCOPES,
+  readQuestionReply,
+  type ApprovalAuth,
+  type Backend,
+  type Effort,
+  type GrantScope,
+  type HostPayload,
+  type HostResult,
+  type PasskeyAuth,
+  type QuestionReply,
+  type Sealed,
+} from "@weft/client";
 import { backendFor, CODEX_DEFAULT_MODEL } from "./new-thread";
-import type { HostPayload, HostResult } from "./host-command";
-import type { Sealed } from "./worker-seal";
-import type { ApprovalAuth } from "./approval-sig";
-import type { PasskeyAuth } from "./approval-passkey";
-import { readQuestionReply } from "./question-reply";
-import type { QuestionReply } from "./types-thread";
-import type { Backend, Effort, PendingPermission } from "./types";
+import type { PendingPermission } from "./types";
 import { commandClient } from "./turn-client";
 
 export type CloudCommandStatus = "pending" | "claimed" | "done" | "failed";

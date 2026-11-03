@@ -3,14 +3,10 @@
 // fresh ephemeral key: X25519 to a shared secret, HKDF-SHA256 to an AES-256-GCM key, bound to both public keys and
 // to what the secret is for. Supabase carries only the sealed bytes, which only that worker can open.
 import crypto from "node:crypto";
+import type { Sealed } from "@weft/client";
 
-export interface Sealed {
-  v: 1;
-  epk: string;
-  iv: string;
-  ct: string;
-  tag: string;
-}
+// The sealed shape lives in @weft/client, for the commands that carry one.
+export type { Sealed };
 
 export interface SealKeys {
   publicKey: string;

@@ -1,7 +1,7 @@
 // @weft/client: Weft's client core in plain TypeScript, for the desktop board, weft.zip and the phone app alike
 // (docs/architecture/project-hosts.md#views, README.md beside this file). Nothing here may import the DOM, React,
 // Next, Node built-ins or the app's lib/; tsconfig.json beside this file checks that.
-export { COLUMNS, MODES, type Backend, type Column, type PermissionMode, type SkillInfo } from "./card";
+export { COLUMNS, MODES, type Backend, type Column, type Effort, type PermissionMode, type SkillInfo } from "./card";
 export { bangCommand, isBang } from "./bang";
 export { cleanTz, ownTimeZone, readClientHint, withClientHint, type ClientApp, type ClientHint } from "./client-hint";
 export { BLOB_REF_PREFIX, type BlobRef } from "./blob-ref";
@@ -102,3 +102,6 @@ export {
   type SortKey,
   type WorkerProjectStatus,
 } from "./board-group";
+export { readQuestionReply } from "./question-reply";
+export type { Sealed } from "./sealed";
+export type { PasskeyAuth } from "./passkey-auth";
