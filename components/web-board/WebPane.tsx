@@ -5,7 +5,8 @@
 // tells it (lib/share-types.ts paneFor). A synced ~/.weft/show page is framed sandboxed through
 // app/api/web-board/[orgId]/page/[sha]; a public site is framed as it is; a localhost or file page only exists on the
 // Mac, so the card's latest pane capture stands in for it. The desktop board draws this too, for a worker's card
-// (components/WorkerPane.tsx), with orgId null: it frames through its own server, more tightly, because a frame there
+// (components/WorkerPane.tsx), with orgId null, where its native pane doesn't take the page: the live screen, a page
+// only the worker has, and off the desktop app. It frames through its own server, more tightly, because a frame there
 // shares the board window's session (app/api/worker-board/page/[sha]), and that's why it never frames a public site.
 import { useState, type ReactNode } from "react";
 import type { SharePane } from "@/lib/share-types";

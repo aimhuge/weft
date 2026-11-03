@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isSelfUrl } from "./self-url.cjs";
+import { isSelfUrl, isWorkerPageUrl } from "./self-url.cjs";
 
 const own = "http://localhost:3000/";
 
@@ -32,5 +32,23 @@ describe("isSelfUrl", () => {
   it("is false with no app view or an unparsable url", () => {
     expect(isSelfUrl("http://localhost:3000/", undefined)).toBe(false);
     expect(isSelfUrl("not a url", own)).toBe(false);
+  });
+});
+
+const PAGE = `/api/worker-board/page/${"a".repeat(64)}`;
+
+describe("a worker card's page", () => {
+  it("opens in the pane though it's on Weft's server, and nothing else under that route does", () => {
+    expect(isSelfUrl(`http://127.0.0.1:3000${PAGE}#step-2`, own)).toBe(false);
+    expect(isSelfUrl(`http://localhost:3000${PAGE}/x`, own)).toBe(true);
+    expect(isSelfUrl("http://localhost:3000/api/worker-board/page/abc", own)).toBe(true);
+  });
+
+  it("is named only on Weft's own server", () => {
+    expect(isWorkerPageUrl(`http://127.0.0.1:3000${PAGE}`, own)).toBe(true);
+    expect(isWorkerPageUrl(`http://127.0.0.1:3001${PAGE}`, own)).toBe(false);
+    expect(isWorkerPageUrl("http://localhost:3000/board", own)).toBe(false);
+    expect(isWorkerPageUrl(`https://example.com${PAGE}`, own)).toBe(false);
+    expect(isWorkerPageUrl(`http://localhost:3000${PAGE}`, undefined)).toBe(false);
   });
 });

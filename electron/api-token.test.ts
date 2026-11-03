@@ -77,13 +77,25 @@ describe("api token", () => {
     expect(send(hook(s).listener, "GET", { ...frame, url: `${PAGE}/../../../settings` })).toEqual({ requestHeaders: { accept: "*/*" } });
   });
 
-  it("gives the pane only the read value, only on attachment GETs, by either loopback name", () => {
+  it("gives the pane only the read value, only on attachment GETs and a worker's page, by either loopback name", () => {
     const s = fakeSession();
     attachPaneAttachments(s, "http://127.0.0.1:1024");
-    expect(hook(s).filter.urls).toEqual(["http://127.0.0.1:1024/api/attachments/*", "http://localhost:1024/api/attachments/*"]);
-    expect(send(hook(s).listener, "GET")).toEqual({ requestHeaders: { accept: "*/*", "x-weft-token": "1" } });
-    expect(send(hook(s).listener, "HEAD")).toEqual({ requestHeaders: { accept: "*/*", "x-weft-token": "1" } });
-    expect(send(hook(s).listener, "POST")).toEqual({});
+    expect(hook(s).filter.urls).toEqual([
+      "http://127.0.0.1:1024/api/attachments/*",
+      "http://localhost:1024/api/attachments/*",
+      "http://127.0.0.1:1024/api/worker-board/page/*",
+      "http://localhost:1024/api/worker-board/page/*",
+    ]);
+    const shot = { url: "http://localhost:1024/api/attachments/a.png" };
+    const read = { requestHeaders: { accept: "*/*", "x-weft-token": "1" } };
+    expect(send(hook(s).listener, "GET", shot)).toEqual(read);
+    expect(send(hook(s).listener, "HEAD", shot)).toEqual(read);
+    expect(send(hook(s).listener, "POST", shot)).toEqual({});
+    expect(send(hook(s).listener, "GET", { url: `${PAGE}#step` })).toEqual(read);
+    expect(send(hook(s).listener, "HEAD", { url: PAGE })).toEqual({});
+    expect(send(hook(s).listener, "POST", { url: PAGE })).toEqual({});
+    expect(send(hook(s).listener, "GET", { url: `${PAGE}/x` })).toEqual({});
+    expect(send(hook(s).listener, "GET")).toEqual({});
   });
 
   it("attaches both once the server is up", () => {
@@ -93,6 +105,6 @@ describe("api token", () => {
     attachTokens({ defaultSession: board, fromPartition }, "http://127.0.0.1:1024", "secret");
     expect(fromPartition).toHaveBeenCalledWith("persist:threadboard-browser");
     expect(hook(board).filter.urls).toEqual(["http://127.0.0.1:1024/*"]);
-    expect(hook(pane).filter.urls).toEqual(["http://127.0.0.1:1024/api/attachments/*", "http://localhost:1024/api/attachments/*"]);
+    expect(hook(pane).filter.urls).toContain("http://127.0.0.1:1024/api/worker-board/page/*");
   });
 });

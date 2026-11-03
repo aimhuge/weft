@@ -267,6 +267,8 @@ export type BoardEvent =
   | { type: "account" }
   // A cron was made, changed, run or deleted (lib/cron-store.ts): the rail's Crons drawer reloads.
   | { type: "crons" }
+  // A Weft Worker wrote a project's snapshot (lib/worker-project-live.ts): the header badges read that worker:// path again.
+  | { type: "worker_project"; project: string }
   // A restart was armed, cancelled, or the turns it waits on changed (lib/restart-when-idle.ts).
   | { type: "restart"; restart: RestartStatus };
 

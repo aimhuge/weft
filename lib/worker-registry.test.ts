@@ -88,6 +88,16 @@ describe("registry", () => {
     expect(calls).toEqual([{ fn: "worker_claim", args: { p_key: key, p_command: "cmd-1" } }]);
   });
 
+  it("renews its leases and reclaims its expired reads", async () => {
+    const renewed = fakeRpc({ data: 2 });
+    await registry(renewed.rpc, key).renew(["cmd-1", "cmd-2"]);
+    expect(renewed.calls).toEqual([{ fn: "worker_renew", args: { p_key: key, p_commands: ["cmd-1", "cmd-2"] } }]);
+    const back = fakeRpc({ data: 3 });
+    expect(await registry(back.rpc, key).reclaim(["files.read"])).toBe(3);
+    expect(back.calls).toEqual([{ fn: "worker_reclaim", args: { p_key: key, p_verbs: ["files.read"] } }]);
+    expect(await registry(fakeRpc({ data: null }).rpc, key).reclaim([])).toBe(0);
+  });
+
   it("reports a command done", async () => {
     const { rpc, calls } = fakeRpc();
     await registry(rpc, key).report("cmd-1", "done", "card-1", null);

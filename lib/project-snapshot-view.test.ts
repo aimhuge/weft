@@ -1,14 +1,22 @@
 // @vitest-environment jsdom
 // A worker project's snapshot on the board (lib/project-snapshot-view.ts): one request shared by the badges for a few
 // seconds, a badge's read from it, the age line only when it's stale or the worker is offline, and the hook.
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SnapshotView } from "./project-snapshot-view";
 
 const fetchMock = vi.hoisted(() => vi.fn<(url: string) => Promise<Response>>());
 vi.mock("./api-client", () => ({ apiFetch: (url: string) => fetchMock(url) }));
+const heard = vi.hoisted(() => ({ fn: null as ((event: unknown) => void) | null, open: null as (() => void) | null }));
+vi.mock("./use-events", () => ({
+  useBoardEvents: (fn: (event: unknown) => void, open: () => void) => {
+    heard.fn = fn;
+    heard.open = open;
+  },
+}));
 
-const { SNAPSHOT_TTL_MS, STALE_MS, cloudRead, fetchSnapshot, forgetSnapshots, snapshotAge, useSnapshotView } = await import("./project-snapshot-view");
+const { SNAPSHOT_TTL_MS, STALE_MS, cloudRead, fetchSnapshot, forgetSnapshots, snapshotAge, snapshotChanged, snapshotVersion, useSnapshotVersion, useSnapshotView, useWorkerProjectEvents } =
+  await import("./project-snapshot-view");
 
 const NOW = Date.parse("2026-11-02T12:00:00.000Z");
 const pile = { root: "/w/ling", files: 1, added: 2, removed: 0, cards: 0 };
@@ -95,5 +103,34 @@ describe("useSnapshotView", () => {
     late.unmount();
     release(new Response(JSON.stringify(view())));
     await new Promise((r) => setTimeout(r, 0));
+  });
+});
+
+describe("a worker's new snapshot", () => {
+  it("drops that project's cached view and moves its version, leaving the others alone", async () => {
+    fetchMock.mockImplementation(() => json(view()));
+    await fetchSnapshot("worker://w1/ling", NOW);
+    await fetchSnapshot("worker://w1/other", NOW);
+    const before = snapshotVersion("worker://w1/ling");
+    snapshotChanged("worker://w1/ling");
+    expect(snapshotVersion("worker://w1/ling")).toBe(before + 1);
+    expect(snapshotVersion(null)).toBe(0);
+    await fetchSnapshot("worker://w1/ling", NOW + 1_000);
+    await fetchSnapshot("worker://w1/other", NOW + 1_000);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("is heard off the board's events, and a badge's version follows it", () => {
+    renderHook(() => useWorkerProjectEvents());
+    const { result } = renderHook(() => useSnapshotVersion("worker://w2/app"));
+    expect(result.current).toBe(0);
+    act(() => heard.fn?.({ type: "crons" }));
+    expect(result.current).toBe(0);
+    act(() => heard.fn?.({ type: "worker_project", project: "worker://w2/app" }));
+    expect(result.current).toBe(1);
+    heard.open?.();
+    const { result: none, unmount } = renderHook(() => useSnapshotVersion(undefined));
+    expect(none.current).toBe(0);
+    unmount();
   });
 });

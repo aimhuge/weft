@@ -33,6 +33,10 @@ export interface CommandLine {
   // True when this host now holds the command. Only a pending row can be claimed, so a command runs once.
   claim(id: string): Promise<boolean>;
   report(id: string, outcome: Outcome): Promise<void>;
+  // Leases (lib/host/lease.ts): renews the claims this host still runs, and requeues its own expired claims of the
+  // verbs named, answering how many. Each throws on a database without them, which turns leases off for a while.
+  renew?: (ids: string[]) => Promise<void>;
+  reclaim?: (verbs: string[]) => Promise<number>;
 }
 
 // The Mac: the account signed in here, its device's pending rows oldest first. A claim that errors is a claim it
@@ -62,15 +66,26 @@ export function sessionLine(client: SupabaseClient, uid: string, device: string,
       const { error } = await commands().update(patch).eq("id", id);
       if (error) warn(`couldn't report on ${id}: ${error.message}`);
     },
+    // Any write to lease_until renews it from the database's clock (the lease trigger), so the value sent doesn't count.
+    async renew(ids) {
+      const { error } = await commands().update({ lease_until: new Date().toISOString() }).in("id", ids).eq("status", "claimed");
+      if (error) throw new Error(error.message);
+    },
+    async reclaim(verbs) {
+      const res = await client.rpc("reclaim_cloud_commands", { p_device: device, p_verbs: verbs });
+      if (res.error) throw new Error(res.error.message);
+      return Number(res.data ?? 0);
+    },
   };
 }
 
 // A Weft Worker: its key, through the key-checked functions. A failed claim throws (the pass logs it); a report goes
 // without p_result unless there is one, so it still reaches a database whose worker_report predates it.
-export function keyLine(reg: Pick<Registry, "pending" | "claim" | "report">): CommandLine {
+export function keyLine(reg: Pick<Registry, "pending" | "claim" | "report"> & Partial<Pick<Registry, "renew" | "reclaim">>): CommandLine {
   return {
     pending: () => reg.pending(),
     claim: (id) => reg.claim(id),
+    ...(reg.renew && reg.reclaim ? { renew: reg.renew, reclaim: reg.reclaim } : {}),
     async report(id, o) {
       const cardId = o.status === "done" ? o.cardId : null;
       const error = o.status === "failed" ? o.error : null;

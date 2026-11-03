@@ -94,6 +94,17 @@ describe("createBeat", () => {
     await t.beat.stop();
   });
 
+  it("renews the host's leases on every tick, and not once stopped", async () => {
+    const renew = vi.fn(() => Promise.resolve());
+    const t = setup({ renew }, false);
+    await t.beat.tick();
+    await t.beat.tick();
+    expect(renew).toHaveBeenCalledTimes(2);
+    await t.beat.stop();
+    await t.beat.tick();
+    expect(renew).toHaveBeenCalledTimes(2);
+  });
+
   it("logs a failed write and says it didn't land", async () => {
     const t = setup({}, false);
     t.heartbeat.mockRejectedValueOnce(new Error("no network"));
