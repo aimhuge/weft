@@ -2,6 +2,37 @@
 
 The mic button and its shortcut (`lib/use-dictation.ts`) record from the microphone and send the recording to
 `POST /api/transcribe`, which turns it into text on this Mac with whisper.cpp (`lib/transcribe.ts`). Nothing leaves the Mac.
+In the desktop app the shortcut works in every app, through a floating pill (below); on weft.zip the composer records on its own.
+
+## Anywhere
+
+The dictation key (⌥' unless rebound in Settings → Shortcuts) is a system-wide hotkey, like Superwhisper's.
+
+```
+⌥' in any app ─► main (electron/dictation-helper.cjs) ─► floating pill (app/dictate, components/DictationPill.tsx)
+                   shows the pill, holds Esc                records with useDictation, chimes, POST /api/transcribe
+                                                                │ text
+                 electron/dictation-insert.cjs ◄────────────────┘
+                   clipboard, then: Weft field → insertText · other app's text box → ⌘V · no text box → clipboard only
+```
+
+- **The pill** is a transparent, non-activating panel (`type: "panel"`, `focusable: false`) at the top centre of the screen the
+  mouse is on, above every Space and full-screen app (`screen-saver` level). It never takes focus, so the caret stays where you
+  were typing; its stop square still takes clicks. It loads once the server is up and is only hidden between uses, so a press
+  shows it at once. A server that comes back on another port gets a fresh pill on the next press.
+- **Esc** is registered globally only while the pill records (`holdEscape`), so other apps have it the rest of the time.
+- **The key** lives in the board's localStorage (`lib/shortcuts.ts`); the board sends it as an Electron accelerator
+  (`bindingAccelerator`) on load and on every change, and main swaps its registration.
+- **Where the text goes** (`createDictationInsert`): it always goes on the clipboard first. With Weft active, the focused page
+  says whether the caret is in an input, textarea or editor (`PROBE_SCRIPT`) and `webContents.insertText` types it, with a space
+  when it would run into the word before. With another app active, one `osascript` asks System Events for the focused element
+  (turning on `AXManualAccessibility` so Chromium and Electron apps answer); a text role (`TEXT_ROLES`) or a selected-text range
+  gets ⌘V. Without Accessibility, macOS is asked once a launch and the pill says "Copied · allow Accessibility to paste".
+  The first paste also brings macOS's "Weft wants to control System Events" (Automation, `NSAppleEventsUsageDescription`).
+- **The composer's mic** stays, for discoverability: in the desktop app it puts the caret back in its composer and starts the
+  pill (`lib/use-desktop-dictation.ts`), and mirrors the pill's state (relayed by main to the board and the copilot).
+- **Chimes** (`lib/dictation-chimes.ts`): two soft notes, E5→A5 to start and A5→E5 to stop, synthesised with Web Audio, so
+  there are no sound files. Settings → General → Dictation → Start and stop sounds turns them off.
 
 ## One recording, end to end
 
@@ -40,5 +71,5 @@ Names and terms you list (comma-separated or one per line, under 600 characters)
 
 ## Settings
 
-`~/.weft/dictation.json` (`lib/dictation-prefs.ts`): `language`, `advanced`, `vocabulary`. Read and written by
+`~/.weft/dictation.json` (`lib/dictation-prefs.ts`): `language`, `advanced`, `vocabulary`, `sounds`. Read and written by
 `GET`/`PATCH /api/transcribe/settings`; turning Advanced off stops the server right away.

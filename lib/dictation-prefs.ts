@@ -6,7 +6,7 @@ import { DATA_DIR } from "./store";
 
 // Dictation's settings (Settings → General), kept in ~/.weft/dictation.json apart from settings.json:
 // the language whisper listens for, Advanced dictation (the warm whisper-server, lib/whisper-server.ts)
-// and your vocabulary, the names whisper should expect.
+// your vocabulary, the names whisper should expect, and whether the dictation pill chimes.
 
 export type { DictationPrefs };
 
@@ -15,7 +15,7 @@ export const VOCABULARY_MAX = 600;
 
 export const DICTATION_FILE = path.join(DATA_DIR, "dictation.json");
 
-const DEFAULTS: DictationPrefs = { language: "system", advanced: false, vocabulary: "" };
+const DEFAULTS: DictationPrefs = { language: "system", advanced: false, vocabulary: "", sounds: true };
 
 export function readDictationPrefs(): DictationPrefs {
   try {
@@ -24,6 +24,7 @@ export function readDictationPrefs(): DictationPrefs {
       language: isDictationLanguage(raw.language) ? raw.language : DEFAULTS.language,
       advanced: raw.advanced === true,
       vocabulary: typeof raw.vocabulary === "string" ? raw.vocabulary.slice(0, VOCABULARY_MAX) : "",
+      sounds: raw.sounds !== false,
     };
   } catch {
     return { ...DEFAULTS };
@@ -45,6 +46,10 @@ export function writeDictationPrefs(patch: Record<string, unknown>): DictationPr
     if (typeof patch.vocabulary !== "string") throw new Error("vocabulary must be text.");
     if (patch.vocabulary.length > VOCABULARY_MAX) throw new Error(`Keep the vocabulary under ${VOCABULARY_MAX} characters.`);
     next.vocabulary = patch.vocabulary;
+  }
+  if (patch.sounds !== undefined) {
+    if (typeof patch.sounds !== "boolean") throw new Error("sounds must be true or false.");
+    next.sounds = patch.sounds;
   }
   fs.mkdirSync(path.dirname(DICTATION_FILE), { recursive: true });
   fs.writeFileSync(DICTATION_FILE, JSON.stringify(next, null, 2));

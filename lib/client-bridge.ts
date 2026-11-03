@@ -128,6 +128,14 @@ export interface ShellBridge {
     toggle(): void;
     onState(callback: (state: { open: boolean }) => void): () => void;
   };
+  // Dictate anywhere (electron/dictation-helper.cjs): the floating pill records, and its state comes back here so the
+  // composer's mic button shows it. Missing in older shells.
+  dictation?: {
+    toggle(): void;
+    cancel(): void;
+    setShortcut(accelerator: string): void;
+    onState(callback: (update: PillUpdate | null) => void): () => void;
+  };
   // Sign in to Claude for a Weft Worker (electron/claude-sign-in.cjs): runs claude setup-token, opens its approval
   // page beside the click, and resolves with the token or why there isn't one. Older shells don't have it.
   claudeSignIn?: {
@@ -180,8 +188,29 @@ export interface StartupResult {
   slowest: { name: string; label: string; ms: number };
 }
 
+// What the dictation pill reports, ~10 times a second while it records.
+export interface PillUpdate {
+  state: "idle" | "recording" | "transcribing";
+  seconds: number;
+  // Mic loudness, 0 to 1.
+  level: number;
+}
+
+// How a dictation arrived (electron/dictation-insert.cjs): typed into a Weft field, pasted into another app's text box,
+// left on the clipboard, or left there because Weft can't paste without Accessibility.
+export type PillDelivery = "inserted" | "pasted" | "copied" | "no-access";
+
+// Exposed by electron/dictation-preload.cjs, only in the floating dictation pill (app/dictate).
+export interface PillBridge {
+  onCommand(callback: (command: "toggle" | "cancel") => void): () => void;
+  state(update: PillUpdate): void;
+  text(text: string): Promise<PillDelivery>;
+  hide(): void;
+}
+
 declare global {
   interface Window {
     weft?: ShellBridge;
+    weftPill?: PillBridge;
   }
 }

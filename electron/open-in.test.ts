@@ -41,4 +41,15 @@ describe("open in", () => {
     on.get("shell:reveal")!({}, "relative");
     expect(shell.openPath.mock.calls).toEqual([["/p"]]);
   });
+
+  it("opens only web links in the default browser", () => {
+    const on = new Map<string, (...args: unknown[]) => unknown>();
+    const ipcMain = { on: (c: string, f: (...args: unknown[]) => unknown) => on.set(c, f), handle: (c: string, f: (...args: unknown[]) => unknown) => on.set(c, f) };
+    const shell = { openPath: vi.fn(), openExternal: vi.fn() };
+    registerOpenIn(ipcMain, { ...mac([]), shell });
+    on.get("shell:openExternal")!({}, "https://weft.zip");
+    on.get("shell:openExternal")!({}, "file:///etc/passwd");
+    on.get("shell:openExternal")!({}, "javascript:alert(1)");
+    expect(shell.openExternal.mock.calls).toEqual([["https://weft.zip"]]);
+  });
 });

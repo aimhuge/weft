@@ -6,6 +6,7 @@ import { useDictation } from "@/lib/use-dictation";
 import { useThreadTransport } from "@/lib/thread-transport";
 import type { Editor } from "@tiptap/react";
 import { insertFiles } from "./MediaNode";
+import { currentBinding, formatBinding } from "@/lib/shortcuts";
 import ComposerMicButton from "./ComposerMicButton";
 import Icon, { type IconName } from "./Icon";
 import Tip from "./Tip";
@@ -93,7 +94,7 @@ export default function ComposerBottomBar({
               {dictation.error}
             </button>
           ) : dictation.state === "recording" ? (
-            <span className="text-muted">Listening… click the mic again to insert the text</span>
+            <span className="text-muted">Listening… {formatBinding(currentBinding("dictation"))} or the mic again to insert, Esc cancels</span>
           ) : null}
         </span>
         {actions}

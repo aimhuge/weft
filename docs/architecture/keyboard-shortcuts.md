@@ -92,6 +92,11 @@ The key is claimed in the capture phase, so the editor never types the character
 behind while the microphone is still opening, so the toggle reads a ref instead: a second press in that window cancels
 the recording that is starting rather than opening a second microphone (or leaving one running with nobody listening).
 
+In the desktop app the binding is also a system-wide hotkey (`bindingAccelerator()` → `electron/dictation-helper.cjs`), so it
+works in every app (docs/architecture/dictation.md#anywhere). macOS takes a registered hotkey before any window sees it, so
+the exact combination never reaches the composer there. A system hotkey is an exact combination, though: `⌘⌥'` still
+reaches the composer's handler inside Weft, which starts the same floating pill, but does nothing in other apps.
+
 ## Gotchas
 
 - Enter opens a card only when the card itself has focus, so it still presses a button inside one.

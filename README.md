@@ -276,6 +276,11 @@ The new-thread dialog (⌘N) and every card's reply box use the same editor:
   vocabulary of names and terms whisper should expect, and turns on **Advanced dictation**: Weft
   downloads large-v3-turbo if this Mac has none and keeps it warm in `whisper-server`, so text is back
   in about half a second (it lets go of the memory after 5 idle minutes).
+- **Dictate in any app.** In the desktop app `⌥'` works everywhere on the Mac, like Superwhisper: a red
+  pill floats at the top of the screen with the time and your voice's pulse, a soft chime starts and stops
+  it, and Esc cancels. The text is pasted where you're typing, or copied to the clipboard when there's no
+  text box. Pasting into other apps needs Weft allowed in System Settings → Privacy & Security →
+  Accessibility; the composer's mic starts the same pill.
 - **Drafts are kept** per card and for the new-thread dialog until sent, so closing it loses nothing.
 - **One button that says what Enter does.** The reply box is in one mode at a time, named on a chip inside it
   and on its button: **Send**; while a Claude Code or puku turn runs, **Send** goes in after the agent's next tool

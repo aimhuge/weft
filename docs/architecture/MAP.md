@@ -30,7 +30,7 @@ matching doc below. When a feature lands, add or update its entry here and in it
 - `secrets.md` — the 🔐 vault: device key, on-disk encryption, IPC, Touch ID, agent tools, dev-server env, Supabase sync.
 - `webhooks.md` — the 🪝 rail drawer, the `mcp__webhooks__*` tools, the relay URL, `webhook_deliveries` on Supabase.
 - `tunnels.md` — a private address for a local dev server: `/t/<id>`, cloudflared quick tunnels, the local gate and tickets; on a worker, approved by the owner's Mac (`lib/tunnel-host.ts`, `lib/tunnel-mac.ts`, `lib/tunnel-worker.ts`, `lib/worker-mac-ask.ts`, `lib/device-call-approvals.ts` (owner check, per-worker prompt limits), `electron/worker-label.cjs` (the pinned name in the prompt), `lib/worker-reach.ts`, `worker_tunnel_open`).
-- `dictation.md` — local whisper.cpp dictation: languages, the Advanced warm server, vocabulary, the transcribe route.
+- `dictation.md` — local whisper.cpp dictation: dictate anywhere (the floating pill), languages, the Advanced warm server, vocabulary, the transcribe route.
 - `vercel.md` — the ▲ rail drawer: token in the Keychain, `.vercel/project.json`, env push from the vault, deploys, `vercel_events` Realtime.
 - `supabase.md` — the Supabase rail drawer: token in the Keychain, `supabase/.temp/project-ref`, state, unapplied migrations, the Migrate card.
 - `cloudflare.md` — the orange-cloud rail drawer: API token in the Keychain, Worker/Pages links in `~/.weft/cloudflare-links.json`, wrangler `account_id` and deploys.
@@ -765,6 +765,11 @@ When a new doc lands in this folder, add it here on the same change.
   under 20 s gets an audio window its own length (retried over the full 30 s if the output loops); the vocabulary is whisper's
   prompt; Advanced dictation downloads large-v3-turbo and keeps it warm in `whisper-server` on 127.0.0.1, stopped after 5 idle
   minutes (docs/architecture/dictation.md).
+- `electron/dictation-helper.cjs` + `electron/dictation-insert.cjs` + `electron/dictation-setup.cjs` + `electron/dictation-preload.cjs` +
+  `app/dictate` + `components/DictationPill.tsx` + `lib/use-desktop-dictation.ts` + `lib/dictation-chimes.ts`: dictate anywhere. The
+  dictation key is a system-wide hotkey; a non-activating floating pill records and chimes, Esc is held only while it records, and
+  the text is typed into a focused Weft field, pasted (⌘V) into another app's text box, or left on the clipboard
+  (docs/architecture/dictation.md#anywhere).
 - `lib/shortcut-sheet.ts` + `lib/print-sheet.ts` + `electron/print.cjs` + `components/PrintShortcutSheet.tsx`: the printable
   one-page shortcut sheet, the `?` dialog's Print button and the welcome's pitch for it, shown only when macOS has a printer
   (docs/architecture/keyboard-shortcuts.md#the-printed-sheet).

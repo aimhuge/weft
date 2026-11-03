@@ -340,7 +340,7 @@ export const api = {
   dictation: () => call<{ available: boolean; reason?: string; model?: string }>("GET", "/api/transcribe"),
   transcribe,
   dictationSettings: () => call<DictationSettingsView>("GET", "/api/transcribe/settings"),
-  setDictationSettings: (patch: { language?: string; advanced?: boolean; vocabulary?: string }) =>
+  setDictationSettings: (patch: { language?: string; advanced?: boolean; vocabulary?: string; sounds?: boolean }) =>
     call<DictationSettingsView>("PATCH", "/api/transcribe/settings", patch),
   repos: (fresh = false) => call<{ repos: LocalRepo[] }>("GET", `/api/repos${fresh ? "?fresh=1" : ""}`),
   githubRepos: (fresh = false) => call<{ repos: GithubRepo[] }>("GET", `/api/repos/github${fresh ? "?fresh=1" : ""}`),

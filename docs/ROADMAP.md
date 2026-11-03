@@ -74,6 +74,7 @@ Tags: `Now` is being built this session; `P1` is next and high value; `P2` is cl
 - `Now` **Composer** — the new-thread dialog and reply box share a Markdown editor (formatting bar, ⌘B/⌘I, raw Markdown view), local dictation with whisper.cpp, and saved drafts.
 - `Now` **Repo picker** — the new-thread folder field lists recent projects, git repos on this Mac with their branch, and GitHub repos through `gh`, cloning one into `~/dev` when picked.
 - `Done` **Faster dictation** — a named language, an audio window sized to the clip, a vocabulary, and Advanced dictation's warm whisper-server: 4.8 s → about 0.5 s for a 9-second prompt.
+- `Done` **Dictate anywhere** — `⌥'` in any Mac app: a floating red pill records, chimes, and pastes into the focused text box or copies to the clipboard; Esc cancels.
 - `P2` **Live dictation text** — words appearing while you talk instead of after (the shortcut shipped).
 - `P1` **Fork a thread** — start a new card from a thread's current session, to try a second approach without losing the first.
 - `P1` **Card templates** — saved prompts with folder, CLI, and permission mode ("fix lint", "add tests for X", "review my diff"), picked from the new-card dialog.
