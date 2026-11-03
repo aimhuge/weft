@@ -8,6 +8,12 @@ lands; a release moves those lines under its version and tags the commit `vX.Y.Z
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-11-03
+
+### Fixed
+
+- **The 0.7.1 build now packs.** 0.7.1 was tagged but never shipped: the Mac build of five weft.zip share pages (`/a/<id>`, `/s/<id>`, a user's and a workspace's app and thread addresses) stopped with "uncached or runtime data in `generateMetadata()`", because without the web side those pages are a fixed notice while their link previews still waited on the address. The preview now checks for the web side first and falls back to Weft's generic card, so the desktop build passes and weft.zip's previews are unchanged. Everything listed under 0.7.1 ships in this release.
+
 ## [0.7.1] - 2026-11-03
 
 ### Added
