@@ -12,12 +12,17 @@ import { onWorker } from "./worker-pane";
 export type ServerCaps = Record<string, true | string>;
 
 const NO_PANE = "the browser pane is on the user's Mac, and a worker has no headless browser to drive yet";
-const NO_VAULT = "the 🔐 vault is on the user's Mac, and sealing its values to a worker isn't built yet";
 const NO_TUNNEL = "a worker has no Weft session or tunnel yet, so a dev server or webhook here can't be reached from outside";
 
 export const WORKER_TOOLS: Record<string, ServerCaps> = {
   browser: { open_url: true, "*": `${NO_PANE}. Write what you want to show as an HTML page in the show folder and open_url it.` },
-  secrets: { "*": `${NO_VAULT}. Name the secrets you need in your reply, and use what the project's own environment already holds.` },
+  // Every vault tool reaches the vault on the owner's Mac (lib/worker-vault.ts, lib/secret-ask.ts, lib/worker-secret-run.ts),
+  // each write or use behind Touch ID there; request_access answers that each call will ask. fill_field types into the Mac's
+  // pane, which a worker's pages aren't (secrets.md#fill_field-on-a-weft-worker-not-planned).
+  secrets: {
+    fill_field: "it types into the browser pane on the user's Mac, which this worker's pages aren't. For a command use mcp__secrets__run; for a page, ask the user to fill the field on their Mac",
+    "*": true,
+  },
   webhooks: { list: true, add_blank: true, mark_registered: true, "*": `${NO_TUNNEL}. Record it with add_blank; the user registers it from their Mac.` },
   devservers: { "*": true },
   board_view: { "*": "it drives Weft's own window, which is on the user's Mac, not this worker" },
