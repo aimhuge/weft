@@ -112,10 +112,6 @@ function handleSuggestion(id: string, suggestion: string) {
   if (text) safeUpdate(id, { suggestion: text });
 }
 
-// The in-thread input for an ask_add, except on a Weft Worker: there the blank is filled in 🔐 on the Mac
-// (lib/secret-ask.ts), and the worker's folder means nothing to the Mac's vault.
-const threadAskOf = (tool: string, input: Record<string, unknown>, cwd: string) => (process.env.WEFT_WORKER === "1" && !process.env.WEFT_SHELL_URL ? undefined : secretAskOf(tool, input, cwd));
-
 // The agent's reply: its text goes to the thread (status and review blocks lifted onto the card), and
 // each tool call gets a thread item its result fills in later.
 function handleAssistant(id: string, session: Session, msg: Extract<SDKMessage, { type: "assistant" }>) {
@@ -141,7 +137,9 @@ function handleAssistant(id: string, session: Session, msg: Extract<SDKMessage, 
       const action = toolAction(block.name, input);
       if (block.name === "mcp__browser__open_url") session.openedPane = true;
       recordEdit(id, block.name, input);
-      const ask = threadAskOf(block.name, input, session.spec.cwd);
+      // The in-thread input for an ask_add. On a Weft Worker too: the Mac draws it against its own checkout of the
+      // card's repo (lib/use-ask-folder.ts), so the worker's folder here is only the ask's own.
+      const ask = secretAskOf(block.name, input, session.spec.cwd);
       // The diff (when the tool edits a file) and the path it touches, so the thread can show
       // a clickable file link and an inline diff instead of just the tool's raw result. Computed
       // at tool_use time, so Write's diff is against the file on disk. A throw here would still

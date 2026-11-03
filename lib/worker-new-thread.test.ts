@@ -38,6 +38,23 @@ describe("startWorkerThread", () => {
     });
   });
 
+  it("seals a pasted file with the worker's newest grant: there's no card row yet to take a version from", async () => {
+    const fs = await import("node:fs");
+    const os = await import("node:os");
+    const path = await import("node:path");
+    const dir = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "new-thread-paste-")), "attachments");
+    fs.mkdirSync(dir);
+    fs.writeFileSync(path.join(dir, "shot-1a2b.png"), "a screenshot");
+    for (const agent of [undefined, "reviewer"]) {
+      const { client, calls, uploads } = fakeClient({ workers: [online], grants: [] });
+      await startWorkerThread({ cwd: "worker://w1/ling", prompt: `look ![s](${path.join(dir, "shot-1a2b.png")})`, agent }, client, NOW, dir);
+      // No grant: the file goes up plain, as the worker publishes.
+      expect(calls).toContainEqual({ op: "from", args: ["worker_key_grants"] });
+      expect(calls).toContainEqual({ op: "eq", args: ["worker_id", "w1"] });
+      expect(String(uploads[0]?.body)).toBe("a screenshot");
+    }
+  });
+
   it("names the repo this Mac knows the folder as, for the GitHub connector", async () => {
     const { client, inserted } = fakeClient({ workers: [online] });
     const repoOf = vi.fn(() => "ada/ling");

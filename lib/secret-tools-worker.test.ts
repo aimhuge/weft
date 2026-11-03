@@ -74,7 +74,7 @@ describe("the vault's tools on a worker", () => {
 
   it("asks for a key by making it a blank on the Mac, for the user to fill there", async () => {
     v.blankOnWorker.mockResolvedValueOnce({ label: "o/r", filled: [] });
-    expect(said(await run("ask_add", { name: "K" }))).toBe("K (development) is a blank in the o/r vault on the user's Mac now. This card runs on a Weft Worker, so ask the user to fill it in with 🔐 on their Mac, then end your turn; they'll tell you once it's in.");
+    expect(said(await run("ask_add", { name: "K" }))).toBe("K (development) is a blank in the o/r vault on the user's Mac now, and this thread shows the user an input for it there; the value goes straight into that vault, never to this worker. End your turn now; they'll tell you once it's in.");
     v.blankOnWorker.mockResolvedValueOnce({ label: "", filled: ["K"] });
     const filled = await run("ask_add", { name: "K", environment: "preview" });
     expect(filled.isError).toBe(true);

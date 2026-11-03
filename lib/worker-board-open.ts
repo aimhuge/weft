@@ -137,13 +137,26 @@ export async function openPictureUrls(client: SupabaseClient, orgId: string, url
   return out;
 }
 
+// A file sealed with a version, when main holds it; null (plain) when it doesn't.
+async function versionSeal(orgId: string, version: unknown): Promise<BlobSeal | null> {
+  if (typeof version !== "number") return null;
+  const key = (await macRing(orgId)).get(version);
+  return key ? blobSealer(await sodium(), { version, key }) : null;
+}
+
 // How a file this Mac pastes into a worker card goes up: sealed with the version that card's row came sealed with, when
 // main holds it, since only a worker holding that version (a grant this Mac signed) can have sealed the row, so it opens
 // the file too (lib/worker-sealing.ts openingReader); plain for a card that came plain (no grant, shared) or one it can't read.
 export async function cardBlobSeal(client: SupabaseClient, orgId: string, cardId: string): Promise<BlobSeal | null> {
   const { data } = await client.from("cloud_cards").select("sealed:card->sealed->v").eq("org_id", orgId).eq("card_id", cardId).maybeSingle<{ sealed: unknown }>();
-  const version = data?.sealed;
-  if (typeof version !== "number") return null;
-  const key = (await macRing(orgId)).get(version);
-  return key ? blobSealer(await sodium(), { version, key }) : null;
+  return versionSeal(orgId, data?.sealed);
+}
+
+// A brand-new thread has no row yet to take the version from: its files go up sealed with the newest version this Mac
+// granted the worker (worker_key_grants, electron/worker-key-grants.cjs), which the worker opens them with; plain when it
+// holds no grant (it publishes plain too) or main doesn't hold that version.
+export async function workerBlobSeal(client: SupabaseClient, orgId: string, workerId: string): Promise<BlobSeal | null> {
+  const { data } = await client.from("worker_key_grants").select("version").eq("org_id", orgId).eq("worker_id", workerId).order("version", { ascending: false }).limit(1);
+  const rows: { version: unknown }[] | null = data;
+  return versionSeal(orgId, rows?.[0]?.version);
 }

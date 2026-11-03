@@ -39,9 +39,10 @@ export function missingText(names: string[], environment: string, vault: string,
   return `${lack} ${many ? "They're blanks" : "It's a blank"} there now. If you're blocked on ${many ? "them" : "it"}, call mcp__secrets__ask_add for ${many ? "each" : names[0]} and end your turn: the user gets an input for it in this thread and tells you once it's in.`;
 }
 
-// ask_add on a Weft Worker: the blank goes in on the Mac, and the user fills it there (the thread's input is the Mac's).
+// ask_add on a Weft Worker: the blank goes in on the Mac, and the thread's input there puts the value straight into that
+// vault (components/SecretAskInput.tsx, lib/use-ask-folder.ts); it never comes through the worker.
 export const askOnWorkerText = (name: string, environment: string, vault: string) =>
-  `${name} (${environment}) is a blank in the ${vault} vault on the user's Mac now. This card runs on a Weft Worker, so ask the user to fill it in with 🔐 on their Mac, then end your turn; they'll tell you once it's in.`;
+  `${name} (${environment}) is a blank in the ${vault} vault on the user's Mac now, and this thread shows the user an input for it there; the value goes straight into that vault, never to this worker. End your turn now; they'll tell you once it's in.`;
 
 /** mcp__secrets__ask_add. folder is the card's project, read when the tool runs. */
 export function askAddTool(folder: () => string, cardId: () => string | undefined) {

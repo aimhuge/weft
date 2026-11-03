@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { addLabel } from "@/lib/secret-ask-batch";
+import { useAskFolder } from "@/lib/use-ask-folder";
 import { askAnswered, vaultBridge, type SecretAsk, type VaultEnvironment } from "@/lib/vault-view";
 import Icon from "./Icon";
 import { useAskBatch, useSecretAskBatch } from "./SecretAskBatch";
@@ -12,7 +13,26 @@ import { EnvironmentPicker } from "./VaultParts";
 // Electron main (the same vault.set as the 🔐 drawer) and tells the thread it's in; the value never reaches the
 // thread. Once the vault has it, the input folds to a one-line ✓. Several asks in a thread fill in together
 // (components/SecretAskBatch.tsx): all stay open, one Add takes every filled one, and the thread hears once.
+// On a worker card the value goes into this Mac's checkout of the same repo (lib/use-ask-folder.ts), never the worker.
 export default function SecretAskInput({ ask, onAdded }: { ask: SecretAsk; onAdded?: (text: string) => Promise<void> | void }) {
+  const folder = useAskFolder(ask.folder);
+  const here = useMemo(() => (folder ? { ...ask, folder } : null), [ask, folder]);
+  if (folder === undefined) return null;
+  if (!here)
+    return (
+      <div className={LINE}>
+        <Icon name="lock" size={12} className="text-warn" />
+        <span>
+          Claude needs <code className="font-mono font-medium text-ink">{ask.name}</code>: this Mac has no checkout of the worker&apos;s project, so add it with 🔐 on the board&apos;s left rail.
+        </span>
+      </div>
+    );
+  return <AskForm ask={here} onAdded={onAdded} />;
+}
+
+const LINE = "flex items-center gap-2 rounded-md border border-line bg-sunken px-2.5 py-1.5 text-[12px] text-muted";
+
+function AskForm({ ask, onAdded }: { ask: SecretAsk; onAdded?: (text: string) => Promise<void> | void }) {
   const bridge = vaultBridge();
   const id = useId();
   const batch = useAskBatch(useSecretAskBatch(onAdded));
@@ -40,7 +60,7 @@ export default function SecretAskInput({ ask, onAdded }: { ask: SecretAsk; onAdd
   }, [report, id, state, ask, value, environments]);
   useEffect(() => () => report(id, null), [report, id]);
 
-  const line = "flex items-center gap-2 rounded-md border border-line bg-sunken px-2.5 py-1.5 text-[12px] text-muted";
+  const line = LINE;
   const name = <code className="font-mono font-medium text-ink">{ask.name}</code>;
   if (!bridge)
     return (

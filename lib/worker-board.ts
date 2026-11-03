@@ -24,7 +24,7 @@ import { LINE_PURPOSE, type LineOffer } from "./host-line-protocol";
 import { lanAnswer } from "./lan-offer";
 import { EMPTY_WORKER_BOARD, workerProjectPath, type WorkerBoard, type WorkerProject, type WorkerProjectStatus } from "./worker-project";
 import { liveStatus, type PresenceRead } from "./worker-presence";
-import { cardBlobSeal, openCardRows, openedBlob, openItemRows, openOutput, openPageAssets } from "./worker-board-open";
+import { cardBlobSeal, openCardRows, workerBlobSeal, openedBlob, openItemRows, openOutput, openPageAssets } from "./worker-board-open";
 import { SEALED_PAGE_HTML } from "./blob-seal";
 import { presenceWatch, type PresenceWatch } from "./worker-presence-watch";
 import { macHint } from "./host-facts";
@@ -190,12 +190,13 @@ async function commandTarget(client: SupabaseClient, cardId: string) {
 
 // The files a message pastes, uploaded to the workspace's blobs as you, for the worker to bring over
 // (lib/attachment-transfer.ts). The row gains them only when there are any, so a text reply's row is as it was. For a
-// card, they go up sealed when its row came sealed (lib/worker-board-open.ts cardBlobSeal), asked once there's a file.
-export async function withAttachments(client: SupabaseClient, row: NewCommand, text: string, dir: string, cardId?: string): Promise<NewCommand> {
+// card, they go up sealed when its row came sealed (lib/worker-board-open.ts cardBlobSeal); for a brand-new thread, with
+// the newest version its worker was granted (workerBlobSeal). Asked once there's a file.
+export async function withAttachments(client: SupabaseClient, row: NewCommand, text: string, dir: string, cardId?: string, workerId?: string): Promise<NewCommand> {
   const blobs = createBlobStore({ client });
   let seal: Promise<BlobSeal | null> | null = null;
   const upload = async (file: string) => {
-    seal ??= cardId ? cardBlobSeal(client, row.org_id, cardId) : Promise.resolve(null);
+    seal ??= cardId ? cardBlobSeal(client, row.org_id, cardId) : workerId ? workerBlobSeal(client, row.org_id, workerId) : Promise.resolve(null);
     return (await blobs.upload(file, row.org_id, (await seal) ?? undefined))?.slice(BLOB_REF_PREFIX.length) ?? null;
   };
   const attachments = await encodeAttachments(text, dir, upload);

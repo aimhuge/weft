@@ -13,8 +13,8 @@ const shell = vi.fn<(route: string, body: unknown) => Promise<unknown>>();
 vi.mock("./browser-shell", () => ({ shell: (route: string, body: unknown) => shell(route, body) }));
 vi.mock("./blob-urls", () => ({ resolveBlobUrls: (_c: unknown, _o: string, refs: string[]) => Promise.resolve(Object.fromEntries(refs.map((r) => [r, `https://sb.test/${r.slice(-4)}`]))) }));
 
-const { readWorkerBoard, sendWorkerAction, workerPage, workerThreadPage, workerToolOutput } = await import("./worker-board");
-const { cardBlobSeal, forgetMacRing, macRing, MAX_INLINE_BYTES, openCardRows, openItemRows, openOutput, openPageAssets, openPictureUrls } = await import("./worker-board-open");
+const { readWorkerBoard, sendWorkerAction, withAttachments, workerPage, workerThreadPage, workerToolOutput } = await import("./worker-board");
+const { cardBlobSeal, workerBlobSeal, forgetMacRing, macRing, MAX_INLINE_BYTES, openCardRows, openItemRows, openOutput, openPageAssets, openPictureUrls } = await import("./worker-board-open");
 const { sodium } = await import("./sodium");
 const { aadFor, blobAad, sealBytes, sealCardRow, sealJson, SEALED_TEXT } = await import("./sync-seal");
 const { openBlob, SEALED_PAGE_HTML } = await import("./blob-seal");
@@ -147,5 +147,28 @@ describe("a file this Mac pastes into a worker card", () => {
       expect(String(uploads[0]!.body)).toBe("a screenshot");
     }
     expect(await cardBlobSeal(fakeClient({ cardRow: null }).client, "org-1", "c1")).toBeNull();
+  });
+
+  it("goes up sealed for a brand-new thread with the newest version its worker was granted, plain with none", async () => {
+    const s = await sodium();
+    const { dir, text } = pasted();
+    const row = { org_id: "org-1", kind: "host", target_device: "worker:w1", folder: "ling", payload: {} } as never;
+    const { client, uploads, calls } = fakeClient({ grants: [{ version: 2 }] });
+    const sent = (await withAttachments(client, row, text, dir, undefined, "w1")) as unknown as { payload: { attachments: unknown[] } };
+    expect(sent.payload.attachments).toHaveLength(1);
+    expect(calls).toContainEqual({ op: "eq", args: ["worker_id", "w1"] });
+    const body = new Uint8Array(uploads[0]!.body as Buffer);
+    const shaOf = crypto.createHash("sha256").update("a screenshot").digest("hex");
+    expect((await openBlob(s, body, new Map([[2, KEY.key]]), "org-1", shaOf))?.sealed).toBe(true);
+    // No grant, or a version main doesn't hold: plain. No card and no worker: plain, nothing asked.
+    for (const grants of [[], null, [{ version: 7 }]]) {
+      const plain = fakeClient({ grants });
+      await withAttachments(plain.client, row, text, dir, undefined, "w1");
+      expect(String(plain.uploads[0]!.body)).toBe("a screenshot");
+    }
+    expect(await workerBlobSeal(fakeClient({ grants: [{ version: "x" }] }).client, "org-1", "w1")).toBeNull();
+    const none = fakeClient({ grants: [{ version: 2 }] });
+    await withAttachments(none.client, row, text, dir);
+    expect(String(none.uploads[0]!.body)).toBe("a screenshot");
   });
 });

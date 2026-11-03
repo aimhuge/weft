@@ -375,7 +375,8 @@ in memory only. The design, guarantees and limits are in
 
 Since T2 the rest of the tools work there too, each a device call signed by the worker's pairing key that main re-reads
 and answers from the vault the card's own repo names, through this Mac's clone of it (`electron/worker-vault.cjs`):
-`list` (names), `add_blank` and `ask_add` (blanks made here; the user fills them in 🔐 on the Mac), `set_value` (the value
+`list` (names), `add_blank` and `ask_add` (blanks made here; `ask_add`'s in-thread input on the desktop board fills this
+Mac's checkout of the repo, `lib/use-ask-folder.ts`, so the value never passes through the worker), `set_value` (the value
 sealed to this Mac's device key, stored after the usual Touch ID, which names the worker) and `push_to_vercel` (Touch ID,
 from this Mac's linked clone). A worker card's dev server gets the development set after a Touch ID at every start and
 restart, with no standing grant on a worker (`electron/worker-dev-env.cjs`), sealed to the worker and handed to

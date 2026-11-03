@@ -76,7 +76,7 @@ export async function startWorkerThread(
   if (body.agent) {
     if (body.start === false) throw new Error(AGENT_BACKLOG);
     const row = agentRun({ orgId: who.org, workerId: worker.id, folder: project.folder }, body);
-    const { commandId } = await insert(client, await withAttachments(client, row, body.prompt, dir));
+    const { commandId } = await insert(client, await withAttachments(client, row, body.prompt, dir, undefined, worker.id));
     return { commandId, worker: worker.name, cardId: "" };
   }
   const cardId = randomUUID();
@@ -86,6 +86,7 @@ export async function startWorkerThread(
   // (lib/worker-folder-repo.ts); the worker ignores both.
   const extra = body.signStart ? await connectorStart({ workerId: worker.id, cardId, folder: project.folder }, connector) : {};
   const row: NewCommand = { ...built, payload: { ...(built.payload as object), ...extra } as NewCommand["payload"] };
-  const { commandId } = await insert(client, await withAttachments(client, row, body.prompt, dir));
+  // No card row yet to take a seal version from: the files go up sealed with the worker's newest grant, when it has one.
+  const { commandId } = await insert(client, await withAttachments(client, row, body.prompt, dir, undefined, worker.id));
   return { commandId, worker: worker.name, cardId };
 }
