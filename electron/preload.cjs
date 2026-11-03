@@ -219,6 +219,11 @@ contextBridge.exposeInMainWorld("weft", {
     forgetPin: (id, name) => ipcRenderer.invoke("worker-pins:forget", id, name),
     // Approve re-pair: main asks Touch ID and signs the swap with this Mac's key (electron/worker-repair.cjs).
     approveRepair: (id, code) => ipcRenderer.invoke("worker-repair:approve", id, code),
+    // Seal… : main grants the worker the workspace key after Touch ID; drop after a revoke; status for the list
+    // (electron/worker-key-grants.cjs).
+    grantKey: (id) => ipcRenderer.invoke("worker-keys:grant", id),
+    dropKeys: (id) => ipcRenderer.invoke("worker-keys:drop", id),
+    keyStatus: () => ipcRenderer.invoke("worker-keys:status"),
   },
   // A worker's connectors (electron/connector-grants.cjs): on, settings, Allows and vouching for another Mac, each behind
   // Touch ID in main and signed by this Mac's approval key; the Mac keys of yours and whether each is trusted yet.

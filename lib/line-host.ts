@@ -14,18 +14,15 @@ import { useEffect, useRef } from "react";
 import type { HostVerb } from "./host-api/types";
 import type { HostArgs } from "./host-command";
 import { lineWatch } from "./line-file-watch";
-import { NOT_STREAMING, streamedAfter } from "./line-streaming";
 import { MEDIA_REF } from "./media";
 import { LineDown } from "./session-line-calls";
-import { lineFor, useLineRoute } from "./session-lines";
-import { applyThreadEvent, type ThreadPage } from "./thread-page";
+import { lineFor } from "./session-lines";
+import { useLineThread } from "./line-thread";
 import type { PageUpdate, ThreadTransport } from "./thread-transport";
 import { actOnWorker, askWorker, type ActResult } from "./worker-acts";
 import { workerFilesVia } from "./worker-files";
 import { useWorkerLive, workerTransportVia } from "./worker-transport";
 import { signedArgs } from "./widen-signer";
-
-const EMPTY: ThreadPage = { items: [], start: 0, total: 0 };
 
 const pastesFiles = (args: HostArgs) => Object.values(args).some((v) => typeof v === "string" && new RegExp(MEDIA_REF.source).test(v));
 
@@ -71,17 +68,11 @@ export function warmOnLine(workerId: string, cardId: string): void {
   if (line?.up()) line.call("card.warm", { id: cardId }).catch(() => {});
 }
 
-type OnStreaming = ((text: string) => void) | undefined;
-
-export function useLineLive(workerId: string, cardId: string, onUpdate: (update: PageUpdate) => void, onReconnect: () => void, onStreaming?: OnStreaming) {
-  const direct = useLineRoute(workerId)?.kind === "direct";
-  const update = useRef(onUpdate);
+export function useLineLive(workerId: string, cardId: string, onUpdate: (update: PageUpdate) => void, onReconnect: () => void, onStreaming?: (text: string) => void) {
+  const direct = useLineThread(workerId, cardId, onUpdate, onStreaming);
   const reconnect = useRef(onReconnect);
-  const streaming = useRef<OnStreaming>(onStreaming);
   useEffect(() => {
-    update.current = onUpdate;
     reconnect.current = onReconnect;
-    streaming.current = onStreaming;
   });
   useWorkerLive(cardId, onUpdate, !direct);
   const first = useRef(true);
@@ -89,19 +80,6 @@ export function useLineLive(workerId: string, cardId: string, onUpdate: (update:
     // The route changed: read the newest page once, to cover what neither route carried meanwhile.
     if (first.current) first.current = false;
     else reconnect.current();
-    if (!direct) return;
-    let streamed = NOT_STREAMING;
-    const off = lineFor(workerId)?.onEvent((event) => {
-      if (event.t === "thread_cleared" && event.cardId === cardId) update.current(() => EMPTY);
-      if (event.t === "thread" && event.cardId === cardId) update.current((prev) => applyThreadEvent(prev, event));
-      const next = streamedAfter(streamed, event, cardId);
-      if (next !== streamed) streaming.current?.((streamed = next).text);
-    });
-    // Another card, or the line went: what was streaming isn't any more (the re-read page has the reply if it landed).
-    return () => {
-      off?.();
-      if (streamed.text) streaming.current?.("");
-    };
   }, [direct, workerId, cardId]);
 }
 

@@ -3,7 +3,8 @@
 // read back from the row's result and kept a few minutes.
 import { describe, expect, it, vi } from "vitest";
 import type { NewCommand } from "./cloud-commands";
-import { cloudHostActs, type CloudHostInput } from "./cloud-host-acts";
+import { cloudHostActs, workerOfTarget, type CloudHostInput } from "./cloud-host-acts";
+import { LineDown, LineLost } from "./session-line-calls";
 import type { CommandResult } from "./worker-command-wait";
 
 const TARGET = { orgId: "org-1", device: "mac-1", folder: "/dev/app", cardId: "c1" };
@@ -110,5 +111,59 @@ describe("a widening from weft.zip", () => {
     expect(rows).toHaveLength(1);
     const gone = setup(undefined, { widen: vi.fn(() => true) });
     await expect(gone.acts.act("card.shell", "gone", { command: "ls" })).rejects.toThrow(/isn't on the board/);
+  });
+});
+
+describe("a worker's card over its session line", () => {
+  const WORKER = { ...TARGET, device: "worker:w-1" };
+  function online(call: (verb: string, args: Record<string, unknown>) => Promise<unknown>, up = true) {
+    const held = { up: () => up, call: vi.fn(call) };
+    const line = vi.fn((workerId: string) => (workerId === "w-1" ? held : null));
+    const made = setup(undefined, { target: (cardId) => ({ ...WORKER, cardId }), line });
+    return { ...made, held, line };
+  }
+
+  it("goes on the line while it's up, with the card's id, and sends no row", async () => {
+    const { acts, rows, held, line } = online(() => Promise.resolve({ value: null }));
+    await expect(acts.act("card.update", "c1", { body: { starred: true }, id: "other" })).resolves.toBeUndefined();
+    expect(line).toHaveBeenCalledWith("w-1");
+    expect(held.call).toHaveBeenCalledWith("card.update", { body: { starred: true }, id: "c1" });
+    expect(rows).toEqual([]);
+  });
+
+  it("takes the relay when the line is down, or couldn't send it", async () => {
+    const down = online(() => Promise.resolve(), false);
+    await down.acts.act("card.update", "c1", { body: { starred: true } });
+    expect(down.held.call).not.toHaveBeenCalled();
+    expect(down.rows).toHaveLength(1);
+    const unsent = online(() => Promise.reject(new LineDown()));
+    await unsent.acts.act("card.update", "c1", { body: { starred: true } });
+    expect(unsent.rows).toHaveLength(1);
+  });
+
+  it("rejects with the worker's refusal, and never resends a call the line lost", async () => {
+    const refused = online(() => Promise.reject(new Error("A worker doesn't run shell commands from the network.")));
+    await expect(refused.acts.act("card.update", "c1", { body: { starred: true } })).rejects.toThrow("from the network");
+    const lost = online(() => Promise.reject(new LineLost()));
+    await expect(lost.acts.act("card.update", "c1", { body: { starred: true } })).rejects.toBeInstanceOf(LineLost);
+    expect([...refused.rows, ...lost.rows]).toEqual([]);
+  });
+
+  it("never carries a widening or pasted files: those go as rows", async () => {
+    const { acts, rows, held } = online(() => Promise.resolve());
+    await acts.act("card.update", "c1", { body: { agent: "builder" } });
+    await acts.act("card.message.edit", "c1", { text: "see ![shot](/tmp/a.png)" });
+    expect(held.call).not.toHaveBeenCalled();
+    expect(rows).toHaveLength(2);
+  });
+
+  it("leaves a Mac's card on the relay, line or not", async () => {
+    const line = vi.fn(() => ({ up: () => true, call: vi.fn() }));
+    const { acts, rows } = setup(undefined, { line });
+    await acts.act("card.update", "c1", { body: { starred: true } });
+    expect(line).not.toHaveBeenCalled();
+    expect(rows).toHaveLength(1);
+    expect(workerOfTarget("gone")).toBeNull();
+    expect(workerOfTarget(WORKER)).toBe("w-1");
   });
 });

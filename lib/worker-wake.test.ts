@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { listenForPushes, listenForWakes, PUSH_EVENT, PUSH_TOPIC, wakeTopic, WAKE_EVENT, type WakeChannel, type WakeClient } from "./worker-wake";
+import { createHash } from "node:crypto";
+import { KEY_GRANT_EVENT, keyGrantTopic, listenForKeyGrants, listenForPushes, listenForWakes, PUSH_EVENT, PUSH_TOPIC, wakeTopic, WAKE_EVENT, type WakeChannel, type WakeClient } from "./worker-wake";
 
 const KEY = "wwk_test";
 
@@ -126,5 +127,21 @@ describe("listenForPushes", () => {
     expect(f.held.event).toBe(PUSH_EVENT);
     f.held.ping?.();
     expect(h.ping).toHaveBeenCalledOnce();
+  });
+});
+
+describe("listenForKeyGrants", () => {
+  it("joins the worker's key-grant topic, derived as private.worker_key_grant_topic derives it", () => {
+    const hex = (v: string) => createHash("sha256").update(v).digest("hex");
+    expect(keyGrantTopic(KEY)).toBe(`worker-keys:${hex(`weft-worker-keys:${hex(KEY)}`)}`);
+    expect(keyGrantTopic(KEY)).not.toBe(wakeTopic(KEY).replace("worker-wake", "worker-keys"));
+    const f = fakeClient();
+    const h = hooks();
+    const log = vi.fn();
+    listenForKeyGrants(f.client, KEY, h, log);
+    expect(f.channel).toHaveBeenCalledWith(keyGrantTopic(KEY));
+    expect(f.held.event).toBe(KEY_GRANT_EVENT);
+    f.held.status?.("SUBSCRIBED");
+    expect(log).toHaveBeenCalledWith("Weft Worker: key grant socket joined");
   });
 });
