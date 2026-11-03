@@ -8,6 +8,7 @@ import { globalSingleton } from "./global-singleton";
 import { openedUse, sameNames, secretUseBody, secretUseMessage, secretUsePurpose } from "./secret-use";
 import { macSigned, type MacKeys } from "./worker-mac-keys";
 import type { Sealed } from "./worker-seal";
+import { gooseKeyPurpose } from "./worker-goose-key-wire";
 import { devEnvPurpose } from "./worker-vault-wire";
 
 interface Ask {
@@ -19,6 +20,9 @@ interface Ask {
   // A dev server's ask (lib/worker-dev-env.ts): sealed for devEnvPurpose, and it takes whatever names the vault's
   // development set has, since the worker can't know them before the Mac answers. A run's names are exact.
   dev?: boolean;
+  // A Goose turn's provider key (lib/worker-goose-key.ts): sealed for gooseKeyPurpose, its command naming the provider
+  // and endpoint, its one name the provider's key variable.
+  goose?: boolean;
   // The vault the checkout's remote names (github:owner/name), where a kept value is looked up (lib/worker-kept-vault.ts).
   repo?: string;
   resolve: (values: Record<string, string>) => void;
@@ -60,11 +64,14 @@ function checkMac(body: NonNullable<ReturnType<typeof secretUseBody>>, macs: Mac
   if (!macSigned(body.mac.key, secretUseMessage(body.cardId, body.nonce, body.sealed), body.mac.sig)) throw new Error("That secret use's Mac signature doesn't check out.");
 }
 
+// What a row must be sealed for to answer this ask: a run's, a dev server's and a Goose key's never open as each other.
+const purposeOf = (ask: Ask) => (ask.goose ? gooseKeyPurpose : ask.dev ? devEnvPurpose : secretUsePurpose);
+
 // The values a row carries, once it opens under this ask's purpose and repeats it exactly before the expiry; throws why not.
 function openChecked(body: NonNullable<ReturnType<typeof secretUseBody>>, ask: Ask, open: (sealed: Sealed, purpose: string) => string, now: number) {
   let text: string;
   try {
-    text = open(body.sealed, (ask.dev ? devEnvPurpose : secretUsePurpose)(ask.cardId, body.nonce, ask.command));
+    text = open(body.sealed, purposeOf(ask)(ask.cardId, body.nonce, ask.command));
   } catch {
     throw new Error("That secret use wasn't sealed to this worker for this card's command.");
   }

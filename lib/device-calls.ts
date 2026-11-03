@@ -15,6 +15,7 @@ import { recentCrashes } from "./simulator-crashes";
 import { bootedDevice, listDevices } from "./simulator-devices";
 import { simulatorTools } from "./simulator-tools";
 import { SITE } from "./site";
+import { GOOSE_KEY } from "./worker-goose-key-wire";
 import { VAULT_TOOLS } from "./worker-vault-wire";
 
 const ERROR_MAX = 1_000;
@@ -83,6 +84,13 @@ async function finish(client: SupabaseClient, id: string, patch: { status: "done
   if (error) console.warn(`Local Simulator: couldn't answer ${id}: ${error.message}`);
 }
 
+// The control-server route of Electron main that answers a worker's ask by its id, or null for a call run here.
+function mainRoute(tool: string): string | null {
+  if (tool === SECRET_ASK_TOOL) return "/secrets/worker-ask";
+  if (VAULT_TOOLS.has(tool)) return "/secrets/worker-vault";
+  return tool === GOOSE_KEY ? "/secrets/worker-goose-key" : null;
+}
+
 async function take(client: SupabaseClient, row: DeviceCallRow) {
   const claim = await client.from("device_calls").update({ status: "claimed" }).eq("id", row.id).eq("status", "pending").select("id");
   if (claim.error || !claim.data.length) return;
@@ -92,15 +100,17 @@ async function take(client: SupabaseClient, row: DeviceCallRow) {
     // with Touch ID too (lib/device-call-approvals.ts); no QA grant is involved in either.
     // A worker card's vault call (list, blanks, set_value, push_to_vercel, a dev server's env) goes to main the same way,
     // by id only (electron/worker-vault.cjs): names in, names or "queued" out, never a value.
-    const answer = row.tool === SECRET_ASK_TOOL ? shell("/secrets/worker-ask", { call: row.id }) : VAULT_TOOLS.has(row.tool) ? shell("/secrets/worker-vault", { call: row.id }) : APPROVAL_TOOLS.has(row.tool) ? runApproval(client, row) : runDeviceCall(client, row);
+    // A worker's Goose turn asking for this Mac's provider key goes to main by id too (electron/worker-goose-key.cjs).
+    const route = mainRoute(row.tool);
+    const answer = route ? shell(route, { call: row.id }) : APPROVAL_TOOLS.has(row.tool) ? runApproval(client, row) : runDeviceCall(client, row);
     await finish(client, row.id, { status: "done", result: await answer });
   } catch (err) {
     await finish(client, row.id, { status: "failed", error: (err as Error).message.slice(0, ERROR_MAX) });
   }
 }
 
-// A secret ask, a vault call or an approval may wait on a person at this Mac.
-const waitsOnPerson = (tool: string) => tool === SECRET_ASK_TOOL || VAULT_TOOLS.has(tool) || APPROVAL_TOOLS.has(tool);
+// A secret ask, a vault call, a Goose key ask or an approval may wait on a person at this Mac.
+const waitsOnPerson = (tool: string) => mainRoute(tool) !== null || APPROVAL_TOOLS.has(tool);
 
 const state = () => globalSingleton("__weftDeviceCalls", () => ({ draining: false, again: false }));
 

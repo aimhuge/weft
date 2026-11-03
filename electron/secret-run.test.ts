@@ -264,6 +264,16 @@ describe("helpers", () => {
     expect(() => secretRunRoutes(() => ({}) as never)["POST /secrets/worker-vault"]({ call: "c" })).toThrow("This Mac can't answer a worker's vault calls yet.");
   });
 
+  it("routes a worker's Goose key ask to main by its id", async () => {
+    const workerGooseKey = vi.fn(() => Promise.resolve({ queued: true }));
+    const routes = secretRunRoutes(() => ({ workerGooseKey }) as never);
+    expect(await routes["POST /secrets/worker-goose-key"]({ call: "call-3", providerId: "ignored" })).toEqual({ queued: true });
+    expect(workerGooseKey).toHaveBeenCalledWith("call-3");
+    await routes["POST /secrets/worker-goose-key"]({});
+    expect(workerGooseKey).toHaveBeenLastCalledWith("");
+    expect(() => secretRunRoutes(() => ({}) as never)["POST /secrets/worker-goose-key"]({ call: "c" })).toThrow("This Mac can't answer a worker's Goose key asks yet.");
+  });
+
   it("asks with a dialog, then Touch ID where there is one", async () => {
     const dialog = { showMessageBox: vi.fn() };
     const win = {};

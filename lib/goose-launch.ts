@@ -10,6 +10,8 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { shell } from "./browser-tools";
 import { shellToken } from "./shell-token";
+import { gooseKeyOnWorker } from "./worker-goose-key";
+import { onWorker } from "./worker-secret-run";
 
 // What main answers a grant request with: the grant itself, how to claim it, and the model the provider serves.
 export interface GooseEnvGrant {
@@ -52,8 +54,15 @@ export interface GooseLaunch {
 /**
  * How to start Goose with a provider's key in its env: the grant's runner (electron/goose-env.cjs) with the grant on
  * stdin. undefined when there is no key saved for the provider, or the desktop app isn't running.
+ *
+ * On a Weft Worker there's no main to grant it: the card asks the paired Mac, which seals the key to this box after
+ * Touch ID (lib/worker-goose-key.ts), and Goose itself is the program, with the key in its env only.
  */
-export async function gooseLaunch(providerId: string, argv: string[], env: Record<string, string> = {}, cwd?: string, baseUrl = ""): Promise<GooseLaunch | undefined> {
+export async function gooseLaunch(providerId: string, argv: string[], env: Record<string, string> = {}, cwd?: string, baseUrl = "", cardId?: string | null): Promise<GooseLaunch | undefined> {
+  if (onWorker()) {
+    const keyed = await gooseKeyOnWorker({ cardId, providerId, baseUrl });
+    return keyed && { bin: argv[0] ?? "", args: argv.slice(1), env: keyed, stdin: "", names: Object.keys(keyed) };
+  }
   const grant = await gooseEnvGrant(providerId, baseUrl);
   if (!grant || !grant.node || !grant.runner) return undefined;
   return {
