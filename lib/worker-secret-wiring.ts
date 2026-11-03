@@ -10,9 +10,10 @@ import type { CloudCommandRow } from "./cloud-commands";
 import type { Registry } from "./worker-registry";
 import { deliverSecretUse } from "./worker-secret-asks";
 import type { SecretLink } from "./worker-secret-run";
-import { macKeysAt } from "./worker-mac-keys";
+import { keptVaultAt } from "./worker-kept-vault";
+import { KEPT_FILE, macKeysAt, wipeKept } from "./worker-mac-keys";
 import { macFingerprint } from "./worker-repair";
-import { open, sealFingerprint, type SealKeys } from "./worker-seal";
+import { open, sealFingerprint, type Sealed, type SealKeys } from "./worker-seal";
 import { setVaultLink } from "./worker-vault";
 
 // The pairing's sign key, read only: a token-enrolled box has none, and making one here would sign with a key no Mac pinned.
@@ -27,14 +28,20 @@ export function pairedSigner(home: string): ((message: string) => string) | unde
   }
 }
 
-export function secretWiring(home: string, reg: Pick<Registry, "secretAsk" | "deviceResult" | "deviceCancel">, keys: SealKeys) {
+// workerId turns on the values the paired Mac keeps here (lib/worker-kept-vault.ts): its vault_keep handler, the claim
+// each ask carries, and opening a kept value once a Mac-signed secret_use names it.
+export function secretWiring(home: string, reg: Pick<Registry, "secretAsk" | "deviceResult" | "deviceCancel">, keys: SealKeys, workerId?: string) {
   const signer = pairedSigner(home);
   const macs = macKeysAt(home);
-  const link: SecretLink = { ask: reg.secretAsk, result: reg.deviceResult, cancel: reg.deviceCancel, boxKey: keys.publicKey, ...(signer ? { sign: signer } : {}) };
-  setVaultLink({ boxKey: keys.publicKey, macKey: () => macs.pinned()[0], ...(signer ? { sign: signer } : {}) });
+  const unseal = (sealed: Sealed, purpose: string) => open(keys, sealed, purpose);
+  const kept = workerId ? keptVaultAt(home, workerId, macs) : null;
+  const claim = kept ? { kept: (repo: string, env: string, names?: string[]) => kept.index(repo, env, names) } : {};
+  const link: SecretLink = { ask: reg.secretAsk, result: reg.deviceResult, cancel: reg.deviceCancel, boxKey: keys.publicKey, ...(signer ? { sign: signer } : {}), ...claim };
+  setVaultLink({ boxKey: keys.publicKey, macKey: () => macs.pinned()[0], ...(signer ? { sign: signer } : {}), ...claim });
   return {
     link,
-    use: (command: CloudCommandRow) => deliverSecretUse(command, (sealed, purpose) => open(keys, sealed, purpose), macs),
+    use: (command: CloudCommandRow) => deliverSecretUse(command, unseal, macs, Date.now(), kept ? (repo, env, want) => kept.open(repo, env, want, unseal) : undefined),
+    ...(kept ? { keep: (command: CloudCommandRow) => kept.apply(command.payload), wipeKept: kept.wipe } : {}),
   };
 }
 
@@ -55,7 +62,12 @@ export function keyStatus(home: string): string[] {
   if (trusted.length) lines.push(`Takes secrets from the Mac it was paired with, key ${trusted.map(macFingerprint).join(", ")} (weft-worker forget-macs to stop).`);
   else if (revoked.length) lines.push(`Takes no secrets: the Mac it was paired with (key ${revoked.map(macFingerprint).join(", ")}) was revoked. Wipe it and enrol it afresh from another Mac.`);
   else lines.push("Takes no secrets: enrolled by token. Pair it from Settings → Devices → Add a worker to use secrets.");
+  if (fs.existsSync(path.join(home, KEPT_FILE))) lines.push("Keeps secrets your Mac sent it (Keep on this worker), sealed to its box key; each use still needs your Mac's approval.");
   return lines;
 }
 
-export const forgetMacs = (home: string) => macKeysAt(home).forget();
+// Forgetting the Mac deletes what it kept here too.
+export function forgetMacs(home: string) {
+  macKeysAt(home).forget();
+  wipeKept(home);
+}

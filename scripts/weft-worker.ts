@@ -26,7 +26,7 @@ import { pairWorker, workerSignKeys } from "../lib/worker-pair";
 import { RTC_PURPOSE } from "../lib/rtc-signal";
 import { CLAUDE_TOKEN, GITHUB_PURPOSE, LOGIN_PURPOSE, newSealKeys, open } from "../lib/worker-seal";
 import { createUpdater, updatesOn } from "../lib/worker-update";
-import { listenForPushes, listenForWakes } from "../lib/worker-wake";
+import { listenForKeyGrants, listenForPushes, listenForWakes } from "../lib/worker-wake";
 import { joinPresence } from "../lib/worker-presence";
 import { browserSandboxNote } from "../lib/worker-chromium";
 
@@ -112,6 +112,8 @@ async function loadEngine() {
     () => import("../lib/cron-run"),
     () => import("../lib/worktree-pool"),
     () => import("../lib/worker-browser-screen"),
+    // Loaded again in start, for the LAN path; here so `check` proves multicast-dns is installed.
+    () => import("../lib/worker-lan-start"),
   ] as const);
   return { store, parts };
 }
@@ -148,15 +150,19 @@ async function startCommand() {
   // its cards (lib/worker-blobs.ts), so a thread's pasted picture shows on weft.zip too.
   const attachments = path.join(store.DATA_DIR, "attachments");
   const blobs = createBlobStore({ client: workerBlobClient(config.key, client.storage), mayUpload: (file) => workerMayUpload(file, [SHOW_DIR, root, attachments]) });
-  const readBlob = workerBlobReader(config.key, MAX_TRAVEL_BYTES);
-  setPageUpload((file) => blobs.uploadPage(file, config.orgId));
+  // The workspace keys its Mac granted it, in memory only: rows, pages and pasted files go sealed when it holds one
+  // (lib/worker-sealing-wire.ts, docs/architecture/mobile-security.md#sealing-on-a-weft-worker).
+  const sealing = await (await import("../lib/worker-sealing-wire")).startWorkerSealing({ home, config, rpc, keys, isShared: (id) => Boolean(store.getCard(id)?.share?.id), readBlob: workerBlobReader(config.key, MAX_TRAVEL_BYTES), listen: (hooks) => listenForKeyGrants(client, config.key, hooks, console.log), log: console.log });
+  const readBlob = sealing.reader;
+  setPageUpload((file, cardId) => blobs.uploadPage(file, config.orgId, sealing.blobSeal(cardId) ?? undefined));
   setScreenChannel((topic) => openScreenChannel(client, topic));
   // The worker's browser, live in the pane on the same kind of topic (lib/worker-browser-screen.ts).
   browserScreen.setBrowserScreenChannel((topic) => openScreenChannel(client, topic));
   setDeviceLink(deviceLink(reg, config.key));
   // A card's mcp__secrets__run asks the owner's Mac, and the answer comes back sealed to this box (lib/worker-secret-run.ts).
   // The other secrets tools ask it too (lib/worker-vault.ts).
-  const secrets = secretWiring(home, reg, keys);
+  // With the worker's id, the values the paired Mac keeps here too (lib/worker-kept-vault.ts).
+  const secrets = secretWiring(home, reg, keys, config.workerId);
   setSecretLink(secrets.link);
   subscribe(forgetOnTurnEnd);
   // A card's git and gh get GitHub tokens minted on weft.zip, before any CLI starts (lib/connector-worker.ts).
@@ -164,7 +170,7 @@ async function startCommand() {
   setFastScreen(openFastScreen, (sealed) => open(keys, sealed, RTC_PURPOSE));
   // The editor's large answers, under results/ and swept after a day (lib/worker-blobs.ts workerResults).
   const results = workerResults(config.key, client.storage);
-  const publisher = createPublisher(reg, store, console.warn, { blobs, orgId: config.orgId });
+  const publisher = createPublisher(reg, store, console.warn, { blobs, orgId: config.orgId, sealer: sealing.sealer });
   subscribe(publisher.hear);
   // Signed widening: the pairing Mac's approvals and its endorsed passkeys lift the network's refusals (lib/worker-signing.ts).
   const { widen, terminal } = (await import("../lib/worker-signing")).workerSigning({ home, workerId: config.workerId, root, listFolders: listProjectFolders, repoPath: paths.repoPath, nameFolder: publisher.nameFolder, orgId: config.orgId, folderOf: publisher.folderOf, heads: reg.passkeyHeads, signHeld: (await import("../lib/worker-secret-wiring")).pairedSigner(home) });
@@ -189,6 +195,8 @@ async function startCommand() {
   // through the host kind's path (the daemon hands `run` in).
   const lines = createHostLines({
     terminal,
+    // The editor's live reload: a file open on a line, watched until the line drops it (lib/worker-file-watch.ts).
+    watchFile: (await import("../lib/worker-file-watch")).watchCardFiles((id) => store.getCard(id)?.cwd),
     unseal: (sealed, purpose) => open(keys, sealed, purpose),
     answerOn: async (topic, sealed) => {
       const channel = await openScreenChannel(client, topic);
@@ -205,7 +213,8 @@ async function startCommand() {
   // Your account's settings mirrored in, and this box's plan limits polled and published (lib/worker-host-services.ts).
   const services = startHostServices(reg, console.log, home);
   const daemon = createDaemon({
-    reg,
+    // A revoked worker's key stops working: its heartbeat then deletes what the Mac kept here.
+    reg: secrets.wipeKept ? (await import("../lib/worker-kept-vault")).wipeWhenRevoked(reg, secrets.wipeKept, console.log) : reg,
     owner: config.ownerUser,
     publisher,
     listen: (hooks) => listenForWakes(client, config.key, hooks, console.log),
@@ -222,7 +231,7 @@ async function startCommand() {
       void lists.flush();
       startWorktreePool();
     },
-    line: (sealed, run) => lines.open(sealed, run),
+    line: (sealed, run, answerOn) => lines.open(sealed, run, answerOn),
     widen,
     engine: {
       // A card.create names its id (the board's) and may leave the card in Backlog; a run or new_card starts one.
@@ -265,6 +274,7 @@ async function startCommand() {
       if ((await paths.cloneProject(dir, repo)) === "cloned") console.log(`Weft Worker: cloned ${repo} into ${dir}`);
     },
     secretUse: secrets.use,
+    keep: secrets.keep,
     // No restart: git asks its credential helper afresh each time.
     github: { login: (sealed) => github.signInGithub(home, open(keys, sealed, GITHUB_PURPOSE)), status: () => github.githubStatus() },
     // A sign-in from the desktop: save the token where the wrapper loads it, then restart (the service brings the
@@ -295,13 +305,15 @@ async function startCommand() {
   // Tunnels, the relay and dev servers reach the boards through the owner's Mac (lib/worker-reach.ts).
   const { startWorkerReach } = await import("../lib/worker-reach");
   const stopReach = startWorkerReach(reg, console.log);
+  // A board on the same LAN offers lines straight here, found by a signed mDNS hint (lib/worker-lan-start.ts).
+  const stopLan = await (await import("../lib/worker-lan-start")).startWorkerLanSafely({ home, workerId: config.workerId, boxKey: keys.publicKey, sign: pairedSigner(home), open: daemon.lanLine, log: console.log });
   console.log(`Weft Worker ${config.name} (${config.device}) is running. Work root ${root}.`);
   const quit = () => {
     stopProjects();
     clearInterval(sweepTimer);
     connectors?.close();
     services.stop();
-    void Promise.all([stop(), stopReach()]).finally(() => process.exit(0));
+    void Promise.all([stop(), stopReach(), stopLan()]).finally(() => process.exit(0));
   };
   restart = quit;
   process.on("SIGTERM", quit);

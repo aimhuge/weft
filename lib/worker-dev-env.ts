@@ -11,8 +11,8 @@ import { fileURLToPath } from "node:url";
 import type { DevLaunch } from "./secret-run";
 import { ASK_MS, newNonce } from "./secret-use";
 import { openAsk } from "./worker-secret-asks";
-import { remember } from "./worker-secret-run";
-import { askVault, type VaultDeps } from "./worker-vault";
+import { gitRemote, keptAt, remember } from "./worker-secret-run";
+import { askVault, vaultLink, type VaultDeps } from "./worker-vault";
 import { DEV_ENV } from "./worker-vault-wire";
 
 export interface DevEnvRequest {
@@ -29,7 +29,8 @@ export interface DevEnvRequest {
 
 const RUNNER = () => fileURLToPath(new URL("../electron/secret-env.cjs", import.meta.url));
 
-function within<T>(promise: Promise<T>, ms: number, why: string): Promise<T> {
+// Rejects with why once ms pass, if promise hasn't settled (lib/worker-goose-key.ts waits on its sealed answer the same way).
+export function within<T>(promise: Promise<T>, ms: number, why: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const late = new Promise<never>((_, fail) => (timer = setTimeout(() => fail(new Error(why)), ms)));
   return Promise.race([promise, late]).finally(() => clearTimeout(timer));
@@ -41,9 +42,11 @@ export async function devEnvOnWorker(req: DevEnvRequest, given: Partial<VaultDep
   const now = given.now?.() ?? Date.now();
   let ask: ReturnType<typeof openAsk> | undefined;
   try {
-    ask = openAsk(nonce, { cardId: req.cardId, command: req.command, names: [], environment: "development", expiresAt: now + ASK_MS, dev: true });
+    // The vault this checkout names, where a value the Mac kept here is looked up (lib/worker-kept-vault.ts).
+    const { repo, kept } = keptAt(given.link === undefined ? vaultLink() : given.link, await (given.remote ?? gitRemote)(req.root), "development");
+    ask = openAsk(nonce, { cardId: req.cardId, command: req.command, names: [], environment: "development", expiresAt: now + ASK_MS, dev: true, repo });
     const cwd = path.relative(req.root, req.cwd) || ".";
-    const answer = await askVault(req.cardId, req.root, DEV_ENV, { command: req.command, cwd, script: req.script, thread: req.thread }, given, nonce);
+    const answer = await askVault(req.cardId, req.root, DEV_ENV, { command: req.command, cwd, script: req.script, thread: req.thread, kept }, given, nonce);
     if (answer.denied) return { note: "Started without vault secrets: not approved on your Mac." };
     if (answer.queued !== true) return {};
     const values = await within(ask.values, given.waitMs ?? ASK_MS, "Your Mac approved the dev server's secrets, but they didn't arrive.");

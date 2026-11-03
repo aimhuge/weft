@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 import { fakeDb } from "./pairing.harness";
 import { setupPairing } from "./pairing-ipc.cjs";
 import vaultCrypto from "./vault-crypto.cjs";
+import { createGooseSetRecord } from "./worker-goose-set.cjs";
 
 const plainStorage = () => ({ isEncryptionAvailable: () => true, encryptString: (s: string) => Buffer.from(s), decryptString: (b: Buffer) => b.toString() });
 
@@ -73,6 +74,40 @@ describe("pairing IPC", () => {
     expect(await wired.routes["POST /sync/key"]({ orgId: "o" })).toEqual({ none: true });
     expect(await wired.routes["POST /sync/key"]({ orgId: "o", create: true })).toMatchObject({ version: 1 });
     expect(db.tables.workspace_key_grants[0]!).toMatchObject({ device_id: "mac-row", version: 1 });
+    // Every version it holds, for opening a worker's sealed rows on its own server (lib/worker-board-open.ts).
+    const ring = (await wired.routes["POST /sync/keyring"]({ orgId: "o" })) as { keys: { version: number; key: string }[] };
+    expect(ring.keys.map((k) => k.version)).toEqual([1]);
+  });
+
+  it("grants the workers it sealed for the new version when a rotation comes", async () => {
+    const { wired, handlers } = setup();
+    const regrant = vi.spyOn(wired.workerKeys, "regrant");
+    expect([...handlers.keys()]).toEqual(expect.arrayContaining(["worker-keys:grant", "worker-keys:drop", "worker-keys:status"]));
+    const rotate = vi.spyOn(wired.syncKeys, "rotate").mockResolvedValue(4);
+    // Revoking a phone rotates through pairing (electron/pairing.cjs revoke); the wired rotate passes the version on.
+    expect(await wired.pairing.revoke("not-paired")).toEqual({ ok: false });
+    expect(rotate).not.toHaveBeenCalled();
+    wired.paired.pin({ id: "p9", name: "iPhone", kind: "phone", orgId: "o", boxKey: "bk", signKey: "sk", fingerprint: "f", pairedAt: "t", platform: "ios" });
+    regrant.mockRejectedValueOnce(new Error("offline"));
+    expect(await wired.pairing.revoke("p9")).toEqual({ ok: true, version: 4 });
+    expect(regrant).toHaveBeenCalledWith("o", 4);
+  });
+});
+
+describe("Keep on this worker's wiring", () => {
+  it("answers the board's calls and watches the vault it's handed", async () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "weft-pair-keep-"));
+    const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>();
+    const ipcMain = { handle: (channel: string, fn: (event: unknown, ...args: unknown[]) => unknown) => handlers.set(channel, fn) };
+    const board = { id: "board" };
+    const setValue = vi.fn<(folder: string, name: string, environment: string, value: string) => Promise<{ saved: boolean }>>(() => Promise.resolve({ saved: true }));
+    const vault = { setValue, remove: vi.fn(() => Promise.resolve({})), valuesFor: vi.fn(() => Promise.resolve({ id: "github:o/r", label: "o/r", values: {} })) };
+    setupPairing({ ipcMain, dataDir, accountClient: () => ({ supabase: fakeDb(), getClaims: () => ({ sub: "u1" }) }), isBoard: (s: unknown) => s === board, confirm: vi.fn(), safeStorage: plainStorage, crypto: () => vaultCrypto, vault });
+    expect(await handlers.get("worker-keep:list")!({ sender: board }, "w1")).toEqual({ kept: [], repos: [], environments: ["development", "preview"] });
+    await expect(Promise.resolve(handlers.get("worker-keep:wipe")!({ sender: { id: "pane" } }, "w1"))).rejects.toThrow(/board window/);
+    expect(vault.setValue).not.toBe(setValue);
+    expect(await vault.setValue("/p", "A", "development", "v")).toEqual({ saved: true });
+    expect(setValue).toHaveBeenCalled();
   });
 });
 
@@ -91,5 +126,15 @@ describe("passkey heads and reconciling", () => {
     const from = db.from;
     db.from = ((name: string) => (name === "worker_passkey_heads" ? { insert: () => Promise.resolve({ data: null, error: { message: "no such table" } }) } : from(name))) as typeof db.from;
     expect(await call("approval:endorse", { worker: "w1", revoke: true })).toHaveLength(1);
+  });
+});
+
+describe("a worker's Goose settings", () => {
+  it("remembers the provider and endpoint this Mac signed for a worker, for its Goose key asks", async () => {
+    const { call, dataDir } = setup();
+    fs.writeFileSync(path.join(dataDir, "device-id"), "d".repeat(64));
+    const goose = { gooseProviderId: "anthropic", gooseBaseUrl: "https://gw" };
+    expect(await call("approval:widen", { host: "w1", card: "", verb: "settings.put", change: { goose }, args: { patch: goose } })).toMatchObject({ kind: "ed25519" });
+    expect(createGooseSetRecord({ dir: dataDir, safeStorage: plainStorage }).of("w1")).toEqual({ providerId: "anthropic", baseUrl: "https://gw" });
   });
 });

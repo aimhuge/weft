@@ -65,6 +65,9 @@ export const HOST_API = {
   // The editor (H4). A save writes the folder, so it takes Weft's own window locally and is confined from the network.
   "files.list": { elevated: false, idempotent: true, run: lazy(() => import("./files"), "listFilesVerb") },
   "files.read": { elevated: false, idempotent: true, run: lazy(() => import("./files"), "readFileVerb") },
+  // Live reload of an open file over a session line (lib/host-line-files.ts): a read's checks, then the line watches it.
+  "files.watch": { elevated: false, idempotent: true, run: lazy(() => import("./files"), "watchFileVerb") },
+  "files.unwatch": { elevated: false, idempotent: true, run: lazy(() => import("./files"), "unwatchFileVerb") },
   "files.write": { elevated: true, run: lazy(() => import("./files"), "writeFileVerb") },
   // The host's own settings, for no card: only HOST_SETTINGS, and only from Weft's own window (lib/host-settings.ts).
   "settings.get": { elevated: true, idempotent: true, run: lazy(() => import("./settings"), "settingsGetVerb") },

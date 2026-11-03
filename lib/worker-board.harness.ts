@@ -18,7 +18,8 @@ export interface FakeOptions {
   // cloud_tool_outputs row.
   toolOutput?: { result: string } | null;
   // A card row for the command target lookup.
-  cardRow?: { owner_device: string; owner_worker: string | null; folder: string; owner_user: string } | null;
+  // `sealed`: the key version the card's row came sealed with (card->sealed->v), for lib/worker-board-open.ts cardBlobSeal.
+  cardRow?: { owner_device: string; owner_worker: string | null; folder: string; owner_user: string; sealed?: number } | null;
   workersError?: { message: string } | null;
   cardsError?: { message: string } | null;
   itemsError?: { message: string } | null;
@@ -84,7 +85,7 @@ function withoutStamp(row: unknown): unknown {
 export function fakeClient(opts: FakeOptions = {}) {
   const calls: { op: string; args: unknown[] }[] = [];
   let inserted: unknown = null;
-  const uploads: { path: string; type?: string }[] = [];
+  const uploads: { path: string; type?: string; body?: unknown }[] = [];
 
   const builder = (table: string) => {
     // The columns of the select being built.
@@ -127,7 +128,7 @@ export function fakeClient(opts: FakeOptions = {}) {
     rpc: (fn: string, args: unknown) => (calls.push({ op: "rpc", args: [fn, args] }), Promise.resolve({ data: null, error: null })),
     storage: {
       from: () => ({
-        upload: (objectPath: string, _body: unknown, o: { contentType?: string }) => (uploads.push({ path: objectPath, type: o.contentType }), Promise.resolve({ error: opts.uploadError ?? null })),
+        upload: (objectPath: string, body: unknown, o: { contentType?: string }) => (uploads.push({ path: objectPath, type: o.contentType, body }), Promise.resolve({ error: opts.uploadError ?? null })),
       }),
     },
   } as unknown as SupabaseClient;

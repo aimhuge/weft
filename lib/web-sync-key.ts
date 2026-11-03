@@ -83,8 +83,8 @@ export function openSyncedCard<R extends Pick<CloudCardRow, "org_id" | "card_id"
 }
 
 // How a file pasted into `cardId` goes up (lib/web-upload.ts): sealed when the card's own row came sealed with a version
-// this browser holds, since its host then opens it; plain otherwise (a worker's card, an unsealed or shared one, a new
-// thread, a browser with no grant), as before sealing.
+// this browser holds, since its host then opens it (a Mac, or a worker its Mac granted the key: only such a worker can
+// have sealed its row); plain otherwise (an unsealed or shared card, a new thread, a browser with no grant).
 export function webBlobSeal(cardId: string | null | undefined): BlobSeal | null {
   const version = cardId ? state.sealedCards.get(cardId) : undefined;
   const key = version === undefined ? undefined : state.ring.get(version);

@@ -13,10 +13,11 @@ const { appSecretsRoutes } = require("./app-secrets-push.cjs");
 const { slackRoutes } = require("./slack.cjs");
 const { touchIdPrompt } = require("./touch-id.cjs");
 const { desktopSignerFor, settingsSignRoutes } = require("./settings-sign.cjs");
+const { lanLineRoutes } = require("./lan-line-sign.cjs");
 const { workerLabel } = require("./worker-label.cjs");
 
 // The pairing routes, looked up when called: pairing is set up after the pane (it needs the account client).
-const PAIRING_ROUTES = ["POST /sync/key", "POST /pairing/verify", "POST /pairing/passkey-verify", "POST /pairing/widen-nonce", "POST /pairing/status", "POST /connectors/sign-start"];
+const PAIRING_ROUTES = ["POST /sync/key", "POST /sync/keyring", "POST /pairing/verify", "POST /pairing/passkey-verify", "POST /pairing/widen-nonce", "POST /pairing/status", "POST /connectors/sign-start"];
 function pairingRoutes(pairing) {
   return Object.fromEntries(
     PAIRING_ROUTES.map((route) => [
@@ -47,6 +48,8 @@ function onWorker(dataDir, worker, name) {
 }
 
 function paneRoutes({ dataDir, app, dialog, systemPreferences = require("electron").systemPreferences, shell, window, board, sendMenu, updater, vault, vercelEnv, vercelApi, supabaseApi, blastcpApi = () => null, gooseApi = () => null, slackApi = () => null, pairing = () => null, cardFor = () => "" }) {
+  // This Mac's device key, opened once for the settings and LAN-offer signatures.
+  const deviceKey = desktopSignerFor(dataDir);
   return {
     // The workspace sync key and paired-phone checks the server asks for (electron/pairing-ipc.cjs).
     ...pairingRoutes(pairing),
@@ -120,7 +123,9 @@ function paneRoutes({ dataDir, app, dialog, systemPreferences = require("electro
     // The server asks main to post to Slack, and how the socket is doing (electron/slack.cjs).
     ...slackRoutes(slackApi),
     // Your account's settings for your workers, signed with this Mac's device key on each push (electron/settings-sign.cjs).
-    ...settingsSignRoutes(desktopSignerFor(dataDir)),
+    ...settingsSignRoutes(deviceKey),
+    // A worker's pinned keys and this Mac's signature over a line offered to it over the LAN (electron/lan-line-sign.cjs).
+    ...lanLineRoutes({ pins: () => pinsFor(dataDir), signer: deviceKey }),
     // mcp__board_view__*: threads see and drive the board itself, secrets redacted (electron/board-view.cjs).
     ...boardViewRoutes(createBoardView({ board })),
   };

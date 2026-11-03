@@ -4,7 +4,8 @@
 //
 //   host      a verb runs through `run`, the `host` kind's own path (lib/worker-kinds.ts: CardRules, remoteRefusal, the
 //             update hold and the log), one at a time in the order sent, so it passes exactly the checks a row does
-//   events    what the publisher ships, as it ships it (lib/worker-publish.ts mirror): one projection and one upload
+//   events    what the publisher ships, as it ships it (lib/worker-publish.ts mirror): one projection and one upload,
+//             a reply's text as it streams, and a `file` event when a file this line watches changes (lib/host-line-files.ts)
 //   line      ping → pong; an offer renegotiates the same peer, one at a time and rate-limited (a watched
 //             simulator's track, lib/host-line-screen.ts, or an ICE restart)
 //   terminal  a pty in one project folder, only with a signed approval for it (lib/host-line-terminal.ts); refused
@@ -13,6 +14,7 @@
 // Each fixed label gets one channel per line, and any other label is closed. A line no board has pinged for QUIET_MS is
 // closed: the board went away without saying so.
 import type { HostDone } from "./host-command";
+import { lineFileWatches, type WatchFile } from "./host-line-files";
 import { lineScreens, type ScreenDeps } from "./host-line-screen";
 import { terminalChannel, type TerminalDeps } from "./host-line-terminal";
 import { LINE_CHANNELS, LINE_PURPOSE, readControl, readHostCall, readLineOffer, type HostReply, type LineEvent } from "./host-line-protocol";
@@ -42,6 +44,8 @@ export interface HostLineDeps extends ScreenDeps {
   answer?: typeof answerOffer;
   // The terminal's checks and pty (lib/host-line-terminal.ts); absent, every terminal is refused.
   terminal?: TerminalDeps;
+  // Watches a card's file for the editor's live reload (lib/worker-file-watch.ts); absent, files.watch is only a read.
+  watchFile?: WatchFile;
   log?: (msg: string) => void;
   quietMs?: number;
   maxLines?: number;
@@ -69,8 +73,10 @@ export function createHostLines(deps: HostLineDeps) {
   const now = deps.now ?? Date.now;
   const lines = new Set<{ close: () => void }>();
 
+  type Files = ReturnType<typeof lineFileWatches>;
+
   // Strictly one verb at a time, as the inbox runs rows.
-  function hostChannel(channel: LineChannel, run: RunHost) {
+  function hostChannel(channel: LineChannel, run: RunHost, files: Files) {
     const next = serial();
     channel.onMessage.subscribe((raw) => {
       const call = readHostCall(raw.toString());
@@ -78,7 +84,10 @@ export function createHostLines(deps: HostLineDeps) {
       next(async () => {
         let reply: HostReply;
         try {
+          const refused = files.refusal(call);
+          if (refused) throw new Error(refused);
           const done = await run({ verb: call.verb, args: call.args });
+          files.ran(call);
           reply = { id: call.id, ok: true, result: done.result };
         } catch (err) {
           reply = { id: call.id, ok: false, error: errorOf(err) };
@@ -88,8 +97,14 @@ export function createHostLines(deps: HostLineDeps) {
     });
   }
 
-  function eventsChannel(channel: LineChannel) {
-    closed(channel, deps.hear((event) => send(channel, event)));
+  function eventsChannel(channel: LineChannel, own: (send: ((event: LineEvent) => void) | null) => void) {
+    const push = (event: LineEvent) => send(channel, event);
+    own(push);
+    const off = deps.hear(push);
+    closed(channel, () => {
+      own(null);
+      off();
+    });
   }
 
   type Line = { opened: () => Opened | null; screens: ReturnType<typeof lineScreens>; heard: () => void };
@@ -146,8 +161,9 @@ export function createHostLines(deps: HostLineDeps) {
     };
   }
 
-// Opens a line from a sealed offer. Only this worker can open it, and the answer goes back under the board's key.
-  async function open(sealed: Sealed, run: RunHost): Promise<void> {
+// Opens a line from a sealed offer. Only this worker can open it, and the answer goes back under the board's key: on
+  // its Broadcast topic, or to `answerOn` when the offer came another way (the LAN port's reply, lib/worker-lan.ts).
+  async function open(sealed: Sealed, run: RunHost, answerOn?: HostLineDeps["answerOn"]): Promise<void> {
     const offer = readLineOffer(deps.unseal(sealed, LINE_PURPOSE));
     if (!offer) throw new Error("That line's offer is incomplete.");
     let opened: Opened | null = null;
@@ -155,6 +171,8 @@ export function createHostLines(deps: HostLineDeps) {
     const screens = lineScreens(deps);
     const taken = new Set<string>();
     const terminals = new Set<() => void>();
+    let events: ((event: LineEvent) => void) | null = null;
+    const files = lineFileWatches(deps.watchFile, (event) => events?.(event));
     const quietMs = deps.quietMs ?? QUIET_MS;
     const quiet = setInterval(() => {
       if (now() - lastHeard > quietMs) line.close();
@@ -164,13 +182,14 @@ export function createHostLines(deps: HostLineDeps) {
         if (!lines.delete(line)) return;
         clearInterval(quiet);
         terminals.forEach((stop) => stop());
+        files.closeAll();
         screens.closeAll();
         opened?.close();
       },
     };
     const channels: Channels = {
-      [LINE_CHANNELS.host]: once(taken, (c) => hostChannel(c, run)),
-      [LINE_CHANNELS.events]: once(taken, eventsChannel),
+      [LINE_CHANNELS.host]: once(taken, (c) => hostChannel(c, run, files)),
+      [LINE_CHANNELS.events]: once(taken, (c) => eventsChannel(c, (push) => (events = push))),
       [LINE_CHANNELS.control]: once(taken, (c) => controlChannel(c, { opened: () => opened, screens, heard: () => (lastHeard = now()) })),
       [LINE_CHANNELS.terminal]: (c) => terminal(c, taken, terminals),
       // A screen's input:<device>:<nonce>, or a label nobody handles, which is closed.
@@ -186,7 +205,8 @@ export function createHostLines(deps: HostLineDeps) {
         return;
       }
       opened.onClosed(() => line.close());
-      await deps.answerOn(offer.topic, await sealAnswer(offer.key, opened.answer));
+      const answer = await sealAnswer(offer.key, opened.answer);
+      await (answerOn ? answerOn(offer.topic, answer) : deps.answerOn(offer.topic, answer));
       log(`Weft Worker: a board opened a line (${lines.size} open)`);
     } catch (err) {
       line.close();

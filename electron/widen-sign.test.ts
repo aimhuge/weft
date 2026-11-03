@@ -18,7 +18,7 @@ function signer() {
   return { publicKey: () => publicKey, sign: (m: string) => crypto.sign(null, Buffer.from(m), pair.privateKey).toString("base64") };
 }
 
-function handlers(over: { confirm?: () => Promise<boolean> } = {}) {
+function handlers(over: { confirm?: () => Promise<boolean>; onGoose?: (host: string, goose: Record<string, string>) => void } = {}) {
   const map = new Map<string, (...args: unknown[]) => unknown>();
   const s = signer();
   const confirm = vi.fn(over.confirm ?? (() => Promise.resolve(true)));
@@ -27,6 +27,7 @@ function handlers(over: { confirm?: () => Promise<boolean> } = {}) {
     macDevice: () => "a".repeat(64),
     confirm,
     hostName: (id: string) => (id === "w1" ? "m1mini" : null),
+    ...(over.onGoose ? { onGoose: over.onGoose } : {}),
     now: () => 1_000,
   });
   return { call: (channel: string, ...args: unknown[]) => map.get(channel)?.(...args), s, confirm };
@@ -120,5 +121,56 @@ describe("the IPC", () => {
     const h = handlers({ confirm: () => Promise.resolve(false) });
     expect(await h.call("approval:widen", { host: "w1", card: "c1", verb: "card.shell", change: { shell: "ls" }, args: { command: "ls" } })).toBeNull();
     await expect(h.call("approval:widen", { host: "w1" })).rejects.toThrow();
+  });
+});
+
+describe("Goose's provider on a worker", () => {
+  const goose = (g: unknown) => readWidenRequest({ host: "w1", card: "", verb: "settings.put", change: { goose: g }, args: { patch: g } });
+
+  it("takes the provider and endpoint as plain text, a cleared one too, and nothing else", () => {
+    expect(goose({ gooseProviderId: "litellm", gooseBaseUrl: "http://proxy:4000" })).toMatchObject({ verb: "settings.put", change: { goose: { gooseProviderId: "litellm" } } });
+    expect(goose({ gooseProviderId: "" })).toMatchObject({ change: { goose: { gooseProviderId: "" } } });
+    expect(goose({ gooseModelId: "x" })).toMatch(/Goose change/);
+    expect(goose({})).toMatch(/Goose change/);
+    expect(goose(["x"])).toMatch(/Goose change/);
+    expect(goose({ gooseBaseUrl: `https://${"x".repeat(130)}` })).toMatch(/too long/);
+    expect(goose({ gooseBaseUrl: "https://x\n" })).toMatch(/can't show/);
+    expect(goose({ gooseProviderId: 3 })).toMatch(/isn't text/);
+    expect(goose({ gooseProviderId: "" , gooseBaseUrl: null })).toMatch(/isn't text/);
+  });
+
+  it("says where Goose will point, and the host settings that ride with it, for the worker's settings", () => {
+    const self = "a".repeat(64);
+    const req = { host: "w1", card: "", verb: "settings.put", change: { goose: { gooseProviderId: "openai", gooseBaseUrl: "" } }, args: { patch: { gooseProviderId: "openai", gooseBaseUrl: "", maxThreads: 4 } } };
+    expect(widenPrompt(req, self, () => "m1mini")).toBe("point Goose at the provider openai and the endpoint none (and its maxThreads 4 with it), for the settings on the worker m1mini (w1)");
+    expect(widenPrompt({ ...req, change: { goose: { gooseBaseUrl: "https://gw" } }, args: {} }, self, () => "m1mini")).toBe("point Goose at the endpoint https://gw, for the settings on the worker m1mini (w1)");
+    expect(widenPrompt({ ...req, change: { goose: { gooseProviderId: "" } }, args: { patch: [] } }, self, () => "m1mini")).toBe("point Goose at the provider Goose's own, for the settings on the worker m1mini (w1)");
+  });
+
+  it("signs one a worker that pinned this Mac accepts, over exactly its patch", async () => {
+    const h = handlers();
+    const change = { goose: { gooseProviderId: "openai" } };
+    const auth = await h.call("approval:widen", { host: "w1", card: "", verb: "settings.put", change, args: { patch: { gooseProviderId: "openai" } } });
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), "weft-widen-goose-"));
+    fs.writeFileSync(path.join(home, "mac-keys.json"), JSON.stringify([h.s.publicKey()]));
+    const signers = createHostSigners(home, []);
+    const deps = () => ({ host: "w1", now: 1_000, nonces: nonceBook({ load: () => ({}), save: () => {} }, () => 1_000), verify: signers.verify });
+    const target = { card: "", verb: "settings.put" as const, change, args: { patch: { gooseProviderId: "openai" } } };
+    expect(await widenProblem({ ...target, args: { patch: { gooseProviderId: "openai", maxThreads: 0 } } }, auth, "no", deps())).toMatch(/pairing Mac/);
+    expect(await widenProblem({ ...target, change: { goose: { gooseProviderId: "custom" } } }, auth, "no", deps())).toMatch(/pairing Mac/);
+    expect(await widenProblem(target, auth, "no", deps())).toBeNull();
+  });
+
+  it("records the provider and endpoint a worker's Goose key may go to, only once Touch ID passed", async () => {
+    const onGoose = vi.fn();
+    const h = handlers({ onGoose });
+    const change = { goose: { gooseProviderId: "anthropic", gooseBaseUrl: "https://gw" } };
+    await h.call("approval:widen", { host: "w1", card: "", verb: "settings.put", change, args: { patch: change.goose } });
+    expect(onGoose).toHaveBeenCalledWith("w1", change.goose);
+    await h.call("approval:widen", { host: "w1", card: "c1", verb: "card.update", change: { cwd: "app" }, args: { body: { cwd: "app" } } });
+    expect(onGoose).toHaveBeenCalledTimes(1);
+    const no = handlers({ onGoose, confirm: () => Promise.resolve(false) });
+    expect(await no.call("approval:widen", { host: "w1", card: "", verb: "settings.put", change, args: { patch: change.goose } })).toBeNull();
+    expect(onGoose).toHaveBeenCalledTimes(1);
   });
 });

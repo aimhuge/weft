@@ -31,3 +31,15 @@ describe("openWorkerLine", () => {
     await expect(openWorkerLine({ action: "line", workerId: "w1", offer }, fakeClient({ user: null }).client)).rejects.toThrow("Sign in");
   });
 });
+
+describe("openWorkerLine over the LAN", () => {
+  it("hands back a LAN answer and writes no row; with none, takes the row", async () => {
+    const answer = { iv: "aXY=", ct: "Y3Q=" };
+    const { client, inserted } = fakeClient({ workers: [workerRow()], publicKey: keys.publicKey, insertId: "cmd-9" });
+    const lan = vi.fn(() => Promise.resolve(answer));
+    await expect(openWorkerLine({ action: "line", workerId: "w1", offer }, client, lan)).resolves.toEqual({ answer });
+    expect(lan).toHaveBeenCalledWith("w1", offer);
+    expect(inserted()).toBeNull();
+    await expect(openWorkerLine({ action: "line", workerId: "w1", offer }, client, () => Promise.resolve(null))).resolves.toEqual({ commandId: "cmd-9" });
+  });
+});

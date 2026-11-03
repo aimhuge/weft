@@ -5,7 +5,7 @@
 // rule and the elevated verbs it keeps while a phone is paired, a worker's pasted-file transfer.
 import { answerBody, answerGrant, replyBody, stopBody, type AnswerPayload, type CloudCommandRow, type GrantScope } from "../cloud-commands";
 import type { HostVerb } from "../host-api";
-import { isHostLevelVerb, isListVerb, type ListVerb } from "@weft/client";
+import { isHostLevelVerb, isListVerb, withoutGoose, type ListVerb } from "@weft/client";
 import { hostResult, readHostCommand, remoteRefusal, textArgOf, verbResult, type HostArgs, type HostDone, type HostPayload } from "../host-command";
 import { carriesValue, valueResult, type Carry } from "../host-result";
 import type { Card } from "../types";
@@ -46,6 +46,9 @@ export interface CardRules {
   widen?(target: WidenTarget, auth: unknown, refusal: string): Promise<string | null>;
   // A verb on the host itself (settings.get / settings.put), from the network. Absent: this host refuses them (a Mac).
   hostVerb?(verb: HostVerb, args: Record<string, unknown>): Promise<unknown>;
+  // A settings.put's Goose provider and endpoint, checked and saved, once its signed widening checked out (a worker).
+  // Absent, they stay refused like any setting outside HOST_SETTINGS.
+  goose?: (fields: Record<string, unknown>) => void | Promise<void>;
   // Whether the command's author is this host's owner. A verb in OWNER_VERBS runs only when it is; a host without the
   // rule can't say, so none of those verbs runs there from the network.
   fromOwner?(command: CloudCommandRow): boolean;
@@ -99,7 +102,7 @@ export function asAnswer(command: CloudCommandRow, { args }: HostPayload): Cloud
 const TURN_VERBS = new Set<HostVerb>(["card.message", "card.message.edit", "card.restart", "card.fresh"]);
 
 // Verbs a board runs for their answer, or to warm a CLI: they change no card, so there's nothing to sync after them.
-const READS = new Set<HostVerb>(["skills.list", "files.list", "files.read", "files.write", "card.warm", "settings.get", "settings.put", "dev.status"]);
+const READS = new Set<HostVerb>(["skills.list", "files.list", "files.read", "files.watch", "files.unwatch", "files.write", "card.warm", "settings.get", "settings.put", "dev.status"]);
 
 const NO_HOST_VERBS = "This host takes its settings only from its own window.";
 
@@ -196,6 +199,17 @@ export function cardKinds(rules: CardRules) {
     return { cardId: card.id, result };
   }
 
+  // A settings.put's Goose fields, once their signed widening checks out, and the rest of the command, which still
+  // passes remoteRefusal on its own. Null when it carries no Goose change, no approval or this host takes none.
+  async function signedGoose(body: HostPayload): Promise<{ goose: Record<string, unknown>; rest: HostPayload } | null> {
+    const refused = remoteRefusal(body);
+    const change = refused ? widenChangeOf(body) : null;
+    if (!refused || !change?.goose || !rules.widen || !rules.goose || body.args.widen === undefined) return null;
+    const problem = await rules.widen({ card: "", verb: body.verb, change, args: widenArgsOf(body.args) }, body.args.widen, refused);
+    if (problem) throw new Error(problem);
+    return { goose: change.goose, rest: { verb: body.verb, args: { ...withoutWiden(body.args), patch: withoutGoose(body.args.patch) } } };
+  }
+
   // The rule a host-level verb runs through, if this host takes it from the network.
   function hostLevel({ verb: name, args }: HostPayload): (() => Promise<unknown>) | string {
     if (name === "card.list") return rules.cards ? () => (rules.cards as () => Promise<unknown>).call(rules) : NO_READS;
@@ -204,12 +218,15 @@ export function cardKinds(rules: CardRules) {
 
   // A verb on the host itself: no card to check, the same refusals, and the cardId left empty (reported as none).
   async function onHost(body: HostPayload): Promise<HostDone> {
-    const run = hostLevel(body);
+    const signed = await signedGoose(body);
+    const payload = signed?.rest ?? body;
+    const run = hostLevel(payload);
     if (typeof run === "string") throw new Error(run);
-    const refused = remoteRefusal(body);
+    const refused = remoteRefusal(payload);
     if (refused) throw new Error(refused);
+    if (signed) await (rules.goose as NonNullable<CardRules["goose"]>)(signed.goose);
     const reply = await run();
-    const result = carriesValue(body.verb) ? await valueResult("", reply, rules.carry) : verbResult(body.verb, "", reply);
+    const result = carriesValue(payload.verb) ? await valueResult("", reply, rules.carry) : verbResult(payload.verb, "", reply);
     return { cardId: "", result };
   }
 

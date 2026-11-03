@@ -12,7 +12,8 @@ import { SHOW_DIR } from "./show-dir";
 import { tunnelFor } from "./tunnels";
 import type { PermissionMode } from "./types-card";
 
-export type PageUpload = (local: string) => Promise<BlobRef | null>;
+// The card it opened for, so the page goes up sealed when that card's rows do (lib/worker-sealing.ts).
+export type PageUpload = (local: string, cardId?: string) => Promise<BlobRef | null>;
 
 let upload: PageUpload | null = null;
 
@@ -77,7 +78,7 @@ export async function openOnWorker(cardId: string | undefined, url: string, brow
   const found = resolvePage(url.trim());
   if (!found) throw new Error(refused(url));
   if (!upload) throw new Error("This worker can't upload pages yet. Update it with weft-worker update.");
-  const ref = await upload(found.local);
+  const ref = await upload(found.local, cardId);
   if (!ref) throw new Error(refused(url));
   notePage(cardId, url.trim());
   // The same page in the worker's browser too, so read_page, snapshot and click act on what the pane shows.

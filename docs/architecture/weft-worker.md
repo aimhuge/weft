@@ -283,7 +283,13 @@ expiry, and the board that asked waited on a result that would never come. Now a
 ### What's sealed on a worker
 
 Vault values for a card's `mcp__secrets__run` reach a worker sealed to its `seal-key.json` for one run and stay in the
-daemon's memory, never on this disk ([project-hosts.md, H8](project-hosts.md#secrets-on-a-worker-h8-the-per-use-seal-as-built)).
+daemon's memory, never on this disk ([project-hosts.md, H8](project-hosts.md#secrets-on-a-worker-h8-the-per-use-seal-as-built)),
+unless the user turned on **Keep on this worker** for a project's development or preview set (Settings → Devices → the
+worker → Secrets; [secrets.md](secrets.md#kept-on-a-worker)). Then `kept-vault.json` in the home holds those values
+sealed to the same box key, written only from a `vault_keep` the pairing Mac signed (`lib/worker-kept-vault.ts`), opened
+only for a Mac-signed `secret_use` that names the value's version, and deleted on a signed wipe, when the worker's key
+stops working (revoked), on a pairing to another Mac and by `weft-worker forget-macs`. `weft-worker status` says when it
+keeps any. It sits beside `seal-key.json`, so code a card runs as the same user can open it: see the threat there.
 
 The secret guard seals the worker's home as it seals the data dir (`reachesWorkerHome`, `lib/secret-guard-files.ts`), in
 every permission mode. The folder gate can't do this job: it asks, and **Always** would grant all of `~/.weft-worker` to
@@ -294,7 +300,7 @@ A deny beats an ask, so the prompt never shows and a grant buys nothing here.
 | Under `~/.weft-worker` | A thread |
 | --- | --- |
 | the home itself, listed: `ls ~/.weft-worker`, `ls -la`, the LS tool (not `-R`, not a glob of it) | open: names only, so a thread can find the folders below (2026-11-02) |
-| `worker.json`, `worker.env`, `seal-key.json`, `github-credentials` | refused: the worker's key, its Claude token, its private seal key, its GitHub token |
+| `worker.json`, `worker.env`, `seal-key.json`, `github-credentials`, `kept-vault.json` | refused: the worker's key, its Claude token, its private seal key, its GitHub token, the values a Mac kept here |
 | `worker.log`, `update-bad`, `update-trial`, `rollback.sh`, anything new | refused: the log is the daemon's raw stdout and stderr with no redaction pass, so whatever any process printed (an SDK error echoing a request, a CLI's debug output) lands there; `update-bad` keeps the first line of git and pnpm errors, which can carry a credentialed remote URL; `rollback.sh` is a copy of `install/worker-rollback.sh`, readable in the clone |
 | `data/`, as on a Mac | refused, save `data/show` and `data/apps` |
 | `work/` (or `WEFT_WORKER_ROOT`) | open: it's where cards run |
@@ -324,7 +330,7 @@ A paired worker takes secrets and signed settings from one Mac, the one whose ke
 (`mac-keys.json`). To move it to another Mac, or to pair it again into another workspace, that Mac approves the move:
 Settings → Devices → the worker → **Re-pair**, paste the new Mac's `wph.…` code, Touch ID, and run the line it shows in
 a terminal on the box (`weft-worker enrol wph.… --re-pair --approval wra.…`). The approval lasts 30 minutes and is
-good for that worker and that code only ([project-hosts.md](project-hosts.md#re-pairing-a-worker)).
+good for that worker and that code only ([project-hosts.md](project-hosts.md#re-pairing-a-worker-as-built-2026-11-02)).
 
 **A lost Mac, or a box that trusts none** (enrolled by token, after `weft-worker forget-macs`, or once its Mac was
 revoked: the daemon checks every minute and stops trusting a revoked pairing Mac for good,
@@ -437,7 +443,7 @@ store (`lib/worker-project.ts`, `lib/worker-board.ts`, `lib/worker-transport.ts`
   archive and the model picker, and its reply box ↑ edit, fresh and the held-edit choices, each a host verb; the show
   rail projects the items its thread view drew (`lib/worker-shown.ts`), and the pane column is `components/WorkerPane.tsx`
   (in the desktop app, this Mac's native pane on a page the card wrote or a site, as on a local card,
-  [below](#the-native-pane-on-a-worker-card); `WebPane` on the live screen, a page only the worker has, and off the
+  [below](#pages-from-a-worker); `WebPane` on the live screen, a page only the worker has, and off the
   desktop app; the native pane under Local Simulator). The editor column
   says a worker's files aren't there yet. Reply, answer, stop and mode are the same `cloud_commands` rows the web sends.
 - **A new thread:** `POST /api/cards` with a worker path calls `startWorkerThread`, sends a `run` with that folder, makes
@@ -446,10 +452,15 @@ store (`lib/worker-project.ts`, `lib/worker-board.ts`, `lib/worker-transport.ts`
 - **Folder reports:** `worker_set_folders` and `lib/worker-folders.ts` exist, but the daemon doesn't call them yet, so
   until it does a project needs a card to show.
 - **Not yet:** attachments on a new thread, Run on Worker's local record cards still sit on the local project, and
-  sealed rows: a worker publishes its rows and pages in the clear, and files reach it plain, until it holds the workspace
-  key. The grant (sealed to its pinned box key and signed by the pairing Mac after Touch ID) and the worker's own sealing
-  are designed in [mobile-security.md](mobile-security.md#sealing-on-a-weft-worker-design); a Mac's and a browser's files
-  are sealed already ([Sealed blobs](mobile-security.md#sealed-blobs)), so a sealed card's pasted file only goes plain to a worker.
+  a file pasted into a new thread for a worker goes up plain (a reply's goes sealed once the card is).
+- **Sealed threads:** Settings → Devices → the worker → Seal… grants a paired worker the workspace key, sealed to the box key
+  the Mac pinned and signed by the Mac's approval key after Touch ID (`electron/worker-key-grants.cjs`). The worker checks it
+  against the Mac in `mac-keys.json`, holds the key in memory only (`lib/worker-keyring.ts`, read at start, on a `key_grant`
+  ping and every 10 minutes), and from then on publishes its card, items, tool outputs, pages and their files sealed, as a
+  Mac's outbox does, and files a Mac or a browser pastes into its sealed cards go up sealed too; both boards open them.
+  Add a worker offers Seal… right after pairing while your Mac seals. Once it has sealed, `seal-floor.json` in its home makes a worker with no key hold
+  its rows back rather than publish plain. Re-pin and Revoke drop its grants and rotate the key. A token-enrolled worker
+  trusts no Mac and stays plain. See [mobile-security.md](mobile-security.md#sealing-on-a-weft-worker).
 
 ### Pages from a worker
 
@@ -515,7 +526,7 @@ card.page and the open_url item carry blob:sha256:<hex>#anchor (lib/worker-publi
   session. A worker's page is untrusted, so `app/api/worker-board/page/[sha]` sends a CSP with no `http:` source (the page
   can't fetch, load or post anything to 127.0.0.1), and the iframe is `sandbox="allow-scripts"` with no popups or forms. A
   public site is never framed there: its CSP isn't ours, so the pane says so and offers Open ↗. (In the desktop app both
-  now load in the native pane instead, [above](#the-native-pane-on-a-worker-card); this frame is what's left off it.)
+  now load in the native pane instead, [above](#pages-from-a-worker); this frame is what's left off it.)
 - **The launch token stays out of frames** (`electron/api-token.cjs`). `attachApiToken` used to put it on every request
   from the board window's session, so a page could navigate its own frame to a local GET with it attached. It now skips
   a frame's navigation (`resourceType` `subFrame`) and anything a frame asks for (`details.frame.parent`, or the
@@ -602,7 +613,7 @@ daemon ◀─ claim ◀─ cloud_commands kind=input ◀─ POST /api/worker-boa
 
 ### The fast path
 
-A watched iOS simulator also gets H.264 and live input over WebRTC, beside the JPEGs, which never stop. WebRTC finds a direct
+A watched iOS simulator or Android emulator also gets H.264 and live input over WebRTC, beside the JPEGs, which never stop. WebRTC finds a direct
 route on a LAN or through NAT with no open port, so home and away are one path. Anything that goes wrong leaves the pane on
 the JPEGs.
 
@@ -638,7 +649,14 @@ board ─ sealed offer, elevated input command ─▶ daemon ─ encrypted answe
   `card.page` only gains `fast=1`, which says the watch takes offers.
 - **Gesture and keyboard.** `down`, `move` and `up` are sent as they happen, as fractions of the screen, and a gesture holds one
   hid stream from press to release. Keys go as HID usages (`lib/hid-keys.ts`), down and up. With no line open, a finished tap or
-  swipe takes the command path. Paste isn't built.
+  swipe takes the command path.
+- **Paste.** ⌘V on the focused screen sends the clipboard's plain text as one `{ t: "text" }` event on the input channel
+  (`pasteEvent`, `lib/rtc-signal.ts`). Only the `paste` event does it, so the board never reads the clipboard on its own,
+  and only over an open line: with none, a paste does nothing. It's cut to `PASTE_MAX` (2,000 characters) on the board, and a
+  worker drops a longer one. The device types it: on iOS each character becomes its US-keyboard HID presses, Shift
+  included (`lib/hid-text.ts`, idb's `text`), as `idb ui text` does it; on Android it's `input text` lines, a newline as
+  Enter and a tab as Tab (`textLines`, `lib/adb-input.ts`); the worker's browser takes it whole with CDP's
+  `Input.insertText`. A character no US key types (accents, emoji) is dropped on a device; the browser keeps it.
 - **Video on an RTP track (H6a).** The board's offer carries a receive-only video m-line limited to H.264 in packetization-mode 1,
   High first, then Constrained Baseline (`offerVideoTrack`, `setCodecPreferences`, jitter buffer target 0). The worker is
   configured for those two codecs only, and `takeVideo` turns the m-line to `sendonly` before answering, so it's all inside
@@ -668,15 +686,109 @@ board ─ sealed offer, elevated input command ─▶ daemon ─ encrypted answe
   13 of 16 detected, before decoding and drawing), 29 fps, about 0.66 Mbps at quality 0.2 and a 2 Mbps cap. Fast scrolling
   showed artifacts at those settings, so it's now 0.6 and 8 Mbps, not yet measured under motion. Nothing's been measured off
   the LAN, and a slow link may need a lower bitrate.
-- **Not yet:** weft.zip and phones stay on JPEGs, since sealing an offer runs on the desktop's local server. The screen's own
-  line has no TURN; on a network that blocks direct connections it rides the session line, which takes TURN when this
-  Mac holds a Cloudflare TURN key (`lib/rtc-ice.ts`), or stays on JPEGs.
-- **Android** has no idb, so an emulator stays on JPEGs and `adb`. `adb exec-out screenrecord --output-format=h264` is the likely
-  next step, not built because no box here has adb to measure it on.
+- **weft.zip seals its own offers.** A tab has no Mac server, so `@weft/client` seals in the browser
+  (`packages/weft-client/src/seal.ts`: libsodium's X25519, Web Crypto's HKDF-SHA256 and AES-256-GCM, byte for byte as
+  `lib/worker-seal.ts`, which `lib/worker-seal-client.test.ts` proves by opening both on the worker's side). Your own open
+  worker card holds its worker's **session line** (`lib/web-lines.ts`, `useWebLine` in `components/web-board/useWebHost.ts`):
+  the tab reads `cloud_workers.public_key`, seals the offer (`lineOpener`) and inserts the `line` row with its own session,
+  which only the worker's owner may do (`private.owns_device`), in exactly the server's shape
+  (`20261103150000_line_row_shape.sql`). Over it go the card's verbs (`lib/cloud-host-acts.ts`, never a
+  widening or pasted files), its thread's events beside Realtime (`lib/line-thread.ts`) and the watched screen as an H.264
+  track. The phone gets the same opener with its own RTCPeerConnection (`openLine`, `packages/weft-client/src/line-open.ts`).
+- **TURN on weft.zip.** A web line asks weft.zip's own `GET /api/web-board/ice` (`lib/web-ice.ts`, `webIce` in
+  `lib/web-lines.ts`) for its ICE servers, which mints Cloudflare TURN credentials with the desktop's `mintIce`
+  (`lib/rtc-ice.ts`; `CLOUDFLARE_TURN_KEY_ID` and `CLOUDFLARE_TURN_KEY_API_TOKEN` on the deployment). Only a signed-in
+  visitor (cookie, or the phone's bearer) who owns an unrevoked worker gets them, at most 12 asks a minute per account
+  (per instance), never cached (`no-store`); the key never leaves the server, the browser gets the minted username and
+  credential (4 h). The servers ride in the sealed offer, so the worker relays through the same allocation. Without a key
+  on the deployment, a refusal or any failure, the line opens on STUN alone, and the board stays on the relay where that
+  can't connect. The live screen rides the session line as a track, so it relays too.
+- **Not yet:** the phone app wiring the opener (it can call `/api/web-board/ice` with its bearer); a screen line of its own
+  on weft.zip (the web can't seal the screen's own `input` offer, so it rides the session line or stays on JPEGs). The
+  screen's own line on the desktop is STUN only; on a network that blocks direct connections it rides the session line,
+  which takes TURN, or stays on JPEGs.
+- **Android** (`lib/adb-screen.ts`, built 2026-11-03, not yet run on a device). The emulator's video is `adb exec-out
+  screenrecord --output-format=h264 --bit-rate=<rate> --time-limit=180 -`: raw Annex B on stdout, cut into access units by
+  `lib/h264-units.ts` (a new frame starts at an AUD, SEI, SPS or PPS after a slice, or at a slice whose first_mb_in_slice is
+  0; a 12 ms lull ends the last one, since screenrecord writes nothing on a still screen; an IDR without its SPS and PPS
+  gets the last ones seen). Those frames go into the same `rtpVideo` track and `videoChannel` idb feeds, so the board
+  can't tell them apart, and the JPEGs keep running underneath as the fallback. screenrecord stops itself at 3 minutes,
+  so `rollingVideo` starts the next one at 170 s and switches at its first frame (a key frame), stopping the old one: no
+  gap. A recording that ends early is followed at once; one that sends nothing (screenrecord refused) ends the stream,
+  and the pane stays on JPEGs. A PLI or a new bitrate restarts screenrecord, as it restarts idb. Quality is bitrate alone
+  (2, 8 or 20 Mbps, low at half size), since screenrecord takes no frame rate. Input is one `adb shell` held open for the
+  watch, fed `input` lines built from numbers and quoted text only (`lib/adb-input.ts`): a quick still press is `input
+  tap`, any other gesture one `input swipe` over the time it took (a long press is a swipe that didn't move; the path
+  between isn't replayed); a key that types something is `input text`, Enter, Escape, Backspace, Tab and the arrows are
+  `input keyevent`, Shift is held across presses. The size is `wm size` (the override when set), in pixels, the units
+  `input` takes. **Needs a device check:** that screenrecord's frames decode in the board's `<video>` (profile and level
+  as the emulator's encoder picks them), the switch at 170 s shows no stall, the 12 ms lull doesn't split a large IDR
+  on a slow pipe, and how far gesture-to-frame latency lags iOS.
 - **Install:** `install/worker.sh` puts idb_companion 1.1.8 in `~/.weft/tools/idb-companion`, pinned by hash, on a Mac with
   Xcode. A failure only skips it, and `lib/idb-companion.ts` also finds it on PATH. idb's GitHub release publishes no digest, so
   the hash is of the file as downloaded. An auto-update runs `pnpm install` but not that script, so an enrolled box needs
   `weft-worker update` to get it.
+
+### The LAN path
+
+A board on the same network as a worker opens its [session line](project-hosts.md#the-session-line-h6-as-built) straight
+to the box, found through a signed mDNS hint, with no Supabase round trip: no `line` row, no Broadcast answer. The line
+it opens is the same one, its verbs on the same `host` path; only how the offer and the answer travel changes. Supabase
+stays the fallback for every step that fails. Built 2026-11-03.
+
+```
+worker  lib/worker-lan-start.ts ── multicast-dns ── _weft._tcp  PTR/SRV/A + TXT { v, id, fp, port, at, sig }
+                                                                 sig = worker sign key over weft-lan-hint-v1\n id\n fp\n port\n at
+        lib/worker-lan.ts  POST /line on 0.0.0.0:<port>
+Mac     lib/lan-offer.ts   (this Mac's server, from openWorkerLine)
+          1 main: POST /lan-line/keys → the sign key + box key pinned at pairing (electron/lan-line-sign.cjs)
+          2 lib/lan-mdns.ts browser: a TXT for that worker id that checks against those pins, fresh (lib/lan-hint.ts)
+          3 seal the board's offer to the pinned box key (LINE_PURPOSE); main: POST /lan-line/sign → this Mac's device key
+            over weft-lan-offer-v1\n workerId\n issuedAt\n nonce\n sha256(sealed)
+          4 POST http://<packet's source address>:<port>/line { v, workerId, sealed, mac }
+worker  rate → size → shape → pinned Mac key + fresh + nonce once → unseal → daemon.lanLine: the `line` kind (lib/worker-kinds.ts
+        openLine) as the owner's row would run it → lib/host-line.ts answers to the reply, not the Broadcast topic
+board   ◀── { answer: sealed under the one-time key } in the /api/worker-board reply ── lib/session-line.ts opens it as before
+```
+
+- **Where it runs.** The renderer can't browse mDNS or reach a LAN socket, so this Mac's server does it inside
+  `openWorkerLine` (`lib/worker-board.ts`), before the row; the reply's `answer` goes to `createSessionLine`, which feeds it to
+  the same `openAnswer` a Broadcast answer takes. The browser (`multicast-dns`, MIT) opens once per server process, on the first
+  offer, and only after main answered (off the desktop there is no control server, so no socket is opened); it asks for
+  `_weft._tcp` every 30 s and waits up to 400 ms for a hint when it has none. `WEFT_LAN=0` turns it off on either end.
+- **Which boxes.** Only a worker paired through Settings → Devices: the Mac needs its pinned sign key (to check the hint) and
+  box key (to seal to), and the box needs the Mac key from the pairing code (`mac-keys.json`, to check the offer). A
+  token-enrolled box, a box after `weft-worker forget-macs`, and a worker this Mac re-pinned (box key dropped) take the row.
+  The worker listens on any free port (`WEFT_LAN_PORT` fixes one) and logs "offering lines on the LAN, port N".
+- **Reconnecting.** A dropped line (no answer, ICE `failed`, a channel closed) is offered again after the backoff, and each new
+  offer takes the LAN when a fresh hint is up and the row when it isn't; an ICE `disconnected` or a missed pong first tries the
+  line's own ICE restart, as before. So a box that moves off the LAN falls back to Supabase on the next try, and one that comes
+  back is reached directly again.
+- **What's checked, and against what.** The hint: the worker id, the fingerprint of the box key this Mac pinned, an Ed25519
+  signature by the sign key it pinned at pairing (never `cloud_workers`), and `at` within 5 min (re-signed every 60 s). The
+  offer, in order, cheapest first: 6 tries per address and 20 in all per minute, and 2 being answered at once (429); 64 KB by
+  Content-Length and while streaming, 5 s for headers (413); a whole offer for this worker's id (400 / 403); then a Mac key
+  this box pinned and hasn't since marked revoked (`mac-revoked.json`, lib/worker-mac-revocation.ts; read on every offer), a signature over this exact sealed offer's digest and this worker id, `issuedAt` within 60 s of the box's
+  clock, and a nonce never seen (kept on disk in `lan-nonces.json`, inside the sealed worker home); then the seal opens for
+  `LINE_PURPOSE`. Every refusal past the shape is the same 403.
+- **Threat model.** *A spoofed advert* (someone on the LAN advertising this worker's id) fails the signature or the
+  fingerprint and is never offered to. *A replayed advert* (a real TXT re-sent from another address within its 5 minutes)
+  sends the sealed offer to the wrong place: it can't be opened (sealed to the box key), its answer key and TURN credentials
+  are inside it, and the board falls back to the row when nothing answers; the cost is the attempt. *A replayed offer* is
+  refused by its nonce, and a stale one by its time; one replayed inside the window to the real box would open nothing the
+  replayer can use, since the answer comes back sealed under the board's one-time key. *An offer from anyone else on the
+  LAN* (anyone can seal to a public box key) is refused without the pinned Mac's signature, so the port gives no more than
+  the relay, which takes only the owner's rows. *DoS on the port* is bounded by the rate and size limits, the concurrent cap
+  and the timeouts; a flood can make the board fall back to Supabase, never take the line. *DoS on the browser* is bounded by
+  64 workers and 4 records each, checked only when a line is offered. The Mac signs with its device key and no Touch ID, as it
+  signs settings: what's signed is built in main from checked fields under its own prefix, so it can't stand for an approval,
+  and only the server holds the control server's token. A line opened this way can do exactly what a `line` row's can.
+- **Tested** with a fake mDNS bus (`lib/lan-mdns.test.ts`) and end to end on 127.0.0.1 (`lib/lan-line.loopback.test.ts`): a
+  worker daemon advertises, this Mac's server finds it, checks it, seals, signs and posts, the worker opens the line through
+  its own `line` kind, and the board opens the answer; a spoofed advert is ignored and an unpinned Mac refused. Not yet run on
+  a real LAN (multicast through a real router, a Linux box's firewall, Electron's server).
+- **Not yet.** Reconnecting without a new offer (the address is only used to deliver the offer; ICE does the rest); IPv6
+  (the socket is `udp4`); weft.zip and the phone, which can't browse mDNS.
 
 **Local Simulator.** To test by hand with no tap latency, a card can run its build on a simulator on your Mac, with the agent still driving it:
 [Local Simulator mode](manual-qa.md).
@@ -706,6 +818,66 @@ set out:
 5. **A dev server to point at.** `mcp__devservers` needs the desktop too, so a worker needs its own start, stop and status.
 6. **The pane.** `/t/<id>` needs a weft.zip session. A sandboxed frame has no cookie and the board window must not frame it,
    so the first version is Open ↗ in the toolbar. `openOnWorker` would then trade a localhost URL for the card's `/t/<id>`.
+
+### Goose on a worker
+
+Goose's provider and endpoint say where a Goose card's traffic goes, so they never sync and are never a plain host
+setting (`packages/weft-client/src/host-settings.ts`). Settings → Threads → On a worker shows them for a worker that
+reports them (`components/WorkerGooseFields.tsx`), and Save on worker sends them in the same `settings.put` as the host
+settings, signed (built 2026-11-03):
+
+- **Signed by the Mac, after Touch ID.** `workerSettings` (`lib/worker-host-settings.ts`) asks main to sign a widening
+  over exactly the patch: verb `settings.put`, card `""`, change `{ goose: { gooseProviderId?, gooseBaseUrl? } }`, args
+  the whole patch (`signWiden`, `electron/widen-sign.cjs`, whose Touch ID prompt reads "point Goose at the provider … and
+  the endpoint …, for the settings on the worker …", and names any host setting riding with it). Without the desktop app
+  there's no signer: the fields show greyed and Save doesn't send them.
+- **Checked on the worker.** `remoteRefusal` still refuses the Goose fields unsigned (they're foreign to `HOST_SETTINGS`).
+  `signedGoose` in `lib/host/dispatch.ts` lifts that only for a `widen` that `widenProblem` accepts against the worker's
+  own id, its nonce book and the Mac key it pinned at pairing (`lib/host-signers.ts`); the rest of the patch must then
+  pass `remoteRefusal` on its own, so an approval can't carry `allowedFolders`. **A passkey can't sign it**
+  (`PASSKEY_NO_GOOSE`, `lib/widen-check.ts`), even where the web may approve a "!" line. A Mac has no `goose` rule, so it
+  refuses them from the network as before.
+- **Saved.** `applyGooseSettings` (`lib/host-goose-settings.ts`) checks both fields first: a provider in the catalog or
+  `""`, an endpoint that's `""` or an http(s) URL of at most 500 characters with no user or password in it. Then it
+  saves. `settings.get` reads them back with the host settings.
+- **The endpoint reaches Goose.** A worker has no Electron main to grant a key; without one from the Mac (below) Goose
+  starts as the plain binary, and `gooseEndpointEnv` (`lib/goose-provider.ts`) still sets the endpoint's own variable (`ANTHROPIC_HOST`, `LITELLM_HOST`,
+  `AZURE_OPENAI_ENDPOINT`, `GOOSE_PROVIDER__HOST`), as it now does on a Mac where Goose holds its own key.
+- **The key comes from the Mac, per turn, after Touch ID** (built 2026-11-03, with
+  `supabase/migrations/20261103160000_goose_key_ask.sql`, not applied). The key stays in the paired Mac's Keychain
+  (`electron/goose-token.cjs`); a worker's `worker.env` still can't reach Goose (`cliEnv` drops secret-named variables,
+  `GOOSE_DISABLE_KEYRING` is set). Each Goose turn whose provider takes a key asks for it:
+
+  ```
+  worker gooseLaunch (lib/goose-launch.ts) on a worker ─ gooseKeyOnWorker (lib/worker-goose-key.ts): openAsk(nonce,
+         goose: true) ─ goose_key device call through worker_mac_ask, signed by sign-key.json over [card, box key,
+         nonce, expiry, provider, endpoint] (lib/worker-goose-key-wire.ts)
+  Mac    lib/device-calls.ts → POST /secrets/worker-goose-key (by call id only) → electron/worker-goose-key.cjs:
+         re-read the row with main's session ─ paired worker only (pinned sign key) ─ signature ─ a card its owner
+         started (cardOrigin) ─ nonce spent once ─ provider AND endpoint equal what this Mac last signed for that
+         worker (electron/worker-goose-set.cjs, recorded by electron/widen-sign.cjs after the settings.put Touch ID)
+         ─ the Keychain key ─ Touch ID naming the worker, card, provider and endpoint ─ seal to the PINNED box key for
+         gooseKeyPurpose(card, nonce, [provider, endpoint]) ─ Mac-signed secret_use, use: "goose"
+  worker deliverSecretUse (lib/worker-secret-asks.ts): Mac signature ─ the open ask ─ opens under the goose purpose
+         only ─ same card, nonce, provider and endpoint, the one key name ─ gooseEnvFor (lib/goose-provider.ts) ─
+         that one Goose process's env; remember() for redaction; the next turn asks again
+  ```
+
+  - **Where the key may go.** Main answers only for the provider and endpoint it last set on that worker under Touch ID,
+    so a worker (or anyone holding its `wwk_` key) can't point the key at a new host: changing the endpoint means a new
+    signed `settings.put`, whose Touch ID names it. A Mac that never set the pair, or whose record won't open, refuses.
+  - **Only that turn's process.** The key goes into the spawned `goose run`'s env (and so to the tools and subagents it
+    runs), never the daemon's own env, an argument or a file. Goose's rows (its replies, progress steps, result and a
+    failure's error) go through `redactStored` in `lib/goose-runner.ts`, so the key shows as `‹NAME›` in the thread;
+    `forgetOnTurnEnd` drops it from memory when the card leaves Running.
+  - **What a refusal does.** Denied, no Mac, unpaired or no key saved fails the turn with why, except LiteLLM and a
+    custom endpoint, which may run keyless and start plain. Ollama never asks.
+  - **Not kept on the worker.** "Keep on this worker" (`vault_keep`) is per project, development or preview; the opened
+    plaintext of a Goose key says production, which keeping refuses on both sides, and a kept key would save only the
+    trip, not the Touch ID. So every Goose turn on a worker asks Touch ID once.
+  - **The threat that stays.** Any code that turn runs on the worker (its shell tool, a script, a dependency) can read the
+    key from its env, as the Touch ID prompt says; the worker's other cards run as the same OS user and could read a
+    running Goose's env. The key is as safe as that box for as long as the turn runs.
 
 ### Cloning onto a worker
 

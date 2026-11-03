@@ -4,7 +4,7 @@
 // files a progress note marks on the card.
 import fs from "node:fs";
 import path from "node:path";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { EXE, setupGoose } from "./goose-runner.harness";
 import type { Card } from "./types";
 
@@ -260,5 +260,31 @@ describe("what a Goose thread passes on", () => {
     const r = rig();
     const args = r.goose.argsFor({ ...r.session, spec: { ...r.session.spec, copilot: true } }, "hi");
     expect(args[args.indexOf("--system") + 1]).not.toContain("Co-Authored-By");
+  });
+});
+
+describe("a worker card's Goose key in what the turn files", () => {
+  const leak = async () => {
+    vi.stubEnv("WEFT_WORKER", "1");
+    vi.stubEnv("WEFT_SHELL_URL", "");
+    const { markInUse } = await import("./secret-run");
+    const { remember } = await import("./worker-secret-run");
+    markInUse("card-1");
+    remember("card-1", { ANTHROPIC_API_KEY: "sk-ant-leak-123456" });
+  };
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("swaps the key for ‹NAME› in the reply, the tool steps and the result", async () => {
+    await leak();
+    await rig().run([event({ type: "message", message: "Your key is sk-ant-leak-123456." }), event({ type: "notification", progress: "echo sk-ant-leak-123456" }), event({ type: "complete", text: "Done with sk-ant-leak-123456" })]);
+    const filed = JSON.stringify(s.handled);
+    expect(filed).not.toContain("sk-ant-leak-123456");
+    expect(filed).toContain("‹ANTHROPIC_API_KEY›");
+  });
+
+  it("swaps it in a failed turn's error too", async () => {
+    await leak();
+    const failed = await rig().start(["error: bad key sk-ant-leak-123456"], { code: 1 }).then(() => null, (err: unknown) => err as Error);
+    expect(failed?.message).toBe("error: bad key ‹ANTHROPIC_API_KEY›");
   });
 });

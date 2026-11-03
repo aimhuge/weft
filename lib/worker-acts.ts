@@ -20,7 +20,7 @@ import { wakeCard, workerOfCard } from "./worker-poll";
 import { noteRelay } from "./worker-route";
 import { waitForCommand, type CommandResult } from "./worker-command-wait";
 
-export async function postWorkerAction(body: WorkerAction | LineAction): Promise<{ commandId?: string }> {
+export async function postWorkerAction(body: WorkerAction | LineAction): Promise<{ commandId?: string; answer?: unknown }> {
   const started = Date.now();
   const res = await apiFetch("/api/worker-board", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
   // A session line's offer names a worker, not a card, and isn't a relay round trip.
@@ -28,7 +28,7 @@ export async function postWorkerAction(body: WorkerAction | LineAction): Promise
     noteRelay(workerOfCard(body.cardId), Date.now() - started);
     wakeCard(body.cardId);
   }
-  const reply = (await res.json().catch(() => ({}))) as { commandId?: string; error?: string };
+  const reply = (await res.json().catch(() => ({}))) as { commandId?: string; answer?: unknown; error?: string };
   if (res.ok) return reply;
   throw new Error(reply.error || `HTTP ${res.status}`);
 }

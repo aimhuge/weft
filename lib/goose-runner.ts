@@ -22,13 +22,14 @@ import { gooseLaunch } from "./goose-launch";
 import { openGooseMcp } from "./goose-mcp";
 import { openGooseGuards } from "./guards/goose";
 import { addToReply, flushReply, lastReply, resetReply } from "./goose-reply";
-import { replacesSystemPrompt } from "./goose-provider";
+import { gooseEndpointEnv, replacesSystemPrompt } from "./goose-provider";
 import { progressPaths } from "./goose-progress-paths";
 import { writeRecipe } from "./goose-recipe-store";
 import { gooseHasSession, gooseStateRoot } from "./goose-state";
 import { endsGooseTurn, parseGooseEvent, type GooseEvent, type GooseNotificationEvent } from "./goose-runner-events";
 import { GOOSE_DEFAULT_MODEL } from "./new-thread";
 import { handle } from "./runner-turn";
+import { redactStored } from "./secret-run";
 import { getCard, updateCard } from "./store";
 import { touchFile } from "./overlap";
 import type { Session } from "./runner-state";
@@ -66,8 +67,18 @@ export function modelName(session: Session): string {
   return model && model !== GOOSE_DEFAULT_MODEL ? model : "Goose";
 }
 
+/**
+ * Text Goose produced, with any vault value or provider key the card used swapped for ‹NAME› before it's filed: on a
+ * worker the Goose key the Mac sealed for this turn is one (lib/worker-goose-key.ts). Goose's rows are text and tool
+ * steps, never the tool results lib/runner-turn.ts redacts, so it's done here.
+ */
+function scrub(session: Session, text: string): Promise<string> {
+  return session.cardId ? redactStored(session.cardId, text) : Promise.resolve(text);
+}
+
 /** The assistant's text, as a row in the thread. */
-async function assistant(session: Session, text: string) {
+async function assistant(session: Session, raw: string) {
+  const text = await scrub(session, raw);
   await handle(session.cardId as string, session, sdkMessage({
     type: "assistant",
     parent_tool_use_id: null,
@@ -103,7 +114,7 @@ async function result(session: Session, text: string, error?: string) {
   const id = session.cardId;
   if (!id) return;
   const model = modelName(session);
-  const summary = error ?? (text || "Done.");
+  const summary = await scrub(session, error ?? (text || "Done."));
   await handle(id, session, sdkMessage({
     type: "result",
     subtype: error ? "error_execution" : "success",
@@ -181,7 +192,7 @@ export async function handleGooseEvent(session: Session, event: GooseEvent): Pro
   // The note also names the files Goose is working on, so the card's overlap warning sees them.
   const use = gooseToolUse(event);
   if (use) {
-    const progress = (event as GooseNotificationEvent).progress;
+    const progress = await scrub(session, (event as GooseNotificationEvent).progress);
     noteFileChanges(session, progressPaths(progress));
     const id = progress;
     if (!id || session.toolIndex.has(id)) return false;
@@ -193,7 +204,7 @@ export async function handleGooseEvent(session: Session, event: GooseEvent): Pro
         type: "message",
         role: "assistant",
         model: modelName(session),
-        content: [{ type: "tool_use", id, ...use }],
+        content: [{ type: "tool_use", id, ...use, input: { progress } }],
         stop_reason: null,
         stop_sequence: null,
         usage: { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
@@ -360,6 +371,13 @@ async function runGooseTurn(session: Session, executable: string, prompt: string
   }
 }
 
+// The launch helper's env over the turn's; with no grant (a worker, or Goose holding its own key) the endpoint the
+// settings name still applies.
+function childEnvOf(session: Session, env: Record<string, string>, granted: Record<string, string> | undefined): Record<string, string> {
+  if (granted) return { ...env, ...granted };
+  return { ...env, ...gooseEndpointEnv(session.spec.provider ?? "", session.spec.gooseBaseUrl ?? "") };
+}
+
 /** Starts the turn's `goose run`, reads its events, and fails the turn if it ends without a `complete`. */
 async function runGooseProcess(session: Session, executable: string, prompt: string) {
   // The recipe is written before Goose is started, from the same plan and prompt the argv is built
@@ -371,12 +389,13 @@ async function runGooseProcess(session: Session, executable: string, prompt: str
   session.toolIndex.clear();
   // The provider's key stays in Electron main: the launch helper starts Goose with it in its env, so
   // this process never holds the plaintext. Without a saved key the plain binary is started, which is
-  // what Goose wants when the user configured a provider itself.
+  // what Goose wants when the user configured a provider itself. On a worker the key comes sealed from
+  // the paired Mac after Touch ID and goes into this one process's env (lib/worker-goose-key.ts).
   // The helper spawns argv[0] as the program, so the Goose binary leads; without it the helper tried to run `run`.
-  const launch = session.spec.provider ? await gooseLaunch(session.spec.provider, [executable, ...argv], env, session.spec.cwd, session.spec.gooseBaseUrl ?? "") : undefined;
+  const launch = session.spec.provider ? await gooseLaunch(session.spec.provider, [executable, ...argv], env, session.spec.cwd, session.spec.gooseBaseUrl ?? "", session.cardId) : undefined;
   const command = launch ? launch.bin : executable;
   const args = launch ? launch.args : argv;
-  const childEnv: Record<string, string> = launch ? { ...env, ...launch.env } : env;
+  const childEnv = childEnvOf(session, env, launch?.env);
   const proc = spawnCli({ command, args, cwd: session.spec.cwd, env: childEnv, signal: session.abort.signal }, stderr);
   session.process = proc;
   proc.stdin.on("error", () => {});
@@ -399,14 +418,14 @@ async function runGooseProcess(session: Session, executable: string, prompt: str
   // The turn ended without a `complete` event: Goose failed, and its stderr says why.
   const tail = (proc.stderrTail() || plain.join("\n")).slice(-STDERR_TAIL);
   const signal = proc.signalCode;
-  throw new Error(tail || `Goose exited ${signal ? `on ${signal}` : `with code ${proc.exitCode ?? "unknown"}`} without finishing the turn.`);
+  throw new Error((await scrub(session, tail)) || `Goose exited ${signal ? `on ${signal}` : `with code ${proc.exitCode ?? "unknown"}`} without finishing the turn.`);
 }
 
 // The code in this module, fed into the runner's BUILD fingerprint (lib/runner-session.ts) so a change to
 // the runner or to the plan it starts Goose with replaces idle sessions.
 export const GOOSE_RUNNER_CODE = [
   driveGoose, assistant, result, noteFileChanges, handleGooseEvent, readGooseEvents, promptFor, argsFor, gooseEnv,
-  gooseToolUse, gooseToolResult, isTurnEnd, eventText, messageText, modelName, planFor, saveTurnRecipe,
+  gooseToolUse, gooseToolResult, isTurnEnd, eventText, messageText, modelName, planFor, saveTurnRecipe, scrub,
   openGooseMcp, openGooseGuards, addToReply, flushReply, lastReply, resetReply, replacesSystemPrompt, parseGooseEvent,
   ...GOOSE_RECIPE_CODE,
 ];

@@ -10,7 +10,7 @@ const db = vi.hoisted(() => ({ cards: new Map<string, Card>() }));
 const data = vi.hoisted(() => `${process.env.TMPDIR ?? "/tmp"}/weft-files-audit-${String(process.pid)}`);
 vi.mock("@/lib/store", () => ({ DATA_DIR: data, getCard: vi.fn((id: string) => db.cards.get(id)) }));
 
-const { AUDIT_LOG, listFilesVerb, readFileVerb, writeFileVerb } = await import("./files");
+const { AUDIT_LOG, listFilesVerb, readFileVerb, unwatchFileVerb, watchFileVerb, writeFileVerb } = await import("./files");
 const { NotFound } = await import("./types");
 
 let dir: string;
@@ -102,5 +102,21 @@ describe("credentials and the audit log", () => {
   it("keeps working when the log can't be written", async () => {
     fs.rmSync(data, { recursive: true, force: true });
     await expect(listFilesVerb({ id: "c1" })).resolves.toEqual({ files: ["src/a.ts"] });
+  });
+});
+
+describe("files.watch and files.unwatch", () => {
+  it("answer the file's hash under a read's checks, logged, and the path to drop", async () => {
+    const { file } = (await readFileVerb({ id: "c1", path: "src/a.ts" })) as { file: { hash: string } };
+    await expect(watchFileVerb({ id: "c1", path: "src/a.ts" })).resolves.toEqual({ path: "src/a.ts", hash: file.hash });
+    await expect(watchFileVerb({ id: "c1", path: "src/gone.ts" })).resolves.toEqual({ path: "src/gone.ts", hash: null });
+    await expect(watchFileVerb({ id: "c1", path: "/etc/hosts" })).rejects.toThrow("outside the card's folder");
+    fs.writeFileSync(path.join(dir, "deploy.pem"), "key");
+    await expect(watchFileVerb({ id: "c1", path: "deploy.pem" })).rejects.toThrow("holds credentials");
+    await expect(watchFileVerb({ id: "nope", path: "src/a.ts" })).rejects.toThrow(NotFound);
+    await expect(unwatchFileVerb({ id: "c1", path: "src/a.ts" })).resolves.toEqual({ path: "src/a.ts" });
+    await expect(unwatchFileVerb({ id: "nope", path: "src/a.ts" })).rejects.toThrow(NotFound);
+    const lines = fs.readFileSync(path.join(data, AUDIT_LOG), "utf8").trim().split("\n");
+    expect(lines.filter((l) => l.includes("files.watch"))).toHaveLength(2);
   });
 });

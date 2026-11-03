@@ -8,7 +8,17 @@ vi.mock("./cloud-sync", () => ({ syncOrgId: (client: unknown, uid: string) => sy
 const resolveBlobUrls = vi.fn((_client: unknown, _org: string, refs: readonly string[]) => Promise.resolve(Object.fromEntries(refs.map((r) => [r, `https://sb.test/${r.slice(-4)}`]))));
 vi.mock("./blob-urls", () => ({ resolveBlobUrls: (client: unknown, org: string, refs: readonly string[]) => resolveBlobUrls(client, org, refs) }));
 
+// Main's keys over the control server (lib/worker-board-open.ts macRing): none unless a test hands some in.
+const shell = vi.fn<(route: string, body: unknown) => Promise<unknown>>(() => Promise.reject(new Error("no desktop shell")));
+vi.mock("./browser-shell", () => ({ shell: (route: string, body: unknown) => shell(route, body) }));
+const readBlob = vi.fn<(client: unknown, org: string, sha: string) => Promise<{ bytes: ArrayBuffer; type: string } | null>>(() => Promise.resolve(null));
+vi.mock("./blob-read", async (orig) => ({ ...(await orig<object>()), readBlob: (client: unknown, org: string, sha: string) => readBlob(client, org, sha) }));
+
 const { BLOB_REFS_MAX, SEARCH_MAX, SEARCH_PAGE, workerBlobUrls, workerThreadSearch } = await import("./worker-thread-reads");
+const { forgetMacRing } = await import("./worker-board-open");
+const { sodium } = await import("./sodium");
+const { sealJson, aadFor, blobAad, sealBytes } = await import("./sync-seal");
+const KEY = { version: 1, key: Buffer.alloc(32, 7).toString("base64") };
 
 type Row = { seq: number; item: unknown } | { tool_id: string; result: string };
 
@@ -46,6 +56,7 @@ const say = (text: string) => ({ kind: "assistant", text, at: 0 });
 
 beforeEach(() => {
   vi.clearAllMocks();
+  forgetMacRing();
   syncOrgId.mockResolvedValue("org-1");
 });
 
@@ -111,6 +122,41 @@ describe("workerThreadSearch", () => {
     expect(await workerThreadSearch("c1", "x", client([], null).client)).toBeNull();
     syncOrgId.mockResolvedValueOnce(null);
     expect(await workerThreadSearch("c1", "x", client([]).client)).toBeNull();
+  });
+});
+
+describe("a worker's sealed thread", () => {
+  it("opens sealed rows and cut results with main's keys before matching; one it can't open matches nothing", async () => {
+    const s = await sodium();
+    shell.mockResolvedValue({ keys: [KEY] });
+    const sealed = (seq: number, item: unknown) => ({ seq, item: sealJson(s, item, KEY, aadFor("org-1", "c1", `item:${seq}`)) });
+    const cut = { kind: "tool", id: "t1", name: "Bash", summary: "ls", resultBytes: 9000, at: 0 };
+    const other = { seq: 2, item: sealJson(s, say("needle"), { version: 9, key: KEY.key }, aadFor("org-1", "c1", "item:2")) };
+    const outputs = [{ tool_id: "t1", result: JSON.stringify(sealJson(s, "a needle", KEY, aadFor("org-1", "c1", "tool:t1"))) }];
+    const { client: c } = client([[sealed(0, say("one needle")), sealed(1, cut), other], outputs]);
+    expect(await workerThreadSearch("c1", "needle", c)).toEqual([{ index: 0, hits: 1 }, { index: 1, hits: 1 }]);
+    expect(shell).toHaveBeenCalledWith("/sync/keyring", { orgId: "org-1" });
+    // A row that isn't an item at all reads as a hole.
+    expect(await workerThreadSearch("c1", "needle", client([[{ seq: 0, item: null }]]).client)).toEqual([]);
+    // Sealed for a version main doesn't hold: the 🔒 stand-in, which no search for "Sealed" finds either.
+    expect(await workerThreadSearch("c1", "Sealed", client([[other]]).client)).toEqual([]);
+  });
+
+  it("opens a sealed picture into a data: URL, keeps a plain one signed, and reads each once", async () => {
+    const s = await sodium();
+    shell.mockResolvedValue({ keys: [KEY] });
+    const bytes = new TextEncoder().encode("png bytes");
+    const sha = (await import("node:crypto")).createHash("sha256").update(bytes).digest("hex");
+    const plainSha = "c".repeat(64);
+    const stored = sealBytes(s, bytes, KEY, blobAad("org-1", sha));
+    readBlob.mockImplementation((_c, _o, h) => Promise.resolve(h === sha ? { bytes: stored.slice().buffer, type: "image/png" } : h === plainSha ? { bytes: new ArrayBuffer(3), type: "image/png" } : null));
+    const refs = [`blob:sha256:${sha}`, `blob:sha256:${plainSha}`, `blob:sha256:${"d".repeat(64)}`];
+    const urls = await workerBlobUrls(refs, client([]).client);
+    expect(urls[refs[0]!]).toBe(`data:image/png;base64,${Buffer.from(bytes).toString("base64")}`);
+    expect(urls[refs[1]!]).toBe("https://sb.test/cccc");
+    expect(urls[refs[2]!]).toBe("https://sb.test/dddd");
+    await workerBlobUrls(refs, client([]).client);
+    expect(readBlob.mock.calls.filter(([, , h]) => h === sha)).toHaveLength(1);
   });
 });
 

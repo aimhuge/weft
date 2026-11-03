@@ -26,6 +26,7 @@ import FirstMessageErrorBanner from "./FirstMessageErrorBanner";
 import YouFirst from "./YouFirst";
 import { useAnsweredPrompt } from "@/lib/use-answered-prompt";
 import { firstMessageFailed } from "@/lib/first-message-failed";
+import { useThreadLive } from "@/lib/use-thread-live";
 
 // Loaded in its own CrashGuard (components/guarded.tsx), so a broken strip leaves the thread and its reply box.
 const TaskStrip = guarded(() => import("./TaskStrip"), { what: "subagents", inline: true });
@@ -70,7 +71,7 @@ function ThreadFindBar({ find }: { find: ThreadFind }) {
 export default function ThreadView({
   card,
   items,
-  streaming,
+  streaming: givenStreaming,
   onSend,
   onAnswer,
   empty,
@@ -143,10 +144,11 @@ export default function ThreadView({
     queueMicrotask(() => void loadPage().catch(() => {}));
   }, [card.id, loadPage]);
 
-  // Live changes land in the loaded window; a reconnect re-pulls the newest page to catch up on any it missed.
-  transport.useLive(card.id, setPage, () => {
+  // Live changes land in the loaded window; a reconnect re-pulls the newest page to catch up on any it missed. The reply
+  // streams in from the board (a local card) or the transport (a worker card's line).
+  const streaming = useThreadLive(transport, card.id, setPage, () => {
     loadPage().catch(() => {});
-  });
+  }, givenStreaming);
 
   // Follow new output unless the user has scrolled up to read.
   useEffect(() => {

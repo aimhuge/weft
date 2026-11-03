@@ -1,22 +1,26 @@
 // The board's end of a session line to one worker (docs/architecture/project-hosts.md#routes-the-webrtc-line): one
 // peer connection every card on that worker shares, with `host`, `events` and `line` channels (lib/host-line-protocol.ts).
 //
-//   open      offer (+ the ICE servers lib/rtc-ice.ts minted) ─ sealed by this Mac's server to the worker's key ─ `line`
-//             command ─ the worker answers under the one-time key on our Broadcast topic ─ DTLS, fingerprints inside
+//   open      offer (+ the ICE servers lib/rtc-ice.ts minted) ─ sealed by this Mac's server to the worker's key ─ straight
+//             to the worker over the LAN when its signed mDNS hint is up (the answer in the reply, lib/lan-offer.ts), else a
+//             `line` command and the answer under the one-time key on our Broadcast topic ─ DTLS, fingerprints inside
 //   live      a ping every BEAT_MS on `line`; its pong is the chip's "direct · N ms"
 //   repair    no pong for DEAD_MS, or ICE says disconnected: an ICE restart offered over the line itself; when that
-//             can't get through, the line is dropped and opened again through Supabase, backing off (RETRY_MS)
+//             can't get through, the line is dropped and opened again, over the LAN when the hint is up and through
+//             Supabase when it isn't, backing off (RETRY_MS)
 //   media     renegotiate() adds m-lines over the line (a watched simulator's track) without another command
 //
 // While it isn't up the route is "relay": callers use cloud_commands and polling, as before H6.
-import { LINE_CHANNELS, lineTopic, readControl, readLineEvent, type IceServer, type LineEvent, type LineOffer, type LineScreen } from "./host-line-protocol";
-import { newAnswerKey, openAnswer, STUN, type SealedAnswer } from "./rtc-signal";
+import { gathered, offerLine, type AnswerKeys, type Listen, type SealedAnswer } from "@weft/client";
+import { LINE_CHANNELS, readControl, readLineEvent, type IceServer, type LineEvent, type LineOffer, type LineScreen } from "./host-line-protocol";
+import { newAnswerKey, openAnswer, STUN } from "./rtc-signal";
 import { createCalls, LineDown } from "./session-line-calls";
+
+export { GATHER_MS } from "@weft/client";
 
 export const BEAT_MS = 5_000;
 export const DEAD_MS = 15_000;
 export const ANSWER_MS = 15_000;
-export const GATHER_MS = 2_500;
 export const RENEGOTIATE_MS = 5_000;
 // Each try is a command, so a network that can't connect settles at one every five minutes.
 export const RETRY_MS = [5_000, 15_000, 60_000, 300_000];
@@ -26,25 +30,19 @@ export type LineRoute = { kind: "connecting" } | { kind: "direct"; ms: number | 
 export interface LineDeps {
   peer: (ice: IceServer[]) => RTCPeerConnection;
   ice: () => Promise<IceServer[]>;
-  // Hands the offer to this Mac's server, which seals it and sends the `line` command (lib/worker-board.ts openWorkerLine).
+  // Sends the sealed offer: this Mac's server seals it and offers it over the LAN or sends the `line` command
+  // (lib/worker-board.ts openWorkerLine), and a LAN offer resolves with the sealed `answer`; weft.zip seals it in the
+  // browser and inserts the row itself (@weft/client lineOpener, lib/web-lines.ts).
   offer: (workerId: string, offer: LineOffer) => Promise<unknown>;
   // Listens on the Broadcast topic the answer comes back on (lib/line-answer.ts).
-  listen: (topic: string, onAnswer: (sealed: SealedAnswer) => void) => () => void;
+  listen: Listen;
   token: () => string;
   now?: () => number;
 }
 
-function gathered(pc: RTCPeerConnection) {
-  return new Promise<void>((done) => {
-    if (pc.iceGatheringState === "complete") { done(); return; }
-    const timer = setTimeout(done, GATHER_MS);
-    pc.addEventListener("icegatheringstatechange", () => {
-      if (pc.iceGatheringState !== "complete") return;
-      clearTimeout(timer);
-      done();
-    });
-  });
-}
+// The answer's one-time key, by Web Crypto (lib/rtc-signal.ts): the same bytes @weft/client's answerKeys makes.
+const KEYS: AnswerKeys = { newKey: newAnswerKey, open: openAnswer };
+const wait = (ms: number) => new Promise<void>((done) => setTimeout(done, ms));
 
 export function createSessionLine(workerId: string, deps: LineDeps) {
   const now = deps.now ?? Date.now;
@@ -108,7 +106,7 @@ export function createSessionLine(workerId: string, deps: LineDeps) {
       if (!me || !ctl) throw new LineDown();
       add?.(me);
       await me.setLocalDescription(await me.createOffer(iceRestart ? { iceRestart: true } : undefined));
-      if (iceRestart) await gathered(me);
+      if (iceRestart) await gathered(me, wait);
       const answered = new Promise<string>((resolve, reject) => {
         const timer = setTimeout(() => reject(new Error("The worker didn't answer over the line.")), RENEGOTIATE_MS);
         const settle = (fn: () => void) => {
@@ -182,26 +180,22 @@ export function createSessionLine(workerId: string, deps: LineDeps) {
       if (me.connectionState === "failed" || me.connectionState === "closed") down();
       else if (me.connectionState === "disconnected") repair();
     });
-    await me.setLocalDescription(await me.createOffer());
-    await gathered(me);
-    const key = newAnswerKey();
-    const topic = lineTopic(deps.token());
-    const stop = deps.listen(topic, (sealed) => {
-      // A forged or stale answer fails to open and is dropped; the attempt then times out to the relay.
-      void openAnswer(key, sealed)
-        .then((sdp) => (pc === me ? me.setRemoteDescription({ type: "answer", sdp }) : undefined))
-        .catch(() => {});
-    });
+    // The offer and the answer's listener are @weft/client's, the phone's too: a forged or stale answer fails to open and
+    // is dropped, and the attempt then times out to the relay.
+    const { offer, stop, take } = await offerLine(me, ice, { keys: KEYS, listen: deps.listen, token: deps.token, wait, current: () => pc === me });
     const giveUp = setTimeout(() => pc === me && down(), ANSWER_MS);
     endAttempt = () => {
       clearTimeout(giveUp);
       stop();
       endAttempt = () => {};
     };
-    await deps.offer(workerId, { sdp: me.localDescription?.sdp ?? "", key, topic, ice }).catch((err: unknown) => {
+    const sent = await deps.offer(workerId, offer).catch((err: unknown) => {
       refused = true;
       throw err;
     });
+    // A worker on this Mac's LAN answered straight away (lib/lan-offer.ts): no Broadcast to wait for.
+    const direct = (sent as { answer?: SealedAnswer } | null | undefined)?.answer;
+    if (direct) take(direct);
   }
 
   void connect().catch(() => down());

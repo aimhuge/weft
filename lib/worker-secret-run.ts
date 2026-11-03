@@ -12,6 +12,7 @@ import { globalSingleton } from "./global-singleton";
 import { hasUnsafeText, packageScript } from "./secret-command";
 import { ASK_MS, askMessage, newNonce, type SecretAsk } from "./secret-use";
 import type { BoardEvent } from "./types";
+import { repoOfRemote } from "./worker-keep-wire";
 import { openAsk, type OpenAsk } from "./worker-secret-asks";
 import type { DeviceAnswer } from "./worker-registry";
 
@@ -32,6 +33,8 @@ export interface SecretLink {
   sign?: (message: string) => string;
   // This box's seal key, which the signed ask names so main seals only to it.
   boxKey?: string;
+  // The versions of these names this box keeps for the vault (lib/worker-kept-vault.ts index), for the ask's claim.
+  kept?: (repo: string, environment: string, names?: string[]) => Record<string, number>;
 }
 
 export interface WorkerRunRequest {
@@ -163,6 +166,14 @@ async function answered(to: SecretLink, id: string, ask: OpenAsk, expiresAt: num
   }
 }
 
+// The vault a checkout's remote names (where a value the Mac kept here is looked up, lib/worker-kept-vault.ts) and what
+// this box keeps of the names asked for: a claim the Mac checks against its own record. Either may be absent.
+export function keptAt(to: Pick<SecretLink, "kept"> | null | undefined, remote: string | null, environment: string, names?: string[]): { repo?: string; kept?: Record<string, number> } {
+  const repo = (remote && repoOfRemote(remote)) || undefined;
+  const kept = repo && to?.kept ? to.kept(repo, environment, names) : {};
+  return { repo, kept: Object.keys(kept).length ? kept : undefined };
+}
+
 /** The worker's mcp__secrets__run, after lib/secret-run.ts has checked and split the command. */
 export async function workerSecretRun(req: WorkerRunRequest, given: Partial<RunDeps> = {}): Promise<WorkerRunReply> {
   const deps: RunDeps = { link: current, ...DEFAULTS, ...given };
@@ -175,10 +186,11 @@ export async function workerSecretRun(req: WorkerRunRequest, given: Partial<RunD
   if (!remote) throw new Error("This project has no git remote on the worker, so no vault on your Mac matches it.");
   const nonce = newNonce(randomBytes);
   const expiresAt = deps.now() + ASK_MS;
-  const ask = openAsk(nonce, { cardId, command: req.command, names: req.names, environment: req.environment, expiresAt });
+  const { repo, kept } = keptAt(to, remote, req.environment, req.names);
+  const ask = openAsk(nonce, { cardId, command: req.command, names: req.names, environment: req.environment, expiresAt, repo });
   try {
     const cwd = path.relative(req.root, req.cwd) || ".";
-    const question: SecretAsk = { nonce, command: req.command, names: req.names, environment: req.environment, cwd, remote, expiresAt, timeoutMs: req.timeoutMs, script: req.script, why: req.why, thread: req.thread };
+    const question: SecretAsk = { nonce, command: req.command, names: req.names, environment: req.environment, cwd, remote, expiresAt, timeoutMs: req.timeoutMs, script: req.script, why: req.why, thread: req.thread, kept };
     // A paired worker signs what the user will approve; main refuses an unsigned ask from it (electron/worker-secret.cjs).
     const id = await to.ask(cardId, to.sign ? { ...question, sig: to.sign(askMessage(cardId, to.boxKey ?? "", question)) } : question);
     if (!id) throw new Error(NO_MAC);
