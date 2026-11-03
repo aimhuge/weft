@@ -32,6 +32,8 @@ export const HOST_VERBS = [
   "settings.put",
   "dev.open",
   "dev.stop",
+  // A cron made from a card (lib/host-api/cron-create.ts): args.id is the card, whose folder and CLI each run takes.
+  "cron.create",
   // The crons and webhooks a host keeps (lib/host-api/lists.ts): args.id names the item, not a card.
   "cron.update",
   "cron.delete",
@@ -72,9 +74,10 @@ export function isHostLevelVerb(verb: string): boolean {
   return HOST_LEVEL.has(verb);
 }
 
-/** The verbs on a host's own crons and webhooks, whose args.id is the item's id there rather than a card's. */
-export type ListVerb = Extract<HostVerb, `cron.${string}` | `webhook.${string}`>;
+/** The verbs on a host's own crons and webhooks, whose args.id is the item's id there rather than a card's. cron.create
+ * isn't one: it names the card the cron is made from. */
+export type ListVerb = Exclude<Extract<HostVerb, `cron.${string}` | `webhook.${string}`>, "cron.create">;
 
 export function isListVerb(verb: string): verb is ListVerb {
-  return isHostVerb(verb) && (verb.startsWith("cron.") || verb.startsWith("webhook."));
+  return isHostVerb(verb) && verb !== "cron.create" && (verb.startsWith("cron.") || verb.startsWith("webhook."));
 }

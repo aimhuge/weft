@@ -157,6 +157,29 @@ describe("a cron or webhook the host keeps", () => {
   });
 });
 
+describe("a cron made from a card (cron.create)", () => {
+  const make = cmd("host", { verb: "cron.create", args: { id: "k1", prompt: "tidy up", expr: "0 9 * * *" } });
+
+  it("checks the card, then runs it through the host's lists rule, naming the card", async () => {
+    const lists = vi.fn<NonNullable<CardRules["lists"]>>(() => Promise.resolve(null));
+    const r = rules({ lists });
+    expect(await cardKinds(r).host(make)).toEqual({ cardId: "k1", result: { ok: true, cardId: "k1" } });
+    expect(r.card).toHaveBeenCalledWith("k1", make, "reached");
+    expect(lists).toHaveBeenCalledWith("cron.create", { id: "k1", prompt: "tidy up", expr: "0 9 * * *" });
+    expect(r.verb).not.toHaveBeenCalled();
+  });
+
+  it("refuses a folder, a mode or a shell line from the network, and a host without the rule refuses it", async () => {
+    const lists = vi.fn<NonNullable<CardRules["lists"]>>(() => Promise.resolve(null));
+    const mode = cmd("host", { verb: "cron.create", args: { id: "k1", prompt: "p", expr: "0 9 * * *", permissionMode: "bypassPermissions" } });
+    await expect(cardKinds(rules({ lists })).host(mode)).rejects.toThrow(/can't change a cron's permissionMode/);
+    const bang = cmd("host", { verb: "cron.create", args: { id: "k1", prompt: "!rm -rf /", expr: "0 9 * * *" } });
+    await expect(cardKinds(rules({ lists })).host(bang)).rejects.toThrow(/shell line/);
+    expect(lists).not.toHaveBeenCalled();
+    await expect(cardKinds(rules()).host(make)).rejects.toThrow(NO_LISTS);
+  });
+});
+
 describe("dispatcher", () => {
   it("runs a known kind after the host's check, and refuses one it doesn't know", async () => {
     const check = vi.fn((c: CloudCommandRow) => Promise.resolve({ ...c, folder: "/checked" }));

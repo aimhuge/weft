@@ -9,6 +9,7 @@ import { api, type AgentDraft } from "@/lib/client";
 import { folderName } from "@/lib/format";
 import { errorText } from "@/lib/new-thread";
 import { refreshAgents, showAgents, useAgentList } from "@/lib/use-agents";
+import { useWorkerProjectsOnce } from "@/lib/use-worker-projects-once";
 import AgentEditor, { STARTER_SOUL } from "./AgentEditor";
 import AgentBuilder from "./AgentBuilder";
 import { SettingsCard, SettingsSectionHeader } from "./SettingsLayout";
@@ -84,9 +85,15 @@ export default function SettingsAgentsPage({ projects }: { projects: string[] })
 
 // Each project's default agent: a new thread there starts as it, and so does one a thread or the copilot starts there
 // without naming an agent.
+// A worker project's default goes to that worker with your agents (lib/agent-sync.ts), named "folder · worker" here.
 function ProjectDefaults({ agents, defaults, projects }: { agents: AgentInfo[]; defaults: Record<string, string>; projects: string[] }) {
   const [error, setError] = useState<string | null>(null);
-  const folders = [...new Set([...projects, ...Object.keys(defaults)])];
+  const workers = useWorkerProjectsOnce();
+  const folders = [...new Set([...projects, ...workers.map((w) => w.path), ...Object.keys(defaults)])];
+  const label = (cwd: string) => {
+    const worker = workers.find((w) => w.path === cwd);
+    return worker ? `${worker.folder} · ${worker.worker}` : folderName(cwd);
+  };
   const pick = (cwd: string, id: string) =>
     void api.setProjectAgent(cwd, id === "builder" ? null : id).then((r) => showAgents(r), (err: unknown) => setError(errorText(err)));
   return (
@@ -96,8 +103,8 @@ function ProjectDefaults({ agents, defaults, projects }: { agents: AgentInfo[]; 
       <ul className="flex flex-col gap-1.5">
         {folders.map((cwd) => (
           <li key={cwd} className="flex items-center justify-between gap-4">
-            <span className="truncate text-[13px] text-ink" title={cwd}>{folderName(cwd)}</span>
-            <select aria-label={`Default agent for ${folderName(cwd)}`} value={defaults[cwd] ?? "builder"} onChange={(e) => pick(cwd, e.target.value)}
+            <span className="truncate text-[13px] text-ink" title={cwd}>{label(cwd)}</span>
+            <select aria-label={`Default agent for ${label(cwd)}`} value={defaults[cwd] ?? "builder"} onChange={(e) => pick(cwd, e.target.value)}
               className="rounded-md border border-line-strong bg-canvas px-2 py-1 text-[12.5px] text-ink">
               {agents.map((a) => <option key={a.id} value={a.id}>{a.emoji} {a.name}</option>)}
             </select>

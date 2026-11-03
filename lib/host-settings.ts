@@ -7,6 +7,7 @@
 // - accountSettings / applyAccountSettings: the account's settings, as this Mac pushes them and a worker mirrors them.
 //   Every field is sent explicitly (a default too), so a reset on the Mac resets the worker. A field that doesn't check
 //   out is skipped on its own and the rest still apply; one that hasn't changed isn't written again.
+import { agentsSnapshot, applyAgentsSnapshot, readAgentsSnapshot } from "./agent-sync";
 import { readAutomations } from "./automation-rules";
 import { backendFor, BACKEND_IDS, EFFORTS } from "./new-thread";
 import { MAX_THREADS_CEILING } from "./settings-shared";
@@ -83,6 +84,7 @@ export function accountSettings(): Record<AccountSetting, unknown> {
     // "" is the default instructions, so a Mac that never changed them doesn't send Weft's own text.
     threadPrompt: settings().threadPrompt ?? "",
     backupModel: backupModel(),
+    agents: agentsSnapshot(),
   };
 }
 
@@ -104,6 +106,7 @@ const ACCOUNT_FIELDS: Record<AccountSetting, { read: (v: unknown) => unknown; sa
   subagentModel: { read: (v) => (isSubagentModel(v) ? v : undefined), save: (v) => setSubagentModel(v) },
   threadPrompt: { read: (v) => (typeof v === "string" && v.length <= 32_000 ? v : undefined), save: (v) => setThreadPrompt(v) },
   backupModel: { read: (v) => (isModel(v) ? v : undefined), save: (v) => setBackupModel(v) },
+  agents: { read: readAgentsSnapshot, save: (v) => applyAgentsSnapshot(v) },
 };
 
 /** Mirrors a synced snapshot into this host's settings: only account settings, each checked, changed ones written. */
