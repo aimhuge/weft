@@ -5,17 +5,21 @@ import { workerBlobUrls, workerThreadSearch } from "@/lib/worker-thread-reads";
 import { openWorkerLine, readWorkerBoard, sendWorkerAction, workerThreadPage, workerToolOutput, type LineAction, type WorkerAction } from "@/lib/worker-board";
 import { workerProjectSnapshot, workerResultBlob } from "@/lib/worker-board-reads";
 import { pinWorkerPasskeys, type PinAction } from "@/lib/worker-pin";
+import { macTwin } from "@/lib/worker-twin-mac";
 
 // Your Weft Workers' projects on the desktop board (lib/worker-board.ts): GET lists them with their cards, GET ?card=
 // reads a page of that card's thread (before= walks back, after= sends only the items past that seq), since= only the
 // cards changed after it, GET ?card=&tool= reads a full tool result, GET ?project= a worker project's snapshot for the
 // header badges, GET ?blob= a host verb's answer too big for its row (the editor's), GET ?card=&q= finds q over the
-// whole thread, GET ?blobs=<ref>,<ref> signs the blob refs a thread's pictures name (lib/worker-thread-reads.ts), and POST sends
+// whole thread, GET ?blobs=<ref>,<ref> signs the blob refs a thread's pictures name (lib/worker-thread-reads.ts), GET ?twin=
+// a worker project's checkout on this Mac, for an in-thread ask_add (lib/use-ask-folder.ts), and POST sends
 // a reply, an answer, a stop, a mode, a tap or any host verb as a cloud_commands row, a session line's sealed offer, or a
 // Mac's passkey endorsements (pin). A new thread goes through POST /api/cards like any other.
 
 // The reads that name no card: a worker project's snapshot, a verb's oversized answer, and a thread's picture refs signed.
 async function blobReads(params: URLSearchParams): Promise<Response | null> {
+  const twin = params.get("twin");
+  if (twin) return Response.json({ folder: macTwin(twin) });
   const project = params.get("project");
   if (project) return Response.json(await workerProjectSnapshot(project));
   const blob = params.get("blob");

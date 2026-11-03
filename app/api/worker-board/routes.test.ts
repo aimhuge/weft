@@ -29,6 +29,8 @@ vi.mock("@/lib/worker-board-reads", () => reads);
 const pin = vi.hoisted(() => ({ pinWorkerPasskeys: vi.fn(() => Promise.resolve({ commandId: "cmd-pin" })) }));
 vi.mock("@/lib/worker-pin", () => pin);
 vi.mock("@/lib/worker-thread-reads", () => reads);
+const twin = vi.hoisted(() => ({ macTwin: vi.fn((): string | null => "/Users/me/dev/ling") }));
+vi.mock("@/lib/worker-twin-mac", () => twin);
 
 const route = await import("./route");
 
@@ -66,6 +68,13 @@ describe("GET /worker-board thread reads", () => {
     const res = await route.GET(get(`/worker-board?blobs=${a},nope`));
     expect(await res.json()).toEqual({ urls: { [a]: "https://sb.test/sign/a" } });
     expect(reads.workerBlobUrls).toHaveBeenCalledWith([a, "nope"]);
+    expect(board.readWorkerBoard).not.toHaveBeenCalled();
+  });
+
+  it("names a worker project's checkout on this Mac, for an in-thread ask_add", async () => {
+    const res = await route.GET(get(`/worker-board?twin=${encodeURIComponent("worker://w1/ling")}`));
+    expect(await res.json()).toEqual({ folder: "/Users/me/dev/ling" });
+    expect(twin.macTwin).toHaveBeenCalledWith("worker://w1/ling");
     expect(board.readWorkerBoard).not.toHaveBeenCalled();
   });
 });
