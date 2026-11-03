@@ -37,6 +37,29 @@ describe("the session lines' mirror", () => {
     await p.flush();
     expect(heard).toHaveLength(1);
   });
+
+  it("streams a published card's reply to lines only, and ends it when the reply lands", () => {
+    vi.useFakeTimers();
+    const { reg } = fakeReg();
+    const copilot = card({ id: "co", role: "copilot" });
+    const p = createPublisher(reg, fakeSource({ "card-1": card(), co: copilot }, { "card-1": [toolItem()] }));
+    // No line listening: nothing is kept.
+    p.hear({ type: "delta", cardId: "card-1", text: "unheard " });
+    const heard: unknown[] = [];
+    p.mirror((e) => heard.push(e));
+    p.hear({ type: "delta", cardId: "card-1", text: "Hello there " });
+    p.hear({ type: "delta", cardId: "co", text: "copilot " });
+    p.hear({ type: "delta", cardId: "nope", text: "gone " });
+    vi.advanceTimersByTime(60);
+    expect(heard).toEqual([{ t: "delta", cardId: "card-1", index: 1, text: "Hello there " }]);
+    p.hear({ type: "delta", cardId: "card-1", text: "more " });
+    p.hear({ type: "thread", cardId: "card-1", index: 1, item: { kind: "assistant", text: "Hello there more", at: 0 } as ThreadItem });
+    p.hear({ type: "delta", cardId: "card-1", text: "next " });
+    p.hear({ type: "card_deleted", id: "card-1" });
+    vi.advanceTimersByTime(60);
+    expect(heard).toHaveLength(1);
+    vi.useRealTimers();
+  });
 });
 
 describe("the session lines' snapshot (card.list)", () => {

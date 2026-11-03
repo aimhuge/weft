@@ -22,7 +22,7 @@ function clock(start = 1_000_000) {
 
 describe("IDEMPOTENT_VERBS", () => {
   it("is the reads, and never a verb that makes a card, starts or stops a turn, or writes", () => {
-    expect([...IDEMPOTENT_VERBS].sort()).toEqual(["dev.log", "files.list", "files.read", "settings.get", "skills.list"]);
+    expect([...IDEMPOTENT_VERBS].sort()).toEqual(["dev.log", "files.list", "files.read", "files.unwatch", "files.watch", "settings.get", "skills.list"]);
     for (const verb of ["card.create", "card.message", "card.fresh", "card.restart", "card.stop", "card.update", "files.write", "settings.put", "cron.run"]) {
       expect(IDEMPOTENT_VERBS).not.toContain(verb);
     }
