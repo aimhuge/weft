@@ -2,7 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CloudCommandRow } from "../cloud-commands";
 import type { WakeHooks } from "../worker-wake";
 import type { CommandLine } from "./identity";
-import { createInbox, startPolling, type Connection } from "./inbox";
+import { createInbox, newInboxState, startPolling, type Connection, type InboxState } from "./inbox";
+import { IDEMPOTENT_VERBS } from "./lease";
 
 const row = (id: string, kind = "reply") => ({ id, kind }) as CloudCommandRow;
 
@@ -131,6 +132,58 @@ describe("startPolling", () => {
     vi.advanceTimersByTime(5);
     expect(poll).toHaveBeenCalledTimes(4);
     bare();
+  });
+});
+
+describe("leases", () => {
+  it("requeues expired idempotent claims before it reads the queue, and holds a command only while it runs it", async () => {
+    const order: string[] = [];
+    let during: string[] = [];
+    const st = newInboxState();
+    const line = {
+      ...fakeLine([row("a", "host")]),
+      reclaim: vi.fn(() => (order.push("reclaim"), Promise.resolve(0))),
+      renew: vi.fn<NonNullable<CommandLine["renew"]>>(() => Promise.resolve()),
+    };
+    line.pending.mockImplementation(() => (order.push("pending"), Promise.resolve([row("a", "host")])));
+    const dispatch = vi.fn(() => {
+      during = [...(st.leases?.held ?? [])];
+      return Promise.resolve("k");
+    });
+    const inbox = createInbox({ connect: () => ({ line, dispatch }), log: vi.fn(), state: st });
+    await inbox.poll();
+    expect(order).toEqual(["reclaim", "pending"]);
+    expect(line.reclaim).toHaveBeenCalledWith(IDEMPOTENT_VERBS);
+    expect(during).toEqual(["a"]);
+    expect(st.leases?.held.size).toBe(0);
+    // Nothing held, so the beat's renew asks nothing.
+    await inbox.renew(line);
+    expect(line.renew).not.toHaveBeenCalled();
+  });
+
+  it("renews a command still running, and lets go of one that failed", async () => {
+    let finish = () => {};
+    const line = { ...fakeLine([row("slow", "clone")]), renew: vi.fn<NonNullable<CommandLine["renew"]>>(() => Promise.resolve()) };
+    const dispatch = vi.fn(() => new Promise<string>((resolve) => (finish = () => resolve("k"))));
+    const st = newInboxState();
+    const inbox = createInbox({ connect: () => ({ line, dispatch }), aside: () => true, log: vi.fn(), state: st });
+    await inbox.poll();
+    await vi.waitFor(() => expect(dispatch).toHaveBeenCalled());
+    await inbox.renew(line);
+    expect(line.renew).toHaveBeenCalledWith(["slow"]);
+    finish();
+    await vi.waitFor(() => expect(inbox.idle()).toBe(true));
+    expect(st.leases?.held.size).toBe(0);
+
+    const failing = fakeLine([row("x", "host")]);
+    await createInbox({ connect: () => ({ line: failing, dispatch: () => Promise.reject(new Error("no")) }), log: vi.fn(), state: st }).poll();
+    expect(st.leases?.held.size).toBe(0);
+  });
+
+  it("gives a state kept from before leases its lease state", async () => {
+    const state: InboxState = { polling: false, again: false, aside: 0 };
+    await createInbox({ connect: () => null, log: vi.fn(), state }).poll();
+    expect(state.leases?.held.size).toBe(0);
   });
 });
 

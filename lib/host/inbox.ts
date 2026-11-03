@@ -4,11 +4,14 @@
 // per host is injected: the identity and transport (lib/host/identity.ts), the table, which kinds run beside the
 // queue, and the log.
 //
-// Passes are single-flight: a wake-up during one asks for one more straight after it, never one per wake-up. A
-// claimed command is never retried: a card that was made must not be made twice.
+// Passes are single-flight: a wake-up during one asks for one more straight after it, never one per wake-up. A claim
+// holds a lease the host renews while it runs the command (renew, from its beat); a pass first requeues the host's own
+// expired claims of verbs safe to run twice (lib/host/lease.ts). Any other claimed command is never retried: a card
+// that was made must not be made twice.
 import type { CloudCommandRow } from "../cloud-commands";
 import type { WakeHooks } from "../worker-wake";
 import { doneOutcome, failedOutcome, type CommandLine, type Done } from "./identity";
+import { createLeases, newLeaseState, type LeaseState } from "./lease";
 
 // One pass's identity: its line to cloud_commands, and the kind table it runs a claimed command through (throws to
 // fail it). A Mac's is per signed-in account, so it's read afresh each pass.
@@ -23,9 +26,11 @@ export interface InboxState {
   polling: boolean;
   again: boolean;
   aside: number;
+  // The commands it holds and when it last renewed or reclaimed; optional, so a state kept from before a reload works.
+  leases?: LeaseState;
 }
 
-export const newInboxState = (): InboxState => ({ polling: false, again: false, aside: 0 });
+export const newInboxState = (): InboxState => ({ polling: false, again: false, aside: 0, leases: newLeaseState() });
 
 export interface InboxDeps {
   // This host's connection for one pass, or null when it has no identity now (signed out). A host that has it at hand
@@ -46,9 +51,11 @@ export interface InboxDeps {
 
 export function createInbox(deps: InboxDeps) {
   const st = deps.state ?? newInboxState();
+  const leases = createLeases((st.leases ??= newLeaseState()), (msg) => deps.log(msg));
 
   async function runOne({ line, dispatch }: Connection, command: CloudCommandRow) {
     if (!(await line.claim(command.id))) return;
+    leases.hold(command.id);
     deps.claimed?.(command);
     try {
       await line.report(command.id, doneOutcome(await dispatch(command)));
@@ -56,6 +63,8 @@ export function createInbox(deps: InboxDeps) {
       const outcome = failedOutcome(command, err);
       deps.failed?.(command, outcome.error);
       await line.report(command.id, outcome).catch(() => {});
+    } finally {
+      leases.drop(command.id);
     }
   }
 
@@ -71,6 +80,7 @@ export function createInbox(deps: InboxDeps) {
       const got = deps.connect();
       const conn = got instanceof Promise ? await got : got;
       if (!conn) return;
+      await leases.reclaim(conn.line);
       for (const command of await conn.line.pending()) {
         if (deps.aside?.(command)) void runAside(conn, command);
         else await runOne(conn, command);
@@ -100,8 +110,10 @@ export function createInbox(deps: InboxDeps) {
   const run = (conn: Connection, command: CloudCommandRow) => runOne(conn, command);
   // Nothing in flight: no pass, no command aside.
   const idle = () => !st.polling && st.aside === 0;
+  // Renews the leases of what this host is running; the beat calls it each tick, and it asks at most once a minute.
+  const renew = (line: CommandLine) => leases.renew(line);
 
-  return { poll, run, idle };
+  return { poll, run, idle, renew };
 }
 
 // The poll backstop under the wake-ups: every fastMs until a wake-up socket joins, slowMs while it's up, back to fast

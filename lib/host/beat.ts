@@ -2,7 +2,8 @@
 // and a Mac's rides its inbox's 30 s check (lib/cloud-inbox.ts, tick only, no presence, no offline on the way out).
 // While the presence socket is up (lib/worker-presence.ts) a tick only re-tracks a changed status; the row is written
 // every 5 minutes, or at once when the status changes, so last-seen and a board without Realtime stay right. With the
-// socket down, or no socket at all, every tick writes the row, as before.
+// socket down, or no socket at all, every tick writes the row, as before. Each tick also renews the leases of the
+// commands the host is running (lib/host/lease.ts), so a host that's alive never loses one.
 import type { Presence, PresenceHooks } from "../worker-presence";
 import type { WorkerStatus } from "../worker-registry";
 
@@ -14,6 +15,8 @@ export interface BeatDeps {
   status(): WorkerStatus;
   // After every tick, with whether the last row write landed.
   after(landed: boolean): void;
+  // Renews the leases of the commands the host is running (lib/host/lease.ts); never throws.
+  renew?: () => Promise<void>;
   // Joins the presence topic; absent on a worker that can't.
   presence?: (hooks: PresenceHooks) => Presence;
   log: (msg: string) => void;
@@ -58,6 +61,7 @@ export function createBeat(deps: BeatDeps) {
 
   async function tick(s: WorkerStatus = deps.status()) {
     if (stopped) return;
+    void deps.renew?.();
     if (up && s !== tracked) {
       tracked = s;
       // A track the server refused is tried again on the next tick, and the row keeps its pace meanwhile.
