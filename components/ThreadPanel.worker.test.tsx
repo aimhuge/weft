@@ -69,13 +69,17 @@ describe("a worker card's header", () => {
     expect(screen.getByRole("button", { name: /Switch model/ })).toBeInTheDocument();
   });
 
-  it("leaves out what only this Mac has (the skill set chip, crons, the editor), and delete and Share… when the board gives none", () => {
+  it("leaves out the editor, and delete and Share… when the board gives none", () => {
     renderWorkerPanel();
     expect(screen.queryByRole("button", { name: "Delete card" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Share" })).toBeNull();
     expect(screen.queryByRole("button", { name: /editor/i })).toBeNull();
-    expect(screen.queryByTitle("Skills this thread gets")).toBeNull();
-    expect(screen.queryByLabelText("Crons")).toBeNull();
+  });
+
+  it("offers the skill set chip and the ⏰, which act on the worker (cron.create, card.update { skill })", async () => {
+    renderWorkerPanel();
+    expect(await screen.findByLabelText("Crons")).toBeInTheDocument();
+    expect(await screen.findByTitle("Skills this thread gets")).toBeInTheDocument();
   });
 
   it("offers the Skills menu, which sends /<skill> as a message", () => {
@@ -117,6 +121,27 @@ describe("a worker card's header", () => {
     // The thread also reads its file index once (files.list, cached a minute per card) so file names link to the editor.
     expect(posted.filter((p) => (p as { verb?: string }).verb !== "files.list")).toEqual([{ action: "host", cardId: "c1", verb: "card.switchBackend", args: { id: "c1", backend: "puku", replay: false, model: "puku-ai-2.7" } }]);
     expect(api.switchBackend).not.toHaveBeenCalled();
+  });
+});
+
+describe("a worker card's mode picker", () => {
+  const renderWith = (signsSkip: boolean) =>
+    render(
+      <ThreadTransportContext.Provider value={{ ...workerTransport, signsSkip }}>
+        <ThreadPanel card={card} items={[]} streaming="" onSend={vi.fn(() => Promise.resolve())} onAnswer={vi.fn()} onMode={vi.fn()} onClose={vi.fn()} />
+      </ThreadTransportContext.Provider>,
+    );
+
+  it("offers YOLO where the board signs the change with Touch ID", async () => {
+    renderWith(true);
+    await userEvent.click(screen.getByRole("button", { name: /^Permissions:/ }));
+    expect(screen.getByText("YOLO")).toBeInTheDocument();
+  });
+
+  it("leaves YOLO out where the board can't sign it", async () => {
+    renderWith(false);
+    await userEvent.click(screen.getByRole("button", { name: /^Permissions:/ }));
+    expect(screen.queryByText("YOLO")).not.toBeInTheDocument();
   });
 });
 

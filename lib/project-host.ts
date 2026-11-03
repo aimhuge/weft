@@ -47,6 +47,8 @@ export type HostFeature =
 
 export interface ProjectHost {
   kind: "local" | "cloud";
+  // The Weft Worker this host is, for reads keyed by it (its model caps, lib/use-plan-limits.ts); none on this Mac.
+  workerId?: string;
   thread: ThreadTransport;
   tools: ToolResultSource;
   can: (feature: HostFeature) => boolean;
@@ -153,7 +155,7 @@ export const cloudHost: ProjectHost = {
 const cloudHosts = new Map<string, ProjectHost>();
 function cloudHostOf(workerId: string): ProjectHost {
   let host = cloudHosts.get(workerId);
-  if (!host) cloudHosts.set(workerId, (host = { ...cloudHost, thread: lineTransport(workerId), files: lineFiles(workerId), act: (verb, args) => actOnLine(workerId, verb, args), warm: (id) => warmOnLine(workerId, id) }));
+  if (!host) cloudHosts.set(workerId, (host = { ...cloudHost, workerId, thread: lineTransport(workerId), files: lineFiles(workerId), act: (verb, args) => actOnLine(workerId, verb, args), warm: (id) => warmOnLine(workerId, id) }));
   return host;
 }
 

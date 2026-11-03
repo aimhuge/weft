@@ -1,7 +1,9 @@
 // @vitest-environment happy-dom
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { PLANS_POLL_MS, resetPlans, useLimitedModels, usePlanLimits } from "./use-plan-limits";
+// A worker:// project is that worker's host (lib/project-host.ts); anything else, this Mac.
+vi.mock("./project-host", () => ({ hostFor: (cwd?: string | null) => (cwd?.startsWith("worker://") ? { workerId: cwd.slice(9).split("/")[0] } : {}) }));
+const { PLANS_POLL_MS, resetPlans, useLimitedModels, usePlanLimits } = await import("./use-plan-limits");
 
 const PLANS = { claude: { at: 1, fiveHour: { used: 20 } } };
 
@@ -91,5 +93,27 @@ describe("useLimitedModels", () => {
     await waitFor(() => expect(result.current).toEqual([]));
     const refused = renderHook(() => useLimitedModels());
     await waitFor(() => expect(refused.result.current).toEqual([]));
+  });
+
+  it("reads a worker's own caps for a card on its project, and this Mac's for one here", async () => {
+    const mine = [{ model: "claude-opus-5-5", at: 1, resetsAt: 2 }];
+    const theirs = [{ model: "claude-sonnet-5", at: 3, resetsAt: 4 }];
+    const fetch = vi.fn((url: string) => Promise.resolve({ ok: true, json: () => Promise.resolve({ plans: PLANS, models: url.includes("worker=") ? theirs : mine }) } as Response));
+    vi.stubGlobal("fetch", fetch);
+    const worker = renderHook(() => useLimitedModels("worker://w 1/app"));
+    const here = renderHook(() => useLimitedModels("/Users/me/app"));
+    await waitFor(() => expect(worker.result.current).toEqual(theirs));
+    await waitFor(() => expect(here.result.current).toEqual(mine));
+    expect(fetch.mock.calls.map(([url]) => url).sort()).toEqual(["/api/limits/plans", "/api/limits/plans?worker=w%201"]);
+  });
+
+  it("reads the card's host again when its refresh key changes", async () => {
+    const fetch = respond({ plans: PLANS, models: [] });
+    vi.stubGlobal("fetch", fetch);
+    const { rerender } = renderHook(({ key }) => useLimitedModels("worker://w1/app", key), { initialProps: { key: undefined as string | undefined } });
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+    rerender({ key: "hit" });
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+    expect((fetch.mock.calls as unknown as [string][])[1]![0]).toBe("/api/limits/plans?worker=w1");
   });
 });

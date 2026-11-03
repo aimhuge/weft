@@ -176,13 +176,18 @@ can be a subagent's, or blank after a turn that reported no usage.
 ## On a worker card
 
 A Weft Worker runs the same 15-minute poll (`lib/worker-host-services.ts` starts `startLimitPoll` in the daemon) and
-publishes its history to its `cloud_workers.limits` row: the newest 1,000 samples, packed as
+publishes its history to its `cloud_workers.limits` row: the newest 750 samples, packed as
 `[at minutes, CLI, 5|7, used, reset]` tuples by `lib/limits-wire.ts`, a minute after start and every 5 minutes when the
 history grew (`lib/worker-limits.ts`, `worker_set_limits`). On a worker card (`StatusStrip` with `cardLimits` and a
 `worker://` cwd) the chart asks `/api/limits?backend=&worker=<id>` (`lib/worker-limits-read.ts`), which answers from that
 row instead of this Mac's log, and says "on the worker" in its header. Until the card reports a reading of its own, the
 strip shows the worker's newest (`latestReading`). `lib/use-limit-samples.ts` keeps one read per CLI and worker a
 minute for every strip and chart on screen. See project-hosts.md#settings-on-a-worker-wp3.
+
+The same row carries the worker's models at their own cap (`lib/model-limit.ts` there), as `m: [model, at minutes, reset
+seconds]` beside the samples (at most 20, ids cut to 100 characters, ~2.5 KB inside the 64 KB check; no migration). A
+worker card's model pickers (ModelSelect, BackendPicker) read them through `/api/limits/plans?worker=<id>`, so they mark
+the worker's spent models, not this Mac's (`useLimitedModels(cwd)`, lib/use-plan-limits.ts).
 
 ## Notes
 

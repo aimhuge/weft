@@ -56,7 +56,15 @@ async function connect(): Promise<Connection | null> {
 // Listening means this Mac takes the web board's commands, and says so in the workspace's Workers list. One beat per
 // check, as the account the check found: no presence, so every tick writes the row, and never an offline on the way out.
 const beat = (client: SupabaseClient, uid: string) =>
-  createBeat({ heartbeat: (status) => beatDesktopWorker(client, uid, status), status: desktopStatus, after: () => {}, log: console.warn, label: "Desktop worker" }).tick();
+  createBeat({
+    heartbeat: (status) => beatDesktopWorker(client, uid, status),
+    status: desktopStatus,
+    // Keeps the leases of the commands this Mac is running (lib/host/lease.ts).
+    renew: () => inbox().renew(sessionLine(client, uid, deviceId(), warn)),
+    after: () => {},
+    log: console.warn,
+    label: "Desktop worker",
+  }).tick();
 
 // Only state lives across a module reload; the inbox and its closures are built from this module each time, so a
 // reloaded server never runs a stale handler. The single-flight flags carry over, so two drains still can't overlap.
@@ -70,7 +78,8 @@ const live = () =>
   }));
 
 // Reads this device's pending commands from the account's own table and runs them oldest first.
-const drain = () => createInbox({ connect, log: warn, state: live().flight }).poll();
+const inbox = () => createInbox({ connect, log: warn, state: live().flight });
+const drain = () => inbox().poll();
 
 async function stopListening(client: SupabaseClient | null) {
   const g = live();

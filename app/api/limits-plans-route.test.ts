@@ -17,7 +17,12 @@ vi.mock("@/lib/model-limit", () => ({
   modelLimits: vi.fn(() => []),
 }));
 
+vi.mock("@/lib/worker-limits-read", () => ({
+  workerLimits: vi.fn(() => Promise.resolve({ samples: [{ at: 3, backend: "claude", kind: "five_hour", used: 70 }], models: [{ model: "claude-sonnet-5", at: 2, resetsAt: 50 }] })),
+}));
+
 const history = await import("@/lib/limit-history");
+const reads = await import("@/lib/worker-limits-read");
 const limits = await import("@/lib/model-limit");
 const route = await import("./limits/plans/route");
 
@@ -34,6 +39,15 @@ describe("GET /api/limits/plans", () => {
       },
       models: [{ model: "claude-opus-5-5", at: 1, resetsAt: 100 }],
     });
+  });
+
+  it("returns a worker's own plans and capped models with ?worker=", async () => {
+    const res = await route.GET(new Request("http://localhost:3457/api/limits/plans?worker=w1", { headers: READ }));
+    expect(await res.json()).toEqual({
+      plans: { claude: { reportedAt: 3, fiveHour: { used: 70 }, fiveHourAt: 3 } },
+      models: [{ model: "claude-sonnet-5", at: 2, resetsAt: 50 }],
+    });
+    expect(reads.workerLimits).toHaveBeenCalledWith("w1");
   });
 
   it("refuses other hosts and reports errors", async () => {
