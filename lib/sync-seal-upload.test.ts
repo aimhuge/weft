@@ -70,11 +70,24 @@ describe("makeSealer", () => {
 });
 
 describe("macKeyring", () => {
-  it("is main's current version, or empty when it holds none", async () => {
+  it("is main's current version, never made for it, or empty when main holds none", async () => {
     shellMock.mockResolvedValueOnce({ version: 2, key });
     expect(await macKeyring("o", 0)).toEqual(new Map([[2, key]]));
+    expect(shellMock).toHaveBeenCalledWith("/sync/key", { orgId: "o", create: false });
+    expect(await macKeyring("o", 1)).toEqual(new Map([[2, key]]));
+    expect(shellMock).toHaveBeenCalledTimes(1);
     forgetSyncKey();
-    shellMock.mockResolvedValueOnce({ none: true });
+    shellMock.mockResolvedValue({ none: true });
     expect((await macKeyring("o", 0)).size).toBe(0);
+    expect((await macKeyring("o", 1)).size).toBe(0);
+    expect(shellMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("asks again for an uploader after a reader found nothing, and a reader uses an uploader's empty answer only to ask", async () => {
+    status.seal = true;
+    shellMock.mockResolvedValueOnce({ none: true }).mockResolvedValueOnce({ version: 1, key });
+    expect((await macKeyring("o", 0)).size).toBe(0);
+    expect(await sealerFor("o", 1)).not.toBeNull();
+    expect(shellMock).toHaveBeenLastCalledWith("/sync/key", { orgId: "o", create: true });
   });
 });

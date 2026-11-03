@@ -23,17 +23,19 @@ export interface Sealer {
 
 const cache = () => globalSingleton("__weftSyncKey", () => new Map<string, { key: SyncKey | null; at: number }>());
 
-async function keyFor(orgId: string, now: number): Promise<SyncKey | null> {
+// Main's key: made when the workspace has none only for an uploader (`create`), so something sealed arriving never makes
+// one. Only a found key, or an uploader's answer, is cached.
+async function keyFor(orgId: string, now: number, create = true): Promise<SyncKey | null> {
   const hit = cache().get(orgId);
-  if (hit && now - hit.at < KEY_TTL_MS) return hit.key;
+  if (hit && now - hit.at < KEY_TTL_MS && (hit.key || create)) return hit.key;
   let key: SyncKey | null = null;
   try {
-    const r = await shell("/sync/key", { orgId, create: true });
+    const r = await shell("/sync/key", { orgId, create });
     key = typeof r.version === "number" && typeof r.key === "string" ? { version: r.version, key: r.key } : null;
   } catch {
     // No desktop shell, signed out in main, or offline: upload plain this time.
   }
-  cache().set(orgId, { key, at: now });
+  if (key || create) cache().set(orgId, { key, at: now });
   return key;
 }
 
@@ -60,7 +62,7 @@ export async function sealerFor(orgId: string, now = Date.now()): Promise<Sealer
 // The keys this Mac opens a sealed blob with (one a browser sealed, lib/web-upload.ts): main's current version, asked
 // for only once something sealed arrives. Empty when main holds none.
 export async function macKeyring(orgId: string, now = Date.now()): Promise<SyncKeyring> {
-  const key = await keyFor(orgId, now);
+  const key = await keyFor(orgId, now, false);
   return new Map(key ? [[key.version, key.key]] : []);
 }
 
