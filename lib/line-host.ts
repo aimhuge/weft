@@ -13,15 +13,13 @@ import type { HostVerb } from "./host-api/types";
 import type { HostArgs } from "./host-command";
 import { MEDIA_REF } from "./media";
 import { LineDown } from "./session-line-calls";
-import { lineFor, useLineRoute } from "./session-lines";
-import { applyThreadEvent, type ThreadPage } from "./thread-page";
+import { lineFor } from "./session-lines";
+import { useLineThread } from "./line-thread";
 import type { PageUpdate, ThreadTransport } from "./thread-transport";
 import { actOnWorker, askWorker, type ActResult } from "./worker-acts";
 import { workerFilesVia } from "./worker-files";
 import { useWorkerLive, workerTransportVia } from "./worker-transport";
 import { signedArgs } from "./widen-signer";
-
-const EMPTY: ThreadPage = { items: [], start: 0, total: 0 };
 
 const pastesFiles = (args: HostArgs) => Object.values(args).some((v) => typeof v === "string" && new RegExp(MEDIA_REF.source).test(v));
 
@@ -68,11 +66,9 @@ export function warmOnLine(workerId: string, cardId: string): void {
 }
 
 export function useLineLive(workerId: string, cardId: string, onUpdate: (update: PageUpdate) => void, onReconnect: () => void) {
-  const direct = useLineRoute(workerId)?.kind === "direct";
-  const update = useRef(onUpdate);
+  const direct = useLineThread(workerId, cardId, onUpdate);
   const reconnect = useRef(onReconnect);
   useEffect(() => {
-    update.current = onUpdate;
     reconnect.current = onReconnect;
   });
   useWorkerLive(cardId, onUpdate, !direct);
@@ -81,11 +77,6 @@ export function useLineLive(workerId: string, cardId: string, onUpdate: (update:
     // The route changed: read the newest page once, to cover what neither route carried meanwhile.
     if (first.current) first.current = false;
     else reconnect.current();
-    if (!direct) return;
-    return lineFor(workerId)?.onEvent((event) => {
-      if (event.t === "thread_cleared" && event.cardId === cardId) update.current(() => EMPTY);
-      if (event.t === "thread" && event.cardId === cardId) update.current((prev) => applyThreadEvent(prev, event));
-    });
   }, [direct, workerId, cardId]);
 }
 

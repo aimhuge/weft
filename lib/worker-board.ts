@@ -28,7 +28,7 @@ import { openCardRows, openedBlob, openItemRows, openOutput, openPageAssets } fr
 import { SEALED_PAGE_HTML } from "./blob-seal";
 import { presenceWatch, type PresenceWatch } from "./worker-presence-watch";
 import { macHint } from "./host-facts";
-import { withClientHint } from "@weft/client";
+import { linePlaintext, withClientHint } from "@weft/client";
 
 // Where this Mac's composer saves what you paste (lib/attachments.ts ATTACHMENTS_DIR, without its image tools).
 export const ATTACHMENTS = path.join(DATA_DIR, "attachments");
@@ -237,8 +237,8 @@ export async function openWorkerLine(body: LineAction, client: SupabaseClient = 
   if (!(await myWorkers(client, who)).some((w) => w.id === body.workerId)) throw new Error("That worker isn't one of yours.");
   const { data } = await client.from("cloud_workers").select("public_key").eq("id", body.workerId).maybeSingle<{ public_key: string | null }>();
   if (!data?.public_key) throw new Error("That worker hasn't published its key yet.");
-  const { sdp, key, topic, ice } = body.offer;
-  const sealed = seal(data.public_key, JSON.stringify({ sdp, key, topic, ice }), LINE_PURPOSE);
+  // The same plaintext weft.zip and the phone seal themselves (@weft/client lineOpener), so the worker reads one shape.
+  const sealed = seal(data.public_key, linePlaintext(body.offer), LINE_PURPOSE);
   return insert(client, { org_id: who.org, kind: "line", target_device: workerDevice(body.workerId), folder: "", payload: { sealed } });
 }
 

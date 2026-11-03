@@ -121,6 +121,30 @@ move a sealed item onto another card or seq and have it open: `weft-sync-v1\n<or
   its grants on load). The server render and the first client render both draw the 🔒 stand-ins; once the keys are in,
   `useWebBoard` reopens the cards and reloads the open thread, so hydration never disagrees.
 
+### A session line's offer, sealed in the browser or on the phone
+
+A worker's session line opens with an offer sealed to the worker's published X25519 key
+([project-hosts.md](project-hosts.md#the-session-line-h6-as-built)). The desktop's server sealed it alone until now;
+`@weft/client` seals the same bytes anywhere (`packages/weft-client/src/seal.ts` `sealTo`, `line-offer.ts` `lineOpener`):
+libsodium's `crypto_scalarmult` for X25519 (what node's `diffieHellman` computes), and Web Crypto for HKDF-SHA256 and
+AES-256-GCM, which libsodium's WebAssembly build doesn't have, so the caller hands in both (`SealCrypto`). On weft.zip
+that's `libsodium-wrappers` and `crypto.subtle` (`lib/web-lines.ts`); the phone needs `react-native-libsodium` with
+`crypto_scalarmult` and a Web Crypto `subtle` (a polyfill such as react-native-quick-crypto), and its RTCPeerConnection goes
+into `openLine`. `lib/worker-seal-client.test.ts` opens a browser-sealed and a node-sealed offer with the worker's own
+`open`, and refuses either under another purpose, another worker's key, a changed byte or a swapped ephemeral key.
+
+- **What a line from weft.zip or the phone may do:** exactly what a row from there may do. The worker can't tell who sealed
+  an offer (its key is public, so anyone with the session could), so a line proves only that the worker answers. Each verb
+  on it passes the `host` kind's own checks (`remoteRefusal`, CardRules); a widening still needs its own fresh signed
+  approval, which weft.zip never sends down a line (`lib/cloud-host-acts.ts` signs it on sign.weft.zip and sends a row); the
+  terminal channel still needs the Mac's Touch ID key.
+- **Who may open one:** only the worker's owner, by the insert policy that already gated the row
+  (`private.owns_device`); `20261103150000_line_row_shape.sql` (applied) now holds a `line` row to the server's shape,
+  since a browser builds it: a worker device, no folder, a payload of `sealed` (and the client hint) only, under 32 KB.
+- **Which key it trusts:** `cloud_workers.public_key` as the visitor's session reads it, the same read the desktop's server
+  makes. A key swapped in that row would get a line answered by whoever holds its private half, so such a line can do no more
+  than the session it was opened with already can by rows.
+
 ## Sealed blobs
 
 Status: **built for a Mac and the web board** (2026-11-03); a worker's in [Sealing on a Weft Worker](#sealing-on-a-weft-worker).

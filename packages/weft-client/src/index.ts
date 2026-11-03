@@ -154,3 +154,6 @@ export { pendingItem, unsent, type PendingSend } from "./pending-sends";
 export { findableText, findCount, matchThread, plainMarkdown, spotAt, totalHits, type FindMatch, type FindSpot } from "./thread-find";
 export type { MediaKind, UploadedAttachment } from "./attachment";
 export { mergePage, SHELL_ELSEWHERE, type PageUpdate, type ThreadTransport } from "./transport";
+export { answerKeys, rawX25519, sealedOf, sealTo, spkiX25519, type AnswerKeys, type SealCrypto, type SealedAnswer, type SealSodium, type SubtleLike } from "./seal";
+export { LINE_CHANNELS, LINE_PURPOSE, lineOpener, linePlaintext, lineRow, lineTopic, type IceServer, type LineOffer, type LineOpenerDeps, type LineRow } from "./line-offer";
+export { gathered, GATHER_MS, offerLine, openLine, STUN, type Listen, type LinePeer, type OfferDeps, type OfferPeer, type OpenedLine, type SdpInit, type OpenLineDeps } from "./line-open";
