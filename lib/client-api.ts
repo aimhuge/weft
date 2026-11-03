@@ -238,9 +238,10 @@ export const api = {
   schedule: (id: string, text: string, at: number) => call<{ card: Card }>("POST", `/api/cards/${id}/scheduled`, { text, at }),
   unschedule: (id: string, messageId: string) => call("DELETE", `/api/cards/${id}/scheduled`, { messageId }),
   // pendingId is the request the user saw; the server refuses the answer if another is in front.
-  // reply: a question's notes, or "Chat about this" instead of answers.
-  answer: (id: string, allow: boolean, answers?: Record<string, string>, pendingId?: string, reply?: QuestionReply) =>
-    call("POST", `/api/cards/${id}/permission`, { allow, answers, pendingId, ...reply }),
+  // reply: a question's notes, or "Chat about this" instead of answers. auth: main's signature after Touch ID, which an
+  // Allow on a vault, skip-permissions or agent-config ask needs (lib/local-approve.ts).
+  answer: (id: string, allow: boolean, answers?: Record<string, string>, pendingId?: string, reply?: QuestionReply, auth?: object) =>
+    call("POST", `/api/cards/${id}/permission`, { allow, answers, pendingId, ...reply, ...(auth ? { auth } : {}) }),
   // Wait on a symbol-claim prompt: Weft answers it once the card holding that code lets go.
   waitPermission: (id: string, pendingId: string) => call("POST", `/api/cards/${id}/permission`, { wait: true, pendingId }),
   putFirst: (id: string, pendingId: string) => call("POST", `/api/cards/${id}/permission`, { first: true, pendingId }),

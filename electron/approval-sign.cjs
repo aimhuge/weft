@@ -4,11 +4,14 @@
 // lib/worker-ask-read.ts): the card's title, the waiting request's tool and what it runs. The renderer sends no text for
 // the prompt, so a board-side script can't show "allow ls" over a request that runs something else. The message's host
 // and workspace come from that read too: this Mac's own id, or the worker's `worker:<id>` and its workspace, the names
-// the worker rebuilds the message from (lib/worker-approve.ts). A request main can't see waiting is refused.
+// the worker rebuilds the message from (lib/worker-approve.ts). A request main can't see waiting is refused. This Mac's
+// own card signs over the workspace "local" (lib/local-approve.ts LOCAL_ORG), so it checks out only on the local
+// route, never as a network answer.
 const { READ_HEADERS } = require("./server-read.cjs");
 const { approvalMessage } = require("./desktop-signer.cjs");
 
 const GRANTS = new Set(["card", "always"]);
+const LOCAL_ORG = "local";
 const id = (v) => (typeof v === "string" && v && v.length <= 200 && !/[\u0000-\u001f\u2028\u2029]/.test(v) ? v : null);
 
 function answersProblem(answers) {
@@ -24,7 +27,7 @@ function answersProblem(answers) {
 function readSignRequest(raw) {
   if (!raw || typeof raw !== "object") return "Nothing to sign.";
   const { orgId, cardId, pendingId, allow, answers, grant } = raw;
-  // The workspace is main's own read for a worker card; this Mac's card still names it.
+  // The workspace is main's own read for a worker card, and "local" for this Mac's: a name the board sends is checked.
   if ((orgId !== undefined && !id(orgId)) || !id(cardId) || !id(pendingId) || typeof allow !== "boolean") return "That approval is missing its workspace, card, request or decision.";
   if (grant != null && !GRANTS.has(grant)) return "That approval names an unknown grant.";
   const why = answersProblem(answers);
@@ -67,16 +70,14 @@ const WORKER_DEVICE = /^worker:[A-Za-z0-9_-]{1,100}$/;
 
 /**
  * The card, its waiting request and the names the message carries: this Mac's own card under its own id and the
- * workspace the board names, else a worker card under the worker's id and workspace as main read them. A string says
- * why not.
+ * workspace "local", else a worker card under the worker's id and workspace as main read them. A string says why not.
  * @param {{ cards: () => Promise<any[]>, workerAsk: (cardId: string) => Promise<any>, macDevice: () => string }} deps
  */
 async function findRequest({ cards, workerAsk, macDevice }, req) {
   const here = (await cards()).some((c) => c.id === req.cardId);
   if (here) {
-    if (!req.orgId) return "That approval is missing its workspace, card, request or decision.";
     const found = await waitingRequest(cards, req);
-    return typeof found === "string" ? found : { ...found, orgId: req.orgId, device: macDevice(), worker: null };
+    return typeof found === "string" ? found : { ...found, orgId: LOCAL_ORG, device: macDevice(), worker: null };
   }
   const ask = await workerAsk(req.cardId).catch(() => null);
   if (!ask) return "That card isn't on this Mac or one of your workers, so this Mac can't sign for it.";
@@ -87,12 +88,17 @@ async function findRequest({ cards, workerAsk, macDevice }, req) {
   return { card: ask.card, pending, orgId: ask.orgId, device: ask.device, worker: ask.workerId };
 }
 
-// Main's read of the board's cards from its own server.
+// Main's read of the board's cards from its own server, and the copilot's (card.list leaves it out), so an Allow in the
+// copilot's lane signs too. A copilot that won't read only leaves it out.
 const serverCards = (getServer) => async () => {
   const server = getServer();
   if (!server?.url) throw new Error("Weft's server isn't up yet.");
   const { cards } = await (await fetch(`${server.url}/api/cards`, READ_HEADERS)).json();
-  return Array.isArray(cards) ? cards : [];
+  const copilot = await fetch(`${server.url}/api/copilot`, READ_HEADERS)
+    .then((res) => (res.ok ? res.json() : null))
+    .then((body) => body?.card ?? null)
+    .catch(() => null);
+  return [...(Array.isArray(cards) ? cards : []), ...(copilot && typeof copilot === "object" ? [copilot] : [])];
 };
 
 // Main's read of a worker card's row from its own server (lib/worker-ask-read.ts); null when it can't be read.
@@ -127,4 +133,4 @@ function registerApprovalSign(handle, { cards, workerAsk, macDevice, confirm, si
   });
 }
 
-module.exports = { readSignRequest, signPrompt, waitingRequest, findRequest, serverCards, serverWorkerAsk, registerApprovalSign };
+module.exports = { LOCAL_ORG, readSignRequest, signPrompt, waitingRequest, findRequest, serverCards, serverWorkerAsk, registerApprovalSign };

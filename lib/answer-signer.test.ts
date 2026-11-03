@@ -1,7 +1,7 @@
 // The desktop board's signed Allow on a worker card (lib/answer-signer.ts): only an Allow on a permission request asks
 // main to sign, the board sends ids only, and what comes back is the auth a worker reads.
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { needsSignature, signedAnswer } from "./answer-signer";
+import { localSignedAnswer, needsSignature, signedAnswer } from "./answer-signer";
 import type { Card } from "./types";
 
 const card = (pending: unknown) => ({ id: "c1", pending }) as Pick<Card, "id" | "pending">;
@@ -44,5 +44,27 @@ describe("signedAnswer", () => {
     expect(await signedAnswer(card(permission), true)).toBeUndefined();
     vi.unstubAllGlobals();
     expect(await signedAnswer(card(permission), true)).toBeUndefined();
+  });
+});
+
+describe("localSignedAnswer", () => {
+  const risky = { id: "p1", toolName: "Bash", input: { command: "echo x > .claude/settings.json" } };
+
+  it("signs only an Allow on a phone-only ask on this Mac's card", async () => {
+    const sign = vi.fn(() => Promise.resolve({ device: "mac-1", issuedAt: 5, sig: "c2ln", publicKey: "k" }));
+    vi.stubGlobal("window", { weft: { approval: { sign } } });
+    expect(await localSignedAnswer(card(permission), true)).toBeUndefined();
+    expect(await localSignedAnswer(card(risky), false)).toBeUndefined();
+    expect(await localSignedAnswer(card({ ...risky, questions: [{ question: "?" }] }), true)).toBeUndefined();
+    expect(sign).not.toHaveBeenCalled();
+    expect(await localSignedAnswer(card(risky), true, { answers: { a: "b" } })).toEqual({ device: "mac-1", issuedAt: 5, sig: "c2ln" });
+    expect(sign).toHaveBeenCalledWith({ cardId: "c1", pendingId: "p1", allow: true, answers: { a: "b" } });
+  });
+
+  it("throws when Touch ID is refused, and sends unsigned without the desktop app (the route then refuses it)", async () => {
+    vi.stubGlobal("window", { weft: { approval: { sign: () => Promise.resolve(null) } } });
+    await expect(localSignedAnswer(card(risky), true)).rejects.toThrow("Not approved");
+    vi.stubGlobal("window", {});
+    expect(await localSignedAnswer(card(risky), true)).toBeUndefined();
   });
 });

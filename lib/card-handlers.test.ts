@@ -41,14 +41,30 @@ describe("cardHandlers", () => {
     const c = ctx();
     const h = cardHandlers(card, c);
     h.onAnswer(true);
-    expect(api.answer).toHaveBeenCalledWith("c1", true, undefined, "p1");
+    await vi.waitFor(() => expect(api.answer).toHaveBeenCalledWith("c1", true, undefined, "p1", undefined, undefined));
     api.stop.mockRejectedValueOnce(new Error("gone"));
     h.onStop();
     await vi.waitFor(() => expect(c.notify).toHaveBeenCalledWith(new Error("gone")));
   });
 
-  it("answers with no pending id when the card has none", () => {
+  it("answers with no pending id when the card has none", async () => {
     cardHandlers({ ...card, pending: undefined }, ctx()).onAnswer(false);
-    expect(api.answer).toHaveBeenCalledWith("c1", false, undefined, undefined);
+    await vi.waitFor(() => expect(api.answer).toHaveBeenCalledWith("c1", false, undefined, undefined, undefined, undefined));
+  });
+
+  it("signs an Allow on a phone-only ask after Touch ID before it sends, and sends nothing when Touch ID is refused", async () => {
+    const sign = vi.fn(() => Promise.resolve({ device: "mac-1", issuedAt: 5, sig: "s", publicKey: "k" }));
+    vi.stubGlobal("window", { weft: { approval: { sign } } });
+    const risky = { ...card, pending: { id: "p1", toolName: "Bash", title: "", input: { command: "claude --dangerously-skip-permissions" } } };
+    cardHandlers(risky, ctx()).onAnswer(true);
+    await vi.waitFor(() => expect(api.answer).toHaveBeenCalledWith("c1", true, undefined, "p1", undefined, { device: "mac-1", issuedAt: 5, sig: "s" }));
+    expect(sign).toHaveBeenCalledWith({ cardId: "c1", pendingId: "p1", allow: true });
+    api.answer.mockClear();
+    sign.mockResolvedValueOnce(null as never);
+    const c = ctx();
+    cardHandlers(risky, c).onAnswer(true);
+    await vi.waitFor(() => expect(c.notify).toHaveBeenCalled());
+    expect(api.answer).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
   });
 });

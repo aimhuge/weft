@@ -53,7 +53,7 @@ describe("threadHandlers", () => {
     const c = ctx();
     const reply = { notes: "n" } as never;
     await threadHandlers(card, c).onAnswer(true, { q: "a" }, reply);
-    expect(api.answer).toHaveBeenCalledWith("c1", true, { q: "a" }, "p1", reply);
+    expect(api.answer).toHaveBeenCalledWith("c1", true, { q: "a" }, "p1", reply, undefined);
     api.answer.mockRejectedValueOnce(new Error("stale"));
     await expect(threadHandlers(card, c).onAnswer(false)).rejects.toThrow("stale");
     expect(c.notify).toHaveBeenCalledWith(new Error("stale"));

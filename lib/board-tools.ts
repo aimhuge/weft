@@ -15,6 +15,7 @@ import { skillTools } from "./skill-tools";
 import { folderAccessTool } from "./folder-access-tool";
 import { restartTool } from "./restart-tool";
 import { cleanTitle, titleFromPrompt } from "./format";
+import { phoneOnlyAllow } from "./passkey-phone-only";
 import { defaultPermissionMode, touchProject } from "./settings";
 import { createCard, getCard, listCards, updateCard } from "./store";
 import { rememberTags } from "./tag-store";
@@ -43,6 +44,9 @@ async function attempt(run: () => string | Promise<string>) {
     return { content: [{ type: "text" as const, text: err instanceof Error ? err.message : String(err) }], isError: true };
   }
 }
+
+// What the copilot is told when it tries to Allow a phone-only ask for the user.
+export const COPILOT_PHONE_ONLY = "That one needs the user's Touch ID: it reaches a vault secret, skips permissions or changes an agent's settings. Ask them to Allow it on the card.";
 
 const COLUMN = z.enum(["backlog", "running", "needs_you", "review", "done"]);
 
@@ -264,6 +268,8 @@ export function boardMcpServer(actions: BoardActions) {
             const card = boardCard(card_id);
             const questions = card.pending?.questions;
             const answers = questions && answer ? Object.fromEntries(questions.map((q) => [q.question, answer])) : undefined;
+            // A phone-only ask takes the user's Touch ID on the card (lib/local-approve.ts), never the copilot's word.
+            if (phoneOnlyAllow(card.pending, allow)) throw new Error(COPILOT_PHONE_ONLY);
             actions.answer(card.id, allow, answers);
             return `${allow ? "Allowed" : "Denied"} on “${card.title}”.`;
           }),

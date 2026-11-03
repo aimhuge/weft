@@ -59,11 +59,12 @@ describe("findRequest", () => {
     expect(await findRequest({ cards: none, workerAsk: read, macDevice }, req)).toMatch(why);
   });
 
-  it("refuses a workspace the board names that isn't the row's, and a Mac card with none", async () => {
+  it("refuses a workspace the board names that isn't the row's, and signs a Mac card over the workspace \"local\"", async () => {
     expect(await findRequest({ cards: none, workerAsk: workerAsk(), macDevice }, { ...req, orgId: "org-2" })).toMatch(/another workspace/);
     const here = () => Promise.resolve([{ id: "card-9", pending }]);
-    expect(await findRequest({ cards: here, workerAsk: workerAsk(), macDevice }, req)).toMatch(/missing its workspace/);
-    expect(await findRequest({ cards: here, workerAsk: workerAsk(), macDevice }, { ...req, orgId: "org-1" })).toMatchObject({ device: "mac-1", worker: null });
+    expect(await findRequest({ cards: here, workerAsk: workerAsk(), macDevice }, req)).toMatchObject({ orgId: "local", device: "mac-1", worker: null });
+    // A workspace the board names for this Mac's card is ignored: a local signature never names a real one.
+    expect(await findRequest({ cards: here, workerAsk: workerAsk(), macDevice }, { ...req, orgId: "org-1" })).toMatchObject({ orgId: "local", device: "mac-1", worker: null });
   });
 });
 

@@ -1,4 +1,5 @@
 import type React from "react";
+import { localSignedAnswer } from "./answer-signer";
 import type { ResumeHow } from "./card-resume";
 import { api } from "./client";
 import { answerNow, stopNow } from "./optimistic-cards";
@@ -23,11 +24,16 @@ export type CardActionsCtx = {
 export function cardHandlers(card: Card, ctx: CardActionsCtx) {
   return {
     onOpen: () => ctx.openCard(card),
-    // The prompt leaves the card at once (lib/optimistic-cards.ts); a refusal brings it back.
+    // The prompt leaves the card at once (lib/optimistic-cards.ts); a refusal brings it back. An Allow on a phone-only
+    // ask is signed by main after Touch ID first (lib/answer-signer.ts); a refused Touch ID sends nothing.
     onAnswer: (allow: boolean) => {
       const pendingId = card.pending?.id;
-      const send = () => api.answer(card.id, allow, undefined, pendingId);
-      void (pendingId ? answerNow(card.id, pendingId, allow, send) : send()).catch(ctx.notify);
+      void localSignedAnswer(card, allow)
+        .then((auth) => {
+          const send = () => api.answer(card.id, allow, undefined, pendingId, undefined, auth);
+          return pendingId ? answerNow(card.id, pendingId, allow, send) : send();
+        })
+        .catch(ctx.notify);
     },
     onStop: () => void stopNow(card.id).catch(ctx.notify),
     onResume: (how: ResumeHow) => ctx.resume(card.id, how),

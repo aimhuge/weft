@@ -4,6 +4,7 @@
 // shows the whole input it signs. Matched on a normalized copy of the input: shell quotes, backslashes and $'' escapes
 // stripped, whitespace collapsed, lowercased.
 import type { PasskeyAction } from "./approval-passkey";
+import type { PendingPermission } from "./types";
 
 export const PHONE_ONLY =
   "That one needs your phone or this Mac: a vault secret, skipping permissions or changing an agent's settings can't be approved from a browser.";
@@ -47,4 +48,13 @@ export function phoneOnly(action: PasskeyAction): boolean {
   const text = normalizeForRisk(Object.values(action.input).map((v) => (typeof v === "string" ? v : JSON.stringify(v))).join(" "));
   if (SKIPS.some((r) => r.test(text)) || CONFIG.some((r) => r.test(text)) || BUILT.test(text)) return true;
   return SETTINGS.test(text) && PERMISSION_KEYS.test(text);
+}
+
+// Whether this answer is an Allow on a phone-only permission request (not a question or a form): on this Mac's own card
+// it then needs main's signature after Touch ID (lib/local-approve.ts, lib/answer-signer.ts localSignedAnswer).
+export function phoneOnlyAllow(pending: Pick<PendingPermission, "toolName" | "input" | "questions" | "elicitation"> | null | undefined, allow: boolean): boolean {
+  if (!pending || !allow || pending.questions?.length || pending.elicitation) return false;
+  // A request read off the wire may lack its fields; one with no tool names nothing to run.
+  const { toolName, input } = pending as Partial<PendingPermission>;
+  return typeof toolName === "string" && phoneOnly({ toolName, input: input && typeof input === "object" ? input : {} });
 }

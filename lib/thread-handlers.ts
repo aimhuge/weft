@@ -1,3 +1,4 @@
+import { localSignedAnswer } from "./answer-signer";
 import { api } from "./client";
 import { answerNow, patchNow, removeNow } from "./optimistic-cards";
 import type { Card, PermissionMode, QuestionReply } from "./types";
@@ -26,11 +27,14 @@ export function threadHandlers(card: Card, ctx: ThreadActionsCtx) {
       await api.send(card.id, text);
     },
     // A failure is shown and rethrown, so the question form re-enables. A plain Allow or Deny leaves the thread at
-    // once (lib/optimistic-cards.ts); a form with answers waits, so one that doesn't fit stays filled in.
+    // once (lib/optimistic-cards.ts); a form with answers waits, so one that doesn't fit stays filled in. An Allow on a
+    // phone-only ask is signed by main after Touch ID first (lib/answer-signer.ts).
     onAnswer: (allow: boolean, answers?: Record<string, string>, reply?: QuestionReply) => {
       const pendingId = card.pending?.id;
-      const send = () => api.answer(card.id, allow, answers, pendingId, reply);
-      const sent = pendingId && !answers && !reply ? answerNow(card.id, pendingId, allow, send) : send();
+      const sent = localSignedAnswer(card, allow).then((auth) => {
+        const send = () => api.answer(card.id, allow, answers, pendingId, reply, auth);
+        return pendingId && !answers && !reply ? answerNow(card.id, pendingId, allow, send) : send();
+      });
       return sent.catch((err: unknown) => {
         ctx.notify(err);
         throw err;
