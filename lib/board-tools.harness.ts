@@ -6,7 +6,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { vi } from "vitest";
+import type { ThreadPage } from "./thread-page";
 import type { Card, ThreadItem } from "./types";
+import type { WorkerProject } from "./worker-project";
 
 // A tool the SDK MCP server registers: the handler takes the tool's arguments and answers the way
 // MCP does. The board wraps the result in attempt() (board-tools.ts), so an error comes back as
@@ -34,12 +36,29 @@ export function boardState() {
     // The setup report (lib/copilot-setup.ts) and the projects it defaults to (lib/copilot-sources.ts).
     setupReport: vi.fn(),
     activeProjects: vi.fn<(cards: unknown[]) => string[]>(() => []),
+    // The user's Weft Workers as the board tools reach them (lib/worker-board-reach.ts): none, unless a test says.
+    reach: fakeReach(),
     // A real directory for the tests that need one (folders.resolveFolder requires it to exist).
     testRoot: "",
   };
 }
 
 export type State = ReturnType<typeof boardState>;
+
+// A WorkerReach whose every call is a spy: no workers, no pages, and acts the worker takes at once.
+export function fakeReach() {
+  return {
+    board: vi.fn(() => Promise.resolve({ cards: [] as Card[], projects: [] as WorkerProject[] })),
+    page: vi.fn<(cardId: string, before?: number) => Promise<ThreadPage | null>>(() => Promise.resolve(null)),
+    act: vi.fn<(cardId: string, verb: string, args: Record<string, unknown>) => Promise<{ queued?: true }>>(() => Promise.resolve({})),
+    start: vi.fn((input: { cwd: string }) => Promise.resolve({ worker: "m1mini", cardId: `w-${input.cwd.length}` })),
+  };
+}
+
+// The mock of lib/worker-board-reach.ts: the board tools get the state's fake.
+export function reachMock(state: State) {
+  return { workerReach: () => state.reach };
+}
 
 // The mock of @anthropic-ai/claude-agent-sdk: every tool the server registers is captured, so a
 // test can call its handler directly.
@@ -195,5 +214,6 @@ export function reset(state: State) {
   state.setupReport.mockReset();
   state.activeProjects.mockReset();
   state.activeProjects.mockReturnValue([]);
+  Object.assign(state.reach, fakeReach());
   state.testRoot = fs.mkdtempSync(path.join(os.tmpdir(), "weft-board-tools-"));
 }
