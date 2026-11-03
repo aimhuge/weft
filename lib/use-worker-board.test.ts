@@ -19,6 +19,7 @@ const { BOARD_POLL_MS, IDLE_POLL_MS, useBoardWorkers, useWorkerBoard, withLineEv
 const { setWorkerMarks } = await import("./worker-project-marks");
 const { closeLines, retainLine } = await import("./session-lines");
 const { forget, patchNow } = await import("./optimistic-cards");
+const { dropPending, drawPending, pendingSnapshot } = await import("./worker-pending-cards");
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
@@ -243,6 +244,30 @@ describe("useBoardWorkers", () => {
     act(() => setWorkerMarks(project().path, { pinned: true }));
     expect(result.current.workers.projects[0]).toMatchObject({ pinned: true });
     act(() => setWorkerMarks(project().path, { pinned: false }));
+  });
+
+  it("draws a new thread on its way to a worker at once, and the worker's card in its place once it comes", async () => {
+    vi.useFakeTimers();
+    fetchMock.mockResolvedValue(json(board({ projects: [project()], cards: [card()] })));
+    let emit: (e: unknown) => void = () => {};
+    retainLine("w1", () => ({ up: () => false, onRoute: () => () => {}, onEvent: (fn: (e: unknown) => void) => ((emit = fn), () => {}), close: vi.fn() }) as never);
+    const { result } = renderHook(() => useBoardWorkers([]));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    act(() => drawPending(card({ id: "p1", title: "New", column: "running" })));
+    expect(result.current.boardCards.map((c) => c.id)).toEqual(["p1", "c1"]);
+    // The line's change on a card the board has read settles nothing; the read with it does.
+    act(() => emit({ t: "card", card: card({ title: "Live", cwd: "/w/ling" }) }));
+    expect(pendingSnapshot()).toHaveLength(1);
+    fetchMock.mockResolvedValue(json(board({ projects: [project()], cards: [card({ id: "p1", title: "New" }), card()] })));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(BOARD_POLL_MS);
+    });
+    expect(pendingSnapshot()).toEqual([]);
+    expect(result.current.boardCards.map((c) => c.id)).toEqual(["p1", "c1"]);
+    dropPending("p1");
+    closeLines();
   });
 
   it("lays this board's marks only on the projects they name", () => {

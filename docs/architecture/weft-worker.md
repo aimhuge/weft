@@ -428,6 +428,13 @@ store (`lib/worker-project.ts`, `lib/worker-board.ts`, `lib/worker-transport.ts`
   (`lib/project-host.ts` `hostFor(cwd).act`) and land on the board at once through `lib/optimistic-cards.ts`, which
   `useWorkerBoard` now draws its cards through; a refusal reloads them. Not offered: delete, Share…, the agent, the
   folder, skills, the vault, the dev server, and logging this Mac's CLI in.
+- **A new thread is drawn before the worker has it.** `createCard` in `lib/use-board-actions.ts` picks the card's id
+  (`crypto.randomUUID()`), draws it through `lib/worker-pending-cards.ts` (Running or Backlog, "Sending to your worker…")
+  and sends it as `cardId`; `startWorkerThread` (`lib/worker-new-thread.ts`) puts that id on the `card.create` command,
+  and the worker's `claimId` still refuses one it has had. `useBoardWorkers` draws the pending cards among the read
+  ones, `useWorkerBoard` settles each when a read or a line event has it, and a refusal or `PENDING_MS` (two minutes)
+  with no card takes it off. A thread with an agent goes as a `run`, whose card the worker names: it is matched by its
+  project and its prompt's first line instead.
 - **Reading:** the account's Supabase session lives on the local server, so the renderer polls `/api/worker-board` every
   5 s (once a minute with no worker), and an open thread re-reads its newest page every 2.5 s. A project's snapshot (the
   header badges, [project-hosts.md](project-hosts.md#project-reads-and-the-editor-h4-as-built)) is live: from the first
