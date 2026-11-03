@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { agentOf, isBuiltIn, mergeAgents, shippedAgent, type AgentInfo } from "./agents";
 import { DATA_DIR, listCards, updateCard } from "./store";
+import { isWorkerProject, parseWorkerProject } from "./worker-project";
 
 // The agents you made and the built-ins you edited (Settings → Agents), kept in ~/.weft/agents.json. lib/agents.ts merges
 // them over the built-ins; every reader on the server goes through listAgents(). docs/architecture/agents.md.
@@ -45,11 +46,21 @@ function readFile(): Saved {
 
 const readSaved = () => readFile().agents;
 
+// Told after every write: this Mac pushes its account settings again, which carry your agents to your workers
+// (lib/account-settings.ts, lib/agent-sync.ts).
+const listeners = new Set<() => void>();
+
+export function onAgentsSaved(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
 function writeFile(next: Partial<Saved>) {
   const saved = { ...readFile(), ...next };
   fs.mkdirSync(DATA_DIR, { recursive: true });
   fs.writeFileSync(file(), JSON.stringify(saved, null, 2));
   cache = saved;
+  for (const listener of listeners) listener();
 }
 
 const writeSaved = (agents: AgentInfo[]) => writeFile({ agents });
@@ -77,9 +88,22 @@ export function projectAgent(cwd: string): string | undefined {
 
 export const projectAgents = (): Record<string, string> => readFile().projects;
 
-// Builder (or null) clears the folder's default.
+// What a Weft Worker mirrors (lib/agent-sync.ts): the agents you made and edited, and the defaults of worker projects
+// (worker://<id>/<folder>). A folder of this Mac's is its own path, so it stays here.
+export const savedAgents = (): AgentInfo[] => [...readSaved()];
+export const workerProjectAgents = (): Record<string, string> => Object.fromEntries(Object.entries(readFile().projects).filter(([cwd]) => isWorkerProject(cwd)));
+
+// On a worker: your Mac's agents in place of the ones here, and its worker-project defaults in place of the ones here.
+export function mirrorAgents(agents: AgentInfo[], workerProjects: Record<string, string>) {
+  const own = Object.fromEntries(Object.entries(readFile().projects).filter(([cwd]) => !isWorkerProject(cwd)));
+  writeFile({ agents, projects: { ...own, ...workerProjects } });
+}
+
+// Builder (or null) clears the folder's default. A worker project's default is kept here and goes to that worker with
+// your agents (lib/agent-sync.ts), so a new thread there starts as it.
 export function setProjectAgent(cwd: string, id: string | null) {
   if (!cwd) throw new Error("Which project?");
+  if (isWorkerProject(cwd) && !parseWorkerProject(cwd)) throw new Error("That isn't a worker project.");
   if (id !== null && !listAgents().some((a) => a.id === id)) throw new Error("No such agent.");
   const projects = Object.fromEntries(Object.entries(readFile().projects).filter(([folder]) => folder !== cwd));
   writeFile({ projects: id && id !== "builder" ? { ...projects, [cwd]: id } : projects });

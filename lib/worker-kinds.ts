@@ -5,6 +5,7 @@
 // hands a sealed answer to a card's waiting secret run. Each returns the card it made or touched, or null.
 import { NEW_CARD_MODES, newCardBody, type CloudCommandRow, type NewCardMode } from "./cloud-commands";
 import { networkStartMode } from "./cloud-new-card-mode";
+import { projectAgent } from "./agent-store";
 import { signedAgent } from "./create-widen";
 import { heldMessage } from "./host-endorse";
 import { dispatcher, type KindTable } from "./host/dispatch";
@@ -15,6 +16,7 @@ import { cloneBody, runBody } from "./worker-commands";
 import type { DaemonDeps } from "./worker-daemon";
 import { explainClone, type GithubStatus } from "./worker-github";
 import { sentByWorker, WORKER_CARD_MODE } from "./worker-origin";
+import { workerProjectPath } from "./worker-project";
 import { sealedOf, type Sealed } from "./worker-seal";
 import type { Card, PermissionMode } from "./types";
 import { workerReads } from "./worker-reads";
@@ -89,7 +91,16 @@ function sealedToken(command: CloudCommandRow): Sealed {
 // never bypassPermissions, plan as default), whatever mode the thread that made the cron had; it answers the run's card.
 // A new prompt is new work on every fire after it, so the cron keeps only the mode a card from the network may start in:
 // one made in bypassPermissions (or a mode the web can't name) drops to `default` rather than run the new words unasked.
-export async function listVerb(engine: Pick<DaemonDeps["engine"], "host">, verb: ListVerb, args: HostArgs): Promise<string | null> {
+// cron.create (the ⏰ popover on a card here) takes the card's mode the same way: a cron made from the network never
+// fires in a mode a card from it couldn't start in.
+export async function listVerb(engine: Pick<DaemonDeps["engine"], "host" | "getCard">, verb: ListVerb | "cron.create", args: HostArgs): Promise<string | null> {
+  if (verb === "cron.create") {
+    const card = engine.getCard(args.id);
+    if (!card) throw new Error("That thread isn't on this worker.");
+    const permissionMode = await workerStartMode(card.permissionMode).catch((): PermissionMode => "default");
+    await engine.host("cron.create", { ...args, permissionMode });
+    return null;
+  }
   if (verb !== "cron.run" && !(verb === "cron.update" && typeof (args.patch as { prompt?: unknown }).prompt === "string")) {
     await engine.host(verb, args);
     return null;
@@ -122,14 +133,18 @@ export function workerKinds(deps: DaemonDeps, ctx: KindContext): KindTable {
     return null;
   }
 
+  // The agent a new thread in a project starts as when it names none: the default you picked for it on your Mac, which
+  // came with your signed settings (lib/agent-sync.ts). A worker that trusts no Mac has none.
+  const defaultAgent = (folder: string) => (deps.widen ? projectAgent(workerProjectPath(deps.widen.host, folder)) : undefined);
+
   async function startCard(command: CloudCommandRow): Promise<string> {
     const run = command.kind === "run" ? runBody(command) : null;
     if (command.kind === "run" && !run) throw new Error("That run has no prompt.");
     const { repo, start, ...fields }: Record<string, unknown> = run ? { ...run } : newCardBody(command);
     if (typeof fields.prompt !== "string" || !fields.prompt) throw new Error("That card has no prompt.");
     if (start === false) throw new Error("A worker has no Backlog yet. Start the thread instead.");
-    // Checked before the files come over: the approval names the prompt as it was sent.
-    const agent = await signedAgent(command, command.folder, deps.widen && workerWidenCheck(deps.widen));
+    // Checked before the files come over: the approval names the prompt as it was sent. None named: the project's default.
+    const agent = (await signedAgent(command, command.folder, deps.widen && workerWidenCheck(deps.widen))) ?? defaultAgent(command.folder);
     fields.prompt = await engine.receive(fields.prompt, command.payload);
     const cwd = await deps.checkout(command.folder, typeof repo === "string" ? repo : undefined);
     const permissionMode = await startMode(command, run?.permissionMode ?? fields.permissionMode);
@@ -149,7 +164,8 @@ export function workerKinds(deps: DaemonDeps, ctx: KindContext): KindTable {
   async function create(command: CloudCommandRow, args: Record<string, unknown>): Promise<string> {
     const permissionMode = await workerStartMode(args.permissionMode);
     const cwd = await deps.checkout(command.folder, undefined);
-    return published(command, await engine.start({ ...args, cwd, permissionMode }));
+    const agent = defaultAgent(command.folder);
+    return published(command, await engine.start({ ...args, cwd, permissionMode, ...(agent ? { agent } : {}) }));
   }
 
   const lists = (verb: ListVerb, args: HostArgs) => listVerb(engine, verb, args);

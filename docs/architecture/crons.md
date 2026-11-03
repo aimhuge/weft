@@ -72,7 +72,14 @@ owner-only), and the Mac's `GET /api/crons` adds them (`lib/worker-lists-read.ts
 `worker:<worker>:<cron>` and `worker` set to its name, so the ⏰ drawer and count include them, and a worker project's ⏰
 shows only that worker's. The drawer's switch, Edit, Run now and Delete reach the worker as host verbs (`cron.update`,
 `cron.run`, `cron.delete`; `lib/worker-list-acts.ts`), held to what the drawer changes (never the folder, CLI, mode or
-agent, never a "!" prompt), and a run from the Mac starts in the mode a card from the network may. The other way,
+agent, never a "!" prompt), and a run from the Mac starts in the mode a card from the network may. A worker card's
+thread header ⏰ makes one there too: `components/ThreadCronButton.tsx` sends `cron.create` through `hostOf(card).act`
+(`lib/host-api/cron-create.ts`, args.id the card, so each run takes the card's folder, CLI, model, effort and agent on
+the worker); remoteRefusal keeps the row to what the popover sends (`cronCreateRefusal`, @weft/client list-policy.ts:
+prompt, schedule, name, fork or fresh, the message to fork at, a window, on or off, run now; never a "!" prompt), the
+worker narrows the cron's mode to what a card from the network may start in (`lib/worker-kinds.ts` `listVerb`), and a
+Mac refuses it from the network like its other list verbs. The popover reads the list again once the worker has
+republished it (`useCrons().later`). The other way,
 `list_crons` on a worker lists the Mac's crons too, read-only as `mac:<id>` (`lib/mac-crons.ts` publishes a summary to
 `cloud_mac_crons`), and refuses to change one. Details:
 [project-hosts.md](project-hosts.md#crons-and-webhooks-both-ways-as-built).

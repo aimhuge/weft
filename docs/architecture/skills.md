@@ -65,6 +65,11 @@ Checked against the CLI on 2026-10-19:
 - ✦N in a card header (`components/SkillsChip.tsx`): the card's set, N the skills its model sees
   (a plugin counts as its skills). Both draw `components/SkillSetList.tsx` from `lib/use-skill-set.ts`,
   laid out by `lib/skill-set-view.ts`.
+- On a Weft Worker's card the chip reads the card's host (`lib/use-card-skill-set.ts`): the worker's own skills for
+  the card (`skills.list` through the card's transport), drawn by `hostSkillView` (on unless the card turned one off,
+  since the worker's project set isn't read here), and a switch goes as `card.update { skill: { name, on } }`
+  (`lib/host-api/card-update.ts` → `setCardSkill` on the worker, which works out the smallest change from its own set).
+  skills.sh search and installs stay this Mac's, so the list's search is off there (`SkillSetList search={false}`).
 
 ## The repo-analysis skill
 

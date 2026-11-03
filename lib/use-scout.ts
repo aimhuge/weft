@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { hostFor } from "./project-host";
+import { useSnapshotVersion } from "./project-snapshot-view";
 import type { ScoutState } from "./scout-view";
 
 // While the scout runs, how often the badge looks for its findings.
@@ -21,6 +22,8 @@ export function useScout(cwd: string | null | undefined) {
   const [loaded, setLoaded] = useState<{ cwd: string; scout: ScoutState | null } | null>(null);
   const scout = cwd && loaded?.cwd === cwd ? loaded.scout : null;
   const running = !!scout?.running;
+  // A worker's new snapshot reads again (lib/project-snapshot-view.ts); always 0 on this Mac's own projects.
+  const fresh = useSnapshotVersion(cwd);
 
   useEffect(() => {
     if (!cwd) return;
@@ -43,7 +46,7 @@ export function useScout(cwd: string | null | undefined) {
       window.removeEventListener("focus", load);
       clearInterval(timer);
     };
-  }, [cwd, running]);
+  }, [cwd, running, fresh]);
 
   // A re-scout runs on this Mac; a worker scouts only when one of its cards asks.
   function post(body: Record<string, string>) {

@@ -25,6 +25,8 @@ function lazy<M, K extends keyof M>(load: () => Promise<M>, name: K): M[K] {
   }) as M[K];
 }
 
+// `idempotent: true` marks a pure read, safe to run twice: a host requeues one whose claim's lease ran out (a host that
+// died mid-command, lib/host/lease.ts). Nothing that makes a card, starts or stops a turn, or writes is marked.
 export const HOST_API = {
   // A new thread, started or left in Backlog. Asking less than the default mode needs Weft's own window, as POST /api/cards.
   "card.create": {
@@ -59,17 +61,19 @@ export const HOST_API = {
   "card.schedule": { elevated: false, run: lazy(() => import("./card-schedule"), "scheduleVerb") },
   "card.unschedule": { elevated: false, run: lazy(() => import("./card-schedule"), "unscheduleVerb") },
   // A read: the skills the card's folder has on that host, for the "/" typeahead.
-  "skills.list": { elevated: false, run: lazy(() => import("./skills-list"), "skillsListVerb") },
+  "skills.list": { elevated: false, idempotent: true, run: lazy(() => import("./skills-list"), "skillsListVerb") },
   // The editor (H4). A save writes the folder, so it takes Weft's own window locally and is confined from the network.
-  "files.list": { elevated: false, run: lazy(() => import("./files"), "listFilesVerb") },
-  "files.read": { elevated: false, run: lazy(() => import("./files"), "readFileVerb") },
+  "files.list": { elevated: false, idempotent: true, run: lazy(() => import("./files"), "listFilesVerb") },
+  "files.read": { elevated: false, idempotent: true, run: lazy(() => import("./files"), "readFileVerb") },
   "files.write": { elevated: true, run: lazy(() => import("./files"), "writeFileVerb") },
   // The host's own settings, for no card: only HOST_SETTINGS, and only from Weft's own window (lib/host-settings.ts).
-  "settings.get": { elevated: true, run: lazy(() => import("./settings"), "settingsGetVerb") },
+  "settings.get": { elevated: true, idempotent: true, run: lazy(() => import("./settings"), "settingsGetVerb") },
   "settings.put": { elevated: true, run: lazy(() => import("./settings"), "settingsPutVerb") },
   // A card's dev server: a private address for it (a tunnel, after the owner's Touch ID on their Mac), or its end.
   "dev.open": { elevated: false, run: lazy(() => import("./dev-servers"), "devOpenVerb") },
   "dev.stop": { elevated: false, run: lazy(() => import("./dev-servers"), "devStopVerb") },
+  // A cron made from the card args.id names (the ⏰ popover): it runs as the card does, so it widens nothing.
+  "cron.create": { elevated: false, run: lazy(() => import("./cron-create"), "cronCreateVerb") },
   // The crons and webhooks this host keeps (the Mac's drawers reach a worker's). args.id is the item, not a card.
   "cron.update": { elevated: false, run: lazy(() => import("./lists"), "cronUpdateVerb") },
   "cron.delete": { elevated: false, run: lazy(() => import("./lists"), "cronDeleteVerb") },
@@ -78,7 +82,7 @@ export const HOST_API = {
   "webhook.delete": { elevated: false, run: lazy(() => import("./lists"), "webhookDeleteVerb") },
   // The same command again, and its last lines: neither widens what the card can touch.
   "dev.restart": { elevated: false, run: lazy(() => import("./dev-servers"), "devRestartVerb") },
-  "dev.log": { elevated: false, run: lazy(() => import("./dev-servers"), "devLogVerb") },
+  "dev.log": { elevated: false, idempotent: true, run: lazy(() => import("./dev-servers"), "devLogVerb") },
   // The review tour's Start / Restart (its plan's dev command) and its status: as the dev route always guarded them.
   "dev.start": { elevated: false, run: lazy(() => import("./dev-servers"), "devStartVerb") },
   "dev.status": { elevated: false, run: lazy(() => import("./dev-servers"), "devStatusVerb") },

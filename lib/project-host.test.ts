@@ -36,7 +36,7 @@ const warmOnLine = vi.hoisted(() => vi.fn());
 vi.mock("./line-host", () => ({ actOnLine, warmOnLine, lineTransport: (workerId: string) => ({ desktop: false, workerId }), lineFiles: (workerId: string) => `line files ${workerId}` }));
 const filesApi = vi.hoisted(() => ({ list: vi.fn(), read: vi.fn(), head: vi.fn(), write: vi.fn(), stat: vi.fn() }));
 vi.mock("./client-files", () => ({ filesApi }));
-const cronApi = vi.hoisted(() => ({ update: vi.fn(), remove: vi.fn(), run: vi.fn() }));
+const cronApi = vi.hoisted(() => ({ create: vi.fn(), update: vi.fn(), remove: vi.fn(), run: vi.fn() }));
 vi.mock("./cron-client", () => ({ cronApi }));
 vi.mock("./worker-files", () => ({ workerFiles: "worker files" }));
 vi.mock("./project-reads", () => ({ localRead: "local read" }));
@@ -154,6 +154,7 @@ describe("localHost", () => {
     ["card.create", { id: "n1", prompt: "p", start: false }, api.create, [{ prompt: "p", start: false }]],
     ["dev.open", { id: "c1" }, call, ["POST", "/api/cards/c1/dev", { action: "open" }]],
     ["dev.stop", { id: "c1" }, api.devAction, ["c1", "stop"]],
+    ["cron.create", { id: "c1", prompt: "p", expr: "0 9 * * *" }, cronApi.create, [{ prompt: "p", expr: "0 9 * * *", cardId: "c1" }]],
     ["cron.update", { id: "k1", patch: { enabled: false } }, cronApi.update, ["k1", { enabled: false }]],
     ["cron.delete", { id: "k1" }, cronApi.remove, ["k1"]],
     ["cron.run", { id: "k1" }, cronApi.run, ["k1"]],
@@ -197,10 +198,10 @@ describe("cloudHost", () => {
     expect(cloudHost.files).toBe("worker files");
   });
 
-  it("has Send later, the files and the header reads (H4), a skill as a message, shares its cloud rows and deletes, and none of this Mac's other features", () => {
-    for (const feature of ["projectActs", "shots", "pane", "folder", "agent", "shell", "skills", "login", "vault", "dev", "cron", "settings"] as const)
+  it("has Send later, the files and the header reads (H4), a skill as a message, its crons and skill set, shares its cloud rows and deletes, and none of this Mac's other features", () => {
+    for (const feature of ["projectActs", "shots", "pane", "folder", "agent", "shell", "login", "vault", "dev", "settings"] as const)
       expect(cloudHost.can(feature)).toBe(false);
-    for (const feature of ["schedule", "runSkill"] as const) {
+    for (const feature of ["schedule", "runSkill", "cron", "skills"] as const) {
       expect(cloudHost.can(feature)).toBe(true);
       expect(localHost.can(feature)).toBe(true);
     }
@@ -268,7 +269,9 @@ describe("cardCan", () => {
   it("is the card's host's answer where the panel reaches that host", () => {
     expect(cardCan(mac, desktop, "cron")).toBe(true);
     expect(cardCan(worker, workerPanel, "runSkill")).toBe(true);
-    expect(cardCan(worker, workerPanel, "skills")).toBe(false);
+    expect(cardCan(worker, workerPanel, "skills")).toBe(true);
+    expect(cardCan(worker, workerPanel, "cron")).toBe(true);
+    expect(cardCan(worker, workerPanel, "pane")).toBe(false);
   });
 
   it("is never on weft.zip, whose panel reaches no host's card controls", () => {

@@ -59,7 +59,11 @@ vi.mock("@/lib/new-card", () => ({
   createCardFromBody: vi.fn((_body: unknown, id: string) => ({ id, title: "t" })),
   startCard: vi.fn(() => ({ started: true })),
 }));
-vi.mock("@/lib/crons", () => ({ updateCron: vi.fn((id: string, patch: object) => ({ id, ...patch })), deleteCron: vi.fn() }));
+vi.mock("@/lib/crons", () => ({
+  updateCron: vi.fn((id: string, patch: object) => ({ id, ...patch })),
+  deleteCron: vi.fn(),
+  createCron: vi.fn((input: object) => ({ id: "k2", ...input })),
+}));
 vi.mock("@/lib/cron-run", () => ({ runCron: vi.fn(() => Promise.resolve({ id: "run-1" })) }));
 vi.mock("@/lib/webhooks", () => ({ updateWebhook: vi.fn((id: string, patch: object) => ({ id, ...patch })), removeWebhook: vi.fn(() => ({ id: "h1" })) }));
 vi.mock("@/lib/skills", () => ({ listSkills: vi.fn(() => [{ name: "ship", description: "d", source: "project" }]) }));
@@ -121,6 +125,7 @@ const SAMPLES: Record<HostVerb, { args: unknown; reply: () => unknown }> = {
   "files.write": { args: { id: "c1", path: "a.ts", text: "y", baseHash: "h" }, reply: () => ({ result: { hash: "h2", mtime: 2 } }) },
   "dev.open": { args: { id: "c1" }, reply: () => ({ address: "https://weft.zip/t/t1" }) },
   "dev.stop": { args: { id: "c1" }, reply: () => ({ ok: true }) },
+  "cron.create": { args: { id: "c1", prompt: "p", expr: "0 9 * * *" }, reply: () => ({ cron: { id: "k2", prompt: "p", expr: "0 9 * * *", cardId: "c1", by: "you" } }) },
   "cron.update": { args: { id: "k1", patch: { enabled: false } }, reply: () => ({ cron: { id: "k1", enabled: false } }) },
   "cron.delete": { args: { id: "k1" }, reply: () => ({ ok: true }) },
   "cron.run": { args: { id: "k1" }, reply: () => ({ card: { id: "run-1" } }) },
@@ -167,6 +172,7 @@ const ROUTES: Record<CardVerb, string> = {
   "files.write": "files/route.ts",
   "dev.open": "dev/route.ts",
   "dev.stop": "dev/route.ts",
+  "cron.create": "../../crons/route.ts",
   "cron.update": "../../crons/[id]/route.ts",
   "cron.delete": "../../crons/[id]/route.ts",
   "cron.run": "../../crons/[id]/run/route.ts",
