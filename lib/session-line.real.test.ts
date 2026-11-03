@@ -114,4 +114,46 @@ describe("a real session line", () => {
     line.close();
     lines.closeAll();
   }, 40_000);
+
+  it("streams a reply's deltas and watches an open file: files.watch under a read's checks, its changes pushed on events", async () => {
+    const keys = newSealKeys();
+    const wire = topics();
+    const bus = new Set<(e: LineEvent) => void>();
+    const card = { id: "c1", title: "T", cwd: "/w/app", column: "running" } as Card;
+    const host = vi.fn((verb: string, args: Record<string, unknown>) => Promise.resolve(verb === "files.watch" ? { path: args.path, hash: "h0" } : { path: args.path }));
+    const commands = createCardCommands({ getCard: (id: string) => (id === "c1" ? card : undefined), host, receive: (t: string) => Promise.resolve(t) } as unknown as Engine);
+    const changes = new Map<string, (hash: string | null) => void>();
+    const stopped: string[] = [];
+    const lines = createHostLines({
+      unseal: (sealed, purpose) => open(keys, sealed, purpose),
+      answerOn: wire.answerOn,
+      hear: (fn) => (bus.add(fn), () => void bus.delete(fn)),
+      watchFile: (_id, path, changed) => (changes.set(path, changed), () => void stopped.push(path)),
+    });
+    const line = createSessionLine("w1", {
+      peer: () => new RTCPeerConnection({}) as unknown as globalThis.RTCPeerConnection,
+      ice: () => Promise.resolve([]),
+      offer: (_, offer) => lines.open(seal(keys.publicKey, JSON.stringify(offer), LINE_PURPOSE), (payload) => commands.host({ payload } as never)),
+      listen: wire.listen,
+      token: () => "t3",
+    });
+    await vi.waitFor(() => expect(line.up()).toBe(true), { timeout: 15_000 });
+    const heard: LineEvent[] = [];
+    line.onEvent((e) => heard.push(e));
+    bus.forEach((fn) => fn({ t: "delta", cardId: "c1", index: 2, text: "Hello " }));
+    await vi.waitFor(() => expect(heard).toEqual([{ t: "delta", cardId: "c1", index: 2, text: "Hello " }]), { timeout: 5_000 });
+
+    // A credential is refused as a read is, and watches nothing.
+    await expect(line.call("files.watch", { id: "c1", path: ".ssh/id_rsa" })).rejects.toThrow("holds credentials");
+    expect(changes.size).toBe(0);
+    await expect(line.call("files.watch", { id: "c1", path: "src/a.ts" })).resolves.toMatchObject({ value: { path: "src/a.ts", hash: "h0" } });
+    changes.get("src/a.ts")?.("h1");
+    await vi.waitFor(() => expect(heard.at(-1)).toEqual({ t: "file", cardId: "c1", path: "src/a.ts", hash: "h1" }), { timeout: 5_000 });
+    await line.call("files.unwatch", { id: "c1", path: "src/a.ts" });
+    expect(stopped).toEqual(["src/a.ts"]);
+    await line.call("files.watch", { id: "c1", path: "src/b.ts" });
+    line.close();
+    lines.closeAll();
+    expect(stopped).toEqual(["src/a.ts", "src/b.ts"]);
+  }, 40_000);
 });
