@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 // Settings → Devices (components/DevicesSettings.tsx, lib/use-devices.ts): one list of every kind, Revoke routed by
-// kind, and Add a worker's code polled until main says how it went.
+// kind, and Add a worker's code polled until main says how it went. The hook's pure words are lib/use-devices.test.ts.
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -15,7 +15,7 @@ const connectors = vi.hoisted(() => ({ view: { signedIn: true, github: { connect
 vi.mock("@/lib/use-worker-connectors", () => ({ useWorkerConnectors: () => connectors }));
 
 const { default: DevicesSettings } = await import("./DevicesSettings");
-const { POLL_MS, revokeRoute, repinOutcome, workerOutcome, useDevices, hostPairingBridge } = await import("@/lib/use-devices");
+const { POLL_MS, useDevices, hostPairingBridge } = await import("@/lib/use-devices");
 
 const base: DeviceView = {
   id: "m1", kind: "mac", name: "MacBook", platform: "darwin", orgId: "o", host: "h", hasBoxKey: true, hasSignKey: false, hasPasskey: false,
@@ -110,9 +110,6 @@ describe("DevicesSettings", () => {
     expect(forgetPin).toHaveBeenCalledWith("w1", "m1mini");
     expect(await screen.findByText("Forgot m1mini's pinned keys: its next secret ask pins the keys it has now.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Re-pin iPhone" })).toBeNull();
-    expect(repinOutcome("m1mini", { denied: true })).toBe("Not re-pinned.");
-    expect(repinOutcome("m1mini", { forgotten: false })).toBe("m1mini had no pinned keys on this Mac.");
-    expect(repinOutcome("m1mini", { forgotten: true, keysError: "offline" })).toBe("Forgot m1mini's pinned keys, but its workspace key grant couldn't be dropped: offline");
   });
 
   it("approves a paired worker's re-pair through main and shows the line for the box", async () => {
@@ -250,22 +247,6 @@ describe("DevicesSettings", () => {
 });
 
 describe("use-devices helpers", () => {
-  it("routes a pinned phone or browser through main, the rest through the registry", () => {
-    const pinned = new Set(["p1", "b1"]);
-    expect(revokeRoute({ id: "p1", kind: "phone" }, pinned)).toBe("pairing");
-    expect(revokeRoute({ id: "b1", kind: "browser" }, pinned)).toBe("pairing");
-    expect(revokeRoute({ id: "p9", kind: "phone" }, pinned)).toBe("registry");
-    expect(revokeRoute({ id: "p1", kind: "worker" }, pinned)).toBe("registry");
-  });
-
-  it("says how a worker's code ended", () => {
-    expect(workerOutcome({ status: "paired" })).toBe("Added the worker.");
-    expect(workerOutcome({ status: "expired" })).toMatch(/expired/);
-    expect(workerOutcome({ status: "failed", error: "bad proof" })).toBe("Not added: bad proof");
-    expect(workerOutcome({ status: "failed" })).toMatch(/didn't check out/);
-    expect(workerOutcome({ status: "cancelled" })).toBe("Not added.");
-  });
-
   it("finds the bridge in the desktop app only", () => {
     expect(hostPairingBridge()).toBe(hosts);
     delete (window as unknown as { weft?: unknown }).weft;

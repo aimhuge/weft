@@ -18,7 +18,7 @@ function signer() {
   return { publicKey: () => publicKey, sign: (m: string) => crypto.sign(null, Buffer.from(m), pair.privateKey).toString("base64") };
 }
 
-function handlers(over: { confirm?: () => Promise<boolean> } = {}) {
+function handlers(over: { confirm?: () => Promise<boolean>; onGoose?: (host: string, goose: Record<string, string>) => void } = {}) {
   const map = new Map<string, (...args: unknown[]) => unknown>();
   const s = signer();
   const confirm = vi.fn(over.confirm ?? (() => Promise.resolve(true)));
@@ -27,6 +27,7 @@ function handlers(over: { confirm?: () => Promise<boolean> } = {}) {
     macDevice: () => "a".repeat(64),
     confirm,
     hostName: (id: string) => (id === "w1" ? "m1mini" : null),
+    ...(over.onGoose ? { onGoose: over.onGoose } : {}),
     now: () => 1_000,
   });
   return { call: (channel: string, ...args: unknown[]) => map.get(channel)?.(...args), s, confirm };
@@ -158,5 +159,18 @@ describe("Goose's provider on a worker", () => {
     expect(await widenProblem({ ...target, args: { patch: { gooseProviderId: "openai", maxThreads: 0 } } }, auth, "no", deps())).toMatch(/pairing Mac/);
     expect(await widenProblem({ ...target, change: { goose: { gooseProviderId: "custom" } } }, auth, "no", deps())).toMatch(/pairing Mac/);
     expect(await widenProblem(target, auth, "no", deps())).toBeNull();
+  });
+
+  it("records the provider and endpoint a worker's Goose key may go to, only once Touch ID passed", async () => {
+    const onGoose = vi.fn();
+    const h = handlers({ onGoose });
+    const change = { goose: { gooseProviderId: "anthropic", gooseBaseUrl: "https://gw" } };
+    await h.call("approval:widen", { host: "w1", card: "", verb: "settings.put", change, args: { patch: change.goose } });
+    expect(onGoose).toHaveBeenCalledWith("w1", change.goose);
+    await h.call("approval:widen", { host: "w1", card: "c1", verb: "card.update", change: { cwd: "app" }, args: { body: { cwd: "app" } } });
+    expect(onGoose).toHaveBeenCalledTimes(1);
+    const no = handlers({ onGoose, confirm: () => Promise.resolve(false) });
+    expect(await no.call("approval:widen", { host: "w1", card: "", verb: "settings.put", change, args: { patch: change.goose } })).toBeNull();
+    expect(onGoose).toHaveBeenCalledTimes(1);
   });
 });

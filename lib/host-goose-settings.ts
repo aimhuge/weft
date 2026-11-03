@@ -1,8 +1,8 @@
 // Goose's provider and endpoint on a Weft Worker (docs/architecture/weft-worker.md#goose-on-a-worker): where a Goose
 // card's traffic goes, so never synced and never a plain host setting. A settings.put carries them only with a signed
 // widening from the pairing Mac's Touch ID key (lib/host/dispatch.ts signedGoose, lib/widen-check.ts); this is the
-// worker's check and save once that approval checked out. The provider's key never travels: the worker's Goose reads
-// it from its own environment (worker.env) or its own `goose configure`.
+// worker's check and save once that approval checked out. The provider's key isn't a setting: each Goose turn asks the
+// paired Mac for it, which answers only for the provider and endpoint it signed here (lib/worker-goose-key.ts).
 import { gooseBaseUrl, gooseProviderId, setGooseBaseUrl, setGooseProviderId } from "./settings";
 import { providerById } from "./goose-provider";
 import type { GooseSettings } from "@weft/client";

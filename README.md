@@ -1000,8 +1000,10 @@ menu to switch simulators, **Resume** when the 10 minutes run out, and a Low / M
 live screen types your clipboard's text on the device (docs/architecture/weft-worker.md#the-fast-path).
 
 **Goose on a worker.** Settings → Threads → On a worker sets a worker's Goose provider and endpoint. They say where a Goose
-card's traffic goes, so Save asks Touch ID and the worker checks the Mac's signature; the provider's key doesn't travel
-yet (docs/architecture/weft-worker.md#goose-on-a-worker).
+card's traffic goes, so Save asks Touch ID and the worker checks the Mac's signature. The provider's key stays in your
+Mac's Keychain: each Goose turn on the worker asks for it, your Mac asks Touch ID naming the worker, provider and
+endpoint, and sends it sealed to that worker for that one Goose process, only for the provider and endpoint it set there
+(docs/architecture/weft-worker.md#goose-on-a-worker).
 
 **Local Simulator** (was Manual QA). Testing a worker's app by hand? The **host chip** at the top right of the card's pane, beside Share, names
 where the card runs ("m1mini", "m1mini + simulator" while one streams, "this Mac + simulator" in Local Simulator mode). Its menu starts the
