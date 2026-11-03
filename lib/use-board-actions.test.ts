@@ -3,7 +3,7 @@ import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Card } from "./types";
 
-const apiCreate = vi.fn<(...args: unknown[]) => Promise<{ card: Card | null; start?: { started: boolean; worker?: string } }>>();
+const apiCreate = vi.fn<(...args: unknown[]) => Promise<{ card: Card | null; start?: { started: boolean; worker?: string; cardId?: string } }>>();
 const apiWarm = vi.fn<(...args: unknown[]) => Promise<unknown>>();
 const apiSettings = vi.fn<() => Promise<{ reviewAllModel: string }>>();
 vi.mock("./client", () => ({
@@ -21,6 +21,7 @@ const lineWarm = vi.fn();
 vi.mock("./line-host", () => ({ actOnLine: vi.fn(), lineTransport: vi.fn(() => ({})), lineFiles: vi.fn(() => ({})), warmOnLine: (...args: unknown[]) => { lineWarm(...args); } }));
 
 const { useBoardActions } = await import("./use-board-actions");
+const { dropPending, pendingSnapshot } = await import("./worker-pending-cards");
 const { openCardById } = await import("./open-card");
 
 const card = (over: Partial<Card> = {}): Card =>
@@ -56,6 +57,7 @@ beforeEach(() => {
   startPileReview.mockReset();
   startPileReview.mockResolvedValue();
   localStorage.clear();
+  for (const c of pendingSnapshot()) dropPending(c.id);
 });
 
 afterEach(cleanup);
@@ -142,6 +144,47 @@ describe("useBoardActions", () => {
     });
     expect(id).toBeUndefined();
     expect(onSentToWorker).toHaveBeenCalledWith("m1mini");
+  });
+
+  it("draws a worker project's new card before the worker answers, under the id it sends", async () => {
+    let answer: (v: { card: null; start: { started: boolean; worker: string; cardId: string } }) => void = () => {};
+    apiCreate.mockImplementationOnce((input) => new Promise((res) => (answer = (v) => res({ ...v, start: { ...v.start, cardId: (input as { cardId: string }).cardId } }))));
+    const { result } = make();
+    let done: Promise<void> = Promise.resolve();
+    act(() => {
+      done = result.current.create({ prompt: "Fix it", cwd: "worker://w1/ling", backend: "claude", start: true });
+    });
+    const [drawn] = pendingSnapshot();
+    expect(drawn).toMatchObject({ title: "Fix it", cwd: "worker://w1/ling", column: "running" });
+    expect(apiCreate).toHaveBeenCalledWith(expect.objectContaining({ cardId: drawn?.id }));
+    await act(async () => {
+      answer({ card: null, start: { started: false, worker: "m1mini", cardId: "" } });
+      await done;
+    });
+    expect(pendingSnapshot()).toHaveLength(1);
+    dropPending(drawn!.id);
+  });
+
+  it("takes the drawn card off when the worker refuses", async () => {
+    apiCreate.mockRejectedValueOnce(new Error("m1mini is offline"));
+    const { result } = make();
+    await act(async () => {
+      await expect(result.current.create({ prompt: "Fix it", cwd: "worker://w1/ling", backend: "claude", start: true })).rejects.toThrow("offline");
+    });
+    expect(pendingSnapshot()).toEqual([]);
+  });
+
+  it("matches a run's card by its prompt when the worker names it (a thread with an agent)", async () => {
+    apiCreate.mockResolvedValueOnce({ card: null, start: { started: false, worker: "m1mini" } });
+    const { result } = make();
+    await act(async () => {
+      await result.current.create({ prompt: "Fix it", cwd: "worker://w1/ling", backend: "claude", agent: "builder", start: true });
+    });
+    const [drawn] = pendingSnapshot();
+    expect(drawn).toBeDefined();
+    const { withPending } = await import("./worker-pending-cards");
+    expect(withPending([card({ id: "named", cwd: "worker://w1/ling", prompt: "Fix it", createdAt: Date.now() })]).map((c) => c.id)).toEqual(["named"]);
+    dropPending(drawn!.id);
   });
 
   it("reviewAll resolves with no cwd and skips work", async () => {

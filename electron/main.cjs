@@ -1,6 +1,6 @@
 // Weft's desktop shell: starts and supervises the Next.js server, shows the board in a native
 // window with a side browser pane, keeps the copilot in its own window, and adds the macOS
-// pieces: menus, a menu bar icon, a dock menu and badge, a global copilot shortcut, and weft:// links.
+// pieces: menus, a menu bar icon, a dock menu and badge, global copilot and dictation shortcuts, and weft:// links.
 const {
   BaseWindow,
   BrowserWindow,
@@ -15,7 +15,6 @@ const {
   shell,
 } = require("electron");
 const crypto = require("node:crypto");
-const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { registerAboutBridge } = require("./about.cjs");
@@ -185,6 +184,7 @@ async function boot() {
   attachTokens(session, server.url, TOKEN);
   await startup.loadBoard(server.url);
   timer.mark("page");
+  dictation.start();
   for (const link of pendingLinks.splice(0)) handleLink(link);
 }
 
@@ -359,14 +359,13 @@ const menus = createMenus({
 // The browser pane's IPC from the board (electron/pane-ipc.cjs).
 registerPaneIpc(ipcMain, { pane, isBoard: (sender) => Boolean(sender) && sender === appView?.webContents });
 ipcMain.on("copilot:toggle", () => toggleCopilot());
+const dictation = require("./dictation-setup.cjs").setupDictation({ ipcMain, getServer: () => server, listeners: () => [appView?.webContents, copilotWin?.webContents] });
 const killTerminals = registerTerminal(ipcMain, { isBoard: (sender) => Boolean(sender) && sender === appView?.webContents });
 require("./claude-sign-in.cjs").setupClaudeSignIn(ipcMain, { isBoard: (sender) => Boolean(sender) && sender === appView?.webContents });
 require("./folder-dialog.cjs").registerFolderDialog(ipcMain, { dialog, window: () => win });
-ipcMain.on("shell:openExternal", (_e, url) => /^https?:\/\//i.test(String(url)) && shell.openExternal(String(url)));
 createMenuPopup({ ipcMain, Menu, BrowserWindow });
 require("./open-in.cjs").registerOpenIn(ipcMain, { shell });
 require("./print.cjs").setupPrint({ ipcMain, BrowserWindow, isBoard: (sender) => Boolean(sender) && sender === appView?.webContents });
-ipcMain.on("shell:reveal", (_e, folder) => path.isAbsolute(String(folder)) && fs.existsSync(String(folder)) && shell.openPath(String(folder)));
 // The account's Supabase client in main, reading and writing the shared vault's tables as the signed-in
 // user (docs/architecture/teams-vault.md). The session stays in the Keychain; the Keychain is asked for on
 // first use, because safeStorage only works once the app is ready.

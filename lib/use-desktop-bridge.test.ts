@@ -23,7 +23,7 @@ function card(id: string, column: Column = "running"): Card {
 }
 
 // The parts of window.weft (electron/preload.cjs) the hook touches, with handles to drive them.
-function installBridge(platform = "darwin", state: BrowserState = open) {
+function installBridge(platform = "darwin", state: BrowserState = open, extra: Record<string, unknown> = {}) {
   let browserListener: ((s: BrowserState) => void) | undefined;
   let copilotListener: ((s: { open: boolean }) => void) | undefined;
   const offBrowser = vi.fn();
@@ -47,6 +47,7 @@ function installBridge(platform = "darwin", state: BrowserState = open) {
       }),
     },
     setBadge: vi.fn(),
+    ...extra,
   };
   window.weft = bridge as unknown as ShellBridge;
   return {
@@ -114,6 +115,14 @@ describe("useDesktopBridge in the desktop app", () => {
     expect(result.current.copilotOpen).toBe(true);
     act(() => emitCopilot({ open: false }));
     expect(result.current.copilotOpen).toBe(false);
+  });
+
+  it("tells the desktop app the dictation key on mount", () => {
+    localStorage.clear();
+    const setShortcut = vi.fn();
+    installBridge("darwin", open, { dictation: { setShortcut } });
+    renderHook(() => useDesktopBridge(closed, null, []));
+    expect(setShortcut).toHaveBeenCalledExactlyOnceWith("Alt+'");
   });
 
   it("unsubscribes from both listeners on unmount", () => {

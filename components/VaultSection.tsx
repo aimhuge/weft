@@ -1,6 +1,6 @@
 "use client";
 
-// One project's vault: its name with Add and Import…, the nudge, and its secrets by environment. editing
+// One project's vault: its name with Add, Import… and Share…, the nudge, and its secrets by environment. editing
 // is set when the form is open in this vault: at the top when adding, in place of the row when changing one.
 
 import { keyLabel } from "@/lib/hotkeys";
@@ -74,21 +74,22 @@ export function VaultSection({
         <button onClick={onImport} className="rounded px-1.5 py-0.5 text-[11px] text-muted hover:bg-sunken hover:text-ink">
           Import…
         </button>
+        {!v.shared && !v.join && (
+          <ShareOffer
+            folder={v.folder}
+            org={shareTargets(orgs)[0] ?? null}
+            orgs={orgs}
+            bridge={bridge}
+            label={v.label}
+            repo={repoOf(v.id)}
+            secrets={v.secrets.filter((s) => !s.missing).length}
+            onShared={onShared}
+            notify={notify}
+          />
+        )}
       </div>
       {v.join && <JoinOffer folder={v.folder} join={v.join} bridge={bridge} onDone={onShared} notify={notify} />}
       {v.requests && <DeviceRequests requests={v.requests} bridge={bridge} onDone={onShared} notify={notify} />}
-      {!v.shared && !v.join && (
-        <ShareOffer
-          folder={v.folder}
-          org={shareTargets(orgs)[0] ?? null}
-          orgs={orgs}
-          bridge={bridge}
-          label={v.label}
-          repo={repoOf(v.id)}
-          onShared={onShared}
-          notify={notify}
-        />
-      )}
       <VaultVercel folder={v.folder} changed={v.secrets.map((s) => `${secretKey(s)}${s.missing ? "" : s.updatedAt}`).join("\n")} notify={notify} />
       {editing && !editing.fixed && form}
       {v.nudge && (

@@ -1,6 +1,7 @@
 import { catalog, freeTierCapLabel, PRO_PUKU_TOKENS, TEAM_SEAT_CENTS, type BlastcpTier, type PlanId } from "@/lib/billing/plans";
 import { planLink } from "@/lib/billing/plan-link";
 import AccessPlans from "./AccessPlans";
+import CloudWorkers from "./CloudWorkers";
 
 // The pricing section under the pillars (docs/architecture/billing.md). The three plans come from the catalog
 // in lib/billing/plans.ts, so a price change there moves this page too — the numbers below are read, not typed.
@@ -134,6 +135,7 @@ export default function Plans({ download = null }: { download?: PlanCta | null }
         ))}
       </div>
       <AccessPlans />
+      <CloudWorkers />
       <p className="wz-planNote">
         Weft is free to download and open source. Plans are per workspace, charged on weft.zip, and cancel any time.
       </p>

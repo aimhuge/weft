@@ -27,35 +27,35 @@ afterEach(() => {
 describe("readDictationPrefs", () => {
   it("gives the defaults when there's no file yet", async () => {
     const { readDictationPrefs } = await load();
-    expect(readDictationPrefs()).toEqual({ language: "system", advanced: false, vocabulary: "" });
+    expect(readDictationPrefs()).toEqual({ language: "system", advanced: false, vocabulary: "", sounds: true });
   });
 
   it("gives the defaults when the file is broken", async () => {
     write("{ not json");
     const { readDictationPrefs } = await load();
-    expect(readDictationPrefs()).toEqual({ language: "system", advanced: false, vocabulary: "" });
+    expect(readDictationPrefs()).toEqual({ language: "system", advanced: false, vocabulary: "", sounds: true });
   });
 
   it("reads what's stored", async () => {
-    write({ language: "de", advanced: true, vocabulary: "Weft, Supabase" });
+    write({ language: "de", advanced: true, vocabulary: "Weft, Supabase", sounds: true });
     const { readDictationPrefs } = await load();
-    expect(readDictationPrefs()).toEqual({ language: "de", advanced: true, vocabulary: "Weft, Supabase" });
+    expect(readDictationPrefs()).toEqual({ language: "de", advanced: true, vocabulary: "Weft, Supabase", sounds: true });
   });
 
   it("falls back to the default language when the stored one is unknown", async () => {
-    write({ language: "klingon", advanced: true, vocabulary: "x" });
+    write({ language: "klingon", advanced: true, vocabulary: "x", sounds: true });
     const { readDictationPrefs } = await load();
     expect(readDictationPrefs().language).toBe("system");
   });
 
   it("takes 'system' and 'auto' as languages", async () => {
-    write({ language: "auto", advanced: false, vocabulary: "" });
+    write({ language: "auto", advanced: false, vocabulary: "", sounds: true });
     const { readDictationPrefs } = await load();
     expect(readDictationPrefs().language).toBe("auto");
   });
 
   it("only treats advanced as on when it's exactly true", async () => {
-    write({ language: "en", advanced: "yes", vocabulary: "" });
+    write({ language: "en", advanced: "yes", vocabulary: "", sounds: true });
     const { readDictationPrefs } = await load();
     expect(readDictationPrefs().advanced).toBe(false);
   });
@@ -76,16 +76,16 @@ describe("readDictationPrefs", () => {
 describe("writeDictationPrefs", () => {
   it("writes the file and gives back what it wrote", async () => {
     const { writeDictationPrefs, DICTATION_FILE } = await load();
-    const prefs = writeDictationPrefs({ language: "fr", advanced: true, vocabulary: "Weft" });
-    expect(prefs).toEqual({ language: "fr", advanced: true, vocabulary: "Weft" });
+    const prefs = writeDictationPrefs({ language: "fr", advanced: true, vocabulary: "Weft", sounds: true });
+    expect(prefs).toEqual({ language: "fr", advanced: true, vocabulary: "Weft", sounds: true });
     expect(DICTATION_FILE).toBe(path.join(dir, "dictation.json"));
-    expect(JSON.parse(fs.readFileSync(DICTATION_FILE, "utf8"))).toEqual({ language: "fr", advanced: true, vocabulary: "Weft" });
+    expect(JSON.parse(fs.readFileSync(DICTATION_FILE, "utf8"))).toEqual({ language: "fr", advanced: true, vocabulary: "Weft", sounds: true });
   });
 
   it("keeps the settings it isn't given", async () => {
     const { writeDictationPrefs, readDictationPrefs } = await load();
-    writeDictationPrefs({ language: "de", advanced: true, vocabulary: "Weft" });
-    expect(writeDictationPrefs({ vocabulary: "tsc" })).toEqual({ language: "de", advanced: true, vocabulary: "tsc" });
+    writeDictationPrefs({ language: "de", advanced: true, vocabulary: "Weft", sounds: false });
+    expect(writeDictationPrefs({ vocabulary: "tsc" })).toEqual({ language: "de", advanced: true, vocabulary: "tsc", sounds: false });
     expect(readDictationPrefs().language).toBe("de");
   });
 
@@ -110,6 +110,18 @@ describe("writeDictationPrefs", () => {
   it("turns down an advanced that isn't true or false", async () => {
     const { writeDictationPrefs } = await load();
     expect(() => writeDictationPrefs({ advanced: "yes" })).toThrow("advanced must be true or false.");
+  });
+
+  it("turns the pill's sounds off and back on", async () => {
+    const { writeDictationPrefs, readDictationPrefs } = await load();
+    expect(writeDictationPrefs({ sounds: false }).sounds).toBe(false);
+    expect(readDictationPrefs().sounds).toBe(false);
+    expect(writeDictationPrefs({ sounds: true }).sounds).toBe(true);
+  });
+
+  it("turns down sounds that aren't true or false", async () => {
+    const { writeDictationPrefs } = await load();
+    expect(() => writeDictationPrefs({ sounds: "loud" })).toThrow("sounds must be true or false.");
   });
 
   it("turns down a vocabulary that isn't text", async () => {

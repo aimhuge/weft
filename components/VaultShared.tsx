@@ -4,9 +4,10 @@ import { useState } from "react";
 import type { VaultBridge, VaultSummary } from "@/lib/vault-view";
 import { keyVersionTitle, shareTargets, type VaultDeviceRequest, type VaultJoin, type VaultOrg } from "@/lib/vault-shared";
 import Icon from "./Icon";
+import { VaultShareDialog } from "./VaultShareDialog";
 
 // The shared vault's pieces of the 🔐 drawer (docs/architecture/teams-vault.md, "What the 🔐 drawer
-// shows"): the badge on a shared vault's header and the offer to share a local one with a workspace.
+// shows"): the badge on a shared vault's header and the Share… that offers a local one to a workspace.
 
 export function SharedBadge({ vault }: { vault: VaultSummary }) {
   const shared = vault.shared;
@@ -23,8 +24,9 @@ export function SharedBadge({ vault }: { vault: VaultSummary }) {
   );
 }
 
-// The banner at the top of a local vault: share it with a workspace. Only offered when the user is
-// in a workspace with someone else in it — a team of one has nobody to share with (Q15).
+// Share… in a local vault's header, beside Add and Import…: it opens a dialog that says what sharing
+// hands over before it shares. Only offered when the user is in a workspace with someone else in it —
+// a team of one has nobody to share with (Q15).
 export function ShareOffer({
   folder,
   org,
@@ -32,6 +34,7 @@ export function ShareOffer({
   bridge,
   label,
   repo,
+  secrets = 0,
   onShared,
   notify,
 }: {
@@ -46,11 +49,14 @@ export function ShareOffer({
   // The vault's label and repo, for the server's row.
   label?: string;
   repo?: string;
+  // How many secrets the vault holds, for the dialog.
+  secrets?: number;
   // Called once the vault is shared, so the drawer loads the new header.
   onShared: () => void;
   // Shows an error as a toast.
   notify: (err: unknown) => void;
 }) {
+  const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [picked, setPicked] = useState(org?.id ?? "");
   const share = bridge?.share?.bind(bridge);
@@ -63,6 +69,7 @@ export function ShareOffer({
     setBusy(true);
     try {
       const { keptLocal } = await share(folder, chosen.id, repo, label);
+      setOpen(false);
       onShared();
       if (keptLocal?.length) notify(new Error(`Shared. ${keptLocal.join(", ")} stayed on this Mac: the team vault only takes upper-case names.`));
     } catch (err) {
@@ -73,32 +80,29 @@ export function ShareOffer({
   };
 
   return (
-    <div className="mx-1.5 mt-1.5 flex items-center gap-1.5 rounded-md border border-accent/40 bg-accent-soft px-2 py-1.5 text-[11px] leading-snug text-accent">
-      {choices.length > 1 ? (
-        <select
-          value={chosen.id}
-          onChange={(e) => setPicked(e.target.value)}
-          aria-label="Workspace to share with"
-          className="min-w-0 flex-1 rounded border border-line-strong bg-card px-1 py-0.5 text-[11px] text-ink"
-        >
-          {choices.map((o) => (
-            <option key={o.id} value={o.id}>
-              {o.name}
-            </option>
-          ))}
-        </select>
-      ) : (
-        <span className="min-w-0 flex-1 truncate">Share this vault with {chosen.name}</span>
-      )}
+    <>
       <button
         type="button"
-        onClick={() => void run()}
-        disabled={busy || !repo}
-        className="shrink-0 rounded-md bg-accent px-2 py-0.5 text-[11px] font-medium text-on-accent disabled:opacity-50"
+        onClick={() => setOpen(true)}
+        disabled={!repo}
+        title={`Share this vault with ${chosen.name}`}
+        className="flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[11px] text-muted hover:bg-sunken hover:text-ink disabled:opacity-50"
       >
-        Share
+        <Icon name="share" size={11} /> Share…
       </button>
-    </div>
+      {open && (
+        <VaultShareDialog
+          label={label}
+          secrets={secrets}
+          choices={choices}
+          chosen={chosen}
+          onPick={setPicked}
+          busy={busy}
+          onShare={() => void run()}
+          onClose={() => setOpen(false)}
+        />
+      )}
+    </>
   );
 }
 

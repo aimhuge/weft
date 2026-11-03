@@ -51,7 +51,7 @@ export default function DictationSettings() {
   }, [downloading]);
 
   if (!view) return null;
-  const change = (patch: { language?: string; advanced?: boolean; vocabulary?: string }) => {
+  const change = (patch: { language?: string; advanced?: boolean; vocabulary?: string; sounds?: boolean }) => {
     setError("");
     api
       .setDictationSettings(patch)
@@ -61,7 +61,7 @@ export default function DictationSettings() {
   const line = advancedLine(view);
   return (
     <section className="flex flex-col gap-3">
-      <SettingsSectionHeader title="Dictation" hint="The mic button and its shortcut turn speech into text on this Mac with whisper. Nothing you say leaves it." />
+      <SettingsSectionHeader title="Dictation" hint="The mic button and its shortcut turn speech into text on this Mac with whisper, in any app: the text is pasted where you're typing, or copied when there's no text box. Nothing you say leaves this Mac." />
       <section className="flex items-center justify-between gap-4">
         <div className="flex flex-col gap-0.5">
           <h3 className="text-[13px] font-medium text-ink">Language</h3>
@@ -101,6 +101,12 @@ export default function DictationSettings() {
         hint="Keeps a speech model loaded so text is back in about half a second. Downloads large-v3-turbo (~550 MB) once if this Mac has none, and holds 1-2 GB of memory while you dictate, freed after 5 idle minutes."
         on={view.prefs.advanced}
         onChange={(on) => change({ advanced: on })}
+      />
+      <SwitchRow
+        title="Start and stop sounds"
+        hint="A soft chime when the dictation pill starts listening and when it stops."
+        on={view.prefs.sounds}
+        onChange={(on) => change({ sounds: on })}
       />
       {line && <p className={`text-[12px] ${view.download.error ? "text-danger" : "text-muted"}`}>{line}</p>}
       {error && <p className="text-[12px] text-danger">{error}</p>}

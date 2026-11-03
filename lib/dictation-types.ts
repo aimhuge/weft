@@ -8,6 +8,8 @@ export interface DictationPrefs {
   advanced: boolean;
   // Names and terms whisper should expect, one per line or comma-separated.
   vocabulary: string;
+  // The floating pill's start and stop chimes (lib/dictation-chimes.ts).
+  sounds: boolean;
 }
 
 export interface DownloadState {

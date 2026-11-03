@@ -3,7 +3,8 @@
 // store for ones that reach the user's board (lib/worker-board-link.ts), keeping each tool's name and schema:
 //
 //   list_cards    this worker's cards and every other synced card of the owner's
-//   create_card   a project on this worker starts here; another host's gets a new_card (Mac) or run (worker) command
+//   create_card   a project on this worker starts here; another host's gets a new_card (Mac) or run (worker) command,
+//                 carrying no agent: that host starts it as the project's default (lib/host-agent.ts)
 //   create_cron   only for this worker's projects: a cron fires where its cards run, and the worker publishes its
 //                 crons for the Mac's ⏰ drawer (lib/worker-lists.ts)
 //   list_crons    this worker's crons, saying so, then the user's Mac crons read-only (lib/worker-mac-crons.ts)
@@ -13,10 +14,12 @@
 // (lib/changelog-stamp.ts runs in every runner), which is what the user sees once the worker pushes.
 import { firstMessage } from "./automations";
 import { listText, type ListOptions } from "./board-tools-format";
+import { agentElsewhereRefusal, defaultAgentNote, MAC_AGENT_UNKNOWN } from "./host-agent";
 import { getCard, listCards } from "./store";
 import type { Card, PermissionMode } from "./types";
 import { boardCards, boardLink, BOARD_READ, localFolder, remoteTarget } from "./worker-board-link";
 import { isMacCronId, MAC_CRON_REFUSED, macCronsSection } from "./worker-mac-crons";
+import { workerProjectPath } from "./worker-project";
 
 type Reply = { content: { type: "text"; text: string }[]; isError?: boolean };
 // A tool definition as lib/board-tools.ts makes them (the SDK's tool()); only the name and handler are read or replaced.
@@ -65,7 +68,7 @@ export async function workerListCards(opts: ListOptions): Promise<string> {
   return listText(await boardCards(listCards()), opts);
 }
 
-// What a new_card or run carries: never a mode or an agent; the host that runs it picks its own.
+// What a new_card or run carries: never a mode or an agent; the host that runs it picks its own (its project's default).
 function remotePayload(args: NewCardArgs): Record<string, unknown> {
   const payload: Record<string, unknown> = { prompt: args.prompt };
   if (args.title) payload.title = args.title;
@@ -91,9 +94,18 @@ export async function workerCreateCard(args: NewCardArgs, deps: WorkerBoardDeps)
     deps.start(card.id, firstMessage(card));
     return `Created and started ${card.id}: ${card.title}`;
   }
+  return sendElsewhere(args, link);
+}
+
+// A card for another host's project, as a new_card (a Mac) or run (a worker). It carries no agent, so a named one
+// passes only when it's that project's default, checked before anything is sent (lib/host-agent.ts).
+async function sendElsewhere(args: NewCardArgs, link: ReturnType<typeof boardLink>): Promise<string> {
   const to = remoteTarget(args.folder ?? "", await link.cards(BOARD_READ), link.workerId);
+  const project = to.where === "Mac" ? null : workerProjectPath(to.target.slice("worker:".length), to.folder);
+  const refused = project ? agentElsewhereRefusal(args.agent, project) : args.agent?.trim() ? MAC_AGENT_UNKNOWN : null;
+  if (refused) throw new Error(refused);
   const id = await link.newCard(to.target, to.folder, remotePayload(args));
-  const agent = args.agent ? " The agent isn't carried to another host yet: that project's default agent runs it." : "";
+  const agent = project ? defaultAgentNote(project) : " It gets that project's default agent there.";
   return `Sent to your ${to.where} for ${to.folder} (command ${id}). ${arrival(to.where, args.start)} list_cards shows the card after.${agent}`;
 }
 

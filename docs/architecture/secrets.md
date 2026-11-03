@@ -375,12 +375,13 @@ in memory only. The design, guarantees and limits are in
 
 Since T2 the rest of the tools work there too, each a device call signed by the worker's pairing key that main re-reads
 and answers from the vault the card's own repo names, through this Mac's clone of it (`electron/worker-vault.cjs`):
-`list` (names), `add_blank` and `ask_add` (blanks made here; the user fills them in 🔐 on the Mac), `set_value` (the value
+`list` (names), `add_blank` and `ask_add` (blanks made here; `ask_add`'s in-thread input on the desktop board fills this
+Mac's checkout of the repo, `lib/use-ask-folder.ts`, so the value never passes through the worker), `set_value` (the value
 sealed to this Mac's device key, stored after the usual Touch ID, which names the worker) and `push_to_vercel` (Touch ID,
 from this Mac's linked clone). A worker card's dev server gets the development set after a Touch ID at every start and
 restart, with no standing grant on a worker (`electron/worker-dev-env.cjs`), sealed to the worker and handed to
 `electron/secret-env.cjs` on its stdin. `fill_field` and `request_access` stay the Mac's: the pane and the grants are
-here. Lending the Mac's gog and gh sign-ins to a worker is not built: it needs a process boundary on the worker. The design, guarantees and limits are in
+here ([why fill_field isn't planned on a worker](#fill_field-on-a-weft-worker-not-planned)). Lending the Mac's gog and gh sign-ins to a worker is not built: it needs a process boundary on the worker. The design, guarantees and limits are in
 [project-hosts.md](project-hosts.md#the-vault-on-a-worker-t2-as-built).
 
 A worker card's **Goose provider key** (built 2026-11-03, `supabase/migrations/20261103160000_goose_key_ask.sql`, not
@@ -434,6 +435,27 @@ use   a run or dev server ask carries kept: {NAME: version} (outside the signatu
   a disk image without the home's key) opens nothing, and the Supabase row is blanked once taken. Revocation can't reach
   a box that never comes back online; a stolen box keeps what was kept on it. That is why it's off by default, behind a
   warning the user ticks, and never offered for production.
+
+### fill_field on a Weft Worker: not planned
+
+Weighed 2026-11-03 and left out. A worker card's browser is the worker's headless Chromium, and a worker card's
+`fill_field` is refused with why (`FILL_ON_WORKER` in `lib/secret-tools.ts`, `FILL_REFUSAL` in
+`lib/worker-browser-routes.ts`). The shape that was considered: the thread asks the Mac (a signed `worker_mac_ask` naming
+the card, the page's https origin and the selector), main asks Touch ID naming the worker, site and secret, seals the
+value to the worker's pinned box key for that one use, and the daemon types it over its CDP pipe and masks it in
+`read_page`, as `secret_use` does for `run`. Every step of that can be built; what it promises can't be kept:
+
+- **The thread would see it anyway.** `fill_field`'s promise is that the thread never has the value. On a worker the
+  daemon, its Chromium and every card run as one OS user, so code a thread runs (a script, `node -e`, a dependency's
+  postinstall) can read `seal-key.json` and the worker key, fetch the sealed row and open it, or read the value back out
+  of the renderer's memory or the profile under the browser's `--user-data-dir`. The Mac's pane is in Electron main's
+  process, which a thread's code can't attach to; the worker's has no such boundary.
+- **`run` is different on purpose.** `mcp__secrets__run` hands the value to a command the user reads and approves, which
+  could print it anyway, so the worker sharing a user with the thread adds nothing. A fill's approval names a site, not
+  code, so a leak to the thread's code would be one the Touch ID prompt never mentioned.
+- **What would make it safe** is the process boundary the dropped split would have given (cards as another OS user than
+  the daemon and its Chromium, [project-hosts.md](project-hosts.md#connectors-on-a-worker-not-planned)). Until then a
+  worker card fills a page by asking the user to, on their Mac, or uses `run` for a command that needs the value.
 
 ## Which card a vault request is for
 

@@ -1,5 +1,6 @@
 // The Composer's mic button: a pulse while recording, a spinner while transcribing, and the
-// elapsed time in monospace so it doesn't shift the rest of the bar.
+// elapsed time in monospace so it doesn't shift the rest of the bar. In the desktop app it starts the floating pill
+// (lib/use-desktop-dictation.ts), which also listens for the same key in every other app.
 import type { useDictation } from "@/lib/use-dictation";
 import { currentBinding, formatBinding } from "@/lib/shortcuts";
 import Icon, { Spinner } from "./Icon";
@@ -14,7 +15,7 @@ export default function ComposerMicButton({ dictation }: { dictation: ReturnType
   const recording = state === "recording";
   const tip = recording
     ? "Stop and insert the text (Esc cancels)"
-    : `Dictate (${formatBinding(currentBinding("dictation"))})`;
+    : `Dictate (${formatBinding(currentBinding("dictation"))})${typeof window !== "undefined" && window.weft?.dictation ? " · works in any app" : ""}`;
   return (
     <Tip text={tip} className="inline-flex">
       <button

@@ -228,9 +228,9 @@
       "icon": "build/icon.icns",
       "hardenedRuntime": true,
       "extendInfo": {
-        "NSAppleEventsUsageDescription": "Weft opens Terminal to run a command-line tool's login when it needs a real terminal.",
+        "NSAppleEventsUsageDescription": "Weft opens Terminal to run a command-line tool's login when it needs a real terminal, and pastes your dictation into the app you're typing in.",
         "NSDownloadsFolderUsageDescription": "Weft's threads read files you save to Downloads, like audio to transcribe or screenshots to look at.",
-        "NSMicrophoneUsageDescription": "Weft listens when you press the mic button, to type your prompt for you. The audio is transcribed on this Mac.",
+        "NSMicrophoneUsageDescription": "Weft listens when you press the mic button or the dictation key, to type for you in any app. The audio is transcribed on this Mac.",
         "LSUIElement": false
       },
       "artifactName": "Weft-${version}-${arch}.${ext}",

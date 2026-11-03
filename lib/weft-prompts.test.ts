@@ -181,7 +181,8 @@ describe("toolPrompts", () => {
     const parts = prompts.toolPrompts(true);
     const text = parts.join("\n\n");
     expect(text).toContain("Weft Worker");
-    expect(text).not.toContain("mcp__secrets__ask_add");
+    // The vault tools reach the Mac from a worker, so their prompt stays.
+    expect(text).toContain("mcp__secrets__ask_add");
     expect(text).toContain("mcp__webhooks__add_blank");
     expect(parts.at(-1)).toMatch(/^On this Weft Worker some of Weft's tools don't work yet/);
   });

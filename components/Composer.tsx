@@ -4,7 +4,7 @@ import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { Placeholder } from "@tiptap/extensions";
 import { Markdown } from "@tiptap/markdown";
-import { forwardRef, useEffect, useRef, useState, type ReactNode } from "react";
+import { forwardRef, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { mediaMarkdown } from "@/lib/media";
 import { LOOKS_LIKE_MARKDOWN } from "@/lib/composer-slash";
 import { useComposerHandle, type ComposerHandle } from "@/lib/composer-handle";
@@ -12,6 +12,7 @@ import { useSkillTypeahead } from "@/lib/use-skill-typeahead";
 import { useThreadTransport } from "@/lib/thread-transport";
 import { useComposerKeys } from "@/lib/use-composer-keys";
 import { useDictation } from "@/lib/use-dictation";
+import { useDesktopDictation } from "@/lib/use-desktop-dictation";
 import { useHandedFiles } from "@/lib/use-file-drop";
 import { removeFromEditor, SecretBars, useComposerSecrets } from "./SecretPaste";
 import { Media, NO_UPLOAD, insertFiles } from "./MediaNode";
@@ -166,7 +167,7 @@ const Composer = forwardRef<
     });
   }
 
-  const dictation = useDictation((text) => {
+  const recorder = useDictation((text) => {
     if (source !== null) {
       insertIntoSource(text);
       return;
@@ -181,6 +182,13 @@ const Composer = forwardRef<
       .insertContent(before && !/\s/.test(before) ? ` ${text}` : text)
       .run();
   });
+
+  // In the desktop app the floating pill records; the caret goes back here first so its text lands in this composer.
+  const focusForDictation = useCallback(() => {
+    if (source !== null) sourceBox.current?.focus();
+    else editor?.commands.focus();
+  }, [source, editor]);
+  const dictation = useDesktopDictation(recorder, focusForDictation);
 
   const { onKeyDownCapture, onKeyDown } = useComposerKeys({ typeahead, dictation, pickSkill });
 

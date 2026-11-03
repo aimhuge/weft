@@ -5,7 +5,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { VaultOverview } from "@/lib/vault-view";
 import type { ThreadItem } from "@/lib/types";
 import "./test-utils";
+import { AskProjectContext } from "@/lib/use-ask-folder";
 import SecretAskInput from "./SecretAskInput";
+
+const apiFetch = vi.hoisted(() => vi.fn<(url: string) => Promise<Response>>());
+vi.mock("@/lib/api-client", async (orig) => ({ ...(await orig<object>()), apiFetch: (url: string) => apiFetch(url) }));
 import { ThreadEntries, groupThread } from "./ThreadItems";
 
 const ask = { folder: "/dev/web", name: "SUPABASE_SECRET_KEY", environment: "preview" as const };
@@ -119,5 +123,33 @@ describe("SecretAskInput", () => {
     await userEvent.click(screen.getByRole("button", { name: "Tell Claude now" }));
     expect(onSend).toHaveBeenCalledWith("I added A (preview), B (preview) to the 🔐 vault.");
     expect(screen.getByText("Goes straight into the vault; Claude never sees it.")).toBeInTheDocument();
+  });
+
+  it("on a worker card, puts the value into this Mac's checkout of the repo, never the worker's folder", async () => {
+    const vault = shell();
+    apiFetch.mockResolvedValue(Response.json({ folder: "/dev/web" }));
+    const onAdded = vi.fn();
+    render(
+      <AskProjectContext.Provider value="worker://w1/web">
+        <SecretAskInput ask={{ ...ask, folder: "/home/worker/web" }} onAdded={onAdded} />
+      </AskProjectContext.Provider>,
+    );
+    await userEvent.type(await screen.findByLabelText("Value"), "v{Enter}");
+    expect(apiFetch).toHaveBeenCalledWith(`/api/worker-board?twin=${encodeURIComponent("worker://w1/web")}`);
+    expect(vault.overview).toHaveBeenCalledWith(["/dev/web"]);
+    expect(vault.set).toHaveBeenCalledWith("/dev/web", ask.name, "preview", "v");
+    expect(onAdded).toHaveBeenCalledWith("I added SUPABASE_SECRET_KEY (preview) to the 🔐 vault.");
+  });
+
+  it("on a worker card this Mac has no checkout of, points at the rail", async () => {
+    shell();
+    apiFetch.mockResolvedValue(Response.json({ folder: null }));
+    render(
+      <AskProjectContext.Provider value="worker://w1/web">
+        <SecretAskInput ask={{ ...ask, folder: "/home/worker/web" }} />
+      </AskProjectContext.Provider>,
+    );
+    expect(await screen.findByText(/this Mac has no checkout of the worker's project/)).toBeInTheDocument();
+    expect(screen.queryByLabelText("Value")).not.toBeInTheDocument();
   });
 });

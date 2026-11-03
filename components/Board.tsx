@@ -167,7 +167,7 @@ export default function Board() {
     project,
     latestCwd,
     notify,
-    onSentToWorker: (worker) => setToast(`Sent to ${worker}. Its card shows here in a moment.`),
+    onSentToWorker: (worker) => setToast(`Sent to ${worker}.`),
   });
   // Browser and copilot-lane state; the terminal drawer's is useTerminalDrawer, below.
   const { toggleBrowser, toggleCopilot, setCopilotState } = useBoardToggles({

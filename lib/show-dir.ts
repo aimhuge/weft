@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { DATA_DIR } from "./store";
 
@@ -10,11 +11,27 @@ export const SHOW_DIR = path.join(DATA_DIR, "show");
 // thread, since the system prompt tells each one to write its pages there. Without it the CLI's own
 // working-directory gate asked the user before a thread could write its own page (2026-10-31). The folder
 // is made first: the CLI drops a directory that isn't there and asks again.
+// The temp dirs ride along too: threads clone and build scratch copies in /tmp (and macOS's per-user tmpdir is
+// /var/folders/…/T, not /tmp), and each command there used to ask, dozens a turn (2026-11-02).
 export function sessionDirs(readScope: string[] | undefined): string[] {
   try {
     fs.mkdirSync(SHOW_DIR, { recursive: true });
   } catch {
     // An unwritable data dir: the thread asks, as before.
   }
-  return [...new Set([...(readScope ?? []), SHOW_DIR])];
+  return [...new Set([...(readScope ?? []), ...scratchDirs()])];
+}
+
+// Folders every thread may read and write with no prompt, whatever its permission mode: its pane pages and the temp
+// dirs, each as written and by its real path (/tmp is /private/tmp), so a command naming either form matches.
+export function scratchDirs(): string[] {
+  return [...new Set([SHOW_DIR, "/tmp", os.tmpdir()].flatMap((dir) => [dir, real(dir)]))];
+}
+
+function real(dir: string): string {
+  try {
+    return fs.realpathSync(dir);
+  } catch {
+    return dir;
+  }
 }

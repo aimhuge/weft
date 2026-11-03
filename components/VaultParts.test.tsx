@@ -72,10 +72,39 @@ describe("SharedBadge", () => {
 });
 
 describe("ShareOffer", () => {
-  it("offers to share a local vault with the workspace", () => {
+  const open = () => userEvent.click(screen.getByRole("button", { name: /Share…/ }));
+  const confirm = async () => {
+    await userEvent.click(screen.getByRole("checkbox"));
+    await userEvent.click(screen.getByRole("button", { name: "Share with Acme" }));
+  };
+
+  it("offers Share… in the header, with no dialog until it's clicked", () => {
     render(<ShareOffer folder="/dev/web" org={org()} orgs={[org()]} bridge={bridge()} label="o/web" repo="o/web" onShared={vi.fn()} notify={vi.fn()} />);
-    expect(screen.getByText("Share this vault with Acme")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Share" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Share…/ })).toHaveAttribute("title", "Share this vault with Acme");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("explains what sharing hands over and waits for the user to say they understand", async () => {
+    const share = vi.fn(() => Promise.resolve({ vaultId: "v1", repo: "o/web", keyVersion: 1, orgId: "o1" }));
+    render(<ShareOffer folder="/dev/web" org={org()} orgs={[org()]} bridge={bridge({ share })} label="o/web" repo="o/web" secrets={3} onShared={vi.fn()} notify={vi.fn()} />);
+    await open();
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toHaveTextContent("3 secrets in o/web");
+    expect(dialog).toHaveTextContent(/can't be taken back/);
+    expect(dialog).toHaveTextContent(/end-to-end encrypted/);
+    const go = screen.getByRole("button", { name: "Share with Acme" });
+    expect(go).toBeDisabled();
+    await userEvent.click(go);
+    expect(share).not.toHaveBeenCalled();
+  });
+
+  it("closes on Cancel without sharing", async () => {
+    const share = vi.fn();
+    render(<ShareOffer folder="/dev/web" org={org()} orgs={[org()]} bridge={bridge({ share })} label="o/web" repo="o/web" onShared={vi.fn()} notify={vi.fn()} />);
+    await open();
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(share).not.toHaveBeenCalled();
   });
 
   it("is hidden when the user is the only member of the workspace", () => {
@@ -92,17 +121,18 @@ describe("ShareOffer", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("shares the vault with the chosen workspace and reloads", async () => {
+  it("shares the vault with the chosen workspace, closes and reloads", async () => {
     const share = vi.fn(() => Promise.resolve({ vaultId: "v1", repo: "o/web", keyVersion: 1, orgId: "o1" }));
-    const b = bridge({ share });
     const onShared = vi.fn();
-    render(<ShareOffer folder="/dev/web" org={org()} orgs={[org()]} bridge={b} label="o/web" repo="o/web" onShared={onShared} notify={vi.fn()} />);
-    await userEvent.click(screen.getByRole("button", { name: "Share" }));
+    render(<ShareOffer folder="/dev/web" org={org()} orgs={[org()]} bridge={bridge({ share })} label="o/web" repo="o/web" onShared={onShared} notify={vi.fn()} />);
+    await open();
+    await confirm();
     await waitFor(() => expect(share).toHaveBeenCalledWith("/dev/web", "o1", "o/web", "o/web"));
-    expect(onShared).toHaveBeenCalled();
+    await waitFor(() => expect(onShared).toHaveBeenCalled());
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("offers a picker when the user is in more than one workspace", () => {
+  it("offers a picker in the dialog when the user is in more than one workspace", async () => {
     render(
       <ShareOffer
         folder="/dev/web"
@@ -115,8 +145,9 @@ describe("ShareOffer", () => {
         notify={vi.fn()}
       />,
     );
-    expect(screen.getByLabelText("Workspace to share with")).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "Beta" })).toBeInTheDocument();
+    await open();
+    await userEvent.selectOptions(screen.getByLabelText("Workspace to share with"), "o2");
+    expect(screen.getByRole("button", { name: "Share with Beta" })).toBeInTheDocument();
   });
 
   it("says the error as a toast and doesn't reload", async () => {
@@ -124,7 +155,8 @@ describe("ShareOffer", () => {
     const notify = vi.fn();
     const onShared = vi.fn();
     render(<ShareOffer folder="/dev/web" org={org()} orgs={[org()]} bridge={b} label="o/web" repo="o/web" onShared={onShared} notify={notify} />);
-    await userEvent.click(screen.getByRole("button", { name: "Share" }));
+    await open();
+    await confirm();
     await waitFor(() => expect(notify).toHaveBeenCalled());
     expect(onShared).not.toHaveBeenCalled();
   });

@@ -32,6 +32,7 @@ export function setBinding(id: string, binding: Binding | null) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(all));
   } catch {}
+  if (id === "dictation") syncDictationShortcut();
 }
 
 const MODIFIER_CODES = /^(Alt|Control|Meta|Shift|OS)(Left|Right)?$/;
@@ -95,4 +96,31 @@ export function formatBinding(b: Binding) {
     b.meta && (mac ? "⌘" : "Win+"),
   ].filter(Boolean);
   return mods.join("") + key;
+}
+
+// Electron's names for the keys whose accelerator isn't their CODE_LABELS character.
+const ACCELERATOR_KEYS: Record<string, string> = {
+  Space: "Space",
+  Enter: "Return",
+  Tab: "Tab",
+  Backspace: "Backspace",
+  ArrowUp: "Up",
+  ArrowDown: "Down",
+  ArrowLeft: "Left",
+  ArrowRight: "Right",
+};
+
+// A binding as an Electron accelerator ("Alt+'", "Command+Shift+D"), for the system-wide dictation key the desktop
+// app registers (electron/dictation-helper.cjs).
+export function bindingAccelerator(b: Binding) {
+  const key = ACCELERATOR_KEYS[b.code] ?? CODE_LABELS[b.code] ?? b.code.replace(/^(Key|Digit)/, "");
+  const mods = [b.ctrl && "Control", b.alt && "Alt", b.shift && "Shift", b.meta && "Command"].filter(Boolean);
+  return [...mods, key].join("+");
+}
+
+// Tells the desktop app which key starts dictation in every app. The binding lives in the board's localStorage, so
+// the board sends it at load and on every change; in a browser tab there's nothing to tell.
+export function syncDictationShortcut() {
+  if (typeof window === "undefined") return;
+  window.weft?.dictation?.setShortcut(bindingAccelerator(currentBinding("dictation")));
 }

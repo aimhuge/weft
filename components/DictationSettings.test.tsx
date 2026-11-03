@@ -11,7 +11,7 @@ const { default: DictationSettings, advancedLine } = await import("./DictationSe
 
 function view(over: Partial<DictationSettingsView> = {}): DictationSettingsView {
   return {
-    prefs: { language: "system", advanced: false, vocabulary: "" },
+    prefs: { language: "system", advanced: false, vocabulary: "", sounds: true },
     server: false,
     model: undefined,
     download: { downloading: false, received: 0, total: 0 },
@@ -38,7 +38,7 @@ describe("DictationSettings", () => {
   });
 
   it("renders the language picker with the saved language", async () => {
-    api.dictationSettings.mockResolvedValue(view({ prefs: { language: "fr", advanced: false, vocabulary: "" } }));
+    api.dictationSettings.mockResolvedValue(view({ prefs: { language: "fr", advanced: false, vocabulary: "", sounds: true } }));
     render(<DictationSettings />);
     const select = await screen.findByLabelText<HTMLSelectElement>("Dictation language");
     expect(select.value).toBe("fr");
@@ -53,7 +53,7 @@ describe("DictationSettings", () => {
   });
 
   it("shows the saved vocabulary in the box", async () => {
-    api.dictationSettings.mockResolvedValue(view({ prefs: { language: "system", advanced: false, vocabulary: "Weft, Supabase" } }));
+    api.dictationSettings.mockResolvedValue(view({ prefs: { language: "system", advanced: false, vocabulary: "Weft, Supabase", sounds: true } }));
     render(<DictationSettings />);
     const box = await screen.findByLabelText("Dictation vocabulary");
     expect((box as HTMLTextAreaElement).value).toBe("Weft, Supabase");
@@ -84,6 +84,14 @@ describe("DictationSettings", () => {
     render(<DictationSettings />);
     fireEvent.click(await screen.findByRole("switch", { name: "Advanced dictation" }));
     await waitFor(() => expect(api.setDictationSettings).toHaveBeenCalledWith({ advanced: true }));
+  });
+
+  it("shows the Start and stop sounds switch as on by default and turns it off", async () => {
+    render(<DictationSettings />);
+    const toggle = await screen.findByRole("switch", { name: "Start and stop sounds" });
+    expect(toggle.getAttribute("aria-checked")).toBe("true");
+    fireEvent.click(toggle);
+    await waitFor(() => expect(api.setDictationSettings).toHaveBeenCalledWith({ sounds: false }));
   });
 
   it("shows why a setting couldn't be saved", async () => {
@@ -183,7 +191,7 @@ describe("advancedLine", () => {
   });
 
   it("asks for whisper-server when Advanced dictation is on without it", () => {
-    expect(advancedLine(view({ prefs: { language: "system", advanced: true, vocabulary: "" } }))).toBe(
+    expect(advancedLine(view({ prefs: { language: "system", advanced: true, vocabulary: "", sounds: true } }))).toBe(
       "Needs whisper-server: brew install whisper-cpp",
     );
   });
@@ -192,7 +200,7 @@ describe("advancedLine", () => {
     expect(
       advancedLine(
         view({
-          prefs: { language: "system", advanced: true, vocabulary: "" },
+          prefs: { language: "system", advanced: true, vocabulary: "", sounds: true },
           server: true,
           model: "ggml-large-v3-turbo-q5_0.bin",
         }),
@@ -201,6 +209,6 @@ describe("advancedLine", () => {
   });
 
   it("says nothing when Advanced dictation is on with a server but no model", () => {
-    expect(advancedLine(view({ prefs: { language: "system", advanced: true, vocabulary: "" }, server: true }))).toBe("");
+    expect(advancedLine(view({ prefs: { language: "system", advanced: true, vocabulary: "", sounds: true }, server: true }))).toBe("");
   });
 });

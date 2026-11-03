@@ -16,8 +16,8 @@ applied to live Supabase. The desktop half: `electron/account-client.cjs` (main 
 the service role), `electron/device-fingerprint.cjs` and `registerDevice` on `electron/device-key.cjs`,
 `electron/vault-sync.cjs` (pull, push, the offline queue, Realtime), `electron/vault-grant.cjs` and
 `electron/vault-share.cjs` (the TOFU wrap and the first-time share), `electron/vault-rotate.cjs` (rotate on
-removal) and `electron/vault-recovery.cjs` (the 24 words). The board half: the shared badge and **Share this
-vault** in `components/VaultShared.tsx`, the event log tab in `components/VaultEventsList.tsx`, the conflict
+removal) and `electron/vault-recovery.cjs` (the 24 words). The board half: the shared badge and **Share…** in `components/VaultShared.tsx`
+(its confirm dialog, which spells out what sharing hands over, in `components/VaultShareDialog.tsx`), the event log tab in `components/VaultEventsList.tsx`, the conflict
 banner in `components/SecretRow.tsx`, and the workspace's **Devices** tab at `app/[orgSlug]/team/devices/`.
 
 **What is still open.** The rename path (Q8) is out of v1 — a renamed repo orphans the old vault, and the

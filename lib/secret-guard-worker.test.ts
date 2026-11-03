@@ -76,6 +76,17 @@ describe("a worker's home", () => {
     "python3 -c \"print(open('../../worker.json').read())\"",
   ])("refuses `%s`", (command) => expect(bash(command)).toContain("can't be read"));
 
+  // Isolated worker cards run in data/worktrees (lib/worktrees.ts); sealed, every call there was refused (2026-11-02).
+  it("opens the worktrees folder, save secret names and links out", () => {
+    const tree = path.join(data, "worktrees", "proj", "pool-1");
+    fs.mkdirSync(tree, { recursive: true });
+    fs.symlinkSync("../../../../worker.json", path.join(tree, "key.txt"));
+    expect(verdict("Read", { file_path: path.join(tree, "lib", "a.ts") })).toBeNull();
+    expect(bash(`cd ${tree} && sed -n 1p scripts/a.ts`)).toBeNull();
+    expect(verdict("Read", { file_path: path.join(tree, ".env") })).toContain("can't be read");
+    expect(verdict("Read", { file_path: path.join(tree, "key.txt") })).toContain("can't be read");
+  });
+
   it("refuses the data dir by its ~ path, which the folder gate never asks about", () => {
     expect(bash("cat ~/.weft-worker/data/shell-token")).toContain("can't be read");
     expect(bash("ls ~/.weft-worker/data/vault")).toContain("can't be read");

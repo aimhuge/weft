@@ -49,6 +49,14 @@ contextBridge.exposeInMainWorld("weft", {
     toggle: () => ipcRenderer.send("copilot:toggle"),
     onState: (callback) => listen("copilot:state", callback),
   },
+  // Dictate anywhere (electron/dictation-helper.cjs): the mic button starts the floating pill, and the board tells
+  // main which key to listen for in every app.
+  dictation: {
+    toggle: () => ipcRenderer.send("dictation:toggle"),
+    cancel: () => ipcRenderer.send("dictation:cancel"),
+    setShortcut: (accelerator) => ipcRenderer.send("dictation:shortcut", accelerator),
+    onState: (callback) => listen("dictation:state", callback),
+  },
   // Sign in to Claude for a Weft Worker (electron/claude-sign-in.cjs): resolves { token } or { error }.
   claudeSignIn: {
     start: (click) => ipcRenderer.invoke("claude-sign-in:start", click),

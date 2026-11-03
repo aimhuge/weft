@@ -140,6 +140,9 @@ describe("a worker's sealed thread", () => {
     expect(await workerThreadSearch("c1", "needle", client([[{ seq: 0, item: null }]]).client)).toEqual([]);
     // Sealed for a version main doesn't hold: the 🔒 stand-in, which no search for "Sealed" finds either.
     expect(await workerThreadSearch("c1", "Sealed", client([[other]]).client)).toEqual([]);
+    // A cut tool output sealed for a version main doesn't hold matches nothing either, its stand-in included.
+    const unheld = [{ tool_id: "t1", result: JSON.stringify(sealJson(s, "a needle", { version: 9, key: KEY.key }, aadFor("org-1", "c1", "tool:t1"))) }];
+    for (const q of ["needle", "Sealed"]) expect(await workerThreadSearch("c1", q, client([[sealed(1, cut)], unheld]).client)).toEqual([]);
   });
 
   it("opens a sealed picture into a data: URL, keeps a plain one signed, and reads each once", async () => {

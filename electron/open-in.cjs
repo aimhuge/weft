@@ -37,9 +37,11 @@ function runOpen(app, folder) {
   return new Promise((resolve, reject) => execFile("open", ["-a", app, folder], (err) => (err ? reject(err) : resolve())));
 }
 
-// deps.shell is Electron's; the rest are openIn's test seams.
+// The board's shell IPC: reveal a folder, open it in an app, open a web link in the default browser. deps.shell is
+// Electron's; the rest are openIn's test seams.
 function registerOpenIn(ipcMain, deps) {
   const { shell, exists = fs.existsSync } = deps;
+  ipcMain.on("shell:openExternal", (_e, url) => /^https?:\/\//i.test(String(url)) && shell.openExternal(String(url)));
   ipcMain.on("shell:reveal", (_e, folder) => path.isAbsolute(String(folder)) && exists(String(folder)) && shell.openPath(String(folder)));
   ipcMain.handle("shell:openIn", (_e, folder, target) => openIn(String(folder), String(target), deps));
 }

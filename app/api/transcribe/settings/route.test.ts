@@ -7,10 +7,10 @@ import { GET, PATCH } from "./route";
 // file is written, no model is fetched and no process is started.
 vi.mock("next/server", () => ({ connection: async () => {} }));
 
-const DEFAULTS: DictationPrefs = { language: "system", advanced: false, vocabulary: "" };
+const DEFAULTS: DictationPrefs = { language: "system", advanced: false, vocabulary: "", sounds: true };
 
 const prefs = vi.hoisted(() => ({
-  value: { language: "system", advanced: false, vocabulary: "" },
+  value: { language: "system", advanced: false, vocabulary: "", sounds: true },
   written: [] as Record<string, unknown>[],
   languages: ["system", "auto", "en", "fr", "de", "es"],
 }));
@@ -60,7 +60,7 @@ describe("GET /api/transcribe/settings", () => {
   it("returns the prefs and the advanced dictation's state", async () => {
     const res = await GET(new Request(URL_BASE, { headers: { host: "localhost" } }));
     expect(await res.json()).toEqual({
-      prefs: { language: "system", advanced: false, vocabulary: "" },
+      prefs: { language: "system", advanced: false, vocabulary: "", sounds: true },
       server: false,
       model: undefined,
       download: { downloading: false, received: 0, total: 0 },

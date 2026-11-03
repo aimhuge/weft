@@ -32,7 +32,7 @@ row was a missing command kind and a missing handler on the board, not a missing
 | --- | --- | --- |
 | Permission mode | PATCH `permissionMode` | default/acceptEdits/auto through the `mode` command; YOLO where the desktop app signs it (`transport.signsSkip`, through `actOnLine`'s [signed widening](#signed-widening-as-built), PR #74); no `plan` mid-card |
 | Model, CLI, effort on an open card | `switch-backend`, `rerun-model` | the model picker and the first-message banner's rerun, as `card.switchBackend` / `card.rerunModel` (H3); on the desktop the rerun takes your synced `backupModel`, on weft.zip the CLI's default (PR #75) |
-| Agent | PATCH `agent` | `card.update` with a signed approval ([Signed widening](#signed-widening-as-built)); your custom agents and worker-project defaults travel as the signed `agents` account setting, so a new thread there gets its project's default and Settings → Agents lists worker projects (PR #79) |
+| Agent | PATCH `agent` | `card.update` with a signed approval ([Signed widening](#signed-widening-as-built)); your custom agents and worker-project defaults travel as the signed `agents` account setting, so a new thread there gets its project's default and Settings → Agents lists worker projects (PR #79); a board tool's `create_card` to another host runs as that default ([Agents across hosts](#agents-across-hosts)) |
 | Rename, tags, star, archive, move, delete | PATCH, DELETE, `CardActions` | as `card.update` (H3), and `card.delete` (2026-11-02) |
 | Share… | `card-share`, `ShareCardDialog` | the same dialog over the rows the worker published (`lib/card-share-worker.ts`, 2026-11-02; sharing.md) |
 | ↑ edit, Restart, Fresh | `messages`, `fresh` | as host verbs (H3) |
@@ -40,24 +40,24 @@ row was a missing command kind and a missing handler on the board, not a missing
 | Allow on a request | `permission` | a Touch ID-signed Allow from the desktop (PR #80), a passkey's, or a paired phone's once the Mac endorsed it there (mobile-security.md, [Phones on a worker](mobile-security.md#phones-on-a-worker-h10-built-2026-11-03)); a local card signs its phone-only Allows too |
 | Wait, Me first, Others first | `permission` | as host verbs, on the tile and in the thread (H3) |
 | Stop a subagent task | `tasks/[taskId]/stop` | `card.stopTask` (H3) |
-| Attachments in a reply | `/api/attachments` | images and PDFs travel as blobs on `reply`, `run` and `new_card` (`lib/attachment-transfer.ts`), sealed when the card's row is (PR #94); a brand-new worker thread's files still go plain |
+| Attachments in a reply | `/api/attachments` | images and PDFs travel as blobs on `reply`, `run` and `new_card` (`lib/attachment-transfer.ts`), sealed when the card's row is (PR #94); a brand-new worker thread's with the newest version this Mac granted its worker (`workerBlobSeal`) |
 | Send later | `desktop: true` | `card.schedule` / `card.unschedule`, the worker's daemon holding the timer (H3b) |
 | "/" skills list | `/api/skills?cwd=` | `skills.list`, the worker's own list for the card's checkout (H3b) |
 | Plan limits meter, "at its cap" | this Mac's limits log | the card's own reading and the worker's burndown (H3b, WP3); the model pickers' caps from the `m` caps the worker publishes in `cloud_workers.limits` (`/api/limits/plans?worker=`, `useLimitedModels(cwd)`, PR #75) |
 | Settings | this Mac's settings.json | account settings synced from the Mac, host settings per worker in Settings → Threads (WP3); Goose's provider as a `settings.put` signed by the pairing Mac (PR #81), its key per turn from the Mac after Touch ID (PR #93) |
-| Streaks and XP | this Mac's activity log | the worker's cards count too (WP3); a Run on Worker card's local record is marked `handedOff` and left out (`lib/activity.ts` `withoutHandedOff`, PR #75) |
+| Streaks and XP | this Mac's activity log | the worker's cards count too (WP3), a card that ran across days on each day a turn ended (`lib/worker-turn-times.ts`); a Run on Worker card's local record is marked `handedOff` and left out (`lib/activity.ts` `withoutHandedOff`, PR #75) |
 | Show rail, pane, editor | Board's open card | the show rail (H3); the card's uploaded pages and sites in the native `BrowserPane` (PR #78, `WebPane` kept for the live screen); the editor and file links through `files.*` (H4), reloading when the file changes on the worker (`files.watch`, PR #86) |
 | Review tour | `desktop: true` | the tour and the no-tour panel (card data), each step's page in the card's pane column (`lib/pane-open.ts`); no dev server step |
 | Skills menu, Run /skill | `/api/skills`, `api.send` | the header menu (its list from `skills.list`) and the right-click Run /<skill>, as `card.message` |
 | Skill set chip, ⏰ crons | `desktop: true` | the chip as `card.update { skill }` over the worker's `skills.list`; ⏰ as `cron.create` through `hostOf(card).act`, the worker narrowing the mode (PR #79) |
-| ⌘F over the whole thread | `/thread/search` | `GET /api/worker-board?card=&q=` over the card's `cloud_thread_items`, cut tool results paged in from `cloud_tool_outputs` first (`workerThreadSearch`, PR #75), sealed rows opened with the workspace key where it's granted (PR #92); a sealed tool output matches nothing |
+| ⌘F over the whole thread | `/thread/search` | `GET /api/worker-board?card=&q=` over the card's `cloud_thread_items`, cut tool results paged in from `cloud_tool_outputs` first (`workerThreadSearch`, PR #75), sealed rows and cut tool outputs opened with the workspace key where it's granted (PR #92); only one sealed for a version this Mac doesn't hold matches nothing |
 | Pictures in the thread | `/api/attachments/<name>` | blob refs signed through `GET /api/worker-board?blobs=` and drawn by the transport's `useView` (`lib/worker-blob-view.ts`), opened in the browser when sealed (PR #87) |
 | New thread, Backlog | POST `/api/cards` | `card.create` (tags, CLI, model, effort, mode, Isolated; `start: false` is the worker's Backlog), Backlog reorder as `card.update { before }` (board parity) |
 | Isolated | the warm worktree pool | the daemon's own pool, landing on Done as on the Mac (board parity) |
 | Notifications, dock badge | `board-live` announce, chimes | the same `noticeCard` per read (`useWorkerNotices`); the badge counts every card on the board (board parity) |
 | Rail drawers, mini apps | the project's folder | 🔐 and the provider drawers through this Mac's checkout of the repo; Services with Log, Restart and Stop; issues as runs; Save as app on its pages (T5) |
 | Streaming | SSE | over the session line, reply text typing out from `delta` events (H6, PR #86); a 2.5 s poll on the relay |
-| Secrets | the 🔐 vault in main | `mcp__secrets__run`, the other secrets tools and a dev server's env through the Mac's Touch ID (H8, T2), optionally kept on the worker (PR #88); `fill_field` stays the Mac's |
+| Secrets | the 🔐 vault in main | `mcp__secrets__run`, the other secrets tools and a dev server's env through the Mac's Touch ID (H8, T2), optionally kept on the worker (PR #88); `ask_add`'s in-thread input fills this Mac's checkout of the repo (`lib/use-ask-folder.ts`); `fill_field` stays the Mac's, by design ([secrets.md](secrets.md#fill_field-on-a-weft-worker-not-planned)) |
 | weft.zip and the phone | | any verb as a `host` command (H2); weft.zip opens its own session line to your worker cards, through TURN (PRs #89, #91); the phone still sends rows, not lines |
 
 ## The idea: a project has a host
@@ -639,9 +639,13 @@ check at a time) and refuses the card if it later names another. A card the work
 command expired (finished commands go after a day) before it first reached the vault, is refused with a message to
 start a new card. The folder isn't in the signed message: the worker's secrets tools know the checkout's
 path, not the name the publisher put on the row, and the signed remote already has to match. A blank's source says
-"a thread on the worker m1mini". `ask_add` on a worker makes the blank and tells the thread the user fills it in 🔐 on
-the Mac: the in-thread input (`SecretAskInput`) is left off a worker card's item (`threadAskOf`, `lib/runner-turn.ts`),
-because its folder means nothing to the Mac's vault. A run or push that finds a name missing makes it a blank the same way.
+"a thread on the worker m1mini". `ask_add` on a worker makes the blank on the Mac, and the worker marks the tool item with
+the ask as a Mac's runner does (`secretAskOf`, `lib/runner-turn.ts`), so the desktop board draws the in-thread input (`SecretAskInput`). The item's folder is the worker's checkout, which means
+nothing to the Mac's vault, so the open card says it's a worker project (`AskProjectContext`, `lib/use-ask-folder.ts`) and
+the input asks this Mac's server for its twin, the checkout of the same repo (`GET /api/worker-board?twin=`,
+`lib/worker-twin-mac.ts`, by folder name as `electron/worker-projects.cjs` does): the value goes from the input to main's
+`vault.set` for that folder and never through the worker, and the thread hears "I added …" as a reply. With no twin the
+input says to add it with 🔐; weft.zip, with no vault, says the same. A run or push that finds a name missing makes it a blank the same way.
 
 **2. set_value, push_to_vercel, fill_field.** `set_value`'s value is sealed by the worker to the Mac it was paired with
 (`lib/mac-box.ts`: libsodium's sealed box to the X25519 twin of the Mac's Ed25519 device key, the one key the pairing
@@ -696,8 +700,7 @@ writes and runs as the same user can read a running server's env, so a dev serve
 the worker's cards are trusted. The device_calls row of a
 `set_value` keeps its sealed bytes while it waits, until it's answered or swept.
 
-**Follow-ups.** `fill_field` on the worker's browser once T4 can hold a field to a site, the in-thread `ask_add` input for
-a worker card, and the folder in the signed ask once the worker's secrets tools know the published name. Routing asks to
+**Follow-ups.** `fill_field` on the worker's browser once T4 can hold a field to a site, and the folder in the signed ask once the worker's secrets tools know the published name. Routing asks to
 the pairing Mac is built (PR #85). Lending gog and gh is not planned
 ([below](#connectors-on-a-worker-not-planned)).
 
@@ -952,7 +955,8 @@ webhook" in a board nobody sees. Now the tools that write the board reach the us
   `worker_new_card`, which inserts a `new_card` (a Mac the owner has synced cards from) or `run` (another worker of the
   owner's, headless and not revoked, same workspace) as the owner, so the target's inbox applies its usual checks: a
   Mac's synced folder, a worker's work root. `start: false` travels in the payload (`NewCardPayload.start`,
-  `newCardBody`, `runBody`). An agent isn't carried to another host yet; the reply says so.
+  `newCardBody`, `runBody`). No agent travels: the target starts it as that project's default
+  ([Agents across hosts](#agents-across-hosts)).
 - **A worker's card never runs unasked elsewhere.** A worker key belongs to a box, and a thread's prompt can be injected,
   so `worker_new_card` treats both as untrusted: it rebuilds the payload from `prompt`, `title`, `tags` and
   `start: false` alone (no mode, agent, model, repo or attachments) and stamps it `fromWorker: <id>`, which only the
@@ -989,14 +993,41 @@ webhook" in a board nobody sees. Now the tools that write the board reach the us
   all hear it before the tool runs. Landing a tool on workers is flipping its entry to `true`.
 - **Migration** `supabase/migrations/20261102210000_worker_board_tools.sql`: `worker_board_cards`, `worker_new_card`,
   `cloud_worker_lists` and `worker_set_lists`. Applied.
-- **Not yet:** an agent on a card sent to another host. Changing a Mac's cron from a worker is refused by design (below).
+- **Changing a Mac's cron from a worker** is refused by design (below).
 - **The other way, built and landing (PR #83).** This Mac's board tools reach worker cards: `list_cards` merges the
   workers' boards and `read_thread` reads a worker thread from its synced pages (`lib/board-tools-hosts.ts`,
   `lib/worker-board-reach.ts`); `create_card` on a `worker://` project (or a name only a worker has) starts it there
-  through `startWorkerThread`, always in `default`, an agent refused until a thread can carry a signed approval; the
+  through `startWorkerThread`, always in `default`, as the project's default agent ([below](#agents-across-hosts)); the
   copilot's tags, start, reply, move, stop and answer on worker cards go as `card.update` / `card.message` /
   `card.stop` / `card.permission.answer` rows (`lib/board-tools-copilot.ts`), queued when the worker is offline. Once
   PR #80 lands, an Allow from the copilot is refused unsigned, by design.
+
+### Agents across hosts
+
+Built 2026-11-03. Choosing an agent for a card on another host is a [signed widening](#signed-widening-as-built) only
+Weft's own window signs, and a thread's tool can't, so `create_card` to another host never carries one. It doesn't need
+to: every host already starts a card that names none as its project's default, and since PR #79 a worker project's
+default is a Mac-signed account setting the worker mirrors (`lib/agent-sync.ts`). So the tools send no agent and say
+which one runs it; a named agent passes only when it is that default, and any other is refused before anything is sent
+(`lib/host-agent.ts`).
+
+```
+create_card(folder, agent?)              the default the target uses           check, before sending
+Mac ──▶ worker://<id>/<f>   card.create  worker-kinds defaultAgent (signed)     Mac's projectAgent(worker path) ?? builder
+worker ──▶ worker://<id2>/<f>  run       worker-kinds defaultAgent (signed)     the mirrored projectAgent(path) ?? builder
+worker ──▶ a Mac folder     new_card     new-card.ts marksFromBody: projectAgent  unknown on a worker: any named agent refused
+```
+
+- **Mac → worker** (`createWorkerCard`, `lib/board-tools-hosts.ts`): the Mac is where worker-project defaults are set,
+  so its own `projectAgent(worker://…)` is what the worker will use. The reply ends "It runs as Copywriter (copywriter),
+  that project's default agent."
+- **Worker → worker** (`workerCreateCard`, `lib/worker-board-tools.ts`): the sending worker reads the target project's
+  default from the same signed setting it mirrors. A worker that trusts no Mac starts every card as Builder.
+- **Worker → Mac**: a Mac folder's default stays on the Mac (`workerProjectAgents` mirrors worker projects only), so a
+  worker can't check a name: any named agent is refused (`MAC_AGENT_UNKNOWN`), and without one the card lands in
+  Backlog with the Mac project's default (`createCardFromBody`), for the user to change before starting it.
+- **Threat.** Nothing widens: the agent a card runs as is one the user picked in Settings → Agents, signed where it
+  crosses to a worker, and `worker_new_card` still strips `agent` from a worker's payload in the database.
 
 ### Crons and webhooks both ways (as built)
 
@@ -1495,12 +1526,14 @@ applied on production.
   (`lib/worker-approve.ts`, `answerAsKind` on), with a clear refusal for older Macs. Roll-out: update the Mac before
   its workers, or Allows on worker cards are refused and the request stays waiting.
 - **This Mac's board tools reach worker cards** (PR #83): [Board tools on a worker](#board-tools-on-a-worker).
-- **Phones on a worker and a local card's signed Allow** (builds on PR #80). Settings → Devices → Passkeys also endorses
+- **Phones on a worker and a local card's signed Allow** (PR #96, with PR #80). Settings → Devices → Passkeys also endorses
   this Mac's paired phones to the worker (`weft-endorse-v3`, v2 unchanged when there are none), and the worker takes an
   endorsed phone's signed Allow behind the same heads as a passkey (`lib/host-signers.ts` `verifyAnswer`); answers only.
   On this Mac, an Allow on a phone-only ask is signed by main after Touch ID and checked by
   `POST /api/cards/<id>/permission` (`lib/local-approve.ts`), and the copilot can't give one. No migration
   (mobile-security.md, "Phones on a worker" and "A local card's Allow").
+- **Agents across hosts** (this change, on top of PR #83): a card a board tool sends to another host runs as that
+  project's default agent; another named agent is refused with why ([Agents across hosts](#agents-across-hosts)).
 
 ## Still open
 
@@ -1512,15 +1545,35 @@ Plainly, as of 2026-11-03:
 - **Passkey re-pair at weft.zip.** Designed only
   ([weft-worker.md](weft-worker.md#a-passkey-approved-re-pair-designed-not-built)): it needs a phone approver and a
   console code.
-- **The phone app wiring `openLine`**, so the phone opens session lines as weft.zip now does.
-- **Sealing files pasted into a brand-new worker thread** (no row yet to take the seal version from).
 - **Connectors.** Lending the Mac's gog and gh sign-ins to a worker is not planned: it would need a process boundary,
   and the process split is dropped ([Connectors](#connectors-on-a-worker-not-planned)).
-- **Smaller gaps.** An agent on a card sent to another host; `fill_field` on a worker's browser; the in-thread `ask_add`
-  input on a worker card; the streak counting a worker's turns; a sealed tool output matching ⌘F.
+- **The phone app wiring `openLine`** lives in its own repo, `aimhuge/weft-mobile` (`~/dev/weft-mobile`, [mobile.md](mobile.md)).
+- **Smaller gaps.** An agent on a card sent to another host. Closed on 2026-11-03
+  ([below](#small-gaps-closed-on-2026-11-03)): the in-thread `ask_add` input on a worker card, the streak counting each day
+  a worker's turns ended, a sealed tool output matching ⌘F, and sealing files pasted into a brand-new worker thread.
+- **Not planned: `fill_field` on a worker's browser.** Cards on a worker run as the daemon's OS user, so a value the Mac
+  seals to the worker for typing can be opened by any code a card there runs, breaking fill_field's promise that the
+  thread never sees it ([secrets.md](secrets.md#fill_field-on-a-weft-worker-not-planned)).
 - **Checked by hand, not yet done.** The LAN path on a real LAN; Electron against a real worker through TURN; Android's
   H.264 live screen on a device (decode and the switch before 3 minutes); the hand checks listed on PRs #78, #81, #86,
   #87, #88, #89 and #92; `CLOUDFLARE_TURN_KEY_ID` / `CLOUDFLARE_TURN_KEY_API_TOKEN` on Vercel production for weft.zip's TURN.
+
+### Small gaps closed on 2026-11-03
+
+- **The streak on a worker's days.** `lib/worker-activity.ts` dated a worker card's turns on its last active day, so a card
+  that ran Monday to Wednesday kept the streak for Wednesday alone. Now a card made on one day and last active on another
+  has its turn times read (`lib/worker-turn-times.ts`: the `at` of its `result` rows in `cloud_thread_items`, plain
+  columns even when the worker seals the item, in chunks of 100 cards and pages of 1000 rows, at most 20,000), and its one
+  `turns:<id>` event becomes one per day (`turns:<id>:<day>`, `turnDays`). Turns with no time count on the last active
+  day, so the total stays the card's; a failed read keeps the old single event.
+- **⌘F over sealed tool outputs.** Built with PR #92: `fillCutResults` opens each cut output with main's keyring
+  (`openOutput`) before matching. Pinned by a test, along with one sealed for a version main doesn't hold, which matches
+  nothing (its 🔒 stand-in included).
+- **The in-thread `ask_add` input** ([The vault on a worker](#the-vault-on-a-worker-t2-as-built)): the worker marks the
+  item, the board fills the value into this Mac's twin of the repo.
+- **Files pasted into a brand-new worker thread.** There's no card row to take a seal version from, so `withAttachments`
+  takes the worker's newest `worker_key_grants` version (`workerBlobSeal`, `lib/worker-board-open.ts`, read as the owner
+  under RLS) and seals with it when main holds that version; plain with no grant, as the worker then publishes plain too.
 
 ## Phases
 

@@ -101,4 +101,9 @@ describe("Plans", () => {
     expect(names).toEqual(["Startups", "Open source", "Education", "Regional pricing"]);
     expect(container.querySelectorAll(".wz-accessSoon")).toHaveLength(4);
   });
+
+  it("asks for Cloud Workers requests under the access row", () => {
+    const { container } = render(<Plans />);
+    expect(container.querySelector("#wz-access + #wz-cloud form")?.getAttribute("action")).toBe("/api/cloud-workers/request");
+  });
 });
