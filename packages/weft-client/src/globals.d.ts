@@ -19,3 +19,9 @@ declare class URLSearchParams {
   set(name: string, value: string): void;
   toString(): string;
 }
+
+// A pasted file a transport uploads; only its shape is named here.
+declare interface Blob {
+  readonly size: number;
+  readonly type: string;
+}

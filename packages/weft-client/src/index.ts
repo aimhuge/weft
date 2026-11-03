@@ -139,3 +139,5 @@ export {
 export { pendingView, type PendingPermission, type PromptReason } from "./pending";
 export { pendingItem, unsent, type PendingSend } from "./pending-sends";
 export { findableText, findCount, matchThread, plainMarkdown, spotAt, totalHits, type FindMatch, type FindSpot } from "./thread-find";
+export type { MediaKind, UploadedAttachment } from "./attachment";
+export { mergePage, SHELL_ELSEWHERE, type PageUpdate, type ThreadTransport } from "./transport";

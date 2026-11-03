@@ -5,11 +5,12 @@
 // Supabase session lives there and not in the renderer. It has no Realtime, so an open thread re-reads its newest
 // page every couple of seconds. Like the web's, it leaves out what only the machine running the card can do.
 import { useEffect, useRef } from "react";
+import { mergePage, SHELL_ELSEWHERE } from "@weft/client";
 import { apiFetch } from "./api-client";
 import { api } from "./client";
 import type { HostArgs } from "./host-command";
 import { firstNow, otherFirstNow, stopNow, waitNow } from "./optimistic-cards";
-import { applyThreadEvent, type ThreadPage } from "./thread-page";
+import type { ThreadPage } from "./thread-page";
 import type { Device } from "./simulator-devices";
 import type { PageUpdate, ThreadTransport } from "./thread-transport";
 import { skillCache } from "./skills-wire";
@@ -52,12 +53,8 @@ async function loadPage(cardId: string, before?: number, after?: number): Promis
   }
 }
 
-// The newest page laid over what's loaded. A thread that got shorter was rewound on the worker: the page replaces it,
-// and so does one that starts past the end of the window (more arrived between polls than a page holds).
-export function mergePage(prev: ThreadPage, page: ThreadPage): ThreadPage {
-  if (page.total < prev.total || (page.items.length && page.start > prev.start + prev.items.length)) return page;
-  return page.items.reduce((next, item, i) => applyThreadEvent(next, { index: page.start + i, item }), prev);
-}
+// The newest page laid over what's loaded lives in @weft/client, with the transport's shape.
+export { mergePage };
 
 // ⌘F over the card's whole thread, the rows read and matched on this Mac's server (lib/worker-thread-reads.ts).
 export async function searchWorkerThread(cardId: string, query: string): Promise<FindMatch[] | null> {
@@ -100,8 +97,8 @@ const signedVerbs = (act: typeof actOnWorker): Pick<ThreadTransport, "shell" | "
   grantFolder: (cardId, directory) => act("card.update", { id: cardId, body: { readScope: directory } }).then(() => {}),
 });
 
-// Where the board can't sign (weft.zip, or no Touch ID signer), a "!" says so in the box instead of reaching the agent.
-export const SHELL_ELSEWHERE = "A shell runs only on this Mac's cards.";
+// Where the board can't sign, a "!" says so in the box instead of reaching the agent (@weft/client).
+export { SHELL_ELSEWHERE };
 
 // A worker's transport over a route: the relay's commands and poll (workerTransport), or a session line that falls
 // back to them (lib/line-host.ts).
