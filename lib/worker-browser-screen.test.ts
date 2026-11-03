@@ -197,7 +197,7 @@ describe("browserScreenOf", () => {
     const c = line();
     input(c as never);
     expect(Buffer.concat(c.sent).subarray(4).toString()).toBe("jpeg");
-    for (const event of [{ t: "down", x: 0.5, y: 0.5 }, { t: "move", x: 0.6, y: 0.5 }, { t: "up", x: 0.6, y: 0.5 }, { t: "key", code: 4, down: true }, { t: "key", code: 225, down: true }, { t: "key", code: 225, down: false }, "not json"]) say(c, event);
+    for (const event of [{ t: "down", x: 0.5, y: 0.5 }, { t: "move", x: 0.6, y: 0.5 }, { t: "up", x: 0.6, y: 0.5 }, { t: "key", code: 4, down: true }, { t: "key", code: 225, down: true }, { t: "key", code: 225, down: false }, { t: "text", text: "pasted" }, "not json"]) say(c, event);
     await flush();
     expect(sentOf(page, "Input.dispatchMouseEvent")).toEqual([
       { type: "mousePressed", x: 500, y: 250, button: "left", clickCount: 1 },
@@ -205,6 +205,7 @@ describe("browserScreenOf", () => {
       { type: "mouseReleased", x: 600, y: 250, button: "left", clickCount: 1 },
     ]);
     expect(sentOf(page, "Input.dispatchKeyEvent")).toEqual([expect.objectContaining({ type: "keyDown", key: "a" })]);
+    expect(sentOf(page, "Input.insertText")).toEqual([{ text: "pasted" }]);
     // A viewer far behind skips frames; one that left gets none.
     c.bufferedAmount = 2 * 1024 * 1024;
     page.frame("skipped");
