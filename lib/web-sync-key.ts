@@ -3,7 +3,8 @@
 // sees a key. A browser with no grant draws the 🔒 stand-ins. The ring is module state: the board loads it once on
 // mount (loadWebKeyring) and then reopens what it already drew, so the server render and the first client render match.
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { CloudCardRow, CloudThreadItemRow, CloudToolOutputRow } from "./cloud-sync-types";
+import { blobSealer } from "./blob-seal";
+import type { BlobSeal, CloudCardRow, CloudThreadItemRow, CloudToolOutputRow } from "./cloud-sync-types";
 import { makeClaim, parsePairingLink } from "./pairing-link";
 import { b64, sodium, unb64, type Sodium } from "./sodium";
 import type { BrowserPasskey } from "./web-passkey";
@@ -23,7 +24,9 @@ interface BrowserDevice {
   passkeyId?: string;
 }
 
-const state = { s: null as Sodium | null, ring: new Map<number, string>(), orgId: "" };
+// sealedCards: the key version each card's row came sealed with, as it was drawn, so a file pasted into it goes up sealed
+// with a key its host provably holds (webBlobSeal).
+const state = { s: null as Sodium | null, ring: new Map<number, string>(), orgId: "", sealedCards: new Map<string, number>() };
 
 function readDevice(userId: string): BrowserDevice | null {
   try {
@@ -71,10 +74,25 @@ export function openSyncedItem(row: Pick<CloudThreadItemRow, "card_id" | "seq" |
 }
 
 export function openSyncedCard<R extends Pick<CloudCardRow, "org_id" | "card_id" | "card">>(row: R): R {
+  const sealed = (row.card as { sealed?: unknown }).sealed;
+  if (isSealed(sealed)) state.sealedCards.set(row.card_id, sealed.v);
+  else state.sealedCards.delete(row.card_id);
   if (!state.s) return row;
   const card = openCard(state.s, row, state.ring);
   return card === row.card ? row : { ...row, card };
 }
+
+// How a file pasted into `cardId` goes up (lib/web-upload.ts): sealed when the card's own row came sealed with a version
+// this browser holds, since its host then opens it; plain otherwise (a worker's card, an unsealed or shared one, a new
+// thread, a browser with no grant), as before sealing.
+export function webBlobSeal(cardId: string | null | undefined): BlobSeal | null {
+  const version = cardId ? state.sealedCards.get(cardId) : undefined;
+  const key = version === undefined ? undefined : state.ring.get(version);
+  return state.s && key && version !== undefined ? blobSealer(state.s, { version, key }) : null;
+}
+
+// The ready libsodium, once a keyring has loaded; what the board's blob viewers open sealed bytes with.
+export const webSodium = (): Sodium | null => state.s;
 
 export const openSyncedTool = (row: Pick<CloudToolOutputRow, "org_id" | "card_id" | "tool_id" | "result">) =>
   state.s ? openToolResult(state.s, row, state.ring) : row.result;
@@ -123,4 +141,5 @@ export function resetWebKeyring() {
   state.s = null;
   state.ring = new Map();
   state.orgId = "";
+  state.sealedCards = new Map();
 }

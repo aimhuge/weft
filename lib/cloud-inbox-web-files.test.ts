@@ -129,5 +129,21 @@ describe("macReceive", () => {
     await expect(receive("plain", {})).resolves.toBe("plain");
     control.org = null;
     await expect(receive(pasted, { attachments })).rejects.toThrow("doesn't sync to a workspace");
+    control.org = "org1";
+  });
+
+  it("opens a file a paired browser sealed, with main's key, asked for only then", async () => {
+    const { sodium, b64 } = await import("./sodium");
+    const { blobSealer } = await import("./blob-seal");
+    const s = await sodium();
+    const key = { version: 3, key: b64(s, s.crypto_aead_xchacha20poly1305_ietf_keygen()) };
+    blobs.set(`org1/${SHA}`, blobSealer(s, key)("org1", SHA, PNG));
+    const keyring = vi.fn(() => Promise.resolve(new Map([[3, key.key]])));
+    const dir = path.join(dataDir, "sealed");
+    await expect(macReceive({} as never, "u1", { dir: () => dir, read: readBlob as never, keyring })(pasted, { attachments })).resolves.toBe(`look ![shot](${path.join(dir, NAME)})`);
+    expect(fs.readFileSync(path.join(dir, NAME))).toEqual(Buffer.from(PNG));
+    expect(keyring).toHaveBeenCalledWith("org1");
+    const none = macReceive({} as never, "u1", { dir: () => path.join(dataDir, "none"), read: readBlob as never, keyring: () => Promise.resolve(new Map()) });
+    await expect(none(pasted, { attachments })).rejects.toThrow("sealed with workspace key v3, which this Mac doesn't hold");
   });
 });

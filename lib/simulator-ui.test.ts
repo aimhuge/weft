@@ -298,7 +298,7 @@ describe("uiTree", () => {
 });
 
 describe("touches on a device with idb open", () => {
-  const idb = { size: { width: 1, height: 1 }, tap: vi.fn(() => Promise.resolve()), swipe: vi.fn(() => Promise.resolve()), touch: vi.fn(), key: vi.fn(), video: vi.fn(), close: vi.fn() };
+  const idb = { size: { width: 1, height: 1 }, tap: vi.fn(() => Promise.resolve()), swipe: vi.fn(() => Promise.resolve()), touch: vi.fn(), key: vi.fn(), text: vi.fn(), video: vi.fn(), close: vi.fn() };
 
   it("goes through idb, not a fresh process", async () => {
     setIdb(ios.id, idb);

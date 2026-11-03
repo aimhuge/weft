@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { BIDI_REFUSED } from "./approval-passkey";
 import { PHONE_ONLY } from "./passkey-phone-only";
 import { widenMessage, WIDEN_TTL_MS } from "./widen";
-import { NO_PASSKEY_HERE, PASSKEY_NO_SHELL, PASSKEY_TOO_WIDE, STALE, USED, widenProblem, type WidenDeps } from "./widen-check";
+import { NO_PASSKEY_HERE, PASSKEY_NO_GOOSE, PASSKEY_NO_SHELL, PASSKEY_TOO_WIDE, STALE, USED, widenProblem, type WidenDeps } from "./widen-check";
 import { nonceBook } from "./widen-nonces";
 
 const NOW = 1_000_000;
@@ -66,6 +66,8 @@ describe("widenProblem", () => {
     expect(d.passkey).toHaveBeenCalledWith(expect.objectContaining({ device: "b", credId: "cred", authenticatorData: "YQ" }));
     expect(await widenProblem({ ...target, change: { permissionMode: "bypassPermissions" } }, wa, "no", deps())).toBe(PASSKEY_TOO_WIDE);
     expect(await widenProblem({ ...target, change: { readScope: "/x" } }, wa, "no", deps())).toBe(PASSKEY_TOO_WIDE);
+    // Where Goose's traffic goes is the Mac's Touch ID only, even where the web may approve a "!" line.
+    expect(await widenProblem({ ...target, card: "", verb: "settings.put", change: { goose: { gooseProviderId: "openai" } } }, wa, "no", deps({ passkeyShell: true }))).toBe(PASSKEY_NO_GOOSE);
     // A "!" line from a passkey is a shell for whoever holds it: only where the host lets the web approve.
     expect(await widenProblem({ ...target, verb: "card.shell", change: { shell: "ls" } }, wa, "no", deps())).toBe(PASSKEY_NO_SHELL);
     expect(await widenProblem({ ...target, verb: "card.schedule", change: { schedule: "!ls" } }, wa, "no", deps())).toBe(PASSKEY_NO_SHELL);

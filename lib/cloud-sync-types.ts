@@ -65,16 +65,19 @@ export type OutboxEntry =
   // Items from seq on were dropped (a rewind or an edit with ↑).
   | { op: "truncate"; cardId: string; seq: number; at: number };
 
-// The blob store's face to the outbox.
+// Seals a blob's bytes for its org and sha just before the put (lib/blob-seal.ts).
+export type BlobSeal = (orgId: string, sha: string, bytes: Uint8Array) => Uint8Array;
+
+// The blob store's face to the outbox. `seal`, when given, puts the bytes up sealed (lib/blob-seal.ts withBlobSeal).
 export interface BlobStore {
   // sha256 of a local file as a ref, or null if it doesn't exist.
   refFor(localPath: string): Promise<BlobRef | null>;
   // Uploads the file to weft-blobs/<orgId>/<sha> unless it's already there; returns its ref.
-  upload(localPath: string, orgId: string): Promise<BlobRef | null>;
+  upload(localPath: string, orgId: string, seal?: BlobSeal): Promise<BlobRef | null>;
   // Uploads a page the pane showed: an HTML file with the local images it names uploaded too and swapped for refs
   // (lib/blob-page-assets.ts). A store without it (a test fake) uploads the page as it is.
-  uploadPage?(localPath: string, orgId: string): Promise<BlobRef | null>;
+  uploadPage?(localPath: string, orgId: string, seal?: BlobSeal): Promise<BlobRef | null>;
   // The item with each local path it names (attachments, images, ~/.weft/show pages) swapped for a blob ref,
   // uploading as it goes. Returns the item unchanged when nothing in it points at a local file.
-  rewriteItem(item: ThreadItem, orgId: string): Promise<ThreadItem>;
+  rewriteItem(item: ThreadItem, orgId: string, seal?: BlobSeal): Promise<ThreadItem>;
 }

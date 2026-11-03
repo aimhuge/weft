@@ -5,6 +5,7 @@ import path from "node:path";
 import { createHostSigners } from "./host-signers";
 import { passkeyOrigins } from "./passkey-verify";
 import { sharedNonceBook } from "./widen-nonces";
+import { macKeysAt } from "./worker-mac-keys";
 import type { TerminalDeps } from "./host-line-terminal";
 import { spawnPty } from "./worker-pty";
 import { terminalAllow, type WorkerWiden } from "./worker-widen";
@@ -17,13 +18,16 @@ export interface WorkerWidenOptions {
   repoPath: (root: string, folder: string) => string;
   nameFolder: (cardId: string, folder: string) => void;
   signHeld?: (message: string) => string;
+  // The passkey heads its Mac published (lib/passkey-head.ts, the registry's passkeyHeads): with them, a passkey approves
+  // only while this worker holds the Mac's latest set.
+  heads?: () => Promise<unknown[]>;
   env?: { NODE_ENV?: string; WEFT_PASSKEY_DEV_ORIGIN?: string };
 }
 
 export function workerWidenFor(o: WorkerWidenOptions): WorkerWiden {
   return {
     host: o.workerId,
-    signers: createHostSigners(o.home, passkeyOrigins(o.env ?? process.env)),
+    signers: createHostSigners(o.home, passkeyOrigins(o.env ?? process.env), macKeysAt(o.home), o.heads ? { heads: o.heads, worker: o.workerId } : undefined),
     nonces: sharedNonceBook(path.join(o.home, "widen-nonces.json")),
     projects: () => o.listFolders(o.root),
     root: o.root,

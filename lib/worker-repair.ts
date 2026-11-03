@@ -68,7 +68,7 @@ export function repairRefusal({ pinned, worker, code, approval, now }: RepairChe
   const parsed: HostPairCode | null = parsePairCode(code);
   if (!parsed) return "An enrolled box re-pairs only with a pairing code (wph.…) from Settings → Devices, never a token. To enrol it afresh, wipe it first (docs/architecture/weft-worker.md#re-pairing-and-a-lost-mac).";
   if (!parsed.macKey) return "That pairing code carries no Mac key. Make a new one in Weft → Settings → Devices.";
-  if (!pinned.length) return "This box trusts no Mac, so none can approve a re-pair. Wipe it and enrol it afresh (docs/architecture/weft-worker.md#re-pairing-and-a-lost-mac).";
+  if (!pinned.length) return "This box trusts no Mac (it was enrolled by token, or the Mac it was paired with was revoked), so none can approve a re-pair. Wipe it and enrol it afresh (docs/architecture/weft-worker.md#re-pairing-and-a-lost-mac).";
   const fp = macFingerprint(parsed.macKey);
   const how = `On the Mac this box trusts now (${pinned.map(macFingerprint).join(", ")}), open Settings → Devices → this worker → Approve re-pair, paste this code, and run the command it shows.`;
   if (approval === undefined) return `Re-pairing makes this box trust the Mac ${fp} instead. ${how}`;

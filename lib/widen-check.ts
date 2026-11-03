@@ -42,6 +42,8 @@ export const NO_PASSKEY_HERE = "This host can't check a passkey yet. Approve it 
 // What a passkey may not widen, as for an answer (lib/passkey-phone-only.ts): skipping permission prompts and a folder
 // grant stay on the phone or the Mac, where the prompt is native.
 export const PASSKEY_TOO_WIDE = "Skipping permission prompts or granting a folder needs your phone or Weft on your Mac, not a browser.";
+// Where a Goose card's traffic and key go (a worker's settings.put): only the Mac's Touch ID key, never a browser's passkey.
+export const PASSKEY_NO_GOOSE = "Pointing Goose at another provider or endpoint needs Touch ID in Weft on your Mac, not a browser.";
 export const PASSKEY_NO_SHELL = "A \"!\" line needs your phone or Weft on your Mac, not a browser (unless Settings → Sync on your Mac lets the web approve).";
 
 const strings = (value: unknown): string[] =>
@@ -50,6 +52,7 @@ const strings = (value: unknown): string[] =>
 // What a passkey can't sign: the H7 rule for answers, read over the change as a Bash command would be.
 function passkeyRefusal(change: WidenChange, shell: boolean): string | null {
   if (change.permissionMode || change.readScope !== undefined) return PASSKEY_TOO_WIDE;
+  if (change.goose !== undefined) return PASSKEY_NO_GOOSE;
   const command = change.shell ?? change.schedule;
   if (command === undefined) return null;
   if (!shell) return PASSKEY_NO_SHELL;

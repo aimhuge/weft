@@ -11,7 +11,7 @@ import { fakeDb } from "../electron/pairing.harness";
 import { makeClaim, newPairingSecret, pairingLink } from "./pairing-link";
 import { b64, sodium, type Sodium } from "./sodium";
 import { sealCardRow, sealItemRow, sealToolRow, SEALED_TEXT } from "./sync-seal";
-import { BROWSER_DEVICE_KEY, loadWebKeyring, openSyncedCard, openSyncedItem, openSyncedTool, pairThisBrowser, resetWebKeyring, webKeyring } from "./web-sync-key";
+import { BROWSER_DEVICE_KEY, loadWebKeyring, openSyncedCard, openSyncedItem, openSyncedTool, pairThisBrowser, resetWebKeyring, webBlobSeal, webKeyring, webSodium } from "./web-sync-key";
 
 const ORG = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
 const PAIR_ID = "11111111-2222-4333-8444-555555555555";
@@ -71,6 +71,24 @@ describe("loadWebKeyring", () => {
     expect(openSyncedCard(card)).toBe(card);
     const tool = sealToolRow(s, { org_id: ORG, card_id: "c", tool_id: "t", result: "long", bytes: 4 }, { version: 1, key });
     expect(openSyncedTool(tool)).toBe("long");
+  });
+
+  it("seals a file for a card whose row came sealed with a version it holds, and for no other", async () => {
+    const card = { org_id: ORG, card_id: "c", owner_device: "d", folder: "/", card: { title: "Hi" } as never, deleted: false, updated_at: "t" };
+    openSyncedCard(sealCardRow(s, card, { version: 1, key }));
+    expect(webBlobSeal("c")).toBeNull();
+    expect(webSodium()).toBeNull();
+    const db = fakeDb();
+    pairedBrowser(db);
+    await loadWebKeyring(asClient(db), ORG, "u1");
+    expect(webSodium()).toBe(s);
+    expect(webBlobSeal("c")!(ORG, "a".repeat(64), new Uint8Array([1])).slice(0, 4)).toEqual(new Uint8Array([0x77, 0x73, 0x62, 0x31]));
+    openSyncedCard(sealCardRow(s, { ...card, card_id: "v2" }, { version: 2, key }));
+    expect(webBlobSeal("v2")).toBeNull();
+    expect(webBlobSeal("unknown")).toBeNull();
+    expect(webBlobSeal(null)).toBeNull();
+    openSyncedCard(card);
+    expect(webBlobSeal("c")).toBeNull();
   });
 
   it("is false when the grants can't be read", async () => {

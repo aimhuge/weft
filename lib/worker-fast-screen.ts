@@ -1,6 +1,7 @@
-// Joins idb to the WebRTC line for one watch (docs/architecture/weft-worker.md#the-fast-path). iOS only: Android has no
-// idb, so an emulator stays on the JPEG path. H.264 goes on the board's video track where it offered one
-// (lib/rtp-video.ts), else on the "video" channel; "input" carries the live gesture and keyboard.
+// Joins a device to the WebRTC line for one watch (docs/architecture/weft-worker.md#the-fast-path): idb on iOS, adb's
+// screenrecord on Android (lib/adb-screen.ts). H.264 goes on the board's video track where it offered one
+// (lib/rtp-video.ts), else on the "video" channel; "input" carries the live gesture, the keyboard and a paste.
+import { openAdbScreen } from "./adb-screen";
 import { openIdb } from "./idb-companion";
 import type { IdbSession } from "./idb-session";
 import { liveEvent, type ScreenQuality } from "./rtc-signal";
@@ -56,19 +57,25 @@ export function untilClosed(channel: Pick<Channel, "stateChanged">, stop: () => 
   });
 }
 
-// Fractions become points here, so nothing on the wire depends on the device's size.
-export function inputChannel(idb: Pick<IdbSession, "size" | "touch" | "key">, channel: Pick<Channel, "onMessage">) {
+// What a watched device gives the line: idb's session on iOS, adb's on Android.
+export type LiveDevice = Pick<IdbSession, "size" | "touch" | "key" | "text" | "video" | "close">;
+
+// Fractions become the device's own units here (points on iOS, pixels on Android), so nothing on the wire depends on its size.
+export function inputChannel(idb: Pick<LiveDevice, "size" | "touch" | "key" | "text">, channel: Pick<Channel, "onMessage">) {
   channel.onMessage.subscribe((raw) => {
     const event = liveEvent(raw.toString());
     if (!event) return;
     if (event.t === "key") idb.key(event.code, event.down);
+    else if (event.t === "text") idb.text(event.text);
     else idb.touch(event.t, event.x * idb.size.width, event.y * idb.size.height);
   });
 }
 
+// Null on a box without the device's tool (idb_companion, adb): that watch stays on the JPEG path.
+const openDevice = (d: Device): Promise<LiveDevice | null> => (d.platform === "ios" ? openIdb(d.id) : openAdbScreen(d.id));
+
 export async function openFastScreen(d: Device): Promise<FastScreen | null> {
-  if (d.platform !== "ios") return null;
-  const idb = await openIdb(d.id);
+  const idb = await openDevice(d);
   if (!idb) return null;
   let line: { close: () => void } | null = null;
   return {
