@@ -54,6 +54,7 @@ export function WebThreadPanel({
   edits,
   editTitle = false,
   onScreenInput,
+  workerId,
   footer,
   onClose,
   onSend,
@@ -73,6 +74,8 @@ export function WebThreadPanel({
   editTitle?: boolean;
   // Taps and swipes on a worker's live screen.
   onScreenInput?: (input: BoardInput) => Promise<void>;
+  // The worker whose session line this board holds (useWebLine): its live screen comes as an H.264 track on it.
+  workerId?: string;
   footer: ReactNode;
   onClose: () => void;
   onSend: (text: string) => Promise<void>;
@@ -114,7 +117,7 @@ export function WebThreadPanel({
           className="flex h-full min-h-0 w-full flex-col bg-panel md:w-[44%] md:min-w-[380px] md:shrink-0"
         />
       </ThreadTransportContext.Provider>
-      <WebPane orgId={orgId} pane={pane} thumbUrl={card.thumb && /^https?:/.test(card.thumb) ? card.thumb : undefined} onScreenInput={onScreenInput} mobileApp={card.mobileApp} />
+      <WebPane orgId={orgId} pane={pane} thumbUrl={card.thumb && /^https?:/.test(card.thumb) ? card.thumb : undefined} onScreenInput={onScreenInput} mobileApp={card.mobileApp} workerId={workerId} />
       <div className="hidden md:flex">
         <ShowRail card={card} hidden={false} items={shown} pageUrl={reopened ?? card.page ?? ""} shots={shots} onReopen={(url) => setPicked({ card: card.id, page: card.page, url })} />
       </div>

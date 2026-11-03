@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 // Settings → Devices (components/DevicesSettings.tsx, lib/use-devices.ts): one list of every kind, Revoke routed by
-// kind, and Add a worker's code polled until main says how it went.
+// kind, and Add a worker's code polled until main says how it went. The hook's pure words are lib/use-devices.test.ts.
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -15,7 +15,7 @@ const connectors = vi.hoisted(() => ({ view: { signedIn: true, github: { connect
 vi.mock("@/lib/use-worker-connectors", () => ({ useWorkerConnectors: () => connectors }));
 
 const { default: DevicesSettings } = await import("./DevicesSettings");
-const { POLL_MS, revokeRoute, repinOutcome, workerOutcome, useDevices, hostPairingBridge } = await import("@/lib/use-devices");
+const { POLL_MS, useDevices, hostPairingBridge } = await import("@/lib/use-devices");
 
 const base: DeviceView = {
   id: "m1", kind: "mac", name: "MacBook", platform: "darwin", orgId: "o", host: "h", hasBoxKey: true, hasSignKey: false, hasPasskey: false,
@@ -55,7 +55,7 @@ describe("DevicesSettings", () => {
     render(<DevicesSettings />);
     expect(await screen.findByText("m1mini")).toBeInTheDocument();
     expect(screen.getByText("Mac · reads sealed threads · this Mac · Online")).toBeInTheDocument();
-    expect(screen.getByText("Worker · paired · Seen 5m ago")).toBeInTheDocument();
+    expect(screen.getByText("Worker · paired · Seen 5m ago · Threads in the clear")).toBeInTheDocument();
     expect(screen.getByText("Phone · approves with Face ID · Seen 5m ago")).toBeInTheDocument();
     expect(screen.getByText("Phone · reads sealed threads · Never seen")).toBeInTheDocument();
     expect(screen.getByText("Browser · reads sealed threads · Revoked 2h ago")).toBeInTheDocument();
@@ -70,7 +70,7 @@ describe("DevicesSettings", () => {
     );
     render(<DevicesSettings />);
     expect(await screen.findByText("Mac · reads sealed threads · this Mac · Online · 0.7.0 (15388b1)")).toBeInTheDocument();
-    expect(screen.getByText("Worker · paired · Online · 0.6.6 (abc1234, older)")).toBeInTheDocument();
+    expect(screen.getByText("Worker · paired · Online · 0.6.6 (abc1234, older) · Threads in the clear")).toBeInTheDocument();
   });
 
   it("revokes a phone this Mac pinned through main, and anything else through the registry", async () => {
@@ -131,9 +131,29 @@ describe("DevicesSettings", () => {
     expect(forgetPin).toHaveBeenCalledWith("w1", "m1mini");
     expect(await screen.findByText("Forgot m1mini's pinned keys: its next secret ask pins the keys it has now.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Re-pin iPhone" })).toBeNull();
-    expect(repinOutcome("m1mini", { denied: true })).toBe("Not re-pinned.");
-    expect(repinOutcome("m1mini", { forgotten: false })).toBe("m1mini had no pinned keys on this Mac.");
   });
+
+  it("seals a paired worker's threads through main, and says which key it holds", async () => {
+    let status = { sealOn: true, workers: {} as Record<string, { version: number; latest: number }> };
+    const grantKey = vi.fn(() => {
+      status = { sealOn: true, workers: { w1: { version: 3, latest: 3 } } };
+      return Promise.resolve({ version: 3 });
+    });
+    // The first read fails (signed out in main): the list still draws, in the clear.
+    const keyStatus = vi.fn(() => Promise.resolve(status)).mockRejectedValueOnce(new Error("out"));
+    const dropKeys = vi.fn(() => Promise.resolve({ dropped: true }));
+    (window as unknown as { weft: unknown }).weft = { pairing, hostPairing: { ...hosts, grantKey, keyStatus, dropKeys } };
+    render(<DevicesSettings />);
+    await userEvent.click(await screen.findByRole("button", { name: "Seal m1mini's threads" }));
+    expect(grantKey).toHaveBeenCalledWith("w1");
+    expect(await screen.findByText("m1mini now holds key v3: it seals what it publishes from now on.")).toBeInTheDocument();
+    expect(await screen.findByText("Worker · paired · Seen 5m ago · Threads sealed (key v3)")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Seal m1mini's threads" })).toBeNull();
+    // Revoking the worker drops its grants in main too, which rotates the key.
+    await userEvent.click(screen.getByRole("button", { name: "Revoke m1mini" }));
+    await waitFor(() => expect(dropKeys).toHaveBeenCalledWith("w1"));
+  });
+
 
   it("lets this Mac's passkeys approve on a worker, after main endorses them", async () => {
     const endorse = vi.fn(() => Promise.resolve(null));
@@ -291,22 +311,6 @@ describe("DevicesSettings", () => {
 });
 
 describe("use-devices helpers", () => {
-  it("routes a pinned phone or browser through main, the rest through the registry", () => {
-    const pinned = new Set(["p1", "b1"]);
-    expect(revokeRoute({ id: "p1", kind: "phone" }, pinned)).toBe("pairing");
-    expect(revokeRoute({ id: "b1", kind: "browser" }, pinned)).toBe("pairing");
-    expect(revokeRoute({ id: "p9", kind: "phone" }, pinned)).toBe("registry");
-    expect(revokeRoute({ id: "p1", kind: "worker" }, pinned)).toBe("registry");
-  });
-
-  it("says how a worker's code ended", () => {
-    expect(workerOutcome({ status: "paired" })).toBe("Added the worker.");
-    expect(workerOutcome({ status: "expired" })).toMatch(/expired/);
-    expect(workerOutcome({ status: "failed", error: "bad proof" })).toBe("Not added: bad proof");
-    expect(workerOutcome({ status: "failed" })).toMatch(/didn't check out/);
-    expect(workerOutcome({ status: "cancelled" })).toBe("Not added.");
-  });
-
   it("finds the bridge in the desktop app only", () => {
     expect(hostPairingBridge()).toBe(hosts);
     delete (window as unknown as { weft?: unknown }).weft;

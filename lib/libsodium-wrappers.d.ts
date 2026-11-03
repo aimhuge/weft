@@ -15,6 +15,9 @@ declare module "libsodium-wrappers" {
     crypto_aead_xchacha20poly1305_ietf_encrypt(message: Uint8Array, ad: Uint8Array | null, secretNonce: null, nonce: Uint8Array, key: Uint8Array): Uint8Array;
     crypto_aead_xchacha20poly1305_ietf_decrypt(secretNonce: null, ciphertext: Uint8Array, ad: Uint8Array | null, nonce: Uint8Array, key: Uint8Array): Uint8Array;
     crypto_box_keypair(): { publicKey: Uint8Array; privateKey: Uint8Array };
+    // X25519, for sealing a session line's offer in the browser (@weft/client seal.ts).
+    crypto_scalarmult(privateKey: Uint8Array, publicKey: Uint8Array): Uint8Array;
+    crypto_scalarmult_base(privateKey: Uint8Array): Uint8Array;
     crypto_box_seal(message: Uint8Array, publicKey: Uint8Array): Uint8Array;
     crypto_box_seal_open(ciphertext: Uint8Array, publicKey: Uint8Array, privateKey: Uint8Array): Uint8Array;
     crypto_sign_keypair(): { publicKey: Uint8Array; privateKey: Uint8Array };

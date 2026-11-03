@@ -451,10 +451,14 @@ store (`lib/worker-project.ts`, `lib/worker-board.ts`, `lib/worker-transport.ts`
 - **Folder reports:** `worker_set_folders` and `lib/worker-folders.ts` exist, but the daemon doesn't call them yet, so
   until it does a project needs a card to show.
 - **Not yet:** attachments on a new thread, Run on Worker's local record cards still sit on the local project, and
-  sealed rows: a worker publishes its rows and pages in the clear, and files reach it plain, until it holds the workspace
-  key. The grant (sealed to its pinned box key and signed by the pairing Mac after Touch ID) and the worker's own sealing
-  are designed in [mobile-security.md](mobile-security.md#sealing-on-a-weft-worker-design); a Mac's and a browser's files
-  are sealed already ([Sealed blobs](mobile-security.md#sealed-blobs)), so a sealed card's pasted file only goes plain to a worker.
+  files a Mac or a browser pastes into a worker card still go up plain (the worker opens sealed ones already).
+- **Sealed threads:** Settings → Devices → the worker → Seal… grants a paired worker the workspace key, sealed to the box key
+  the Mac pinned and signed by the Mac's approval key after Touch ID (`electron/worker-key-grants.cjs`). The worker checks it
+  against the Mac in `mac-keys.json`, holds the key in memory only (`lib/worker-keyring.ts`, read at start, on a `key_grant`
+  ping and every 10 minutes), and from then on publishes its card, items, tool outputs, pages and their files sealed, as a
+  Mac's outbox does; both boards open them. Once it has sealed, `seal-floor.json` in its home makes a worker with no key hold
+  its rows back rather than publish plain. Re-pin and Revoke drop its grants and rotate the key. A token-enrolled worker
+  trusts no Mac and stays plain. See [mobile-security.md](mobile-security.md#sealing-on-a-weft-worker).
 
 ### Pages from a worker
 
@@ -680,9 +684,20 @@ board ─ sealed offer, elevated input command ─▶ daemon ─ encrypted answe
   13 of 16 detected, before decoding and drawing), 29 fps, about 0.66 Mbps at quality 0.2 and a 2 Mbps cap. Fast scrolling
   showed artifacts at those settings, so it's now 0.6 and 8 Mbps, not yet measured under motion. Nothing's been measured off
   the LAN, and a slow link may need a lower bitrate.
-- **Not yet:** weft.zip and phones stay on JPEGs, since sealing an offer runs on the desktop's local server. The screen's own
-  line has no TURN; on a network that blocks direct connections it rides the session line, which takes TURN when this
-  Mac holds a Cloudflare TURN key (`lib/rtc-ice.ts`), or stays on JPEGs.
+- **weft.zip seals its own offers.** A tab has no Mac server, so `@weft/client` seals in the browser
+  (`packages/weft-client/src/seal.ts`: libsodium's X25519, Web Crypto's HKDF-SHA256 and AES-256-GCM, byte for byte as
+  `lib/worker-seal.ts`, which `lib/worker-seal-client.test.ts` proves by opening both on the worker's side). Your own open
+  worker card holds its worker's **session line** (`lib/web-lines.ts`, `useWebLine` in `components/web-board/useWebHost.ts`):
+  the tab reads `cloud_workers.public_key`, seals the offer (`lineOpener`) and inserts the `line` row with its own session,
+  which only the worker's owner may do (`private.owns_device`), in exactly the server's shape
+  (`20261103150000_line_row_shape.sql`). Over it go the card's verbs (`lib/cloud-host-acts.ts`, never a
+  widening or pasted files), its thread's events beside Realtime (`lib/line-thread.ts`) and the watched screen as an H.264
+  track. The phone gets the same opener with its own RTCPeerConnection (`openLine`, `packages/weft-client/src/line-open.ts`).
+- **Not yet:** the phone app wiring the opener; TURN for weft.zip (a tab can't mint Cloudflare credentials, `/api/rtc-ice` is
+  this Mac's), so a web line forms where STUN gets through and the board stays on the relay and JPEGs where it doesn't; a
+  screen line of its own on weft.zip (it rides the session line or stays on JPEGs). The screen's own line has no TURN; on a
+  network that blocks direct connections it rides the session line, which takes TURN when this Mac holds a Cloudflare TURN
+  key (`lib/rtc-ice.ts`), or stays on JPEGs.
 - **Android** (`lib/adb-screen.ts`, built 2026-11-03, not yet run on a device). The emulator's video is `adb exec-out
   screenrecord --output-format=h264 --bit-rate=<rate> --time-limit=180 -`: raw Annex B on stdout, cut into access units by
   `lib/h264-units.ts` (a new frame starts at an AUD, SEI, SPS or PPS after a slice, or at a slice whose first_mb_in_slice is

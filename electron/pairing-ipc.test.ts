@@ -74,6 +74,23 @@ describe("pairing IPC", () => {
     expect(await wired.routes["POST /sync/key"]({ orgId: "o" })).toEqual({ none: true });
     expect(await wired.routes["POST /sync/key"]({ orgId: "o", create: true })).toMatchObject({ version: 1 });
     expect(db.tables.workspace_key_grants[0]!).toMatchObject({ device_id: "mac-row", version: 1 });
+    // Every version it holds, for opening a worker's sealed rows on its own server (lib/worker-board-open.ts).
+    const ring = (await wired.routes["POST /sync/keyring"]({ orgId: "o" })) as { keys: { version: number; key: string }[] };
+    expect(ring.keys.map((k) => k.version)).toEqual([1]);
+  });
+
+  it("grants the workers it sealed for the new version when a rotation comes", async () => {
+    const { wired, handlers } = setup();
+    const regrant = vi.spyOn(wired.workerKeys, "regrant");
+    expect([...handlers.keys()]).toEqual(expect.arrayContaining(["worker-keys:grant", "worker-keys:drop", "worker-keys:status"]));
+    const rotate = vi.spyOn(wired.syncKeys, "rotate").mockResolvedValue(4);
+    // Revoking a phone rotates through pairing (electron/pairing.cjs revoke); the wired rotate passes the version on.
+    expect(await wired.pairing.revoke("not-paired")).toEqual({ ok: false });
+    expect(rotate).not.toHaveBeenCalled();
+    wired.paired.pin({ id: "p9", name: "iPhone", kind: "phone", orgId: "o", boxKey: "bk", signKey: "sk", fingerprint: "f", pairedAt: "t", platform: "ios" });
+    regrant.mockRejectedValueOnce(new Error("offline"));
+    expect(await wired.pairing.revoke("p9")).toEqual({ ok: true, version: 4 });
+    expect(regrant).toHaveBeenCalledWith("o", 4);
   });
 });
 

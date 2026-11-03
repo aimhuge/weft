@@ -7,7 +7,7 @@ const { createWorkerRepair } = require("./worker-repair.cjs");
 
 /**
  * @param {(channel: string, fn: (...args: any[]) => unknown) => void} handle the board-only IPC handler
- * @param {Parameters<typeof createHostPairing>[0] & { macSign?: (message: string) => Promise<string> }} deps
+ * @param {Parameters<typeof createHostPairing>[0] & { macSign?: (message: string) => Promise<string>, dropKeys?: (id: string) => Promise<unknown> }} deps
  * @param {{ pin: (id: string, keys: { name: string, publicKey: string, signKey: string }) => void, forget: (id: string) => boolean }} [pins]
  */
 function registerHostPairing(handle, deps, pins = undefined) {
@@ -20,7 +20,10 @@ function registerHostPairing(handle, deps, pins = undefined) {
   handle("worker-pins:forget", async (id, name) => {
     if (!pins) return { forgotten: false };
     if (!(await deps.confirm(`forget the keys this Mac pinned for the worker ${String(name ?? id)}, so its next secret ask pins new ones`))) return { denied: true };
-    return { forgotten: pins.forget(String(id)) };
+    const forgotten = pins.forget(String(id));
+    // The box key it was granted the workspace key under goes too: drop its grants and rotate (electron/worker-key-grants.cjs).
+    const keysError = forgotten && deps.dropKeys ? await deps.dropKeys(String(id)).then(() => null, (err) => String(err?.message ?? err)) : null;
+    return { forgotten, ...(keysError ? { keysError } : {}) };
   });
   // Approve re-pair (Settings → Devices): Touch ID, then this Mac signs the swap to the Mac in the pasted code
   // (electron/worker-repair.cjs). Without the signer (no approval key wired) there's nothing to sign with.
