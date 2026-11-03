@@ -445,7 +445,10 @@ store (`lib/worker-project.ts`, `lib/worker-board.ts`, `lib/worker-transport.ts`
 - **Folder reports:** `worker_set_folders` and `lib/worker-folders.ts` exist, but the daemon doesn't call them yet, so
   until it does a project needs a card to show.
 - **Not yet:** attachments on a new thread, Run on Worker's local record cards still sit on the local project, and
-  sealed rows (a worker publishes in the clear today).
+  sealed rows: a worker publishes its rows and pages in the clear, and files reach it plain, until it holds the workspace
+  key. The grant (sealed to its pinned box key and signed by the pairing Mac after Touch ID) and the worker's own sealing
+  are designed in [mobile-security.md](mobile-security.md#sealing-on-a-weft-worker-design); a Mac's and a browser's files
+  are sealed already ([Sealed blobs](mobile-security.md#sealed-blobs)), so a sealed card's pasted file only goes plain to a worker.
 
 ### Pages from a worker
 

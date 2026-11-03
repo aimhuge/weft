@@ -5,7 +5,7 @@ const status = vi.hoisted(() => ({ seal: false }));
 vi.mock("./browser-shell", () => ({ shell: shellMock }));
 vi.mock("./sync-security", () => ({ pairingStatus: () => Promise.resolve({ approvers: 0, webApprovals: false, seal: status.seal }) }));
 
-const { forgetSyncKey, makeSealer, sealerFor } = await import("./sync-seal-upload");
+const { forgetSyncKey, macKeyring, makeSealer, sealerFor } = await import("./sync-seal-upload");
 const { b64, sodium } = await import("./sodium");
 const { isSealed } = await import("./sync-seal");
 
@@ -60,9 +60,38 @@ describe("makeSealer", () => {
     const other = makeSealer(s, { version: 1, key }, () => false);
     expect(other.tool(tool).result).toMatch(/^\{"\$sealed":1/);
     expect((other.card(card).card as { title: string }).title).toBe("🔒");
+    expect(sealer.blob("c")).toBeNull();
+    expect(other.blob("c")!("o", "s", new Uint8Array([1])).slice(0, 4)).toEqual(new Uint8Array([0x77, 0x73, 0x62, 0x31]));
   });
   it("by default reads the share from the store", async () => {
     const s = await sodium();
     expect(isSealed(makeSealer(s, { version: 1, key }).item(item).item)).toBe(true);
+  });
+});
+
+describe("macKeyring", () => {
+  it("is main's current version, never made for it, or empty when main holds none", async () => {
+    shellMock.mockResolvedValueOnce({ version: 2, key });
+    expect(await macKeyring("o", 0)).toEqual(new Map([[2, key]]));
+    expect(shellMock).toHaveBeenCalledWith("/sync/key", { orgId: "o", create: false });
+    expect(await macKeyring("o", 1)).toEqual(new Map([[2, key]]));
+    expect(shellMock).toHaveBeenCalledTimes(1);
+    forgetSyncKey();
+    shellMock.mockResolvedValue({ none: true });
+    expect((await macKeyring("o", 0)).size).toBe(0);
+    expect((await macKeyring("o", 1)).size).toBe(0);
+    expect(shellMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("asks again for an uploader after a reader found nothing, and a reader uses an uploader's empty answer only to ask", async () => {
+    status.seal = true;
+    shellMock.mockResolvedValueOnce({ none: true }).mockResolvedValueOnce({ version: 1, key });
+    expect((await macKeyring("o", 0)).size).toBe(0);
+    expect(await sealerFor("o", 1)).not.toBeNull();
+    expect(shellMock).toHaveBeenLastCalledWith("/sync/key", { orgId: "o", create: true });
+    forgetSyncKey();
+    shellMock.mockResolvedValueOnce({ none: true }).mockResolvedValueOnce({ version: 1, key });
+    expect(await sealerFor("o", 0)).toBeNull();
+    expect(await macKeyring("o", 1)).toEqual(new Map([[1, key]]));
   });
 });
